@@ -40,6 +40,23 @@ needed keys) but exactly the traceability ambiguity to watch; the harness now ma
 The **cadnano** patches (1–3 below) and `numpy==1.26` pin are NOT needed for the NADOC bridge
 (builds from lists, no cadnano import); they only matter for the standalone cadnano→mrdna tutorial.
 
+## FULLY WORKING on this WSL box — validated 2026-07-02
+
+End-to-end mrDNA→ARBD→NADOC round-trip PASSES on `DESKTOP-T44QS0K` (RTX 2080 SUPER,
+WSL2). Three things had to line up, all now handled:
+1. **ARBD binary**: built at `~/arbd-src/build/arbd`, installed to `~/.local/bin/arbd`
+   (no-password finish — copies the built binary; `find_arbd()` checks `~/.local/bin`).
+   `/usr/local/bin` via sudo also supported. (Panel: Help▸MD Engines▸ARBD.)
+2. **mrdna Python**: `./scripts/setup-mrdna.sh` (one-click Install in the panel).
+3. **WSL CUDA fix (KEY)**: a Linux-side NVIDIA driver had installed
+   `/usr/lib/x86_64-linux-gnu/libcuda.so.535…` shadowing the WSL driver at
+   `/usr/lib/wsl/lib` → ARBD "Found 0 GPU(s)". Fixed transparently by
+   `mrdna_bridge.ensure_wsl_cuda_libs()` (prepends `/usr/lib/wsl/lib` to
+   `LD_LIBRARY_PATH` at import). See [[feedback_cg_pipeline_lessons]].
+
+Test: `just bench-mrdna --designs 2hb_xover_val --steps 500` → 1/1 PASS (real GPU).
+CUDA toolkit nvcc 12.0 is present now (`/usr/bin/nvcc`); driver 596.49 / CUDA 13.2.
+
 ## Installation locations
 
 - **ARBD binary**: `/usr/local/bin/arbd` (installed via `sudo make install`; persists across reboots)

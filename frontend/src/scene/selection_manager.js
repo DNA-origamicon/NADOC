@@ -1434,6 +1434,105 @@ function _showFlexibleConnectionMenu(x, y, connId, onFlexibleSegmentRightClick) 
   _menuOutsideListeners(menu)
 }
 
+// Resolve the scaffold-strand context for a right-click, or null if the click
+// doesn't land on a scaffold strand. Prefers the frontmost bead; otherwise the
+// terminus cone. Returns null for overhang tips (handled by the overhang menu)
+// so their divert keeps precedence. `nuc` is the full nucleotide under the
+// cursor (bead `nuc` or cone `fromNuc` — same shape).
+function _resolveScaffoldCtx(design, hitBead, hitCone, beadFrontmost) {
+  let nuc = null, strandId = null
+  if (beadFrontmost && hitBead?.nuc) { nuc = hitBead.nuc; strandId = nuc.strand_id }
+  else if (hitCone) { nuc = hitCone.fromNuc; strandId = hitCone.strandId }
+  if (nuc == null || strandId == null) return null
+  const st = design?.strands?.find(s => s.id === strandId)?.strand_type
+  if (st !== 'scaffold') return null
+  return { strandId, nuc }
+}
+
+// Unified scaffold-strand context menu (2026-07-01). Replaces the three
+// previously-conflicting scaffold menus (the raw-HTML cone menu, the
+// flexible-segment bead menu, and the loop/skip bead menu) with ONE menu in the
+// standard `_menuBase` format. Fires for any right-click that resolves to a
+// scaffold strand — its terminus cone OR any bead on it. `nuc` is the full
+// nucleotide under the cursor (a bead's `nuc` or a cone's `fromNuc`; both share
+// shape). Callbacks route to the existing handlers in main.js.
+//
+// Sections (top→bottom): Nick · Assign sequence · Flexible segments
+// (mark/unmark + relax sub-items + clear) · Loop/skip · Representation · Delete.
+function _showScaffoldMenu(x, y, ctx, cbs) {
+  const { strandId, nuc } = ctx
+  const { onNick, onLoopSkip, onFlexibleSegmentRightClick, onScaffoldAssignSequence } = cbs
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+  const design = store.getState().currentDesign
+
+  const hdr = document.createElement('div')
+  hdr.textContent = 'Scaffold strand'
+  hdr.style.cssText = 'padding:3px 12px;color:#8899aa;font-size:11px;letter-spacing:.05em;' +
+    'text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+  menu.appendChild(hdr)
+
+  // 1 — Nick at the clicked position (splits the scaffold at the 3′ side).
+  menu.appendChild(_menuItem('Nick here', () => onNick?.({
+    helixId: nuc.helix_id, bpIndex: nuc.bp_index, direction: nuc.direction,
+  })))
+
+  // 2 — Assign scaffold sequence (opens the scaffold modal for the whole strand).
+  menu.appendChild(_menuItem('Assign sequence…', () => onScaffoldAssignSequence?.(strandId)))
+
+  // 3 — Flexible segments. Always shown; "Mark" is greyed on paired (dsDNA)
+  // regions since only an unpaired run can become a flexible tether.
+  menu.appendChild(_menuSep())
+  const marks = design?.flexible_segment_marks ?? []
+  const marked = marks.some(m =>
+    m.strand_id === nuc.strand_id && m.domain_index === nuc.domain_index &&
+    m.bp_index === nuc.bp_index && m.direction === nuc.direction)
+  if (marked) {
+    const rm = _menuItem('Unmark flexible segment', () => onFlexibleSegmentRightClick?.(nuc, 'unmark'))
+    rm.style.color = '#ff6b6b'
+    menu.appendChild(rm)
+    // Relax sub-items — only meaningful once the run is marked.
+    menu.appendChild(_menuItem('Relax this segment', () => onFlexibleSegmentRightClick?.(nuc, 'relax_one')))
+    menu.appendChild(_menuItem('Relax all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'relax_all')))
+  } else {
+    menu.appendChild(_menuItem('Mark flexible segment', () => onFlexibleSegmentRightClick?.(nuc, 'mark'), {
+      disabled: !nuc.is_unpaired,
+      title: nuc.is_unpaired ? undefined : 'Only unpaired (ssDNA) scaffold runs can be marked flexible',
+    }))
+  }
+  if (marks.length > 0) {
+    const clear = _menuItem('Clear all flexible segments', () => onFlexibleSegmentRightClick?.(nuc, 'clear'))
+    clear.style.color = '#ff6b6b'
+    menu.appendChild(clear)
+  }
+
+  // 6 — Loop / skip at this helix position (kept per user request).
+  menu.appendChild(_menuSep())
+  const helix = design?.helices?.find(h => h.id === nuc.helix_id)
+  const existingLs = helix?.loop_skips?.find(ls => ls.bp_index === nuc.bp_index)
+  if (existingLs) {
+    menu.appendChild(_menuItem(
+      existingLs.delta === 1 ? 'Remove loop' : 'Remove skip',
+      () => onLoopSkip?.({ helixId: nuc.helix_id, bpIndex: nuc.bp_index, delta: 0 }),
+    ))
+  }
+  menu.appendChild(_menuItem('Add loop (+1 bp)', () => onLoopSkip?.({ helixId: nuc.helix_id, bpIndex: nuc.bp_index, delta: 1 })))
+  menu.appendChild(_menuItem('Add skip (−1 bp)', () => onLoopSkip?.({ helixId: nuc.helix_id, bpIndex: nuc.bp_index, delta: -1 })))
+
+  // 4 — Representation override for the scaffold region (adds its own separator).
+  _appendRepresentationMenu(menu, { strandIds: [strandId] })
+
+  // 5 — Delete the scaffold strand.
+  menu.appendChild(_menuSep())
+  const del = _menuItem('Delete strand', () => api.deleteStrand(strandId))
+  del.style.color = '#ff6b6b'
+  menu.appendChild(del)
+
+  document.body.appendChild(menu)
+  _menuEl = menu
+  _menuOutsideListeners(menu)
+}
+
 // Right-click on a selected cluster (drill `_mode === 'cluster'`) → offer the
 // move/rotate gizmo for that cluster. Mirrors the assembly part-instance menu's
 // "Move / Rotate" entry; the callback owns gizmo attachment in main.js.
@@ -1545,10 +1644,10 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {HTMLCanvasElement} canvas
  * @param {THREE.Camera} camera
  * @param {object} designRenderer
- * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldRightClick?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
+ * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldRightClick, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera
@@ -3523,6 +3622,29 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
+    // Unified scaffold menu — any right-click that resolves to a scaffold strand
+    // (its terminus cone OR any bead on it) opens ONE standard menu carrying
+    // nick / assign-sequence / flexible-segment / loop-skip / representation /
+    // delete. This intercepts BEFORE the unpaired-bead flexible branch and the
+    // bead-mode loop/skip branch so a scaffold gets a single consistent menu
+    // regardless of the exact pixel. Overhang tips on the scaffold divert to the
+    // overhang menu first (marking them flexible is inert).
+    {
+      const _design = store.getState().currentDesign
+      const _scafCtx = _resolveScaffoldCtx(_design, hitBead, hitCone, _beadFrontmost)
+      if (_scafCtx) {
+        const _ovhgId = _scafCtx.nuc?.overhang_id
+        if (_ovhgId != null && onOverhangRightClick) {
+          onOverhangRightClick([_ovhgId], e.clientX, e.clientY)
+          return
+        }
+        _showScaffoldMenu(e.clientX, e.clientY, _scafCtx, {
+          onNick, onLoopSkip, onFlexibleSegmentRightClick, onScaffoldAssignSequence,
+        })
+        return
+      }
+    }
+
     // Unpaired bead → flexible-segment menu (mark the contiguous ssDNA run as a
     // flexible tether). Fires when the click lands directly on an unpaired bead
     // that is frontmost over any terminal cone, and the bead's strand isn't a
@@ -3624,16 +3746,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Remaining cone hits: selected strand in bead mode (already handled above), or any
     // unselected strand — show nick menu.
     if (hitCone) {
-      // Scaffold strand: always dispatch to the scaffold-specific menu regardless
-      // of whether the strand is currently selected — avoids two inconsistent menus.
-      if (onScaffoldRightClick) {
-        const design = store.getState().currentDesign
-        const strandType = design?.strands?.find(s => s.id === hitCone.strandId)?.strand_type
-        if (strandType === 'scaffold') {
-          onScaffoldRightClick(e.clientX, e.clientY, hitCone)
-          return
-        }
-      }
+      // (Scaffold cones are intercepted by the unified scaffold menu earlier.)
       if ((_mode === 'strand' || _mode === 'domain' || _mode === 'bead') && hitCone.strandId === _strandId) {
         _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager, _domainRef)
         return

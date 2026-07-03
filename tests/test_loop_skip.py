@@ -227,6 +227,45 @@ def test_loop_nucleotides_separated_along_axis():
     assert abs(abs(z1 - z0) - BDNA_RISE_PER_BP) < 1e-6
 
 
+def test_atomistic_loop_backbone_threads_in_order_on_reverse_strand():
+    """The atomistic O3′→P backbone must thread a loop bulge in strand 5′→3′ order on
+    BOTH strands. A reverse strand descends the axial stack, so its loop copies must be
+    visited top-first — otherwise the backbone zig-zags (a bond spanning the whole
+    bulge). Regression: atomistic iterated copies ascending for both directions. The
+    reverse strand's worst O3′→P bond must match the forward strand's (no zig-zag)."""
+    from backend.core.atomistic import build_atomistic_model
+    import numpy as np
+
+    h = _make_helix("h0", length_bp=12, loop_skips=[LoopSkip(bp_index=6, delta=+2)])
+    rev = Strand(id="scaf", strand_type=StrandType.SCAFFOLD, sequence="A" * 20,
+                 domains=[Domain(helix_id="h0", direction=Direction.REVERSE, start_bp=11, end_bp=0)])
+    fwd = Strand(id="stap", strand_type=StrandType.STAPLE, sequence="T" * 20,
+                 domains=[Domain(helix_id="h0", direction=Direction.FORWARD, start_bp=0, end_bp=11)])
+    design = Design(metadata=DesignMetadata(name="loop"), helices=[h], strands=[rev, fwd],
+                    lattice_type=LatticeType.HONEYCOMB)
+    model = build_atomistic_model(design)
+
+    def worst_backbone_bond(strand_id):
+        res = {}
+        for a in model.atoms:
+            if a.strand_id != strand_id:
+                continue
+            res.setdefault(a.seq_num, {})[a.name] = np.array([a.x, a.y, a.z])
+        worst, prev_o3 = 0.0, None
+        for sn in sorted(res):
+            p = res[sn].get("P")
+            if prev_o3 is not None and p is not None:
+                worst = max(worst, float(np.linalg.norm(prev_o3 - p)))
+            prev_o3 = res[sn].get("O3'")
+        return worst
+
+    fwd_worst = worst_backbone_bond("stap")
+    rev_worst = worst_backbone_bond("scaf")
+    # The reverse strand mirrors the forward: same worst bond, no bulge-spanning bond.
+    assert rev_worst == pytest.approx(fwd_worst, abs=0.05)
+    assert rev_worst < 0.6   # nm; a zig-zag bond spanning the δ=2 bulge would be > 1
+
+
 # ── _cell_boundaries ──────────────────────────────────────────────────────────
 
 

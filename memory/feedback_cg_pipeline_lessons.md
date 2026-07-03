@@ -79,6 +79,29 @@ key in the bead map. FORWARD positions come from the spline; REVERSE positions a
 
 ---
 
+## WSL2: ARBD "Found 0 GPU(s)" despite working nvidia-smi (libcuda shadowing)
+
+**Rule:** Under WSL2, ARBD (any CUDA app) must load the GPU driver from
+`/usr/lib/wsl/lib`. If a Linux-side NVIDIA **driver** package is installed, it puts
+`/usr/lib/x86_64-linux-gnu/libcuda.so.1` (a *desktop* driver, e.g. `.535.309.01`)
+that **shadows** the WSL passthrough driver → ARBD prints `CUDA Error: no
+CUDA-capable device is detected` / `Found 0 GPU(s)` even though `nvidia-smi` works.
+
+**Why:** WSL exposes the real driver via `/usr/lib/wsl/lib/libcuda.so.1` (matches the
+Windows driver version, e.g. 595/CUDA 13.2). `/usr/lib/x86_64-linux-gnu` is ahead on
+the loader path, so the desktop libcuda wins and can't reach the (non-existent in
+WSL) kernel driver. NVIDIA's guidance: on WSL install only the CUDA *toolkit*, never
+the Linux GPU driver.
+
+**How to apply:** `mrdna_bridge.ensure_wsl_cuda_libs()` (called at import) prepends
+`/usr/lib/wsl/lib` to `LD_LIBRARY_PATH` when `_is_wsl()`. mrdna spawns `arbd` as a
+subprocess inheriting the env, so every ARBD launch (bench, `/ws/mrdna-relax`,
+skip-twist relax) is fixed transparently. **Validated 2026-07-02** (RTX 2080 SUPER,
+WSL2): before → "Found 0 GPU(s)", dcd=None; after → "Found 1 GPU(s)", full
+`2hb_xover_val` round-trip PASS (B1 sim 17.4s, B2 back-map 140/140, B5 no-explosion
+1.00×). Diagnose with `find /usr -name 'libcuda.so*'` (a `/usr/lib/x86_64-linux-gnu`
+copy alongside the `/usr/lib/wsl/lib` one = shadowing).
+
 ## Skip-site sequence mapping applies to oxDNA topology too
 
 **Rule:** The sequence offset bug (skip sites shift downstream sequence characters) applies identically to `write_topology` in `oxdna_interface.py`. Must use `_build_ls_lookup` to skip deleted bp positions when advancing the sequence index.

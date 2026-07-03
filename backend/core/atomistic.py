@@ -980,6 +980,19 @@ def _apply_backbone_torsions(
 # ── Sequence lookup builder ───────────────────────────────────────────────────
 
 
+def _loop_copy_order(direction: Direction, n_copies: int):
+    """Loop-copy indices in the order a strand traverses them 5′→3′.
+
+    A loop insertion emits ``n_copies`` nucleotides at one bp_index, stacked up the
+    helix axis by copy index (copy 0 lowest — see ``nucleotide_positions``).  A
+    FORWARD strand climbs that stack (0→n-1); a REVERSE strand descends it (n-1→0).
+    Threading a reverse strand in ascending order zig-zags the backbone down into the
+    bulge and back out (an out-of-order O3′→P bond).  The copy INDEX (identity/key) is
+    unchanged — only the traversal order flips — so sequence, atom placement, and
+    backbone bonds stay mutually consistent when every loop uses this helper."""
+    return range(n_copies) if direction == Direction.FORWARD else range(n_copies - 1, -1, -1)
+
+
 def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
     """
     Returns a mapping (helix_id, bp_index, direction) → base character (A/T/G/C/N).
@@ -1014,7 +1027,9 @@ def _build_sequence_map(design: Design) -> dict[tuple[str, int, str], str]:
                 if delta <= -1:
                     continue  # deletion: no character in scadnano sequence string
                 n_copies = max(1, delta + 1)
-                for copy_k in range(n_copies):
+                # Assign sequence characters in the strand's 5′→3′ traversal order so a
+                # reverse strand's loop copies get their letters top-of-bulge first.
+                for copy_k in _loop_copy_order(domain.direction, n_copies):
                     if idx >= len(seq):
                         break
                     # k=0 uses the plain 3-tuple key for backward compat;
@@ -1236,11 +1251,15 @@ def build_atomistic_model(
                         )
 
             for bp in _atomistic_domain_bp_range(domain, strand):
-                copy_k = 0
-                while True:
+                _n_copies = 0
+                while (bp, direction, _n_copies) in nuc_positions:
+                    _n_copies += 1
+                # Thread loop copies in strand 5′→3′ order (reverse strands descend the
+                # axial stack) so the backbone doesn't zig-zag through the bulge.
+                for copy_k in _loop_copy_order(direction, _n_copies):
                     nuc_pos = nuc_positions.get((bp, direction, copy_k))
                     if nuc_pos is None:
-                        break  # no more copies at this bp (includes skip positions)
+                        continue  # skip position (no nucleotide) — belt-and-braces
 
                     # Apply CG position override for copy 0 only.
                     if nuc_pos_override is not None and copy_k == 0:
@@ -1379,11 +1398,12 @@ def build_atomistic_model(
                         sugar_name_to_serial.get("O3'"),
                         sugar_name_to_serial.get("P"),
                     )
-                    # Register full sugar serial map for crossover/skip bridge
-                    # (always overwritten → last copy wins, which is what src lookups want).
-                    bp_to_sugar_serials[(h_id, bp, dir_str)] = dict(sugar_name_to_serial)
-
-                    copy_k += 1  # advance to next loop copy
+                    # Register full sugar serial map for crossover/skip bridge.  Keep the
+                    # HIGHEST-index copy as the representative (order-independent) so this
+                    # matches the previous ascending "last-copy-wins" — crossover/skip src
+                    # lookups are unaffected by the reversed loop-copy traversal order.
+                    if copy_k == _n_copies - 1:
+                        bp_to_sugar_serials[(h_id, bp, dir_str)] = dict(sugar_name_to_serial)
 
     # ── Inter-residue backbone bonds (O3′ → P of next residue) ───────────────
     # Walk each strand's domains in 5′→3′ order; connect consecutive bp.
@@ -1398,14 +1418,16 @@ def build_atomistic_model(
             dir_str   = domain.direction.value
             direction = domain.direction
             for bp in _atomistic_domain_bp_range(domain, strand):
-                copy_k2 = 0
-                found_any = False
-                while True:
-                    entry = bp_to_serials.get((h_id, bp, dir_str, copy_k2))
-                    if entry is None:
-                        break
-                    found_any = True
-                    o3_serial, p_serial = entry
+                _n_copies = 0
+                while (h_id, bp, dir_str, _n_copies) in bp_to_serials:
+                    _n_copies += 1
+                if _n_copies == 0:
+                    prev_o3_serial = None
+                    prev_nuc_key   = None
+                    continue
+                # Connect loop copies in the SAME 5′→3′ traversal order as placement.
+                for copy_k2 in _loop_copy_order(direction, _n_copies):
+                    o3_serial, p_serial = bp_to_serials[(h_id, bp, dir_str, copy_k2)]
                     if prev_o3_serial is not None and p_serial is not None:
                         # Skip direct bond if the previous nucleotide is the 3′
                         # junction of an extra-base crossover (handled separately).
@@ -1413,10 +1435,6 @@ def build_atomistic_model(
                             bonds.append((prev_o3_serial, p_serial))
                     prev_o3_serial = o3_serial
                     prev_nuc_key   = (h_id, bp, dir_str)
-                    copy_k2 += 1
-                if not found_any:
-                    prev_o3_serial = None
-                    prev_nuc_key   = None
 
     # ── Crossover phosphate bridge relaxation ────────────────────────────────
     # At each crossover (consecutive domains on different helices sharing the

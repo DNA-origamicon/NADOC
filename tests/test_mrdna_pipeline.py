@@ -162,6 +162,30 @@ def _ideal_positions(design) -> "dict[tuple, np.ndarray]":
 # Tier 1 — Pure geometry unit tests (no external tools required)
 # ─────────────────────────────────────────────────────────────────────────────
 
+class TestWslCudaLibs:
+    """ensure_wsl_cuda_libs prepends the WSL GPU driver dir so ARBD sees the GPU."""
+
+    def test_prepends_wsl_lib_dir_under_wsl(self, monkeypatch):
+        import backend.core.mrdna_bridge as mb
+        monkeypatch.setattr(mb, "_is_wsl", lambda: True)
+        monkeypatch.setattr(mb.os.path, "isdir", lambda p: p == mb._WSL_LIB_DIR)
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/some/other/lib")
+        mb.ensure_wsl_cuda_libs()
+        parts = mb.os.environ["LD_LIBRARY_PATH"].split(mb.os.pathsep)
+        assert parts[0] == mb._WSL_LIB_DIR          # WSL driver first → not shadowed
+        assert "/some/other/lib" in parts
+        # idempotent — a second call doesn't duplicate it
+        mb.ensure_wsl_cuda_libs()
+        assert mb.os.environ["LD_LIBRARY_PATH"].split(mb.os.pathsep).count(mb._WSL_LIB_DIR) == 1
+
+    def test_noop_when_not_wsl(self, monkeypatch):
+        import backend.core.mrdna_bridge as mb
+        monkeypatch.setattr(mb, "_is_wsl", lambda: False)
+        monkeypatch.setenv("LD_LIBRARY_PATH", "/orig")
+        mb.ensure_wsl_cuda_libs()
+        assert mb.os.environ["LD_LIBRARY_PATH"] == "/orig"
+
+
 class TestInternalHelpers:
     """_xy_frame and _rotate helpers used throughout the override function."""
 

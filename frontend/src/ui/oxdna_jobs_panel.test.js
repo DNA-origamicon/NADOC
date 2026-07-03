@@ -11,6 +11,12 @@ vi.mock('../api/client.js', () => ({
   getOxdnaRmsf: vi.fn().mockResolvedValue({ ready: true, n_frames: 10, positions: [], min_rmsf: 0.1, max_rmsf: 1.4, mean_rmsf: 0.7 }),
   getOxdnaTrajectory: vi.fn().mockResolvedValue({ ready: true, n_frames: 4, keys: [], frames: [[]], markers: [], stages: [] }),
   createMdJob: vi.fn().mockResolvedValue({ job_id: 'md1', status: 'queued' }),
+  getOxdnaErrorLog: vi.fn().mockResolvedValue({
+    error: 'Health gate failed after 2_md_relax: base-pair retention 24% below gate 50%',
+    stage: '2_md_relax', log: 'INFO: END OF THE SIMULATION, everything went OK!',
+    log_path: '/w/2_md_relax/oxdna.log',
+    diagnostics: { requested_backend: 'CUDA', oxdna_bin: '/x/oxDNA', cuda_capable: true },
+  }),
   lastErrorMessage: () => null,
 }))
 
@@ -593,7 +599,8 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-panel': 'div', 'oxdna-jobs-heading': 'div', 'oxdna-jobs-arrow': 'div',
     'oxdna-jobs-body': 'div', 'oxdna-jobs-status': 'div', 'oxdna-jobs-prod-status': 'div',
     'oxdna-jobs-list': 'div', 'oxdna-jobs-detail': 'div', 'oxdna-jobs-detail-status': 'div',
-    'oxdna-jobs-detail-error': 'div', 'oxdna-jobs-progress': 'div', 'oxdna-jobs-timeline': 'div',
+    'oxdna-jobs-detail-error': 'div', 'oxdna-jobs-errorlog-btn': 'button',
+    'oxdna-jobs-progress': 'div', 'oxdna-jobs-timeline': 'div',
     'oxdna-jobs-health': 'div', 'oxdna-jobs-show-all': 'input',
     'oxdna-jobs-run-btn': 'button', 'oxdna-jobs-prod-btn': 'button', 'oxdna-jobs-prod-steps': 'input',
     'oxdna-jobs-start-btn': 'button', 'oxdna-jobs-stop-btn': 'button', 'oxdna-jobs-delete-btn': 'button',
@@ -645,6 +652,22 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     $('oxdna-jobs-list').querySelector('div')?.click()
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
   }
+
+  it('clicking "View error log" on a failed job opens the modal (regression: modal.open was missing)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'failed',
+      created_at: 1, current_stage_idx: 1,
+      error: 'Health gate failed after 2_md_relax: base-pair retention 24% below gate 50%',
+      stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'failed' }, { kind: 'equil', status: 'pending' }] }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    const btn = $('oxdna-jobs-errorlog-btn')
+    expect(btn.style.display).not.toBe('none')          // button visible for a failed job
+    expect(document.querySelector('.modal__overlay')).toBeNull()   // nothing open yet
+    btn.click()
+    await flush()
+    expect(document.querySelector('.modal__overlay')).toBeTruthy()  // modal actually opened
+    expect(document.querySelector('.modal__overlay').textContent).toContain('everything went OK')
+  })
 
   it('a completed relaxation → Production enabled, Flexibility map disabled (waiting for production)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',

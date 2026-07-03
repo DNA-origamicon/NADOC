@@ -265,16 +265,16 @@ def assign_staple_sequences_endpoint() -> dict:
 
     # Logged (op_kind='assign-staple-sequences') so the sequenced state is captured
     # in the feature log and survives a seek / job roll.
-    def _run(design):
-        if design.overhangs:
-            cleared_overhangs = [o.model_copy(update={"sequence": None}) for o in design.overhangs]
-            design = design.model_copy(update={"overhangs": cleared_overhangs})
-        return assign_staple_sequences(design)
-
+    #
+    # User-assigned overhang sequences are PRESERVED here — assign_staple_sequences
+    # reads each overhang's stored sequence (via _assemble_overhang_5to3) and threads
+    # it into the containing staple, so re-running this must not clear or reassign
+    # them. (An earlier version wiped overhang sequences to None first; that was
+    # removed deliberately.)
     try:
         updated, report, _entry = design_state.mutate_with_feature_log(
             op_kind='assign-staple-sequences', label='Assign staple sequences',
-            params={}, fn=_run)
+            params={}, fn=assign_staple_sequences)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return _design_response(updated, report)

@@ -37,6 +37,7 @@ from backend.api.routes_oxdna import (
     SurfaceElement,
     _assert_job_current,
     _load_job,
+    _seed_geometry,
     _workspace,
 )
 from backend.core.oxdna_job import OxdnaStatus
@@ -310,8 +311,6 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     # Resolve the enabled elements into the writer's input dicts (mirror /run).
     field_in, field_oxdna, field_dir, wall_in, anchors = _resolve_live_elements(body)
 
-    from backend.api.crud import _geometry_for_design
-
     sid = new_session_id()
     rundir = ws / "live_sessions" / sid
     rundir.mkdir(parents=True, exist_ok=True)
@@ -319,7 +318,7 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     # mirroring routes_oxdna._design_ref_conf — NOT the drifted seed conf.  Written
     # before the engine build so the frame builder can parse it.
     design_ref = rundir / "design_ref.dat"
-    write_configuration(design, _geometry_for_design(design, compact_skips=True), design_ref)
+    write_configuration(design, _seed_geometry(design), design_ref)
 
     # _build_live_engine autodetects the backend (CUDA when a GPU is present, with a
     # CPU fallback input staged) and returns it for the response.

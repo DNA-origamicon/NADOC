@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from backend.core.engines import engines_status, gpu_info
+from backend.core.engines import engines_status
 
 router = APIRouter(tags=["engines"])
 
@@ -23,17 +23,22 @@ async def get_engines_status() -> dict:
     return engines_status()
 
 
-@router.get("/engines/namd/scan-download")
-async def scan_namd_download() -> dict:
-    """Look for a user-downloaded NAMD tarball in the usual download folders.
+# Filename shapes worth highlighting per engine in the folder navigator.
+_BROWSE_GLOB = {
+    "arbd": "arbd*.tar.*",
+    "namd": "namd_*linux-x86_64*.tar.gz",
+}
 
-    Backs the "check download & install" button: NAMD is license-gated so it
-    can't be auto-downloaded, but once the user has the tarball NADOC can verify
-    it and finish (extract + detect).  Returns ``{candidates, best}`` (filename
-    checks only — the deep tar-peek happens at install time).
+
+@router.get("/engines/browse")
+async def browse_files(path: str | None = None, kind: str | None = None) -> dict:
+    """List a directory for the "pick a downloaded file" folder navigator.
+
+    Backs the Browse… button in the install popups.  With no ``path`` it opens at
+    the user's Downloads folder (the Windows one on WSL — see
+    `fs_browse.default_downloads_dir`).  ``kind`` (``"arbd"`` | ``"namd"``) picks
+    the filename glob used to *highlight* likely files (navigation is never
+    restricted).  Returns ``fs_browse.list_dir`` shape.
     """
-    from backend.core.engine_artifact import pick_best_candidate, scan_namd_downloads
-    gpu = gpu_info()
-    candidates = scan_namd_downloads(gpu)
-    best = pick_best_candidate(candidates, gpu)
-    return {"candidates": candidates, "best": best}
+    from backend.core.fs_browse import list_dir
+    return list_dir(path, name_glob=_BROWSE_GLOB.get(kind or ""))

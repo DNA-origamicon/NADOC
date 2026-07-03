@@ -31,6 +31,7 @@ export function toFemUpdates(displayResponse) {
     helix_id:          p.helix_id,
     bp_index:          p.bp_index,
     direction:         p.direction,
+    copy:              p.copy ?? 0,   // loop-copy index → addresses the exact loop bead
     backbone_position: p.backbone_position,
     nx: p.nx, ny: p.ny, nz: p.nz,
   }))
@@ -74,11 +75,15 @@ export function rmsfColorMap(resp, loBound, hiBound) {
   const colorByKey = {}
   for (const p of resp.positions) {
     updates.push({
-      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
+      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy: p.copy ?? 0,
       backbone_position: p.backbone_position, nx: p.nx, ny: p.ny, nz: p.nz,
     })
     const t = span > 1e-9 ? (p.rmsf - lo) / span : 0.0   // viridisHex clamps to [0,1]
-    colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}`] = viridisHex(t)
+    const hex = viridisHex(t)
+    // 4-part key → each loop copy's bead/slab/cone; 3-part alias (copy 0 only) keeps
+    // 3-part consumers working (crossover-arc recolour, which lands on real nucleotides).
+    colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}:${p.copy ?? 0}`] = hex
+    if ((p.copy ?? 0) === 0) colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}`] = hex
   }
   return { updates, colorByKey, min: dataLo, max: dataHi }
 }
@@ -130,11 +135,13 @@ export function deviationColorMap(resp, loBound, hiBound) {
   const colorByKey = {}
   for (const p of resp.positions) {
     updates.push({
-      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
+      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy: p.copy ?? 0,
       backbone_position: p.backbone_position, nx: p.nx, ny: p.ny, nz: p.nz,
     })
     const t = span > 1e-9 ? (p.deviation - lo) / span : 0.0
-    colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}`] = deviationHex(t)
+    const hex = deviationHex(t)
+    colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}:${p.copy ?? 0}`] = hex
+    if ((p.copy ?? 0) === 0) colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}`] = hex
   }
   return { updates, colorByKey, min: dataLo, max: dataHi }
 }
@@ -151,6 +158,7 @@ export function framesToUpdates(keys, frame) {
     const o = j * 6
     updates.push({
       helix_id: keys[j][0], bp_index: keys[j][1], direction: keys[j][2],
+      copy: keys[j][3] ?? 0,   // 4th key element = loop-copy index (absent → 0)
       backbone_position: [frame[o], frame[o + 1], frame[o + 2]],
       nx: frame[o + 3], ny: frame[o + 4], nz: frame[o + 5],
     })
@@ -195,7 +203,16 @@ export function initOxdnaDisplay({
   designRenderer, api, proteinRenderer = null,
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
+  onFrame = null,
 }) {
+  // Single chokepoint for the bead-position overlay: applies the frame to the rigid
+  // design mesh AND forwards it to any per-frame consumer (onFrame) — e.g. flexible
+  // ssDNA arcs, whose beads are excluded from the rigid mesh and must be redrawn at
+  // simulated positions.  Pass null to restore the design (both revert).
+  const _applyFem = (updates) => {
+    designRenderer?.applyFemPositions(updates)
+    onFrame?.(updates)
+  }
   let _active = false
   let _jobId = null
   let _mode = null     // 'relaxed' | 'rmsf' | 'trajectory'
@@ -458,7 +475,7 @@ export function initOxdnaDisplay({
       // Switching to a job with no relaxed frame yet: clear any stale overlay left
       // from a previously-displayed job so we don't keep showing its positions.
       if (_active && _jobId !== jobId) {
-        designRenderer.applyFemPositions(null)
+        _applyFem(null)
         designRenderer.clearScalarColors?.()
         proteinRenderer?.clearOxdnaTransforms?.()
         _active = false; _mode = null; _jobId = null
@@ -466,7 +483,7 @@ export function initOxdnaDisplay({
       return { ok: false, reason: resp?.ready === false ? 'no relaxed frame yet' : 'empty' }
     }
     designRenderer.clearScalarColors?.()   // leaving a flexibility map → restore bead colours
-    designRenderer.applyFemPositions(updates)
+    _applyFem(updates)
     // Hybrid (protein) jobs: move each protein to its relaxed pose (design→relaxed
     // rigid 4×4 from the backend); DNA-only jobs send no proteins → clears to design.
     proteinRenderer?.applyOxdnaTransforms?.(proteinTransformMap(resp))
@@ -496,7 +513,7 @@ export function initOxdnaDisplay({
     if (!updates.length) return false
     _epoch++   // supersede any in-flight relaxed/flex/traj fetch
     designRenderer.clearScalarColors?.()
-    designRenderer.applyFemPositions(updates)
+    _applyFem(updates)
     proteinRenderer?.clearOxdnaTransforms?.()
     _active = true
     _mode = 'live'
@@ -527,7 +544,7 @@ export function initOxdnaDisplay({
     _rmsfCache = { jobId, resp }   // keep across toggle-off
     _rmsfResp = resp
     _rmsfBounds = null             // fresh display → default data-range scale
-    designRenderer.applyFemPositions(map.updates)
+    _applyFem(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _active = true
     _mode = 'rmsf'
@@ -550,7 +567,7 @@ export function initOxdnaDisplay({
     _epoch++
     const map = deviationColorMap(resp)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
-    designRenderer.applyFemPositions(map.updates)
+    _applyFem(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _active = true
     _mode = 'deviation'
@@ -618,7 +635,7 @@ export function initOxdnaDisplay({
     const n = _traj.frames.length
     const idx = Math.max(0, Math.min(n - 1, i | 0))
     _frameIdx = idx
-    designRenderer.applyFemPositions(framesToUpdates(_traj.keys, _traj.frames[idx]))
+    _applyFem(framesToUpdates(_traj.keys, _traj.frames[idx]))
     _applyHeavy()   // atomistic/surface follow the scrub (coarse=snap, fine=exact)
   }
 
@@ -658,7 +675,7 @@ export function initOxdnaDisplay({
     _setHeavyBusy(false, null)   // clear any "building…" spinner the cancelled fetch left up
     if (!_active) return
     designRenderer?.clearScalarColors?.()
-    designRenderer?.applyFemPositions(null)
+    _applyFem(null)
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
     _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
     _active = false

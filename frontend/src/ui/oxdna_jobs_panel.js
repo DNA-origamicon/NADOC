@@ -1263,6 +1263,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
         createButton({ label: 'Close', size: 'sm', variant: 'primary', onClick: () => modal.close() }),
       ],
     })
+    modal.open()
   }
 
   function _renderProgress(job) {

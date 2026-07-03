@@ -73,6 +73,55 @@ Now `_namd_candidates()`/`_psfgen_candidates()` glob at CALL time (namd_runner.p
 namd_topology.py; test_namd_discovery.py monkeypatches the functions). Verified
 live: install round-trip now flips namd+psfgen to detected with no restart.
 
+## Phase 4 — mrDNA / ARBD / CUDA rows (2026-07-02)
+Added the coarse-grained pipeline's three deps to the same panel (reusing the NAMD
+download-scan-install + oxDNA auto-build machinery; ZERO new main.js logic):
+- **mrDNA** = `method:"auto"` (`_mrdna_plan`) — one-click **Install** runs
+  `scripts/setup-mrdna.sh` (git clone, GPU-independent) via `install_steps("mrdna")`
+  + `installable_engine_keys()` now `["oxdna","oxdna_anm","mrdna"]`; discovery
+  `mrdna_bridge.find_mrdna()`.
+- **ARBD** = `method:"download"` (`_arbd_plan`, KS UIUC license-gated download portal
+  `www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=ARBD` — the old
+  gitlab.engr TBGL link was dead) — the user chose
+  the standard **`sudo make install` → /usr/local/bin/arbd**, so the download-finish
+  flow (`engine_artifact.validate_arbd_archive`/`install_arbd_archive`, ws
+  `{engine:"arbd", archive_path}`) streams **extract+cmake+make** then emits a
+  **`manual_step`** WS message (command=`sudo make install`) instead of `complete` —
+  the frontend (`_showManualStep`) shows it with Copy. CUDA nvcc surfaced as an ARBD
+  `missing_prereqs`. Discovery `mrdna_bridge.find_arbd()`.
+- **WSL-aware + "built but not installed" finish (2026-07-02).** `engines.is_wsl()`
+  (via `/proc/version` microsoft marker / `WSL_*` env); status carries top-level
+  `wsl` + a panel banner. NADOC runs on the Linux side, so ARBD must be the Linux
+  build — a Windows-side `/mnt/c/...` copy can't run. `mrdna_bridge.find_arbd_build()`
+  detects a built-but-not-on-PATH binary (`~/arbd-src/build/arbd`); when present the
+  ARBD plan flips to `can_finish_built` and offers **two terminal-free finishes**:
+  (1) `install_arbd_binary` — copies the built binary to `~/.local/bin/arbd`
+  (no password; `find_arbd()` also checks `~/.local/bin`), WS `{engine:"arbd",
+  install_built:true}`; (2) `install_arbd_sudo(password)` — runs `sudo -S -k make
+  install` for the user (password fed to stdin, never logged), WS `{…,sudo_install,
+  password}`. Frontend `_finishBuiltBlock`/`_promptSudoInstall`. **The classic WSL
+  snag** ("I built ARBD but sudo make install wasn't finished, so NADOC can't find
+  it") — live-fixed here: `~/arbd-src/build/arbd` → `~/.local/bin/arbd`, ARBD went
+  green. `sudo -S` reads the password from stdin so terminal-averse users never open
+  a shell (localhost-only tool; password used once).
+- **File selection = folder navigator, NOT a fixed-folder scan.** The original
+  `scan-download` endpoints + `scan_*_downloads`/`pick_best_candidate` were REMOVED
+  and replaced by `backend/core/fs_browse.py` (`list_dir` + `default_downloads_dir`)
+  + `GET /engines/browse?path=&kind=` + `frontend/src/ui/file_picker.js`
+  (`openFilePicker({api,kind,onPick})`). **Why:** on WSL the user's real Downloads is
+  the **Windows** folder (`/mnt/c/Users/<name>/Downloads`), which `~/Downloads` never
+  saw — `default_downloads_dir()` prefers the most-recent `/mnt/*/Users/*/Downloads`.
+  Both NAMD + ARBD download-finish blocks now use a **Browse…** button. `kind`
+  highlights likely files (dirs-first, files newest-first).
+- **CUDA toolkit** = `method:"guided"` (`_cuda_plan`, NVIDIA link + apt) — status +
+  link + copy-paste; `installed = shutil.which("nvcc")`.
+Frontend: `ENGINE_ORDER` extended; `namdScanSummary`→ thin wrapper over generic
+`downloadScanSummary(scan,label)`; `_downloadFinishBlock`/`_installFromArchive`
+parameterized by `eng.key` via `_DOWNLOAD_ENGINES`; `api.scanArbdDownload`.
+**This box (RTX 2080 SUPER, no CUDA/nvcc) can't compile ARBD** — real build only
+stub-tested; genuine compile → 3080 Ti. Live-verified: API rows + arbd scan.
+[[manual_validation_debt]] MV-MRDNA-PANEL. See [[project_mrdna_arbd_setup]].
+
 ## Tests
 `test_engines.py` (20), `test_engine_install.py` (10), `test_engine_artifact.py`
 (13 — real fabricated tarballs), `test_engines_ws.py` (7 — TestClient WS: sim-switch

@@ -1357,7 +1357,8 @@ validated on the tiny 6hb (~500 nt / 30 nm):
    NOTE: this design has 0 LOOPS (insertions), so the loop-copy compaction path is unexercised; loops still
    bulge (eff advances by 1 per loop column, unchanged). `write_configuration`'s `_compute_nuc_geometry`
    FALLBACK (only hit for keys missing from geo_map) is NOT skip-compacted — fine because compacted
-   geometry covers all strand keys.
+   geometry covers all strand keys. **[SUPERSEDED 2026-07-02 for LOOPS + BENT bundles — see §"Loops in
+   oxDNA".]**
 
 **NOT yet addressed (separate from the 3 fixes):** MC/MD step counts are FIXED, not scaled to N — 1000 MC
 steps ≈ 0.07 moves/particle on 14.7k nt (a near-no-op; MC extent stayed 47×12×76 flat, then MD popped). The
@@ -2182,3 +2183,183 @@ initially, then RE-ANNEALS over the long md_relax stage.* Verified on CUDA (RTX 
 relaxation (mc≈1000, md_relax≈1e6, equil≈1e5, `min_bp_retained≈0.5`, `max_relax_retries>0`) on a real-design
 fixture, not the mock defaults. Repro: scratchpad `af24_standard.py` (test343 standard relax), `af24_duplex.py`,
 t=0 HBList/orientation probes. Full write-up: `design_automation_log.md` difficulties ledger "AF-24 ROOT-CAUSED".
+
+## 2026-07-02 — bp-MELT now escalates the relax ladder (was a hard fail) + SQ seed characterised
+
+Triggered by a user report: `workspace/2x6_triple_strut.nadoc` (2610 nt, **SQUARE** lattice) "fell apart at md_relax".
+Job `workspace/oxdna_jobs/333e9682f27c`: oxDNA ran clean ("everything went OK") — a HEALTH-GATE fail, not a crash.
+Per-stage bp (measured on the saved confs): **seed 100% → mc 97% → md_relax 39%** (oxDNA HBList read 24%; both < 50% gate).
+
+- **Root cause = the §2026-06-23 re-anneal phenomenon.** oxDNA drops pairing early then re-anneals over a LONG
+  md_relax. The run used `md_relax_steps=100_000` (the user hand-lowered it for speed; both backend & frontend
+  DEFAULT to 1_000_000) — 10× short of re-anneal, so it dropped pairing and never recovered. Not a real melt.
+- **Retry-ladder gap FIXED (`oxdna_runner.py`, ~L1073).** A bp-melt (or non-finite blow-up) at md_relax was a HARD
+  FAIL — only FENE-not-ready escalated. Now a failing md_relax health gate routes through the SAME
+  `_escalate_relax_and_rewind` ladder (steps ×{3,6,10}, dt→0.001) when `relax_retries < max_relax_retries`; exhausting
+  the budget fails with a melt-specific message ("could not hold the structure together after N escalating attempt(s)").
+  **Quickness preserved:** the fast default runs first; only a failed melt pays. And the ×10 rung takes a 100k base to
+  **exactly 1e6** = the proven re-anneal count, so an auto-escalated 100k run reaches standard grade on retry 3.
+  Tests: `test_run_job_recovers_from_md_relax_bp_melt`, `test_run_job_fails_after_exhausting_melt_retries`.
+- **SQ native seed characterised (NOT the proximate cause).** `oxdna_native_seed_map`'s uniform inward-along-a1 shift
+  gives a FENE-CLEAN seed on honeycomb (6hb/18hb: fene_over=0, max 0.785) but leaves **~140 backbone bonds over the
+  1.006 cliff on this SQ design** (max ~1.7 units; the saved job's conf read 103 / 3.588). Almost certainly the
+  crossover backbones — the intra-duplex narrowing shift doesn't fix SQ's 90° inter-helix crossover spans. MC relax
+  neutralises it (fene→0, bp 97%), so it did NOT trigger the melt. Seed docstring's "REMOVES the FENE over-stretch"
+  claim is HONEYCOMB-ONLY — improving the SQ seed (crossover-aware shift) is a real but separate ASK-FIRST geometry job.
+- **Also fixed this session:** the "View error log" button did nothing — `_showErrorLog` built the modal but never
+  called `modal.open()` (`frontend/src/ui/oxdna_jobs_panel.js`). One line + regression test.
+
+## 2026-07-02 — LOOPS in oxDNA: two blockers fixed (the loop-copy path was never exercised)
+
+Triggered by "include loops in oxDNA sims", iterated on `workspace/Robot Arm/Arm_pulley_v1.nadoc` (22 helices,
+14 322 nt, **204 loop insertions + 207 skip deletions**, honeycomb, fully sequenced; `flexible_connections`
+EMPTY — so the ssDNA flexible-arc work does NOT apply here, "loops" = the loop_skip deformation system). It's
+a **bent bundle**: column-0 helices net −23/−33, column-2 net +26/+35 — deliberate differential ins/del bends
+the arm. Two stacked failures blocked relaxation; both were dormant because every prior oxDNA test design had
+**0 loop insertions**.
+
+- **BLOCKER 1 — `oxdna_native_seed_map` KeyError (crashes job-prep).** A loop insertion is a **dsDNA** insert
+  (both strands get an extra bp — `nucleotide_positions` adds 2 nucs/loop), so loop copies are WC-paired and
+  keyed by a **4-tuple** `(helix, bp, dir, copy_idx)` in `resolved_nuc_map` (816 such keys here). The seed map
+  built its FWD/REV pair sets from `k[2]` but then indexed `resolved_map[(hid,bp,"FORWARD")]` as a 3-tuple →
+  `KeyError('h_XY_2_1',180,'FORWARD')`. FIX (`oxdna_interface.py`): guard the pair-sep SAMPLE to `len(k)==3`
+  (loop copies excluded from the median — they're at the same radius, so 3-tuple pairs are representative);
+  the inward a1-shift still applies to EVERY key incl. copies (`a1_of` covers all). Pin
+  `test_oxdna_native_seed_map_handles_loop_inserts` (can-go-red: old code raised).
+
+- **BLOCKER 2 — `compact_skips=True` desyncs crossovers on a bent bundle (no relax recovers).** `compact_skips`
+  (added for straight uniformly-skipped bundles, §2026-06-18 #3) closes skip gaps by advancing a per-helix
+  `eff` counter — i.e. it shifts EACH helix axially by ITS OWN cumulative deletion count. When paired helices
+  carry **unequal** skips (h_XY_0_7: 23 skips below bp307 vs h_XY_1_7: 4) the crossover between them stretches
+  to **8.4 oxDNA units** (≈19 bp × rise) — far past FENE; 508 crossover bonds over the cliff, max 8.41. The
+  un-compacted **deformed** geometry keeps crossovers registered (worst cross-helix bond 3.05, mostly the
+  bend edges) and relaxes fine. Skip gaps are INTRA-helix so compaction can only leave crossover bonds equal
+  (balanced skips) or worse (bent) — never better. FIX: new `_seed_geometry(design)` in `routes_oxdna.py`
+  builds both, and falls back to deformed when `max_crossover_backbone_stretch(deformed) <
+  max_crossover_backbone_stretch(compact) − 0.5`; no-loop_skips designs short-circuit to compact (no 2nd
+  build). New pure helper `max_crossover_backbone_stretch(design, geometry)` (`oxdna_interface.py`) measures
+  the worst cross-helix backbone bond. Wired at ALL THREE seed sites so the display's Kabsch reference matches
+  the sim frame: job-prep (`create_oxdna_job`), `_reference_conf` (`design_ref.dat`), protein-transforms; plus
+  `routes_oxdna_live.py`'s live design_ref. **CAUTION on the threshold:** ideal NADOC seed crossover bonds are
+  inherently ~2–2.5 units (wide 1.0 nm helix radius) even when perfectly registered — do NOT use an absolute
+  cutoff (an early 2.0-unit version mis-fired on a normal routed 18hb reading 2.45); the *difference* vs
+  deformed is the only clean signal. Pins: `test_max_crossover_stretch_detects_compaction_desync`,
+  `test_seed_geometry_falls_back_for_bent_bundle` (both on a synthetic bent 18hb_routed).
+
+- **RESULT.** With both fixes the production `_seed_geometry` path relaxes the arm cleanly: MC 500 → GPU MD
+  relax drove energy **+27 → −0.36/particle** (unbiased equil plateau = self-sustaining), all 3 stages
+  `completed`, no divergence. Short-probe bp mc 94% → md 74% → equil 66% geometric / 4338 HBList (a 20k-step
+  probe, well short of the ~1e6 re-anneal — a standard-defaults run re-anneals further; a full-length
+  standard run was launched to confirm quality/gate-pass).
+
+- **KNOWN residual (not a blocker, health blind-spot):** `backbone_bond_pairs` COLLAPSES loop copies to one
+  3-tuple and never emits the loop-insert backbone bonds — so the FENE health check (`max_backbone_stretch`)
+  can't see loop-copy bonds (they don't match the 4-tuple `resolved_nuc_map` keys → the "missing 816"). oxDNA
+  itself simulates them fine (topology threads them, no inconsistency), but a loop bulge that over-stretches
+  would be invisible to the gate. Worth threading loop copies into `backbone_bond_pairs` if loop-heavy designs
+  need health coverage. Also: loops are still placed as an axial "bulge" (eff advances 1 per loop column), not
+  a ⟂ ssDNA loop — physically crude but FENE-safe as a seed; a real ss-loop bulge geometry is a separate job.
+
+### 2026-07-02 (later) — loop base ORDER + groove were topologically wrong on reverse strands
+
+User caught it: a loop bulges along the axis (copy k=0 lowest, k=n−1 highest). A FORWARD strand climbs
+`bp_lo → k0 → … → k_{n−1} → bp_hi`; a REVERSE strand runs antiparallel and must DESCEND `bp_hi → k_{n−1} →
+… → k0 → bp_lo`. Two bugs made the reverse strand wrong (user model confirmed = **paired extra base-pair /
+duplex extension**, fix scope = **all paths**):
+
+- **Bug A — copy ORDER not reversed for reverse strands.** `_walk_strand_nucleotides` emitted `for k in
+  range(n_copies)` for BOTH directions → the reverse strand threaded `bp_hi → k0[low] → k1 → … → bp_lo`, a
+  ZIG-ZAG with a ~1.9-unit out-of-order backbone bond on every reverse-strand loop (measured: 1.89 oxu on a
+  δ=2 loop). This also mis-assigned `strand.sequence` letters to the wrong copies on reverse strands. FIX:
+  `copy_order = range(n) if FORWARD else range(n−1,−1,−1)`. The 4-tuple key still carries the TRUE k, so WC
+  pairing (copy k ↔ copy k, same axial level) and per-copy geometry are unchanged — only the emission (n3/n5
+  chain + sequence) order flips.
+- **Bug B — loop copies came from a DIFFERENT groove convention.** `resolved_nuc_map` recomputed loop copies
+  via `_compute_nuc_geometry_copy` → `_compute_nuc_geometry`, whose reverse minor-groove sign is OPPOSITE to
+  geometry.py `nucleotide_positions` (oxdna_interface L119 `groove=−150° FWD-helix` vs geometry.py L181
+  `+150°`). Real bases dodge it (taken from the geometry LIST = geometry.py); only loop copies hit the
+  divergent path → the reverse loop copy landed ACROSS the duplex (a 2nd ~1.7-unit junction bond). FORWARD
+  copies were immune (they return `fwd_backbone`, groove-independent). FIX: `resolved_nuc_map` now sources
+  the k-th loop copy from the geometry LIST itself (grouped per (helix,bp,dir) in emission order = k
+  ascending) instead of recomputing — same groove as real bases. `_compute_nuc_geometry_copy` kept only as a
+  fallback when the list lacks the copy. **NOTE the broader latent issue:** `_compute_nuc_geometry`'s reverse
+  groove genuinely disagrees with geometry.py — it's only masked now because real bases never use it and loop
+  copies no longer do; reverse OVERHANG bases (outside helix span) may still hit it. Reconcile if touched.
+- **RESULT** (δ=2 loop): reverse strand now mirrors forward exactly — `bp_hi → k2(0.69) → k1(0.39) →
+  k0(0.39) → bp_lo(0.69)`, monotone, no over-stretch. On the real arm: loop-copy bonds median 0.73 / max
+  2.47 / only 3-of-1224 over FENE (were hundreds); oxDNA topology inits clean + relaxes to `completed`. Pin
+  `test_loop_copies_thread_monotonically_on_both_strands` (both strands monotone + all bonds < FENE).
+- **THREE separate walks — NO single shared one.** Each consumer resolves loop-copy order independently
+  (geometry is emitted PER HELIX, ascending-axial k; both strand directions traverse each helix, so no
+  single emission order suits both — the reversal MUST happen per-consumer at its strand walk):
+  - **oxDNA (DONE):** `_walk_strand_nucleotides` + `resolved_nuc_map` (above).
+  - **Render (DONE 2026-07-02):** `helix_renderer.js buildHelixObjects` sorted each strand's nucs by
+    (domain, direction-aware bp) and drew a backbone cone between consecutive nucs — but loop copies share
+    a bp_index, so JS's STABLE sort kept them in geometry-list order (ascending axial) for BOTH directions →
+    a REVERSE strand (e.g. `loop_test.nadoc`: scaffold is REVERSE on the looped helix) zig-zagged the cone
+    into the bulge and back. FIX: extracted `export function orderStrandNucleotides(nucs)` — same sort +
+    a direction-aware LOOP-COPY tiebreak (copy index = per-(helix,bp,dir) appearance order in the list;
+    FORWARD threads 0→n-1, REVERSE n-1→0). Pin: `helix_renderer.test.js` (`orderStrandNucleotides`, pure).
+    Verified in-app via a throwaway Playwright spec on `loop_test.nadoc` (scaffold is REVERSE on the looped
+    helix): max scaffold backbone bond <1.0 nm (was ~1.6 nm). No groove bug here (render uses geometry.py
+    positions throughout).
+  - **atomistic.py (DONE 2026-07-02 — PDB/NAMD export):** its OWN walk, DIFFERENT key convention (3-tuple
+    k=0, 4-tuple k≥1), same forward-only copy iteration in THREE coupled loops — seq_map (`_build_sequence_map`),
+    atom placement, and O3′→P backbone bonds (all in `build_atomistic_model`). New shared helper
+    `_loop_copy_order(direction, n_copies)` (range ascending FORWARD / descending REVERSE); all three loops
+    restructured to iterate it (placement/bond `while copy_k` → count `n_copies` then `for copy_k in
+    _loop_copy_order(...)`). `bp_to_sugar_serials` (crossover/skip bridge representative) pinned to
+    copy `n-1` explicitly so its "last-copy-wins" value is order-independent (unchanged behaviour). Uses
+    geometry.py positions → order only, no groove bug. Pin `test_atomistic_loop_backbone_threads_in_order_on_reverse_strand`
+    (reverse worst O3′→P bond must match forward; can-go-red: pre-fix reverse 0.83 nm vs forward 0.42).
+  All three walks now correct. The real long-term cleanup is to UNIFY them onto one strand walk (they
+  triplicate the domain→bp→copy traversal with three different key conventions) — a separate refactor.
+
+### 2026-07-02 (later still) — loop bases now FOLLOW the sim in all 4 display overlays
+
+User: toggling oxDNA display left loop bases at their design positions (didn't follow the relaxed sim).
+Root cause = the SAME collapse everywhere: the display/flex/deviation/trajectory data keyed nucleotides by
+the 3-tuple `(helix,bp,dir)`, so loop-insertion copies collapsed (last copy wins) — one update moved one
+bead, the rest stayed put. Fix = surface + address a **loop-copy index** end-to-end (loop copies are already
+4-tuple `(helix,bp,dir,copy)` in `read_configuration_full(copies=True)`):
+
+- **Frontend bead addressing (shared enabler, `helix_renderer.js`):** new `_copyKeyToEntry`
+  (`"helix:bp:dir:copy"→entry`, copy = per-(helix,bp,dir) appearance order in `backboneEntries`) + `entry._copy`
+  + `slab._copy`. `applyFemPositions` addresses `_copyKeyToEntry.get(...:${upd.copy ?? 0})` (falls back to
+  `_keyToEntry` → backward-compatible); slab-normal `normalMap` + `applyScalarColors` (beads/slabs/cones) all
+  key by copy. Cones follow free (nuc-identity via `_nucToEntry`). Non-loop designs unchanged (copy 0).
+- **Each data path adds a `copy` field** (0 for plain nucleotides / `__xb__` inserts):
+  - **Display** (`get_oxdna_display`): `_relaxed_full_map(..., copies=True)` + emit `copy=key[3] if len==4`.
+    `toFemUpdates` carries it.
+  - **Flex** (`production_rmsf(..., copies=True)`, route passes it): reads ref+traj with copies, per-copy
+    positions. `rmsfColorMap` emits `copy` + a 4-part `colorByKey` (plus a 3-part alias for copy 0 so the
+    crossover-arc recolour, which lands on real nucleotides, still matches).
+  - **Deviation** (`geometry_deviation_map`): copy-aware INLINE lookups (kept `_backbone_lookup` untouched —
+    it's shared by rmsd/field/skip-twist self-consistency); `core_reference_geometry` (skip_twist_tuning) now
+    emits `copy` (additive). `deviationColorMap` mirrors `rmsfColorMap`.
+  - **Trajectory** (`composite_trajectory` + `_aligned_downsampled_frames(copies=True)`): the KEY BUG was
+    `key_list = [k[:3] for …]` truncating even under copies=True → changed to `(k if copies else k[:3])`;
+    `composite_trajectory_meta` matched. Keys ship as `[h,bp,dir,copy]`; `framesToUpdates` reads `keys[j][3]`.
+- **Verified:** backend function calls on the arm's real trajectory — FLEX 408 / DEVIATION 408 / TRAJECTORY
+  816 loop-copy entries (were collapsed); display route returns 408 loop-bp groups with 2 distinct copies.
+  In-app Playwright (throwaway) on Arm_pulley_v1 + a seeded relax job: display + trajectory move ALL 408 loop
+  bps' copies to distinct positions; `applyScalarColors` gives a loop bp's two copies distinct colours. Pins:
+  vitest `oxdna_display.test.js` (copy carried through toFemUpdates/framesToUpdates/rmsf/deviation) +
+  `helix_renderer.test.js`; backend `test_geometry_deviation_map_keeps_loop_copies_distinct`. Frontend 1932 /
+  build clean; backend suite green; ruff clean on touched files (4 pre-existing errors in untouched
+  oxdna_health functions left per no_bulk_reformat).
+
+- **FOLLOW-UP BUG (same session) — copies=True ORPHANED loop copies in the PBC unwrap → giant display bonds.**
+  User screenshot: massively over-stretched bonds shooting off the structure. Root cause: `_build_unwrap_adjacency`
+  built the backbone graph from `backbone_bond_pairs` (which COLLAPSES loop copies to a 3-tuple that isn't in
+  the copies=True map) + a 4-tuple copy-tie to a NON-existent 3-tuple base — so ALL 816 loop copies became
+  isolated components (measured: 469 components, every 4-tuple orphaned). `unwrap_align_to_reference` box-shifts
+  each component independently, so once the diffused structure straddles a box face the loop-copy islands land
+  at the wrong image → giant bonds. FIX: new `_backbone_adjacency_pairs(design)` walks the REAL strand order
+  (`_walk_strand_nucleotides`) threading loop copies as 4-tuples (prev_real → copy0 → … → next_real);
+  `_build_unwrap_adjacency` uses it with a `_present()` resolver that maps each walk key to whatever is in the
+  map (full 4-tuple when copies kept, collapsed 3-tuple when copies=False) — so BOTH conventions connect, and
+  the 4-tuple-tie block is gone. Result: 1 connected component (arm copies True/False AND a no-loop 18hb all =
+  1). Verified: wrap-the-structure-across-the-box then unwrap → worst loop-copy bond 1.99 nm, 0 giant (>3 nm).
+  Pin `test_unwrap_adjacency_keeps_loop_copies_in_one_component` (can-go-red: pre-fix 469 components). This
+  fix benefits EVERY unwrap consumer (display/flex/deviation/trajectory/field/rmsf) since they share the graph.

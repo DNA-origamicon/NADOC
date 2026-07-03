@@ -8,9 +8,14 @@ describe('framesToUpdates', () => {
     const keys = [['h0', 0, 'FORWARD'], ['h0', 0, 'REVERSE']]
     const frame = [1, 2, 3, 1, 0, 0,  4, 5, 6, 0, 1, 0]
     expect(framesToUpdates(keys, frame)).toEqual([
-      { helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [1, 2, 3], nx: 1, ny: 0, nz: 0 },
-      { helix_id: 'h0', bp_index: 0, direction: 'REVERSE', backbone_position: [4, 5, 6], nx: 0, ny: 1, nz: 0 },
+      { helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0, backbone_position: [1, 2, 3], nx: 1, ny: 0, nz: 0 },
+      { helix_id: 'h0', bp_index: 0, direction: 'REVERSE', copy: 0, backbone_position: [4, 5, 6], nx: 0, ny: 1, nz: 0 },
     ])
+  })
+
+  it('carries a 4th key element as the loop-copy index', () => {
+    const updates = framesToUpdates([['h0', 5, 'REVERSE', 2]], [7, 8, 9, 0, 1, 0])
+    expect(updates[0].copy).toBe(2)
   })
   it('returns [] for bad input', () => {
     expect(framesToUpdates(null, [])).toEqual([])
@@ -35,9 +40,17 @@ describe('toFemUpdates', () => {
       ],
     }
     expect(toFemUpdates(resp)).toEqual([
-      { helix_id: 'h0', bp_index: 3, direction: 'FORWARD',
+      { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 0,
         backbone_position: [1, 2, 3], nx: 0.1, ny: 0.2, nz: 0.3 },
     ])
+  })
+
+  it('carries a loop-copy index through to the update (defaults 0)', () => {
+    const resp = { ready: true, positions: [
+      { helix_id: 'h0', bp_index: 3, direction: 'REVERSE', copy: 2,
+        backbone_position: [4, 5, 6], nx: 0, ny: 1, nz: 0 },
+    ] }
+    expect(toFemUpdates(resp)[0].copy).toBe(2)
   })
 })
 
@@ -167,7 +180,7 @@ describe('initOxdnaDisplay controller', () => {
 
   it('applies positions and tracks active job', async () => {
     const resp = { ready: true, stage_name: '3_equil',
-      positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD',
+      positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0,
         backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0 }] }
     const deps = makeDeps(resp)
     const ctrl = initOxdnaDisplay(deps)
@@ -179,6 +192,19 @@ describe('initOxdnaDisplay controller', () => {
     expect(deps.designRenderer.applyFemPositions).toHaveBeenCalledWith(resp.positions)
     expect(ctrl.isActive()).toBe(true)
     expect(ctrl.activeJobId()).toBe('job1')
+  })
+
+  it('forwards each frame to onFrame and null on stop (flexible-arc sim positions)', async () => {
+    const resp = { ready: true, stage_name: 's',
+      positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0,
+        backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0 }] }
+    const deps = makeDeps(resp)
+    const onFrame = vi.fn()
+    const ctrl = initOxdnaDisplay({ ...deps, onFrame })
+    await ctrl.displayJob('job1')
+    expect(onFrame).toHaveBeenCalledWith(resp.positions)
+    ctrl.stopAndRestore()
+    expect(onFrame).toHaveBeenLastCalledWith(null)
   })
 
   it('does not activate when there is no relaxed frame', async () => {
@@ -193,7 +219,7 @@ describe('initOxdnaDisplay controller', () => {
   it('displayLiveFrame applies a positions payload directly (live mode, no fetch)', () => {
     const deps = makeDeps({ ready: false, positions: [] })
     const ctrl = initOxdnaDisplay(deps)
-    const positions = [{ helix_id: 'h0', bp_index: 2, direction: 'REVERSE',
+    const positions = [{ helix_id: 'h0', bp_index: 2, direction: 'REVERSE', copy: 0,
       backbone_position: [4, 5, 6], nx: 0, ny: 1, nz: 0 }]
     const applied = ctrl.displayLiveFrame(positions)
     expect(applied).toBe(true)
@@ -280,10 +306,10 @@ describe('initOxdnaDisplay controller', () => {
     expect(r.n_frames).toBe(2)
     expect(ctrl.mode()).toBe('trajectory')
     expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(
-      [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [1, 1, 1], nx: 1, ny: 0, nz: 0 }])
+      [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0, backbone_position: [1, 1, 1], nx: 1, ny: 0, nz: 0 }])
     ctrl.showFrame(1)
     expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(
-      [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [2, 2, 2], nx: 1, ny: 0, nz: 0 }])
+      [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0, backbone_position: [2, 2, 2], nx: 1, ny: 0, nz: 0 }])
   })
 
   it('loadTrajectory reports not-ready when there are no frames', async () => {

@@ -64,6 +64,7 @@ from backend.physics.oxdna_interface import (
     _strand_nucleotide_order,
     count_undefined_bases,
     designed_pair_complementarity,
+    max_crossover_backbone_stretch,
     oxdna_backbone_site,
     pn_to_oxdna_force,
     read_configuration_unwrapped,
@@ -82,6 +83,46 @@ router = APIRouter(tags=["oxdna"])
 # ~0.99 (a few frayed ends aside); a stale-after-skip design reads ~0.27 (≈ random).
 # 0.80 cleanly separates the two — nothing legitimate sits in between.
 _MIN_PAIR_COMPLEMENTARITY = 0.80
+
+# A skip-gap closing (compact_skips) is preferred UNLESS it lengthens the worst
+# cross-helix backbone bond by more than this many oxDNA units versus the deformed
+# geometry — i.e. it has desynced crossovers.  Skip gaps are intra-helix so they
+# never affect crossover bonds; compaction can therefore only leave crossover stretch
+# equal (balanced skips) or make it worse (a bent bundle's unequal per-helix skips),
+# so any meaningful increase is unambiguous desync.  0.5 ignores numerical noise.
+_COMPACT_CROSSOVER_MARGIN = 0.5
+
+
+def _seed_geometry(design) -> list[dict]:
+    """The per-nucleotide seed geometry oxDNA is initialised from.
+
+    Deletions (skips) are normally collapsed to one bp (``compact_skips=True``) so
+    oxDNA does not start with backbone bonds stretched across a 2×-rise gap at every
+    skip.  But that compaction shifts EACH helix by its OWN cumulative deletion
+    count, so on a *bent* bundle — paired helices carrying unequal skips/loops — it
+    pulls every crossover between them axially apart (8+ oxDNA units vs ~2.5 for a
+    registered one), which no relax can recover.  We compare the worst cross-helix
+    backbone bond both ways and fall back to the un-compacted deformed geometry when
+    compaction makes it meaningfully worse (the capped-force MC/MD stages then close
+    the residual per-helix skip gaps).
+
+    Physical layer only — this is the simulation's starting configuration, never
+    written back into Design topology."""
+    from backend.api.crud import _geometry_for_design
+    # No skips/loops → compaction is a no-op; skip the second geometry build.
+    if not any(h.loop_skips for h in design.helices):
+        return _geometry_for_design(design, compact_skips=True)
+    compact = _geometry_for_design(design, compact_skips=True)
+    deformed = _geometry_for_design(design, compact_skips=False)
+    compact_stretch = max_crossover_backbone_stretch(design, compact)
+    deformed_stretch = max_crossover_backbone_stretch(design, deformed)
+    if deformed_stretch < compact_stretch - _COMPACT_CROSSOVER_MARGIN:
+        logger.info(
+            "oxdna seed: compaction desynced crossovers (worst bond %.2f vs %.2f "
+            "units) — using un-compacted deformed geometry instead",
+            compact_stretch, deformed_stretch)
+        return deformed
+    return compact
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -189,13 +230,12 @@ def _design_ref_conf(job_dir: Path, design) -> Path:
     to it displays the whole structure far below/away from the design).  This
     regenerates a clean origin-frame reference from the job's design snapshot.
 
-    Geometry uses ``compact_skips=True`` to match exactly what ``prepare_oxdna_job``
-    wrote into a root job's ``conf.dat`` (deletions collapsed to one bp), so a root
-    job's alignment is byte-for-byte unchanged by routing through this helper."""
+    Geometry comes from ``_seed_geometry`` — the SAME seed ``prepare_oxdna_job``
+    wrote into a root job's ``conf.dat`` (compacted, or un-compacted-deformed for a
+    bent bundle) — so the display's Kabsch alignment matches the simulated frame."""
     ref = job_dir / "design_ref.dat"
     if not ref.exists():
-        from backend.api.crud import _geometry_for_design
-        write_configuration(design, _geometry_for_design(design, compact_skips=True), ref)
+        write_configuration(design, _seed_geometry(design), ref)
     return ref
 
 
@@ -527,11 +567,11 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
 
     # Build geometry + write the self-contained job dir (threadpool — file I/O).
     try:
-        from backend.api.crud import _geometry_for_design
-        # compact_skips=True: place flanking nucleotides one normal bp apart across
-        # each deletion instead of leaving a 2×-rise gap, so oxDNA doesn't start with
-        # backbone bonds stretched past its FENE divergence (~0.85 nm) at every skip.
-        geometry = _geometry_for_design(design, compact_skips=True)
+        # Compacted (skip gaps collapsed) so oxDNA doesn't start with backbone bonds
+        # stretched across every deletion — but auto-falls back to the un-compacted
+        # deformed geometry for a bent bundle, where compaction would desync
+        # crossovers (see _seed_geometry).
+        geometry = _seed_geometry(design)
         # Count the nucleotides oxDNA actually simulates (the strand-order list),
         # NOT len(geometry): the geometry endpoint emits a slot for every position
         # in each helix's full lattice grid — including thousands of empty sites on
@@ -1142,7 +1182,8 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     design = Design.model_validate_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
 
-    result = await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
+    # copies=True → a per-loop-copy flexibility value so every loop bead recolours.
+    result = await run_in_threadpool(production_rmsf, design, trajs, ref_conf, copies=True)
     # Attach the confidence metric (frames pooled + statistical RMSF error) and
     # whether production is still running, so the panel can warn "preliminary".
     result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
@@ -1179,7 +1220,7 @@ async def get_oxdna_deviation(job_id: str) -> dict:
     ref_conf = _design_ref_conf(jd, design)
 
     def _compute():
-        mean = production_rmsf(design, trajs, ref_conf)
+        mean = production_rmsf(design, trajs, ref_conf, copies=True)
         if not mean.get("ready") or not mean.get("positions"):
             return None, mean
         return geometry_deviation_map(mean["positions"], core_reference_geometry(design)), mean
@@ -1348,8 +1389,10 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     lined up with the surface grid instead of re-posed onto the free design.
     """
     job = _load_job(job_id)
+    # copies=True keys each loop-insertion copy under its own 4-tuple so the display
+    # can move every loop bead (not just the collapsed last copy) to its relaxed spot.
     design, full_map, stage_name, conf_path, ref_conf = _relaxed_full_map(
-        job, align, include_extra_bases=True)
+        job, align, copies=True, include_extra_bases=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False, "positions": [], "stage_name": None}
 
@@ -1358,25 +1401,27 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     proteins = []
     from backend.physics.oxdna_protein import has_proteins, protein_display_transforms
     if has_proteins(design):
-        from backend.api.crud import _geometry_for_design
         transforms = protein_display_transforms(
             conf_path, ref_conf, design,
-            _geometry_for_design(design, compact_skips=True), align=align)
+            _seed_geometry(design), align=align)
         proteins = [{"attachment_id": aid, "transform": M} for aid, M in transforms.items()]
     # Render the true backbone site, not the oxDNA centre of mass — the CM sits
     # inward of the backbone, so rendering it collapses the apparent duplex.
     positions = [
         {
-            "helix_id": hid,
-            "bp_index": bp,
-            "direction": direction,
+            "helix_id": key[0],
+            "bp_index": key[1],
+            "direction": key[2],
+            # Loop-copy index (4-tuple key); 0 for plain nucleotides and __xb__ inserts
+            # (3-tuple) so the frontend addresses the exact loop bead.
+            "copy": key[3] if len(key) == 4 else 0,
             "backbone_position": oxdna_backbone_site(
                 v["backbone_position"], v["a1"], v["a3"]).tolist(),
             "nx": float(v["a1"][0]),
             "ny": float(v["a1"][1]),
             "nz": float(v["a1"][2]),
         }
-        for (hid, bp, direction), v in full_map.items()
+        for key, v in full_map.items()
     ]
     return {
         "job_id": job.job_id,

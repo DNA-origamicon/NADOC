@@ -53,7 +53,7 @@ non-zero on any failure, so it doubles as a smoke gate.
 
 | Component | Purpose | Source |
 |-----------|---------|--------|
-| **ARBD** | GPU-accelerated Brownian dynamics engine that runs the CG simulation | `~/Downloads/arbd-may24-beta.tar.gz` or Aksimentiev lab |
+| **ARBD** | GPU-accelerated Brownian dynamics engine that runs the CG simulation | download (register + accept license) from `https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=ARBD` → `~/Downloads/` |
 | **mrdna** | Python package that converts cadnano JSON → CG bead model → runs ARBD → outputs atomistic PDB | `gitlab.engr.illinois.edu/tbgl/tools/mrdna` |
 | **mrdna tutorial** | Example designs (hextube.json, curved-hextube.json) and load-mrdna.tcl VMD script | `gitlab.engr.illinois.edu/tbgl/tutorials/multi-resolution-dna-nanostructures` |
 
@@ -76,6 +76,14 @@ The mrdna simulation engine is GPU-only. ARBD will not run without a CUDA-capabl
 ## Step 1 — Build and install ARBD
 
 ARBD is distributed as C++/CUDA source and must be compiled.
+
+> **WSL users:** NADOC's backend runs on the **Linux** side, so ARBD must be built
+> and installed **inside WSL** (not a Windows `.exe`, and not left under `/mnt/c/...`).
+> Easiest path: use **Help ▸ MD Engines ▸ ARBD ▸ Download… ▸ Browse…**, pick the
+> tarball, and let NADOC build it. If the build finishes but `arbd` isn't on your
+> PATH (the common "`sudo make install` step was skipped" case), the panel offers
+> **Finish install (no password)** — copies the built binary to `~/.local/bin/arbd`
+> — or **Run it for me** (enter your password once; NADOC runs `sudo make install`).
 
 ```bash
 # Extract source (adjust path to wherever you downloaded the tar)

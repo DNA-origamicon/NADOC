@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 
 from backend.core import engines
+from backend.core.mrdna_bridge import find_mrdna
 from backend.core.oxdna_runner import find_oxdna, find_oxdna_anm
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -63,11 +64,19 @@ def install_steps(engine_key: str, gpu: dict, tools: dict) -> list[dict]:
              "argv": ["bash", engines.ANM_OXDNA_BUILD_SCRIPT], "env": env},
         ]
 
+    if engine_key == "mrdna":
+        # Pure Python (git clone + patch + editable install) — no GPU, no compile.
+        return [
+            {"label": "Installing mrDNA (download + patch + install) — about a minute",
+             "cwd": str(_PROJECT_ROOT),
+             "argv": ["bash", "scripts/setup-mrdna.sh"]},
+        ]
+
     raise ValueError(f"{engine_key!r} is not auto-installable (see installable_engine_keys())")
 
 
 def _verify(engine_key: str) -> str | None:
-    return {"oxdna": find_oxdna, "oxdna_anm": find_oxdna_anm}[engine_key]()
+    return {"oxdna": find_oxdna, "oxdna_anm": find_oxdna_anm, "mrdna": find_mrdna}[engine_key]()
 
 
 async def _simulate_install(engine_key: str, send) -> str:

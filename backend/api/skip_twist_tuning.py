@@ -116,11 +116,12 @@ def core_reference_geometry(design) -> list[dict]:
             continue
         hid, bp = key[0], int(key[1])
         direction = getattr(key[2], "value", key[2])
-        recs.append((hid, bp, direction, nuc["backbone_position"]))
+        copy = key[3] if len(key) == 4 else 0   # loop-copy index (0 for plain nucleotides)
+        recs.append((hid, bp, direction, copy, nuc["backbone_position"]))
         strands_at.setdefault((hid, bp), set()).add(direction)
-    return [{"helix_id": hid, "bp_index": bp, "direction": d,
+    return [{"helix_id": hid, "bp_index": bp, "direction": d, "copy": copy,
              "backbone_position": list(pos)}
-            for (hid, bp, d, pos) in recs if len(strands_at[(hid, bp)]) >= 2]
+            for (hid, bp, d, copy, pos) in recs if len(strands_at[(hid, bp)]) >= 2]
 
 
 class PeriodAdjuster:

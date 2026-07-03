@@ -25,8 +25,16 @@ import { el } from './primitives/dom.js'
 import { showToast } from './toast.js'
 import {
   ENGINE_ORDER, gpuSummary, actionKind, actionLabel, commandText,
-  statusTone, sectionSummary, gateMessage, namdScanSummary, degradedNote,
+  statusTone, sectionSummary, gateMessage, degradedNote,
 } from './md_engines_logic.js'
+import { openFilePicker } from './file_picker.js'
+
+// Per-engine config for the "finish a downloaded package" block: the browse `kind`
+// (highlights likely files) + a placeholder. NAMD extracts a binary; ARBD builds source.
+const _DOWNLOAD_ENGINES = {
+  namd: { kind: 'namd', placeholder: 'path to NAMD_*.tar.gz' },
+  arbd: { kind: 'arbd', placeholder: 'path to arbd*.tar.*' },
+}
 
 const _TONE = { ok: '#3fb950', warn: '#d29922', err: '#f85149' }
 const _DIM = 'color:#8b949e;font-size:12px'
@@ -75,8 +83,14 @@ export function initMdEngines({ api }) {
     }
     body.appendChild(el('div', {
       text: gpuSummary(_status.gpu),
-      attrs: { style: 'margin-bottom:12px;font-size:13px' },
+      attrs: { style: 'margin-bottom:4px;font-size:13px' },
     }))
+    if (_status.wsl) {
+      body.appendChild(el('div', {
+        text: 'Running in WSL — engines install on the Linux side (a Windows-side download under /mnt/c/… can’t run).',
+        attrs: { style: _DIM + ';margin-bottom:12px' },
+      }))
+    }
     for (const key of ENGINE_ORDER) {
       const eng = _status.engines[key]
       if (eng) body.appendChild(_engineRow(eng))
@@ -123,7 +137,7 @@ export function initMdEngines({ api }) {
 
   // Shared progress modal + WS streaming for any install (source build OR finishing
   // a downloaded package). onComplete()/onError(message) decide what happens next.
-  function _wsInstall({ title, payload, onComplete, onError }) {
+  function _wsInstall({ title, payload, onComplete, onError, onManualStep }) {
     const stage = el('div', { text: 'Starting…', attrs: { style: 'font-size:13px;margin-bottom:8px' } })
     const bar = el('div', { attrs: { style: 'height:100%;width:0%;background:#1f6feb;transition:width .3s' } })
     const barWrap = el('div', { attrs: { style: 'height:8px;background:#21262d;border-radius:4px;overflow:hidden;margin-bottom:10px' }, children: [bar] })
@@ -153,6 +167,7 @@ export function initMdEngines({ api }) {
       if (msg.type === 'progress') { stage.textContent = msg.stage; bar.style.width = `${msg.pct}%` }
       else if (msg.type === 'log') { _append(msg.line) }
       else if (msg.type === 'complete') { done = true; _closeWs(); modal.close(); onComplete && onComplete(msg) }
+      else if (msg.type === 'manual_step') { done = true; _closeWs(); modal.close(); (onManualStep || _showManualStep)(msg) }
       else if (msg.type === 'error') { _fail(msg.message) }
     }
     ws.onerror = () => { if (!done) _fail('Could not reach the install service.') }
@@ -187,6 +202,9 @@ export function initMdEngines({ api }) {
     for (const dl of (inst.downloads || [])) {
       parts.push(createButton({ label: dl.label + ' ↗', variant: 'primary', onClick: () => window.open(dl.url, '_blank', 'noopener') }))
     }
+    // ARBD already built on the Linux side but not on PATH (the common WSL snag):
+    // offer the one-click no-password finish up top.
+    if (inst.can_finish_built) parts.push(_finishBuiltBlock(eng))
     // For download-method engines (NAMD): after the user downloads, NADOC can
     // verify the file and finish the install (extract + detect).
     if (actionKind(eng) === 'download') parts.push(_downloadFinishBlock(eng))
@@ -212,42 +230,138 @@ export function initMdEngines({ api }) {
     return modal
   }
 
-  // "Check download & install": verify the user-downloaded NAMD tarball, then
-  // extract + detect it — closing the gap the license-gated download leaves.
+  // "Finish a downloaded package": the user browses to the file they downloaded,
+  // NADOC verifies it, then finishes — extract + detect (NAMD) or build (ARBD).
+  // The folder navigator opens at Downloads (the Windows one on WSL). Works for any
+  // engine in _DOWNLOAD_ENGINES (keyed by eng.key).
   function _downloadFinishBlock(eng) {
-    const status = el('div', { text: 'Looking for a downloaded NAMD file…', attrs: { style: _DIM + ';margin:4px 0' } })
-    const input = el('input', { attrs: { type: 'text', placeholder: 'path to NAMD_*.tar.gz', style: 'width:100%;box-sizing:border-box;font-size:12px;font-family:monospace;padding:5px;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#c9d1d9;margin-bottom:6px' } })
-    const rescan = createButton({ label: 'Re-scan', size: 'sm', onClick: () => _scan() })
-    const install = createButton({ label: 'Check & install', size: 'sm', variant: 'primary', onClick: () => _installFromArchive(input.value.trim(), status) })
+    const cfg = _DOWNLOAD_ENGINES[eng.key] || _DOWNLOAD_ENGINES.namd
+    const status = el('div', { text: 'No file chosen yet. Click Browse… and pick the file you downloaded.', attrs: { style: _DIM + ';margin:4px 0' } })
+    const input = el('input', { attrs: { type: 'text', placeholder: cfg.placeholder, style: 'width:100%;box-sizing:border-box;font-size:12px;font-family:monospace;padding:5px;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#c9d1d9;margin-bottom:6px' } })
 
-    async function _scan() {
-      status.style.color = ''
-      status.textContent = 'Scanning ~/Downloads…'
-      const res = await api.scanNamdDownload().catch(() => null)
-      const sum = namdScanSummary(res)
-      status.textContent = sum.message
-      if (sum.path) input.value = sum.path
-    }
-    _scan()
+    const browse = createButton({
+      label: 'Browse…', size: 'sm', variant: 'primary',
+      onClick: () => openFilePicker({
+        api, kind: cfg.kind, title: `Choose the downloaded ${eng.name} file`,
+        onPick: (path) => {
+          input.value = path
+          status.style.color = ''
+          status.textContent = `Chosen: ${path.split('/').pop()}. Click "Check & install".`
+        },
+      }),
+    })
+    const install = createButton({ label: 'Check & install', size: 'sm', onClick: () => _installFromArchive(eng, input.value.trim(), status) })
 
     return el('div', {
       attrs: { style: 'border-top:1px solid #21262d;margin-top:12px;padding-top:10px' },
       children: [
-        el('div', { text: 'Already downloaded it? Let NADOC verify the file and finish:', attrs: { style: 'font-size:13px;font-weight:600;margin-bottom:6px' } }),
+        el('div', { text: 'Already downloaded it? Pick the file and NADOC will verify + finish:', attrs: { style: 'font-size:13px;font-weight:600;margin-bottom:6px' } }),
         status, input,
-        el('div', { attrs: { style: 'display:flex;gap:8px' }, children: [rescan, install] }),
+        el('div', { attrs: { style: 'display:flex;gap:8px' }, children: [browse, install] }),
       ],
     })
   }
 
-  function _installFromArchive(path, statusEl) {
-    if (!path) { statusEl.style.color = _TONE.err; statusEl.textContent = 'Enter the path to the downloaded NAMD .tar.gz first.'; return }
+  function _installFromArchive(eng, path, statusEl) {
+    if (!path) { statusEl.style.color = _TONE.err; statusEl.textContent = `Enter the path to the downloaded ${eng.name} file first.`; return }
     _wsInstall({
-      title: 'Installing NAMD from your download',
-      payload: { engine: 'namd', archive_path: path },
-      onComplete: () => { showToast('NAMD installed ✓', { severity: 'ok' }); refresh() },
+      title: `Installing ${eng.name} from your download`,
+      payload: { engine: eng.key, archive_path: path },
+      onComplete: () => { showToast(`${eng.name} installed ✓`, { severity: 'ok' }); refresh() },
+      onManualStep: (msg) => { statusEl.style.color = _TONE.ok; statusEl.textContent = `${eng.name} built — one step left (see the box).`; _showManualStep(msg) },
       onError: (m) => { statusEl.style.color = _TONE.err; statusEl.textContent = m },
     })
+  }
+
+  // ARBD is built (Linux binary) but not on PATH — offer the one-click, no-password
+  // finish (copy onto PATH). This is the fix for "I built it but NADOC can't find it",
+  // especially on WSL where sudo make install is the missed step.
+  function _finishBuiltBlock(eng) {
+    return el('div', {
+      attrs: { style: 'border:1px solid #238636;background:#0d1a10;border-radius:6px;padding:10px;margin:8px 0' },
+      children: [
+        el('div', { text: '✓ ARBD is already built — it just needs installing so NADOC can find it.', attrs: { style: 'font-size:13px;font-weight:600;margin-bottom:6px' } }),
+        el('div', { text: 'No terminal needed — pick one:', attrs: { style: _DIM + ';margin-bottom:8px' } }),
+        el('div', { attrs: { style: 'display:flex;gap:8px;flex-wrap:wrap' }, children: [
+          createButton({ label: 'Finish install (no password)', size: 'sm', variant: 'primary', onClick: () => _finishBuiltArbd(eng) }),
+          createButton({ label: 'Install system-wide (uses your password)', size: 'sm', onClick: () => _promptSudoInstall(eng) }),
+        ] }),
+        el('div', { text: 'No password just copies it to your user folder; system-wide runs the admin install for you.', attrs: { style: _DIM + ';margin-top:6px' } }),
+      ],
+    })
+  }
+
+  function _finishBuiltArbd(eng) {
+    _wsInstall({
+      title: 'Finishing ARBD install',
+      payload: { engine: 'arbd', install_built: true },
+      onComplete: () => { showToast('ARBD installed ✓', { severity: 'ok' }); refresh() },
+      onError: (m) => { showToast(`Couldn't finish ARBD install — ${m}`, { severity: 'error' }) },
+    })
+  }
+
+  // For users who'd rather not touch a terminal: collect the computer password and
+  // let the backend run `sudo make install`. The password is used once for that
+  // command and is not stored (localhost-only tool).
+  function _promptSudoInstall(eng) {
+    const pw = el('input', { attrs: { type: 'password', placeholder: 'Your computer password', autocomplete: 'off',
+      style: 'width:100%;box-sizing:border-box;font-size:13px;padding:7px;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#c9d1d9;margin-top:8px' } })
+    const errLine = el('div', { attrs: { style: `color:${_TONE.err};font-size:12px;margin-top:6px;display:none` } })
+    const run = () => {
+      if (!pw.value) { errLine.style.display = ''; errLine.textContent = 'Enter your password first.'; return }
+      const password = pw.value
+      modal.close()
+      _wsInstall({
+        title: 'Installing ARBD (system-wide)',
+        payload: { engine: 'arbd', sudo_install: true, password },
+        onComplete: () => { showToast('ARBD installed ✓', { severity: 'ok' }); refresh() },
+        onError: (m) => { showToast(`ARBD install failed — ${m}`, { severity: 'error' }) },
+      })
+    }
+    pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') run() })
+    const modal = createModal({
+      title: 'Install ARBD system-wide',
+      size: 'sm',
+      body: [
+        el('div', { text: 'This runs the one admin step for you (sudo make install → /usr/local/bin/arbd). Your password is used only for this command and is not saved.', attrs: { style: 'font-size:13px' } }),
+        pw, errLine,
+      ],
+      actions: [
+        createButton({ label: 'Cancel', onClick: () => modal.close() }),
+        createButton({ label: 'Install', variant: 'primary', onClick: run }),
+      ],
+    })
+    modal.open()
+  }
+
+  // Some installs (ARBD) can finish with one sudo line the background service can't
+  // run. Show that line big with Copy — plus the no-password finish when available.
+  function _showManualStep(msg) {
+    const cmd = msg.command || ''
+    const note = msg.note || 'Paste this line in a terminal to finish, then click Re-check.'
+    const actions = []
+    if (msg.can_finish_built) {
+      actions.push(createButton({
+        label: 'Finish install (no password)', variant: 'primary',
+        onClick: () => { modal.close(); _finishBuiltArbd({ key: 'arbd', name: 'ARBD' }) },
+      }))
+      actions.push(createButton({
+        label: 'Run it for me (password)',
+        onClick: () => { modal.close(); _promptSudoInstall({ key: 'arbd', name: 'ARBD' }) },
+      }))
+    }
+    actions.push(createButton({ label: 'Copy command', onClick: () => { navigator.clipboard?.writeText(cmd); showToast('Command copied', { severity: 'ok' }) } }))
+    actions.push(createButton({ label: 'Done', variant: msg.can_finish_built ? 'default' : 'primary', onClick: () => { modal.close(); refresh() } }))
+    const modal = createModal({
+      title: 'One step left to finish',
+      size: 'md',
+      body: [
+        el('div', { text: note, attrs: { style: 'font-size:13px;margin-bottom:10px;white-space:pre-wrap' } }),
+        el('pre', { text: cmd, attrs: { style: 'background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px;font-size:13px;color:#c9d1d9;margin:0;white-space:pre-wrap;word-break:break-all' } }),
+      ],
+      actions,
+    })
+    modal.open()
   }
 
   // ── sidebar gates ─────────────────────────────────────────────────────────

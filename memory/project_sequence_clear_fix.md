@@ -4,11 +4,22 @@ description: In-progress fix for "Clear sequence" right-click and "Assign Staple
 type: project
 originSessionId: 4bd4801a-92ac-49ed-a780-4670e5b1abf0
 ---
-## Status: INCOMPLETE — interrupted, needs resumption
+## Status: SUPERSEDED — the "Assign Staple Sequences clears overhangs" part was REVERSED (2026-07-01)
 
-**Why:** Sequences can accumulate errors. User wants a clean reset path.
+**2026-07-01 reversal:** The user asked that overhang sequences be **preserved** (not
+cleared or reassigned) when "Assign Staple Sequences" runs — the opposite of item 2
+below. The overhang-clearing wrapper in `assign_staple_sequences_endpoint` (which by
+then lived in `backend/api/routes_assign_sequences.py`, not `crud.py`) was removed.
+`assign_staple_sequences` in `backend/core/sequences.py` already reads each overhang's
+stored sequence via `_assemble_overhang_5to3` and threads it into the containing staple,
+so preservation is automatic once the wrapper stops wiping `OverhangSpec.sequence`.
+Pin: `tests/test_assign_staple_preserves_overhang_seq.py`. The "Clear sequence"
+right-click (item 1) is untouched by this reversal.
 
-**How to apply:** Resume this work next session before considering the feature done.
+**Why (original):** Sequences can accumulate errors. User wanted a clean reset path.
+
+**How to apply:** Original clear-to-Ns intent is stale for the Assign-Staple path — do
+NOT re-add overhang clearing there.
 
 ## What was done
 

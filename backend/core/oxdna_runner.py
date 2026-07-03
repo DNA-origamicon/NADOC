@@ -1106,9 +1106,32 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
                     res.n_clashes, res.passed)
 
         if not res.passed:
+            # A base-pair melt (or a numerical blow-up) at md_relax is RECOVERABLE, not
+            # terminal: the escalation ladder (more steps + a smaller timestep) gives the
+            # trap-held pairs time to anneal into register instead of fraying, and a
+            # smaller dt stops the first-step velocity refresh from kicking borderline
+            # pairs apart.  Spend a retry on it — the same lever + budget the FENE gate
+            # uses — rather than giving up.  This keeps oxDNA fast: the quick default
+            # relax still runs first, and only a failed melt pays for the longer,
+            # gentler escalated pass.
+            if (spec.kind == "md_relax" and relax_idx is not None
+                    and job.relax_retries < job.max_relax_retries):
+                logger.info("[%s] %s health gate failed (%s) → retry via escalated relax",
+                            job.job_id, spec.name, res.reason)
+                _escalate_relax_and_rewind(job, workspace_dir, specs, relax_idx, base_relax_spec)
+                idx = relax_idx
+                continue
             job.stages[idx].status = "failed"
             job.status = OxdnaStatus.failed
-            job.error = f"Health gate failed after {spec.name}: {res.reason or res.error}"
+            if spec.kind == "md_relax" and job.max_relax_retries > 0:
+                job.error = (
+                    f"Relaxation could not hold the structure together after "
+                    f"{job.max_relax_retries} escalating attempt(s): {res.reason}. The "
+                    f"design is over-strained for this coarse seed — relaxing longer, "
+                    f"lowering dt, or simplifying the geometry is the likely fix."
+                )
+            else:
+                job.error = f"Health gate failed after {spec.name}: {res.reason or res.error}"
             job.save(workspace_dir)
             return
 

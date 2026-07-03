@@ -99,6 +99,10 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
   scene.add(group)
   let _design = null
   let _visible = true
+  // When an oxDNA/MD display overlay is active, the flexible run's beads are drawn
+  // at their SIMULATED positions (keyed "helix:bp:dir" → {pos, n:a1}) instead of the
+  // geometric arc. null = geometric-arc mode (the default).
+  let _simByKey = null
   const _lastBow = new Map()   // connection id -> THREE.Vector3 (hysteresis)
   const _tubeMat = new THREE.MeshPhongMaterial({ color: ARC_COLOR })
   const _beadMat = new THREE.MeshPhongMaterial({ color: ARC_COLOR })
@@ -233,6 +237,47 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     return hits.length ? (hits[0].object.userData.connectionId ?? null) : null
   }
 
+  // Draw one connection's run at explicit SIMULATED bead positions (oxDNA/MD frame):
+  // tube + beads through the sim points, slabs oriented from the sim base-normal.
+  function _drawSimSegment(pA, entries, pB, connId) {
+    const beads = entries.map(e => e.pos)
+    const pts = [pA, ...beads, pB]
+    const curve = new THREE.CatmullRomCurve3(pts)
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), _tubeMat)
+    tube.userData.connectionId = connId
+    group.add(tube)
+    const inst = new THREE.InstancedMesh(GEO_BEAD, _beadMat, beads.length)
+    const m = new THREE.Matrix4()
+    beads.forEach((p, i) => { m.makeTranslation(p.x, p.y, p.z); inst.setMatrixAt(i, m) })
+    inst.instanceMatrix.needsUpdate = true
+    inst.frustumCulled = false
+    inst.userData.connectionId = connId
+    group.add(inst)
+    const slabs = new THREE.InstancedMesh(GEO_SLAB, _slabMat, beads.length)
+    const sm = new THREE.Matrix4(), q = new THREE.Quaternion()
+    const tan = new THREE.Vector3(), bn = new THREE.Vector3(), center = new THREE.Vector3()
+    const scl = new THREE.Vector3(1, 1, 1)
+    for (let i = 0; i < beads.length; i++) {
+      tan.subVectors(pts[i + 2], pts[i]).normalize()      // local backbone tangent
+      const a1 = entries[i].n
+      if (a1 && a1.lengthSq() > 1e-9) {                    // sim base-normal, ⟂ tangent
+        bn.copy(a1).addScaledVector(tan, -a1.dot(tan))
+        if (bn.lengthSq() < 1e-9) bn.copy(_fallbackBow(tan))
+      } else {
+        bn.copy(_fallbackBow(tan))
+      }
+      bn.normalize()
+      center.copy(beads[i]).addScaledVector(bn, SLAB_DISTANCE)
+      _slabQuaternion(bn, tan, q)
+      sm.compose(center, q, scl)
+      slabs.setMatrixAt(i, sm)
+    }
+    slabs.instanceMatrix.needsUpdate = true
+    slabs.frustumCulled = false
+    slabs.userData.connectionId = connId
+    group.add(slabs)
+  }
+
   function _render(live = null) {
     _clear()
     if (!_design || !_visible) return
@@ -240,11 +285,17 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     if (!conns.length) return
     const posMap = _entryPosMap()
     const helixOf = _helixResolver(_design)
-    const obstacles = _obstacleSegments(live)
+    const obstacles = _simByKey ? [] : _obstacleSegments(live)
     for (const c of conns) {
       const pA = posMap.get(helixOf(c.anchor_a) ?? '')
       const pB = posMap.get(helixOf(c.anchor_b) ?? '')
       if (!pA || !pB) continue
+      // oxDNA/MD active: place beads at simulated positions when every run bead is
+      // present in the frame; otherwise fall through to the geometric arc.
+      if (_simByKey) {
+        const entries = (c.segment_bead_keys ?? []).map(k => _simByKey.get(helixOf(k) ?? ''))
+        if (entries.length && entries.every(Boolean)) { _drawSimSegment(pA, entries, pB, c.id); continue }
+      }
       const bow = _bowDir(pA, pB, c.id, obstacles)
       _drawArc(pA, pB, _arcPoints(pA, pB, c.contour_length_nm, c.n_ss_bases, bow), bow, c.id)
     }
@@ -258,10 +309,32 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     _render(live)
   }
   function setVisible(v) { _visible = v; group.visible = v; if (v) _render(); else _clear() }
+  /** Switch to SIMULATED-position mode from an oxDNA/MD frame's applyFemPositions
+   *  updates (array of {helix_id,bp_index,direction,backbone_position,nx,ny,nz}), or
+   *  pass null/empty to revert to the geometric arc.  Called by the oxDNA display
+   *  controller's frame chokepoint so the flexible run tracks the relaxed ssDNA
+   *  instead of leaving a stale geometric arc floating over the sim. */
+  function applySimPositions(updates) {
+    if (!Array.isArray(updates) || !updates.length) {
+      _simByKey = null
+    } else {
+      const map = new Map()
+      for (const u of updates) {
+        const p = u.backbone_position
+        if (!p) continue
+        map.set(`${u.helix_id}:${u.bp_index}:${u.direction}`, {
+          pos: new THREE.Vector3(p[0], p[1], p[2]),
+          n: Number.isFinite(u.nx) ? new THREE.Vector3(u.nx, u.ny, u.nz) : null,
+        })
+      }
+      _simByKey = map.size ? map : null
+    }
+    _render()
+  }
   function dispose() {
     _clear(); scene.remove(group); _tubeMat.dispose(); _beadMat.dispose(); _slabMat.dispose()
     GEO_BEAD.dispose(); GEO_SLAB.dispose()
   }
 
-  return { rebuild, applyLiveUpdate, setVisible, dispose, hitTest, group }
+  return { rebuild, applyLiveUpdate, setVisible, applySimPositions, dispose, hitTest, group }
 }

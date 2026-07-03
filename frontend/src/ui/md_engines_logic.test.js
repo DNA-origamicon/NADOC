@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  gpuSummary, actionKind, actionLabel, commandText, statusTone,
-  sectionSummary, gateMessage, namdScanSummary, degradedNote,
+  ENGINE_ORDER, gpuSummary, actionKind, actionLabel, commandText, statusTone,
+  sectionSummary, gateMessage, degradedNote,
 } from './md_engines_logic.js'
 
 const engine = (over = {}) => ({
@@ -107,22 +107,26 @@ describe('sectionSummary / gateMessage', () => {
   })
 })
 
-describe('namdScanSummary', () => {
-  it('no candidates → not found, guidance message', () => {
-    const s = namdScanSummary({ candidates: [], best: null })
-    expect(s.found).toBe(false)
-    expect(s.path).toBe('')
-    expect(s.message).toMatch(/No NAMD download/)
+describe('new pipeline engines (mrdna / arbd / cuda)', () => {
+  it('ENGINE_ORDER includes the three new rows', () => {
+    for (const k of ['mrdna', 'arbd', 'cuda']) expect(ENGINE_ORDER).toContain(k)
   })
-  it('uses best candidate, prefilling path and reporting build', () => {
-    const best = { filename: 'NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar.gz', build: 'CUDA', path: '/home/u/Downloads/x.tar.gz', warning: '' }
-    const s = namdScanSummary({ candidates: [best], best })
-    expect(s.found).toBe(true)
-    expect(s.path).toBe('/home/u/Downloads/x.tar.gz')
-    expect(s.message).toMatch(/Found .*CUDA build/)
+  it('mrdna is a one-click auto install', () => {
+    const e = { key: 'mrdna', name: 'mrDNA', installed: false,
+      install: { method: 'auto', can_auto: true, target: 'CPU', commands: ['./scripts/setup-mrdna.sh'] } }
+    expect(actionKind(e)).toBe('auto')
+    expect(actionLabel(e)).toBe('Install (CPU)')
   })
-  it('surfaces a CPU-on-GPU warning', () => {
-    const best = { filename: 'NAMD_3.0.2_Linux-x86_64-multicore.tar.gz', build: 'CPU', path: '/d/x.tar.gz', warning: 'This is the CPU build, but RTX 2080 was detected' }
-    expect(namdScanSummary({ candidates: [best], best }).message).toMatch(/CPU build, but RTX 2080/)
+  it('arbd is a download', () => {
+    const e = { key: 'arbd', name: 'ARBD', installed: false,
+      install: { method: 'download', can_auto: false, commands: [] } }
+    expect(actionKind(e)).toBe('download')
+    expect(actionLabel(e)).toBe('Download…')
+  })
+  it('cuda is guided', () => {
+    const e = { key: 'cuda', name: 'CUDA toolkit', installed: false,
+      install: { method: 'guided', can_auto: false, commands: ['sudo apt-get install -y nvidia-cuda-toolkit'] } }
+    expect(actionKind(e)).toBe('guided')
+    expect(actionLabel(e)).toBe('How to install…')
   })
 })

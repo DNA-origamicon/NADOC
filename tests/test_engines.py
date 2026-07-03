@@ -237,4 +237,112 @@ def test_installable_keys_only_source_engines():
     assert "gromacs" not in keys       # guided (PATH/conda wrinkle)
     assert "psfgen" not in keys        # bundled with namd
     assert "dnanalysis" not in keys    # bundled with oxdna
+    assert "arbd" not in keys          # downloaded source tarball, not a repo
+    assert "cuda" not in keys          # guided (needs sudo)
     assert "oxdna" in keys and "oxdna_anm" in keys
+    assert "mrdna" in keys             # git clone via setup-mrdna.sh, no GPU
+
+
+# ── mrDNA / ARBD / CUDA plans (the coarse-grained pipeline deps) ──────────────
+
+def test_mrdna_plan_is_auto_gpu_independent():
+    plan = engines._mrdna_plan(_gpu(True), _FULL_TOOLCHAIN)
+    assert plan["method"] == "auto"
+    assert plan["can_auto"] is True
+    assert plan["commands"] == [engines.MRDNA_SETUP_SCRIPT]
+    assert plan["downloads"] == []            # nothing to download — pure git clone
+
+
+def test_mrdna_plan_blocked_without_git():
+    plan = engines._mrdna_plan(_gpu(False), {**_FULL_TOOLCHAIN, "git": False})
+    assert plan["can_auto"] is False
+    assert any("git" in m for m in plan["missing_prereqs"])
+
+
+def test_arbd_plan_is_download_and_surfaces_cuda_prereq():
+    plan = engines._arbd_plan(_gpu(True), {**_FULL_TOOLCHAIN, "nvcc": False})
+    assert plan["method"] == "download"
+    assert plan["can_auto"] is False
+    assert "ks.uiuc.edu" in plan["downloads"][0]["url"] and "ARBD" in plan["downloads"][0]["url"]
+    assert any("CUDA toolkit" in m for m in plan["missing_prereqs"])
+    assert "sudo make install" in "\n".join(plan["commands"])
+
+
+def test_arbd_plan_no_cuda_prereq_when_toolkit_present():
+    plan = engines._arbd_plan(_gpu(True), _FULL_TOOLCHAIN)
+    assert not any("CUDA toolkit" in m for m in plan["missing_prereqs"])
+
+
+def test_cuda_plan_is_guided_with_link_and_apt():
+    plan = engines._cuda_plan(_gpu(True), _FULL_TOOLCHAIN)
+    assert plan["method"] == "guided"
+    assert plan["can_auto"] is False
+    assert plan["downloads"][0]["url"].startswith("https://developer.nvidia.com")
+    assert any("apt-get" in c for c in plan["commands"])
+
+
+def test_status_includes_mrdna_arbd_cuda_rows(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis", gpu_present=True)
+    monkeypatch.setattr(engines, "find_mrdna", lambda: None)
+    monkeypatch.setattr(engines, "find_arbd", lambda: None)
+    monkeypatch.setattr(engines, "find_arbd_build", lambda: None)
+    # nvcc reported present via the toolchain which-stub → cuda row installed
+    st = engines.engines_status()
+    assert st["engines"]["mrdna"]["installed"] is False
+    assert st["engines"]["mrdna"]["install"]["method"] == "auto"
+    assert st["engines"]["arbd"]["installed"] is False
+    assert st["engines"]["arbd"]["install"]["method"] == "download"
+    assert st["engines"]["cuda"]["installed"] is True      # which("nvcc") stubbed truthy
+    # the new rows don't disturb the existing sidebar sections
+    assert set(st["sections"]) == {"oxdna", "md"}
+
+
+def test_status_mrdna_installed_when_found(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis")
+    monkeypatch.setattr(engines, "find_mrdna", lambda: "/home/u/mrdna-tool")
+    monkeypatch.setattr(engines, "find_arbd", lambda: "/usr/local/bin/arbd")
+    st = engines.engines_status()
+    assert st["engines"]["mrdna"]["installed"] is True
+    assert st["engines"]["mrdna"]["install"] is None
+    assert st["engines"]["arbd"]["installed"] is True
+
+
+# ── WSL-awareness + ARBD "built but not installed" finish ──────────────────────
+
+def test_arbd_plan_built_but_not_installed_offers_no_password_finish():
+    plan = engines._arbd_plan(_gpu(True), _FULL_TOOLCHAIN,
+                              built_path="/home/u/arbd-src/build/arbd", wsl=True)
+    assert plan["can_finish_built"] is True
+    assert plan["built_path"].endswith("build/arbd")
+    assert plan["wsl"] is True
+    # both routes shown: sudo make install AND the no-password copy
+    joined = "\n".join(plan["commands"])
+    assert "sudo make install" in joined
+    assert "~/.local/bin" in joined
+    assert "not installed on PATH" in plan["note"]
+
+
+def test_arbd_plan_wsl_note_when_not_built():
+    plan = engines._arbd_plan(_gpu(True), _FULL_TOOLCHAIN, built_path=None, wsl=True)
+    assert plan["can_finish_built"] is False
+    assert "WSL" in plan["note"] and "Linux" in plan["note"]
+
+
+def test_status_arbd_built_not_installed(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis", gpu_present=True)
+    monkeypatch.setattr(engines, "find_mrdna", lambda: None)
+    monkeypatch.setattr(engines, "find_arbd", lambda: None)                 # not on PATH
+    monkeypatch.setattr(engines, "find_arbd_build", lambda: "/h/arbd-src/build/arbd")
+    monkeypatch.setattr(engines, "is_wsl", lambda: True)
+    arbd = engines.engines_status()["engines"]["arbd"]
+    assert arbd["installed"] is False
+    assert arbd["install"]["can_finish_built"] is True
+    assert "not installed yet" in arbd["required_note"]
+
+
+def test_is_wsl_reads_env(monkeypatch):
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    assert engines.is_wsl() is True

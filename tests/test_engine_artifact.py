@@ -35,19 +35,6 @@ def test_parse_rejects_non_namd():
     assert art.parse_namd_filename("NAMD_macOS.tar.gz") is None
 
 
-def test_pick_best_prefers_cuda_on_gpu_box():
-    cands = [
-        {"filename": "NAMD_3.0.2_Linux-x86_64-multicore.tar.gz", "is_cuda": False, "matches_name": True},
-        {"filename": "NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar.gz", "is_cuda": True, "matches_name": True},
-    ]
-    assert art.pick_best_candidate(cands, _gpu(True))["is_cuda"] is True
-    assert art.pick_best_candidate(cands, _gpu(False))["is_cuda"] is False
-
-
-def test_pick_best_none_when_empty():
-    assert art.pick_best_candidate([], _gpu(True)) is None
-
-
 # ── fabricated tarballs ───────────────────────────────────────────────────────
 
 def _make_tar(dirpath, filename, *, inner_names):
@@ -105,21 +92,6 @@ def test_validate_missing_file():
     assert "not found" in v["error"].lower()
 
 
-# ── scan ──────────────────────────────────────────────────────────────────────
-
-def test_scan_finds_namd_tarballs(tmp_path):
-    _make_tar(str(tmp_path), "NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar.gz", inner_names=["a/namd3"])
-    _make_tar(str(tmp_path), "unrelated.tar.gz", inner_names=["a/b"])
-    found = art.scan_namd_downloads(_gpu(True), search_dirs=[str(tmp_path)])
-    assert len(found) == 1
-    assert found[0]["build"] == "CUDA"
-    assert found[0]["matches_name"] is True
-
-
-def test_scan_empty_when_no_dir():
-    assert art.scan_namd_downloads(_gpu(False), search_dirs=["/no/such/dir/xyz"]) == []
-
-
 # ── install (real extraction) ─────────────────────────────────────────────────
 
 class _Rec:
@@ -152,3 +124,129 @@ def test_install_raises_on_bad_archive(tmp_path, monkeypatch):
     monkeypatch.setattr(art, "gpu_info", lambda: _gpu(False))
     with pytest.raises(art.ArtifactError):
         asyncio.run(art.install_namd_archive(p, _Rec()))
+
+
+# ── ARBD (source tarball → build; sudo install stays manual) ──────────────────
+
+def test_parse_arbd_filename_accepts_and_rejects():
+    assert art.parse_arbd_filename("/d/arbd-may24-beta.tar.gz")["filename"] == "arbd-may24-beta.tar.gz"
+    assert art.parse_arbd_filename("arbd-2024.tar.xz") is not None
+    assert art.parse_arbd_filename("NAMD_3.0.2_Linux-x86_64-multicore.tar.gz") is None
+    assert art.parse_arbd_filename("not-arbd.zip") is None
+
+
+def test_validate_arbd_accepts_source_with_cmakelists(tmp_path):
+    p = _make_tar(str(tmp_path), "arbd-may24-beta.tar.gz",
+                  inner_names=["arbd-may24-beta/CMakeLists.txt", "arbd-may24-beta/src/main.cpp"])
+    v = art.validate_arbd_archive(p, _gpu(True))
+    assert v["valid"] is True and v["is_source"] is True
+    assert v["warning"] == ""                              # GPU present → no warning
+
+
+def test_validate_arbd_warns_without_gpu(tmp_path):
+    p = _make_tar(str(tmp_path), "arbd-may24-beta.tar.gz", inner_names=["arbd/CMakeLists.txt"])
+    v = art.validate_arbd_archive(p, _gpu(False))
+    assert v["valid"] is True
+    assert "GPU" in v["warning"]
+
+
+def test_validate_arbd_rejects_non_source(tmp_path):
+    p = _make_tar(str(tmp_path), "arbd-blob.tar.gz", inner_names=["arbd-blob/README.txt"])
+    v = art.validate_arbd_archive(p, _gpu(True))
+    assert v["valid"] is False
+    assert "CMakeLists" in v["error"]
+
+
+def test_validate_arbd_rejects_wrong_filename(tmp_path):
+    p = _make_tar(str(tmp_path), "engine.tar.gz", inner_names=["x/CMakeLists.txt"])
+    v = art.validate_arbd_archive(p, _gpu(True))
+    assert v["valid"] is False
+    assert "ARBD" in v["error"]
+
+
+def test_install_arbd_extracts_builds_and_emits_manual_step(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    p = _make_tar(str(tmp_path), "arbd-may24-beta.tar.gz",
+                  inner_names=["arbd-may24-beta/CMakeLists.txt", "arbd-may24-beta/src/main.cpp"])
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(art, "gpu_info", lambda: _gpu(True))
+    # don't actually run cmake/make — pretend both succeed
+    async def _ok(argv, cwd, send):
+        await send({"type": "log", "line": " ".join(argv)})
+        return 0
+    monkeypatch.setattr(art, "_stream_build", _ok)
+
+    rec = _Rec()
+    asyncio.run(art.install_arbd_archive(p, rec))
+    # source really unpacked with the top-level dir stripped
+    assert os.path.isfile(str(home / "arbd-src" / "CMakeLists.txt"))
+    last = rec.msgs[-1]
+    assert last["type"] == "manual_step"
+    assert "sudo make install" in last["command"]
+    assert last["can_finish_built"] is True          # no-password finish also offered
+    assert "sudo make install" in last["note"]
+
+
+def test_install_arbd_raises_when_cmake_fails(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    p = _make_tar(str(tmp_path), "arbd-may24-beta.tar.gz", inner_names=["arbd-may24-beta/CMakeLists.txt"])
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(art, "gpu_info", lambda: _gpu(True))
+    async def _fail(argv, cwd, send):
+        return 1
+    monkeypatch.setattr(art, "_stream_build", _fail)
+    with pytest.raises(art.ArtifactError):
+        asyncio.run(art.install_arbd_archive(p, _Rec()))
+
+
+def test_install_arbd_raises_on_bad_archive(tmp_path, monkeypatch):
+    p = _make_tar(str(tmp_path), "arbd-blob.tar.gz", inner_names=["a/README"])
+    monkeypatch.setattr(art, "gpu_info", lambda: _gpu(True))
+    with pytest.raises(art.ArtifactError):
+        asyncio.run(art.install_arbd_archive(p, _Rec()))
+
+
+# ── ARBD no-password finish (copy the built Linux binary onto PATH) ────────────
+
+def test_install_arbd_binary_copies_built_onto_path(tmp_path, monkeypatch):
+    import backend.core.mrdna_bridge as mb
+    home = tmp_path / "home"; (home / ".local").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    built = tmp_path / "build" / "arbd"; built.parent.mkdir()
+    built.write_text("#!/bin/sh\n"); os.chmod(built, 0o755)
+    monkeypatch.setattr(mb, "find_arbd_build", lambda: str(built))
+    dest = str(home / ".local" / "bin" / "arbd")
+    monkeypatch.setattr(mb, "find_arbd", lambda: dest if os.path.isfile(dest) else None)
+
+    rec = _Rec()
+    out = asyncio.run(art.install_arbd_binary(rec))
+    assert out == dest
+    assert os.path.isfile(dest) and os.access(dest, os.X_OK)   # really copied + executable
+    assert rec.msgs[-1]["type"] == "complete"
+
+
+def test_install_arbd_binary_raises_when_nothing_built(monkeypatch):
+    import backend.core.mrdna_bridge as mb
+    monkeypatch.setattr(mb, "find_arbd_build", lambda: None)
+    with pytest.raises(art.ArtifactError):
+        asyncio.run(art.install_arbd_binary(_Rec()))
+
+
+# ── ARBD sudo install (run the privileged step for terminal-averse users) ─────
+
+def test_install_arbd_sudo_rejects_empty_password(tmp_path, monkeypatch):
+    import backend.core.mrdna_bridge as mb
+    built = tmp_path / "build" / "arbd"; built.parent.mkdir(parents=True); built.write_text("x")
+    monkeypatch.setattr(mb, "find_arbd_build", lambda: str(built))   # build dir exists
+    with pytest.raises(art.ArtifactError, match="password"):
+        asyncio.run(art.install_arbd_sudo("", _Rec()))
+
+
+def test_install_arbd_sudo_raises_when_not_built(tmp_path, monkeypatch):
+    import backend.core.mrdna_bridge as mb
+    monkeypatch.setenv("HOME", str(tmp_path))          # ~/arbd-src/build absent under temp HOME
+    monkeypatch.setattr(mb, "find_arbd_build", lambda: None)
+    with pytest.raises(art.ArtifactError, match="built"):
+        asyncio.run(art.install_arbd_sudo("pw", _Rec()))

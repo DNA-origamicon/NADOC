@@ -40,6 +40,7 @@ from backend.core.oxdna_runner import (
 )
 from backend.core.namd_runner import find_gmx, find_namd
 from backend.core.namd_topology import find_psfgen
+from backend.core.mrdna_bridge import find_arbd, find_arbd_build, find_mrdna
 
 # ── simulation switch ─────────────────────────────────────────────────────────
 # `NADOC_ENGINES_FORCE_MISSING=oxdna,namd` makes those engines REPORT as not
@@ -61,6 +62,11 @@ def is_forced_missing(key: str) -> bool:
 OXDNA_REPO = "https://github.com/lorenzo-rovigatti/oxDNA.git"
 ANM_OXDNA_BUILD_SCRIPT = "scripts/build-anm-oxdna.sh"
 NAMD_DOWNLOAD_URL = "https://www.ks.uiuc.edu/Research/namd/"
+MRDNA_SETUP_SCRIPT = "./scripts/setup-mrdna.sh"
+# ARBD ships from the UIUC KS group's download portal (register + accept the license,
+# like NAMD) — not a public one-click repo.
+ARBD_DOWNLOAD_URL = "https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=ARBD"
+CUDA_DOWNLOAD_URL = "https://developer.nvidia.com/cuda-downloads"
 
 # Build tools we probe for.  `cxx` resolves either g++ or clang++.
 _TOOLCHAIN_PROBES = {
@@ -142,6 +148,23 @@ def toolchain_info() -> dict:
         name: any(shutil.which(c) for c in cmds)
         for name, cmds in _TOOLCHAIN_PROBES.items()
     }
+
+
+def is_wsl() -> bool:
+    """True when NADOC is running inside WSL (Windows Subsystem for Linux).
+
+    Matters for engine installs: NADOC's backend runs on the *Linux* side, so
+    engines must be Linux builds installed on the Linux side — a Windows-side
+    download (under ``/mnt/c/...``) can't be run.  Detected via the ``microsoft``
+    marker the WSL kernel puts in ``/proc/version``.
+    """
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        with open("/proc/version", encoding="utf-8", errors="ignore") as fh:
+            return "microsoft" in fh.read().lower()
+    except OSError:
+        return False
 
 
 # ── per-engine install-plan builders (pure: (gpu, toolchain) → dict) ───────────
@@ -251,6 +274,130 @@ def _namd_plan(gpu: dict, tools: dict) -> dict:
     }
 
 
+def _mrdna_plan(gpu: dict, tools: dict) -> dict:
+    """mrdna Python package: one-click auto-install (git clone, no download, no sudo).
+
+    ``scripts/setup-mrdna.sh`` clones the checkout, applies the NumPy-2.x patches,
+    and editable-installs it into NADOC's venv — GPU-independent (mrdna builds the
+    model; ARBD does the GPU work).  Auto-buildable whenever ``git`` is present.
+    """
+    missing = _missing(tools, ["git"])
+    return {
+        "method": "auto",
+        "target": "CPU",
+        "can_auto": not missing,
+        "missing_prereqs": [_pretty_tool(m) for m in missing],
+        "commands": [MRDNA_SETUP_SCRIPT],
+        "downloads": [],
+        "doc": "docs/mrdna_setup.md",
+        "note": (
+            "Installs the mrdna Python package (no download needed). It converts a "
+            "design into a coarse-grained model; the GPU simulation itself needs ARBD "
+            "(below). Click Install to run the setup script here."
+        ),
+    }
+
+
+def _arbd_plan(gpu: dict, tools: dict, *, built_path: str | None = None, wsl: bool = False) -> dict:
+    """ARBD GPU engine: download the source tarball, build it here, then install.
+
+    Not a public one-click repo — the user downloads the tarball from the KS/UIUC
+    portal, picks it with the folder navigator, and NADOC verifies + builds it.
+    Building needs the CUDA toolkit + a C++ build chain (surfaced as prereqs).
+
+    **WSL-aware:** NADOC runs on the Linux side, so ARBD must be the *Linux* build
+    installed on the Linux side.  When a Linux binary is already built but not yet
+    on PATH (``built_path`` — the common "sudo make install wasn't finished" snag),
+    the plan flips to a **finish-install** shape: a one-click no-password copy onto
+    PATH (``can_finish_built``), plus the standard ``sudo make install`` line.
+    """
+    missing = _missing(tools, ["nvcc", "cmake", "make", "cxx"])
+    plan = {
+        "method": "download",
+        "target": "CUDA" if gpu["present"] else "CPU",
+        "can_auto": False,
+        "wsl": wsl,
+        "built_path": built_path,
+        "can_finish_built": bool(built_path),
+        "missing_prereqs": [_pretty_tool(m) for m in missing],
+        "downloads": [
+            {"label": "ARBD download (register + accept license)", "url": ARBD_DOWNLOAD_URL},
+        ],
+        "doc": "docs/mrdna_setup.md",
+    }
+    if built_path:
+        # Already built on the Linux side — just needs to land on PATH.
+        plan["commands"] = [
+            f"cd {os.path.dirname(built_path)}",
+            "sudo make install            # → /usr/local/bin/arbd (needs your password)",
+            f"# …or with no password:  cp {built_path} ~/.local/bin/",
+        ]
+        plan["note"] = (
+            f"ARBD is already **built** (Linux binary at {built_path}) but not installed "
+            "on PATH yet, so NADOC can't find it. Click **Finish install** below to copy it "
+            "onto PATH (no password) — or run the sudo line to install it system-wide."
+        )
+    else:
+        plan["commands"] = [
+            "mkdir -p ~/arbd-src && tar xf ~/Downloads/arbd*.tar.* -C ~/arbd-src --strip-components=1",
+            "cd ~/arbd-src && mkdir -p build && cd build",
+            "cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local",
+            "make -j$(nproc)",
+            "sudo make install   # installs /usr/local/bin/arbd (needs your password)",
+        ]
+        plan["note"] = _arbd_note(gpu, tools, wsl)
+    return plan
+
+
+def _cuda_plan(gpu: dict, tools: dict) -> dict:
+    """CUDA toolkit (nvcc): guided install — needs the admin password, can't auto-run.
+
+    The toolkit provides ``nvcc``, required to *build* ARBD (and the GPU oxDNA/NAMD
+    builds). On this WSL/Ubuntu setup it installs via apt (sudo) or the NVIDIA
+    runfile; either way it needs the password, so NADOC shows the link + commands
+    rather than running them.
+    """
+    return {
+        "method": "guided",
+        "target": "CUDA",
+        "can_auto": False,
+        "missing_prereqs": [],
+        "commands": [
+            "sudo apt-get update",
+            "sudo apt-get install -y nvidia-cuda-toolkit",
+        ],
+        "downloads": [
+            {"label": "CUDA Toolkit (NVIDIA)", "url": CUDA_DOWNLOAD_URL},
+        ],
+        "doc": "docs/mrdna_setup.md",
+        "note": (
+            "The CUDA toolkit gives you `nvcc`, needed to build the GPU engine ARBD. "
+            "Installing it needs your computer's admin password, so paste the lines "
+            "below in a terminal (or use the NVIDIA link), then click Re-check."
+        ),
+    }
+
+
+def _arbd_note(gpu: dict, tools: dict, wsl: bool = False) -> str:
+    wsl_hint = (
+        " You're running NADOC inside WSL, so ARBD must be the **Linux** build "
+        "installed on the Linux side — a Windows download (under /mnt/c/…) won't run. "
+        "NADOC builds the Linux binary for you."
+        if wsl else ""
+    )
+    if not tools.get("nvcc"):
+        return (
+            "First install the CUDA toolkit (below) — ARBD needs it to build. Then "
+            "download the ARBD source (link) and use **Browse…** to pick the file. "
+            "NADOC builds it; one `sudo make install` line finishes it." + wsl_hint
+        )
+    return (
+        "Download the ARBD source (link), then use **Browse…** to pick the file. "
+        "NADOC builds it; one `sudo make install` line (needs your password) finishes "
+        "the install to /usr/local/bin/arbd." + wsl_hint
+    )
+
+
 def _pretty_tool(tool: str) -> str:
     return {
         "nvcc": "CUDA toolkit (nvcc)",
@@ -329,6 +476,11 @@ def engines_status() -> dict:
     gmx_path = _try_find(find_gmx)
     psfgen_path = _try_find(find_psfgen)
     dnanalysis_path = find_dnanalysis()
+    mrdna_path = _try_find(find_mrdna)
+    arbd_path = _try_find(find_arbd)
+    arbd_built = None if arbd_path else _try_find(find_arbd_build)
+    wsl = is_wsl()
+    nvcc_path = shutil.which("nvcc")
     forced = forced_missing_engines()
     _f = lambda k: k in forced
 
@@ -380,6 +532,32 @@ def engines_status() -> dict:
             required_note="Bundled with oxDNA; building oxDNA provides it.",
             forced=_f("dnanalysis"),
         ),
+        # ── mrDNA coarse-grained pipeline (mrdna Python + ARBD GPU engine + CUDA) ──
+        "mrdna": _engine(
+            "mrdna", "mrDNA",
+            "Coarse-grained multi-resolution relaxation — converts a design to a bead model.",
+            mrdna_path,
+            _mrdna_plan(gpu, tools),
+            forced=_f("mrdna"),
+        ),
+        "arbd": _engine(
+            "arbd", "ARBD",
+            "GPU Brownian-dynamics engine that runs the mrDNA coarse-grained simulation.",
+            arbd_path,
+            _arbd_plan(gpu, tools, built_path=arbd_built, wsl=wsl),
+            required_note=(
+                "Built on the Linux side but not installed yet — finish below."
+                if arbd_built else "Needs the CUDA toolkit to build; drives mrDNA."
+            ),
+            forced=_f("arbd"),
+        ),
+        "cuda": _engine(
+            "cuda", "CUDA toolkit",
+            "GPU compiler toolkit (nvcc) — needed to build ARBD and the GPU oxDNA/NAMD engines.",
+            nvcc_path,
+            _cuda_plan(gpu, tools),
+            forced=_f("cuda"),
+        ),
     }
 
     # ── CUDA-degraded detection ─────────────────────────────────────────────
@@ -415,6 +593,7 @@ def engines_status() -> dict:
     return {
         "gpu": gpu,
         "toolchain": tools,
+        "wsl": wsl,
         "engines": engines,
         "sections": {
             "oxdna": _section(["oxdna"]),
@@ -429,5 +608,7 @@ def installable_engine_keys() -> list[str]:
     Only the from-source engines, which build into conventional paths that
     ``find_*`` then auto-detect.  GROMACS is guided (PATH/conda wrinkle), NAMD is
     download-only (license), psfgen/dnanalysis are bundled — none auto-buildable.
+    mrdna is auto-installable via its setup script (git clone, no GPU); ARBD is a
+    downloaded source tarball (handled via the archive path), CUDA is guided.
     """
-    return ["oxdna", "oxdna_anm"]
+    return ["oxdna", "oxdna_anm", "mrdna"]

@@ -215,6 +215,7 @@ def production_rmsf(
     production_traj_path,
     reference_conf_path,
     include_average_frame: bool = False,
+    copies: bool = False,
 ) -> dict:
     """Per-NUCLEOTIDE average position + RMSF (root-mean-square fluctuation, nm)
     over a production trajectory — the flexibility map.
@@ -249,7 +250,9 @@ def production_rmsf(
         read_trajectory_frames_full,
         unwrap_align_to_reference,
     )
-    ref = read_configuration_full(reference_conf_path, design)
+    # copies=True keeps each loop-insertion copy under its own 4-tuple key so the
+    # flexibility/deviation maps carry a per-copy value instead of collapsing them.
+    ref = read_configuration_full(reference_conf_path, design, copies=copies)
     paths = (list(production_traj_path)
              if isinstance(production_traj_path, (list, tuple))
              else [production_traj_path])
@@ -257,7 +260,7 @@ def production_rmsf(
     acc: dict[tuple, dict] = {}   # key → {"pos": [bb xyz...], "a1": [a1...]}
     n_frames = 0
     for path in paths:
-        frames = read_trajectory_frames_full(path, design)
+        frames = read_trajectory_frames_full(path, design, copies=copies)
         box = _parse_box_nm(path)
         for fr in frames:
             aligned = (unwrap_align_to_reference(fr, ref, design, box)
@@ -279,14 +282,16 @@ def production_rmsf(
     positions: list[dict] = []
     rmsfs: list[float] = []
     average_frame: dict = {}
-    for (hid, bp, direction), slot in acc.items():
+    for key, slot in acc.items():
+        hid, bp, direction = key[0], key[1], key[2]
+        copy = key[3] if len(key) == 4 else 0   # loop-copy index (0 for plain nucleotides)
         P = np.array(slot["pos"])                      # (F, 3)
         mean_pos = P.mean(axis=0)
         rmsf = float(np.sqrt(((P - mean_pos) ** 2).sum(axis=1).mean()))
         a1m = np.array(slot["a1"]).mean(axis=0)
         a1m = a1m / (np.linalg.norm(a1m) + 1e-14)
         positions.append({
-            "helix_id": hid, "bp_index": bp, "direction": direction,
+            "helix_id": hid, "bp_index": bp, "direction": direction, "copy": copy,
             "backbone_position": mean_pos.tolist(),
             "nx": float(a1m[0]), "ny": float(a1m[1]), "nz": float(a1m[2]),
             "rmsf": rmsf,
@@ -296,7 +301,7 @@ def production_rmsf(
             cmm = np.array(slot["cm"]).mean(axis=0)
             a3m = np.array(slot["a3"]).mean(axis=0)
             a3m = a3m / (np.linalg.norm(a3m) + 1e-14)
-            average_frame[(hid, bp, direction)] = {
+            average_frame[key] = {
                 "backbone_position": cmm, "a1": a1m, "a3": a3m,
             }
 
@@ -976,12 +981,16 @@ def geometry_deviation_map(positions, reference_positions) -> dict:
         raise ValueError("geometry_deviation_map: empty position map")
     if not reference_positions:
         raise ValueError("geometry_deviation_map: empty reference map")
-    cur_pos = _backbone_lookup(positions)
-    cur_a1 = {(p["helix_id"], int(p["bp_index"]),
-               getattr(p["direction"], "value", p["direction"])):
-              np.array([p.get("nx", 0.0), p.get("ny", 0.0), p.get("nz", 0.0)], float)
+    # Copy-aware keys ((helix,bp,dir,copy), copy defaults 0) so loop-insertion copies
+    # stay distinct on BOTH the mean structure and the design reference instead of
+    # collapsing to one — every loop bead then gets its own deviation value.
+    def _k(p):
+        return (p["helix_id"], int(p["bp_index"]),
+                getattr(p["direction"], "value", p["direction"]), int(p.get("copy", 0)))
+    cur_pos = {_k(p): np.array(p["backbone_position"], float) for p in positions}
+    cur_a1 = {_k(p): np.array([p.get("nx", 0.0), p.get("ny", 0.0), p.get("nz", 0.0)], float)
               for p in positions}
-    ref = _backbone_lookup(reference_positions)
+    ref = {_k(p): np.array(p["backbone_position"], float) for p in reference_positions}
     shared = sorted(set(cur_pos) & set(ref))
     if len(shared) < 3:
         raise ValueError(
@@ -995,7 +1004,7 @@ def geometry_deviation_map(positions, reference_positions) -> dict:
     out = []
     for i, k in enumerate(shared):
         a1 = R @ cur_a1.get(k, np.zeros(3))      # rotate a1 into the aligned frame
-        out.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+        out.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2], "copy": k[3],
                     "backbone_position": aligned[i].tolist(),
                     "nx": float(a1[0]), "ny": float(a1[1]), "nz": float(a1[2]),
                     "deviation": float(dev[i])})
@@ -2038,7 +2047,10 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         unwrap_align_to_reference,
     )
     ref = read_configuration_full(reference_conf_path, design, copies=copies)
-    key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
+    # copies=True keeps loop-insertion copies distinct (full 4-tuple key); else collapse
+    # to the 3-tuple so the CG trajectory key list is one entry per (helix,bp,dir).
+    key_list = list(dict.fromkeys(
+        (k if copies else k[:3]) for k in _strand_nucleotide_order(design)))
 
     # A stage tuple is ``(name, kind, path)`` or ``(name, kind, path, marker_label)``.
     per_stage: list[dict] = []
@@ -2140,8 +2152,9 @@ def composite_trajectory(
       ``markers``= [{frame, label, kind, stage_name}]      (transition at each
                    stage's first composite-frame; the very first frame is omitted)
     """
+    # copies=True → loop-insertion copies stay distinct so every loop bead scrubs.
     key_list, ordered, out_stages, markers = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames)
+        design, stages, reference_conf_path, max_frames, copies=True)
     if not ordered:
         return {"n_frames": 0, "n_nucleotides": len(key_list),
                 "keys": [list(k) for k in key_list], "frames": [],
@@ -2171,7 +2184,8 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
     downloading the multi-MB trajectory."""
     from backend.physics.oxdna_interface import _strand_nucleotide_order
 
-    key_list = list(dict.fromkeys(k[:3] for k in _strand_nucleotide_order(design)))
+    # Full keys (loop copies distinct) so n_nucleotides matches composite_trajectory's.
+    key_list = list(dict.fromkeys(_strand_nucleotide_order(design)))
     per_stage = []
     for item in stages:
         name, kind, path = item[0], item[1], item[2]

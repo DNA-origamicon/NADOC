@@ -1256,20 +1256,28 @@ async def engines_install_ws(websocket: WebSocket) -> None:
     Protocol
     ────────
     Client → Server (once), either:
-      {"engine": "oxdna" | "oxdna_anm"}                 — auto-build from source
+      {"engine": "oxdna" | "oxdna_anm" | "mrdna"}        — auto-build/install here
       {"engine": "namd", "archive_path": "/path.tar.gz"} — finish a downloaded package
+      {"engine": "arbd", "archive_path": "/path.tar.gz"} — build a downloaded source tarball
+      {"engine": "arbd", "install_built": true}          — copy an already-built arbd onto PATH (no sudo)
+      {"engine": "arbd", "sudo_install": true, "password": "…"} — run `sudo make install` for the user
     Server → Client:
-      {"type": "progress", "stage": str, "pct": int}
-      {"type": "log",      "line": str}
-      {"type": "complete", "engine": str, "path": str}
-      {"type": "error",    "message": str}   — bad request, or build/extract failed;
-                                               the UI then shows the manual steps.
+      {"type": "progress",    "stage": str, "pct": int}
+      {"type": "log",         "line": str}
+      {"type": "complete",    "engine": str, "path": str}
+      {"type": "manual_step", "engine": str, "command": str, "note": str}  — built, but
+                                               one manual (sudo) line finishes it (ARBD)
+      {"type": "error",       "message": str} — bad request, or build/extract failed;
+                                                the UI then shows the manual steps.
 
-    Thin wrapper over `engine_install.run_install` / `engine_artifact.install_namd_archive`
+    Thin wrapper over `engine_install.run_install` / `engine_artifact.install_*_archive`
     (FEATURE_DEVELOPMENT sprout rule — the logic lives in the modules, not here).
     """
     from backend.core.engine_install import InstallError, run_install
-    from backend.core.engine_artifact import ArtifactError, install_namd_archive
+    from backend.core.engine_artifact import (
+        ArtifactError, install_arbd_archive, install_arbd_binary,
+        install_arbd_sudo, install_namd_archive,
+    )
     from backend.core.engines import installable_engine_keys
 
     await websocket.accept()
@@ -1278,15 +1286,24 @@ async def engines_install_ws(websocket: WebSocket) -> None:
         engine = req.get("engine")
         archive_path = req.get("archive_path")
         try:
-            if archive_path:
-                # Finish a downloaded package (currently NAMD only).
-                if engine != "namd":
+            if engine == "arbd" and req.get("install_built"):
+                # No-password finish: copy an already-built ARBD binary onto PATH.
+                await install_arbd_binary(websocket.send_json)
+            elif engine == "arbd" and req.get("sudo_install"):
+                # Run `sudo make install` for the user (password fed to sudo -S).
+                await install_arbd_sudo(req.get("password") or "", websocket.send_json)
+            elif archive_path:
+                # Finish a downloaded package: NAMD (extract) or ARBD (build).
+                if engine == "namd":
+                    await install_namd_archive(archive_path, websocket.send_json)
+                elif engine == "arbd":
+                    await install_arbd_archive(archive_path, websocket.send_json)
+                else:
                     await websocket.send_json({
                         "type": "error",
                         "message": f"No downloaded-package install for {engine!r}.",
                     })
                     return
-                await install_namd_archive(archive_path, websocket.send_json)
             elif engine in installable_engine_keys():
                 await run_install(engine, websocket.send_json)
             else:

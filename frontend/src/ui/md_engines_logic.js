@@ -8,8 +8,13 @@
  * md_engines.js stays presentational and these stay unit-tested.
  */
 
-// Display order for the status panel (required engines first, bundled last).
-export const ENGINE_ORDER = ['oxdna', 'namd', 'gromacs', 'oxdna_anm', 'psfgen', 'dnanalysis']
+// Display order for the status panel (required engines first, CG pipeline in the
+// middle, bundled/optional last).
+export const ENGINE_ORDER = [
+  'oxdna', 'namd', 'gromacs',
+  'mrdna', 'arbd', 'cuda',
+  'oxdna_anm', 'psfgen', 'dnanalysis',
+]
 
 /** Human one-liner about the local GPU, used at the top of the panel. */
 export function gpuSummary(gpu) {
@@ -84,25 +89,6 @@ export function sectionSummary(status, key) {
   const engines = (status && status.engines) || {}
   const missing = (sec.missing || []).map(k => ({ key: k, name: (engines[k] && engines[k].name) || k }))
   return { ready: !!sec.ready, missing }
-}
-
-/**
- * Summarize a `/engines/namd/scan-download` result for the "check download"
- * line → { found, path, message }.  `path` prefills the input; `message`
- * tells the user what was found (incl. any CPU-on-GPU warning) or that nothing was.
- */
-export function namdScanSummary(scan) {
-  const cands = (scan && scan.candidates) || []
-  if (!cands.length) {
-    return {
-      found: false, path: '',
-      message: 'No NAMD download found in ~/Downloads. Download it (link above), then Re-scan — or paste the file path below.',
-    }
-  }
-  const b = (scan && scan.best) || cands[0]
-  let message = `Found ${b.filename} (${b.build} build).`
-  if (b.warning) message += ' ' + b.warning
-  return { found: true, path: b.path, message }
 }
 
 /** Short gate banner text for a not-ready section. */

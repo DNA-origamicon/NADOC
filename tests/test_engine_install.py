@@ -59,9 +59,20 @@ def test_anm_no_arch_env_without_gpu():
     assert steps[0]["env"] == {}
 
 
+def test_mrdna_runs_setup_script_gpu_independent():
+    for gpu in (_gpu(False), _gpu(True)):
+        steps = ei.install_steps("mrdna", gpu, {})
+        assert len(steps) == 1
+        assert steps[0]["argv"] == ["bash", "scripts/setup-mrdna.sh"]
+        # no CUDA/arch env — mrdna is a pure Python install
+        assert "env" not in steps[0] or steps[0].get("env") in ({}, None)
+
+
 def test_non_installable_engine_raises():
     with pytest.raises(ValueError):
         ei.install_steps("namd", _gpu(False), {})
+    with pytest.raises(ValueError):
+        ei.install_steps("arbd", _gpu(True), {})
 
 
 # ── run_install (streaming/progress/verify contract) ──────────────────────────
@@ -93,6 +104,20 @@ def test_run_install_success_streams_progress_and_completes(monkeypatch):
     assert rec.msgs[-1] == {"type": "complete", "engine": "oxdna", "path": path}
     assert any(m.get("pct") == 100 for m in rec.msgs if m["type"] == "progress")
     assert len(calls) == 3  # clone + cmake + make all streamed
+
+
+def test_run_install_mrdna_streams_and_completes(monkeypatch):
+    async def ok_stream(argv, cwd, env, send):
+        await send({"type": "log", "line": " ".join(argv)})
+        return 0
+    monkeypatch.setattr(ei, "_stream", ok_stream)
+    monkeypatch.setattr(ei, "_verify", lambda k: "/home/u/mrdna-tool/mrdna")
+    monkeypatch.setattr(ei.os.path, "isdir", lambda p: False)
+
+    rec = _Recorder()
+    path = asyncio.run(ei.run_install("mrdna", rec))
+    assert path.endswith("mrdna")
+    assert rec.msgs[-1] == {"type": "complete", "engine": "mrdna", "path": path}
 
 
 def test_run_install_step_failure_raises(monkeypatch):

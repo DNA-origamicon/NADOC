@@ -282,6 +282,38 @@ function _fadeMat(mat, opacity) {
   mat.depthWrite  = opaque
 }
 
+/**
+ * Sort one strand's nucleotides into 5′→3′ backbone order (in place, also returned).
+ *
+ * Ordering: by domain, then bp_index (ascending for FORWARD, descending for REVERSE),
+ * then LOOP-COPY index. A loop insertion emits several nucleotides at ONE bp_index,
+ * stacked up the helix axis in emission order (copy 0 lowest). They must be threaded
+ * in the direction the strand travels the axis — a FORWARD strand climbs (0→n-1), a
+ * REVERSE strand descends (n-1→0) — otherwise the backbone connector zig-zags down
+ * into the bulge and back out (an out-of-order over-stretched bond). Copy index is the
+ * per-(helix,bp,dir) appearance order in `nucs`, which the geometry list emits ascending.
+ */
+export function orderStrandNucleotides(nucs) {
+  const copyIdx = new Map()   // nuc → copy index
+  const seen    = new Map()   // "helix:bp:dir" → running count
+  for (const n of nucs) {
+    const k = `${n.helix_id}:${n.bp_index}:${n.direction}`
+    const c = seen.get(k) ?? 0
+    copyIdx.set(n, c)
+    seen.set(k, c + 1)
+  }
+  nucs.sort((a, b) => {
+    const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
+    if (di !== 0) return di
+    const bpDiff = a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
+    if (bpDiff !== 0) return bpDiff
+    const ca = copyIdx.get(a) ?? 0
+    const cb = copyIdx.get(b) ?? 0
+    return a.direction === 'FORWARD' ? ca - cb : cb - ca
+  })
+  return nucs
+}
+
 export function buildHelixObjects(geometry, design, scene, customColors = {}, loopStrandIds = [], helixAxes = null, lod = 'full') {
   const loopSet = new Set(loopStrandIds)
 
@@ -336,13 +368,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     byBp.get(nuc.bp_index)[nuc.direction] = nuc
   }
 
-  for (const [, nucs] of byStrand) {
-    nucs.sort((a, b) => {
-      const di = (a.domain_index ?? 0) - (b.domain_index ?? 0)
-      if (di !== 0) return di
-      return a.direction === 'FORWARD' ? a.bp_index - b.bp_index : b.bp_index - a.bp_index
-    })
-  }
+  for (const [, nucs] of byStrand) orderStrandNucleotides(nucs)
 
   // ── Periodic-seam connectors ───────────────────────────────────────────────
   // A forced ligation with is_periodic_seam merges a far 3' end into a near 5'
@@ -1679,10 +1705,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // Fast lookup: nuc object → backboneEntry, and key string → backboneEntry.
   const _nucToEntry = new Map()
   const _keyToEntry = new Map()
+  // Loop insertions put several nucleotides at one (helix,bp,dir); they collapse in
+  // _keyToEntry (last wins). _copyKeyToEntry keys each one by its loop-copy index
+  // ("helix:bp:dir:copy", copy = appearance order = geometry emission order) so a
+  // sim/scalar update carrying a copy index can address the RIGHT bead instead of
+  // only the last copy. Non-loop beads are copy 0. See applyFemPositions/applyScalarColors.
+  const _copyKeyToEntry = new Map()
+  const _copySeenBB = new Map()
   for (const entry of backboneEntries) {
     _nucToEntry.set(entry.nuc, entry)
     const n = entry.nuc
-    _keyToEntry.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, entry)
+    const bk = `${n.helix_id}:${n.bp_index}:${n.direction}`
+    _keyToEntry.set(bk, entry)
+    const ci = _copySeenBB.get(bk) ?? 0
+    _copySeenBB.set(bk, ci + 1)
+    entry._copy = ci
+    _copyKeyToEntry.set(`${bk}:${ci}`, entry)
   }
   // Per-instance colour captured before a scalar (RMSF) recolour overlay (beads +
   // cones + slabs), so it can be restored when the overlay is cleared.  null = no
@@ -1697,9 +1735,16 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // key string → slab entry (for surgical per-bead overrides, e.g. overhang
   // unzip animation that moves only a handful of beads each frame).
   const _keyToSlab = new Map()
+  const _copySeenSlab = new Map()
   for (const slab of slabEntries) {
     const n = slab.nuc
-    _keyToSlab.set(`${n.helix_id}:${n.bp_index}:${n.direction}`, slab)
+    const sk = `${n.helix_id}:${n.bp_index}:${n.direction}`
+    _keyToSlab.set(sk, slab)
+    // Loop-copy index (geometry emission order) so a per-copy sim normal reaches the
+    // right slab — see the normalMap lookup in applyFemPositions.
+    const ci = _copySeenSlab.get(sk) ?? 0
+    _copySeenSlab.set(sk, ci + 1)
+    slab._copy = ci
   }
   // key string → connector cones touching that bead (from OR to), so a surgical
   // per-bead move (setBeadOverrides) can recompose only the affected cones.
@@ -3167,7 +3212,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
       for (let _i = 0; _i < updates.length; _i++) {
         const upd   = updates[_i]
-        const entry = _keyToEntry.get(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`)
+        // Address the specific loop copy when the update carries one (copy defaults to
+        // 0 → the plain bead, so non-loop designs and copy-less updates are unchanged).
+        const _bk = `${upd.helix_id}:${upd.bp_index}:${upd.direction}`
+        const entry = _copyKeyToEntry.get(`${_bk}:${upd.copy ?? 0}`) ?? _keyToEntry.get(_bk)
         if (!entry) continue
         const bp = upd.backbone_position
         const eq = entry.nuc.backbone_position
@@ -3236,7 +3284,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         normalMap = new Map()
         for (const upd of updates) {
           if (upd.nx !== undefined)
-            normalMap.set(`${upd.helix_id}:${upd.bp_index}:${upd.direction}`, upd)
+            normalMap.set(`${upd.helix_id}:${upd.bp_index}:${upd.direction}:${upd.copy ?? 0}`, upd)
         }
       }
       for (const slab of slabEntries) {
@@ -3244,7 +3292,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (!entry) continue
         slab.bbPos.copy(entry.pos)
         if (normalMap) {
-          const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`
+          const key = `${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}:${slab._copy ?? 0}`
           const upd = normalMap.get(key)
           if (upd) {
             _slabBnS.set(upd.nx, upd.ny, upd.nz)
@@ -3290,20 +3338,23 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         }
         mesh.setColorAt(id, _tColor.setHex(hex))
       }
-      for (const [key, entry] of _keyToEntry) {
+      // colorByKey is keyed "helix:bp:dir:copy" so each loop copy recolours its own
+      // bead/slab/cone (copy defaults 0 for plain nucleotides).
+      for (const [key, entry] of _copyKeyToEntry) {
         const hex = get(key)
         if (hex === undefined || hex === null) continue
         recolor(entry.instMesh, entry.id, hex)
       }
       for (const cone of coneEntries) {
         const n = cone.fromNuc
-        const hex = get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
+        const c = _nucToEntry.get(n)?._copy ?? 0
+        const hex = get(`${n.helix_id}:${n.bp_index}:${n.direction}:${c}`)
         if (hex === undefined || hex === null) continue
         recolor(cone.instMesh, cone.id, hex)
       }
       for (const slab of slabEntries) {
         const n = slab.nuc
-        const hex = get(`${n.helix_id}:${n.bp_index}:${n.direction}`)
+        const hex = get(`${n.helix_id}:${n.bp_index}:${n.direction}:${slab._copy ?? 0}`)
         if (hex === undefined || hex === null) continue
         recolor(slab.instMesh, slab.id, hex)
       }

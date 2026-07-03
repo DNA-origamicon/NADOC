@@ -264,7 +264,16 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
                 if delta <= -1:
                     continue  # deleted position: no nucleotide
                 n_copies = max(1, delta + 1)
-                for k in range(n_copies):
+                # Loop copies are stacked along the axis by copy index k (k=0 lowest,
+                # k=n-1 highest — see geometry.py / _compute_nuc_geometry_copy).  A
+                # FORWARD strand climbs the axis, so it threads k=0→n-1; a REVERSE
+                # strand descends, so it must thread k=n-1→0, else the backbone
+                # zig-zags through the bulge (bp_hi → k0[low] → … → bp_lo, an
+                # over-stretched out-of-order bond).  The key still carries the true k
+                # so WC pairing (copy k ↔ copy k) and per-copy geometry are unchanged.
+                copy_order = (range(n_copies) if domain.direction == Direction.FORWARD
+                              else range(n_copies - 1, -1, -1))
+                for k in copy_order:
                     keys.append((domain.helix_id, bp, domain.direction.value)
                                 if n_copies == 1
                                 else (domain.helix_id, bp, domain.direction.value, k))
@@ -340,6 +349,141 @@ def _resolve_extra_base_geometry(prev_nuc: dict, next_nuc: dict, k: int, n: int)
         "base_normal": a1.tolist(),
         "axis_tangent": a3.tolist(),
     }
+
+
+def _perp_bow(chord: np.ndarray) -> np.ndarray:
+    """A deterministic unit vector ⟂ *chord* — the plane a slack flexible arc bows
+    into.  Its direction is physically irrelevant for a relaxation seed (oxDNA
+    equilibrates the ssDNA), so we just need it stable and perpendicular; unlike the
+    frontend arc it does NOT try to bow away from nearby helices."""
+    dn = chord / (np.linalg.norm(chord) + 1e-14)
+    b = np.cross(dn, np.array([0.0, 1.0, 0.0]))
+    if float(np.dot(b, b)) < 1e-6:
+        b = np.cross(dn, np.array([1.0, 0.0, 0.0]))
+    return b / (np.linalg.norm(b) + 1e-14)
+
+
+def _flexible_arc_points(a: np.ndarray, b: np.ndarray, contour_nm: float,
+                         n: int, bow: np.ndarray) -> list[np.ndarray]:
+    """``n`` interior points along a circular arc of arc-length ``contour_nm`` from
+    ``a`` to ``b``, bowing toward unit ``bow`` (⟂ chord).  Straight (evenly-spaced
+    chord lerp) when the chord is taut (``|b-a| >= contour_nm``) or coincident.
+
+    Direct port of ``flexible_arcs.js`` ``_arcPoints`` so the oxDNA seed matches the
+    on-screen flexible-arc conformation.  Even spacing keeps consecutive backbone
+    separations ≈ contour/(n+1) ≈ the ssDNA rise, inside oxDNA's FENE range — so the
+    ssDNA starts relaxed instead of as a stretched rigid half-helix."""
+    if n <= 0:
+        return []
+    d = b - a
+    c = float(np.linalg.norm(d))
+    if c < 1e-6 or c >= contour_nm:                      # taut / coincident → straight
+        return [a + d * (i / (n + 1)) for i in range(1, n + 1)]
+    # Solve θ ∈ (0,π): sin(θ)/θ = chord/contour  (half-angle of the circular arc).
+    ratio = c / contour_nm
+    lo, hi = 1e-4, math.pi - 1e-4
+    for _ in range(60):
+        mid = (lo + hi) / 2.0
+        if math.sin(mid) / mid > ratio:
+            lo = mid
+        else:
+            hi = mid
+    theta = (lo + hi) / 2.0                              # half arc-angle (may exceed π/2)
+    radius = contour_nm / (2.0 * theta)
+    chord_hat = d / c
+    # Re-orthogonalise bow against the chord and build the in-plane basis.  The arc
+    # is parametrised directly by angle ψ ∈ [-θ, +θ] about its centre — this avoids
+    # the acos()-based sweep that silently collapses slack (>180°) arcs.
+    bow_p = bow - float(np.dot(bow, chord_hat)) * chord_hat
+    if float(np.linalg.norm(bow_p)) < 1e-9:
+        bow_p = _perp_bow(d)
+    bow_hat = bow_p / (np.linalg.norm(bow_p) + 1e-14)
+    midpt = (a + b) / 2.0
+    center = midpt - bow_hat * (radius * math.cos(theta))
+    pts: list[np.ndarray] = []
+    for i in range(1, n + 1):
+        psi = -theta + 2.0 * theta * (i / (n + 1))
+        pts.append(center + radius * (math.cos(psi) * bow_hat + math.sin(psi) * chord_hat))
+    return pts
+
+
+def flexible_segment_geo_keys(design: Design):
+    """``(anchor_geo_key_a, anchor_geo_key_b, [bead_geo_keys…], contour_nm)`` per
+    flexible connection, where each geo key is the 3-tuple ``(helix_id, bp, dir)``
+    the oxDNA resolver uses.  Skips a connection whose anchors/beads don't resolve.
+
+    Layer-3 (``flexible_connections``) → physical seed only; never mutates topology.
+    """
+    strands_by_id = {s.id: s for s in design.strands}
+
+    def geo_key(anc):
+        s = strands_by_id.get(anc.strand_id)
+        if s is None or anc.domain_index >= len(s.domains):
+            return None
+        d = s.domains[anc.domain_index]
+        return (d.helix_id, anc.bp_index, anc.direction.value)
+
+    out = []
+    for c in design.flexible_connections:
+        ka, kb = geo_key(c.anchor_a), geo_key(c.anchor_b)
+        beads = [geo_key(k) for k in c.segment_bead_keys]
+        if ka is None or kb is None or any(k is None for k in beads):
+            continue
+        out.append((ka, kb, beads, c.contour_length_nm))
+    return out
+
+
+def _apply_flexible_segment_arc(design: Design,
+                                resolved_map: dict[tuple, dict]) -> dict[tuple, dict]:
+    """Re-seat every flexible ssDNA run onto a contour-length arc between its two
+    (already posed) rigid anchors, replacing the default per-bead helix-axis
+    placement.
+
+    A marked-flexible unpaired scaffold run is otherwise seeded as a rigid B-DNA
+    half-helix rooted on whichever cluster owns its helix — so it juts stiffly out
+    of one anchor and ignores the other, and a relaxation must spend a long time
+    un-stretching it.  Seeding it as the same slack arc the UI draws (bond lengths
+    ≈ the ssDNA rise) lets oxDNA start from a near-relaxed ssDNA conformation.
+
+    Physical-layer only: mutates the STARTING configuration, never Design topology.
+    """
+    specs = flexible_segment_geo_keys(design)
+    if not specs:
+        return resolved_map
+    out = dict(resolved_map)
+    for ka, kb, bead_keys, contour_nm in specs:
+        na, nb = resolved_map.get(ka), resolved_map.get(kb)
+        if na is None or nb is None or any(k not in resolved_map for k in bead_keys):
+            continue
+        p_a = np.asarray(na["backbone_position"], dtype=float)
+        p_b = np.asarray(nb["backbone_position"], dtype=float)
+        n = len(bead_keys)
+        bow = _perp_bow(p_b - p_a)
+        pts = _flexible_arc_points(p_a, p_b, contour_nm, n, bow)
+        chain = [p_a, *pts, p_b]                 # anchors flank the run for tangents
+        for i, bk in enumerate(bead_keys):
+            base = resolved_map[bk]
+            tan = chain[i + 2] - chain[i]        # local 5′→3′ arc tangent
+            nrm = float(np.linalg.norm(tan))
+            a3 = tan / nrm if nrm > 1e-9 else np.asarray(base["axis_tangent"], float)
+            a3 = a3 / (np.linalg.norm(a3) + 1e-14)
+            bn = np.asarray(base["base_normal"], dtype=float)
+            a1 = bn - float(np.dot(bn, a3)) * a3     # keep a1 ⟂ a3
+            if float(np.linalg.norm(a1)) < 1e-9:
+                a1 = np.cross(a3, np.array([1.0, 0.0, 0.0]))
+                if float(np.linalg.norm(a1)) < 1e-9:
+                    a1 = np.cross(a3, np.array([0.0, 1.0, 0.0]))
+            a1 = a1 / (np.linalg.norm(a1) + 1e-14)
+            # nuc_conf_line negates the stored tangent for REVERSE beads, so store it
+            # pre-flipped and the emitted a3 tracks the arc tangent either way.
+            stored_tan = a3 if base["direction"] == "FORWARD" else -a3
+            out[bk] = {
+                **base,
+                "backbone_position": pts[i].tolist(),
+                "base_normal": a1.tolist(),
+                "axis_tangent": stored_tan.tolist(),
+            }
+    return out
 
 
 def _strand_nucleotide_order(design: Design) -> list[tuple]:
@@ -585,6 +729,16 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
     geo_map: dict[tuple[str, int, str], dict] = {
         (n["helix_id"], n["bp_index"], n["direction"]): n for n in geometry
     }
+    # Loop copies collapse in geo_map (all n copies share the 3-tuple key), so also
+    # keep the per-(helix,bp,dir) list IN EMISSION ORDER (geometry.py emits copy
+    # k=0..n-1 by ascending axial offset).  Sourcing the k-th copy from here — rather
+    # than recomputing it with _compute_nuc_geometry_copy — keeps loop copies on the
+    # SAME groove side as the real bases (the two code paths use OPPOSITE minor-groove
+    # signs; the recomputed reverse copy landed across the duplex → a spurious
+    # over-stretched junction bond on every reverse-strand loop).
+    geo_copies: dict[tuple[str, int, str], list[dict]] = {}
+    for n in geometry:
+        geo_copies.setdefault((n["helix_id"], n["bp_index"], n["direction"]), []).append(n)
     order = _strand_nucleotide_order(design)
     ls_lookup_conf = _build_ls_lookup(design)
     resolved_map: dict[tuple, dict] = {}
@@ -593,14 +747,18 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
     for key in order:
         if key[0] == _XB_SENTINEL:
             continue
-        nuc = geo_map.get(key[:3])  # geo_map always uses 3-tuple keys
         if len(key) == 4:
-            _h_id, _bp, _dir, _copy_k = key
-            _delta = ls_lookup_conf.get((_h_id, _bp), 0)
-            _n_copies = max(1, _delta + 1)
-            nuc = _compute_nuc_geometry_copy(design, _h_id, _bp, _dir, _copy_k, _n_copies)
-        elif nuc is None:
-            nuc = _compute_nuc_geometry(design, key[0], key[1], key[2])
+            copies = geo_copies.get(key[:3])
+            if copies is not None and key[3] < len(copies):
+                nuc = copies[key[3]]                 # geometry.py copy (correct groove)
+            else:                                    # geometry list lacked the copy
+                _delta = ls_lookup_conf.get((key[0], key[1]), 0)
+                nuc = _compute_nuc_geometry_copy(
+                    design, key[0], key[1], key[2], key[3], max(1, _delta + 1))
+        else:
+            nuc = geo_map.get(key)
+            if nuc is None:
+                nuc = _compute_nuc_geometry(design, key[0], key[1], key[2])
         if nuc is not None:
             resolved_map[key] = nuc
     # Pass 2: crossover extra bases, interpolated between their resolved flanks.
@@ -609,7 +767,9 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
         next_nuc = resolved_map.get(next_key)
         if prev_nuc is not None and next_nuc is not None:
             resolved_map[key] = _resolve_extra_base_geometry(prev_nuc, next_nuc, k, n)
-    return resolved_map
+    # Pass 3: re-seat flexible ssDNA runs onto a contour-length arc between their
+    # posed rigid anchors (near-relaxed ssDNA seed instead of a rigid half-helix).
+    return _apply_flexible_segment_arc(design, resolved_map)
 
 
 # oxDNA's base (H-bond) interaction site sits at CM + POS_BASE·a1 (model.h
@@ -651,8 +811,12 @@ def oxdna_native_seed_map(
         a1 = np.asarray(nuc["base_normal"], dtype=float)
         a1_of[key] = a1 / (np.linalg.norm(a1) + 1e-14)
 
-    fwd = {(k[0], k[1]) for k in resolved_map if k[2] == "FORWARD"}
-    rev = {(k[0], k[1]) for k in resolved_map if k[2] == "REVERSE"}
+    # Designed WC pairs are keyed by the 3-tuple (helix, bp, dir); loop-insertion
+    # copies carry a 4th copy-index element and are single-stranded inserts (no WC
+    # partner), so exclude them from the pair-separation median.  They are still
+    # shifted below (a1_of covers every key) so backbone bonds stay intact.
+    fwd = {(k[0], k[1]) for k in resolved_map if len(k) == 3 and k[2] == "FORWARD"}
+    rev = {(k[0], k[1]) for k in resolved_map if len(k) == 3 and k[2] == "REVERSE"}
     seps: list[float] = []
     for hid, bp in fwd & rev:
         f = resolved_map[(hid, bp, "FORWARD")]
@@ -973,27 +1137,49 @@ def read_configuration_unwrapped(
                                      align_keys=align_keys, rotate=rotate, align=align)
 
 
+def _backbone_adjacency_pairs(design: Design):
+    """Consecutive backbone-bonded key pairs for the unwrap graph, threading loop
+    copies as 4-tuples (``prev_real → copy0 → … → next_real``).
+
+    Distinct from ``backbone_bond_pairs``, which COLLAPSES loop copies to one 3-tuple
+    (right for the health check, but it leaves the loop copies disconnected in the
+    unwrap graph → they get box-shifted as their own tiny components → giant display
+    bonds).  Walking the real strand order keeps every copy in its strand's chain."""
+    cur_strand = None
+    prev_key = None
+    for step in _walk_strand_nucleotides(design):
+        if step.strand_idx != cur_strand:
+            cur_strand, prev_key = step.strand_idx, None
+        if prev_key is not None:
+            yield prev_key, step.key
+        prev_key = step.key
+
+
 def _build_unwrap_adjacency(relax: dict[tuple, dict], design: Design) -> dict[tuple, list[tuple]]:
-    """Bond-adjacency for the unwrap BFS: backbone bonds + loop-copy ties + designed
-    WC pairs, over the keys present in *relax*.  Depends only on topology + the key
-    SET (constant for a given design/frame-shape), so a live session can build it
-    ONCE and pass it back via ``unwrap_align_to_reference(..., adj=…)`` instead of
+    """Bond-adjacency for the unwrap BFS: backbone bonds (loop copies threaded) +
+    designed WC pairs, over the keys present in *relax*.  Depends only on topology +
+    the key SET (constant for a given design/frame-shape), so a live session can build
+    it ONCE and pass it back via ``unwrap_align_to_reference(..., adj=…)`` instead of
     rebuilding it every frame."""
     adj: dict[tuple, list[tuple]] = {k: [] for k in relax}
-    for a, b in backbone_bond_pairs(design):
-        if a in relax and b in relax:
-            adj[a].append(b)
-            adj[b].append(a)
-    # Loop-insertion copies (4-tuple keys): tie each copy to its base 3-tuple (or the
-    # previous copy) so it joins the same connected component as its sibling.
-    for k in relax:
-        if len(k) == 4:
-            base = k[:3] if k[3] == 0 else (k[0], k[1], k[2], k[3] - 1)
-            if base in relax:
-                adj[k].append(base)
-                adj[base].append(k)
-    # WC pairs only between canonical 3-tuple nucleotides (copies are unpaired loop
-    # bases — keying them here would collide multiple copies onto one (h,bp)).
+
+    def _present(k):
+        # Resolve a walk key to the key actually in *relax*: the full 4-tuple when
+        # copies are kept, else its collapsed 3-tuple (copies=False).
+        if k in relax:
+            return k
+        if len(k) == 4 and k[:3] in relax:
+            return k[:3]
+        return None
+
+    for a, b in _backbone_adjacency_pairs(design):
+        ra, rb = _present(a), _present(b)
+        if ra is not None and rb is not None and ra != rb:
+            adj[ra].append(rb)
+            adj[rb].append(ra)
+    # WC pairs only between canonical 3-tuple nucleotides.  With copies kept, loop
+    # copies are already backbone-threaded above; keying WC here would collide
+    # multiple copies onto one (h,bp).
     fwd = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "FORWARD"}
     rev = {(k[0], k[1]): k for k in relax if len(k) == 3 and k[2] == "REVERSE"}
     for hb in set(fwd) & set(rev):
@@ -1334,6 +1520,32 @@ def backbone_bond_pairs(design: Design) -> list[tuple[tuple, tuple]]:
         for a, b in zip(seq_keys, seq_keys[1:]):
             pairs.append((a, b))
     return pairs
+
+
+def max_crossover_backbone_stretch(design: Design, geometry: list[dict]) -> float:
+    """Longest backbone bond that CROSSES between two helices (oxDNA units) for a
+    given seed *geometry*.
+
+    A cross-helix backbone bond is a crossover (or a strand's helix-to-helix jump).
+    In a well-registered seed these sit near the normal backbone length (~0.9 units);
+    a large value means the two helices' crossover endpoints have drifted axially
+    apart.  ``compact_skips`` compaction shifts each helix by ITS OWN cumulative
+    deletion count, so when paired helices carry unequal skips/loops (a *bent*
+    bundle) it desynchronises every crossover between them — this metric catches
+    that (8+ units on such a design) so the seeder can fall back to the un-compacted
+    deformed geometry.  Loop-insertion copies are intra-helix, so they don't appear
+    here.  Read-only: measures geometry, never mutates topology."""
+    rmap = resolved_nuc_map(design, geometry)
+    worst = 0.0
+    for k1, k2 in backbone_bond_pairs(design):
+        if k1[0] == k2[0]:                       # same helix — not a crossover
+            continue
+        g1, g2 = rmap.get(k1), rmap.get(k2)
+        if g1 is None or g2 is None:
+            continue
+        d = np.asarray(g1["backbone_position"], float) - np.asarray(g2["backbone_position"], float)
+        worst = max(worst, float(np.linalg.norm(d)) * NM_TO_OXDNA)
+    return worst
 
 
 # ── Electric-field forces (uniform string force + anchor traps) ─────────────────

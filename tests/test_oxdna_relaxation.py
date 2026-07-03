@@ -109,6 +109,165 @@ def test_oxdna_native_seed_map_noop_without_pairs(design):
     assert out is fwd_only
 
 
+def test_oxdna_native_seed_map_handles_loop_inserts():
+    """Loop insertions add WC-paired copies keyed by a 4-tuple (helix, bp, dir,
+    copy) — the native seed map must NOT choke on them (regression: it assumed
+    3-tuple keys and raised KeyError, crashing job-prep for any design with a loop).
+    Every key, copies included, is still shifted."""
+    import numpy as np
+    from backend.core.models import LoopSkip
+    from backend.physics.oxdna_interface import resolved_nuc_map, oxdna_native_seed_map
+    from backend.api.crud import _geometry_for_design
+    from tests.conftest import make_18hb_routed_design
+
+    design = make_18hb_routed_design()
+    design.helices[1].loop_skips = [LoopSkip(bp_index=50, delta=+2)]
+    rmap = resolved_nuc_map(design, _geometry_for_design(design))
+    assert any(len(k) == 4 for k in rmap)            # loop copies present
+    out = oxdna_native_seed_map(design, rmap)        # must not raise
+    assert set(out) == set(rmap)                     # every key (incl. copies) kept
+    # the inward shift moved every centre of mass (paired and copy alike)
+    for k in rmap:
+        moved = np.linalg.norm(
+            np.asarray(out[k]["backbone_position"], float)
+            - np.asarray(rmap[k]["backbone_position"], float))
+        assert moved > 1e-6
+
+
+def _loop_design(delta: int = 2):
+    """1 helix, scaffold FORWARD + staple REVERSE, one loop insertion at bp5."""
+    from backend.core.models import (
+        Design, Helix, Strand, Domain, Vec3, DesignMetadata,
+        LatticeType, StrandType, Direction, LoopSkip)
+    from backend.core.constants import BDNA_RISE_PER_BP
+    L = 10
+    h = Helix(id="h0", axis_start=Vec3(x=0, y=0, z=0),
+              axis_end=Vec3(x=0, y=0, z=L * BDNA_RISE_PER_BP), phase_offset=0.0,
+              length_bp=L, loop_skips=[LoopSkip(bp_index=5, delta=delta)])
+    fwd = Strand(id="scaf", strand_type=StrandType.SCAFFOLD,
+                 domains=[Domain(helix_id="h0", direction=Direction.FORWARD, start_bp=0, end_bp=L - 1)])
+    rev = Strand(id="stap", strand_type=StrandType.STAPLE,
+                 domains=[Domain(helix_id="h0", direction=Direction.REVERSE, start_bp=L - 1, end_bp=0)])
+    return Design(metadata=DesignMetadata(name="loop"), helices=[h], strands=[fwd, rev],
+                  lattice_type=LatticeType.HONEYCOMB)
+
+
+def test_loop_copies_thread_monotonically_on_both_strands():
+    """A loop bulges along the helix axis; a FORWARD strand climbs it, a REVERSE
+    strand descends it.  Both must thread the copies in axial order (no zig-zag).
+    Regression: reverse strands used the same copy order as forward, threading
+    bp_hi → copy0[low] → … → bp_lo — a ~1.9-unit out-of-order backbone bond on
+    every reverse-strand loop; and the reverse loop copy was recomputed on the
+    WRONG groove side (a second ~1.7-unit junction bond)."""
+    import numpy as np
+    from backend.physics.oxdna_interface import (
+        _walk_strand_nucleotides, resolved_nuc_map, NM_TO_OXDNA)
+    from backend.api.crud import _geometry_for_design
+
+    design = _loop_design(delta=2)
+    rmap = resolved_nuc_map(design, _geometry_for_design(design, compact_skips=False))
+    axis = np.array([0.0, 0.0, 1.0])
+    for want_dir in ("FORWARD", "REVERSE"):
+        zs, bonds, prev = [], [], None
+        for step in _walk_strand_nucleotides(design):
+            k = step.key
+            if len(k) < 3 or k[2] != want_dir:
+                continue
+            p = np.asarray(rmap[k]["backbone_position"], float)
+            if prev is not None:
+                bonds.append(float(np.linalg.norm(p - prev)) * NM_TO_OXDNA)
+            prev = p
+            zs.append(float(p.dot(axis)))
+        # monotone axial progression through the whole strand incl. the loop (ties at
+        # the flank↔copy junctions are fine — same z, different rotation)
+        diffs = np.diff(zs)
+        assert np.all(diffs >= -1e-9) or np.all(diffs <= 1e-9), f"{want_dir} zig-zags: {zs}"
+        # no backbone bond past FENE — the loop no longer over-stretches
+        assert max(bonds) < 1.006, f"{want_dir} over-stretched bond {max(bonds):.2f}"
+
+
+def _bent_18hb():
+    """A routed 18hb with skips in only HALF the helices → a bent bundle whose
+    crossovers desync under per-helix compaction."""
+    from backend.core.models import LoopSkip
+    from tests.conftest import make_18hb_routed_design
+    design = make_18hb_routed_design()
+    for i, h in enumerate(design.helices):
+        if i % 2 == 0:
+            h.loop_skips = [LoopSkip(bp_index=bp, delta=-1) for bp in range(20, 200, 20)]
+    return design
+
+
+def test_unwrap_adjacency_keeps_loop_copies_in_one_component():
+    """The PBC-unwrap graph must thread loop-insertion copies into their strand's
+    connected component — else they unwrap as their own tiny components, get box-
+    shifted independently, and render as massively over-stretched bonds. Regression:
+    with copies=True the copies were ALL orphaned (tied to a non-existent 3-tuple base
+    + a 3-tuple backbone key absent from the copies=True map)."""
+    from backend.core.models import LoopSkip
+    from backend.physics.oxdna_interface import resolved_nuc_map, _build_unwrap_adjacency
+    from backend.api.crud import _geometry_for_design
+    from tests.conftest import make_18hb_routed_design
+
+    design = make_18hb_routed_design()
+    # inject loops on several helices so there are 4-tuple copies to thread
+    for i, h in enumerate(design.helices):
+        if i % 3 == 0:
+            h.loop_skips = [LoopSkip(bp_index=bp, delta=+1) for bp in range(30, 120, 30)]
+    relax = resolved_nuc_map(design, _geometry_for_design(design))   # 4-tuple loop copies
+    assert any(len(k) == 4 for k in relax)
+
+    adj = _build_unwrap_adjacency(relax, design)
+    seen, comps = set(), 0
+    for start in relax:
+        if start in seen:
+            continue
+        comps += 1
+        stack = [start]
+        while stack:
+            n = stack.pop()
+            if n in seen:
+                continue
+            seen.add(n)
+            stack.extend(adj.get(n, []))
+    assert comps == 1                                       # one whole structure, no islands
+    assert all(len(k) != 4 or adj[k] for k in relax)       # every loop copy is bonded
+
+
+def test_max_crossover_stretch_detects_compaction_desync():
+    """On a bent bundle, compacting each helix by its own skip count pulls crossover
+    partners axially apart — the deformed (un-compacted) geometry keeps them
+    registered, so its worst cross-helix bond is markedly shorter."""
+    from backend.physics.oxdna_interface import max_crossover_backbone_stretch
+    from backend.api.crud import _geometry_for_design
+
+    design = _bent_18hb()
+    compact = max_crossover_backbone_stretch(design, _geometry_for_design(design, compact_skips=True))
+    deformed = max_crossover_backbone_stretch(design, _geometry_for_design(design, compact_skips=False))
+    assert compact > deformed + 1.0
+
+
+def test_seed_geometry_falls_back_for_bent_bundle():
+    """`_seed_geometry` uses compaction for a balanced design but falls back to the
+    deformed geometry for a bent one (crossovers stay registered)."""
+    from backend.api.routes_oxdna import _seed_geometry
+    from backend.physics.oxdna_interface import max_crossover_backbone_stretch
+    from backend.api.crud import _geometry_for_design
+    from tests.conftest import make_18hb_routed_design
+
+    balanced = make_18hb_routed_design()
+    balanced_seed = max_crossover_backbone_stretch(balanced, _seed_geometry(balanced))
+    compact_only = max_crossover_backbone_stretch(
+        balanced, _geometry_for_design(balanced, compact_skips=True))
+    assert balanced_seed == pytest.approx(compact_only)   # no skips → compaction kept
+
+    bent = _bent_18hb()
+    bent_seed = max_crossover_backbone_stretch(bent, _seed_geometry(bent))
+    bent_compact = max_crossover_backbone_stretch(
+        bent, _geometry_for_design(bent, compact_skips=True))
+    assert bent_seed < bent_compact - 1.0                 # fell back to deformed
+
+
 # ── oxdna_job: persistence round-trip ─────────────────────────────────────────
 
 def test_job_roundtrip(tmp_path):
@@ -595,6 +754,99 @@ def test_run_job_recovers_from_production_explosion(tmp_path, monkeypatch, desig
     assert job.status == OxdnaStatus.completed
     assert job.production_retries == 1
     assert specs[0].dt == 0.0025                  # ran the recovery at half dt
+
+
+def test_run_job_recovers_from_md_relax_bp_melt(tmp_path, monkeypatch, design, geometry):
+    """A base-pair melt at md_relax is recoverable: the runner escalates the relax
+    (more steps + smaller dt) and retries instead of hard-failing, and the job then
+    reaches `completed`.  Guards the quickness contract — the fast default relax runs
+    first; only the failed melt pays for the escalated pass."""
+    import asyncio
+
+    from backend.core import oxdna_runner as r
+    from backend.core.oxdna_health import OxdnaHealthResult
+
+    specs = build_relaxation_stages(backend="CPU", md_relax_steps=1_000)
+    job = new_oxdna_job("melt-recover", [s.to_status() for s in specs],
+                        n_nucleotides=len(geometry))
+    r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
+
+    monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
+
+    md_health_calls = {"n": 0}
+
+    def fake_health(*a, **k):
+        kind = k.get("kind")
+        if kind == "mc":
+            return OxdnaHealthResult(passed=True, bp_retained_fraction=0.79)
+        if kind == "md_relax":
+            md_health_calls["n"] += 1
+            if md_health_calls["n"] == 1:               # first pass melts
+                return OxdnaHealthResult(passed=False, bp_retained_fraction=0.24,
+                                         reason="base-pair retention 24% below gate 50%")
+            return OxdnaHealthResult(passed=True, bp_retained_fraction=0.9, fene_safe=True)
+        return OxdnaHealthResult(passed=True, bp_retained_fraction=0.9, fene_safe=True)
+
+    monkeypatch.setattr(r, "run_oxdna_health_check", fake_health)
+
+    async def fake_run(oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None):
+        if on_spawn:
+            on_spawn(999)
+        (Path(stage_dir) / "last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
+        (Path(stage_dir) / "energy.dat").write_text("0 -1.3 0.3 -1.0\n")
+        Path(log_path).write_text("INFO: END OF THE SIMULATION, everything went OK!\n")
+        return 0, 999
+
+    monkeypatch.setattr(r, "_run_oxdna_async", fake_run)
+
+    asyncio.run(r.run_job(job, tmp_path, specs))
+
+    assert job.status == OxdnaStatus.completed        # recovered, not failed
+    assert job.relax_retries == 1                     # spent exactly one escalation
+    relax_idx = next(i for i, s in enumerate(specs) if s.kind == "md_relax")
+    assert specs[relax_idx].steps == 3_000            # escalated 3× from the 1_000 base
+    assert specs[relax_idx].dt == 0.001               # escalated to the gentler timestep
+
+
+def test_run_job_fails_after_exhausting_melt_retries(tmp_path, monkeypatch, design, geometry):
+    """A persistent melt exhausts the retry budget and then fails cleanly with a
+    melt-specific message (not the generic health-gate string)."""
+    import asyncio
+
+    from backend.core import oxdna_runner as r
+    from backend.core.oxdna_health import OxdnaHealthResult
+
+    specs = build_relaxation_stages(backend="CPU", md_relax_steps=1_000)
+    job = new_oxdna_job("melt-persist", [s.to_status() for s in specs],
+                        n_nucleotides=len(geometry))
+    r.prepare_oxdna_job(design, geometry, job, tmp_path, specs)
+
+    monkeypatch.setattr(r, "find_oxdna", lambda *a, **k: "/fake/oxDNA")
+    monkeypatch.setattr(r, "find_dnanalysis", lambda *a, **k: None)
+    monkeypatch.setattr(
+        r, "run_oxdna_health_check",
+        lambda *a, **k: (OxdnaHealthResult(passed=True, bp_retained_fraction=0.79)
+                         if k.get("kind") == "mc"
+                         else OxdnaHealthResult(passed=False, bp_retained_fraction=0.24,
+                                                reason="base-pair retention 24% below gate 50%")),
+    )
+
+    async def fake_run(oxdna_bin, input_path, stage_dir, log_path, job_id, on_spawn=None):
+        if on_spawn:
+            on_spawn(999)
+        (Path(stage_dir) / "last_conf.dat").write_text("t = 0\nb = 1 1 1\nE = 0 0 0\n")
+        (Path(stage_dir) / "energy.dat").write_text("0 -0.66 0.3 -0.36\n")
+        Path(log_path).write_text("INFO: END OF THE SIMULATION, everything went OK!\n")
+        return 0, 999
+
+    monkeypatch.setattr(r, "_run_oxdna_async", fake_run)
+
+    asyncio.run(r.run_job(job, tmp_path, specs))
+
+    assert job.status == OxdnaStatus.failed
+    assert job.relax_retries == job.max_relax_retries        # spent the whole budget
+    assert "escalating attempt" in job.error                 # melt-specific message
 
 
 def test_job_progress_eta(tmp_path):
@@ -1439,6 +1691,30 @@ def test_geometry_deviation_map_per_nucleotide():
     tw = geometry_deviation_map(_twist_bundle(40.0, n_axial=24), ref)
     assert tw["max_deviation"] > tw["mean_deviation"] > 0.0       # twist => real spread
     assert tw["min_deviation"] <= tw["mean_deviation"] <= tw["max_deviation"]
+
+
+def test_geometry_deviation_map_keeps_loop_copies_distinct():
+    """Two loop copies at one (helix,bp,dir) must stay SEPARATE (matched by copy index)
+    with their OWN deviation — not collapse to one — so the deviation map recolours
+    every loop bead. Regression: keys were 3-tuple (last copy won)."""
+    from backend.core.oxdna_health import geometry_deviation_map
+    ref = [
+        {"helix_id": "h0", "bp_index": 5, "direction": "FORWARD", "copy": 0,
+         "backbone_position": [0.0, 0.0, 0.0]},
+        {"helix_id": "h0", "bp_index": 5, "direction": "FORWARD", "copy": 1,
+         "backbone_position": [0.0, 0.0, 0.34]},
+        {"helix_id": "h0", "bp_index": 6, "direction": "FORWARD", "copy": 0,
+         "backbone_position": [0.0, 0.0, 0.68]},
+        {"helix_id": "h0", "bp_index": 5, "direction": "REVERSE", "copy": 0,
+         "backbone_position": [1.9, 0.0, 0.0]},
+    ]
+    # current = reference but the two copies each displaced differently
+    cur = [dict(p, nx=1.0, ny=0.0, nz=0.0) for p in ref]
+    cur[1]["backbone_position"] = [0.0, 0.5, 0.34]   # only copy 1 moved
+    m = geometry_deviation_map(cur, ref)
+    got = {(p["helix_id"], p["bp_index"], p["direction"], p["copy"]) for p in m["positions"]}
+    assert ("h0", 5, "FORWARD", 0) in got and ("h0", 5, "FORWARD", 1) in got   # both copies kept
+    assert m["n_shared"] == 4                                                    # nothing collapsed
 
 
 def test_measure_geometry_rmsd_rejects_bad_input():
