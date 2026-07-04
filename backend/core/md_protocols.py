@@ -62,6 +62,83 @@ class SegmentSpec:
 
 # ── NAMD conf template ────────────────────────────────────────────────────────
 
+# A whole ``GPUresident ...`` directive line (with its trailing newline).  NADOC's
+# confs bake ``GPUresident on`` into the fast (HMR + 4 fs) segments because the
+# local pipeline is GPU-resident; a CPU / regular-multicore NAMD build FATALs on it
+# ("GPUresident not supported on regular multicore builds").
+_GPU_RESIDENT_LINE_RE = re.compile(
+    r"^[ \t]*GPUresident\b.*\r?\n?", re.IGNORECASE | re.MULTILINE
+)
+
+
+def strip_gpu_resident(conf_text: str) -> str:
+    """Remove any ``GPUresident`` directive from a NAMD conf, for a CPU/multicore run.
+
+    GPUresident (NAMD 3 CUDASOAintegrate) is valid only on a GPU-resident build; a
+    regular multicore build aborts at startup.  Stripping it makes a GPU-prepared
+    conf CPU-safe — HMR + 4 fs + ``rigidBonds all`` still run on CPU (just slower),
+    only the GPU-resident integrator is unavailable.  Idempotent; a no-op when the
+    directive is absent (e.g. the gentle ``_p10`` warmup confs never had it).
+    """
+    return _GPU_RESIDENT_LINE_RE.sub("", conf_text)
+
+
+# Directives a resume conf must re-specify (dropped from the original, re-emitted to
+# point at the checkpoint + run only the remaining steps).  Mirrors the local
+# runner's `_RESUME_DROP` (namd_runner) so remote resume matches local behaviour.
+_RESUME_DROP = frozenset({
+    "binCoordinates", "binVelocities", "extendedSystem", "temperature",
+    "reinitvels", "firsttimestep", "dcdFile", "xstFile", "run",
+})
+
+
+def build_remote_resume_conf(
+    conf_text: str,
+    *,
+    segment_name: str,
+    restart_step: int,
+    total_steps: int,
+    cont_index: int = 1,
+) -> str:
+    """Rewrite a segment conf to RESUME from its NAMD checkpoint on the cluster (pure).
+
+    A short-walltime remote run times out MID-segment; the segment's
+    ``output/<name>.restart.{coor,vel,xsc}`` (written every ``restartfreq`` steps) is
+    the checkpoint.  This drops the original coordinate/velocity/box/run directives
+    and re-emits them pointing at those restart files, continues the step counter with
+    ``firsttimestep``, runs only the REMAINING steps, and writes trajectory frames to a
+    fresh ``output/<name>.cont<k>.dcd`` so the partial trajectory is preserved.
+    ``outputName`` is untouched, so the final ``output/<name>.{coor,vel,xsc}`` land
+    where the next segment expects them.
+
+    Reads the restart files directly (NAMD reads them fully at startup, before the run
+    overwrites them, so there is no read/write aliasing).  Port of the local runner's
+    ``_write_resume_conf`` — kept pure (no file IO) since remote resume ships text.
+    """
+    remaining = int(total_steps) - int(restart_step)
+    if remaining <= 0:
+        raise ValueError(
+            f"resume step {restart_step} is at/past the segment total {total_steps}"
+        )
+    kept = [
+        line for line in conf_text.splitlines()
+        if (line.split()[0] if line.split() else "") not in _RESUME_DROP
+    ]
+    kept += [
+        f"binCoordinates     output/{segment_name}.restart.coor",
+        f"binVelocities      output/{segment_name}.restart.vel",
+        f"extendedSystem     output/{segment_name}.restart.xsc",
+        f"dcdFile            output/{segment_name}.cont{cont_index}.dcd",
+        f"xstFile            output/{segment_name}.cont{cont_index}.xst",
+        f"firsttimestep      {int(restart_step)}",
+        # NAMD 3's Tcl `run` has no `upto`; firsttimestep already advances the label,
+        # so run only the remaining steps.  restart_step is a multiple of restartfreq
+        # (itself a multiple of stepspercycle), so the remainder stays cycle-aligned.
+        f"run                {remaining}",
+    ]
+    return "\n".join(kept) + "\n"
+
+
 def _common_header(
     name_stem: str,
     box: tuple[float, float, float],
@@ -536,6 +613,23 @@ def write_declashed_pdb(coor_path: Path, src_pdb: Path, dst_pdb: Path) -> int:
 _HMR_WATER_RESNAMES = {"TIP3", "TIP3P", "TIP4", "SPC", "SPCE", "HOH", "WAT"}
 
 
+def _base_name_stem(package_dir: Path) -> str:
+    """Return the base topology stem from a solvated package (e.g. "B_tube").
+
+    The package ships both "{stem}.psf" and the derived "{stem}_hmr.psf" (fast-mode
+    heavy-hydrogen topology), so the base stem is the one whose name does NOT end in
+    "_hmr".  An unfiltered glob is filesystem-order-dependent and can otherwise pick
+    the _hmr sibling, breaking every "{name_stem}.pdb" lookup downstream.
+    """
+    psf_files = list(package_dir.glob("*.psf"))
+    if not psf_files:
+        raise RuntimeError(f"No .psf file found in {package_dir}")
+    base = [p for p in psf_files if not p.stem.endswith("_hmr")]
+    if not base:
+        raise RuntimeError(f"No base (non-_hmr) .psf file found in {package_dir}")
+    return base[0].stem
+
+
 def write_hmr_psf(src_psf: Path, dst_psf: Path, factor: float = 3.0) -> int:
     """Write dst_psf = src_psf with non-water hydrogen masses scaled by ``factor``.
 
@@ -895,11 +989,12 @@ def prepare_mgh_slow_release(
         raise RuntimeError("ZIP extraction produced no subdirectory.")
     package_dir = inner_dirs[0]       # e.g. package/B_tube_namd_solvated/
 
-    # Derive file stem from {stem}.psf presence
-    psf_files = list(package_dir.glob("*.psf"))
-    if not psf_files:
-        raise RuntimeError(f"No .psf file found in {package_dir}")
-    name_stem = psf_files[0].stem     # e.g. "B_tube"
+    # Derive file stem from the BASE {stem}.psf.  The package also ships a derived
+    # "{stem}_hmr.psf" (heavy-hydrogen topology for fast mode), so an unfiltered
+    # glob can pick that up first (glob order is filesystem-dependent) and make
+    # name_stem "{stem}_hmr" — then every downstream "{name_stem}.pdb" lookup opens
+    # a nonexistent "{stem}_hmr.pdb".  Exclude the _hmr sibling explicitly.
+    name_stem = _base_name_stem(package_dir)
 
     # Parse box from the generated namd.conf
     namd_conf_path = package_dir / "namd.conf"

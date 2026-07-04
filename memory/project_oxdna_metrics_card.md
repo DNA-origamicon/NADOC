@@ -64,10 +64,37 @@ Card is a CHILD module of the oxDNA jobs panel (`initOxdnaMetricsCard` wired fro
 - `frontend/src/ui/metric_graph_popup.js` — Display popup (2 canvases spatial+temporal; `metricSpecs`
   pure builder reused for PNG export). `frontend/src/ui/metric_export_modal.js` — PNG/Data/Both
   checkbox modal + `downloadText`/`downloadHref`; pure `exportChoiceFiles`.
-- `frontend/src/ui/oxdna_metrics_card.js` — factory: scope state, per-metric Generate→poll→cache
+- `frontend/src/ui/metrics_card.js` — **the shared engine-agnostic factory** `initMetricsCard(
+  {idPrefix, api:{start,poll}, getSelectedJob, getJobs})`: scope state, per-metric Generate→poll→cache
   (keyed by scope), Display→popup, Export→modal→downloads. `_activeJobId` = selected job else newest.
+  `oxdna_metrics_card.js` is now a thin wrapper binding `idPrefix:'oxdna-metrics'` +
+  `startOxdnaMetrics`/`getOxdnaMetricsRun`.
 - `frontend/src/api/client.js` — `startOxdnaMetrics(id,body)` + `getOxdnaMetricsRun(runId)`
   (NOTE the pre-existing `getOxdnaMetrics` = different metrics.jsonl route; don't confuse).
+
+## MD (NAMD) twin (shipped 2026-07-03)
+Same card for NAMD jobs (goal: compare oxDNA vs NAMD twist/curvature/pairing). Reuses ALL the
+pure graph/popup/export modules + the shared `initMetricsCard`; only the endpoints, ids, and the
+base-pairing metric differ.
+- **Backend** `backend/core/md_trajectory.py`: `md_metric_series(psf, segments, ref, design,
+  analytic, *, n_slices, on_frame)` — MD analogue of `production_metric_series`, ONE DCD pass.
+  Twist/curvature REUSE the engine-agnostic `oxdna_health` bundle measures verbatim (fed
+  `_extract_md_nadoc_frame` P positions per (helix,bp,dir)). **Base pairing = native C1'…C1'
+  fraction** (designed FWD/REV within `MD_BP_CUTOFF_NM=1.2 nm` = md_health `C1_PAIRED_MAX_DEFAULT`
+  12 Å), NOT the oxDNA base-site distance — so pairing curves are comparable in TREND but not
+  absolute cutoff (per `feedback_wc_calibration`: C1' is the MD primary metric). `_extract_md_nadoc_frame`
+  gained `with_c1p=True` → returns aligned C1' (P + rotated P→C1', free — already computed for the
+  base normal). `count_md_frames(segments)` sizes the ETA (DCD headers).
+- `backend/api/routes_md_metrics.py` — mirrors `routes_oxdna_metrics` (daemon-thread registry +
+  `on_frame` ETA): `POST /md/jobs/{id}/metrics/start` → `{metrics_id}`; `GET /md/metrics/{run_id}`.
+  Loads inputs via `routes_md._md_segment_dcds`/`_md_snapshot_design` (FROZEN design.json, no active
+  fallback except legacy). `chain` scope = refit lineage via `_md_job_chain` (parent_job_id walk).
+  Registered in main.py.
+- **Frontend**: `md_metrics_card.js` (thin wrapper, `idPrefix:'md-metrics'` + `startMdMetrics`/
+  `getMdMetricsRun`); `#md-metrics-card` in index.html AFTER the MD viz card; wired from
+  `initMdJobsPanel` (`_metricsCard`, refreshed on `nadoc:design-changed`). Tests:
+  `tests/test_md_metrics.py` (faked reader — one-pass all-metrics, C1' pairing drop, chain resolver,
+  404, count); vitest `md_metrics_card.test.js` (3, mirrors oxDNA). NOT yet run on a real NAMD DCD.
 
 ## Tests
 Backend pins (test_oxdna_relaxation.py): `production_metric_series` one-pass all-metrics,

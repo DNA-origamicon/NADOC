@@ -43,6 +43,7 @@ from backend.api.routes_assembly_polymerize import router as assembly_polymerize
 from backend.api.routes_assembly_validation import router as assembly_validation_router
 from backend.api.routes_assembly_workspace import router as assembly_workspace_router
 from backend.api.routes_camera_poses import router as camera_poses_router
+from backend.api.routes_cluster import router as cluster_router
 from backend.api.routes_cluster_joints import router as cluster_joints_router
 from backend.api.routes_clusters import router as clusters_router
 from backend.api.routes_deformation import router as deformation_router
@@ -63,6 +64,7 @@ from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_jobs import router as jobs_router
 from backend.api.routes_md import router as md_router
 from backend.api.routes_mrdna import router as mrdna_router
+from backend.api.routes_md_metrics import router as md_metrics_router
 from backend.api.routes_oxdna import router as oxdna_router
 from backend.api.routes_oxdna_live import router as oxdna_live_router
 from backend.api.routes_autorefine import router as autorefine_router
@@ -97,6 +99,18 @@ async def _md_supervisor_loop() -> None:
             raise
         except Exception:
             logger.exception("MD supervisor pass failed")
+        # Remote (Alpine/SLURM) jobs: poll squeue/sacct + fetch on completion.  Runs
+        # on this (main) loop because the asyncssh session is bound to it; a no-op
+        # when disconnected.
+        try:
+            from backend.core.md_executor import poll_remote_jobs
+            touched = await poll_remote_jobs(_WORKSPACE_DIR)
+            if touched:
+                logger.info("MD supervisor polled remote jobs: %s", ", ".join(touched))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MD remote poll pass failed")
         await asyncio.sleep(_MD_SUPERVISOR_INTERVAL_S)
 
 
@@ -150,6 +164,7 @@ app.include_router(crud_router,        prefix="/api")
 app.include_router(loop_skip_router,   prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")
 app.include_router(clusters_router,    prefix="/api")
+app.include_router(cluster_router,     prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")
 app.include_router(animations_router,  prefix="/api")
 app.include_router(extensions_router,  prefix="/api")
@@ -183,6 +198,7 @@ app.include_router(assembly_validation_router, prefix="/api")
 app.include_router(assembly_workspace_router, prefix="/api")
 app.include_router(jobs_router,        prefix="/api")
 app.include_router(md_router,          prefix="/api")
+app.include_router(md_metrics_router,  prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
 app.include_router(mrdna_router,       prefix="/api")
 app.include_router(oxdna_live_router,  prefix="/api")

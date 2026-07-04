@@ -1,0 +1,302 @@
+"""Auto-resource decision tree for remote MD submission (Alpine/SLURM).
+
+The *offline* half of Phase 2 (see ``memory/project_alpine_cluster_submission.md``).
+From a prepared job's sizing (total atoms, total simulated ns, and — when we have
+it — a measured ns/day) recommend a partition + walltime + memory + QoS, and
+estimate queue time and SU cost.  Everything here is pure and offline: no network,
+no scheduler, no file writes.  It only *reads* a manifest / metrics file when the
+convenience extractors are used.
+
+Design decisions (from the plan):
+- **GPU by default** — Alpine ``aa100`` (A100), one GPU, NAMD3 GPU-resident.  CPU
+  ``amilan`` only when a system is too large for a single GPU.
+- ``walltime = total_ns / expected_ns_per_day * safety_factor`` (in days → hours),
+  clamped to the QoS ceiling; auto-bump ``normal``→``long`` rather than truncate.
+- ``expected_ns_per_day`` uses a *measured* value when available (Phase 5 learns
+  these); otherwise a size-based guess that is deliberately conservative.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+
+from backend.core.cluster_config import ClusterProfile
+
+# ── Tunables ──────────────────────────────────────────────────────────────────
+
+# NAMD3 GPU-resident throughput scales ~ 1/atoms.  Anchor: ~180k-atom fast
+# production projected >16 ns/day on an A100 (see project_md_job_system.md), so
+# C ≈ 16 * 180_000 ≈ 2.9e6 atom·ns/day.  This is a first-run guess only; Phase 5
+# replaces it with a learned per-bucket value.
+_GPU_NSDAY_ATOM_CONSTANT = 2.9e6
+
+# Above this atom count a single A100 is no longer the obvious choice; fall back
+# to a large CPU allocation.  A100 (80 GB) comfortably handles millions of atoms,
+# so this ceiling is high on purpose — CPU is the exception, not the rule.
+_GPU_ATOM_CEILING = 3_000_000
+
+_DEFAULT_SAFETY_FACTOR = 1.5
+
+# GPU-resident NAMD needs only a handful of CPU cores (PME/patch work); more do
+# not help and cost SU.  CPU fallback wants many.
+_GPU_CORES = 8
+_CPU_CORES = 32
+
+# Rough per-partition queue-time guesses (minutes).  Very approximate — surfaced
+# as an estimate with a caveat, not a promise.  Phase 5 can refine from history.
+_QUEUE_GUESS_MIN = {
+    "aa100": 240,          # A100s are contended
+    "atesting_a100": 15,
+    "al40": 120,
+    "ami100": 90,
+    "amilan": 60,
+    "amilan128c": 90,
+    "amem": 120,
+}
+
+
+def _gpu_nsday_guess(n_atoms: int) -> float:
+    """Conservative first-run GPU throughput guess (ns/day) for ``n_atoms``."""
+    n = max(1, int(n_atoms))
+    return _GPU_NSDAY_ATOM_CONSTANT / n
+
+
+def _mem_gb_for_atoms(n_atoms: int) -> int:
+    """Memory request (GB) from atom count, with headroom.
+
+    NAMD is memory-light (~KBs/atom); ~4 GB per 50k atoms plus a 4 GB floor is
+    generous.  Rounded up to an integer GB.
+    """
+    return max(4, math.ceil(n_atoms / 50_000 * 4) + 4)
+
+
+def _format_walltime(hours: float) -> str:
+    """Format a positive number of hours as SLURM ``HH:MM:SS``."""
+    total_seconds = max(60, int(math.ceil(hours * 3600)))
+    h, rem = divmod(total_seconds, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def estimate_cost_su(
+    cores: int, gpus: int, hours: float, profile: ClusterProfile
+) -> float:
+    """SU cost = cores·hours·su_per_core_hour + gpus·hours·su_per_gpu_hour."""
+    return (
+        cores * hours * profile.su_per_core_hour
+        + gpus * hours * profile.su_per_gpu_hour
+    )
+
+
+def estimate_queue_time_min(partition: str) -> int:
+    """Rough expected queue wait (minutes) for a partition — a guess, not a SLA."""
+    return _QUEUE_GUESS_MIN.get(partition, 60)
+
+
+def recommend(
+    profile: ClusterProfile,
+    *,
+    n_atoms: int,
+    total_ns: float,
+    measured_ns_per_day: float | None = None,
+    safety_factor: float = _DEFAULT_SAFETY_FACTOR,
+    partition: str | None = None,
+) -> dict:
+    """Recommend SLURM resources for a prepared job.
+
+    Args:
+        profile:  the target cluster (partition/QoS/billing come from here).
+        n_atoms:  total atoms of the solvated system (PSF ``!NATOM`` / manifest).
+        total_ns: total simulated nanoseconds the job will run (relax + prod).
+        measured_ns_per_day: a real throughput if known (else a size-based guess).
+        safety_factor: multiply the walltime estimate for headroom.
+        partition: force a specific partition (e.g. ``amilan`` for a fast-queue
+            validation run).  Everything dependent — kind, gpus, cores, gres_type,
+            QoS, throughput class, cost — is re-derived from it so the request stays
+            self-consistent.  ``None`` = auto-pick (GPU by default).  Raises
+            ``ValueError`` if the named partition is not in the profile.
+
+    Returns a dict: ``partition, kind, gpus, cores, mem_gb, walltime, walltime_h,
+    qos, expected_ns_per_day, measured, est_queue_min, est_cost_su,
+    safety_factor, notes``.
+    """
+    notes: list[str] = []
+    n_atoms = max(1, int(n_atoms))
+    total_ns = max(0.0, float(total_ns))
+
+    if partition is not None:
+        # User forced a partition (e.g. amilan for a quick, fast-queueing CPU
+        # validation run).  Derive the rest from its kind so we never pair, say, a
+        # CPU partition with a GPU QoS + GRES.
+        part = profile.partition(partition)
+        if part is None:
+            raise ValueError(
+                f"partition {partition!r} is not in profile {profile.name!r}"
+            )
+        partition_name = part.name
+        use_gpu = part.kind == "gpu"
+        gpus = 1 if use_gpu else 0
+        cores = _GPU_CORES if use_gpu else min(_CPU_CORES, part.max_cores)
+        notes.append(f"Partition manually set to {partition_name} ({part.kind}).")
+    else:
+        use_gpu = n_atoms <= _GPU_ATOM_CEILING and profile.partition(profile.default_partition) is not None
+        if not use_gpu:
+            notes.append(
+                f"{n_atoms:,} atoms exceeds the single-GPU ceiling "
+                f"({_GPU_ATOM_CEILING:,}); using a CPU partition."
+            )
+        if use_gpu:
+            partition_name = profile.default_partition
+            gpus = 1
+            cores = _GPU_CORES
+        else:
+            # Prefer a plain CPU partition (amilan) for the fallback.
+            cpu = profile.partition("amilan") or next(
+                (p for p in profile.partitions if p.kind == "cpu"), None
+            )
+            partition_name = cpu.name if cpu else profile.default_partition
+            gpus = 0
+            cores = min(_CPU_CORES, cpu.max_cores if cpu else _CPU_CORES)
+        part = profile.partition(partition_name)
+
+    kind = part.kind if part else ("gpu" if use_gpu else "cpu")
+
+    # Throughput → walltime.
+    if measured_ns_per_day and measured_ns_per_day > 0:
+        expected = float(measured_ns_per_day)
+        notes.append(f"Using measured throughput {expected:.1f} ns/day.")
+    else:
+        expected = _gpu_nsday_guess(n_atoms) if use_gpu else _gpu_nsday_guess(n_atoms) * 0.15
+        notes.append(
+            f"No measured throughput yet — guessing {expected:.1f} ns/day from system size "
+            "(first run per size is a guess by design)."
+        )
+
+    raw_days = total_ns / expected if expected > 0 else 0.0
+    walltime_h = raw_days * 24.0 * safety_factor
+
+    # QoS selection + clamp to ceiling.  Names are partition-KIND aware: Alpine's
+    # GPU partitions require the gpu-* QoS names (SLURM rejects the plain ones on
+    # aa100), CPU partitions use the plain names.
+    normal = profile.qos_for(kind, "normal")
+    long_q = profile.qos_for(kind, "long")
+    normal_name = normal.name if normal else ("gpu-normal" if kind == "gpu" else "normal")
+    long_name = long_q.name if long_q else ("gpu-long" if kind == "gpu" else "long")
+    normal_ceil = normal.max_walltime_h if normal else 24
+    long_ceil = long_q.max_walltime_h if long_q else 168
+
+    if walltime_h <= normal_ceil:
+        qos = normal_name
+    elif long_q is not None:
+        qos = long_name
+        notes.append(
+            f"Estimated walltime {walltime_h:.1f} h exceeds the {normal_ceil} h "
+            f"'{normal_name}' ceiling — bumped to '{long_name}'."
+        )
+    else:
+        qos = normal_name
+
+    ceiling = long_ceil if qos == long_name else normal_ceil
+    if walltime_h > ceiling:
+        notes.append(
+            f"Estimated walltime {walltime_h:.1f} h exceeds the {qos} ceiling "
+            f"{ceiling} h — clamped; the run may need auto-resubmit from a checkpoint."
+        )
+        walltime_h = float(ceiling)
+    # A minimum so a tiny run still requests a sane block.
+    walltime_h = max(walltime_h, 0.5)
+
+    mem_gb = _mem_gb_for_atoms(n_atoms)
+    if part and part.mem_per_core_gb:
+        mem_ceiling = int(part.mem_per_core_gb * cores)
+        if mem_gb > mem_ceiling:
+            mem_gb = mem_ceiling
+            notes.append(
+                f"Memory clamped to {mem_gb} GB (partition ceiling {part.mem_per_core_gb} GB/core × {cores})."
+            )
+
+    est_cost = estimate_cost_su(cores, gpus, walltime_h, profile)
+    est_queue = estimate_queue_time_min(partition_name)
+
+    return {
+        "partition": partition_name,
+        "kind": kind,
+        "gpus": gpus,
+        "gres_type": (part.gres_type if part else "") if gpus else "",
+        "cores": cores,
+        "mem_gb": mem_gb,
+        "walltime": _format_walltime(walltime_h),
+        "walltime_h": round(walltime_h, 3),
+        "qos": qos,
+        "expected_ns_per_day": round(expected, 3),
+        "measured": bool(measured_ns_per_day and measured_ns_per_day > 0),
+        "est_queue_min": est_queue,
+        "est_cost_su": round(est_cost, 1),
+        "safety_factor": safety_factor,
+        "notes": notes,
+    }
+
+
+# ── Manifest / metrics extractors (thin, best-effort) ─────────────────────────
+
+def n_atoms_from_manifest(manifest: dict) -> int:
+    """Total solvated atom count from a run manifest.
+
+    Prefers the solvation charge-audit (``final_solvated.n_atoms``); falls back to
+    the ionization water/ion counts, then 0 if nothing is available.
+    """
+    audit = manifest.get("charge_audit") or {}
+    final = audit.get("final_solvated") or {}
+    n = final.get("n_atoms")
+    if isinstance(n, (int, float)) and n > 0:
+        return int(n)
+    dry = audit.get("dry_dna") or {}
+    n = dry.get("n_atoms")
+    return int(n) if isinstance(n, (int, float)) and n > 0 else 0
+
+
+def total_ns_from_manifest(manifest: dict) -> float:
+    """Total simulated nanoseconds = Σ(segment steps) × timestep, + production.
+
+    Minimization steps do not advance time and are excluded.  Uses the relax
+    ladder's timestep (2 fs standard / 4 fs fast); adds any recorded production
+    extension.
+    """
+    settings = manifest.get("relax_protocol_settings") or {}
+    ts_fs = float(settings.get("timestep_fs") or 2.0)
+    seg_steps = sum(int(s.get("steps", 0)) for s in manifest.get("segments", []))
+    total_ns = seg_steps * ts_fs / 1e6
+
+    prod = manifest.get("production_extension") or {}
+    prod_ns = prod.get("length_ns")
+    if isinstance(prod_ns, (int, float)) and prod_ns > 0:
+        total_ns += float(prod_ns)
+    return total_ns
+
+
+def latest_ns_per_day(metrics_path: str | Path) -> float | None:
+    """Most-recent non-null ``ns_per_day`` from an ``output/metrics.jsonl`` file.
+
+    Returns None if the file is missing/empty or no record carries a value.
+    """
+    path = Path(metrics_path)
+    if not path.is_file():
+        return None
+    latest: float | None = None
+    try:
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            v = rec.get("ns_per_day")
+            if isinstance(v, (int, float)) and v > 0:
+                latest = float(v)
+    except OSError:
+        return None
+    return latest

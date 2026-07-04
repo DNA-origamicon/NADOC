@@ -62,7 +62,7 @@ describe('filterJobsForPart', () => {
   })
 })
 
-import { mdJobIsActive, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel } from './md_jobs_panel.js'
+import { mdJobIsActive, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob } from './md_jobs_panel.js'
 
 describe('mdChildRowLabel', () => {
   it('labels a derived child by its global run number', () => {
@@ -80,6 +80,44 @@ describe('mdJobIsActive', () => {
       expect(mdJobIsActive({ status: s })).toBe(false)
     }
     expect(mdJobIsActive(null)).toBe(false)
+  })
+  it('is NOT active for an Alpine job queued but never submitted to SLURM', () => {
+    // The failed-submit / never-submitted case: shows no running spinner.
+    expect(mdJobIsActive({ status: 'queued', execution_target: 'alpine' })).toBe(false)
+    expect(mdJobIsActive({ status: 'queued', execution_target: 'alpine', error: 'Cluster submission failed: x' })).toBe(false)
+  })
+  it('IS active once the Alpine job has a SLURM id (on the cluster)', () => {
+    expect(mdJobIsActive({ status: 'queued', execution_target: 'alpine', slurm_job_id: '123' })).toBe(true)
+    expect(mdJobIsActive({ status: 'running', execution_target: 'alpine', slurm_job_id: '123' })).toBe(true)
+  })
+  it('local jobs are unaffected (queued = active)', () => {
+    expect(mdJobIsActive({ status: 'queued', execution_target: 'local' })).toBe(true)
+  })
+})
+
+describe('hasActiveRemoteJob (gates the remote-poll timer)', () => {
+  it('true only when a submitted Alpine job is in flight', () => {
+    expect(hasActiveRemoteJob([{ status: 'running', execution_target: 'alpine', slurm_job_id: '9' }])).toBe(true)
+    expect(hasActiveRemoteJob([{ status: 'queued', execution_target: 'alpine', slurm_job_id: '9' }])).toBe(true)
+  })
+  it('false for local, terminal, or not-yet-submitted remote jobs', () => {
+    expect(hasActiveRemoteJob([{ status: 'running', execution_target: 'local' }])).toBe(false)
+    expect(hasActiveRemoteJob([{ status: 'completed', execution_target: 'alpine', slurm_job_id: '9' }])).toBe(false)
+    expect(hasActiveRemoteJob([{ status: 'queued', execution_target: 'alpine' }])).toBe(false)  // awaiting submit
+    expect(hasActiveRemoteJob([])).toBe(false)
+    expect(hasActiveRemoteJob(null)).toBe(false)
+  })
+})
+
+describe('mdRemoteAwaitingSubmit', () => {
+  it('is true only for an Alpine, queued, no-slurm-id job', () => {
+    expect(mdRemoteAwaitingSubmit({ status: 'queued', execution_target: 'alpine' })).toBe(true)
+  })
+  it('is false once submitted, for local jobs, or non-queued states', () => {
+    expect(mdRemoteAwaitingSubmit({ status: 'queued', execution_target: 'alpine', slurm_job_id: '9' })).toBe(false)
+    expect(mdRemoteAwaitingSubmit({ status: 'queued', execution_target: 'local' })).toBe(false)
+    expect(mdRemoteAwaitingSubmit({ status: 'running', execution_target: 'alpine' })).toBe(false)
+    expect(mdRemoteAwaitingSubmit(null)).toBe(false)
   })
 })
 
@@ -158,5 +196,76 @@ describe('fastPhaseSpeedNote', () => {
     const note = fastPhaseSpeedNote(fastJob(0), null)
     expect(note.asterisk).toBe(true)
     expect(note.tooltip).not.toMatch(/ns\/day,/)   // no "~N ns/day," estimate clause
+  })
+})
+
+import { mdResumeButtonState, mdResumeHistoryRows } from './md_jobs_panel.js'
+
+describe('mdResumeButtonState (one-click Resume for a timed-out remote job)', () => {
+  it('hidden for a non-resumable or non-alpine job', () => {
+    expect(mdResumeButtonState({ execution_target: 'alpine', resumable: false }, 'connected').show).toBe(false)
+    expect(mdResumeButtonState({ execution_target: 'local', resumable: true }, 'connected').show).toBe(false)
+  })
+  it('shown+enabled only when connected', () => {
+    const j = { execution_target: 'alpine', resumable: true }
+    expect(mdResumeButtonState(j, 'connected')).toMatchObject({ show: true, disabled: false })
+    const off = mdResumeButtonState(j, 'disconnected')
+    expect(off.show).toBe(true)
+    expect(off.disabled).toBe(true)
+    expect(off.reason).toMatch(/Duo/)
+  })
+})
+
+describe('mdResumeHistoryRows (expand-chevron content)', () => {
+  it('formats newest-first with numbering', () => {
+    const job = { resume_history: [
+      { slurm_job_id: '100', state: 'TIMEOUT', segment_reached: 2, segments_total: 12, walltime: '1:00:00' },
+      { slurm_job_id: '200', state: 'TIMEOUT', segment_reached: 5, segments_total: 12, walltime: '1:00:00' },
+    ] }
+    const rows = mdResumeHistoryRows(job)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toContain('#2')            // newest first
+    expect(rows[0]).toContain('SLURM 200')
+    expect(rows[0]).toContain('seg 5/12')
+    expect(rows[1]).toContain('#1')
+  })
+  it('empty for no history', () => {
+    expect(mdResumeHistoryRows({})).toEqual([])
+    expect(mdResumeHistoryRows(null)).toEqual([])
+  })
+})
+
+import { mdIsRemoteQueued, mdQueueWaitLabel, fmtDurationShort } from './md_jobs_panel.js'
+
+describe('mdIsRemoteQueued (SLURM PENDING, not running / not awaiting-submit)', () => {
+  it('true for a submitted alpine job that is queued and not yet running', () => {
+    expect(mdIsRemoteQueued({ execution_target: 'alpine', status: 'queued', slurm_job_id: '9', slurm_state: 'PENDING' })).toBe(true)
+    expect(mdIsRemoteQueued({ execution_target: 'alpine', status: 'queued', slurm_job_id: '9' })).toBe(true)
+  })
+  it('false for awaiting-submit (no slurm id), running, or local', () => {
+    expect(mdIsRemoteQueued({ execution_target: 'alpine', status: 'queued' })).toBe(false)          // no slurm id
+    expect(mdIsRemoteQueued({ execution_target: 'alpine', status: 'queued', slurm_job_id: '9', slurm_state: 'RUNNING' })).toBe(false)
+    expect(mdIsRemoteQueued({ execution_target: 'alpine', status: 'running', slurm_job_id: '9' })).toBe(false)
+    expect(mdIsRemoteQueued({ execution_target: 'local', status: 'queued', slurm_job_id: '9' })).toBe(false)
+  })
+})
+
+describe('fmtDurationShort', () => {
+  it('formats seconds/minutes/hours compactly', () => {
+    expect(fmtDurationShort(45)).toBe('45s')
+    expect(fmtDurationShort(6 * 60)).toBe('6m')
+    expect(fmtDurationShort(3 * 3600 + 4 * 60)).toBe('3h 4m')
+    expect(fmtDurationShort(-5)).toBe('0s')
+  })
+})
+
+describe('mdQueueWaitLabel', () => {
+  it('reports elapsed time since queued_at', () => {
+    const now = 1000000
+    const job = { queued_at: now - 300 }        // 5 min ago
+    expect(mdQueueWaitLabel(job, now * 1000)).toMatch(/Queued 5m ago/)
+  })
+  it('falls back when queued_at is missing', () => {
+    expect(mdQueueWaitLabel({})).toMatch(/waiting for the cluster scheduler/)
   })
 })

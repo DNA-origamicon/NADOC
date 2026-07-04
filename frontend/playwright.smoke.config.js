@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 //   • the test Vite proxies /api → :8001 (VITE_API_PORT), not the user's :8000.
 //   • globalTimeout hard-caps the whole run so a stuck run self-aborts (and tears
 //     its servers down) instead of hanging.
+// Session-doc cleanup (test .session/<doc> dirs) happens in ./e2e/global-teardown.js.
 const FRONTEND_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(FRONTEND_DIR, '..')
 
@@ -47,6 +48,7 @@ export default defineConfig({
       // Throwaway backend — NO --reload (avoids the WSL2 watcher wedge).
       command: `uv run uvicorn backend.api.main:app --port ${BACKEND_PORT} --host 127.0.0.1`,
       cwd: REPO_ROOT,
+      env: { NADOC_DISABLE_SESSION_CACHE: '1' },   // no .session autosave into shared workspace/
       url: `http://127.0.0.1:${BACKEND_PORT}/docs`,
       reuseExistingServer: false,
       timeout: 60_000,

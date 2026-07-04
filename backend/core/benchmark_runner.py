@@ -609,10 +609,10 @@ def _solvate_once(design: Design, workdir: Path):
     if not inner:
         raise RuntimeError("NAMD solvation produced no package directory.")
     package_dir = inner[0]
-    psf = list(package_dir.glob("*.psf"))
-    if not psf:
-        raise RuntimeError(f"No .psf in {package_dir}")
-    name_stem = psf[0].stem
+    # Use the BASE {stem}.psf, not the derived {stem}_hmr.psf (fast-mode topology);
+    # an unfiltered glob is filesystem-order-dependent and can pick _hmr first.
+    from backend.core.md_protocols import _base_name_stem  # noqa: PLC0415
+    name_stem = _base_name_stem(package_dir)
     box = parse_box_from_namd_conf((package_dir / "namd.conf").read_text())
     (package_dir / "output").mkdir(exist_ok=True)
     return package_dir, name_stem, box

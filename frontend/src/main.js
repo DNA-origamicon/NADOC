@@ -187,6 +187,7 @@ import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
+import { initClusterConnection } from './ui/cluster_connection.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
@@ -1793,6 +1794,9 @@ async function main() {
   const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
   // getOxdnaDisplay is a lazy getter (oxdnaDisplay is declared below at ~1808): a
   // seeded MD run with no MD frame yet shows the inherited oxDNA-seed positions via it.
+  // ── Compute-cluster (Alpine) connection chip (Phase 1 remote-execution backend) ─
+  const clusterConn = initClusterConnection({ mount: document.getElementById('md-cluster-connection-mount') })
+
   initMdJobsPanel({
     mdDisplayController,
     getWorkspacePath: () => _workspacePath,
@@ -1800,6 +1804,8 @@ async function main() {
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
     // flexibility-map tools reuse the oxDNA display controller via an MD api adapter.
     getMdViz: () => mdViz,
+    // Phase 4: gate the Alpine run-target on the live cluster-connection state.
+    getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
   })
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────

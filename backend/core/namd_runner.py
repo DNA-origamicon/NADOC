@@ -44,7 +44,7 @@ from backend.core.disk_guard import (
 from backend.core.md_health import run_health_check, append_health_jsonl
 from backend.core.namd_metrics import parse_namd_log
 from backend.core.md_protocols import segments_from_manifest
-from backend.core.md_vram import classify_failure_log_file
+from backend.core.md_vram import classify_failure_log_file, extract_error_line_from_file
 
 
 def _classify_namd_failure(log_path: Path) -> str:
@@ -330,6 +330,10 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
       states are picked up and relaunched by ``resume_interrupted_jobs`` (startup
       + periodic supervisor); ``run_job`` then resumes mid-segment if needed.
     """
+    if getattr(job, "execution_target", "local") != "local":
+        # Remote job — its status is driven by the SlurmExecutor's poll pass, not
+        # the local /proc reconciliation.  Leave it untouched here.
+        return job
     if job.status == MdStatus.preparing:
         return _reconcile_preparing(job, workspace_dir)
     if job.status != MdStatus.running or is_running(job.job_id) or _external_process_running(job):
@@ -731,7 +735,9 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             logger.error("[%s] Minimization failed rc=%d; log=%s", job.job_id, rc, min_log)
             job.status = MdStatus.failed
             job.failure_kind = _classify_namd_failure(min_log)
-            job.error  = f"Minimization failed (rc={rc}). See {min_name}.log"
+            _cause = extract_error_line_from_file(min_log)
+            job.error  = (f"Minimization failed (rc={rc}). {_cause} (see {min_name}.log)"
+                          if _cause else f"Minimization failed (rc={rc}). See {min_name}.log")
             job.save(workspace_dir)
             return
         logger.info("[%s] Minimization done", job.job_id)
@@ -877,7 +883,9 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     job.segments[idx].status = "failed"
                 job.status = MdStatus.failed
                 job.failure_kind = _classify_namd_failure(seg_log)
-                job.error = f"NAMD failed for {spec.name} (rc={rc}). See {seg_log.name}"
+                _cause = extract_error_line_from_file(seg_log)
+                job.error = (f"NAMD failed for {spec.name} (rc={rc}). {_cause} (see {seg_log.name})"
+                             if _cause else f"NAMD failed for {spec.name} (rc={rc}). See {seg_log.name}")
                 job.save(workspace_dir)
                 return
 
@@ -954,6 +962,11 @@ def start_job(job: MdJob, workspace_dir: Path) -> None:
     the sidebar continue polling job/health/metric endpoints while simulations
     are active.
     """
+    if getattr(job, "execution_target", "local") != "local":
+        # Remote (Alpine/SLURM) jobs are staged + submitted by the async
+        # SlurmExecutor from the cluster endpoints/supervisor — never a local NAMD
+        # thread.  The sync path is a no-op so nothing local touches a remote job.
+        return
     if is_running(job.job_id):
         return
 
@@ -1003,42 +1016,58 @@ def start_job(job: MdJob, workspace_dir: Path) -> None:
 
 
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
-    """Cancel the running task for job_id.  Returns True if a task was found.
+    """Kill the NAMD process for job_id and cancel its runner task.  Returns True
+    if anything (a live task or a running process) was found and acted on.
 
-    Two paths: (1) the normal in-process path cancels the runner task + kills its
-    process group; (2) the ORPHAN path — after a server restart the in-memory registry
-    is empty but a detached NAMD may still be running — finds the orphan's PID
-    (persisted ``namd_pid``, verified against /proc, falling back to a /proc scan by
-    stage conf), kills it, and marks the job stopped on disk so it stays controllable."""
-    handle = _RUNNING.get(job_id)
-    if handle and handle.thread.is_alive():
-        pid = _ACTIVE_PIDS.get(job_id)
-        if pid:
-            _kill_process_group(pid)
-        if handle.loop is not None and handle.task is not None:
-            handle.loop.call_soon_threadsafe(handle.task.cancel)
-        return True
+    The kill target is resolved from three sources, most-trusted first:
+      1. ``_ACTIVE_PIDS`` — a process THIS worker spawned via ``_run_namd_async``.
+      2. ``_external_pid`` — a self-verifying /proc scan by the current segment's
+         conf name.  This is what catches an ADOPTED orphan: after a dev-server
+         reload the new worker only *waits on* the surviving NAMD
+         (``_wait_for_segment_process``) and never records its PID, so ``_ACTIVE_PIDS``
+         is empty even though ``_RUNNING`` has a live (waiting) handle.  Without this
+         fallback a stop would cancel the wait but leave NAMD burning the GPU.
+      3. persisted ``namd_pid`` — last resort, guarded by ``_pid_is_namd`` against a
+         recycled PID.
 
-    # Orphan fallback: no live runner thread, but a detached process may persist.
+    We always kill the process (when found) AND cancel the runner task (when a live
+    handle exists), regardless of the on-disk status — a live NAMD for a job the user
+    is stopping must die even if a prior half-stop already flipped the status."""
     try:
         job = MdJob.load(job_id, workspace_dir)
     except Exception:  # noqa: BLE001
-        return False
-    if job.status != MdStatus.running:
-        return False
-    # Prefer the self-verifying /proc match (also confirms a persisted PID is still ours).
-    pid = _external_pid(job)
-    if pid is None and job.namd_pid and _pid_is_namd(job.namd_pid):
+        job = None
+
+    pid = _ACTIVE_PIDS.get(job_id)
+    if pid is None and job is not None:
+        pid = _external_pid(job)
+    if pid is None and job is not None and job.namd_pid and _pid_is_namd(job.namd_pid):
         pid = job.namd_pid
-    if pid is None:
+
+    handle = _RUNNING.get(job_id)
+    live_handle = bool(handle and handle.thread.is_alive())
+
+    if pid is None and not live_handle:
         return False
-    _kill_process_group(pid)
-    job.status = MdStatus.stopped
-    # Explicit user stop on the orphan path too — keep it from being auto-resumed
-    # by resume_interrupted_jobs (the runner thread that normally sets this is gone).
-    job.user_stopped = True
-    job.namd_pid = None
-    job.save(workspace_dir)
+
+    # Cancel the runner task first so the CancelledError propagates out of any
+    # `_wait_for_segment_process` sleep BEFORE the wait loop can re-observe the
+    # now-dead process and mis-mark the segment "ended without completing".
+    if live_handle and handle.loop is not None and handle.task is not None:
+        handle.loop.call_soon_threadsafe(handle.task.cancel)
+
+    if pid is not None:
+        _kill_process_group(pid)
+
+    # When a live runner thread exists it persists the stopped state itself on
+    # task-cancel (see run_job's thread finally).  Only the orphan/no-handle path
+    # needs to write it here.
+    if job is not None and not live_handle:
+        job.status = MdStatus.stopped
+        job.user_stopped = True
+        job.namd_pid = None
+        job.save(workspace_dir)
+
     return True
 
 
@@ -1074,6 +1103,8 @@ def resume_interrupted_jobs(workspace_dir: Path) -> list[str]:
     """
     resumed: list[str] = []
     for job in MdJob.list_jobs(workspace_dir):
+        if getattr(job, "execution_target", "local") != "local":
+            continue  # remote jobs are polled by the SlurmExecutor, not resumed here
         if job.user_stopped or job.status != MdStatus.running or is_running(job.job_id):
             continue
         job = reconcile_job_status(job, workspace_dir)

@@ -7,6 +7,7 @@ with skipif so they no-op in environments without the fixture.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,30 @@ _HAVE_FIXTURE = _PSF.exists() and _REF.exists() and _DESIGN.exists() and any(
 
 skip_no_fixture = pytest.mark.skipif(
     not _HAVE_FIXTURE, reason="real 2hb NAMD job fixture not present"
+)
+
+# Many-strand fixture that reproduces the psfgen chainID-collapse collision (77 strands
+# → multi-char chain ids).  Local-only (multi-GB package); skipped where absent.
+_JOB_3X6 = _WS / "md_jobs" / "c89a67841933" / "package" / "3x6x200_test_namd_solvated"
+_PSF_3X6 = _JOB_3X6 / "3x6x200_test.psf"
+_REF_3X6 = _JOB_3X6 / "3x6x200_test.pdb"
+_DESIGN_3X6 = _WS / "md_jobs" / "c89a67841933" / "design.json"
+
+_HAVE_3X6 = _PSF_3X6.exists() and _REF_3X6.exists() and _DESIGN_3X6.exists() and any(
+    _JOB_3X6.glob("output/*.dcd")
+) if _JOB_3X6.exists() else False
+
+# The always-on collision regression lives in test_md_p_order_mapping.py; these real
+# tests need the multi-GB package, so they're fixture-gated (skipped where absent).
+skip_no_3x6 = pytest.mark.skipif(
+    not _HAVE_3X6, reason="real 3x6x200 many-strand NAMD job fixture not present"
+)
+
+# The equivalence proof re-adds the whole-system mda_unwrap to a REFERENCE universe
+# (~180 s/frame by design), so it stays opt-in even where the fixture exists.
+skip_no_3x6_heavy = pytest.mark.skipif(
+    not (_HAVE_3X6 and os.environ.get("NADOC_RUN_HEAVY_MD_FIXTURE")),
+    reason="slow unwrap-reference equivalence — set NADOC_RUN_HEAVY_MD_FIXTURE=1 to run",
 )
 
 
@@ -129,6 +154,77 @@ def test_md_rmsf_shape_and_values():
     # Base normals are unit length (within tolerance).
     nmag = np.linalg.norm([[p["nx"], p["ny"], p["nz"]] for p in pos], axis=1)
     assert np.allclose(nmag, 1.0, atol=1e-3)
+
+
+@skip_no_3x6
+def test_md_rmsf_many_strand_uses_segid_order():
+    """Regression for the 3x6x200 flexibility map "not ready".  A many-strand design's
+    multi-char chain ids collapse in the reference PDB's single-char chainID field, so
+    the PDB-key P-order path drops atoms and md_rmsf's strict length guard voids every
+    frame.  The segid-map path must recover the full P-atom order so the map builds."""
+    from backend.core.md_trajectory import _build_md_nadoc_ctx, md_rmsf
+
+    raw = _DESIGN_3X6.read_text()
+    try:
+        design = Design.model_validate_json(raw)
+    except Exception:
+        obj = json.loads(raw)
+        design = Design.model_validate(obj.get("design", obj))
+
+    # One small (p10) DCD keeps the Kabsch/model cost bounded for the test.
+    dcds = sorted(_JOB_3X6.glob("output/*p10.dcd")) or sorted(_JOB_3X6.glob("output/*.dcd"))
+    seg = dcds[:1]
+    segments = [(seg[0].stem, "md", seg[0])]
+
+    ctx = _build_md_nadoc_ctx(_PSF_3X6, [d for _, _, d in segments], _REF_3X6, design)
+    # The fix: segid-mapped order covers EVERY simulated DNA-P atom (no collision drop).
+    assert ctx["p_order_source"] == "segid"
+    assert len(ctx["p_order"]) == ctx["n_dna_p"]
+
+    r = md_rmsf(_PSF_3X6, segments, _REF_3X6, design, max_frames=2)
+    assert r["ready"] is True, r.get("reason")
+    assert len(r["positions"]) == ctx["n_dna_p"]
+
+
+def _load_3x6_design():
+    raw = _DESIGN_3X6.read_text()
+    try:
+        return Design.model_validate_json(raw)
+    except Exception:
+        return Design.model_validate(json.loads(raw))
+
+
+@skip_no_3x6_heavy
+def test_md_extraction_matches_unwrap_reference():
+    """Perf regression: per-frame extraction drops the whole-system ``mda_unwrap``
+    (~180 s/frame over ~1 M solvated atoms) and reconstructs DNA from RAW coords via
+    the vectorised min-image path instead.  Assert the fast output is numerically
+    IDENTICAL (to float32 rounding, ~1e-8 nm) to a reference universe that still
+    applies the unwrap — proving the speedup changes nothing about the geometry."""
+    import MDAnalysis as mda  # type: ignore
+    from MDAnalysis.transformations import unwrap as mda_unwrap  # type: ignore
+    from backend.core.md_trajectory import _build_md_nadoc_ctx, _extract_md_nadoc_frame
+
+    design = _load_3x6_design()
+    dcd = (sorted(_JOB_3X6.glob("output/*p10.dcd")) or sorted(_JOB_3X6.glob("output/*.dcd")))[0]
+
+    # Fast ctx: no unwrap transformation (production path).
+    ctx_fast = _build_md_nadoc_ctx(_PSF_3X6, [dcd], _REF_3X6, design)
+    # Reference universe WITH the whole-system unwrap, reusing the same design arrays.
+    u_ref = mda.Universe(str(_PSF_3X6), str(dcd))
+    u_ref.trajectory.add_transformations(mda_unwrap(u_ref.atoms))
+    ctx_ref = dict(ctx_fast)
+    ctx_ref["universe"] = u_ref
+
+    n = ctx_fast["n_frames"]
+    for f in {0, min(5, n - 1), n - 1}:
+        for c in (ctx_fast, ctx_ref):
+            c["R_prev"] = None
+            c["prev_frame_idx"] = -999
+        p_fast, n_fast = _extract_md_nadoc_frame(ctx_fast, f)
+        p_ref, n_ref = _extract_md_nadoc_frame(ctx_ref, f)
+        assert np.allclose(p_fast, p_ref, atol=1e-6), f"frame {f}: positions diverge"
+        assert np.allclose(n_fast, n_ref, atol=1e-6), f"frame {f}: normals diverge"
 
 
 @skip_no_fixture

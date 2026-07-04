@@ -225,15 +225,28 @@ if [ -n "$GPU_INFO" ]; then
     echo ""
 fi
 
-# ── 3. Detect CPU count ──────────────────────────────────────────────────────
-NCPU=$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
-echo "→ Using $NCPU CPU threads"
+# ── 3. Runtime placement ─────────────────────────────────────────────────────
+N_LOGICAL=$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 2)
+NCPU="${{NAMD_THREADS:-$(( (N_LOGICAL + 1) / 2 ))}}"
+DEVICES="${{NAMD_DEVICES:-}}"
+PEMAP="${{NAMD_PEMAP:-}}"
+namd_args=("+p$NCPU" "+setcpuaffinity")
+if [ -n "$PEMAP" ]; then
+    namd_args+=("+pemap" "$PEMAP")
+fi
+if [ -n "$DEVICES" ]; then
+    namd_args+=("+devices" "$DEVICES")
+fi
+echo "→ Using $NCPU NAMD threads"
+if [ -n "$DEVICES" ]; then
+    echo "→ CUDA devices: $DEVICES"
+fi
 echo ""
 
 # ── 4. Run NAMD ──────────────────────────────────────────────────────────────
 LOG="namd_run.log"
 echo "→ Starting NAMD…  (log: $LOG)"
-"$NAMD_CMD" +p"$NCPU" namd.conf > "$LOG" 2>&1 &
+"$NAMD_CMD" "${{namd_args[@]}}" namd.conf > "$LOG" 2>&1 &
 NAMD_PID=$!
 echo "  PID: $NAMD_PID"
 echo ""
@@ -401,7 +414,7 @@ QUICK START
 That's it. The script will:
   1. Install namd2 (CPU build, via apt — requires sudo once)
   2. Detect any NVIDIA GPU and print NAMD3 instructions if found
-  3. Use all available CPU cores
+  3. Use a local-MD-style thread default (half logical CPUs) with CPU affinity
   4. Run NAMD and show a live progress table
 
 If namd2 is already installed, no internet connection is needed.
@@ -431,7 +444,14 @@ GPU ACCELERATION
 ----------------
   apt namd2 is CPU-only. For GPU runs download NAMD3 from:
     https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=NAMD
-  Then:  NAMD_CMD=/path/to/namd3  bash launch.sh
+  Then:  NAMD_CMD=/path/to/namd3 NAMD_DEVICES=0 bash launch.sh
+
+LAUNCH TUNING
+-------------
+  launch.sh mirrors NADOC's local NAMD runner controls:
+    NAMD_THREADS=6          Override the default half-logical thread count
+    NAMD_DEVICES=0          Add "+devices 0" for CUDA NAMD3
+    NAMD_PEMAP=0-11         Optional explicit CPU affinity map
 
 EXTENDING THE SIMULATION
 ------------------------

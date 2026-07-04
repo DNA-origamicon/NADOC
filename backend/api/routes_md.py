@@ -124,6 +124,15 @@ class CreateJobRequest(BaseModel):
                     "job's relaxed CG structure (its OWN design.json snapshot) instead "
                     "of ideal B-DNA.  Mutually exclusive with oxdna_job_id.",
     )
+    execution_target: str = Field(
+        "local",
+        description="'local' runs NAMD as a local subprocess (default); 'alpine' "
+                    "tags the job for remote SLURM submission (submit via "
+                    "/md/jobs/{id}/submit-remote once prepared + connected).",
+    )
+    cluster_name: Optional[str] = Field(
+        None, description="Cluster profile name for remote execution (default 'alpine').",
+    )
 
 
 class ProductionRequest(BaseModel):
@@ -202,13 +211,14 @@ def _assert_md_job_current(job: MdJob) -> None:
     it was prepared (mirrors the oxDNA guard); the frontend turns it into the roll
     popup."""
     from backend.core.oxdna_staleness import (
-        current_active_design_fingerprint, job_out_of_date)
+        current_active_design_fingerprint, describe_staleness, job_out_of_date)
     if job_out_of_date(_md_job_fingerprint(job), current_active_design_fingerprint()):
+        try:
+            current = design_state.get_or_404()
+        except Exception:  # noqa: BLE001 — staleness messaging must never 500
+            current = None
         raise HTTPException(
-            409,
-            "The design has changed since this MD job was prepared. Roll the design "
-            "back to the job's run state, or prepare a new MD run, first.",
-        )
+            409, describe_staleness(_md_snapshot_design(job), current, stage="prepared"))
 
 
 def _jsonl_records(path: Path) -> list[dict]:
@@ -334,7 +344,9 @@ async def get_md_job_trajectory(job_id: str, request: Request) -> dict:
     segments = _md_segment_dcds(job)
     if not segments:
         return {"ready": False, "reason": "no trajectory yet"}
-    design = design_state.get_or_404()
+    # Frozen snapshot design (job's prepared state), not the live active design —
+    # see _md_traj_inputs.  Fall back to active for legacy pre-snapshot jobs.
+    design = _md_snapshot_design(job) or design_state.get_or_404()
     result = await _run_md_analysis(
         request, job_id, "trajectory", "md_composite_trajectory", (psf, segments, ref, design))
     return {"ready": result["n_frames"] > 0, **result}
@@ -405,7 +417,13 @@ def _md_traj_inputs(job_id: str):
     segments = _md_segment_dcds(job)
     if not segments:
         return None
-    return psf, ref, segments, design_state.get_or_404()
+    # Analyse against the design this job was PREPARED from (its frozen design.json),
+    # not whatever is loaded in the app now — mirrors the oxDNA RMSF route.  The DCD
+    # atom order is fixed to the job's topology; pairing it with a drifted/other active
+    # design mis-maps P atoms and silently voids the map.  Fall back to the active
+    # design only for legacy jobs that predate snapshot-saving.
+    design = _md_snapshot_design(job) or design_state.get_or_404()
+    return psf, ref, segments, design
 
 
 @router.post("/md/jobs/{job_id}/frames-atomistic")
@@ -1104,6 +1122,11 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
         seed_mrdna_job_id  = body.mrdna_job_id if seeded else None,
         parent_job_id      = parent_job_id,
     )
+    # Remote-execution tag (default "local"): submission itself happens later via
+    # /md/jobs/{id}/submit-remote once the package is prepared and a cluster session
+    # is connected.  Tagging here lets the UI show the intended target from creation.
+    job.execution_target = body.execution_target
+    job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
     # Capture the request so a later refit can rebuild the job with one knob moved.
     job.prep_params = body.model_dump()
     job.status = MdStatus.preparing
@@ -1276,9 +1299,12 @@ async def _prepare_job_bg(
     job.save(ws)
     clear_prep_progress(job_dir)
 
-    if body.autostart:
+    if body.autostart and job.execution_target == "local":
         logger.info("prep %s: autostart=True, launching", job_id)
         start_job(job, ws)
+    elif body.autostart:
+        logger.info("prep %s: remote target %s — submit via /submit-remote when connected",
+                    job_id, job.execution_target)
 
 
 def _backfill_failure_kind(job: MdJob) -> None:
@@ -1502,6 +1528,243 @@ async def start_md_job(job_id: str) -> dict:
     return {"ok": True, "job_id": job_id, "status": "running"}
 
 
+class SubmitRemoteRequest(BaseModel):
+    """Submit a prepared job to a compute cluster (Alpine/SLURM)."""
+    cluster_name: str = Field("alpine", description="Cluster profile name")
+    resources: Optional[dict] = Field(
+        None, description="Override the auto-recommended SLURM resources (partition/"
+                          "cores/gpus/mem_gb/walltime/qos). Omit to auto-recommend.",
+    )
+    safety_factor: float = Field(1.5, gt=0.0, description="Walltime headroom multiplier")
+
+
+def _size_prepared_job(
+    job: MdJob, profile, safety_factor: float, partition: Optional[str] = None
+) -> Optional[dict]:
+    """Sizing + Phase-2 auto-recommendation for a prepared job.
+
+    Returns ``{n_atoms, total_ns, measured_ns_per_day, resources}`` or ``None``
+    when the job has no ``manifest.json`` yet (still preparing / never prepped).
+    Shared by the submit path and the review-card preview endpoint.  ``partition``
+    forces a specific partition (else auto-pick) — the review card passes it when
+    the user picks one from the dropdown.
+    """
+    from backend.core import cluster_resources, cluster_throughput
+    package_dir = job.package_dir(_workspace())
+    manifest_path = package_dir / "manifest.json"
+    if not manifest_path.exists():
+        return None
+    manifest = json.loads(manifest_path.read_text())
+    n_atoms = cluster_resources.n_atoms_from_manifest(manifest)
+    total_ns = cluster_resources.total_ns_from_manifest(manifest)
+    # Resolve the partition first (forced or auto-pick) so we can look up the LEARNED
+    # Alpine throughput for that exact partition + size bucket.  A learned value beats
+    # both the local-GPU metrics (wrong hardware for a CPU target) and the size guess;
+    # fall back to local metrics, then to the size-based guess inside recommend().
+    chosen_partition = cluster_resources.recommend(
+        profile, n_atoms=n_atoms, total_ns=total_ns, safety_factor=safety_factor,
+        partition=partition,
+    )["partition"]
+    measured = cluster_throughput.lookup_throughput(
+        _workspace(), cluster=profile.name, partition=chosen_partition, n_atoms=n_atoms,
+    )
+    if measured is None:
+        measured = cluster_resources.latest_ns_per_day(package_dir / "output" / "metrics.jsonl")
+    resources = cluster_resources.recommend(
+        profile, n_atoms=n_atoms, total_ns=total_ns,
+        measured_ns_per_day=measured, safety_factor=safety_factor,
+        partition=chosen_partition,
+    )
+    return {
+        "n_atoms": n_atoms,
+        "total_ns": total_ns,
+        "measured_ns_per_day": measured,
+        "resources": resources,
+    }
+
+
+def _remote_resources(job: MdJob, profile, body: "SubmitRemoteRequest") -> dict:
+    """Resolve the SLURM resources for a remote submit: an explicit override, or the
+    Phase-2 auto-recommendation from the prepared package's sizing + any measured
+    ns/day."""
+    if body.resources:
+        return body.resources
+    sizing = _size_prepared_job(job, profile, body.safety_factor)
+    if sizing is None:
+        raise HTTPException(400, "Job is not prepared yet (no manifest.json) — cannot size resources.")
+    return sizing["resources"]
+
+
+@router.get("/md/jobs/{job_id}/remote-recommendation")
+def md_job_remote_recommendation(
+    job_id: str, cluster_name: str = "alpine", safety_factor: float = 1.5,
+    partition: Optional[str] = None, current: bool = False,
+) -> dict:
+    """Preview the auto-recommended SLURM resources for a prepared job — read-only,
+    no cluster connection needed. Drives the Phase-4 submit-review card so the user
+    sees system size / total ns / partition / walltime / est. SU cost before submitting.
+
+    ``partition`` (optional) forces a specific partition instead of the auto-pick —
+    the review card sends it when the user changes the partition dropdown, so the
+    whole resource set (kind/gpus/cores/qos/gres) is re-derived consistently.
+    ``available_partitions`` in the response populates that dropdown.
+
+    Returns ``{prepared: false, reason}`` while the package is still being built.
+    """
+    from backend.core import cluster_config
+
+    job = _load_job(job_id)
+    profiles = cluster_config.load_profiles(_workspace())
+    profile = profiles.get(cluster_name)
+    if profile is None:
+        raise HTTPException(404, f"Unknown cluster profile {cluster_name!r}.")
+
+    try:
+        sizing = _size_prepared_job(job, profile, safety_factor, partition=partition)
+    except ValueError as exc:  # unknown forced partition
+        raise HTTPException(400, str(exc)) from exc
+    # Resume review: seed the card with the job's CURRENT resources (e.g. the short
+    # walltime it just ran) so the user reviews/edits what they actually used, rather
+    # than a fresh auto-recommend.  Skipped when the user forces a partition (the
+    # dropdown change re-sizes on that partition consistently, like the submit path).
+    if current and partition is None and job.resources and sizing is not None:
+        sizing = {**sizing, "resources": job.resources}
+    available = [
+        {"name": p.name, "kind": p.kind, "gpu_model": p.gpu_model}
+        for p in profile.partitions
+    ]
+    if sizing is None:
+        return {
+            "prepared": False,
+            "status": job.status.value,
+            "available_partitions": available,
+            "reason": "Job is still preparing — resources can be sized once the package is built.",
+        }
+    rec_partition = (sizing["resources"] or {}).get("partition", profile.default_partition)
+    available_qos = [
+        {"name": q.name, "max_walltime_h": q.max_walltime_h}
+        for q in profile.qos_tiers_for_partition(rec_partition)
+    ]
+    return {
+        "prepared": True,
+        "cluster_name": cluster_name,
+        "design_name": job.design_name,
+        "status": job.status.value,
+        "already_submitted": bool(job.slurm_job_id),
+        "slurm_job_id": job.slurm_job_id,
+        "available_partitions": available,
+        "available_qos": available_qos,
+        **sizing,
+    }
+
+
+def _record_submit_failure(job: MdJob, msg: str) -> None:
+    """Persist a remote-submit failure onto the job so the UI reflects it.
+
+    A failed submit leaves the job PREPARED and retryable (no slurm id), so we keep
+    it ``queued`` — but record the error so it no longer looks like a clean, pending
+    job (or, worse, shows a running spinner).  The frontend renders an Alpine job
+    that is queued-with-no-slurm-id as "awaiting submit" and surfaces this error.
+    """
+    try:
+        job.slurm_job_id = None
+        job.error = f"Cluster submission failed: {msg}"
+        job.save(_workspace())
+    except Exception as exc:  # never mask the original submit error
+        logger.warning("could not record submit failure on %s: %s", job.job_id, exc)
+
+
+@router.post("/md/jobs/{job_id}/submit-remote")
+async def submit_md_job_remote(job_id: str, body: SubmitRemoteRequest) -> dict:
+    """Stage + submit a prepared job to a cluster (needs a live cluster session).
+
+    The whole relaxation ladder runs as ONE sbatch on the compute node; the MD
+    supervisor then polls SLURM and fetches results back locally on completion.
+    """
+    from backend.core import cluster_config, cluster_ssh, md_executor
+
+    job = _load_job(job_id)
+    if job.status in (MdStatus.preparing,):
+        raise HTTPException(400, "Job is still preparing — wait for prep to finish.")
+    if job.slurm_job_id:
+        raise HTTPException(409, f"Job already submitted to the cluster as SLURM {job.slurm_job_id}.")
+
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(409, "Not connected to a cluster — connect first (Duo).")
+
+    profiles = cluster_config.load_profiles(_workspace())
+    profile = profiles.get(body.cluster_name)
+    if profile is None:
+        raise HTTPException(404, f"Unknown cluster profile {body.cluster_name!r}.")
+
+    resources = _remote_resources(job, profile, body)
+    try:
+        job = await md_executor.submit_job(
+            job, _workspace(), profile=profile, resources=resources, conn=mgr,
+        )
+    except cluster_ssh.ClusterSSHError as exc:
+        _record_submit_failure(job, f"Cluster transport error: {exc}")
+        raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+    except (ValueError, RuntimeError) as exc:
+        _record_submit_failure(job, str(exc))
+        raise HTTPException(400, str(exc)) from exc
+    return {
+        "ok": True,
+        "job": job.to_dict(),
+        "slurm_job_id": job.slurm_job_id,
+        "cluster_name": job.cluster_name,
+        "resources": resources,
+    }
+
+
+class ResumeRemoteRequest(BaseModel):
+    cluster_name: str = "alpine"
+    # Reviewed/edited SLURM resources for the resumed run (e.g. a longer walltime
+    # after a promising short run).  Omitted → keep the job's existing resources.
+    resources: Optional[dict] = None
+
+
+@router.post("/md/jobs/{job_id}/resume-remote")
+async def resume_md_job_remote(job_id: str, body: ResumeRemoteRequest) -> dict:
+    """Resume a timed-out remote job from its latest checkpoint (needs a live session).
+
+    One-click Resume: the user reconnects (Duo) and clicks Resume on a job that hit a
+    walltime TIMEOUT.  NADOC regenerates the sbatch (completed segments skip, the
+    interrupted one continues from its NAMD checkpoint) and resubmits as a new SLURM
+    job — same job row, ``resubmit_count`` bumped, prior attempts kept in
+    ``resume_history``.
+    """
+    from backend.core import cluster_config, cluster_ssh, md_executor
+
+    job = _load_job(job_id)
+    if job.execution_target != "alpine":
+        raise HTTPException(400, "Not a cluster job.")
+    if not job.resumable:
+        raise HTTPException(400, "Job is not in a resumable (timed-out) state.")
+    if not job.remote_scratch_dir:
+        raise HTTPException(400, "Job has no remote scratch dir to resume from.")
+
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(409, "Not connected to a cluster — connect first (Duo).")
+
+    profiles = cluster_config.load_profiles(_workspace())
+    profile = profiles.get(body.cluster_name or job.cluster_name or "alpine")
+    if profile is None:
+        raise HTTPException(404, f"Unknown cluster profile {body.cluster_name!r}.")
+
+    try:
+        job = await md_executor.resume_job(
+            job, _workspace(), profile=profile, resources=body.resources, conn=mgr,
+        )
+    except cluster_ssh.ClusterSSHError as exc:
+        raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "job": job.to_dict(), "slurm_job_id": job.slurm_job_id}
+
+
 class RefitRequest(BaseModel):
     """Settings to override when re-running a failed job (all optional).
 
@@ -1707,6 +1970,25 @@ async def stop_md_job(job_id: str) -> dict:
     # Mark as user-stopped so the startup/supervisor auto-resume leaves it alone.
     job.user_stopped = True
     job.save(_workspace())
+
+    # Remote (Alpine/SLURM) jobs: scancel over the live session (this endpoint runs
+    # on the main loop the asyncssh connection is bound to).
+    if job.execution_target != "local":
+        from backend.core import cluster_ssh, md_executor
+        mgr = cluster_ssh.get_manager()
+        if not mgr.is_connected():
+            job.status = MdStatus.stopped
+            job.save(_workspace())
+            return {"ok": True, "message": "Cluster not connected — marked stopped locally; scancel skipped."}
+        try:
+            issued = await md_executor.cancel_job(job, conn=mgr)
+        except cluster_ssh.ClusterSSHError as exc:
+            raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+        job.status = MdStatus.stopped
+        job.save(_workspace())
+        return {"ok": True, "job_id": job_id,
+                "status": "cancelled" if issued else "stopped",
+                "slurm_job_id": job.slurm_job_id}
 
     cancelled = stop_job(job_id, _workspace())
     if not cancelled:

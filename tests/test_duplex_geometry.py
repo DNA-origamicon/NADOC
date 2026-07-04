@@ -8,6 +8,8 @@ from the old driver's helix to the new driver's helix. See
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -17,7 +19,12 @@ from backend.api.routes import _demo_design
 from backend.core.models import Design
 
 client = TestClient(app)
-FIXTURE = "/home/joshua/NADOC/workspace/playwright_tests/2x2_OH_test.nadoc"
+# Lives in the gitignored playwright-fixtures dir (per feedback_playwright_fixtures_location),
+# so it is not present on every checkout — skip cleanly rather than hard-fail when absent.
+FIXTURE = Path(__file__).resolve().parents[1] / "workspace" / "playwright_tests" / "2x2_OH_test.nadoc"
+pytestmark = pytest.mark.skipif(
+    not FIXTURE.exists(), reason=f"fixture {FIXTURE.name} not present on this checkout"
+)
 
 OH1, OH2 = "ovhg_h_XY_1_0_40_5p", "ovhg_h_XY_4_0_40_3p"
 SD1, SD2 = "2bc55cd5-f0eb-5c59-b01f-d7fe3f62d042", "c48033e6-031b-5e13-8495-6b56cb5d513b"

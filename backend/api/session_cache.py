@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import os
 import re
 import shutil
 import threading
@@ -84,7 +85,14 @@ def start(workspace_dir: Path) -> None:
 
     Called once from the FastAPI lifespan hook.  Never started during the test
     suite (tests do not enter the app lifespan), so it adds no test overhead.
+
+    Set ``NADOC_DISABLE_SESSION_CACHE`` to skip it entirely (no restore, no
+    autosave) — used by the e2e backends, which are throwaway processes that
+    would otherwise flush a ``.session/<doc>`` dir per test into the shared
+    workspace.
     """
+    if os.environ.get("NADOC_DISABLE_SESSION_CACHE"):
+        return
     global _session_dir, _thread, _last_flushed, _seen, _stable_since
     _session_dir = Path(workspace_dir) / ".session"
     try:
@@ -110,6 +118,8 @@ def start(workspace_dir: Path) -> None:
 def stop() -> None:
     """Stop the flush thread and write one final snapshot."""
     global _thread
+    if _session_dir is None:
+        return   # never started (test suite, or NADOC_DISABLE_SESSION_CACHE)
     _stop.set()
     if _thread is not None:
         _thread.join(timeout=5.0)

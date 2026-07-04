@@ -71,6 +71,44 @@ def job_out_of_date(job_fingerprint: str | None, current_fingerprint: str | None
     return job_fingerprint != current_fingerprint
 
 
+def _design_identity(design: "Design | None"):
+    """(name, lattice, n_helices, n_strands) — the coarse identity used to tell a
+    WHOLLY different loaded design apart from an edit of the same one.  None-safe."""
+    if design is None:
+        return None
+    name = getattr(getattr(design, "metadata", None), "name", None)
+    lattice = str(getattr(design, "lattice_type", "")).split(".")[-1].lower()
+    return (name or "untitled", lattice, len(design.helices), len(design.strands))
+
+
+def describe_staleness(job_design: "Design | None", current_design: "Design | None",
+                       *, stage: str = "prepared") -> str:
+    """Human-readable reason a job is out of date, DISTINGUISHING the two cases the
+    old single message conflated:
+
+    * a *different* design is loaded (name / lattice / helix+strand count differ) —
+      rolling the feature log cannot help; the user must open the job's design;
+    * the *same* design was edited (identity matches, fingerprint differs) — roll the
+      feature log back or prepare a new run.
+
+    Falls back to the generic message when either design is unavailable."""
+    generic = (f"The design has changed since this job was {stage}. Roll the design "
+               "back to the job's run state, or prepare a new run, first.")
+    ji, ci = _design_identity(job_design), _design_identity(current_design)
+    if ji is None or ci is None:
+        return generic
+    jn, jl, jh, js = ji
+    cn, cl, ch, cs = ci
+    if ji != ci:
+        return (f"A different design is loaded: the app currently has '{cn}' "
+                f"({cl} lattice, {ch} helices, {cs} strands), but this job was "
+                f"{stage} from '{jn}' ({jl} lattice, {jh} helices, {js} strands). "
+                f"Open '{jn}' to continue this run.")
+    return (f"'{jn}' has been edited since this job was {stage} (same name and size, "
+            "but its topology / sequence / geometry changed). Roll the feature log "
+            "back to the run state, or prepare a new run.")
+
+
 # The fingerprint is generic over DNA designs — both oxDNA and NAMD/MD jobs build
 # from the same topology/sequence/geometry fields — so MD code imports it under this
 # neutral name (the ``oxdna_`` alias is kept for the existing oxDNA call sites).

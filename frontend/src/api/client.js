@@ -2134,6 +2134,49 @@ export const getMdFramesAtomistic = (id, frameIndices) =>
 export const getMdFramesSurface = (id, frameIndices, params = {}) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/frames-surface`, { frame_indices: frameIndices, ...params })
 
+/** MD "Graphs and Metrics" — launch a background twist/curvature/base-pairing compute for a
+ *  NAMD job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getMdMetricsRun`. Same shape
+ *  as the oxDNA metrics endpoints, so the shared metrics card reuses it. */
+export const startMdMetrics      = (id, body)    => _oxdnaJSON('POST', `/md/jobs/${id}/metrics/start`, body)
+/** Poll an MD metric run → {state, progress, eta_s, frames_done, frames_total, result?}. */
+export const getMdMetricsRun     = (runId)       => _oxdnaJSON('GET',  `/md/metrics/${runId}`)
+
+// NAMD MD job lifecycle (routes_md.py).  All go through _oxdnaJSON so the tab's
+// X-NADOC-Doc header is ALWAYS stamped — the staleness/out-of-date checks read the
+// active design from that document, so a missing header silently compares against
+// the wrong (default) doc.  Do NOT call these endpoints with a bare `fetch`.
+export const getMdJob            = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}`)
+export const deleteMdJob         = (id)          => _oxdnaJSON('DELETE', `/md/jobs/${id}`)
+export const startMdJob          = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/start`)
+export const stopMdJob           = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/stop`)
+/** Append a production stage (the "continue from previous run" path). Body:
+ *  {steps, autostart, continue_from_production}. 409 when the active design ≠ the
+ *  job's — hence the doc header must be correct (see block comment above). */
+export const appendMdProduction  = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/production`, body)
+export const refitMdJob          = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/refit`, body)
+/** Live-display metadata for a job ({ready, config_path, …}). */
+export const getMdDisplayMeta    = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/display`)
+export const getMdJobMetrics     = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/metrics`)
+export const getMdJobFixAdvice   = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/fix-advice`)
+/** NAMD/GROMACS availability + recommended thread count. */
+export const namdAvailable       = ()            => _oxdnaJSON('GET',    '/md/namd-available')
+
+// ── Remote (Alpine/SLURM) execution — Phase 4 submit-review flow ───────────────
+/** Preview the auto-recommended SLURM resources for a prepared job (read-only, no
+ *  cluster connection needed). Returns {prepared:false,…} while still preparing. */
+export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFactor = 1.5, partition = null, current = false } = {}) => {
+  let url = `/md/jobs/${id}/remote-recommendation?cluster_name=${encodeURIComponent(clusterName)}&safety_factor=${safetyFactor}`
+  if (partition) url += `&partition=${encodeURIComponent(partition)}`
+  if (current) url += '&current=true'
+  return _oxdnaJSON('GET', url)
+}
+/** Stage + submit a prepared job to the cluster. `resources` omitted → auto-recommend. */
+export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
+/** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
+export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
+/** Current cluster connection status ({state, who, host}); used to gate the Alpine target. */
+export const getClusterStatus    = ()            => _oxdnaJSON('GET',    '/cluster/status')
+
 // ── Cluster rigid transforms ──────────────────────────────────────────────────
 
 export async function createCluster(body) {

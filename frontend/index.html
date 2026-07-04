@@ -3920,6 +3920,9 @@
               <!-- NAMD availability badge -->
               <div id="md-jobs-namd-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
+              <!-- Compute-cluster (Alpine) connection chip + connect modal mount -->
+              <div id="md-cluster-connection-mount" style="margin-bottom:6px"></div>
+
               <!-- Launch form -->
               <div style="margin-bottom:8px">
                 <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Protocol</div>
@@ -3928,6 +3931,17 @@
                   <option value="equilibrium_aware_namd">Equilibrium-Aware NAMD</option>
                   <option value="mgh_slow_release">Legacy Explicit Mg/MGH Slow Release</option>
                 </select>
+                <!-- Run target: local subprocess vs. Alpine cluster (Phase 4). -->
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e">
+                  <span>Run on:</span>
+                  <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                    <input id="md-run-target-local" type="radio" name="md-run-target" value="local" checked style="accent-color:#3fb950">Local
+                  </label>
+                  <label id="md-run-target-alpine-label" style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                    <input id="md-run-target-alpine" type="radio" name="md-run-target" value="alpine" style="accent-color:#58a6ff">Alpine
+                  </label>
+                  <span id="md-run-target-hint" style="font-size:10px;color:#484f58"></span>
+                </div>
                 <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
                   <button id="md-jobs-run-btn"
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a4a1a;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
@@ -4026,6 +4040,53 @@
                 </div>
               </div>
 
+              <!-- ── Graphs and Metrics (collapsible; MD twin of the oxDNA card) ── -->
+              <div class="ox-card" style="margin-top:8px">
+                <div id="md-metrics-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="md-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
+                </div>
+                <div id="md-metrics-card" class="ox-card__body" style="display:none">
+                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Twist, curvature &amp; base-pairing over a NAMD run — spatial (vs position) &amp; temporal (vs frame). Base pairing = fraction of designed pairs with C1'…C1' &lt; 12&nbsp;Å.</div>
+                  <div style="display:flex;gap:12px;margin-bottom:8px;font-size:var(--text-xs);color:#8b949e">
+                    <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="md-metrics-scope" id="md-metrics-scope-latest" checked> Latest job</label>
+                    <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="Concatenate this job's whole refit lineage into one timeline (spatial profiles overlay per job)."><input type="radio" name="md-metrics-scope" id="md-metrics-scope-chain"> All refit jobs</label>
+                  </div>
+                  <!-- Twist -->
+                  <div style="margin-bottom:8px">
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9">Twist</span>
+                      <button id="md-metrics-twist-gen"     title="Generate / refresh the measurements from the trajectory" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="md-metrics-twist-display" title="Show annotated spatial + temporal graphs" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="md-metrics-twist-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="md-metrics-twist-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="md-metrics-twist-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="md-metrics-twist-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                  <!-- Curvature -->
+                  <div style="margin-bottom:8px">
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9">Curvature</span>
+                      <button id="md-metrics-curve-gen"     title="Generate / refresh the measurements from the trajectory" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="md-metrics-curve-display" title="Show annotated spatial + temporal graphs" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="md-metrics-curve-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="md-metrics-curve-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="md-metrics-curve-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="md-metrics-curve-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                  <!-- Base pairing -->
+                  <div>
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="Fraction of designed base pairs with C1'…C1' within 12 Å (native MD Watson-Crick proxy)">Base pairing</span>
+                      <button id="md-metrics-bp-gen"     title="Generate / refresh the measurements from the trajectory" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                      <button id="md-metrics-bp-display" title="Show annotated spatial + temporal graphs" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="md-metrics-bp-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="md-metrics-bp-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="md-metrics-bp-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="md-metrics-bp-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                </div>
+              </div>
+
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
                 <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
@@ -4096,6 +4157,16 @@
                           style="font-size:var(--text-xs);padding:3px 8px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;display:none">
                     ▶ Start
                   </button>
+                  <button id="md-jobs-submit-alpine-btn"
+                          title="Review resources and submit this prepared job to the Alpine cluster"
+                          style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
+                    ☁ Submit to Alpine
+                  </button>
+                  <button id="md-jobs-resume-btn"
+                          title="Resume this timed-out job from its last checkpoint (new SLURM submission)"
+                          style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
+                    ⟳ Resume
+                  </button>
                   <button id="md-jobs-stop-btn"
                           style="font-size:var(--text-xs);padding:3px 8px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer;display:none">
                     ■ Stop
@@ -4105,6 +4176,15 @@
                 <!-- Error message -->
                 <div id="md-jobs-detail-error"
                      style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border:1px solid #5e1a1a;border-radius:3px;padding:5px;margin-bottom:6px;white-space:pre-wrap;word-break:break-word"></div>
+
+                <!-- Remote resumption history (timed-out → resumed chain) -->
+                <div id="md-jobs-resume-history-wrap" style="display:none;margin-bottom:6px">
+                  <div id="md-jobs-resume-history-toggle" style="cursor:pointer;font-size:var(--text-xs);color:#8b949e;user-select:none">
+                    <span id="md-jobs-resume-history-arrow">▸</span> Resumptions (<span id="md-jobs-resume-history-count">0</span>)
+                  </div>
+                  <div id="md-jobs-resume-history"
+                       style="display:none;font-size:10px;font-family:var(--font-mono);background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-top:3px;max-height:120px;overflow-y:auto"></div>
+                </div>
 
                 <!-- Progress -->
                 <div id="md-jobs-progress"

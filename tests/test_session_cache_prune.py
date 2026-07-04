@@ -82,3 +82,19 @@ def test_noop_when_under_bounds(tmp_path, monkeypatch):
 def test_missing_dir_is_safe(tmp_path, monkeypatch):
     monkeypatch.setattr(session_cache, "_session_dir", tmp_path / "nope")
     assert session_cache._prune(now=1.0) == 0
+
+
+def test_disable_env_skips_start_and_stop(tmp_path, monkeypatch):
+    """NADOC_DISABLE_SESSION_CACHE (used by the throwaway e2e backends) makes start()
+    a no-op: no .session dir, no autosave thread, and stop() stays a safe no-op — so
+    an e2e run never flushes session docs into the shared workspace."""
+    monkeypatch.setenv("NADOC_DISABLE_SESSION_CACHE", "1")
+    monkeypatch.setattr(session_cache, "_session_dir", None)
+    monkeypatch.setattr(session_cache, "_thread", None)
+
+    session_cache.start(tmp_path)
+
+    assert session_cache._session_dir is None      # never bound → nothing persists
+    assert session_cache._thread is None           # no flush thread spawned
+    assert not (tmp_path / ".session").exists()
+    session_cache.stop()                            # must not raise (guards on None dir)

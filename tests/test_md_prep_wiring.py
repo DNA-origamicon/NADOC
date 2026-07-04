@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import sys
 import time
+import zipfile
+from io import BytesIO
 
 import pytest
 
 import backend.core.namd_solvate as ns
 from backend.core.namd_solvate import _Water, _run_watched
-from tests.conftest import make_6hb_design
+from tests.conftest import make_6hb_design, make_minimal_design
 
 
 def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *, water_shell_nm=None):
@@ -40,6 +42,37 @@ def test_progress_threads_through_solvation(monkeypatch):
     assert "solvate" in seen
     assert "assemble" in seen
     assert seen.index("topology") < seen.index("solvate") < seen.index("assemble")
+
+
+def test_solvated_package_exports_fast_relaxation_assets(monkeypatch):
+    """Downloadable NAMD packages carry the same HMR/GPUresident fast path."""
+    monkeypatch.setattr(ns, "_gmx_solvate", _fake_solvate)
+    design = make_minimal_design(helix_length_bp=8)
+
+    blob = ns.build_namd_solvated_package(
+        design,
+        ion_conc_mM=0.0,
+        mg_conc_mM=0.0,
+    )
+    name = (design.metadata.name or "design").replace(" ", "_")
+    prefix = f"{name}_namd_solvated/"
+
+    with zipfile.ZipFile(BytesIO(blob)) as zf:
+        names = set(zf.namelist())
+        fast_conf = zf.read(prefix + "namd_fast.conf").decode()
+        launch = zf.read(prefix + "launch.sh").decode()
+        readme = zf.read(prefix + "README.txt").decode()
+
+    assert prefix + f"{name}_hmr.psf" in names
+    assert prefix + "namd_fast.conf" in names
+    assert f"structure          {name}_hmr.psf" in fast_conf
+    assert "GPUresident        on" in fast_conf
+    assert "timestep           4.0" in fast_conf
+    assert "PMEGridSpacing     1.5" in fast_conf
+    assert 'N_THREADS="${NAMD_THREADS:-' in launch
+    assert 'DEVICES="${NAMD_DEVICES:-0}"' in launch
+    assert '"+setcpuaffinity"' in launch
+    assert "namd_fast.conf" in readme
 
 
 def test_progress_feeds_tracker_monotonic(monkeypatch):

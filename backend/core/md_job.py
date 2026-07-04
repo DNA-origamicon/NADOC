@@ -109,6 +109,36 @@ class MdJob:
     # package/output readers keep working and the job entry stays in the list.
     archived: bool = False
     archive_path: Optional[str] = None
+    # Remote execution (Alpine/SLURM — see backend.core.md_executor + the
+    # alpine-cluster-submission plan).  ``execution_target`` is the seam: "local"
+    # (default) keeps the byte-for-byte local NAMD path; "alpine" routes start/stop/
+    # poll through the SlurmExecutor.  The remaining fields are populated on remote
+    # submit and drive polling + result fetch; ``resources`` is the recommendation
+    # dict actually used; ``slurm_state`` is the last-seen raw SLURM state (badge).
+    execution_target: str = "local"
+    cluster_name: Optional[str] = None
+    slurm_job_id: Optional[str] = None
+    slurm_state: Optional[str] = None
+    remote_project_dir: Optional[str] = None
+    remote_scratch_dir: Optional[str] = None
+    resources: Optional[dict] = None
+    # Wall-clock (epoch s) when the job was last handed to the SLURM queue (submit or
+    # resume) — i.e. when it entered PENDING.  Drives the queued icon's "waiting Nm"
+    # tooltip.  None for local jobs / never-submitted.
+    queued_at: Optional[float] = None
+    # Count of user-triggered resume-from-checkpoint submissions after SLURM
+    # TIMEOUTs (walltime under-estimate).  Resume is NEVER automatic — Duo 2FA
+    # requires the user present — so a timed-out job goes ``resumable`` and waits
+    # for a one-click Resume (see md_executor.resume_job).
+    resubmit_count: int = 0
+    # True when the last remote run hit a walltime TIMEOUT and can be resumed from
+    # its latest NAMD checkpoint.  Set with ``status = paused`` (not failed — a
+    # timeout is expected for the short-walltime strategy).  Cleared on resume.
+    resumable: bool = False
+    # One entry per finished remote SLURM submission (the original + each resume),
+    # so the panel's expand chevron can show the full resumption chain.  Shape:
+    # {slurm_job_id, state, segment_reached, segments_total, walltime, at}.
+    resume_history: list = field(default_factory=list)
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -154,6 +184,17 @@ class MdJob:
         data.setdefault("feature_log_position", None)
         data.setdefault("archived", False)
         data.setdefault("archive_path", None)
+        data.setdefault("execution_target", "local")
+        data.setdefault("cluster_name", None)
+        data.setdefault("slurm_job_id", None)
+        data.setdefault("slurm_state", None)
+        data.setdefault("remote_project_dir", None)
+        data.setdefault("remote_scratch_dir", None)
+        data.setdefault("resources", None)
+        data.setdefault("queued_at", None)
+        data.setdefault("resubmit_count", 0)
+        data.setdefault("resumable", False)
+        data.setdefault("resume_history", [])
         return cls(**data)
 
     @classmethod

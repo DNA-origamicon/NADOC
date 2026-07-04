@@ -292,12 +292,14 @@ def _assert_job_current(job: OxdnaJob) -> None:
     frozen topology and crashes with an internal error.  The frontend turns this 409
     into the 'design has changed' roll-or-cancel popup."""
     if _job_is_out_of_date(job, _current_design_fingerprint()):
-        raise HTTPException(
-            409,
-            "The design has changed since this job was relaxed. Roll the feature log "
-            "back to the relaxation stage, or run a new relaxation, before running a "
-            "live session or production.",
-        )
+        from backend.api import state as design_state
+        from backend.core.oxdna_staleness import describe_staleness
+        try:
+            current = design_state.get_or_404()
+        except Exception:  # noqa: BLE001 — staleness messaging must never 500
+            current = None
+        snap = _load_snapshot_design(job.job_dir(_workspace()))
+        raise HTTPException(409, describe_staleness(snap, current, stage="relaxed"))
 
 
 def _lineage_jobs(job: OxdnaJob) -> list[OxdnaJob]:

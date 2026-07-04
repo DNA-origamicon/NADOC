@@ -6,6 +6,9 @@
  * loadScaffoldedPart + the File>New smoke tests); the auto-save writes them to
  * workspace/ as `__e2e__<name>_<n>.nadoc`. We delete exactly those, by prefix.
  * workspace/ is gitignored, so this only touches local recovery artifacts.
+ *
+ * Session-recovery docs (workspace/.session/<doc_id>/) are NOT cleaned here: the
+ * e2e backends run with NADOC_DISABLE_SESSION_CACHE, so they never write any.
  */
 import { readdir, rm } from 'node:fs/promises'
 import path from 'node:path'

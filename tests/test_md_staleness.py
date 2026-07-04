@@ -14,7 +14,7 @@ from backend.api import state as design_state
 from backend.api.main import app
 from backend.core.md_job import MdStatus, new_job
 from backend.core.oxdna_staleness import design_build_fingerprint
-from tests.conftest import make_6hb_design
+from tests.conftest import make_18hb_design, make_6hb_design
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +56,10 @@ def test_md_out_of_date_flag_and_roll_clears_it(monkeypatch, tmp_path):
     # Production is refused (409) on a stale MD job.
     r409 = c.post(f"/api/md/jobs/{job.job_id}/production", json={"steps": 1000})
     assert r409.status_code == 409
-    assert "design has changed" in r409.json()["detail"].lower()
+    # Same design edited in place (sequences cleared) → identity matches, so the
+    # message names the edit-and-roll case rather than "a different design is loaded".
+    detail = r409.json()["detail"].lower()
+    assert "has been edited" in detail and "roll" in detail
 
     # Roll to the job's prepared state → restores the sequenced snapshot, clears ⚠.
     r = c.post(f"/api/md/jobs/{job.job_id}/roll-design")
@@ -66,3 +69,24 @@ def test_md_out_of_date_flag_and_roll_clears_it(monkeypatch, tmp_path):
     assert all(s.sequence == "ACGT" for s in restored.strands)
     assert design_build_fingerprint(restored) == job.design_fingerprint
     assert c.get(f"/api/md/jobs/{job.job_id}").json()["out_of_date"] is False
+
+
+def test_md_stale_message_names_a_different_loaded_design(monkeypatch, tmp_path):
+    """When a WHOLLY different design is loaded (not an edit of the job's design), the
+    409 must say so and name both designs — rolling the feature log can't fix it.
+    This is the real-world 'Bundle loaded instead of the job's design' case."""
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+
+    prepared = make_6hb_design()          # what the job was built from
+    job = _make_md_job(tmp_path, prepared, fingerprint=design_build_fingerprint(prepared))
+
+    other = make_18hb_design()            # a different structure entirely
+    assert len(other.helices) != len(prepared.helices)
+    design_state.set_design(other)
+
+    r409 = TestClient(app).post(f"/api/md/jobs/{job.job_id}/production", json={"steps": 1000})
+    assert r409.status_code == 409
+    detail = r409.json()["detail"].lower()
+    assert "different design is loaded" in detail
+    assert f"{len(other.helices)} helices" in detail        # names the loaded design's size
+    assert f"{len(prepared.helices)} helices" in detail      # and the job's design's size

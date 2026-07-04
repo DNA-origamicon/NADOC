@@ -783,6 +783,47 @@ class TestOrphanStop:
         assert namd_runner.stop_job(job.job_id, tmp_path) is True
         assert killed == [7777]
 
+    def test_stop_adopted_orphan_kills_via_proc_scan(self, tmp_path, monkeypatch):
+        """Regression: after a dev-server reload the new worker *adopts* the surviving
+        NAMD (run_job sits in _wait_for_segment_process) so _RUNNING has a live handle
+        but _ACTIVE_PIDS is EMPTY.  Stop must still kill the process (found via the
+        /proc scan), not just cancel the wait and leave NAMD burning the GPU."""
+        import threading
+
+        from backend.core import namd_runner
+
+        job = self._running_job(tmp_path)
+        killed: list[int] = []
+        cancelled: list[str] = []
+
+        # A live runner thread with NO _ACTIVE_PIDS entry (adopted, not spawned).
+        alive = threading.Event()
+        thread = threading.Thread(target=alive.wait, daemon=True)
+        thread.start()
+
+        class _FakeLoop:
+            def call_soon_threadsafe(self, fn):
+                cancelled.append("cancel")
+
+        class _FakeTask:
+            def cancel(self):  # pragma: no cover - invoked via fake loop
+                cancelled.append("task")
+
+        handle = namd_runner._RunningHandle(thread=thread, loop=_FakeLoop(), task=_FakeTask())
+        monkeypatch.setitem(namd_runner._RUNNING, job.job_id, handle)
+        namd_runner._ACTIVE_PIDS.pop(job.job_id, None)  # nothing spawned by this worker
+        monkeypatch.setattr(namd_runner, "_external_pid", lambda j: 5151)
+        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: killed.append(pid))
+
+        try:
+            assert namd_runner.stop_job(job.job_id, tmp_path) is True
+            assert killed == [5151]          # the orphan was actually signalled
+            assert cancelled == ["cancel"]   # and the runner task cancelled
+        finally:
+            alive.set()
+            thread.join(timeout=2)
+            namd_runner._RUNNING.pop(job.job_id, None)
+
     def test_stop_no_orphan_returns_false_without_killing(self, tmp_path, monkeypatch):
         from backend.core import namd_runner
 

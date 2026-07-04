@@ -208,6 +208,9 @@ baked snapshot for unknown kinds gracefully. Related: [[#C5. Rapid edits → out
 "live vs recorded state diverge" class). Note migration is NOT automatic — files already in the broken state need the
 sequence re-applied once to write the missing entry.
 
+### C9. `glob("*.psf")[0]` picks the derived `_hmr.psf` sibling non-deterministically → prep fails on a phantom `{stem}_hmr.pdb` (2026-07-03)
+An MD solvated package ships BOTH `{stem}.psf` and the fast-mode `{stem}_hmr.psf` (heavy-hydrogen topology, written unconditionally by `build_namd_solvated_package`). `prepare_mgh_slow_release` derived `name_stem = list(package_dir.glob("*.psf"))[0].stem` — but `Path.glob` order is filesystem-dependent (os.scandir order, NOT sorted). When it returned the `_hmr` file first, `name_stem` became `"{stem}_hmr"` and the very next step (`write_restraints_pdb(package_dir/f"{name_stem}.pdb", …)`) opened a nonexistent `{stem}_hmr.pdb` → `Preparation failed: [Errno 2] No such file or directory: …_hmr.pdb`. **Intermittent** — same code passed on machines/runs where scandir happened to order the base psf first; surfaced during an Alpine submit only because that run's glob ordering flipped (execution target is irrelevant — prep is identical for local/remote). Fix: `_base_name_stem()` filters out any `*_hmr.psf` before picking. Same latent bug lived in `benchmark_runner.py`; `md_import.py` was safe because it used `sorted()` (base `"{stem}."` sorts before `"{stem}_"` since `.`=0x2E < `_`=0x5F). **Lesson:** never index an unsorted `glob()` when a package can contain a derived same-extension sibling — filter by the naming convention or `sorted()`, and prefer a named helper so every call site agrees.
+
 ---
 
 ## D. Rendering / scene state

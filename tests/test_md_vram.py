@@ -39,6 +39,48 @@ def test_classify_failure_log_multikind():
     assert V.classify_failure_log("CUDA error cudaMalloc: out of memory") == "vram_oom"
 
 
+# ── Error-line extraction (frontend cause surfacing) ──────────────────────────
+
+def test_extract_error_line_namd_fatal():
+    log = (
+        "Info: Startup phase 0\n"
+        "Info: Configuring...\n"
+        "FATAL ERROR: GPUresident not supported on regular multicore builds\n"
+        "FATAL ERROR: GPUresident not supported on regular multicore builds\n"
+    )
+    assert V.extract_error_line(log) == (
+        "FATAL ERROR: GPUresident not supported on regular multicore builds"
+    )
+
+
+def test_extract_error_line_prefers_fatal_over_generic_error():
+    # A generic ERROR appears first, but the NAMD FATAL is the real cause.
+    log = "ERROR: something benign earlier\nFATAL ERROR: the real cause\n"
+    assert V.extract_error_line(log) == "FATAL ERROR: the real cause"
+
+
+def test_extract_error_line_slurm_level():
+    assert "TIME LIMIT" in V.extract_error_line(
+        "slurmstepd: error: *** JOB 42 CANCELLED AT ... DUE TO TIME LIMIT ***")
+    assert V.extract_error_line(
+        "/etc/profile: line 47: HISTCONTROL: unbound variable"
+    ) == "/etc/profile: line 47: HISTCONTROL: unbound variable"
+    assert "oom-kill" in V.extract_error_line(
+        "slurmstepd: error: Detected 1 oom-kill event(s)").lower()
+
+
+def test_extract_error_line_none_when_clean():
+    assert V.extract_error_line("Info: Benchmark 12 ns/day\nWallClock: 3.2\n") is None
+    assert V.extract_error_line("") is None
+
+
+def test_extract_error_line_from_file(tmp_path: Path):
+    p = tmp_path / "seg.log"
+    p.write_text("Info: run\nFATAL ERROR: Margin is too small\n")
+    assert V.extract_error_line_from_file(p) == "FATAL ERROR: Margin is too small"
+    assert V.extract_error_line_from_file(tmp_path / "missing.log") is None
+
+
 # ── VRAM model ────────────────────────────────────────────────────────────────
 
 def test_vram_model_monotonic_and_invertible():

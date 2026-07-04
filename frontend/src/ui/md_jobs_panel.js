@@ -16,7 +16,7 @@ import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progres
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk } from '../api/client.js'
-import { docKey, docHeaders } from '../shared/doc_id.js'
+import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
 import { flattenJobTree } from './job_tree.js'
@@ -25,7 +25,9 @@ import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
+import { initMdMetricsCard } from './md_metrics_card.js'
 import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
+import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import * as api from '../api/client.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -44,6 +46,10 @@ const _PRODUCTION_STEPS_PER_NS = 1_000_000 / _PRODUCTION_TIMESTEP_FS
 const _SHOW_ALL_KEY = 'nadoc:md-jobs-show-all'
 const _WORKSPACE_PATH_KEY = 'nadoc:workspace-path'
 const _MD_PREWARM_INTERVAL_MS = 30000
+// Remote (Alpine) jobs have no live WebSocket push — the backend supervisor polls
+// SLURM, but the panel otherwise only re-fetches on user actions.  So while a
+// submitted remote job is in flight we poll the list ourselves on this cadence.
+const _MD_REMOTE_POLL_MS = 20000
 
 // Debug timestamp — kept to <12 chars so console entries don't collapse
 const _ts = () => new Date().toISOString().slice(11, 23)
@@ -75,15 +81,87 @@ export function seededBadge(job) {
   return ''
 }
 
-/** Pure: is the job in an in-progress state (a spinner should show)? */
+/** Pure: an Alpine job that finished local prep but was never handed to SLURM
+ *  (no slurm id) — "prepared, awaiting remote submit".  NOT actually running, even
+ *  though its status is `queued`; a failed submit leaves it here (with an error). */
+export function mdRemoteAwaitingSubmit(job) {
+  return job?.execution_target === 'alpine' && !job?.slurm_job_id && job?.status === 'queued'
+}
+
+/** Pure: is the job in an in-progress state (a spinner should show)?  A remote job
+ *  that hasn't been submitted to SLURM yet is prepared-but-idle, not running — so a
+ *  failed/never-attempted Alpine submit doesn't masquerade as a live job. */
 export function mdJobIsActive(job) {
-  return ['queued', 'preparing', 'running'].includes(job?.status)
+  if (!['queued', 'preparing', 'running'].includes(job?.status)) return false
+  if (mdRemoteAwaitingSubmit(job)) return false
+  return true
+}
+
+/** Pure: is any Alpine job submitted-and-in-flight (so the panel should keep polling
+ *  SLURM status)?  Gates the remote-poll timer — false when nothing remote is active,
+ *  so idle panels don't hit the network. */
+export function hasActiveRemoteJob(jobs) {
+  return (jobs ?? []).some(j => j?.execution_target === 'alpine' && mdJobIsActive(j))
 }
 
 /** Pure: list-row label for a derived (refit/retry) child job — "Refit N", where N
  *  is its global run number among all non-root jobs (from flattenJobTree). */
 export function mdChildRowLabel(job, index) {
   return `Refit ${index}`
+}
+
+/** Pure: should the one-click Resume button show, and can it be clicked?  A timed-out
+ *  Alpine job (`resumable`) can resume from its last checkpoint, but only with a live
+ *  cluster session (Duo).  Returns {show, disabled, reason}. */
+export function mdResumeButtonState(job, clusterState) {
+  if (job?.execution_target !== 'alpine' || !job?.resumable) return { show: false, disabled: true, reason: '' }
+  const connected = clusterState === 'connected'
+  return {
+    show: true,
+    disabled: !connected,
+    reason: connected ? 'Resume from the last checkpoint (new SLURM submission)'
+                      : 'Connect to the cluster (Duo) to resume',
+  }
+}
+
+/** Pure: is this remote job sitting in the SLURM queue (submitted, PENDING — waiting
+ *  for the scheduler)?  Distinct from "awaiting submit" (no slurm id) and from RUNNING.
+ *  Drives the queued icon + wait tooltip. */
+export function mdIsRemoteQueued(job) {
+  return job?.execution_target === 'alpine'
+    && job?.status === 'queued'
+    && !!job?.slurm_job_id
+    && (job?.slurm_state == null || String(job.slurm_state).toUpperCase() !== 'RUNNING')
+}
+
+/** Pure: compact duration label from a number of seconds (e.g. "45s", "6m", "1h 3m"). */
+export function fmtDurationShort(secs) {
+  const s = Math.max(0, Math.floor(secs))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  return `${h}h ${m % 60}m`
+}
+
+/** Pure: tooltip text for a queued remote job — how long it has waited in the queue.
+ *  ``nowMs`` defaults to Date.now() (injectable for tests). */
+export function mdQueueWaitLabel(job, nowMs = Date.now()) {
+  const t = job?.queued_at
+  if (!t) return 'Queued — waiting for the cluster scheduler'
+  return `Queued ${fmtDurationShort(nowMs / 1000 - t)} ago — waiting in the cluster queue`
+}
+
+/** Pure: display rows for a job's remote resumption history (original + each resume),
+ *  newest first — feeds the detail's expand chevron. */
+export function mdResumeHistoryRows(job) {
+  const hist = job?.resume_history ?? []
+  return hist.slice().reverse().map((h, i) => {
+    const n = hist.length - i
+    const seg = h.segments_total ? `seg ${h.segment_reached}/${h.segments_total}` : ''
+    const wt = h.walltime ? ` · ${h.walltime}` : ''
+    return `#${n} · SLURM ${h.slurm_job_id ?? '—'} · ${h.state ?? '—'}${seg ? ' · ' + seg : ''}${wt}`
+  })
 }
 
 // Production segments of a fast job (HMR + GPU-resident, 4 fs) run ~9x the speed
@@ -134,7 +212,7 @@ export function mdHasMetrics(job, persisted = null) {
  *  every poll (visible stutter).  Mirrors the oxDNA panel. */
 export function mdListSignature(jobs, selectedId) {
   return (jobs ?? [])
-    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`)
+    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}`)
     .join('|') + `#${selectedId ?? ''}`
 }
 
@@ -149,7 +227,7 @@ export function mdShouldShowInheritedSeed(job, displayMeta) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getClusterState = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -160,6 +238,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const namdStatusEl  = document.getElementById('md-jobs-namd-status')
   const presetSel     = document.getElementById('md-jobs-preset')
   const runBtn        = document.getElementById('md-jobs-run-btn')
+  const runTargetLocal  = document.getElementById('md-run-target-local')
+  const runTargetAlpine = document.getElementById('md-run-target-alpine')
+  const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
+  const runTargetHint   = document.getElementById('md-run-target-hint')
+  const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
+  const resumeBtn     = document.getElementById('md-jobs-resume-btn')
+  const resumeHistWrap   = document.getElementById('md-jobs-resume-history-wrap')
+  const resumeHistToggle = document.getElementById('md-jobs-resume-history-toggle')
+  const resumeHistArrow  = document.getElementById('md-jobs-resume-history-arrow')
+  const resumeHistCount  = document.getElementById('md-jobs-resume-history-count')
+  const resumeHistEl     = document.getElementById('md-jobs-resume-history')
   const advToggle     = document.getElementById('md-jobs-adv-toggle')
   const advArrow      = document.getElementById('md-jobs-adv-arrow')
   const advBody       = document.getElementById('md-jobs-adv-body')
@@ -244,6 +333,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _threadsInit  = false  // seeded the threads input from server recommendation once
   let _displayTimer = null
   let _prewarmTimer = null
+  let _remotePollTimer = null   // periodic SLURM-status poll for in-flight Alpine jobs
   let _displayJobId = null
   let _displayKey   = null
   let _displayMeta  = null
@@ -254,6 +344,37 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
   const _metricsByJob = new Map()
+  let _pendingAlpineReview = null   // jobId whose review card opens once prep finishes
+
+  // Alpine submit-review card (Phase 4): fetches the auto-recommended SLURM
+  // resources for a prepared job, lets the user review/override, then submits.
+  const _submitReview = initMdSubmitReview({
+    api,
+    toast: showToast,
+    onSubmitted: async (jobId) => { await _fetchJobs(); _selectJob(jobId) },
+  })
+
+  // ── Run target (Local subprocess vs. Alpine cluster) ────────────────────────
+  function _currentRunTarget() {
+    return runTargetAlpine?.checked ? 'alpine' : 'local'
+  }
+
+  // Enable/disable the Alpine radio from the live cluster-connection state; fall
+  // back to Local if the session drops while Alpine was selected.
+  function _updateRunTargetGate(state = getClusterState?.() ?? 'disconnected') {
+    const reason = alpineTargetDisabledReason(state)
+    const disabled = !!reason
+    if (runTargetAlpine) runTargetAlpine.disabled = disabled
+    if (runTargetAlpineLabel) {
+      runTargetAlpineLabel.style.opacity = disabled ? '0.5' : '1'
+      runTargetAlpineLabel.style.cursor = disabled ? 'not-allowed' : 'pointer'
+      runTargetAlpineLabel.title = reason || 'Submit this relaxation to the CU Alpine cluster'
+    }
+    if (runTargetHint) runTargetHint.textContent = disabled ? '(connect cluster)' : ''
+    if (disabled && runTargetAlpine?.checked && runTargetLocal) runTargetLocal.checked = true
+  }
+  window.addEventListener('nadoc:cluster-state-change', (e) => _updateRunTargetGate(e.detail?.state))
+  _updateRunTargetGate()
 
   // Health card: simple collapse (starts open).
   healthToggle?.addEventListener('click', () => {
@@ -273,7 +394,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     arrow.classList.toggle('is-collapsed', _collapsed)
     setSectionCollapsed('dynamics', 'md-jobs-panel', _collapsed)
     if (!_collapsed) _onOpen()
-    else _stopMdPrewarm()   // collapsing the panel tears down the background prewarm
+    else { _stopMdPrewarm(); _stopRemotePoll() }   // collapsing tears down background timers
   })
 
   // ── Advanced drawer (collapsible card) ──────────────────────────────────────
@@ -320,8 +441,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (!namdStatusEl) return
     console.log(`[${_ts()}] md-jobs: checking engines`)
     try {
-      const r = await fetch('/api/md/namd-available')
-      const d = await r.json()
+      const d = await api.namdAvailable()
+      if (!d) throw new Error(api.lastErrorMessage() ?? 'namd-available failed')
       console.log(`[${_ts()}] md-jobs: engines response`, d)
 
       _enginesOk = d.available
@@ -355,9 +476,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Job list fetch ─────────────────────────────────────────────────────────
   async function _fetchJobs() {
     try {
-      const r = await fetch('/api/md/jobs')
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      _jobs = await r.json()
+      const jobs = await api.listMdJobs()
+      if (!jobs) throw new Error(api.lastErrorMessage() ?? 'HTTP error')
+      _jobs = jobs
       _jobs.sort((a, b) => b.created_at - a.created_at)
       console.log(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
       if (_fetchFails > 0) { _fetchFails = 0; _checkEngines() }  // reconnected → restore status line
@@ -399,6 +520,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _checkEngines()
     _fetchJobs()
     _startMdPrewarm()
+    _startRemotePoll()
   }
 
   function _isDynamicsTabVisible() {
@@ -555,9 +677,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   async function _fetchDisplayMeta(jobId = _selectedId) {
     if (!jobId) return null
     try {
-      const r = await fetch(`/api/md/jobs/${jobId}/display`)
-      const d = await r.json()
-      if (!r.ok) throw new Error(d?.detail ?? `Server error ${r.status}`)
+      const d = await api.getMdDisplayMeta(jobId)
+      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       _displayMeta = d
       const job = _jobs.find(j => j.job_id === jobId)
       if (job) _renderProductionControls(job, d)
@@ -571,9 +692,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   async function _fetchJobMetrics(jobId = _selectedId) {
     if (!jobId) return []
     try {
-      const r = await fetch(`/api/md/jobs/${jobId}/metrics`)
-      const d = await r.json()
-      if (!r.ok) throw new Error(d?.detail ?? `Server error ${r.status}`)
+      const d = await api.getMdJobMetrics(jobId)
+      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       const records = Array.isArray(d) ? d : []
       _metricsByJob.set(jobId, records)
       if (jobId === _selectedId) {
@@ -761,6 +881,40 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _prewarmTimer = null
     _prewarmKey = null
     mdDisplayController?.stopPrewarm?.()
+  }
+
+  function _startRemotePoll() {
+    if (_remotePollTimer) return
+    _remotePollTimer = setInterval(_maybePollRemote, _MD_REMOTE_POLL_MS)
+  }
+
+  function _stopRemotePoll() {
+    clearInterval(_remotePollTimer)
+    _remotePollTimer = null
+  }
+
+  /** Refresh in-flight Alpine jobs (no live WS push for remote jobs). Cheap no-op
+   *  when nothing is submitted-and-active; mdListSignature keeps the list from
+   *  needlessly rebuilding when the SLURM state hasn't changed. */
+  async function _maybePollRemote() {
+    if (!hasActiveRemoteJob(_jobs)) return
+    await _fetchJobs()
+    // _selectJob early-returns for an unchanged selection, so the selected remote
+    // job's DETAIL (status / cleared error / SLURM state) wouldn't refresh on its
+    // own — re-apply it explicitly.
+    const sel = _jobs.find(j => j.job_id === _selectedId)
+    if (sel && sel.execution_target === 'alpine') _applyJobState(sel)
+    _refreshQueuedWaits()
+  }
+
+  /** Keep queued jobs' "waiting Nm" tooltips fresh without rebuilding the list (which
+   *  would restart other rows' spinners) — mdListSignature is stable while PENDING. */
+  function _refreshQueuedWaits() {
+    if (!listEl) return
+    for (const el of listEl.querySelectorAll('[data-md-queued]')) {
+      const job = _jobs.find(j => j.job_id === el.dataset.mdQueued)
+      if (job && mdIsRemoteQueued(job)) el.title = mdQueueWaitLabel(job)
+    }
   }
 
   function _startMdDisplay() {
@@ -1011,9 +1165,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const label = job ? `${job.design_name} (${job.job_id})` : _selectedId
     if (!window.confirm(`Delete MD job ${label} and all generated files?`)) return
     try {
-      const r = await fetch(`/api/md/jobs/${_selectedId}`, { method: 'DELETE' })
-      const d = await r.json()
-      if (!r.ok) throw new Error(d?.detail ?? `Server error ${r.status}`)
+      const d = await api.deleteMdJob(_selectedId)
+      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       if (_displayJobId === _selectedId) _stopMdDisplay('Native positions restored')
       showToast('MD job deleted', 'ok')
       _selectedId = null
@@ -1074,17 +1227,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
     prodBtn.disabled = true
     try {
-      const r = await fetch(`/api/md/jobs/${_selectedId}/production`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          steps,
-          autostart: true,
-          continue_from_production: !!prodContinueChk?.checked,
-        }),
+      const d = await api.appendMdProduction(_selectedId, {
+        steps,
+        autostart: true,
+        continue_from_production: !!prodContinueChk?.checked,
       })
-      const d = await r.json()
-      if (!r.ok) throw new Error(d?.detail ?? `Server error ${r.status}`)
+      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       showToast(`Production started: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)`, 'ok')
       await _fetchJobs()
       _selectJob(_selectedId)
@@ -1132,6 +1280,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // to toggle (Option 1).  Both are cheap no-ops when nothing applies: _startMdPrewarm
   // is idempotent, and _refreshMdPrewarm opens no socket unless a ready job exists.
   window.addEventListener('nadoc:design-changed', async () => {
+    _metricsCard?.refresh()   // cached twist/curve/bp graphs no longer match the edited design
     await _fetchJobs()
     if (!displayToggle?.checked) _startMdPrewarm()
   })
@@ -1196,6 +1345,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       autostart:      autostartChk?.checked ?? true,
       fast:           fastChk?.checked ?? true,
       design_source_path: _currentPartPath() || null,
+      execution_target: _currentRunTarget(),
+      cluster_name:   _currentRunTarget() === 'alpine' ? 'alpine' : null,
     }
 
     try {
@@ -1217,23 +1368,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
     try {
       console.log(`[${_ts()}] md-jobs: POST /api/md/jobs`)
-      const r = await fetch('/api/md/jobs', {
-        method:  'POST',
-        // Doc header is required: the backend reads the ACTIVE design from this
-        // tab's document session. Without it the default (empty) doc is used and
-        // prep 404s with "No active design."
-        headers: { 'Content-Type': 'application/json', ...docHeaders() },
-        body:    JSON.stringify(payload),
-      })
-
-      console.log(`[${_ts()}] md-jobs: response status=${r.status}`)
-      const job = await r.json()
+      // createMdJob stamps the X-NADOC-Doc header so the backend reads the ACTIVE
+      // design from THIS tab's document (without it the default/empty doc is used
+      // and prep 404s with "No active design"). Returns null on any HTTP error.
+      const job = await api.createMdJob(payload)
       console.log(`[${_ts()}] md-jobs: response body`, job)
 
-      if (!r.ok) {
+      if (!job) {
         // HTTP error (404 = no active design, 400 = engine missing, etc.)
         hideOpProgress()
-        const msg = job?.detail ?? `Server error ${r.status}`
+        const msg = api.lastErrorMessage() ?? 'Server error'
         console.warn(`[${_ts()}] md-jobs: HTTP error: ${msg}`)
         showToast(msg, 'error')
         return
@@ -1252,7 +1396,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       }
 
       console.log(`[${_ts()}] md-jobs: job created OK job_id=${job.job_id} status=${job.status}`)
-      showToast(`Preparing: ${job.job_id}`, 'ok')
+      // Alpine target: prep runs locally, then the review card opens once the
+      // package is built (_maybeOpenAlpineReview watches for the 'queued' state).
+      if (payload.execution_target === 'alpine') {
+        _pendingAlpineReview = job.job_id
+        showToast('Preparing for Alpine — review opens when the package is ready', 'ok')
+      } else {
+        showToast(`Preparing: ${job.job_id}`, 'ok')
+      }
       await _fetchJobs()
       _selectJob(job.job_id)
     } catch (err) {
@@ -1274,10 +1425,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // straight to unrestrained production blew the structure up).
     console.log(`[${_ts()}] md-jobs: start ${_selectedId}`)
     try {
-      const r = await fetch(`/api/md/jobs/${_selectedId}/start`, { method: 'POST' })
-      const d = await r.json()
+      const d = await api.startMdJob(_selectedId)
       console.log(`[${_ts()}] md-jobs: start response`, d)
-      if (!r.ok) throw new Error(d?.detail ?? `Server error ${r.status}`)
+      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       showToast('Start requested', 'ok')
       await _fetchJobs()
       _selectJob(_selectedId)
@@ -1287,12 +1437,41 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   })
 
+  // Once a queued-for-Alpine job finishes preparing, open the submit-review card.
+  // Clears the pending flag on prep failure too so it can't fire on a later run.
+  function _maybeOpenAlpineReview(job) {
+    if (!job || job.job_id !== _pendingAlpineReview) return
+    if (job.status === 'queued') {
+      _pendingAlpineReview = null
+      _submitReview.open(job.job_id)
+    } else if (['failed', 'stopped'].includes(job.status)) {
+      _pendingAlpineReview = null
+    }
+  }
+
+  submitAlpineBtn?.addEventListener('click', () => {
+    if (_selectedId) _submitReview.open(_selectedId)
+  })
+
+  let _resumeHistOpen = false
+  resumeHistToggle?.addEventListener('click', () => {
+    _resumeHistOpen = !_resumeHistOpen
+    if (resumeHistEl) resumeHistEl.style.display = _resumeHistOpen ? '' : 'none'
+    if (resumeHistArrow) resumeHistArrow.textContent = _resumeHistOpen ? '▾' : '▸'
+  })
+
+  // Resume opens the same review card used to submit (in resume mode) so the user
+  // can review/edit resources — e.g. bump the walltime after a promising short run —
+  // before officially resuming from the checkpoint.
+  resumeBtn?.addEventListener('click', () => {
+    if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
+  })
+
   stopBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
     console.log(`[${_ts()}] md-jobs: stop ${_selectedId}`)
     try {
-      const r = await fetch(`/api/md/jobs/${_selectedId}/stop`, { method: 'POST' })
-      const d = await r.json()
+      const d = await api.stopMdJob(_selectedId)
       console.log(`[${_ts()}] md-jobs: stop response`, d)
       showToast('Stop requested', 'warn')
     } catch (err) {
@@ -1368,6 +1547,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       row.appendChild(seeded)
     }
 
+    // Remote (Alpine) badge — SLURM id + partition once submitted, else "Alpine".
+    const remote = remoteJobBadge(job)
+    if (remote) {
+      const rb = document.createElement('span')
+      rb.title = job.slurm_job_id
+        ? `Running on Alpine (SLURM ${job.slurm_job_id})`
+        : 'Targeted at the Alpine cluster'
+      rb.textContent = remote
+      rb.style.cssText = `font-size:9px;color:#58a6ff;border:1px solid #1f4b78;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px`
+      row.appendChild(rb)
+    }
+
     // Timestamp (HH:MM today, else MM-DD HH:MM)
     const ts = document.createElement('span')
     ts.style.cssText = `font-size:10px;color:${_C.dim};flex-shrink:0;font-family:var(--font-mono)`
@@ -1410,13 +1601,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       row.appendChild(fix)
     }
 
-    // Status symbol: spinner while active, else the badge shape (tooltip = label).
-    const sym = mdJobIsActive(job)
-      ? makeSpinner(sb.color, 10)
-      : Object.assign(document.createElement('span'), { textContent: sb.symbol })
+    // Status symbol: a queued (PENDING) remote job gets the hourglass + a live
+    // "waiting Nm" tooltip (NOT a spinner — it isn't running yet); an active job
+    // spins; everything else shows its badge shape (tooltip = label).
+    let sym
+    if (mdIsRemoteQueued(job)) {
+      sym = Object.assign(document.createElement('span'), { textContent: '⧗' })
+      sym.style.color = _C.warn
+      sym.title = mdQueueWaitLabel(job)
+      sym.dataset.mdQueued = job.job_id     // for in-place tooltip refresh on poll
+    } else if (mdJobIsActive(job)) {
+      sym = makeSpinner(sb.color, 10)
+      sym.title = sb.label
+    } else {
+      sym = Object.assign(document.createElement('span'), { textContent: sb.symbol })
+      sym.title = sb.label
+      sym.style.color = sb.color
+    }
     sym.style.flexShrink = '0'
-    sym.title = sb.label
-    if (!mdJobIsActive(job)) sym.style.color = sb.color
     row.appendChild(sym)
 
     return row
@@ -1426,9 +1628,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   async function _openVramFix(jobId) {
     let advice
     try {
-      const r = await fetch(`/api/md/jobs/${jobId}/fix-advice`)
-      advice = await r.json()
-      if (!r.ok) throw new Error(advice?.detail ?? `Server error ${r.status}`)
+      advice = await api.getMdJobFixAdvice(jobId)
+      if (!advice) throw new Error(api.lastErrorMessage() ?? 'Server error')
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: fix-advice failed`, err)
       advice = { failure_kind: 'other', remedy: 'none' }
@@ -1437,22 +1638,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       advice,
       onApply: async (action) => {
         if (action.type === 'retry') {
-          const r = await fetch(`/api/md/jobs/${jobId}/start`, {
-            method: 'POST', headers: { ...docHeaders() },
-          })
-          if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail ?? `Server error ${r.status}`)
+          const d = await api.startMdJob(jobId)
+          if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
           await _fetchJobs()
           _selectJob(jobId)
           return
         }
         // refit → a fresh job with adjusted settings
-        const r = await fetch(`/api/md/jobs/${jobId}/refit`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...docHeaders() },
-          body: JSON.stringify(action.body),
-        })
-        const d = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(d?.detail ?? `Server error ${r.status}`)
+        const d = await api.refitMdJob(jobId, action.body)
+        if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
         await _fetchJobs()
         if (d?.job_id) _selectJob(d.job_id)
       },
@@ -1484,9 +1678,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (!job || !_TERMINAL_STATUSES.has(job.status)) {
       _openWs(jobId)
     } else {
-      fetch(`/api/md/jobs/${jobId}`)
-        .then(r => r.json())
+      api.getMdJob(jobId)
         .then(j => {
+          if (!j) return
           console.log(`[${_ts()}] md-jobs: REST refresh for completed job`, j.status)
           _applyJobState(j)
         })
@@ -1528,9 +1722,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       console.log(`[${_ts()}] md-jobs: WS closed code=${evt.code}`)
       _ws = null
       if (_selectedId) {
-        fetch(`/api/md/jobs/${_selectedId}`)
-          .then(r => r.json())
+        api.getMdJob(_selectedId)
           .then(job => {
+            if (!job) return
             const idx = _jobs.findIndex(j => j.job_id === job.job_id)
             if (idx >= 0) _jobs[idx] = job; else _jobs.unshift(job)
             _renderList()
@@ -1557,24 +1751,60 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _applyJobState(job, liveMetrics) {
     if (!job) return
 
+    const awaitingSubmit = mdRemoteAwaitingSubmit(job)
     if (statusEl) {
       const seg = job.segments?.[job.current_segment_idx]
       const stageLabel = seg ? `${_timelineStage(seg)} · ${seg.percent}%` : ''
       const segsTotal  = job.segments?.length ?? 0
       const segsDone   = job.segments?.filter(s => s.status === 'done').length ?? 0
-      statusEl.textContent = _statusLabel(job.status, segsDone, segsTotal, stageLabel)
-      statusEl.style.color = _statusColor(job.status)
+      if (awaitingSubmit) {
+        // Prepared for Alpine but not on SLURM yet — show "ready to submit" (or the
+        // last submit error), NOT the misleading local "Queued — ready to start".
+        statusEl.textContent = job.error
+          ? 'Submit to Alpine failed — retry below'
+          : 'Prepared — submit to Alpine below'
+        statusEl.style.color = job.error ? _C.err : _C.accent
+      } else if (mdIsRemoteQueued(job)) {
+        // Waiting in the SLURM queue — show how long, not a generic "Queued".
+        statusEl.textContent = `⧗ ${mdQueueWaitLabel(job)}${job.slurm_job_id ? ` (SLURM ${job.slurm_job_id})` : ''}`
+        statusEl.style.color = _C.warn
+      } else {
+        statusEl.textContent = _statusLabel(job.status, segsDone, segsTotal, stageLabel)
+        statusEl.style.color = _statusColor(job.status)
+      }
     }
 
-    if (startBtn) startBtn.style.display = ['queued', 'stopped', 'failed'].includes(job.status) ? '' : 'none'
+    const isAlpine = job.execution_target === 'alpine'
+    // Local "Start" only applies to local jobs; an Alpine job is launched via Submit-to-Alpine.
+    if (startBtn) startBtn.style.display = (!isAlpine && ['queued', 'stopped', 'failed'].includes(job.status)) ? '' : 'none'
     if (stopBtn) stopBtn.style.display = (job.status === 'running') ? '' : 'none'
+    // Submit-to-Alpine: a prepared remote job not yet handed to SLURM.
+    if (submitAlpineBtn) {
+      const canSubmit = isAlpine && !job.slurm_job_id && ['queued', 'stopped', 'failed'].includes(job.status)
+      submitAlpineBtn.style.display = canSubmit ? '' : 'none'
+    }
+    // Resume: a timed-out remote job, one-click continue from its last checkpoint.
+    if (resumeBtn) {
+      const rs = mdResumeButtonState(job, getClusterState?.() ?? 'disconnected')
+      resumeBtn.style.display = rs.show ? '' : 'none'
+      resumeBtn.disabled = rs.disabled
+      resumeBtn.style.opacity = rs.disabled ? '0.5' : ''
+      resumeBtn.style.cursor = rs.disabled ? 'not-allowed' : 'pointer'
+      resumeBtn.title = rs.reason
+    }
+    _renderResumeHistory(job)
+    _maybeOpenAlpineReview(job)
     if (archiveBtn) {
       // Archive/unarchive only for non-running jobs; label tracks archived state.
       archiveBtn.style.display = job.status === 'running' ? 'none' : ''
       archiveBtn.textContent = job.archived ? 'Unarchive' : 'Archive'
     }
 
-    _showDetailError(['failed', 'stopped'].includes(job.status) ? (job.error ?? 'Unknown error') : null)
+    // Show the error box for terminal failures AND for a failed Alpine submit
+    // (queued-but-errored) so the rejection reason is visible with the retry button.
+    const showErr = ['failed', 'stopped'].includes(job.status) || (awaitingSubmit && job.error)
+      || (job.resumable && job.error)   // timed-out: show the "click Resume" message
+    _showDetailError(showErr ? (job.error ?? 'Unknown error') : null)
     _renderProgress(job, liveMetrics)
     _renderTimeline(job)
     _renderMetrics(job, liveMetrics)
@@ -1583,6 +1813,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (_TERMINAL_STATUSES.has(job.status) && _displayMeta?.job_id !== job.job_id) {
       _fetchDisplayMeta(job.job_id)
     }
+  }
+
+  function _renderResumeHistory(job) {
+    if (!resumeHistWrap) return
+    const rows = mdResumeHistoryRows(job)
+    if (!rows.length) { resumeHistWrap.style.display = 'none'; return }
+    resumeHistWrap.style.display = ''
+    if (resumeHistCount) resumeHistCount.textContent = String(rows.length)
+    if (resumeHistEl) resumeHistEl.textContent = rows.join('\n')
   }
 
   function _showDetailError(msg) {
@@ -2144,6 +2383,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       default:           return status
     }
   }
+
+  // Graphs & Metrics card — a child module reading this panel's job selection.
+  const _metricsCard = initMdMetricsCard({
+    getSelectedJob: _selectedJob,
+    getJobs: () => _jobs,
+  })
 
   // ── Init ───────────────────────────────────────────────────────────────────
   _setDisplayStatus('Off', _C.dim)

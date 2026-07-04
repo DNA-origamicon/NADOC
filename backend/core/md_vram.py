@@ -101,6 +101,46 @@ def classify_failure_log_file(path: Path) -> str:
     return classify_failure_log(_read_log_tail(path))
 
 
+# Log lines that carry the human-meaningful *cause* of a failure, most-specific
+# first: a NAMD ``FATAL ERROR:`` wins over a generic ``ERROR:`` even if the latter
+# appears earlier.  Covers both NAMD-level (FATAL ERROR / abort) and SLURM-level
+# (time-limit / OOM cancellation, ``slurmstepd``/``srun`` errors, a ``set -u``
+# unbound-variable abort in the job header).
+_CAUSE_LINE_PATS = (
+    re.compile(r"^.*FATAL ERROR:.*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^.*DUE TO (?:TIME LIMIT|NODE FAILURE|PREEMPTION|JOB REQUEUE).*$",
+               re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^.*(?:oom-kill|out of memory|outofmemory).*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^.*slurmstepd:\s*error:.*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^.*srun:\s*error:.*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^.*unbound variable.*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^.*\bABORT(?:ING)?\b.*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^.*\bERROR:.*$", re.IGNORECASE | re.MULTILINE),
+)
+
+_MAX_EXCERPT = 300
+
+
+def extract_error_line(text: str) -> Optional[str]:
+    """Most-informative single error line from a NAMD/SLURM log, or None.
+
+    Scans known fatal markers most-specific-first (NAMD ``FATAL ERROR:``, SLURM
+    time-limit / OOM cancellations, ``slurmstepd``/``srun`` errors, a ``set -u``
+    unbound-variable abort, then a generic ``ERROR:``).  Returned trimmed + capped
+    so it fits a one-line status message on the frontend.
+    """
+    for pat in _CAUSE_LINE_PATS:
+        m = pat.search(text or "")
+        if m:
+            return m.group(0).strip()[:_MAX_EXCERPT]
+    return None
+
+
+def extract_error_line_from_file(path: Path) -> Optional[str]:
+    """:func:`extract_error_line` over a log *file* (tail only)."""
+    return extract_error_line(_read_log_tail(path))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # §2  VRAM DETECTION + MODEL
 # ══════════════════════════════════════════════════════════════════════════════

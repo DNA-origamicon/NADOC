@@ -23,6 +23,34 @@ from pathlib import Path
 import numpy as np
 
 
+def _select_p_order(u, chain_map, run_dir, coordinate_path):
+    """Choose the DNA-P → (helix, bp, dir) order for a NAMD PSF/DCD Universe.
+
+    Prefer the PSF-segid map (the package's ``charge_audit.json``): CHARMM psfgen
+    collapses NADOC's multi-char chain ids (``A``, ``AA``, ``AB``, …) into the
+    reference PDB's single-char ``chainID`` field, so the PDB-key path
+    (``build_p_pdb_order``) collides across strands and DROPS atoms for many-strand
+    designs.  That makes ``len(p_order) != `` the universe DNA-P count, which the
+    strict per-frame length guard in ``md_rmsf`` / the trajectory extractor treats as
+    "no usable frames" — silently voiding the flexibility map.  Fall back to the
+    reference PDB only when the package has no ``charge_audit`` or the segid map is
+    incomplete.  Mirrors ws.py's live-display NAMD branch.  Returns ``(p_order,
+    source)`` where ``source`` is ``"segid"`` or ``"reference-pdb"``.
+    """
+    from backend.core.atomistic_to_nadoc import (
+        build_p_order_from_universe,
+        build_p_pdb_order,
+        load_segid_chain_map,
+    )
+    seg2chain = load_segid_chain_map(Path(run_dir))
+    if seg2chain:
+        cand, n_unmapped = build_p_order_from_universe(u, chain_map, seg2chain)
+        if n_unmapped == 0 and cand:
+            return cand, "segid"
+    pdb_text = Path(coordinate_path).read_text(errors="replace")
+    return build_p_pdb_order(pdb_text, chain_map), "reference-pdb"
+
+
 def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design,
                         with_atoms: bool = False) -> dict:
     """Open the PSF + DCD(s), build the P-atom → (helix,bp,dir) order, design
@@ -39,15 +67,32 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         _GRO_DNA_RESNAMES,
         _extract_universe,
         build_chain_map,
-        build_p_pdb_order,
         centroid_offset,
         md_rigid_reference,
     )
 
     model = build_atomistic_model(design)
     cm = build_chain_map(model)
-    pdb_text = Path(coordinate_path).read_text(errors="replace")
-    p_order = build_p_pdb_order(pdb_text, cm)
+
+    paths = [str(p) for p in trajectory_paths]
+    u = mda.Universe(str(topology_path), paths if len(paths) > 1 else paths[0])
+    # NOTE: no whole-system ``mda_unwrap`` transformation.  It make-wholes ALL ~1 M
+    # atoms (incl. solvent) on EVERY frame seek — ~180 s/frame for a solvated origami,
+    # the dominant cost of the flex map / trajectory.  It is redundant here: both
+    # per-frame extractors already reconstruct DNA positions from the RAW (wrapped)
+    # coordinates — the bead path via the vectorised ``_unwrap_min_image`` + the
+    # design-equilibrium minimum-image correction, and the heavy-atom path via
+    # residue-local ``minimum_image(atom − its P)``.  The only thing the global unwrap
+    # affected was the P→C1' base-normal vector for a nucleotide split across a
+    # periodic boundary, which ``_extract_md_nadoc_frame`` now handles with a direct
+    # minimum-image on that 2-atom vector.  (Equivalence to the unwrapped path is
+    # asserted to ~1e-8 nm by test_md_extraction_matches_unwrap_reference, gated on
+    # NADOC_RUN_HEAVY_MD_FIXTURE since the reference side pays the ~180 s/frame unwrap.)
+
+    # P-order = the design (helix, bp, dir) key per trajectory DNA P atom.
+    n_dna_p = len(u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES)))
+    p_order, p_order_source = _select_p_order(
+        u, cm, Path(topology_path).parent, coordinate_path)
 
     # Equilibrium P-atom reference + rigid mask for the Kabsch alignment (shared with
     # the live-display ws handler; handles crossover extra-base "__xb__" inserts).
@@ -59,16 +104,6 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         eq_centroid = eq_positions[rigid_mask].mean(axis=0)
         eq_centered = eq_positions - eq_centroid
         eq_centered[~rigid_mask] = 0.0
-
-    paths = [str(p) for p in trajectory_paths]
-    u = mda.Universe(str(topology_path), paths if len(paths) > 1 else paths[0])
-    # Best-effort PBC make-whole (mirrors ws._try_unwrap).
-    try:
-        from MDAnalysis.transformations import unwrap as mda_unwrap  # type: ignore
-        if hasattr(u.atoms, "bonds") and len(u.atoms.bonds) > 0:
-            u.trajectory.add_transformations(mda_unwrap(u.atoms))
-    except Exception:
-        pass
 
     n_frames = len(u.trajectory)
     beads_0 = _extract_universe(u, 0, p_order)
@@ -112,13 +147,20 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         "rigid_mask": rigid_mask, "eq_centroid": eq_centroid, "eq_centered": eq_centered,
         "c1p_idx": c1p_idx, "heavy_idx": heavy_idx, "atom_meta": atom_meta,
         "R_prev": None, "prev_frame_idx": -999,
+        "n_dna_p": n_dna_p, "p_order_source": p_order_source,
     }
 
 
-def _extract_md_nadoc_frame(ctx: dict, frame_idx: int):
+def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False):
     """Per-frame DNA P-atom positions (nm, NADOC frame) + base normals for one DCD
     frame. Ported from ws.py ``_seek_sync`` (nadoc path). Returns ``(p_nm, normals)``
-    where ``p_nm`` is (N,3) and ``normals`` is (N,3) or ``None``."""
+    where ``p_nm`` is (N,3) and ``normals`` is (N,3) or ``None``.
+
+    ``with_c1p=True`` additionally returns the per-nucleotide **aligned C1' positions**
+    (nm, same NADOC frame as ``p_nm``) as a third element — the sugar-ring anchor used
+    as a native Watson-Crick base-pairing proxy (C1'…C1' distance) by
+    :func:`md_metric_series`.  It is the P position plus the (min-imaged, Kabsch-rotated)
+    P→C1' vector already computed for the base normal, so it costs nothing extra."""
     from backend.core.atomistic_to_nadoc import _GRO_DNA_RESNAMES, _unwrap_min_image
 
     u = ctx["universe"]
@@ -206,15 +248,29 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int):
     # Base normals (P→C1') rotated into the aligned frame.
     c1p_idx = ctx.get("c1p_idx")
     normals = None
+    c1p_nm = None
     if c1p_idx is not None and np.all(c1p_idx >= 0) and len(c1p_idx) == len(p_order):
         c1p_raw = u.atoms[c1p_idx].positions / 10.0
         dn = c1p_raw - p_raw
+        # Minimum-image the intra-nucleotide P→C1' vector: without the (removed)
+        # whole-system unwrap a residue straddling a periodic boundary would give a
+        # box-length spurious dn.  P and C1' are ~0.5 nm apart, so the nearest image
+        # is always the true bond.  On already-whole coords this is a no-op.
+        if dims is not None and dims[0] > 0:
+            box_nm = dims[:3] / 10.0
+            for _d in range(3):
+                if box_nm[_d] > 0:
+                    dn[:, _d] -= np.round(dn[:, _d] / box_nm[_d]) * box_nm[_d]
         if R_align is not None:
             dn = dn @ R_align.T
+        # Aligned C1' = aligned P + the rotated P→C1' vector (same frame as p_nm).
+        c1p_nm = p_nm + dn
         norms = np.linalg.norm(dn, axis=1, keepdims=True)
         norms = np.where(norms > 1e-6, norms, 1.0)
         normals = dn / norms
 
+    if with_c1p:
+        return p_nm, normals, c1p_nm
     return p_nm, normals
 
 
@@ -409,8 +465,10 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
     p_order = ctx["p_order"]
     n = ctx["n_frames"]
     n_keys = len(p_order)
+    n_dna_p = ctx.get("n_dna_p", n_keys)
     if n <= 0 or n_keys == 0:
-        return {"ready": False, "n_frames": 0, "positions": []}
+        return {"ready": False, "n_frames": 0, "positions": [],
+                "reason": "no trajectory frames or no mapped nucleotides"}
 
     idxs = list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
 
@@ -431,7 +489,15 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
             have_norm = True
         used += 1
     if used == 0:
-        return {"ready": False, "n_frames": 0, "positions": []}
+        reason = "no usable trajectory frames"
+        if n_dna_p != n_keys:
+            reason = (
+                f"design/topology atom mismatch: the loaded design maps {n_keys} "
+                f"nucleotides but the simulated structure has {n_dna_p} DNA phosphate "
+                f"atoms (P-order source: {ctx.get('p_order_source', '?')}). Load the "
+                "design this job was prepared from."
+            )
+        return {"ready": False, "n_frames": 0, "positions": [], "reason": reason}
 
     mean_pos = sum_pos / used
     msd = sum_sq / used - np.einsum("ij,ij->i", mean_pos, mean_pos)
@@ -464,6 +530,151 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
         "min_rmsf": float(rmsf.min()),
         "max_rmsf": float(rmsf.max()),
         "mean_rmsf": float(rmsf.mean()),
+    }
+
+
+# Native-MD Watson-Crick pairing cutoff: two designed-partner nucleotides count as
+# "paired" when their C1'…C1' distance is within this (nm).  The MD codebase uses the
+# calibrated C1' distance as the primary base-pairing metric (WC heavy-atom distances
+# are ~25% inflated by the idealized build templates — see feedback_wc_calibration), so
+# the MD "Graphs and Metrics" base-pairing series is a C1'…C1' fraction, not the oxDNA
+# base-site fraction.  ``C1_PAIRED_MAX_DEFAULT`` is 12.0 Å; here in nm.
+from backend.core.md_health import C1_PAIRED_MAX_DEFAULT as _C1_PAIRED_MAX_ANG  # noqa: E402
+MD_BP_CUTOFF_NM = _C1_PAIRED_MAX_ANG / 10.0
+
+
+def count_md_frames(segments) -> int:
+    """Total DCD frame count across every segment (DCD header only, no coordinate
+    read) — sizes the "Graphs and Metrics" ETA/progress bar without a full parse.
+    Mirrors :func:`oxdna_health.count_trajectory_frames` for the MD side."""
+    from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
+
+    total = 0
+    for _name, _kind, dcd in segments:
+        if not Path(dcd).exists():
+            continue
+        try:
+            total += len(DCDReader(str(dcd)))
+        except Exception:
+            pass
+    return total
+
+
+def md_metric_series(topology_path, segments, coordinate_path, design,
+                     analytic_reference, *, n_slices: int = 0, on_frame=None) -> dict:
+    """SINGLE-PASS per-frame twist, curvature AND base-pairing over a NAMD run — the
+    MD analogue of :func:`oxdna_health.production_metric_series`, and the compute behind
+    the MD "Graphs and Metrics" card.
+
+    Reads every written DCD frame ONCE (the frame seek + DNA reconstruction dominates
+    the cost) and, per frame, measures: differential bundle twist and curvature
+    (``measure_bundle_* − analytic``) on the reference dsDNA core, and the base-pairing
+    fraction — the fraction of designed (helix, bp) columns whose FORWARD/REVERSE C1'
+    atoms are within :data:`MD_BP_CUTOFF_NM` (the native MD WC proxy; oxDNA uses a base-
+    site distance instead, so the two engines' pairing curves are comparable in *trend*
+    but not in absolute cutoff).  Twist/curvature geometry reuses the engine-agnostic
+    ``oxdna_health`` bundle measures verbatim; only the frame source (NAMD PSF/DCD via
+    ``_extract_md_nadoc_frame``) and the pairing metric (C1'…C1') differ.
+
+    Accumulates the time-mean structure for the spatial twist/curvature profiles (made
+    differential vs the analytic profiles) and each pair's formed-frame count for the
+    base-pairing spatial profile.  ``on_frame()`` fires once per measured frame so a
+    caller can drive an ETA bar.  Returns the SAME payload shape as
+    ``production_metric_series`` (per-metric ``{temporal, spatial}``); ``ready`` is
+    False on no frames / fewer than two helices / an unmappable topology."""
+    from backend.core.oxdna_health import (
+        _filter_to_reference_core,
+        base_pairing_spatial_profile,
+        differential_profile,
+        measure_bundle_curvature,
+        measure_bundle_curvature_profile,
+        measure_bundle_twist,
+        measure_bundle_twist_profile,
+        twist_series_stats,
+    )
+
+    seg_paths = [s[2] for s in segments]
+    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design)
+    p_order = ctx["p_order"]
+    n = ctx["n_frames"]
+    if n <= 0 or not p_order:
+        return {"ready": False, "n_frames": 0}
+    keys = [(k[0], k[1], k[2]) for k in p_order]
+    n_keys = len(keys)
+
+    analytic_twist = measure_bundle_twist(analytic_reference, n_slices=n_slices)
+    analytic_curv = measure_bundle_curvature(analytic_reference, n_slices=n_slices)
+
+    # FORWARD/REVERSE index of each designed (helix, bp) column, for the C1' pairing test.
+    fwd_idx = {(k[0], k[1]): i for i, k in enumerate(keys) if k[2] == "FORWARD"}
+    rev_idx = {(k[0], k[1]): i for i, k in enumerate(keys) if k[2] == "REVERSE"}
+    designed = sorted(set(fwd_idx) & set(rev_idx))
+    n_designed = len(designed)
+
+    twist_pf: list[float] = []
+    curv_pf: list[float] = []
+    bp_pf: list[float] = []
+    acc: dict[tuple, list] = {}                 # key → [bb xyz, …] for the mean structure
+    formed: dict[tuple, int] = {}               # (helix,bp) → frames the pair was within cutoff
+    total_pair: dict[tuple, int] = {}           # (helix,bp) → frames the pair was measured
+    n_frames = 0
+    for idx in range(n):
+        p_nm, _normals, c1p_nm = _extract_md_nadoc_frame(ctx, idx, with_c1p=True)
+        if p_nm is None or len(p_nm) != n_keys:
+            continue
+        frame_positions = []
+        for i, key in enumerate(keys):
+            bb = p_nm[i]
+            frame_positions.append({"helix_id": key[0], "bp_index": key[1],
+                                    "direction": key[2], "backbone_position": bb})
+            acc.setdefault(key, []).append(bb)
+        core = _filter_to_reference_core(frame_positions, analytic_reference)
+        try:
+            twist_pf.append(measure_bundle_twist(core, n_slices=n_slices) - analytic_twist)
+            curv_pf.append(measure_bundle_curvature(core, n_slices=n_slices) - analytic_curv)
+        except ValueError:
+            continue                            # degenerate frame (too few helices) — skip
+        if c1p_nm is not None and designed:
+            n_formed = 0
+            for hb in designed:
+                d = float(np.linalg.norm(c1p_nm[fwd_idx[hb]] - c1p_nm[rev_idx[hb]]))
+                total_pair[hb] = total_pair.get(hb, 0) + 1
+                if d <= MD_BP_CUTOFF_NM:
+                    formed[hb] = formed.get(hb, 0) + 1
+                    n_formed += 1
+            bp_pf.append(n_formed / len(designed))
+        else:
+            bp_pf.append(0.0)
+        n_frames += 1
+        if on_frame is not None:
+            on_frame()
+
+    if n_frames == 0 or not twist_pf:
+        return {"ready": False, "n_frames": 0}
+
+    mean_positions = [{"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+                       "backbone_position": np.mean(v, axis=0)} for k, v in acc.items()]
+    mean_core = _filter_to_reference_core(mean_positions, analytic_reference)
+    twist_sp = differential_profile(measure_bundle_twist_profile(mean_core, n_slices=n_slices),
+                                    measure_bundle_twist_profile(analytic_reference, n_slices=n_slices))
+    curv_sp = differential_profile(measure_bundle_curvature_profile(mean_core, n_slices=n_slices),
+                                   measure_bundle_curvature_profile(analytic_reference, n_slices=n_slices))
+    pair_frac = {k: formed.get(k, 0) / total_pair[k] for k in total_pair}
+    bp_sp = base_pairing_spatial_profile(pair_frac, mean_positions, n_slices=n_slices)
+
+    return {
+        "ready": True, "n_frames": n_frames,
+        "twist": {"temporal": {"per_frame": [round(x, 3) for x in twist_pf],
+                               "stats": twist_series_stats(twist_pf),
+                               "analytic": round(analytic_twist, 3)},
+                  "spatial": twist_sp},
+        "curvature": {"temporal": {"per_frame": [round(x, 4) for x in curv_pf],
+                                   "stats": twist_series_stats(curv_pf),
+                                   "analytic": round(analytic_curv, 4)},
+                      "spatial": curv_sp},
+        "base_pairing": {"temporal": {"per_frame": [round(x, 4) for x in bp_pf],
+                                      "n_designed": n_designed},
+                         "spatial": bp_sp},
     }
 
 

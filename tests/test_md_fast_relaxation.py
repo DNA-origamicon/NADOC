@@ -1,6 +1,8 @@
 """Fast-relaxation lever: HMR PSF + GPU-resident + 4 fs (capped-box NPT speedup)."""
 from pathlib import Path
 
+import pytest
+
 import backend.core.md_protocols as M
 
 # Minimal PSF: one DNA carbon with 4 H + one TIP3 water (O + 1 H shown).
@@ -100,3 +102,23 @@ def test_fast_mode_halves_steps_to_hold_ns_per_stage():
     slow_total = sum(s.steps for s in slow)
     fast_total = sum(s.steps for s in fast)
     assert abs(fast_total - slow_total / 2) / slow_total < 0.01
+
+
+def test_base_name_stem_ignores_hmr_sibling(tmp_path: Path):
+    """Regression: a package ships both {stem}.psf and {stem}_hmr.psf; the base
+    stem must be derived from the non-_hmr file regardless of glob order, else
+    downstream "{name_stem}.pdb" lookups open a nonexistent "{stem}_hmr.pdb"."""
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    # Write the _hmr sibling FIRST so a naive glob could return it first.
+    (pkg / "2hb_noT_hmr.psf").write_text("hmr")
+    (pkg / "2hb_noT.psf").write_text("base")
+    assert M._base_name_stem(pkg) == "2hb_noT"
+
+
+def test_base_name_stem_raises_without_base(tmp_path: Path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "x_hmr.psf").write_text("hmr")   # only a derived psf, no base
+    with pytest.raises(RuntimeError):
+        M._base_name_stem(pkg)

@@ -57,6 +57,18 @@ server/runner death. Three layers in `namd_runner.py`:
 - **Orphan adoption.** A NAMD that outlived its orchestrator (dev-server reload —
   it runs with `start_new_session=True`) is detected via `/proc`
   (`_segment_process_running`) and *waited on* rather than duplicated.
+  **STOP-KILL BUG (fixed 2026-07-03):** an adopted orphan's PID is never recorded in
+  `_ACTIVE_PIDS` (the new worker only `_wait_for_segment_process`es it), so the old
+  `stop_job` path-A killed `_ACTIVE_PIDS.get(job_id)` == `None` → it cancelled the
+  wait, flipped the job to `stopped` on disk, and returned True while NAMD kept
+  running on the GPU (orphaned to `systemd --user`). Symptom: Stop "does nothing",
+  job shows stopped but a `namd3 …<seg>.conf` process is still live + `namd_pid` never
+  cleared. Fix: `stop_job` now resolves the kill PID from `_ACTIVE_PIDS` → `_external_pid`
+  (self-verifying /proc scan by conf name — catches the adopted orphan) → persisted
+  `namd_pid`, and **always** kills the found process AND cancels the runner task,
+  regardless of on-disk status (so a retry after a half-stop still kills). Cancel is
+  issued *before* the kill so `CancelledError` beats the wait-loop's "ended without
+  completing" FAILED check. Regression test: `TestOrphanStop::test_stop_adopted_orphan_kills_via_proc_scan`.
 - **Auto-resume supervisor.** `resume_interrupted_jobs(workspace)` relaunches any
   job persisted as `running` with no live process and `user_stopped=False`.
   Called on startup AND every 30 s by `_md_supervisor_loop` in `main.py` lifespan.

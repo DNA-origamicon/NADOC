@@ -445,6 +445,7 @@ def test_namd_package_includes_identity_sidecars():
     prefix = f"{name}_namd_complete/"
     with zipfile.ZipFile(BytesIO(blob)) as zf:
         names = set(zf.namelist())
+        launch = zf.read(prefix + "launch.sh").decode()
     assert prefix + f"{name}.identity.json" in names
     assert prefix + f"{name}.identity.tsv" in names
     assert prefix + f"{name}.design_maps.json" in names
@@ -454,6 +455,9 @@ def test_namd_package_includes_identity_sidecars():
     assert prefix + f"{name}.stacking.tsv" in names
     assert prefix + "restraints/restraints_dry_implicit_combined.extrabonds" in names
     assert prefix + "restraints/restraints_summary.json" in names
+    assert 'NCPU="${NAMD_THREADS:-' in launch
+    assert 'DEVICES="${NAMD_DEVICES:-}"' in launch
+    assert '"+setcpuaffinity"' in launch
 
 
 def test_pdb_non_std_bonds_link_record():
