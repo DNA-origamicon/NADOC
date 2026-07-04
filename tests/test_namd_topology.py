@@ -163,3 +163,91 @@ def test_write_segment_pdbs_unique_segids_and_aligned_resids(tmp_path) -> None:
                 resids.add(ln[22:26].strip())
         patch_targets = {str(r) for r in range(s["first_resid"], s["last_resid"] + 1)}
         assert patch_targets <= resids, f"{s['segid']}: patch range escapes PDB resids"
+
+
+# ── crossover extra bases thread inline in the psfgen residue numbering ────────
+#   psfgen bonds residues in seq_num order.  _build_extra_base_atoms appends the
+#   inserts at the END of each chain's range; without _thread_extra_bases_inline
+#   psfgen would bond the last insert of one crossover to the first insert of the
+#   NEXT (a 50 Å junk O3'→P bond) instead of prev_real → eb → eb → next_real.
+
+def _routed_6hb_with_extra(sequence="TT"):
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.core.models import LatticeType
+    from tests.conftest import SIX_HB_CELLS
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=True)
+        hb.full_autostaple()
+        d = design_state.get_or_404().model_copy(deep=True)
+    for x in d.crossovers:
+        x.extra_bases = sequence
+    return d
+
+
+def test_extra_bases_thread_inline_in_seq_num() -> None:
+    """Every insert sits immediately after its source-flank nucleotide in the
+    chain's seq_num order (insert.seq_num == flank.seq_num + k + 1), NOT clustered
+    at the chain tail.  Can-go-red: without _thread_extra_bases_inline the inserts
+    keep their end-appended seq_num far past every real residue."""
+    from collections import defaultdict
+
+    from backend.core.atomistic import build_atomistic_model
+
+    design = _routed_6hb_with_extra("TT")
+    model = build_atomistic_model(design)
+
+    # (chain, helix, bp, dir) → seq_num for the real (non-insert) residues.
+    real_seq: dict[tuple, int] = {}
+    inserts: list = []
+    for a in model.atoms:
+        if getattr(a, "crossover_id", None) is not None:
+            inserts.append(a)
+        else:
+            real_seq[(a.chain_id, a.helix_id, a.bp_index, a.direction)] = a.seq_num
+    assert inserts, "design should have extra-base inserts"
+
+    # Collapse to one entry per insert residue.
+    by_res: dict[tuple, "object"] = {}
+    for a in inserts:
+        by_res.setdefault((a.chain_id, a.crossover_id, a.extra_base_k), a)
+
+    checked = 0
+    for (chain, _xo, k), a in by_res.items():
+        flank = real_seq.get((chain, a.helix_id, a.bp_index, a.direction))
+        if flank is None:      # ambiguous flank (looped helix) — left at tail by design
+            continue
+        assert a.seq_num == flank + k + 1, (
+            f"insert k={k} at seq {a.seq_num} not inline after flank seq {flank}")
+        checked += 1
+    assert checked > 1, "expected several inline-threaded inserts to verify"
+
+
+@pytest.mark.skipif(not _has_psfgen(), reason="psfgen is not installed")
+def test_extra_base_junction_backbone_bonds_are_sane(tmp_path) -> None:
+    """A full CHARMM psfgen topology of an extra-base design (ideal geometry) has NO
+    stretched backbone bond.  Can-go-red: without inline threading the inserts bond
+    cross-crossover, producing tens-of-Å O3'→P junk bonds; with it every bond is
+    canonical (< 3 Å).  Guards the whole seq_num → psfgen connectivity chain."""
+    import numpy as np
+
+    from backend.core.atomistic import build_atomistic_model
+
+    design = _routed_6hb_with_extra("TT")
+    model = build_atomistic_model(design)
+    build = build_charmm_psfgen_topology(design, atomistic_model=model)
+    assert build.metadata["audit"]["passed"]
+
+    mda = pytest.importorskip("MDAnalysis")
+    import warnings
+    (tmp_path / "t.psf").write_text(build.psf_text)
+    (tmp_path / "t.pdb").write_text(build.pdb_text)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        u = mda.Universe(str(tmp_path / "t.psf"), str(tmp_path / "t.pdb"))
+        lengths = np.asarray(u.bonds.bonds())
+    assert lengths.max() < 3.0, (
+        f"a backbone bond is stretched to {lengths.max():.1f} Å — extra-base inserts "
+        "are not threaded inline in the psfgen residue order")

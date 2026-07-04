@@ -1549,6 +1549,15 @@ def build_atomistic_model(
         xb_pos_override    = xb_pos_override,
     )
 
+    # ── Thread extra-base inserts inline in the per-chain residue numbering ────
+    # _build_extra_base_atoms appends the inserts at the END of each chain's
+    # seq_num range.  The psfgen topology writer bonds residues in seq_num order,
+    # so end-appended inserts get threaded prev_real → eb → eb → next-crossover's
+    # eb (a 55 Å junk bond), instead of prev_real → eb → eb → next_real at the
+    # actual junction.  Renumber every chain so each insert sits immediately after
+    # its source-flank nucleotide (see _thread_extra_bases_inline).
+    _thread_extra_bases_inline(atoms)
+
     # ── DISPLAY-ONLY: close the sequential backbone (relaxed-frame reconstruction) ─
     # oxDNA's per-nucleotide CG frames do NOT enforce all-atom backbone continuity,
     # so reconstructing consecutive nucleotides leaves the O3′(i)→P(i+1) stick
@@ -1573,6 +1582,91 @@ def build_atomistic_model(
     if include_proteins:
         model = _append_protein_atoms(model, design)
     return model
+
+
+def _thread_extra_bases_inline(atoms: list[Atom]) -> None:
+    """Re-number per-chain ``seq_num`` so crossover extra-base inserts sit inline in
+    the strand, immediately after their source-flank nucleotide, in-place.
+
+    ``_build_extra_base_atoms`` appends every insert to the END of its chain's
+    ``seq_num`` range.  Consumers that rely on ``seq_num`` order to define backbone
+    connectivity — the CHARMM psfgen topology builder above all — then bond the
+    inserts as one contiguous run at the chain tail (``prev_real → eb → eb → the
+    next crossover's eb``), producing wildly stretched O3′→P bonds between inserts
+    that belong to different junctions.  Threading them inline restores
+    ``prev_real → eb… → next_real`` at each real junction.
+
+    Each insert atom carries its source (owning, 3′) flank nucleotide's
+    ``(helix_id, bp_index, direction)`` (set by ``_build_extra_base_atoms``); the
+    insert is placed right after the real residue with that key, ordered by
+    ``extra_base_k``.  An insert whose flank can't be resolved uniquely (e.g. a
+    looped helix where ``(helix, bp, dir)`` is not unique) is left at the chain
+    tail — the same position as before, so no regression for that case.
+
+    Physical-layer only: touches ``seq_num`` (a residue counter), never topology.
+    """
+    from collections import defaultdict
+
+    # residue key: real → ("r", seq_num); insert → ("x", crossover_id, extra_base_k)
+    def _rkey(a: Atom):
+        if getattr(a, "crossover_id", None) is not None:
+            return ("x", a.crossover_id, a.extra_base_k)
+        return ("r", a.seq_num)
+
+    by_chain: dict[str, list[Atom]] = defaultdict(list)
+    for a in atoms:
+        by_chain[a.chain_id].append(a)
+
+    for chain_atoms in by_chain.values():
+        # Group this chain's atoms into residues.
+        residues: dict[tuple, list[Atom]] = defaultdict(list)
+        for a in chain_atoms:
+            residues[_rkey(a)].append(a)
+
+        real_rkeys = [k for k in residues if k[0] == "r"]
+        insert_rkeys = [k for k in residues if k[0] == "x"]
+        if not insert_rkeys:
+            continue  # nothing to thread on this chain
+
+        real_rkeys.sort(key=lambda k: k[1])  # by existing seq_num
+
+        # (helix, bp, dir) → real residue key, dropping non-unique keys (loops).
+        flank_to_real: dict[tuple, tuple] = {}
+        ambiguous: set[tuple] = set()
+        for k in real_rkeys:
+            a0 = residues[k][0]
+            fk = (a0.helix_id, a0.bp_index, a0.direction)
+            if fk in flank_to_real:
+                ambiguous.add(fk)
+            flank_to_real[fk] = k
+        for fk in ambiguous:
+            flank_to_real.pop(fk, None)
+
+        # Bucket inserts by the real residue they follow.
+        inserts_after: dict[tuple, list[tuple]] = defaultdict(list)
+        orphaned: list[tuple] = []
+        for k in insert_rkeys:
+            a0 = residues[k][0]
+            fk = (a0.helix_id, a0.bp_index, a0.direction)
+            prev_k = flank_to_real.get(fk)
+            if prev_k is None:
+                orphaned.append(k)
+            else:
+                inserts_after[prev_k].append(k)
+        for lst in inserts_after.values():
+            lst.sort(key=lambda k: k[2])  # by extra_base_k
+
+        # Emit real residues in order, each trailed by its inserts; orphans last.
+        ordered: list[tuple] = []
+        for k in real_rkeys:
+            ordered.append(k)
+            ordered.extend(inserts_after.get(k, ()))
+        ordered.extend(sorted(orphaned, key=lambda k: (str(k[1]), k[2])))
+
+        # Contiguous 1-based renumber in the new order.
+        for new_seq, k in enumerate(ordered, start=1):
+            for a in residues[k]:
+                a.seq_num = new_seq
 
 
 def _close_sequential_backbone(atoms: list[Atom], bonds: list[tuple[int, int]]) -> None:
@@ -1876,8 +1970,8 @@ def _build_extra_base_atoms(
                     z            = float(world[2]),
                     strand_id    = strand_id or "",
                     helix_id     = src_key[0],
-                    bp_index     = ha.index,
-                    direction    = ha.strand.value,
+                    bp_index     = src_key[1],
+                    direction    = src_key[2],
                     aux_helix_id = dst_key[0],
                     aux_t        = _aux_t,
                     crossover_id = xo.id,
@@ -1904,8 +1998,8 @@ def _build_extra_base_atoms(
                     z            = float(world[2]),
                     strand_id    = strand_id or "",
                     helix_id     = src_key[0],
-                    bp_index     = ha.index,
-                    direction    = ha.strand.value,
+                    bp_index     = src_key[1],
+                    direction    = src_key[2],
                     aux_helix_id = dst_key[0],
                     aux_t        = _aux_t,
                     crossover_id = xo.id,

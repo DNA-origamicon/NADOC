@@ -152,12 +152,106 @@ def _sim_paths(job_dir: Path) -> tuple[Path, Path]:
     return job_dir / f"{_SIM_STEM}.psf", job_dir / "output" / f"{_SIM_STEM}.dcd"
 
 
+def _coarse_sim_paths(job_dir: Path) -> tuple[Path, Path]:
+    """(PSF, DCD) of the LOWEST-numbered CG stage — the coarse (5 bp/bead) relaxation
+    of a multiresolution run, whose initial structure is still in the clean NADOC
+    design frame.  The DISPLAY falls back to this when the fine stage's bead→helix
+    assignment collapses a helix on a tightly-packed bundle (see
+    ``_override_has_collapsed_helix``).  For a single-stage coarse run this is the
+    same file ``_sim_paths`` returns."""
+    numbered = []
+    for psf in job_dir.glob(f"{_SIM_STEM}-*.psf"):
+        tail = psf.stem.rsplit("-", 1)[-1]
+        if tail.isdigit():
+            numbered.append((int(tail), psf))
+    for _n, psf in sorted(numbered):                       # ascending → coarse first
+        dcd = job_dir / "output" / f"{psf.stem}.dcd"
+        if dcd.exists() and _psf_is_cg(psf):
+            return psf, dcd
+    return job_dir / f"{_SIM_STEM}.psf", job_dir / "output" / f"{_SIM_STEM}.dcd"
+
+
+def _override_has_collapsed_helix(design: Design, override: dict, frac: float = 0.45) -> bool:
+    """True when the display reconstruction squashed any helix into a small blob —
+    the tight-bundle failure mode where the fine stage's nearest-design-axis bead
+    assignment dumps one helix's beads onto its neighbour, so that helix reconstructs
+    from a handful of points and its spline collapses into a bead 'ring' in the view.
+
+    Detected by the per-helix 3-D bounding-box diagonal vs the expected contour
+    length (``length_bp × rise``).  Uses the SPATIAL extent, not the axial projection,
+    on purpose: a genuinely *bent* helix (a curved design's programmed loop/skip bend)
+    has a short axial projection but still spans a large arc — its bounding diagonal
+    stays high (a 180° semicircle is still ~64%), so this does NOT false-fire on
+    curvature and drop the fine reconstruction the curvature readout depends on.
+    Only a true collapse (blob ≪ half the contour) trips it."""
+    import numpy as np
+    from collections import defaultdict
+
+    from backend.core.constants import BDNA_RISE_PER_BP
+
+    by_h: dict[str, list] = defaultdict(list)
+    for (h_id, _bp, _d), pos in override.items():
+        by_h[h_id].append(pos)
+    hmap = {h.id: h for h in design.helices}
+    for h_id, ps in by_h.items():
+        helix = hmap.get(h_id)
+        if helix is None or helix.length_bp < 6:
+            continue
+        arr = np.asarray(ps)
+        diag = float(np.linalg.norm(arr.max(axis=0) - arr.min(axis=0)))
+        expected = helix.length_bp * BDNA_RISE_PER_BP
+        if diag < frac * expected:
+            return True
+    return False
+
+
+def _count_stretched_backbone_bonds(override: dict, thr_nm: float = 1.3) -> int:
+    """Number of CONSECUTIVE same-helix/same-direction backbone bonds longer than
+    ``thr_nm`` in a display override.  The canonical backbone P–P step follows the
+    helical path (√(rise² + twist-chord²) ≈ 0.67 nm), so > ~1.3 nm (≈2×) is a
+    reconstruction JUMP — the partial-mis-assignment failure mode where the fine
+    stage assigns only a sparse, gappy set of beads to a helix and the spline leaps
+    across the gaps (the '6hb_2xT overstretched bonds' report).  A local metric,
+    insensitive to global BEND, so it does NOT penalise a genuinely curved design."""
+    import numpy as np
+    from collections import defaultdict
+
+    by_hd: dict[tuple, dict] = defaultdict(dict)
+    for (h_id, bp, d), pos in override.items():
+        by_hd[(h_id, d)][bp] = pos
+    n = 0
+    for bpmap in by_hd.values():
+        bps = sorted(bpmap)
+        for a, b in zip(bps, bps[1:]):
+            if b - a == 1 and float(np.linalg.norm(
+                    np.asarray(bpmap[b]) - np.asarray(bpmap[a]))) > thr_nm:
+                n += 1
+    return n
+
+
+def _reconstruction_badness(design: Design, override: dict) -> int:
+    """A single 'how wrong does this display reconstruction look' score: a big
+    penalty for any collapsed helix (bead ring) plus the count of stretched backbone
+    bonds (jumps).  Used to choose the cleaner CG stage — see ``_display_positions``."""
+    collapsed = 1 if _override_has_collapsed_helix(design, override) else 0
+    return collapsed * 1000 + _count_stretched_backbone_bonds(override)
+
+
 # ── Extraction: relaxed positions + CG bead cloud ─────────────────────────────
 
 # Bumped when the display reconstruction changes so stale ``display.json`` caches
 # from an older algorithm auto-regenerate on the next read (see ``load_display``).
 # v2 = actual-relaxed-axis reconstruction (v1 re-idealised → structures barely moved).
-_DISPLAY_VERSION = 2
+# v3 = also emit crossover extra-base (__xb__) positions so the inserts follow the shape.
+# v4 = coarse-stage fallback when the fine reconstruction collapses a tight-bundle helix.
+# v5 = fallback also fires on stretched backbone bonds (partial mis-assignment jumps).
+# v6 = beadless helix ends extrapolate straight instead of clipping to the spline
+#      endpoint (clipping pinned the tail into a flat HELIX_RADIUS ring, invisible to
+#      both fallback detectors — see mrdna_bridge._relaxed_axis_at_bp).
+# v7 = unpaired (ssDNA) nucleotides — incl. single-stranded scaffold crossovers at the
+#      helix ends — placed at relaxed NAS-bead positions (nuc_pos_override_ssdna_from_arbd)
+#      instead of the phantom-duplex dsDNA axis, so far-end crossover bonds don't stretch.
+_DISPLAY_VERSION = 7
 
 
 def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
@@ -175,6 +269,42 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
     # DISPLAY reconstruction (actual relaxed axis), NOT the ideal-geometry bridge
     # version — the user must SEE the real relaxed shape, not a re-idealised one.
     override = nuc_pos_override_display_from_coarse(design, str(psf), str(dcd))
+    src_psf, src_dcd = psf, dcd
+
+    # Tight-bundle guard: on closely-packed helices the fine stage's initial
+    # structure has drifted off the design frame, so nearest-design-axis bead
+    # assignment mis-assigns beads — dumping a whole helix onto its neighbour
+    # (collapse → bead ring, e.g. 2hb) or leaving a helix with a sparse, gappy set
+    # of beads whose spline leaps across the gaps (stretched backbone bonds, e.g.
+    # 6hb_2xT).  The coarse stage's beads still sit cleanly at the design axes, so
+    # fall back to it when it reconstructs CLEARLY cleaner.  Only fires when the fine
+    # reconstruction looks distinctly bad — a clean fine reconstruction is kept so a
+    # genuinely curved design keeps its twist/curvature detail (the coarse stage
+    # carries no twist, so it shows less bend — see the curvature note in
+    # project_mrdna_panel.md).
+    fine_bad = _reconstruction_badness(design, override)
+    if _override_has_collapsed_helix(design, override) or fine_bad >= 12:
+        c_psf, c_dcd = _coarse_sim_paths(job_dir)
+        if (c_psf, c_dcd) != (psf, dcd) and c_psf.exists() and c_dcd.exists():
+            c_override = nuc_pos_override_display_from_coarse(design, str(c_psf), str(c_dcd))
+            if _reconstruction_badness(design, c_override) < fine_bad:
+                override = c_override
+                src_psf, src_dcd = c_psf, c_dcd
+
+    # ssDNA / overhang nucleotides (unpaired) — including single-stranded scaffold
+    # CROSSOVERS at the helix ends — are phantom-duplexed onto the dsDNA helix axis
+    # by the reconstruction above (it emits every bp at HELIX_RADIUS around the helix
+    # spline, which past a beadless end is extrapolated straight along the helix's own
+    # tangent).  At a crossover the two helices' extrapolated ends then diverge and the
+    # connecting scaffold backbone bond stretches far beyond a phosphodiester step
+    # (6hb_2xT far end).  Place the unpaired nucleotides at their RELAXED ssDNA (NAS)
+    # bead positions instead — the SAME harvest the MD seed uses — merged so ss wins
+    # at each unpaired key.  Physical/display only.
+    from backend.core.mrdna_bridge import nuc_pos_override_ssdna_from_arbd
+    ss = nuc_pos_override_ssdna_from_arbd(
+        design, str(src_psf), str(src_dcd), override, prefer_continuity=True)
+    if ss:
+        override = {**override, **ss}
 
     positions: list[dict] = []
     for helix in design.helices:
@@ -201,6 +331,35 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
                 "direction":         nuc.direction.value,
                 "backbone_position": pos.tolist(),
             })
+
+    # Crossover extra bases: emit ``__xb__``-keyed positions so the native extra-base
+    # beads/slabs follow the relaxed structure (they are NOT on any helix, so the walk
+    # above never touches them).  Each insert sits on the chord between its two flanking
+    # real nucleotides at their RELAXED positions — the same routing oxDNA uses
+    # (partitionExtraBaseUpdates → setExtraBaseInstanceFromSim on the frontend).
+    import numpy as np
+
+    from backend.core.mrdna_bridge import extra_base_flank_keys
+    flanks = extra_base_flank_keys(design)
+    if flanks:
+        pos_lookup = {
+            (p["helix_id"], p["bp_index"], p["direction"]): np.asarray(p["backbone_position"])
+            for p in positions
+        }
+        for xo_id, extra, prev_key, next_key in flanks:
+            p0 = pos_lookup.get(prev_key)
+            p1 = pos_lookup.get(next_key)
+            if p0 is None or p1 is None:
+                continue
+            n = len(extra)
+            for k in range(n):
+                t = (k + 1) / (n + 1)
+                positions.append({
+                    "helix_id":          "__xb__",
+                    "bp_index":          xo_id,
+                    "direction":         k,
+                    "backbone_position": (p0 * (1.0 - t) + p1 * t).tolist(),
+                })
     return positions, len(override)
 
 

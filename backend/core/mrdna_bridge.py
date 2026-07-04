@@ -588,6 +588,68 @@ def nuc_pos_override_from_mrdna_coarse(
     return override
 
 
+def extra_base_flank_keys(design: Design) -> "list[tuple[str, str, tuple, tuple]]":
+    """``[(crossover_id, extra_bases, prev_key, next_key)]`` for every crossover that
+    carries extra bases, where ``prev_key`` / ``next_key`` are the
+    ``(helix_id, bp_index, direction)`` display keys of the two REAL nucleotides the
+    single-stranded insert bridges (last real nt of the owning strand's prior domain,
+    first real nt of the next domain).  Reuses the oxDNA owning-strand junction map so
+    the mrDNA and oxDNA engines place the inserts at the same junction.
+
+    Used by the DISPLAY path to position the native extra-base beads/slabs at the
+    relaxed junction (chord-lerp between the two flanks).  Empty when the design has
+    no extra bases.  Physical-layer / display only — no topology read-back."""
+    from backend.physics.oxdna_interface import crossover_extra_base_junctions
+
+    ls_map = _build_loop_skip_map(design)
+    junctions = crossover_extra_base_junctions(design)
+    by_id = {s.id: s for s in design.strands}
+    out: list[tuple[str, str, tuple, tuple]] = []
+    for (strand_id, di), (xo_id, extra) in junctions.items():
+        strand = by_id.get(strand_id)
+        if strand is None or di + 1 >= len(strand.domains):
+            continue
+        prev, nxt = strand.domains[di], strand.domains[di + 1]
+        prev_bps = [b for b in domain_bp_range(prev)
+                    if ls_map.get((prev.helix_id, b), 0) > -1]
+        next_bps = [b for b in domain_bp_range(nxt)
+                    if ls_map.get((nxt.helix_id, b), 0) > -1]
+        if not prev_bps or not next_bps:
+            continue
+        prev_key = (prev.helix_id, prev_bps[-1], prev.direction.value)
+        next_key = (nxt.helix_id, next_bps[0], nxt.direction.value)
+        out.append((xo_id, extra, prev_key, next_key))
+    return out
+
+
+def _relaxed_axis_at_bp(cs, bp, t_lo, t_hi, ideal_axis_hat, rise_ang):
+    """Relaxed-axis point (Å) + unit tangent at integer ``bp`` on a per-helix cubic
+    spline ``cs`` (parameterized by bp index, fitted through the bead-covered range
+    ``[t_lo, t_hi]``).
+
+    Within the covered range the spline is evaluated directly.  BEYOND it — a helix
+    END the fine-stage bead→axis assignment left beadless — the axis is continued
+    STRAIGHT along the endpoint tangent at the ideal B-DNA ``rise_ang`` per bp,
+    instead of clipping ``bp`` to the endpoint.  Clipping pins every uncovered bp to
+    the single spline-end point, and the duplex twist reconstruction that follows then
+    fans those pinned nucleotides into a flat HELIX_RADIUS circle — the "a helix
+    collapsed onto a 2-D plane to make a ring" display artifact.  Linear (not cubic)
+    extrapolation keeps the tail bounded and physically extended; ideal rise keeps its
+    backbone bond spacing canonical so it never trips the stretched-bond fallback.
+    """
+    if t_lo <= bp <= t_hi:
+        pt = np.asarray(cs(float(bp)), dtype=float)
+        tan = np.asarray(cs(float(bp), 1), dtype=float)
+        tn = np.linalg.norm(tan)
+        return pt, (tan / tn if tn > 1e-6 else ideal_axis_hat)
+    t_end = t_lo if bp < t_lo else t_hi
+    tan = np.asarray(cs(t_end, 1), dtype=float)
+    tn = np.linalg.norm(tan)
+    axis_hat = tan / tn if tn > 1e-6 else np.asarray(ideal_axis_hat, dtype=float)
+    pt = np.asarray(cs(t_end), dtype=float) + (bp - t_end) * rise_ang * axis_hat
+    return pt, axis_hat
+
+
 def nuc_pos_override_display_from_coarse(
     design: Design,
     psf_path: str,
@@ -719,13 +781,14 @@ def nuc_pos_override_display_from_coarse(
         t_lo, t_hi = float(bp_idxs[0]), float(bp_idxs[-1])
 
         for bp_idx in range(bp_start, bp_start + length_bp):
-            t = float(np.clip(bp_idx, t_lo, t_hi))
             local_i = bp_idx - bp_start
 
-            axis_pt = cs(t)                       # ACTUAL relaxed axis position (Å)
-            tangent = cs(t, 1)
-            tn = np.linalg.norm(tangent)
-            axis_hat = tangent / tn if tn > 1e-6 else ideal_axis_hat
+            # ACTUAL relaxed axis position (Å) on the spline within the bead-covered
+            # range; STRAIGHT tangent extrapolation past a beadless end (NOT clipped
+            # to the spline endpoint — that pins the tail into a flat ring, see
+            # _relaxed_axis_at_bp).
+            axis_pt, axis_hat = _relaxed_axis_at_bp(
+                cs, bp_idx, t_lo, t_hi, ideal_axis_hat, BDNA_RISE_PER_BP * 10.0)
 
             fwd_angle = phase_offset + local_i * twist
             ideal_fwd_rad = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
@@ -900,29 +963,33 @@ def nuc_pos_override_from_arbd_strands(
 
         for bp_idx in range(bp_start, bp_start + length_bp):
             local_i = bp_idx - bp_start
-            t = float(np.clip(bp_idx, t_lo, t_hi))
 
-            # Spline gives the FORWARD backbone position at this bp (Å)
-            fwd_bead = cs(t)
+            # mrDNA's per-bp 'DNA' bead is an AXIS/centroid bead — it sits on the helix
+            # centreline (~2-4 Å off), NOT on the spiralling backbone.  The ~34 deg/bp
+            # helical twist lives in the separate ORIENTATION ('O') bead, which this
+            # override does not read.  So the DNA-bead spline is the relaxed AXIS, and
+            # the backbone must be reconstructed by imposing IDEAL B-DNA twist AROUND
+            # that axis (mrDNA's orientation potential holds local twist near B-DNA).
+            # Deriving the azimuth from the DNA-bead radial instead (the old code) read
+            # the helix's rigid lateral relaxation offset as if it were twist phase —
+            # a constant direction per helix → a near-zero-twist ladder seed.  This
+            # mirrors the display path (nuc_pos_override_display_from_coarse); straight
+            # tangent extrapolation past a beadless end (see _relaxed_axis_at_bp).
+            axis_pt, axis_hat = _relaxed_axis_at_bp(
+                cs, bp_idx, t_lo, t_hi, ideal_axis_hat, BDNA_RISE_PER_BP * 10.0)
 
-            # Extract radial direction from spline position relative to ideal axis
-            ideal_axis_pt = ax_s + local_i * (BDNA_RISE_PER_BP * 10.0) * ideal_axis_hat
-            radial       = fwd_bead - ideal_axis_pt
-            radial_perp  = radial - np.dot(radial, ideal_axis_hat) * ideal_axis_hat
-            rp_norm      = np.linalg.norm(radial_perp)
-
-            if rp_norm < 0.5:   # degenerate — fall back to ideal B-DNA angle
-                fwd_angle = phase_offset + local_i * twist
-                fwd_rad   = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
-            else:
-                fwd_rad = radial_perp / rp_norm
+            fwd_angle     = phase_offset + local_i * twist
+            ideal_fwd_rad = math.cos(fwd_angle) * x_hat + math.sin(fwd_angle) * y_hat
+            perp_comp     = ideal_fwd_rad - np.dot(ideal_fwd_rad, axis_hat) * axis_hat
+            pn            = np.linalg.norm(perp_comp)
+            fwd_rad       = perp_comp / pn if pn > 1e-6 else ideal_fwd_rad
 
             groove = (BDNA_MINOR_GROOVE_ANGLE_RAD
                       if h_dir == Direction.FORWARD
                       else -BDNA_MINOR_GROOVE_ANGLE_RAD)
-            fwd_ang = ideal_axis_pt + helix_radius_ang * fwd_rad
-            rev_rad = _rotate(fwd_rad, ideal_axis_hat, groove)
-            rev_ang = ideal_axis_pt + helix_radius_ang * rev_rad
+            fwd_ang = axis_pt + helix_radius_ang * fwd_rad
+            rev_rad = _rotate(fwd_rad, axis_hat, groove)
+            rev_ang = axis_pt + helix_radius_ang * rev_rad
 
             override[(h_id, bp_idx, 'FORWARD')] = fwd_ang / 10.0   # Å → nm
             override[(h_id, bp_idx, 'REVERSE')] = rev_ang / 10.0
@@ -990,20 +1057,44 @@ def _ssdna_runs(design: Design) -> list:
             while q < n and bp[chain[q]] < 0:
                 q += 1
             run_idxs = chain[p:q]
-            root_idx, root_side = None, None
-            if p - 1 >= 0 and bp[chain[p - 1]] >= 0:
-                root_idx, root_side = chain[p - 1], "5p"
-            elif q < n and bp[chain[q]] >= 0:
-                root_idx, root_side = chain[q], "3p"
+            # 5′-side root = the paired nt just before the run; 3′-side = just after.
+            # A crossover-spanning run (ds…ss→crossover→ss…ds) has BOTH — kept so the
+            # DISPLAY can anchor both ends (single-anchor floats the far junction).
+            root5 = chain[p - 1] if (p - 1 >= 0 and bp[chain[p - 1]] >= 0) else None
+            root3 = chain[q]     if (q < n and bp[chain[q]] >= 0)         else None
+            root_idx, root_side = (root5, "5p") if root5 is not None else (root3, "3p")
             runs.append({
                 "keys":          [idx_to_key[j] for j in run_idxs],
                 "ideal_nm":      [r[j] / 10.0 for j in run_idxs],
                 "root_key":      idx_to_key[root_idx] if root_idx is not None else None,
                 "root_ideal_nm": (r[root_idx] / 10.0) if root_idx is not None else None,
                 "root_side":     root_side,
+                "root5_key":      idx_to_key[root5] if root5 is not None else None,
+                "root5_ideal_nm": (r[root5] / 10.0) if root5 is not None else None,
+                "root3_key":      idx_to_key[root3] if root3 is not None else None,
+                "root3_ideal_nm": (r[root3] / 10.0) if root3 is not None else None,
             })
             p = q
     return runs
+
+
+def _blend_run_both_ends(ideal, d5, d3):
+    """Place a bridging ss run by adding each nucleotide the ideal→relaxed displacement
+    of its NEAR root, linearly blended 5′→3′ (``d5`` at the 5′ end, ``d3`` at the 3′).
+
+    ``ideal`` is the run's ideal backbone positions in 5′→3′ order.  The run's first nt
+    is one bond from the 5′ root and its last nt one bond from the 3′ root, so applying
+    each root's displacement lands BOTH ends one bond from their relaxed roots while the
+    smoothly-varying offset preserves the run's ideal (crossover-loop) shape.  Fixes the
+    stretched far junction a single-end anchor leaves floating.  Pure geometry."""
+    n = len(ideal)
+    out = []
+    for i in range(n):
+        f = 0.5 if n == 1 else i / (n - 1)
+        out.append(np.asarray(ideal[i], dtype=float)
+                   + (1.0 - f) * np.asarray(d5, dtype=float)
+                   + f * np.asarray(d3, dtype=float))
+    return out
 
 
 def nuc_pos_override_ssdna_from_arbd(
@@ -1013,6 +1104,7 @@ def nuc_pos_override_ssdna_from_arbd(
     ds_override: "dict[tuple[str,int,str], np.ndarray]",
     frame: int = -1,
     min_beads_for_spline: int = 2,
+    prefer_continuity: bool = False,
 ) -> "dict[tuple[str,int,str], np.ndarray]":
     """ssDNA / overhang seed positions from a fine-stage mrDNA run.
 
@@ -1099,7 +1191,7 @@ def nuc_pos_override_ssdna_from_arbd(
         return float(body_tree.query(np.asarray(pts))[0].min())
 
     override: dict = {}
-    n_spline = n_translate = n_ideal = 0
+    n_spline = n_translate = n_blend = n_ideal = 0
     for ri, run in enumerate(runs):
         keys, ideal = run["keys"], [np.asarray(p) for p in run["ideal_nm"]]
         n = len(keys)
@@ -1137,9 +1229,38 @@ def nuc_pos_override_ssdna_from_arbd(
                 except Exception:  # noqa: BLE001 — spline failure → drop candidate
                     pass
 
-        label, chosen = max(candidates, key=lambda c: _clearance(c[1]))
+        # C (both-ends anchor): a run bridging two ds segments (a crossover-spanning
+        # scaffold loop: ds…ss→crossover→ss…ds) has a relaxed root at BOTH ends.
+        # Anchoring only one (B/spline) leaves the FAR junction floating → a stretched
+        # ss/ds bond (6hb_2xT far end).  Pin both by adding each nucleotide the
+        # ideal→relaxed displacement of its NEAR root, linearly blended along the run.
+        # Preserves the ideal loop shape (incl. the crossover excursion) while landing
+        # both ends one bond-length from their relaxed roots.  DISPLAY only — appended
+        # last so prefer_continuity picks it when both roots exist.
+        r5r = ds_override.get(run.get("root5_key")) if run.get("root5_key") else None
+        r3r = ds_override.get(run.get("root3_key")) if run.get("root3_key") else None
+        if prefer_continuity and r5r is not None and r3r is not None \
+                and run.get("root5_ideal_nm") is not None and run.get("root3_ideal_nm") is not None:
+            d5 = np.asarray(r5r) - np.asarray(run["root5_ideal_nm"])
+            d3 = np.asarray(r3r) - np.asarray(run["root3_ideal_nm"])
+            candidates.append(("blend", _blend_run_both_ends(ideal, d5, d3)))
+
+        if prefer_continuity:
+            # DISPLAY: continuity beats clearance.  The render must show each ss run
+            # attached to its relaxed root(s) — short ss/ds junction + crossover
+            # backbone bonds — even if that sits closer to the body (clash avoidance
+            # only matters for the MD seed, not the picture).  Take the highest-fidelity
+            # candidate available; they were appended in increasing priority
+            # (ideal < translate < spline < blend), so the last one is best.  A
+            # bridging run gets 'blend' (both ends pinned); a one-sided overhang gets
+            # spline/translate; a rootless run stays 'ideal' → no override → a free
+            # overhang keeps its current phantom display.
+            label, chosen = candidates[-1]
+        else:
+            label, chosen = max(candidates, key=lambda c: _clearance(c[1]))
         n_spline    += label == "spline"
         n_translate += label == "translate"
+        n_blend     += label == "blend"
         n_ideal     += label == "ideal"
         # 'ideal' == leaving the nt at its detached design position; emit NO override
         # for it so build_atomistic uses exactly the current path (no change).
@@ -1150,7 +1271,8 @@ def nuc_pos_override_ssdna_from_arbd(
 
     print(
         f"[ssdna seed] {len(runs)} ss run(s) | {len(override)} nt overrides | "
-        f"placement: {n_spline} spline, {n_translate} translate, {n_ideal} left-ideal",
+        f"placement: {n_spline} spline, {n_translate} translate, {n_blend} blend, "
+        f"{n_ideal} left-ideal",
         flush=True,
     )
     return override
@@ -1252,11 +1374,32 @@ def _build_nt_arrays(
 
     has_sequence = any(s.sequence is not None for s in design.strands)
 
+    # Crossover extra bases (e.g. "TT") are single-stranded nucleotides on the
+    # crossover-owning strand, inserted at the domain→domain transition.  Reuse the
+    # oxDNA path's owning-strand junction map so the two engines agree on where the
+    # inserts go (same reciprocal-crossover handling).  Keyed (strand_id, prev_di).
+    # Lazy import avoids any import-time cycle between core and physics.
+    from backend.physics.oxdna_interface import crossover_extra_base_junctions
+    xb_junctions = crossover_extra_base_junctions(design)
+
+    # Recorded for the stacking pass: (prev_real_idx, [extra_base_idx...], next_real_idx).
+    extra_base_inserts: List[Tuple[int, List[int], int]] = []
+
     for strand in design.strands:
         strand_indices: List[int] = []
         seq_offset = 0
 
-        for domain in strand.domains:
+        # Which domains emit ≥1 nucleotide — guards against arming an insert whose
+        # following domain is entirely skipped (its flank would land on the wrong nt).
+        domain_emits = [
+            any(ls_map.get((dom.helix_id, b), 0) > -1 for b in domain_bp_range(dom))
+            for dom in strand.domains
+        ]
+
+        # (crossover_id, extra_bases_str, prev_real_idx) awaiting the next flank nt.
+        pending_xb: Optional[Tuple[str, str, int]] = None
+
+        for di, domain in enumerate(strand.domains):
             h_id = domain.helix_id
             ax_s, axis_hat, phase_offset, twist, bp_start, groove = helix_geom[h_id]
             x_hat, y_hat = _xy_frame(axis_hat)
@@ -1299,7 +1442,35 @@ def _build_nt_arrays(
                     positions.append(backbone_ang)
                     orientations.append(orient)
                     seq_chars.append(char)
+
+                    # This real nt is the *next* flank of a pending extra-base insert:
+                    # materialise the single-stranded beads between prev and this nt,
+                    # threading their indices into the strand chain (prev → eb… → this).
+                    if pending_xb is not None:
+                        xo_id, extra, prev_idx = pending_xb
+                        p0 = positions[prev_idx]
+                        p1 = backbone_ang
+                        n = len(extra)
+                        eb_idxs: List[int] = []
+                        for j, base in enumerate(extra):
+                            t = (j + 1) / (n + 1)
+                            eb_idx = len(positions)
+                            positions.append(p0 * (1.0 - t) + p1 * t)
+                            orientations.append(orientations[prev_idx])
+                            seq_chars.append(base)
+                            strand_indices.append(eb_idx)
+                            eb_idxs.append(eb_idx)
+                        extra_base_inserts.append((prev_idx, eb_idxs, idx))
+                        pending_xb = None
+
                     strand_indices.append(idx)
+
+            # Arm an insert if this domain owns an extra-base crossover AND the next
+            # domain will emit a flank nucleotide to bridge to.
+            hit = xb_junctions.get((strand.id, di))
+            if (hit is not None and di + 1 < len(strand.domains)
+                    and domain_emits[di + 1] and strand_indices):
+                pending_xb = (hit[0], hit[1], strand_indices[-1])
 
         strand_seqs.append(strand_indices)
 
@@ -1363,6 +1534,14 @@ def _build_nt_arrays(
                 next_idx = nt_key.get((h_id, next_bp, direction, next_k))
                 if next_idx is not None:
                     stack_arr[prev_idx] = next_idx
+
+    # Thread stacking through crossover extra-base inserts (the domain walk above
+    # skips them, and cross-helix junctions leave the flank stack unset).  The
+    # 3′-chain is already threaded via strand_seqs in Pass 3.
+    for prev_idx, eb_idxs, next_idx in extra_base_inserts:
+        chain = [prev_idx, *eb_idxs, next_idx]
+        for a, b in zip(chain[:-1], chain[1:]):
+            stack_arr[a] = b
 
     seq_list = seq_chars if has_sequence else None
     if return_nt_key:

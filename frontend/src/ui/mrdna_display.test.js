@@ -16,6 +16,23 @@ describe('toFemUpdates', () => {
       { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', backbone_position: [1, 2, 3] },
     ])
   })
+
+  it('passes crossover extra-base (__xb__) entries through for the deform toggle', () => {
+    // __xb__ entries carry crossover_id in bp_index and the insert index k in
+    // direction; design_renderer.applyFemPositions routes them to the extra-base
+    // beads/slabs via partitionExtraBaseUpdates.  toFemUpdates must not drop them.
+    const resp = { ready: true, positions: [
+      { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', backbone_position: [1, 2, 3] },
+      { helix_id: '__xb__', bp_index: 'xo-123', direction: 0, backbone_position: [4, 5, 6] },
+      { helix_id: '__xb__', bp_index: 'xo-123', direction: 1, backbone_position: [7, 8, 9] },
+    ] }
+    const out = toFemUpdates(resp)
+    const xb = out.filter((u) => u.helix_id === '__xb__')
+    expect(xb).toEqual([
+      { helix_id: '__xb__', bp_index: 'xo-123', direction: 0, backbone_position: [4, 5, 6] },
+      { helix_id: '__xb__', bp_index: 'xo-123', direction: 1, backbone_position: [7, 8, 9] },
+    ])
+  })
 })
 
 describe('beadsToPoints', () => {

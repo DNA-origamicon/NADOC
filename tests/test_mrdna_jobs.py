@@ -289,6 +289,79 @@ def test_mrdna_job_fine_steps_roundtrip(tmp_path):
     assert MrdnaJob.load(job.job_id, tmp_path).fine_steps == 200000
 
 
+# ── display collapse detector (tight-bundle fine-stage fallback) ──────────────
+#   The fine-stage bead→helix assignment can dump one helix's beads onto a close
+#   neighbour, collapsing its spline into a ring (the reported 2hb artifact).
+#   _override_has_collapsed_helix flags that so _display_positions falls back to the
+#   coarse stage — but it must NOT mistake a genuinely BENT (curved-design) helix for
+#   a collapse, or it would drop the fine reconstruction the curvature readout needs.
+
+def _one_helix_design():
+    from backend.core.lattice import make_bundle_design
+    return make_bundle_design([(0, 0)], 42, name="1hb")   # length_bp 42 → ~14.3 nm
+
+
+def _override_line(helix, n, span_nm):
+    """n FORWARD nucleotides spread over span_nm along +Z (a straight/compressed rod)."""
+    import numpy as np
+    bp0 = helix.bp_start
+    return {(helix.id, bp0 + i, "FORWARD"): np.array([0.0, 0.0, span_nm * i / (n - 1)])
+            for i in range(n)}
+
+
+def test_collapse_detector_flags_blob_but_not_full_or_bent():
+    import math
+    import numpy as np
+    from backend.core.mrdna_runner import _override_has_collapsed_helix
+
+    d = _one_helix_design()
+    h = d.helices[0]
+    full = h.length_bp * 0.34                       # ~14.3 nm expected contour
+
+    # (a) full-length straight rod → not collapsed
+    assert not _override_has_collapsed_helix(d, _override_line(h, h.length_bp, full))
+    # (b) collapsed into a 2 nm blob → collapsed
+    assert _override_has_collapsed_helix(d, _override_line(h, h.length_bp, 2.0))
+    # (c) a bent arc spanning its full contour (a curved design) → NOT collapsed:
+    #     even a half-circle keeps a bounding diagonal well above the 0.45 threshold.
+    R = full / math.pi                              # semicircle of this contour length
+    arc = {(h.id, h.bp_start + i, "FORWARD"):
+           np.array([R * math.sin(math.pi * i / (h.length_bp - 1)),
+                     R * (1 - math.cos(math.pi * i / (h.length_bp - 1))), 0.0])
+           for i in range(h.length_bp)}
+    assert not _override_has_collapsed_helix(d, arc)
+
+
+def test_stretched_bond_detector_and_badness():
+    """_count_stretched_backbone_bonds flags consecutive backbone steps > 1.3 nm
+    (the partial-mis-assignment JUMP failure mode); _reconstruction_badness folds
+    that together with the collapse penalty so the cleaner CG stage can be chosen."""
+    import numpy as np
+    from backend.core.mrdna_runner import (
+        _count_stretched_backbone_bonds, _reconstruction_badness)
+
+    d = _one_helix_design()
+    h = d.helices[0]
+    # A clean helical backbone (0.67 nm steps) → no stretched bonds.
+    clean = {(h.id, h.bp_start + i, "FORWARD"): np.array([0.0, 0.0, 0.67 * i])
+             for i in range(20)}
+    assert _count_stretched_backbone_bonds(clean) == 0
+    # Inject a 2 nm jump between two consecutive bp → one stretched bond.
+    jumpy = dict(clean)
+    jumpy[(h.id, h.bp_start + 10, "FORWARD")] = np.array([0.0, 0.0, 0.67 * 9 + 2.0])
+    assert _count_stretched_backbone_bonds(jumpy) >= 1
+    # Badness: clean < jumpy, and a collapse dwarfs any bond count.
+    assert _reconstruction_badness(d, clean) < _reconstruction_badness(d, jumpy)
+    blob = _override_line_blob(h)
+    assert _reconstruction_badness(d, blob) >= 1000     # collapse penalty dominates
+
+
+def _override_line_blob(helix):
+    import numpy as np
+    return {(helix.id, helix.bp_start + i, "FORWARD"): np.array([0.0, 0.0, 2.0 * i / (helix.length_bp - 1)])
+            for i in range(helix.length_bp)}
+
+
 def test_analytic_curvature_from_marks():
     from backend.core.models import Design
     from backend.core.mrdna_curvature import analytic_curvature

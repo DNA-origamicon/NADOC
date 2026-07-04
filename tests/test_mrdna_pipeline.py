@@ -235,6 +235,154 @@ class TestInternalHelpers:
         assert 1.8 < expected_chord < 2.1, f"Unexpected chord: {expected_chord}"
 
 
+class TestBeadlessEndNoRing:
+    """Regression: a helix END the fine stage leaves beadless must EXTEND straight,
+    not collapse into a flat HELIX_RADIUS ring.
+
+    Bug (fixed 2026-07-04): the DISPLAY reconstruction placed each nucleotide on a
+    per-helix cubic spline at ``t = clip(bp, t_lo, t_hi)`` (t_lo/t_hi = min/max
+    bead-covered bp).  Every bp past ``t_hi`` was pinned to the single point
+    ``cs(t_hi)``, and the duplex twist fan below then splayed those pinned
+    nucleotides into a flat circle of radius HELIX_RADIUS — the user-reported "a
+    helix collapsed onto a 2-D plane to make a ring".  BOTH coarse-fallback detectors
+    are structurally blind to it (whole-helix bounding diagonal stays large because
+    the rest of the helix is extended; ring neighbours are only ~2R·sin(twist/2) ≈
+    0.58 nm apart, under the 1.3 nm stretched-bond threshold), so the fix is at the
+    source: ``_relaxed_axis_at_bp`` extrapolates straight along the endpoint tangent
+    at ideal rise past a beadless end.  See memory/project_mrdna_panel.md.
+    """
+
+    @staticmethod
+    def _straight_spline(t_lo, t_hi, rise_ang):
+        """A per-helix axis spline for a straight helix along +z, knots at every
+        bead-covered bp (Å)."""
+        from scipy.interpolate import CubicSpline
+        bps = np.arange(t_lo, t_hi + 1, dtype=float)
+        pos = np.column_stack([np.zeros_like(bps), np.zeros_like(bps), bps * rise_ang])
+        return CubicSpline(bps, pos, bc_type="not-a-knot")
+
+    def test_extrapolates_past_beadless_end_not_pinned(self):
+        from backend.core.mrdna_bridge import _relaxed_axis_at_bp
+        from backend.core.constants import BDNA_RISE_PER_BP
+        rise = BDNA_RISE_PER_BP * 10.0          # nm → Å
+        t_lo, t_hi = 0.0, 39.0                   # beads cover only bp 0..39
+        cs = self._straight_spline(t_lo, t_hi, rise)
+        ideal = np.array([0.0, 0.0, 1.0])
+
+        # bp 40..50 are beadless: axis must keep advancing (~rise/bp), NOT pin to cs(39)
+        tail_z = np.array([
+            _relaxed_axis_at_bp(cs, bp, t_lo, t_hi, ideal, rise)[0][2]
+            for bp in range(40, 51)
+        ])
+        diffs = np.diff(tail_z)
+        assert np.all(diffs > 0.5 * rise), "beadless tail pinned/compressed — ring risk"
+        assert abs(diffs.mean() - rise) < 1e-6, "extrapolated rise != ideal B-DNA rise"
+        assert tail_z[-1] - tail_z[0] > 9 * rise, "tail collapsed instead of extending"
+
+        # in-range bp are unchanged — still evaluated directly on the spline
+        pt, _ = _relaxed_axis_at_bp(cs, 20, t_lo, t_hi, ideal, rise)
+        np.testing.assert_allclose(pt, np.asarray(cs(20.0)), atol=1e-9)
+
+    def test_full_duplex_tail_extends_not_a_flat_ring(self):
+        """Reconstruct the FORWARD backbone for the beadless tail exactly as the
+        display function does, and compare the fix against the old clip behaviour:
+        clip → flat ring at radius R; fix → axially extended tail."""
+        from backend.core.mrdna_bridge import _relaxed_axis_at_bp, _xy_frame
+        from backend.core.constants import BDNA_RISE_PER_BP, HELIX_RADIUS
+        rise = BDNA_RISE_PER_BP * 10.0
+        R = HELIX_RADIUS * 10.0
+        twist = 0.5949                            # ~34°/bp, canonical B-DNA
+        t_lo, t_hi = 0.0, 39.0
+        cs = self._straight_spline(t_lo, t_hi, rise)
+        ideal = np.array([0.0, 0.0, 1.0])
+        x_hat, y_hat = _xy_frame(ideal)
+
+        def _forward(bp, axis_pt, axis_hat):
+            ang = bp * twist
+            rad = math.cos(ang) * x_hat + math.sin(ang) * y_hat
+            rad = rad - np.dot(rad, axis_hat) * axis_hat
+            return axis_pt + R * rad / np.linalg.norm(rad)
+
+        # FIX (helper extrapolates the axis): tail spans the real axial extent
+        fixed = np.array([
+            _forward(bp, *_relaxed_axis_at_bp(cs, bp, t_lo, t_hi, ideal, rise))
+            for bp in range(40, 51)
+        ])
+        fixed_axial = np.ptp(fixed[:, 2])
+
+        # OLD (clip pins the axis at cs(t_hi)): tail is a flat ring in a z=const plane
+        pinned = np.asarray(cs(t_hi))
+        old = np.array([_forward(bp, pinned, ideal) for bp in range(40, 51)])
+        old_axial = np.ptp(old[:, 2])
+
+        # bug signature — the clipped tail really is a flat HELIX_RADIUS ring
+        assert old_axial < 1e-6, "sanity: clip pins the tail into one plane"
+        assert np.allclose(np.linalg.norm(old[:, :2], axis=1), R, atol=1e-6), \
+            "sanity: clipped tail is a circle of radius HELIX_RADIUS (the ring)"
+        # the fix — tail now extends axially rather than collapsing to a disk
+        assert fixed_axial > 9 * rise, "fixed tail failed to extend axially"
+        assert fixed_axial > 100 * old_axial
+
+
+class TestSsdnaBridgeContinuity:
+    """Regression: a single-stranded scaffold CROSSOVER — a run that bridges
+    ds→ss→(crossover)→ss→ds across two helices — must render with BOTH ends anchored
+    to their relaxed roots, so the far-end crossover and ss/ds junction backbone bonds
+    don't stretch (the 6hb_2xT far-end report).  Before the fix the ss run was anchored
+    at only one root (or phantom-duplexed onto the dsDNA axis), floating the far
+    junction to 4-6 nm.  See memory/project_mrdna_panel.md.
+    """
+
+    def test_ssdna_runs_reports_both_roots_for_a_bridging_run(self, monkeypatch):
+        import backend.core.mrdna_bridge as mb
+        # synthetic scaffold chain: ds(0) → ss(1) → ss(2) → ds(3); one bridging run [1,2]
+        r = np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]], float) * 10.0  # Å
+        bp = np.array([3, -1, -1, 0])                  # 0 & 3 paired, 1 & 2 unpaired
+        stack = np.array([-1, -1, -1, -1])
+        three_prime = np.array([1, 2, 3, -1])          # 5'→3': 0→1→2→3
+        orient = np.zeros((4, 3, 3))
+        seq = list("ACGT")
+        nt_key = {("hA", 0, "FORWARD", 0): 0, ("hA", -1, "FORWARD", 0): 1,
+                  ("hB", -1, "FORWARD", 0): 2, ("hB", 0, "FORWARD", 0): 3}
+
+        def _fake(design, return_nt_key=False):
+            base = (r, bp, stack, three_prime, orient, seq)
+            return (*base, nt_key) if return_nt_key else base
+        monkeypatch.setattr(mb, "_build_nt_arrays", _fake)
+
+        runs = mb._ssdna_runs(object())
+        assert len(runs) == 1
+        run = runs[0]
+        assert [k[:2] for k in run["keys"]] == [("hA", -1), ("hB", -1)]
+        # BOTH ds neighbours captured — the far-side (3') root is the fix's whole point
+        assert run["root5_key"][:2] == ("hA", 0)
+        assert run["root3_key"][:2] == ("hB", 0)
+
+    def test_blend_pins_both_ends_where_single_anchor_floats(self):
+        from backend.core.mrdna_bridge import _blend_run_both_ends
+        n = 10
+        ideal = [np.array([float(i), 0.0, 0.0]) for i in range(n)]
+        d5 = np.array([0.0, 1.0, 0.0])      # 5' root relaxed one way,
+        d3 = np.array([0.0, -2.0, 0.0])     # 3' root the other → single anchor floats
+        out = _blend_run_both_ends(ideal, d5, d3)
+        # each end lands at ideal + its NEAR root's displacement → both junctions short
+        np.testing.assert_allclose(out[0], ideal[0] + d5, atol=1e-9)
+        np.testing.assert_allclose(out[-1], ideal[-1] + d3, atol=1e-9)
+        # a single-anchor translate (+d5 everywhere) would float the far end by |d3-d5|
+        single_far = ideal[-1] + d5
+        assert np.linalg.norm(single_far - out[-1]) == pytest.approx(
+            float(np.linalg.norm(d3 - d5)))
+        # the run's own shape is preserved — consecutive spacing stays near the ideal 1.0
+        steps = [float(np.linalg.norm(out[i + 1] - out[i])) for i in range(n - 1)]
+        assert 0.5 < min(steps) and max(steps) < 1.5
+
+    def test_blend_single_nucleotide_centers_between_roots(self):
+        from backend.core.mrdna_bridge import _blend_run_both_ends
+        out = _blend_run_both_ends([np.array([0.0, 0.0, 0.0])],
+                                   np.array([2.0, 0.0, 0.0]), np.array([0.0, 2.0, 0.0]))
+        np.testing.assert_allclose(out[0], [1.0, 1.0, 0.0], atol=1e-9)  # f=0.5 blend
+
+
 class TestDesignGeometry:
     """Verify design-level geometric invariants used by the override function."""
 
@@ -494,7 +642,16 @@ class TestRoutedPrimitiveIntegration:
 
     def test_position_range_matches_structure(self, primitive_override):
         """All override positions must fall within the design's physical extent —
-        a frame mismatch or an exploded structure pushes beads outside it."""
+        a frame mismatch or an exploded structure pushes beads outside it.
+
+        The seed places each nucleotide at HELIX_RADIUS off the RELAXED CG axis
+        (the DNA-bead spline), NOT off the ideal design axis — that is the whole
+        point of seeding from a relaxed structure (it follows the CG bend + drift +
+        crossover gaps).  So a healthy relaxation legitimately sits a few nm off the
+        design axis (measured ~3 nm axis drift + ~1 nm HELIX_RADIUS on this short
+        coarse fixture).  The margin only has to separate that from a real failure —
+        a frame mismatch puts beads tens of nm out (138 nm for U6hb), an explosion
+        far more — so 6 nm cleanly catches those without flagging normal relaxation."""
         design, override = primitive_override
         vals = np.array(list(override.values()))
 
@@ -502,13 +659,15 @@ class TestRoutedPrimitiveIntegration:
             [h.axis_start.to_array() for h in design.helices]
             + [h.axis_end.to_array() for h in design.helices]
         )
-        lo = all_pts.min(0) - 2.0   # 2 nm margin (HELIX_RADIUS + some)
-        hi = all_pts.max(0) + 2.0
+        _MARGIN_NM = 6.0            # HELIX_RADIUS + CG relaxation drift, ≪ frame-mismatch
+        lo = all_pts.min(0) - _MARGIN_NM
+        hi = all_pts.max(0) + _MARGIN_NM
 
         violations = np.any((vals < lo) | (vals > hi), axis=1).sum()
         assert violations == 0, (
-            f"{violations} override positions outside helix axis extent. "
-            "Likely a coordinate frame mismatch (DCD not aligned to NADOC frame)."
+            f"{violations} override positions outside helix axis extent + "
+            f"{_MARGIN_NM} nm. Likely a coordinate frame mismatch (DCD not aligned "
+            "to NADOC frame) or an exploded structure — not ordinary CG relaxation."
         )
 
     def test_all_helices_covered(self, primitive_override):
