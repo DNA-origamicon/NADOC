@@ -17,6 +17,10 @@ vi.mock('../api/client.js', () => ({
     log_path: '/w/2_md_relax/oxdna.log',
     diagnostics: { requested_backend: 'CUDA', oxdna_bin: '/x/oxDNA', cuda_capable: true },
   }),
+  // Graphs & Metrics card (initOxdnaMetricsCard) statically imports these — the mock
+  // must expose them or vitest throws "No export defined" at panel init.
+  startOxdnaMetrics: vi.fn().mockResolvedValue({ metrics_id: 'm1' }),
+  getOxdnaMetricsRun: vi.fn().mockResolvedValue({ state: 'complete', metrics: {} }),
   lastErrorMessage: () => null,
 }))
 
