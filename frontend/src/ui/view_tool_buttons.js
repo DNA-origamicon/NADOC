@@ -138,10 +138,11 @@ export function initViewToolButtons({
   }
 
   function _syncVtButtons() {
-    const { showSequences, showOverhangNames, unfoldActive, cadnanoActive, deformVisuActive } = store.getState()
+    const { showSequences, showOverhangNames, showLoopSkips, unfoldActive, cadnanoActive, deformVisuActive } = store.getState()
     document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.classList.toggle('active', _lengthHeatmapOn)
     document.querySelector('.vt-btn[data-vt="sequences"]')?.classList.toggle('active', showSequences)
     document.querySelector('.vt-btn[data-vt="undefinedBases"]')?.classList.toggle('active', getUndefinedHighlightOn())
+    document.querySelector('.vt-btn[data-vt="loopSkips"]')?.classList.toggle('active', showLoopSkips)
     document.querySelector('.vt-btn[data-vt="grid"]')?.classList.toggle('active', _gridHelper.visible)
     document.querySelector('.vt-btn[data-vt="overhangNames"]')?.classList.toggle('active', showOverhangNames)
     document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expandedSpacing.isActive())
@@ -170,6 +171,12 @@ export function initViewToolButtons({
     if (next) refreshUndefinedHighlight()
     else designRenderer.clearUndefinedHighlight()
     _syncVtButtons()
+  })
+
+  document.querySelector('.vt-btn[data-vt="loopSkips"]')?.addEventListener('click', () => {
+    // Flip the shared store key; view_legends' subscriber applies the actual
+    // scene/legend/menu-pill changes, and the store.subscribe below re-syncs this pill.
+    store.setState({ showLoopSkips: !store.getState().showLoopSkips })
   })
 
   document.querySelector('.vt-btn[data-vt="grid"]')?.addEventListener('click', () => {
@@ -204,6 +211,7 @@ export function initViewToolButtons({
   store.subscribe((newState, prevState) => {
     if (newState.showSequences !== prevState.showSequences ||
         newState.showOverhangNames !== prevState.showOverhangNames ||
+        newState.showLoopSkips !== prevState.showLoopSkips ||
         newState.unfoldActive !== prevState.unfoldActive ||
         newState.cadnanoActive !== prevState.cadnanoActive ||
         newState.deformVisuActive !== prevState.deformVisuActive) {

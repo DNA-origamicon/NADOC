@@ -195,6 +195,10 @@ import { mdVizApiAdapter } from './ui/md_viz_adapter.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initMrdnaDisplay } from './ui/mrdna_display.js'
 import { initMrdnaJobsPanel } from './ui/mrdna_jobs_panel.js'
+import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
+import { initCandoDisplay } from './ui/cando_display.js'
+import { initCandoLegend } from './ui/cando_legend.js'
+import { initCandoCylinders } from './scene/cando_cylinders.js'
 import { initMrdnaConnections } from './scene/mrdna_connections.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
 import { initMdEngines }   from './ui/md_engines.js'
@@ -1789,9 +1793,29 @@ async function main() {
   // protein. Opened from Tools ▸ Conjugate Manager… and the protein right-click.
   const conjugateManager = initConjugateManager({ api, store })
 
+  // Rebuild the atomistic / surface mesh from the live design so a stopped MD/oxDNA
+  // overlay drops back to the design's equilibrium pose in the SAME representation —
+  // never reverting an atomistic/surface scene to the CG bead model.  Shared by the
+  // live MD display, the MD viz (flex/traj), and the oxDNA display controllers.
+  // (_atomSurface is assigned below at ~1995; this only fires on a user toggle-off,
+  // post-boot, so the lazy reference is resolved by then.)
+  const _restoreDesignHeavy = () => {
+    if (atomisticRenderer.getMode?.() !== 'off') {
+      _atomSurface.invalidateAtomCache()
+      _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
+    }
+    if (_atomSurface.getSurfaceMode?.() !== 'off') {
+      _atomSurface.invalidateSurfaceCache()
+      _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
+    }
+  }
+
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
-  const mdDisplayController = initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer })
+  const mdDisplayController = initMdPanel(store, {
+    designRenderer, mdOverlay, atomisticRenderer,
+    onRestoreDesignHeavy: _restoreDesignHeavy,
+  })
   // getOxdnaDisplay is a lazy getter (oxdnaDisplay is declared below at ~1808): a
   // seeded MD run with no MD frame yet shows the inherited oxDNA-seed positions via it.
   // ── Compute-cluster (Alpine) connection chip (Phase 1 remote-execution backend) ─
@@ -1822,16 +1846,7 @@ async function main() {
     // Toggle-off / job-switch: rebuild the atomistic + surface meshes from the
     // live design so they drop the oxDNA overlay (mirrors the animation player's
     // stop handler).
-    onRestoreDesignHeavy: () => {
-      if (atomisticRenderer.getMode?.() !== 'off') {
-        _atomSurface.invalidateAtomCache()
-        _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
-      }
-      if (_atomSurface.getSurfaceMode?.() !== 'off') {
-        _atomSurface.invalidateSurfaceCache()
-        _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
-      }
-    },
+    onRestoreDesignHeavy: _restoreDesignHeavy,
     // A heavy (atomistic/surface) frame rebuild started/finished — forward to the
     // panel so it can show a "building…" spinner instead of looking frozen.
     onHeavyStatus: (d) => window.dispatchEvent(
@@ -1874,16 +1889,7 @@ async function main() {
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,
     getCurrentRepr:       () => _currentRepr,
-    onRestoreDesignHeavy: () => {
-      if (atomisticRenderer.getMode?.() !== 'off') {
-        _atomSurface.invalidateAtomCache()
-        _atomSurface.applyAtomisticMode(atomisticRenderer.getMode())
-      }
-      if (_atomSurface.getSurfaceMode?.() !== 'off') {
-        _atomSurface.invalidateSurfaceCache()
-        _atomSurface.applySurfaceMode(_atomSurface.getSurfaceMode())
-      }
-    },
+    onRestoreDesignHeavy: _restoreDesignHeavy,
     onHeavyStatus: (d) => window.dispatchEvent(
       new CustomEvent('nadoc:md-heavy-status', { detail: d })),
     onFrame: (u) => flexibleArcs.applySimPositions(u),
@@ -1919,6 +1925,19 @@ async function main() {
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
   })
   initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
+  // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
+  // solver. The "Predicted shape (deform model)" toggle deforms the NADOC model to
+  // the FEM-predicted positions via applyFemPositions (display-only, Three-Layer).
+  // "CanDo style output" toggle draws the predicted shape as CanDo's jointed-cylinder
+  // tubes (a standalone rep — native model hidden, like the mrDNA CG-beads mode).
+  const candoCylinderOverlay = initCandoCylinders(scene)
+  const candoDisplay = initCandoDisplay({
+    designRenderer, api,
+    cylinderOverlay:  candoCylinderOverlay,
+    setDesignVisible: (v) => _setDesignGeometryVisible(v),
+    legend:           initCandoLegend(),
+  })
+  initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
   // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
   // on every design sync; both panels self-listen, so no store subscription here.)
@@ -3119,7 +3138,7 @@ async function main() {
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'oxdna-jobs-panel', 'mrdna-jobs-panel', 'md-panel',
+    'oxdna-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}

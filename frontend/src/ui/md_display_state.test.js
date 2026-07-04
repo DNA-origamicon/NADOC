@@ -9,6 +9,8 @@ import {
   nextLivePollAction,
   mdReadinessIndicator,
   shouldForceDisplayReload,
+  sceneUsesHeavy,
+  restorePlan,
 } from './md_display_state.js'
 
 describe('targetStreamMode', () => {
@@ -34,6 +36,37 @@ describe('sceneUsesAtomistic / sceneUsesNativeCg', () => {
     expect(sceneUsesNativeCg('cylinders')).toBe(true)
     expect(sceneUsesNativeCg('vdw')).toBe(false)
     expect(sceneUsesNativeCg('hull-prism')).toBe(false)
+  })
+})
+
+describe('sceneUsesHeavy', () => {
+  it('is true only for the atomistic + surface renderers', () => {
+    expect(sceneUsesHeavy('vdw')).toBe(true)
+    expect(sceneUsesHeavy('ballstick')).toBe(true)
+    expect(sceneUsesHeavy('surface')).toBe(true)
+  })
+  it('is false for every design-renderer CG repr, INCLUDING hull-prism', () => {
+    // hull-prism is drawn by the design renderer, so it is NOT heavy — this is the
+    // case sceneUsesNativeCg misses (hence a dedicated predicate).
+    for (const r of ['full', 'beads', 'cylinders', 'hull-prism', 'anything', undefined])
+      expect(sceneUsesHeavy(r)).toBe(false)
+  })
+})
+
+describe('restorePlan', () => {
+  it('CG design reprs → show the native design, no heavy rebuild', () => {
+    for (const r of ['full', 'beads', 'cylinders', 'hull-prism']) {
+      expect(restorePlan(r)).toEqual({ showNativeCg: true, rebuildHeavy: false })
+    }
+  })
+  it('atomistic reprs → keep the heavy rep (rebuild), hide the native CG design', () => {
+    // The bug this pins: stopping a display in atomistic must NOT show native CG.
+    for (const r of ['vdw', 'ballstick']) {
+      expect(restorePlan(r)).toEqual({ showNativeCg: false, rebuildHeavy: true })
+    }
+  })
+  it('surface → keep the heavy rep (rebuild), hide the native CG design', () => {
+    expect(restorePlan('surface')).toEqual({ showNativeCg: false, rebuildHeavy: true })
   })
 })
 

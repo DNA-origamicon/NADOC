@@ -47,7 +47,7 @@ function makeMdSeg(toggleResult = true) {
 
 function makeDeps(overrides = {}) {
   return {
-    store: createMockStore({ currentDesign: { strands: [] }, currentGeometry: [], currentHelixAxes: [] }),
+    store: createMockStore({ currentDesign: { strands: [] }, currentGeometry: [], currentHelixAxes: [], showLoopSkips: false }),
     loopSkipHighlight: makeLoopSkip(),
     mdSegmentation: makeMdSeg(),
     setMenuToggle: vi.fn(),
@@ -96,7 +96,11 @@ describe('Loop/Skip toggle', () => {
 
   it('off: hides legend, flips highlight off, sets pill, does NOT rebuild', () => {
     mountMenu()
-    const deps = makeDeps({ loopSkipHighlight: makeLoopSkip(true) })
+    // Source of truth is the store key `showLoopSkips`; seed it on so the click turns it off.
+    const deps = makeDeps({
+      store: createMockStore({ currentDesign: { strands: [] }, currentGeometry: [], currentHelixAxes: [], showLoopSkips: true }),
+      loopSkipHighlight: makeLoopSkip(true),
+    })
     const { loopSkipLegend } = initViewLegends(deps)
     document.getElementById('menu-view-loop-skip').click()
     expect(deps.loopSkipHighlight.setVisible).toHaveBeenCalledWith(false)

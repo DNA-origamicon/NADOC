@@ -48,7 +48,7 @@ const _initialState = {
 
   /** View-tool toggles — visual overlays that don't affect selection.
    *  referenceGeometry=true → show reference strands (translucent); false → hide. */
-  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false, overhangNames: false, grid: true, referenceGeometry: true, periodicBoundary: false },
+  viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false, loopSkips: true, overhangNames: false, grid: true, referenceGeometry: true, periodicBoundary: false },
 
   /** True while an API request is in flight. */
   loading: false,

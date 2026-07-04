@@ -50,14 +50,26 @@ export function initViewLegends({ store, loopSkipHighlight, mdSegmentation, setM
   `.trim()
   document.body.appendChild(loopSkipLegend)
 
-  document.getElementById('menu-view-loop-skip')?.addEventListener('click', () => {
-    const nowVisible = !loopSkipHighlight.isVisible()
+  // Loop/skip visibility is held in the store (`showLoopSkips`) so the View-menu
+  // item and the "loop/skip" view-tool pill drive the same state. Both entry
+  // points just flip the key; this applier does the actual scene/legend work.
+  function _applyLoopSkipVisibility(nowVisible) {
     loopSkipHighlight.setVisible(nowVisible)
     setMenuToggle('menu-view-loop-skip', nowVisible)
     loopSkipLegend.style.display = nowVisible ? 'block' : 'none'
     if (nowVisible) {
       const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
       loopSkipHighlight.rebuild(currentDesign, currentGeometry, currentHelixAxes)
+    }
+  }
+
+  document.getElementById('menu-view-loop-skip')?.addEventListener('click', () => {
+    store.setState({ showLoopSkips: !store.getState().showLoopSkips })
+  })
+
+  store.subscribe((newState, prevState) => {
+    if (newState.showLoopSkips !== prevState.showLoopSkips) {
+      _applyLoopSkipVisibility(newState.showLoopSkips)
     }
   })
 
@@ -108,8 +120,7 @@ export function initViewLegends({ store, loopSkipHighlight, mdSegmentation, setM
   // View-menu pills, and hides the MD overlay. Verbatim port of the 5-line reset
   // block (order preserved).
   function reset() {
-    setMenuToggle('menu-view-loop-skip', false)
-    loopSkipLegend.style.display = 'none'
+    store.setState({ showLoopSkips: false })   // hides highlight + legend + pills via subscriber
     mdSegmentation.hide()
     setMenuToggle('menu-view-md-segmentation', false)
     mdSegLegend.style.display = 'none'

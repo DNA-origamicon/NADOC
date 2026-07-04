@@ -229,6 +229,25 @@ Hiding requires `designRenderer` + `bluntEnds` + `endExtrudeArrows` + `jointRend
 
 **How to avoid**: See `feedback_design_renderer_visibility_rule.md`. There is no single visibility toggle.
 
+### D11. Display overlays MUST emit a loop-`copy` index, or loop-insert beads strand (2026-07-04)
+A loop insertion places several nucleotides at ONE `(helix, bp, direction)`. `helix_renderer`
+distinguishes them by a **`copy` index** (`_copySeenBB` = appearance order) and addresses every
+bead/slab/cone position (`applyFemPositions`) and scalar colour (`applyScalarColors`) by the 4-part
+key `helix:bp:dir:copy` — **there is no 3-part fallback for beads/slabs/cones**. Any overlay that
+emits positions/colours keyed only by `(helix,bp,dir)` (or with no `copy`) aliases every loop
+copy>0 onto copy 0 → the extra loop bases are never moved OR coloured and strand at their native
+position. Hit the CanDo deform/flex/deviation toggles (`fem_solver.deformed_positions` had no
+`copy`); **mrDNA `mrdna_runner._display_positions` still has this latent gap**; oxDNA's health/RMSF
+path got it right (carries `copy`).
+
+**The trap that hid it:** a coverage test asserting `{(helix,bp,dir)} == expected_set` COLLAPSES the
+loop copies → passes while copies strand (false confidence). Assert over `(helix,bp,dir,COPY)` tuples
+AND `len(positions) == total_nucleotides`.
+
+**How to avoid**: emit `copy` = per-`(helix,bp,dir)` running counter over `nucleotide_positions`
+order (verified identical to the geometry-endpoint order → matches `_copySeenBB`); frontend colour
+keys use `helix:bp:dir:copy` (+3-part alias only for copy 0). See `project_cando_fem.md` (loop-copy fix).
+
 ### D3. Plan B (lean fast paths) skips backend geometry
 Cluster commits and seeks now skip the full backend geometry recompute and rebuild only what's affected. Anything derived from live anchors (e.g. ds-linker bridges) must be re-emitted explicitly via `/design/refresh-bridges`. Forgetting this leaves bridges stuck at their old positions.
 

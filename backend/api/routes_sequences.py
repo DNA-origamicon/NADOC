@@ -29,7 +29,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.core.models import StrandType
-from backend.core.sequences import domain_bp_range
+from backend.core.sequences import domain_bp_range, strand_nucleotide_count
 # Shared export resolver used by many routes across crud.py + assembly.py + core;
 # it stays in crud.py and is imported back here (same convention as
 # routes_export_structure.py / routes_camera_poses.py).
@@ -131,7 +131,10 @@ def export_sequence_csv() -> Response:
         last_d = strand.domains[-1]
         if first_d.helix_id not in helix_num_map or last_d.helix_id not in helix_num_map:
             continue
-        total_nt = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
+        # Loop/skip-adjusted nt count (NOT the raw bp-range span): deletions remove
+        # bases, so the bp-range over-counts and pads the shorter real sequence with
+        # spurious '?' — which crashes/skips CanDo. See strand_nucleotide_count.
+        total_nt = strand_nucleotide_count(strand, design)
         seq = _sequence_for_export(strand, total_nt)
         color = (strand.color or "#f7931e").lower()
         writer.writerow([
@@ -213,7 +216,7 @@ def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) 
         d0, dn = strand.domains[0], strand.domains[-1]
         ovhg5_len = (abs(d0.end_bp - d0.start_bp) + 1) if d0.overhang_id else 0
         ovhg3_len = (abs(dn.end_bp - dn.start_bp) + 1) if dn.overhang_id else 0
-        total_len = sum(abs(d.end_bp - d.start_bp) + 1 for d in strand.domains)
+        total_len = strand_nucleotide_count(strand, design)  # loop/skip-adjusted (see CSV export)
 
         color_hex = color_overrides.get(strand.id) \
                     or strand.color \

@@ -57,7 +57,8 @@ Live in `.claude/rules/`, auto-load when matching files are read. Don't open man
 - [interrupt_before_doubting_user](feedback_interrupt_before_doubting_user.md) — ask first; don't preemptively "fix" user observations
 - [busy_popup_threshold](feedback_busy_popup_threshold.md) — `_BUSY_POPUP_DELAY_MS = 5000`
 - [user_todo_smoke_tests](feedback_user_todo_smoke_tests.md) — manual smoke tests get a `USER TODO` numbered block
-- [playwright_fixtures_location](feedback_playwright_fixtures_location.md) — test `.nadoc` → `workspace/playwright_tests/`
+- [playwright_fixtures_location](feedback_playwright_fixtures_location.md) — test `.nadoc` → `workspace/playwright_tests/`, deleted when done
+- [display_toggle_visual_verify](feedback_display_toggle_visual_verify.md) — verify viz toggles by SCREENSHOT not status text; multi-doc e2e needs doc-pinned load (`?doc=`+`X-NADOC-Doc`) or renders nothing
 
 **MD / simulation feedback:**
 - [c1_pair_builder](feedback_c1_pair_builder.md) — sort all C1' pair candidates by distance first (else scaffold-before-staples mispair)
@@ -75,6 +76,7 @@ Live in `.claude/rules/`, auto-load when matching files are read. Don't open man
 - [namd_cufix_oc_stub](feedback_namd_cufix_oc_stub.md) — fix OTMG NBFIX partners in `par_stub_ions_nbfix.str`
 - [namd_anisotropic_barostat](feedback_namd_anisotropic_barostat.md) — `useFlexibleCell yes` → Z runaway; use isotropic NPT
 - [no_bulk_reformat](feedback_no_bulk_reformat.md) — no repo-wide `ruff format` commits; rely on pre-commit hook
+- [loopskip_no_crossover_ends](feedback_loopskip_no_crossover_ends.md) — auto loops/skips never on crossovers/strand-ends (breaks CanDo); manual placement stays free
 
 ## Active topic files
 

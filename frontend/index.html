@@ -330,6 +330,7 @@
     .vt-btn.active[data-vt="lengthHeatmap"]  { color: #c084fc; border-color: #7c3aed; background: rgba(192,132,252,0.10); }
     .vt-btn.active[data-vt="sequences"]      { color: #4ade80; border-color: #16a34a; background: rgba(74,222,128,0.10); }
     .vt-btn.active[data-vt="undefinedBases"] { color: #fbbf24; border-color: #d97706; background: rgba(251,191,36,0.10); }
+    .vt-btn.active[data-vt="loopSkips"]      { color: #ff9944; border-color: #c2410c; background: rgba(255,153,68,0.10); }
     .vt-btn.active[data-vt="grid"]           { color: #94a3b8; border-color: #475569; background: rgba(148,163,184,0.10); }
     .vt-btn.active[data-vt="overhangNames"]  { color: #fb923c; border-color: #ea580c; background: rgba(251,146,60,0.10); }
     .vt-btn.active[data-vt="expanded"]       { color: #22d3ee; border-color: #0891b2; background: rgba(34,211,238,0.10); }
@@ -3909,6 +3910,140 @@
             </div>
           </div><!-- /mrdna-jobs-panel -->
 
+          <!-- ── CanDo FEM (native shape predictor: linear/nonlinear solve) ──── -->
+          <div class="panel-section" id="cando-jobs-panel">
+            <h2 id="cando-jobs-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+              <span>CanDo FEM</span>
+              <span id="cando-jobs-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="cando-jobs-body" style="display:none;margin-top:8px">
+
+              <!-- running job's progress bar -->
+              <div id="cando-jobs-progress" style="margin-bottom:6px">
+                <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
+                  <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
+                </div>
+              </div>
+
+              <!-- two run buttons: Coarse (linear preview) + Fine (nonlinear) -->
+              <div style="display:flex;gap:5px;margin-bottom:6px">
+                <button id="cando-jobs-coarse-btn"
+                        title="COARSE prediction (linear FEM solve). Fast (seconds) — reproduces ~0.92 of the CanDo-predicted bend. Use for an interactive preview of the loop/skip shape + flexibility."
+                        style="flex:1;font-size:var(--text-xs);padding:6px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
+                  ▶ Coarse
+                </button>
+                <button id="cando-jobs-fine-btn"
+                        title="FINE prediction (geometrically-nonlinear corotational solve). Slower (~1 min on a 6HB) but validated ~0.95 of the CanDo bend — the accurate shape."
+                        style="flex:1;font-size:var(--text-xs);padding:6px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
+                  ⤴ Fine (nonlinear)
+                </button>
+              </div>
+
+              <!-- ── Jobs (list of runs, filtered to this design) ──────────── -->
+              <div class="ox-card">
+                <div id="cando-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span class="ox-card__title">Jobs</span>
+                </div>
+                <div class="ox-card__body">
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
+                    <input id="cando-jobs-show-all" type="checkbox"> Show jobs for all designs
+                  </label>
+                  <div id="cando-jobs-list" style="max-height:120px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                </div>
+              </div>
+
+              <!-- ── Advanced (collapsible card) ──────────────────────────── -->
+              <div class="ox-card">
+                <div id="cando-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e;cursor:pointer">
+                  <span id="cando-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
+                </div>
+                <div id="cando-jobs-adv-body" class="ox-card__body" style="display:none">
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                    <label for="cando-jobs-n-steps" style="font-size:var(--text-xs);color:#8b949e" title="Corotational load-step count (nonlinear solve only)">Load steps</label>
+                    <input id="cando-jobs-n-steps" type="number" value="20" min="1" max="200" step="1"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px">
+                    <input id="cando-jobs-with-rmsf" type="checkbox" checked> Compute RMSF (flexibility, NMA)
+                  </label>
+                </div>
+              </div>
+
+              <!-- ── Detail (selected job) ─────────────────────────────────── -->
+              <div id="cando-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
+                <div id="cando-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>
+                <div id="cando-jobs-timeline" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;font-family:var(--font-mono, monospace)"></div>
+                <!-- completed-job summary: solver / nodes / RMSF range -->
+                <div id="cando-jobs-summary" style="display:none;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:6px;padding:5px 6px;background:#12161c;border:1px solid #21262d;border-radius:3px"></div>
+                <div id="cando-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#ff7b72;margin-bottom:4px"></div>
+                <div style="display:flex;gap:5px;margin-bottom:6px">
+                  <button id="cando-jobs-stop-btn"
+                          style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer">■ Stop</button>
+                  <button id="cando-jobs-delete-btn"
+                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">🗑 Delete</button>
+                </div>
+              </div>
+
+              <!-- ── Display (mutually-exclusive viz modes; collapsible card) ────────── -->
+              <!-- Always visible; the radios stay locked until a completed job is selected. -->
+              <!-- All modes are Physical-layer / display-only (topology untouched). -->
+              <div class="ox-card" style="margin-top:8px">
+                <div id="cando-display-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
+                  <span id="cando-display-arrow" style="display:inline-block;transition:transform .15s">▾</span><span class="ox-card__title">Display</span>
+                </div>
+                <div id="cando-display-card" class="ox-card__body">
+                  <div id="cando-jobs-display-modes" style="display:flex;flex-direction:column;gap:2px;margin-bottom:3px">
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9">
+                      <input class="cando-display-mode" name="cando-display-mode" value="off" type="radio" checked disabled> Off (native model)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9">
+                      <input class="cando-display-mode" name="cando-display-mode" value="deform" type="radio" disabled> Predicted shape (deform model)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9">
+                      <input class="cando-display-mode" name="cando-display-mode" value="flex" type="radio" disabled> Flexibility map (RMSF)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9">
+                      <input class="cando-display-mode" name="cando-display-mode" value="deviation" type="radio" disabled> Deviation from design
+                    </label>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9" title="Draw the predicted shape as CanDo's familiar jointed-cylinder tubes (native model hidden)">
+                      <input class="cando-display-mode" name="cando-display-mode" value="cando" type="radio" disabled> CanDo style output (cylinders)
+                    </label>
+                  </div>
+                  <div id="cando-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Graphs and Metrics (per-bp flexibility + deviation; collapsible) ── -->
+              <div class="ox-card" style="margin-top:8px">
+                <div id="cando-metrics-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="cando-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
+                </div>
+                <div id="cando-metrics-card" class="ox-card__body" style="display:none">
+                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Per-base-pair flexibility (RMSF) &amp; deviation-from-design along each helix, for the selected completed job. Static solve — spatial only.</div>
+                  <!-- Flexibility (RMSF) -->
+                  <div style="margin-bottom:8px">
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="Per-bp RMSF from the free-free normal-mode analysis (needs a job run with RMSF on)">Flexibility (RMSF)</span>
+                      <button id="cando-metrics-rmsf-display" title="Show the per-bp RMSF graph" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="cando-metrics-rmsf-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="cando-metrics-rmsf-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                  <!-- Deviation from design -->
+                  <div>
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <span style="flex:1;font-size:var(--text-xs);color:#c9d1d9" title="Per-bp distance of the FEM-predicted shape from the design's intended geometry">Deviation from design</span>
+                      <button id="cando-metrics-dev-display" title="Show the per-bp deviation graph" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Display</button>
+                      <button id="cando-metrics-dev-export"  title="Export PNG and/or CSV" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    </div>
+                    <div id="cando-metrics-dev-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div><!-- /cando-jobs-panel -->
+
           <!-- ── MD relaxation panel (job launcher + live progress) ───────── -->
           <div class="panel-section" id="md-jobs-panel">
             <h2 id="md-jobs-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
@@ -5176,6 +5311,10 @@
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="2" y="1" width="12" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 1"/><text x="8" y="8" font-size="8" font-weight="bold" font-family="monospace" fill="currentColor" text-anchor="middle">?</text></svg>
               <span class="sf-label-text">undef</span>
             </button>
+            <button class="sf-btn vt-btn" data-vt="loopSkips" title="Show loop / skip markers (orange torus = loops, red ✕ = skips)">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="4" cy="5" r="2.5" fill="none" stroke="#ff8800" stroke-width="1.3"/><line x1="9.5" y1="2.5" x2="14" y2="7.5" stroke="#ff2222" stroke-width="1.3"/><line x1="14" y1="2.5" x2="9.5" y2="7.5" stroke="#ff2222" stroke-width="1.3"/></svg>
+              <span class="sf-label-text">loop/skip</span>
+            </button>
             <button class="sf-btn vt-btn" data-vt="grid" title="Toggle floor grid">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="1" width="14" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1"/><line x1="5" y1="1" x2="5" y2="9" stroke="currentColor" stroke-width="0.8"/><line x1="9" y1="1" x2="9" y2="9" stroke="currentColor" stroke-width="0.8"/><line x1="13" y1="1" x2="13" y2="9" stroke="currentColor" stroke-width="0.8"/><line x1="1" y1="5" x2="15" y2="5" stroke="currentColor" stroke-width="0.8"/></svg>
               <span class="sf-label-text">grid</span>
@@ -5249,6 +5388,20 @@
                     style="width:100%;margin-top:6px;font-size:9px;padding:2px;cursor:pointer;
                            background:var(--color-bg-inset);color:var(--color-text-secondary);
                            border:1px solid var(--color-border-default);border-radius:3px">Reset</button>
+          </div>
+          <!-- CanDo FEM colour-map legend (middle-right, same slot as the oxDNA flex scale;
+               shown only while a CanDo Flexibility (RMSF) / Deviation map is active). Static
+               ramp + data max/min readout — the ramp + bounds come from cando_display's stats. -->
+          <div id="cando-legend" style="
+            position:absolute; right:14px; top:50%; transform:translateY(-50%); display:none;
+            z-index:var(--z-overlay); width:56px; padding:7px 6px;
+            background:var(--color-bg-raised); border:1px solid var(--color-border-default);
+            border-radius:6px; box-shadow:var(--shadow-sm); font-family:var(--font-ui);">
+            <div id="cando-legend-title" style="font-size:9px;color:var(--color-text-secondary);text-align:center;margin-bottom:4px">RMSF (nm)</div>
+            <div id="cando-legend-max" style="font-size:10px;color:var(--color-text-primary);text-align:center;margin-bottom:3px">—</div>
+            <div id="cando-legend-bar" style="width:18px;height:140px;margin:0 auto;border-radius:3px;
+                        background:linear-gradient(to top,#440154,#3b528b,#21918c,#5dc863,#fde725)"></div>
+            <div id="cando-legend-min" style="font-size:10px;color:var(--color-text-primary);text-align:center;margin-top:3px">—</div>
           </div>
 
           <div id="length-heatmap-legend">

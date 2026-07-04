@@ -19,6 +19,7 @@ import {
   canReapplyFrame,
   decideReload,
   nextLivePollAction,
+  restorePlan,
 } from './md_display_state.js'
 
 const _WS_URL  = `ws://${location.host}/ws/md-run`
@@ -65,7 +66,7 @@ function _activeSceneRepresentation() {
   return 'full'
 }
 
-export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer }) {
+export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer, onRestoreDesignHeavy }) {
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const panel          = document.getElementById('md-panel')
   const heading        = document.getElementById('md-panel-heading')
@@ -460,18 +461,23 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     designRenderer?.setDesignVisible(v)
   }
 
-  // Restore design to full visibility and revert any MD-displaced positions.
+  // Stop an MD display and revert to the design's equilibrium pose — WITHOUT ever
+  // changing the user's chosen representation.  A CG scene drops back to the native
+  // bead-and-slab design; an atomistic/surface scene keeps that heavy representation,
+  // rebuilt from the design (onRestoreDesignHeavy) so it persists across toggling
+  // Display MD / flexibility map / trajectory (mirrors the mdViz flex/traj stop path).
   function _restoreDesign() {
     _stopLiveBar()
     mdOverlay?.dispose?.()
-    if (!_autoDisplayActive || _sceneUsesNativeCg()) {
+    designRenderer?.applyFemPositions(null)   // always drop MD-displaced CG positions
+    const { showNativeCg, rebuildHeavy } = restorePlan(_sceneRepr)
+    if (showNativeCg) {
       atomisticRenderer?.setMode?.('off')
+      _setShowNadoc(true)
+    } else {
+      _setShowNadoc(false)               // hide the CG design under the heavy rep
+      if (rebuildHeavy) onRestoreDesignHeavy?.()
     }
-    designRenderer?.applyFemPositions(null)
-    const showNative = !_autoDisplayActive || _sceneUsesNativeCg()
-    designRenderer?.setDesignVisible(showNative)
-    if (showNadocChk) showNadocChk.checked = showNative
-    _showNadoc = showNative
   }
 
   showNadocChk?.addEventListener('change', () => {

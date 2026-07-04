@@ -1,0 +1,21 @@
+{
+  "_comment": "CanDo reference values extracted from the honeycomb 6HB/210bp battery (2026-07-03). These are the calibration/validation targets for the native NADOC FEM. Bends measured from deformedShape.bild + atomic PDB (arc-span + chord-sagitta, agree <1deg). Twist measured via 6-fold order parameter on coarse axis nodes (|Z|~0.9, linear profile, control=0); absolute sign is arbitrary (PCA frame), magnitude +/-~15pct method uncertainty. RMSF from structure_NMA_RMSF.txt (nm).",
+  "lattice": "honeycomb",
+  "helices": 6,
+  "length_bp": 210,
+  "cando_constants": {"EA_pN": 1100, "EI_pN_nm2": 230, "GJ_pN_nm2": 460, "helix_diam_nm": 2.25, "rise_nm": 0.34, "bp_per_turn": 10.5, "nick_factor": 0.01},
+  "designs": {
+    "01_control_straight": {"marks": "none", "bend_deg": 0.0, "R_nm": null, "twist_deg": 0.0, "rmsf_nm": {"min": 0.45, "max": 1.50, "mean": 0.74}},
+    "02_twist_half_turn":  {"marks": "30 skips", "twist_deg_cando": 45,  "twist_deg_analytic": 171.4, "ratio": 0.26, "bend_deg": 0.0, "rmsf_nm": {"min": 0.42, "max": 1.48, "mean": 0.73}},
+    "03_twist_full_turn":  {"marks": "60 skips", "twist_deg_cando": 87,  "twist_deg_analytic": 342.9, "ratio": 0.25, "bend_deg": 0.0, "rmsf_nm": {"min": 0.42, "max": 1.46, "mean": 0.72}},
+    "04_twist_opposite":   {"marks": "30 loops", "twist_deg_cando": 62,  "twist_deg_analytic": 171.4, "ratio": 0.36, "bend_deg": 0.0, "rmsf_nm": {"min": 0.48, "max": 1.63, "mean": 0.81}},
+    "05_bend_90":          {"marks": "18 loops + 18 skips gradient", "bend_deg_cando": 86.9, "R_nm_cando": 45.9, "bend_deg_analytic": 90.0, "R_nm_analytic": 45.5, "ratio": 0.97, "twist_deg": 0.0, "rmsf_nm": {"min": 0.49, "max": 1.41, "mean": 0.71}},
+    "06_bend_180":         {"marks": "36 loops + 36 skips gradient", "bend_deg_cando": 170.1, "R_nm_cando": 23.4, "bend_deg_analytic": 180.0, "R_nm_analytic": 22.7, "ratio": 0.94, "twist_deg": 0.0, "rmsf_nm": {"min": 0.54, "max": 1.74, "mean": 0.80}},
+    "07_2hb_twist":        {"note": "2-helix, 5 skips/helix; user added nicks to linearize staples before submit; seamless-routed", "twist_deg_cando": 84, "twist_deg_analytic": 171.4, "ratio": 0.49, "measure": "2-tube azimuth (sd 0.9)"},
+    "08_18hb_straight":    {"note": "18-helix control", "twist_deg_cando": 0.2, "bend_deg": 0.0, "measure": "18-tube azimuth (sd 0.4) -> validates method"},
+    "09_18hb_twist":       {"note": "18-helix, 5 skips/helix (same density as 02)", "twist_deg_cando": 23, "twist_deg_analytic": 171.4, "ratio": 0.14, "measure": "18-tube azimuth (sd 3.9) = m=6 order param 23.7 (agree)"},
+    "10_18hb_bend":        {"note": "18-helix 90deg bend (cross-section bend scaling)", "bend_deg_cando": 91.4, "R_nm_cando": 42.4, "bend_deg_analytic": 90.0, "R_nm_analytic": 45.5, "ratio": 1.02, "planarity": 0.419, "caveat": "mild non-planarity (bend-twist coupling in larger cross-section); span/sagitta agree ~4deg"}
+  },
+  "cross_section_scaling_finding": "At the SAME 5-skips/helix density (analytic 171deg for ALL), CanDo global twist DROPS with bundle size: 2HB=84deg (0.49), 6HB=45deg (0.26), 18HB=23deg (0.14) — roughly halves as helix count triples. The naive analytic is cross-section-blind (171 for all); only a proper FE captures the torsional-coupling size dependence. 2HB anchors GJ (weakest coupling); 6HB/18HB pin the coupling scaling. CAVEAT: 07/09 submitted topology has user-added nicks (staples appeared cyclic in caDNAno though our export traces linear); the global twist trend is robust but exact per-design FEM matching wants the user's submitted files.",
+  "key_finding": "CanDo reproduces BEND at ~95% of the naive single-helix analytic but TWIST at only ~14-49% (dropping with bundle size). The analytic 34.3deg/deletion ignores the bundle's torsional coupling; crossover-linked helices resist global twist. The native FEM MUST reproduce this bend/twist asymmetry AND the twist-damping-vs-cross-section scaling — the naive analytic cannot. RMSF ~0.4-1.7nm (stiff crossover-dense core -> floppy ends), consistent across designs."
+}

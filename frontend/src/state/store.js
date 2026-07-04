@@ -234,6 +234,13 @@ const _initialState = {
   showOverhangNames: false,
 
   /**
+   * When true, loop/skip markers (orange torus = loop, red ✕ = skip) are shown
+   * in the 3D scene. Toggled via View > Loop/Skip Highlights or the "loop/skip"
+   * view-tool pill; both flip this key so they stay in sync.
+   */
+  showLoopSkips: false,
+
+  /**
    * When true, the long end-to-end ("periodic boundary") crossover connectors
    * of is_periodic_seam forced ligations are shown in 3D. Default false — these
    * span the whole part and clutter the view. Toggled via View > End-to-End Crossovers.

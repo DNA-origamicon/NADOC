@@ -11,9 +11,36 @@ the returned atomic models, so the future NADOC-FEM can be calibrated to reprodu
   `.cadnano.json` + `_manifest.json` + `EXPECTED_VALUES.md`). Pipeline: create_bundle →
   auto_scaffold(seamed) → auto_crossover → auto_break → add_twist/add_bend →
   apply_loop_skip_deformations → export.
+- **`gen_bend_diagnostics.py`** — the BEND-GAP diagnostic battery (§4): 15 designs
+  (`B1_*`…`B5_*`) that isolate why the FEM converts only ~68% of a programmed bend.
+  Adds staple-crossover **thinning** (by `process_id=="auto_crossover"`, keeps the single
+  scaffold) + an **off-crossover/off-end mark-relocation** pass
+  (`feedback_loopskip_no_crossover_ends`) + clean sequence CSVs. Writes
+  `_bend_diagnostics_manifest.json` + `BEND_DIAGNOSTICS_SUBMISSION.md` (submit guide).
+- **`fem_bend_diagnostics.py`** — in-code FEM experiments (§5, no CanDo run): baseline
+  bend (linear + nonlinear), **dense inter-helix coupling** stress test, and the
+  **axial/bend energy partition** on 05 & 06.
 - **`analyze_cando_pdb.py`** — analyses a CanDo multi-model atomic PDB → global bend
   angle + radius of curvature + planarity + contour + RMSF availability, from MODEL 1.
   `uv run python analyze_cando_pdb.py <pdb> --expect-bend 90 --expect-R 45.5 [--dump-centerline out.txt]`
+
+## BEND-GAP diagnostic battery (2026-07-03) — `B1_*`…`B5_*`, awaiting CanDo
+15 designs in `workspace/cando validation/`, submission guide in
+`BEND_DIAGNOSTICS_SUBMISSION.md`. Families: **B1** crossover-density sweep (6HB 90° bend,
+staple crossovers 112/56/28/1 — THE key run), **B2** bend-angle series (30/45/60/90/135°),
+**B3** length series at fixed R≈45 nm (105/210/420 bp = 45/90/180°), **B4** 2HB+4HB 90°
+bends, **B5** square-lattice 6HB bend (confounded by ~149° intrinsic SQ-correction twist —
+optional). All: single scaffold, 0 marks on crossovers/ends, `?`-free CSV (verified at
+caDNAno level).
+
+### §5 cheap diagnostic ALREADY resolved — CanDo `05.inp` element census (no CanDo run)
+Extracted from `05_bend_90.zip/structure_NLSA.inp`: **1225 BDNA + 33 NICKDNA beams,
+117 HJ crossover elements, 5 ssDNA connectors** (1264 nodes = bp). **117 HJ ≈ our 122
+crossovers → CanDo does NOT mesh denser inter-helix coupling than we do.** HJ = finite-
+length **compliant B31H beams** (span 2.25–3.8 nm, mean 2.68 nm, DNA section EI=230/GJ=460),
+**not rigid links**. ⇒ The bend gap is **not** sparse coupling; it is the crossover model
+(rigid link vs compliant beam) and/or the eigenstrain→bend conversion. This reframes B1:
+the sweep now tests the density *dependence*, not whether CanDo is denser (it isn't).
 
 ## CanDo output format (learned from 05_bend_90)
 - Atomic-model ZIP = `structure_multimodel.pdb` + 3 PNG views.
@@ -54,7 +81,84 @@ signal — small for a gentle bend; expect it larger on 06_bend_180 (hairpin, R�
 **Lesson: the CanDo submission lattice must match the design's — always confirm
 `readme.txt` "File type" against the design.** NADOC-FEM target for 05 = ~86°.
 
-Pending CanDo submissions: 01 (control), 02/03/04 (twist), 06 (hairpin).
+### Batch 2 (2026-07-03) — labels SCRAMBLED; identified by content (node count = definitive)
+Fingerprint each zip by CanDo node count (=bp; ins/del shifts it from baseline 1264),
+planarity (λ3/λ2: ≈1 straight rod, <0.2 flat bent arc), and bend. Node-count key:
++30→04(loops), −30→02, −60→03, net-0→{01 straight,05 bend86,06 bend166}.
+
+| ZIP filename | nodes | TRUE design | data |
+|---|---|---|---|
+| `01_control_straight` | 1264 | **01 control** ✓ | straight, twist≈0° (validates twist baseline) |
+| `02_twist_half_turn` | 1294 | **04 twist_opposite** ✗mislabel | twisted; magnitude pending per-helix estimator |
+| `03_twist_full_turn` | 1264 | **06 bend_180** ✗mislabel | 166°/R24.1nm (below) |
+| `05_bend_90` | 1264 | **05 bend_90** ✓ | 86°/R46 |
+
+**06_bend_180 result:** CanDo bend **165.6°** (span 164 / sag 167), R **24.1 nm** vs analytic
+180°/22.7 nm → **92% of ideal** (R +6%). Hairpin relaxes MORE than the gentle bend
+(95%→92%) — higher strain, more continuum relaxation, as predicted. Atomic planar 0.063.
+
+**Bend calibration so far:** 05 → 95%, 06 → 92%. The efficiency-vs-strain trend is the FEM
+signal. NADOC-FEM targets: 05≈86°, 06≈166°.
+
+**PRESENT (by content): 01, 04, 05, 06. MISSING: 02 (twist_half −30 skips), 03 (twist_full
+−60 skips)** — the two deletion/positive-twist designs. NB the user's zips *labeled* 02/03
+are actually 04/06, so the real 02 & 03 still need submitting.
+
+**OPEN — twist magnitude estimator.** Bend pipeline is robust (2 exact estimators agree).
+Twist proxies (2-fold covariance axis, 6-fold order parameter on all atoms) give
+inconsistent 70–168° for 04 — aliasing between the intra-helix backbone spiral and the
+bundle twist. The 6-fold order param DID read control=0° correctly (baseline OK). TODO:
+per-helix-centroid azimuth tracker (cluster 6 helices per axial slice → follow each helix's
+angle about the bundle axis → mean rate × length). Needed before trusting any twist number.
+
+Pending CanDo: real 02, real 03 (re-submit as honeycomb).
+
+### Refinement structures staged (2026-07-03) — for FEM calibration
+Generated in `workspace/cando validation/` (honeycomb, 210 bp, marks off crossovers/ends,
+`scratchpad/gen_extra_structures.py`), each with `.nadoc`+`.cadnano.json`+`_sequences.csv`:
+- **07_2hb_twist** — 2-helix, 5 skips/helix (single scaffold via SEAMLESS routing; seamed
+  gives 2 scaffolds on 2HB). Isolates duplex GJ from bundle coupling (decouples the two
+  twist-damping parameters).
+- **08_18hb_straight** — 18-helix control (cross-section baseline).
+- **09_18hb_twist** — 18-helix, 5 skips/helix (SAME density as design 02 → direct
+  cross-section comparison of twist damping).
+- **10_18hb_bend** — 18-helix 90° bend (cross-section scaling of bend vs 6HB design 05).
+All: 1 scaffold, 0 marks on crossovers/ends (caDNAno-verified), CSV `?`-free, analytic
+twist 171.4° / bend R 45.5 nm preserved. Gotcha fixed: auto loop/skip candidate must be
+interior to BOTH strands (scaffold AND staple) — a scaffold-interior bp can be a staple
+terminus. Pending user CanDo submission.
+
+### Whole battery regenerated — NO marks on crossovers/ends (2026-07-03)
+Principle (user, now [[feedback_loopskip_no_crossover_ends]]): auto-generated loops/skips
+must never sit on a crossover or strand end (nick/terminus/u-turn); manual placement stays
+free. Original battery violated this (02 had skips at bp 0, a terminal u-turn end
+crossover; 04/05/06 had 20–45 marks on crossovers). Regenerated all 5 loop/skip designs:
+- **Twist (02,03,04):** fresh uniform marks at common crossover/end-free bps (twist is
+  count-set → positions free). 02→[22,64,105,148,190], 03→[12,32,…,198], 04 loops same as 02.
+- **Bend (05,06):** gradient via deformation, then relocate ONLY offending marks to nearest
+  free interior bp (per-helix net count preserved → bend preserved).
+Verified caDNAno-level: **0 marks on crossovers, 0 on strand ends** (all 5). Preserved:
+twist 171.4/342.9/−171.4°, bend R 45.5/22.7 nm (exact analytic), all CSVs `?`-free.
+Forbidden set = crossover bps ∪ all strand domain endpoints ∪ 6-bp helix-end margin.
+`scratchpad/regen_battery_clean.py`.
+
+NOTE the CanDo failure of 02/03 is still not definitively explained (04/05/06 RAN with
+marks on crossovers). Candidate causes now all removed: bp-0 terminal-crossover skip, marks
+on crossovers, `?` CSV. Core realizers (`twist_loop_skips`/`bend_loop_skips`) do NOT yet
+enforce the no-crossover/end rule — flagged follow-up. Pending CanDo: resubmit 02–06.
+
+### Sequence-CSV '?' bug — FIXED (2026-07-03)
+CanDo crashed/skipped on 02 & 03 because their exported sequence CSV had `?` bases.
+Root cause: `routes_sequences.py` computed staple length as the raw bp-range
+`Σ(|end−start|+1)`, ignoring loop/skips — so for SKIP (deletion) designs the real
+sequence is shorter than the range and got padded with spurious `?` (02: 10 staples,
+03: 21; 05/06 also affected, 12/… — they ran anyway but were also dirty). Fix: use the
+loop/skip-adjusted count `sequences.strand_nucleotide_count(strand, design)` (wraps the
+canonical `_strand_nt_with_skips` the assignment already uses) in both the CSV and XLSX
+exports. Regression tests in `test_sequences.py` (`TestStrandNucleotideCount`,
+`TestSequenceCsvExportSkips`). Clean CSVs for all 6 designs written to
+`workspace/cando validation/*_sequences.csv` (0 `?`). `just test`: 3817 passed (1 unrelated
+xdist flake). **When re-submitting, upload these clean CSVs.**
 
 ### ⚠ LATTICE CONFOUND — 05 was solved as SQUARE, our design is HONEYCOMB
 The coarse ZIP (`05_bend_90.zip`) `readme.txt` says **File type: square**. The `.inp`

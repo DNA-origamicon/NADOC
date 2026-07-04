@@ -137,6 +137,18 @@ def _strand_nt_with_skips(strand: Strand, ls_map: dict[tuple[str, int], int]) ->
     return total
 
 
+def strand_nucleotide_count(strand: Strand, design: "Design") -> int:
+    """Actual nucleotide count of *strand*, accounting for loop/skips.
+
+    Loops (+1) add a base and skips (-1) remove one, so this differs from the raw
+    bp-range span sum ``Σ(|end-start|+1)``. It matches the length the sequence
+    assignment produces. Sequence *exports* MUST use this rather than the bp-range,
+    or deleted (skip) positions get padded with spurious ``?`` (which breaks CanDo
+    and other downstream tools). See ``backend/api/routes_sequences.py``.
+    """
+    return _strand_nt_with_skips(strand, _build_loop_skip_map(design))
+
+
 # ── Scaffold sequence assignment ───────────────────────────────────────────────
 
 

@@ -2094,6 +2094,27 @@ export const getMrdnaCurvature   = (id)          => _oxdnaJSON('GET',  `/mrdna/j
 /** Analytic curvature of the ACTIVE design's loop/skip pattern (instant, no run). */
 export const getMrdnaAnalyticCurvature = ()      => _oxdnaJSON('GET',  '/mrdna/curvature/analytic')
 
+// ── CanDo FEM shape-prediction jobs (routes_cando.py) ───────────────────────
+// Native CanDo-replica FEM: Coarse = linear preview, Fine = nonlinear corotational
+// solve.  Pure in-process solver (no GPU), so /available is always true.  Output is
+// Physical-layer / display-only; never mutates topology.  Same _oxdnaJSON transport.
+export const candoAvailable      = ()            => _oxdnaJSON('GET',  '/cando/available')
+export const createCandoJob      = (body)        => _oxdnaJSON('POST', '/cando/jobs', body)
+export const listCandoJobs       = ()            => _oxdnaJSON('GET',  '/cando/jobs')
+export const getCandoJob         = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}`)
+export const getCandoProgress    = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/progress`)
+export const getCandoErrorLog    = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/error-log`)
+export const startCandoJob       = (id)          => _oxdnaJSON('POST', `/cando/jobs/${id}/start`)
+export const stopCandoJob        = (id)          => _oxdnaJSON('POST', `/cando/jobs/${id}/stop`)
+export const deleteCandoJob      = (id)          => _oxdnaJSON('DELETE', `/cando/jobs/${id}`)
+export const getCandoDisplay     = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/display`)
+/** Per-bp RMSF (nm) for the flexibility map (Item 3). */
+export const getCandoRmsf        = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/rmsf`)
+/** Per-bp deviation from the intended (displayed) geometry + global RMSD (Item 3). */
+export const getCandoDeviation   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`)
+/** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
+export const getCandoCylinders   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/cylinders`)
+
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)

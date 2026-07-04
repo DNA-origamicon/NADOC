@@ -4904,3 +4904,139 @@ def _coverage_report(modules, path_predicate) -> dict:
         "covered_routes": covered_routes,
         "uncovered_routes": uncovered_routes,
     }
+
+
+# ── CanDo FEM curvature oracle ────────────────────────────────────────────────
+# Reusable measurement + assertion for the native CanDo-replica FEM shape
+# predictor (backend/physics/fem_solver.py; see memory/project_cando_fem.md +
+# experiments/exp36_cando_fem_validation).  This is the AUTOMATED, CanDo-zip-free
+# counterpart of exp36's process_bend_battery.py: it regenerates the FEM bend on a
+# headlessly-built design and measures it with the same A9-safe estimator, so the
+# curvature validation runs inside `just test` without any user-supplied CanDo output.
+
+
+def _chord_sagitta_bend(centerline) -> tuple[float, float]:
+    """Total bend angle (deg) + radius of curvature (nm) of an ordered centerline
+    via chord+sagitta — the A9-safe estimator that reads ~0 for a STRAIGHT rod and
+    the true angle for a circular arc (unlike a circle-fit arc-span, which is
+    degenerate on a straight line, or a turning-angle integral, which blows up on
+    jitter).  ``centerline`` is an (N,3) array of points ordered ALONG the axis.
+
+    chord ``c`` = |end − start|; sagitta ``s`` = max perpendicular deviation of the
+    centerline from that chord; ``R = (c²/4 + s²)/(2s)``; ``bend = 2·asin((c/2)/R)``
+    (reflected past 180° when ``s > R``, for hairpins)."""
+    import numpy as np
+
+    cen = np.asarray(centerline, dtype=float)
+    if len(cen) < 5:
+        return 0.0, float("inf")
+    a, b = cen[0], cen[-1]
+    chord_v = b - a
+    c = float(np.linalg.norm(chord_v))
+    if c < 1e-9:
+        return 0.0, float("inf")
+    u = chord_v / c
+    perp = (cen - a) - np.outer((cen - a) @ u, u)
+    s = float(np.linalg.norm(perp, axis=1).max())     # sagitta (max deviation)
+    if s < 1e-6:
+        return 0.0, float("inf")
+    R = (c * c / 4.0 + s * s) / (2.0 * s)
+    bend = float(np.degrees(2.0 * np.arcsin(np.clip((c / 2.0) / R, -1.0, 1.0))))
+    if s > R:                                          # arc past 180° (hairpin)
+        bend = 360.0 - bend
+    return bend, R
+
+
+def measure_fem_bundle_bend(
+    design: Design,
+    *,
+    nonlinear: bool = False,
+    n_steps: int = 8,
+) -> dict:
+    """Measure the CanDo-FEM-predicted global bend of a bundle ``design``.
+
+    Builds the duplex-core beam mesh, solves the loop/skip eigenstrain equilibrium,
+    reduces the deformed axis nodes to a per-station cross-section-centroid centerline,
+    and measures its bend angle (deg) + radius (nm) with :func:`_chord_sagitta_bend`.
+
+    The FEM prestress is driven ONLY by the design's TOPOLOGICAL loop/skip marks
+    (``fem_solver.assemble_prestress_force`` reads ``helix.loop_skips``).  A bend that
+    exists only as a display-layer ``DeformationOp`` — added via ``add_bend`` but never
+    realised to loop/skips via ``apply_loop_skip_deformations`` — imposes NO eigenstrain,
+    so the predicted shape is straight (``bend_deg ≈ 0``).  That is the Three-Layer Law
+    made testable: geometry/physical layers never read the display deformation.
+
+    ``nonlinear=False`` runs the fast linear prestress solve (~0.90 × CanDo bend on the
+    exp36 battery); ``nonlinear=True`` runs the corotational solve (~0.95 × CanDo, slower).
+
+    Returns ``{"bend_deg", "radius_nm", "n_nodes"}``.  Raises ``ValueError`` if the design
+    has no duplex core (fewer than 2 paired bp) to solve — same guard as ``predict_shape``.
+    """
+    from collections import defaultdict
+
+    import numpy as np
+
+    from backend.physics import fem_solver as fem
+
+    mesh = fem.build_fem_mesh(design)
+    if len(mesh.nodes) < fem._MIN_FEM_NODES:
+        raise ValueError(
+            f"measure_fem_bundle_bend: design meshed only {len(mesh.nodes)} duplex node(s); "
+            "needs a double-helical core of at least 2 base pairs to solve."
+        )
+
+    if nonlinear:
+        pos = fem.solve_prestress_shape(design, mesh, n_steps=n_steps)
+    else:
+        K, _ = fem.assemble_global_stiffness(mesh)
+        f = fem.assemble_prestress_force(mesh, design)
+        K_free, f_free, free = fem.apply_boundary_conditions(K, f, mesh)
+        u = fem.solve_equilibrium(K_free, f_free, K.shape[0], free)
+        pos = np.array([mesh.nodes[i].position + u[6 * i:6 * i + 3]
+                        for i in range(len(mesh.nodes))])
+
+    # Centerline = mean of every helix node at each axial station (global_bp), ordered.
+    by_station: dict[int, list] = defaultdict(list)
+    for p, node in zip(pos, mesh.nodes):
+        by_station[node.global_bp].append(p)
+    centerline = np.array([np.mean(by_station[s], axis=0) for s in sorted(by_station)])
+
+    bend, R = _chord_sagitta_bend(centerline)
+    return {"bend_deg": bend, "radius_nm": R, "n_nodes": len(mesh.nodes)}
+
+
+def assert_fem_matches_cando_bend(
+    design: Design,
+    cando_bend_deg: float,
+    *,
+    nonlinear: bool = False,
+    n_steps: int = 8,
+    ratio_lo: float = 0.80,
+    ratio_hi: float = 1.12,
+    min_bend_deg: float = 5.0,
+) -> dict:
+    """Assert the CanDo-FEM-predicted bend of ``design`` matches the measured CanDo
+    reference angle ``cando_bend_deg`` (from
+    ``experiments/exp36_cando_fem_validation/cando_reference_values.json``) within a
+    ratio band, plus a can-go-red guard that the FEM actually bent.
+
+      1. **Non-trivial** — ``bend_deg > min_bend_deg`` (fails on a straight prediction,
+         so the oracle can't pass vacuously — the analog of assert_deformation_angle's guard).
+      2. **Matches CanDo** — ``ratio_lo ≤ bend_deg / cando_bend_deg ≤ ratio_hi``.  The FEM
+         reproduces CanDo to ~0.90 linear / ~0.95 nonlinear; the default band brackets that.
+
+    Returns the :func:`measure_fem_bundle_bend` result dict (bend_deg / radius_nm / n_nodes)."""
+    m = measure_fem_bundle_bend(design, nonlinear=nonlinear, n_steps=n_steps)
+    bend = m["bend_deg"]
+    assert bend > min_bend_deg, (
+        f"FEM predicted only {bend:.2f}° of bend (< {min_bend_deg}°) — the design appears "
+        "un-bent, so this oracle would pass vacuously.  Realise the loop/skips "
+        "(apply_loop_skip_deformations) before asserting a curvature match."
+    )
+    ratio = bend / cando_bend_deg
+    assert ratio_lo <= ratio <= ratio_hi, (
+        f"FEM bend {bend:.2f}° vs CanDo {cando_bend_deg:.2f}° → ratio {ratio:.2f} "
+        f"outside [{ratio_lo}, {ratio_hi}] "
+        f"({'linear' if not nonlinear else 'nonlinear'} solve, R={m['radius_nm']:.1f} nm)."
+    )
+    return m

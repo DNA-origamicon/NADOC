@@ -1,0 +1,292 @@
+"""
+CanDo FEM Runner — background execution of a single CanDo-replica shape prediction.
+
+Sibling of ``mrdna_runner.py``, radically simplified: a CanDo job is a PURE
+in-process Python solve (``backend.physics.fem_solver.predict_shape``), not an
+external simulator.  There is no subprocess, no GPU, and no availability probe —
+only the two solver modes (linear "Coarse" preview vs nonlinear "Fine" solve).
+
+The runner:
+
+  1. prepare: write a self-contained ``design.json`` snapshot into the job dir, so
+     the solve (and every display read) is decoupled from live editor state.
+  2. run ``predict_shape`` on the snapshot in a background daemon thread (the fine
+     solve is ~1 min; the thread keeps the sidebar polling job/progress).
+  3. cache the deformed positions as ``display.json`` and the per-bp RMSF as
+     ``rmsf.json``.
+  4. mark the job completed.
+
+Stopping is best-effort: ``predict_shape`` is a monolithic scipy solve that can't
+be interrupted mid-way, so stop sets a cancel flag; a running solve finishes, then
+the thread discards the result and marks the job stopped instead of caching.
+
+FEM output is Physical-layer only — never written back into Design topology.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+from backend.core.cando_job import CandoJob, CandoStatus
+from backend.core.models import Design
+
+logger = logging.getLogger(__name__)
+
+
+# ── Global task registry ──────────────────────────────────────────────────────
+
+@dataclass
+class _RunningHandle:
+    thread:    threading.Thread
+    cancelled: bool = False
+
+
+_RUNNING: dict[str, _RunningHandle] = {}
+
+
+def is_running(job_id: str) -> bool:
+    handle = _RUNNING.get(job_id)
+    return handle is not None and handle.thread.is_alive()
+
+
+# ── Prepare: write the self-contained job dir ─────────────────────────────────
+
+def prepare_cando_job(design: Design, job: CandoJob, workspace_dir: Path) -> None:
+    """Write a self-contained ``design.json`` snapshot into the job dir, so the
+    solve (and every display read) is decoupled from live editor state."""
+    jd = job.job_dir(workspace_dir)
+    jd.mkdir(parents=True, exist_ok=True)
+    (jd / "design.json").write_text(design.model_dump_json())
+
+
+def _load_snapshot_design(job_dir: Path) -> Optional[Design]:
+    snap = job_dir / "design.json"
+    if not snap.exists():
+        return None
+    try:
+        return Design.model_validate_json(snap.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+# ── Cache accessors ───────────────────────────────────────────────────────────
+
+def load_cached(job_dir: Path, name: str) -> Optional[dict]:
+    """Load a cached ``display.json`` / ``rmsf.json`` payload, or None."""
+    p = job_dir / name
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def load_display(job_dir: Path) -> Optional[dict]:
+    """The cached predicted positions payload (applyFemPositions list), or None."""
+    return load_cached(job_dir, "display.json")
+
+
+def load_rmsf(job_dir: Path) -> Optional[dict]:
+    """The cached per-bp RMSF payload, or None."""
+    return load_cached(job_dir, "rmsf.json")
+
+
+# ── Progress (time-based estimate; the true completion signal is the thread) ──
+
+def _estimate_seconds(job: CandoJob) -> float:
+    """Rough wall-clock estimate for the solve, scaled by system size + mode.
+
+    Only drives the progress bar (capped < 1.0 until the thread ends); the true
+    completion signal is the runner thread finishing.  Reference: a 6HB/210
+    (~1260 duplex nodes) nonlinear solve ≈ 60 s; the linear preview ≈ a few s.
+    """
+    nodes = max(1.0, job.n_nucleotides / 2.0)          # ≈ base pairs ≈ FEM nodes
+    if job.nonlinear:
+        # Corotational solve: one sparse factorisation + eigensolve per load step.
+        est = 3.0 + (nodes / 1260.0) * (job.n_steps / 20.0) * 55.0
+    else:
+        est = 1.0 + (nodes / 1260.0) * 4.0
+    if job.with_rmsf:
+        est += (nodes / 1260.0) * 8.0                  # the 200-mode NMA eigensolve
+    return max(2.0, est)
+
+
+def job_progress(job: CandoJob, workspace_dir: Path) -> dict:
+    """Overall progress fraction + ETA for the panel."""
+    stage = job.stages[0] if job.stages else None
+    overall = 0.0
+    eta_seconds: float | None = None
+    if job.status == CandoStatus.completed:
+        overall = 1.0
+    elif job.status in (CandoStatus.failed, CandoStatus.stopped):
+        overall = 0.0
+    elif job.status == CandoStatus.running and stage and stage.started_at:
+        elapsed = time.time() - stage.started_at
+        est = _estimate_seconds(job)
+        overall = min(0.97, elapsed / est)
+        eta_seconds = max(0.0, est - elapsed)
+    return {
+        "overall":      overall,
+        "status":       job.status.value,
+        "stage_status": stage.status if stage else None,
+        "eta_seconds":  eta_seconds,
+        "sim_seconds":  job.sim_seconds,
+    }
+
+
+# ── Execution ─────────────────────────────────────────────────────────────────
+
+class _Cancelled(Exception):
+    pass
+
+
+def _run_job(job: CandoJob, workspace_dir: Path) -> None:
+    """Thread body: load the snapshot, run predict_shape, extract + cache."""
+    jd = job.job_dir(workspace_dir)
+    handle = _RUNNING.get(job.job_id)
+
+    def _cancelled() -> bool:
+        return handle is not None and handle.cancelled
+
+    try:
+        design = _load_snapshot_design(jd)
+        if design is None:
+            raise RuntimeError("job design snapshot (design.json) missing")
+
+        from backend.physics.fem_solver import predict_shape
+
+        if _cancelled():
+            raise _Cancelled()
+
+        # Flip the JOB status to running (not just the stage) so the panel's
+        # progress bar + ETA — both gated on status==running — light up during the
+        # solve.  The create route left it queued after autostart.
+        job.status = CandoStatus.running
+        job.stages[0].status = "running"
+        job.stages[0].started_at = time.time()
+        job.save(workspace_dir)
+
+        t0 = time.monotonic()
+        result = predict_shape(
+            design,
+            nonlinear = job.nonlinear,
+            n_steps   = job.n_steps,
+            with_rmsf = job.with_rmsf,
+        )
+        sim_seconds = time.monotonic() - t0
+
+        if _cancelled():
+            raise _Cancelled()
+
+        positions = result.get("positions", [])
+        (jd / "display.json").write_text(json.dumps({
+            "solver":    result.get("solver"),
+            "positions": positions,
+            "axis":      result.get("axis", []),   # per-bp helix-centre nodes (cylinder rep)
+        }))
+        rmsf = result.get("rmsf")
+        rmsf_min = rmsf_max = None
+        if rmsf:
+            (jd / "rmsf.json").write_text(json.dumps({"rmsf": rmsf}))
+            vals = [r["rmsf_nm"] for r in rmsf]
+            if vals:
+                rmsf_min, rmsf_max = min(vals), max(vals)
+
+        job.sim_seconds = round(sim_seconds, 2)
+        # positions carry two entries (FORWARD/REVERSE) per axis node; the RMSF list
+        # is one entry per node, so it is the honest FEM-node (= base pair) count.
+        job.n_nodes = len(rmsf) if rmsf else (len(positions) // 2 if positions else 0)
+        job.rmsf_min_nm = round(rmsf_min, 3) if rmsf_min is not None else None
+        job.rmsf_max_nm = round(rmsf_max, 3) if rmsf_max is not None else None
+        for st in job.stages:
+            st.status = "done"
+        job.status = CandoStatus.completed
+        job.error = None
+        job.save(workspace_dir)
+        logger.info("cando job %s completed in %.1fs (%s solve, %s nodes)",
+                    job.job_id, sim_seconds, result.get("solver"), job.n_nodes)
+
+    except _Cancelled:
+        job.status = CandoStatus.stopped
+        for st in job.stages:
+            if st.status != "done":
+                st.status = "failed"
+        job.save(workspace_dir)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("cando job %s failed: %s", job.job_id, exc, exc_info=True)
+        if _cancelled():
+            job.status = CandoStatus.stopped
+        else:
+            job.status = CandoStatus.failed
+            job.error = str(exc)
+        for st in job.stages:
+            if st.status != "done":
+                st.status = "failed"
+        job.save(workspace_dir)
+    finally:
+        _RUNNING.pop(job.job_id, None)
+
+
+def start_job(job: CandoJob, workspace_dir: Path) -> None:
+    """Launch _run_job in a background daemon thread. Idempotent if running."""
+    if is_running(job.job_id):
+        return
+    handle = _RunningHandle(thread=threading.Thread(
+        target=_run_job, args=(job, workspace_dir),
+        name=f"cando-runner-{job.job_id}", daemon=True))
+    _RUNNING[job.job_id] = handle
+    handle.thread.start()
+
+
+def stop_job(job_id: str, workspace_dir: Path) -> bool:
+    """Stop a running CanDo job.  Sets the cancel flag; a running scipy solve can't
+    be interrupted mid-way, so the flagged thread finishes the current solve, then
+    discards the result and marks the job stopped.  If no thread is alive, marks a
+    stray ``running`` job stopped directly.  Returns True if a live job was found."""
+    handle = _RUNNING.get(job_id)
+    live = handle is not None and handle.thread.is_alive()
+    if handle is not None:
+        handle.cancelled = True
+    if not live:
+        try:
+            job = CandoJob.load(job_id, workspace_dir)
+        except Exception:  # noqa: BLE001
+            return False
+        if job.status == CandoStatus.running:
+            job.status = CandoStatus.stopped
+            for st in job.stages:
+                if st.status != "done":
+                    st.status = "failed"
+            job.save(workspace_dir)
+    return live
+
+
+def reconcile_cando_status(job: CandoJob, workspace_dir: Path) -> CandoJob:
+    """Recover a detached job's status after the runner thread died (e.g. a
+    ``uvicorn --reload`` restart mid-solve).  If the cached ``display.json`` exists
+    the solve finished → ``completed``; otherwise the thread died without caching →
+    ``stopped``.  No-op unless the job is an orphaned ``running`` one."""
+    if job.status != CandoStatus.running:
+        return job
+    if is_running(job.job_id):
+        return job
+    jd = job.job_dir(workspace_dir)
+    if (jd / "display.json").exists():
+        job.status = CandoStatus.completed
+        for st in job.stages:
+            st.status = "done"
+        job.save(workspace_dir)
+        return job
+    job.status = CandoStatus.stopped
+    for st in job.stages:
+        if st.status != "done":
+            st.status = "failed"
+    job.save(workspace_dir)
+    return job

@@ -29,6 +29,37 @@ export function sceneUsesNativeCg(sceneRepr) {
 }
 
 /**
+ * Is the scene drawn by a HEAVY renderer (atomistic or molecular surface) rather
+ * than the design's own CG geometry?  The heavy set is exactly {vdw, ballstick,
+ * surface}; every other repr (full / beads / cylinders / hull-prism) is drawn by
+ * the design renderer.  Note this is the complement of "design-renderer CG" — it is
+ * NOT `!sceneUsesNativeCg`, because hull-prism is a design-renderer CG repr that
+ * `sceneUsesNativeCg` deliberately excludes.
+ */
+export function sceneUsesHeavy(sceneRepr) {
+  return sceneUsesAtomistic(sceneRepr) || sceneRepr === 'surface'
+}
+
+/**
+ * What `_restoreDesign` should do when a live / flex / trajectory MD view is stopped,
+ * GIVEN the scene representation the user has chosen.  The chosen representation must
+ * PERSIST across toggling any MD view — stopping a display must never revert an
+ * atomistic/surface scene back to the CG bead-and-slab model.
+ *
+ *   CG design reprs (full / beads / cylinders / hull-prism)
+ *     → showNativeCg: show the design renderer's own CG geometry at the equilibrium
+ *       pose (atomistic renderer off).
+ *   Heavy reprs (vdw / ballstick / surface)
+ *     → rebuildHeavy: keep the heavy renderer, rebuilt from the design at equilibrium;
+ *       the native CG design renderer stays hidden.
+ */
+export function restorePlan(sceneRepr) {
+  return sceneUsesHeavy(sceneRepr)
+    ? { showNativeCg: false, rebuildHeavy: true }
+    : { showNativeCg: true, rebuildHeavy: false }
+}
+
+/**
  * Decide what the display controller should do when asked to show `requestedConfig`.
  *
  * Returns one of:

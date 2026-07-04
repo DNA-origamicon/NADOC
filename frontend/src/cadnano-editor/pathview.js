@@ -1501,7 +1501,7 @@ export function initPathview(canvasEl, containerEl, {
   }
 
   // ── View tools state ──────────────────────────────────────────────────────
-  let _viewTools = { lengthHeatmap: false, overhangNames: false, grid: true }
+  let _viewTools = { lengthHeatmap: false, overhangNames: false, grid: true, loopSkips: true }
 
   // Length heat map: maps nucleotide count to a blue→red colour.
   // Range 14–60 bp linearly interpolated; below 14 = pure blue, above 60 = pure red.
@@ -2420,6 +2420,7 @@ export function initPathview(canvasEl, containerEl, {
   const CLR_LOOP = '#4488dd'
 
   function _drawLoopSkips() {
+    if (_viewTools.loopSkips === false) return
     if (!_design?.helices?.length) return
     ctx.save()
     ctx.lineCap  = 'round'

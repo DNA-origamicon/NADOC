@@ -1,11 +1,17 @@
 ---
 name: project_cando_fem
 description: "Native CanDo-replica FEM shape predictor (twist/curvature/RMSF). Phase 0 research DONE — GO w/ conditions. Method spec, reference-data path, phase plan."
-metadata:
+metadata: 
+  node_type: memory
   type: project
+  originSessionId: e1d46763-a32b-48c8-a9b2-03be170aa027
 ---
 
 # Native CanDo FEM shape predictor
+
+**RESUME HERE →** `experiments/exp36_cando_fem_validation/HANDOFF.md` (scorecard, architecture,
+bend-gap diagnosis, PRIORITY CanDo designs to run, next-session plan). This file is the running
+log; the HANDOFF is the entry point for a fresh session.
 
 Goal: in-app FEM that reproduces CanDo's NONLINEAR predictions (global twist +
 curvature + RMSF flexibility) to within a stated tolerance on the loaded design,
@@ -151,6 +157,15 @@ genuine continuum relaxation, small for a gentle bend; expect larger on 06 hairp
 RMSF present in coarse zip (`structure_NMA_RMSF.txt`, 0.50–1.37 nm, ends floppy). NADOC-FEM
 target for 05 = ~86°.
 
+**Batch 2 (2026-07-03) — CanDo labels SCRAMBLED; identify by content (node count=bp,
+definitive: +30→04, −30→02, −60→03, net-0 split by planarity/bend).** Zips labeled
+01/02/03/05 are ACTUALLY **01, 04, 06, 05**. PRESENT: 01,04,05,06. **MISSING: real 02 & 03**
+(the deletion/positive-twist designs). **06_bend_180: CanDo 166°/R24.1 vs analytic 180°/22.7
+→ 92%.** Bend calibration: 05→95%, 06→92% (relaxation grows with strain). Control (01) reads
+twist≈0 ✓. **Twist-magnitude estimator STILL UNSOLVED** — global proxies alias with the
+backbone spiral (70–168° spread); need per-helix-centroid azimuth tracker before any twist
+number is trustworthy. Bend pipeline solid. Fingerprint/analysis in exp36 README.
+
 **Two ZIPs per CanDo job:** `*_atomic.zip` (multimodel PDB, B-factors ZERO) + `*.zip`
 coarse (RMSF txt HERE, deformedShape.bild=cleanest geometry, **structure_NLSA.inp=the
 Abaqus deck**). Deck CONFIRMS EA=1100/EI=230/GJ=460 (Å units) + reveals:
@@ -159,14 +174,550 @@ relaxation (InitialDisp→HJgen→Unloding1-6 w/ *Temperature op=mod→NMA).** E
 (hybrid Timoshenko), NICKDNA (I,J÷100), HJ (crossover beams), CONN3D2 (ssDNA nonlinear).
 This is the exact Phase-2/3 blueprint. Pending CanDo (re-run honeycomb): 01,02,03,04,06.
 
+## FULL BATTERY EXTRACTED (2026-07-03) — calibration targets in
+`experiments/exp36_cando_fem_validation/cando_reference_values.json`. All 6 zips present,
+correctly labeled, honeycomb.
+**KEY FINDING: CanDo reproduces BEND ~95% of naive analytic but TWIST only ~25-36%.**
+- Bends: 05→86.9°/R45.9 (0.97), 06→170.1°/R23.4 (0.94). Tight, well-measured.
+- Twists: 02(30skips)→~45° (analytic 171, 0.26), 03(60skips)→~87° (0.25), 04(30loops)→~62°
+  (0.36). Measured via 6-fold order param on coarse axis nodes (|Z|~0.9, linear ψ profile,
+  control=0 ✓; scales w/ count 02:03≈1:2 ✓; abs sign frame-arbitrary; ±15% method unc).
+- **Why:** analytic 34.3°/deletion is SINGLE-HELIX; the 6-helix crossover-coupled bundle's
+  torsional coupling strongly resists global twist. The FEM MUST reproduce this bend/twist
+  ASYMMETRY (near-full bend, heavily-damped twist) — naive analytic can't. This is THE
+  Phase-2/3 calibration signal.
+- RMSF (all designs, `structure_NMA_RMSF.txt`): ~0.4–1.7 nm, stiff core→floppy ends.
+Twist estimator lives inline (6-fold on BILD axis nodes); tube-follower fragile at high
+winding — use 6-fold.
+
+**CROSS-SECTION SCALING (2026-07-03, structures 07/08/09):** at SAME 5-skips/helix
+(analytic 171° for all), CanDo twist DROPS with size: **2HB=84° (0.49), 6HB=45° (0.26),
+18HB=23° (0.14)** — halves as helix count triples. 18HB straight (08) reads 0° ✓ (validates
+measure). Tube-following (kmeans nh clusters + per-helix azimuth slope) is robust at LOW
+twist (these) — agrees with m=6 order param on 18HB (23.2 vs 23.7). 2HB needs 2-tube (m-fold
+degenerate). Naive analytic is cross-section-BLIND → only FE captures this. 2HB anchors GJ;
+6/18HB pin coupling scaling. **10_18hb_bend NOT returned (missing zip) — user to resubmit.**
+**CYCLIC-STAPLE NOTE:** user saw cyclic staples in caDNAno for 2HB/18HB, added nicks +
+re-sequenced before submit. BUT our `.cadnano.json` traces provably LINEAR (every staple
+5'→3', 0 cycles) — discrepancy is caDNAno-side import/render, not our file. Submitted
+topology has user's extra nicks → global twist trend robust, but exact per-design FEM
+matching wants the user's submitted files (ASK). Values in cando_reference_values.json.
+
 ## Phase plan
-- P0 feasibility — **DONE (GO w/ conditions)**. First-wave CanDo battery generated.
-- P1 restore+modernize archived linear FEM into live tree, tests green (baseline).
-- P2 pre-stress (axial ΔL from ins/del + torsional from over/under-twist & ins/del)
+- P0 feasibility — **DONE (GO w/ conditions)**. First-wave CanDo battery generated + extracted.
+- P1 restore linear FEM — **DONE (2026-07-03)**. `backend/physics/fem_solver.py` restored
+  from archive (fixed `Optional` import; N_RMSF_MODES 30→200, KBT@298K per CanDo). Runs
+  end-to-end on battery designs (mesh→K→solve→RMSF). Tests: `tests/test_fem_solver.py`
+  (5 smoke tests green); `just test` 3823 passed. **Two calibration gaps exposed (→P2):**
+  (1) **mesh over-counts nodes** — 1386 vs CanDo 1264: `build_fem_mesh` uses helix AXIS
+  length `round(len/rise)` incl. the ~21-bp auto_scaffold end-caps; must use actual bp
+  (domain ranges, loop/skip-adjusted). (2) **RMSF ~7× too floppy** (FEM mean 5.04 vs CanDo
+  0.71 nm, max 12.4 nm unphysical) — uncalibrated stiffness/constraints + soft internal
+  modes under a single centroid pin. Equilibrium u=0 (no pre-stress yet, expected).
+- P2 (IN PROGRESS 2026-07-03):
+  - **Mesh node-count FIXED** — `build_fem_mesh` meshes only the DUPLEX CORE (bp with both
+    scaffold+staple) via `_duplex_bp_per_helix`, not `round(axislen/rise)` incl. the ~21-bp
+    auto_scaffold caps. 05: 1386→**1260** (CanDo 1264 ✓); 18HB 3780 (CanDo 3792). Variable-
+    length beam elements → per-length `_beam_stiffness_local` cache.
+  - **RMSF method FIXED — free-free NMA** (`compute_rmsf_nma`): projects out 6 rigid-body
+    modes (no pin) → kills the cantilever artifact. 7×→**2.9×** (mean 2.05 vs CanDo 0.71).
+  - **Remaining 2.9× isolated: NOT crossover coupling** (RMSF insensitive to k_xover
+    1e5→1e9, already rigid) → it's composite bending stiffness (discrete crossovers → partial
+    parallel-axis EA·r²) or a B31H-formulation gap. Next calibration target.
+  - Tests `tests/test_fem_solver.py` (7 green); `just test` 3825 passed.
+  - **KEY HYPOTHESIS (shapes P3):** twist damping (analytic 171°→CanDo 45/23°) is
+    GEOMETRIC-NONLINEAR — helices at radius r wind around the bundle axis when it twists,
+    stretching (resisted by EA); a large-rotation coupling ABSENT in linear theory. Explains
+    BEND reproduced ~95-102% but TWIST heavily/size-dependently damped. Predicts: linear
+    pre-stress → ~free twist 171°; only P3 nonlinear → damped 45/23°. VERIFY when pre-stress lands.
+  - Reference values complete incl. 10_18hb_bend (91°/R42, 1.02) in cando_reference_values.json.
+  - **PRE-STRESS IMPLEMENTED + VALIDATED** — `assemble_prestress_force(mesh, design)`:
+    loop/skip eigenstrain → equivalent nodal forces (torsional φ0=-Σδ·2π/bp_per_turn on θz;
+    axial δ0=Σδ·rise, per-element length-weighted, rotated to global). **Linear solve
+    reproduces the FREE analytic per-helix twist EXACTLY** — 02: local θz end-to-end +171.4°
+    (analytic 171.4), 03: +342.9° (342.9), to 0.1°. Pins the eigenstrain magnitude/sign.
+    Test `test_prestress_reproduces_free_analytic_twist`.
+  - **GLOBAL SHAPE ≈ 0 in linear** — 6-fold global twist ~0 (02/03), bend ~0° (05, |u_trans|
+    0.07 nm). TWO distinct causes:
+    (a) TWIST global=0 → EXPECTED: local over-twist→global bundle winding is geometric-
+        NONLINEAR (helices at radius r wind + stretch). Damping 171→45 is Phase 3.
+    (b) BEND=0 → NOT expected (bimetallic differential-eigenstrain bend IS linear) →
+        **crossover-model BUG: the spring enforces zero RELATIVE displacement of paired axis
+        nodes incl. the AXIAL DOF, over-constraining the differential that creates bend.**
+        Fix: rework crossover to CanDo's rigid zero-length-link geometry (allow axial
+        differential, constrain lateral). Likely also relevant to the RMSF 2.9× softness.
+  - Tests `tests/test_fem_solver.py` (8 green); `just test` 3826 passed.
+- **CROSSOVER REWORK — big win (2026-07-03).** Replaced the zero-relative-displacement
+  spring with a STIFF BEAM spanning the inter-helix offset (`XOVER_STIFF_SCALE=100`, robust:
+  RMSF insensitive 20→1000). Rigid-link kinematics (u_B=u_A+θ_A×r_AB) with the offset geometry
+  → composite bundle. Fixed BOTH:
+  - **RMSF now CALIBRATED**: 05 ratio 0.97, 02 0.95, 18HB 0.92, 2HB 0.81 (was 2.9-7×). Robust.
+  - **TWIST now reproduced IN LINEAR** — the offset-coupled crossovers provide the torsional
+    damping (my "twist needs nonlinearity" hypothesis was WRONG; it was the missing offset
+    coupling). FEM vs CanDo: 07(2HB) 111 vs 84, 02(6HB) 40 vs 45, 03 80 vs 87, 09(18HB) 28
+    vs 23 — cross-section scaling captured, ~10-30% off. 6HB best (~10%).
+  - **BEND enabled but under-converted**: 05 34.6° vs CanDo 87° (0.38), 06 64° vs 166° (0.36).
+- **P3 corotational nonlinear solve added** (`solve_prestress_shape`, incremental load-step +
+  `_reframe_elements` recompute frames from deformed geometry). Converges but **barely moves
+  the bend** (05: 34.6→35.7°, 06: 63.9→71.4°). **KEY: the bend gap is NOT large-deflection
+  and NOT crossover stiffness** (bend insensitive to XOVER scale 10→1e5; 35° is a small bend).
+  It's the **eigenstrain→bend CONVERSION** — the outer/inner length differential relieves as
+  elastic AXIAL strain instead of bending (~2.5× under). OPEN calibration problem: needs the
+  eigenstrain formulation reworked (impose rest-CURVATURE / prevent along-helix relative
+  slide at crossovers), not nonlinearity. Twist + RMSF unaffected (already good).
+  Test `test_nonlinear_prestress_shape_runs_and_deforms`. `just test` 3827 passed.
+
+**SCORECARD vs CanDo (2026-07-03):** RMSF ✅ 0.8-0.97 (calibrated, robust). TWIST ✅ ~10-30%
+(cross-section scaling captured: 2HB 111/84, 6HB 40/45, 18HB 28/23). BEND ❌ ~38% (open —
+eigenstrain→bend conversion under-couples; NOT nonlinearity). Next: crack the bend conversion.
+
+## BEND-GAP DIAGNOSIS — coupling RULED OUT both ways (2026-07-03, exp36)
+Two independent tests converge: **the bend gap is NOT inter-helix coupling.**
+- **CanDo `05.inp` element census:** 1225 BDNA + 33 NICKDNA + **117 HJ crossover beams** +
+  5 ssDNA connectors (1264 nodes). **117 HJ ≈ our 122 crossovers → CanDo is NOT more
+  coupled than us.** HJ = finite-length **compliant B31H beams** (span 2.25–3.8 nm, DNA
+  section EI=230/GJ=460), not rigid links.
+- **In-code dense-coupling test** (`fem_bend_diagnostics.py`): adding a rigid link at EVERY
+  duplex bp between adjacent helices (+1140 links, 10× coupling) changes the bend by <1°
+  (05: 61.2→60.4°; 06: 99.5→98.6°). **More coupling does nothing.**
+- **Energy partition:** **67% of the eigenstrain strain-energy relieves as internal AXIAL
+  stretch**, only 33% into bend+torsion (05 & 06 both). This is the dominant loss channel.
+- ⇒ **The fix is the eigenstrain→CURVATURE formulation, not coupling / not nonlinearity.**
+  Current `assemble_prestress_force` applies loop/skip as opposing AXIAL nodal forces
+  (±N0=EA·δ0/L); across the cross-section these SHOULD make a bimetallic moment but 2/3 of
+  the energy bleeds into uniform axial strain of the bundle. NEXT: impose the differential
+  as a rest-CURVATURE (bending eigenstrain / rest-angle per element) directly, rather than
+  as axial end-forces that partly cancel into stretch. Linear bend 05=61°(0.70)/06=100°(0.58).
+
+## ⚠ BEND "GAP" WAS A MEASUREMENT ARTIFACT — CORRECTED (2026-07-03, exp36)
+The reported ~0.68 FEM/CanDo bend ratio (and the whole coupling/rest-curvature/stiffness saga
+below) came from measuring the FEM with an END-TANGENT estimator vs CanDo with ARC-SPAN. The
+end-tangent reads low on real FEM arcs (ends straighten under BCs): 05 = 61° end-tangent but
+78° arc-span (the two agree to 0.5° on the clean arc). **Measured consistently (arc-span both),
+the FEM already reproduces CanDo bend to 0.82–1.01 (mean ~0.91) LINEAR; nonlinear refines the
+clean cases (05→0.94, 4HB→1.08). Density sweep flat both sides. NO 32% bend gap.** Residual is
+small, only at extremes (2HB 0.82, 180° hairpin 0.78 — high-strain continuum relaxation).
+Fix: `process_bend_battery._fem_linear_bend` now uses arc-span (same as CanDo). The
+paper-review-motivated per-segment U→D→R rework was NOT implemented — premise (0.68) was wrong;
+bend is already good. **NEW SCORECARD: RMSF ✅, TWIST ✅, BEND ✅ (~0.9, was falsely ❌).**
+Everything in the sections below predates this correction — read it as history.
+
+## BEND-GAP DIAGNOSIS (SUPERSEDED by the correction above) — CanDo results in (2026-07-03, exp36)
+User ran B1–B4 (B5 excluded: SQ routing error bp159 H0→H1, separate session). Measured via
+`process_bend_battery.py`; full table in `bend_diagnostics_results.md`.
+**ANSWER to the plan's central question: CanDo bend is crossover-density-INDEPENDENT.**
+- **B1 sweep decisive:** CanDo bend FLAT 86.5→86.4→89.5° as staple crossovers drop
+  112→56→28 (4× coupling cut, <3° change). `minimal` (1 xo) = degenerate collapse (disconnected
+  6HB, planarity 0.64, RMSF 1144nm) → discard.
+- **CanDo is a near-ideal LINEAR converter, ratio ≈0.95 FLAT** across angle (B2: 30–135° →
+  0.94–1.04), length (B3: 210/420 → 0.92–0.96), cross-section (B4: 4HB 0.95, 6HB 0.96; only
+  2HB dips to 0.84). Programmed bend ≈ realized to ~5%.
+- **Our FEM ~0.68 AND deficit GROWS with strain** (angle 0.74→0.63, length 0.79→0.55) =
+  the axial-relief fingerprint (67% eigenstrain energy → stretch).
+- ⇒ Coupling refuted 3 ways (census 117≈122, dense-coupling <1°, CanDo sweep flat).
+- **REST-CURVATURE FIX TRIED + REJECTED (2026-07-03).** Reworked `assemble_prestress_force`
+  to route the differential into a composite rest-curvature (bending moments). The κ geometry
+  is EXACT (05 → R=45.2 vs analytic 45.5) BUT applying κ as per-element moments only leaves
+  net END-COUPLES after assembly, which a long crossover-coupled bundle can't transmit into a
+  uniform curvature → topology/length-dependent UNDER-conversion (6HB 0.62, 4HB 0.42, 420bp
+  0.32; self-cal factor 1.6–3.2, not constant). WORSE than axial. **Reverted** solver to the
+  validated axial+torsion eigenstrain (0.68). `just test` green (see below).
+- **REFINED CONCLUSION: the bend gap is in the discrete STIFFNESS RESPONSE, not the eigenstrain
+  LOAD.** The axial eigenstrain already applies the correct section moment M*=ΣEA·ε·r; the
+  discrete crossover-coupled beam just responds more compliantly (more axial relief) than
+  CanDo's continuum plane-section B31H. **Real fix (dedicated session) = a STIFFNESS change:
+  enforce plane-sections** — rigid cross-section MPC tying ALL helices at a station (pairwise
+  rigid links don't rigidify, per dense-link test), OR add B31H inter-helix shear/warping
+  stiffness. Gate: bend→~0.95 flat across B1/B2/B3/B4 AND twist(0.26)+RMSF unmoved.
+  Details: `experiments/exp36/bend_diagnostics_results.md`.
+
+## CanDo bend-gap BATTERY generated (2026-07-03) — SUBMITTED, results above
+`gen_bend_diagnostics.py` → 15 designs `B1_*`…`B5_*` in `workspace/cando validation/`,
+submission guide `BEND_DIAGNOSTICS_SUBMISSION.md` (honeycomb+fine+NMA; B5=square). All
+verified caDNAno-level: single scaffold, **0 marks on crossovers/ends**
+([[feedback_loopskip_no_crossover_ends]]), `?`-free CSV. Families: **B1** staple-crossover
+density sweep at fixed 90° bend (112/56/28/1 — THE decisive run; .inp predicts CanDo bend
+stays ~87° since coupling isn't the lever), **B2** angle series 30/45/60/90/135°, **B3**
+length series at fixed R≈45nm (105/210/420bp = 45/90/180°), **B4** 2HB+4HB, **B5** SQ
+(confounded by ~149° intrinsic SQ-correction twist). Generator reuses the proven route +
+adds staple-crossover thinning (by process_id) + an off-crossover/off-end mark-relocation
+pass (core realizers still don't self-enforce the rule).
+
+## CONSTANTS ALIGNED TO CANDO + NICK MODEL (2026-07-03)
+Set FEM to CanDo submission defaults: `FEM_RISE_PER_BP=0.34` (was NADOC 0.334),
+`HELIX_DIAMETER=2.25`, `BP_PER_TURN=10.5`, EA/EI/GJ 1100/230/460, `NICK_FACTOR=0.01`.
+Added nick model: `_nick_bps_per_helix` (strand 5'/3' termini) → beams spanning a nick get
+bending+torsion ×0.01. **Fixed a real bug:** `assemble_prestress_force` used GLOBAL GJ_DS/EA_DS
+for the eigenstrain force → soft (nicked) beams over-twisted; now uses PER-ELEMENT el.gj/el.ea
+(a nick relaxes local over-twist = CanDo swivel). Also excluded crossover beams from eigenstrain.
+**Effect (with nicks):**
+- **BEND IMPROVED 0.38→0.68** (05 59°, 06 97°) — nicks soften helix bending → bundle bends more.
+- **TWIST REGRESSED to over-predict** (02 1.32, 07 1.58, 09 1.68; was ~0.9 no-nick) — soft
+  torsion + crossover UNDER-DAMPS. RMSF 1.06 (was 0.97).
+- **ROOT CAUSE now sharp: the crossover model (stiff finite BEAM) vs CanDo's RIGID zero-length
+  link is the remaining gap for BOTH bend (0.68 not 0.95) AND twist damping (over with soft
+  helices).** Next: replace the crossover beam with a true rigid link / MPC (u_B=u_A+θ_A×r_AB
+  as an exact constraint, not a stiff beam) → should give full bend conversion + restore twist
+  damping simultaneously. Tests 9 green; `just test` 3827.
+
+## RIGID-LINK MPC + eigenstrain diagnostics (2026-07-03) — hypotheses RULED OUT
+Replaced the stiff crossover beam with a TRUE rigid link (`FEMRigidLink`, penalty on the exact
+constraint Cd=0: u_j−u_i+skew(r)θ_i=0, θ_j−θ_i=0). **NUMERICALLY IDENTICAL to the stiff beam**
+(bend 0.68, twist 1.3-1.7, RMSF 1.06) → beam was already effectively rigid; **crossover model is
+NOT the bottleneck.** Ruled out: bend is **purely AXIAL-driven** (axial-only 59.5° = both 59.3°;
+torsion-only 0.8°); eigenstrain net force is **exactly 0** per-helix + total (no net-force bug);
+bend insensitive to crossover stiffness AND rigid-vs-beam. **So the bend gap (0.68 vs 0.95) is the
+AXIAL→BEND CONVERSION EFFICIENCY** — ~32% of the differential relieves as internal axial strain
+(even net-0 middle helices "stretch" +6nm via coupling). Likely SHEAR-LAG between discrete
+crossovers (helices slide axially between crossover points); CanDo may couple duplex shear more.
+OPEN. Added `axial=/torsion=` toggles to `assemble_prestress_force`. Tests 9 green; `just test` 3827.
+**Net vs CanDo: RMSF ✅~1.0, TWIST ✅(no-nick)/over(nick), BEND 0.68 (open: shear-lag).**
+- P2b pre-stress (axial ΔL from ins/del + torsional from over/under-twist & ins/del)
   + calibrate to CanDo constants; GATE: linear small/moderate bends match
   predict_radius_nm in direction AND magnitude. (NO twist-stretch coupling.)
 - P3 geometric nonlinearity — corotational 3D beam + Newton-Raphson w/ load-stepping
   (REQUIRED for 90° bends + global twist).
 - P4 validate vs REAL CanDo (user-supplied reference); iterate to stated tolerance.
-- P5 in-app "Predict shape (FEM)" → deform to equilibrium (Physical layer) + RMSF
-  heatmap + twist/curvature readout. Zero export.
+- P5 in-app "Predict shape (FEM)" — **entry point SHIPPED 2026-07-03**:
+  `fem_solver.predict_shape(design, nonlinear=True, n_steps=20, with_rmsf=True)` → deformed
+  positions + per-bp RMSF; **nonlinear solve is the default** (validated ~0.95 vs CanDo; linear
+  ~0.92 for fast preview). Display-only (Three-Layer). Test green; `just test` passing.
+  **Full Phase-5 feature handoff (4 items — dynamics panel / viz-cylinder toggle / flex+
+  deviation maps / CanDo-oracle autorefine) in `experiments/exp36/HANDOFF.md §7`**, each mapped
+  to the oxDNA/mrDNA module to mirror (`cando_job.py`←oxdna_job, `cando_jobs_panel.js`←
+  oxdna_jobs_panel, `oxdna_display`/`oxdna_metrics_card`, `routes_autorefine`). Zero export.
+
+### P5 Item 1 — Dynamics-tab CanDo FEM job panel **SHIPPED 2026-07-03**
+Full jobs-list + Coarse/Fine + Advanced + detail/stop/delete panel, mirroring the mrDNA
+section but radically simpler (FEM is in-process scipy — **no subprocess, no GPU, no
+availability probe**; the two "engines" are the solver modes). New modules:
+- `backend/core/cando_job.py` — `CandoJob` (persist to `workspace/cando_jobs/{id}/job.json`),
+  `new_cando_job`. Params: `nonlinear` (Fine/Coarse), `n_steps`, `with_rmsf`. Archival parity.
+- `backend/core/cando_runner.py` — daemon-thread lifecycle: snapshot `design.json` → run
+  `predict_shape` → cache `display.json` (positions) + `rmsf.json` → completed. `stop` is
+  best-effort (scipy solve can't be interrupted mid-way → flag, finish, discard). Progress =
+  time estimate. `reconcile_cando_status` recovers orphaned running jobs after a `--reload`.
+- `backend/api/routes_cando.py` (registered in `main.py`) — `/api/cando/{available,jobs,...,
+  jobs/{id}/{progress,start,stop,display,rmsf,error-log}}`. `/available` always true.
+- `frontend/src/ui/cando_jobs_panel.js` (`initCandoJobsPanel({candoDisplay,getWorkspacePath})`)
+  + HTML block `#cando-jobs-panel` in `index.html` + client fns (`candoAvailable`…`getCandoRmsf`)
+  + thin `main.js` init (`candoDisplay:null` until Item 2). Pure helpers unit-tested
+  (`cando_jobs_panel.test.js`, 15). Backend `tests/test_cando_job.py` (5).
+- **BUG FIXED (shared latent w/ mrdna):** `_run_job` now sets `job.status=running` (not just
+  the stage) at solve start, so the panel's progress bar + ETA (gated on status==running) light
+  up during the run. mrdna/oxdna autostart leaves status=queued — cando is strictly more correct.
+- **PERF NOTE:** on a real ~1200-node design (6hb_curved) the **200-mode RMSF NMA dominates**
+  — linear+RMSF ~41s standalone, linear-only ~4s. So `with_rmsf` off = a genuine fast preview;
+  Fine (nonlinear)+RMSF is a background job. Advanced exposes `n_steps` + `with_rmsf`.
+- **DEFERRED in Item 1:** EA/EI/GJ/NICK_FACTOR advanced params (handoff asked for them) — they
+  are module-level constants in `fem_solver`; threading per-job overrides is a solver change that
+  risks the exp36 calibration, so left out (only `n_steps`+`with_rmsf` exposed). Deform display
+  toggle present but disabled (wired by Item 2's `candoDisplay`). No `physics-fem.md` rule created
+  (planned in MEMORY.md but doesn't exist; routes already scoped by `api-and-state.md`).
+- **NOT hand-driven in a browser** — full lifecycle verified over HTTP vs the live server
+  (create→run→complete→display→rmsf→list→delete, status/progress/ETA correct); the button/DOM
+  gesture path is unexercised in a real browser (MV pending).
+
+### P5 Item 2 — "Predicted shape (deform model)" toggle **SHIPPED 2026-07-04**
+Deform-only viz toggle: turning it on deforms the NADOC model to the FEM-predicted positions;
+off restores native. New `frontend/src/ui/cando_display.js` (`initCandoDisplay({designRenderer,
+api})`) — a stripped sibling of `mrdna_display.js` (no CG-beads mode; the FEM has no bead cloud).
+Exposes exactly the `candoDisplay` interface the Item-1 panel already called: `showDeform(id)`
+(→`api.getCandoDisplay`→`toFemUpdates`→`designRenderer.applyFemPositions`), `stopDeform()`
+(→`applyFemPositions(null)`), `stopAndRestore()`, `deformActive()`, `deformJobId()`. Coarse+Fine
+share the deform path (mode is baked into the cached positions). Wired in `main.js` (`const
+candoDisplay = initCandoDisplay({designRenderer, api})` replacing the `null` placeholder — +1
+import +1 init line, pure wiring, main.js cohesive LOC flat). **Three-Layer: display-only.**
+- Tests: `cando_display.test.js` (6 vitest — verbatim lift of exercised mrdna deform logic).
+  `just test-frontend` green (2038); `just smoke` green (23).
+- **VERIFIED IN APP:** 6hb_curved → panel Coarse → completed (1182 nodes) → toggle ON → status
+  "Showing: model deformed" → OFF → cleared; no JS console errors. Backend display also HTTP-proven
+  (2364 positions, correct shape). One-off gesture e2e used then removed (E2E = troubleshooting-only).
+- **Item-2 original "cylinders" spec SUPERSEDED:** the shipped Item-1 panel committed to a
+  deform-in-place toggle, so Item 2 = applyFemPositions swap (same mechanism as mrDNA), not new
+  cylinder geometry. Simpler + reuses the shared FEM-position display path.
+- **BUGFIX 2026-07-04 — stranded ssDNA ends + loop bases (user-reported, w/ screenshot).** The
+  first Item-2 ship stranded every non-duplex-core nucleotide: `deformed_positions` emitted ONLY
+  FEM mesh nodes (duplex core), so ssDNA scaffold ends + loop/skip inserted bases got no
+  displacement and stayed at native while the duplex swung to the bent shape → bonds stretched
+  across the gap (long fanning lines off the ends; centroid-pinned solve, so no global shift —
+  just the bend stranding the ends). **My earlier "verified in app" was a FALSE PASS** — the e2e
+  asserted only the panel's "model deformed" status text, never the actual render (and the smoke-
+  config runs showed "No active design" — multi-doc: design never loaded into the page's doc).
+  Lesson: status text ≠ visual correctness; drive a doc-pinned load (`?doc=` + `X-NADOC-Doc`) and
+  screenshot. **Fix:** `deformed_positions` now mirrors mrDNA's `_display_positions` gap-fill —
+  iterate EVERY nucleotide; covered bp → its FEM displacement; uncovered (ss end / loop) → ride
+  along the nearest FEM-covered bp in the same helix (nearest by bp index). Full coverage: on
+  6hb_curved the display went 2364→2536 positions (== all rendered nucleotides). Display-only,
+  purely geometric, mirrors a shipped/validated pattern (no new topology reasoning). **Validation
+  (the user's ask):** new `test_predict_shape_covers_every_nucleotide_no_stranded_ssdna_or_loops`
+  asserts `predict_shape().positions` key-set == every nucleotide key (would've failed on the old
+  mesh-nodes-only output); `test_cando_job` count assertion relaxed `==2*n_nodes` → `>=2*n_nodes`
+  (old exact-equality encoded the bug). `just test` 3834 passed. **VISUALLY re-verified** on
+  6hb_curved (doc-pinned dev-server screenshots OFF vs ON): deformed bundle moves coherently, no
+  stranded fanning lines; the residual grey/blue straight lines are native scaffold arcs (present
+  in OFF too).
+- **EDGE CASE FIXED 2026-07-04:** `predict_shape` on a duplex-free design (0 FEM mesh nodes — e.g.
+  the e2e's lone unpaired scaffold, or any all-ssDNA design) crashed with a cryptic
+  `AxisError: axis 1 is out of bounds` — `apply_boundary_conditions` did `norm(positions-centroid,
+  axis=1)` on an empty (1-D) positions array. Now `predict_shape` guards `len(mesh.nodes) <
+  _MIN_FEM_NODES` (=2, a beam FEM needs ≥1 element) and raises a clear `ValueError` ("needs a
+  double-helical (duplex) core of at least 2 base pairs … pair the scaffold with staples first").
+  The job runner's `except` stores `str(exc)` → the panel shows it as a readable "Failed: …" instead
+  of the numpy error. Guard sits before the linear/nonlinear branch → both modes covered. Test
+  `test_predict_shape_raises_clear_error_on_duplex_free_design`; runner path hand-verified (status
+  failed + friendly message). `just test` green.
+- **FRAME-JUMP FIXED 2026-07-04 (user-reported "shifts the entire model", w/ screenshot; after
+  the ssDNA gap-fill the whole model still jumped).** Root cause: `deformed_positions` built the
+  FEM shape on the STRAIGHT `nucleotide_positions` base (FEM mesh nodes sit on the straight helix
+  axes), but the renderer draws the DISPLAYED geometry = `/design/geometry` =
+  `deformed_nucleotide_positions` with the design's **DeformationOps + cluster transforms** applied.
+  6hb_curved's bend is a DeformationOp (`κ=0.45°/bp`), NOT baked into raw nucleotide_positions —
+  so raw base bbox is straight `5.9×6.5×73.5` while the displayed (rendered) geometry is bent
+  `49×6.5×48`. Toggling swapped the bent render for the straight-based FEM shape → whole-model jump
+  (centroid shift 12.9 nm). **Fix (user chose "align to displayed model"):** `deformed_positions`
+  now rigid-body superimposes (Kabsch, `_rigid_superpose`) the FEM shape onto the displayed geometry
+  over the shared beads — zips `nucleotide_positions(helix)` (FEM base) with `deformed_nucleotide_
+  positions(helix, design)` (target), same order. Rigid alignment preserves ALL intrinsic quantities
+  (bond lengths, twist, curvature → exp36 calibration + the twist/bend measurement tests untouched);
+  only the global pose changes, exactly like the mrDNA/oxDNA overlays. Verified: centroid gap
+  12.9→**0.0 nm**, FEM bbox now `56×6.7×53` ≈ displayed `49×6.5×48`; browser OFF/ON co-located (no
+  jump). Test `test_predict_shape_covers_every_nucleotide...` still green (alignment doesn't drop
+  beads). `just test` green. NOTE: the FEM's predicted curvature still differs somewhat from the
+  DeformationOp analytic (FEM predicts from the loop/skip eigenstrain, gentler) — that's a legitimate
+  prediction difference, now shown overlaid in-frame rather than as a jump. Whether the loop/skips
+  fully encode the DeformationOp's intended bend is a SEPARATE question (not pursued).
+### P5 Item 3 — flex map + deviation map (on-structure) **SHIPPED 2026-07-04**
+Two new display modes join the deform toggle; the panel's single deform checkbox became a
+mutually-exclusive **radio group** (Off / Predicted shape / Flexibility map (RMSF) / Deviation
+from design). All Physical-layer/display-only, share the one FEM overlay + scalar-colour channel.
+- **Flex map** (RMSF): backend `/cando/jobs/{id}/rmsf` already existed. Deform to predicted shape +
+  `applyScalarColors` viridis over per-bp RMSF (rigid=dark→flexible=bright). No new backend.
+- **Deviation map** (NEW backend): `backend/core/cando_deviation.py::compute_deviation(design,
+  display_positions)` → per-nucleotide |FEM-predicted − intended-geometry| + global **RMSD**. Native
+  target = **deformed_nucleotide_positions** (the DISPLAYED geometry the FEM was Kabsch-aligned to),
+  NOT straight `nucleotide_positions` (diffing vs straight would just re-report the DeformationOp
+  bend). Route `/cando/jobs/{id}/deviation`; green→red ramp; readout shows RMSD.
+- **Semantics validated** (`tests/test_cando_deviation.py`, 4): straight control RMSD 0.00; realized
+  90° bend RMSD 1.94 (FEM ~85° ≈ drawn 90°); UNREALIZED bend (add_bend, no apply_loop_skip_deformations)
+  RMSD 5.11 — realizing loop/skips halves+ the deviation. **This IS the Item-4 autorefine oracle.**
+- Frontend: `cando_display.js` → 3-mode controller (showDeform/showFlex/showDeviation/refresh/mode/
+  lastStats; local viridis+green→red ramps, pure `flexColorMap`/`deviationColorMap`). Panel radios +
+  `getCandoDeviation` client fn. Tests: `cando_display.test.js` 15, panel test green, full frontend 2047.
+- **VISUALLY VERIFIED** (doc-pinned e2e screenshot on 6hb_curved's completed jobs, then removed):
+  flex = viridis bead cloud (dark rigid core), deviation = green→amber (RMSD 5.54 nm, grows where the
+  FEM under-realizes 6hb_curved's drawn bend), radios exclusive, readouts correct, 0 console errors.
+  `/deviation` HTTP-verified (2536 positions, rmsd 5.54). Backend `just test` green.
+- **DEFERRED to Item 3b:** PNG/CSV export + the `metric_graph.js`-style heatmap card (the handoff's
+  "PNG/CSV export like the oxDNA metrics card"). On-structure maps shipped; the 2D graph/export did not.
+
+### LOOP-COPY FIX for all CanDo display toggles **2026-07-04** (user-reported)
+Loop *insertions* place several nucleotides at ONE (helix,bp,dir); the renderer distinguishes them
+by a **`copy` index** (`helix_renderer._copySeenBB`) and addresses beads/colours by the 4-part key
+`helix:bp:dir:copy` (NO 3-part fallback for beads/slabs/cones). CanDo's `deformed_positions` emitted
+**no copy field** → every loop copy>0 aliased to copy 0 → loop-insert bases were never moved OR
+coloured by deform/flex/deviation (stranded at native). The prior coverage test checked a COLLAPSED
+set of (helix,bp,dir) → blind to it (false pass).
+- **Fix:** `fem_solver.deformed_positions` now stamps `copy` = per-(helix,bp,dir) running counter over
+  `nucleotide_positions` order — **verified identical to the geometry-endpoint order** (0/36 loop keys
+  mis-ordered) so it matches the renderer's `_copySeenBB`. `compute_deviation` matches native per
+  (helix,bp,dir,COPY). Frontend `toFemUpdates`/`flexColorMap`/`deviationColorMap` thread `copy` and
+  emit 4-part colour keys (+3-part alias only for copy 0).
+- **Validation tests (the user's ask):** `test_fem_solver.test_predict_shape_covers_every_nucleotide_
+  including_each_loop_copy` now asserts coverage over (helix,bp,dir,COPY) tuples + `len(pos)==total_nuc`
+  (would fail on the old collapse); `test_cando_deviation.test_loop_copies_each_get_their_own_deviation_
+  entry`; frontend loop-copy colour-key + `toFemUpdates` copy tests. Data check: 6HB w/ loops → 1296
+  nuc = 1296 display entries = 1296 distinct (h,bp,dir,copy), 36 copies>0.
+- **VISUALLY VERIFIED** (loop-heavy 6HB, fresh coarse+RMSF job, doc-pinned screenshots): flex viridis +
+  deviation green→amber colour the ENTIRE structure incl. the loop-dense mid-region — no stranded/grey
+  loop beads; 0 console errors. `/display` + `/deviation` HTTP-verified carrying `copy` (84 loop copies).
+- **mrDNA shares the same latent gap** (`mrdna_runner._display_positions` emits no copy) — flagged, not
+  fixed (out of scope; separate feature area + tests).
+
+### P5 Item 3b — Graphs & Metrics card (per-bp flex + deviation graphs, PNG/CSV) **SHIPPED 2026-07-04**
+The oxDNA-style "Graphs and Metrics" card, for CanDo. **Key difference from oxDNA: the FEM is a STATIC
+solve → NO temporal domain, NO background compute.** Both metrics are purely SPATIAL (per bp), and the
+data already lives on the completed job (rmsf.json + on-demand `/deviation`), so a click just fetches +
+draws. Two metric rows: **Flexibility (RMSF)** and **Deviation from design**; each with Display (popup
+graph) + Export (PNG/CSV modal).
+- **New modules (frontend-only; no backend — Item-3's `/rmsf` + `/deviation` are the whole data path):**
+  - `frontend/src/ui/cando_metrics.js` — pure cores: `rmsfRows`/`deviationRows` (response → per-bp
+    `{helix,bp,val}`; deviation AVERAGES the strands/loop-copies at one (helix,bp) station), `helixSeries`
+    (one overlaid polyline per helix), `candoMetricCSV`, `buildCandoSpec`. Reuses metric_graph.js
+    `buildChartSpec`/`SERIES_COLORS`/`drawChart`/`renderToDataURL` (shared, live-validated) so popup +
+    PNG render identically.
+  - `frontend/src/ui/cando_metrics_card.js` — `initCandoMetricsCard({getSelectedJob})`, a CHILD module of
+    the cando jobs panel (mirrors how `initOxdnaMetricsCard` is wired from the oxDNA panel). Per-job rows
+    cache, lazily-built single-canvas Display popup (oxDNA's is two-canvas; CanDo needs only spatial).
+    RMSF row gated on `job.rmsf_max_nm`; deviation always available once solved.
+  - HTML `#cando-metrics-card` block in `index.html` (last element in the cando panel body). Reuses
+    metric_export_modal.js (PNG/CSV modal + downloads).
+- **Wiring (module-first):** `cando_jobs_panel.js` gains `import initCandoMetricsCard` + `const _metricsCard
+  = initCandoMetricsCard({getSelectedJob: _selectedJob})` + `_metricsCard?.sync()` in `_renderDetail` +
+  `_metricsCard?.refresh()` in `_stopDisplays`. main.js untouched (panel owns the child, like oxDNA).
+- **REAL-DATA GOTCHA (would've silently mis-sorted):** `helix_id` is a STRING (`"h_XY_0_1"`), NOT numeric,
+  and `bp_index` can be NEGATIVE (ss/loop ends). Initial `a.helix - b.helix` sort → NaN. Fixed with a
+  numeric-aware `localeCompare` comparator (`_cmpHelix`); pinned by a string-id + negative-bp test.
+- **Tests:** `cando_metrics.test.js` (pure: rows/series/CSV/spec, incl. the string-id/negative-bp pin),
+  `cando_metrics_card.test.js` (jsdom: button gating on completed+RMSF job, Display→popup, Export→modal→
+  files, fetch cache + refresh-clears). `just test-frontend` green **2063** (was 2047).
+- **VERIFIED IN APP (doc-pinned e2e, real 6hb_curved completed FEM job, then removed):** both graphs draw
+  non-blank real canvases — RMSF shows the floppy-ends/stiff-core profile (0.44–1.62 nm), deviation shows
+  the ends-high/middle-low profile (6hb_curved under-realizes the drawn bend most at the free ends), 6
+  helix polylines each, correct axes/legend, status "1200 base pairs"/"1250 base pairs", **0 console
+  errors**. Pure pipeline also cross-checked on the live payload via node (1200 rmsf → 6 helices, 1250
+  deviation per-bp rows, CSV w/ negative bp). (One unrelated pre-existing `just smoke` fail:
+  `assembly_exit_cleanup`, an assembly-mode teardown test my Dynamics-tab change doesn't touch.)
+
+### P5 — "CanDo style output" cylinder representation **SHIPPED 2026-07-04** (user-requested, pre-Item-4)
+A new display toggle that draws the FEM-predicted shape the way CanDo does: one grey **jointed-cylinder
+tube per helix** (a chain of short cylinders, radius = duplex radius 1.125 nm, threaded through the per-bp
+axis positions) + thin **crossover joint connectors** (radius 0.2 nm), with the native NADOC model hidden
+— a standalone rep exactly like the mrDNA CG-beads mode. Works for both Coarse (linear) and Fine
+(nonlinear) jobs (the shape is baked into the job's cached display positions).
+- **What CanDo actually renders (confirmed from the zips):** the coarse zip's
+  `structure_NLSA_deformedShape.bild` is 2516 thick cylinders (radius 11.25 Å = duplex radius) forming the
+  per-helix axis tubes + 244 thin (2.0 Å) crossover connectors, all grey; the RMSF `.bild` is the same
+  cylinders coloured per-segment. `deformed_shape_view*.png` = smooth grey tubes following the bent axis.
+  **The axis of a duplex bp = midpoint of its two strand backbones** (they sit at ±radius), so the aligned
+  axis polyline falls straight out of the cached (Kabsch-aligned) display positions — no re-solve.
+- **New backend:** `backend/core/cando_cylinders.py::compute_cylinders(design, display_positions)` →
+  `{tube_radius_nm, joint_radius_nm, helices:[{helix_id, points}], joints}`. Axis map keeps only
+  duplex-core bp (both FORWARD+REVERSE, copy 0) → clean axis; ssDNA ends/loop copies excluded (match
+  CanDo's duplex tubes). Per-helix points bp-ordered; joints from `design.crossovers` (half.index == bp).
+  Route `/cando/jobs/{id}/cylinders` (mirrors `/deviation`: cached display + snapshot design, no re-solve).
+- **New scene overlay:** `frontend/src/scene/cando_cylinders.js::initCandoCylinders(scene)` — mirrors
+  `mrdna_connections.js` (InstancedMesh of unit cylinders scaled per segment) with thick tube segments +
+  thin joint connectors. **PURE CYLINDERS — no sphere fillers** (user: CanDo's real output is the
+  "coin-stacked" per-bp disc look, not a smooth marshmallow tube; the deformedShape.bild is cylinders
+  only). Pure `cylinderSegments(data)` (tubes/joints split, each carrying mean-endpoint RMSF) + `jetRGB`
+  unit-tested.
+- **RMSF heat-map colouring (user: "colour-coded like the RMSF view CanDo provides").** CanDo's
+  `structure_NMA_RMSF.bild` colours every cylinder with the **jet ramp**, normalised bluest=min(0th pct)→
+  reddest=95th pct (per `structure_NMA_HeatMapRange4RMSF.txt`, clamp above p95). So `/cylinders` now also
+  loads `rmsf.json` and returns per-node RMSF + `rmsf_min`/`rmsf_p95`/`rmsf_max`/`has_rmsf`; the overlay
+  tints each segment by `jetRGB((rmsf-min)/(p95-min))`. Segments/jobs w/o RMSF → grey fallback (the ~5%
+  ss-end tips outside the meshed duplex core also stay grey). Three THREE.js gotchas fixed to get the
+  vivid CanDo look: (1) per-instance colour is `instanceColor`/`setColorAt` with `MeshBasicMaterial({color:
+  0xffffff})` — **do NOT set `vertexColors:true`** (that looks for GEOMETRY vertex colours the cylinder
+  lacks → renders solid BLACK); (2) **unlit** MeshBasic (not MeshStandard) so the ramp reads vivid
+  regardless of scene lighting (a lit material sank the blue end to near-black); (3) `setRGB(...,
+  THREE.SRGBColorSpace)` treats ramp values as display colours. Uses the **vivid jet** (bright
+  blue→cyan→green→yellow→red, no dark tails) because the stiff core sits at the ramp min → analytic jet's
+  dark-blue `(0,0,0.5)` looked near-black; CanDo's own dark tails are lifted by Chimera's lighting.
+- **Display wiring:** `cando_display.js` gains a 4th mode `showCandoStyle(jobId)` (fetch cylinders →
+  overlay.update + hide native model via injected `setDesignVisible`) + a `_teardown()` that every mode
+  entry calls so switching between cylinder-rep and the bead-based deform/flex/deviation modes cleanly
+  swaps (clear tubes+show model ⇄ clear bead overlay/colours). Panel: 5th radio "CanDo style output
+  (cylinders)" + `_MODE_FNS.cando` + status readout. main.js: `initCandoCylinders(scene)` overlay +
+  `setDesignVisible: _setDesignGeometryVisible` passed to `initCandoDisplay` (thin wiring; hides beads +
+  arcs, exactly like mrDNA CG-beads). Client `getCandoCylinders`.
+- **Three-Layer:** purely Physical/display-only — axis geometry derived from the aligned display positions,
+  topology untouched.
+- **Tests:** backend `tests/test_cando_cylinders.py` (5: axis-midpoint duplex-only, bp-ordering, real-6HB
+  tube-per-helix + joints⊆crossovers, **RMSF heat-map per-node + p95 ramp**, empty); frontend
+  `cando_cylinders.test.js` (5: `cylinderSegments` mean-RMSF/no-spheres + `jetRGB` vivid landmarks) +
+  `cando_display.test.js` cando-mode block (6). `just test-frontend` **2073**; `just test` **3850** (2
+  unrelated real-sim fails: oxDNA real-binary + NAMD benchmark).
+- **VERIFIED IN APP (doc-pinned e2e on real 6hb_curved job, then removed):** the 6 helix tubes render as
+  the **coin-stacked per-bp disc** look (no spheres) heat-mapped by the **jet RMSF ramp** — bright blue
+  stiff core → red floppy ends, exactly matching CanDo's `rmsf_view*.png`; native bead model hidden, 0
+  console errors.
+
+#### Refinement round 2 (user feedback) — helix-CENTRE axis, no ssDNA, dimmer jet **2026-07-04**
+Three user asks after seeing the first cylinder render:
+1. **"Remove ssDNA (no grey fall-back)."** & 3. **"Centre the cylinders on the helix centre, not the
+   backbone contour."** — BOTH solved by threading the tubes through the **FEM AXIS nodes** (true helix
+   centre, one per duplex-core bp) instead of the backbone MIDPOINT. The old midpoint precesses around the
+   axis along the helical groove → the tube visibly wobbled ("follows the backbone contour"); and it
+   included ss-end bp that had both display strands but no FEM/RMSF node → grey tips. Axis nodes exist only
+   for the meshed duplex core, so ssDNA is gone and every node has RMSF (no grey).
+   - **Solver:** `fem_solver` now shares the Kabsch alignment via `_kabsch_transform`/`_apply_transform`;
+     `deformed_positions_with_axis(design,mesh,u)→(positions,axis)` applies the SAME rigid transform to the
+     axis nodes (`mesh.nodes[i].position + u[axis]`) so they overlay in-frame. `predict_shape` returns
+     `"axis": [{helix_id,bp_index,position}]`; `deformed_positions` kept as a thin list-returning wrapper.
+   - **Runner:** `_run_job` caches `axis` into `display.json`.
+   - **`compute_cylinders(design, axis_nodes, rmsf)`** now consumes the axis-node list directly (was
+     reconstructing midpoints). `axis_from_backbones(display, rmsf)` is the FALLBACK for jobs cached BEFORE
+     this change (wobblier midpoint, but still ssDNA-filtered via the rmsf-bp set). Route prefers
+     `cached["axis"]`, falls back otherwise. **Old cached jobs need a re-run to get the centred axis.**
+2. **"Jet is good but WAY too bright."** — dimmed the ramp by `_BRIGHTNESS=0.62` at colour-set time
+   (`jetRGB` stays the canonical vivid ramp; grey fallback also darkened to `0x8a8a8a`). Full-saturation
+   jet under the unlit material read as glaring neon; ~⅔ brightness matches CanDo's tone.
+- **RE-VERIFIED IN APP (fresh Coarse job, e2e, removed):** 6 smooth parallel tubes (no helical wobble),
+  fully colour-covered end-to-end (no grey/ssDNA), smooth blue→cyan→green→yellow→red gradient at a calm
+  brightness — a close match to CanDo's `rmsf_view`. Status "6 helix tubes, 114 crossover joints", 0
+  console errors.
+- **Tests:** backend `test_cando_cylinders.py` (7: `axis_from_backbones` midpoint+rmsf-filter, bp-ordering
+  from axis nodes, real-6HB tube-per-helix, **axis-nodes==rmsf-nodes & differ from backbone-midpoint**,
+  RMSF p95 ramp, empty); `test_fem_solver`/`test_cando_deviation` still green (alignment refactor
+  behaviour-preserving). `just test-frontend` **2073**; backend cando+fem subset 28 passed (full suite
+  re-running).
+
+- **Next: Item 4** (autorefine: minimise the deviation RMSD by adjusting loop/skip placement — the oracle
+  is `compute_deviation`; `predict_shape` is the ~1-min fast in-loop shape oracle replacing oxDNA CUDA).
+
+### AUTOMATED CURVATURE VALIDATION + negative test **2026-07-04**
+Prior curvature validation lived only in `experiments/exp36/process_bend_battery.py`, which
+needs user-supplied CanDo ZIPs in `workspace/cando validation/` → NOT reproducible in `just test`.
+Closed that gap: the bend validation now runs headlessly against the committed CanDo reference
+angles (`cando_reference_values.json`: 05→86.9°, 06→170.1°), no CanDo run needed.
+- **Oracle in `tests/automation_harness.py`:** `measure_fem_bundle_bend(design, nonlinear=)` →
+  builds mesh, solves prestress, reduces deformed axis nodes to a per-station cross-section-centroid
+  centerline, measures bend via `_chord_sagitta_bend` (A9-safe: reads ~0 on a STRAIGHT rod, true
+  angle on an arc — circle-fit arc-span is degenerate on straight lines, turning-integral jitters).
+  `assert_fem_matches_cando_bend(design, cando_deg, ...)` adds ratio band + can-go-red guard.
+- **Tests `tests/test_fem_curvature_validation.py` (5):** regenerate the 6HB/210bp bends via the
+  gen_cando_battery pipeline; FEM/CanDo — 90° LIN 81.3° (0.94), NL 85.4° (0.98); 180° LIN 145.7°
+  (0.86). Marks depend only on per-helix NET count (not bp positions) → FEM bend identical to the
+  battery even if placement differs.
+- **NEGATIVE test (user ask, Three-Layer Law):** `add_bend` WITHOUT `apply_loop_skip_deformations`
+  → display DeformationOp bends the frame ~82° (`assert_deformation_angle`) but 0 loop/skips → FEM
+  predicts a STRAIGHT rod (bend <3°). Pins that the physical/geometric layers read only topological
+  loop/skips, never the display deformation. `just test` green.
+
+### Colour-map LEGENDS + Display collapsible card **SHIPPED 2026-07-04** (user-requested)
+Two small UI asks on the CanDo panel:
+1. **Legends for the colour-mapped displays** — the Flexibility (RMSF, viridis) and Deviation
+   (green→red) maps now each get a floating colour-ramp legend pinned **middle-right of the workspace,
+   the SAME slot as the oxDNA flex scale** (`#flex-scale`) → every colour-mapped output reads its legend
+   from one place. Static ramp bar + data max/min readout; hidden for the non-colour modes (off /
+   predicted shape / CanDo cylinders).
+   - **New module `frontend/src/ui/cando_legend.js`** (`initCandoLegend()→{show(mode,min,max),hide,
+     isVisible}`). The ramps are SAMPLED from cando_display's own `viridisHex`/`deviationHex` (pure
+     `gradientCss`) so the legend can't drift from the on-structure colours. Pure `legendLabels`/
+     `gradientCss`/`legendConfig` unit-tested (`cando_legend.test.js`, 10).
+   - **HTML `#cando-legend`** (title/max/bar/min) beside `#flex-scale` in index.html.
+   - **Wiring:** `initCandoDisplay` gains a `legend` dep — `showFlex`/`showDeviation` call
+     `legend.show(...)` after applying; `_teardown` calls `legend.hide()` (so deform/off/cando hide it).
+     main.js: `legend: initCandoLegend()` (pure wiring, main.js cohesive LOC flat). Legend-drive pinned
+     in `cando_display.test.js` (shown for flex/deviation w/ correct bounds, hidden for deform/stop).
+2. **Display options in their own collapsible card** — the mutually-exclusive viz-mode radios moved
+   from an inline block in the job-detail into an `ox-card` ("Display", collapsible, starts open),
+   matching the Advanced / Graphs-and-Metrics cards. `cando_jobs_panel.js` wires the header toggle
+   (`#cando-display-toggle`/`-arrow`/`#cando-display-card`).
+- **VERIFIED IN APP** (doc-pinned e2e on the real 6hb_curved completed FEM job, screenshots, then
+  removed): Flexibility → viridis legend "RMSF (nm)" 1.62→0.44 middle-right; Deviation → green→red
+  legend "Deviation (nm)" 15.94→0.23 (matches the RMSD-5.54 readout); Off hides it; Display card
+  collapses on header click. `just test-frontend` **2084** green; `just smoke` **23** green; 0 console
+  errors. Frontend-only change (no Python touched).
+
+#### Follow-ups — CanDo-cylinder legend + always-visible Display card **2026-07-04** (user)
+1. **CanDo-style cylinder output now has a legend too.** The tubes are an RMSF **jet** heat map
+   (bluest = rmsf_min → reddest = rmsf_p95, clamped), so `showCandoStyle` shows the same legend keyed
+   to the cylinders response's `rmsf_min`/`rmsf_p95` (only when `has_rmsf`; a no-RMSF job = grey tubes,
+   legend stays hidden). New `cando` legend mode in `cando_legend.js` uses the scene overlay's own
+   `jetRGB` dimmed by an exported `JET_BRIGHTNESS` (0.62) — single-source, so the legend can't drift
+   from the tubes. Title "RMSF (nm)" (jet ramp ≠ the flex-map viridis ramp for the same quantity).
+2. **Display card is now ALWAYS visible; its radios lock until a completed job is selected.** Moved the
+   Display `ox-card` OUT of `#cando-jobs-detail` (which hides when nothing's selected) to a panel
+   sibling. New `_syncDisplayModes()` (called from `_renderDetail` on every render, job or not) gates
+   each radio: enabled only for a completed job + candoDisplay dep (Flexibility also needs the job's
+   RMSF); no/unfinished selection → all locked. HTML radios keep their default `disabled` so the card
+   boots locked.
+- **VERIFIED IN APP** (doc-pinned e2e, real 6hb_curved job, screenshots, removed): before any
+  selection the Display card shows with all radios dimmed/disabled; after selecting the completed job
+  they enable; CanDo-style output → jet legend "RMSF (nm)" 1.21(p95)→0.44(min) matching the blue
+  stiff-core tubes; Off hides it. `just test-frontend` **2086** green; `just smoke` 22 passed (the lone
+  fail = the pre-existing flaky `assembly_exit_cleanup`, passes standalone, unrelated). 0 console
+  errors. Frontend-only.

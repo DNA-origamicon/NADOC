@@ -36,6 +36,7 @@ from backend.core.sequences import (
     build_scaffold_index_map,
     complement_base,
     domain_bp_range,
+    strand_nucleotide_count,
 )
 from tests.conftest import make_minimal_design
 
@@ -443,3 +444,78 @@ class TestAssignStapleSequences:
         d4 = assign_staple_sequences(d3)
         stap = next(s for s in d4.strands if s.id == "stap")
         assert stap.sequence == "N" * 10
+
+
+# ── TestStrandNucleotideCount ─────────────────────────────────────────────────
+
+
+class TestStrandNucleotideCount:
+    """strand_nucleotide_count = loop/skip-adjusted length (the export must use it,
+    not the raw bp-range span, or deleted positions get spurious '?')."""
+
+    def test_no_marks_equals_bp_range(self):
+        d = make_minimal_design()
+        scaf = next(s for s in d.strands if s.is_scaffold)
+        span = sum(abs(dm.end_bp - dm.start_bp) + 1 for dm in scaf.domains)
+        assert strand_nucleotide_count(scaf, d) == span
+
+    def test_skip_removes_one(self):
+        d = _design_with_loop_skips([(5, -1)])
+        scaf = next(s for s in d.strands if s.is_scaffold)
+        span = sum(abs(dm.end_bp - dm.start_bp) + 1 for dm in scaf.domains)
+        assert strand_nucleotide_count(scaf, d) == span - 1
+
+    def test_loop_adds_one(self):
+        d = _design_with_loop_skips([(5, +1)])
+        scaf = next(s for s in d.strands if s.is_scaffold)
+        span = sum(abs(dm.end_bp - dm.start_bp) + 1 for dm in scaf.domains)
+        assert strand_nucleotide_count(scaf, d) == span + 1
+
+    def test_matches_private_counter(self):
+        d = _design_with_loop_skips([(3, +1), (10, -1)])
+        ls_map = _build_loop_skip_map(d)
+        scaf = next(s for s in d.strands if s.is_scaffold)
+        assert strand_nucleotide_count(scaf, d) == _strand_nt_with_skips(scaf, ls_map)
+
+
+# ── TestSequenceCsvExportSkips (regression) ───────────────────────────────────
+
+
+class TestSequenceCsvExportSkips:
+    """Skip (deletion) designs must export a CSV with NO '?' — deleted positions
+    are not nucleotides, so the sequence is shorter than the bp-range and must not
+    be padded. Regression for the CanDo-crashing '?' bug."""
+
+    def _routed_skip_design_csv(self):
+        from backend.api import headless_build as hb
+        from backend.api import state as design_state
+        from backend.api.routes_sequences import export_sequence_csv
+        from backend.core.models import LatticeType
+
+        cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
+        with hb.scratch_session(LatticeType.HONEYCOMB):
+            hb.create_bundle(cells, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+            hb.auto_scaffold(seamless=False)
+            hb.auto_crossover()
+            hb.auto_break()
+            # place uniform deletions on every helix (a twisted-bundle skip design)
+            d = design_state.get_or_404()
+            for h in d.helices:
+                hb.loop_skip(h.id, 42, -1)
+            hb.full_sequence("M13mp18")
+            return export_sequence_csv().body.decode()
+
+    def test_no_question_marks_in_skip_design_csv(self):
+        import csv as _csv
+        import io as _io
+
+        text = self._routed_skip_design_csv()
+        assert "?" not in text, "skip design CSV still emits '?' padding"
+        rows = list(_csv.reader(_io.StringIO(text)))[1:]
+        assert rows, "expected at least one staple row"
+        for r in rows:
+            if not r:
+                continue
+            seq, length = r[2], int(r[3])
+            assert len(seq) == length, f"Length {length} != sequence length {len(seq)}"
+            assert set(seq) <= set("ACGTN"), f"unexpected base in {seq!r}"
