@@ -1137,3 +1137,22 @@ deviation RMSD (which bottoms at a lower density → floored twist at ~10-15°).
   ALL square bundles — audit every headless-generated bundle before trusting its FEM numbers.**
 - Remaining: wire G1 `_solve_shape_targets` into honeycomb `fem_refine`; G3 asymmetric sections
   (bigger/cleaner bend signal + multi-skip bend probe); G4 1×N twist-degeneracy guard; G5 scale.
+
+## Generalization G3 + G4 (2026-07-05) — both plan-refining (partly negative)
+- **G3 (exp40) — coupled objective's domain narrowed.** auto_scaffold FAILED to route strong-asymmetry
+  cross-sections (L→2 scaffolds, staircase triangle→10; audit flagged+skipped). Only notch_4x4 routed.
+  On the notch (straight strut) register→bend coupling is weak (~0.9° bend, near noise) → 1D twist-null
+  already suffices; forcing the 2D coupled solve on a sub-noise bend row makes it slightly WORSE.
+  ⇒ **Use the coupled (twist,bend) solve only when the design has an intended bend above the ~0.6°
+  arc-bend noise floor (i.e. programmed-shape designs, per G1); twist-only for straight struts.**
+  Strong-asymmetry study is BLOCKED on the auto-scaffold routing bug → handoff prompt at
+  `experiments/exp40_asymmetric_coupling/ASYMMETRIC_SCAFFOLD_HANDOFF.md` (asymmetric shapes route to
+  disjoint scaffolds; seamed_router Hamiltonian path fails; read project_autoscaffold_single_strand).
+- **G4 (exp41) — 1×N twist-degeneracy hypothesis REFUTED (no guard needed).** 1×N is rank-1 colinear
+  (SVD sv2=0) BUT measure_bundle_twist tracks the ribbon helicoid twist fine and the autorefine drives
+  68°→1.5° correctly. Pipeline is more robust than the plan assumed. Only caveat (untested): sign
+  ambiguity for an INTENDED-nonzero-twist symmetric ribbon; nulling to 0 unaffected. 2×N fully fine.
+- **Net generalization status:** G1 coupled solve validated (programmed bend+twist). G2 authority∝geometry
+  trend (seed only). G3 → coupled solve gated on intended-bend>noise; asymmetric auto-routing is the
+  blocker. G4 → no 1×N guard needed. **Still unwired: G1 `_solve_shape_targets` into honeycomb fem_refine**
+  (the one live-code step); G5 (symmetry-orbit scaling) open.
