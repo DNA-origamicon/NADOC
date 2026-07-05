@@ -2683,8 +2683,10 @@ async function main() {
     api.clearPersistedDesign()
     const spreadsheetPanel = document.getElementById('spreadsheet-panel')
     if (spreadsheetPanel) spreadsheetPanel.style.display = 'none'
-    const vcWrap = document.getElementById('vc-wrap')
-    if (vcWrap) vcWrap.style.display = 'none'
+    // Hide the whole view cube — cube wrapper AND the sibling #vc-roll roll buttons
+    // (the direct #vc-wrap poke used to leave the 90° roll buttons floating on the
+    // welcome screen). viewCube.hide() clears both.
+    viewCube.hide()
   }
 
   function _hideWelcome() {
@@ -2699,8 +2701,7 @@ async function main() {
     _setFilterStripEnabled(true)
     const spreadsheetPanel = document.getElementById('spreadsheet-panel')
     if (spreadsheetPanel) spreadsheetPanel.style.display = ''
-    const vcWrap = document.getElementById('vc-wrap')
-    if (vcWrap) vcWrap.style.display = ''
+    viewCube.show()
   }
 
   // ── Recent files ─────────────────────────────────────────────────────────────
@@ -3087,6 +3088,10 @@ async function main() {
     originAxes.visible = true
     _setMenuToggle('menu-view-axes', true)
     viewLegends.reset()
+    // Tear down any active CanDo FEM display — restores the native model, clears the
+    // cylinder overlay, and hides the CanDo RMSF/deviation legend (#cando-legend),
+    // which otherwise lingered on the welcome screen after closing a session.
+    candoDisplay.stopAndRestore()
     if (periodicMdOverlay.isApplied()) _setCGVisible(true)
     periodicMdOverlay.clear()
     // Reset representation to Full — deactivates atomistic/surface renderers,
