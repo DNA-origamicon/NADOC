@@ -11,6 +11,10 @@ import {
   formatSummary,
   autorefineStatusText,
   autorefineResultHtml,
+  autorefineJobStatusText,
+  autorefineJobResultHtml,
+  refineImproved,
+  refineMarkCounts,
 } from './cando_jobs_panel.js'
 
 describe('formatProgress', () => {
@@ -141,10 +145,22 @@ describe('autorefineStatusText', () => {
       current: { deviation: 1.0, bend_deg: null, twist_deg: null }, target: { deviation: 0 } } }
     expect(autorefineStatusText(run)).toContain('curve —→—')
   })
-  it('summarises edits + before/after deviation on done', () => {
-    const run = { state: 'done', result: { edits_kept: [{}, {}, {}],
+  it('summarises the final mark count + before/after deviation on done', () => {
+    const run = { state: 'done', result: {
+      edits_kept: [{}, {}, {}],
+      converged_marks: { h0: { 10: -1, 20: -1 }, h1: { 15: 1 } },   // 3 marks total
       metrics: { before: { deviation: 2.19 }, after: { deviation: 1.99 } } } }
-    expect(autorefineStatusText(run)).toBe('Done · 3 edits · deviation 1.99 nm (was 2.19 nm)')
+    expect(autorefineStatusText(run)).toBe('Done · 3 marks · deviation 1.99 nm (was 2.19 nm)')
+  })
+  it('counts the density-swept skips (edits_kept empty) on done', () => {
+    // THE regression: a SQUARE density sweep lands its skips in converged_marks with zero greedy
+    // edits — the status must report those marks, not "0 marks".
+    const run = { state: 'done', result: {
+      edits_kept: [],
+      converged_marks: { h0: { 10: -1, 30: -1 }, h1: { 20: -1 } },   // 3 skips, 0 greedy edits
+      density: { best_period: 40 },
+      metrics: { before: { deviation: 1.73 }, after: { deviation: 0.46 } } } }
+    expect(autorefineStatusText(run)).toBe('Done · 3 marks · deviation 0.46 nm (was 1.73 nm)')
   })
   it('reports baseline / hotspots phases and errors', () => {
     expect(autorefineStatusText({ state: 'running', last_event: { phase: 'baseline' } }))
@@ -157,16 +173,72 @@ describe('autorefineStatusText', () => {
 })
 
 describe('autorefineResultHtml', () => {
-  it('renders before→after rows with the target and edit count', () => {
-    const html = autorefineResultHtml({ mode: 'loops_and_skips', edits_kept: [{}, {}],
+  it('renders before→after rows with the target and greedy edit count', () => {
+    const html = autorefineResultHtml({ mode: 'loops_and_skips',
+      edits_kept: [{}, {}], converged_marks: { h0: { 5: -1 }, h1: { 9: 1 } },
       metrics: { before: { deviation: 2.19, bend_deg: 39.3, twist_deg: -2.1 },
                  after:  { deviation: 1.99, bend_deg: 45.9, twist_deg: -2.7 },
                  target: { bend_deg: 72.3, twist_deg: -1.7 } } })
-    expect(html).toContain('2 loops+skips edits kept')
+    expect(html).toContain('1 skip + 1 loop kept')
     expect(html).toContain('deviation 2.19 nm → <b>1.99 nm</b> (target 0)')
     expect(html).toContain('curvature 39.3° → <b>45.9°</b> (target 72.3°)')
   })
+  it('headlines the density sweep (period → deletions) for a square strut', () => {
+    const html = autorefineResultHtml({ mode: 'skips_only', edits_kept: [],
+      converged_marks: { h0: { 10: -1, 30: -1 }, h1: { 20: -1 } },
+      density: { best_period: 40 },
+      metrics: { before: { deviation: 1.73 }, after: { deviation: 0.46 }, target: {} } })
+    expect(html).toContain('skip density: period 40 → 3 deletions')
+    expect(html).toContain('deviation 1.73 nm → <b>0.46 nm</b> (target 0)')
+  })
   it('is blank for no result', () => {
     expect(autorefineResultHtml(null)).toBe('')
+  })
+})
+
+describe('autorefine JOB status/result', () => {
+  const doneApplied = {
+    status: 'completed', refine_applied: true, refine_n_marks: 26, refine_period: 36,
+    refine_before_rmsd: 0.7154, refine_after_rmsd: 0.1919,
+    refine_note: 'Applied 26 marks (period 36) · deviation 0.72→0.19 nm',
+  }
+  it('status text uses the server-built refine_note across states', () => {
+    expect(autorefineJobStatusText(doneApplied)).toContain('Applied 26 marks')
+    expect(autorefineJobStatusText({ status: 'running', refine_note: 'Sweeping skip density: period 40…' }))
+      .toBe('Sweeping skip density: period 40…')
+    expect(autorefineJobStatusText({ status: 'running' })).toBe('Autorefining…')
+    expect(autorefineJobStatusText({ status: 'failed', error: 'boom' })).toBe('Failed: boom')
+    expect(autorefineJobStatusText(null)).toBe('')
+  })
+  it('result HTML reports the applied marks + period + before/after, no Apply button', () => {
+    const html = autorefineJobResultHtml(doneApplied)
+    expect(html).toContain('Applied 26 loop/skip marks')
+    expect(html).toContain('period 36')
+    expect(html).toContain('deviation 0.72 nm → <b>0.19 nm</b>')
+    expect(html).toContain('Feature Log')
+  })
+  it('result HTML says nothing-applied when no improvement', () => {
+    const html = autorefineJobResultHtml({ status: 'completed', refine_applied: false, refine_before_rmsd: 0.3 })
+    expect(html).toContain('No improving loop/skip program found')
+    expect(html).toContain('Nothing applied')
+  })
+  it('result HTML is blank until completed', () => {
+    expect(autorefineJobResultHtml({ status: 'running', refine_applied: true })).toBe('')
+    expect(autorefineJobResultHtml(null)).toBe('')
+  })
+})
+
+describe('refineImproved / refineMarkCounts', () => {
+  it('refineImproved is true when RMSD dropped even with zero greedy edits (density sweep)', () => {
+    expect(refineImproved({ before: { rmsd: 1.73 }, after: { rmsd: 0.46 }, edits_kept: [] }))
+      .toBe(true)
+    expect(refineImproved({ before: { rmsd: 1.0 }, after: { rmsd: 1.0 }, edits_kept: [] }))
+      .toBe(false)
+    expect(refineImproved(null)).toBe(false)
+  })
+  it('refineMarkCounts sums skips and loops across helices', () => {
+    const c = refineMarkCounts({ converged_marks: { h0: { 1: -1, 2: -1 }, h1: { 3: 1 } } })
+    expect(c).toEqual({ skips: 2, loops: 1, total: 3 })
+    expect(refineMarkCounts({}).total).toBe(0)
   })
 })

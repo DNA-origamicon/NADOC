@@ -50,6 +50,23 @@ def _routed_sq(length: int = 128):
         return design_state.get_or_404().model_copy(deep=True)
 
 
+SIX_HB_SQ_CELLS = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]
+
+
+@pytest.fixture(scope="module")
+def routed_sq_strut():
+    """A LONG bare square-lattice bundle (no marks, no deformation).  Its crossover register
+    imposes an intrinsic global over-twist that only a skip DENSITY can relieve — the case the
+    per-hotspot greedy can't touch (uniform twist → no local hotspot).  Module-scoped: the density
+    sweep solves the FEM ~20× so we build it once."""
+    with hb.scratch_session(SQ):
+        hb.create_bundle(SIX_HB_SQ_CELLS, 256, lattice=SQ, name="sq6")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        return design_state.get_or_404().model_copy(deep=True)
+
+
 # ── Pure helpers ──────────────────────────────────────────────────────────────────────────────
 
 def test_aggregate_deviation_by_bp_averages_directions_and_copies():
@@ -224,6 +241,72 @@ def test_measure_bundle_arc_bend_reads_zero_on_straight_and_angle_on_arc():
             arc.append({"helix_id": f"h{k}", "bp_index": i,
                         "backbone_position": [cx + float(k), 0.0, cz]})
     assert measure_bundle_arc_bend(arc) == pytest.approx(90.0, abs=10.0)
+
+
+# ── Global skip-DENSITY search (SQUARE register over-twist) ─────────────────────────────────────
+
+def test_periodic_skip_marks_are_skips_only_off_forbidden_and_empty_for_honeycomb():
+    # Honeycomb has no register-twist knob → no periodic pattern.
+    hc = _routed_bend(84, None, realize=False)
+    assert car.periodic_skip_marks(hc, 48) == {}
+    # Square: one deletion per `period` bp per helix, all skips (−1), none on a forbidden bp.
+    sq = _routed_sq(128)
+    marks = car.periodic_skip_marks(sq, 48)
+    assert marks and all(dl == -1 for bps in marks.values() for dl in bps.values())
+    forbidden, _ = car._forbidden_bps(sq)
+    for hid, bps in marks.items():
+        assert not (set(bps) & forbidden[hid]), "a periodic skip landed on a crossover/end"
+    # A denser period places strictly more skips than a sparser one.
+    assert (sum(len(v) for v in car.periodic_skip_marks(sq, 24).values())
+            > sum(len(v) for v in marks.values()))
+
+
+def test_sweep_skip_period_finds_a_twist_relieving_minimum(routed_sq_strut):
+    # The register over-twist makes the 0-skip strut deviate; the sweep must find a skip DENSITY
+    # that lowers the RMSD well below the bare bundle and report the sampled curve.
+    sweep = car.sweep_skip_period(routed_sq_strut, nonlinear=False)
+    assert sweep["status"] == "done"
+    base_rmsd = sweep["baseline_measure"]["rmsd"]
+    assert sweep["best_period"] is not None, "adding skips must beat the bare (0-skip) strut"
+    assert 16 <= sweep["best_period"] <= 128            # near the ~48 bp literature density
+    assert sweep["best_measure"]["rmsd"] < 0.75 * base_rmsd   # a substantial straightening
+    assert all(dl == -1 for bps in sweep["best_marks"].values() for dl in bps.values())
+    periods = {c["period"] for c in sweep["curve"]}
+    assert None in periods and len([p for p in periods if p is not None]) >= 6
+
+
+def test_refine_plain_square_strut_nulls_twist_where_greedy_kept_zero(routed_sq_strut):
+    # THE regression + the exp37 objective change: on a plain square strut the per-hotspot greedy
+    # kept 0 edits (uniform twist → no local hotspot).  The refiner now targets end-to-end TWIST vs
+    # the intended twist — a density sweep to the twist-nulling density + fractional per-helix bumps
+    # — and drives the twist into ±tol (the deviation RMSD is allowed to rise; it is not the goal).
+    res = car.fem_refine(routed_sq_strut, nonlinear=False)
+    assert res["status"] == "done"
+    assert res["mode"] == "skips_only"
+    assert res["objective"] == "twist"
+    # The density report is present (the sweep ran) and a per-helix authority map was measured.
+    assert res["density"] is not None and res["density"]["best_period"] is not None
+    assert res["authority"] and len(res["authority"]) >= 1
+    # The twist error vs the intended twist collapses (a bare strut is strongly over-wound).
+    tgt = res["twist_target"]
+    err_before = abs(res["twist_before"] - tgt)
+    err_after = abs(res["twist_after"] - tgt)
+    assert err_before > 5.0                       # register over-twist is large on a bare strut
+    assert err_after < 0.5 * err_before           # substantially nulled
+    # A non-empty, skips-only converged pattern (greedy alone produced {} here).
+    marks = res["converged_marks"]
+    assert marks and all(dl == -1 for bps in marks.values() for dl in bps.values())
+    # Every landed skip is off crossovers/ends.
+    forbidden, _ = car._forbidden_bps(routed_sq_strut)
+    for hid, bps in marks.items():
+        assert not (set(bps) & forbidden[hid])
+
+
+def test_sweep_honors_should_stop(routed_sq_strut):
+    # A should_stop that trips immediately → the sweep bails as 'stopped' with the 0-skip point.
+    sweep = car.sweep_skip_period(routed_sq_strut, nonlinear=False, should_stop=lambda: True)
+    assert sweep["status"] == "stopped"
+    assert sweep["best_period"] is None      # nothing beat the (unmeasured) baseline
 
 
 def test_refine_square_lattice_is_skips_only():

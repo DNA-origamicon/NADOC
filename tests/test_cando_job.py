@@ -172,3 +172,118 @@ def test_snapshot_geometry_missing_snapshot_is_not_ready(tmp_path, monkeypatch):
 
     resp = asyncio.run(rc.get_cando_snapshot_geometry(job.job_id))
     assert resp["ready"] is False and resp["nucleotides"] == []
+
+
+# ── Autorefine job kind ──────────────────────────────────────────────────────────
+
+def test_autorefine_job_kind_stage_and_roundtrip(tmp_path):
+    """The new 'autorefine' kind persists its result fields + doc_id, and an OLD job.json
+    (written before the kind field existed) loads back-compatibly as a 'predict' job."""
+    import json
+
+    from backend.core.cando_job import CandoJob, new_cando_job
+
+    job = new_cando_job("d", kind="autorefine", nonlinear=False, doc_id="__default__")
+    assert job.kind == "autorefine"
+    assert job.stages[0].name == "autorefine"          # not "linear"/"nonlinear"
+    job.refine_applied = True
+    job.refine_n_marks = 12
+    job.refine_period = 40
+    job.refine_before_rmsd = 1.7
+    job.refine_after_rmsd = 0.4
+    job.save(tmp_path)
+
+    loaded = CandoJob.load(job.job_id, tmp_path)
+    assert loaded.kind == "autorefine" and loaded.doc_id == "__default__"
+    assert loaded.refine_applied is True and loaded.refine_n_marks == 12
+    assert loaded.refine_period == 40 and loaded.refine_after_rmsd == 0.4
+
+    # Back-compat: a job.json missing the new fields loads as a plain predict job.
+    p = job.job_dir(tmp_path) / "job.json"
+    data = json.loads(p.read_text())
+    for k in ("kind", "doc_id", "refine_applied", "refine_period"):
+        data.pop(k, None)
+    p.write_text(json.dumps(data))
+    old = CandoJob.load(job.job_id, tmp_path)
+    assert old.kind == "predict" and old.refine_applied is False and old.refine_period is None
+
+
+def _routed_sq_strut(length: int = 160):
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    cells = [(r, c) for r in range(2) for c in range(3)]   # 2×3 = 6 helices
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle(cells, length, lattice=LatticeType.SQUARE, name="sq")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        return design_state.get_or_404().model_copy(deep=True)
+
+
+def _run_autorefine_job(design, ws: Path, *, name: str = "sq"):
+    """Set ``design`` as the active (default-doc) design, then run an autorefine job to
+    completion synchronously (the runner applies to the active design + feature log)."""
+    from backend.api import state as ds
+    from backend.core import cando_runner as cr
+    from backend.core.cando_job import CandoJob, new_cando_job
+
+    ds.set_design(design.model_copy(deep=True))
+    job = new_cando_job(name, kind="autorefine", nonlinear=False, with_rmsf=True,
+                        n_nucleotides=1000, doc_id="__default__")
+    cr.prepare_cando_job(ds.get_or_404(), job, ws)
+    cr._run_autorefine_job(job, ws)            # synchronous (no thread) for a deterministic test
+    return CandoJob.load(job.job_id, ws)
+
+
+def test_autorefine_job_applies_marks_logs_and_caches_all_displays(tmp_path):
+    """The autorefine JOB, end to end: refine a square strut's register over-twist, AUTO-APPLY
+    the winning skip program to the active design as a reversible feature-log entry, and cache the
+    FEM analysis of the refined design so ALL display modes work on the completed job."""
+    from backend.api import state as ds
+    from backend.core import cando_runner as cr
+    from backend.core.cando_job import CandoStatus
+
+    job = _run_autorefine_job(_routed_sq_strut(160), tmp_path)
+
+    assert job.status == CandoStatus.completed
+    assert job.kind == "autorefine"
+    assert job.refine_applied is True
+    assert job.refine_n_marks and job.refine_n_marks > 0
+    assert job.refine_after_rmsd < job.refine_before_rmsd     # it straightened the strut
+    assert job.feature_log_position is not None
+
+    # The active design received exactly the applied marks + a reversible feature-log entry.
+    active = ds.get_or_404()
+    assert sum(len(h.loop_skips) for h in active.helices) == job.refine_n_marks
+    assert active.feature_log and active.feature_log[-1].op_kind == "cando-autorefine-marks"
+
+    # ALL display modes work: the FEM analysis of the REFINED design is cached (display + rmsf +
+    # per-bp axis nodes for the cylinder rep), and the job's snapshot is the refined topology.
+    disp = cr.load_display(job.job_dir(tmp_path))
+    assert disp and disp["positions"] and disp["axis"]
+    rmsf = cr.load_rmsf(job.job_dir(tmp_path))
+    assert rmsf and len(rmsf["rmsf"]) == job.n_nodes
+    snap = cr._load_snapshot_design(job.job_dir(tmp_path))
+    assert sum(len(h.loop_skips) for h in snap.helices) == job.refine_n_marks
+
+
+def test_autorefine_job_no_improvement_leaves_design_but_still_caches(routed_6hb, tmp_path):
+    """A straight design with nothing to refine: the job applies NOTHING (design + feature log
+    untouched) but STILL caches its FEM analysis, so the completed job's displays work."""
+    from backend.api import state as ds
+    from backend.core import cando_runner as cr
+    from backend.core.cando_job import CandoStatus
+
+    before_marks = sum(len(h.loop_skips) for h in routed_6hb.helices)
+    before_log = len(routed_6hb.feature_log or [])
+    job = _run_autorefine_job(routed_6hb, tmp_path, name="6hb")
+
+    assert job.status == CandoStatus.completed
+    assert job.refine_applied is False
+    active = ds.get_or_404()
+    assert sum(len(h.loop_skips) for h in active.helices) == before_marks
+    assert len(active.feature_log or []) == before_log        # no entry added
+    # Displays still work on the completed job.
+    assert cr.load_display(job.job_dir(tmp_path))["positions"]
+    assert cr.load_rmsf(job.job_dir(tmp_path))["rmsf"]

@@ -132,14 +132,47 @@ const _fmtDeg = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}°`)
  * index and the CURRENT vs TARGET twist / curvature / deviation; on done it summarises the edit
  * count + before/after deviation.
  */
+/**
+ * Total loop/skip marks in a converged mark set ``{helix:{bp:delta}}`` (pure).  The autorefine's
+ * work lands here — the SQUARE density sweep writes the whole skip pattern to ``converged_marks``
+ * (NOT ``edits_kept``, which only counts the greedy hotspot pass) — so a summary keyed on this is
+ * the one that shows a density-driven refinement.
+ */
+export function refineMarkCounts(result) {
+  const marks = result?.converged_marks || {}
+  let skips = 0, loops = 0
+  for (const bps of Object.values(marks)) {
+    for (const dl of Object.values(bps)) {
+      if (dl < 0) skips += 1
+      else if (dl > 0) loops += 1
+    }
+  }
+  return { skips, loops, total: skips + loops }
+}
+
+/**
+ * Did the refine actually improve the design vs as-loaded (pure)?  True when the deviation RMSD
+ * dropped — this catches BOTH the density sweep (which can lower RMSD with zero greedy edits) and
+ * the greedy pass.  The old gate keyed on ``edits_kept.length`` and so reported a large
+ * density-driven improvement (e.g. RMSD 1.73→0.46 on a square strut) as "no improving edit found".
+ */
+export function refineImproved(result) {
+  if (!result) return false
+  const before = result.before?.rmsd
+  const after = result.after?.rmsd
+  if (typeof before === 'number' && typeof after === 'number') return after < before - 1e-4
+  return (result.edits_kept?.length ?? 0) > 0
+}
+
 export function autorefineStatusText(run) {
   if (!run) return ''
   if (run.state === 'error') return `Failed: ${run.error || 'autorefine error'}`
   if (run.state === 'stopped') return 'Stopped.'
   if (run.state === 'done') {
     const m = run.result?.metrics
-    const kept = run.result?.edits_kept?.length ?? 0
-    const editStr = `${kept} edit${kept === 1 ? '' : 's'}`
+    const { total } = refineMarkCounts(run.result)
+    const n = total || (run.result?.edits_kept?.length ?? 0)
+    const editStr = `${n} mark${n === 1 ? '' : 's'}`
     if (m) return `Done · ${editStr} · deviation ${_fmtNm(m.after?.deviation)} (was ${_fmtNm(m.before?.deviation)})`
     return `Done · ${editStr}`
   }
@@ -164,16 +197,59 @@ export function autorefineStatusText(run) {
 export function autorefineResultHtml(result) {
   if (!result) return ''
   const m = result.metrics || {}
+  const { skips, loops } = refineMarkCounts(result)
   const kept = result.edits_kept?.length ?? 0
-  const mode = result.mode === 'skips_only' ? 'skips' : 'loops+skips'
+  const density = result.density
+  // Headline: what the refine landed.  For a SQUARE density sweep, the marks come as a uniform
+  // skip period; otherwise report the skip/loop mix + any local greedy edits.
+  const parts = []
+  if (density && density.best_period != null) {
+    parts.push(`skip density: period ${density.best_period} → ${skips} deletion${skips === 1 ? '' : 's'}`)
+    if (kept) parts.push(`${kept} local edit${kept === 1 ? '' : 's'}`)
+  } else {
+    const bits = []
+    if (skips) bits.push(`${skips} skip${skips === 1 ? '' : 's'}`)
+    if (loops) bits.push(`${loops} loop${loops === 1 ? '' : 's'}`)
+    parts.push(`${bits.join(' + ') || 'no marks'} kept`)
+  }
   const rows = [
     `deviation ${_fmtNm(m.before?.deviation)} → <b>${_fmtNm(m.after?.deviation)}</b> (target 0)`,
     `curvature ${_fmtDeg(m.before?.bend_deg)} → <b>${_fmtDeg(m.after?.bend_deg)}</b> (target ${_fmtDeg(m.target?.bend_deg)})`,
     `twist ${_fmtDeg(m.before?.twist_deg)} → <b>${_fmtDeg(m.after?.twist_deg)}</b> (target ${_fmtDeg(m.target?.twist_deg)})`,
   ]
   return `<div style="font-size:11px;color:#8b949e;line-height:1.5">`
-    + `<div>${kept} ${mode} edit${kept === 1 ? '' : 's'} kept</div>`
+    + `<div>${parts.join(' · ')}</div>`
     + rows.map((r) => `<div>${r}</div>`).join('') + `</div>`
+}
+
+// ── Autorefine JOB status/result (the auto-applying job flow; pure, unit-tested) ─────────────
+/** Live status line for an autorefine JOB poll payload (uses the server-built ``refine_note``). */
+export function autorefineJobStatusText(job) {
+  if (!job) return ''
+  if (job.status === 'failed') return `Failed: ${job.error || 'autorefine error'}`
+  if (job.status === 'stopped') return job.refine_note || 'Stopped.'
+  if (job.status === 'completed') return job.refine_note || 'Done.'
+  return job.refine_note || 'Autorefining…'
+}
+
+/** Result summary HTML for a COMPLETED autorefine job: what it auto-applied (or that nothing
+ *  improved) + a pointer that the job's displays are ready.  No Apply button — the job already
+ *  applied the marks to the design as a reversible feature-log entry. */
+export function autorefineJobResultHtml(job) {
+  if (!job || job.status !== 'completed') return ''
+  const b = job.refine_before_rmsd, a = job.refine_after_rmsd
+  if (!job.refine_applied) {
+    return `<div style="font-size:11px;color:#8b949e;line-height:1.5">`
+      + `<div>No improving loop/skip program found — deviation ${_fmtNm(b)} is already as low as `
+      + `the marks allow. Nothing applied.</div></div>`
+  }
+  const per = job.refine_period != null ? ` · period ${job.refine_period}` : ''
+  const n = job.refine_n_marks ?? 0
+  return `<div style="font-size:11px;color:#8b949e;line-height:1.5">`
+    + `<div><b>Applied ${n} loop/skip mark${n === 1 ? '' : 's'}</b>${per} — reversible in the Feature Log</div>`
+    + `<div>deviation ${_fmtNm(b)} → <b>${_fmtNm(a)}</b> (target 0)</div>`
+    + `<div>Select this job below to view its predicted shape / flexibility / deviation / cylinder displays.</div>`
+    + `</div>`
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -301,7 +377,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   const arResult = $('cando-jobs-autorefine-result')
   const _SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
   let _arRunning = false
-  let _arRunId = null
+  let _arJobId = null
   let _arPollTimer = null
   let _arSpin = 0
   let _arSpinTimer = null
@@ -319,7 +395,6 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     else if (!spinning && _arSpinTimer) { clearInterval(_arSpinTimer); _arSpinTimer = null }
     _renderArStatus()
   }
-  function _clearArPoll() { if (_arPollTimer) { clearTimeout(_arPollTimer); _arPollTimer = null } }
   function _updateArButton() {
     if (!arBtn) return
     arBtn.disabled = _arRunning
@@ -328,77 +403,67 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     if (arStopBtn) arStopBtn.style.display = _arRunning ? '' : 'none'
   }
 
-  async function _applyArResult(runId) {
-    const applied = await api.applyCandoAutorefine(runId)
-    if (!applied || !applied.design) {
-      showToast(api.lastErrorMessage() || 'Failed to apply autorefine marks', { severity: 'error' })
-      return
-    }
-    api.syncDesignResponse(applied)   // updates editor + Feature Log, fires nadoc:design-changed
-    showToast('Autorefine loop/skips applied to the design', { severity: 'info' })
-  }
-
-  function _renderArResult(runId, result) {
+  function _renderArJobResult(job) {
     if (!arResult) return
-    arResult.innerHTML = ''
-    if (!result || !(result.edits_kept?.length)) {
-      arResult.innerHTML = `<div style="font-size:11px;color:${_C.dim}">No improving edit found — the design already matches its intended shape as closely as the loop/skips allow.</div>`
-      return
-    }
-    const box = document.createElement('div')
-    box.innerHTML = autorefineResultHtml(result)
-    const apply = document.createElement('button')
-    apply.textContent = '✓ Apply to design'
-    apply.style.cssText = 'margin-top:5px;font-size:var(--text-xs);padding:5px 8px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600'
-    apply.addEventListener('click', async () => {
-      apply.disabled = true; apply.textContent = 'Applying…'
-      await _applyArResult(runId)
-      apply.textContent = '✓ Applied'
-    })
-    box.appendChild(apply)
-    arResult.appendChild(box)
+    arResult.innerHTML = autorefineJobResultHtml(job)
   }
 
-  async function _pollAutorefine(runId) {
-    let run
-    try { run = await api.getCandoAutorefine(runId) } catch { run = null }
-    if (!run) { _arPollTimer = setTimeout(() => _pollAutorefine(runId), 1200); return }
-    if (run.state === 'running') {
-      _setArStatus(autorefineStatusText(run), _C.warn, true)
-      _arPollTimer = setTimeout(() => _pollAutorefine(runId), 1000)
+  async function _pollAutorefineJob(jobId) {
+    let job
+    try { job = await api.getCandoJob(jobId) } catch { job = null }
+    if (!job) { _arPollTimer = setTimeout(() => _pollAutorefineJob(jobId), 1200); return }
+    if (['queued', 'preparing', 'running'].includes(job.status)) {
+      _setArStatus(autorefineJobStatusText(job), _C.warn, true)
+      _arPollTimer = setTimeout(() => _pollAutorefineJob(jobId), 1000)
       return
     }
-    // terminal (done / stopped / error)
+    // terminal (completed / stopped / failed)
     _arRunning = false
     _updateArButton()
-    const color = run.state === 'error' ? _C.err : run.state === 'stopped' ? _C.dim : _C.ok
-    _setArStatus(autorefineStatusText(run), color, false)
-    if (run.state === 'done') _renderArResult(runId, run.result)
+    const color = job.status === 'failed' ? _C.err : job.status === 'stopped' ? _C.dim : _C.ok
+    _setArStatus(autorefineJobStatusText(job), color, false)
+    _renderArJobResult(job)
+    // The refine auto-APPLIED its marks server-side (feature log) → pull the updated design so the
+    // editor + feature log reflect it; refresh the jobs list + select the job so its display modes
+    // (predicted shape / flex / deviation / cylinders) are immediately available.
+    if (job.status === 'completed') {
+      if (job.refine_applied) {
+        await api.getDesign()
+        showToast('Autorefine applied loop/skips to the design (see Feature Log)', { severity: 'info' })
+      }
+      _selectedId = jobId
+    }
+    await _fetchJobs()
   }
 
   async function _startAutorefine() {
     if (_arRunning) return
     if (!(await confirmNoConcurrentJob())) return
-    _arRunning = true; _arRunId = null
+    _arRunning = true; _arJobId = null
     if (arResult) arResult.innerHTML = ''
     _updateArButton()
     _setArStatus('Starting autorefine…', _C.warn, true)
-    // Coarse (linear) FEM oracle per trial — fast; the user re-runs a Fine job to confirm.
-    const r = await api.startCandoAutorefine({ nonlinear: false })
-    if (!r || !r.autorefine_id) {
+    // An autorefine JOB: Coarse (linear) FEM oracle per trial (fast), auto-applies the best
+    // loop/skip program as a reversible feature-log entry, then caches the FEM analysis of the
+    // refined design so all display modes work on the job.
+    const job = await api.createCandoJob({
+      kind: 'autorefine', nonlinear: false, autostart: true,
+      design_source_path: getWorkspacePath?.() || null,
+    })
+    if (!job || !job.job_id) {
       _arRunning = false; _updateArButton()
-      _setArStatus('Failed to start: ' + (api.lastErrorMessage() || 'no marks or bend/twist to refine'), _C.err, false)
+      _setArStatus('Failed to start: ' + (api.lastErrorMessage() || 'could not create autorefine job'), _C.err, false)
       return
     }
-    _arRunId = r.autorefine_id
-    _pollAutorefine(_arRunId)
+    _arJobId = job.job_id
+    _pollAutorefineJob(_arJobId)
   }
   arBtn?.addEventListener('click', _startAutorefine)
   arStopBtn?.addEventListener('click', async () => {
-    if (!_arRunId) return
+    if (!_arJobId) return
     if (arStopBtn) arStopBtn.disabled = true
     _setArStatus('Stopping…', _C.dim, true)
-    await api.stopCandoAutorefine(_arRunId)
+    await api.stopCandoJob(_arJobId)
     if (arStopBtn) arStopBtn.disabled = false
   })
 

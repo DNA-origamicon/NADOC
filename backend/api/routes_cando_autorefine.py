@@ -104,9 +104,14 @@ def start_cando_autorefine(req: CandoAutorefineStartRequest) -> dict:
     """Launch a background CanDo-FEM refine loop on the active design.  Returns
     ``{autorefine_id}``; poll ``/design/cando/autorefine/{id}``."""
     design = design_state.get_or_404()
+    from backend.core.models import LatticeType
     if not design.helices:
         raise HTTPException(400, detail="Design has no helices to refine.")
-    if not any(h.loop_skips for h in design.helices) and not design.deformations:
+    # A SQUARE bundle is always refinable even bare: its crossover register imposes an intrinsic
+    # global over-twist at ZERO skips, and the density sweep adds the deletions that relieve it.
+    # Honeycomb has no such register term, so a bare honeycomb design needs a bend/twist or marks.
+    if (design.lattice_type != LatticeType.SQUARE
+            and not any(h.loop_skips for h in design.helices) and not design.deformations):
         raise HTTPException(
             400, detail="Nothing to refine: the design carries no loop/skips and no bend/twist "
             "to realise.  Draw a bend/twist (or add loop/skips) first, then autorefine tunes the "
@@ -146,31 +151,6 @@ def stop_cando_autorefine(run_id: str) -> dict:
     return {"autorefine_id": run_id, "stopping": True}
 
 
-def _build_refined_design(base_design, marks_by_helix: dict[str, dict[int, int]]):
-    """Lay the converged ``{helix_id: {bp_index: delta}}`` mark set on ``base_design`` and
-    RE-SEQUENCE (delta-aware, any lattice) — the apply path.  Mirrors
-    :func:`skip_twist_tuning.build_explicit_skip_from_design` but carries loop deltas (+1) too and
-    uses the design's own lattice.  Re-sequencing is mandatory here (unlike the fast inner-loop
-    trial builds): changing the mark set shifts every downstream base, so the staples must be
-    re-complemented or the design's sequences go non-Watson-Crick."""
-    from backend.api import headless_build as hb
-    from backend.api import state as ds
-    from backend.api.skip_twist_tuning import _select_scaffold
-    from backend.core.loop_skip_calculator import apply_loop_skips, clear_all_loop_skips
-    from backend.core.models import LoopSkip
-
-    with hb.scratch_session(base_design.lattice_type):
-        ds.set_design(base_design.model_copy(deep=True))
-        d = clear_all_loop_skips(ds.get_or_404())
-        mods = {hid: [LoopSkip(bp_index=int(bp), delta=int(dl)) for bp, dl in sorted(bps.items())]
-                for hid, bps in (marks_by_helix or {}).items() if bps}
-        if mods:
-            d = apply_loop_skips(d, mods)
-        ds.set_design(d)
-        hb.full_sequence(scaffold_name=_select_scaffold(ds.get_or_404(), None))
-        return ds.get_or_404().model_copy(deep=True)
-
-
 @router.post("/design/cando/autorefine/{run_id}/apply")
 def apply_cando_autorefine(run_id: str) -> dict:
     """Land a completed run's converged loop/skip mark set on the ACTIVE design as a reversible
@@ -203,7 +183,8 @@ def apply_cando_autorefine(run_id: str) -> dict:
     # session that re-acquires the same global state lock the callback holds → self-deadlock.
     # Build first, hand the finished design in as a pure replacement (same pattern as the oxDNA
     # autorefine apply).
-    refined = _build_refined_design(design, marks)
+    from backend.core.cando_autorefine import build_refined_design
+    refined = build_refined_design(design, marks)
     updated, report, _entry = design_state.mutate_with_feature_log(
         op_kind="cando-autorefine-marks", label=label, params=params, fn=lambda _d: refined)
     return _design_response(updated, report)

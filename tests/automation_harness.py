@@ -5040,3 +5040,84 @@ def assert_fem_matches_cando_bend(
         f"({'linear' if not nonlinear else 'nonlinear'} solve, R={m['radius_nm']:.1f} nm)."
     )
     return m
+
+
+def assert_fem_autorefine_relieves_twist(
+    design: Design,
+    *,
+    nonlinear: bool = False,
+    max_drop_ratio: float = 0.6,
+    min_before_rmsd: float = 0.3,
+    require_skips_only: bool | None = None,
+    max_hotspots: int = 3,
+) -> dict:
+    """Assert the CanDo-FEM autorefine (:func:`cando_autorefine.fem_refine`) actually relieves a
+    bundle's deviation by landing a real loop/skip program — the headless proof that the SQUARE
+    skip-DENSITY sweep works end-to-end (a plain square strut's register over-twist is a GLOBAL
+    twist the per-hotspot greedy can't touch; the density sweep is what straightens it).
+
+    Guards (each can go red — the oracle can NOT pass vacuously):
+      1. **Non-vacuous start** — ``before.rmsd > min_before_rmsd``: the design must actually deviate
+         from its intended shape, else there is nothing to relieve.
+      2. **Improvement** — for a SQUARE design the objective is end-to-end TWIST (exp37), so this
+         asserts the twist ERROR (vs intended twist) drops by ``max_drop_ratio`` — the deviation
+         RMSD may RISE as twist→0.  For honeycomb it asserts the deviation ``after.rmsd ≤
+         max_drop_ratio · before.rmsd``.  Either way the "0 edits / no improvement" bug fails it.
+      3. **Landed marks** — ``converged_marks`` is non-empty (the regression was an empty set), every
+         mark sits OFF crossovers/ends ([[feedback_loopskip_no_crossover_ends]]), and a SQUARE design
+         uses skips (−1) only.
+
+    ``require_skips_only`` defaults to ``lattice_type == SQUARE``.  Returns the ``fem_refine`` result
+    dict (so a caller can further assert ``density.best_period`` etc.)."""
+    from backend.core import cando_autorefine as car
+    from backend.core.models import LatticeType
+
+    res = car.fem_refine(design, nonlinear=nonlinear, max_hotspots=max_hotspots)
+    assert res["status"] == "done", f"autorefine did not finish: status={res['status']!r}"
+    before, after = res["before"]["rmsd"], res["after"]["rmsd"]
+    assert before > min_before_rmsd, (
+        f"autorefine oracle is vacuous: the design deviates only {before:.3f} nm before refining "
+        f"(≤ {min_before_rmsd} nm) — no twist/curvature to relieve, so any 'improvement' is noise."
+    )
+    # SQUARE objective is end-to-end TWIST vs the intended twist (exp37): the register over-twist is
+    # nulled, and the deviation RMSD is ALLOWED to rise (twist↔deviation tradeoff), so assert a real
+    # TWIST relief here — not an RMSD drop.  Honeycomb keeps the deviation-RMSD contract.
+    if res.get("objective") == "twist":
+        tgt = res.get("twist_target") or 0.0
+        err_before = abs((res.get("twist_before") or 0.0) - tgt)
+        err_after = abs((res.get("twist_after") or 0.0) - tgt)
+        assert err_before > 1.0, (
+            f"autorefine oracle is vacuous: twist already {err_before:.2f}° from target before "
+            f"refining — nothing to null."
+        )
+        assert err_after <= max_drop_ratio * err_before, (
+            f"autorefine did NOT null the twist: {res.get('twist_before'):.2f}° → "
+            f"{res.get('twist_after'):.2f}° (target {tgt:.2f}°, error ratio "
+            f"{err_after / err_before:.2f} > {max_drop_ratio}). density best_period="
+            f"{(res.get('density') or {}).get('best_period')}, converged marks="
+            f"{sum(len(v) for v in res['converged_marks'].values())}."
+        )
+    else:
+        assert after <= max_drop_ratio * before, (
+            f"autorefine did NOT relieve the deviation: {before:.3f} → {after:.3f} nm (ratio "
+            f"{after / before:.2f} > {max_drop_ratio}). density best_period="
+            f"{(res.get('density') or {}).get('best_period')}, converged marks="
+            f"{sum(len(v) for v in res['converged_marks'].values())}."
+        )
+    marks = res["converged_marks"]
+    assert marks, (
+        "autorefine kept NO loop/skip marks — the '0 edits / no improvement' regression.  The SQUARE "
+        "density sweep should have landed a uniform skip pattern in converged_marks."
+    )
+    forbidden, _interior = car._forbidden_bps(design)
+    for hid, bps in marks.items():
+        stray = set(bps) & forbidden.get(hid, set())
+        assert not stray, f"autorefine placed a mark on forbidden bp(s) {sorted(stray)} of helix {hid}."
+    skips_only = (design.lattice_type == LatticeType.SQUARE
+                  if require_skips_only is None else require_skips_only)
+    if skips_only:
+        assert all(dl == -1 for bps in marks.values() for dl in bps.values()), (
+            "square-lattice refinement produced a loop (+1) mark — the register over-twist is "
+            "relieved by DELETIONS only."
+        )
+    return res

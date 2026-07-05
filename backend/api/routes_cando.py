@@ -92,9 +92,15 @@ def _is_out_of_date(job: CandoJob, current_fp: "str | None") -> bool:
 # ── Request models ────────────────────────────────────────────────────────────
 
 class CreateCandoJobRequest(BaseModel):
+    kind:       str = Field("predict",
+                            description="'predict' (plain FEM shape prediction) or 'autorefine' "
+                                        "(tune the loop/skip program, auto-apply it as a reversible "
+                                        "feature-log entry, then cache the FEM analysis of the "
+                                        "refined design so all display modes work on the job).")
     nonlinear:  bool = Field(True,
                              description="Fine (geometrically-nonlinear corotational, "
-                                         "~0.95·CanDo) vs Coarse (linear preview, ~0.92).")
+                                         "~0.95·CanDo) vs Coarse (linear preview, ~0.92).  For an "
+                                         "autorefine job this is also the per-trial oracle mode.")
     n_steps:    int = Field(20, ge=1, le=200,
                             description="Corotational load-step count (nonlinear only)")
     with_rmsf:  bool = Field(True, description="Also compute the free-free NMA per-bp RMSF")
@@ -116,14 +122,17 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
         name = Path(body.design_source_path).stem or None
     name = (name or design.metadata.name or "design").replace(" ", "_")
 
+    from backend.api import doc_context
     from backend.core.oxdna_staleness import (
         effective_feature_log_position,
         oxdna_design_fingerprint,
     )
     from backend.physics.oxdna_interface import _strand_nucleotide_order
 
+    kind = body.kind if body.kind in ("predict", "autorefine") else "predict"
     job = new_cando_job(
         design_name        = name,
+        kind               = kind,
         nonlinear          = body.nonlinear,
         n_steps            = body.n_steps,
         with_rmsf          = body.with_rmsf,
@@ -131,6 +140,9 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
         design_source_path = body.design_source_path,
         design_fingerprint = oxdna_design_fingerprint(design),
         feature_log_position = effective_feature_log_position(design),
+        # Autorefine auto-applies from its worker thread → bind the job to the current document so
+        # the feature-log entry lands on the right design in a multi-doc session.
+        doc_id             = doc_context.get_current_doc(),
     )
     job.status = CandoStatus.preparing
     job.save(_workspace())

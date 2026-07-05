@@ -363,6 +363,11 @@ _SLOW_TESTS = {
     "test_apply_deformations_geometry_honors_marks_per_helix",
     "test_fill_all_overhang_candidates_saturates_and_stays_valid",
     "test_auto_op_chain_routes_a_full_18hb",
+    # CanDo-FEM autorefine density sweep (~20 FEM solves on a multi-helix square strut)
+    "test_fem_autorefine_relieves_square_strut_twist_headless",
+    "test_sweep_skip_period_finds_a_twist_relieving_minimum",
+    "test_refine_plain_square_strut_tunes_density_where_greedy_kept_zero",
+    "test_autorefine_job_applies_marks_logs_and_caches_all_displays",
 }
 
 

@@ -963,16 +963,88 @@ twist is too small/near-square to re-pin the factor.
 - Test `test_square_lattice_register_overtwist_present_and_relieved_by_skips` (SQ pre-stress ≠0 at 0 skips,
   HC =0, skips shrink the predicted deformation). `just test`: 4059 passed, 0 failed (2026-07-05).
 
-**Objective now correct, engine NOT yet:** `fem_measure` RMSD-vs-straight now 1.73(0)→0.58(150)→1.08(298) —
-a proper minimum near the right density, 150 on the under-skipped side. BUT `fem_refine` STILL keeps 0 edits:
-its greedy single-skip-per-hotspot search with `rmsd_improve_nm=0.05` can't navigate the shallow global-twist
-objective (one skip moves RMSD ~0.004 nm, below the bar). **Global SQ twist needs a skip-DENSITY tuning search
-(like `skip_twist_selfconsistency`'s period sweep), not per-hotspot greedy.** That's the separate engine work
-the user anticipated ("iterate to near-perfect match / single-skip resolution") — NEXT. The FEM *oracle* (the
-requested "accurate CanDo mimic") is done + validated.
+**Objective correct — ENGINE now fixed too (2026-07-05):** `fem_measure` RMSD-vs-straight is 1.73(0)→0.58(150)→
+1.08(298), a proper minimum near the right density. The greedy single-skip-per-hotspot search kept 0 edits (a
+plain SQ strut has NO local hotspot — the register over-twist spreads the deviation uniformly, and one skip
+moves RMSD ~0.004 nm < the accept bar). **FIX = a global skip-DENSITY sweep** mirroring `skip_twist_tuning`'s
+period sweep but with the fast FEM oracle (`backend/core/cando_autorefine.py`):
+- `periodic_skip_marks(design, period)` — uniform `sq_lattice_periodic_skips`→`relocate_marks_off_forbidden`,
+  skips-only, `{}` for non-square, NO re-sequence (oracle reads geometry).
+- `sweep_skip_period(base, ...)` — coarse geometric pass over the period range + 0-skip point → ternary
+  `_search_min_period` refine to the integer optimum. ~20 FEM solves (seconds each). Returns
+  `{status, best_period, best_marks, best_measure, baseline_measure, curve}`; emits `density_trial`/`density_best`.
+- `fem_refine` now composes TWO strategies: **SQUARE → density sweep FIRST** (adopt only if it beats the
+  design as loaded — never a regression), then the greedy hotspot pass mops up local residual (usually none on a
+  plain strut); **honeycomb → greedy only** (unchanged). Output gains `density` (sweep report; `None` for HC).
+- Route guard (`routes_cando_autorefine.py`) relaxed: a bare SQUARE strut (no marks/no deformation) is now
+  refinable (the sweep adds the twist-relieving skips); bare honeycomb still rejected (no register term).
+- **VALIDATED** on a 2×3×336 SQ strut: greedy=0 edits → density sweep picks **period 48 (42 skips), RMSD
+  1.369→0.443** (0.32×), best off crossovers/ends, skips-only. Tests `test_cando_autorefine.py` **16** (4 new:
+  periodic-marks purity, sweep-finds-min, plain-strut-tunes-where-greedy-kept-zero, should_stop). `just test`
+  **4063 passed** (was 4059).
 **Reconstruct the submitted `3x6x400` calibration design:** load workspace file (now 0-skip) → `apply-loop-skips`
 tool (`sq_lattice_periodic_skips`→`relocate_marks_off_forbidden`→`apply_loop_skips`) → 150 skips. `2x3x100_Sq_test`
 source already carries its 12 skips.
+
+### AUTOREFINE "0 EDITS / NO IMPROVEMENT" ON 3x6x400 — was a FRONTEND reporting bug (2026-07-05, user-reported)
+After the density-sweep engine landed, the user still saw "0 edits / no improvement" on `3x6x400_Sq_test.nadoc`.
+**The ENGINE was fine** — headless `fem_refine` on the real 18-helix strut: baseline RMSD **1.734 → 0.459**,
+density **period 40, 180 skips**, `edits_kept=0`. The bug was in the PANEL: `cando_jobs_panel.js` gated the whole
+result + Apply button on `edits_kept.length`. The density sweep writes its skips to **`converged_marks`, NOT
+`edits_kept`** (edits_kept only counts the greedy hotspot pass, which correctly keeps 0 on a uniform-twist strut),
+so a real 1.73→0.46 improvement rendered as "No improving edit found" with no Apply button.
+- **Fix (frontend):** new pure `refineMarkCounts(result)` (sums skips/loops in `converged_marks`) +
+  `refineImproved(result)` (true when `after.rmsd < before.rmsd`). `_renderArResult` now gates on
+  `refineImproved && converged_marks non-empty` (Apply applies `converged_marks` — always did); `autorefineResultHtml`
+  headlines the density sweep (`skip density: period 40 → N deletions`); status shows total marks. Tests:
+  `cando_jobs_panel.test.js` (+ density-result/refineImproved/refineMarkCounts) + NEW jsdom
+  `cando_jobs_panel.autorefine_result.test.js` (density-only done run → Apply button renders + calls apply, no
+  "No improving edit"). Frontend suite **2166**.
+- **Headless validation (user ask "automate + headless validation tests"):** new harness oracle
+  `automation_harness.assert_fem_autorefine_relieves_twist(design)` (non-vacuous start + RMSD drop ≤ ratio +
+  non-empty off-forbidden skips-only marks — the "0 edits" regression fails it) + `tests/test_cando_autorefine_
+  validation.py` builds a **3×6 = 18-helix** square strut HEADLESSLY (real design's cross-section; workspace/ file
+  is gitignored so build, don't load) and asserts it: 3×6×160 → 0.806→0.206 (ratio 0.26), period 40 (== real
+  design). Registered slow in `conftest.py`. `just test` **4064 passed**.
+- **NOTE:** the density sweep runs FIRST for SQ but the greedy hotspot pass still runs after and can burn time
+  (real 3x6x400: 8 hotspots × trials × full solve ≈ 200s, all rejected on a plain strut). Works, but a future
+  optimization = skip/limit the greedy pass when the post-density field has no hotspots.
+
+### AUTOREFINE JOB TYPE — auto-apply + retained FEM analysis + all displays **2026-07-05** (user-requested)
+Promoted autorefine from a separate "run" (manual Apply click) into a first-class **CanDo JOB kind** so the
+result is a persistent, displayable job that AUTO-APPLIES its marks. New `kind` field on `CandoJob` (`"predict"`
+default | `"autorefine"`); the Autorefine button now creates `kind=autorefine` (user chose "repoint existing
+button").
+- **`cando_runner._run_autorefine_job`**: sets `doc_context` to the job's `doc_id` (multi-doc safe) → loads
+  snapshot → `fem_refine` (live `refine_note` per progress event) → if improved, `build_refined_design`
+  (re-sequenced) + `mutate_with_feature_log(op_kind="cando-autorefine-marks")` on the doc's active design →
+  re-snapshots the refined design → `predict_shape` (with RMSF) → `_cache_fem_analysis` (display.json + rmsf.json
+  + axis). So the completed job behaves EXACTLY like a predict job: deform / flex / deviation / cylinder toggles
+  + snapshot-geometry all work off its cache. **No-improvement path still caches** the analysis (displays work,
+  design untouched).
+- **`build_refined_design`** promoted from `routes_cando_autorefine._build_refined_design` to
+  `cando_autorefine.py` (core) — shared by the REST apply route + the job runner. Builds in an isolated scratch
+  doc, handed to `mutate_with_feature_log` as a pure replacement (build OUTSIDE the callback → no state-lock
+  self-deadlock).
+- **New `CandoJob` fields:** `kind`, `doc_id`, `refine_applied/before_rmsd/after_rmsd/n_marks/period`,
+  `refine_note` (live status line, server-built). `load()` back-compat defaults → old job.json = predict job.
+- **`routes_cando`**: `CreateCandoJobRequest.kind`; create captures `doc_context.get_current_doc()`→`doc_id`;
+  `start_job` dispatches `kind=="autorefine"`→`_run_autorefine_job` else `_run_job`. Job status/list already
+  serialize all fields (asdict), so the panel gets `refine_note` + result fields for free.
+- **Frontend (`cando_jobs_panel.js`):** Autorefine button → `createCandoJob({kind:'autorefine',nonlinear:false})`;
+  new `_pollAutorefineJob` polls `/cando/jobs/{id}`, shows live `refine_note`, on completed calls `api.getDesign()`
+  (design auto-applied server-side → refresh editor + feature log) + selects the job (displays ready). New pure
+  `autorefineJobStatusText`/`autorefineJobResultHtml` (no Apply button — already applied). Old run-based
+  formatters kept (the `/design/cando/autorefine/*` API still exists) but unwired from the panel.
+- **VERIFIED headlessly** (2×3×160 SQ strut): job completed, applied 26 marks (period 36), RMSD 0.72→0.19,
+  feature-log entry `cando-autorefine-marks`, active design 0→26 marks, display/axis/rmsf cached (2252/960/960).
+- **Tests:** backend `test_cando_job.py` +3 (kind roundtrip+back-compat; SQ apply+log+cache-all-displays [slow];
+  HC no-improvement still-caches); frontend `cando_jobs_panel.test.js` +job-helper pure tests + rewritten jsdom
+  `cando_jobs_panel.autorefine_result.test.js` (button→job→applied-result→getDesign, no Apply button). Frontend
+  **2171**; backend green.
+- **NOT hand-driven in a live browser** — jsdom + headless prove the flow; the live gesture + on-job display
+  rendering is MV-pending. **Caveat:** auto-apply builds from the job's SNAPSHOT (design at launch), so edits made
+  during the run are superseded by the refined design (reversible via the feature-log entry / undo).
 
 ### THE 4 "PRE-EXISTING/FLAKY" SUITE FAILS — ROOT-CAUSED + FIXED **2026-07-04** (user-driven)
 The recurring `just test` fails (mrdna analytic + oxDNA real-binary ×2 + NAMD benchmark) turned out to be
@@ -992,3 +1064,57 @@ TWO distinct bugs, both now fixed — none was a physics/engine bug.
   complete" not throughput) so no single test monopolizes the box; (2) widened deadlines as belt-and-suspenders
   for residual contention — oxDNA 120→300 s (both lifecycle + http, incl. production leg), NAMD 300→600 s.
 - **Verify:** `just test` full parallel run — all 4 now green (see log). NAMD +p2 still 56 s in isolation.
+
+## exp37 — skip→twist LANDSCAPE MAP + sub-1° config (2026-07-05) — `experiments/exp37_cando_skip_twist_map/`
+User goal: get 3x6x400 SQ end-to-end twist below 1° (autorefine floored at ~10-15°). Mapped the
+FINE-FEM twist/bend/deviation landscape vs skip count on `workspace/3x6x400_Sq_test.nadoc` (18
+helices, best-guess 180 skips=10/helix, FINE twist 14.3°). 252 nonlinear solves (~233 s each),
+parallelised 8-way (12 cores), checkpointed+watchdog'd. Scripts: `sweep.py` (uniform diagonal +
+per-helix axes), `analyze.py`, `stage2_spread.py`, `plot.py`→`results/exp37_summary.png`.
+KEY FINDINGS:
+- **FEM twist is placement-INDEPENDENT, count is the axis** (probe: <0.2° across
+  baseline/even/front/back at fixed count). The ±30° register sensitivity that killed regional
+  optimization ([[project_regional_autorefine]]) was an oxDNA-measurement artifact; the
+  deterministic FEM makes per-helix skip COUNT a clean, well-defined lever. Overturns the
+  "regional not viable" blocker FOR THE FEM ORACLE.
+- **ROOT CAUSE of the ~10-15° floor: autorefine minimises deviation RMSD, and RMSD-min ≠
+  twist-min.** RMSD valley is at ~10 skips/helix (twist +14°); the twist→0 crossing is ~12.6
+  skips/helix. A deviation-driven refiner structurally cannot null twist. Nulling twist costs
+  ~0.10 nm RMSD (0.44→0.54) — an intrinsic twist↔deviation tradeoff, not a solver bug.
+- **Per-helix authority varies ~4×**: middle row (h_XY_1_0…1_5) ≈ −0.44..−0.52°/skip vs
+  corners (0_0,0_5,2_0) ≈ −0.13°/skip (moment-arm + coupling; interior steers hardest).
+- **RECOMMENDED sub-1° config `12base+6@13`**: 12 skips on all 18 helices + 13 on the middle row →
+  **twist 0.37°, bend 0.33°, rmsd 0.54, 222 skips** (from 14.3°/0.30°/0.44/180). Physical + clean.
+  `results/optimized_spread.json`. The auto-greedy `analyze.py` optimum was DEGENERATE (38 skips on
+  ONE helix → twist −0.37 but bend 1.66°); the authority-per-rmsd metric over-concentrates — prefer
+  the spread search. All proposals are marks only; NOTHING applied to the design (Three-Layer).
+- **ACTIONABLE (not yet done):** to make `cando_autorefine` actually null twist, its objective needs
+  a twist term (or a fractional-density knob per helix), not just deviation RMSD. Current
+  `sweep_skip_period` tunes a single global period against RMSD → lands at the RMSD optimum (~10),
+  ~14° short. Offer before implementing.
+
+## exp37 FOLLOW-UP — twist objective WIRED INTO autorefine (2026-07-05)
+Acting on exp37, changed `cando_autorefine.fem_refine` so the **SQUARE** path optimises end-to-end
+TWIST relative to the design's INTENDED twist (`_twist_error` = |FEM twist − target["twist_deg"]|,
+differential so the lattice offset cancels + it generalises to programmed-twist designs), NOT the
+deviation RMSD (which bottoms at a lower density → floored twist at ~10-15°).
+- `fem_measure` now returns `twist_deg`/`bend_deg` (off the cached solve).
+- `sweep_skip_period(cost_fn=…)` — pluggable objective; default RMSD (back-compat), square passes a
+  twist-error cost → sweeps to the twist-nulling density.
+- `_fractional_twist_bump` — fractional per-helix density: measures ∂twist/∂skip authority per helix,
+  bumps highest-authority helices by ±1 skip toward target until |twist−target|<`TWIST_TOL_DEG`(=1°).
+  Mirrors the exp37 "spread" winner (bump the middle row). Placement even/off-forbidden; no geometric
+  reasoning (authority MEASURED, bumps empirically kept — [[feedback_crossover_no_reasoning]]).
+- `fem_refine` result gained `objective` ("twist"|"deviation"), `twist_target/before/after`,
+  `twist_tol`, `authority` (per-helix map). HONEYCOMB path UNCHANGED (deviation greedy) — full
+  coupled twist+bend objective for honeycomb is the generalisation plan.
+- **`cando_runner` apply gate FIXED**: was `after_rmsd < before_rmsd` → would REJECT the twist-optimal
+  program (rmsd RISES as twist→0). Now square gates on twist-error improvement; note shows
+  twist before→after. New job fields `refine_twist_before/after/target`.
+- Tests updated to the twist contract: `test_cando_autorefine.py` (square strut nulls twist +
+  authority map), `automation_harness.assert_fem_autorefine_relieves_twist` (asserts twist relief for
+  square, rmsd relief for honeycomb), `test_cando_autorefine_validation.py`. Smoke (200bp 6HB SQ):
+  twist 58.1°→0.67°, 37 skips, off-forbidden, authority for 6 helices.
+- **Generalisation plan** (coupled twist+bend Jacobian objective; hollow-tube authority-vs-geometry
+  law; asymmetric-section coupling stress test; 1×N twist-degeneracy guard; symmetry-orbit scaling):
+  `experiments/exp37_cando_skip_twist_map/GENERALIZATION.md`.
