@@ -893,3 +893,102 @@ the bead moved to the wound frame → the two diverge; measured slab tilt vs inw
   passthrough in `toFemUpdates` + `deviationColorMap`). `just test` / frontend suite green.
 - **USER-CONFIRMED RESOLVED 2026-07-04** — the user re-ran a job and confirmed the slabs no longer splay
   radially outward (the visual is correct in the app).
+
+### WELCOME-SCREEN LEGEND LEAK FIX **2026-07-04** (user-reported) — VERIFIED
+CanDo RMSF/deviation legend `#cando-legend` (and the view-cube 90° roll buttons `#vc-roll`) stayed
+visible after **File ▸ Close Session** returned to the welcome screen. Cause: `_resetForNewDesign`
+tore down most overlays but never called `candoDisplay.stopAndRestore()` (the only path that hides
+`#cando-legend` via `_clearAll → legend.hide()`); and `_showWelcome` hid only `#vc-wrap`, not the
+sibling `#vc-roll`.
+- **Fix (main.js):** `_resetForNewDesign` now calls `candoDisplay.stopAndRestore()`; `_showWelcome`/
+  `_hideWelcome` use `viewCube.hide()`/`viewCube.show()` (which toggle wrap + roll together) instead of
+  poking `#vc-wrap` directly. main.js LOC ≈ flat (swap, not growth).
+- **Verify:** `frontend/e2e/welcome_overlay_cleanup.spec.js` (load → close-session → assert `#vc-roll`
+  visible-then-hidden, `#cando-legend` hidden). Frontend suite 2162 green. `just smoke` close-session
+  teardown gate green (the `assembly_exit_cleanup` fail under `just smoke` is the pre-existing flake —
+  reproduces on stashed master, unrelated).
+
+### 500 ON `/api/cando/jobs` DURING A SOLVE — thread-unsafe global warnings filter FIXED **2026-07-04** (user-reported)
+User: "CanDo FEM fails for square-lattice designs" — terminal showed `GET /api/cando/jobs 500` with a
+`FastAPIDeprecationWarning: ORJSONResponse is deprecated` raised as an exception (FastAPI 0.135). **NOT
+square-lattice-specific — a concurrency race.** `fem_solver.solve_equilibrium` wrapped `spsolve` in
+`with warnings.catch_warnings(): warnings.filterwarnings("error", category=Warning)` to detect a singular
+matrix. But the warnings filter list is **process-global and not thread-safe**, and the CanDo FEM runs in
+a background daemon thread (`cando_runner`). While a solve sat inside that block, the global filter was
+"all Warnings → error"; any HTTP request the main loop served concurrently — e.g. the panel's
+`/api/cando/jobs` poll, which builds an `ORJSONResponse` (now deprecated) — had its DeprecationWarning
+promoted to a real exception → 500. Square lattice just happened to be what was solving (longer solve =
+wider race window).
+- **Fix:** dropped the `catch_warnings`/`filterwarnings("error")` entirely. A singular system makes
+  `spsolve` emit a `MatrixRankWarning` and **return NaNs**, which the existing NaN/Inf guard already
+  catches → same friendly "disconnected helices" `ValueError`, no global-filter mutation.
+- **Tests (`test_fem_solver.py`, +2 → 16 green):** `test_solve_does_not_globally_promote_warnings_to_errors`
+  (solve leaves no leaked "error" filter) + `test_singular_system_raises_clear_valueerror` (NaN→ValueError
+  preserved). Square-lattice `predict_shape` hand-verified end-to-end (2×2 SQ bundle → 768 positions + RMSF).
+  `just test`: 4055 passed (3 pre-existing/flaky fails unrelated — mrdna analytic `n_loops` 56≠18 fails on
+  stashed master too; oxDNA/NAMD real-binary tests pass in isolation, flake under parallel xdist).
+- **Sibling flagged, not fixed:** `mrdna_convergence.py:207` uses the same global-mutating
+  `warnings.simplefilter("ignore")` in a threaded path — only *suppresses* (can't 500), left alone.
+
+### SQUARE-LATTICE REGISTER OVER-TWIST — FEM oracle fixed + CanDo-validated **2026-07-04** (user-driven)
+**Symptom:** autorefine "fails to twist correct" square-lattice struts (`3x6x400_Sq_test`) — it kept 0 edits
+and the FEM predicted ~0° twist regardless of skips. **Root cause: the FEM never modelled the square
+lattice's intrinsic REGISTER over-twist.** SQ crossover geometry demands ~10.67 bp/turn
+(`SQUARE_TWIST_PER_BP`=33.75°/bp) while the duplex's natural helicity is ~10.5 bp/turn
+(`BDNA`=34.3°/bp); that **0.55°/bp mismatch** is a rest-twist eigenstrain the crossovers can't relax → a
+global bundle twist that exists **with zero loop/skips**, and deletions are placed to RELIEVE it. The old
+`assemble_prestress_force` had only a loop/skip term (intercept 0, and skips *added* twist) — inverted vs
+reality. **CanDo IS lattice-invariant** (34.3°/bp everywhere; twist emergent from crossover register — the
+Abaqus deck confirms: uniform `*Initial Conditions TEMPERATURE` eigenstrain + prescribed-displacement
+register `InitialDisp→HJgen→Unloding` release, no lattice constant). NADOC's geometry layer *is* SQ-aware
+(draws straight at 33.75°/bp) but the FEM threw the winding away (bare-axis nodes, identical per-helix
+frames) → register mismatch = 0 → no emergent twist. See [[REFERENCE_DNA_TOPOLOGY]] / [[feedback_crossover_no_reasoning]]
+(direction taken from CanDo data, never reasoned).
+
+**CanDo ground truth (bild twist, `workspace/cando validation/3x6x400_Sq_test*.zip`, fine+square+matched
+constants):** unskipped **+64.0°**, 150-skip **+24.8°** — skips relieve, design under-corrected (zero-crossing
+~245 skips → needs ~95 more; matches the user's "needs more skips"). 2x3x100 (independent geometry) is
+directionally consistent (register-only would give +27°, CanDo is small <10° → substantial relief) but its
+twist is too small/near-square to re-pin the factor.
+
+**Fix** (`fem_solver.assemble_prestress_force`, SQ-gated): per helix
+`φ0 = _SQ_REGISTER_TWIST_PER_BP_RAD·N_bp + SQ_SKIP_RELIEF_FACTOR·Σδ·(2π/bp_per_turn)`.
+- `_SQ_REGISTER_TWIST_PER_BP_RAD = BDNA_TWIST_PER_BP_RAD − SQUARE_TWIST_PER_BP_RAD` (≈+0.55°/bp) — **zero
+  free parameters**; reproduces the +64° intercept (FEM +67°).
+- `SQ_SKIP_RELIEF_FACTOR = 0.5` — each deletion relieves ~½ bp of natural twist (the least-documented CanDo
+  per-skip recipe; calibrated to the 150-skip +24.8° point → FEM +24.2°). Exposed as a constant to refine.
+- Honeycomb: `natural == lattice` → register term **exactly 0**, old branch unchanged → exp36 battery + all
+  prestress/curvature tests untouched (verified: `test_fem_solver` + `test_fem_curvature_validation` green).
+- Model is physically clean: bundle stays straight (sag ~0.02 nm), monotonic, twist ∝ eigenstrain.
+- Test `test_square_lattice_register_overtwist_present_and_relieved_by_skips` (SQ pre-stress ≠0 at 0 skips,
+  HC =0, skips shrink the predicted deformation). `just test`: 4059 passed, 0 failed (2026-07-05).
+
+**Objective now correct, engine NOT yet:** `fem_measure` RMSD-vs-straight now 1.73(0)→0.58(150)→1.08(298) —
+a proper minimum near the right density, 150 on the under-skipped side. BUT `fem_refine` STILL keeps 0 edits:
+its greedy single-skip-per-hotspot search with `rmsd_improve_nm=0.05` can't navigate the shallow global-twist
+objective (one skip moves RMSD ~0.004 nm, below the bar). **Global SQ twist needs a skip-DENSITY tuning search
+(like `skip_twist_selfconsistency`'s period sweep), not per-hotspot greedy.** That's the separate engine work
+the user anticipated ("iterate to near-perfect match / single-skip resolution") — NEXT. The FEM *oracle* (the
+requested "accurate CanDo mimic") is done + validated.
+**Reconstruct the submitted `3x6x400` calibration design:** load workspace file (now 0-skip) → `apply-loop-skips`
+tool (`sq_lattice_periodic_skips`→`relocate_marks_off_forbidden`→`apply_loop_skips`) → 150 skips. `2x3x100_Sq_test`
+source already carries its 12 skips.
+
+### THE 4 "PRE-EXISTING/FLAKY" SUITE FAILS — ROOT-CAUSED + FIXED **2026-07-04** (user-driven)
+The recurring `just test` fails (mrdna analytic + oxDNA real-binary ×2 + NAMD benchmark) turned out to be
+TWO distinct bugs, both now fixed — none was a physics/engine bug.
+- **mrdna `test_analytic_curvature_from_marks` (deterministic, not flaky):** loaded `workspace/6hb_curved.nadoc`,
+  which is **gitignored** — workspace/ isn't synced across the two computers, so the local file had drifted to
+  56 loops/55 skips (13 nm) vs the test's expected 18/18 (~35 nm). Fix: made the test self-contained via a new
+  deterministic conftest builder **`make_6hb_curved_design()`** = plain 192-bp 6hb + `bend_loop_skips` at R=40 nm
+  → exactly 18 loops + 18 skips, pred radius 34.9 nm. Sibling `..._no_marks_is_straight` was the same
+  gitignored-fixture fragility (`6hb_sim_v2.nadoc`) → now uses plain `make_6hb_design(192)`. No `workspace/`
+  reads left in `test_mrdna_jobs.py`.
+- **oxDNA ×2 + NAMD (genuine parallel-xdist flakes):** all three pass in isolation, fail only in the full
+  12-worker `-n auto` run. **Root cause = CPU oversubscription.** The NAMD benchmark test launched `+p{cpu_count()}`
+  = +p12 WITH core-pinning (`_core_binding_prefix`), seizing every core mid-suite and starving the ~11 concurrent
+  workers running real oxDNA CPU sims (single-threaded), blowing their 120 s wall-clock deadlines; NAMD itself
+  contended → blew its 300 s. Fixes: (1) NAMD test capped to `+p2` (a 32-bp proxy needs no more; "does it
+  complete" not throughput) so no single test monopolizes the box; (2) widened deadlines as belt-and-suspenders
+  for residual contention — oxDNA 120→300 s (both lifecycle + http, incl. production leg), NAMD 300→600 s.
+- **Verify:** `just test` full parallel run — all 4 now green (see log). NAMD +p2 still 56 s in isolation.

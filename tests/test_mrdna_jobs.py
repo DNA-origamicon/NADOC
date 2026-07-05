@@ -363,9 +363,9 @@ def _override_line_blob(helix):
 
 
 def test_analytic_curvature_from_marks():
-    from backend.core.models import Design
     from backend.core.mrdna_curvature import analytic_curvature
-    d = Design.model_validate_json(open("workspace/6hb_curved.nadoc").read())
+    from tests.conftest import make_6hb_curved_design
+    d = make_6hb_curved_design()
     a = analytic_curvature(d)
     assert a["has_marks"] is True
     assert a["n_loops"] == 18 and a["n_skips"] == 18
@@ -374,9 +374,9 @@ def test_analytic_curvature_from_marks():
 
 
 def test_analytic_curvature_no_marks_is_straight():
-    from backend.core.models import Design
     from backend.core.mrdna_curvature import analytic_curvature
-    d = Design.model_validate_json(open("workspace/6hb_sim_v2.nadoc").read())
+    from tests.conftest import make_6hb_design
+    d = make_6hb_design(length_bp=192)
     a = analytic_curvature(d)
     assert a["has_marks"] is False
     assert a["kappa_deg_per_nm"] == 0.0

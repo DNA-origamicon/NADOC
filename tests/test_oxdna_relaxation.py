@@ -2956,7 +2956,11 @@ def test_runner_real_binary_status_lifecycle(design, geometry, tmp_path):
     # Monitor: collect status + overall-progress samples until terminal.
     seen_running = False
     last_overall = -1.0
-    deadline = time.time() + 120
+    # 300s (not 120): under `just test` (-n auto) this real oxDNA CPU run competes with
+    # ~11 concurrent workers running their own sims, so wall time far exceeds the isolated
+    # ~30s. The wide ceiling absorbs contention (the historical parallel-xdist flake); a
+    # true stall still fails, just later.
+    deadline = time.time() + 300
     while time.time() < deadline:
         j = OxdnaJob.load(job.job_id, tmp_path)
         prog = oxdna_runner.job_progress(j, tmp_path, specs)
@@ -3298,8 +3302,10 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
     assert created.status_code == 200, created.text
     job_id = created.json()["job_id"]
 
-    # Monitor via the status endpoint until terminal.
-    deadline = time.time() + 120
+    # Monitor via the status endpoint until terminal. 300s (not 120): real oxDNA run
+    # contends with ~11 concurrent xdist workers under `just test`, so it runs far slower
+    # than the isolated ~30s — the wide ceiling absorbs that (parallel-xdist flake fix).
+    deadline = time.time() + 300
     status = None
     while time.time() < deadline:
         s = client.get(f"/api/oxdna/jobs/{job_id}").json()
@@ -3327,7 +3333,7 @@ def test_oxdna_http_lifecycle(monkeypatch, tmp_path):
     # Production: appends an unbiased MD stage and runs it to completion.
     pr = client.post(f"/api/oxdna/jobs/{job_id}/production", json={"steps": 1000})
     assert pr.status_code == 200, pr.text
-    deadline = time.time() + 120
+    deadline = time.time() + 300  # wide ceiling for parallel-xdist contention (see above)
     while time.time() < deadline:
         s = client.get(f"/api/oxdna/jobs/{job_id}").json()
         if s["status"] in ("completed", "failed", "stopped"):

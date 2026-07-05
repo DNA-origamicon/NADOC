@@ -544,10 +544,16 @@ def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
 
     # Keep the sweep to a single CPU trial so the real solvate→minimize→MD→parse path
     # runs in ~a minute (the point is "does it complete", not "which config wins").
+    # Cap the trial at 2 threads — NOT cpu_count(). Under `just test` (-n auto = one
+    # worker per core), a `+p{all-cores}` NAMD run with core-pinning seizes every core
+    # mid-suite and starves the ~11 concurrent workers running real oxDNA sims, blowing
+    # their wall-clock deadlines (the historical "flaky under parallel xdist" failures).
+    # A 32-bp proxy completes fine on 2 threads and stays a good citizen under load.
+    trial_threads = min(2, cpu_count())
     monkeypatch.setattr(
         bench,
         "namd_config_grid",
-        lambda *a, **k: [bench.NamdTrialConfig(f"+p{cpu_count()} CPU", cpu_count(), "")],
+        lambda *a, **k: [bench.NamdTrialConfig(f"+p{trial_threads} CPU", trial_threads, "")],
     )
 
     # Press the button: the real route counts the design's nucleotides, builds the
@@ -558,7 +564,10 @@ def test_namd_benchmark_completes_end_to_end_on_a_6hb(monkeypatch):
     bid = resp["benchmark_id"]
 
     # Poll exactly like the frontend until the run leaves the "running" state.
-    deadline = time.monotonic() + 300
+    # 600s (not 300): under `just test` this real NAMD run competes with ~11 other
+    # workers for cores, so its wall time balloons well past the isolated ~1 min. The
+    # generous ceiling absorbs that contention; a genuine hang still fails, just later.
+    deadline = time.monotonic() + 600
     state = None
     while time.monotonic() < deadline:
         state = br.get_state(bid)

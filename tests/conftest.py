@@ -167,6 +167,25 @@ def make_6hb_design(length_bp: int = 42) -> Design:
     )
 
 
+def make_6hb_curved_design(length_bp: int = 192) -> Design:
+    """6-helix honeycomb bundle bent into a Dietz curve via loop/skip marks.
+
+    Deterministic replacement for the old gitignored ``workspace/6hb_curved.nadoc``
+    (workspace/ isn't synced across the two computers, so any test bound to it
+    drifted).  Builds a plain 192-bp 6hb, then applies ``bend_loop_skips`` at
+    R=40 nm over the interior span — which lands exactly 18 loops + 18 skips and a
+    predicted radius of ~35 nm (the ~36 nm Dietz regime the curvature check pins).
+    """
+    from backend.core.loop_skip_calculator import apply_loop_skips, bend_loop_skips
+
+    d = make_6hb_design(length_bp=length_bp)
+    hel = d.helices
+    bp0 = min(h.bp_start for h in hel)
+    bpN = min(h.bp_start + h.length_bp for h in hel)
+    mods = bend_loop_skips(hel, bp0 + 5, bpN - 5, 40.0, direction_deg=0.0, design=d)
+    return apply_loop_skips(d, mods)
+
+
 def make_18hb_design(length_bp: int = 388) -> Design:
     """18-helix honeycomb bundle — matches tests/fixtures/18hb_fixture.nadoc at 388 bp."""
     return build_extruded_bundle(
