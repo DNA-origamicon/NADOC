@@ -23,11 +23,11 @@ Architecture notes
   converted to csr for solving.
 - Boundary condition: pin all 6 DOF at node 0 of the first helix to remove
   the 6 rigid-body modes.
-- Crossover springs enforce zero relative displacement between connected axis
-  nodes (both nodes must move together).  No pre-stress force is applied —
-  for a correctly-designed DNA origami the equilibrium is the designed
-  geometry (u ≈ 0).  Torsional pre-stress from helix under/over-winding is
-  not modelled; the primary output is the RMSF heatmap.
+- Crossovers couple connected axis nodes as stiff rigid links (u_B = u_A + θ_A×r_AB).
+- Pre-stress (assemble_prestress_force): loop/skip eigenstrain + the square-lattice
+  register over-twist (SQ helices are intrinsically over-wound vs their natural helicity,
+  so they carry a global twist even with no loop/skips — see assemble_prestress_force).
+  Honeycomb without loop/skips relaxes to u ≈ 0.
 - RMSF is computed from the 30 lowest eigenmodes of the free-DOF stiffness
   matrix: RMSF_i = sqrt(k_BT × Σ_m φ²_m,i / λ_m)
 """
@@ -42,8 +42,9 @@ import numpy as np
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import eigsh, spsolve
 
+from backend.core.constants import BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
 from backend.core.geometry import _frame_from_helix_axis
-from backend.core.models import Design, Direction, StrandType
+from backend.core.models import Design, Direction, LatticeType, StrandType
 from backend.core.sequences import domain_bp_range
 
 
@@ -91,6 +92,20 @@ def _nick_bps_per_helix(design: Design) -> Dict[str, set]:
 FEM_RISE_PER_BP = 0.34    # nm — axial rise per bp (CanDo; NADOC's BDNA_RISE_PER_BP=0.334)
 HELIX_DIAMETER  = 2.25    # nm — helix diameter (cross-section geometry from NADOC axes)
 BP_PER_TURN     = 10.5    # bp — crossover spacing / helicity
+
+# Square-lattice REGISTER over-twist (emergent global twist that exists with ZERO loop/skips).
+# The square-lattice crossover geometry demands ~10.67 bp/turn (SQUARE_TWIST_PER_BP = 33.75°/bp)
+# while the duplex's natural helicity is ~10.5 bp/turn (BDNA = 34.3°/bp). That per-bp mismatch is
+# a rest-twist eigenstrain the crossovers cannot relax → a global bundle twist, which CanDo
+# reproduces (e.g. 3x6x400 unskipped ≈ +64°) and which deletions are placed to relieve. Honeycomb
+# has natural == lattice helicity, so this term is exactly zero there (battery untouched). Lattice-
+# INVARIANT physics: the twist is emergent from the crossover register, not a per-lattice constant.
+_SQ_REGISTER_TWIST_PER_BP_RAD = BDNA_TWIST_PER_BP_RAD - SQUARE_TWIST_PER_BP_RAD   # ≈ +0.55°/bp
+# Fraction of one bp of natural twist that a single deletion relieves from the register over-twist.
+# The exact per-skip register recipe is not published (the least-documented CanDo step); this is
+# calibrated to the CanDo web solver on 3x6x400 (unskipped +64° → 150-skip +24.8°) and cross-checked
+# for direction/magnitude on 2x3x100. Exposed as a constant so it can be refined against more data.
+SQ_SKIP_RELIEF_FACTOR = 0.5
 
 EA_DS   = 1100.0   # pN — dsDNA axial stretch stiffness
 EI_DS   = 230.0    # pN·nm² — dsDNA bending stiffness (isotropic)
@@ -455,6 +470,18 @@ def assemble_prestress_force(mesh: FEMMesh, design: Design,
     then rotated to global via the element frame. Uniform per-helix content → global
     twist; a cross-section gradient → global bend (via the crossover-coupled bundle).
 
+    SQUARE-LATTICE REGISTER OVER-TWIST (2026-07-04): a square-lattice bundle carries an
+    intrinsic global twist even with ZERO loop/skips — its crossover geometry demands
+    ~10.67 bp/turn while the duplex's natural helicity is ~10.5 bp/turn, and that per-bp
+    mismatch (_SQ_REGISTER_TWIST_PER_BP_RAD) is a rest-twist eigenstrain the crossovers
+    cannot relax. This is the emergent twist the CanDo web solver reports (3x6x400
+    unskipped ≈ +64°) and that deletions are placed to RELIEVE. So for square designs the
+    torsional term becomes φ0 = register·N_bp + f·Σδ·(2π/bp_per_turn), where the register
+    over-twist is present at Σδ=0 and each deletion (δ=-1) subtracts a fraction
+    SQ_SKIP_RELIEF_FACTOR of it (skips straighten the strut; validated vs CanDo — unskipped
+    +64° → 150-skip +24.8° on 3x6x400). Honeycomb has natural == lattice helicity → the
+    register term is exactly zero, so this branch leaves the honeycomb battery untouched.
+
     NOTE (bend under-conversion, exp36 2026-07-03): this axial-force eigenstrain converts
     ~0.68 of the programmed bend (CanDo converts ~0.95); ~67% of the eigenstrain energy
     relieves as internal axial stretch. A rest-CURVATURE reformulation (differential →
@@ -477,16 +504,30 @@ def assemble_prestress_force(mesh: FEMMesh, design: Design,
             elems_by_helix.setdefault(hi, []).append(el)
 
     twist_per_del = 2.0 * math.pi / BP_PER_TURN   # rad of over/under-twist per mark
+    is_square = design.lattice_type == LatticeType.SQUARE
 
     for hid, elems in elems_by_helix.items():
         nd = net.get(hid, 0)
-        if nd == 0 or not elems:
+        if not elems:
             continue
         L_helix = sum(e.length for e in elems)
         if L_helix <= 0:
             continue
-        phi0_total = -nd * twist_per_del      # net skips (nd<0) → positive over-twist
+        if is_square:
+            # Square lattice carries an intrinsic REGISTER over-twist even at nd=0 (see
+            # _SQ_REGISTER_TWIST_PER_BP_RAD): distribute (natural − lattice) rest-twist over the
+            # helix's duplex bp, then let deletions RELIEVE it (nd<0 subtracts a fraction
+            # SQ_SKIP_RELIEF_FACTOR of one bp of natural twist per mark). This is the CanDo
+            # behaviour: unskipped SQ bundles are globally twisted; skips straighten them.
+            n_bp = L_helix / FEM_RISE_PER_BP
+            phi0_total = _SQ_REGISTER_TWIST_PER_BP_RAD * n_bp + SQ_SKIP_RELIEF_FACTOR * nd * twist_per_del
+        else:
+            if nd == 0:
+                continue
+            phi0_total = -nd * twist_per_del      # honeycomb: deletion → positive over-twist
         dax_total  = nd * FEM_RISE_PER_BP    # net skips (nd<0) → shorter rest length
+        if phi0_total == 0.0 and dax_total == 0.0:
+            continue
 
         for el in elems:
             frac = el.length / L_helix
@@ -597,21 +638,27 @@ def solve_equilibrium(
     Returns the full displacement vector u (zeros at pinned DOF).
     Raises ValueError if the system is singular (disconnected structure).
     """
-    import warnings
-    with warnings.catch_warnings():
-        warnings.filterwarnings("error", category=Warning)
-        try:
-            u_free = spsolve(K_free, f_free)
-        except Exception as exc:
-            raise ValueError(
-                "Stiffness matrix is singular — the design may have disconnected helices "
-                "with no crossovers. Add crossovers to create a connected structure."
-            ) from exc
+    # NOTE: do NOT use warnings.catch_warnings()/filterwarnings here. The warnings
+    # filter list is PROCESS-GLOBAL and not thread-safe. This solver runs in a
+    # background daemon thread (cando_runner); flipping the global filter to "error"
+    # leaked into concurrently-served HTTP handlers and promoted FastAPI's
+    # ORJSONResponse DeprecationWarning to a real exception → intermittent 500s on
+    # unrelated endpoints (e.g. GET /api/cando/jobs while a solve was mid-flight).
+    # A singular/under-constrained system makes spsolve emit a MatrixRankWarning and
+    # return NaNs, which the NaN/Inf guard below already catches — so no
+    # warning-to-error trick is needed to detect it.
+    try:
+        u_free = spsolve(K_free, f_free)
+    except Exception as exc:
+        raise ValueError(
+            "Stiffness matrix is singular — the design may have disconnected helices "
+            "with no crossovers. Add crossovers to create a connected structure."
+        ) from exc
 
     if np.any(np.isnan(u_free)) or np.any(np.isinf(u_free)):
         raise ValueError(
-            "FEM solve produced invalid displacements (NaN/Inf). "
-            "The structure may be under-constrained — ensure all helices are connected by crossovers."
+            "Stiffness matrix is singular — the design may have disconnected helices "
+            "with no crossovers. Add crossovers to create a connected structure."
         )
     u = np.zeros(n_dof, dtype=float)
     u[free_dofs] = u_free

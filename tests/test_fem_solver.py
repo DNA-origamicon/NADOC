@@ -84,6 +84,102 @@ def test_equilibrium_is_trivially_zero_without_prestress(routed_6hb):
     assert np.abs(u).max() < 1e-9           # u=0 until Phase-2 pre-stress lands
 
 
+@pytest.fixture(scope="module")
+def routed_sq_bundle():
+    """A routed SQUARE-lattice bundle (no loop/skips). Square lattices carry an intrinsic
+    register over-twist (~10.67 vs 10.5 bp/turn) that the FEM must now reproduce."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    cells = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]   # 2×3 SQ
+    with hb.scratch_session(LatticeType.SQUARE):
+        hb.create_bundle(cells, 168, lattice=LatticeType.SQUARE, name="sq6")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        return design_state.get_or_404().model_copy(deep=True)
+
+
+def _max_axis_disp(design):
+    """Max axis-node displacement magnitude from the linear pre-stress solve — a robust,
+    sign-free proxy for the predicted global twist (twist ∝ spiral displacement)."""
+    mesh = build_fem_mesh(design)
+    K, _ = assemble_global_stiffness(mesh)
+    f = assemble_prestress_force(mesh, design)
+    Kf, ff, free = apply_boundary_conditions(K, f, mesh)
+    u = solve_equilibrium(Kf, ff, K.shape[0], free)
+    return float(np.abs(u.reshape(-1, 6)[:, :3]).max())
+
+
+def test_square_lattice_register_overtwist_present_and_relieved_by_skips(routed_sq_bundle, routed_6hb):
+    """The square-lattice register over-twist (the emergent global twist CanDo reports on an
+    UNSKIPPED square bundle) must now show up as a non-zero pre-stress even with zero loop/skips,
+    and deletions must RELIEVE it — the direction that lets autorefine straighten a square strut by
+    ADDING skips (validated vs the CanDo web solver on 3x6x400: unskipped +64° → 150-skip +24.8°).
+    Honeycomb has natural == lattice helicity, so its register term is exactly zero (unchanged)."""
+    from backend.core.loop_skip_calculator import apply_loop_skips, sq_lattice_periodic_skips
+
+    # Honeycomb, no skips: register term vanishes → pre-stress is exactly zero (old behaviour).
+    hc_mesh = build_fem_mesh(routed_6hb)
+    assert np.linalg.norm(assemble_prestress_force(hc_mesh, routed_6hb)) == 0.0
+
+    # Square, no skips: register eigenstrain is present → non-zero pre-stress AND real deformation
+    # (the OLD solver gave u=0 here — it had no register term).
+    sq_mesh = build_fem_mesh(routed_sq_bundle)
+    assert np.linalg.norm(assemble_prestress_force(sq_mesh, routed_sq_bundle)) > 0.0
+    disp_noskip = _max_axis_disp(routed_sq_bundle)
+    assert disp_noskip > 1e-3                       # a genuine predicted twist, not u=0
+
+    # Adding the default square-lattice deletions RELIEVES the register over-twist → the
+    # predicted deformation SHRINKS (skips straighten the bundle, as CanDo shows).
+    sq_skipped = apply_loop_skips(routed_sq_bundle, sq_lattice_periodic_skips(routed_sq_bundle))
+    assert sum(len(h.loop_skips) for h in sq_skipped.helices) > 0
+    disp_skipped = _max_axis_disp(sq_skipped)
+    assert disp_skipped < disp_noskip               # relief, not addition
+
+
+def test_solve_does_not_globally_promote_warnings_to_errors():
+    """Regression: solve_equilibrium must NOT flip the process-global warnings filter
+    to "error". It runs in a background thread (cando_runner); a global escalation
+    leaked into concurrently-served FastAPI handlers and turned the ORJSONResponse
+    DeprecationWarning into a 500 on GET /api/cando/jobs while a solve was mid-flight.
+    A benign warning emitted around/inside the solve must stay a warning, not raise."""
+    import warnings
+
+    from scipy.sparse import csr_matrix
+
+    K = csr_matrix(np.eye(6))          # trivial well-conditioned system
+    f = np.arange(6, dtype=float)
+    free = np.arange(6)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # our sandbox: everything IS an error here...
+        # ...but the fix means solve() no longer *installs its own* global escalation.
+        # Emit a warning right after the solve — if solve had left an "error" filter or
+        # if it promoted warnings itself, this would already have blown up inside it.
+        u = solve_equilibrium(K, f, 6, free)
+    assert np.allclose(u, f)
+
+    # After the solve the global filter list is pristine — no leaked "error" entry.
+    assert not any(
+        entry[0] == "error" and entry[2] is Warning
+        for entry in warnings.filters
+    )
+
+
+def test_singular_system_raises_clear_valueerror():
+    """A disconnected/under-constrained stiffness matrix (spsolve → NaN) must raise a
+    friendly ValueError — preserved after dropping the warnings-as-errors mechanism,
+    since the NaN/Inf guard now detects singularity directly."""
+    from scipy.sparse import csr_matrix
+
+    K = csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]]))  # rank-deficient → singular
+    f = np.array([1.0, 2.0])
+    free = np.arange(2)
+    with pytest.raises(ValueError, match="singular"):
+        solve_equilibrium(K, f, 2, free)
+
+
 def test_rmsf_is_finite_nonnegative_and_per_node(routed_6hb):
     mesh = build_fem_mesh(routed_6hb)
     K, f = assemble_global_stiffness(mesh)
