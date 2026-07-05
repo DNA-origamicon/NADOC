@@ -1,0 +1,81 @@
+{
+  "hollow_d3": {
+    "D": 3,
+    "hollow": true,
+    "flags": [],
+    "n_helices": 8,
+    "n_crossovers": 88,
+    "mesh_nodes": 1344,
+    "nick_on_xo_error": true,
+    "nonadjacent_xo": 0,
+    "scaffolds": 1
+  },
+  "hollow_d4": {
+    "D": 4,
+    "hollow": true,
+    "flags": [],
+    "n_helices": 12,
+    "n_crossovers": 132,
+    "mesh_nodes": 2016,
+    "nick_on_xo_error": true,
+    "nonadjacent_xo": 0,
+    "scaffolds": 1
+  },
+  "hollow_d5": {
+    "D": 5,
+    "hollow": true,
+    "flags": [],
+    "n_helices": 16,
+    "n_crossovers": 176,
+    "mesh_nodes": 2688,
+    "nick_on_xo_error": true,
+    "nonadjacent_xo": 0,
+    "scaffolds": 1
+  },
+  "hollow_d6": {
+    "D": 6,
+    "hollow": true,
+    "flags": [],
+    "n_helices": 20,
+    "n_crossovers": 220,
+    "mesh_nodes": 3360,
+    "nick_on_xo_error": true,
+    "nonadjacent_xo": 0,
+    "scaffolds": 1
+  },
+  "solid_d2": {
+    "D": 2,
+    "hollow": false,
+    "flags": [],
+    "n_helices": 4,
+    "n_crossovers": 43,
+    "mesh_nodes": 672,
+    "nick_on_xo_error": true,
+    "nonadjacent_xo": 0,
+    "scaffolds": 1
+  },
+  "solid_d3": {
+    "D": 3,
+    "hollow": false,
+    "flags": [
+      "scaffold not single (2)"
+    ],
+    "n_helices": 9,
+    "n_crossovers": 126,
+    "mesh_nodes": 1512,
+    "nick_on_xo_error": true,
+    "nonadjacent_xo": 0,
+    "scaffolds": 2
+  },
+  "solid_d4": {
+    "D": 4,
+    "hollow": false,
+    "flags": [],
+    "n_helices": 16,
+    "n_crossovers": 246,
+    "mesh_nodes": 2688,
+    "nick_on_xo_error": true,
+    "nonadjacent_xo": 0,
+    "scaffolds": 1
+  }
+}
