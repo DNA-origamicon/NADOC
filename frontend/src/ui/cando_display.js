@@ -3,7 +3,14 @@
  *
  * Three mutually-exclusive display modes, all Physical-layer / display-state only
  * (topology is never touched — Three-Layer Law).  They share the one bead-position
- * overlay + scalar-colour channel, so turning one on supersedes the others:
+ * overlay + scalar-colour channel, so turning one on supersedes the others.
+ *
+ * Each mode renders the job's OWN design snapshot (the topology the design had when
+ * the analysis ran — fetched via /cando/jobs/{id}/snapshot-geometry) in place of the
+ * live model (designRenderer.renderExternalGeometry), THEN overlays the FEM shape on
+ * it.  So a job solved before loops/skips were added still shows its shape on the
+ * topology it was solved for, instead of stranding the new (unsolved) beads at native.
+ * clearExternalGeometry() restores the live model on toggle-off / tab-leave / edit.
  *
  *  - "Predicted shape (deform model)" (showDeform): deform the NADOC model to a
  *    job's FEM-predicted configuration via designRenderer.applyFemPositions(...).
@@ -26,21 +33,32 @@
 
 /**
  * Pure mapping: a /cando/jobs/{id}/display response → applyFemPositions updates.
- * The FEM reconstruction carries no relaxed base-normal, so nx/ny/nz are omitted —
- * applyFemPositions keeps each base's design orientation and only moves the
- * backbone (option B, same as mrDNA).  Returns [] for a not-ready / empty response.
+ * When the FEM display carries the WOUND slab frame (nx/ny/nz base-normal + tx/ty/tz
+ * axis-tangent — newer job caches), those are threaded through so applyFemPositions
+ * reorients each base slab to follow the wound backbone (fixes slabs splaying radially
+ * on a bent/mark-dense bundle).  Older caches omit them → slabs keep their design
+ * orientation (option B, backward-compatible).  Returns [] for a not-ready response.
  */
 export function toFemUpdates(displayResponse) {
   if (!displayResponse || !displayResponse.ready || !Array.isArray(displayResponse.positions)) {
     return []
   }
-  return displayResponse.positions.map((p) => ({
+  return displayResponse.positions.map((p) => _femUpdate(p))
+}
+
+/** One position dict → an applyFemPositions update, threading the wound slab frame
+ *  (nx/ny/nz + tx/ty/tz) only when present. */
+function _femUpdate(p) {
+  const u = {
     helix_id:          p.helix_id,
     bp_index:          p.bp_index,
     direction:         p.direction,
     copy:              p.copy ?? 0,   // loop-copy index → addresses the exact loop bead
     backbone_position: p.backbone_position,
-  }))
+  }
+  if (p.nx !== undefined) { u.nx = p.nx; u.ny = p.ny; u.nz = p.nz }
+  if (p.tx !== undefined) { u.tx = p.tx; u.ty = p.ty; u.tz = p.tz }
+  return u
 }
 
 // ── Colour ramps (pure) ───────────────────────────────────────────────────────
@@ -120,10 +138,7 @@ export function deviationColorMap(devResp) {
   const colorByKey = {}
   for (const p of devResp.positions) {
     const copy = p.copy ?? 0
-    updates.push({
-      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy,
-      backbone_position: p.backbone_position,
-    })
+    updates.push(_femUpdate(p))   // carries the wound slab frame (nx/ny/nz + tx/ty/tz) when present
     const t = hi > 1e-9 ? p.deviation / hi : 0.0
     _putColor(colorByKey, p.helix_id, p.bp_index, p.direction, copy, deviationHex(t))
   }
@@ -152,27 +167,54 @@ export function initCandoDisplay({
     else designRenderer?.setDesignVisible?.(v)
   }
 
-  // Clear whatever the CURRENT mode drew before switching representations: the
-  // cylinder tubes (+ restore the native model), or the bead overlay + scalar colours.
-  function _teardown() {
-    legend?.hide()   // colour-map legend re-shown below only by the flex / deviation modes
-    if (_mode === 'cando') {
-      cylinderOverlay?.clear()
-      _nativeVisible(true)
-    } else if (_mode !== null) {
-      designRenderer.applyFemPositions(null)
-      designRenderer.clearScalarColors?.()
+  // Full restore to the clean LIVE native model — drops whatever the current mode
+  // drew (cylinder tubes, scalar recolour, AND the job-snapshot render).  Used when
+  // turning a mode off, and before the cylinder mode (which hides the live model).
+  function _clearAll() {
+    legend?.hide()
+    cylinderOverlay?.clear()
+    designRenderer.clearScalarColors?.()
+    designRenderer.clearExternalGeometry?.()   // rebuilds the live model (no-op if not external)
+    _nativeVisible(true)
+  }
+
+  // Prepare the scene for an external (job-snapshot) render: clear the previous mode's
+  // tubes / colours and make sure visibility isn't left off by the cylinder mode.  The
+  // subsequent renderExternalGeometry() rebuilds the model in one pass (no live rebuild).
+  function _prepareForExternal() {
+    legend?.hide()
+    cylinderOverlay?.clear()
+    designRenderer.clearScalarColors?.()
+    _nativeVisible(true)
+  }
+
+  function _snapshotReady(snap) {
+    return !!(snap?.ready && snap.design && Array.isArray(snap.nucleotides) && snap.nucleotides.length)
+  }
+
+  /** Render a job's OWN design snapshot (its topology at solve time), hiding the live
+   *  model, so the FEM overlay below lands on beads that match the solved topology. */
+  function _renderExternal(snap) {
+    const axes = {}
+    for (const ax of snap.helix_axes ?? []) {
+      axes[ax.helix_id] = {
+        start: ax.start, end: ax.end,
+        samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null, segments: ax.segments ?? null,
+      }
     }
+    designRenderer.renderExternalGeometry(snap.design, snap.nucleotides, axes)
   }
 
   /** Deform the model to the predicted shape (no recolour). */
   async function showDeform(jobId) {
     const epoch = ++_epoch
-    const resp = await api.getCandoDisplay(jobId)
+    const [resp, snap] = await Promise.all([
+      api.getCandoDisplay(jobId), api.getCandoSnapshotGeometry(jobId)])
     if (epoch !== _epoch) return { ok: false }
     const updates = toFemUpdates(resp)
-    if (!updates.length) return { ok: false, reason: 'not-ready' }
-    _teardown()
+    if (!updates.length || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
+    _prepareForExternal()
+    _renderExternal(snap)
     designRenderer.applyFemPositions(updates)
     designRenderer.clearScalarColors?.()
     _jobId = jobId; _mode = 'deform'; _stats = null
@@ -182,11 +224,13 @@ export function initCandoDisplay({
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
   async function showFlex(jobId) {
     const epoch = ++_epoch
-    const [disp, rmsf] = await Promise.all([api.getCandoDisplay(jobId), api.getCandoRmsf(jobId)])
+    const [disp, rmsf, snap] = await Promise.all([
+      api.getCandoDisplay(jobId), api.getCandoRmsf(jobId), api.getCandoSnapshotGeometry(jobId)])
     if (epoch !== _epoch) return { ok: false }
     const map = flexColorMap(disp, rmsf)
-    if (!map) return { ok: false, reason: 'not-ready' }
-    _teardown()
+    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
+    _prepareForExternal()
+    _renderExternal(snap)
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _jobId = jobId; _mode = 'flex'
@@ -199,11 +243,13 @@ export function initCandoDisplay({
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
   async function showDeviation(jobId) {
     const epoch = ++_epoch
-    const resp = await api.getCandoDeviation(jobId)
+    const [resp, snap] = await Promise.all([
+      api.getCandoDeviation(jobId), api.getCandoSnapshotGeometry(jobId)])
     if (epoch !== _epoch) return { ok: false }
     const map = deviationColorMap(resp)
-    if (!map) return { ok: false, reason: 'not-ready' }
-    _teardown()
+    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
+    _prepareForExternal()
+    _renderExternal(snap)
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _jobId = jobId; _mode = 'deviation'
@@ -222,7 +268,7 @@ export function initCandoDisplay({
     if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
       return { ok: false, reason: 'not-ready' }
     }
-    _teardown()
+    _clearAll()   // restore the live model first, then hide it under the tubes
     cylinderOverlay.update(resp)
     _nativeVisible(false)
     _jobId = jobId; _mode = 'cando'
@@ -245,7 +291,7 @@ export function initCandoDisplay({
 
   function stopDeform() {
     if (_mode === null) return
-    _teardown()
+    _clearAll()
     _jobId = null; _mode = null; _stats = null
   }
 

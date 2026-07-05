@@ -123,6 +123,30 @@ teeth-specific bug.
 don't fixed-wait for a rebuild after the `nadoc-design` broadcast — POLL (`page.waitForFunction`) for
 the target mesh (e.g. `backboneSpheres.count>0`); fixed waits were flaky under a busy server.
 
+### C7. NEVER load a user's REAL `workspace/*.nadoc` in a mutating/app-loading E2E — the app autosaves back and CORRUPTS it (2026-07-04)
+Ran throwaway Playwright specs that `loadDesign('workspace/6hb_curved.nadoc')` (a gitignored USER fixture)
+to screenshot the CanDo deform display + drive the autorefine panel. While it was the active design, the
+app persisted extra `apply-loop-skips` + routing ops back to the SOURCE file (feature-log entries stamped
+with the session's date, pre/post loop-skip counts jumping 18/18 → 38/36). This silently changed the file
+`tests/test_mrdna_jobs.py::test_analytic_curvature_from_marks` hard-codes (expects analytic n_loops=18,
+n_skips=18, R≈36 nm) → the test began failing with NO code reason. The file is gitignored (no `git checkout`
+restore).
+
+**Recovery that worked (definitive, not a guess):** the `.nadoc` feature-log entries carry gzip'd pre/post
+Design snapshots (`design_snapshot_gz_b64` / `post_state_gz_b64`, decode via
+`backend.api.state.decode_design_snapshot`) AND timestamps. Decoding each showed entries 0–7 dated the
+ORIGINAL day (ending 18/18) and 8–9 dated the session (the corruption). Restored = `decode(fl[7].post_state)`
+for the active state + `model_copy(update={'feature_log': orig.feature_log[:8]})` to KEEP the user's history
+(the snapshot itself decodes with an EMPTY feature_log — must graft the original entries back). Backed up the
+corrupted file first.
+
+**How to avoid:** never point an app-loading E2E at a real user workspace file — copy it to a
+`workspace/playwright_tests/__e2e__*.nadoc` first ([[feedback_playwright_fixtures_location]] +
+`main-init.md` `__e2e__` cleanup), or build a throwaway design via `File>New`. Also: a headless build
+(`hb.scratch_session`) is isolated and never touches the source — prefer it over app-loading for geometry
+checks. And tests should not depend on a MUTABLE gitignored fixture's exact mark counts (fragile) — but
+that's a separate cleanup.
+
 ### C5. Rapid edits → out-of-order response clobber ("changes disappear a moment later") (2026-05-25)
 Fast successive mutations (e.g. clicking several nicks quickly) fire CONCURRENT requests. The backend
 serializes them correctly (`mutate_with_minor_log` under `_lock`), but the client had no ordering guard,

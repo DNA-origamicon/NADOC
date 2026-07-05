@@ -64,6 +64,7 @@ from backend.api.routes_loop_skip import router as loop_skip_router
 from backend.api.routes_jobs import router as jobs_router
 from backend.api.routes_md import router as md_router
 from backend.api.routes_cando import router as cando_router
+from backend.api.routes_cando_autorefine import router as cando_autorefine_router
 from backend.api.routes_mrdna import router as mrdna_router
 from backend.api.routes_md_metrics import router as md_metrics_router
 from backend.api.routes_oxdna import router as oxdna_router
@@ -203,6 +204,7 @@ app.include_router(md_metrics_router,  prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
 app.include_router(mrdna_router,       prefix="/api")
 app.include_router(cando_router,       prefix="/api")
+app.include_router(cando_autorefine_router, prefix="/api")
 app.include_router(oxdna_live_router,  prefix="/api")
 app.include_router(autorefine_router,  prefix="/api")
 app.include_router(oxdna_metrics_router, prefix="/api")

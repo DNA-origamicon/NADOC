@@ -4,10 +4,13 @@ import {
   formatProgress,
   jobDisplayName,
   candoJobIsActive,
+  launchBlocked,
   solverLabel,
   detailStatusText,
   stageChip,
   formatSummary,
+  autorefineStatusText,
+  autorefineResultHtml,
 } from './cando_jobs_panel.js'
 
 describe('formatProgress', () => {
@@ -45,6 +48,23 @@ describe('candoJobIsActive', () => {
       expect(candoJobIsActive({ status: s })).toBe(false)
     }
     expect(candoJobIsActive(null)).toBe(false)
+  })
+})
+
+describe('launchBlocked', () => {
+  it('blocks while a launch is mid-flight (before any job registers)', () => {
+    expect(launchBlocked(true, [], null)).toBe(true)
+  })
+  it('blocks while any job in the list is still active', () => {
+    expect(launchBlocked(false, [{ status: 'completed' }, { status: 'running' }], null)).toBe(true)
+    expect(launchBlocked(false, [{ status: 'queued' }], null)).toBe(true)
+  })
+  it('blocks while the selected job is active even if not in the filtered list', () => {
+    expect(launchBlocked(false, [], { status: 'preparing' })).toBe(true)
+  })
+  it('allows a launch when idle: no launch in-flight and every job finished', () => {
+    expect(launchBlocked(false, [{ status: 'completed' }, { status: 'failed' }], null)).toBe(false)
+    expect(launchBlocked(false, [], null)).toBe(false)
   })
 })
 
@@ -102,5 +122,51 @@ describe('formatSummary', () => {
     const s = formatSummary({ status: 'completed', nonlinear: false, n_nodes: 504 })
     expect(s).toContain('Coarse (linear)')
     expect(s).not.toContain('RMSF')
+  })
+})
+
+describe('autorefineStatusText', () => {
+  it('shows iteration index + current→target twist/curve/deviation while running', () => {
+    const run = { state: 'running', last_event: { phase: 'iteration', iteration: 2, n_hotspots: 4,
+      current: { deviation: 2.07, bend_deg: 42.2, twist_deg: 1.0 },
+      target:  { deviation: 0.0, bend_deg: 72.3, twist_deg: -1.7 } } }
+    const s = autorefineStatusText(run)
+    expect(s).toContain('Iteration 2/4')
+    expect(s).toContain('dev 2.07 nm→0.00 nm')
+    expect(s).toContain('curve 42.2°→72.3°')
+    expect(s).toContain('twist 1.0°→-1.7°')
+  })
+  it('renders — for an unresolved (null) metric', () => {
+    const run = { state: 'running', last_event: { phase: 'iteration', iteration: 1,
+      current: { deviation: 1.0, bend_deg: null, twist_deg: null }, target: { deviation: 0 } } }
+    expect(autorefineStatusText(run)).toContain('curve —→—')
+  })
+  it('summarises edits + before/after deviation on done', () => {
+    const run = { state: 'done', result: { edits_kept: [{}, {}, {}],
+      metrics: { before: { deviation: 2.19 }, after: { deviation: 1.99 } } } }
+    expect(autorefineStatusText(run)).toBe('Done · 3 edits · deviation 1.99 nm (was 2.19 nm)')
+  })
+  it('reports baseline / hotspots phases and errors', () => {
+    expect(autorefineStatusText({ state: 'running', last_event: { phase: 'baseline' } }))
+      .toBe('Solving baseline shape…')
+    expect(autorefineStatusText({ state: 'running', last_event: { phase: 'hotspots', n: 1 } }))
+      .toBe('Found 1 deviation hotspot…')
+    expect(autorefineStatusText({ state: 'error', error: 'boom' })).toBe('Failed: boom')
+    expect(autorefineStatusText(null)).toBe('')
+  })
+})
+
+describe('autorefineResultHtml', () => {
+  it('renders before→after rows with the target and edit count', () => {
+    const html = autorefineResultHtml({ mode: 'loops_and_skips', edits_kept: [{}, {}],
+      metrics: { before: { deviation: 2.19, bend_deg: 39.3, twist_deg: -2.1 },
+                 after:  { deviation: 1.99, bend_deg: 45.9, twist_deg: -2.7 },
+                 target: { bend_deg: 72.3, twist_deg: -1.7 } } })
+    expect(html).toContain('2 loops+skips edits kept')
+    expect(html).toContain('deviation 2.19 nm → <b>1.99 nm</b> (target 0)')
+    expect(html).toContain('curvature 39.3° → <b>45.9°</b> (target 72.3°)')
+  })
+  it('is blank for no result', () => {
+    expect(autorefineResultHtml(null)).toBe('')
   })
 })

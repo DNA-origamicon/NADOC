@@ -81,14 +81,20 @@ def compute_deviation(design: Design, display_positions: List[dict]) -> dict:
             matched += 1
             dev_min = dev if dev_min is None else min(dev_min, dev)
             dev_max = dev if dev_max is None else max(dev_max, dev)
-        out.append({
+        entry = {
             "helix_id":          p["helix_id"],
             "bp_index":          p["bp_index"],
             "direction":         p["direction"],
             "copy":              copy,
             "backbone_position": bb,
             "deviation":         dev,
-        })
+        }
+        # Forward the wound slab normal/tangent (present on newer display caches) so the
+        # deviation-map slabs follow the wound backbones like the deform/flex modes.
+        for f in ("nx", "ny", "nz", "tx", "ty", "tz"):
+            if f in p:
+                entry[f] = p[f]
+        out.append(entry)
 
     rmsd = math.sqrt(sq_sum / matched) if matched else 0.0
     mean_dev = (sum(o["deviation"] for o in out) / len(out)) if out else 0.0

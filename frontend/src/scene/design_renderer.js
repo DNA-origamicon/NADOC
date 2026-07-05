@@ -46,6 +46,12 @@ export function initDesignRenderer(scene, storeRef) {
   let _simXbByCrossover = null
   let _detailLevel      = 0      // current LOD (0=full,1=beads,2=cylinders); re-applied to xover extras after _rebuild
   let _currentMode      = 'normal'
+  // External (job-snapshot) render: while a CanDo display mode is active, the scene is
+  // rebuilt from a job's OWN design snapshot (its topology at solve time) instead of the
+  // live store design, so FEM overlays land on matching beads.  While true, the store
+  // subscription ignores live-design changes; clearExternalGeometry() restores the live
+  // model.  Purely a display swap — the active design in the store is never mutated.
+  let _externalActive   = false
   const _glowLayer         = createGlowLayer(scene)
   // Undefined-bases highlight: red, ~2× the selection glow size
   const _undefinedGlowLayer = createGlowLayer(scene, 0xff3030, 5.6)
@@ -539,6 +545,9 @@ export function initDesignRenderer(scene, storeRef) {
 
   // Subscribe to store changes and rebuild when geometry or design changes.
   storeRef.subscribe((newState, prevState) => {
+    // While an external (job-snapshot) render owns the scene, ignore live-store
+    // changes — the CanDo display controller rebuilds the live model on teardown.
+    if (_externalActive) return
     const geoChanged    = newState.currentGeometry  !== prevState.currentGeometry ||
                           newState.currentHelixAxes !== prevState.currentHelixAxes
     const designChanged = newState.currentDesign    !== prevState.currentDesign
@@ -883,6 +892,34 @@ export function initDesignRenderer(scene, storeRef) {
     setDesignVisible(visible) {
       _designVisible = visible
       if (_helixCtrl?.root) _helixCtrl.root.visible = visible
+    },
+
+    /**
+     * Render an EXTERNAL design's geometry (e.g. a CanDo job's own snapshot — the
+     * topology the design had when the analysis ran) in place of the live store
+     * design, so FEM overlays land on beads that actually match the solved topology.
+     * Display-only, mirrors the reactive rebuild path but from provided data; the
+     * store's active design is untouched.  While active the store subscription is
+     * suppressed — call clearExternalGeometry() to restore the live model.
+     *
+     * @param {object} design     the snapshot Design object
+     * @param {Array}  geometry   its nucleotide positions (as GET /design/geometry)
+     * @param {object} helixAxes  map helix_id → {start,end,samples?,ovhgAxes?,segments?}
+     */
+    renderExternalGeometry(design, geometry, helixAxes) {
+      _externalActive = true
+      _rebuild(geometry, design, helixAxes)
+      if (!_designVisible && _helixCtrl?.root) _helixCtrl.root.visible = false
+    },
+
+    /** Restore the live store design after a renderExternalGeometry() overlay.
+     *  No-op (no rebuild) when no external render is active. */
+    clearExternalGeometry() {
+      if (!_externalActive) return
+      _externalActive = false
+      const { currentGeometry, currentDesign, currentHelixAxes } = storeRef.getState()
+      _rebuild(currentGeometry, currentDesign, currentHelixAxes)
+      if (!_designVisible && _helixCtrl?.root) _helixCtrl.root.visible = false
     },
 
     /**

@@ -417,6 +417,15 @@ availability probe**; the two "engines" are the solver modes). New modules:
 - **NOT hand-driven in a browser** — full lifecycle verified over HTTP vs the live server
   (create→run→complete→display→rmsf→list→delete, status/progress/ETA correct); the button/DOM
   gesture path is unexercised in a real browser (MV pending).
+- **DOUBLE-CLICK GUARD 2026-07-04 (user-reported crash):** clicking Coarse/Fine twice fast
+  spawned TWO jobs → crash. `confirmNoConcurrentJob` can't gate the FEM (it only knows MD/oxDNA
+  jobs; the FEM is in-process), and the old `_launch` awaited the confirm BEFORE disabling the
+  buttons, so both clicks slipped through. Fix in `cando_jobs_panel.js`: synchronous `_launching`
+  re-entrancy flag set before any await + pure `launchBlocked(launching, jobs, selectedJob)` that
+  keeps both buttons disabled until NO CanDo job is active; `_fetchJobs`' poll re-enables when the
+  job finishes. Tests: `launchBlocked` unit (4) + `cando_jobs_panel.launch_guard.test.js` (jsdom
+  integration — double-click `.click()` → exactly 1 `createCandoJob`; re-enable after completed).
+  Verified at gesture level in jsdom (real-browser click still MV-pending).
 
 ### P5 Item 2 — "Predicted shape (deform model)" toggle **SHIPPED 2026-07-04**
 Deform-only viz toggle: turning it on deforms the NADOC model to the FEM-predicted positions;
@@ -654,8 +663,97 @@ Three user asks after seeing the first cylinder render:
   behaviour-preserving). `just test-frontend` **2073**; backend cando+fem subset 28 passed (full suite
   re-running).
 
-- **Next: Item 4** (autorefine: minimise the deviation RMSD by adjusting loop/skip placement — the oracle
-  is `compute_deviation`; `predict_shape` is the ~1-min fast in-loop shape oracle replacing oxDNA CUDA).
+### P5 Item 4 — CanDo-FEM autorefine (backend engine + routes + tests) **SHIPPED 2026-07-04**
+The greedy loop/skip refiner driven by the FAST in-process FEM oracle (`predict_shape` →
+`compute_deviation.rmsd_nm`), replacing oxDNA CUDA's hours with seconds. Mirror of
+`skip_twist_tuning.greedy_finetune_skips` with the FEM oracle swapped in. **Backend only this
+session (user's scope choice); the panel Autorefine button/apply is Item-4b, not built.**
+- **New `backend/core/cando_autorefine.py`** — `fem_refine(design, *, nonlinear=False, sigma,
+  max_hotspots, min_spacing, rmsd_improve_nm, allow_loops=None, on_progress, should_stop)`:
+  baseline `fem_measure` → rank deviation hotspots (mean+σ·std, spread) → at each hotspot TRY every
+  candidate edit and KEEP the best if it lowers RMSD by ≥`rmsd_improve_nm`. Returns
+  `{status, mode, n_hotspots, n_evaluated, edits_kept, before/after:{rmsd,dev_max,dev_mean},
+  converged_marks:{helix_id:{bp:delta}}}`. Pure helpers: `aggregate_deviation_by_bp`,
+  `rank_hotspots`, `free_interior_candidates`, `current_marks_by_helix`, `apply_marks`,
+  `candidate_edits`, `fem_measure`.
+- **User's split (Q-answered):** SQUARE lattice → **skips only** (add/remove deletions); twist/bend
+  (honeycomb) → **skips + loops** (`allow_loops = lattice != SQUARE`, overridable). Edit DIRECTION
+  is chosen EMPIRICALLY — every candidate (add_skip/add_loop/remove) is tried and the FEM oracle
+  keeps whichever lowers RMSD. **No geometric reasoning about direction** (CLAUDE DNA-topology rule +
+  [[feedback_crossover_no_reasoning]]).
+- **Off-crossover/off-end placement ENFORCED** ([[feedback_loopskip_no_crossover_ends]]):
+  `free_interior_candidates` = `core_candidates` minus crossover bp + domain endpoints + END_MARGIN(6).
+  The refiner NEVER adds a mark on a forbidden bp (inherited marks the core realizer put on
+  crossovers are left alone — that realizer still doesn't self-enforce the rule).
+- **Trial builds are fast + pure:** `apply_marks` = clear+apply loop/skips, NO re-sequence (the FEM
+  oracle reads duplex-coverage geometry, not base letters). The apply route DOES re-sequence.
+- **New `backend/api/routes_cando_autorefine.py`** (registered in main.py) — mirror of
+  `routes_autorefine.py`: in-memory `_RUNS`/`_STOP` + daemon thread + durable JSON. Routes:
+  `POST /design/cando/autorefine/start` (rejects a design w/ no marks AND no deformation),
+  `GET /design/cando/autorefine/{id}`, `.../stop`, `.../apply` (lands `converged_marks` as ONE
+  reversible feature-log entry `op_kind='cando-autorefine-marks'` — NEW op_kind added to models.py;
+  re-sequences via `_build_refined_design`, delta-aware + lattice-general, built OUTSIDE
+  mutate_with_feature_log to dodge the non-reentrant state-lock deadlock, same pattern as oxDNA apply).
+  Works on ANY lattice (objective is positional RMSD, not the SQ twist gate).
+- **Three-Layer Law:** loop reads topology + predicts Physical-layer shape; only `apply` mutates
+  topology, reversibly. **VERIFIED** (in-process real route handlers, under-realized 90° 6HB bend):
+  guard rejects bare design; start→done, 4 hotspots/12 trials/4 kept, **RMSD 2.19→1.99 nm**; apply
+  landed +4 marks + `cando-autorefine-marks` feature-log entry + proper design response. Backend-only,
+  NOT driven from a browser (no panel yet).
+- Tests `tests/test_cando_autorefine.py` (10 green): pure helpers + the off-crossover/off-end filter
+  (load-bearing) + oracle (`fem_measure`) + greedy loop (straight control→0 edits, under-realized
+  bend→RMSD never rises + added marks off-forbidden, SQ→skips-only). `just test` **4046 passed** (3
+  pre-existing real-sim fails: oxDNA real-binary ×2 + NAMD benchmark, unrelated — no oxDNA/NAMD code
+  touched).
+### P5 Item 4b — Autorefine PANEL button + live status **SHIPPED 2026-07-04**
+The Dynamics-tab CanDo panel now drives the Item-4 engine (user-requested). Frontend + a small
+backend progress enrichment; no main.js change (all in `cando_jobs_panel.js`, module-first).
+- **Button** `#cando-jobs-autorefine-btn` (+ Stop + status + result) sits **BELOW the Coarse/Fine
+  row** in `index.html`; `cando_jobs_panel.js` wires start→poll→stop→apply mirroring the oxDNA
+  autorefine block. Client fns `startCandoAutorefine`/`getCandoAutorefine`/`stopCandoAutorefine`/
+  `applyCandoAutorefine` on `/design/cando/autorefine/*`. Apply is an EXPLICIT "✓ Apply to design"
+  button in the result (safer than oxDNA's auto-apply — it mutates topology; reversible feature log).
+- **LIVE status** (braille spinner, 1s poll): shows **iteration index + current→target twist /
+  curvature / deviation** each round, e.g. `Iteration 3/8 · dev 2.04 nm→0.00 nm · curve 44.0°→72.3°
+  · twist -0.7°→-1.7°`. Pure formatters `autorefineStatusText`/`autorefineResultHtml` (6 vitest).
+- **Backend metric enrichment** (`cando_autorefine.py`): `fem_refine` emits a `phase:"iteration"`
+  event per hotspot carrying `current`+`target` `{deviation, twist_deg, bend_deg}` — measured off the
+  ALREADY-solved shape (NO extra solves): twist via `oxdna_health.measure_bundle_twist`, curve via a
+  NEW `oxdna_health.measure_bundle_arc_bend` (chord-sagitta on the slab-centroid centreline — reads
+  the TRUE arc angle ~85-90° for a 90° bend, unlike the existing `measure_bundle_bend` end-tangent
+  estimator that reads low; the A9-safe exp36 estimator). Target = same estimators on the design's
+  intended `deformed_nucleotide_positions` (deviation target 0). The route retains `last_iteration`
+  so the metrics line persists through the interspersed per-trial events.
+- Tests: backend `test_cando_autorefine.py` **14** (added iteration-metrics + arc-bend estimator);
+  frontend `cando_jobs_panel.test.js` **21** (+6); full frontend suite **2153**. **VERIFIED IN APP**
+  (doc-pinned e2e on `6hb_curved`, then removed): button below Coarse/Fine, click → live
+  `Iteration 0 · dev 6.49 nm→0.00 nm · curve 73.1°→146.3° · twist 16.5°→-2.8°`, Stop works, 0 console
+  errors. **Item 4 (backend + panel) COMPLETE → all of Phase 5 shipped.**
+
+### TWO BUGS FIXED (user-reported on 6hb_curved) **2026-07-04**
+1. **Deform-display backbone beads mis-wound on curvature.** `deformed_positions_with_axis` only
+   TRANSLATED each bead by its axis-node displacement — the radial offset stayed in the STRAIGHT
+   frame, so on a bent bundle the beads pointed the wrong way ("helical positions messed up mapping
+   onto the curvature"); the CanDo-cylinder axis looked right (it uses axis nodes directly), which is
+   how the user spotted it. **Fix (user chose "full frame incl. predicted twist"):** transport a
+   rotation-minimising frame (RMF, double-reflection Wang 2008 — new `_rmf_frames`) along each helix's
+   DEFORMED axis, seeded from the straight frame; re-seat every bead (`_wound_backbones_for_helix`) at
+   its EXACT straight winding angle + radius in the transported cross-section frame. Captures bend +
+   the bundle's global twist (helices spiral) from the correct axis geometry — no solver change, no
+   calibration risk (display-only). **GOTCHA:** the FEM mesh spaces nodes at `FEM_RISE_PER_BP=0.34`
+   (a CanDo constant, do NOT touch) while display geometry uses the helix's own rise → parametrise the
+   RMF interpolation by **bp coordinate** (drift-free), NOT absolute axial, else beads drift off-node
+   (measured non-perpendicular). After fix: beads ⊥ local deformed tangent (|off·tan|/|off|≈0.04) at
+   radius≈1.0 nm. Loop copies keep their ±½-bp bulge (bp-coord ±0.5). Test
+   `test_fem_solver.test_deform_backbones_wind_around_the_curved_axis`; VISUALLY verified on 6hb_curved
+   (clean curved bundle, coherent winding). Twist/bend MEASUREMENTS unaffected (they use bp midpoints
+   = axis, invariant to winding).
+2. **"Add Loops/Skips [4]" tool placed marks on crossovers/ends** (42/74 on 6hb_curved). See
+   [[feedback_loopskip_no_crossover_ends]] — now ENFORCED via `relocate_marks_off_forbidden` in
+   `apply_loop_skips_from_deformations` (crud.py), preserving per-helix net count. Shared helpers in
+   `loop_skip_calculator.py`; `cando_autorefine` now derives crossovers via
+   `extract_crossovers_from_strands` too (robust vs the often-empty `design.crossovers`). Tests: tool
+   → 0 marks on forbidden bps; curvature/deviation calibration unchanged (net count preserved).
 
 ### AUTOMATED CURVATURE VALIDATION + negative test **2026-07-04**
 Prior curvature validation lived only in `experiments/exp36/process_bend_battery.py`, which
@@ -721,3 +819,77 @@ Two small UI asks on the CanDo panel:
   stiff-core tubes; Off hides it. `just test-frontend` **2086** green; `just smoke` 22 passed (the lone
   fail = the pre-existing flaky `assembly_exit_cleanup`, passes standalone, unrelated). 0 console
   errors. Frontend-only.
+
+### PER-JOB SNAPSHOT RENDER for all display toggles **2026-07-04** (user-reported) — USER-CONFIRMED RESOLVED
+Every CanDo display mode now renders the SELECTED JOB'S OWN design snapshot (the topology the design
+had when that job ran) instead of overlaying the FEM positions onto the LIVE rendered beads. Fixes two
+things the user reported:
+1. **Old job + new live topology → stranded beads.** The bead modes (predicted shape / flex / deviation)
+   called `applyFemPositions` onto the live model's beads (keyed `helix:bp:dir:copy`). When the live
+   design had topology the snapshot lacked (loops/skips added since), those live beads got no update and
+   sat at native ("new topology remains with unchanged positions"). Only the CanDo-cylinder mode was
+   immune (it hides the model + draws its own geometry). **Fix:** the bead modes now fetch the job's own
+   snapshot geometry and render THAT (hiding the live model), then overlay the FEM shape on it → 1:1 bead
+   coverage, snapshot topology shown.
+2. **Switching jobs with a mode on didn't update the view.** `_selectJob` never retargeted the active
+   display to the newly-selected job. Added `_retargetDisplayToSelection` — on job switch, if a mode is
+   active it re-applies that mode for the new job (or turns off if the new job can't support it, e.g.
+   flex w/o RMSF or not completed).
+- **New backend route** `GET /cando/jobs/{id}/snapshot-geometry` (`routes_cando.py`) → the snapshot
+  design's full geometry (`_geometry_for_helices` + `deformed_helix_axes` + `_apply_ovhg_rotations_to_axes`
+  on the job's `design.json`) + the design object. Same shape as `/design/geometry` plus `design`.
+  Client fn `getCandoSnapshotGeometry`.
+- **New renderer methods** (`design_renderer.js`): `renderExternalGeometry(design, geometry, helixAxes)`
+  rebuilds the scene from arbitrary (snapshot) data + sets `_externalActive` (store subscription then
+  ignores live-design changes — pure display swap, active design NEVER mutated, Three-Layer safe);
+  `clearExternalGeometry()` restores the live model. Reuses the existing `_rebuild` path (colours/slabs/
+  cones/xover-extras all free).
+- **`cando_display.js`:** `_teardown` replaced by `_clearAll` (full restore: tubes + colours +
+  `clearExternalGeometry`) and `_prepareForExternal` (light, before a snapshot render). Each `showDeform/
+  showFlex/showDeviation` now `Promise.all([display/rmsf/deviation, getCandoSnapshotGeometry])` →
+  `_renderExternal(snap)` → overlay. `showCandoStyle` calls `_clearAll` first (restore live, then hide +
+  tubes). (NOTE: the Item-3b/legend doc above says `_teardown` calls `legend.hide()` — that logic now
+  lives in `_clearAll`/`_prepareForExternal`.)
+- **Tests:** backend `test_cando_job.py` +2 (`test_snapshot_geometry_reflects_the_jobs_own_topology`,
+  `..._missing_snapshot_is_not_ready`), `just test` green. Frontend `cando_display.test.js` updated (new
+  mocks + snapshot-render assertions + a snapshot-unavailable not-ready case); full frontend suite **2160**
+  green. main.js untouched (LOC flat — `initCandoDisplay` wiring unchanged).
+- **KNOWN LIMITATION:** crossover ARC LINES (unfold_view) still track the LIVE design, not the snapshot;
+  when snapshot vs live crossovers differ some arcs can mismatch. In practice loops/skips never land on
+  crossovers ([[feedback_loopskip_no_crossover_ends]]) so the crossover set is typically identical.
+  Selection raycasts snapshot beads while a mode is active (inspection-only; pre-existing in spirit).
+- **USER-CONFIRMED RESOLVED 2026-07-04** — the user exercised it in the app (select old job after adding
+  loops → toggle modes; switch jobs with a mode on) and confirmed the per-job snapshot render works.
+
+### SLAB SPLAY FIX (wound base-normal/tangent in the FEM display) **2026-07-04** (user-reported) — USER-CONFIRMED RESOLVED
+On a heavily bent + mark-dense design (6hb_curved w/ 56 loops/55 skips) several base-pair SLABS in the
+predicted-shape/flex/deviation display splayed radially OUTWARD. Root cause: the FEM display WINDS the
+backbone beads onto the deformed axis (`_wound_backbones_for_helix`, RMF frame) but emitted NO base
+normals (option B), so `applyFemPositions` kept each slab at its DESIGN (display-frame) orientation while
+the bead moved to the wound frame → the two diverge; measured slab tilt vs inward-radial had a tail to
+**102°** (>90° = pointing outward), ~1% of beads (worst on loop copies).
+- **NOT a regression from the per-job snapshot render** — verified the snapshot endpoint returns geometry
+  byte-identical (0.000 nm / 0.00°) to what the FEM Kabsch-aligns onto; the slab/normal code was untouched.
+  Latent option-B display gap, exposed by this design's strong bend + dense marks.
+- **Also confirmed Symptom-1 ("barely changes curvature") is NOT a bug:** the FEM converts the marks
+  strongly (displayed bend 164°, 0° with marks stripped, 164° with the DeformationOp stripped → marks
+  drive it, DeformationOp doesn't feed the solve per Three-Layer). It "barely changes" vs native only
+  because the native model is already drawn ~163° by its bend DeformationOp and the FEM prediction (164°)
+  lands on top of it — the drawn bend and the loop/skip program agree. No fix needed.
+- **Fix (Symptom-2):** `_wound_backbones_for_helix` now also transports each bead's DESIGN base-normal +
+  axis-tangent through the SAME straight→wound rotation (`_transport`: express in `(e1s,e2s,axis_hat)`,
+  rebuild in `(e1,e2,tan)`) and returns `(positions, normals, tangents)`. `deformed_positions_with_axis`
+  rotates them by the Kabsch R and emits `nx/ny/nz` (slab bnDir) + `tx/ty/tz` (slab tanDir) per position.
+  `cando_deviation.compute_deviation` forwards the 6 fields. Frontend: `cando_display._femUpdate` threads
+  them (both `toFemUpdates` + `deviationColorMap`); `helix_renderer` slab normal-map path uses the emitted
+  `tx/ty/tz` when present (falls back to design `axis_tangent` → mrDNA/oxDNA overlays unaffected).
+- **Result (measured):** wound slab normal ⊥ tangent (orthonormal frame, 0.00° err); vs the NATIVE
+  displayed base-normal p50 **9.5°** / max **35°** (residual = genuine FEM-vs-drawn shape diff); NO slab
+  exceeds 90° (outward splay eliminated).
+- **Backward-compatible:** OLD job caches (display.json without the frame fields) → slabs keep design
+  orientation (prior behaviour). **Re-run a job to get wound slabs.**
+- **Tests:** backend `test_fem_solver.test_deform_slabs_carry_the_wound_frame_not_the_straight_orientation`
+  (frame fields present + orthonormal + no outward slabs); frontend `cando_display.test.js` +2 (frame
+  passthrough in `toFemUpdates` + `deviationColorMap`). `just test` / frontend suite green.
+- **USER-CONFIRMED RESOLVED 2026-07-04** — the user re-ran a job and confirmed the slabs no longer splay
+  radially outward (the visual is correct in the app).

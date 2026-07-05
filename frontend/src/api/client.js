@@ -2108,12 +2108,25 @@ export const startCandoJob       = (id)          => _oxdnaJSON('POST', `/cando/j
 export const stopCandoJob        = (id)          => _oxdnaJSON('POST', `/cando/jobs/${id}/stop`)
 export const deleteCandoJob      = (id)          => _oxdnaJSON('DELETE', `/cando/jobs/${id}`)
 export const getCandoDisplay     = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/display`)
+/** Full geometry of the job's OWN design snapshot (topology at solve time), for the
+ *  display modes to render instead of the live model. */
+export const getCandoSnapshotGeometry = (id)     => _oxdnaJSON('GET',  `/cando/jobs/${id}/snapshot-geometry`)
 /** Per-bp RMSF (nm) for the flexibility map (Item 3). */
 export const getCandoRmsf        = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/rmsf`)
 /** Per-bp deviation from the intended (displayed) geometry + global RMSD (Item 3). */
 export const getCandoDeviation   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`)
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
 export const getCandoCylinders   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/cylinders`)
+
+// ── CanDo-FEM autorefine (Phase-5 Item 4): greedy loop/skip tuning driven by the FEM shape oracle.
+/** Start a CanDo-FEM autorefine run on the active design → {autorefine_id, state}. */
+export const startCandoAutorefine = (body)        => _oxdnaJSON('POST', '/design/cando/autorefine/start', body)
+/** Poll a CanDo autorefine run → {state, phase, last_event, result?, error?}. */
+export const getCandoAutorefine   = (id)          => _oxdnaJSON('GET',  `/design/cando/autorefine/${id}`)
+/** Request cancellation of a running CanDo autorefine (exits at the next hotspot/trial). */
+export const stopCandoAutorefine  = (id)          => _oxdnaJSON('POST', `/design/cando/autorefine/${id}/stop`)
+/** Apply a completed CanDo autorefine's converged loop/skip marks to the active design. */
+export const applyCandoAutorefine = (id)          => _oxdnaJSON('POST', `/design/cando/autorefine/${id}/apply`)
 
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
  *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */

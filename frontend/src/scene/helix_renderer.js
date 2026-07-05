@@ -3402,7 +3402,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           const upd = normalMap.get(key)
           if (upd) {
             _slabBnS.set(upd.nx, upd.ny, upd.nz)
-            _slabAxisDir.set(...slab.nuc.axis_tangent)            // design helix tangent
+            // Prefer the WOUND axis-tangent (CanDo FEM display supplies tx/ty/tz so the slab
+            // frame follows the wound backbone); fall back to the design tangent (mrDNA/oxDNA
+            // overlays send only nx/ny/nz).
+            if (upd.tx !== undefined) _slabAxisDir.set(upd.tx, upd.ty, upd.tz)
+            else _slabAxisDir.set(...slab.nuc.axis_tangent)
             _slabTanS.crossVectors(_slabAxisDir, _slabBnS).normalize()  // tangential
             _slabBasis.makeBasis(_slabTanS, _slabAxisDir, _slabBnS)
             _slabQuatS.setFromRotationMatrix(_slabBasis)

@@ -946,3 +946,33 @@ def test_validate_deformation_endpoint_never_422_on_block():
     })
     assert resp.status_code == 200
     assert resp.json()["status"] == "block"
+
+
+def test_add_loops_skips_tool_places_no_mark_on_crossover_or_end():
+    """The 'Add Loops/Skips' tool (apply-deformations) must NOT leave any auto mark on a crossover
+    bp or a strand end/margin (feedback_loopskip_no_crossover_ends) — a deletion on a crossover
+    breaks CanDo.  Regression: the realizers place on an even cell grid and used to land ~half the
+    marks on crossovers; a relocation pass now moves each offender to the nearest free interior bp
+    while preserving the per-helix count (twist/bend magnitude)."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.api.crud import apply_loop_skips_from_deformations
+    from backend.core.loop_skip_calculator import forbidden_loop_skip_bps
+    from backend.core.models import LatticeType
+
+    cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(cells, 126, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        hb.add_bend(0, 126, curvature_deg_per_bp=90.0 / 126)
+        apply_loop_skips_from_deformations()            # ← the tool
+        d = design_state.get_or_404()
+
+        forb = forbidden_loop_skip_bps(d)
+        n_marks = sum(len(h.loop_skips) for h in d.helices)
+        on_forbidden = [(h.id, ls.bp_index) for h in d.helices for ls in h.loop_skips
+                        if ls.bp_index in forb.get(h.id, set())]
+        assert n_marks > 0, "the tool produced marks"
+        assert on_forbidden == [], f"marks on crossovers/ends: {on_forbidden[:8]}"

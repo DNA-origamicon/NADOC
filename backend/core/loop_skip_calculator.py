@@ -1013,6 +1013,104 @@ def clear_all_loop_skips(design: "Design") -> "Design":
     return design.copy_with(helices=new_helices)
 
 
+FORBIDDEN_END_MARGIN = 6
+"""bp kept clear of each helix's duplex ends for AUTO loop/skip placement."""
+
+
+def forbidden_loop_skip_bps(design: "Design", *, end_margin: int = FORBIDDEN_END_MARGIN
+                            ) -> dict[str, set[int]]:
+    """Per-helix bp indices where an AUTO-placed loop/skip must NOT land — crossover bps + strand
+    domain endpoints (nicks / 5′-3′ termini / u-turns) + a duplex-end margin.  A deletion on a
+    crossover removes the base the strand-jump depends on and a mark on a terminus is non-physical;
+    downstream tools (CanDo) crash or mishandle such files (see feedback_loopskip_no_crossover_ends).
+
+    Crossovers are derived from strand TOPOLOGY (``extract_crossovers_from_strands``) rather than
+    ``design.crossovers`` — the latter is frequently empty (real crossover topology lives in the
+    strand domain transitions).  MANUAL placement is unrestricted and never consults this."""
+    from backend.core.crossover_positions import extract_crossovers_from_strands
+
+    forb: dict[str, set[int]] = {h.id: set() for h in design.helices}
+    try:
+        xos, _ = extract_crossovers_from_strands(
+            design.strands, design.helices, design.lattice_type)
+    except Exception:  # noqa: BLE001 — fall back to any recorded crossovers
+        xos = list(getattr(design, "crossovers", []) or [])
+    for xo in xos:
+        for half in (xo.half_a, xo.half_b):
+            if half.helix_id in forb:
+                forb[half.helix_id].add(half.index)
+    cov: dict[str, set[int]] = {h.id: set() for h in design.helices}
+    for s in design.strands:
+        if getattr(s, "is_reference", False):
+            continue
+        for dm in s.domains:
+            if dm.helix_id not in forb:
+                continue
+            forb[dm.helix_id].add(dm.start_bp)
+            forb[dm.helix_id].add(dm.end_bp)
+            cov[dm.helix_id].update(range(min(dm.start_bp, dm.end_bp),
+                                          max(dm.start_bp, dm.end_bp) + 1))
+    for hid, bps in cov.items():
+        if not bps:
+            continue
+        lo, hi = min(bps), max(bps)
+        for b in range(lo, lo + end_margin):
+            forb[hid].add(b)
+        for b in range(hi - end_margin + 1, hi + 1):
+            forb[hid].add(b)
+    return forb
+
+
+def relocate_marks_off_forbidden(mods: dict[str, list[LoopSkip]], design: "Design", *,
+                                 end_margin: int = FORBIDDEN_END_MARGIN
+                                 ) -> dict[str, list[LoopSkip]]:
+    """Move every AUTO loop/skip in ``mods`` that lands on a forbidden bp (crossover / strand end /
+    margin) to the nearest FREE INTERIOR bp on the SAME helix, preserving its delta — so each
+    helix's net insertion/deletion COUNT (which sets the programmed twist/bend magnitude) is
+    unchanged, only offending positions move (see feedback_loopskip_no_crossover_ends).
+
+    ``mods`` is ``{helix_id: [LoopSkip, …]}``.  Per helix the marks are first collapsed by bp (last
+    wins — matching :func:`apply_loop_skips`' merge) so a mark that can't be relocated safely is
+    dropped rather than left on a crossover.  Returns a new ``{helix_id: [LoopSkip, …]}``."""
+    forb = forbidden_loop_skip_bps(design, end_margin=end_margin)
+    helix_by_id = {h.id: h for h in design.helices}
+    out: dict[str, list[LoopSkip]] = {}
+    for hid, ls_list in mods.items():
+        helix = helix_by_id.get(hid)
+        if helix is None:
+            out[hid] = list(ls_list)
+            continue
+        bad = forb.get(hid, set())
+        ivls = _active_intervals_for_helices(design, {hid})
+        is_core = lambda bp: any(lo <= bp < hi for lo, hi in ivls)  # noqa: E731
+        marks: dict[int, int] = {}
+        for ls in ls_list:
+            marks[ls.bp_index] = ls.delta                # collapse duplicates (last wins)
+        occupied = set(marks)
+        placed: dict[int, int] = {}
+        for bp, delta in marks.items():
+            if bp not in bad:
+                placed[bp] = delta
+                continue
+            occupied.discard(bp)
+            target = None
+            for radius in range(1, helix.length_bp + 1):
+                for cand in (bp + radius, bp - radius):
+                    if cand in bad or cand in occupied or not is_core(cand):
+                        continue
+                    target = cand
+                    break
+                if target is not None:
+                    break
+            if target is None:
+                continue                                 # no safe interior slot → drop the mark
+            occupied.add(target)
+            placed[target] = delta
+        if placed:
+            out[hid] = [LoopSkip(bp_index=bp, delta=dl) for bp, dl in sorted(placed.items())]
+    return out
+
+
 def clear_orphaned_loop_skips(design: "Design") -> "Design":
     """Return a new Design with loop_skips removed at bp positions not covered
     by any strand domain on that helix."""

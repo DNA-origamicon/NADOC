@@ -16,6 +16,7 @@ GET    /cando/jobs/{id}/progress    overall progress fraction + ETA
 POST   /cando/jobs/{id}/start       start or resume a queued/stopped/failed job
 POST   /cando/jobs/{id}/stop        stop a running job (best-effort cancel)
 DELETE /cando/jobs/{id}             delete job + generated files
+GET    /cando/jobs/{id}/snapshot-geometry  full geometry of the job's OWN design snapshot
 GET    /cando/jobs/{id}/display     predicted positions → applyFemPositions list
 GET    /cando/jobs/{id}/rmsf        per-bp RMSF (nm) for the flex map (Item 3)
 GET    /cando/jobs/{id}/deviation   per-bp deviation from the intended shape + RMSD (Item 3)
@@ -239,6 +240,42 @@ async def delete_cando_job(job_id: str) -> dict:
 
 
 # ── Display ───────────────────────────────────────────────────────────────────
+
+@router.get("/cando/jobs/{job_id}/snapshot-geometry")
+async def get_cando_snapshot_geometry(job_id: str) -> dict:
+    """The full geometry of the job's OWN design snapshot — the topology the design
+    had when the analysis was run, not live editor state.  The CanDo display modes
+    render THIS (hiding the live model) and then overlay the FEM-predicted shape on
+    it, so a job whose snapshot differs from the current design (e.g. loops/skips
+    added since) still shows the shape on the topology it was solved for.
+
+    Same shape as ``GET /design/geometry`` plus the snapshot ``design`` object:
+    ``{ready, design, nucleotides:[...], helix_axes:[{helix_id,start,end,...}]}``.
+    """
+    from backend.core.deformation import _apply_ovhg_rotations_to_axes, deformed_helix_axes
+    from backend.core.design_geometry import _geometry_for_helices
+    from backend.core.cando_runner import _load_snapshot_design
+
+    job = _load_job(job_id)
+    design = _load_snapshot_design(job.job_dir(_workspace()))
+    if design is None or not design.helices:
+        return {"job_id": job.job_id, "ready": False, "nucleotides": [], "helix_axes": []}
+
+    def _compute() -> tuple[list, list]:
+        nucleotides = _geometry_for_helices(design, None)
+        axes = deformed_helix_axes(design)
+        _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+        return nucleotides, axes
+
+    nucleotides, axes = await run_in_threadpool(_compute)
+    return {
+        "job_id": job.job_id,
+        "ready": True,
+        "design": design.model_dump(mode="json"),
+        "nucleotides": nucleotides,
+        "helix_axes": axes,
+    }
+
 
 @router.get("/cando/jobs/{job_id}/display")
 async def get_cando_display(job_id: str) -> dict:

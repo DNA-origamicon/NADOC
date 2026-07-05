@@ -1313,6 +1313,68 @@ def measure_bundle_curvature(positions, *, n_slices: int = 0) -> float:
     return total_turn / arc                                  # deg per nm
 
 
+def _chord_sagitta_bend(centerline) -> tuple[float, float]:
+    """Total bend angle (deg) + radius of curvature (nm) of an ordered centerline via
+    chord+sagitta — the A9-safe estimator that reads ~0 for a STRAIGHT rod and the true arc
+    angle for a circular arc (unlike a segment-tangent angle, which reads LOW as arc ends
+    straighten, or a turning-angle integral, which blows up on jitter).  ``centerline`` is
+    an (N,3) array ordered ALONG the axis.  This is the estimator the exp36 CanDo bend
+    validation uses (``tests/automation_harness._chord_sagitta_bend`` — kept in sync)."""
+    cen = np.asarray(centerline, dtype=float)
+    if len(cen) < 5:
+        return 0.0, float("inf")
+    a, b = cen[0], cen[-1]
+    chord_v = b - a
+    c = float(np.linalg.norm(chord_v))
+    if c < 1e-9:
+        return 0.0, float("inf")
+    u = chord_v / c
+    perp = (cen - a) - np.outer((cen - a) @ u, u)
+    s = float(np.linalg.norm(perp, axis=1).max())            # sagitta (max deviation)
+    if s < 1e-6:
+        return 0.0, float("inf")
+    R = (c * c / 4.0 + s * s) / (2.0 * s)
+    bend = float(np.degrees(2.0 * np.arcsin(np.clip((c / 2.0) / R, -1.0, 1.0))))
+    if s > R:                                                # arc past 180° (hairpin)
+        bend = 360.0 - bend
+    return bend, R
+
+
+def measure_bundle_arc_bend(positions, *, n_slices: int = 0) -> float:
+    """FAITHFUL total bend ANGLE (deg) of a bundle from a backbone-position list, via the
+    chord+sagitta of its slab-centroid centreline (:func:`_chord_sagitta_bend`).  Unlike
+    :func:`measure_bundle_bend` (segment-tangent angle, reads LOW), this reads the TRUE arc
+    angle — a realised 90° bend reads ~85-90°, matching the programmed intent — so it is the
+    right estimator for a user-facing "current vs target bend" readout.  Reads ~0 on a straight
+    bundle.  Method mirrors :func:`measure_bundle_bend`: collapse (helix, bp) columns to bp
+    midpoints, fit the bundle axis, bin into ~1-turn axial slabs, take each slab's 3-D centroid,
+    then chord+sagitta the ordered centroid polyline.  Returns 0.0 when too few slabs to resolve.
+    Pass the rigid duplex CORE."""
+    if not positions:
+        raise ValueError("measure_bundle_arc_bend: empty position map")
+    bp_pts: dict = {}
+    for p in positions:
+        bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
+    if len(pts) < 5:
+        return 0.0
+    C, L, _e1, _e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        return 0.0
+    if n_slices <= 0:
+        n_slices = max(5, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    if len(centroids) < 5:
+        return 0.0
+    bend, _R = _chord_sagitta_bend(np.array(centroids))
+    return bend
+
+
 def measure_bundle_curvature_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
     """Per-position CUMULATIVE bending profile ``[(axial_t_nm, cumulative_turning_deg), …]`` — the
     curvature analogue of :func:`measure_bundle_twist_profile`.  The running sum of |turning angle|

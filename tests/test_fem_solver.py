@@ -303,3 +303,128 @@ def test_free_free_nma_rmsf_is_physical_and_flatter_than_pinned(routed_6hb):
     assert 0.05 < free.mean() < 20.0        # physical order of magnitude (nm)
     # Free-free removes the pinned-node cantilever, so it is flatter.
     assert (free.max() / free.mean()) < (pinned.max() / max(pinned.mean(), 1e-9))
+
+
+def test_deform_backbones_wind_around_the_curved_axis():
+    """Regression: on a BENT bundle the FEM-deform backbone beads must WIND around the deformed
+    axis (offset ⊥ the local deformed tangent, at the helix radius), not keep their straight-frame
+    radial direction.  The pre-fix code only TRANSLATED each bead by its axis-node displacement, so
+    on a curve the beads pointed the wrong way ('helical positions messed up mapping onto the
+    curvature').  Fixed by transporting a rotation-minimising frame along the deformed axis."""
+    from collections import defaultdict
+
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(cells, 126, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        hb.add_bend(0, 126, curvature_deg_per_bp=90.0 / 126)
+        hb.apply_loop_skip_deformations()
+        d = design_state.get_or_404().model_copy(deep=True)
+
+    res = predict_shape(d, nonlinear=False, with_rmsf=False)
+    axis_by_helix = defaultdict(list)
+    for a in res["axis"]:
+        axis_by_helix[a["helix_id"]].append((a["bp_index"], np.array(a["position"])))
+
+    checked = 0
+    for hid, nodes in axis_by_helix.items():
+        nodes.sort()
+        bp_to_pos = {b: p for b, p in nodes}
+        bps = [b for b, _ in nodes]
+        P = np.array([p for _, p in nodes])
+        if len(P) < 5:
+            continue
+        # local deformed tangent per node (central difference)
+        tan = {}
+        for i, b in enumerate(bps):
+            v = P[min(i + 1, len(P) - 1)] - P[max(i - 1, 0)]
+            nv = np.linalg.norm(v)
+            if nv > 1e-9:
+                tan[b] = v / nv
+        perp_ratios, radii = [], []
+        for p in res["positions"]:
+            if p["helix_id"] != hid or p["bp_index"] not in bp_to_pos or p["bp_index"] not in tan:
+                continue
+            off = np.array(p["backbone_position"]) - bp_to_pos[p["bp_index"]]
+            r = np.linalg.norm(off)
+            if r < 1e-6 or r > 4.0:              # skip degenerate / ssDNA-end extrapolations
+                continue
+            perp_ratios.append(abs(float(off @ tan[p["bp_index"]]) / r))
+            radii.append(r)
+        if len(perp_ratios) < 50:
+            continue
+        checked += 1
+        # Beads are ~perpendicular to the local deformed tangent (winding follows the curve)…
+        assert np.mean(perp_ratios) < 0.15, f"{hid}: beads not ⊥ deformed tangent"
+        # …and at roughly the helix radius (not flung off-axis).
+        assert 0.7 < np.mean(radii) < 1.6, f"{hid}: bead radius off ({np.mean(radii):.2f} nm)"
+    assert checked >= 4, "expected several duplex-core helices to validate"
+
+
+def test_deform_slabs_carry_the_wound_frame_not_the_straight_orientation():
+    """Regression (Symptom-2 slab splay): the FEM-deform display must emit a WOUND slab frame
+    (base-normal nx/ny/nz + axis-tangent tx/ty/tz) per bead so the base-pair slabs follow the
+    wound backbone.  The pre-fix display emitted NO normals (option B), so slabs kept their
+    straight/design orientation while the backbone wound onto the deformed axis → on a bent,
+    mark-dense bundle several slabs splayed radially OUTWARD (angle to the inward radial > 90°).
+
+    Pins: every position carries the 6 frame fields; the frame is orthonormal (normal ⊥ tangent,
+    both unit); and the normal points INWARD (toward the helix axis) — no radially-outward slabs."""
+    from collections import defaultdict
+
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(cells, 126, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        hb.add_bend(0, 126, curvature_deg_per_bp=90.0 / 126)
+        hb.apply_loop_skip_deformations()
+        d = design_state.get_or_404().model_copy(deep=True)
+
+    res = predict_shape(d, nonlinear=False, with_rmsf=False)
+    pos = res["positions"]
+
+    # (1) every position carries the wound frame; (2) it is an orthonormal frame.
+    for p in pos[:200] + pos[-200:]:
+        for f in ("nx", "ny", "nz", "tx", "ty", "tz"):
+            assert f in p, f"missing slab-frame field {f}"
+        n = np.array([p["nx"], p["ny"], p["nz"]])
+        t = np.array([p["tx"], p["ty"], p["tz"]])
+        assert abs(np.linalg.norm(n) - 1.0) < 1e-6, "base-normal not unit"
+        assert abs(np.linalg.norm(t) - 1.0) < 1e-6, "axis-tangent not unit"
+        assert abs(float(n @ t)) < 1e-3, "slab frame not orthonormal (normal ⊥ tangent)"
+
+    # (3) the normal points INWARD (toward the helix axis) at the WOUND backbone — no slab splays
+    # radially outward.  Compare against the FEM axis-centre node nearest each bead (excluding the
+    # ssDNA-end extrapolations, r > 4 nm, as the winding test does).
+    axis_by_helix = defaultdict(list)
+    for a in res["axis"]:
+        axis_by_helix[a["helix_id"]].append((a["bp_index"], np.array(a["position"])))
+    outward = 0
+    checked = 0
+    for p in pos:
+        nodes = axis_by_helix.get(p["helix_id"])
+        if not nodes:
+            continue
+        bb = np.array(p["backbone_position"])
+        ax = min(nodes, key=lambda t: abs(t[0] - p["bp_index"]))[1]
+        inward = ax - bb
+        r = np.linalg.norm(inward)
+        if r < 1e-6 or r > 4.0:
+            continue
+        n = np.array([p["nx"], p["ny"], p["nz"]])
+        checked += 1
+        if float(n @ (inward / r)) < 0.0:      # obtuse → slab points radially outward
+            outward += 1
+    assert checked > 500
+    # Pre-fix this design had ~1% radially-outward slabs (max 102°); the wound frame removes them.
+    assert outward / checked < 0.005, f"{outward}/{checked} slabs still splay outward"

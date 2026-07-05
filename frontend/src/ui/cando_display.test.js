@@ -4,6 +4,16 @@ import {
   flexColorMap, deviationColorMap,
 } from './cando_display.js'
 
+// A ready /cando/jobs/{id}/snapshot-geometry response — the job's own design snapshot
+// that the display modes render (via renderExternalGeometry) before overlaying the FEM
+// shape.  Minimal but non-empty so _snapshotReady() passes.
+const snapshotResp = () => ({
+  ready: true,
+  design: { helices: [{ id: 'h' }], strands: [], crossovers: [] },
+  nucleotides: [{ helix_id: 'h', bp_index: 0, direction: 'forward', backbone_position: [0, 0, 0] }],
+  helix_axes: [{ helix_id: 'h', start: [0, 0, 0], end: [1, 0, 0] }],
+})
+
 describe('toFemUpdates', () => {
   it('returns [] for a not-ready / empty response', () => {
     expect(toFemUpdates(null)).toEqual([])
@@ -21,41 +31,78 @@ describe('toFemUpdates', () => {
       { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 1, backbone_position: [4, 5, 6] },
     ])
   })
+
+  it('threads the wound slab frame (nx/ny/nz + tx/ty/tz) when the display carries it', () => {
+    const resp = { ready: true, positions: [
+      { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', backbone_position: [1, 2, 3],
+        nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1 },
+    ] }
+    expect(toFemUpdates(resp)[0]).toEqual({
+      helix_id: 'h0', bp_index: 3, direction: 'FORWARD', copy: 0, backbone_position: [1, 2, 3],
+      nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1,
+    })
+  })
 })
 
 describe('initCandoDisplay controller', () => {
   function makeDeps() {
-    const designRenderer = { applyFemPositions: vi.fn() }
+    const designRenderer = {
+      applyFemPositions: vi.fn(), clearScalarColors: vi.fn(),
+      renderExternalGeometry: vi.fn(), clearExternalGeometry: vi.fn(),
+    }
     const api = {
       getCandoDisplay: vi.fn(async () => ({ ready: true, positions: [
         { helix_id: 'h', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0] },
       ] })),
+      getCandoSnapshotGeometry: vi.fn(async () => snapshotResp()),
     }
     return { designRenderer, api }
   }
 
-  it('showDeform applies fem positions and marks active; stopDeform restores', async () => {
+  it('showDeform renders the job snapshot + applies fem positions; stopDeform restores', async () => {
     const { designRenderer, api } = makeDeps()
     const c = initCandoDisplay({ designRenderer, api })
     const r = await c.showDeform('job1')
     expect(r.ok).toBe(true)
+    // Renders the job's OWN snapshot topology first, THEN overlays the FEM shape.
+    expect(api.getCandoSnapshotGeometry).toHaveBeenCalledWith('job1')
+    expect(designRenderer.renderExternalGeometry).toHaveBeenCalled()
     expect(designRenderer.applyFemPositions).toHaveBeenCalledWith(expect.any(Array))
     expect(c.deformActive()).toBe(true)
     expect(c.deformJobId()).toBe('job1')
 
     c.stopDeform()
-    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
+    expect(designRenderer.clearExternalGeometry).toHaveBeenCalled()   // live model restored
     expect(c.deformActive()).toBe(false)
     expect(c.deformJobId()).toBe(null)
   })
 
   it('showDeform returns not-ready when the response is empty (model untouched)', async () => {
     const { designRenderer } = makeDeps()
-    const api = { getCandoDisplay: vi.fn(async () => ({ ready: false, positions: [] })) }
+    const api = {
+      getCandoDisplay: vi.fn(async () => ({ ready: false, positions: [] })),
+      getCandoSnapshotGeometry: vi.fn(async () => snapshotResp()),
+    }
     const c = initCandoDisplay({ designRenderer, api })
     const r = await c.showDeform('j')
     expect(r.ok).toBe(false)
+    expect(designRenderer.renderExternalGeometry).not.toHaveBeenCalled()
     expect(designRenderer.applyFemPositions).not.toHaveBeenCalled()
+    expect(c.deformActive()).toBe(false)
+  })
+
+  it('showDeform returns not-ready when the snapshot geometry is unavailable', async () => {
+    const { designRenderer } = makeDeps()
+    const api = {
+      getCandoDisplay: vi.fn(async () => ({ ready: true, positions: [
+        { helix_id: 'h', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0] },
+      ] })),
+      getCandoSnapshotGeometry: vi.fn(async () => ({ ready: false, nucleotides: [] })),
+    }
+    const c = initCandoDisplay({ designRenderer, api })
+    const r = await c.showDeform('j')
+    expect(r.ok).toBe(false)
+    expect(designRenderer.renderExternalGeometry).not.toHaveBeenCalled()
     expect(c.deformActive()).toBe(false)
   })
 
@@ -65,7 +112,7 @@ describe('initCandoDisplay controller', () => {
     await c.showDeform('j')
     expect(c.deformActive()).toBe(true)
     c.stopAndRestore()
-    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
+    expect(designRenderer.clearExternalGeometry).toHaveBeenCalled()
     expect(c.deformActive()).toBe(false)
   })
 
@@ -79,6 +126,7 @@ describe('initCandoDisplay controller', () => {
         .mockImplementationOnce(async () => ({ ready: true, positions: [
           { helix_id: 'h', bp_index: 1, direction: 'REVERSE', backbone_position: [9, 9, 9] },
         ] })),
+      getCandoSnapshotGeometry: vi.fn(async () => snapshotResp()),
     }
     const c = initCandoDisplay({ designRenderer, api })
     const p1 = c.showDeform('old')
@@ -154,12 +202,22 @@ describe('deviationColorMap', () => {
     expect(map.colorByKey['h:0:forward:1']).toBe(deviationHex(0.5)) // loop copy: its own colour
     expect(map.colorByKey['h:1:forward']).toBe(deviationHex(1))    // far → red
   })
+
+  it('threads the wound slab frame through the deviation updates when present', () => {
+    const withFrame = { ready: true, max_deviation: 4, positions: [
+      { helix_id: 'h', bp_index: 0, direction: 'forward', backbone_position: [0, 0, 0], deviation: 1,
+        nx: 1, ny: 0, nz: 0, tx: 0, ty: 0, tz: 1 },
+    ] }
+    const map = deviationColorMap(withFrame)
+    expect(map.updates[0]).toMatchObject({ nx: 1, ny: 0, nz: 0, tx: 0, ty: 0, tz: 1 })
+  })
 })
 
 describe('initCandoDisplay — flex / deviation modes', () => {
   function makeFullDeps() {
     const designRenderer = {
       applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn(),
+      renderExternalGeometry: vi.fn(), clearExternalGeometry: vi.fn(),
     }
     const api = {
       getCandoDisplay: vi.fn(async () => ({ ready: true, positions: [
@@ -172,6 +230,7 @@ describe('initCandoDisplay — flex / deviation modes', () => {
         max_deviation: 3, positions: [
           { helix_id: 'h', bp_index: 0, direction: 'forward', backbone_position: [0, 0, 0], deviation: 1 },
         ] })),
+      getCandoSnapshotGeometry: vi.fn(async () => snapshotResp()),
     }
     return { designRenderer, api }
   }
@@ -239,6 +298,7 @@ describe('initCandoDisplay — CanDo-style cylinder mode', () => {
   function makeCylDeps() {
     const designRenderer = {
       applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn(),
+      renderExternalGeometry: vi.fn(), clearExternalGeometry: vi.fn(),
       setDesignVisible: vi.fn(),
     }
     const cylinderOverlay = { update: vi.fn(), clear: vi.fn() }
@@ -247,6 +307,7 @@ describe('initCandoDisplay — CanDo-style cylinder mode', () => {
       getCandoDisplay: vi.fn(async () => ({ ready: true, positions: [
         { helix_id: 'h', bp_index: 0, direction: 'forward', backbone_position: [0, 0, 0] },
       ] })),
+      getCandoSnapshotGeometry: vi.fn(async () => snapshotResp()),
       getCandoRmsf: vi.fn(async () => ({ rmsf: [{ helix_id: 'h', bp_index: 0, rmsf_nm: 1 }], min_nm: 0.5, max_nm: 1.5 })),
       getCandoCylinders: vi.fn(async () => ({
         ready: true, tube_radius_nm: 1.125, joint_radius_nm: 0.2, n_helices: 2, n_joints: 3,
@@ -314,7 +375,7 @@ describe('initCandoDisplay — CanDo-style cylinder mode', () => {
     const c = initCandoDisplay({ designRenderer, api, cylinderOverlay, setDesignVisible })
     await c.showFlex('j')
     await c.showCandoStyle('j')
-    expect(designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)  // bead overlay cleared
+    expect(designRenderer.clearExternalGeometry).toHaveBeenCalled()  // snapshot render torn down
     expect(designRenderer.clearScalarColors).toHaveBeenCalled()
     expect(cylinderOverlay.update).toHaveBeenCalled()
     expect(setDesignVisible).toHaveBeenLastCalledWith(false)

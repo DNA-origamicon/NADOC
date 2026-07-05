@@ -10899,6 +10899,16 @@ def apply_loop_skips_from_deformations() -> dict:
     if not all_mods:
         raise HTTPException(400, detail="No loop/skip modifications were produced.")
 
+    # Relocate any auto-placed mark off a crossover / strand end / margin to the nearest free
+    # interior bp (preserving each helix's net count → twist/bend magnitude unchanged).  The
+    # realizers (twist_loop_skips / bend_loop_skips / sq_lattice_periodic_skips) place on an even
+    # cell grid and don't self-enforce this; a deletion on a crossover breaks CanDo
+    # (feedback_loopskip_no_crossover_ends).  Manual context-menu placement never hits this path.
+    from backend.core.loop_skip_calculator import relocate_marks_off_forbidden
+    all_mods = relocate_marks_off_forbidden(all_mods, design)
+    if not all_mods:
+        raise HTTPException(400, detail="No loop/skip modifications were produced.")
+
     n_helices = len(all_mods)
     n_marks = sum(len(ls) for ls in all_mods.values())
     label = f"Add loops/skips ({n_marks} mark{'s' if n_marks != 1 else ''} on {n_helices} helix{'es' if n_helices != 1 else ''})"

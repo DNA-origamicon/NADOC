@@ -3939,6 +3939,25 @@
                 </button>
               </div>
 
+              <!-- Autorefine (Phase-5 Item 4): tune loop/skip placement so the FEM-predicted
+                   shape matches the design's intended bend/twist (minimise the deviation RMSD). -->
+              <div style="margin-bottom:6px">
+                <div style="display:flex;gap:5px;align-items:center">
+                  <button id="cando-jobs-autorefine-btn"
+                          title="Autorefine loop/skips (CanDo-FEM): iteratively add/remove loop/skip marks — using the fast FEM shape solve each round — until the predicted shape matches the bend/twist your design depicts. Square lattice tunes with skips only; curved/twisted designs also use loops. Reports current vs target twist/curvature/deviation per iteration; the result lands as a reversible Feature-Log entry."
+                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#2a1f12;border:1px solid #30363d;color:#e3b341;border-radius:3px;cursor:pointer;font-weight:600">
+                    ✦ Autorefine loop/skips
+                  </button>
+                  <button id="cando-jobs-autorefine-stop-btn"
+                          title="Stop the running autorefine (exits at the next hotspot; the current FEM solve finishes first)."
+                          style="display:none;font-size:var(--text-xs);padding:5px 8px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer;font-weight:600">
+                    ■ Stop
+                  </button>
+                </div>
+                <div id="cando-jobs-autorefine-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                <div id="cando-jobs-autorefine-result" style="margin-top:4px"></div>
+              </div>
+
               <!-- ── Jobs (list of runs, filtered to this design) ──────────── -->
               <div class="ox-card">
                 <div id="cando-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">

@@ -726,6 +726,135 @@ def deformed_positions(design: "Design", mesh: FEMMesh, u: np.ndarray) -> List[d
     return deformed_positions_with_axis(design, mesh, u)[0]
 
 
+def _rmf_frames(points: np.ndarray, seed_perp: np.ndarray):
+    """Rotation-minimising frame (double-reflection, Wang et al. 2008) along an ordered 3-D
+    polyline ``points`` (N×3).  Returns ``(tangents, e1, e2)`` — per-vertex unit tangent + the two
+    cross-section axes, transported with MINIMAL twist so no spurious roll accrues along the curve.
+    ``e1[0]`` is ``seed_perp`` projected ⊥ to the first tangent (ties the winding phase to the
+    straight helix frame); ``e2 = tangent × e1``."""
+    pts = np.asarray(points, dtype=float)
+    n = len(pts)
+    tans = np.zeros((n, 3))
+    for i in range(n):
+        if n == 1:
+            v = np.array([0.0, 0.0, 1.0])
+        elif i == 0:
+            v = pts[1] - pts[0]
+        elif i == n - 1:
+            v = pts[-1] - pts[-2]
+        else:
+            v = pts[i + 1] - pts[i - 1]
+        nv = float(np.linalg.norm(v))
+        tans[i] = v / nv if nv > 1e-12 else (tans[i - 1] if i > 0 else np.array([0.0, 0.0, 1.0]))
+    e1 = np.zeros((n, 3))
+    e2 = np.zeros((n, 3))
+    r = seed_perp - float(seed_perp @ tans[0]) * tans[0]
+    if np.linalg.norm(r) < 1e-9:                              # seed parallel to tangent → pick any ⊥
+        alt = np.array([1.0, 0.0, 0.0]) if abs(tans[0][0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        r = alt - float(alt @ tans[0]) * tans[0]
+    e1[0] = r / np.linalg.norm(r)
+    e2[0] = np.cross(tans[0], e1[0])
+    for i in range(1, n):
+        v1 = pts[i] - pts[i - 1]
+        c1 = float(v1 @ v1)
+        if c1 < 1e-18:                                        # coincident vertices → carry frame
+            e1[i], e2[i] = e1[i - 1], np.cross(tans[i], e1[i - 1])
+            continue
+        rL = e1[i - 1] - (2.0 / c1) * float(v1 @ e1[i - 1]) * v1
+        tL = tans[i - 1] - (2.0 / c1) * float(v1 @ tans[i - 1]) * v1
+        v2 = tans[i] - tL
+        c2 = float(v2 @ v2)
+        ei = rL - (2.0 / c2) * float(v2 @ rL) * v2 if c2 > 1e-18 else rL
+        nrm = float(np.linalg.norm(ei))
+        e1[i] = ei / nrm if nrm > 1e-12 else e1[i - 1]
+        e2[i] = np.cross(tans[i], e1[i])
+    return tans, e1, e2
+
+
+def _wound_backbones_for_helix(helix, straight_nucs, node_anchors):
+    """Re-place a helix's straight backbone beads onto the FEM-DEFORMED axis with the cross-section
+    frame carried along the curve (so beads wind correctly around a bent/twisted bundle instead of
+    keeping their straight-frame radial direction).  Physical-layer / display only.
+
+    ``node_anchors`` = list of ``(global_bp, straight_axis_position, deformed_axis_position)`` for
+    this helix's duplex-core FEM nodes.  A rotation-minimising frame (RMF) is transported along the
+    deformed axis, seeded from the straight helix frame.  Each bead is anchored to its OWN bp's node
+    (nearest node for ssDNA ends / loop copies outside the core): its straight offset is split into
+    an AXIAL part (rebuilt along the local deformed tangent) and a PERPENDICULAR part (its exact
+    winding angle + radius, rebuilt in the transported cross-section frame).  This preserves helix
+    radius, groove, and per-bp winding EXACTLY while following the deformed bend + twist.
+
+    Returns ``(positions, normals, tangents)`` — three lists aligned 1:1 with ``straight_nucs``.
+    ``normals``/``tangents`` are each bead's DESIGN base-normal + axis-tangent transported from the
+    straight helix frame ``(e1s, e2s, axis_hat)`` into the wound frame ``(e1, e2, tan)`` — the exact
+    same rotation the backbone winding uses — so the base-pair SLABS follow the wound backbones
+    instead of keeping their straight-frame orientation (which left slabs splayed radially on a
+    bent/mark-dense bundle).  Falls back to straight positions + design normals/tangents when the
+    helix has < 2 duplex-core nodes (no axis to follow)."""
+    start = helix.axis_start.to_array()
+    end = helix.axis_end.to_array()
+    axis_hat = (end - start)
+    axis_hat = axis_hat / (np.linalg.norm(axis_hat) or 1.0)
+    frame = _frame_from_helix_axis(axis_hat)
+    e1s, e2s = frame[:, 0], frame[:, 1]
+
+    anchors = sorted(node_anchors, key=lambda a: a[0])       # by global_bp
+    if len(anchors) < 2:
+        return (
+            [n.position for n in straight_nucs],
+            [n.base_normal for n in straight_nucs],
+            [n.axis_tangent for n in straight_nucs],
+        )
+    bps = np.array([float(a[0]) for a in anchors])
+    def_pts = np.array([a[2] for a in anchors])
+    tans, E1, E2 = _rmf_frames(def_pts, e1s)
+    # bp coordinate is drift-free: the FEM mesh spaces nodes at FEM_RISE_PER_BP (0.34) while the
+    # display geometry uses the helix's own rise, so parametrise by bp (not absolute axial) — both
+    # sides are then in the SAME units and a normal bead maps exactly onto its own bp's node.
+    rise_geom = float(np.linalg.norm(end - start)) / max(1, helix.length_bp)
+
+    def _at_bp(x: float):
+        """Deformed axis position + RMF frame (e1, e2, tangent) at bp coordinate ``x`` (linear
+        interp between the bracketing nodes; tangent-extrapolated in bp units beyond the ends —
+        for ssDNA tips)."""
+        if x <= bps[0]:
+            return def_pts[0] + (x - bps[0]) * rise_geom * tans[0], E1[0], E2[0], tans[0]
+        if x >= bps[-1]:
+            return def_pts[-1] + (x - bps[-1]) * rise_geom * tans[-1], E1[-1], E2[-1], tans[-1]
+        k = int(np.searchsorted(bps, x)) - 1
+        k = max(0, min(k, len(bps) - 2))
+        span = bps[k + 1] - bps[k]
+        f = (x - bps[k]) / span if span > 1e-9 else 0.0
+        pos = def_pts[k] * (1 - f) + def_pts[k + 1] * f
+        near = k if f < 0.5 else k + 1
+        return pos, E1[near], E2[near], tans[near]
+
+    def _transport(d, e1, e2, tan):
+        """Rotate a straight-frame direction into the wound frame: express in (e1s, e2s, axis_hat)
+        then rebuild in (e1, e2, tan).  Both frames orthonormal → a pure rotation (norm preserved)."""
+        w = float(d @ e1s) * e1 + float(d @ e2s) * e2 + float(d @ axis_hat) * tan
+        n = float(np.linalg.norm(w))
+        return w / n if n > 1e-12 else w
+
+    positions, normals, tangents = [], [], []
+    for nuc in straight_nucs:
+        p = nuc.position
+        s = float((p - start) @ axis_hat)
+        perp = p - (start + s * axis_hat)                    # pure radial (⊥ axis line): winding
+        r = float(np.linalg.norm(perp))
+        az = math.atan2(float(perp @ e2s), float(perp @ e1s))
+        # axial position as a bp coordinate: bp_start + s/rise_geom (== bp for a normal bead,
+        # bp ± ½ for a loop copy's ±½-rise bulge) — so loop copies stay separated along the axis.
+        x = helix.bp_start + (s / rise_geom if rise_geom > 1e-9 else 0.0)
+        pos, e1, e2, tan = _at_bp(x)
+        positions.append(pos + r * (math.cos(az) * e1 + math.sin(az) * e2))
+        # Transport the base-normal + axis-tangent through the SAME straight→wound rotation so the
+        # slab frame (built from bnDir + tanDir) tracks the wound backbone.
+        normals.append(_transport(np.asarray(nuc.base_normal, dtype=float), e1, e2, tan))
+        tangents.append(_transport(np.asarray(nuc.axis_tangent, dtype=float), e1, e2, tan))
+    return positions, normals, tangents
+
+
 def deformed_positions_with_axis(
     design: "Design",
     mesh: FEMMesh,
@@ -771,16 +900,22 @@ def deformed_positions_with_axis(
     twist, curvature) — only the global pose changes.  Display-only; topology untouched.
 
     Returns a list of dicts covering EVERY nucleotide (incl. each loop-insert copy):
-    {helix_id, bp_index, direction, copy, backbone_position}
+    {helix_id, bp_index, direction, copy, backbone_position, nx, ny, nz, tx, ty, tz}
+    where (nx,ny,nz) is the wound base-normal (slab bnDir) and (tx,ty,tz) the wound
+    axis-tangent (slab tanDir) — so the renderer's base slabs follow the wound backbones.
     """
     from backend.core.geometry import nucleotide_positions
     from backend.core.deformation import deformed_nucleotide_positions
 
-    # Per-helix axis displacement of the FEM-covered bp: helix_id → {global_bp: disp}.
-    # The axis displacement is direction-independent (both strands of a bp share it).
-    disp_by_helix: Dict[str, Dict[int, np.ndarray]] = {}
+    # Per-helix duplex-core FEM nodes: helix_id → [(straight_axis_pos, deformed_axis_pos)].
+    # These anchor the rotation-minimising frame that carries each backbone bead's winding around
+    # the DEFORMED axis (bend + global twist), instead of only translating it (which left beads
+    # pointing in their straight-frame radial direction → visibly wrong on a curved bundle).
+    node_anchors: Dict[str, list] = {}
     for idx, node in enumerate(mesh.nodes):
-        disp_by_helix.setdefault(node.helix_id, {})[node.global_bp] = u[6 * idx : 6 * idx + 3]
+        disp = u[6 * idx: 6 * idx + 3]
+        node_anchors.setdefault(node.helix_id, []).append(
+            (node.global_bp, node.position, node.position + disp))
 
     # LOOP-COPY INDEX: a loop insertion places several nucleotides at ONE
     # (helix, bp, direction); the renderer distinguishes them by a `copy` index =
@@ -796,6 +931,8 @@ def deformed_positions_with_axis(
     meta: List[Tuple[str, int, str, int]] = []
     fem_pts:  List[np.ndarray] = []   # FEM-predicted (straight base + eigenstrain) position
     disp_pts: List[np.ndarray] = []   # displayed (DeformationOp/cluster) position — Kabsch target
+    fem_nrm:  List[np.ndarray] = []   # wound base-normal (slab bnDir) per bead
+    fem_tan:  List[np.ndarray] = []   # wound axis-tangent (slab tanDir) per bead
     for helix in design.helices:
         straight = list(nucleotide_positions(helix))
         shown    = list(deformed_nucleotide_positions(helix, design))
@@ -804,17 +941,15 @@ def deformed_positions_with_axis(
         # correction, but never a mis-pairing).
         if len(shown) != len(straight):
             shown = straight
-        for nuc, dn in zip(straight, shown):
-            covered = disp_by_helix.get(nuc.helix_id)
-            if not covered:
-                disp = None                      # helix has no duplex core → leave native
-            elif nuc.bp_index in covered:
-                disp = covered[nuc.bp_index]     # FEM-covered bp → its own displacement
-            else:
-                nearest = min(covered, key=lambda b: abs(b - nuc.bp_index))
-                disp = covered[nearest]          # gap-fill: ride along nearest covered bp
-            fem_pts.append(nuc.position if disp is None else nuc.position + disp)
+        # Wind every bead (incl. ssDNA ends + loop copies, by their axial coordinate) onto the
+        # deformed axis with the transported cross-section frame — one call per helix.  The
+        # normals/tangents ride the SAME rotation so the base slabs follow the wound backbones.
+        wound, wnrm, wtan = _wound_backbones_for_helix(helix, straight, node_anchors.get(helix.id, []))
+        for nuc, dn, w, wn, wt in zip(straight, shown, wound, wnrm, wtan):
+            fem_pts.append(w)
             disp_pts.append(dn.position)
+            fem_nrm.append(np.asarray(wn, dtype=float))
+            fem_tan.append(np.asarray(wt, dtype=float))
             k = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
             meta.append((*k, seen[k]))
             seen[k] += 1
@@ -822,10 +957,16 @@ def deformed_positions_with_axis(
     fem_arr = np.asarray(fem_pts)
     cs, cd, R = _kabsch_transform(fem_arr, np.asarray(disp_pts))
     aligned = _apply_transform(fem_arr, cs, cd, R)
+    # Rotate the direction vectors by the SAME Kabsch rotation (translation-free) so the slab
+    # frame stays consistent with the aligned backbones.
+    nrm_aligned = np.asarray(fem_nrm) @ R.T if fem_nrm else np.zeros((0, 3))
+    tan_aligned = np.asarray(fem_tan) @ R.T if fem_tan else np.zeros((0, 3))
     positions = [
         {"helix_id": m[0], "bp_index": m[1], "direction": m[2], "copy": m[3],
-         "backbone_position": p.tolist()}
-        for m, p in zip(meta, aligned)
+         "backbone_position": p.tolist(),
+         "nx": float(n[0]), "ny": float(n[1]), "nz": float(n[2]),
+         "tx": float(t[0]), "ty": float(t[1]), "tz": float(t[2])}
+        for m, p, n, t in zip(meta, aligned, nrm_aligned, tan_aligned)
     ]
 
     # The FEM AXIS-node positions (one per duplex-core bp = mesh node), carried through

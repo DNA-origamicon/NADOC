@@ -236,13 +236,29 @@ On-structure maps done; the 2D graph card + PNG/CSV export deferred to Item 3b.
   → numeric-aware sort. Verified in-app on real 6hb_curved job (both graphs draw, 0 console errors).
   Detail: `memory/project_cando_fem.md` P5 Item 3b.
 
-### Item 4 — Autorefine for CanDo (reuse the oxDNA autorefine loop)
-Plug `predict_shape` in as the **fast in-loop shape oracle** for design refinement, replacing
-the slow oxDNA CUDA sim. Mirror `routes_autorefine.py` + the oxDNA autorefine process
-([[regional_autorefine]] / `profile_guided_refine.py` in [[skip_twist_curvature_sweep]]):
-iterate loop/skip placement so the **FEM-predicted shape matches the NADOC native/intended
-geometry** (minimize the Item-3 RMSD). CanDo-FEM is ~1 min vs oxDNA's hours → the autorefine
-inner loop becomes practical. Gate each iteration on the deviation map shrinking.
+### Item 4 — Autorefine for CanDo (reuse the oxDNA autorefine loop) — BACKEND ✅ SHIPPED 2026-07-04
+Backend engine + REST routes + tests done (user scope choice); the panel button/apply is Item-4b.
+- **`backend/core/cando_autorefine.py::fem_refine`** — greedy loop/skip refiner with the FAST FEM
+  oracle (`predict_shape` → `compute_deviation.rmsd_nm`), a mirror of
+  `skip_twist_tuning.greedy_finetune_skips`. Ranks deviation hotspots, then at each TRIES every
+  candidate edit (add_skip / add_loop / remove) and KEEPS the best if RMSD drops ≥`rmsd_improve_nm`.
+  **Edit direction is chosen empirically by the oracle — no geometric reasoning** (DNA-topology rule).
+- **User's split:** square lattice → skips only; twist/bend (honeycomb) → skips + loops
+  (`allow_loops = lattice != SQUARE`, overridable). **Off-crossover/off-end placement enforced**
+  (`free_interior_candidates`, per `feedback_loopskip_no_crossover_ends`).
+- **`backend/api/routes_cando_autorefine.py`** (registered in main.py) — start/get/stop/apply, mirror
+  of `routes_autorefine.py` (in-memory `_RUNS` + daemon thread + durable JSON). `apply` lands the
+  converged marks as ONE reversible feature-log entry (`op_kind='cando-autorefine-marks'`), re-seqs.
+  Works on ANY lattice (objective is positional RMSD, not the SQ twist gate).
+- Tests `tests/test_cando_autorefine.py` (10 green); verified in-process on an under-realized 90° 6HB
+  bend (RMSD 2.19→1.99, marks applied via feature log). `just test` 4046 passed.
+- **Item 4b ✅ SHIPPED 2026-07-04:** Autorefine button + Stop + live status + explicit "Apply to
+  design" wired into `cando_jobs_panel.js` (below the Coarse/Fine buttons), client fns on
+  `/design/cando/autorefine/*`. Live status shows **iteration + current→target twist/curvature/
+  deviation** each round (spinner, 1s poll). Backend enriched: `fem_refine` emits per-iteration
+  metrics measured off the already-solved shape (twist via `measure_bundle_twist`, curve via a new
+  chord-sagitta `oxdna_health.measure_bundle_arc_bend`, target from intended geometry). Verified in
+  app on 6hb_curved. **Phase 5 fully complete.**
 
 **Build order:** Item 1 (jobs/panel) → Item 2 (viz toggle) → Item 3 (maps) → Item 4 (autorefine,
 depends on Item 3's RMSD). Each is a mirror of a shipped oxDNA/mrDNA module — reuse, don't invent.

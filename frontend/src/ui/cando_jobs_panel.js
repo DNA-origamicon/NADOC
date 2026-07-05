@@ -61,6 +61,18 @@ export function candoJobIsActive(job) {
   return ['queued', 'preparing', 'running'].includes(job?.status)
 }
 
+/**
+ * Should a new FEM launch be blocked (pure; unit-tested)?  True while a launch is
+ * mid-flight (``launching``) or ANY CanDo FEM job is still active — the FEM runs
+ * in-process, so ``confirmNoConcurrentJob`` (which only knows MD/oxDNA jobs) can't
+ * gate it.  Enforces one-solve-at-a-time and swallows Coarse/Fine double-clicks.
+ */
+export function launchBlocked(launching, jobs, selectedJob) {
+  if (launching) return true
+  if (Array.isArray(jobs) && jobs.some(candoJobIsActive)) return true
+  return candoJobIsActive(selectedJob)
+}
+
 /** Human name for the solver mode of a job. */
 export function solverLabel(job) {
   return job?.nonlinear ? 'Fine (nonlinear)' : 'Coarse (linear)'
@@ -111,6 +123,59 @@ export function formatSummary(job) {
   return bits.join(' · ')
 }
 
+const _fmtNm = (v) => (v == null ? '—' : `${Number(v).toFixed(2)} nm`)
+const _fmtDeg = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}°`)
+
+/**
+ * Live status line for a CanDo-autorefine poll payload ``{state, phase, last_event, result,
+ * error}`` (pure; unit-tested).  While running + on an iteration event it shows the iteration
+ * index and the CURRENT vs TARGET twist / curvature / deviation; on done it summarises the edit
+ * count + before/after deviation.
+ */
+export function autorefineStatusText(run) {
+  if (!run) return ''
+  if (run.state === 'error') return `Failed: ${run.error || 'autorefine error'}`
+  if (run.state === 'stopped') return 'Stopped.'
+  if (run.state === 'done') {
+    const m = run.result?.metrics
+    const kept = run.result?.edits_kept?.length ?? 0
+    const editStr = `${kept} edit${kept === 1 ? '' : 's'}`
+    if (m) return `Done · ${editStr} · deviation ${_fmtNm(m.after?.deviation)} (was ${_fmtNm(m.before?.deviation)})`
+    return `Done · ${editStr}`
+  }
+  // Prefer the last ITERATION event's metrics (retained by the route) so the twist/curve/deviation
+  // line persists through the interspersed trial events; fall back to phase text otherwise.
+  const it = run.last_iteration
+    || (run.last_event?.phase === 'iteration' ? run.last_event : null)
+  if (it) {
+    const c = it.current || {}, t = it.target || {}
+    const of = it.n_hotspots ? `/${it.n_hotspots}` : ''
+    return `Iteration ${it.iteration ?? 0}${of} · dev ${_fmtNm(c.deviation)}→${_fmtNm(t.deviation)}`
+      + ` · curve ${_fmtDeg(c.bend_deg)}→${_fmtDeg(t.bend_deg)}`
+      + ` · twist ${_fmtDeg(c.twist_deg)}→${_fmtDeg(t.twist_deg)}`
+  }
+  const ev = run.last_event || {}
+  if (ev.phase === 'baseline') return 'Solving baseline shape…'
+  if (ev.phase === 'hotspots') return `Found ${ev.n} deviation hotspot${ev.n === 1 ? '' : 's'}…`
+  return 'Autorefining…'
+}
+
+/** Compact before→after result summary HTML for a finished autorefine (pure; unit-tested). */
+export function autorefineResultHtml(result) {
+  if (!result) return ''
+  const m = result.metrics || {}
+  const kept = result.edits_kept?.length ?? 0
+  const mode = result.mode === 'skips_only' ? 'skips' : 'loops+skips'
+  const rows = [
+    `deviation ${_fmtNm(m.before?.deviation)} → <b>${_fmtNm(m.after?.deviation)}</b> (target 0)`,
+    `curvature ${_fmtDeg(m.before?.bend_deg)} → <b>${_fmtDeg(m.after?.bend_deg)}</b> (target ${_fmtDeg(m.target?.bend_deg)})`,
+    `twist ${_fmtDeg(m.before?.twist_deg)} → <b>${_fmtDeg(m.after?.twist_deg)}</b> (target ${_fmtDeg(m.target?.twist_deg)})`,
+  ]
+  return `<div style="font-size:11px;color:#8b949e;line-height:1.5">`
+    + `<div>${kept} ${mode} edit${kept === 1 ? '' : 's'} kept</div>`
+    + rows.map((r) => `<div>${r}</div>`).join('') + `</div>`
+}
+
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = null } = {}) {
@@ -150,6 +215,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   let _selectedId = null
   let _progress = null
   let _pollTimer = null
+  let _launching = false   // re-entrancy guard: a launch is between click and job-registered
 
   const _selectedJob = () => _jobs.find((j) => j.job_id === _selectedId) || null
 
@@ -185,29 +251,156 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   }
 
   // ── Run (Coarse = linear preview; Fine = nonlinear corotational) ──────────────
+  /** Disable Coarse/Fine while a solve is being launched or is still running, so a
+   *  second click can't spawn a duplicate job (the FEM is in-process — no external
+   *  concurrency gate). Re-enabled by _fetchJobs' poll once the job finishes. */
+  function _updateLaunchButtons() {
+    const busy = launchBlocked(_launching, _jobs, _selectedJob())
+    for (const btn of [coarseBtn, fineBtn]) {
+      if (!btn) continue
+      btn.disabled = busy
+      btn.style.cursor = busy ? 'not-allowed' : 'pointer'
+      btn.style.opacity = busy ? '0.5' : '1'
+    }
+  }
+
   async function _launch(nonlinear) {
-    if (!(await confirmNoConcurrentJob())) return
-    const body_ = {
-      nonlinear,
-      n_steps:   Math.max(1, parseInt(stepsInput?.value, 10) || 20),
-      with_rmsf: rmsfInput ? !!rmsfInput.checked : true,
-      autostart: true,
-      design_source_path: getWorkspacePath?.() || null,
+    // Synchronous guard: bail before any await so a fast double-click can't slip a
+    // second launch through while the first is still awaiting the confirm / create.
+    if (launchBlocked(_launching, _jobs, _selectedJob())) return
+    _launching = true
+    _updateLaunchButtons()
+    try {
+      if (!(await confirmNoConcurrentJob())) return
+      const body_ = {
+        nonlinear,
+        n_steps:   Math.max(1, parseInt(stepsInput?.value, 10) || 20),
+        with_rmsf: rmsfInput ? !!rmsfInput.checked : true,
+        autostart: true,
+        design_source_path: getWorkspacePath?.() || null,
+      }
+      const job = await api.createCandoJob(body_)
+      if (!job) {
+        showToast(api.lastErrorMessage() || 'Failed to start CanDo FEM prediction', { severity: 'error' })
+        return
+      }
+      _selectedId = job.job_id
+      await _fetchJobs()
+    } finally {
+      _launching = false
+      _updateLaunchButtons()   // stays disabled if the new job is now active
     }
-    if (coarseBtn) coarseBtn.disabled = true
-    if (fineBtn) fineBtn.disabled = true
-    const job = await api.createCandoJob(body_)
-    if (coarseBtn) coarseBtn.disabled = false
-    if (fineBtn) fineBtn.disabled = false
-    if (!job) {
-      showToast(api.lastErrorMessage() || 'Failed to start CanDo FEM prediction', { severity: 'error' })
-      return
-    }
-    _selectedId = job.job_id
-    await _fetchJobs()
   }
   coarseBtn?.addEventListener('click', () => _launch(false))
   fineBtn?.addEventListener('click', () => _launch(true))
+
+  // ── Autorefine (Phase-5 Item 4): FEM-oracle greedy loop/skip tuning ───────────
+  const arBtn = $('cando-jobs-autorefine-btn')
+  const arStopBtn = $('cando-jobs-autorefine-stop-btn')
+  const arStatus = $('cando-jobs-autorefine-status')
+  const arResult = $('cando-jobs-autorefine-result')
+  const _SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  let _arRunning = false
+  let _arRunId = null
+  let _arPollTimer = null
+  let _arSpin = 0
+  let _arSpinTimer = null
+  let _arBase = ''
+  let _arColor = _C.dim
+
+  function _renderArStatus() {
+    if (!arStatus) return
+    arStatus.textContent = (_arRunning ? _SPIN[_arSpin % _SPIN.length] + ' ' : '') + (_arBase || '')
+    arStatus.style.color = _arColor
+  }
+  function _setArStatus(text, color, spinning = false) {
+    _arBase = text || ''; _arColor = color || _C.dim
+    if (spinning && !_arSpinTimer) _arSpinTimer = setInterval(() => { _arSpin++; _renderArStatus() }, 120)
+    else if (!spinning && _arSpinTimer) { clearInterval(_arSpinTimer); _arSpinTimer = null }
+    _renderArStatus()
+  }
+  function _clearArPoll() { if (_arPollTimer) { clearTimeout(_arPollTimer); _arPollTimer = null } }
+  function _updateArButton() {
+    if (!arBtn) return
+    arBtn.disabled = _arRunning
+    arBtn.style.cursor = _arRunning ? 'not-allowed' : 'pointer'
+    arBtn.style.opacity = _arRunning ? '0.5' : '1'
+    if (arStopBtn) arStopBtn.style.display = _arRunning ? '' : 'none'
+  }
+
+  async function _applyArResult(runId) {
+    const applied = await api.applyCandoAutorefine(runId)
+    if (!applied || !applied.design) {
+      showToast(api.lastErrorMessage() || 'Failed to apply autorefine marks', { severity: 'error' })
+      return
+    }
+    api.syncDesignResponse(applied)   // updates editor + Feature Log, fires nadoc:design-changed
+    showToast('Autorefine loop/skips applied to the design', { severity: 'info' })
+  }
+
+  function _renderArResult(runId, result) {
+    if (!arResult) return
+    arResult.innerHTML = ''
+    if (!result || !(result.edits_kept?.length)) {
+      arResult.innerHTML = `<div style="font-size:11px;color:${_C.dim}">No improving edit found — the design already matches its intended shape as closely as the loop/skips allow.</div>`
+      return
+    }
+    const box = document.createElement('div')
+    box.innerHTML = autorefineResultHtml(result)
+    const apply = document.createElement('button')
+    apply.textContent = '✓ Apply to design'
+    apply.style.cssText = 'margin-top:5px;font-size:var(--text-xs);padding:5px 8px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600'
+    apply.addEventListener('click', async () => {
+      apply.disabled = true; apply.textContent = 'Applying…'
+      await _applyArResult(runId)
+      apply.textContent = '✓ Applied'
+    })
+    box.appendChild(apply)
+    arResult.appendChild(box)
+  }
+
+  async function _pollAutorefine(runId) {
+    let run
+    try { run = await api.getCandoAutorefine(runId) } catch { run = null }
+    if (!run) { _arPollTimer = setTimeout(() => _pollAutorefine(runId), 1200); return }
+    if (run.state === 'running') {
+      _setArStatus(autorefineStatusText(run), _C.warn, true)
+      _arPollTimer = setTimeout(() => _pollAutorefine(runId), 1000)
+      return
+    }
+    // terminal (done / stopped / error)
+    _arRunning = false
+    _updateArButton()
+    const color = run.state === 'error' ? _C.err : run.state === 'stopped' ? _C.dim : _C.ok
+    _setArStatus(autorefineStatusText(run), color, false)
+    if (run.state === 'done') _renderArResult(runId, run.result)
+  }
+
+  async function _startAutorefine() {
+    if (_arRunning) return
+    if (!(await confirmNoConcurrentJob())) return
+    _arRunning = true; _arRunId = null
+    if (arResult) arResult.innerHTML = ''
+    _updateArButton()
+    _setArStatus('Starting autorefine…', _C.warn, true)
+    // Coarse (linear) FEM oracle per trial — fast; the user re-runs a Fine job to confirm.
+    const r = await api.startCandoAutorefine({ nonlinear: false })
+    if (!r || !r.autorefine_id) {
+      _arRunning = false; _updateArButton()
+      _setArStatus('Failed to start: ' + (api.lastErrorMessage() || 'no marks or bend/twist to refine'), _C.err, false)
+      return
+    }
+    _arRunId = r.autorefine_id
+    _pollAutorefine(_arRunId)
+  }
+  arBtn?.addEventListener('click', _startAutorefine)
+  arStopBtn?.addEventListener('click', async () => {
+    if (!_arRunId) return
+    if (arStopBtn) arStopBtn.disabled = true
+    _setArStatus('Stopping…', _C.dim, true)
+    await api.stopCandoAutorefine(_arRunId)
+    if (arStopBtn) arStopBtn.disabled = false
+  })
 
   // ── Jobs list + poll ────────────────────────────────────────────────────────
   async function _fetchJobs() {
@@ -215,6 +408,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     if (!Array.isArray(all)) return
     _jobs = filterJobsForPart(all, getWorkspacePath?.() || null, showAll?.checked)
     _renderList()
+    _updateLaunchButtons()   // re-enable Coarse/Fine once no job is active
     if (_selectedId) {
       _progress = await api.getCandoProgress(_selectedId)
       const job = _selectedJob()
@@ -229,9 +423,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   }
 
   function _hasActiveJob() {
-    if (_jobs.some(candoJobIsActive)) return true
-    const job = _selectedJob()
-    return job ? candoJobIsActive(job) : false
+    return launchBlocked(false, _jobs, _selectedJob())
   }
 
   function _clearPoll() {
@@ -274,7 +466,28 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     _progress = await api.getCandoProgress(jobId)
     _renderList()
     _renderDetail()
+    await _retargetDisplayToSelection()
     _scheduleNextPoll()
+  }
+
+  /** When a display mode is active and the user selects a DIFFERENT job, retarget the
+   *  active mode to the newly-selected job so the 3D model updates to THIS job's
+   *  snapshot + predicted shape (rather than keeping the previous job's shape on
+   *  screen).  Turns the display off if the new job can't support the current mode. */
+  async function _retargetDisplayToSelection() {
+    if (!candoDisplay?.deformActive?.()) return
+    if (candoDisplay.deformJobId?.() === _selectedId) return   // already showing this job
+    const mode = checkedMode()
+    const job = _selectedJob()
+    const canShow = mode !== 'off' && job?.status === 'completed'
+      && (mode !== 'flex' || !!job?.rmsf_max_nm)
+    if (!canShow) {
+      candoDisplay.stopDeform?.(); setMode('off'); _syncDisplayStatus()
+      return
+    }
+    const r = await candoDisplay[_MODE_FNS[mode]]?.(_selectedId)
+    if (!r?.ok) { candoDisplay.stopDeform?.(); setMode('off') }
+    _syncDisplayStatus()
   }
 
   function _renderDetail() {

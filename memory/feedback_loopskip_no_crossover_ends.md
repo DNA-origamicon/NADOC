@@ -30,5 +30,13 @@ kind of thing that breaks a caDNAno→CanDo run.
   bend angle).
 - **Manual** placement (`POST /design/loop-skip/insert`, the context-menu tool) stays
   UNRESTRICTED — the user may deliberately place a mark anywhere.
-- The core realization functions do NOT yet enforce this (flagged follow-up). Until they
-  do, battery regeneration uses an explicit off-crossover/off-end placement pass.
+- **ENFORCED 2026-07-04** in the "Add Loops/Skips [4]" tool: `apply_loop_skips_from_deformations`
+  (crud.py) now runs `loop_skip_calculator.relocate_marks_off_forbidden(all_mods, design)` before
+  applying — moves every offending mark to the nearest free interior bp, preserving each helix's net
+  count (twist/bend magnitude unchanged). Shared helpers: `forbidden_loop_skip_bps(design)` (crossover
+  bps via `extract_crossovers_from_strands` — NOT `design.crossovers`, which is often empty — + domain
+  endpoints + `FORBIDDEN_END_MARGIN=6`) and `relocate_marks_off_forbidden`. Also used by
+  `cando_autorefine` (which never adds a mark on a forbidden bp). Test:
+  `test_loop_skip.test_add_loops_skips_tool_places_no_mark_on_crossover_or_end` (0 marks on
+  crossovers/ends after the tool; was ~half on 6hb_curved). The exp36 battery generator keeps its own
+  `relocate_marks_off_forbidden` copy (standalone script).

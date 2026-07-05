@@ -126,3 +126,49 @@ def test_stop_marks_stray_running_stopped(tmp_path):
     job.save(tmp_path)
     assert cr.stop_job(job.job_id, tmp_path) is False
     assert CandoJob.load(job.job_id, tmp_path).status == CandoStatus.stopped
+
+
+def test_snapshot_geometry_reflects_the_jobs_own_topology(routed_6hb, tmp_path, monkeypatch):
+    """The /cando/jobs/{id}/snapshot-geometry route serves the geometry of the job's
+    OWN design snapshot (the topology at solve time), so the display modes render THIS
+    instead of the live editor design.  Pins that the served geometry matches the
+    snapshotted design regardless of any later live edits (the core of the fix)."""
+    import asyncio
+
+    from backend.api import routes_cando as rc
+    from backend.core import cando_runner as cr
+    from backend.core.cando_job import CandoStatus, new_cando_job
+    from backend.core.design_geometry import _geometry_for_helices
+
+    monkeypatch.setattr(rc, "_WORKSPACE_DIR", tmp_path)
+
+    job = new_cando_job("6hb", nonlinear=False, with_rmsf=False, n_steps=5, n_nucleotides=1000)
+    job.status = CandoStatus.completed
+    job.save(tmp_path)
+    cr.prepare_cando_job(routed_6hb, job, tmp_path)   # writes the design.json snapshot
+
+    resp = asyncio.run(rc.get_cando_snapshot_geometry(job.job_id))
+    assert resp["ready"] is True
+    assert resp["design"]["helices"]                   # full snapshot design returned
+    assert resp["helix_axes"]
+    # Nucleotide list covers exactly the SNAPSHOT topology — every helix bp, not live state.
+    expected = len(_geometry_for_helices(routed_6hb, None))
+    assert len(resp["nucleotides"]) == expected > 0
+    for n in resp["nucleotides"][:5]:
+        assert set(n) >= {"helix_id", "bp_index", "direction", "backbone_position"}
+
+
+def test_snapshot_geometry_missing_snapshot_is_not_ready(tmp_path, monkeypatch):
+    """A job whose design.json snapshot is absent reports not-ready rather than 500."""
+    import asyncio
+
+    from backend.api import routes_cando as rc
+    from backend.core.cando_job import CandoStatus, new_cando_job
+
+    monkeypatch.setattr(rc, "_WORKSPACE_DIR", tmp_path)
+    job = new_cando_job("d", nonlinear=False)
+    job.status = CandoStatus.completed
+    job.save(tmp_path)                                  # no prepare → no design.json
+
+    resp = asyncio.run(rc.get_cando_snapshot_geometry(job.job_id))
+    assert resp["ready"] is False and resp["nucleotides"] == []
