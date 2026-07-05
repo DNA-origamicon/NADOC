@@ -1,0 +1,86 @@
+{
+  "1x4": {
+    "n_helices": 4,
+    "flags": [],
+    "scaffolds": 1,
+    "sv": [
+      5.031,
+      0.0
+    ],
+    "colinear": true,
+    "twist_measure": 67.86950448488493,
+    "twist_error": null,
+    "bend_measure": 10.666303028841487,
+    "twist_degenerate": true,
+    "autorefine": {
+      "objective": "twist",
+      "twist_before": 67.86950448488493,
+      "twist_after": 1.4892735195125506,
+      "n_marks": 20,
+      "note": "done"
+    }
+  },
+  "1x6": {
+    "n_helices": 6,
+    "flags": [],
+    "scaffolds": 1,
+    "sv": [
+      9.412,
+      0.0
+    ],
+    "colinear": true,
+    "twist_measure": 68.79437033472405,
+    "twist_error": null,
+    "bend_measure": 2.8838800895092422,
+    "twist_degenerate": true,
+    "autorefine": {
+      "objective": "twist",
+      "twist_before": 68.79437033472405,
+      "twist_after": 1.5199759520291798,
+      "n_marks": 30,
+      "note": "done"
+    }
+  },
+  "1x8": {
+    "n_helices": 8,
+    "flags": [],
+    "scaffolds": 1,
+    "sv": [
+      14.582,
+      0.0
+    ],
+    "colinear": true,
+    "twist_measure": 69.19058207659234,
+    "twist_error": null,
+    "bend_measure": 3.6352343159930895,
+    "twist_degenerate": true,
+    "autorefine": {
+      "objective": "twist",
+      "twist_before": 69.19058207659234,
+      "twist_after": 1.5348469325170624,
+      "n_marks": 40,
+      "note": "done"
+    }
+  },
+  "2x4": {
+    "n_helices": 8,
+    "flags": [],
+    "scaffolds": 1,
+    "sv": [
+      7.115,
+      3.182
+    ],
+    "colinear": false,
+    "twist_measure": 40.46600239047671,
+    "twist_error": null,
+    "bend_measure": 0.4410558215627754,
+    "twist_degenerate": false,
+    "autorefine": {
+      "objective": "twist",
+      "twist_before": 40.46600239047671,
+      "twist_after": 0.8394559420740006,
+      "n_marks": 40,
+      "note": "done"
+    }
+  }
+}
