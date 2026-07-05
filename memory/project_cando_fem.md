@@ -1118,3 +1118,22 @@ deviation RMSD (which bottoms at a lower density → floored twist at ~10-15°).
 - **Generalisation plan** (coupled twist+bend Jacobian objective; hollow-tube authority-vs-geometry
   law; asymmetric-section coupling stress test; 1×N twist-degeneracy guard; symmetry-orbit scaling):
   `experiments/exp37_cando_skip_twist_map/GENERALIZATION.md`.
+
+## Generalization progress (2026-07-05) — G1 done, G2 done
+- **G1 (exp38, `experiments/exp38_coupled_shape_jacobian/`) — coupled (twist,bend) Jacobian VALIDATED.**
+  On honeycomb bend designs a per-helix skip moves BOTH twist and bend; bend authority varies by
+  cross-section position (bimetallic: inner vs outer bend opposite), twist authority ~uniform → the
+  2×H Jacobian is well-conditioned. Ridge least-squares solve recovered an under-realized 60° bend
+  25.7°→49.7° (err 28°→4°, twist err <0.5°) in ONE iter, discovering inner-loops/outer-skips from the
+  Jacobian alone. Algorithm validated; NOT yet wired into `fem_refine` honeycomb path (deviation greedy
+  still live). Next code step: `_solve_shape_targets` replacing the honeycomb branch.
+- **G2 (exp39, `experiments/exp39_hollow_tube_authority/`) — authority-vs-geometry law.** Hollow SQ
+  tubes d3–d6 route CLEANLY (single scaffold, no across-hollow crossovers, full mesh); audit flagged a
+  mis-routed solid 3×3 (2 scaffolds). Twist authority ∝ ~1/(N·r) (steers less as section grows); bend
+  authority ∝ moment arm but noise-limited on symmetric/large tubes (scalar arc-bend ~0.6° floor).
+  VERDICT: geometry predicts the trend, not accurate per-helix numbers → keep the in-loop Jacobian for
+  accuracy, use geometry as a seed; symmetry-orbit grouping (G5) for scale. **Autostaple caveat: basic
+  auto_scaffold can leave DISJOINT scaffolds (solid 3×3 → 2); auto_break nicks land on crossovers on
+  ALL square bundles — audit every headless-generated bundle before trusting its FEM numbers.**
+- Remaining: wire G1 `_solve_shape_targets` into honeycomb `fem_refine`; G3 asymmetric sections
+  (bigger/cleaner bend signal + multi-skip bend probe); G4 1×N twist-degeneracy guard; G5 scale.
