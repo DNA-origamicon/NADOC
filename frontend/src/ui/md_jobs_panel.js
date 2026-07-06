@@ -28,6 +28,7 @@ import { initJobArchive } from './job_archive_action.js'
 import { initMdMetricsCard } from './md_metrics_card.js'
 import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
+import { runExclusive } from './primitives/button_busy.js'
 import * as api from '../api/client.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -86,6 +87,18 @@ export function seededBadge(job) {
  *  though its status is `queued`; a failed submit leaves it here (with an error). */
 export function mdRemoteAwaitingSubmit(job) {
   return job?.execution_target === 'alpine' && !job?.slurm_job_id && job?.status === 'queued'
+}
+
+/** Pure: text for the detail error box, or null to hide it.  A user-`stopped` job is
+ *  NOT an error — it only shows the box when it actually carries an error message (an
+ *  older job saved before the clean-stop fix, or a stop that raced a real failure).  A
+ *  clean stop returns null so the sidebar never shows the "Unknown error" fallback. */
+export function mdDetailErrorText(job) {
+  const showErr = job?.status === 'failed'
+    || (job?.status === 'stopped' && !!job?.error)
+    || (mdRemoteAwaitingSubmit(job) && job?.error)
+    || (job?.resumable && job?.error)   // timed-out: show the "click Resume" message
+  return showErr ? (job?.error ?? 'Unknown error') : null
 }
 
 /** Pure: is the job in an in-progress state (a spinner should show)?  A remote job
@@ -262,6 +275,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const minstepsInput = document.getElementById('md-jobs-minsteps')
   const autostartChk  = document.getElementById('md-jobs-autostart')
   const fastChk       = document.getElementById('md-jobs-fast')
+  const earlyStopChk  = document.getElementById('md-jobs-early-stop')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
   const displayIndicator      = document.getElementById('md-jobs-display-indicator')
@@ -288,6 +302,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const statusEl    = document.getElementById('md-jobs-detail-status')
   const startBtn    = document.getElementById('md-jobs-start-btn')
   const stopBtn     = document.getElementById('md-jobs-stop-btn')
+  const earlyStopLiveWrap = document.getElementById('md-jobs-early-stop-live-wrap')
+  const earlyStopLiveChk  = document.getElementById('md-jobs-early-stop-live')
   const errorEl     = document.getElementById('md-jobs-detail-error')
   const progressEl  = document.getElementById('md-jobs-progress')
   const timelineEl  = document.getElementById('md-jobs-timeline')
@@ -1344,6 +1360,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       minimize_steps: parseInt(minstepsInput?.value  ?? '10000', 10),
       autostart:      autostartChk?.checked ?? true,
       fast:           fastChk?.checked ?? true,
+      early_stop_relax: earlyStopChk?.checked ?? false,
       design_source_path: _currentPartPath() || null,
       execution_target: _currentRunTarget(),
       cluster_name:   _currentRunTarget() === 'alpine' ? 'alpine' : null,
@@ -1417,7 +1434,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   })
 
   // ── Stop button ────────────────────────────────────────────────────────────
-  startBtn?.addEventListener('click', async () => {
+  // Busy-guard Start: an immediate spinner + gray-out, and the request fires once
+  // even if the user mashes the button while it registers on the backend.
+  startBtn?.addEventListener('click', () => runExclusive(startBtn, async () => {
     if (!_selectedId) return
     if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     // oxDNA-seeded jobs run the SAME restrained relaxation ladder, starting from
@@ -1430,12 +1449,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       showToast('Start requested', 'ok')
       await _fetchJobs()
-      _selectJob(_selectedId)
+      _reselectJob(_selectedId)   // force WS re-subscribe (same id → _selectJob would no-op)
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: start failed`, err)
       showToast(`Start failed: ${err.message}`, 'error')
     }
-  })
+  }, { label: 'Starting…' }))
 
   // Once a queued-for-Alpine job finishes preparing, open the submit-review card.
   // Clears the pending flag on prep failure too so it can't fire on a later run.
@@ -1467,7 +1486,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
   })
 
-  stopBtn?.addEventListener('click', async () => {
+  stopBtn?.addEventListener('click', () => runExclusive(stopBtn, async () => {
     if (!_selectedId) return
     console.log(`[${_ts()}] md-jobs: stop ${_selectedId}`)
     try {
@@ -1476,6 +1495,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       showToast('Stop requested', 'warn')
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: stop failed`, err)
+    }
+  }, { label: 'Stopping…' }))
+
+  earlyStopLiveChk?.addEventListener('change', async () => {
+    if (!_selectedId) return
+    const enabled = earlyStopLiveChk.checked
+    try {
+      const d = await api.setMdEarlyStop(_selectedId, enabled)
+      console.log(`[${_ts()}] md-jobs: early-stop toggle`, d)
+      showToast(enabled ? 'Early-stop enabled (applies at next checkpoint)'
+                        : 'Early-stop disabled', 'info')
+    } catch (err) {
+      earlyStopLiveChk.checked = !enabled   // revert on failure
+      console.warn(`[${_ts()}] md-jobs: early-stop toggle failed`, err)
+      showToast('Early-stop toggle failed', 'warn')
     }
   })
 
@@ -1641,7 +1675,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
           const d = await api.startMdJob(jobId)
           if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
           await _fetchJobs()
-          _selectJob(jobId)
+          _reselectJob(jobId)   // same id → force WS re-subscribe (see _reselectJob)
           return
         }
         // refit → a fresh job with adjusted settings
@@ -1666,6 +1700,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _openDetailForJob(jobId)
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
+  }
+
+  /** Re-open a job's detail after a (re)start.  `_selectJob` early-returns when the
+   *  id is unchanged, so a resume/retry of the ALREADY-selected job would never
+   *  re-subscribe the status WebSocket — the timeline + spinners would freeze while
+   *  NAMD actually runs.  Force `_openDetailForJob` in that case (it reopens the WS
+   *  for a now-live job); a different id takes the normal `_selectJob` path. */
+  function _reselectJob(jobId) {
+    if (_selectedId === jobId) _openDetailForJob(jobId)
+    else _selectJob(jobId)
   }
 
   function _openDetailForJob(jobId) {
@@ -1778,6 +1822,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // Local "Start" only applies to local jobs; an Alpine job is launched via Submit-to-Alpine.
     if (startBtn) startBtn.style.display = (!isAlpine && ['queued', 'stopped', 'failed'].includes(job.status)) ? '' : 'none'
     if (stopBtn) stopBtn.style.display = (job.status === 'running') ? '' : 'none'
+    // Mid-run early-stop toggle: shown for a running LOCAL relaxation job; reflects
+    // its current flag (skip the update if the user is mid-interaction is unlikely
+    // here since it re-renders on job state, not keystroke).
+    if (earlyStopLiveWrap) {
+      const showLive = job.status === 'running' && job.execution_target !== 'alpine'
+      earlyStopLiveWrap.style.display = showLive ? 'flex' : 'none'
+      if (showLive && earlyStopLiveChk) earlyStopLiveChk.checked = !!job.early_stop_relax
+    }
     // Submit-to-Alpine: a prepared remote job not yet handed to SLURM.
     if (submitAlpineBtn) {
       const canSubmit = isAlpine && !job.slurm_job_id && ['queued', 'stopped', 'failed'].includes(job.status)
@@ -1802,9 +1854,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
     // Show the error box for terminal failures AND for a failed Alpine submit
     // (queued-but-errored) so the rejection reason is visible with the retry button.
-    const showErr = ['failed', 'stopped'].includes(job.status) || (awaitingSubmit && job.error)
-      || (job.resumable && job.error)   // timed-out: show the "click Resume" message
-    _showDetailError(showErr ? (job.error ?? 'Unknown error') : null)
+    _showDetailError(mdDetailErrorText(job))
     _renderProgress(job, liveMetrics)
     _renderTimeline(job)
     _renderMetrics(job, liveMetrics)
@@ -2041,6 +2091,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       return
     }
 
+    // A stopped/failed/completed job is NOT live: a segment left marked "running"
+    // mid-cancel must render as interrupted, never as a spinning stage.
+    const jobLive = mdJobIsActive(job)
+
     const stages = []
     let cur = null
     const healthBySegment = new Map((job.health_samples ?? []).map(h => [h.segment, h]))
@@ -2066,7 +2120,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       segs.forEach(seg => {
         const dot = document.createElement('span')
         const health = healthBySegment.get(seg.name)
-        const { symbol, color } = _segSymbol(seg.status, health)
+        const { symbol, color } = _segSymbol(seg.status, health, jobLive)
         dot.style.cssText = `color:${color};font-size:11px;cursor:default;flex-shrink:0`
         dot.textContent = symbol
         const warnNote = _productionAdvisory(health)
@@ -2080,7 +2134,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
       const allDone   = segs.every(s => s.status === 'done')
       const anyFailed = segs.some(s => s.status === 'failed')
-      const anyRun    = segs.some(s => s.status === 'running')
+      const anyRun    = jobLive && segs.some(s => s.status === 'running')
       const anyWarn   = segs.some(s => s.status === 'done'
         && (_isAdvisoryWarning(healthBySegment.get(s.name)) || _productionAdvisory(healthBySegment.get(s.name))))
       if (anyRun) {
@@ -2107,9 +2161,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return !!health && health.passed === false
   }
 
-  function _segSymbol(status, health = null) {
+  function _segSymbol(status, health = null, jobLive = true) {
     if (status === 'done' && (_productionAdvisory(health) || _isAdvisoryWarning(health)))
       return { symbol: '⚠', color: _C.warn }
+    // A "running" segment on a terminal (stopped/failed/completed) job was
+    // interrupted mid-flight — show it as pending, not as an active stage.
+    if (status === 'running' && !jobLive) return { symbol: '·', color: _C.dim }
     switch (status) {
       case 'done':    return { symbol: '●', color: _C.ok }
       case 'failed':  return { symbol: '✗', color: _C.err }

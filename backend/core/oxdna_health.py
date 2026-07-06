@@ -519,7 +519,10 @@ def base_pairing_spatial_profile(per_pair_formed_frac, mean_positions, *, n_slic
         return []
     bp_pts: dict = {}
     for p in mean_positions:
-        key = (p["helix_id"], int(p["bp_index"]))
+        bp = p["bp_index"]
+        if not isinstance(bp, int):
+            continue                       # crossover extra-base inserts (bp_index = crossover id, ssDNA — not a designed pair)
+        key = (p["helix_id"], bp)
         if key in per_pair_formed_frac:
             bp_pts.setdefault(key, []).append(np.asarray(p["backbone_position"], dtype=float))
     keys = list(bp_pts.keys())
@@ -1867,18 +1870,25 @@ def _require_number(value, name: str, *, positive: bool = False) -> float:
     return float(value)
 
 
+def _core_column_key(p):
+    """``(helix_id, bp_index, direction)`` for a position dict, or ``None`` when
+    ``bp_index`` is not an integer column — i.e. a crossover extra-base insert, whose
+    key is ``("__xb__", crossover_id, k)`` (bp_index = a crossover id string). Those
+    ssDNA inserts are never part of the dsDNA reference core, so they drop out."""
+    bp = p["bp_index"]
+    if not isinstance(bp, int):
+        return None
+    return (p["helix_id"], bp, getattr(p["direction"], "value", p["direction"]))
+
+
 def _filter_to_reference_core(positions, reference):
     """Sub-list of ``positions`` whose ``(helix_id, bp_index, direction)`` key is
     present in ``reference`` — the reference (a core-only analytic geometry) doubles
     as the CORE MASK, so ragged ssDNA ends absent from the reference are dropped from
     the simulated mean before a self-consistency measure runs."""
-    ref_keys = {
-        (p["helix_id"], int(p["bp_index"]),
-         getattr(p["direction"], "value", p["direction"]))
-        for p in reference}
+    ref_keys = {k for p in reference if (k := _core_column_key(p)) is not None}
     return [p for p in positions
-            if (p["helix_id"], int(p["bp_index"]),
-                getattr(p["direction"], "value", p["direction"])) in ref_keys]
+            if (k := _core_column_key(p)) is not None and k in ref_keys]
 
 
 def _dispatch_measure(measure: str, positions, landmarks, reference=None):

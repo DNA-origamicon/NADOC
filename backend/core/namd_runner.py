@@ -24,6 +24,7 @@ import functools
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -42,7 +43,8 @@ from backend.core.disk_guard import (
     wait_proc_with_disk_guard,
 )
 from backend.core.md_health import run_health_check, append_health_jsonl
-from backend.core.namd_metrics import parse_namd_log
+from backend.core.namd_metrics import parse_namd_log, parse_namd_log_frames
+from backend.core.md_cutoff import should_early_stop_stage
 from backend.core.md_protocols import segments_from_manifest
 from backend.core.md_vram import classify_failure_log_file, extract_error_line_from_file
 
@@ -69,6 +71,10 @@ class _RunningHandle:
 
 _RUNNING: dict[str, _RunningHandle] = {}
 _ACTIVE_PIDS: dict[str, int] = {}
+# Mid-run early-stop toggles: set_early_stop() stashes {job_id: bool} here while a
+# job is running; the runner thread consumes it at the next chunk boundary so the
+# flag flips without a relaunch AND the runner stays the sole job.json writer.
+_EARLY_STOP_OVERRIDE: dict[str, bool] = {}
 
 
 def active_namd_pids() -> set[int]:
@@ -659,6 +665,60 @@ def _append_metrics_jsonl(output_dir: Path, segment_name: str, stage: str,
 
 # ── Main runner coroutine ─────────────────────────────────────────────────────
 
+def _stage_base(segment_name: str) -> str:
+    """Stage identity = segment name minus the _pNN chunk suffix."""
+    return re.sub(r"_p\d+$", "", segment_name)
+
+
+def _is_production_segment(segment_name: str) -> bool:
+    """Production / qualification stages are sampling, not relaxation — never skip."""
+    return bool(re.search(r"production|qualification", segment_name, re.I))
+
+
+def _stage_last_chunk_idx(segments, idx: int) -> int:
+    """Index of the last chunk sharing this segment's stage (chunks are contiguous)."""
+    base = _stage_base(segments[idx].name)
+    last = idx
+    for j in range(idx + 1, len(segments)):
+        if _stage_base(segments[j].name) == base:
+            last = j
+        else:
+            break
+    return last
+
+
+def _alias_skipped_stage_outputs(
+    output_dir: Path, completed_name: str, skipped_names: list[str]
+) -> None:
+    """Bridge the restart chain across an early-stop skip.
+
+    Early-stop marks a stage's trailing chunks ``done`` WITHOUT running NAMD, so
+    their ``.{coor,vel,xsc}`` are never written.  But the next stage's first chunk
+    was packaged to restart from the *last* chunk of this stage — so its conf
+    reads e.g. ``output/<...p100>.xsc``, which now never exists (FATAL: "Unable to
+    open extended system file").  Copy the last actually-completed chunk's final
+    coordinates onto each skipped chunk's expected output names — both the plain
+    ``<seg>.{ext}`` (what the next stage's conf reads, and what
+    ``_segment_outputs_complete``/``_resume_step`` check) and the ``.restart.{ext}``
+    variant (in case a package wired the chain through restart files).  Physically
+    sound: the stage plateaued, so its last completed chunk's coordinates are the
+    stage's equilibrium — exactly what the skipped chunks would have reproduced.
+    """
+    for ext in ("coor", "vel", "xsc"):
+        src = output_dir / f"{completed_name}.{ext}"
+        if not src.exists():
+            src = output_dir / f"{completed_name}.restart.{ext}"
+        if not src.exists():
+            logger.warning(
+                "early-stop alias: no %s output for completed chunk %s — "
+                "next stage may fail to restart", ext, completed_name,
+            )
+            continue
+        for skip in skipped_names:
+            shutil.copy2(src, output_dir / f"{skip}.{ext}")
+            shutil.copy2(src, output_dir / f"{skip}.restart.{ext}")
+
+
 async def run_job(job: MdJob, workspace_dir: Path) -> None:
     """Async coroutine — runs until completion, failure, or cancellation."""
     package_dir = job.package_dir(workspace_dir)
@@ -772,9 +832,12 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     job.save(workspace_dir)
 
     start_idx = job.current_segment_idx
+    skip_until = 0            # early-stop: chunks below this were skipped as redundant
     for idx, spec in enumerate(segments):
         if idx < start_idx:
             continue   # resume support
+        if idx < skip_until:
+            continue   # stage plateaued; this chunk was skipped (already marked done)
 
         # Mark segment running
         logger.info("[%s] Segment %d/%d: %s (%s)", job.job_id, idx+1, len(segments), spec.name, spec.stage)
@@ -947,6 +1010,43 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             job.current_segment_idx = idx + 1
             job.save(workspace_dir)
 
+        # Mid-run toggle: a POST /md/jobs/{id}/early-stop stashes an override the
+        # running thread consumes here, so the flag flips without a relaunch (and
+        # the runner stays the single job.json writer).
+        _ov = _EARLY_STOP_OVERRIDE.pop(job.job_id, None)
+        if _ov is not None and _ov != job.early_stop_relax:
+            job.early_stop_relax = _ov
+            job.save(workspace_dir)
+            logger.info("[%s] early_stop_relax toggled mid-run -> %s", job.job_id, _ov)
+
+        # ── Early-stop accelerator (opt-in, default OFF) ──────────────────────
+        # If this stage's first chunk already shows an energy+WC plateau, its
+        # remaining p50/p100 chunks are redundant — mark them done and jump to the
+        # next stage.  Only fires when run_check ran (percent>=10, so wc_per_frame
+        # exists), never on production/qualification stages, never on a stage's
+        # last chunk.  Multi-criteria on purpose (see md_cutoff).
+        if job.early_stop_relax and run_check and not _is_production_segment(spec.name):
+            last_idx = _stage_last_chunk_idx(segments, idx)
+            if last_idx > idx:
+                frames = parse_namd_log_frames(seg_log)
+                decision, diag = should_early_stop_stage(frames, hresult.wc_per_frame)
+                if decision:
+                    skipped_names = []
+                    for j in range(idx + 1, last_idx + 1):
+                        if j < len(job.segments):
+                            job.segments[j].status = "done"
+                        skipped_names.append(segments[j].name)
+                    # Skipped chunks never ran, so their restart files are absent —
+                    # bridge the chain so the next stage restarts from this chunk.
+                    _alias_skipped_stage_outputs(output_dir, spec.name, skipped_names)
+                    skip_until = last_idx + 1
+                    job.current_segment_idx = skip_until
+                    job.save(workspace_dir)
+                    logger.info(
+                        "[%s] early-stop: stage '%s' plateaued at %s (%s) — skipped %d chunk(s)",
+                        job.job_id, spec.stage, spec.name, diag, last_idx - idx,
+                    )
+
     logger.info("[%s] All segments completed", job.job_id)
     job.status = MdStatus.completed
     job.current_segment_idx = len(segments)
@@ -993,9 +1093,9 @@ def start_job(job: MdJob, workspace_dir: Path) -> None:
             try:
                 j = MdJob.load(job.job_id, workspace_dir)
                 if task.cancelled() and j.status == MdStatus.running:
-                    # User stop — keep it from being auto-resumed.
-                    j.status = MdStatus.stopped
-                    j.user_stopped = True
+                    # User stop — keep it from being auto-resumed, and clear the
+                    # transient in-flight state so the UI shows a clean stop.
+                    apply_user_stop(j)
                     j.save(workspace_dir)
                 elif run_error is not None and j.status == MdStatus.running:
                     # Unexpected crash — fail rather than relaunch in a loop.
@@ -1013,6 +1113,40 @@ def start_job(job: MdJob, workspace_dir: Path) -> None:
     )
     _RUNNING[job.job_id] = _RunningHandle(thread=thread)
     thread.start()
+
+
+def apply_user_stop(job: MdJob) -> None:
+    """Mutate ``job`` into a clean user-stopped state (caller saves).
+
+    A stop is a deliberate user action, not a failure, so it must leave NO error
+    behind: (1) ``error`` is cleared — otherwise the sidebar shows an error box
+    (and "Unknown error" when the field was already empty); (2) the in-flight
+    segment, still marked ``running`` mid-cancel, is reverted to ``pending`` so
+    the stage timeline stops spinning (it re-runs from its checkpoint on resume).
+    """
+    job.status = MdStatus.stopped
+    job.user_stopped = True
+    job.error = None
+    for seg in job.segments:
+        if seg.status == "running":
+            seg.status = "pending"
+
+
+def set_early_stop(job_id: str, enabled: bool, workspace_dir: Path) -> bool:
+    """Flip a job's relaxation early-stop accelerator without relaunching it.
+
+    Idle job → write ``early_stop_relax`` straight to ``job.json`` (safe: no runner
+    thread owns the file).  Running job → stash the value in ``_EARLY_STOP_OVERRIDE``
+    for the runner to consume at its next chunk boundary, leaving the runner the
+    sole writer of ``job.json`` (never touch disk here).  Returns the value applied.
+    """
+    if is_running(job_id):
+        _EARLY_STOP_OVERRIDE[job_id] = enabled
+        return enabled
+    job = MdJob.load(job_id, workspace_dir)
+    job.early_stop_relax = enabled
+    job.save(workspace_dir)
+    return enabled
 
 
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
@@ -1063,8 +1197,7 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     # task-cancel (see run_job's thread finally).  Only the orphan/no-handle path
     # needs to write it here.
     if job is not None and not live_handle:
-        job.status = MdStatus.stopped
-        job.user_stopped = True
+        apply_user_stop(job)
         job.namd_pid = None
         job.save(workspace_dir)
 

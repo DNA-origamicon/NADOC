@@ -84,10 +84,14 @@ describe('anchor descriptors', () => {
     expect(anchorKey({ kind: 'overhang', id: 'o1' })).toBe('overhang:o1')
     expect(anchorKey({ kind: 'cluster', id: 'c1' })).toBe('cluster:c1')
     expect(anchorKey({ kind: 'domain', strandId: 's1', domainIndex: 3 })).toBe('domain:s1:3')
+    expect(anchorKey({ kind: 'strand', id: 's7' })).toBe('strand:s7')
+    expect(anchorKey({ kind: 'base', helixId: 'h2', bp: 5, direction: 'forward' })).toBe('base:h2:5:forward')
   })
   it('labels are human-readable', () => {
     expect(anchorLabel({ kind: 'overhang', id: 'o1' })).toBe('overhang o1')
     expect(anchorLabel({ kind: 'domain', strandId: 's2', domainIndex: 0 })).toBe('domain s2#0')
+    expect(anchorLabel({ kind: 'strand', id: 's7' })).toBe('strand s7')
+    expect(anchorLabel({ kind: 'base', helixId: 'h2', bp: 5, direction: 'reverse' })).toBe('base h2.5 reverse')
   })
   it('dedupe keeps first-seen order', () => {
     const out = dedupeAnchors([
@@ -122,7 +126,19 @@ describe('resolveSelectionAnchors', () => {
     expect(resolveSelectionAnchors({ selectedObject: { type: 'domain', data: { strand_id: 's5', domain_index: 2 } } }))
       .toEqual([{ kind: 'domain', strandId: 's5', domainIndex: 2 }])
   })
-  it('ignores unsupported selection types and empty state', () => {
+  it('reads whole strands (binding oligos) from multi-select and selectedObject', () => {
+    expect(resolveSelectionAnchors({ multiSelectedStrandIds: ['s3', 's4'] }))
+      .toEqual([{ kind: 'strand', id: 's3' }, { kind: 'strand', id: 's4' }])
+    expect(resolveSelectionAnchors({ selectedObject: { type: 'strand', id: 's8', data: { strand_id: 's8' } } }))
+      .toEqual([{ kind: 'strand', id: 's8' }])
+  })
+  it('reads an individual selected base (nucleotide)', () => {
+    expect(resolveSelectionAnchors({
+      selectedObject: { type: 'nucleotide', id: 'h1:5:forward',
+                        data: { helix_id: 'h1', bp_index: 5, direction: 'forward' } },
+    })).toEqual([{ kind: 'base', helixId: 'h1', bp: 5, direction: 'forward' }])
+  })
+  it('ignores a data-less nucleotide selection and empty state', () => {
     expect(resolveSelectionAnchors({ selectedObject: { type: 'nucleotide', id: 'n1' } })).toEqual([])
     expect(resolveSelectionAnchors(null)).toEqual([])
   })

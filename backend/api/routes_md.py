@@ -51,7 +51,7 @@ from backend.core.md_prep_progress import (
     design_size_factor,
     write_prep_progress,
 )
-from backend.core.namd_runner import default_threads, find_gmx, find_namd, is_running, reconcile_job_status, start_job, stop_job
+from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, reconcile_job_status, set_early_stop, start_job, stop_job
 from backend.core.md_vram import (
     detect_vram_mb,
     package_solvation_profile,
@@ -132,6 +132,13 @@ class CreateJobRequest(BaseModel):
     )
     cluster_name: Optional[str] = Field(
         None, description="Cluster profile name for remote execution (default 'alpine').",
+    )
+    early_stop_relax: bool = Field(
+        False,
+        description="Relaxation accelerator (opt-in, EXPERIMENTAL): skip a stage's "
+                    "remaining p50/p100 chunks once its first chunk shows an energy+WC "
+                    "plateau (multi-criteria, backend/core/md_cutoff.py). Never skips "
+                    "production/qualification stages. Off by default.",
     )
 
 
@@ -1127,6 +1134,7 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     # is connected.  Tagging here lets the UI show the intended target from creation.
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
+    job.early_stop_relax = body.early_stop_relax
     # Capture the request so a later refit can rebuild the job with one knob moved.
     job.prep_params = body.model_dump()
     job.status = MdStatus.preparing
@@ -1977,14 +1985,14 @@ async def stop_md_job(job_id: str) -> dict:
         from backend.core import cluster_ssh, md_executor
         mgr = cluster_ssh.get_manager()
         if not mgr.is_connected():
-            job.status = MdStatus.stopped
+            apply_user_stop(job)
             job.save(_workspace())
             return {"ok": True, "message": "Cluster not connected — marked stopped locally; scancel skipped."}
         try:
             issued = await md_executor.cancel_job(job, conn=mgr)
         except cluster_ssh.ClusterSSHError as exc:
             raise HTTPException(502, f"Cluster transport error: {exc}") from exc
-        job.status = MdStatus.stopped
+        apply_user_stop(job)
         job.save(_workspace())
         return {"ok": True, "job_id": job_id,
                 "status": "cancelled" if issued else "stopped",
@@ -1994,11 +2002,27 @@ async def stop_md_job(job_id: str) -> dict:
     if not cancelled:
         # Not in our task registry — job may have completed or never started
         if job.status == MdStatus.running:
-            job.status = MdStatus.stopped
+            apply_user_stop(job)
             job.save(_workspace())
         return {"ok": True, "message": "Job was not actively running"}
 
     return {"ok": True, "job_id": job_id, "status": "stopping"}
+
+
+class EarlyStopRequest(BaseModel):
+    enabled: bool = True
+
+
+@router.post("/md/jobs/{job_id}/early-stop")
+async def toggle_md_early_stop(job_id: str, body: EarlyStopRequest) -> dict:
+    """Flip the relaxation early-stop accelerator on a job WITHOUT relaunching.
+
+    If the job is running, the runner picks the new value up at its next chunk
+    boundary; if idle, it's persisted for the next start/resume."""
+    _load_job(job_id)   # 404s if the job doesn't exist
+    val = set_early_stop(job_id, body.enabled, _workspace())
+    return {"ok": True, "job_id": job_id, "early_stop_relax": val,
+            "running": is_running(job_id)}
 
 
 @router.get("/md/jobs/{job_id}/health")

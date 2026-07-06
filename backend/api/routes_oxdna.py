@@ -161,13 +161,18 @@ class ProductionRequest(BaseModel):
 
 
 class AnchorRef(BaseModel):
-    """An anchor selection: one cluster / domain / overhang held fixed during a
-    field stage.  Accepts the frontend's camelCase keys (strandId/domainIndex)."""
+    """An anchor selection held fixed during a field stage — one of: cluster,
+    domain, overhang, a whole strand (``kind='strand'``, e.g. an overhang-binding
+    oligo), or a single base (``kind='base'`` at helix/bp/direction).  Accepts the
+    frontend's camelCase keys (strandId/domainIndex/helixId)."""
     model_config = ConfigDict(populate_by_name=True)
     kind:         str
     id:           Optional[str] = None
     strand_id:    Optional[str] = Field(None, alias="strandId")
     domain_index: Optional[int] = Field(None, alias="domainIndex")
+    helix_id:     Optional[str] = Field(None, alias="helixId")
+    bp:           Optional[int] = None
+    direction:    Optional[str] = None
 
 
 class FieldRequest(BaseModel):

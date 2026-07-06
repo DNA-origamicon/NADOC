@@ -1,8 +1,8 @@
 /**
  * Anchors setup UI — the shared "Anchors" sub-section of the oxDNA panel
- * (Dynamics tab).  Lets the user mark overhangs / domains / clusters as FIXED
- * strands (traps) held in place during a run, independent of whether an electric
- * field or a hard surface is enabled.
+ * (Dynamics tab).  Lets the user mark overhangs / binding strands / domains /
+ * clusters / individual bases as FIXED (traps) held in place during a run,
+ * independent of whether an electric field or a hard surface is enabled.
  *
  * The anchor set feeds the consolidated production run (the panel reads it via
  * getAnchors()).  A field requires ≥1 anchor (an unanchored uniform force drifts
@@ -66,7 +66,7 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null } =
   function addSelectedAnchors() {
     const found = resolveSelectionAnchors(getSelection ? getSelection() : null)
     if (!found.length) {
-      _setStatus('Select an overhang, domain, or cluster first.', _C.warn)
+      _setStatus('Select an overhang, binding strand, domain, cluster, or base first.', _C.warn)
       return 0
     }
     const before = _anchors.length

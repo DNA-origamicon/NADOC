@@ -824,6 +824,52 @@ class TestOrphanStop:
             thread.join(timeout=2)
             namd_runner._RUNNING.pop(job.job_id, None)
 
+    def test_stop_clears_error_and_reverts_running_segment(self, tmp_path, monkeypatch):
+        """A clean user-stop must leave no error behind and no segment stuck
+        "running": otherwise the sidebar shows "Unknown error" + a perpetual
+        spinner on a terminal job."""
+        from backend.core import namd_runner
+        from backend.core.md_job import MdJob, MdStatus
+
+        job = self._running_job(tmp_path)
+        job.error = "transient interrupted/resuming message"
+        job.segments[0].status = "running"
+        job.save(tmp_path)
+
+        # Orphan path (no live runner handle) — stop_job writes the stopped state.
+        monkeypatch.setattr(namd_runner, "_external_pid", lambda j: 4242)
+        monkeypatch.setattr(namd_runner, "_kill_process_group", lambda pid, **k: None)
+
+        assert namd_runner.stop_job(job.job_id, tmp_path) is True
+        reloaded = MdJob.load(job.job_id, tmp_path)
+        assert reloaded.status == MdStatus.stopped
+        assert reloaded.user_stopped is True
+        assert reloaded.error is None
+        assert reloaded.segments[0].status == "pending"
+
+    def test_apply_user_stop_only_reverts_running_segments(self, tmp_path):
+        """apply_user_stop leaves done/failed segments alone — only the in-flight
+        (running) one is rewound to pending."""
+        from backend.core import namd_runner
+        from backend.core.md_job import MdSegmentStatus, MdStatus
+
+        job = self._running_job(tmp_path)
+        job.segments = [
+            MdSegmentStatus(name="S_01", stage="x", percent=100, steps=100),
+            MdSegmentStatus(name="S_02", stage="x", percent=50, steps=100),
+        ]
+        job.segments[0].status = "done"
+        job.segments[1].status = "running"
+        job.error = "boom"
+
+        namd_runner.apply_user_stop(job)
+
+        assert job.status == MdStatus.stopped
+        assert job.user_stopped is True
+        assert job.error is None
+        assert job.segments[0].status == "done"      # completed work preserved
+        assert job.segments[1].status == "pending"   # in-flight rewound
+
     def test_stop_no_orphan_returns_false_without_killing(self, tmp_path, monkeypatch):
         from backend.core import namd_runner
 

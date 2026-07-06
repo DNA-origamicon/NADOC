@@ -27,6 +27,7 @@ import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
 import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
+import { runExclusive } from './primitives/button_busy.js'
 import { el } from './primitives/dom.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
 import { flattenJobTree, descendantIds } from './job_tree.js'
@@ -1751,17 +1752,19 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
 
   // ── Detail actions ───────────────────────────────────────────────────────
-  startBtn?.addEventListener('click', async () => {
+  // Start/Stop take a beat to register on the backend — busy-guard them so a
+  // spam of clicks fires the request once, with an immediate spinner + gray-out.
+  startBtn?.addEventListener('click', () => runExclusive(startBtn, async () => {
     if (!_selectedId) return
     if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     await api.startOxdnaJob(_selectedId)
-    _fetchJobs()
-  })
-  stopBtn?.addEventListener('click', async () => {
+    await _fetchJobs()
+  }, { label: 'Starting…' }))
+  stopBtn?.addEventListener('click', () => runExclusive(stopBtn, async () => {
     if (!_selectedId) return
     await api.stopOxdnaJob(_selectedId)
-    _fetchJobs()
-  })
+    await _fetchJobs()
+  }, { label: 'Stopping…' }))
   errorLogBtn?.addEventListener('click', () => { _showErrorLog(_selectedId) })
   deleteBtn?.addEventListener('click', async () => {
     if (!_selectedId) return

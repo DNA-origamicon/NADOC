@@ -119,3 +119,40 @@ def parse_namd_log(log_path: Path) -> NamdLogMetrics:
 def parse_namd_log_series(log_paths: list[Path]) -> list[NamdLogMetrics]:
     """Parse multiple segment logs in order (for stage timeline display)."""
     return [parse_namd_log(p) for p in log_paths if p.exists()]
+
+
+def parse_namd_log_frames(log_path: Path) -> list[dict[str, float]]:
+    """Return EVERY ENERGY frame as a {column_name: value} dict (name-indexed).
+
+    Unlike parse_namd_log (which keeps only the last frame's scalars), this yields
+    the full per-frame series used by relaxation-cutoff plateau detection. Columns
+    are resolved from the most recent ETITLE, so NVT (no VOLUME) and NPT logs both
+    parse. Restart-replayed duplicate frames at a resume seam (TS <= previous) are
+    dropped so the series is monotone in TS.
+    """
+    try:
+        text = log_path.read_text(errors="replace")
+    except OSError:
+        return []
+    cols: list[str] = []
+    out: list[dict[str, float]] = []
+    last_ts: float | None = None
+    for line in text.splitlines():
+        if line.startswith("ETITLE:"):
+            cols = line.split()[1:]
+        elif line.startswith("ENERGY:") and cols:
+            vals = line.split()[1:]
+            if len(vals) < len(cols):
+                continue
+            row: dict[str, float] = {}
+            for name, v in zip(cols, vals):
+                try:
+                    row[name] = float(v)
+                except ValueError:
+                    pass
+            ts = row.get("TS")
+            if last_ts is not None and ts is not None and ts <= last_ts:
+                continue
+            last_ts = ts
+            out.append(row)
+    return out

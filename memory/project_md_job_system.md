@@ -44,6 +44,56 @@ read this file and md_integration_plan.md for Milestones 2-5.
 **Next milestone (2):** MD Job UI panel — Run MD button, preset selector,
 job timeline, live metric cards, health gate display, WS streaming.
 
+**Clean-stop UI fix (2026-07-04):** Stopping a running local job left the sidebar
+showing a **spinning stage** + **"Unknown error"** (seen on the two stopped
+`6hb_2xT` jobs `78a15b57195a`/`d097bad60cf2`). Two independent causes:
+- Backend flipped `status→stopped` but never cleared `error` and left the in-flight
+  segment marked `"running"` on disk. New shared helper `namd_runner.apply_user_stop(job)`
+  sets stopped + `user_stopped=True`, clears `error=None`, and rewinds any `running`
+  segment → `pending` (it re-runs from its checkpoint on resume). Called from ALL stop
+  transitions: `_thread_main` finally (cancel), `stop_job` orphan path, and the three
+  `routes_md.stop_md_job` sites (remote-disconnected, remote-scancel, local-not-in-registry).
+- Frontend `md_jobs_panel.js`: a `stopped` job unconditionally showed the error box
+  (`job.error ?? 'Unknown error'`), and the timeline spun on ANY `running` segment
+  regardless of job liveness. Now pure `mdDetailErrorText(job)` returns null for a
+  clean stop (box only when a message exists — failed submit / raced failure / legacy);
+  `_renderTimeline` gates the spinner + `_segSymbol` on `mdJobIsActive(job)`, so a
+  terminal job's leftover `running` segment renders as interrupted `·`, never spinning.
+  This also heals already-saved bad job.json (no backend re-save needed).
+  Tests: `TestOrphanStop::{test_stop_clears_error_and_reverts_running_segment,
+  test_apply_user_stop_only_reverts_running_segments}`; vitest `mdDetailErrorText` block.
+
+**Start/Stop buttons are spam-guarded (2026-07-05):** The Start + Stop buttons on
+BOTH the MD and oxDNA job panels had no in-flight guard — a Stop request takes a beat
+to register on the backend, so an impatient user could fire it several times. New shared
+`frontend/src/ui/primitives/button_busy.js` (`runExclusive(btn, action, {label})`): a
+module-level WeakSet keyed on the button element ignores re-entrant presses while one is
+in flight, and it immediately disables + spins the button (`.nadoc-spinner` + `.is-busy`
+CSS added to `components.css` for the inline-styled job buttons that don't carry `.btn`),
+restoring the original label/disabled state in a `finally`. The 4 handlers
+(`{md,oxdna}_jobs_panel.js` start/stop) now wrap their body in `runExclusive` with labels
+"Starting…"/"Stopping…". Run/Prod/Seed/Archive already had their own `_launching`/`_seeding`/
+disabled guards — left as-is. Pin: `button_busy.test.js` (7). MV-BTNBUSY logs the live
+mash-the-button gesture (needs a running GPU job). No `main.js` change (panels are their own
+factory modules).
+
+**Resume doesn't update the detail/spinners (2026-07-04):** After clicking Start to
+resume a stopped/failed LOCAL job, NAMD runs but the detail panel (stage timeline,
+spinners) + live status froze — only the list rows updated. Cause: the Start handler
+(and the Fix-modal "retry") did `await _fetchJobs(); _selectJob(_selectedId)`, but
+`_selectJob` **early-returns when the id is unchanged**, so `_openDetailForJob` (which
+opens the status WebSocket for a now-live job) never ran → no WS → no live updates.
+This is the SAME failure the old "Monitoring model" note below describes, but the
+`_ensureSelectedSubscription()` heal it credits **no longer exists** in
+`md_jobs_panel.js` (refactored away) — so nothing re-subscribed. Fix: new
+`_reselectJob(jobId)` = `_openDetailForJob(jobId)` when `id===_selectedId` (force
+re-subscribe) else `_selectJob(jobId)`; Start handler + retry flow now call it. Backend
+`/md/jobs/{id}/start` already sets `status=running` synchronously before returning, so
+the WS opens against a live job. NOTE: still no periodic list/detail poll and no
+`_ensureSelectedSubscription`, so a BACKEND auto-resume (supervisor relaunch) of a
+selected terminal job won't live-update until the next `_fetchJobs` — button resume is
+covered; passive auto-resume heal is a remaining gap.
+
 **Crash/interruption resilience (added 2026-06-10):** NAMD jobs survive a
 server/runner death. Three layers in `namd_runner.py`:
 
@@ -102,6 +152,24 @@ exactly one NAMD process). It was frontend staleness:
   `isLiveStatus`/`resumeKindForJob` unit-tested; e2e `md_live_no_stale.spec.js` asserts a
   running job shows live status, no stale banner, and an open WS.
 
+**Health scoring excludes deliberately-ssDNA residues (2026-07-04):** `md_health`
+`build_c1_pairs`/`build_wc_pairs` take `exclude_residues` — the same (chain,resid)
+keys `md_protocols.identify_unpaired_residues` produces (chain = segid[-1]), which
+the declash ENM already excludes. `run_health_check` fills it via
+`_unpaired_exclusion_set(psf,pdb)`: computes the ss set ONLY when the declash marker
+`{stem}_build.pdb` exists (extra-base/declash designs), else empty → fully-duplex
+designs unchanged. So crossover extra bases + other designed ssDNA can't form a
+spurious geometric pair (e.g. inserted T landing near a real A across the gap) that
+then "fails" and depresses the fraction. Pin: `tests/test_md_health_ss_exclusion.py`
+(can-go-red: shows the spurious ss pair forms without exclusion, is dropped with it,
+and the real duplex pair is restored). **CAVEAT — small effect on 6hb_2xT:** measured
+on the live job `78a15b57195a` k=0.1 frame, exclusion moved WC 47.9%→48.6% (1 pair)
+and C1' 77.3%→78.1% (4 pairs). The low WC is NOT the extra bases being counted — it's
+that 6hb_2xT is largely UNSEQUENCED (453/656 bases default to THY), so only ~73 of 251
+duplex C1' pairs are WC-complementary/scorable, and that sparse biased subset is
+genuinely losing ref-relative H-bond contacts at low restraint. To trust WC as a health
+signal on this design, assign the scaffold sequence first (see [[feedback-wc-calibration]]).
+
 **Declash protocol for clashed single-stranded inserted bases (added 2026-06-11):**
 Designs with extra unpaired bases at crossovers (e.g. "6hb_2xT" — 2 ss thymines
 per junction via `crossover.extra_bases="TT"`) are BUILT in hard steric clash:
@@ -152,6 +220,53 @@ so below-threshold done segments show a ⚠ dot; stage-summary row also shows �
 any of its segments warned. Test `test_c1_breach_warns_and_continues` (was
 `…_still_fails_the_run`) now asserts completed + samples recorded. oxDNA runner
 gate (`oxdna_runner.py:948`) left untouched — separate engine, not in scope.
+
+**Relaxation early-stop accelerator — opt-in, default OFF (2026-07-04):** New
+`backend/core/md_cutoff.py` = pure multi-criteria plateau decision
+(`should_early_stop_stage(frames, wc_per_frame)` → skip only when POTENTIAL(+VOLUME)
+AND WC base-pairing are BOTH flat over the trailing window; energy-alone is unsafe at
+low restraint on fragile designs — 2hb_noT k=0.01). Consumes
+`namd_metrics.parse_namd_log_frames` (new: returns ALL ENERGY frames, resume-seam
+deduped, vs `parse_namd_log`'s last-frame-only). `namd_runner.run_job`: after a chunk's
+(advisory) health check, if `job.early_stop_relax` and it's a relaxation stage's
+non-final chunk (`_stage_base`/`_stage_last_chunk_idx`, `_is_production_segment` excludes
+production/qualification), evaluate the plateau on that chunk's log; on a hit, mark the
+stage's remaining p50/p100 chunks `done` + jump `current_segment_idx` past them
+(`skip_until` guard at loop top). `MdJob.early_stop_relax: bool=False` (load-setdefault);
+`CreateJobRequest.early_stop_relax` field → set on the job in create route. **Default OFF
+= zero behavior change to existing runs** (the whole hook is under `if job.early_stop_relax`).
+UI (2026-07-04): `#md-jobs-early-stop` checkbox in the MD launch Advanced card (index.html,
+under "Fast relaxation"), read into the create payload as `early_stop_relax` in
+`md_jobs_panel.js` (mirrors the `fast`/`autostart` toggles); unchecked by default.
+Mid-run toggle (2026-07-05): `POST /md/jobs/{id}/early-stop {enabled}` →
+`namd_runner.set_early_stop`. A RUNNING job can't have job.json rewritten by the route
+(runner is sole writer), so it stashes `_EARLY_STOP_OVERRIDE[job_id]` which `run_job`
+consumes+persists at its next chunk boundary; an idle job is written directly. UI: a
+"Early-stop settled stages (live)" checkbox in the job detail (`#md-jobs-early-stop-live`,
+shown only for a running local job, reflects `job.early_stop_relax`), client
+`setMdEarlyStop`. Tests: `test_{set_early_stop_persists_when_idle,
+set_early_stop_override_when_running,runner_consumes_midrun_override}`.
+**Threshold recalibration (2026-07-04, from a live fast run) — LOAD-BEARING:** the first
+live run (2hb_noT, `early_stop_relax` on, FAST=HMR+4fs) NEVER skipped: the old single
+threshold (`eps_pot`=0.1%, `eps_vol`=0.2% for BOTH drift and scatter) sat *below* fast-run
+instantaneous thermal noise (measured POT fluct ~0.13%, VOL ~0.24% even when the mean had
+settled to ~0.02% drift). Fix in `md_cutoff.CutoffParams`: **separate DRIFT (mean settled —
+tight: `eps_pot_drift`=0.05%, `eps_vol_drift`=0.30%) from FLUCT (thermal-noise guard —
+loose: `eps_pot_fluct`=0.35%, `eps_vol_fluct`=0.50%; WC drift 0.02 / fluct 0.05)** and raise
+`min_frames` 12→20 so a ~13-frame fast `p10` chunk can't trigger on too little data (skips
+are judged on the fuller p50 chunk). Validated per-chunk on BOTH the live run (k0.5 p50→skip
+settled, k0.1 p50→hold still-relaxing) AND the exp36 bank (18hb: all 8 non-final chunks skip;
+2hb: skips settled restrained stages but HOLDS the true-zero k=0/MGHH melt stage — the
+safety-critical property). Regression tests `test_{noisy_but_settled_energy_plateaus,
+drifting_mean_not_plateaued_even_if_quiet}`. **A running job imports `md_cutoff` at server
+start — a recalibration only affects a NEW job after a server restart.**
+Motivated + validated offline by `experiments/exp36_relax_cutoff_bank/` (parser + replay on
+real reference runs: 2hb 2.45× / 3x6x200 4.9× / 18hb 11.4× / 3x4SQ 29× multi-criteria
+speedup; the gate self-holds fragile low-k stages, cuts hard on over-provisioned ladders).
+Tests: `tests/test_md_cutoff.py` (10 — pure decision, frame parser, flag round-trip, and a
+stubbed-NAMD `run_job` proving skip + flag-off-runs-all). **NOT yet exercised on a live GPU
+relax run** — needs one real run with the flag on to confirm the skipped structure matches a
+full run's endpoint (owes an MV row). [[md-prep-relaxation-exp29]], [[oxdna-relaxation]].
 
 **Fast production runs — HMR + GPUresident + 4 fs (2026-07-02):** production was
 pinned at ~1.3 ns/day because `_conservative_production_conf`/`_seed_production_conf`
@@ -259,3 +374,15 @@ toggles mutually-exclusive radios in a "Visualizations & processing" card.
   throwaway Playwright spec against the live app confirming both cards render, the
   radios are grouped/mutually-exclusive, Off is default-checked, and select→Off
   round-trips (spec deleted after).
+
+**Early-stop restart-chain fix (2026-07-05):** The relaxation early-stop
+accelerator (`early_stop_relax`; `md_cutoff.should_early_stop_stage`) marks a
+plateaued stage's trailing p50/p100 chunks `done` WITHOUT running NAMD, then jumps
+to the next stage. But each stage's first chunk conf was packaged to restart from
+the *previous stage's LAST chunk* (e.g. `02_p10` reads `01_..p100.{coor,vel,xsc}`).
+Skipping that last chunk meant its restart files never existed → NAMD `FATAL ERROR:
+Unable to open extended system file` (job `3f4d932cd76c`). Fix:
+`namd_runner._alias_skipped_stage_outputs()` copies the last *completed* chunk's
+final coords onto every skipped chunk's expected output names (plain + `.restart.`)
+so the chain stays intact; called from the skip block in `run_job`. Pinned by
+`test_early_stop_skips_remaining_chunks` (asserts the bridge files exist).

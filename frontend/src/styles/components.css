@@ -423,6 +423,15 @@
   .nadoc-spinner { animation-duration: 1.6s; }
 }
 
+/* An action button whose async request is in flight (see primitives/button_busy.js).
+   Grays it out + blocks further clicks even on buttons that don't use the .btn
+   class (many oxDNA/MD job buttons carry inline styles instead). */
+.is-busy {
+  opacity: 0.55;
+  cursor: progress;
+  pointer-events: none;
+}
+
 .modal--sm  { width: 360px; }
 .modal--md  { width: 480px; }
 .modal--lg  { width: 640px; }

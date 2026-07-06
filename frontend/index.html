@@ -4286,6 +4286,11 @@
                     <input id="md-jobs-fast" type="checkbox" checked style="accent-color:#3fb950">
                     Fast relaxation (HMR + GPU-resident, 4&nbsp;fs)
                   </label>
+                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                         title="Experimental relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. Off by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages.">
+                    <input id="md-jobs-early-stop" type="checkbox" style="accent-color:#3fb950">
+                    Early-stop settled stages (experimental)
+                  </label>
                 </div>
               </div>
 
@@ -4326,6 +4331,14 @@
                     ■ Stop
                   </button>
                 </div>
+
+                <!-- Mid-run early-stop toggle (running relaxation jobs) -->
+                <label id="md-jobs-early-stop-live-wrap"
+                       style="display:none;align-items:center;gap:4px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                       title="Toggle the relaxation early-stop accelerator on THIS running job. Takes effect at the next stage checkpoint — no relaunch.">
+                  <input id="md-jobs-early-stop-live" type="checkbox" style="accent-color:#3fb950">
+                  Early-stop settled stages (live)
+                </label>
 
                 <!-- Error message -->
                 <div id="md-jobs-detail-error"

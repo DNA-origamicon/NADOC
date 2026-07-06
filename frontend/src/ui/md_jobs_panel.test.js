@@ -121,6 +121,31 @@ describe('mdRemoteAwaitingSubmit', () => {
   })
 })
 
+import { mdDetailErrorText } from './md_jobs_panel.js'
+
+describe('mdDetailErrorText', () => {
+  it('shows nothing for a clean user-stop (no error)', () => {
+    expect(mdDetailErrorText({ status: 'stopped' })).toBe(null)
+    expect(mdDetailErrorText({ status: 'stopped', error: null })).toBe(null)
+  })
+  it('shows the error for a stopped job that carries one (raced a real failure / legacy)', () => {
+    expect(mdDetailErrorText({ status: 'stopped', error: 'disk full' })).toBe('disk full')
+  })
+  it('shows Unknown error only for a failed job with no message', () => {
+    expect(mdDetailErrorText({ status: 'failed' })).toBe('Unknown error')
+    expect(mdDetailErrorText({ status: 'failed', error: 'boom' })).toBe('boom')
+  })
+  it('shows a failed Alpine submit and a resumable timed-out job', () => {
+    expect(mdDetailErrorText({ status: 'queued', execution_target: 'alpine', error: 'rejected' })).toBe('rejected')
+    expect(mdDetailErrorText({ status: 'stopped', resumable: true, error: 'click Resume' })).toBe('click Resume')
+  })
+  it('hides the box for live / non-terminal jobs', () => {
+    expect(mdDetailErrorText({ status: 'running' })).toBe(null)
+    expect(mdDetailErrorText({ status: 'preparing' })).toBe(null)
+    expect(mdDetailErrorText({ status: 'completed' })).toBe(null)
+  })
+})
+
 describe('makeSpinner', () => {
   it('builds a .nadoc-spinner span sized + colored', () => {
     const s = makeSpinner('#e3b341', 10)

@@ -1599,13 +1599,17 @@ def resolve_anchor_particles(
 ) -> tuple[list[int], list[tuple]]:
     """Resolve anchor descriptors to (sorted particle indices, their keys).
 
-    Descriptor kinds (the three scopes the UI offers — overhang recommended):
+    Descriptor kinds (the scopes the UI offers — overhang recommended):
       ``{'kind':'overhang', 'id': <overhang_id>}`` → nucleotides of the domains
           whose ``overhang_id`` matches (the surface-tethered overhang).
       ``{'kind':'cluster',  'id': <cluster_id>}``  → nucleotides on any helix in
           the cluster's ``helix_ids``.
       ``{'kind':'domain', 'strand_id'|'strandId', 'domain_index'|'domainIndex'}``
           → that one domain's nucleotides.
+      ``{'kind':'strand', 'id'|'strand_id'|'strandId'}`` → every nucleotide of that
+          strand (used to pin an overhang-binding oligo, which is a whole strand).
+      ``{'kind':'base', 'helix_id'|'helixId', 'bp'|'bp_index', 'direction'}`` → one
+          individual nucleotide at (helix, bp, direction) — all loop copies of it.
 
     Unknown ids / kinds contribute nothing, so a stale selection silently drops
     rather than raising.  Particle indices match the topology / configuration
@@ -1630,6 +1634,19 @@ def resolve_anchor_particles(
             didx = a.get("domain_index", a.get("domainIndex"))
             for p in prov:
                 if p["strand_id"] == sid and p["domain_index"] == didx:
+                    selected[p["particle"]] = p["key"]
+        elif kind == "strand":
+            sid = a.get("id") or a.get("strand_id") or a.get("strandId")
+            for p in prov:
+                if p["strand_id"] == sid:
+                    selected[p["particle"]] = p["key"]
+        elif kind == "base":
+            hid = a.get("helix_id", a.get("helixId"))
+            bp = a.get("bp", a.get("bp_index", a.get("bpIndex")))
+            direction = a.get("direction")
+            for p in prov:
+                if (p["helix_id"] == hid and p["bp"] == bp
+                        and p["direction"] == direction):
                     selected[p["particle"]] = p["key"]
     parts = sorted(selected)
     return parts, [selected[i] for i in parts]

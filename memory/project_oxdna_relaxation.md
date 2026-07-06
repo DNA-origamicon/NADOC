@@ -1419,8 +1419,15 @@ surface" card (`oxdna_floor_setup.js` / pure `oxdna_floor_math.js`): Apply check
 floor convention) + offset + stiffness.
 
 ### 25.3 Anchors — own card, shared by field + surface
-Fixed strands (overhang/cluster/domain → traps) live in the standalone **Anchors** card
-(`oxdna_anchors_setup.js`, reuses `efield_math` anchor helpers). Used by field (required), surface, or alone.
+Fixed elements (overhang / cluster / domain / whole strand / individual base → traps) live in the
+standalone **Anchors** card (`oxdna_anchors_setup.js`, reuses `efield_math` anchor helpers). Used by field
+(required), surface, or alone. Descriptor kinds resolved in `resolve_anchor_particles`
+(`oxdna_interface.py`) + `resolveSelectionAnchors`/`anchorKey`/`anchorLabel` (`efield_math.js`) +
+`resolveAnchorEntries` (`anchor_glow.js`): `{kind:'overhang',id}`, `{kind:'cluster',id}`,
+`{kind:'domain',strandId,domainIndex}`, **`{kind:'strand',id}`** (whole strand — pin an overhang-binding
+oligo; select the binder strand → Add anchor), **`{kind:'base',helixId,bp,direction}`** (one nucleotide;
+click a bead → Add anchor). `AnchorRef` (routes_oxdna.py) carries the base fields; camelCase persisted.
+Added 2026-07-04.
 
 ### 25.4 Relax-on-a-surface (surface + anchors during relaxation, NO field)
 A structure relaxed free settles differently than one bound to a surface, so relaxation now carries the

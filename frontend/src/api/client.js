@@ -2183,6 +2183,8 @@ export const getMdJob            = (id)          => _oxdnaJSON('GET',    `/md/jo
 export const deleteMdJob         = (id)          => _oxdnaJSON('DELETE', `/md/jobs/${id}`)
 export const startMdJob          = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/start`)
 export const stopMdJob           = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/stop`)
+/** Flip the relaxation early-stop accelerator on a job without relaunching. */
+export const setMdEarlyStop      = (id, enabled) => _oxdnaJSON('POST',   `/md/jobs/${id}/early-stop`, { enabled })
 /** Append a production stage (the "continue from previous run" path). Body:
  *  {steps, autostart, continue_from_production}. 409 when the active design ≠ the
  *  job's — hence the doc header must be correct (see block comment above). */

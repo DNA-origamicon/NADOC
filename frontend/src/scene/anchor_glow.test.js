@@ -1,6 +1,6 @@
 /**
  * Tests for anchor_glow.js — purple highlight over oxDNA anchor (fixed) elements.
- *   resolveAnchorEntries — pure: overhang / domain / cluster descriptors → entries.
+ *   resolveAnchorEntries — pure: overhang / domain / cluster / strand / base descriptors → entries.
  *   initAnchorGlow       — factory: setAnchors drives setAnchorGlow/clearAnchorGlow,
  *                          re-resolves on geometry change.
  */
@@ -10,10 +10,10 @@ import { resolveAnchorEntries, initAnchorGlow } from './anchor_glow.js'
 // Backbone entries carry .pos + .nuc (strand_id, domain_index, overhang_id, helix_id).
 function entry(nuc) { return { pos: { x: 0, y: 0, z: 0 }, nuc } }
 const ENTRIES = [
-  entry({ strand_id: 's1', domain_index: 0, helix_id: 'h1', overhang_id: null }),
-  entry({ strand_id: 's1', domain_index: 1, helix_id: 'h1', overhang_id: null }),
-  entry({ strand_id: 's2', domain_index: 0, helix_id: 'h2', overhang_id: 'ov9' }),
-  entry({ strand_id: 's3', domain_index: 0, helix_id: 'h3', overhang_id: null }),
+  entry({ strand_id: 's1', domain_index: 0, helix_id: 'h1', overhang_id: null, bp_index: 0, direction: 'forward' }),
+  entry({ strand_id: 's1', domain_index: 1, helix_id: 'h1', overhang_id: null, bp_index: 1, direction: 'forward' }),
+  entry({ strand_id: 's2', domain_index: 0, helix_id: 'h2', overhang_id: 'ov9', bp_index: 0, direction: 'reverse' }),
+  entry({ strand_id: 's3', domain_index: 0, helix_id: 'h3', overhang_id: null, bp_index: 4, direction: 'forward' }),
 ]
 const DESIGN = { cluster_transforms: [{ id: 'c1', helix_ids: ['h1', 'h2'] }] }
 
@@ -35,6 +35,19 @@ describe('resolveAnchorEntries', () => {
     // h1 (2 entries) + h2 (1 entry) = 3
     expect(out).toHaveLength(3)
     expect(out.every(e => ['h1', 'h2'].includes(e.nuc.helix_id))).toBe(true)
+  })
+
+  it('strand anchor → every entry of that strand', () => {
+    const out = resolveAnchorEntries([{ kind: 'strand', id: 's1' }], ENTRIES, DESIGN)
+    expect(out).toHaveLength(2)
+    expect(out.every(e => e.nuc.strand_id === 's1')).toBe(true)
+  })
+
+  it('base anchor → only the entry at that helix/bp/direction', () => {
+    const out = resolveAnchorEntries(
+      [{ kind: 'base', helixId: 'h3', bp: 4, direction: 'forward' }], ENTRIES, DESIGN)
+    expect(out).toHaveLength(1)
+    expect(out[0].nuc.strand_id).toBe('s3')
   })
 
   it('de-duplicates entries matched by multiple anchors', () => {

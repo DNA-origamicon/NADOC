@@ -212,3 +212,18 @@ flexible, non-rigid). `centroid_offset` skips `__xb__` keys (not in design, no c
 md_composite_trajectory `keys`/`frames` now interleave `["__xb__", xo, k]` the frontend
 already routes. (Full MD/heavy-rep app exercise needs a real job; backend placement is
 pinned in test_oxdna_extra_bases.py.)
+
+**Graphs & Metrics card crash on __xb__ bp_index (fixed 2026-07-04).** The MD "Generate"
+button (`md_metric_series` → the card) fed the interleaved `__xb__` positions — whose
+`bp_index` is a crossover-id STRING — into two `oxdna_health` helpers that did
+`int(p["bp_index"])`: `_filter_to_reference_core` (runs PER FRAME, so it crashed first) and
+`base_pairing_spatial_profile` (the unfiltered `mean_positions` path). Both now skip any
+entry whose `bp_index` isn't an `int` via the shared `_core_column_key` helper (matches the
+`isinstance(bpi, int)` convention above) — the inserts are ssDNA, never a designed dsDNA
+core pair, so dropping them is correct. Twist/curvature always used the FILTERED `mean_core`,
+which is why only base-pairing appeared to fail. oxDNA's `production_metric_series` is
+unaffected (read-back drops `__xb__`). Pins: `test_md_metrics.py`
+(`test_md_metric_series_tolerates_extra_base_inserts` — full card path;
+`test_filter_to_reference_core_skips_extra_base_inserts`), `test_oxdna_relaxation.py`
+(`test_base_pairing_spatial_profile_skips_extra_base_inserts`); all can-go-red (reproduce the
+exact `invalid literal for int()` on the crossover uuid).

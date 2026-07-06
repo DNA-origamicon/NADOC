@@ -98,6 +98,48 @@ def test_md_metric_series_pairing_drops_when_c1p_separated(monkeypatch):
     assert all(v == pytest.approx(0.0) for v in out["base_pairing"]["temporal"]["per_frame"])
 
 
+def test_md_metric_series_tolerates_extra_base_inserts(monkeypatch):
+    """Regression (MD 'Generate' crash): a design with crossover extra bases interleaves
+    ``("__xb__", crossover_id, k)`` keys whose bp_index is a crossover id (a str, not an
+    integer column).  Those ssDNA inserts reach the per-frame reference-core filter AND
+    the base-pairing spatial profile; both must SKIP them, not ``int()`` them — the bug
+    was ``invalid literal for int() with base 10: '<crossover-uuid>'``."""
+    import backend.core.md_trajectory as mt
+    from backend.core.md_trajectory import md_metric_series
+    order, analytic = _paired_bundle(n_axial=12)
+    xo_id = "accc07e6-a6df-431d-9090-d24cf77a8ec9"
+    # Two inserts threaded in-chain at the junction, keyed like the real extra bases.
+    order = order + [("__xb__", xo_id, 0), ("__xb__", xo_id, 1)]
+    p_nm = np.array([a["backbone_position"] for a in analytic]
+                    + [[0.0, 0.0, 0.5], [0.1, 0.0, 0.6]], dtype=float)
+    c1p = p_nm.copy()
+    monkeypatch.setattr(mt, "_build_md_nadoc_ctx",
+                        lambda *a, **k: {"p_order": order, "n_frames": 3})
+    monkeypatch.setattr(mt, "_extract_md_nadoc_frame",
+                        lambda ctx, idx, with_c1p=False:
+                        (p_nm, None, c1p) if with_c1p else (p_nm, None))
+    # analytic reference EXCLUDES __xb__ (core_reference_geometry drops _XB_SENTINEL).
+    out = md_metric_series("psf", [], "ref", object(), analytic)   # must NOT raise
+    assert out["ready"] is True
+    # Inserts are ssDNA, not designed pairs, and every profile still resolves.
+    assert out["base_pairing"]["temporal"]["n_designed"] == 4 * 12
+    assert out["base_pairing"]["spatial"]
+    assert out["twist"]["spatial"] and out["curvature"]["spatial"]
+
+
+def test_filter_to_reference_core_skips_extra_base_inserts():
+    """Unit pin on the crash site itself: the core filter drops non-integer bp_index
+    (extra-base inserts) instead of int()-ing a crossover-id string."""
+    from backend.core.oxdna_health import _filter_to_reference_core
+    reference = [{"helix_id": 0, "bp_index": 3, "direction": "FORWARD",
+                  "backbone_position": [0.0, 0.0, 0.0]}]
+    positions = reference + [
+        {"helix_id": "__xb__", "bp_index": "accc07e6-a6df-431d-9090-d24cf77a8ec9",
+         "direction": 0, "backbone_position": [1.0, 0.0, 0.0]}]
+    core = _filter_to_reference_core(positions, reference)          # must NOT raise
+    assert [p["helix_id"] for p in core] == [0]                     # insert dropped
+
+
 def test_md_job_chain_resolves_refit_lineage():
     from backend.api.routes_md_metrics import _md_job_chain
     root = SimpleNamespace(job_id="root", parent_job_id=None, created_at=1.0)

@@ -1111,6 +1111,22 @@ def test_base_pairing_spatial_profile_dips_at_melted_end():
     assert prof[-1][1] < 0.5
 
 
+def test_base_pairing_spatial_profile_skips_extra_base_inserts():
+    # Crossover extra-base inserts key bp_index by crossover id (a str, not a column):
+    # ("__xb__", crossover_id, k) → mean_positions entry with bp_index = crossover_id.
+    # They are ssDNA, not designed WC pairs, and must be dropped — not int()'d (which
+    # crashed the MD base-pairing "Generate": invalid literal for int() ... <uuid>).
+    from backend.core.oxdna_health import base_pairing_spatial_profile
+    mean = _paired_bundle(n_axial=40)
+    frac = {(p["helix_id"], p["bp_index"]): 1.0 for p in mean}
+    mean.append({"helix_id": "__xb__",
+                 "bp_index": "accc07e6-a6df-431d-9090-d24cf77a8ec9",
+                 "direction": 0,
+                 "backbone_position": [0.0, 0.0, 0.0]})
+    prof = base_pairing_spatial_profile(frac, mean)   # must not raise
+    assert prof and all(v == pytest.approx(1.0) for _, v in prof)
+
+
 def test_count_trajectory_frames(tmp_path):
     from backend.core.oxdna_health import count_trajectory_frames
     p = tmp_path / "traj.dat"
@@ -3703,6 +3719,39 @@ def test_resolve_anchor_particles_domain_cluster_unknown(design):
     # Unknown id / kind → nothing (stale selection drops silently, no raise).
     assert resolve_anchor_particles(design, [{"kind": "overhang", "id": "nope"}]) == ([], [])
     assert resolve_anchor_particles(design, [{"kind": "bogus"}]) == ([], [])
+
+
+def test_resolve_anchor_particles_strand_and_base(design):
+    """Whole-strand (overhang-binding oligo) and individual-base anchor kinds."""
+    from backend.physics.oxdna_interface import (
+        resolve_anchor_particles, _strand_nucleotide_order)
+    order = _strand_nucleotide_order(design)
+    s0 = design.strands[0]
+
+    # Strand anchor → every nucleotide of that strand; a superset of its domain 0.
+    sparts, skeys = resolve_anchor_particles(design, [{"kind": "strand", "id": s0.id}])
+    dparts, _ = resolve_anchor_particles(
+        design, [{"kind": "domain", "strand_id": s0.id, "domain_index": 0}])
+    expected_strand = sum(abs(d.end_bp - d.start_bp) + 1 for d in s0.domains)
+    assert len(sparts) == expected_strand == len(skeys) > 0
+    assert sparts == sorted(sparts)
+    assert set(dparts).issubset(set(sparts))
+    assert all(0 <= p < len(order) for p in sparts)
+    # camelCase / strandId aliases also resolve the strand.
+    assert resolve_anchor_particles(design, [{"kind": "strand", "strandId": s0.id}])[0] == sparts
+
+    # Base anchor → the single nucleotide at (helix, bp, direction), all copies.
+    k0 = order[0]
+    hid, bp, direction = k0[0], k0[1], k0[2]
+    bparts, bkeys = resolve_anchor_particles(
+        design, [{"kind": "base", "helix_id": hid, "bp": bp, "direction": direction}])
+    assert len(bparts) >= 1 == len({(k[0], k[1], k[2]) for k in bkeys})
+    assert all(k[0] == hid and k[1] == bp and k[2] == direction for k in bkeys)
+    # camelCase helixId alias resolves too; unknown base drops silently.
+    assert resolve_anchor_particles(
+        design, [{"kind": "base", "helixId": hid, "bp": bp, "direction": direction}])[0] == bparts
+    assert resolve_anchor_particles(
+        design, [{"kind": "base", "helix_id": "nope", "bp": 0, "direction": "forward"}]) == ([], [])
 
 
 def test_field_anchor_preview_route(design, monkeypatch, tmp_path):

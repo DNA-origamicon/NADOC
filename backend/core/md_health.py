@@ -91,13 +91,24 @@ class HealthCheckResult:
 
 # ── C1' pair builder ──────────────────────────────────────────────────────────
 
-def build_c1_pairs(psf: Path, pdb: Path) -> C1Pairs:
+def build_c1_pairs(
+    psf: Path,
+    pdb: Path,
+    *,
+    exclude_residues: Optional[set[tuple[str, str]]] = None,
+) -> C1Pairs:
     """Identify C1'...C1' base pairs from the reference structure.
 
     All cross-segment candidate pairs within [C1_SEARCH_LO, C1_SEARCH_HI] Å
     are collected, sorted by distance, and then greedily assigned shortest-first.
     This makes intra-duplex pairs (~10 Å) win over inter-helix contacts
     (~12+ Å) regardless of atom-index ordering or PSF segment layout.
+
+    ``exclude_residues`` is a set of ``(chain, resid)`` keys (as produced by
+    ``md_protocols.identify_unpaired_residues``) for deliberately single-stranded
+    residues — crossover extra bases and other designed ssDNA.  Candidates that
+    touch one are skipped so these bases never contribute a (weak, floppy) pair
+    that then "fails" during dynamics and depresses the health fraction.
     """
     import MDAnalysis as mda  # noqa: PLC0415
 
@@ -105,10 +116,13 @@ def build_c1_pairs(psf: Path, pdb: Path) -> C1Pairs:
     c1 = _select_c1(u)
     pos = c1.positions
     segids = c1.atoms.segids
+    excl = exclude_residues or set()
 
     candidates: list[tuple[float, int, int]] = []
     for i, j in cKDTree(pos).query_pairs(C1_SEARCH_HI):
         if segids[i] == segids[j]:
+            continue
+        if _residue_key(c1[i]) in excl or _residue_key(c1[j]) in excl:
             continue
         d = float(np.linalg.norm(pos[i] - pos[j]))
         if d >= C1_SEARCH_LO:
@@ -223,6 +237,7 @@ def build_wc_pairs(
     *,
     lo: float = C1_SEARCH_LO,
     hi: float = C1_SEARCH_HI,
+    exclude_residues: Optional[set[tuple[str, str]]] = None,
 ) -> list[WcPair]:
     """Build WC H-bond proxy pair list from reference structure.
 
@@ -233,16 +248,27 @@ def build_wc_pairs(
     intra-duplex pairs win over inter-helix contacts regardless of atom order.
     Non-WC-compatible candidates do not consume atoms, allowing each atom to
     be re-evaluated with the next-shortest candidate.
+
+    ``exclude_residues`` is a set of ``(chain, resid)`` keys (as produced by
+    ``md_protocols.identify_unpaired_residues``) for deliberately single-stranded
+    residues — crossover extra bases and other designed ssDNA.  These are never
+    Watson-Crick base-paired in the design, so an occasional geometric ss→partner
+    pairing (e.g. an inserted T that lands near a real A across the gap) is a
+    spurious WC pair; excluding them keeps the WC fraction measuring the intended
+    duplex.
     """
     import MDAnalysis as mda  # noqa: PLC0415
 
     u = mda.Universe(str(psf), str(pdb))
     c1 = _select_c1(u)
     pos = c1.positions
+    excl = exclude_residues or set()
 
     candidates: list[tuple[float, int, int]] = []
     for i, j in cKDTree(pos).query_pairs(hi):
         if c1[i].segid == c1[j].segid:
+            continue
+        if _residue_key(c1[i]) in excl or _residue_key(c1[j]) in excl:
             continue
         d = float(np.linalg.norm(pos[i] - pos[j]))
         if d >= lo:
@@ -374,8 +400,12 @@ def run_health_check(
         return HealthCheckResult(passed=False, error=f"DCD not found or empty: {dcd}")
 
     try:
-        c1_pairs = build_c1_pairs(psf, pdb)
-        wc_pairs = build_wc_pairs(psf, pdb)
+        # Exclude deliberately single-stranded residues (crossover extra bases +
+        # other designed ssDNA) so they don't contribute spurious pairs that fail
+        # during dynamics.  Empty for fully-duplex designs (no declash marker).
+        excl = _unpaired_exclusion_set(psf, pdb)
+        c1_pairs = build_c1_pairs(psf, pdb, exclude_residues=excl)
+        wc_pairs = build_wc_pairs(psf, pdb, exclude_residues=excl)
     except Exception as exc:
         return HealthCheckResult(passed=False, error=f"Pair build failed: {exc}")
 
@@ -480,6 +510,34 @@ def _select_c1(u: Any) -> Any:
     if not len(sel):
         raise RuntimeError("No C1' atoms found in universe.")
     return sel
+
+
+def _residue_key(atom: Any) -> tuple[str, str]:
+    """(chain, resid) key matching md_protocols.identify_unpaired_residues.
+
+    Chain = last character of the PSF segid (DNAA→A … DNAI→I), resid = str(int).
+    """
+    return (str(atom.segid)[-1], str(int(atom.resid)))
+
+
+def _unpaired_exclusion_set(psf: Path, pdb: Path) -> set[tuple[str, str]]:
+    """Deliberately single-stranded residues to exclude from health pairs.
+
+    Only computed for declashed / extra-base designs (detected by the
+    ``{stem}_build.pdb`` backup the declash rebuild leaves behind); a fully
+    duplex design has no such marker, so this returns an empty set and health
+    scoring is byte-identical to before.  Reuses the SAME ss detection that the
+    declash protocol excludes from the ENM, so the metric judges exactly the
+    residues that are actually restrained/expected to pair.
+    """
+    build_backup = pdb.with_name(f"{pdb.stem}_build.pdb")
+    if not build_backup.exists():
+        return set()
+    try:
+        from backend.core.md_protocols import identify_unpaired_residues  # noqa: PLC0415
+        return identify_unpaired_residues(psf, pdb)
+    except Exception:
+        return set()
 
 
 def _atom_index(residue: Any, name: str) -> int | None:

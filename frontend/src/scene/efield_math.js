@@ -250,6 +250,7 @@ export function fieldColorForHex(pN, ctx) {
 export function anchorKey(a) {
   if (!a) return ''
   if (a.kind === 'domain') return `domain:${a.strandId}:${a.domainIndex}`
+  if (a.kind === 'base') return `base:${a.helixId}:${a.bp}:${a.direction}`
   return `${a.kind}:${a.id}`
 }
 
@@ -259,6 +260,8 @@ export function anchorLabel(a) {
   if (a.kind === 'domain') return `domain ${a.strandId}#${a.domainIndex}`
   if (a.kind === 'overhang') return `overhang ${a.id}`
   if (a.kind === 'cluster') return `cluster ${a.id}`
+  if (a.kind === 'strand') return `strand ${a.id}`
+  if (a.kind === 'base') return `base ${a.helixId}.${a.bp} ${a.direction}`
   return anchorKey(a)
 }
 
@@ -282,14 +285,18 @@ export function removeAnchor(existing, key) {
 
 /**
  * Collect anchor descriptors from a store state snapshot.  Reads the multi-select
- * arrays (lasso) + the single `selectedObject`, restricted to the three allowed
- * scopes (overhang / domain / cluster — overhang being the recommended path).
- * Pure: takes the state object, returns descriptors; the UI passes store.getState().
+ * arrays (lasso) + the single `selectedObject`, restricted to the anchorable
+ * scopes: overhang / domain / cluster / whole strand (e.g. an overhang-binding
+ * oligo) / individual base.  Pure: takes the state object, returns descriptors;
+ * the UI passes store.getState().
  */
 export function resolveSelectionAnchors(state) {
   const s = state || {}
   const out = []
   for (const id of s.multiSelectedOverhangIds || []) out.push({ kind: 'overhang', id })
+  for (const id of s.multiSelectedStrandIds || []) {
+    if (id != null) out.push({ kind: 'strand', id })
+  }
   for (const d of s.multiSelectedDomainIds || []) {
     if (d) out.push({ kind: 'domain', strandId: d.strandId, domainIndex: d.domainIndex })
   }
@@ -297,8 +304,12 @@ export function resolveSelectionAnchors(state) {
   if (sel) {
     if (sel.type === 'overhang') out.push({ kind: 'overhang', id: sel.id })
     else if (sel.type === 'cluster') out.push({ kind: 'cluster', id: sel.id })
+    else if (sel.type === 'strand') out.push({ kind: 'strand', id: sel.id ?? sel.data?.strand_id })
     else if (sel.type === 'domain' && sel.data) {
       out.push({ kind: 'domain', strandId: sel.data.strand_id, domainIndex: sel.data.domain_index })
+    } else if (sel.type === 'nucleotide' && sel.data) {
+      out.push({ kind: 'base', helixId: sel.data.helix_id,
+                bp: sel.data.bp_index, direction: sel.data.direction })
     }
   }
   return dedupeAnchors(out)

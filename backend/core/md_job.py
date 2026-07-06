@@ -94,6 +94,10 @@ class MdJob:
     # True when the user explicitly stopped the job — keeps the startup/supervisor
     # auto-resume from relaunching a deliberately-paused run.  Reset on manual start.
     user_stopped: bool = False
+    # Opt-in relaxation accelerator.  When True, the runner may skip a stage's
+    # remaining p50/p100 chunks once its first chunk shows an energy+WC plateau
+    # (backend/core/md_cutoff.py).  Default OFF — never changes existing runs.
+    early_stop_relax: bool = False
     # Out-of-date detection (mirrors OxdnaJob).  ``design_fingerprint`` is a content
     # hash of the design this run was PREPARED from (set during background prep, after
     # the seed/active design is resolved — see backend.core.oxdna_staleness); a current
@@ -178,6 +182,7 @@ class MdJob:
         data.setdefault("seed_oxdna_job_id", None)
         data.setdefault("seed_mrdna_job_id", None)
         data.setdefault("parent_job_id", None)
+        data.setdefault("early_stop_relax", False)
         data.setdefault("failure_kind", None)
         data.setdefault("prep_params", None)
         data.setdefault("design_fingerprint", None)

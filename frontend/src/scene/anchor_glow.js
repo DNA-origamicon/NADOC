@@ -8,9 +8,13 @@
 //   { kind: 'overhang', id }                       — an overhang strand
 //   { kind: 'domain',   strandId, domainIndex }    — one domain of a strand
 //   { kind: 'cluster',  id }                        — a cluster of helices
+//   { kind: 'strand',   id }                        — a whole strand (e.g. an
+//                                                     overhang-binding oligo)
+//   { kind: 'base', helixId, bp, direction }        — one individual nucleotide
 // Each resolves to backbone entries via designRenderer.getBackboneEntries() (every
-// entry carries .pos + .nuc.{strand_id, domain_index, overhang_id}); clusters reuse
-// the same membership filter the selection/gizmo paths use.
+// entry carries .pos + .nuc.{strand_id, domain_index, overhang_id, helix_id,
+// bp_index, direction}); clusters reuse the same membership filter the
+// selection/gizmo paths use.
 //
 // Display-layer only — never touches topology.  Factory:
 //   initAnchorGlow({ designRenderer, store }) → { setAnchors, clear, refresh }
@@ -39,6 +43,13 @@ export function resolveAnchorEntries(anchors, backboneEntries, design) {
       const cluster = design?.cluster_transforms?.find((c) => c.id === a.id)
       const f = cluster ? clusterMemberFilter(cluster, design) : null
       if (f) for (const e of backboneEntries) if (f(e.nuc)) push(e)
+    } else if (a.kind === 'strand') {
+      for (const e of backboneEntries) if (e.nuc?.strand_id === a.id) push(e)
+    } else if (a.kind === 'base') {
+      for (const e of backboneEntries) {
+        if (e.nuc?.helix_id === a.helixId && e.nuc?.bp_index === a.bp
+            && e.nuc?.direction === a.direction) push(e)
+      }
     }
   }
   return out
