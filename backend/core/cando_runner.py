@@ -312,13 +312,18 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
         after = res["after"]["rmsd"]
         marks = res.get("converged_marks") or {}
         objective = res.get("objective", "deviation")
-        # SQUARE tunes end-to-end TWIST (deviation RMSD *rises* as twist→0, so the old rmsd gate
-        # would wrongly reject the twist-optimal program — exp37); honeycomb still gates on RMSD.
+        # SQUARE tunes end-to-end TWIST and HONEYCOMB the coupled (twist,bend) SHAPE — for both the
+        # deviation RMSD *rises* as the shape is hit (exp37/exp38), so the old rmsd gate would wrongly
+        # reject the correct program.  Gate those on the shape error; honeycomb-weak still gates on RMSD.
         tw_b, tw_a = res.get("twist_before"), res.get("twist_after")
         tw_t = res.get("twist_target") or 0.0
-        if objective == "twist":
+        bd_b, bd_a, bd_t = res.get("bend_before"), res.get("bend_after"), res.get("bend_target")
+        if objective in ("twist", "shape"):
             err_b = abs((tw_b if tw_b is not None else 0.0) - tw_t)
             err_a = abs((tw_a if tw_a is not None else 0.0) - tw_t)
+            if objective == "shape" and bd_t is not None:
+                err_b += abs((bd_b if bd_b is not None else 0.0) - bd_t)
+                err_a += abs((bd_a if bd_a is not None else 0.0) - bd_t)
             improved = bool(marks) and tw_a is not None and err_a < err_b - 1e-3
         else:
             improved = bool(marks) and after < before - 1e-4
@@ -327,6 +332,9 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
         job.refine_twist_before = round(tw_b, 3) if tw_b is not None else None
         job.refine_twist_after = round(tw_a, 3) if tw_a is not None else None
         job.refine_twist_target = round(tw_t, 3)
+        job.refine_bend_before = round(bd_b, 3) if bd_b is not None else None
+        job.refine_bend_after = round(bd_a, 3) if bd_a is not None else None
+        job.refine_bend_target = round(bd_t, 3) if bd_t is not None else None
         job.refine_period = (res.get("density") or {}).get("best_period")
 
         refined = snapshot
@@ -369,16 +377,21 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
 
         job.sim_seconds = round(time.monotonic() - t0, 2)
         per = f" (period {job.refine_period})" if job.refine_period else ""
-        if improved and objective == "twist":
+        if improved and objective == "shape":
+            bstr = (f", bend {bd_b:.1f}°→{bd_a:.1f}° (target {bd_t:.1f}°)"
+                    if bd_t is not None and bd_b is not None and bd_a is not None else "")
+            job.refine_note = (f"Applied {job.refine_n_marks} marks · twist "
+                               f"{tw_b:.1f}°→{tw_a:.1f}° (target {tw_t:.1f}°){bstr}")
+        elif improved and objective == "twist":
             job.refine_note = (f"Applied {job.refine_n_marks} marks{per} · twist "
                                f"{tw_b:.1f}°→{tw_a:.1f}° (target {tw_t:.1f}°, "
                                f"dev {before:.2f}→{after:.2f} nm)")
         elif improved:
             job.refine_note = (f"Applied {job.refine_n_marks} marks{per} · "
                                f"deviation {before:.2f}→{after:.2f} nm")
-        elif objective == "twist":
+        elif objective in ("twist", "shape"):
             cur = f"{tw_b:.1f}°" if tw_b is not None else "—"
-            job.refine_note = (f"No twist improvement (twist {cur}, target {tw_t:.1f}°) "
+            job.refine_note = (f"No shape improvement (twist {cur}, target {tw_t:.1f}°) "
                                f"— nothing applied.")
         else:
             job.refine_note = f"No improvement (deviation {before:.2f} nm) — nothing applied."

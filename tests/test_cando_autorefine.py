@@ -172,28 +172,33 @@ def test_refine_straight_control_makes_no_edits():
     assert res["converged_marks"] == {}
 
 
-def test_refine_never_increases_rmsd_and_places_marks_off_forbidden():
-    # An under-realised bend: keep the 90° DeformationOp target but strip half the loop/skips so a
-    # localized deviation opens up → the refiner should be able to lower the RMSD.
-    realized = _routed_bend(126, 90.0, realize=True)
+def test_refine_honeycomb_shape_hits_bend_and_places_marks_off_forbidden():
+    # An under-realised 90° bend: keep the DeformationOp target but strip half the loop/skips so the
+    # FEM under-bends → a real shape error opens up.  A programmed bend >> the arc-bend noise floor
+    # routes to the COUPLED (twist,bend) shape solve (exp38/G1), which drives the bend toward target.
+    realized = _routed_bend(210, 90.0, realize=True)
     marks = car.current_marks_by_helix(realized)
     reduced = {hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
                for hid, bps in marks.items()}
     under = car.apply_marks(realized, reduced)          # keeps the bend DeformationOp
-    res = car.fem_refine(under, nonlinear=False, max_hotspots=4, rmsd_improve_nm=0.02)
+    res = car.fem_refine(under, nonlinear=False)
 
     assert res["status"] == "done"
+    assert res["objective"] == "shape"                  # programmed bend → coupled twist+bend solve
     assert res["mode"] == "loops_and_skips"             # honeycomb → loops allowed
-    # Greedy: the RMSD must never rise (only strict improvements are accepted).
-    assert res["after"]["rmsd"] <= res["before"]["rmsd"] + 1e-9
-    # The topological gate applies to marks the refiner ITSELF adds (inherited marks placed by the
-    # core realizer may sit on crossovers — that realizer doesn't self-enforce the rule yet, see
-    # [[feedback_loopskip_no_crossover_ends]]; the refiner never adds such a mark).
+    assert res["authority"] is not None                 # per-helix [∂twist/∂skip, ∂bend/∂skip] map
+    # The coupled solve never regresses the shape: bend lands NO FURTHER from target than it started
+    # (it only adopts a step that lowers the combined twist+bend error; deviation RMSD may rise).
+    tgt_bd = res["bend_target"]
+    assert abs(res["bend_after"] - tgt_bd) <= abs(res["bend_before"] - tgt_bd) + 1e-6
+    # Any mark the refiner ADDED (beyond the inherited under-realised set) sits off crossovers/ends
+    # ([[feedback_loopskip_no_crossover_ends]]); inherited realizer marks may sit on crossovers.
     forbidden, _ = car._forbidden_bps(under)
-    for e in res["edits_kept"]:
-        if e["op"] in ("add_skip", "add_loop"):
-            assert e["bp_index"] not in forbidden[e["helix_id"]], \
-                "autorefine ADDED a mark on a crossover/end"
+    inherited = {(hid, bp) for hid, bps in reduced.items() for bp in bps}
+    for hid, bps in res["converged_marks"].items():
+        for bp in bps:
+            if (hid, bp) not in inherited:
+                assert bp not in forbidden[hid], "shape solve ADDED a mark on a crossover/end"
 
 
 def test_refine_emits_per_iteration_twist_bend_deviation_and_target():

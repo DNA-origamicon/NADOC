@@ -47,6 +47,14 @@ END_MARGIN = 6
 # landscape and drove twist 14.3°→0.37° — 1° is comfortably reachable by fractional skip density.
 TWIST_TOL_DEG = 1.0
 
+# HONEYCOMB coupled (twist, bend) objective (exp38/exp40).  Accept bend within this many degrees of
+# the intended bend — generous because the continuum FEM intrinsically realises only ~92% of a
+# programmed bend (exp36; G1 residual ~4° on a 60° bend).  And only ENGAGE the bend row of the
+# Jacobian when the intended bend exceeds the arc-bend estimator noise floor (exp40 G3: below ~this,
+# the bend signal is noise and the coupled solve chases it — twist-only is better).
+BEND_TOL_DEG = 3.0
+BEND_TARGET_FLOOR_DEG = 3.0
+
 
 def _twist_error(measure: Optional[dict], target_twist_deg: float) -> float:
     """|FEM end-to-end twist − INTENDED twist| for a :func:`fem_measure` result.  The intended
@@ -590,6 +598,123 @@ def _fractional_twist_bump(base_design: Design, *, base_count: int, target_twist
             "base_count": base_count}
 
 
+# ── Coupled (twist, bend) shape solve (HONEYCOMB / programmed-shape designs) ──────────────────
+# exp38 (G1) + exp40 (G3): a per-helix skip moves BOTH twist and bend, and bend authority varies by
+# cross-section position (bimetallic: inner-helix skips bend one way, outer the other) while twist
+# authority is ~uniform → the 2×H authority Jacobian J is well-conditioned, so a ridge least-squares
+# solve hits (twist_target, bend_target) jointly.  The bend row is ENGAGED only when the intended bend
+# clears the estimator noise floor (G3) — else it degenerates to the twist-only least-squares.  Every
+# edit is TRIED and kept only if it lowers the combined shape error (no geometric reasoning about
+# direction — [[feedback_crossover_no_reasoning]]).
+
+def _shape_error(tw, bd, tw_star, bd_star, use_bend):
+    """Combined |twist−target| (+ |bend−target| when the bend row is engaged), in degrees."""
+    e = abs((tw if tw is not None else 0.0) - tw_star)
+    if use_bend and bd is not None and bd_star is not None:
+        e += abs(bd - bd_star)
+    return e
+
+
+def _solve_shape_targets(base_design: Design, *, target_twist_deg: float,
+                         target_bend_deg: Optional[float], nonlinear: bool,
+                         forbidden: dict[str, set[int]], free_base: dict[str, list[int]],
+                         allow_loops: bool, probe_skips: int = 4, max_iters: int = 4,
+                         twist_tol: float = TWIST_TOL_DEG, bend_tol: float = BEND_TOL_DEG,
+                         on_progress: Optional[Callable[[dict], None]] = None,
+                         should_stop: Optional[Callable[[], bool]] = None) -> dict:
+    """Drive the FEM-predicted (twist, bend) to (``target_twist_deg``, ``target_bend_deg``) with a
+    ridge least-squares solve on the MEASURED 2×H authority Jacobian, iterated.  Starts from the
+    design's existing marks; each iteration re-probes the Jacobian (``probe_skips`` per helix ÷ count,
+    so the bend row clears the noise floor — exp40 fix), solves ``min_x ‖J·x − residual‖² + λ‖x‖²``,
+    realises the integer per-helix deltas (x>0 → skips, x<0 → loops when ``allow_loops``), and KEEPS
+    the step only if it lowers the combined shape error.  ``target_bend_deg=None`` → twist-only row.
+
+    Returns ``{marks, measure, authority, twist, bend, n_iters}`` where ``authority`` is
+    ``{helix_id: [∂twist/∂skip, ∂bend/∂skip]}``."""
+    import numpy as np
+
+    use_bend = target_bend_deg is not None
+
+    def emit(ev: dict) -> None:
+        if on_progress:
+            on_progress(ev)
+
+    def measure(marks):
+        return fem_measure(apply_marks(base_design, marks), nonlinear=nonlinear)
+
+    helices = list(base_design.helices)
+    cur = current_marks_by_helix(base_design)
+    cur_m = measure(cur)
+    if cur_m is None:
+        return {"marks": cur, "measure": None, "authority": {}, "twist": None, "bend": None,
+                "n_iters": 0}
+    cur_tw, cur_bd = cur_m.get("twist_deg"), cur_m.get("bend_deg")
+    cur_err = _shape_error(cur_tw, cur_bd, target_twist_deg, target_bend_deg, use_bend)
+    authority: dict[str, list[float]] = {}
+    n_iters = 0
+
+    for it in range(max_iters):
+        if should_stop and should_stop():
+            break
+        tw_ok = abs((cur_tw or 0.0) - target_twist_deg) <= twist_tol
+        bd_ok = (not use_bend) or (cur_bd is not None
+                                   and abs(cur_bd - target_bend_deg) <= bend_tol)
+        if tw_ok and bd_ok:
+            break
+        n_iters = it + 1
+        rows = 2 if use_bend else 1
+        J = np.zeros((rows, len(helices)))
+        for j, h in enumerate(helices):
+            if should_stop and should_stop():
+                break
+            avail = [bp for bp in free_base[h.id] if bp not in cur.get(h.id, {})]
+            picks = _even_place(avail, probe_skips)
+            if not picks:
+                continue
+            trial = {k: dict(v) for k, v in cur.items()}
+            trial.setdefault(h.id, {}).update({bp: -1 for bp in picks})
+            m = measure(trial)
+            if m is None or m.get("twist_deg") is None:
+                continue
+            dtw = (float(m["twist_deg"]) - float(cur_tw or 0.0)) / len(picks)
+            J[0, j] = dtw
+            if use_bend and m.get("bend_deg") is not None and cur_bd is not None:
+                dbd = (float(m["bend_deg"]) - float(cur_bd)) / len(picks)
+                J[1, j] = dbd
+                authority[h.id] = [round(dtw, 4), round(dbd, 4)]
+            else:
+                authority[h.id] = [round(dtw, 4), 0.0]
+        r = np.array([target_twist_deg - (cur_tw or 0.0)]
+                     + ([target_bend_deg - (cur_bd or 0.0)] if use_bend else []))
+        try:
+            x = J.T @ np.linalg.solve(J @ J.T + 0.5 * np.eye(rows), r)
+        except np.linalg.LinAlgError:
+            break
+        deltas = {h.id: int(round(x[j])) for j, h in enumerate(helices) if round(x[j]) != 0}
+        if not deltas:
+            break
+        trial = {k: dict(v) for k, v in cur.items()}
+        for hid, n in deltas.items():
+            avail = [bp for bp in free_base[hid] if bp not in trial.get(hid, {})]
+            for bp in _even_place(avail, abs(n)):
+                trial.setdefault(hid, {})[bp] = -1 if n > 0 else (+1 if allow_loops else -1)
+            if not trial.get(hid):
+                trial.pop(hid, None)
+        m = measure(trial)
+        if m is None:
+            break
+        e = _shape_error(m.get("twist_deg"), m.get("bend_deg"),
+                         target_twist_deg, target_bend_deg, use_bend)
+        emit({"phase": "shape_iter", "iter": it, "twist": m.get("twist_deg"),
+              "bend": m.get("bend_deg"), "shape_err": round(e, 3)})
+        if e < cur_err - 1e-6:
+            cur, cur_m, cur_tw, cur_bd, cur_err = trial, m, m.get("twist_deg"), m.get("bend_deg"), e
+        else:
+            break                                     # step did not help → stop (no regression)
+    return {"marks": cur, "measure": cur_m, "authority": authority,
+            "twist": cur_tw, "bend": cur_bd, "n_iters": n_iters}
+
+
 # ── The greedy refinement loop ───────────────────────────────────────────────────────────────
 
 def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1.0,
@@ -611,10 +736,14 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
       Deviation is REPORTED but not minimised; it rises modestly as twist → 0 (the twist↔deviation
       tradeoff).  ``authority`` in the result is the per-helix ∂twist/∂skip map.
 
-    * **HONEYCOMB / other → minimise the deviation RMSD** via the local greedy hotspot pass
-      (unchanged): rank the deviation hotspots, TRY every applicable edit (add-skip / add-loop /
-      remove) and KEEP the best if it lowers the RMSD by ≥ ``rmsd_improve_nm``.  (Generalising the
-      explicit twist+bend-target objective to honeycomb is future work — see the plan.)
+    * **HONEYCOMB / other → hit the intended (TWIST, BEND) shape** (exp38/exp40).  If the design
+      carries a real shape target — a programmed bend above the arc-bend noise floor, or a twist
+      error beyond tol — the coupled :func:`_solve_shape_targets` drives the FEM (twist, bend) to the
+      intended pair via a ridge least-squares solve on the measured 2×H authority Jacobian
+      (``objective="shape"``, ``authority`` = per-helix ``[∂twist/∂skip, ∂bend/∂skip]``).  Otherwise
+      (straight / weak-target designs, where the bend row would be noise — exp40 G3) it falls back to
+      the local greedy on the DEVIATION field (``objective="deviation"``): rank hotspots, TRY every
+      edit (add-skip / add-loop / remove), KEEP the best if it lowers the RMSD by ≥ ``rmsd_improve_nm``.
 
     ``allow_loops`` defaults to ``design.lattice_type != SQUARE`` (square → skips only, per the
     user's split); pass an explicit bool to override.  ``nonlinear=False`` (linear, ~seconds) is
@@ -631,7 +760,7 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
         allow_loops = base_design.lattice_type != LatticeType.SQUARE
     is_square = base_design.lattice_type == LatticeType.SQUARE
     mode = "loops_and_skips" if allow_loops else "skips_only"
-    objective = "twist" if is_square else "deviation"
+    objective = "twist" if is_square else "deviation"    # honeycomb may switch to "shape" below
 
     def emit(ev: dict) -> None:
         if on_progress:
@@ -651,11 +780,15 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
     core_keys = _core_keys(baseline["shape"])
     target = target_metrics(base_design, core_keys)
     target_twist = target["twist_deg"] if target["twist_deg"] is not None else 0.0
+    target_bend = target["bend_deg"]
+    before_metrics = current_metrics(baseline, core_keys)
     emit({"phase": "iteration", "iteration": 0, "n_hotspots": None,
-          "current": current_metrics(baseline, core_keys), "target": target})
+          "current": before_metrics, "target": target})
 
     forbidden, _interior = _forbidden_bps(base_design)
     helix_by_id = {h.id: h for h in base_design.helices}
+    free_base = {h.id: free_interior_candidates(base_design, h, forbidden[h.id])
+                 for h in base_design.helices}
     cur_marks = current_marks_by_helix(base_design)
     best = baseline
     stopped = False
@@ -682,8 +815,6 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
         if not stopped and bm_marks:
             per = [len(v) for v in bm_marks.values()]
             n_uniform = round(sum(per) / len(per)) if per else 0
-            free_base = {h.id: free_interior_candidates(base_design, h, forbidden[h.id])
-                         for h in base_design.helices}
             frac = _fractional_twist_bump(
                 base_design, base_count=n_uniform, target_twist_deg=target_twist,
                 nonlinear=nonlinear, twist_tol=TWIST_TOL_DEG, forbidden=forbidden,
@@ -700,11 +831,44 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
                 emit({"phase": "iteration", "iteration": 0, "n_hotspots": None,
                       "density_period": sweep["best_period"],
                       "current": current_metrics(best, core_keys), "target": target})
+    # Does this (non-square) design carry a real SHAPE target to hit — a programmed bend above the
+    # arc-bend noise floor (exp40 G3), or a twist error beyond tol?  If so, use the coupled
+    # (twist,bend) Jacobian solve (exp38 G1); else fall back to the deviation greedy (straight /
+    # weak-target designs, where the bend row would be noise and the greedy does no harm).
+    use_bend_target = (not is_square and target_bend is not None
+                       and abs(target_bend) > BEND_TARGET_FLOOR_DEG)
+    base_bd = before_metrics["bend_deg"]
+    twist_off = abs((before_metrics["twist_deg"] or 0.0) - target_twist) > TWIST_TOL_DEG
+    bend_off = use_bend_target and base_bd is not None and abs(base_bd - target_bend) > BEND_TOL_DEG
+    use_shape = (not is_square) and (use_bend_target or twist_off) and (twist_off or bend_off)
+
+    if is_square:
+        pass                                            # handled above
+    elif use_shape:
+        # ── HONEYCOMB coupled (twist, bend) SHAPE solve (exp38 G1) ───────────────────────────
+        objective = "shape"
+        emit({"phase": "shape_target", "twist": target_twist,
+              "bend": (target_bend if use_bend_target else None)})
+        sol = _solve_shape_targets(
+            base_design, target_twist_deg=target_twist,
+            target_bend_deg=(target_bend if use_bend_target else None),
+            nonlinear=nonlinear, forbidden=forbidden, free_base=free_base,
+            allow_loops=allow_loops, on_progress=emit, should_stop=should_stop)
+        cand = sol["measure"]
+        use_bd = use_bend_target
+        # Adopt only if it lowers the combined shape error over the design as loaded (no regression).
+        base_err = _shape_error(before_metrics["twist_deg"], base_bd,
+                                target_twist, target_bend, use_bd)
+        cand_err = (_shape_error(cand.get("twist_deg"), cand.get("bend_deg"),
+                                 target_twist, target_bend, use_bd) if cand else float("inf"))
+        if cand is not None and cand_err < base_err - 1e-6:
+            cur_marks = {hid: dict(bps) for hid, bps in sol["marks"].items()}
+            best = cand
+            authority = sol["authority"]
+        emit({"phase": "iteration", "iteration": sol.get("n_iters", 0), "n_hotspots": None,
+              "current": current_metrics(best, core_keys), "target": target})
     else:
-        # ── HONEYCOMB / other: local greedy on the DEVIATION field (unchanged) ───────────────
-        # Honeycomb designs realise a programmed bend/twist via loops+skips; the deviation-hotspot
-        # greedy tunes their placement.  Full twist+bend-target optimisation here is future work
-        # (see the generalisation plan in project_cando_fem.md / experiments/exp37 GENERALIZATION).
+        # ── HONEYCOMB / other: local greedy on the DEVIATION field (straight / weak-target) ──
         hotspots = [] if stopped else rank_hotspots(
             best["deviation_by_bp"], sigma=sigma, max_hotspots=max_hotspots, min_spacing=min_spacing)
         emit({"phase": "hotspots", "n": len(hotspots)})
@@ -750,29 +914,34 @@ def fem_refine(base_design: Design, *, nonlinear: bool = False, sigma: float = 1
                   "op": best_edit["op"] if accepted else None, "accepted": accepted,
                   "current": current_metrics(best, core_keys), "target": target})
 
-    before_metrics = current_metrics(baseline, core_keys)
     after_metrics = current_metrics(best, core_keys)
     out = {
         "status":          "stopped" if stopped else "done",
         "mode":            mode,
-        "objective":       objective,                  # "twist" (square) | "deviation" (honeycomb)
+        # "twist" (square) | "shape" (honeycomb coupled twist+bend) | "deviation" (greedy fallback).
+        "objective":       objective,
         "n_hotspots":      n_hotspots,
         "n_evaluated":     evaluated,
         "edits_kept":      kept,
         "before":          {k: baseline[k] for k in ("rmsd", "dev_max", "dev_mean")},
         "after":           {k: best[k] for k in ("rmsd", "dev_max", "dev_mean")},
-        # End-to-end twist vs the intended twist — the SQUARE objective (the runner's apply gate).
+        # End-to-end twist + bend vs the intended shape — the objective (the runner's apply gate).
         "twist_target":    target_twist,
         "twist_before":    before_metrics["twist_deg"],
         "twist_after":     after_metrics["twist_deg"],
         "twist_tol":       TWIST_TOL_DEG,
+        "bend_target":     target_bend,
+        "bend_before":     before_metrics["bend_deg"],
+        "bend_after":      after_metrics["bend_deg"],
+        "bend_tol":        BEND_TOL_DEG,
         # Final twist/bend/deviation of the best prediction vs the target (for the result readout).
         "metrics":         {"before": before_metrics, "after": after_metrics, "target": target},
         "converged_marks": {hid: {int(bp): int(dl) for bp, dl in bps.items()}
                             for hid, bps in cur_marks.items() if bps},
         # Square-lattice density sweep report (None for honeycomb / non-square).
         "density":         density,
-        # Per-helix measured twist authority (∂twist/∂skip) from the fractional pass (square only).
+        # Per-helix measured authority: square → {helix: ∂twist/∂skip}; shape → {helix:
+        # [∂twist/∂skip, ∂bend/∂skip]}; deviation → None.
         "authority":       authority,
     }
     emit({"phase": "done", "status": out["status"], "kept": len(kept),

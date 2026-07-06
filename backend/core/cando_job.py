@@ -77,10 +77,14 @@ class CandoJob:
     refine_after_rmsd:   Optional[float] = None # …and after (the applied result)
     refine_n_marks:      Optional[int] = None   # total loop/skip marks in the applied program
     refine_period:       Optional[int] = None   # SQUARE density-sweep winning period (None = n/a)
-    # SQUARE twist objective (exp37): end-to-end twist before/after vs the design's intended twist.
+    # SQUARE twist objective (exp37) + HONEYCOMB coupled (twist,bend) SHAPE objective (exp38):
+    # end-to-end twist/bend before/after vs the design's intended twist/bend.
     refine_twist_before: Optional[float] = None
     refine_twist_after:  Optional[float] = None
     refine_twist_target: Optional[float] = None
+    refine_bend_before:  Optional[float] = None
+    refine_bend_after:   Optional[float] = None
+    refine_bend_target:  Optional[float] = None
     refine_note:         Optional[str] = None    # live status line while running / summary on done
     # Populated on completion — surfaced in the panel detail block.
     sim_seconds:         Optional[float] = None   # wall time inside predict_shape()
@@ -134,6 +138,9 @@ class CandoJob:
         data.setdefault("refine_twist_before", None)
         data.setdefault("refine_twist_after", None)
         data.setdefault("refine_twist_target", None)
+        data.setdefault("refine_bend_before", None)
+        data.setdefault("refine_bend_after", None)
+        data.setdefault("refine_bend_target", None)
         data.setdefault("refine_note", None)
         data.setdefault("sim_seconds", None)
         data.setdefault("n_nodes", None)

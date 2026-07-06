@@ -58,19 +58,27 @@ degenerate frame). 1×N shape is **bend-dominated** (a ribbon). So the generaliz
 - treat 2×N / N×1 as the boundary where twist authority is small and noisy — clamp/guard it.
 Cheap to map and important for robustness: many real origami are 1–2 layers.
 
-## Phased plan
+## Phased plan + STATUS
 
-- **G1 — coupled (twist,bend) objective.** Extend `_fractional_twist_bump` → a `_solve_shape_targets`
-  that builds the 2×H authority Jacobian (∂twist, ∂bend per helix), solves for Δc toward
-  (twist_target, bend_target), verifies with real solves. Replace the honeycomb deviation-greedy with
-  it (deviation stays the tiebreak). Regression-gate on exp37's square result (twist-only row).
-- **G2 — authority-vs-geometry law.** Hollow SQ tube diameter sweep (+ solid/hollow) → fit
-  `authority(r_h, d)`. Deliver an analytic `J` seed + a decision: probe vs closed-form by size.
-- **G3 — asymmetric sections.** L / triangle / notched-block battery, straight + programmed
-  bend&twist → prove the 2D solve hits both; quantify residual coupling.
-- **G4 — 1×N & few-layer.** Twist-degeneracy guard + bend-only objective; 2×N noise clamp.
-- **G5 — scale.** Symmetry-orbit grouping (equivalent helices share an authority column) to cut the
-  probe from O(H) to O(orbits); needed for 100s-of-helix designs.
+- **G1 — coupled (twist,bend) objective. ✅ DONE + WIRED.** `_solve_shape_targets` (in
+  `backend/core/cando_autorefine.py`) builds the measured 2×H authority Jacobian (∂twist, ∂bend per
+  helix, multi-skip probe), ridge-least-squares solves toward (twist_target, bend_target), realizes
+  integer per-helix deltas (skips/loops), keeps a step only if it lowers the combined shape error.
+  Wired into `fem_refine`'s HONEYCOMB branch (`objective="shape"`) when the design carries a real
+  shape target (bend > noise floor OR twist beyond tol); else falls back to the deviation greedy.
+  Validated: under-realized 60° bend → bend 25.7°→54.0° (target 53.6°). exp38.
+- **G2 — authority-vs-geometry law. ✅ DONE.** Twist authority ∝ ~1/(N·r); bend ∝ moment arm but
+  noise-limited on symmetric tubes → geometry is a SEED, keep the in-loop measured Jacobian for
+  accuracy. exp39. Also surfaced: `auto_scaffold` leaves disjoint scaffolds on some sections → audit
+  every generated bundle.
+- **G3 — asymmetric sections. ✅ DONE (plan-refining).** Strong-asymmetry cases (L, triangle) don't
+  auto-route (→ separate handoff); on the routable notch, register→bend coupling is weak → coupled
+  solve gated on intended-bend > ~3° (the `BEND_TARGET_FLOOR_DEG` in the wiring). exp40.
+- **G4 — 1×N & few-layer. ✅ DONE — no guard needed.** 1×N is rank-1 colinear but the twist estimator
+  tracks the ribbon helicoid twist fine and the autorefine works (68°→1.5°). exp41.
+- **G5 — scale. OPEN.** Symmetry-orbit grouping (equivalent helices share an authority column) to cut
+  the probe from O(H) to O(orbits) on 100s-of-helix designs — the geometry law (G2) sets which helices
+  are equivalent.
 
-Each phase reuses the exp37 harness (parallel FINE solves, checkpoint + watchdog) to generate the
+Each phase reused the exp37 harness (parallel FINE solves, checkpoint + watchdog) to generate the
 validation tables the same way this one did.
