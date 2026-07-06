@@ -13,6 +13,7 @@ Index only. Open the topic file when relevant. Hard rules + commands live in `CL
 - **`backend_router_carveup.md` + `backend_router_extraction_log.md` (repo root)** — backend god-file carve-up (`crud.py`/`assembly.py` → `routes_<area>.py`). `/carve-router`. Metric = back-import surface B≤3, not LOC.
 - **`manual_validation_debt.md` (repo root)** — shift-register of "live gesture NOT hand-checked" features. One item/loop; `MV-N` rows.
 - **`design_automation_{backlog,log,harness,metrics}.md` (repo root)** — design-automation loop (`/automate-feature`): one op → headless entry point + oracle. Read backlog+log per loop; harness+metrics on demand.
+- **`SIM_COVERAGE_PLAN.md` + `sim_coverage_plan.json` + `sim_coverage_{log,metrics}.md` (repo root)** — full sim/feature-coverage loop (`/continue-coverage`): drive CanDo FEM / mrDNA / oxDNA / NAMD to cover extra-bases/linkers/E-fields/anchors + a shared cross-engine comparison metric. Authoritative task list = the JSON (status-only edits, seeded all-pending). Manager rubric: shared-metric track first, anchors-before-field, one task/session, single main loop + read-only subagents. Per-observable reference (oxDNA=shape+field, CanDo=RMSF, NAMD=gold-when-present). Auto-commit to master. Read the `▶` handoff first.
 - [test_parallelization](project_test_parallelization.md) — `just test` = parallel `pytest -n auto` (~2.5min); `just test-fast` skips slow real-sim (~45s); slow registry in `tests/conftest.py`; xdist active-design isolation gotcha.
 
 ## Path-scoped architecture maps
