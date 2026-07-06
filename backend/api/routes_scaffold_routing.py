@@ -70,6 +70,19 @@ def _run_auto_scaffold_with_feature_log(
     return updated, report, holder['result']
 
 
+def _guard_seamed_routable(errors_fn) -> None:
+    """Refuse a seamed/matched route (422) that would fragment into a disjoint
+    scaffold — an odd-helix group or a shape with no continuous crossover path.
+
+    Runs on the LIVE design BEFORE any state mutation, so a refused route leaves
+    the design (and its feature log) untouched; the frontend surfaces ``detail``
+    as a toast.  ``errors_fn`` is ``seamed_router.seamed_routability_errors``.
+    """
+    errs = errors_fn(design_state.get_or_404())
+    if errs:
+        raise HTTPException(status_code=422, detail="; ".join(errs))
+
+
 @router.post("/design/auto-scaffold-seamed", status_code=200)
 def auto_scaffold_seamed_endpoint() -> dict:
     """Seamed scaffold routing: Create Seam + Create Near Ends + Create Far Ends atomically.
@@ -78,7 +91,9 @@ def auto_scaffold_seamed_endpoint() -> dict:
     seam crossovers at interior pairs, extends and connects the near (-lo) face, then
     extends and connects the far (+hi) face.  All three phases share one snapshot.
     """
-    from backend.core.seamed_router import auto_scaffold_seamed
+    from backend.core.seamed_router import auto_scaffold_seamed, seamed_routability_errors
+
+    _guard_seamed_routable(seamed_routability_errors)
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
         op_kind='auto-scaffold-seamed',
@@ -104,7 +119,9 @@ def auto_scaffold_matched_endpoint() -> dict:
     cap lands on the next copy's near cap.  Seam marking + sequence assignment
     stay with the existing periodic tools.
     """
-    from backend.core.seamed_router import auto_scaffold_matched
+    from backend.core.seamed_router import auto_scaffold_matched, seamed_routability_errors
+
+    _guard_seamed_routable(seamed_routability_errors)
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
         op_kind='auto-scaffold-matched',

@@ -234,3 +234,83 @@ def test_circular_scaffold_is_linearized_at_buried_noncrossover_nick():
     assert s.domains[0].start_bp not in (0, 50)                  # nick is interior, not a crossover bp
     assert s.domains[-1].end_bp not in (0, 50)
     assert not result.warnings
+
+
+# ── Routability guard (seamed_routability_errors) ─────────────────────────────
+# The seamed router silently fragments two shape classes into a DISJOINT scaffold
+# instead of one strand: (A) an ODD-helix group orphans the last path helix
+# (3×3 → 8+1, L → 6+1), and (B) a cross-section whose crossover-adjacency graph
+# has NO Hamiltonian path (staircase triangle) skips the whole group so every
+# helix stays its own scaffold.  The endpoints call this guard and refuse (422)
+# rather than emit the broken scaffold.  Seamless routing pairs helices
+# differently and handles both, so the guard is seamed/matched-only.
+
+from backend.core.seamed_router import seamed_routability_errors
+
+SQ = LatticeType.SQUARE
+
+
+def _sq_bundle(cells):
+    return make_bundle_design(cells, length_bp=160, lattice_type=SQ)
+
+
+def test_guard_passes_even_hamiltonian_bundles():
+    """Even-helix, Hamiltonian-traceable cross-sections route cleanly → no errors."""
+    solid_2x3 = [(r, c) for r in range(2) for c in range(3)]
+    notch = [(r, c) for r in range(4) for c in range(4) if not (r < 2 and c >= 2)]
+    for cells in (solid_2x3, notch):
+        assert seamed_routability_errors(_sq_bundle(cells)) == []
+
+
+@pytest.mark.parametrize("cells,n", [
+    ([(r, c) for r in range(3) for c in range(3)], 9),                       # 3×3
+    ([(r, 0) for r in range(4)] + [(3, c) for c in range(1, 4)], 7),         # L
+])
+def test_guard_flags_odd_helix_group(cells, n):
+    """An odd-helix group would orphan the trailing helix — flagged as 'even'."""
+    errs = seamed_routability_errors(_sq_bundle(cells))
+    assert errs and any("even number of helices" in e for e in errs)
+    assert any(str(n) in e for e in errs)
+
+
+def test_guard_flags_no_hamiltonian_path():
+    """The staircase triangle's crossover graph has no single path — flagged."""
+    triangle = [(r, c) for r in range(4) for c in range(r + 1)]
+    errs = seamed_routability_errors(_sq_bundle(triangle))
+    assert errs and any("continuous crossover path" in e for e in errs)
+
+
+def test_guard_is_out_of_scope_for_forced_ligation_designs():
+    """Forced-ligation (hinge) designs route through their own router — not guarded."""
+    d = _sq_bundle([(r, c) for r in range(3) for c in range(3)])  # odd, would flag
+    from backend.core.models import Direction, ForcedLigation
+    d = d.copy_with(forced_ligations=[
+        ForcedLigation(
+            three_prime_helix_id=d.helices[0].id, three_prime_bp=10,
+            three_prime_direction=Direction.FORWARD,
+            five_prime_helix_id=d.helices[1].id, five_prime_bp=10,
+            five_prime_direction=Direction.REVERSE,
+        )
+    ])
+    assert seamed_routability_errors(d) == []
+
+
+def test_seamed_endpoint_refuses_odd_helix_design_with_422():
+    """End-to-end: the seamed endpoint 422s on an odd-helix design (feeds the toast),
+    while seamless still routes it to a single scaffold."""
+    from fastapi import HTTPException
+    from backend.api import headless_build as hb
+    from backend.api import state as ds
+
+    cells = [(r, c) for r in range(3) for c in range(3)]  # 3×3, 9 helices
+    with hb.scratch_session(SQ):
+        hb.create_bundle(cells, 160, lattice=SQ, name="guard")
+        with pytest.raises(HTTPException) as exc:
+            hb.auto_scaffold(seamless=False)
+        assert exc.value.status_code == 422
+        assert "even number of helices" in str(exc.value.detail)
+        # the design must be untouched by the refused route (no scaffold fragmentation)
+        assert sum(s.is_scaffold for s in ds.get_or_404().strands) == 9
+        # seamless handles the odd count → one strand
+        hb.auto_scaffold(seamless=True)
+        assert sum(s.is_scaffold for s in ds.get_or_404().strands) == 1

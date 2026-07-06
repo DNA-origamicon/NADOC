@@ -59,6 +59,26 @@ KNOWN LIMIT: the HC dumbbell trunk is a degree-2 6-RING; closing the full cycle 
 SQ teeth close cleanly. Fixing HC-ring closure (place the closing zig at the endpoints' actual FREE faces, not the FORWARD-hA
 heuristic) is the remaining follow-up if a seam-free HC dumbbell is wanted. Full suite 1853 pass.
 
+**SEAMED ROUTABILITY GUARD (2026-07-05) — asymmetric SQ sections that silently fragment now 422.**
+The seamed router fragments a connected design into a DISJOINT scaffold on two shape classes; instead of
+emitting the broken scaffold (which fed garbage duplex coverage to the CanDo FEM — see [[project_cando_fem]]
+G3), the seamed+matched endpoints now refuse (422 → frontend toast). Two causes, both reproduced headless:
+(A) **odd helix group** — `_auto_scaffold_seamed_impl` pairs the Ham path in steps of two from both ends
+(`seam (1,2)(3,4)…` + `near (0,1)(2,3)…`), so `path[n-1]` is never paired → orphan singleton (3×3→8+1, L→6+1).
+A Ham path EXISTS; it's a parity bug. (B) **no Hamiltonian path** in the *scaffold-crossover* adjacency
+graph (`_build_adj`) — staircase triangle (`brute_ham=False`) → the whole component is skipped at
+seamed_router.py `if not path or len(path)<4: continue` → every helix its own scaffold. Predictor =
+Hamiltonicity of the **crossover** graph (NOT the raw cell grid) + helix-count parity; cell-grid
+cut-vertices do NOT predict it (L has 5 but its xover graph is a clean path — fails on parity). **SEAMLESS
+handles odd counts fine** (zig-zag pairing routes 3×3/L to 1 strand) → the guard is seamed/matched-ONLY.
+Impl: pure `seamed_router.seamed_routability_errors(design)` (returns [] for forced-ligation + multisection
+designs = out of scope; those route via hinge/section routers) called by
+`routes_scaffold_routing._guard_seamed_routable` → `HTTPException(422, detail=…)` BEFORE any state mutation.
+Frontend needed NO change: `_request` maps `detail`→`lastError.message`, `autoscaffold_picker` already
+toasts it. Tests: `test_seamed_router.py::test_guard_*` (6). Full suite 4072 pass (1 pre-existing NAMD
+benchmark fail, unrelated). NOT fixed — the underlying router; odd/no-Ham sections still can't be seamed-
+routed to one strand (that's the ISSUE-8 continuous-routing rework). Guard just makes the failure LOUD.
+
 ISSUE-8 (issues_ledger.md): a connected multi-section "teeth" design must route to ONE scaffold
 strand but the seamed router fragments (teeth.nadoc → 11 strands). Investigation + build session 1
 done 2026-06-08. Full design + status: plan file `~/.claude/plans/floating-crunching-widget.md`.

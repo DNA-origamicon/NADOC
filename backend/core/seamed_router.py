@@ -1111,6 +1111,81 @@ def _matched_ends_feasible(result: SeamedResult) -> bool:
     return not any(w.startswith("[MatchedEnds]") for w in result.warnings)
 
 
+def seamed_routability_errors(design: Design) -> list[str]:
+    """Precondition guard for the *seamed/matched* endpoints (empty == routable).
+
+    The seamed router threads one Hamiltonian path through each connected group of
+    the scaffold-crossover adjacency graph, then chains consecutive path helices in
+    steps of two (``_auto_scaffold_seamed_impl``: seam pairs ``(1,2),(3,4)…`` + near
+    pairs ``(0,1),(2,3)…``).  Two shapes silently fragment that into a disjoint
+    scaffold instead of one strand:
+
+    * **Odd helix group** — the step-2 pairing chains ``path[0..n-2]``; when the group
+      has an *odd* number of helices ``path[n-1]`` is never placed in any pair and is
+      left as its own single-helix scaffold (e.g. a 3×3 → 8+1, an L → 6+1).
+    * **No Hamiltonian path** — some connected cross-sections (e.g. a staircase
+      triangle) admit no single path through the crossover graph at all, so the whole
+      group is skipped and *every* helix stays its own scaffold.
+
+    Rather than emit a silently-broken scaffold (which then feeds garbage duplex
+    coverage to downstream FEM / audits), the endpoints refuse with these messages so
+    the UI can toast them.  The guard is scoped to the *classic per-group* path only:
+    forced-ligation (hinge) and multi-section (dumbbell/teeth) designs route through
+    their own routers and are out of scope here — they are returned as routable.
+
+    Seamless routing pairs helices differently (zig-zag) and handles odd groups, so
+    this guard is deliberately NOT applied to the seamless endpoint.
+    """
+    if design.forced_ligations:
+        return []  # hinge router path — out of scope for this guard
+
+    coverage = _scaffold_coverage(design)
+    if not coverage:
+        return []  # nothing to route; the router reports its own "no scaffold" warning
+
+    from backend.core.section_router import has_multisection_helix
+    if has_multisection_helix(coverage):
+        return []  # section router path — out of scope for this guard
+
+    adj = _build_adj(design, coverage)
+
+    # Connected components of the crossover-adjacency graph (mirrors the impl).
+    visited: set[str] = set()
+    components: list[list[str]] = []
+    for hid in adj:
+        if hid in visited:
+            continue
+        comp, stack = [], [hid]
+        while stack:
+            nid = stack.pop()
+            if nid in visited:
+                continue
+            visited.add(nid); comp.append(nid)
+            stack.extend(adj[nid] - visited)
+        components.append(comp)
+
+    errors: list[str] = []
+    for comp in components:
+        if len(comp) < 4:
+            continue  # the impl already warns on tiny groups; not this guard's job
+        path = _hamiltonian_path(comp, adj)
+        if not path or len(path) < len(comp):
+            errors.append(
+                f"Seamed autoscaffold can't thread a single scaffold path through all "
+                f"{len(comp)} helices of this cross-section (no continuous crossover "
+                f"path exists for this shape). Try Seamless routing, or adjust the "
+                f"cross-section."
+            )
+        elif len(path) % 2 == 1:
+            errors.append(
+                f"Seamed autoscaffold needs an even number of helices per connected "
+                f"group; this design has a group of {len(path)} helices (odd), which "
+                f"would leave one helix unrouted. Try Seamless routing, which handles "
+                f"odd helix counts."
+            )
+    return errors
+
+
 def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     """Seamed scaffold pipeline (Seam → Near Ends → Far Ends).
 
