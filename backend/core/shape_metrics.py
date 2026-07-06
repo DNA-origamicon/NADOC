@@ -30,7 +30,10 @@ Descriptor set (all lengths nm, angles degrees):
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
+from scipy.stats import pearsonr, spearmanr
 
 from backend.core.constants import BDNA_BP_PER_TURN, BDNA_RISE_PER_BP
 from backend.core.oxdna_health import (
@@ -284,3 +287,160 @@ def normalize_rmsf_profile(profile) -> dict:
         for direction in dirs:
             result[f"{e['helix_id']}:{int(e['bp_index'])}:{direction}"] = v
     return result
+
+
+# ── Cross-engine agreement (S3) ────────────────────────────────────────────────────
+#
+# ``compare_descriptors`` scores how well a CANDIDATE engine's shape prediction agrees
+# with a REFERENCE engine's, on the three comparable observable classes S1/S2 produce:
+#   * scalar shape descriptors  -> signed percent delta vs the reference
+#   * per-nt RMSF profile        -> Pearson (linear) + Spearman (rank) correlation
+#   * relaxed shape frame        -> aligned-shape RMSD (reuses deviation_profile align=True,
+#                                   i.e. Kabsch — rigid pose is irrelevant, intrinsic shape
+#                                   mismatch survives)
+# ``reference_for`` applies the per-observable reference POLICY (oxDNA=shape/field,
+# CanDo=RMSF/flexibility) with NAMD overriding every observable once a NAMD run exists.
+# Pure comparison layer over Physical-layer outputs — never touches topology.
+
+#: The engine-agnostic scalar descriptors compared as signed percent deltas.  (Counts
+#: like ``n_nucleotides`` are excluded — they describe the map, they aren't observables.)
+COMPARABLE_SCALARS: tuple[str, ...] = (
+    "twist_total_deg", "twist_per_turn_deg", "bend_angle_deg", "bend_radius_nm",
+    "radius_of_gyration_nm", "end_to_end_nm", "axial_span_nm",
+)
+
+#: Per-observable reference engine (lower-case).  NAMD (:data:`_GOLD_ENGINE`) overrides
+#: all of these when present.  ``field`` shares oxDNA with ``shape`` (both geometric).
+_REFERENCE_POLICY: dict[str, str] = {"shape": "oxdna", "field": "oxdna", "rmsf": "cando"}
+_GOLD_ENGINE = "namd"
+
+
+def reference_for(engines, observable: str) -> str | None:
+    """Which engine is the reference for ``observable`` given the ones present.
+
+    ``engines`` is any iterable of engine names; ``observable`` is one of ``"shape"``,
+    ``"field"``, ``"rmsf"``.  NAMD wins every observable when present (gold override);
+    otherwise the policy engine wins if present.  Returns ``None`` when neither the gold
+    engine nor the policy engine is available (or the observable is unknown) — a missing
+    reference is reported, never silently mis-assigned.
+    """
+    avail = {str(e).lower() for e in engines}
+    if _GOLD_ENGINE in avail:
+        return _GOLD_ENGINE
+    pref = _REFERENCE_POLICY.get(observable)
+    return pref if pref in avail else None
+
+
+def _finite_or_none(x) -> float | None:
+    """Coerce to a plain float, mapping NaN/inf (degenerate correlation) to ``None``."""
+    x = float(x)
+    return x if math.isfinite(x) else None
+
+
+def _signed_pct(cand, ref) -> tuple[float | None, float | None]:
+    """``(abs_delta, signed_percent_delta)`` of a candidate scalar vs its reference.
+    ``None`` scalars -> both ``None`` (incomparable); a zero reference -> the absolute
+    delta but a ``None`` percent (no divide-by-zero)."""
+    if cand is None or ref is None:
+        return None, None
+    abs_delta = float(cand) - float(ref)
+    if ref == 0:
+        return abs_delta, None
+    return abs_delta, abs_delta / abs(float(ref)) * 100.0
+
+
+def _rmsf_per_bp(profile) -> dict:
+    """Collapse a per-nucleotide RMSF profile to a per-base-pair ``(helix, bp, copy)`` map,
+    averaging over strand direction.
+
+    This is the reconciliation the cross-engine comparison needs: an ensemble profile
+    (``rmsf_from_ensemble``) carries a ``direction`` per strand — two entries per bp —
+    while CanDo's NMA RMSF (the policy RMSF *reference*) is an axis-node value with NO
+    direction — one entry per bp.  Keying on ``direction`` would leave those two key-sets
+    disjoint (nothing shared), so the correlation between the very pair the policy exists
+    to compare would silently be undefined.  Reducing both sides to the per-bp mean puts
+    them on the SAME sites (mirrors the strand-agnostic collapse in
+    ``normalize_rmsf_profile``)."""
+    acc: dict = {}
+    for e in profile:
+        k = (e["helix_id"], int(e["bp_index"]), int(e.get("copy", 0)))
+        acc.setdefault(k, []).append(float(e["rmsf_nm"]))
+    return {k: float(np.mean(v)) for k, v in acc.items()}
+
+
+def _rmsf_agreement(cand_rmsf, ref_rmsf) -> dict | None:
+    """Pearson + Spearman correlation between two RMSF profiles over the base pairs they
+    share (each collapsed to per-bp by :func:`_rmsf_per_bp`, so a direction-less CanDo
+    profile still matches a per-strand ensemble profile).  ``None`` if either profile is
+    missing, fewer than two base pairs overlap, or a profile is constant (correlation
+    undefined -> ``None`` coefficient, not NaN)."""
+    if not cand_rmsf or not ref_rmsf:
+        return None
+    c = _rmsf_per_bp(cand_rmsf)
+    r = _rmsf_per_bp(ref_rmsf)
+    shared = sorted(set(c) & set(r))
+    if len(shared) < 2:
+        return None
+    cv = np.array([c[k] for k in shared])
+    rv = np.array([r[k] for k in shared])
+    degenerate = cv.std() < 1e-12 or rv.std() < 1e-12
+    pear = None if degenerate else _finite_or_none(pearsonr(cv, rv)[0])
+    spear = None if degenerate else _finite_or_none(spearmanr(cv, rv).correlation)
+    return {
+        "pearson": pear,
+        "spearman": spear,
+        "n": len(shared),
+        "candidate_mean_rmsf_nm": float(cv.mean()),
+        "reference_mean_rmsf_nm": float(rv.mean()),
+    }
+
+
+def _shape_rmsd(cand_frame, ref_frame, align: bool) -> float | None:
+    """Aligned-shape RMSD (nm) between two display-position frames — reuses
+    :func:`deviation_profile`.  ``None`` if either frame is absent or too small/degenerate
+    to superpose."""
+    if not cand_frame or not ref_frame:
+        return None
+    try:
+        return deviation_profile(cand_frame, ref_frame, align=align)["rmsd_nm"]
+    except ValueError:
+        return None
+
+
+def compare_descriptors(candidate, reference, *, align_shape: bool = True) -> dict:
+    """Agreement between a candidate engine's prediction and a reference engine's.
+
+    Each argument is a source bundle::
+
+        {"engine": str,
+         "descriptors": <compute_shape_descriptors output> | None,
+         "rmsf": [{helix_id, bp_index, rmsf_nm, direction?, copy?}, …] | None,
+         "shape_frame": <display-position map> | None}
+
+    ``reference`` is the denominator for the scalar percent deltas (pick it with
+    :func:`reference_for`).  Returns::
+
+        {"candidate", "reference",             # engine names
+         "scalars": {name: {candidate, reference, abs_delta, signed_pct_delta}},
+         "rmsf": {pearson, spearman, n, candidate_mean_rmsf_nm, reference_mean_rmsf_nm} | None,
+         "shape_rmsd_nm": float | None}         # Kabsch-aligned when align_shape (default)
+
+    Any observable a source doesn't carry is reported as ``None`` — a partial bundle
+    yields a partial comparison, never a crash.
+    """
+    cd = candidate.get("descriptors") or {}
+    rd = reference.get("descriptors") or {}
+    scalars: dict = {}
+    for name in COMPARABLE_SCALARS:
+        c, r = cd.get(name), rd.get(name)
+        abs_delta, pct = _signed_pct(c, r)
+        scalars[name] = {"candidate": c, "reference": r,
+                         "abs_delta": abs_delta, "signed_pct_delta": pct}
+    return {
+        "candidate": candidate.get("engine"),
+        "reference": reference.get("engine"),
+        "scalars": scalars,
+        "rmsf": _rmsf_agreement(candidate.get("rmsf"), reference.get("rmsf")),
+        "shape_rmsd_nm": _shape_rmsd(
+            candidate.get("shape_frame"), reference.get("shape_frame"), align_shape),
+    }

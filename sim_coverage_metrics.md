@@ -32,6 +32,21 @@ fills in as milestones complete.
   on the shared substrate — the two flexibility/shape yardsticks S3's `compare_descriptors` needs to report a
   Pearson r / signed Δ between two engines instead of comparing incommensurable per-engine numbers.
 
+- **`S3` — cross-engine descriptor agreement** · shape: 2 entry points added to the `shape_metrics.py` service
+  (`compare_descriptors` + `reference_for`; no solver/card change) composing S1's descriptors + S2's profiles ·
+  feature: comparison-metric (the agreement math itself) · engines now comparable: any two engines yield a
+  scored comparison — signed %Δ per shape descriptor, Pearson/Spearman on per-bp RMSF, Kabsch-aligned shape
+  RMSD — with the reference picked per-observable by policy (oxDNA=shape/field, CanDo=RMSF, NAMD-override) ·
+  oracle: `tests/test_shape_compare.py` 13 tests **fast** (identical→perfect, ±10° twist→±10% signed,
+  scaled/reversed/constant RMSF correlation, rigid-pose-invariant shape RMSD, `reference_for` policy + override +
+  missing→None, **CanDo dir-less vs oxDNA per-strand RMSF collapses to per-bp & correlates** — the review-caught
+  fix) · main.js LOC Δ = 0 · tests: 13/13 oracle (32/32 S1+S2+S3), `just test` 4140 passed / 66 skipped /
+  1 xfailed (1 pre-existing xdist flake, passes in isolation) ·
+  **Comparable prediction gained, not just a run:** the loop's first cross-*validation* number — two engines'
+  frames now reduce to an agreement score (%Δ, Pearson r, aligned RMSD) with a policy-chosen reference, so the
+  question "do the quick and rigorous engines agree, and where do they diverge?" becomes computable the moment
+  S5 wires it into the generate/view/export card.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -53,7 +68,7 @@ requirement)._
 
 | Milestone | Meaning | Status |
 |---|---|---|
-| `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | pending (S1–S5) |
+| `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | pending (S1–S3 done; S4, S5 remain) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | pending (C1,C2,S4,S5,O1) |
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1–C5) |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |
