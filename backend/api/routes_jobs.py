@@ -104,6 +104,10 @@ def _collect_active() -> list[dict]:
                 "design_name": j.design_name,
                 "design_source_path": j.design_source_path,
                 "status": j.status.value,
+                # "local" runs on this machine's GPU/CPU; "alpine" runs on the remote
+                # cluster and consumes no local resources — the concurrent-launch guard
+                # ignores remote jobs (they can't contend for the local GPU/disk).
+                "execution_target": getattr(j, "execution_target", "local"),
                 "eta_seconds": _md_eta_seconds(j, ws) if j.status.value == "running" else None,
             })
     except Exception:  # noqa: BLE001
@@ -127,6 +131,8 @@ def _collect_active() -> list[dict]:
                 "design_name": j.design_name,
                 "design_source_path": j.design_source_path,
                 "status": j.status.value,
+                # oxDNA has no remote backend — every oxDNA job runs locally.
+                "execution_target": "local",
                 "eta_seconds": _oxdna_eta_seconds(j, ws) if j.status.value == "running" else None,
             })
     except Exception:  # noqa: BLE001

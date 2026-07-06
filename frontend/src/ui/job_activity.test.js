@@ -6,6 +6,7 @@ import {
   activeJobForPath,
   jobActivityTooltip,
   pickBlockingJob,
+  isLocalJob,
   diskWarningMessage,
 } from './job_activity.js'
 
@@ -116,6 +117,29 @@ describe('pickBlockingJob', () => {
     expect(pickBlockingJob([{ job_id: '2', status: 'queued' }])).toBeNull()
     expect(pickBlockingJob([])).toBeNull()
     expect(pickBlockingJob(null)).toBeNull()
+  })
+  it('ignores a job running on the remote Alpine cluster (no local contention)', () => {
+    expect(pickBlockingJob([
+      { job_id: 'a', status: 'running', execution_target: 'alpine' },
+    ])).toBeNull()
+  })
+  it('still blocks on a concurrent LOCAL job when a remote one is also active', () => {
+    expect(pickBlockingJob([
+      { job_id: 'a', status: 'running', execution_target: 'alpine' },
+      { job_id: 'b', status: 'running', execution_target: 'local' },
+    ]).job_id).toBe('b')
+  })
+  it('treats a missing execution_target as local (legacy jobs)', () => {
+    expect(pickBlockingJob([{ job_id: '1', status: 'running' }]).job_id).toBe('1')
+  })
+})
+
+describe('isLocalJob', () => {
+  it('true for local / missing target, false for alpine', () => {
+    expect(isLocalJob({ execution_target: 'local' })).toBe(true)
+    expect(isLocalJob({})).toBe(true)
+    expect(isLocalJob(undefined)).toBe(true)
+    expect(isLocalJob({ execution_target: 'alpine' })).toBe(false)
   })
 })
 

@@ -1361,8 +1361,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       console.log(`[${_ts()}] md-jobs: Relax clicked but already launching`)
       return
     }
-    if (!(await confirmNoConcurrentJob())) return
-    if (!(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
+    // Alpine runs on the remote cluster — it can't contend for the local GPU/disk,
+    // so the local-resource guards (concurrent NADOC job, external GPU hog, local
+    // disk space) don't apply and would wrongly block a submit while a local job runs.
+    const runTarget = _currentRunTarget()
+    const isLocalRun = runTarget !== 'alpine'
+    if (isLocalRun && !(await confirmNoConcurrentJob())) return
+    if (isLocalRun && !(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
     _launching = true
     runBtn.disabled = true
 
@@ -1381,18 +1386,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       fast:           fastChk?.checked ?? true,
       early_stop_relax: earlyStopChk?.checked ?? false,
       design_source_path: _currentPartPath() || null,
-      execution_target: _currentRunTarget(),
-      cluster_name:   _currentRunTarget() === 'alpine' ? 'alpine' : null,
+      execution_target: runTarget,
+      cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
     }
 
-    try {
-      const fc = await estimateMdDisk(payload)
-      if (!(await confirmDiskSpaceOk(fc))) {
-        _launching = false
-        runBtn.disabled = false
-        return
-      }
-    } catch { /* forecast is best-effort — never block a launch on it */ }
+    // Local-disk forecast only applies to a local run; an Alpine run writes its
+    // trajectory on the cluster's scratch, not this machine's disk.
+    if (isLocalRun) {
+      try {
+        const fc = await estimateMdDisk(payload)
+        if (!(await confirmDiskSpaceOk(fc))) {
+          _launching = false
+          runBtn.disabled = false
+          return
+        }
+      } catch { /* forecast is best-effort — never block a launch on it */ }
+    }
 
     console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
     if (detailEl) detailEl.style.display = ''

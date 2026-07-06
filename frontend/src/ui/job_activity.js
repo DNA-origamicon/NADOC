@@ -61,12 +61,22 @@ export function jobActivityTooltip(job) {
     : `${eng} simulation ${verb}…`
 }
 
+/** Pure: true if a job runs on THIS machine (vs. the remote Alpine cluster).
+ *  Missing/legacy field → local (old jobs predate the remote backend). */
+export function isLocalJob(job) {
+  return (job?.execution_target ?? 'local') === 'local'
+}
+
 /** Pure: a busy job (running/preparing) that should block a new launch, or null.
+ *  Only LOCAL jobs block — a job running on the Alpine cluster consumes no local
+ *  GPU/disk, so it can't contend with a new local run (and vice versa: an Alpine
+ *  submit isn't gated by a local run — its launch handler skips this guard).
  *  ``excludeJobId`` skips the job being resumed so resuming it never warns about
  *  itself. */
 export function pickBlockingJob(activeJobs, excludeJobId = null) {
   return (activeJobs || []).find(
-    j => j.job_id !== excludeJobId && (j.status === 'running' || j.status === 'preparing'),
+    j => j.job_id !== excludeJobId && isLocalJob(j)
+      && (j.status === 'running' || j.status === 'preparing'),
   ) || null
 }
 
