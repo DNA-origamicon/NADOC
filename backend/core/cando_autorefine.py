@@ -705,8 +705,16 @@ def _solve_shape_targets(base_design: Design, *, target_twist_deg: float,
             break
         e = _shape_error(m.get("twist_deg"), m.get("bend_deg"),
                          target_twist_deg, target_bend_deg, use_bend)
-        emit({"phase": "shape_iter", "iter": it, "twist": m.get("twist_deg"),
-              "bend": m.get("bend_deg"), "shape_err": round(e, 3)})
+        # Carry the same {current, target} metric dicts the "iteration" events do so the live
+        # status line renders the coupled twist+bend objective per Jacobian iteration (deviation +
+        # curvature + twist current→target + the combined shape error).
+        emit({"phase": "shape_iter", "iter": it,
+              "current": {"deviation": m["rmsd"], "twist_deg": m.get("twist_deg"),
+                          "bend_deg": m.get("bend_deg")},
+              "target": {"deviation": 0.0, "twist_deg": target_twist_deg,
+                         "bend_deg": target_bend_deg},
+              "twist": m.get("twist_deg"), "bend": m.get("bend_deg"),
+              "shape_err": round(e, 3)})
         if e < cur_err - 1e-6:
             cur, cur_m, cur_tw, cur_bd, cur_err = trial, m, m.get("twist_deg"), m.get("bend_deg"), e
         else:

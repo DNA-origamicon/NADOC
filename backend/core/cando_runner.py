@@ -243,25 +243,68 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
 
 # ── Autorefine job ────────────────────────────────────────────────────────────
 
+def _fmt_deg(v) -> str:
+    return f"{v:.1f}°" if isinstance(v, (int, float)) else "—"
+
+
+def _fmt_nm(v) -> str:
+    return f"{v:.2f} nm" if isinstance(v, (int, float)) else "—"
+
+
+def _metric_tail(cur: Optional[dict], tgt: Optional[dict]) -> str:
+    """`· dev X→Y · curve X°→Y° · twist X°→Y°` for an event's current/target metric dicts — the
+    per-iteration readout of the autorefine objective (deviation + curvature + twist, each
+    current→target).  Omits a metric neither side resolves so a twist-only design shows no bogus
+    curvature row."""
+    cur, tgt = cur or {}, tgt or {}
+    bits = []
+    if cur.get("deviation") is not None or tgt.get("deviation") is not None:
+        bits.append(f"dev {_fmt_nm(cur.get('deviation'))}→{_fmt_nm(tgt.get('deviation'))}")
+    if cur.get("bend_deg") is not None or tgt.get("bend_deg") is not None:
+        bits.append(f"curve {_fmt_deg(cur.get('bend_deg'))}→{_fmt_deg(tgt.get('bend_deg'))}")
+    if cur.get("twist_deg") is not None or tgt.get("twist_deg") is not None:
+        bits.append(f"twist {_fmt_deg(cur.get('twist_deg'))}→{_fmt_deg(tgt.get('twist_deg'))}")
+    return (" · " + " · ".join(bits)) if bits else ""
+
+
 def _format_refine_note(ev: dict) -> Optional[str]:
     """A short live-status line for the panel from a ``fem_refine`` progress event (or None to keep
-    the previous note).  Covers the density sweep + greedy phases so the user sees what it is doing."""
+    the previous note).  Covers every phase — the square density sweep + fractional twist tuning,
+    the honeycomb coupled twist+bend shape solve, and the greedy deviation pass — so each iteration
+    reports its full metric set (deviation, curvature, twist, combined shape error)."""
     phase = ev.get("phase")
     if phase == "density_trial":
-        p, n, r = ev.get("period"), ev.get("n_skips"), ev.get("rmsd")
-        rs = f", dev {r:.2f} nm" if isinstance(r, (int, float)) else ""
-        return f"Sweeping skip density: period {p} ({n} skips{rs})…"
+        p, n, r, tw = ev.get("period"), ev.get("n_skips"), ev.get("rmsd"), ev.get("twist")
+        tail = []
+        if isinstance(tw, (int, float)):
+            tail.append(f"twist {tw:.1f}°")
+        if isinstance(r, (int, float)):
+            tail.append(f"dev {r:.2f} nm")
+        ts = (" — " + ", ".join(tail)) if tail else ""
+        return f"Sweeping skip density: period {p} ({n} skips){ts}…"
     if phase == "density_best":
         return f"Best skip density: period {ev.get('period')} (dev {ev.get('rmsd', 0):.2f} nm)"
+    if phase == "shape_target":
+        tw, bd = ev.get("twist"), ev.get("bend")
+        tgt = f"twist {_fmt_deg(tw)}" + (f", curve {_fmt_deg(bd)}" if bd is not None else "")
+        return f"Solving coupled shape → {tgt}…"
+    if phase == "twist_authority":
+        return (f"Probing twist authority: helix {ev.get('helix_id')} "
+                f"(Δtwist {_fmt_deg(ev.get('dtwist'))}/skip)…")
+    if phase == "twist_bump":
+        return (f"Twist tuning: helix {ev.get('helix_id')} → "
+                f"twist err {_fmt_deg(ev.get('twist_err'))}…")
+    if phase == "shape_iter":
+        it = ev.get("iter", ev.get("iteration", 0))
+        se = ev.get("shape_err")
+        es = f" · err {se:.1f}°" if isinstance(se, (int, float)) else ""
+        return f"Shape iter {it}{_metric_tail(ev.get('current'), ev.get('target'))}{es}"
     if phase == "hotspots":
         return f"Refining {ev.get('n', 0)} local hotspot(s)…"
     if phase == "iteration":
         it, n = ev.get("iteration", 0), ev.get("n_hotspots")
-        cur = ev.get("current") or {}
-        dev = cur.get("deviation")
         of = f"/{n}" if n else ""
-        ds = f" · dev {dev:.2f} nm" if isinstance(dev, (int, float)) else ""
-        return f"Iteration {it}{of}{ds}"
+        return f"Iteration {it}{of}{_metric_tail(ev.get('current'), ev.get('target'))}"
     return None
 
 

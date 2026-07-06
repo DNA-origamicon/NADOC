@@ -325,3 +325,50 @@ def test_refine_square_lattice_is_skips_only():
     # No loop (+1) may ever appear in a square-lattice refinement.
     for bps in res["converged_marks"].values():
         assert all(dl == -1 for dl in bps.values())
+
+
+def test_shape_iter_events_carry_current_and_target_metrics():
+    # The coupled twist+bend shape solve must emit its per-iteration metrics (deviation + curvature
+    # + twist current→target) so the live status line can show them — mirror the "iteration" event
+    # contract.  Uses the same under-realised 90° bend that routes to the shape solve.
+    realized = _routed_bend(210, 90.0, realize=True)
+    marks = car.current_marks_by_helix(realized)
+    reduced = {hid: {bp: dl for i, (bp, dl) in enumerate(sorted(bps.items())) if i % 2 == 0}
+               for hid, bps in marks.items()}
+    under = car.apply_marks(realized, reduced)
+
+    events = []
+    res = car.fem_refine(under, nonlinear=False, on_progress=events.append)
+    assert res["objective"] == "shape"
+    shape_iters = [e for e in events if e["phase"] == "shape_iter"]
+    assert shape_iters, "the coupled shape solve emits at least one shape_iter event"
+    for e in shape_iters:
+        for side in ("current", "target"):
+            assert set(e[side]) == {"deviation", "twist_deg", "bend_deg"}
+        assert e["target"]["deviation"] == 0.0
+        assert isinstance(e["shape_err"], (int, float))
+
+
+def test_format_refine_note_surfaces_every_phase_metric():
+    from backend.core.cando_runner import _format_refine_note as f
+    # shape_iter — the coupled twist+bend algorithm's per-iteration line carries dev/curve/twist + err.
+    s = f({"phase": "shape_iter", "iter": 2,
+           "current": {"deviation": 1.2, "twist_deg": 30.0, "bend_deg": 42.0},
+           "target": {"deviation": 0.0, "twist_deg": -1.7, "bend_deg": 72.3}, "shape_err": 32.0})
+    assert "Shape iter 2" in s
+    assert "dev 1.20 nm→0.00 nm" in s and "curve 42.0°→72.3°" in s and "twist 30.0°→-1.7°" in s
+    assert "err 32.0°" in s
+    # iteration — now also carries curvature + twist (was dev-only).
+    s = f({"phase": "iteration", "iteration": 3, "n_hotspots": 4,
+           "current": {"deviation": 2.07, "twist_deg": 1.0, "bend_deg": 42.2},
+           "target": {"deviation": 0.0, "twist_deg": -1.7, "bend_deg": 72.3}})
+    assert "Iteration 3/4" in s and "curve 42.2°→72.3°" in s and "twist 1.0°→-1.7°" in s
+    # density_trial — twist is now shown alongside the deviation.
+    assert "twist 3.3°" in f({"phase": "density_trial", "period": 40, "n_skips": 12,
+                              "rmsd": 0.46, "twist": 3.3})
+    # the new phases each get a readable line
+    assert "coupled shape" in f({"phase": "shape_target", "twist": -1.7, "bend": 72.3})
+    assert "twist authority" in f({"phase": "twist_authority", "helix_id": "h1", "dtwist": -1.4})
+    assert "Twist tuning" in f({"phase": "twist_bump", "helix_id": "h1", "twist_err": 0.6})
+    # a metric-less phase keeps the previous note (None)
+    assert f({"phase": "baseline"}) is None
