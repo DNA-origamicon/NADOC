@@ -25,10 +25,33 @@ dev:
 test:
     uv run pytest tests/ -n auto --dist loadfile
 
-# Fast dev loop: skip the heavy real-binary sims (oxDNA/MD/GROMACS/atomistic),
-# parallel. ~30s vs ~2.5min full. Run plain `just test` before pushing.
+# Fast dev loop: skip the heavy real-binary sims AND the CanDo-FEM/autorefine
+# numeric solves (all carry the `slow` marker via tests/conftest.py). Parallel.
+# Keep the slow registry current: if this creeps back up, run
+#   uv run pytest tests/ -n auto --dist loadfile -m "not slow" --durations=25
+# and fold any new >=~2s "call"/"setup" entries into conftest's _SLOW_* sets.
+# Run plain `just test` before pushing.
 test-fast:
     uv run pytest tests/ -n auto --dist loadfile -m "not slow"
+
+# Change-based selection: run the fast suite (always) + only the HEAVY test
+# groups affected by your uncommitted changes. Foundational/unknown changes ->
+# full suite; a leaf change (oxDNA, CanDo/FEM, NAMD, ...) -> just that group.
+# `just test-smart --dry-run` shows the decision without running. Forward pytest
+# args after `--`, or diff against a ref with `--base origin/master`.
+test-smart *ARGS:
+    uv run python scripts/select_tests.py {{ARGS}}
+
+# Tightest inner loop: point pytest at the area you're editing. Pass file paths
+# and/or `-k pattern`; heavy solves are dropped (`-m 'not slow'`) so it stays
+# snappy. Examples:
+#   just test-affected tests/test_cando_deviation.py
+#   just test-affected tests/test_fem_solver.py -k rmsf
+#   just test-affected tests/test_overhang_geometry.py --lf   # only last failures
+# (True change-based impact analysis — pytest-testmon — is currently broken
+#  against pytest 9.x; see memory/project_test_parallelization.md.)
+test-affected *ARGS:
+    uv run pytest -m "not slow" {{ARGS}}
 
 # Run frontend unit tests (Vitest), single pass
 test-frontend:

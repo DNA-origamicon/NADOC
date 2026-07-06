@@ -24,11 +24,19 @@ export PATH="$HOME/.local/bin:$PATH"
 
 just dev            # backend (FastAPI on :8000)
 just frontend       # Vite dev server (:5173)
-just test           # full backend test suite
+just test           # full backend test suite (~2.5-3 min, parallel)
+just test-fast      # skip heavy sim/FEM tests (~20s) — the pre-push loop
+just test-smart     # run fast suite + only the heavy groups your changes affect
+                    #   (foundational/unknown change -> full; --dry-run to preview)
+just test-affected FILE... # scoped inner loop: point pytest at the area you edit
 just test-file FILE # single test file
 just fmt            # format
 just lint           # lint
 ```
+
+Heavy (`slow`-marked) tests auto-skip while a production NAMD/oxDNA/mrDNA job is
+running on the machine (avoids resource-contention timeouts); override with
+`NADOC_IGNORE_SIM_GUARD=1`. See `memory/project_test_parallelization.md`.
 
 App URL when both servers run: `http://localhost:5173` (or WSL eth0 IP if `mirrored` networking is off — see `START.md`).
 

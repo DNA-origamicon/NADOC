@@ -68,6 +68,88 @@ def enumerate_cuda_devices() -> list[dict]:
     return parse_nvidia_smi_l(out.stdout)
 
 
+# ── heavy-simulation detection (resource guard) ────────────────────────────────
+# Is a NAMD / oxDNA / mrDNA(ARBD) / GROMACS job already chewing this machine's
+# GPU/CPU?  Used by the test suite (tests/conftest.py) to SKIP its own heavy tests
+# rather than pile on and time out.  Kept here because it's the resource-detection
+# module, and the app could reuse it (e.g. warn before launching another job).
+
+# comm (process name) substrings for the local simulation engines.  namd3/namd2
+# → "namd"; the oxDNA binary → "oxDNA"; mrDNA runs via the ARBD engine → "arbd";
+# GROMACS → "gmx".  Matched against process NAMES (not full cmdlines), so a test
+# file path merely containing "oxdna" never trips it.
+_SIM_PROC_PATTERN = "namd|oxDNA|arbd|gmx"
+_RE_PGREP_L = re.compile(r"^\s*\d+\s+(\S+)")  # "1234 namd3" → name
+
+
+def parse_pgrep_l(text: str) -> list[str]:
+    """PURE.  Parse ``pgrep -l`` output ('pid name' lines) → sorted unique names."""
+    names: set[str] = set()
+    for line in text.splitlines():
+        m = _RE_PGREP_L.match(line)
+        if m:
+            names.add(m.group(1))
+    return sorted(names)
+
+
+def parse_gpu_utilization(text: str) -> list[int]:
+    """PURE.  Parse ``--query-gpu=utilization.gpu`` CSV (one % per GPU) → ints."""
+    vals: list[int] = []
+    for line in text.splitlines():
+        s = line.strip().rstrip("%").strip()
+        if s.isdigit():
+            vals.append(int(s))
+    return vals
+
+
+def assess_heavy_sim(
+    sim_procs: list[str], gpu_utils: list[int], gpu_threshold: int = 85
+) -> tuple[bool, str]:
+    """PURE.  Decide from the two signals whether a heavy sim is running.
+
+    Process-name match is authoritative.  GPU utilization is a high-threshold
+    backstop for oxpy-in-python CUDA runs that have no distinct binary name (the
+    threshold is deliberately high so an idle desktop GPU / remote-desktop process
+    never trips it)."""
+    if sim_procs:
+        return True, f"simulation process(es) running: {', '.join(sim_procs)}"
+    busy = [u for u in gpu_utils if u >= gpu_threshold]
+    if busy:
+        return True, f"GPU utilization {max(busy)}% >= {gpu_threshold}% (likely a GPU sim)"
+    return False, ""
+
+
+def _capture(cmd: list[str]) -> str | None:
+    """Run ``cmd`` and return stdout, or None on any failure (missing binary,
+    timeout, non-zero exit is tolerated — callers treat None as 'no signal')."""
+    exe = shutil.which(cmd[0])
+    if not exe:
+        return None
+    try:
+        out = subprocess.run(
+            [exe, *cmd[1:]], capture_output=True, text=True, timeout=10, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout
+
+
+def heavy_sim_running(gpu_threshold: int = 85) -> tuple[bool, str]:
+    """Is a NAMD/oxDNA/mrDNA(ARBD)/GROMACS job running on THIS machine right now?
+
+    Returns ``(running, reason)``.  FAIL-OPEN: any detection error degrades to
+    ``(False, "")`` so a probe glitch never spuriously reports a sim and masks
+    test results.  ``pgrep`` exit 1 (no match) yields empty output → not running.
+    """
+    pgrep_out = _capture(["pgrep", "-l", _SIM_PROC_PATTERN])
+    sim_procs = parse_pgrep_l(pgrep_out) if pgrep_out else []
+    gpu_out = _capture(
+        ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]
+    )
+    gpu_utils = parse_gpu_utilization(gpu_out) if gpu_out else []
+    return assess_heavy_sim(sim_procs, gpu_utils, gpu_threshold)
+
+
 def cpu_thread_ladder() -> list[int]:
     """A small, ascending, de-duplicated ladder of ``+p`` thread counts to sweep.
 

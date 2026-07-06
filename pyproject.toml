@@ -41,6 +41,15 @@ pythonpath = ["."]
 markers = [
     "slow: marks tests as slow (run GROMACS EM; deselect with -m 'not slow')",
     "integration: marks tests requiring external files at /tmp",
+    # Area sub-markers on slow tests, for change-based selection (just test-smart /
+    # scripts/select_tests.py). A slow test carries `slow` + exactly one of these.
+    "oxdna: slow oxDNA/oxpy group",
+    "cando: slow CanDo-FEM / autorefine group",
+    "namd: slow NAMD-topology group",
+    "mrdna: slow mrdna group",
+    "atomistic: slow atomistic group",
+    "md: slow MD-pipeline / trajectory / benchmark group",
+    "headless: slow headless build/routing group",
 ]
 
 [tool.ruff]

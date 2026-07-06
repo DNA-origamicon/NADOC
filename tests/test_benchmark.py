@@ -45,6 +45,46 @@ def test_parse_nvidia_smi_l_empty_and_garbage():
     assert hardware.parse_nvidia_smi_l("no devices were found\nsome junk line") == []
 
 
+# ── resource-guard detection (skip heavy tests while a sim is running) ──────────
+
+def test_parse_pgrep_l_extracts_process_names():
+    text = "12345 namd3\n  678 oxDNA\n42 arbd\n"
+    assert hardware.parse_pgrep_l(text) == ["arbd", "namd3", "oxDNA"]
+
+
+def test_parse_pgrep_l_empty_is_no_processes():
+    # pgrep exit-1 (no match) → empty stdout → no sims.
+    assert hardware.parse_pgrep_l("") == []
+
+
+def test_parse_gpu_utilization_reads_percentages():
+    assert hardware.parse_gpu_utilization("0\n97\n") == [0, 97]
+    assert hardware.parse_gpu_utilization("5 %\n") == [5]
+    assert hardware.parse_gpu_utilization("") == []
+
+
+def test_assess_heavy_sim_process_name_is_authoritative():
+    running, reason = hardware.assess_heavy_sim(["namd3"], [0])
+    assert running and "namd3" in reason
+
+
+def test_assess_heavy_sim_gpu_backstop_above_threshold():
+    running, reason = hardware.assess_heavy_sim([], [12, 91], gpu_threshold=85)
+    assert running and "91" in reason
+
+
+def test_assess_heavy_sim_idle_gpu_and_no_procs_is_clear():
+    # An idle desktop GPU (e.g. a remote-desktop process at low util) must NOT trip.
+    running, reason = hardware.assess_heavy_sim([], [3, 7], gpu_threshold=85)
+    assert not running and reason == ""
+
+
+def test_heavy_sim_running_fails_open_when_probes_unavailable(monkeypatch):
+    # No pgrep / nvidia-smi resolvable → both probes return None → not running.
+    monkeypatch.setattr(hardware, "_capture", lambda cmd: None)
+    assert hardware.heavy_sim_running() == (False, "")
+
+
 def test_cpu_thread_ladder_dedup(monkeypatch):
     monkeypatch.setattr("backend.core.hardware.os.cpu_count", lambda: 2)
     assert hardware.cpu_thread_ladder() == [1, 2]  # {2//4=0→1, 2//2=1, 2} → {1,2}

@@ -314,6 +314,9 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 _SLOW_MODULES = {
     "test_md_trajectory",
     "test_md_display_ready_live",   # real-job load: parses 143 MB PSF + builds model
+    # Setup-dominated: a ~16 s module/class-scoped fixture that EVERY test pays,
+    # so per-test marking wouldn't help — the whole file is slow.
+    "test_md_pipeline",
 }
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
@@ -368,12 +371,87 @@ _SLOW_TESTS = {
     "test_sweep_skip_period_finds_a_twist_relieving_minimum",
     "test_refine_plain_square_strut_tunes_density_where_greedy_kept_zero",
     "test_autorefine_job_applies_marks_logs_and_caches_all_displays",
+    # --- CanDo-FEM / autorefine numeric solves added by the G1/G3/G4 shape-objective
+    #     work (refreshed 2026-07-05; each is a real FEM eigensolve or refine loop). ---
+    # test_cando_autorefine.py (honeycomb/square shape refine)
+    "test_refine_honeycomb_shape_hits_bend_and_places_marks_off_forbidden",
+    "test_refine_plain_square_strut_nulls_twist_where_greedy_kept_zero",
+    "test_refine_emits_per_iteration_twist_bend_deviation_and_target",
+    "test_refine_straight_control_makes_no_edits",
+    "test_refine_square_lattice_is_skips_only",
+    # test_cando_job.py (full autorefine/linear jobs)
+    "test_linear_job_completes_and_caches",
+    "test_progress_and_reconcile",
+    "test_autorefine_job_no_improvement_leaves_design_but_still_caches",
+    # test_cando_cylinders.py (axis nodes + RMSF heatmap)
+    "test_axis_nodes_are_helix_centre_not_backbone_midpoint",
+    "test_rmsf_heatmap_attached_per_node_with_p95_ramp",
+    # test_fem_solver.py (NMA / nonlinear equilibrium eigensolves)
+    "test_free_free_nma_rmsf_is_physical_and_flatter_than_pinned",
+    "test_predict_shape_defaults_to_nonlinear_and_returns_positions_and_rmsf",
+    "test_rmsf_is_finite_nonnegative_and_per_node",
+    "test_nonlinear_prestress_shape_runs_and_deforms",
+    # test_fem_curvature_validation.py (CanDo bend reproduction)
+    "test_fem_reproduces_cando_bend_90_nonlinear",
+    "test_realized_vs_unrealized_bend_is_the_only_difference",
+    "test_fem_reproduces_cando_bend_180_hairpin_linear",
+    "test_bend_deformation_without_loopskips_predicts_straight",
+    # test_cando_deviation.py (deviation-field FEM)
+    "test_unrealized_bend_deviates_far_more_than_realized",
+    "test_deviation_payload_shape_and_stats",
+    "test_straight_control_has_near_zero_deviation",
+    "test_loop_copies_each_get_their_own_deviation_entry",
+    # test_namd_topology.py (extra-base inline threading / junction backbone builds)
+    "test_extra_bases_thread_inline_in_seq_num",
+    "test_extra_base_junction_backbone_bonds_are_sane",
+    # test_oxdna_relaxation.py (seed geometry + crossover-stretch on bent bundle)
+    "test_seed_geometry_falls_back_for_bent_bundle",
+    "test_max_crossover_stretch_detects_compaction_desync",
 }
+
+
+# ---------------------------------------------------------------------------
+# Slow-test AREA tagging (for change-based selection — ``just test-smart``)
+#
+# Each slow test also gets an ``area`` marker derived from its filename, so the
+# selector can run just the heavy group affected by a change:
+#   -m "not slow or oxdna"   → all fast tests + the oxDNA slow group
+# The fast suite (``not slow``) ALWAYS runs regardless, so a mis-tag can only
+# skip a heavy sim test whose fast-suite cousins still ran — never a silent hole
+# in basic coverage. scripts/select_tests.py owns the source->area routing.
+#
+# Keep AREA_MARKERS in sync with the markers registered in pyproject.toml.
+# ---------------------------------------------------------------------------
+AREA_MARKERS = ("oxdna", "cando", "namd", "mrdna", "atomistic", "md", "headless")
+
+
+def _slow_area_for(module: str) -> str:
+    """Map a slow test's module (bare filename, no .py) to one area marker.
+    First match wins; order matters (oxdna before headless so the oxDNA
+    headless-build file lands in oxdna, not headless)."""
+    if "oxdna" in module or "skip_twist" in module:
+        return "oxdna"
+    if "cando" in module or "fem" in module:
+        return "cando"
+    if "namd" in module:
+        return "namd"
+    if "mrdna" in module:
+        return "mrdna"
+    if "atomistic" in module:
+        return "atomistic"
+    if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
+        return "md"
+    if "headless" in module or "spec_build" in module:
+        return "headless"
+    # Unclassified slow test: park in "md" (a broad sim area). It still always
+    # runs under a FULL selection; this only affects narrow leaf selections.
+    return "md"
 
 
 def pytest_collection_modifyitems(config, items):
     """Auto-apply the ``slow`` marker to the heavy real-sim/trajectory tests
-    registered above, so ``-m 'not slow'`` (``just test-fast``) skips them."""
+    registered above, plus an ``area`` marker so ``just test-smart`` can run
+    only the heavy group a change affects. ``-m 'not slow'`` skips them all."""
     import pytest
 
     for item in items:
@@ -382,3 +460,54 @@ def pytest_collection_modifyitems(config, items):
         name = getattr(item, "originalname", None) or item.name.split("[")[0]
         if module in _SLOW_MODULES or name in _SLOW_TESTS:
             item.add_marker(pytest.mark.slow)
+            item.add_marker(getattr(pytest.mark, _slow_area_for(module)))
+
+
+# ---------------------------------------------------------------------------
+# Resource guard: skip heavy (``slow``) tests while a production NAMD / oxDNA /
+# mrDNA job is already running on this machine.  Piling GPU/CPU-bound tests on
+# top of a live sim just starves both and makes the tests time out (flaky).
+#
+# The check runs ONCE per worker at startup (pytest_configure) — before any test
+# body has spawned its own oxDNA/oxpy subprocess — and is cached, so a slow test
+# launching a sim can't make sibling slow tests skip themselves.  Detection is
+# fail-open (a probe glitch never skips).  Override with NADOC_IGNORE_SIM_GUARD=1.
+# ---------------------------------------------------------------------------
+_SIM_GUARD: tuple[bool, str] | None = None
+
+
+def _sim_guard() -> tuple[bool, str]:
+    """(running, reason), computed once per process and cached."""
+    global _SIM_GUARD
+    if _SIM_GUARD is None:
+        import os
+
+        if os.environ.get("NADOC_IGNORE_SIM_GUARD"):
+            _SIM_GUARD = (False, "")
+        else:
+            try:
+                from backend.core.hardware import heavy_sim_running
+
+                _SIM_GUARD = heavy_sim_running()
+            except Exception:  # fail-open: never mask tests on a probe error
+                _SIM_GUARD = (False, "")
+    return _SIM_GUARD
+
+
+def pytest_configure(config):
+    # Prime the cache during the clean startup window (no test has run yet, so no
+    # test-spawned sim can be mistaken for a production job).
+    _sim_guard()
+
+
+def pytest_runtest_setup(item):
+    if item.get_closest_marker("slow") is None:
+        return
+    running, reason = _sim_guard()
+    if running:
+        import pytest
+
+        pytest.skip(
+            f"heavy sim job running ({reason}); skipping slow test to avoid resource "
+            f"contention — set NADOC_IGNORE_SIM_GUARD=1 to override"
+        )
