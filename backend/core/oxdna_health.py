@@ -1378,6 +1378,37 @@ def measure_bundle_arc_bend(positions, *, n_slices: int = 0) -> float:
     return bend
 
 
+def bundle_slab_centreline(positions, *, n_slices: int = 0):
+    """The ordered slab-centroid centreline ``(M, 3)`` of a bundle — the shared
+    substrate the bend estimators derive from, exposed so a caller can get bend ANGLE
+    and RADIUS from the SAME polyline (via :func:`_chord_sagitta_bend`) rather than
+    recomputing the axis fit twice.  Same construction as :func:`measure_bundle_arc_bend`:
+    collapse each ``(helix, bp)`` column to its base-pair midpoint (kills the per-helix
+    backbone spiral), fit the bundle axis, bin into ~1-turn axial slabs, take each
+    slab's 3-D centroid in axial order.  Returns an empty ``(0, 3)`` array when there
+    are too few points/slabs to resolve a centreline.  Pass the rigid duplex CORE."""
+    if not positions:
+        raise ValueError("bundle_slab_centreline: empty position map")
+    bp_pts: dict = {}
+    for p in positions:
+        bp_pts.setdefault((p["helix_id"], int(p["bp_index"])), []).append(
+            np.asarray(p["backbone_position"], dtype=float))
+    pts = np.array([np.mean(v, axis=0) for v in bp_pts.values()])
+    if len(pts) < 5:
+        return np.zeros((0, 3))
+    C, L, _e1, _e2 = _bundle_axis_frame(pts)
+    t = (pts - C) @ L
+    span = float(t.max() - t.min())
+    if span < 1e-6:
+        return np.zeros((0, 3))
+    if n_slices <= 0:
+        n_slices = max(5, int(round(span / 3.5)))
+    edges = np.linspace(t.min(), t.max(), n_slices + 1)
+    slab = np.clip(np.digitize(t, edges[1:-1]), 0, n_slices - 1)
+    centroids = [pts[slab == k].mean(axis=0) for k in range(n_slices) if np.any(slab == k)]
+    return np.array(centroids) if len(centroids) >= 2 else np.zeros((0, 3))
+
+
 def measure_bundle_curvature_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
     """Per-position CUMULATIVE bending profile ``[(axial_t_nm, cumulative_turning_deg), …]`` — the
     curvature analogue of :func:`measure_bundle_twist_profile`.  The running sum of |turning angle|
