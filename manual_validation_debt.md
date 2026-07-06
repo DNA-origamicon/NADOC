@@ -168,16 +168,24 @@ per-engine `{engine, descriptors, rmsf, shape_frame, field}` source bundles.*
 backend assembly (`build_comparison_report`), the Generate→poll→render wiring, and the
 export are all unit-pinned, and a one-off display-vs-oracle Playwright confirmed the
 rendered numbers equal the backend oracle for **synthetic** two-engine sources. What is
-NOT yet hand-driven is the card on **real** cross-engine data: the card's `getSources`
-returns `[]` until the per-engine emission tasks land (O1 oxDNA, C5 CanDo, M5 mrDNA, N4
-NAMD), so an actual oxDNA-vs-CanDo comparison for a loaded design — the RMSF overlay
-lining up, the deltas being physically sane, the field panel verdict — can only be
-eyeballed once ≥1 of those ships. Re-open this the session O1 or C5 wires a live source.
+NOT yet hand-driven is the card on **real** engine data.  **O1 (2026-07-06) wired the
+first live source**: `getSources` now returns the selected oxDNA job's shape-source
+bundle (`GET /oxdna/jobs/{id}/shape-source` → `build_oxdna_shape_source`), so a relaxed
+oxDNA job yields a live **oxDNA column** (shared descriptors + RMSF, core-filtered). What
+still needs a human: (a) confirm on a REAL relaxed oxDNA job the card's oxDNA scalar
+column shows sane, physically-plausible values (the descriptors are core-filtered so ssDNA
+ends don't skew twist/bend — eyeball for garbage), and (b) the true CROSS-engine
+deltas/overlay/field verdict, which still await a second engine (C5 CanDo, M5 mrDNA, N4
+NAMD). Re-open again when C5 lands so oxDNA-vs-CanDo can be eyeballed. NOTE: the card's
+twist is oxDNA's ABSOLUTE twist on the relaxed frame (cross-engine-comparable), NOT the
+DIFFERENTIAL twist-vs-analytic the Graphs-&-Metrics card plots — do not expect the two
+cards to show the same number.
 
-**Test:** after O1/C5 land, load a design with an oxDNA relaxed job (e.g.
-`Examples/26hb_platform_v3.nadoc`), open the card, Generate, confirm the scalar table +
-RMSF overlay + agreement table populate with sane numbers, and Export produces a PNG +
-CSVs. Report pass/fail.
+**Test (O1 slice, do now):** load a design with a completed oxDNA relaxed job (e.g.
+`Examples/26hb_platform_v3.nadoc`), select the job, open the "Shape comparison
+(cross-engine)" card, Generate → confirm the **oxDNA column** populates with sane
+twist/bend/Rg/end-to-end + an RMSF overlay, and that Export produces a PNG + CSVs. (Single
+engine → no deltas yet; that's expected until C5.) Report pass/fail.
 
 ### MV-5 — Assembly right-click context menu (part / linker / belt)
 *Discharges fix #69 — the assembly right-click router moved onto the shared

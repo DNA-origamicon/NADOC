@@ -1956,11 +1956,17 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   // Cross-engine Shape comparison card (S5) — engine-agnostic, hosted here.  `getSources`
   // returns the per-engine {engine, descriptors, rmsf, shape_frame, field} bundles for the
-  // current design; the per-engine emission tasks (O1/C5/M5/N4) populate it, so for now it
-  // is empty and the card reports that no predictions are ready (live data = an MV row).
+  // current design.  O1 wires the oxDNA column: the selected job's shape-source bundle (its
+  // relaxed frame's shared descriptors + RMSF); the remaining engines (C5/M5/N4) will add
+  // their own bundles here (live cross-engine data = MV-21).
   const _compareCard = initShapeCompareCard({
     api: { start: api.startShapeCompare, poll: api.getShapeCompareRun },
-    getSources: () => [],
+    getSources: async () => {
+      const job = _selectedJob()
+      if (!job) return []
+      const src = await api.getOxdnaShapeSource(job.job_id)
+      return src && src.ready ? [src] : []
+    },
   })
 
   // initial availability probe (cheap) so the status line is populated.

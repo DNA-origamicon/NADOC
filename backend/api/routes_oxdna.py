@@ -1240,6 +1240,61 @@ async def get_oxdna_deviation(job_id: str) -> dict:
     return {"ready": True, "n_frames": mean.get("n_frames"), **dev}
 
 
+@router.get("/oxdna/jobs/{job_id}/shape-source")
+async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
+    """oxDNA source bundle for the cross-engine comparison card (S5) — the ``engine=
+    "oxdna"`` column that is the reference for relaxed SHAPE.  Returns ``{ready,
+    stage_name, engine, descriptors, rmsf, shape_frame, field}``: shared shape descriptors
+    (twist / bend / Rg / end-to-end) computed on the relaxed frame + the per-nucleotide
+    RMSF profile when a production/field run has frames.
+
+    Reads the latest relaxed frame (the SAME frame the /display toggle shows) and, from
+    any production/field stage with frames, its RMSF map, then core-filters BOTH to the
+    rigid dsDNA core (ssDNA ends dropped) with the same mask the metrics card uses.  The
+    descriptors are computed with the SAME locked oxdna_health estimators, but report
+    oxDNA's ABSOLUTE twist/bend on the relaxed frame (the cross-engine-comparable value) —
+    NOT the differential (measured − analytic) twist/curvature the Graphs-&-Metrics card
+    plots over the production trajectory, so those numbers won't be equal.  RMSF is
+    optional: a job with only a relaxation run still supplies the shape column.  All
+    outputs are Physical-layer/display only (Three-Layer Law)."""
+    from backend.api.skip_twist_tuning import core_reference_geometry
+    from backend.core.oxdna_health import production_rmsf
+    from backend.core.oxdna_shape_source import build_oxdna_shape_source
+
+    job = _load_job(job_id)
+    design, full_map, stage_name, _conf_path, ref_conf = _relaxed_full_map(job, align)
+    if full_map is None:
+        return {"ready": False, "reason": "no relaxed frame yet"}
+
+    # Render the true backbone site (not the oxDNA centre of mass) — identical to /display.
+    shape_frame = [
+        {"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+         "backbone_position": oxdna_backbone_site(
+             v["backbone_position"], v["a1"], v["a3"]).tolist()}
+        for k, v in full_map.items()
+    ]
+
+    # RMSF from any production/field run that has written frames (optional — the shape
+    # column stands on the relaxed frame alone when no sampling has run).
+    rmsf_positions = None
+    n_frames = None
+    prod = [s for s in job.stages if s.kind in ("production", "field")
+            and s.status in ("done", "running")]
+    trajs: list[Path] = []
+    for s in prod:
+        trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
+    if trajs:
+        res = await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
+        if res.get("ready"):
+            rmsf_positions = res["positions"]
+            n_frames = res.get("n_frames")
+
+    core_ref = core_reference_geometry(design)
+    source = build_oxdna_shape_source(shape_frame, core_ref, rmsf_positions=rmsf_positions)
+    return {"ready": source["descriptors"] is not None,
+            "stage_name": stage_name, "n_frames": n_frames, **source}
+
+
 @router.get("/oxdna/jobs/{job_id}/trajectory")
 async def get_oxdna_trajectory(job_id: str) -> dict:
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the

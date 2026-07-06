@@ -2036,6 +2036,9 @@ export const getOxdnaMetricsRun  = (runId)       => _oxdnaJSON('GET',  `/oxdna/m
  *  {metrics_id}; poll `getShapeCompareRun` → {state, progress, result?}. */
 export const startShapeCompare   = (body)        => _oxdnaJSON('POST', '/shape/compare/start', body)
 export const getShapeCompareRun  = (runId)       => _oxdnaJSON('GET',  `/shape/compare/${runId}`)
+/** oxDNA source bundle for the comparison card (O1): the `engine:"oxdna"` shape-reference
+ *  column → {ready, engine, descriptors, rmsf, shape_frame, field}. */
+export const getOxdnaShapeSource = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/shape-source`)
 export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
 export const getOxdnaDisplay     = (id, align = true) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`)

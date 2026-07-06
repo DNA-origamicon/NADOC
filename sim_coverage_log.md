@@ -36,6 +36,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(S3) descriptor agreement** ✅ | identical→signed %Δ 0 & Pearson 1 & shape-RMSD 0; +10/−10° twist→±10% signed; scaled RMSF→Pearson 1, reversed→<−0.99, constant→None (not NaN); rigid pose→shape-RMSD≈0 but shear survives; **CanDo dir-less RMSF vs oxDNA per-strand collapses to per-bp & correlates**; `reference_for` honors oxdna=shape/field, cando=rmsf, NAMD-override, missing→None | `backend/core/shape_metrics.py::{compare_descriptors,reference_for}`, `tests/test_shape_compare.py` | all cross-validation milestones (S5 card, O1/C5/M5/N4 sources) |
 | **(S5) comparison report** ✅ | per-observable reference selection (oxDNA=shape/field, CanDo=RMSF, NAMD-override); scalar reference→0-delta & candidate recovers ±known %; zero-ref→None (no div0); identical RMSF→Pearson 1 + overlay points; rigid-shift→shape-RMSD≈0; field cosine +1/−1 & mag-ratio 3; 1-engine→raw-no-agreement; empty→not-ready; missing observable omits its rows; REST start→poll→result+404 | `backend/core/shape_compare.py::build_comparison_report`, `backend/api/routes_shape_metrics.py`, `tests/test_shape_compare_report.py` | the compare card; per-engine source-bundle contract for C5/O1/M5/N4 |
 | _(display-vs-oracle)_ ✅ (S5) | card's displayed numbers == headless oracle within tol; else STOP+ask | one-off Playwright per card (deleted after) | S5 ✓, C5, M5, N4 |
+| **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
@@ -222,7 +223,49 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   RMSF-overlay + Pearson/Spearman, an aligned-shape RMSD, and a field-deflection cosine, with PNG/CSV export.
   M-METRIC-CORE is closed; every per-engine emission task (C5/O1/M5/N4) now has a card to feed.
 
+### 2026-07-06 — `O1` oxDNA source bundle → first LIVE card column (M-CANDO-FIELD track)
+
+- **What shipped.** The S5 comparison card had `getSources: () => []` — the machinery existed but no engine fed
+  it. O1 wires the FIRST live source: `backend/core/oxdna_shape_source.py::build_oxdna_shape_source(shape_frame,
+  core_reference, rmsf_positions?, field?)` — a PURE Physical-layer assembly that core-filters the relaxed frame
+  to the rigid dsDNA core (`_filter_to_reference_core` against `core_reference_geometry` — same mask the
+  Graphs-&-Metrics card uses, so ssDNA ends drop out), computes `compute_shape_descriptors` (S1) on it, and maps
+  `production_rmsf` positions into the card's rmsf-profile shape. Route `GET /oxdna/jobs/{id}/shape-source`
+  (routes_oxdna.py) reads the latest relaxed `last_conf` (same frame `/display` shows) + optional trajectory
+  RMSF; frontend `getSources` async-fetches the selected job's bundle. `main.js` Δ = 0.
+- **Oracle** `tests/test_oxdna_shape_source.py` (**7 tests, fast**), written before the module (imported the
+  missing name first → red). Asserts: descriptors == `measure_bundle_twist(core)` on the exact core frame (the
+  "matches oxdna_health" property — same locked estimator, self-consistent), core mask drops ssDNA-end columns
+  absent from the reference, `rmsf`→`rmsf_nm` remap (None-rmsf dropped), field passthrough, the bundle drops into
+  `build_comparison_report` as a ready `oxdna` SHAPE reference (value present, no self-delta), and RED: an empty
+  core reference → None descriptors/frame → not a usable column.
+- **Review-caught (claim, not bug).** The descriptors are oxDNA's **absolute** twist/bend on the relaxed frame
+  (the cross-engine-comparable quantity — oxDNA-abs vs CanDo-abs), which is the RIGHT choice; but my docstrings +
+  the MV-21 wording overclaimed they "match the Graphs-&-Metrics twist/curvature". That card plots the
+  **differential** (measured − analytic) twist over the *production trajectory* — a different quantity on a
+  different frame. Corrected the module + route docstrings and MV-21 so nobody expects the two cards to show
+  equal numbers. Code unchanged; the oracle already asserted self-consistency with the estimator, not the graph.
+- **Field deferred.** O1 emits `field: None`. A field bundle needs `field_response_profile` with the pre-field
+  reference frame + resolved anchor_keys + field vector off a field JOB — a natural follow-up when C2 needs the
+  oxDNA field reference. Shape + RMSF (O1's oracle) ship now.
+- **Gates.** 7/7 oracle; `just test` 4177 passed / 66 skip / 1 xfail; ruff clean on touched files (the 19-error
+  pre-existing debt in OTHER test files untouched, per `feedback_no_bulk_reformat`); vitest 2200; `just smoke`
+  green (pre-work). Live-on-real-relaxed-job eyeball = **MV-21** (updated).
+- **Comparable prediction gained, not just a run:** the comparison card now renders a REAL oxDNA column — a
+  relaxed job's shared shape descriptors + RMSF, core-filtered — instead of an empty source list; the moment a
+  second engine (C5 CanDo) lands, the card computes an actual oxDNA-vs-CanDo agreement with no further card work.
+
 ## Lessons (anti-patterns banked)
+
+### Banked from O1
+
+- **"Matches oxdna_health" is ambiguous — pin the estimator, not the graph.** The card's descriptor and the
+  Graphs-&-Metrics card both derive from `measure_bundle_twist`, but the metrics card reports the DIFFERENTIAL
+  (measured − analytic) over the production mean while the shared descriptor reports the ABSOLUTE value on the
+  relaxed frame. Same function, different reference + frame → different number. When a task says "match existing
+  values within tol", decide WHICH value: the raw estimator output (what cross-engine comparison wants) or the
+  differential the existing UI displays. The oracle should assert self-consistency with the estimator on the
+  chosen frame — asserting equality to the differential graph would be wrong-by-construction.
 
 ### Banked from S3
 

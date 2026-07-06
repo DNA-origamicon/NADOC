@@ -80,6 +80,21 @@ fills in as milestones complete.
   field panel), and EXPORTS it (PNG/CSV). M-METRIC-CORE closed; the per-engine emission tasks (O1/C5/M5/N4) now
   have a card to feed, so their cross-validation results become *reportable*, not just computable.
 
+- **`O1` — oxDNA source bundle (first live card column)** · shape: new `backend/core` service
+  (`oxdna_shape_source.py`, pure assembly) + thin route `GET /oxdna/jobs/{id}/shape-source` (routes_oxdna.py) +
+  1 client fn + `getSources` wiring (no solver/card change — binds the S5 card) · feature: comparison-metric
+  (oxDNA = the SHAPE + field reference column) · engines now comparable: **oxDNA is now a LIVE source** — a
+  relaxed job's core-filtered descriptors + RMSF feed the card (was `getSources:()=>[]`); the moment C5 lands,
+  oxDNA-vs-CanDo agreement computes with no card work · oracle: `tests/test_oxdna_shape_source.py` 7 tests
+  **fast** (descriptors == `measure_bundle_twist(core)` self-consistent, core mask drops ssDNA ends, `rmsf`→
+  `rmsf_nm` remap, field passthrough, drops into `build_comparison_report` as ready `oxdna` shape ref, RED empty-
+  core→None) · main.js LOC Δ = 0 · tests: 7/7 oracle, `just test` 4177 passed / 66 skipped / 1 xfailed (no drop),
+  vitest 2200/2200, smoke green · review-caught: descriptors are oxDNA's ABSOLUTE twist (cross-engine-comparable)
+  not the differential twist the Graphs-&-Metrics card plots — docstrings + MV-21 corrected (claim, not bug) ·
+  **Comparable prediction gained, not just a run:** the comparison card renders a REAL oxDNA column (a relaxed
+  job's shared shape descriptors + RMSF, core-filtered to the rigid dsDNA core) instead of an empty source list —
+  oxDNA is now the concrete reference every other engine's task will be scored against.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
