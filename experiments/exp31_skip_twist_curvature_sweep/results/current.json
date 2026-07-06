@@ -1,0 +1,13 @@
+{
+  "strategy": "deviation",
+  "delta": -3,
+  "total_skips": 96,
+  "job_id": "0cc5368fbfda",
+  "workspace": "/home/jojo/Work/NADOC/experiments/exp31_skip_twist_curvature_sweep/ws",
+  "host": "Compy5000",
+  "production_total_steps": 8000000,
+  "steps_per_s": 2551.7,
+  "expected_wall_s": 3135.164792099385,
+  "started_at": 1782677094.2459955,
+  "started_monotonic": 528548.46727394
+}

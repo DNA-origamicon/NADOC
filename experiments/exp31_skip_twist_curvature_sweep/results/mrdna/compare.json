@@ -1,0 +1,12 @@
+[
+  {
+    "point": "uniform_d+0",
+    "skips": 150,
+    "ox_twist_diff": 51.4,
+    "mrdna_twist_diff": 0.4,
+    "ox_prof_max": "\u2014",
+    "mrdna_prof_max": 0.56,
+    "mrdna_curv": 1.8901,
+    "wall_s": 7.1
+  }
+]

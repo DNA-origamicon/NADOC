@@ -1,0 +1,74 @@
+{
+  "mode": "proxy",
+  "status": "exhausted",
+  "converged_period": 13,
+  "primary_metric": "global_twist_deg",
+  "before": {
+    "rmsd_nm": 8.990907211839762,
+    "twist_residual_deg": -22.15265736134802,
+    "n_frames": 100,
+    "status": "unmet",
+    "job_id": "14b896dab3c2"
+  },
+  "after": {
+    "rmsd_nm": 6.777069724642726,
+    "twist_residual_deg": -102.27341874176092,
+    "n_frames": 100,
+    "status": "unmet",
+    "period": 13
+  },
+  "n_iterations": 3,
+  "n_jobs_captured": 4,
+  "iteration_series": [
+    {
+      "iter": 0,
+      "job_id": "14b896dab3c2",
+      "t0_frames": 0,
+      "mean": -14.61,
+      "sem": 16.74,
+      "std": 67.82,
+      "tau_int": 6.09,
+      "n_eff": 16.41,
+      "whole_mean": -14.61,
+      "n_frames": 100
+    },
+    {
+      "iter": 1,
+      "job_id": "03682376ac96",
+      "t0_frames": 7,
+      "mean": -15.9,
+      "sem": 23.4,
+      "std": 114.09,
+      "tau_int": 3.91,
+      "n_eff": 23.76,
+      "whole_mean": -4.1,
+      "n_frames": 100
+    },
+    {
+      "iter": 2,
+      "job_id": "423cd74135ad",
+      "t0_frames": 27,
+      "mean": 16.55,
+      "sem": 28.48,
+      "std": 95.89,
+      "tau_int": 6.44,
+      "n_eff": 11.34,
+      "whole_mean": 35.2,
+      "n_frames": 100
+    },
+    {
+      "iter": 3,
+      "job_id": "7560b66d8f6f",
+      "t0_frames": 42,
+      "mean": 102.18,
+      "sem": 49.56,
+      "std": 205.29,
+      "tau_int": 3.38,
+      "n_eff": 17.16,
+      "whole_mean": 123.18,
+      "n_frames": 100
+    }
+  ],
+  "per_iter_measurable": true,
+  "wall_s": 155.9
+}

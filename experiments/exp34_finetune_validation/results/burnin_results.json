@@ -1,0 +1,77 @@
+[
+  {
+    "label": "burnin_d+3",
+    "total_skips": 204,
+    "delta": 3,
+    "status": "ok",
+    "n_frames": 1200,
+    "wall_s": 3115.1,
+    "twist_series": {
+      "mean": 38.09,
+      "std": 13.61,
+      "sem": 5.12,
+      "tau_int": 169.73,
+      "n_eff": 7.07,
+      "twist_on_mean_structure": 38.051,
+      "n_frames": 1200
+    },
+    "equilibrated": {
+      "t0_frames": 114,
+      "mean": 35.74,
+      "sem": 0.63,
+      "std": 11.18,
+      "tau_int": 3.45,
+      "n_eff": 314.36
+    }
+  },
+  {
+    "label": "burnin_d+4",
+    "total_skips": 222,
+    "delta": 4,
+    "status": "ok",
+    "n_frames": 1200,
+    "wall_s": 3099.7,
+    "twist_series": {
+      "mean": 5.06,
+      "std": 16.81,
+      "sem": 6.18,
+      "tau_int": 162.26,
+      "n_eff": 7.4,
+      "twist_on_mean_structure": 4.793,
+      "n_frames": 1200
+    },
+    "equilibrated": {
+      "t0_frames": 216,
+      "mean": -0.57,
+      "sem": 0.57,
+      "std": 10.05,
+      "tau_int": 3.14,
+      "n_eff": 313.62
+    }
+  },
+  {
+    "label": "burnin_d+5",
+    "total_skips": 240,
+    "delta": 5,
+    "status": "ok",
+    "n_frames": 800,
+    "wall_s": null,
+    "twist_series": {
+      "mean": -18.11,
+      "std": 14.84,
+      "sem": 3.79,
+      "tau_int": 52.15,
+      "n_eff": 15.34,
+      "twist_on_mean_structure": -17.889,
+      "n_frames": 800
+    },
+    "equilibrated": {
+      "t0_frames": 32,
+      "mean": -19.75,
+      "sem": 0.43,
+      "std": 11.93,
+      "tau_int": 1.0,
+      "n_eff": 768.0
+    }
+  }
+]

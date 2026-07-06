@@ -16,11 +16,20 @@
  */
 import { test, expect } from '@playwright/test'
 import path from 'node:path'
+import fs from 'node:fs'
+import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DESIGN = path.resolve(__dirname, '..', '..', '3x6x200_test.nadoc')
+const REPO_ROOT = path.resolve(__dirname, '..', '..')
+const DESIGN = path.join(REPO_ROOT, '3x6x200_test.nadoc')
 const API = 'http://127.0.0.1:8000/api'
+
+// The 3x6x200_test fixture is gitignored + regenerable — rebuild it headlessly
+// (deterministic replay of its feature-log recipe) if it isn't on disk.
+if (!fs.existsSync(DESIGN)) {
+  execSync('uv run python -m scripts.build_3x6x200_test', { cwd: REPO_ROOT, stdio: 'inherit' })
+}
 
 test('toggling Display MD off keeps it ready (no re-warm)', async ({ page }) => {
   test.setTimeout(300_000)

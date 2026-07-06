@@ -1,0 +1,16 @@
+{
+  "nicked_baseline": {
+    "twist_diff": 51.4,
+    "curv_diff": 1.7158,
+    "n_nicks": 152
+  },
+  "ligated": {
+    "twist_diff": 61.88,
+    "curv_diff": 1.278,
+    "prof_max": 69.63,
+    "status": "ok",
+    "n_strands": 40,
+    "n_ligations": 112
+  },
+  "verdict": "twist +51.4 -> +61.9 (-20% removed by ligation)"
+}

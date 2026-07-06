@@ -152,6 +152,18 @@ experiments/**/ws_*/
 experiments/*/*.log
 # Aggregated per-sweep result dumps (multi-MB, regenerable from run.py + ws/).
 experiments/*/results/results.json
+# exp36 relax-cutoff frame banks + any large tab-separated frame dumps (multi-MB,
+# regenerable by replaying the run; keep the bank_parser/cutoff_replay scripts).
+experiments/**/bank/
+experiments/**/bank_*/
+experiments/**/*.tsv
+# Other multi-hundred-KB per-run result JSON blobs (regenerable).
+experiments/*/results/longrun_result.json
+
+# ── Scratch fixture design (regenerable headlessly) ──────────────────────────
+# 3x6x200_test.nadoc is the MD-display-toggle E2E fixture; NOT a curated Example.
+# Rebuild with:  uv run python -m scripts.build_3x6x200_test
+/3x6x200_test.nadoc
 
 # ── Editor / tool local state (machine-specific, not user content) ───────────
 .codex

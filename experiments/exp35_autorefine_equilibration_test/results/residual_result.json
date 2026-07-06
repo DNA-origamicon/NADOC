@@ -1,0 +1,52 @@
+{
+  "mode": "residual",
+  "status": "ok",
+  "job_id": "76deb290aba8",
+  "total_skips": 222,
+  "wall_s": 4607.5,
+  "measure": {
+    "twist_diff": 17.76,
+    "twist_profile_max": 21.42,
+    "curvature_diff": 1.0605,
+    "bend_diff": 5.81,
+    "dev_max": 5.156,
+    "dev_mean": 1.578,
+    "n_frames": 800,
+    "healthy": true,
+    "bp_retained": 0.963,
+    "fene_safe": true,
+    "max_backbone_stretch_nm": 1.51
+  },
+  "twist_series": {
+    "mean": 18.24,
+    "std": 11.29,
+    "sem": 0.68,
+    "tau_int": 2.94,
+    "n_eff": 272.15,
+    "twist_on_mean_structure": 17.763,
+    "twist_on_avg_structure": 17.76,
+    "n_frames": 800
+  },
+  "equilibrated": {
+    "t0_frames": 0,
+    "mean": 18.24,
+    "sem": 0.68,
+    "std": 11.29,
+    "tau_int": 2.94,
+    "n_eff": 272.15
+  },
+  "verdict": {
+    "passed": false,
+    "t0_frames": 0,
+    "t0_steps": 0,
+    "whole_production_mean_deg": 18.24,
+    "equilibrated_mean_deg": 18.24,
+    "whole_minus_equilibrated_deg": 0.0,
+    "criteria": {
+      "t0_le_1M_steps": true,
+      "whole_vs_eq_within_2deg": true,
+      "equilibrated_within_2deg_of_zero": false
+    },
+    "interpretation": "FAIL (not a measurement/burn-in problem) \u2014 the equil fix WORKED: t0\u22480, the trace is flat from the start, and whole-prod mean == equilibrated mean (18.24\u00b0). But d+4 equilibrates to 18.24\u00b0 \u2260 0 (reproduces the OLD under-equilibrated +17\u00b0, CONTRADICTS exp34c's warm-started \u22120.6\u00b0).  A burn-in DISCARD is a no-op here (t0=0). The slow +90\u00b0\u2192equilibrium twist glide is longer than this 26M-step run, so detect_equilibration can't see it in a 16M window; 10M equil removes the fast ramp but not the slow relaxation. Fix = MUCH longer equilibration (or a long-run convergence check), not trimming."
+  }
+}
