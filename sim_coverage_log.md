@@ -30,7 +30,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | Oracle / pattern | Asserts (property, not "ran") | File(s) | Reuse for |
 |---|---|---|---|
-| _(S4) field-response_ | anchors held ≤ tol AND free beads deflect along +field AND monotone in \|F\| | `shape_metrics.py` (generalize `oxdna_health.measure_field_response`) | every engine's E-field task (C2, M2, N1) |
+| **(S4) field-response** ✅ | anchors held ≤ tol AND free nts deflect along +field AND monotone in \|F\|; cross-engine deflection cosine +1 identical / −1 opposite / 0 orthogonal, magnitude-ratio = compliance ratio; zero-field & no-free raise; copy-aware, no-shared-free→None | `shape_metrics.py::{field_response_profile,compare_field_response}`, `tests/test_shape_field_response.py` | every engine's E-field task (C2, M2, N1); S5 field panel |
 | **(S1) shape descriptors** ✅ | straight→twist≈0 & bend≈0; `_twist_bundle(60)`→60±10°, signed+monotone; `_arc_bundle(R,sweep)`→arc-span±12° & R±25%; can-go-red (twist>20 on twisted frame); single-helix→twist None | `backend/core/shape_metrics.py::compute_shape_descriptors`, `tests/test_shape_metrics.py` | every descriptor-emitting task (O1, C5, M5, N4); S3 consumes its dict; S4 field panel |
 | **(S2) deviation + RMSF profiles** ✅ | identical→rmsd 0; known non-rigid displacement recovered exactly (align=False); rigid pose removed by Kabsch, shear survives (align=True); static ensemble→rmsf 0; known amplitude→A/√2 round-trip; align strips bulk drift keeps site fluctuation; normalize max→1 + rescale-back + all-zero safe | `backend/core/shape_metrics.py::{deviation_profile,rmsf_from_ensemble,normalize_rmsf_profile}`, `tests/test_shape_deviation_rmsf.py` | S3 (agreement math consumes both); per-nt deviation-map + flexibility-map for any engine (O1/C5/M5/N4) |
 | **(S3) descriptor agreement** ✅ | identical→signed %Δ 0 & Pearson 1 & shape-RMSD 0; +10/−10° twist→±10% signed; scaled RMSF→Pearson 1, reversed→<−0.99, constant→None (not NaN); rigid pose→shape-RMSD≈0 but shear survives; **CanDo dir-less RMSF vs oxDNA per-strand collapses to per-bp & correlates**; `reference_for` honors oxdna=shape/field, cando=rmsf, NAMD-override, missing→None | `backend/core/shape_metrics.py::{compare_descriptors,reference_for}`, `tests/test_shape_compare.py` | all cross-validation milestones (S5 card, O1/C5/M5/N4 sources) |
@@ -136,6 +136,41 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   signed %Δ per shape descriptor, Pearson/Spearman on the per-bp RMSF profile, and Kabsch-aligned shape RMSD —
   with the reference chosen per-observable by policy (incl. NAMD override). This is the first cross-*validation*
   number in the loop; S5 wraps it in the generate/view/export card.
+
+### 2026-07-06 — `S4` unified field-response descriptor (shared-metric track)
+
+- **Picked** `S4` — highest-leverage eligible task: shared-metric track leads, deps=S1 met, low effort, closes
+  half of what remained in `M-METRIC-CORE` (S4+S5) and unblocks the E-field oracle every engine's field task
+  (C2, M2, N1) will reuse + enriches the S5 card's field panel.
+- **Built** `backend/core/shape_metrics.py` — the engine-agnostic E-field layer (pure read-over-positions, no
+  topology; NOT Kabsch-aligned — the anchored region IS the common frame, aligning would erase the measured
+  motion):
+  - `field_response_profile(field_positions, reference_positions, field_dir, anchor_keys, *, anchor_tol_nm=1.0,
+    min_free_proj_nm=0.5)` — generalizes `oxdna_health.measure_field_response`. Reproduces its aggregates +
+    physical verdict byte-for-byte (`passed` = anchored_max_drift ≤ tol AND free_proj_along_field ≥ min; same two
+    `ValueError`s on zero field-dir / no free nts) and ADDS a copy-aware `per_nt` deflection map
+    `[{helix_id,bp_index,direction,copy,disp_vec_nm,disp_nm,proj_along_field_nm,anchored}]` plus the mean free
+    `deflection_vec_nm`. Keys via `_dev_key` (copy-distinct so inserted-base copies stay separate); anchor
+    membership is copy-AGNOSTIC (an anchored bp pins all its copies).
+  - `compare_field_response(candidate_profile, reference_profile)` — cross-engine agreement over the SHARED FREE
+    nucleotides: `cosine_similarity` (cosine of the two engines' concatenated free displacement vectors:
+    identical→+1, opposite→−1, orthogonal→0) + `magnitude_ratio` (‖cand‖/‖ref‖ = relative compliance), `None`
+    on degenerate/empty (`n_shared_free=0`). Both profiles normalize `direction` identically → no S3-style
+    silent-empty-intersection.
+- **Oracle** `tests/test_shape_field_response.py` (**13 tests, fast**), imports written first (red on missing
+  name). Asserts *properties*: anchors held + free deflect along field, per-nt map covers every shared nt with
+  correct anchored flags, deflection monotone in |F|, fails when anchors drift or free doesn't deflect,
+  copy-aware keys stay distinct, zero-field & no-free raise; cross-engine cosine +1/−1/0, magnitude-ratio=3.0 at
+  3× compliance, no-shared-free→all-None. Fresh-context review: no correctness gaps against the oracle.
+- **Gates**: oracle 13/13 (45/45 across S1–S4); `just test` = **4155 passed / 66 skipped / 1 xfailed** (full
+  suite, no drop from S3's 4140 + these 13 + repo growth); `ruff check` clean on the 2 touched files (repo has
+  unrelated pre-existing lint debt in other test files — not swept, per `feedback_no_bulk_reformat`). No UI this
+  session (field panel lands in the S5 card) → no smoke/Playwright/display-vs-oracle (N/A: no card yet).
+- **main.js LOC Δ = 0** (backend-only, no frontend).
+- **Comparable prediction gained, not just a run:** two engines' E-field responses now yield an actual agreement
+  score — a copy-aware per-nt deflection field, the free-region projection-along-field, and a cross-engine
+  deflection cosine + magnitude ratio — so "does CanDo deflect the way oxDNA does under the same field?" becomes
+  a number, not a vibe. This is the E-field half of the cross-validation deliverable; S5 wraps it in the card.
 
 ## Lessons (anti-patterns banked)
 

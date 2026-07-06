@@ -47,6 +47,21 @@ fills in as milestones complete.
   question "do the quick and rigorous engines agree, and where do they diverge?" becomes computable the moment
   S5 wires it into the generate/view/export card.
 
+- **`S4` — unified field-response descriptor** · shape: 2 entry points added to the `shape_metrics.py` service
+  (`field_response_profile` + `compare_field_response`; no solver/card change) generalizing
+  `oxdna_health.measure_field_response` · feature: **E-field** (the shared field-deflection substrate) · engines
+  now comparable: any two engines' field responses yield a scored deflection comparison — cosine of the free-nt
+  deflection fields + magnitude (compliance) ratio, plus a copy-aware per-nt deflection map + projection-along-
+  field per engine · oracle: `tests/test_shape_field_response.py` 13 tests **fast** (anchors held + free deflect
+  along field, monotone in |F|, fails on anchor-drift/no-deflection, copy-aware keys, cross-engine cosine
+  +1/−1/0, magnitude-ratio=3.0 at 3× compliance, zero-field/no-free raise, no-shared-free→None) · main.js LOC
+  Δ = 0 · tests: 13/13 oracle (45/45 S1–S4), `just test` 4155 passed / 66 skipped / 1 xfailed (full suite, no
+  drop) ·
+  **Comparable prediction gained, not just a run:** the E-field half of the cross-validation deliverable — two
+  engines' responses to the same field now reduce to a deflection cosine + compliance ratio (does CanDo bend the
+  way oxDNA does, and by how much?), the field-panel counterpart to S3's shape/RMSF agreement, ready for the S5
+  card.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -68,7 +83,7 @@ requirement)._
 
 | Milestone | Meaning | Status |
 |---|---|---|
-| `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | pending (S1–S3 done; S4, S5 remain) |
+| `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | pending (S1–S4 done; **S5 remains**) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | pending (C1,C2,S4,S5,O1) |
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1–C5) |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |

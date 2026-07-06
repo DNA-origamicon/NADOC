@@ -444,3 +444,161 @@ def compare_descriptors(candidate, reference, *, align_shape: bool = True) -> di
         "shape_rmsd_nm": _shape_rmsd(
             candidate.get("shape_frame"), reference.get("shape_frame"), align_shape),
     }
+
+
+# ── Field-response descriptor (S4) ──────────────────────────────────────────────────
+#
+# The engine-agnostic E-field oracle + descriptor.  Generalises
+# ``oxdna_health.measure_field_response`` (oxDNA-only, one aggregate verdict) into a
+# reusable primitive every engine's field flow feeds: it adds a copy-aware PER-NT
+# deflection map so two engines' field responses can be compared directionally, while
+# keeping the physical verdict (anchors held + free deflected along the field).
+#
+# Positions are NOT Kabsch-aligned: the anchored region IS the common frame between the
+# field-on and field-off structures, and aligning would remove the very field-driven
+# motion being measured (mirrors ``field_response_from_confs``' note).  All read-only
+# over the Physical layer (Three-Layer Law) — never touches topology.
+
+
+def _pos_lookup(positions) -> dict:
+    """Copy-aware ``{(helix, bp, dir, copy): np.array(xyz)}`` map (same key as
+    :func:`_dev_key`) so inserted-base copies stay distinct."""
+    return {_dev_key(p): np.asarray(p["backbone_position"], dtype=float)
+            for p in positions}
+
+
+def _anchor_key_set(anchor_keys) -> set:
+    """Normalise anchor landmarks to their ``(helix, bp, dir)`` triple (copy-agnostic —
+    an anchored base pins all of its inserted copies)."""
+    out = set()
+    for k in anchor_keys:
+        h, bp, direction = tuple(k)[:3]
+        out.add((h, int(bp), getattr(direction, "value", direction)))
+    return out
+
+
+def field_response_profile(
+    field_positions,
+    reference_positions,
+    field_dir,
+    anchor_keys=(),
+    *,
+    anchor_tol_nm: float = 1.0,
+    min_free_proj_nm: float = 0.5,
+) -> dict:
+    """Per-nucleotide + aggregate response of a structure to an E-field stage vs its
+    field-off reference — engine-agnostic (generalises
+    ``oxdna_health.measure_field_response``).
+
+    ``field_positions`` / ``reference_positions`` are display-position maps (lists of
+    ``{helix_id, bp_index, direction, backbone_position, copy?}`` dicts).  ``anchor_keys``
+    is the iterable of anchored ``(helix, bp, direction)`` landmarks (the parts pinned by
+    traps/restraints); ``field_dir`` is the applied field direction.
+
+    ``passed`` asserts a *physical property*, not a run status: the anchored nucleotides
+    barely moved (≤ ``anchor_tol_nm``) AND the free nucleotides displaced, on average,
+    ALONG the field (≥ ``min_free_proj_nm``).  Returns the aggregates
+    (``anchored_max_drift_nm``, ``anchored_mean_drift_nm``, ``free_mean_disp_nm``,
+    ``free_proj_along_field_nm``, ``n_anchored``, ``n_free``, ``passed``, ``reason``), the
+    unit ``field_dir``, the mean free ``deflection_vec_nm`` (for cross-engine cosine), and
+    a copy-aware ``per_nt`` deflection map ``[{helix_id, bp_index, direction, copy,
+    disp_vec_nm, disp_nm, proj_along_field_nm, anchored}, …]``.
+
+    Raises ``ValueError`` on a zero field direction or no free nucleotides to measure."""
+    fdir = np.asarray(field_dir, dtype=float)
+    fnorm = float(np.linalg.norm(fdir))
+    if fnorm <= 1e-9:
+        raise ValueError("field_response_profile: field_dir is ~zero")
+    fdir = fdir / fnorm
+
+    fmap = _pos_lookup(field_positions)
+    rmap = _pos_lookup(reference_positions)
+    anchor_set = _anchor_key_set(anchor_keys)
+
+    per_nt: list = []
+    anchored_drifts: list[float] = []
+    free_disps: list[float] = []
+    free_projs: list[float] = []
+    free_vecs: list = []
+    for key, fpos in fmap.items():
+        if key not in rmap:
+            continue
+        h, bp, direction, copy = key
+        disp = fpos - rmap[key]
+        dist = float(np.linalg.norm(disp))
+        proj = float(np.dot(disp, fdir))
+        is_anchor = (h, bp, direction) in anchor_set
+        per_nt.append({
+            "helix_id": h, "bp_index": bp, "direction": direction, "copy": copy,
+            "disp_vec_nm": [float(x) for x in disp],
+            "disp_nm": dist, "proj_along_field_nm": proj, "anchored": is_anchor,
+        })
+        if is_anchor:
+            anchored_drifts.append(dist)
+        else:
+            free_disps.append(dist)
+            free_projs.append(proj)
+            free_vecs.append(disp)
+
+    if not free_disps:
+        raise ValueError("field_response_profile: no free (non-anchored) nucleotides to measure")
+
+    anchored_max = max(anchored_drifts) if anchored_drifts else 0.0
+    anchored_mean = float(np.mean(anchored_drifts)) if anchored_drifts else 0.0
+    free_mean = float(np.mean(free_disps))
+    free_proj = float(np.mean(free_projs))
+    deflection_vec = np.mean(np.asarray(free_vecs), axis=0)
+
+    held = anchored_max <= anchor_tol_nm
+    deflected = free_proj >= min_free_proj_nm
+    reasons = []
+    if not held:
+        reasons.append(f"anchors drifted {anchored_max:.2f} nm > {anchor_tol_nm} nm tol")
+    if not deflected:
+        reasons.append(f"free motion along field {free_proj:.2f} nm < {min_free_proj_nm} nm min")
+    return {
+        "field_dir": [float(x) for x in fdir],
+        "per_nt": per_nt,
+        "deflection_vec_nm": [float(x) for x in deflection_vec],
+        "anchored_max_drift_nm": anchored_max,
+        "anchored_mean_drift_nm": anchored_mean,
+        "free_mean_disp_nm": free_mean,
+        "free_proj_along_field_nm": free_proj,
+        "n_anchored": len(anchored_drifts),
+        "n_free": len(free_disps),
+        "passed": held and deflected,
+        "reason": "; ".join(reasons) or "anchors held; structure deflected along the field",
+    }
+
+
+def _free_vec_map(profile) -> dict:
+    """``{(helix, bp, dir, copy): np.array(disp_vec)}`` over the FREE nucleotides of a
+    :func:`field_response_profile` result — the substrate the cross-engine comparison
+    correlates."""
+    return {(e["helix_id"], e["bp_index"], e["direction"], e["copy"]):
+            np.asarray(e["disp_vec_nm"], dtype=float)
+            for e in profile.get("per_nt", []) if not e["anchored"]}
+
+
+def compare_field_response(candidate_profile, reference_profile) -> dict:
+    """Cross-engine agreement of two :func:`field_response_profile` deflection fields.
+
+    Over the FREE nucleotides both engines share, the per-nt displacement vectors are
+    concatenated into one long vector per engine; ``cosine_similarity`` is the cosine of
+    those (do both engines deflect the structure the same way? +1 identical, 0 orthogonal,
+    −1 opposite) and ``magnitude_ratio`` is ‖candidate‖/‖reference‖ (one engine more
+    compliant than the other).  Returns ``{cosine_similarity, magnitude_ratio,
+    n_shared_free}`` — the scalars are ``None`` when no free nucleotides overlap or a
+    deflection field is degenerate (zero-length -> cosine undefined, no divide-by-zero)."""
+    c = _free_vec_map(candidate_profile)
+    r = _free_vec_map(reference_profile)
+    shared = sorted(set(c) & set(r))
+    if not shared:
+        return {"cosine_similarity": None, "magnitude_ratio": None, "n_shared_free": 0}
+    cv = np.concatenate([c[k] for k in shared])
+    rv = np.concatenate([r[k] for k in shared])
+    cn = float(np.linalg.norm(cv))
+    rn = float(np.linalg.norm(rv))
+    cosine = None if cn < 1e-12 or rn < 1e-12 else _finite_or_none(float(np.dot(cv, rv)) / (cn * rn))
+    ratio = None if rn < 1e-12 else _finite_or_none(cn / rn)
+    return {"cosine_similarity": cosine, "magnitude_ratio": ratio, "n_shared_free": len(shared)}
