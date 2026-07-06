@@ -19,6 +19,19 @@ fills in as milestones complete.
   bend-angle+radius / Rg / end-to-end numbers on the shared `(helix,bp,dir,copy)` substrate, so S3 can score
   agreement instead of comparing incommensurable per-engine metrics.
 
+- **`S2` — unified deviation + RMSF profiles** · shape: 3 functions added to the `shape_metrics.py` service
+  (no solver/card change) generalizing `cando_deviation.compute_deviation`, `oxdna_health.production_rmsf`'s
+  variance core, and `fem_solver.normalize_rmsf` · feature: comparison-metric (the second shared substrate) ·
+  engines now comparable: *all four* can be scored on identical per-nt deviation-from-design (+RMSD) and per-nt
+  RMSF (CanDo via NMA, others via `rmsf_from_ensemble`) · oracle: `tests/test_shape_deviation_rmsf.py` 10 tests
+  **fast** (rmsd 0 identical, exact non-rigid displacement recovery, Kabsch pose-removal, `A/√2` fluctuation
+  round-trip, normalize round-trip) · main.js LOC Δ = 0 · tests: 10/10 oracle, `just test` 4128 passed / 66
+  skipped / 1 xfailed (full suite, no drop) ·
+  **Comparable prediction gained, not just a run:** any engine's frame(s) now yield the SAME per-nucleotide
+  deviation (Kabsch-aligned, so pose is stripped and only real shape mismatch survives) and the SAME per-nt RMSF
+  on the shared substrate — the two flexibility/shape yardsticks S3's `compare_descriptors` needs to report a
+  Pearson r / signed Δ between two engines instead of comparing incommensurable per-engine numbers.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
