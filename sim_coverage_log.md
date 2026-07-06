@@ -34,7 +34,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(S1) shape descriptors** ✅ | straight→twist≈0 & bend≈0; `_twist_bundle(60)`→60±10°, signed+monotone; `_arc_bundle(R,sweep)`→arc-span±12° & R±25%; can-go-red (twist>20 on twisted frame); single-helix→twist None | `backend/core/shape_metrics.py::compute_shape_descriptors`, `tests/test_shape_metrics.py` | every descriptor-emitting task (O1, C5, M5, N4); S3 consumes its dict; S4 field panel |
 | **(S2) deviation + RMSF profiles** ✅ | identical→rmsd 0; known non-rigid displacement recovered exactly (align=False); rigid pose removed by Kabsch, shear survives (align=True); static ensemble→rmsf 0; known amplitude→A/√2 round-trip; align strips bulk drift keeps site fluctuation; normalize max→1 + rescale-back + all-zero safe | `backend/core/shape_metrics.py::{deviation_profile,rmsf_from_ensemble,normalize_rmsf_profile}`, `tests/test_shape_deviation_rmsf.py` | S3 (agreement math consumes both); per-nt deviation-map + flexibility-map for any engine (O1/C5/M5/N4) |
 | **(S3) descriptor agreement** ✅ | identical→signed %Δ 0 & Pearson 1 & shape-RMSD 0; +10/−10° twist→±10% signed; scaled RMSF→Pearson 1, reversed→<−0.99, constant→None (not NaN); rigid pose→shape-RMSD≈0 but shear survives; **CanDo dir-less RMSF vs oxDNA per-strand collapses to per-bp & correlates**; `reference_for` honors oxdna=shape/field, cando=rmsf, NAMD-override, missing→None | `backend/core/shape_metrics.py::{compare_descriptors,reference_for}`, `tests/test_shape_compare.py` | all cross-validation milestones (S5 card, O1/C5/M5/N4 sources) |
-| _(display-vs-oracle)_ | card's displayed numbers == headless oracle within tol; else STOP+ask | one-off Playwright per card (deleted after) | S5, C5, M5, N4 |
+| **(S5) comparison report** ✅ | per-observable reference selection (oxDNA=shape/field, CanDo=RMSF, NAMD-override); scalar reference→0-delta & candidate recovers ±known %; zero-ref→None (no div0); identical RMSF→Pearson 1 + overlay points; rigid-shift→shape-RMSD≈0; field cosine +1/−1 & mag-ratio 3; 1-engine→raw-no-agreement; empty→not-ready; missing observable omits its rows; REST start→poll→result+404 | `backend/core/shape_compare.py::build_comparison_report`, `backend/api/routes_shape_metrics.py`, `tests/test_shape_compare_report.py` | the compare card; per-engine source-bundle contract for C5/O1/M5/N4 |
+| _(display-vs-oracle)_ ✅ (S5) | card's displayed numbers == headless oracle within tol; else STOP+ask | one-off Playwright per card (deleted after) | S5 ✓, C5, M5, N4 |
 
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
@@ -171,6 +172,55 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   score — a copy-aware per-nt deflection field, the free-region projection-along-field, and a cross-engine
   deflection cosine + magnitude ratio — so "does CanDo deflect the way oxDNA does under the same field?" becomes
   a number, not a vibe. This is the E-field half of the cross-validation deliverable; S5 wraps it in the card.
+
+### 2026-07-06 — `S5` cross-engine comparison CARD (closes M-METRIC-CORE)
+
+- **Picked** `S5` — the last shared-metric task; the S1–S4 math existed but couldn't be *reported*. Closes
+  M-METRIC-CORE and unblocks the per-engine emission tasks (C5/O1/M5/N4). deps=S3 met.
+- **Backend** `backend/core/shape_compare.py::build_comparison_report(sources)` — a PURE assembly that composes
+  S3/S4 (`reference_for` + `compare_descriptors` + `compare_field_response`) into one card payload from a list of
+  per-engine source bundles `{engine, descriptors?, rmsf?, shape_frame?, field?}`: a scalar table (each engine's
+  value + signed %-delta vs the SHAPE reference), per-engine RMSF overlay profiles (collapsed per-bp), agreement
+  rows (shape-RMSD vs shape-ref, RMSF Pearson/Spearman vs rmsf-ref, field cosine/ratio vs field-ref), and a field
+  panel (per-engine held+deflected verdict + cosine-vs-ref). Per-observable reference honors the S3 policy
+  (oxDNA=shape/field, CanDo=RMSF, NAMD overrides all). Graceful: 1 engine → raw values no deltas; missing
+  observable → no rows for it; never crashes. Read-only over Physical-layer dicts (Three-Layer Law) — no topology.
+- **Backend route** `backend/api/routes_shape_metrics.py` — daemon-thread registry (mirrors `routes_oxdna_metrics`):
+  `POST /shape/compare/start` (body `{sources:[…]}`) → `{metrics_id}`; `GET /shape/compare/{run_id}` →
+  `{state, progress, result?}`. Registered in `main.py`. (Compute is instant now — sources are posted
+  pre-computed — but the daemon pattern is kept so the per-engine tasks can later make source-*gathering* slow
+  without changing the card.)
+- **Frontend** `frontend/src/ui/shape_compare_card.js` — the card factory + PURE helpers (`fmtNum`, `fmtDelta`,
+  `scalarTableModel`, `rmsfOverlaySpec` via the shared `metric_graph.buildChartSpec`, `comparisonCSVs`).
+  Generate → gather sources → `POST`/poll → render scalar table + RMSF overlay canvas + agreement table + field
+  panel; Export → shared `metric_export_modal` (PNG of the overlay via `renderToDataURL`, CSV of the three tables).
+  Hosted as a collapsible card in the oxDNA Dynamics panel, wired from `initOxdnaJobsPanel` (`getSources: ()=>[]`
+  for now — live per-engine sources are O1/C5/M5/N4, tracked as MV-21). Reuses `metric_graph`/`metric_export_modal`
+  verbatim — the card machinery is bound, not rebuilt. **`main.js` LOC Δ = 0.**
+- **Oracle** `tests/test_shape_compare_report.py` (**14 tests, fast**), written before the assembly (imported the
+  new name first → red). Asserts *properties*: per-observable reference selection incl. NAMD-override; scalar
+  reference=0-delta & candidate recovers ±known %; zero-ref→None delta no div0; identical RMSF→Pearson 1 + overlay
+  points; rigid-shifted frame→shape-RMSD≈0 (Kabsch); field cosine +1/−1 & magnitude-ratio 3; 1-engine→raw no
+  agreement; empty→not-ready; missing observable omits its rows; REST start→poll→result + 404.
+- **Frontend pins** `frontend/src/ui/shape_compare_card.test.js` (6 pure-helper + 3 wiring tests): fmt/null, table
+  view-model column order + reference flag, overlay series order (ref first) + empty, CSV sections/numbers,
+  Generate→poll→render fills tables + enables Export, empty-sources reports not-ready without a run, refresh clears.
+- **Display-vs-oracle** (one-off Playwright, deleted): drove the REAL card + REAL client against the REAL
+  throwaway backend with two synthetic engine sources; scraped the rendered table and asserted it shows the
+  backend oracle's `+10.0%` twist delta, `oxdna · ref`, RMSF Pearson `1.000`, and `Reference: shape=oxdna` —
+  displayed == oracle. Passed. Standing human-eye check on live cross-engine data filed as **MV-21**.
+- **Gates**: oracle 15/15; `just test-frontend` = **2200 passed / 177 files**; `just test` = **4170 passed / 66
+  skipped / 1 xfailed** (full suite, no drop — S4's 4155 + these 15 + the field-ref-fix test);
+  `ruff check` clean on all touched backend files (repo's 19 pre-existing lint errors in other test files
+  untouched, per `feedback_no_bulk_reformat`); `just smoke` green (pre-work) + the one-off display-vs-oracle.
+  Fresh-context review: no correctness bugs; math + layer discipline + backend↔frontend shape contract all
+  sound. One benign edge flagged (policy field-reference mislabelled when it carries no field data) — FIXED this
+  session (field comparison/panel now resolve the reference among field-carrying engines; new test
+  `test_field_reference_resolves_among_field_carrying_engines_only`).
+- **Comparable prediction gained, not just a run:** the cross-engine comparison built in S3/S4 is now
+  GENERATABLE/VIEWABLE/EXPORTABLE — one card turns two engines' descriptor bundles into a scalar-delta table, an
+  RMSF-overlay + Pearson/Spearman, an aligned-shape RMSD, and a field-deflection cosine, with PNG/CSV export.
+  M-METRIC-CORE is closed; every per-engine emission task (C5/O1/M5/N4) now has a card to feed.
 
 ## Lessons (anti-patterns banked)
 

@@ -21,6 +21,9 @@ vi.mock('../api/client.js', () => ({
   // must expose them or vitest throws "No export defined" at panel init.
   startOxdnaMetrics: vi.fn().mockResolvedValue({ metrics_id: 'm1' }),
   getOxdnaMetricsRun: vi.fn().mockResolvedValue({ state: 'complete', metrics: {} }),
+  // Shape comparison card (initShapeCompareCard) is wired from the panel with these.
+  startShapeCompare: vi.fn().mockResolvedValue({ metrics_id: 's1' }),
+  getShapeCompareRun: vi.fn().mockResolvedValue({ state: 'done', result: { ready: false } }),
   lastErrorMessage: () => null,
 }))
 

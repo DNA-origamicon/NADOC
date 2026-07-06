@@ -24,6 +24,7 @@ import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
+import { initShapeCompareCard } from './shape_compare_card.js'
 import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
@@ -1929,6 +1930,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _autorefineCleanForDesign = false
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     _metricsCard?.refresh()      // cached twist/curve/bp graphs no longer match the edited design
+    _compareCard?.refresh()      // cached cross-engine comparison no longer matches the edited design
     _fetchJobs()
   })
 
@@ -1950,6 +1952,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const _metricsCard = initOxdnaMetricsCard({
     getSelectedJob: _selectedJob,
     getJobs: () => _jobs,
+  })
+
+  // Cross-engine Shape comparison card (S5) — engine-agnostic, hosted here.  `getSources`
+  // returns the per-engine {engine, descriptors, rmsf, shape_frame, field} bundles for the
+  // current design; the per-engine emission tasks (O1/C5/M5/N4) populate it, so for now it
+  // is empty and the card reports that no predictions are ready (live data = an MV row).
+  const _compareCard = initShapeCompareCard({
+    api: { start: api.startShapeCompare, poll: api.getShapeCompareRun },
+    getSources: () => [],
   })
 
   // initial availability probe (cheap) so the status line is populated.

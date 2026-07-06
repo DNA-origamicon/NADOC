@@ -2031,6 +2031,11 @@ export const getOxdnaDeviation   = (id)          => _oxdnaJSON('GET',  `/oxdna/j
 export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)
 /** Poll a Graphs & Metrics run → {state, progress, eta_s, frames_done, frames_total, result?}. */
 export const getOxdnaMetricsRun  = (runId)       => _oxdnaJSON('GET',  `/oxdna/metrics/${runId}`)
+/** Cross-engine Shape comparison card (S5): start a comparison over per-engine source
+ *  bundles (`{sources:[{engine, descriptors?, rmsf?, shape_frame?, field?}, …]}`) →
+ *  {metrics_id}; poll `getShapeCompareRun` → {state, progress, result?}. */
+export const startShapeCompare   = (body)        => _oxdnaJSON('POST', '/shape/compare/start', body)
+export const getShapeCompareRun  = (runId)       => _oxdnaJSON('GET',  `/shape/compare/${runId}`)
 export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
 export const getOxdnaDisplay     = (id, align = true) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`)

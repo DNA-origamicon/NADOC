@@ -3803,6 +3803,26 @@
                 </div>
               </div>
 
+              <!-- ── Cross-engine shape comparison (S5, collapsible) ──────────── -->
+              <div class="ox-card" style="margin-top:8px">
+                <div id="shape-compare-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="shape-compare-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Shape comparison (cross-engine)</span>
+                </div>
+                <div id="shape-compare-card" class="ox-card__body" style="display:none">
+                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Compare each engine's predicted shape, flexibility (RMSF) &amp; E-field deflection for this design. Per-observable reference: oxDNA=shape/field, CanDo=RMSF, NAMD overrides when present.</div>
+                  <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+                    <button id="shape-compare-gen"    title="Gather every engine's prediction for this design and compare" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                    <button id="shape-compare-export" title="Export the RMSF overlay (PNG) and the tables (CSV)" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                  </div>
+                  <div id="shape-compare-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-bottom:4px;overflow:hidden"><div id="shape-compare-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                  <div id="shape-compare-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:12px"></div>
+                  <div id="shape-compare-scalars" style="margin-bottom:8px"></div>
+                  <canvas id="shape-compare-rmsf" width="520" height="260" style="width:100%;max-width:520px;background:#0d1117;border-radius:4px;margin-bottom:8px"></canvas>
+                  <div id="shape-compare-agreement" style="margin-bottom:4px"></div>
+                  <div id="shape-compare-field"></div>
+                </div>
+              </div>
+
               <!-- manual export (run oxDNA yourself from the ZIP) — last in the section -->
               <button id="oxdna-jobs-export-btn"
                       style="width:100%;font-size:var(--text-xs);padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer;margin-top:8px">

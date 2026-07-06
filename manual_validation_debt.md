@@ -158,6 +158,27 @@ Core editing + default-selection UX first; niche/visual last.
 
 ## GENERATED (manual ops ready — run these, then report pass/fail)
 
+### MV-21 — Cross-engine "Shape comparison" card on LIVE engine data (S5)
+*The S5 comparison card (oxDNA Dynamics panel → "Shape comparison (cross-engine)")
+generates/views/exports the S3/S4 agreement — scalar-delta table, per-engine RMSF
+overlay + Pearson/Spearman, aligned-shape RMSD, and an E-field deflection panel — from
+per-engine `{engine, descriptors, rmsf, shape_frame, field}` source bundles.*
+
+**Why this needs a human.** The pure helpers (table view-model, chart spec, CSVs), the
+backend assembly (`build_comparison_report`), the Generate→poll→render wiring, and the
+export are all unit-pinned, and a one-off display-vs-oracle Playwright confirmed the
+rendered numbers equal the backend oracle for **synthetic** two-engine sources. What is
+NOT yet hand-driven is the card on **real** cross-engine data: the card's `getSources`
+returns `[]` until the per-engine emission tasks land (O1 oxDNA, C5 CanDo, M5 mrDNA, N4
+NAMD), so an actual oxDNA-vs-CanDo comparison for a loaded design — the RMSF overlay
+lining up, the deltas being physically sane, the field panel verdict — can only be
+eyeballed once ≥1 of those ships. Re-open this the session O1 or C5 wires a live source.
+
+**Test:** after O1/C5 land, load a design with an oxDNA relaxed job (e.g.
+`Examples/26hb_platform_v3.nadoc`), open the card, Generate, confirm the scalar table +
+RMSF overlay + agreement table populate with sane numbers, and Export produces a PNG +
+CSVs. Report pass/fail.
+
 ### MV-5 — Assembly right-click context menu (part / linker / belt)
 *Discharges fix #69 — the assembly right-click router moved onto the shared
 `createContextMenu` primitive. The router (`assembly_pointer.js`
