@@ -166,6 +166,31 @@ describe('mdHasMetrics', () => {
   })
 })
 
+import { mdEarlyStopToggleState } from './md_jobs_panel.js'
+
+describe('mdEarlyStopToggleState', () => {
+  it('settled: no override → reflects the persisted flag, not pending', () => {
+    expect(mdEarlyStopToggleState({ early_stop_relax: false })).toEqual({ checked: false, pending: false })
+    expect(mdEarlyStopToggleState({ early_stop_relax: true })).toEqual({ checked: true, pending: false })
+  })
+  it('queued override differing from persisted → shows requested value, pending', () => {
+    // user toggled ON; runner has not yet consumed it, so early_stop_relax still false
+    expect(mdEarlyStopToggleState({ early_stop_relax: false, early_stop_pending: true }))
+      .toEqual({ checked: true, pending: true })
+    // user toggled OFF a currently-on job
+    expect(mdEarlyStopToggleState({ early_stop_relax: true, early_stop_pending: false }))
+      .toEqual({ checked: false, pending: true })
+  })
+  it('override already matches persisted → settled (nothing actually queued)', () => {
+    expect(mdEarlyStopToggleState({ early_stop_relax: true, early_stop_pending: true }))
+      .toEqual({ checked: true, pending: false })
+  })
+  it('in-flight POST (busy) forces pending even before the server reports the override', () => {
+    expect(mdEarlyStopToggleState({ early_stop_relax: false }, true))
+      .toEqual({ checked: false, pending: true })
+  })
+})
+
 describe('mdListSignature', () => {
   it('changes on status, segment, selection; stable otherwise', () => {
     const jobs = [{ job_id: 'a', status: 'running', current_segment_idx: 1 }]

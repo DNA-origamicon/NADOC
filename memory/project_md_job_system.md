@@ -243,9 +243,18 @@ Mid-run toggle (2026-07-05): `POST /md/jobs/{id}/early-stop {enabled}` →
 (runner is sole writer), so it stashes `_EARLY_STOP_OVERRIDE[job_id]` which `run_job`
 consumes+persists at its next chunk boundary; an idle job is written directly. UI: a
 "Early-stop settled stages (live)" checkbox in the job detail (`#md-jobs-early-stop-live`,
-shown only for a running local job, reflects `job.early_stop_relax`), client
-`setMdEarlyStop`. Tests: `test_{set_early_stop_persists_when_idle,
-set_early_stop_override_when_running,runner_consumes_midrun_override}`.
+shown only for a running local job), client `setMdEarlyStop`. **Pending-state fix
+(2026-07-05):** a running chunk can be hours long, so `early_stop_relax` on disk lags
+the user's intent that whole time; the old UI re-synced the checkbox to that stale flag
+on every 3 s WS push → it "toggled back off". Fix: backend surfaces the queued override
+as `early_stop_pending` (via `namd_runner.pending_early_stop`) in the WS payload +
+`GET /md/jobs[/{id}]`; frontend `mdEarlyStopToggleState(job, busy)` (pure, unit-tested)
+derives `{checked, pending}` — while the override differs from persisted (or a POST is
+in flight) the toggle is shown in the REQUESTED position, `disabled` (no spam-toggle),
+with a `⧗ pending` span (`#md-jobs-early-stop-live-pending`). Clears when the runner
+consumes the override at the next boundary. Tests: `test_{set_early_stop_persists_when_idle,
+set_early_stop_override_when_running,pending_early_stop_reports_queued_override,
+runner_consumes_midrun_override}`; frontend `mdEarlyStopToggleState` (4 cases).
 **Threshold recalibration (2026-07-04, from a live fast run) — LOAD-BEARING:** the first
 live run (2hb_noT, `early_stop_relax` on, FAST=HMR+4fs) NEVER skipped: the old single
 threshold (`eps_pot`=0.1%, `eps_vol`=0.2% for BOTH drift and scatter) sat *below* fast-run

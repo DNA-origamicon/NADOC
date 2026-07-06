@@ -238,6 +238,23 @@ export function mdShouldShowInheritedSeed(job, displayMeta) {
 }
 
 
+/** Pure: resolve the live early-stop toggle's display state from a job dict + the
+ *  "a POST is in flight" flag.  A running job stashes a mid-run override the runner
+ *  only consumes at the next chunk boundary, so `early_stop_relax` (the persisted
+ *  flag) lags behind the user's intent for as long as a chunk takes.  While the
+ *  override differs from persisted — or a POST is still in flight — the toggle is
+ *  `pending`: shown in the REQUESTED position, `checked` reflecting intent, and
+ *  `disabled` so it can't be spam-toggled before the change lands.
+ *  Returns {checked, pending}. */
+export function mdEarlyStopToggleState(job, busy = false) {
+  const persisted = !!job?.early_stop_relax
+  const ov = job?.early_stop_pending
+  const serverPending = (ov === true || ov === false) && ov !== persisted
+  const checked = serverPending ? ov : persisted
+  return { checked, pending: serverPending || !!busy }
+}
+
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
 export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getClusterState = null } = {}) {
@@ -304,6 +321,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const stopBtn     = document.getElementById('md-jobs-stop-btn')
   const earlyStopLiveWrap = document.getElementById('md-jobs-early-stop-live-wrap')
   const earlyStopLiveChk  = document.getElementById('md-jobs-early-stop-live')
+  const earlyStopLivePending = document.getElementById('md-jobs-early-stop-live-pending')
   const errorEl     = document.getElementById('md-jobs-detail-error')
   const progressEl  = document.getElementById('md-jobs-progress')
   const timelineEl  = document.getElementById('md-jobs-timeline')
@@ -359,6 +377,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
   let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
+  let _earlyStopBusy = false      // a live early-stop POST is in flight (locks the toggle until the server confirms)
   const _metricsByJob = new Map()
   let _pendingAlpineReview = null   // jobId whose review card opens once prep finishes
 
@@ -1499,17 +1518,32 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }, { label: 'Stopping…' }))
 
   earlyStopLiveChk?.addEventListener('change', async () => {
-    if (!_selectedId) return
+    if (!_selectedId || _earlyStopBusy) return
     const enabled = earlyStopLiveChk.checked
+    // Optimistically lock the toggle in the requested position so it can't be
+    // spam-flipped while the POST is in flight; the server-side override then keeps
+    // it "pending" (via mdEarlyStopToggleState) until the runner applies it.
+    _earlyStopBusy = true
+    earlyStopLiveChk.disabled = true
+    if (earlyStopLivePending) earlyStopLivePending.style.display = ''
     try {
       const d = await api.setMdEarlyStop(_selectedId, enabled)
       console.log(`[${_ts()}] md-jobs: early-stop toggle`, d)
+      // Reflect the queued override on the cached job now so any render before the
+      // next WS state push (which will carry it from the server) already reads it as
+      // pending — otherwise a stale-`_jobs` render could flicker the toggle back.
+      const cached = _jobs.find(j => j.job_id === _selectedId)
+      if (cached) cached.early_stop_pending = enabled
       showToast(enabled ? 'Early-stop enabled (applies at next checkpoint)'
                         : 'Early-stop disabled', 'info')
     } catch (err) {
       earlyStopLiveChk.checked = !enabled   // revert on failure
+      if (earlyStopLivePending) earlyStopLivePending.style.display = 'none'
+      earlyStopLiveChk.disabled = false
       console.warn(`[${_ts()}] md-jobs: early-stop toggle failed`, err)
       showToast('Early-stop toggle failed', 'warn')
+    } finally {
+      _earlyStopBusy = false
     }
   })
 
@@ -1822,13 +1856,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // Local "Start" only applies to local jobs; an Alpine job is launched via Submit-to-Alpine.
     if (startBtn) startBtn.style.display = (!isAlpine && ['queued', 'stopped', 'failed'].includes(job.status)) ? '' : 'none'
     if (stopBtn) stopBtn.style.display = (job.status === 'running') ? '' : 'none'
-    // Mid-run early-stop toggle: shown for a running LOCAL relaxation job; reflects
-    // its current flag (skip the update if the user is mid-interaction is unlikely
-    // here since it re-renders on job state, not keystroke).
+    // Mid-run early-stop toggle: shown for a running LOCAL relaxation job.  The
+    // requested value can lag the persisted flag until the runner consumes it at a
+    // chunk boundary, so drive checked/disabled from mdEarlyStopToggleState (which
+    // honours the queued override + the in-flight POST) instead of the raw flag —
+    // otherwise every 3 s state push would snap the toggle back off.
     if (earlyStopLiveWrap) {
       const showLive = job.status === 'running' && job.execution_target !== 'alpine'
       earlyStopLiveWrap.style.display = showLive ? 'flex' : 'none'
-      if (showLive && earlyStopLiveChk) earlyStopLiveChk.checked = !!job.early_stop_relax
+      if (showLive && earlyStopLiveChk) {
+        const { checked, pending } = mdEarlyStopToggleState(job, _earlyStopBusy)
+        earlyStopLiveChk.checked = checked
+        earlyStopLiveChk.disabled = pending
+        if (earlyStopLivePending) earlyStopLivePending.style.display = pending ? '' : 'none'
+      }
     }
     // Submit-to-Alpine: a prepared remote job not yet handed to SLURM.
     if (submitAlpineBtn) {

@@ -1149,6 +1149,14 @@ def set_early_stop(job_id: str, enabled: bool, workspace_dir: Path) -> bool:
     return enabled
 
 
+def pending_early_stop(job_id: str) -> Optional[bool]:
+    """The mid-run early-stop value a POST stashed but the runner has not yet
+    consumed at a chunk boundary, or None when nothing is queued.  The UI shows a
+    "pending" state (and blocks re-toggling) while this differs from the persisted
+    ``early_stop_relax`` so a slow chunk can't make the live toggle look reverted."""
+    return _EARLY_STOP_OVERRIDE.get(job_id)
+
+
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Kill the NAMD process for job_id and cancel its runner task.  Returns True
     if anything (a live task or a running process) was found and acted on.

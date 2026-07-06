@@ -242,6 +242,18 @@ def test_set_early_stop_override_when_running(tmp_path: Path, monkeypatch: pytes
     nr._EARLY_STOP_OVERRIDE.pop(job.job_id, None)
 
 
+def test_pending_early_stop_reports_queued_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The UI reads pending_early_stop to show a queued-but-not-yet-applied toggle
+    (so a slow chunk can't make the live toggle look reverted)."""
+    job = _setup(tmp_path, early_stop=False)
+    monkeypatch.setattr(nr, "is_running", lambda jid: True)
+    nr._EARLY_STOP_OVERRIDE.pop(job.job_id, None)
+    assert nr.pending_early_stop(job.job_id) is None      # nothing queued
+    nr.set_early_stop(job.job_id, True, tmp_path)
+    assert nr.pending_early_stop(job.job_id) is True       # queued override surfaced
+    nr._EARLY_STOP_OVERRIDE.pop(job.job_id, None)
+
+
 def test_runner_consumes_midrun_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A job started with early-stop OFF picks up a mid-run override and skips the
     plateaued stage's remaining chunks."""

@@ -1183,7 +1183,7 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
     from backend.core.md_job import MdJob, MdStatus
     from backend.core.md_prep_progress import read_prep_progress
     from backend.core.namd_metrics import parse_namd_log
-    from backend.core.namd_runner import reconcile_job_status
+    from backend.core.namd_runner import pending_early_stop, reconcile_job_status
 
     await websocket.accept()
     try:
@@ -1198,6 +1198,10 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                 break
 
             payload = job.to_dict()
+            # Mid-run early-stop override queued but not yet consumed at a chunk
+            # boundary — lets the live toggle show "pending" instead of snapping back
+            # to the (still-stale) persisted flag on every 3 s state push.
+            payload["early_stop_pending"] = pending_early_stop(job_id)
 
             # While preparing, attach the live solvation/ENM progress snapshot
             # (phase, fraction, ETA, stall warning) the background worker writes.

@@ -51,7 +51,7 @@ from backend.core.md_prep_progress import (
     design_size_factor,
     write_prep_progress,
 )
-from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, reconcile_job_status, set_early_stop, start_job, stop_job
+from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, pending_early_stop, reconcile_job_status, set_early_stop, start_job, stop_job
 from backend.core.md_vram import (
     detect_vram_mb,
     package_solvation_profile,
@@ -1352,6 +1352,7 @@ async def list_md_jobs() -> list[dict]:
         d = j.to_dict()
         d["out_of_date"] = _md_job_out_of_date(j, current_fp)
         d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+        d["early_stop_pending"] = pending_early_stop(j.job_id)
         out.append(d)
     return out
 
@@ -1362,6 +1363,7 @@ async def get_md_job(job_id: str) -> dict:
     job = _load_job(job_id)
     d = job.to_dict()
     d["out_of_date"] = _md_job_out_of_date(job, current_active_design_fingerprint())
+    d["early_stop_pending"] = pending_early_stop(job_id)
     return d
 
 
