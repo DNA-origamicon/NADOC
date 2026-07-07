@@ -54,6 +54,16 @@ describe('actionKind / actionLabel', () => {
     expect(actionKind(e)).toBe('guided')
     expect(actionLabel(e)).toBe('Enable GPU…')
   })
+  it('degraded rebuild wording is overridable by the plan (LAMMPS = CG-DNA, not GPU)', () => {
+    const auto = engine({ key: 'lammps_oxdna', installed: true, degraded: true,
+      install: { method: 'auto', can_auto: true, target: 'CPU', commands: ['x'],
+        degraded_action_label: 'Rebuild with CG-DNA', degraded_guided_label: 'Add CG-DNA…' } })
+    expect(actionLabel(auto)).toBe('Rebuild with CG-DNA')       // not "Rebuild for GPU"
+    const guided = engine({ key: 'lammps_oxdna', installed: true, degraded: true,
+      install: { method: 'auto', can_auto: false, target: 'CPU', commands: ['x'],
+        degraded_action_label: 'Rebuild with CG-DNA', degraded_guided_label: 'Add CG-DNA…' } })
+    expect(actionLabel(guided)).toBe('Add CG-DNA…')             // not "Enable GPU…"
+  })
 })
 
 describe('degradedNote', () => {

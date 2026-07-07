@@ -263,6 +263,90 @@ def find_dnanalysis() -> Optional[str]:
     return None
 
 
+# ── LAMMPS (CG-DNA / oxDNA) discovery ─────────────────────────────────────────
+#
+# LAMMPS with the CG-DNA package runs the *same* oxDNA/oxDNA2 force field as the
+# standalone oxDNA above, but MPI domain-decomposed — the only oxDNA that scales
+# to very large assemblies on CPU cores.  It is a SEPARATE binary (``lmp``), and
+# only a build that included the CG-DNA package can run the oxDNA styles, so it is
+# discovered + capability-probed independently (mirrors find_oxdna /
+# oxdna_supports_cuda).  The runner that uses it is a later phase.
+
+_LAMMPS_CANDIDATES = [
+    "lmp",                                                        # modern default name
+    "lmp_mpi",
+    "lmp_serial",
+    os.path.expanduser("~/lammps/build/lmp"),                    # conventional source build
+    os.path.expanduser("~/Applications/lammps/build/lmp"),
+]
+
+# Cache CG-DNA capability by (path, mtime) so per-request find_lammps() calls don't
+# re-spawn ``lmp -h`` every time.  mtime keying means a rebuild is picked up.
+_CGDNA_CAP_CACHE: dict[tuple[str, float], bool] = {}
+
+
+def find_lammps() -> Optional[str]:
+    """Return the best usable LAMMPS binary path, or None if not found.
+
+    Resolution: ``$LAMMPS_BIN`` override (a name on PATH or an absolute path)
+    always wins; otherwise the first usable candidate among ``lmp``/``lmp_mpi``/
+    ``lmp_serial`` on PATH and the conventional ``~/lammps/build/lmp`` source
+    build.  Presence alone does NOT imply the CG-DNA package — check that with
+    ``lammps_supports_cgdna(path)`` (the LAMMPS analog of oxDNA's CUDA-capability
+    gate).
+    """
+    override = os.environ.get("LAMMPS_BIN", "").strip()
+    for candidate in ([override] if override else []) + _LAMMPS_CANDIDATES:
+        found = _usable_path(candidate)
+        if found:
+            return found
+    return None
+
+
+def lammps_supports_cgdna(path: str) -> bool:
+    """True iff the LAMMPS binary at ``path`` was built with the CG-DNA package.
+
+    Only a CG-DNA build carries the oxDNA/oxDNA2 pair + bond styles NADOC needs.
+    ``lmp -h`` prints the compiled-in packages and every available style, so we
+    read it statically (fast, no input file) and look for the oxDNA styles /
+    the CG-DNA package name.  A plain LAMMPS without CG-DNA reports False — the
+    same "present but not capable" signal a CPU-only oxDNA gives for CUDA.
+    Returns False on any probe failure.
+    """
+    if not path:
+        return False
+    try:
+        key = (path, os.path.getmtime(path))
+    except OSError:
+        return False
+    if key in _CGDNA_CAP_CACHE:
+        return _CGDNA_CAP_CACHE[key]
+    result = False
+    import subprocess
+    try:
+        out = subprocess.run(
+            [path, "-h"], capture_output=True, text=True, timeout=20, check=False,
+        )
+        blob = (out.stdout + out.stderr).lower()
+        # "oxdna2/fene" etc. appear in the style lists; "cg-dna" in the installed-
+        # packages list.  Either is definitive proof the package is compiled in.
+        result = ("oxdna" in blob) or ("cg-dna" in blob)
+    except (OSError, subprocess.SubprocessError):
+        result = False
+    _CGDNA_CAP_CACHE[key] = result
+    return result
+
+
+def lammps_available() -> dict:
+    """Probe for a usable CG-DNA-capable LAMMPS (mirror oxdna_available)."""
+    bin_path = find_lammps()
+    return {
+        "available": bin_path is not None,
+        "lammps_bin": bin_path,
+        "cgdna_capable": lammps_supports_cgdna(bin_path) if bin_path else False,
+    }
+
+
 def oxdna_available() -> dict:
     """Probe for a usable oxDNA binary (mirror md/namd-available)."""
     bin_path = find_oxdna()

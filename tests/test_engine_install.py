@@ -68,6 +68,34 @@ def test_mrdna_runs_setup_script_gpu_independent():
         assert "env" not in steps[0] or steps[0].get("env") in ({}, None)
 
 
+def test_lammps_steps_cgdna_flags_and_mpi():
+    steps = ei.install_steps("lammps_oxdna", _gpu(False), {"mpi": True})
+    clone = steps[0]
+    assert clone["argv"][0:2] == ["git", "clone"]
+    assert "--depth" in clone["argv"]                 # shallow — LAMMPS history is huge
+    assert clone["skip_if_dir"].endswith("lammps")
+    cmake = next(s for s in steps if s["label"].startswith("Configuring"))
+    assert "PKG_CG-DNA=on" in cmake["argv"]           # hyphen, not underscore
+    assert "PKG_MOLECULE=on" in cmake["argv"] and "PKG_ASPHERE=on" in cmake["argv"]
+    assert "BUILD_MPI=on" in cmake["argv"]            # MPI toolchain present
+    assert cmake["argv"][-1].endswith("cmake")        # LAMMPS's cmake source subdir
+
+
+def test_lammps_steps_no_mpi_flag_without_mpi_toolchain():
+    steps = ei.install_steps("lammps_oxdna", _gpu(False), {"mpi": False})
+    cmake = next(s for s in steps if s["label"].startswith("Configuring"))
+    assert "BUILD_MPI=on" not in cmake["argv"]
+    # never a CUDA flag — this is the CPU-parallel engine
+    assert not any("CUDA" in a for a in cmake["argv"])
+
+
+def test_lammps_builds_into_conventional_build_dir():
+    steps = ei.install_steps("lammps_oxdna", _gpu(False), {"mpi": False})
+    make = next(s for s in steps if s["label"].startswith("Compiling"))
+    assert make["cwd"] == os.path.join(os.path.expanduser("~/lammps"), "build")
+    assert make["argv"][0:3] == ["cmake", "--build", "."]
+
+
 def test_non_installable_engine_raises():
     with pytest.raises(ValueError):
         ei.install_steps("namd", _gpu(False), {})

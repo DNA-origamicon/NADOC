@@ -323,6 +323,9 @@ _SLOW_MODULES = {
 _SLOW_TESTS = {
     "test_oxdna_http_lifecycle",
     "test_runner_real_binary_status_lifecycle",
+    "test_lammps_real_run_end_to_end",   # real lmp CG-DNA run
+    "test_create_runs_to_completion_and_lists",   # real lmp CG-DNA run via REST
+
     # headless build+optimize (real router/oxdna passes)
     "test_build_and_optimize_oracle_fires_on_unreachable",
     "test_build_and_optimize_converges",

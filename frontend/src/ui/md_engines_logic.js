@@ -11,7 +11,7 @@
 // Display order for the status panel (required engines first, CG pipeline in the
 // middle, bundled/optional last).
 export const ENGINE_ORDER = [
-  'oxdna', 'namd', 'gromacs',
+  'oxdna', 'lammps_oxdna', 'namd', 'gromacs',
   'mrdna', 'arbd', 'cuda',
   'oxdna_anm', 'psfgen', 'dnanalysis',
 ]
@@ -47,15 +47,23 @@ export function actionKind(engine) {
   return 'guided'
 }
 
-/** Button label for an engine's action. */
+/**
+ * Button label for an engine's action.
+ *
+ * A *degraded* engine's rebuild wording defaults to the oxDNA case (installed but
+ * CPU-only on a GPU box → "Rebuild for GPU"). Engines whose degradation isn't about
+ * the GPU (e.g. LAMMPS built without the CG-DNA package) override it via the plan's
+ * `degraded_action_label` / `degraded_guided_label` so the backend owns the wording.
+ */
 export function actionLabel(engine) {
   const degraded = !!engine?.degraded
+  const inst = engine?.install || {}
   switch (actionKind(engine)) {
     case 'installed': return 'Installed'
-    case 'auto':      return degraded ? `Rebuild for GPU (${engine.install.target})`
-                                      : `Install (${engine.install.target})`
+    case 'auto':      return degraded ? (inst.degraded_action_label || `Rebuild for GPU (${inst.target})`)
+                                      : `Install (${inst.target})`
     case 'download':  return 'Download…'
-    default:          return degraded ? 'Enable GPU…' : 'How to install…'
+    default:          return degraded ? (inst.degraded_guided_label || 'Enable GPU…') : 'How to install…'
   }
 }
 

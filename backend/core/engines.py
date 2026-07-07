@@ -34,8 +34,10 @@ import shutil
 from backend.core import hardware
 from backend.core.oxdna_runner import (
     find_dnanalysis,
+    find_lammps,
     find_oxdna,
     find_oxdna_anm,
+    lammps_supports_cgdna,
     oxdna_supports_cuda,
 )
 from backend.core.namd_runner import find_gmx, find_namd
@@ -60,6 +62,7 @@ def is_forced_missing(key: str) -> bool:
 
 # Upstream sources (kept here so the doc, the plan, and engine_install.py agree).
 OXDNA_REPO = "https://github.com/lorenzo-rovigatti/oxDNA.git"
+LAMMPS_REPO = "https://github.com/lammps/lammps.git"
 ANM_OXDNA_BUILD_SCRIPT = "scripts/build-anm-oxdna.sh"
 NAMD_DOWNLOAD_URL = "https://www.ks.uiuc.edu/Research/namd/"
 MRDNA_SETUP_SCRIPT = "./scripts/setup-mrdna.sh"
@@ -75,6 +78,7 @@ _TOOLCHAIN_PROBES = {
     "make": ["make"],
     "cxx": ["g++", "c++", "clang++"],
     "nvcc": ["nvcc"],
+    "mpi": ["mpirun", "mpiexec", "mpicxx", "mpic++"],
     "conda": ["conda", "mamba", "micromamba"],
     "apt": ["apt-get"],
 }
@@ -215,6 +219,65 @@ def _oxdna_anm_commands(target: str, arch: str) -> list[str]:
     # The build script self-detects CPU/CUDA; arch via OXDNA_CUDA_ARCH.
     env = f"OXDNA_CUDA_ARCH={arch} " if target == "CUDA" else ""
     return [f"{env}{ANM_OXDNA_BUILD_SCRIPT}"]
+
+
+def _lammps_commands(mpi: bool) -> list[str]:
+    # LAMMPS's CMake source dir is the ``cmake`` subfolder, not the repo root.
+    # CG-DNA carries the oxDNA/oxDNA2 styles; it *requires* MOLECULE + ASPHERE.
+    # BUILD_MPI=on is what makes it the CPU-*parallel* oxDNA (the whole point);
+    # without an MPI toolchain it still builds serial.  A shallow clone avoids
+    # pulling LAMMPS's very large full git history.  Binary: ~/lammps/build/lmp.
+    cmake = "cmake -D PKG_CG-DNA=on -D PKG_MOLECULE=on -D PKG_ASPHERE=on"
+    if mpi:
+        cmake += " -D BUILD_MPI=on"
+    cmake += " ../cmake"
+    return [
+        f"git clone --depth 1 {LAMMPS_REPO} ~/lammps",
+        "cd ~/lammps && mkdir -p build && cd build",
+        cmake,
+        "cmake --build . -j$(nproc)",
+    ]
+
+
+def _lammps_plan(gpu: dict, tools: dict) -> dict:
+    """LAMMPS + CG-DNA: the CPU-*parallel* oxDNA — source-built here.
+
+    Unlike standalone oxDNA (whose accelerator is a single GPU), the value of the
+    LAMMPS CG-DNA build is **MPI domain decomposition** across CPU cores, which is
+    how the oxDNA force field scales to very large assemblies.  So the target is
+    always CPU (MPI when an MPI toolchain is present), never CUDA.  Auto-buildable
+    when the base toolchain (git/cmake/make/cxx) is present; MPI is optional and
+    only decides whether the build is parallel.
+    """
+    mpi = bool(tools.get("mpi"))
+    base_needed = ["git", "cmake", "make", "cxx"]
+    missing = _missing(tools, base_needed)
+    target = "CPU (MPI)" if mpi else "CPU"
+    mpi_note = (
+        "MPI toolchain detected — building the parallel (multi-core) engine."
+        if mpi else
+        "No MPI toolchain found — this will build a single-core LAMMPS. Install "
+        "an MPI implementation (e.g. `sudo apt-get install -y libopenmpi-dev`) for "
+        "the parallel speedup, then rebuild."
+    )
+    return {
+        "method": "auto",
+        "target": target,
+        "can_auto": not missing,
+        "missing_prereqs": [_pretty_tool(m) for m in missing],
+        "commands": _lammps_commands(mpi),
+        "downloads": [],
+        "doc": "docs/lammps_setup.md",
+        # Frontend degraded-rebuild label overrides (this rebuild is about the
+        # CG-DNA package, not a GPU — see md_engines_logic.actionLabel).
+        "degraded_action_label": "Rebuild with CG-DNA",
+        "degraded_guided_label": "Add CG-DNA…",
+        "note": (
+            "The CPU-parallel oxDNA: LAMMPS with the CG-DNA package runs the same "
+            "oxDNA/oxDNA2 force field across many cores (MPI), the only oxDNA that "
+            "scales to very large assemblies. " + mpi_note
+        ),
+    }
 
 
 def _gromacs_plan(gpu: dict, tools: dict) -> dict:
@@ -471,6 +534,7 @@ def engines_status() -> dict:
     tools = toolchain_info()
 
     ox_path = find_oxdna()
+    lammps_path = _try_find(find_lammps)
     anm_path = find_oxdna_anm()
     namd_path = _try_find(find_namd)
     gmx_path = _try_find(find_gmx)
@@ -491,6 +555,14 @@ def engines_status() -> dict:
             ox_path,
             _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_oxdna_commands),
             forced=_f("oxdna"),
+        ),
+        "lammps_oxdna": _engine(
+            "lammps_oxdna", "LAMMPS (CG-DNA / oxDNA)",
+            "CPU-parallel oxDNA (MPI) — the only oxDNA that scales to very large assemblies.",
+            lammps_path,
+            _lammps_plan(gpu, tools),
+            required_note="Optional — for assemblies too large for single-GPU oxDNA.",
+            forced=_f("lammps_oxdna"),
         ),
         "oxdna_anm": _engine(
             "oxdna_anm", "ANM-oxDNA (protein fork)",
@@ -586,6 +658,25 @@ def engines_status() -> dict:
                 f"existing CUDA build."
             )
 
+    # ── LAMMPS CG-DNA-capability (present but built without CG-DNA = degraded) ──
+    # Directly analogous to the oxDNA CUDA-degraded case: a LAMMPS that lacks the
+    # CG-DNA package is installed and runnable but cannot run the oxDNA force
+    # field, so it's flagged "installed but not capable" with the rebuild as the
+    # fix — no GPU condition here (CG-DNA is a CPU package).
+    lmp = engines["lammps_oxdna"]
+    lmp_path = lmp["path"]
+    cgdna_capable = lammps_supports_cgdna(lmp_path) if lmp_path else None
+    lmp["cgdna_capable"] = cgdna_capable
+    lmp_degraded = bool(lmp["installed"] and cgdna_capable is False)
+    lmp["degraded"] = lmp_degraded
+    if lmp_degraded:
+        lmp["install"] = _lammps_plan(gpu, tools)
+        lmp["degraded_note"] = (
+            "LAMMPS is installed but this binary was built without the CG-DNA "
+            "package, so it can't run the oxDNA force field. Rebuild with "
+            "-D PKG_CG-DNA=on (commands below), or point LAMMPS_BIN at a CG-DNA build."
+        )
+
     def _section(required: list[str]) -> dict:
         missing = [k for k in required if not engines[k]["installed"]]
         return {"required": required, "ready": not missing, "missing": missing}
@@ -610,5 +701,6 @@ def installable_engine_keys() -> list[str]:
     download-only (license), psfgen/dnanalysis are bundled — none auto-buildable.
     mrdna is auto-installable via its setup script (git clone, no GPU); ARBD is a
     downloaded source tarball (handled via the archive path), CUDA is guided.
+    LAMMPS (CG-DNA) is source-built (git clone + cmake), no license/download.
     """
-    return ["oxdna", "oxdna_anm", "mrdna"]
+    return ["oxdna", "oxdna_anm", "mrdna", "lammps_oxdna"]

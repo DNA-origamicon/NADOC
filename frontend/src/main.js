@@ -195,6 +195,7 @@ import { mdVizApiAdapter } from './ui/md_viz_adapter.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initMrdnaDisplay } from './ui/mrdna_display.js'
 import { initMrdnaJobsPanel } from './ui/mrdna_jobs_panel.js'
+import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initCandoDisplay } from './ui/cando_display.js'
 import { initCandoLegend } from './ui/cando_legend.js'
@@ -1912,6 +1913,10 @@ async function main() {
       oxdnaFloorSetup?.applyConfig?.(cfg.surface)
       oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
     },
+    // Scrubbing a trajectory re-aims the field arrow at whichever run in the chain
+    // is on screen (null = a relaxation stage → arrow hidden), so a chained run with
+    // different field directions shows the direction used at each frame.
+    onTrajectoryField: (field) => efieldSetup?.applyConfig?.(field),
   })
   // mrDNA (coarse ARBD relaxation) — sibling of the oxDNA panel, single Run button.
   // CG-beads mode is a STANDALONE rep: bead cloud (md_overlay InstancedMesh) +
@@ -1925,6 +1930,7 @@ async function main() {
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
   })
   initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
+  initLammpsJobsPanel({ designRenderer })   // CPU-parallel oxDNA (LAMMPS CG-DNA)
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
   // solver. The "Predicted shape (deform model)" toggle deforms the NADOC model to
   // the FEM-predicted positions via applyFemPositions (display-only, Three-Layer).
@@ -3143,7 +3149,7 @@ async function main() {
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'oxdna-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'md-panel',
+    'oxdna-jobs-panel', 'lammps-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}

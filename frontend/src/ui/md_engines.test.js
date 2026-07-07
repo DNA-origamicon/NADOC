@@ -28,6 +28,7 @@ function status({ oxdnaInstalled = false, arbdBuilt = false } = {}) {
         },
       },
       gromacs: { key: 'gromacs', name: 'GROMACS', purpose: 'Solvation.', installed: true, path: '/usr/bin/gmx', install: null },
+      lammps_oxdna: { key: 'lammps_oxdna', name: 'LAMMPS (CG-DNA / oxDNA)', purpose: 'CPU-parallel oxDNA.', installed: false, path: null, cgdna_capable: null, degraded: false, install: { method: 'auto', can_auto: true, target: 'CPU (MPI)', commands: ['git clone --depth 1 …', 'cmake -D PKG_CG-DNA=on …'], downloads: [], doc: 'docs/lammps_setup.md', missing_prereqs: [], note: 'parallel oxDNA' } },
       mrdna: { key: 'mrdna', name: 'mrDNA', purpose: 'CG relax.', installed: false, path: null, install: { method: 'auto', can_auto: true, target: 'CPU', commands: ['./scripts/setup-mrdna.sh'], downloads: [], missing_prereqs: [], note: 'python install' } },
       arbd: { key: 'arbd', name: 'ARBD', purpose: 'GPU BD engine.', installed: false, path: null, required_note: arbdBuilt ? 'Built on the Linux side but not installed yet — finish below.' : 'Needs the CUDA toolkit to build.', install: { method: 'download', can_auto: false, target: 'CUDA', wsl: true, built_path: arbdBuilt ? '/home/u/arbd-src/build/arbd' : null, can_finish_built: arbdBuilt, commands: ['sudo make install'], downloads: [{ label: 'ARBD download (register + accept license)', url: 'https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=ARBD' }], doc: 'docs/mrdna_setup.md', missing_prereqs: arbdBuilt ? [] : ['CUDA toolkit (nvcc)'], note: 'download then build' } },
       cuda: { key: 'cuda', name: 'CUDA toolkit', purpose: 'GPU compiler.', installed: false, path: null, install: { method: 'guided', can_auto: false, target: 'CUDA', commands: ['sudo apt-get install -y nvidia-cuda-toolkit'], downloads: [{ label: 'CUDA Toolkit (NVIDIA)', url: 'https://developer.nvidia.com/cuda-downloads' }], doc: 'docs/mrdna_setup.md', missing_prereqs: [], note: 'needs admin password' } },
@@ -211,6 +212,15 @@ describe('initMdEngines — mrDNA / ARBD / CUDA rows', () => {
     fileRow.click()
     expect(instr.querySelector('input[type="text"]').value).toBe('/mnt/c/Users/joshu/Downloads/arbd-may24-beta.tar.gz')
     openSpy.mockRestore()
+  })
+
+  it('renders the LAMMPS (CG-DNA) row as a one-click CPU-parallel build', async () => {
+    const eng = initMdEngines({ api: makeApi(status()) })
+    await eng.showStatusModal()
+    const root = openModalRoot()
+    expect(root.textContent).toMatch(/LAMMPS \(CG-DNA/)
+    const buttons = [...root.querySelectorAll('button')].map(b => b.textContent)
+    expect(buttons).toContain('Install (CPU (MPI))')   // auto build, not a GPU/CUDA action
   })
 
   it('WSL banner shows in the status modal', async () => {

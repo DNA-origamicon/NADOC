@@ -29,7 +29,7 @@ def test_parse_compute_cap_garbage_is_none():
 # ── source-build plan: GPU-awareness ──────────────────────────────────────────
 
 _FULL_TOOLCHAIN = {"git": True, "cmake": True, "make": True, "cxx": True,
-                   "nvcc": True, "conda": True, "apt": True}
+                   "nvcc": True, "mpi": True, "conda": True, "apt": True}
 
 
 def _gpu(present, toolkit=True, arch="75"):
@@ -346,3 +346,87 @@ def test_status_arbd_built_not_installed(monkeypatch):
 def test_is_wsl_reads_env(monkeypatch):
     monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
     assert engines.is_wsl() is True
+
+
+# ── LAMMPS (CG-DNA / oxDNA) — CPU-parallel oxDNA engine ───────────────────────
+
+def test_lammps_plan_is_auto_cpu_never_cuda_even_on_gpu_box():
+    """The parallel oxDNA scales via MPI on CPU cores, not a GPU — a GPU box must
+    NOT flip this plan to CUDA (unlike the source-build plan for standalone oxDNA)."""
+    plan = engines._lammps_plan(_gpu(True), _FULL_TOOLCHAIN)
+    assert plan["method"] == "auto"
+    assert plan["can_auto"] is True
+    assert "CUDA" not in plan["target"]
+    joined = "\n".join(plan["commands"])
+    assert "-DCUDA=ON" not in joined and "-DCMAKE_CUDA_ARCHITECTURES" not in joined
+
+
+def test_lammps_plan_carries_cgdna_cmake_flags():
+    plan = engines._lammps_plan(_gpu(False), _FULL_TOOLCHAIN)
+    joined = "\n".join(plan["commands"])
+    assert "PKG_CG-DNA=on" in joined          # hyphen, not underscore
+    assert "PKG_MOLECULE=on" in joined and "PKG_ASPHERE=on" in joined
+    assert "../cmake" in joined               # LAMMPS's cmake source dir
+    assert plan["doc"] == "docs/lammps_setup.md"
+
+
+def test_lammps_plan_mpi_toolchain_enables_parallel_build():
+    with_mpi = engines._lammps_plan(_gpu(False), _FULL_TOOLCHAIN)
+    assert with_mpi["target"] == "CPU (MPI)"
+    assert "BUILD_MPI=on" in "\n".join(with_mpi["commands"])
+    no_mpi = engines._lammps_plan(_gpu(False), {**_FULL_TOOLCHAIN, "mpi": False})
+    assert no_mpi["target"] == "CPU"
+    assert "BUILD_MPI=on" not in "\n".join(no_mpi["commands"])
+
+
+def test_lammps_plan_blocked_without_base_toolchain():
+    plan = engines._lammps_plan(_gpu(False), {**_FULL_TOOLCHAIN, "cmake": False})
+    assert plan["can_auto"] is False
+    assert "cmake" in plan["missing_prereqs"]
+
+
+def test_lammps_is_installable():
+    assert "lammps_oxdna" in engines.installable_engine_keys()
+
+
+def test_status_includes_lammps_row_not_capable(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis")
+    monkeypatch.setattr(engines, "find_lammps", lambda: None)
+    st = engines.engines_status()
+    lmp = st["engines"]["lammps_oxdna"]
+    assert lmp["installed"] is False
+    assert lmp["install"]["method"] == "auto"
+    assert lmp["cgdna_capable"] is None            # nothing to probe
+    assert lmp["degraded"] is False
+    # a bare status row, not a gated sidebar section
+    assert set(st["sections"]) == {"oxdna", "md"}
+
+
+def test_status_lammps_installed_and_cgdna_capable(monkeypatch):
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis")
+    monkeypatch.setattr(engines, "find_lammps", lambda: "/home/u/lammps/build/lmp")
+    monkeypatch.setattr(engines, "lammps_supports_cgdna", lambda p: True)
+    lmp = engines.engines_status()["engines"]["lammps_oxdna"]
+    assert lmp["installed"] is True
+    assert lmp["cgdna_capable"] is True
+    assert lmp["degraded"] is False
+    assert lmp["install"] is None
+
+
+def test_status_lammps_without_cgdna_is_degraded_with_rebuild_plan(monkeypatch):
+    """A LAMMPS lacking CG-DNA is installed but can't run oxDNA — flagged degraded
+    (no GPU condition) with the CG-DNA rebuild re-attached as the fix."""
+    _patch_all(monkeypatch, oxdna="/o/oxDNA", anm="/a/oxDNA", namd="/n/namd3",
+               gmx="/g/gmx", psfgen="/n/psfgen", dnanalysis="/o/DNAnalysis",
+               gpu_present=False)
+    monkeypatch.setattr(engines, "find_lammps", lambda: "/usr/bin/lmp")
+    monkeypatch.setattr(engines, "lammps_supports_cgdna", lambda p: False)
+    lmp = engines.engines_status()["engines"]["lammps_oxdna"]
+    assert lmp["installed"] is True                # the binary still runs
+    assert lmp["cgdna_capable"] is False
+    assert lmp["degraded"] is True
+    assert lmp["install"]["method"] == "auto"
+    assert "CG-DNA" in lmp["degraded_note"]
+    assert lmp["install"]["degraded_action_label"] == "Rebuild with CG-DNA"

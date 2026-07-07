@@ -1,0 +1,302 @@
+/**
+ * LAMMPS jobs panel — launch, monitor, and VISUALISE a managed CPU-parallel oxDNA
+ * (LAMMPS CG-DNA) run on the currently-loaded design. Dedicated sibling of the
+ * oxDNA/mrDNA panels: LAMMPS runs the SAME oxDNA2 force field, MPI domain-decomposed,
+ * for assemblies too large for single-GPU oxDNA.
+ *
+ * The "Visualizations & processing" card is a faithful copy of the oxDNA one, driven
+ * by the same validated rendering code: it runs LAMMPS data through `lammps_display`
+ * (which reuses oxdna_display's pure mappers) + the shared `oxdna_trajectory_player`.
+ * Four mutually-exclusive views on the SELECTED finished run: display / flexibility
+ * (RMSF) / deviation / trajectory, plus an "Align to design pose" modifier.
+ *
+ * REST-poll based (no WebSocket), like the mrDNA/oxDNA panels.
+ *
+ * Factory: initLammpsJobsPanel({ designRenderer }) → { refresh }. Cohesive logic lives
+ * here or in the pure lammps_jobs_logic.js (module-first law); main.js only imports+inits.
+ */
+
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { showToast } from './toast.js'
+import { statusBadge, statusKeyFor } from './job_status_symbol.js'
+import {
+  progressPct, jobIsActive, anyActive, runButtonState, availabilityMessage,
+  jobRowLabel, buildCreatePayload, jobIsViewable, flexStatusText,
+} from './lammps_jobs_logic.js'
+import { initLammpsDisplay } from './lammps_display.js'
+import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
+import * as api from '../api/client.js'
+
+const POLL_MS = 1500
+const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', dim: '#8b949e' }
+const _VIEW_RADIOS = ['display', 'flex', 'deviation', 'traj']
+
+export function initLammpsJobsPanel({ designRenderer = null } = {}) {
+  const $ = (id) => document.getElementById(id)
+  const panel = $('lammps-jobs-panel')
+  const heading = $('lammps-jobs-heading')
+  const body = $('lammps-jobs-body')
+  if (!panel || !heading || !body) return { refresh: () => {} }
+
+  const arrow = $('lammps-jobs-arrow')
+  const statusEl = $('lammps-jobs-status')
+  const runBtn = $('lammps-jobs-run-btn')
+  const progressBar = panel.querySelector('#lammps-jobs-progress .bar')
+  const listEl = $('lammps-jobs-list')
+  const advToggle = $('lammps-jobs-adv-toggle')
+  const advArrow = $('lammps-jobs-adv-arrow')
+  const advBody = $('lammps-jobs-adv-body')
+  const inSteps = $('lammps-jobs-steps')
+  const inDump = $('lammps-jobs-dump')
+  const inTemp = $('lammps-jobs-temp')
+  const inSalt = $('lammps-jobs-salt')
+  const inRanks = $('lammps-jobs-ranks')
+  // ── Visualizations & processing card ──
+  const vizToggle = $('lammps-jobs-viz-toggle')
+  const vizArrow = $('lammps-jobs-viz-arrow')
+  const vizBody = $('lammps-jobs-viz-body')
+  const rOff = $('lammps-jobs-viz-off')
+  const rDisplay = $('lammps-jobs-display-toggle')
+  const rFlex = $('lammps-jobs-flex-toggle')
+  const rDeviation = $('lammps-jobs-deviation-toggle')
+  const rTraj = $('lammps-jobs-traj-toggle')
+  const alignToggle = $('lammps-jobs-align-toggle')
+  const sDisplay = $('lammps-jobs-display-status')
+  const sFlex = $('lammps-jobs-flex-status')
+  const sDeviation = $('lammps-jobs-deviation-status')
+  const sTraj = $('lammps-jobs-traj-status')
+  const trajControls = $('lammps-jobs-traj-controls')
+  const _radio = { display: rDisplay, flex: rFlex, deviation: rDeviation, traj: rTraj }
+  const _status = { display: sDisplay, flex: sFlex, deviation: sDeviation, traj: sTraj }
+
+  let _jobs = []
+  let _available = null
+  let _pollTimer = null
+  let _launching = false
+  let _selectedId = null
+
+  // ── display controller + trajectory player (reuse the validated oxDNA code) ──
+  const _display = initLammpsDisplay({ designRenderer })
+  const _player = initOxdnaTrajectoryPlayer({
+    playBtn: $('lammps-jobs-traj-play'),
+    slider: $('lammps-jobs-traj-slider'),
+    markersEl: $('lammps-jobs-traj-markers'),
+    label: $('lammps-jobs-traj-label'),
+    onSeek: (i) => _display.showFrame(i),
+  })
+
+  const _selectedJob = () => _jobs.find((j) => j.job_id === _selectedId) || null
+  function _setStatus(el, text, color = _C.dim) { if (el) { el.textContent = text; el.style.color = color } }
+
+  // ── collapse (section + viz card) ───────────────────────────────────────────
+  function _applyCollapsed(collapsed) {
+    body.style.display = collapsed ? 'none' : ''
+    if (arrow) arrow.classList.toggle('is-collapsed', collapsed)
+    if (!collapsed) { _onOpen() }
+    else { _clearPoll(); _viewsOff() }
+  }
+  heading.addEventListener('click', () => {
+    const next = body.style.display !== 'none'
+    setSectionCollapsed('dynamics', 'lammps-jobs-panel', next)
+    _applyCollapsed(next)
+  })
+  if (advToggle) {
+    advToggle.addEventListener('click', () => {
+      const hidden = advBody.style.display === 'none'
+      advBody.style.display = hidden ? '' : 'none'
+      if (advArrow) advArrow.textContent = hidden ? '▾' : '▸'
+    })
+  }
+  if (vizToggle) {
+    vizToggle.addEventListener('click', () => {
+      const hidden = vizBody.style.display === 'none'
+      vizBody.style.display = hidden ? '' : 'none'
+      if (vizArrow) vizArrow.classList.toggle('is-collapsed', !hidden)
+    })
+  }
+
+  // ── availability + run button ─────────────────────────────────────────────
+  async function _checkAvailable() {
+    _available = await api.lammpsAvailable()
+    if (statusEl) {
+      statusEl.textContent = availabilityMessage(_available)
+      const ok = !!_available?.available && !!_available?.cgdna_capable
+      statusEl.style.color = ok ? _C.ok : _C.warn
+    }
+    _syncRunButton()
+  }
+  function _syncRunButton() {
+    if (!runBtn) return
+    const st = runButtonState(_available)
+    runBtn.disabled = !st.enabled || _launching
+    runBtn.textContent = _launching ? 'Starting…' : st.label
+    runBtn.title = st.title
+  }
+  async function _launch() {
+    if (_launching) return
+    _launching = true
+    _syncRunButton()
+    try {
+      const payload = buildCreatePayload({
+        steps: inSteps?.value, dumpEvery: inDump?.value,
+        temperature: inTemp?.value, salt: inSalt?.value, ranks: inRanks?.value,
+      })
+      const job = await api.createLammpsJob(payload)
+      if (!job) {
+        showToast(api.lastErrorMessage() || 'Could not start LAMMPS run', { severity: 'error' })
+        return
+      }
+      showToast(`LAMMPS run started (${job.n_atoms} nt)`, { severity: 'ok' })
+      await _fetchJobs()
+    } finally {
+      _launching = false
+      _syncRunButton()
+    }
+  }
+  runBtn?.addEventListener('click', _launch)
+
+  // ── jobs list + selection + polling ─────────────────────────────────────────
+  async function _fetchJobs() {
+    const jobs = await api.listLammpsJobs()
+    _jobs = Array.isArray(jobs) ? jobs.slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0)) : []
+    if (_selectedId && !_selectedJob()) _selectedId = null   // selected job vanished
+    _renderList()
+    _renderProgress()
+    _updateVizToggles()
+    _schedulePoll()
+  }
+
+  function _renderProgress() {
+    if (!progressBar) return
+    const active = _jobs.find(jobIsActive)
+    progressBar.style.width = active ? `${progressPct(active)}%` : '0%'
+  }
+
+  function _renderList() {
+    if (!listEl) return
+    listEl.replaceChildren()
+    if (!_jobs.length) {
+      const empty = document.createElement('div')
+      empty.style.cssText = `font-size:var(--text-xs);color:${_C.dim};padding:4px`
+      empty.textContent = 'No LAMMPS runs yet.'
+      listEl.appendChild(empty)
+      return
+    }
+    for (const job of _jobs) {
+      const selected = job.job_id === _selectedId
+      const badge = statusBadge(statusKeyFor('lammps', job.status))
+      const row = document.createElement('div')
+      row.style.cssText = `display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:var(--text-xs);border-radius:3px;cursor:pointer;${selected ? 'background:#132a3a' : ''}`
+      const dot = document.createElement('span')
+      dot.textContent = jobIsActive(job) ? '⟳' : badge.symbol
+      dot.style.cssText = `color:${badge.color};flex:0 0 auto`
+      if (jobIsActive(job)) dot.classList.add('nadoc-spinner')
+      const label = document.createElement('span')
+      label.style.cssText = 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9d1d9'
+      label.textContent = jobRowLabel(job)
+      row.append(dot, label)
+      row.addEventListener('click', () => _select(job.job_id))
+      if (jobIsActive(job)) {
+        const stop = document.createElement('button')
+        stop.textContent = 'Stop'
+        stop.style.cssText = 'flex:0 0 auto;font-size:var(--text-xs);padding:1px 6px;background:#2d1418;border:1px solid #d9534f;color:#f0a0a0;border-radius:3px;cursor:pointer'
+        stop.addEventListener('click', (e) => { e.stopPropagation(); _stop(job.job_id) })
+        row.appendChild(stop)
+      }
+      listEl.appendChild(row)
+    }
+  }
+
+  function _select(jobId) {
+    if (_selectedId === jobId) return
+    _selectedId = jobId
+    _viewsOff()                 // a new selection starts from Off (no stale overlay)
+    _renderList()
+    _updateVizToggles()
+  }
+
+  async function _stop(jobId) {
+    const ok = await api.stopLammpsJob(jobId)
+    if (!ok) showToast(api.lastErrorMessage() || 'Could not stop the run', { severity: 'error' })
+    await _fetchJobs()
+  }
+
+  function _schedulePoll() {
+    _clearPoll()
+    if (anyActive(_jobs)) _pollTimer = setTimeout(_fetchJobs, POLL_MS)
+  }
+  function _clearPoll() { if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null } }
+
+  // ── viz card: enable radios only for a viewable selection ───────────────────
+  function _updateVizToggles() {
+    const viewable = jobIsViewable(_selectedJob())
+    for (const key of _VIEW_RADIOS) {
+      const r = _radio[key]
+      if (!r) continue
+      r.disabled = !viewable
+      const lbl = r.closest('label')
+      if (lbl) { lbl.style.opacity = viewable ? '1' : '0.5'; lbl.style.cursor = viewable ? 'pointer' : 'not-allowed' }
+    }
+    if (!viewable && !rOff?.checked) _viewsOff()
+  }
+
+  // ── the four mutually-exclusive views ───────────────────────────────────────
+  function _viewsOff() {
+    _player.pause?.(); _player.stop()
+    if (trajControls) trajControls.style.display = 'none'
+    _display.stopAndRestore()
+    for (const k of _VIEW_RADIOS) _setStatus(_status[k], '')
+    if (rOff) rOff.checked = true
+  }
+
+  async function _showView(kind) {
+    _player.stop()
+    if (trajControls) trajControls.style.display = kind === 'traj' ? '' : 'none'
+    const sel = _selectedId
+    if (!sel) { _viewsOff(); return }
+    const st = _status[kind]
+    _setStatus(st, 'Loading…')
+    let r
+    if (kind === 'display') r = await _display.displayJob(sel, !!alignToggle?.checked)
+    else if (kind === 'flex') r = await _display.displayRmsf(sel)
+    else if (kind === 'deviation') r = await _display.displayDeviation(sel)
+    else if (kind === 'traj') r = await _display.loadTrajectory(sel)
+    // a newer selection/toggle superseded us, or the radio was turned off meanwhile
+    if (_radio[kind] && !_radio[kind].checked) return
+    if (!r || !r.ok) {
+      _setStatus(st, (r && r.reason) || 'not ready', _C.warn)
+      if (rOff) rOff.checked = true
+      _display.stopAndRestore()
+      if (trajControls) trajControls.style.display = 'none'
+      return
+    }
+    if (kind === 'display') _setStatus(st, `Showing the final structure (${r.n} beads).`)
+    else if (kind === 'flex') _setStatus(st, flexStatusText(r), _C.dim)
+    else if (kind === 'deviation') _setStatus(st, `Deviation from design: mean ${(r.mean ?? 0).toFixed(2)} nm over ${r.nFrames} frames.`)
+    else if (kind === 'traj') { _player.setTrajectory(r.n_frames, r.markers); _setStatus(st, `${r.n_frames} frames — play or scrub.`) }
+  }
+
+  rOff?.addEventListener('change', () => { if (rOff.checked) _viewsOff() })
+  rDisplay?.addEventListener('change', () => { if (rDisplay.checked) _showView('display') })
+  rFlex?.addEventListener('change', () => { if (rFlex.checked) _showView('flex') })
+  rDeviation?.addEventListener('change', () => { if (rDeviation.checked) _showView('deviation') })
+  rTraj?.addEventListener('change', () => { if (rTraj.checked) _showView('traj') })
+  alignToggle?.addEventListener('change', () => { if (rDisplay?.checked) _showView('display') })
+
+  // ── lifecycle ──────────────────────────────────────────────────────────────
+  async function _onOpen() {
+    await _checkAvailable()
+    await _fetchJobs()
+  }
+  function refresh() { if (body.style.display !== 'none') _onOpen() }
+
+  _applyCollapsed(getSectionCollapsed('dynamics', 'lammps-jobs-panel', true))
+  // a design change invalidates any overlay (it's keyed to the old design)
+  window.addEventListener('nadoc:design-changed', () => {
+    _selectedId = null
+    _viewsOff()
+    if (body.style.display !== 'none') _fetchJobs()
+  })
+
+  return { refresh }
+}

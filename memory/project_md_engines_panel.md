@@ -122,6 +122,18 @@ parameterized by `eng.key` via `_DOWNLOAD_ENGINES`; `api.scanArbdDownload`.
 stub-tested; genuine compile → 3080 Ti. Live-verified: API rows + arbd scan.
 [[manual_validation_debt]] MV-MRDNA-PANEL. See [[project_mrdna_arbd_setup]].
 
+## Phase 5 — LAMMPS (CG-DNA / parallel oxDNA) row (2026-07-06)
+Added a `lammps_oxdna` engine row: the CPU-parallel (MPI) oxDNA for very large
+assemblies. Auto-build (`_lammps_plan`, target **CPU/CPU (MPI) — never CUDA**,
+`PKG_CG-DNA`+MOLECULE+ASPHERE, `../cmake` source dir), a **CG-DNA-degraded** state
+(installed but no CG-DNA package → rebuild, mirrors oxDNA CUDA-degraded), a new
+`"mpi"` toolchain probe, and `actionLabel` degraded-wording overrides
+(`install.degraded_action_label`/`degraded_guided_label`) so LAMMPS says "Rebuild
+with CG-DNA" not "Rebuild for GPU". Doctor sibling `scripts/lammps_doctor.py`;
+guide `docs/lammps_setup.md`. No `md_engines.js`/`main.js` change (rows render
+generically; main.js Δ=0). Phase 1 of a multi-phase engine — no runner yet. Full
+detail + follow-up phases: [[project_lammps_oxdna]].
+
 ## Tests
 `test_engines.py` (20), `test_engine_install.py` (10), `test_engine_artifact.py`
 (13 — real fabricated tarballs), `test_engines_ws.py` (7 — TestClient WS: sim-switch

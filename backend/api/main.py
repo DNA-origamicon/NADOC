@@ -68,6 +68,7 @@ from backend.api.routes_cando_autorefine import router as cando_autorefine_route
 from backend.api.routes_mrdna import router as mrdna_router
 from backend.api.routes_md_metrics import router as md_metrics_router
 from backend.api.routes_oxdna import router as oxdna_router
+from backend.api.routes_lammps import router as lammps_router
 from backend.api.routes_oxdna_live import router as oxdna_live_router
 from backend.api.routes_autorefine import router as autorefine_router
 from backend.api.routes_oxdna_metrics import router as oxdna_metrics_router
@@ -203,6 +204,7 @@ app.include_router(jobs_router,        prefix="/api")
 app.include_router(md_router,          prefix="/api")
 app.include_router(md_metrics_router,  prefix="/api")
 app.include_router(oxdna_router,       prefix="/api")
+app.include_router(lammps_router,      prefix="/api")
 app.include_router(mrdna_router,       prefix="/api")
 app.include_router(cando_router,       prefix="/api")
 app.include_router(cando_autorefine_router, prefix="/api")

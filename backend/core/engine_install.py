@@ -22,10 +22,11 @@ from pathlib import Path
 
 from backend.core import engines
 from backend.core.mrdna_bridge import find_mrdna
-from backend.core.oxdna_runner import find_oxdna, find_oxdna_anm
+from backend.core.oxdna_runner import find_lammps, find_oxdna, find_oxdna_anm
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _OXDNA_DIR = os.path.expanduser("~/oxDNA")
+_LAMMPS_DIR = os.path.expanduser("~/lammps")
 
 
 class InstallError(RuntimeError):
@@ -56,6 +57,27 @@ def install_steps(engine_key: str, gpu: dict, tools: dict) -> list[dict]:
              "cwd": build, "argv": ["make", f"-j{os.cpu_count() or 2}", "oxDNA", "DNAnalysis"]},
         ]
 
+    if engine_key == "lammps_oxdna":
+        # CPU-parallel oxDNA. CMake source is the ``cmake`` subfolder; CG-DNA needs
+        # MOLECULE + ASPHERE; BUILD_MPI (when an MPI toolchain is present) makes it
+        # the parallel engine.  Shallow clone — LAMMPS's full history is huge.
+        src = _LAMMPS_DIR
+        build = os.path.join(src, "build")
+        cmake = ["cmake", "-D", "PKG_CG-DNA=on", "-D", "PKG_MOLECULE=on",
+                 "-D", "PKG_ASPHERE=on"]
+        if tools.get("mpi"):
+            cmake += ["-D", "BUILD_MPI=on"]
+        cmake += [os.path.join(src, "cmake")]
+        return [
+            {"label": "Downloading LAMMPS (git clone)", "cwd": os.path.expanduser("~"),
+             "argv": ["git", "clone", "--depth", "1", engines.LAMMPS_REPO, _LAMMPS_DIR],
+             "skip_if_dir": _LAMMPS_DIR},
+            {"label": "Configuring (cmake — CG-DNA + MOLECULE + ASPHERE)",
+             "cwd": build, "argv": cmake},
+            {"label": "Compiling (make) — this can take several minutes",
+             "cwd": build, "argv": ["cmake", "--build", ".", f"-j{os.cpu_count() or 2}"]},
+        ]
+
     if engine_key == "oxdna_anm":
         env = {"OXDNA_CUDA_ARCH": str(arch)} if cuda else {}
         return [
@@ -76,7 +98,8 @@ def install_steps(engine_key: str, gpu: dict, tools: dict) -> list[dict]:
 
 
 def _verify(engine_key: str) -> str | None:
-    return {"oxdna": find_oxdna, "oxdna_anm": find_oxdna_anm, "mrdna": find_mrdna}[engine_key]()
+    return {"oxdna": find_oxdna, "oxdna_anm": find_oxdna_anm, "mrdna": find_mrdna,
+            "lammps_oxdna": find_lammps}[engine_key]()
 
 
 async def _simulate_install(engine_key: str, send) -> str:

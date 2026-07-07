@@ -1995,6 +1995,24 @@ export const browseFiles         = (path, kind)  => {
   return _oxdnaJSON('GET', '/engines/browse' + (s ? `?${s}` : ''))
 }
 export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/jobs', body)
+
+// ── LAMMPS (CG-DNA / parallel oxDNA) jobs ──────────────────────────────────────
+/** Is a CG-DNA-capable LAMMPS installed? → {available, lammps_bin, cgdna_capable}. */
+export const lammpsAvailable     = ()            => _oxdnaJSON('GET',  '/lammps/available')
+/** Launch a LAMMPS oxDNA2 run on the active design ({steps, dump_every, temperature, salt_molar, ranks}). */
+export const createLammpsJob     = (body)        => _oxdnaJSON('POST', '/lammps/jobs', body)
+export const listLammpsJobs      = ()            => _oxdnaJSON('GET',  '/lammps/jobs')
+export const getLammpsJob        = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}`)
+export const stopLammpsJob       = (id)          => _oxdnaJSON('POST', `/lammps/jobs/${id}/stop`)
+/** Scrub-able trajectory ({ready, keys, frames, stages, markers}) — same shape as the oxDNA one. */
+export const getLammpsTrajectory = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}/trajectory`)
+/** Final structure as applyFemPositions positions (the display view); align superposes onto design pose. */
+export const getLammpsDisplay    = (id, align=true) => _oxdnaJSON('GET', `/lammps/jobs/${id}/display?align=${align}`)
+/** Per-base average position + RMSF (flexibility map) — same shape as the oxDNA one. */
+export const getLammpsRmsf       = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}/rmsf`)
+/** Per-base deviation (nm) from the design pose (deviation map) — same shape as the oxDNA one. */
+export const getLammpsDeviation  = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}/deviation`)
+
 /** Forecast free-disk-after for an oxDNA relaxation run (same body as createOxdnaJob). */
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
 /** Forecast free-disk-after for an oxDNA production/run stage ({steps}). */
