@@ -145,6 +145,22 @@ fills in as milestones complete.
   the same design through one shared generate/view/export card, with per-observable references (oxDNA=shape,
   CanDo=RMSF).
 
+- **`C3` — extra crossover bases as compliant connectors** · shape: **solver-mechanism was pre-existing** (an
+  extra-base crossover meshes as a 2-node WLC ssDNA spring in `build_fem_mesh`, shipped untested in Phase-5); this
+  task = the missing property **oracle**, no production change · feature: extra-bases (CanDo's 4th feature) ·
+  engines now comparable: CanDo emits a measurable extra-base **flexibility** prediction (local RMSF ↑) scored
+  through the shared S3 RMSF channel → an oxDNA/NAMD ensemble RMSF at the same inserts can cross-validate it ·
+  oracle: `tests/test_cando_extra_bases.py` 4 tests (3 **fast**: mesh census spring-vs-rigid-link + `k∝1/L_c`
+  monotone + synthetic 2-node compliance `u==F/k_trans` ≫ `F/K_PENALTY`; 1 **slow**: band-of-inserts → real
+  `predict_shape`+NMA local RMSF ~1.87× up, every affected node, RED-guard self-vs-self flat) · main.js LOC Δ = 0
+  (backend-only) · tests: 4/4 oracle, `just test` 4210 passed / 66 skipped / 1 xfailed (was 4206, +4, no drop),
+  ruff clean; fresh-context review no gaps · display-vs-oracle: N/A (no card/UI, like C1/C2) ·
+  **Comparable prediction gained, not just a run:** extra crossover bases now produce a proven, correct-sign
+  CanDo prediction — inserts soften the local junction (WLC connector `~1e5×` more compliant than the rigid link)
+  and the FEM predicts ~1.87× higher local per-bp RMSF there, a flexibility signal directly comparable to any
+  engine's ensemble/NMA RMSF at the same ssDNA inserts. **NO twist/bend direction asserted** (softening a
+  distributed load is non-monotone; geometric crossover reasoning forbidden — RMSF is the sign-safe channel).
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -174,7 +190,7 @@ read/export the agreement) or a future headless two-engine cross-run.
 |---|---|---|
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | **DONE** (C1,C2,S4,S5,O1 shipped 2026-07-06) — FEM predicts the anchored field-deflection regime from oxDNA's per-nt force; real agreement number awaits C5 field-source |
-| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1,C2,C5 ✅; C3 extra-bases + C4 linkers left) |
+| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1,C2,C3,C5 ✅; only C4 linkers left) |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 

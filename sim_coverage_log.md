@@ -41,6 +41,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
 | **(C2) CanDo E-field (S4 on FEM frame)** ✅ | `assemble_field_force`: uniform body load = 2·`field_pN`·dir_hat/node (duplex node = 2 backbones), translational DOF only, None/zero-mag/zero-dir→zero vector, linear in magnitude; end-to-end (S4 `field_response_profile` on the RAW clamped-solve frame, NOT Kabsch-reposed display frame): anchors held (drift≈0) + free deflects ALONG field (proj≥0.5nm) + MONOTONE in \|E\| + zero-field→no deflection (RED); `predict_shape(field=)` threads through & `field=None` is a byte-identical no-op | `backend/physics/fem_solver.py::{assemble_field_force,solve_prestress_shape,predict_shape}`, `tests/test_cando_field.py` | every engine's E-FIELD task (M2/N1) — same `{field_pN,dir}` per-nt-force descriptor; **C5 field-source must emit field-response from the RAW frame, not display positions** |
 
+| **(C3) CanDo extra-base compliant connector** ✅ | an extra-base crossover meshes as a 2-node WLC ssDNA spring (`k_rot==0`, `k_trans==3·kT/(2·L_c·L_p)`, `<K_PENALTY/1e3`) NOT a rigid link → spring count == #inserted, springs+rigid conserved (mesh reflects inserts; no added nodes — CanDo connects EXISTING bp nodes); `k_trans` softens monotone in insert length (`k∝1/L_c`); synthetic 2-node compliance: same load → spring node deflects >1e3× a rigid link (`u==F/k_trans` vs `F/K_PENALTY`); SLOW real `predict_shape`+NMA: a band of inserts raises LOCAL per-bp RMSF at those nodes (>1.3×, ~1.87× obs, every affected node up) via S3 `compare_descriptors` RMSF channel; RED-guard self-vs-self flat (<1.05×). **Asserts NO twist/bend DIRECTION** (softening a distributed load is non-monotone; geometric crossover reasoning forbidden) — RMSF is the sign-unambiguous softening signal + CanDo's observable | `backend/physics/fem_solver.py::build_fem_mesh` (mechanism), `tests/test_cando_extra_bases.py` | C4 (linker connector element reuses the WLC-spring pattern); every engine's extra-base flexibility check (M3/N3) — softening → higher RMSF, cross-validatable |
+
 | **(C5) CanDo source bundle** ✅ | descriptors == `compute_shape_descriptors` on the exact core-filtered `predict_shape` frame (same S1 estimator, self-consistent — ABSOLUTE); core mask drops ssDNA ends; per-bp NMA `rmsf`→card shape with **`direction=None`** (dropped None); field passthrough; empty core→None (RED); **integration: `[oxdna, cando]`→`build_comparison_report` ready, refs shape=oxdna/rmsf=cando, cando shape-RMSD finite (~0 rigid shift), oxDNA RMSF Pearson 1.0 n=24 (dir-less pairs per-strand via `_rmsf_per_bp`)** | `backend/core/cando_shape_source.py::build_cando_shape_source`, `backend/api/routes_cando.py::get_cando_shape_source`, `tests/test_cando_shape_source.py` | the SAME source-bundle contract for M5/N4; CanDo is the RMSF reference column |
 
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
@@ -391,6 +393,49 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   CanDo agreement numbers** — CanDo's absolute shape descriptors + aligned-shape RMSD scored against the oxDNA
   shape reference, and oxDNA's RMSF correlated (Pearson/Spearman) against **CanDo as the RMSF reference**. Two
   independent structure predictors now cross-validate on the same design through one shared card.
+
+### 2026-07-06 — `C3` CanDo extra crossover bases as compliant connectors (M-CANDO-COMPLETE track)
+
+- **Picked** `C3` — the handoff's `▶ NEXT` recommendation and highest-leverage eligible task (no deps). Finishes
+  the most-progressed track (CanDo: C1/C2/C5 done, only C3+C4 left) → context locality, and extra-bases is high
+  leverage. Rubric: prefer finishing an in-progress track.
+- **Key finding (honest):** the compliant-connector **mechanism already existed** in `build_fem_mesh` — a
+  crossover carrying `extra_bases` meshes as a 2-node WLC ssDNA spring (`k_trans=3·kT/(2·L_c·L_p)`, `k_rot=0`, a
+  CanDo CONN3D2 analogue) instead of a rigid link. It shipped **untested** in the Phase-5 commit `9121b78`; the
+  JSON's "currently display-only gap-fill" note overlooked it. So C3's bright-line deliverable was the **missing
+  property ORACLE**, not new production code — proving the mechanism yields a measurable, correct-sign,
+  cross-validatable softening ("not just a run").
+- **What shipped.** `tests/test_cando_extra_bases.py` — 3 FAST + 1 SLOW (slow registered in `conftest.py`). All
+  read-only over topology; `_with_inserts` does `model_copy(deep=True)` before stamping `extra_bases` (fixture
+  construction, not a solver-side topology mutation — Three-Layer clean).
+  - **FAST census** — an extra-base crossover meshes as a compliant spring (`k_rot==0`, `k_trans==` the WLC
+    formula, `<K_PENALTY/1e3`) and leaves the rigid-link set; spring count `==` #inserted crossovers,
+    springs+rigid conserved. CanDo models ssDNA connections as connectors between EXISTING bp nodes → **no added
+    nodes**, so "mesh reflects inserts" = the connector TYPE/compliance, not node count.
+  - **FAST monotone** — `k_trans("T") > k_trans("TT") > k_trans("TTTT")`, `k1==2·k2`, `k∝1/L_c`; even the
+    stiffest insert is `<K_PENALTY/1e4`.
+  - **FAST compliance** — a synthetic 2-node connector mesh: under the SAME transverse load a WLC-spring crossover
+    lets its node deflect `>1e3×` a rigid link (`u==F/k_trans` vs `F/K_PENALTY`, both exact). Single connector →
+    the softening sign is unambiguous, no geometric reasoning.
+  - **SLOW softening** — routed 6HB, inserts on a middle-third BAND of crossovers → real `predict_shape`+free-free
+    NMA shows LOCAL per-bp RMSF at the inserted-crossover nodes rises `>1.3×` (~**1.87×** observed), EVERY affected
+    node more flexible; surfaced through the shared S3 `compare_descriptors` RMSF channel
+    (`candidate_mean_rmsf > reference*1.1`). **RED-guard:** a self-vs-self base rerun over the same nodes is flat
+    (`<1.05×`), so the softening is attributable to inserts, not NMA jitter.
+- **Deliberately asserts NO twist/bend DIRECTION.** Softening inter-helix coupling redistributes a distributed
+  field/eigenstrain load **non-monotonically** (verified probe: the anchored-field free along-field projection is
+  NOT a clean function of insert count — inserts on all 50 crossovers *lower* it while disintegrating the bundle
+  to 7 nm RMSF). Reasoning about the twist/bend sign geometrically is exactly what the crossover rules forbid.
+  RMSF/flexibility is the physically-unambiguous softening signal AND CanDo's designated reference observable —
+  so the oracle rides that channel.
+- **Gates.** oracle 4/4 (3 fast in 1.0s + 1 slow); `just test` = **4210 passed / 66 skipped / 1 xfailed** (was
+  4206 → +4 = the new tests, no drops); ruff clean on touched files. Fresh-context review: **no correctness
+  gaps**, the 2-node compliance math hand-verified (`F/k_trans` vs `F/K_PENALTY`), RED-guard meaningful,
+  Three-Layer clean. No card/UI → display-vs-oracle **N/A** (backend-only, like C1/C2). **main.js LOC Δ = 0.**
+- **Comparable prediction gained, not just a run:** the CanDo FEM now makes a **measurable, correct-sign
+  flexibility prediction for extra crossover bases** — inserts raise local per-bp RMSF ~1.87×, scored through the
+  shared S3 RMSF channel, so an oxDNA/NAMD ensemble RMSF (which also rises at ssDNA inserts) can cross-validate it.
+  CanDo's fourth-feature (extra-bases) coverage is now a proven prediction, not an untested code path.
 
 ## Lessons (anti-patterns banked)
 
