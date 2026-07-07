@@ -838,6 +838,23 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
 - **Scope:** a one-line change at one of the two sites IF approved; would let AF-30's inverse pair drop its
   settling step. Low priority (cosmetic axis offset; no nucleotide-count impact).
 
+## ISSUE-14 — `assembly_exit_cleanup` smoke spec fails: console error tearing down assembly mode (functional bug)
+
+- **Status:** `[ ]` OPEN. Observed 2026-07-06 during a sim-coverage session's pre-work `just smoke` (surfaced,
+  not caused by that session — a backend-only CanDo change). NOT reproduced/pinned beyond the smoke run.
+- **Symptom:** `just smoke` → `e2e/assembly_exit_cleanup.spec.js:20 › exiting assembly mode tears down cleanly
+  (no console error)` FAILS (1 failed / 22 passed). A console error fires while exiting assembly mode. There is
+  already a partial fix commit `d5be41c` ("fix(assembly): exit no longer crashes on the multi-select box
+  disposal") — so this is a **reopen / incomplete fix**, a different error path than the multi-select box.
+- **Where (leads, verify):** assembly-mode teardown path (the spec drives enter→exit assembly mode); the earlier
+  fix touched multi-select box disposal, so the surviving error is elsewhere in the same teardown (renderer /
+  gizmo / subscription cleanup). Grab the actual error from `test-results/assembly_exit_cleanup-*/error-context.md`
+  + `trace.zip` before guessing.
+- **Impact:** unknown user-facing severity (the spec is a console-error gate, not a crash assertion per se); but
+  it **blocks the `just smoke` commit gate** for anyone whose change requires smoke (frontend/stateful work).
+- **Repro FIRST + ASK before fixing** (loop discipline): re-run the single spec, read the captured error, then
+  confirm the desired teardown behavior. Likely a stale-subscription / dispose-order bug (a known LESSONS class).
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element

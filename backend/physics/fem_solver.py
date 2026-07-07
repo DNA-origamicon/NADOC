@@ -553,25 +553,37 @@ def apply_boundary_conditions(
     K: lil_matrix,
     f: np.ndarray,
     mesh: FEMMesh,
+    fixed_nodes: Optional[List[int]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Pin all 6 DOF of the node nearest the geometric centroid to remove
-    rigid-body modes.
+    Pin all 6 DOF of the given ``fixed_nodes`` (Dirichlet BC), or — when none are
+    supplied — the single node nearest the geometric centroid.
 
-    Pinning the centroid node (rather than node 0) avoids a pure cantilever
-    effect where RMSF increases monotonically from one end of the structure.
-    The resulting RMSF is symmetric around the centre and reflects actual
-    crossover-driven stiffness variation rather than distance from an arbitrary
-    boundary.
+    ``fixed_nodes`` are anchor node indices (see :func:`resolve_anchor_nodes`): the
+    physical tether holds those axis nodes clamped while the rest of the bundle
+    deflects under the load. Any anchor set of ≥1 fully-clamped node also removes
+    the 6 rigid-body modes, so it doubles as the constraint the solve needs.
+
+    With NO anchors the legacy centroid pin is used: pinning the centroid node
+    (rather than node 0) avoids a pure cantilever effect where RMSF increases
+    monotonically from one end. The resulting RMSF is symmetric around the centre
+    and reflects actual crossover-driven stiffness variation rather than distance
+    from an arbitrary boundary. An empty ``fixed_nodes`` (a stale anchor selection
+    that resolved to nothing) also falls back to the centroid pin, so the system
+    never goes singular.
 
     Returns (K_free, f_free, free_dofs).
     """
-    positions = np.array([n.position for n in mesh.nodes])
-    centroid  = positions.mean(axis=0)
-    fixed_node = int(np.argmin(np.linalg.norm(positions - centroid, axis=1)))
+    if fixed_nodes:
+        pinned = {dof for node in fixed_nodes
+                  for dof in range(6 * node, 6 * node + 6)}
+    else:
+        positions = np.array([n.position for n in mesh.nodes])
+        centroid  = positions.mean(axis=0)
+        fixed_node = int(np.argmin(np.linalg.norm(positions - centroid, axis=1)))
+        pinned = set(range(6 * fixed_node, 6 * fixed_node + 6))
 
     n_dof = K.shape[0]
-    pinned = set(range(6 * fixed_node, 6 * fixed_node + 6))
     free_dofs = np.array([i for i in range(n_dof) if i not in pinned], dtype=int)
 
     K_csr = K.tocsr()
@@ -599,6 +611,7 @@ def solve_prestress_shape(
     design: Design,
     mesh: FEMMesh,
     n_steps: int = 30,
+    fixed_nodes: Optional[List[int]] = None,
 ) -> np.ndarray:
     """Geometrically-nonlinear equilibrium shape under the loop/skip eigenstrain.
 
@@ -609,13 +622,17 @@ def solve_prestress_shape(
     kinematics a single linear solve misses (a linear solve under-predicts a 90° bend as
     ~35°). Returns the final Nx3 node positions (nm). The straight/linear result is the
     ``n_steps=1`` limit.
+
+    ``fixed_nodes`` (anchor node indices) are held clamped at every load step, so
+    the anchored region stays at its rest position while the rest deflects; with
+    ``None`` the centroid pin is used (pure free relaxation).
     """
     positions = [n.position.copy() for n in mesh.nodes]
     for _ in range(n_steps):
         _reframe_elements(mesh, positions)
         K, _ = assemble_global_stiffness(mesh)
         f = assemble_prestress_force(mesh, design) / n_steps
-        K_free, f_free, free = apply_boundary_conditions(K, f, mesh)
+        K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         du = solve_equilibrium(K_free, f_free, K.shape[0], free)
         for i in range(len(positions)):
             positions[i] = positions[i] + du[6 * i: 6 * i + 3]
@@ -1068,12 +1085,44 @@ def _rigid_superpose(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
 
 # ── Public shape-prediction entry point ──────────────────────────────────────────
 
+def resolve_anchor_nodes(
+    design: "Design", mesh: FEMMesh, anchors: Optional[List[dict]]
+) -> Tuple[List[int], List[Tuple[str, int]]]:
+    """Resolve anchor descriptors to (sorted FEM node indices, their (helix_id, bp) keys).
+
+    Reuses the shared oxDNA anchor-scope resolver (``resolve_anchor_particles`` —
+    overhang / cluster / domain / strand / base) to turn the descriptors into
+    per-nucleotide ``(helix_id, bp, direction)`` keys, then collapses each onto the
+    single duplex-core AXIS node it belongs to (FEM nodes are direction-independent,
+    one per bp — both strands of a bp pin the same node). Nucleotides whose bp is not
+    in the meshed duplex core (ssDNA overhang, auto_scaffold cap extension, extra-base
+    inserts) drop silently, matching ``resolve_anchor_particles``' stale-selection
+    tolerance. Anchors are a JOB-REQUEST annotation, never a topology edit (Three-Layer
+    Law): this only reads positions/keys.
+    """
+    if not anchors:
+        return [], []
+    from backend.physics.oxdna_interface import resolve_anchor_particles
+
+    _parts, keys = resolve_anchor_particles(design, anchors)
+    node_by_hb = {(n.helix_id, n.global_bp): i for i, n in enumerate(mesh.nodes)}
+    selected: dict[int, Tuple[str, int]] = {}
+    for k in keys:
+        hb = (k[0], k[1])                       # (helix_id, bp) — drop direction
+        idx = node_by_hb.get(hb)
+        if idx is not None:
+            selected[idx] = hb
+    nodes = sorted(selected)
+    return nodes, [selected[i] for i in nodes]
+
+
 def predict_shape(
     design: "Design",
     *,
     nonlinear: bool = True,
     n_steps: int = 20,
     with_rmsf: bool = True,
+    anchors: Optional[List[dict]] = None,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
 
@@ -1083,11 +1132,21 @@ def predict_shape(
     moderate bends, whereas the single linear solve under-predicts by ~10% (it straightens
     the arc ends). ``nonlinear=False`` runs the fast linear solve for previews.
 
+    ``anchors`` (optional) is a list of anchor-scope descriptors (the shared oxDNA scopes —
+    overhang / cluster / domain / strand / base) resolved to duplex-core node indices via
+    :func:`resolve_anchor_nodes` and clamped as Dirichlet boundary conditions: the anchored
+    bp are held at their rest positions while the rest of the bundle deflects under the
+    loop/skip eigenstrain. A selection that resolves to nothing falls back to the free
+    centroid-pinned solve (a no-op). Anchors are a job-request annotation, never a topology
+    edit. The RMSF stays the free-free NMA flexibility regardless (an intrinsic property of
+    the elastic network, calibrated against CanDo).
+
     Three-Layer Law: the returned positions are DISPLAY-ONLY (Physical layer); this never
     mutates the topological or geometric layers. Returns::
 
         {"solver": "nonlinear"|"linear",
          "positions": [{helix_id, bp_index, direction, backbone_position}, ...],
+         "anchor_keys": [[helix_id, bp], ...],   # duplex nodes actually clamped
          "rmsf":      [{helix_id, bp_index, rmsf_nm}, ...]  # omitted if with_rmsf=False
         }
 
@@ -1107,15 +1166,18 @@ def predict_shape(
             "There is no paired region to solve — pair the scaffold with staples first."
         )
 
+    fixed_nodes, anchor_keys = resolve_anchor_nodes(design, mesh, anchors)
+
     if nonlinear:
-        positions = solve_prestress_shape(design, mesh, n_steps=n_steps)
+        positions = solve_prestress_shape(
+            design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes)
         u = np.zeros(6 * len(mesh.nodes), dtype=float)
         for i in range(len(mesh.nodes)):
             u[6 * i: 6 * i + 3] = positions[i] - mesh.nodes[i].position
     else:
         K, _ = assemble_global_stiffness(mesh)
         f = assemble_prestress_force(mesh, design)
-        K_free, f_free, free = apply_boundary_conditions(K, f, mesh)
+        K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         u = solve_equilibrium(K_free, f_free, K.shape[0], free)
 
     positions, axis = deformed_positions_with_axis(design, mesh, u)
@@ -1123,6 +1185,7 @@ def predict_shape(
         "solver": "nonlinear" if nonlinear else "linear",
         "positions": positions,
         "axis": axis,   # per-bp helix-CENTRE nodes for the CanDo-style cylinder rep
+        "anchor_keys": [[hid, bp] for (hid, bp) in anchor_keys],
     }
     if with_rmsf:
         K, _ = assemble_global_stiffness(mesh)

@@ -38,6 +38,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | _(display-vs-oracle)_ ✅ (S5) | card's displayed numbers == headless oracle within tol; else STOP+ask | one-off Playwright per card (deleted after) | S5 ✓, C5, M5, N4 |
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
+| **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
@@ -254,6 +256,50 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
 - **Comparable prediction gained, not just a run:** the comparison card now renders a REAL oxDNA column — a
   relaxed job's shared shape descriptors + RMSF, core-filtered — instead of an empty source list; the moment a
   second engine (C5 CanDo) lands, the card computes an actual oxDNA-vs-CanDo agreement with no further card work.
+
+### 2026-07-06 — `C1` CanDo FEM anchors (Dirichlet BC) — M-CANDO-FIELD/COMPLETE track
+
+- **Picked** `C1` — shared-metric track (M-METRIC-CORE) is done, so the next milestone is **M-CANDO-FIELD**
+  (needs C1, C2; S4/S5/O1 already done). Rubric: **anchors-before-field**; C1 is low-effort, high-leverage,
+  and unblocks C2 (critical) plus the whole CanDo feature track. Eligible alternatives (C3/M1/M3/N1/…) rank
+  lower (don't unblock the leading milestone).
+- **What shipped.** Anchors (a physical tether held fixed) for the CanDo FEM shape solve — the CanDo analogue
+  of a boundary condition. Backend-only; anchors are a **job-request annotation, never a `Design`/topology
+  edit** (Three-Layer Law: `predict_shape(..., anchors=...)` kwarg, nothing mutated).
+  - `apply_boundary_conditions(K, f, mesh, fixed_nodes=None)` — generalized from the single centroid pin to
+    pin all 6 DOF of each `fixed_nodes` index (Dirichlet). `None` **or an empty list** → centroid fallback, so
+    a stale anchor that resolves to nothing never leaves the system singular.
+  - `solve_prestress_shape(..., fixed_nodes=None)` clamps them at **every** corotational load step → the
+    anchored region stays exactly at rest while the rest deflects under the loop/skip eigenstrain.
+  - `resolve_anchor_nodes(design, mesh, anchors)` — reuses the **shared oxDNA scope resolver**
+    (`oxdna_interface.resolve_anchor_particles`: overhang/cluster/domain/strand/base) → per-nt `(helix,bp,dir)`
+    keys collapsed onto the single duplex-core axis node per bp (FORWARD+REVERSE → one node). Out-of-core nts
+    (ssDNA ends, extra-base sentinel keys) drop silently — same stale-tolerance as the oxDNA resolver.
+  - `predict_shape(design, *, anchors=None)` threads anchors through **both** the nonlinear and linear paths and
+    surfaces `anchor_keys: [[helix, bp], …]`. RMSF stays free-free NMA regardless (intrinsic flexibility).
+- **Oracle** `tests/test_cando_anchors.py` (**10 tests, fast**), written before the code (imported the new
+  names first → red). Asserts *properties*, not "ran": synthetic straight beam — pinned node `u==0` at its DOFs
+  & the free tip deflects along a test load; BC pins exactly the requested nodes / `[]`→centroid; resolver maps
+  base + cluster scopes to the right node set & drops a stale selection; **prestress solve holds the
+  most-deflecting node <1e-9 while the rest still deflects >1e-3** (the physical anchor property, pre-Kabsch);
+  an anchor genuinely changes the Kabsch-posed `predict_shape` output + reports `anchor_keys`; an unresolved
+  anchor is a no-op (positions identical). Fresh-context review: **no correctness gaps**; honest note — the
+  "free-free NMA preserved" RMSF half is *green-by-construction* (the RMSF path never receives anchors, so it's
+  free-free by design — consistent with the stated oracle; the positions no-op is the load-bearing check). The
+  RMSF comparison uses Pearson>0.999 + mean-within-2% because `eigsh` passes no `v0` → ARPACK start-vector
+  jitter makes element-wise `allclose` the wrong tool (that jitter is not an anchor effect).
+- **Gates.** oracle 10/10; `just test` = **4186 passed / 66 skipped / 1 xfailed** (+ the 1 known pre-existing
+  `test_job_archive::test_md_list_includes_size` xdist active-design flaky — passes in isolation, I touched no
+  job-archive code); ruff clean on both touched files (the pre-existing lint debt in OTHER files untouched, per
+  `feedback_no_bulk_reformat`). No card/UI this task → **display-vs-oracle Playwright is N/A**. **main.js LOC Δ = 0**
+  (backend-only). NB: `just smoke` (pre-work) had one pre-existing FAILING spec unrelated to C1 —
+  `assembly_exit_cleanup` (assembly-teardown console error, already has a partial fix commit `d5be41c`) — routed
+  to `issues_ledger.md`, not a C1 regression (backend-only change, gated on `just test`).
+- **Comparable prediction gained, not just a run:** the CanDo FEM can now hold a **resolved anchor** (u==0 at
+  the tethered node) while the rest of the bundle relaxes — the boundary condition every anchored-field
+  cross-validation needs. This is the substrate for C2 (E-field deflection is measured *against* a held anchor)
+  and shares the exact `resolve_anchor_particles` scope resolver with the oxDNA/mrDNA/NAMD anchor tasks
+  (M1/N2), so "anchor scope X" means the same nucleotides across all four engines.
 
 ## Lessons (anti-patterns banked)
 

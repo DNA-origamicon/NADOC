@@ -95,6 +95,22 @@ fills in as milestones complete.
   job's shared shape descriptors + RMSF, core-filtered to the rigid dsDNA core) instead of an empty source list —
   oxDNA is now the concrete reference every other engine's task will be scored against.
 
+- **`C1` — CanDo FEM anchors (Dirichlet BC)** · shape: **solver-change** (`fem_solver.py`: generalized
+  `apply_boundary_conditions` centroid-pin→arbitrary `fixed_nodes`; `solve_prestress_shape`/`predict_shape` thread
+  anchors; new `resolve_anchor_nodes` reusing the shared `oxdna_interface.resolve_anchor_particles` scope
+  resolver) · feature: **anchors** (CanDo — first of its four) · engines now comparable: CanDo can hold a resolved
+  anchor exactly (u==0) under the eigenstrain — the boundary condition C2's field-deflection is measured against;
+  same scope resolver as the oxDNA/mrDNA/NAMD anchor tasks (M1/N2) so "anchor scope X" = the same nucleotides
+  across engines · oracle: `tests/test_cando_anchors.py` 10 tests **fast** (synthetic-beam pinned-held/free-moves,
+  BC pins exactly the requested nodes / `[]`→centroid, resolver maps base+cluster & drops stale, prestress solve
+  holds clamped node <1e-9 while rest deflects >1e-3, unresolved=no-op) · main.js LOC Δ = 0 · tests: 10/10 oracle,
+  `just test` 4186 passed / 66 skipped / 1 xfailed (+1 known pre-existing job-archive xdist flaky, passes isolated);
+  no card/UI → display-vs-oracle N/A · review-caught: none (honest note — the free-free-RMSF assertion is
+  green-by-construction, consistent w/ the stated oracle; positions no-op is load-bearing) ·
+  **Comparable prediction gained, not just a run:** the CanDo FEM can now clamp a tethered node and predict the
+  *anchored* equilibrium shape (rest of the bundle deflects, anchor held to 1e-9) — the anchored boundary
+  condition every anchored-field cross-validation needs, unblocking C2 and the M-CANDO-FIELD milestone.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -117,8 +133,8 @@ requirement)._
 | Milestone | Meaning | Status |
 |---|---|---|
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
-| `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | pending (C1,C2,S4,S5,O1) |
-| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1–C5) |
+| `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | pending — **only C2 left** (C1,S4,S5,O1 done) |
+| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1 ✅; C2–C5 left) |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 

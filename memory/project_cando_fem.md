@@ -1187,3 +1187,24 @@ straight/weak-target, unchanged). Square path unchanged (`objective="twist"`).
   rmsd-never-rises test); affected suite 27 green. **NOT hand-verified in the CanDo panel** (the note
   carries twist+bend; frontend shows refine_note unchanged — bend-specific UI is optional follow-up).
 - Generalization: G1 wired, G2/G3/G4 done, **G5 (symmetry-orbit probe scaling) still open**.
+
+## ANCHORS — Dirichlet BC (2026-07-06, sim-coverage task C1)
+The FEM shape solve can now be run with **anchors** (a physical tether held fixed), the CanDo
+analogue of a boundary condition. Backend-only; anchors are a JOB-REQUEST annotation, never a
+`Design`/topology edit (Three-Layer Law).
+- `apply_boundary_conditions(K, f, mesh, fixed_nodes=None)` — pins all 6 DOF of each `fixed_nodes`
+  index (Dirichlet); `None` **or an empty list** falls back to the legacy centroid pin (an anchor
+  selection that resolved to nothing never makes the system singular).
+- `solve_prestress_shape(..., fixed_nodes=None)` clamps them at every corotational load step → the
+  anchored region stays exactly at rest while the rest deflects under the loop/skip eigenstrain.
+- `resolve_anchor_nodes(design, mesh, anchors)` — reuses the **shared oxDNA scope resolver**
+  (`oxdna_interface.resolve_anchor_particles`: overhang/cluster/domain/strand/base) → per-nucleotide
+  `(helix,bp,dir)` keys, collapsed onto the single duplex-core axis node per bp (both strands → one
+  node). Out-of-core nts (ssDNA ends, extra-base inserts) drop silently.
+- `predict_shape(design, *, anchors=None)` threads anchors through both the nonlinear and linear
+  paths and returns `anchor_keys: [[helix_id, bp], …]`. RMSF stays the free-free NMA regardless
+  (intrinsic flexibility; anchoring the RMSF is a possible later refinement, not needed by C1).
+- Oracle `tests/test_cando_anchors.py` (10 fast): synthetic beam pins held & free tip moves under a
+  test load; resolver maps base/cluster scopes & drops stale; prestress solve holds the anchored node
+  exactly while the rest deflects; unresolved anchor is a no-op (positions identical, free-free RMSF
+  preserved). Anchors are the substrate for **C2** (E-field deflection needs an anchor to hold against).
