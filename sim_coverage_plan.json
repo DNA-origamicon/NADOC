@@ -3,42 +3,432 @@
     "purpose": "Authoritative, machine-parseable task inventory for the full simulation/feature-coverage loop. Drive four engines (CanDo FEM, mrDNA, oxDNA, NAMD) to cover the four unconventional design features (extra crossover bases, linkers/overhang connections, E-fields, anchors) AND emit a shared, comparable set of prediction descriptors so engines cross-validate each other.",
     "reference_policy": "per-observable: oxDNA is reference for relaxed shape + field-deflection; CanDo is reference for RMSF/flexibility; NAMD becomes gold for any observable once a NAMD run for that design exists (overrides).",
     "updated": "2026-07-05",
-    "status_enum": ["pending", "in_progress", "done", "blocked"],
+    "status_enum": [
+      "pending",
+      "in_progress",
+      "done",
+      "blocked"
+    ],
     "loop_invariant": "The loop edits ONLY task.status and task.notes (and milestone.status, derived). It MUST NOT add, remove, reorder, or rewrite tasks, deps, oracles, or any other field. Scope changes, new tasks, or re-prioritization require the user. Seeded all-pending on purpose (nothing is 'done' until its oracle passes).",
     "three_layer_law": "Every engine output here is PHYSICAL/display-only. Anchors + field specs are JOB-REQUEST annotations, never Design edits. CanDo extra-base/linker ELEMENTS are mesh-build details derived from existing topology metadata (Crossover.extra_bases, overhang_connections), not topology mutations."
   },
   "milestones": [
-    {"id": "M-METRIC-CORE", "title": "Cross-engine comparison card generates/views/exports shared descriptors + agreement", "tasks": ["S1", "S2", "S3", "S4", "S5"], "status": "done"},
-    {"id": "M-CANDO-FIELD", "title": "CanDo FEM E-field deflection cross-validates oxDNA within stated tolerance on a fixture", "tasks": ["C1", "C2", "S4", "S5", "O1"], "status": "pending"},
-    {"id": "M-CANDO-COMPLETE", "title": "CanDo FEM covers all four features + feeds the comparison card", "tasks": ["C1", "C2", "C3", "C4", "C5"], "status": "pending"},
-    {"id": "M-ALL-ANCHORS-FIELD", "title": "Every engine can run an anchored E-field job producing a comparable deflection descriptor", "tasks": ["C1", "C2", "M1", "M2", "N1", "N2"], "status": "pending"},
-    {"id": "M-FULL-COVERAGE", "title": "All engines cover all four features and all feed the comparison card", "tasks": ["S1", "S2", "S3", "S4", "S5", "C1", "C2", "C3", "C4", "C5", "M1", "M2", "M3", "M4", "M5", "N1", "N2", "N3", "N4", "O1", "O2"], "status": "pending"}
+    {
+      "id": "M-METRIC-CORE",
+      "title": "Cross-engine comparison card generates/views/exports shared descriptors + agreement",
+      "tasks": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "M-CANDO-FIELD",
+      "title": "CanDo FEM E-field deflection cross-validates oxDNA within stated tolerance on a fixture",
+      "tasks": [
+        "C1",
+        "C2",
+        "S4",
+        "S5",
+        "O1"
+      ],
+      "status": "done"
+    },
+    {
+      "id": "M-CANDO-COMPLETE",
+      "title": "CanDo FEM covers all four features + feeds the comparison card",
+      "tasks": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M-ALL-ANCHORS-FIELD",
+      "title": "Every engine can run an anchored E-field job producing a comparable deflection descriptor",
+      "tasks": [
+        "C1",
+        "C2",
+        "M1",
+        "M2",
+        "N1",
+        "N2"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M-FULL-COVERAGE",
+      "title": "All engines cover all four features and all feed the comparison card",
+      "tasks": [
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5",
+        "N1",
+        "N2",
+        "N3",
+        "N4",
+        "O1",
+        "O2"
+      ],
+      "status": "pending"
+    }
   ],
   "tasks": [
-    {"id": "S1", "track": "shared-metric", "engine": "all", "feature": "comparison-metric", "title": "shape_metrics.py — engine-agnostic shape descriptors (global twist, bend angle + radius, Rg, end-to-end) from a display-position map", "deps": [], "effort": "medium", "leverage": "critical", "fast_slow": "fast", "oracle": "synthetic straight -> twist~0; known-bend fixture -> arc-span within tol; generalize exp36 6-fold-twist + arc-span estimators; can-go-red on a scrambled frame", "milestone": "M-METRIC-CORE", "status": "done", "notes": "backend/core/shape_metrics.py compute_shape_descriptors(positions) composes the locked oxdna_health estimators into one engine-agnostic set: twist_total_deg, twist_per_turn_deg (axial_span/BDNA_PITCH), bend_angle_deg + bend_radius_nm (both from one bundle_slab_centreline via _chord_sagitta_bend), radius_of_gyration_nm, end_to_end_nm (axial-end cross-section centroids), axial_span_nm, n_nucleotides. Degenerate frames -> per-descriptor None (twist needs >=2 helices). Added ONE purely-additive helper bundle_slab_centreline to oxdna_health (+31/-0, locked estimators untouched). 9/9 oracle tests (tests/test_shape_metrics.py) fast. Caller must core-filter real frames. No UI (card is S5)."},
-    {"id": "S2", "track": "shared-metric", "engine": "all", "feature": "comparison-metric", "title": "Unified RMSF profile + deviation profile (generalize cando_deviation.compute_deviation + fem_solver normalize_rmsf) into shape_metrics", "deps": [], "effort": "medium", "leverage": "high", "fast_slow": "fast", "oracle": "identical predicted==intended -> deviation RMSD 0; synthetic displaced frame -> known per-nt deviation; RMSF profile round-trips", "milestone": "M-METRIC-CORE", "status": "done", "notes": "shape_metrics.py gained 3 engine-agnostic primitives (read-only over positions, no topology): deviation_profile(cand, ref, align=True) — per-nt deviation + rmsd_nm; align=True Kabsch (generalizes oxdna_health.geometry_deviation_map/measure_geometry_rmsd via _kabsch_superpose, strips rigid pose, shape survives), align=False direct key-match (generalizes cando_deviation.compute_deviation, exact residual). rmsf_from_ensemble(frames, align=True) — per-nt RMS fluctuation about the mean over a frame list (generalizes production_rmsf's variance core minus oxDNA file I/O; the trajectory-variance RMSF source for oxDNA/NAMD/mrDNA; CanDo supplies NMA rmsf directly). normalize_rmsf_profile — generalizes fem_solver.normalize_rmsf to a keyed [0,1] map from any {helix_id,bp_index,direction?,rmsf_nm} list (dir-less -> both strands). Copy-aware keys throughout. 10/10 fast oracle (tests/test_shape_deviation_rmsf.py): identical->rmsd 0, known non-rigid displacement recovered exactly (align=False), rigid pose removed by Kabsch, shear survives, A/sqrt(2) fluctuation round-trip, align=True strips bulk drift keeps site fluctuation, normalize max->1 + rescale-back + all-zero safe. No UI (card is S5). Ready for S3 compare_descriptors."},
-    {"id": "S3", "track": "shared-metric", "engine": "all", "feature": "comparison-metric", "title": "compare_descriptors(cand, ref) — per-observable reference selection + agreement math (scalar %delta, RMSF Pearson/Spearman, aligned-shape RMSD via _rigid_superpose)", "deps": ["S1", "S2"], "effort": "medium", "leverage": "critical", "fast_slow": "fast", "oracle": "identical inputs -> perfect agreement; known-perturbed input -> expected deltas/correlation; reference-selection honors per-observable policy incl. NAMD-override-when-present", "milestone": "M-METRIC-CORE", "status": "done", "notes": "shape_metrics.py gained the cross-engine agreement layer (pure over Physical-layer dicts, no topology). compare_descriptors(candidate, reference, *, align_shape=True) scores agreement on the three comparable observable classes S1/S2 emit: (1) COMPARABLE_SCALARS (7 shape descriptors) -> {candidate, reference, abs_delta, signed_pct_delta} where pct = (cand-ref)/|ref|*100, None scalars incomparable, zero-ref -> abs_delta w/ None pct (no div0); (2) rmsf -> Pearson+Spearman over shared base pairs, {pearson, spearman, n, candidate/reference_mean_rmsf_nm}, degenerate (constant/<2 shared) -> None coeff not NaN; (3) shape_rmsd_nm via deviation_profile(align=True) Kabsch (rigid pose zeroed, real shape survives). reference_for(engines, observable) applies per-observable policy (shape/field->oxdna, rmsf->cando) with NAMD gold-override across all observables, missing engine/unknown observable -> None. KEY FIX (review-caught, HIGH): _rmsf_per_bp collapses BOTH profiles to per-(helix,bp,copy) mean over strand direction -- CanDo NMA RMSF is direction-less (1/bp) while ensemble RMSF is per-strand (2/bp); direction keying left the designated CanDo-vs-oxDNA pairing with an empty intersection (silent None). 13/13 fast oracle tests/test_shape_compare.py incl. the mixed-direction cross-engine case. No UI (card = S5). M-METRIC-CORE now S3 done; S4 (field-response, deps S1) + S5 (card, deps S3) remain."},
-    {"id": "S4", "track": "shared-metric", "engine": "all", "feature": "E-field", "title": "Unified field-response descriptor (generalize oxdna_health.measure_field_response into shape_metrics: per-nt deflection map, free-region projection-along-field, anchored drift, magnitude ratio, cosine similarity)", "deps": ["S1"], "effort": "low", "leverage": "high", "fast_slow": "fast", "oracle": "synthetic anchored+deflected frame -> anchors held, free deflects along field, monotone in field magnitude; two-engine deflection cosine sim", "milestone": "M-METRIC-CORE", "status": "done", "notes": "shape_metrics.py gained the engine-agnostic field-response layer (pure read-over-positions, no topology). field_response_profile(field_positions, reference_positions, field_dir, anchor_keys, *, anchor_tol_nm=1.0, min_free_proj_nm=0.5) generalizes oxdna_health.measure_field_response: reproduces its aggregates + physical verdict byte-for-byte (passed = anchored_max<=tol AND free_proj_along_field>=min; same two ValueErrors on zero field-dir / no free nts) and ADDS a copy-aware per_nt deflection map [{helix_id,bp_index,direction,copy,disp_vec_nm,disp_nm,proj_along_field_nm,anchored}] + a mean free deflection_vec_nm. NOT Kabsch-aligned (the anchored region IS the common frame; aligning would erase the measured motion). Keys via _dev_key (copy-distinct so inserted-base copies stay separate); anchor membership copy-AGNOSTIC (an anchored bp pins all its copies). compare_field_response(cand, ref) scores cross-engine deflection agreement over SHARED FREE nts: cosine_similarity (concatenated free disp vectors: identical->+1, opposite->-1, orthogonal->0) + magnitude_ratio (||cand||/||ref||: 3x compliance->3.0), None on degenerate/empty (n_shared_free=0). Both profiles normalize direction identically -> no S3-style silent-empty-intersection. 13/13 fast oracle tests/test_shape_field_response.py; full just test 4155 passed. No UI (field panel lands in the S5 card). S4 done -> M-METRIC-CORE only S5 remains."},
-    {"id": "S5", "track": "shared-metric", "engine": "all", "feature": "comparison-metric", "title": "Cross-engine comparison CARD: routes_shape_metrics.py (daemon-thread registry, POST /shape/compare/start + GET /shape/compare/{run_id}) + shape_compare_card.js (mirror metrics-card pattern; overlay profiles, scalar+agreement table; PNG/CSV export via metric_graph/metric_export_modal)", "deps": ["S3"], "effort": "medium", "leverage": "critical", "fast_slow": "fast+MV", "oracle": "pure helpers (chart spec, CSV rows, agreement table) unit-tested; smoke green; one-off Playwright display-vs-oracle check; MV row for live cross-engine data. S4 enriches the field panel.", "milestone": "M-METRIC-CORE", "status": "done", "notes": "Closes M-METRIC-CORE. backend/core/shape_compare.py build_comparison_report(sources) — PURE assembly composing S3/S4 (reference_for + compare_descriptors + compare_field_response) into one card payload from per-engine source bundles {engine, descriptors?, rmsf?, shape_frame?, field?}: scalar table (value + signed %-delta vs SHAPE reference), per-engine RMSF overlay profiles (per-bp collapsed), agreement rows (shape-RMSD vs shape-ref, RMSF Pearson/Spearman vs rmsf-ref, field cosine/ratio vs field-ref), field panel (held+deflected verdict + cosine-vs-ref). Per-observable reference honors S3 policy (oxDNA=shape/field, CanDo=RMSF, NAMD overrides); references dict reports POLICY ref (data-agnostic like shape/rmsf) but the field comparison/panel resolve the reference among FIELD-CARRYING engines only (review-caught: else the policy engine is mislabelled the reference while contributing no deflection). Graceful: 1 engine->raw values no deltas; missing observable->no rows; empty->not-ready. backend/api/routes_shape_metrics.py daemon registry POST /shape/compare/start + GET /shape/compare/{run_id} (registered in main.py; compute instant now, pattern kept so per-engine source-gathering can go slow later). frontend/src/ui/shape_compare_card.js — card factory + PURE helpers (fmtNum/fmtDelta/scalarTableModel/rmsfOverlaySpec via shared metric_graph.buildChartSpec/comparisonCSVs); Generate->gather sources->POST/poll->render scalar table + RMSF overlay canvas + agreement + field panel; Export via shared metric_export_modal (PNG overlay + CSV tables). Collapsible card in oxDNA Dynamics panel, wired from initOxdnaJobsPanel (getSources: ()=>[] for now; live per-engine sources = O1/C5/M5/N4 -> MV-21). main.js LOC Delta=0. Oracle tests/test_shape_compare_report.py 15 fast (per-observable ref incl NAMD-override + field-carrier resolution, scalar +/-%delta + zero-ref no-div0, identical RMSF->Pearson 1 + overlay pts, rigid-shift->shape-RMSD~0, field cosine +/-1 + mag-ratio 3, 1-engine/empty/missing-observable degradation, REST start->poll->404). vitest shape_compare_card.test.js 9 (pure helpers + Generate->poll->render + empty-sources not-ready + refresh). One-off display-vs-oracle Playwright: real card+client+backend on synthetic 2-engine sources -> rendered table shows the backend oracle's +10.0% twist delta, oxdna.ref, RMSF Pearson 1.000; displayed==oracle, passed, deleted. Fresh-context review: no correctness bugs. Gates: 15/15 oracle, 2200/2200 vitest, just test green, ruff clean on touched files, smoke green."},
-
-    {"id": "C1", "track": "cando", "engine": "CanDo FEM", "feature": "anchors", "title": "Anchors: generalize apply_boundary_conditions from centroid-pin to pin selected nodes (Dirichlet BC); predict_shape(design, anchors=...); reuse oxDNA anchor scopes (cluster/domain/overhang) + resolve_anchor_particles-style resolver -> node indices", "deps": [], "effort": "low", "leverage": "high", "fast_slow": "fast+slow", "oracle": "FAST: pinned nodes fixed (u==0 at pinned DOFs), free nodes move under a test load; free-free NMA preserved when no anchors. SLOW: real nonlinear solve on a fixture holds the anchor.", "milestone": "M-CANDO-COMPLETE", "status": "done", "notes": "Dirichlet anchors for the CanDo FEM (backend-only; anchors are a JOB-REQUEST annotation, never a Design/topology edit -- Three-Layer Law). apply_boundary_conditions(K,f,mesh,fixed_nodes=None) pins all 6 DOF of each anchor node; None OR empty list falls back to the legacy centroid pin (a stale selection that resolves to nothing never makes the system singular). solve_prestress_shape(...,fixed_nodes=) clamps them at every corotational load step -> the anchored region stays exactly at rest while the rest deflects under the loop/skip eigenstrain. resolve_anchor_nodes(design,mesh,anchors) reuses the SHARED oxDNA scope resolver (oxdna_interface.resolve_anchor_particles: overhang/cluster/domain/strand/base) -> per-nt (helix,bp,dir) keys collapsed onto the single duplex-core axis node per bp (both strands -> one node; out-of-core nts drop silently -- ssDNA ends, extra-base sentinel keys). predict_shape(design,*,anchors=None) threads anchors through BOTH nonlinear + linear paths and returns anchor_keys:[[helix,bp],...]. RMSF stays free-free NMA regardless (intrinsic flexibility; anchoring RMSF is a later refinement, not needed here). Oracle tests/test_cando_anchors.py 10 fast: synthetic beam pins held (u==0) & free tip moves under a test load; BC pins exactly the requested nodes / empty->centroid; resolver maps base+cluster scopes & drops stale; prestress solve holds the anchored node <1e-9 while the rest deflects >1e-3; unresolved anchor is a no-op (positions identical, free-free RMSF preserved via Pearson>0.999+mean-within-2% -- ARPACK no-v0 jitter, not an anchor effect). Fresh-context review: no correctness gaps (honest note: the free-free-RMSF assertion is green-by-construction since the RMSF path never receives anchors -- consistent w/ the stated oracle; positions no-op is the load-bearing check). Gates: 10/10 oracle, just test 4186 passed/66 skip/1 xfail (+1 known pre-existing job-archive xdist flaky, passes isolated), ruff clean on touched files. No card/UI -> display-vs-oracle N/A. main.js LOC delta=0. Substrate for C2 (E-field deflection needs an anchor to hold against)."},
-    {"id": "C2", "track": "cando", "engine": "CanDo FEM", "feature": "E-field", "title": "E-field: add uniform q*E per-node nodal load to the assemble_prestress_force vector (editable effective-charge const, same convention as oxDNA); predict_shape(design, field=..., anchors=...); nonlinear solve for large deflections", "deps": ["C1"], "effort": "medium", "leverage": "critical", "fast_slow": "fast+slow", "oracle": "FAST: shared measure_field_response (S4) on the FEM deflected frame -> anchor holds, free deflects along field, deflection monotone in field magnitude, zero-field -> no deflection. SLOW: nonlinear field solve on a tethered-arm fixture.", "milestone": "M-CANDO-FIELD", "status": "pending", "notes": ""},
-    {"id": "C3", "track": "cando", "engine": "CanDo FEM", "feature": "extra-bases", "title": "Extra crossover bases as mechanical elements (compliant FJC / nick-soft connector, CanDo CONN3D2 analogue) in build_fem_mesh, from Crossover.extra_bases; currently display-only gap-fill", "deps": [], "effort": "medium", "leverage": "high", "fast_slow": "fast+slow", "oracle": "FAST: a design with inserts vs without -> inserts measurably soften local twist/bend (compare_descriptors delta beyond tol, correct sign). Mesh node/element count reflects inserts.", "milestone": "M-CANDO-COMPLETE", "status": "pending", "notes": ""},
-    {"id": "C4", "track": "cando", "engine": "CanDo FEM", "feature": "linkers", "title": "Linkers / overhang connections as FJC connector elements coupling parts/domains in build_fem_mesh, from overhang_connections/extensions", "deps": ["C3"], "effort": "medium", "leverage": "medium", "fast_slow": "fast+slow", "oracle": "FAST: two parts joined by a linker element show coupled response under a test load on one part (the other moves); no linker -> decoupled.", "milestone": "M-CANDO-COMPLETE", "status": "pending", "notes": ""},
-    {"id": "C5", "track": "cando", "engine": "CanDo FEM", "feature": "comparison-metric", "title": "CanDo contribution to comparison card: emit shared descriptors from predict_shape output + register CanDo as a compare-source (RMSF reference column)", "deps": ["S5"], "effort": "low", "leverage": "high", "fast_slow": "fast+MV", "oracle": "CanDo descriptors match the exp36 calibration values within tol; appears as a selectable engine in the card; MV live check.", "milestone": "M-CANDO-COMPLETE", "status": "pending", "notes": ""},
-
-    {"id": "M1", "track": "mrdna", "engine": "mrDNA", "feature": "anchors", "title": "Anchors via ARBD restraints / fixed particles, headless entry point; reuse the shared anchor-scope resolver", "deps": [], "effort": "medium", "leverage": "medium", "fast_slow": "fast+slow", "oracle": "FAST: ARBD input carries the restraint block for resolved anchor beads. SLOW: real ARBD run -> anchored beads hold, free beads move.", "milestone": "M-ALL-ANCHORS-FIELD", "status": "pending", "notes": ""},
-    {"id": "M2", "track": "mrdna", "engine": "mrDNA", "feature": "E-field", "title": "E-field via ARBD constant / grid force per bead (charge-scaled); headless", "deps": ["M1"], "effort": "medium", "leverage": "high", "fast_slow": "fast+slow", "oracle": "FAST: shared field-response on a mock deflected frame; force block written correctly. SLOW: real ARBD anchored field run -> deflection along field.", "milestone": "M-ALL-ANCHORS-FIELD", "status": "pending", "notes": ""},
-    {"id": "M3", "track": "mrdna", "engine": "mrDNA", "feature": "extra-bases", "title": "Extra crossover bases into the ARBD MODEL (verify past the existing display bridge extra_base_flank_keys -> beads present in the simulated model)", "deps": [], "effort": "medium", "leverage": "medium", "fast_slow": "fast", "oracle": "FAST: model bead count includes inserts; inserts are ssDNA (flexible, non-rigid) in the ARBD topology.", "milestone": "M-FULL-COVERAGE", "status": "pending", "notes": ""},
-    {"id": "M4", "track": "mrdna", "engine": "mrDNA", "feature": "linkers", "title": "Linkers / overhang connections threaded through to the ARBD model", "deps": ["M3"], "effort": "medium", "leverage": "medium", "fast_slow": "fast+slow", "oracle": "FAST: linker beads/bonds present in the ARBD model. SLOW: joined parts co-move.", "milestone": "M-FULL-COVERAGE", "status": "pending", "notes": ""},
-    {"id": "M5", "track": "mrdna", "engine": "mrDNA", "feature": "comparison-metric", "title": "mrDNA metrics-card + shared descriptors (RMSF from CG trajectory; fix the copy-key gap in _display_positions flagged in project_oxdna_extra_bases)", "deps": ["S5"], "effort": "medium", "leverage": "medium", "fast_slow": "fast+MV", "oracle": "descriptors emitted + selectable in card; copy-key coverage test; MV live check.", "milestone": "M-FULL-COVERAGE", "status": "pending", "notes": ""},
-
-    {"id": "N1", "track": "namd", "engine": "NAMD MD", "feature": "E-field", "title": "E-field: emit native eField / eFieldOn block in md_protocols.py conf generation (q*E on charged atoms) + a Dynamics-tab UI control", "deps": [], "effort": "low", "leverage": "high", "fast_slow": "fast+slow", "oracle": "FAST: generated conf contains eFieldOn + eField vector with the correct magnitude/direction. SLOW: short run + shared field-response descriptor.", "milestone": "M-ALL-ANCHORS-FIELD", "status": "pending", "notes": ""},
-    {"id": "N2", "track": "namd", "engine": "NAMD MD", "feature": "anchors", "title": "Anchors surfaced in the MD job UI: harmonic restraints (consref/conskfile already wired) driven by an anchor picker + shared scopes; optional fixedAtoms", "deps": [], "effort": "low", "leverage": "medium", "fast_slow": "fast+slow", "oracle": "FAST: restraints PDB marks exactly the resolved anchor atoms; conf enables constraints. SLOW: short run -> anchored atoms hold.", "milestone": "M-ALL-ANCHORS-FIELD", "status": "pending", "notes": ""},
-    {"id": "N3", "track": "namd", "engine": "NAMD MD", "feature": "extra-bases", "title": "Extra bases + linkers: validation coverage for the already-wired atomistic path + emit shared descriptors from MD frames", "deps": [], "effort": "low", "leverage": "medium", "fast_slow": "fast", "oracle": "FAST: atomistic model includes insert/linker atoms; descriptors computable from an MD frame.", "milestone": "M-FULL-COVERAGE", "status": "pending", "notes": ""},
-    {"id": "N4", "track": "namd", "engine": "NAMD MD", "feature": "comparison-metric", "title": "NAMD contribution to comparison card: bridge existing md RMSF/metrics into shared descriptors; register NAMD as gold-override compare-source", "deps": ["S5"], "effort": "medium", "leverage": "medium", "fast_slow": "fast+MV", "oracle": "NAMD descriptors selectable in card; when present, override reference per policy; MV live check.", "milestone": "M-FULL-COVERAGE", "status": "pending", "notes": ""},
-
-    {"id": "O1", "track": "oxdna", "engine": "oxDNA", "feature": "comparison-metric", "title": "Emit shared descriptors from oxDNA relaxed/production frames into the comparison card (the reference column for shape + field-deflection)", "deps": ["S1"], "effort": "low", "leverage": "high", "fast_slow": "fast", "oracle": "oxDNA descriptors match existing oxdna_health twist/curvature values within tol; selectable + default reference in card.", "milestone": "M-CANDO-FIELD", "status": "done", "notes": "Wires the FIRST live source into the S5 comparison card (was getSources:()=>[]). backend/core/oxdna_shape_source.py build_oxdna_shape_source(shape_frame, core_reference, rmsf_positions?, field?) — PURE Physical-layer assembly: core-filters the relaxed frame to the rigid dsDNA core (_filter_to_reference_core against core_reference_geometry, same mask the metrics use; ssDNA ends dropped), computes compute_shape_descriptors (S1) on it, maps production_rmsf positions ({...,'rmsf'}) -> the card's rmsf profile shape ({helix_id,bp_index,direction,copy,rmsf_nm}), returns {engine:'oxdna', descriptors, rmsf, shape_frame(core), field}. Empty core mask -> descriptors/shape_frame None (no comparable frame). Route GET /oxdna/jobs/{id}/shape-source in routes_oxdna.py reads the latest relaxed last_conf via _relaxed_full_map (SAME frame /display shows) + optional RMSF from any production/field stage with frames; returns {ready, stage_name, n_frames, ...bundle}. Frontend: api.getOxdnaShapeSource + oxdna_jobs_panel getSources now async-fetches the selected job's bundle -> [src] (main.js Delta=0). REVIEW-CAUGHT (claim, not bug): descriptors are oxDNA's ABSOLUTE twist/bend on the relaxed frame (the cross-engine-comparable value), NOT the DIFFERENTIAL (measured-analytic) twist the Graphs-&-Metrics card plots over the production trajectory -> corrected the docstrings + MV-21 wording so nobody expects the two cards to show equal numbers; absolute is the right choice for oxDNA-abs-vs-CanDo-abs. Oracle tests/test_oxdna_shape_source.py 7 fast: descriptors==measure_bundle_twist(core) (same estimator, self-consistent), core mask drops ssDNA ends, rmsf 'rmsf'->'rmsf_nm' remap (None dropped), field passthrough, bundle drops into build_comparison_report as ready oxdna SHAPE reference, RED: empty core ref -> None descriptors. Gates: 7/7 oracle, just test 4177 passed/66 skip/1 xfail, ruff clean on touched, vitest 2200, smoke green (pre-work). Live-on-real-relaxed-job eyeball = MV-21 (updated: oxDNA column now live; cross-engine deltas await C5). Field emission from a field JOB (field_response_profile w/ pre-field ref + anchor_keys) NOT done here -> field:None for now; a natural follow-up when C2 needs the oxDNA field reference."},
-    {"id": "O2", "track": "oxdna", "engine": "oxDNA", "feature": "maintenance", "title": "Close residual oxDNA gaps as they surface (extra-base CG render v2; linker coverage completeness)", "deps": [], "effort": "low", "leverage": "low", "fast_slow": "fast", "oracle": "per-gap; only pull when a concrete gap is logged.", "milestone": "M-FULL-COVERAGE", "status": "pending", "notes": ""}
+    {
+      "id": "S1",
+      "track": "shared-metric",
+      "engine": "all",
+      "feature": "comparison-metric",
+      "title": "shape_metrics.py — engine-agnostic shape descriptors (global twist, bend angle + radius, Rg, end-to-end) from a display-position map",
+      "deps": [],
+      "effort": "medium",
+      "leverage": "critical",
+      "fast_slow": "fast",
+      "oracle": "synthetic straight -> twist~0; known-bend fixture -> arc-span within tol; generalize exp36 6-fold-twist + arc-span estimators; can-go-red on a scrambled frame",
+      "milestone": "M-METRIC-CORE",
+      "status": "done",
+      "notes": "backend/core/shape_metrics.py compute_shape_descriptors(positions) composes the locked oxdna_health estimators into one engine-agnostic set: twist_total_deg, twist_per_turn_deg (axial_span/BDNA_PITCH), bend_angle_deg + bend_radius_nm (both from one bundle_slab_centreline via _chord_sagitta_bend), radius_of_gyration_nm, end_to_end_nm (axial-end cross-section centroids), axial_span_nm, n_nucleotides. Degenerate frames -> per-descriptor None (twist needs >=2 helices). Added ONE purely-additive helper bundle_slab_centreline to oxdna_health (+31/-0, locked estimators untouched). 9/9 oracle tests (tests/test_shape_metrics.py) fast. Caller must core-filter real frames. No UI (card is S5)."
+    },
+    {
+      "id": "S2",
+      "track": "shared-metric",
+      "engine": "all",
+      "feature": "comparison-metric",
+      "title": "Unified RMSF profile + deviation profile (generalize cando_deviation.compute_deviation + fem_solver normalize_rmsf) into shape_metrics",
+      "deps": [],
+      "effort": "medium",
+      "leverage": "high",
+      "fast_slow": "fast",
+      "oracle": "identical predicted==intended -> deviation RMSD 0; synthetic displaced frame -> known per-nt deviation; RMSF profile round-trips",
+      "milestone": "M-METRIC-CORE",
+      "status": "done",
+      "notes": "shape_metrics.py gained 3 engine-agnostic primitives (read-only over positions, no topology): deviation_profile(cand, ref, align=True) — per-nt deviation + rmsd_nm; align=True Kabsch (generalizes oxdna_health.geometry_deviation_map/measure_geometry_rmsd via _kabsch_superpose, strips rigid pose, shape survives), align=False direct key-match (generalizes cando_deviation.compute_deviation, exact residual). rmsf_from_ensemble(frames, align=True) — per-nt RMS fluctuation about the mean over a frame list (generalizes production_rmsf's variance core minus oxDNA file I/O; the trajectory-variance RMSF source for oxDNA/NAMD/mrDNA; CanDo supplies NMA rmsf directly). normalize_rmsf_profile — generalizes fem_solver.normalize_rmsf to a keyed [0,1] map from any {helix_id,bp_index,direction?,rmsf_nm} list (dir-less -> both strands). Copy-aware keys throughout. 10/10 fast oracle (tests/test_shape_deviation_rmsf.py): identical->rmsd 0, known non-rigid displacement recovered exactly (align=False), rigid pose removed by Kabsch, shear survives, A/sqrt(2) fluctuation round-trip, align=True strips bulk drift keeps site fluctuation, normalize max->1 + rescale-back + all-zero safe. No UI (card is S5). Ready for S3 compare_descriptors."
+    },
+    {
+      "id": "S3",
+      "track": "shared-metric",
+      "engine": "all",
+      "feature": "comparison-metric",
+      "title": "compare_descriptors(cand, ref) — per-observable reference selection + agreement math (scalar %delta, RMSF Pearson/Spearman, aligned-shape RMSD via _rigid_superpose)",
+      "deps": [
+        "S1",
+        "S2"
+      ],
+      "effort": "medium",
+      "leverage": "critical",
+      "fast_slow": "fast",
+      "oracle": "identical inputs -> perfect agreement; known-perturbed input -> expected deltas/correlation; reference-selection honors per-observable policy incl. NAMD-override-when-present",
+      "milestone": "M-METRIC-CORE",
+      "status": "done",
+      "notes": "shape_metrics.py gained the cross-engine agreement layer (pure over Physical-layer dicts, no topology). compare_descriptors(candidate, reference, *, align_shape=True) scores agreement on the three comparable observable classes S1/S2 emit: (1) COMPARABLE_SCALARS (7 shape descriptors) -> {candidate, reference, abs_delta, signed_pct_delta} where pct = (cand-ref)/|ref|*100, None scalars incomparable, zero-ref -> abs_delta w/ None pct (no div0); (2) rmsf -> Pearson+Spearman over shared base pairs, {pearson, spearman, n, candidate/reference_mean_rmsf_nm}, degenerate (constant/<2 shared) -> None coeff not NaN; (3) shape_rmsd_nm via deviation_profile(align=True) Kabsch (rigid pose zeroed, real shape survives). reference_for(engines, observable) applies per-observable policy (shape/field->oxdna, rmsf->cando) with NAMD gold-override across all observables, missing engine/unknown observable -> None. KEY FIX (review-caught, HIGH): _rmsf_per_bp collapses BOTH profiles to per-(helix,bp,copy) mean over strand direction -- CanDo NMA RMSF is direction-less (1/bp) while ensemble RMSF is per-strand (2/bp); direction keying left the designated CanDo-vs-oxDNA pairing with an empty intersection (silent None). 13/13 fast oracle tests/test_shape_compare.py incl. the mixed-direction cross-engine case. No UI (card = S5). M-METRIC-CORE now S3 done; S4 (field-response, deps S1) + S5 (card, deps S3) remain."
+    },
+    {
+      "id": "S4",
+      "track": "shared-metric",
+      "engine": "all",
+      "feature": "E-field",
+      "title": "Unified field-response descriptor (generalize oxdna_health.measure_field_response into shape_metrics: per-nt deflection map, free-region projection-along-field, anchored drift, magnitude ratio, cosine similarity)",
+      "deps": [
+        "S1"
+      ],
+      "effort": "low",
+      "leverage": "high",
+      "fast_slow": "fast",
+      "oracle": "synthetic anchored+deflected frame -> anchors held, free deflects along field, monotone in field magnitude; two-engine deflection cosine sim",
+      "milestone": "M-METRIC-CORE",
+      "status": "done",
+      "notes": "shape_metrics.py gained the engine-agnostic field-response layer (pure read-over-positions, no topology). field_response_profile(field_positions, reference_positions, field_dir, anchor_keys, *, anchor_tol_nm=1.0, min_free_proj_nm=0.5) generalizes oxdna_health.measure_field_response: reproduces its aggregates + physical verdict byte-for-byte (passed = anchored_max<=tol AND free_proj_along_field>=min; same two ValueErrors on zero field-dir / no free nts) and ADDS a copy-aware per_nt deflection map [{helix_id,bp_index,direction,copy,disp_vec_nm,disp_nm,proj_along_field_nm,anchored}] + a mean free deflection_vec_nm. NOT Kabsch-aligned (the anchored region IS the common frame; aligning would erase the measured motion). Keys via _dev_key (copy-distinct so inserted-base copies stay separate); anchor membership copy-AGNOSTIC (an anchored bp pins all its copies). compare_field_response(cand, ref) scores cross-engine deflection agreement over SHARED FREE nts: cosine_similarity (concatenated free disp vectors: identical->+1, opposite->-1, orthogonal->0) + magnitude_ratio (||cand||/||ref||: 3x compliance->3.0), None on degenerate/empty (n_shared_free=0). Both profiles normalize direction identically -> no S3-style silent-empty-intersection. 13/13 fast oracle tests/test_shape_field_response.py; full just test 4155 passed. No UI (field panel lands in the S5 card). S4 done -> M-METRIC-CORE only S5 remains."
+    },
+    {
+      "id": "S5",
+      "track": "shared-metric",
+      "engine": "all",
+      "feature": "comparison-metric",
+      "title": "Cross-engine comparison CARD: routes_shape_metrics.py (daemon-thread registry, POST /shape/compare/start + GET /shape/compare/{run_id}) + shape_compare_card.js (mirror metrics-card pattern; overlay profiles, scalar+agreement table; PNG/CSV export via metric_graph/metric_export_modal)",
+      "deps": [
+        "S3"
+      ],
+      "effort": "medium",
+      "leverage": "critical",
+      "fast_slow": "fast+MV",
+      "oracle": "pure helpers (chart spec, CSV rows, agreement table) unit-tested; smoke green; one-off Playwright display-vs-oracle check; MV row for live cross-engine data. S4 enriches the field panel.",
+      "milestone": "M-METRIC-CORE",
+      "status": "done",
+      "notes": "Closes M-METRIC-CORE. backend/core/shape_compare.py build_comparison_report(sources) — PURE assembly composing S3/S4 (reference_for + compare_descriptors + compare_field_response) into one card payload from per-engine source bundles {engine, descriptors?, rmsf?, shape_frame?, field?}: scalar table (value + signed %-delta vs SHAPE reference), per-engine RMSF overlay profiles (per-bp collapsed), agreement rows (shape-RMSD vs shape-ref, RMSF Pearson/Spearman vs rmsf-ref, field cosine/ratio vs field-ref), field panel (held+deflected verdict + cosine-vs-ref). Per-observable reference honors S3 policy (oxDNA=shape/field, CanDo=RMSF, NAMD overrides); references dict reports POLICY ref (data-agnostic like shape/rmsf) but the field comparison/panel resolve the reference among FIELD-CARRYING engines only (review-caught: else the policy engine is mislabelled the reference while contributing no deflection). Graceful: 1 engine->raw values no deltas; missing observable->no rows; empty->not-ready. backend/api/routes_shape_metrics.py daemon registry POST /shape/compare/start + GET /shape/compare/{run_id} (registered in main.py; compute instant now, pattern kept so per-engine source-gathering can go slow later). frontend/src/ui/shape_compare_card.js — card factory + PURE helpers (fmtNum/fmtDelta/scalarTableModel/rmsfOverlaySpec via shared metric_graph.buildChartSpec/comparisonCSVs); Generate->gather sources->POST/poll->render scalar table + RMSF overlay canvas + agreement + field panel; Export via shared metric_export_modal (PNG overlay + CSV tables). Collapsible card in oxDNA Dynamics panel, wired from initOxdnaJobsPanel (getSources: ()=>[] for now; live per-engine sources = O1/C5/M5/N4 -> MV-21). main.js LOC Delta=0. Oracle tests/test_shape_compare_report.py 15 fast (per-observable ref incl NAMD-override + field-carrier resolution, scalar +/-%delta + zero-ref no-div0, identical RMSF->Pearson 1 + overlay pts, rigid-shift->shape-RMSD~0, field cosine +/-1 + mag-ratio 3, 1-engine/empty/missing-observable degradation, REST start->poll->404). vitest shape_compare_card.test.js 9 (pure helpers + Generate->poll->render + empty-sources not-ready + refresh). One-off display-vs-oracle Playwright: real card+client+backend on synthetic 2-engine sources -> rendered table shows the backend oracle's +10.0% twist delta, oxdna.ref, RMSF Pearson 1.000; displayed==oracle, passed, deleted. Fresh-context review: no correctness bugs. Gates: 15/15 oracle, 2200/2200 vitest, just test green, ruff clean on touched files, smoke green."
+    },
+    {
+      "id": "C1",
+      "track": "cando",
+      "engine": "CanDo FEM",
+      "feature": "anchors",
+      "title": "Anchors: generalize apply_boundary_conditions from centroid-pin to pin selected nodes (Dirichlet BC); predict_shape(design, anchors=...); reuse oxDNA anchor scopes (cluster/domain/overhang) + resolve_anchor_particles-style resolver -> node indices",
+      "deps": [],
+      "effort": "low",
+      "leverage": "high",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: pinned nodes fixed (u==0 at pinned DOFs), free nodes move under a test load; free-free NMA preserved when no anchors. SLOW: real nonlinear solve on a fixture holds the anchor.",
+      "milestone": "M-CANDO-COMPLETE",
+      "status": "done",
+      "notes": "Dirichlet anchors for the CanDo FEM (backend-only; anchors are a JOB-REQUEST annotation, never a Design/topology edit -- Three-Layer Law). apply_boundary_conditions(K,f,mesh,fixed_nodes=None) pins all 6 DOF of each anchor node; None OR empty list falls back to the legacy centroid pin (a stale selection that resolves to nothing never makes the system singular). solve_prestress_shape(...,fixed_nodes=) clamps them at every corotational load step -> the anchored region stays exactly at rest while the rest deflects under the loop/skip eigenstrain. resolve_anchor_nodes(design,mesh,anchors) reuses the SHARED oxDNA scope resolver (oxdna_interface.resolve_anchor_particles: overhang/cluster/domain/strand/base) -> per-nt (helix,bp,dir) keys collapsed onto the single duplex-core axis node per bp (both strands -> one node; out-of-core nts drop silently -- ssDNA ends, extra-base sentinel keys). predict_shape(design,*,anchors=None) threads anchors through BOTH nonlinear + linear paths and returns anchor_keys:[[helix,bp],...]. RMSF stays free-free NMA regardless (intrinsic flexibility; anchoring RMSF is a later refinement, not needed here). Oracle tests/test_cando_anchors.py 10 fast: synthetic beam pins held (u==0) & free tip moves under a test load; BC pins exactly the requested nodes / empty->centroid; resolver maps base+cluster scopes & drops stale; prestress solve holds the anchored node <1e-9 while the rest deflects >1e-3; unresolved anchor is a no-op (positions identical, free-free RMSF preserved via Pearson>0.999+mean-within-2% -- ARPACK no-v0 jitter, not an anchor effect). Fresh-context review: no correctness gaps (honest note: the free-free-RMSF assertion is green-by-construction since the RMSF path never receives anchors -- consistent w/ the stated oracle; positions no-op is the load-bearing check). Gates: 10/10 oracle, just test 4186 passed/66 skip/1 xfail (+1 known pre-existing job-archive xdist flaky, passes isolated), ruff clean on touched files. No card/UI -> display-vs-oracle N/A. main.js LOC delta=0. Substrate for C2 (E-field deflection needs an anchor to hold against)."
+    },
+    {
+      "id": "C2",
+      "track": "cando",
+      "engine": "CanDo FEM",
+      "feature": "E-field",
+      "title": "E-field: add uniform q*E per-node nodal load to the assemble_prestress_force vector (editable effective-charge const, same convention as oxDNA); predict_shape(design, field=..., anchors=...); nonlinear solve for large deflections",
+      "deps": [
+        "C1"
+      ],
+      "effort": "medium",
+      "leverage": "critical",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: shared measure_field_response (S4) on the FEM deflected frame -> anchor holds, free deflects along field, deflection monotone in field magnitude, zero-field -> no deflection. SLOW: nonlinear field solve on a tethered-arm fixture.",
+      "milestone": "M-CANDO-FIELD",
+      "status": "done",
+      "notes": "Uniform E-field body load for the CanDo FEM (backend-only; field is a JOB-REQUEST annotation like anchors, never a Design/topology edit -- Three-Layer Law). assemble_field_force(mesh, field) builds the equivalent nodal-force vector from the shared oxDNA descriptor {\"field_pN\":<force per NUCLEOTIDE, pN>, \"dir\":[x,y,z]} -- the SAME per-nucleotide force oxDNA applies per bead (OXDNA_FORCE_PN convention). Each duplex axis node carries FEM_FIELD_CHARGES_PER_NODE=2 backbones, so its translational load is 2*field_pN*dir_hat (pN), rotational DOF zero (a pure body force, no couple). None/{}/zero-mag/zero-dir -> exact zero vector; magnitude linear. The field is a DEAD load: assembled ONCE in global coords before the corotational loop and added to the per-step-reframed eigenstrain each of n_steps increments, so it stays fixed in the lab frame as the bundle bends (unlike the co-rotating loop/skip eigenstrain). Threaded through solve_prestress_shape(...,field=) (nonlinear) + predict_shape(design,*,anchors=,field=) both paths; a field needs >=1 anchor to hold against (COM drift), reusing C1 resolve_anchor_nodes. ORACLE = shared S4 shape_metrics.field_response_profile on the FEM deflected frame vs the same design field-OFF frame, measured on the RAW solved axis-node positions -- NOT predict_shape display positions, which are per-frame Kabsch-REPOSED onto the design (deformed_positions_with_axis) so straight(ref)+bent(cand) land in different poses and the anchor would spuriously drift ~5nm; the raw clamped-solve frame is a genuine common frame (6 end nodes fully constrain rigid body). tests/test_cando_field.py 7: assemble_field_force unit props (none/zero no-op, 2*chg/node translational-only direction, linear magnitude) FAST; end-to-end (anchored 6HB, transverse field) anchors held (drift ~0) + free deflects ALONG field (proj>=0.5nm) + monotone in |E| (fp 0.05->5.2nm, 0.1->10.4nm) + zero-field->no deflection (RED guard) + predict_shape(field=) threads through & field=None is a byte-identical no-op -- these 4 nonlinear-solve tests registered SLOW in conftest (each multiple corotational solves), unit tests stay fast. n_steps=8 converged+stable (fp>=~0.5 blows up the corotational solve; gentle fields chosen). Fresh-context review: no correctness gaps; predict_shape public S4 verdict proven indirectly (shares the exact solve_prestress_shape(field=) the property tests validate) -- documented, inherent (S4 on the Kabsch display frame would falsely fail). Gates: 7/7 oracle, just test 4194 passed/66 skip/1 xfail, ruff clean on touched. No card/UI -> display-vs-oracle N/A (like C1). main.js LOC delta=0. Closes M-CANDO-FIELD (C1,C2,S4,S5,O1 all done): the cheap FEM now predicts the oxDNA field-deflection regime (anchored tethered-arm, deflection along field, monotone) with the SAME per-nt force convention -- the C5 field-source builder must emit field-response from the RAW frame, not predict_shape display positions."
+    },
+    {
+      "id": "C3",
+      "track": "cando",
+      "engine": "CanDo FEM",
+      "feature": "extra-bases",
+      "title": "Extra crossover bases as mechanical elements (compliant FJC / nick-soft connector, CanDo CONN3D2 analogue) in build_fem_mesh, from Crossover.extra_bases; currently display-only gap-fill",
+      "deps": [],
+      "effort": "medium",
+      "leverage": "high",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: a design with inserts vs without -> inserts measurably soften local twist/bend (compare_descriptors delta beyond tol, correct sign). Mesh node/element count reflects inserts.",
+      "milestone": "M-CANDO-COMPLETE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "C4",
+      "track": "cando",
+      "engine": "CanDo FEM",
+      "feature": "linkers",
+      "title": "Linkers / overhang connections as FJC connector elements coupling parts/domains in build_fem_mesh, from overhang_connections/extensions",
+      "deps": [
+        "C3"
+      ],
+      "effort": "medium",
+      "leverage": "medium",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: two parts joined by a linker element show coupled response under a test load on one part (the other moves); no linker -> decoupled.",
+      "milestone": "M-CANDO-COMPLETE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "C5",
+      "track": "cando",
+      "engine": "CanDo FEM",
+      "feature": "comparison-metric",
+      "title": "CanDo contribution to comparison card: emit shared descriptors from predict_shape output + register CanDo as a compare-source (RMSF reference column)",
+      "deps": [
+        "S5"
+      ],
+      "effort": "low",
+      "leverage": "high",
+      "fast_slow": "fast+MV",
+      "oracle": "CanDo descriptors match the exp36 calibration values within tol; appears as a selectable engine in the card; MV live check.",
+      "milestone": "M-CANDO-COMPLETE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "M1",
+      "track": "mrdna",
+      "engine": "mrDNA",
+      "feature": "anchors",
+      "title": "Anchors via ARBD restraints / fixed particles, headless entry point; reuse the shared anchor-scope resolver",
+      "deps": [],
+      "effort": "medium",
+      "leverage": "medium",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: ARBD input carries the restraint block for resolved anchor beads. SLOW: real ARBD run -> anchored beads hold, free beads move.",
+      "milestone": "M-ALL-ANCHORS-FIELD",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "M2",
+      "track": "mrdna",
+      "engine": "mrDNA",
+      "feature": "E-field",
+      "title": "E-field via ARBD constant / grid force per bead (charge-scaled); headless",
+      "deps": [
+        "M1"
+      ],
+      "effort": "medium",
+      "leverage": "high",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: shared field-response on a mock deflected frame; force block written correctly. SLOW: real ARBD anchored field run -> deflection along field.",
+      "milestone": "M-ALL-ANCHORS-FIELD",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "M3",
+      "track": "mrdna",
+      "engine": "mrDNA",
+      "feature": "extra-bases",
+      "title": "Extra crossover bases into the ARBD MODEL (verify past the existing display bridge extra_base_flank_keys -> beads present in the simulated model)",
+      "deps": [],
+      "effort": "medium",
+      "leverage": "medium",
+      "fast_slow": "fast",
+      "oracle": "FAST: model bead count includes inserts; inserts are ssDNA (flexible, non-rigid) in the ARBD topology.",
+      "milestone": "M-FULL-COVERAGE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "M4",
+      "track": "mrdna",
+      "engine": "mrDNA",
+      "feature": "linkers",
+      "title": "Linkers / overhang connections threaded through to the ARBD model",
+      "deps": [
+        "M3"
+      ],
+      "effort": "medium",
+      "leverage": "medium",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: linker beads/bonds present in the ARBD model. SLOW: joined parts co-move.",
+      "milestone": "M-FULL-COVERAGE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "M5",
+      "track": "mrdna",
+      "engine": "mrDNA",
+      "feature": "comparison-metric",
+      "title": "mrDNA metrics-card + shared descriptors (RMSF from CG trajectory; fix the copy-key gap in _display_positions flagged in project_oxdna_extra_bases)",
+      "deps": [
+        "S5"
+      ],
+      "effort": "medium",
+      "leverage": "medium",
+      "fast_slow": "fast+MV",
+      "oracle": "descriptors emitted + selectable in card; copy-key coverage test; MV live check.",
+      "milestone": "M-FULL-COVERAGE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "N1",
+      "track": "namd",
+      "engine": "NAMD MD",
+      "feature": "E-field",
+      "title": "E-field: emit native eField / eFieldOn block in md_protocols.py conf generation (q*E on charged atoms) + a Dynamics-tab UI control",
+      "deps": [],
+      "effort": "low",
+      "leverage": "high",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: generated conf contains eFieldOn + eField vector with the correct magnitude/direction. SLOW: short run + shared field-response descriptor.",
+      "milestone": "M-ALL-ANCHORS-FIELD",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "N2",
+      "track": "namd",
+      "engine": "NAMD MD",
+      "feature": "anchors",
+      "title": "Anchors surfaced in the MD job UI: harmonic restraints (consref/conskfile already wired) driven by an anchor picker + shared scopes; optional fixedAtoms",
+      "deps": [],
+      "effort": "low",
+      "leverage": "medium",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: restraints PDB marks exactly the resolved anchor atoms; conf enables constraints. SLOW: short run -> anchored atoms hold.",
+      "milestone": "M-ALL-ANCHORS-FIELD",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "N3",
+      "track": "namd",
+      "engine": "NAMD MD",
+      "feature": "extra-bases",
+      "title": "Extra bases + linkers: validation coverage for the already-wired atomistic path + emit shared descriptors from MD frames",
+      "deps": [],
+      "effort": "low",
+      "leverage": "medium",
+      "fast_slow": "fast",
+      "oracle": "FAST: atomistic model includes insert/linker atoms; descriptors computable from an MD frame.",
+      "milestone": "M-FULL-COVERAGE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "N4",
+      "track": "namd",
+      "engine": "NAMD MD",
+      "feature": "comparison-metric",
+      "title": "NAMD contribution to comparison card: bridge existing md RMSF/metrics into shared descriptors; register NAMD as gold-override compare-source",
+      "deps": [
+        "S5"
+      ],
+      "effort": "medium",
+      "leverage": "medium",
+      "fast_slow": "fast+MV",
+      "oracle": "NAMD descriptors selectable in card; when present, override reference per policy; MV live check.",
+      "milestone": "M-FULL-COVERAGE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "O1",
+      "track": "oxdna",
+      "engine": "oxDNA",
+      "feature": "comparison-metric",
+      "title": "Emit shared descriptors from oxDNA relaxed/production frames into the comparison card (the reference column for shape + field-deflection)",
+      "deps": [
+        "S1"
+      ],
+      "effort": "low",
+      "leverage": "high",
+      "fast_slow": "fast",
+      "oracle": "oxDNA descriptors match existing oxdna_health twist/curvature values within tol; selectable + default reference in card.",
+      "milestone": "M-CANDO-FIELD",
+      "status": "done",
+      "notes": "Wires the FIRST live source into the S5 comparison card (was getSources:()=>[]). backend/core/oxdna_shape_source.py build_oxdna_shape_source(shape_frame, core_reference, rmsf_positions?, field?) — PURE Physical-layer assembly: core-filters the relaxed frame to the rigid dsDNA core (_filter_to_reference_core against core_reference_geometry, same mask the metrics use; ssDNA ends dropped), computes compute_shape_descriptors (S1) on it, maps production_rmsf positions ({...,'rmsf'}) -> the card's rmsf profile shape ({helix_id,bp_index,direction,copy,rmsf_nm}), returns {engine:'oxdna', descriptors, rmsf, shape_frame(core), field}. Empty core mask -> descriptors/shape_frame None (no comparable frame). Route GET /oxdna/jobs/{id}/shape-source in routes_oxdna.py reads the latest relaxed last_conf via _relaxed_full_map (SAME frame /display shows) + optional RMSF from any production/field stage with frames; returns {ready, stage_name, n_frames, ...bundle}. Frontend: api.getOxdnaShapeSource + oxdna_jobs_panel getSources now async-fetches the selected job's bundle -> [src] (main.js Delta=0). REVIEW-CAUGHT (claim, not bug): descriptors are oxDNA's ABSOLUTE twist/bend on the relaxed frame (the cross-engine-comparable value), NOT the DIFFERENTIAL (measured-analytic) twist the Graphs-&-Metrics card plots over the production trajectory -> corrected the docstrings + MV-21 wording so nobody expects the two cards to show equal numbers; absolute is the right choice for oxDNA-abs-vs-CanDo-abs. Oracle tests/test_oxdna_shape_source.py 7 fast: descriptors==measure_bundle_twist(core) (same estimator, self-consistent), core mask drops ssDNA ends, rmsf 'rmsf'->'rmsf_nm' remap (None dropped), field passthrough, bundle drops into build_comparison_report as ready oxdna SHAPE reference, RED: empty core ref -> None descriptors. Gates: 7/7 oracle, just test 4177 passed/66 skip/1 xfail, ruff clean on touched, vitest 2200, smoke green (pre-work). Live-on-real-relaxed-job eyeball = MV-21 (updated: oxDNA column now live; cross-engine deltas await C5). Field emission from a field JOB (field_response_profile w/ pre-field ref + anchor_keys) NOT done here -> field:None for now; a natural follow-up when C2 needs the oxDNA field reference."
+    },
+    {
+      "id": "O2",
+      "track": "oxdna",
+      "engine": "oxDNA",
+      "feature": "maintenance",
+      "title": "Close residual oxDNA gaps as they surface (extra-base CG render v2; linker coverage completeness)",
+      "deps": [],
+      "effort": "low",
+      "leverage": "low",
+      "fast_slow": "fast",
+      "oracle": "per-gap; only pull when a concrete gap is logged.",
+      "milestone": "M-FULL-COVERAGE",
+      "status": "pending",
+      "notes": ""
+    }
   ]
 }

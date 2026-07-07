@@ -39,6 +39,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
+| **(C2) CanDo E-field (S4 on FEM frame)** ✅ | `assemble_field_force`: uniform body load = 2·`field_pN`·dir_hat/node (duplex node = 2 backbones), translational DOF only, None/zero-mag/zero-dir→zero vector, linear in magnitude; end-to-end (S4 `field_response_profile` on the RAW clamped-solve frame, NOT Kabsch-reposed display frame): anchors held (drift≈0) + free deflects ALONG field (proj≥0.5nm) + MONOTONE in \|E\| + zero-field→no deflection (RED); `predict_shape(field=)` threads through & `field=None` is a byte-identical no-op | `backend/physics/fem_solver.py::{assemble_field_force,solve_prestress_shape,predict_shape}`, `tests/test_cando_field.py` | every engine's E-FIELD task (M2/N1) — same `{field_pN,dir}` per-nt-force descriptor; **C5 field-source must emit field-response from the RAW frame, not display positions** |
 
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
@@ -301,6 +302,51 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   and shares the exact `resolve_anchor_particles` scope resolver with the oxDNA/mrDNA/NAMD anchor tasks
   (M1/N2), so "anchor scope X" means the same nucleotides across all four engines.
 
+### 2026-07-06 — `C2` CanDo FEM uniform E-field (closes M-CANDO-FIELD)
+
+- **Picked** `C2` — deps (C1) now met; the **M-CANDO-FIELD headline** and the only task left for that milestone.
+  Rubric: shared-metric track done, anchors-before-field satisfied (C1), C2 is critical-leverage + closes a
+  milestone. "Does the cheap FEM predict oxDNA's field deflection?" is the whole point of the CanDo track.
+- **What shipped.** A uniform electric-field body load for the CanDo FEM shape solve — backend-only; the field is
+  a **job-request annotation, never a topology edit** (Three-Layer Law), threaded exactly like C1's anchors.
+  - `assemble_field_force(mesh, field)` — builds the equivalent nodal-force vector from the **shared oxDNA
+    descriptor** `{"field_pN": <force per NUCLEOTIDE, pN>, "dir": [x,y,z]}` (the SAME per-nt force oxDNA applies
+    per bead — `OXDNA_FORCE_PN` convention). Each duplex axis node carries `FEM_FIELD_CHARGES_PER_NODE=2`
+    backbones → translational load `2·field_pN·dir_hat` (pN), rotational DOF zero (a pure body force). `None` /
+    `{}` / zero-mag / zero-dir → exact zero vector; magnitude linear.
+  - **Dead load, not co-rotating.** Assembled ONCE in global coords before the corotational loop and added to the
+    per-step-reframed eigenstrain each of `n_steps` increments — so it stays fixed in the lab frame as the bundle
+    bends (the E-field doesn't rotate with the DNA, unlike the loop/skip eigenstrain). Threaded through
+    `solve_prestress_shape(..., field=)` (nonlinear) + `predict_shape(design, *, anchors=, field=)`. A field needs
+    ≥1 anchor to hold against (COM drift) — reuses C1's `resolve_anchor_nodes`.
+- **Oracle** `tests/test_cando_field.py` (**7 tests**), scored by the shared **S4** `field_response_profile` —
+  the exact descriptor oxDNA is validated on. 3 fast `assemble_field_force` unit props (none/zero no-op,
+  2·chg/node translational-only + normalized direction, linear magnitude); 4 end-to-end nonlinear-solve tests
+  (registered **slow** in conftest): anchored 6HB + transverse field → **anchors held (drift≈0) + free deflects
+  ALONG field (proj≥0.5nm)** (the S4 verdict) + **monotone in |E|** (fp 0.05→5.2nm, 0.1→10.4nm) + **zero-field →
+  no deflection** (RED guard: else the eigenstrain, not the field, is driving) + `predict_shape(field=)` threads
+  through & `field=None` is byte-identical to omitting it.
+  - **KEY: measured on the RAW clamped-solve frame, NOT `predict_shape`'s display positions.** `predict_shape` →
+    `deformed_positions_with_axis` Kabsch-**reposes** each frame onto the displayed design geometry with a
+    per-frame rigid transform, so the straight (field-off) and bent (field-on) frames land in DIFFERENT poses and
+    the anchor spuriously "drifts" ~5nm. The raw solved axis-node frame is a genuine common frame (the 6 clamped
+    end nodes fully constrain rigid-body motion) → no alignment needed, anchor drift ≈0. **→ the C5 field-source
+    builder must emit field-response from the RAW frame, not display positions** (banked below).
+  - `n_steps=8` — converged (proj stable across 8→30) and stable; the corotational solve **blows up (element
+    inversion → `L**3` overflow) for `field_pN ≳ 0.5`**, so gentle fields (0.05–0.1) were chosen for the oracle.
+  - Fresh-context review: **no correctness gaps**. Honest limitation: the public `predict_shape(field=)`'s S4
+    verdict is proven only *indirectly* — it routes through the exact `solve_prestress_shape(field=)` the property
+    tests validate; asserting S4 on its Kabsch-reposed display frame would falsely fail (inherent, documented).
+- **Gates.** oracle 7/7; `just test` = **4194 passed / 66 skipped / 1 xfailed** (+8 vs C1's 4186 = the 7 new
+  tests; no drops; slow suite ran under load ~50 from its own real oxDNA+NAMD sim tests → 12min wall, not a
+  regression); ruff clean on all 3 touched files. No card/UI → **display-vs-oracle Playwright N/A** (like C1).
+  **main.js LOC Δ = 0** (backend-only).
+- **Comparable prediction gained, not just a run:** the cheap CanDo FEM now reproduces the **oxDNA field-deflection
+  regime** — an anchored tethered-arm whose free region deflects *along* the applied field, *monotone* in field
+  magnitude, driven by the *same per-nucleotide force* oxDNA uses. **Closes M-CANDO-FIELD** (C1, C2, S4, S5, O1 all
+  done): the shared S4 descriptor now scores both engines from the same load, so a real oxDNA-vs-CanDo field
+  cross-validation is one C5 field-source wiring away.
+
 ## Lessons (anti-patterns banked)
 
 ### Banked from O1
@@ -322,6 +368,21 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   engines, collapse to the coarsest shared unit (per base pair) first. `normalize_rmsf_profile` already knew
   this (emits both strands for a dir-less entry); the new code initially didn't. **A green oracle that hand-
   matches `direction` on both sides is green-by-construction** — pin the *mixed*-convention case explicitly.
+
+### Banked from C2
+
+- **Field-response must be measured on the RAW solve frame, not the display frame.** `predict_shape` Kabsch-
+  reposes each output frame onto the displayed design geometry with a *per-frame* rigid transform (for overlay).
+  Comparing a field-off and a field-on `predict_shape` output therefore compares two *differently-posed* frames,
+  and an anchored region that is genuinely clamped at rest appears to "drift" several nm. `field_response_profile`
+  is deliberately NOT Kabsch-aligned (the anchored region IS the common frame) — so it must be fed the RAW
+  clamped-solve node positions, where the anchor sits at identical positions in both frames. **Any engine's field-
+  source builder (C5/M2/N4) must emit its deflection descriptor from the pre-display / pre-alignment frame.** A
+  green oracle built on the display frame would either falsely fail or silently mis-measure the anchor hold.
+- **A corotational eigenstrain+field solve is only conditionally stable.** Large body loads invert elements
+  (`L→0`/huge → `L**3` overflow) before the physics is wrong. Pick load magnitudes in the converged, stable band
+  and assert *properties* (monotone, along-field, held) rather than absolute deflection matching a calibration —
+  the absolute V/m→force calibration is a separate, deferred concern (editable effective-charge, per the plan).
 
 ## Difficulties ledger (genuinely-stuck items + why)
 

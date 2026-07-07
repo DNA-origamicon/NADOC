@@ -407,6 +407,12 @@ _SLOW_TESTS = {
     # test_oxdna_relaxation.py (seed geometry + crossover-stretch on bent bundle)
     "test_seed_geometry_falls_back_for_bent_bundle",
     "test_max_crossover_stretch_detects_compaction_desync",
+    # test_cando_field.py (C2 E-field: each is multiple nonlinear corotational solves on
+    # a 6HB; the assemble_field_force UNIT tests stay fast — pure force-vector math)
+    "test_anchored_field_deflects_free_region_along_field",
+    "test_deflection_is_monotone_in_field_magnitude",
+    "test_zero_field_produces_no_deflection",
+    "test_predict_shape_field_threads_through_and_changes_shape",
 }
 
 

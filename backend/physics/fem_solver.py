@@ -116,6 +116,12 @@ RISE_SS = 0.63     # nm — ssDNA rise per base (single-stranded)
 KBT     = 4.11     # pN·nm — thermal energy at ~298 K (CanDo RMSF reference temperature)
 
 K_PENALTY = 1.0e6  # pN/nm — effective spring constant for "rigid" crossovers
+# E-field body load: the shared field descriptor stores force-per-NUCLEOTIDE in pN
+# (the cross-engine-comparable value; oxDNA applies exactly this per bead — see
+# oxdna_interface.OXDNA_FORCE_PN + project_oxdna_efield). A duplex FEM axis node
+# carries BOTH strands of one bp = two charged backbones, so its nodal load is
+# 2 × force_per_nt along the field direction (same convention, doubled per node).
+FEM_FIELD_CHARGES_PER_NODE = 2
 N_RMSF_MODES = 200 # lowest eigenmodes for RMSF (CanDo uses 200 modes + equipartition @ 298 K)
 _MIN_FEM_NODES = 2 # a beam FEM needs ≥1 element (2 nodes); fewer duplex bp → nothing to solve
 
@@ -547,6 +553,43 @@ def assemble_prestress_force(mesh: FEMMesh, design: Design,
     return f
 
 
+# ── External E-field body load ──────────────────────────────────────────────────
+
+def assemble_field_force(mesh: FEMMesh, field: Optional[dict]) -> np.ndarray:
+    """Equivalent nodal-force vector for a uniform electric field (E-field body load).
+
+    A uniform field applies the SAME constant force to every charged backbone bead —
+    the tethered-arm regime (Kopperger 2018): with part of the bundle anchored, the free
+    region deflects along the force while the anchors absorb the net thrust (see
+    ``project_oxdna_efield``; a field run WITHOUT an anchor just streams the whole COM).
+
+    ``field`` mirrors the shared oxDNA descriptor: ``{"field_pN": <force per nucleotide,
+    pN>, "dir": [x, y, z]}`` — the same per-nucleotide force oxDNA applies per bead, so the
+    two engines are driven by an identical, comparable load. Each duplex axis node carries
+    :data:`FEM_FIELD_CHARGES_PER_NODE` (=2) backbones, so its translational load is
+    ``2 · field_pN · dir_hat`` (pN); rotational DOF get none (a pure body force, no couple).
+    ``None`` / zero magnitude / zero direction → a zero vector (no field, exact no-op).
+
+    Three-Layer Law: the field is a JOB-REQUEST annotation read here only; it never touches
+    topology. Unlike the loop/skip eigenstrain (which co-rotates with the elements in the
+    corotational solve), this is a DEAD load — fixed in the lab frame as the bundle bends —
+    so it is assembled once in global coordinates and NOT reframed per load step.
+    """
+    n_dof = 6 * len(mesh.nodes)
+    f = np.zeros(n_dof, dtype=float)
+    if not field:
+        return f
+    mag_pn = float(field.get("field_pN", 0.0) or 0.0)
+    direction = np.asarray(field.get("dir") or (0.0, 0.0, 0.0), dtype=float)
+    dnorm = float(np.linalg.norm(direction))
+    if mag_pn == 0.0 or dnorm <= 1e-12:
+        return f
+    force_vec = FEM_FIELD_CHARGES_PER_NODE * mag_pn * (direction / dnorm)   # pN, global
+    for node in range(len(mesh.nodes)):
+        f[6 * node: 6 * node + 3] += force_vec       # translational DOF only
+    return f
+
+
 # ── Boundary conditions ────────────────────────────────────────────────────────
 
 def apply_boundary_conditions(
@@ -612,6 +655,7 @@ def solve_prestress_shape(
     mesh: FEMMesh,
     n_steps: int = 30,
     fixed_nodes: Optional[List[int]] = None,
+    field: Optional[dict] = None,
 ) -> np.ndarray:
     """Geometrically-nonlinear equilibrium shape under the loop/skip eigenstrain.
 
@@ -626,12 +670,19 @@ def solve_prestress_shape(
     ``fixed_nodes`` (anchor node indices) are held clamped at every load step, so
     the anchored region stays at its rest position while the rest deflects; with
     ``None`` the centroid pin is used (pure free relaxation).
+
+    ``field`` (optional, :func:`assemble_field_force`) adds a uniform E-field body load
+    on top of the eigenstrain. It is a DEAD load — computed once in global coordinates and
+    applied in the same ``n_steps`` increments — so as the bundle bends the field keeps
+    pointing along the lab-frame direction (unlike the co-rotating eigenstrain). A field
+    load needs an anchor to hold against (COM drift); with none, the centroid pin absorbs it.
     """
     positions = [n.position.copy() for n in mesh.nodes]
+    f_field = assemble_field_force(mesh, field)      # dead load: global, not reframed
     for _ in range(n_steps):
         _reframe_elements(mesh, positions)
         K, _ = assemble_global_stiffness(mesh)
-        f = assemble_prestress_force(mesh, design) / n_steps
+        f = (assemble_prestress_force(mesh, design) + f_field) / n_steps
         K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         du = solve_equilibrium(K_free, f_free, K.shape[0], free)
         for i in range(len(positions)):
@@ -1123,6 +1174,7 @@ def predict_shape(
     n_steps: int = 20,
     with_rmsf: bool = True,
     anchors: Optional[List[dict]] = None,
+    field: Optional[dict] = None,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
 
@@ -1140,6 +1192,14 @@ def predict_shape(
     centroid-pinned solve (a no-op). Anchors are a job-request annotation, never a topology
     edit. The RMSF stays the free-free NMA flexibility regardless (an intrinsic property of
     the elastic network, calibrated against CanDo).
+
+    ``field`` (optional) is the shared uniform-E-field descriptor ``{"field_pN", "dir"}``
+    (:func:`assemble_field_force`) — the same per-nucleotide force oxDNA applies — added as a
+    dead body load and solved (nonlinearly by default) for the deflection. A field needs
+    ≥1 anchor to hold against (COM drift): pass ``anchors`` alongside it. The comparable
+    field-response descriptor is measured by ``shape_metrics.field_response_profile`` on the
+    returned frame vs the same design's field-off frame (the C2 oracle). Also a job-request
+    annotation, never a topology edit.
 
     Three-Layer Law: the returned positions are DISPLAY-ONLY (Physical layer); this never
     mutates the topological or geometric layers. Returns::
@@ -1170,13 +1230,13 @@ def predict_shape(
 
     if nonlinear:
         positions = solve_prestress_shape(
-            design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes)
+            design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes, field=field)
         u = np.zeros(6 * len(mesh.nodes), dtype=float)
         for i in range(len(mesh.nodes)):
             u[6 * i: 6 * i + 3] = positions[i] - mesh.nodes[i].position
     else:
         K, _ = assemble_global_stiffness(mesh)
-        f = assemble_prestress_force(mesh, design)
+        f = assemble_prestress_force(mesh, design) + assemble_field_force(mesh, field)
         K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         u = solve_equilibrium(K_free, f_free, K.shape[0], free)
 

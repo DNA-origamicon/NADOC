@@ -111,6 +111,21 @@ fills in as milestones complete.
   *anchored* equilibrium shape (rest of the bundle deflects, anchor held to 1e-9) — the anchored boundary
   condition every anchored-field cross-validation needs, unblocking C2 and the M-CANDO-FIELD milestone.
 
+- **`C2` — CanDo FEM uniform E-field** · shape: **solver-change** (`fem_solver.py`: new `assemble_field_force`
+  uniform body load; `field=` threaded through `solve_prestress_shape` + `predict_shape`; `FEM_FIELD_CHARGES_PER_NODE`
+  const) · feature: **E-field** (CanDo — second of its four) · engines now comparable: CanDo predicts the
+  **field-deflection regime** (anchored tethered-arm, free deflects along field, monotone in |E|) from the SAME
+  per-nucleotide `{field_pN, dir}` force oxDNA applies — the shared **S4** `field_response_profile` now scores both
+  from one load · oracle: `tests/test_cando_field.py` 7 tests (3 `assemble_field_force` unit props **fast**;
+  4 end-to-end nonlinear-solve property tests **slow**) — anchors held (drift≈0) + free proj≥0.5nm along field +
+  monotone (fp 0.05→5.2nm, 0.1→10.4nm) + zero-field→no-deflection RED, measured on the **RAW clamped-solve frame**
+  (not the Kabsch-reposed display frame) · main.js LOC Δ = 0 · tests: 7/7 oracle, `just test` 4194 passed / 66
+  skipped / 1 xfailed (no drop); no card/UI → display-vs-oracle N/A · review-caught: none (honest note —
+  `predict_shape(field=)`'s S4 verdict is proven indirectly via the shared `solve_prestress_shape(field=)`) ·
+  **Comparable prediction gained, not just a run:** the cheap CanDo FEM now reproduces oxDNA's anchored
+  field-deflection (along-field, monotone, same per-nt force) scored by the shared S4 descriptor — **closes
+  M-CANDO-FIELD**; a real oxDNA-vs-CanDo field agreement number is one C5 field-source wiring away.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -133,8 +148,8 @@ requirement)._
 | Milestone | Meaning | Status |
 |---|---|---|
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
-| `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | pending — **only C2 left** (C1,S4,S5,O1 done) |
-| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1 ✅; C2–C5 left) |
+| `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | **DONE** (C1,C2,S4,S5,O1 shipped 2026-07-06) — FEM predicts the anchored field-deflection regime from oxDNA's per-nt force; real agreement number awaits C5 field-source |
+| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1,C2 ✅; C3–C5 left) |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 
