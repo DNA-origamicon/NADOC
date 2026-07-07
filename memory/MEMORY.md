@@ -9,6 +9,7 @@ Index only. Open the topic file when relevant. Hard rules + commands live in `CL
 - **[tech_debt](project_tech_debt.md)** — ledger of code flagged for review/removal.
 - **`FEATURE_DEVELOPMENT.md` (repo root)** — module-first guardrails; READ BEFORE ADDING ANY FEATURE. New cohesive logic → new tested module (`initX({deps})→{api}`); `main.js` gains only imports+factory init+thin wiring (LOC flat-or-lower).
 - **[reference_assembly_test_fixture](reference_assembly_test_fixture.md)** — `workspace/Belt_test1.nass` = reference assembly fixture. Use for any assembly test.
+- **[reference_efield_crossval_fixture](reference_efield_crossval_fixture.md)** — `workspace/6hb_e_test.nadoc` = anchored-E-field cross-validation standard (both end overhangs pinned → transverse field bows the 6HB); bow = existing `field_response_profile`/`compute_shape_descriptors`, agreement via `compare_field_response`.
 - **`issues_ledger.md` + `issues_fix_log.md` (repo root)** — "fix next issue" loop: repro-test FIRST → ask behavior → one phase → don't grow main.js. Read its "Next-session handoff".
 - **`backend_router_carveup.md` + `backend_router_extraction_log.md` (repo root)** — backend god-file carve-up (`crud.py`/`assembly.py` → `routes_<area>.py`). `/carve-router`. Metric = back-import surface B≤3, not LOC.
 - **`manual_validation_debt.md` (repo root)** — shift-register of "live gesture NOT hand-checked" features. One item/loop; `MV-N` rows.
