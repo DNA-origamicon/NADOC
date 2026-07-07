@@ -13,6 +13,7 @@ GET /api/jobs/active   every currently-busy (running/preparing) MD or oxDNA job,
 
 from __future__ import annotations
 
+import importlib
 import logging
 from pathlib import Path
 from typing import Optional
@@ -108,6 +109,10 @@ def _collect_active() -> list[dict]:
                 # cluster and consumes no local resources — the concurrent-launch guard
                 # ignores remote jobs (they can't contend for the local GPU/disk).
                 "execution_target": getattr(j, "execution_target", "local"),
+                # NAMD always runs GPU-resident here, so a local MD job holds the GPU.
+                # The frontend guard only makes two GPU jobs block each other; a CPU-only
+                # run (a CPU-backend oxDNA job) may launch alongside it.
+                "resource_class": "gpu",
                 "eta_seconds": _md_eta_seconds(j, ws) if j.status.value == "running" else None,
             })
     except Exception:  # noqa: BLE001
@@ -133,10 +138,48 @@ def _collect_active() -> list[dict]:
                 "status": j.status.value,
                 # oxDNA has no remote backend — every oxDNA job runs locally.
                 "execution_target": "local",
+                # A CUDA-backend oxDNA run holds the GPU; a CPU-backend run (e.g. an
+                # E-field study) uses only spare cores and can share the machine with a
+                # GPU job. The guard keys off this to decide what actually contends.
+                "resource_class": "gpu" if getattr(j, "backend", "CUDA") == "CUDA" else "cpu",
                 "eta_seconds": _oxdna_eta_seconds(j, ws) if j.status.value == "running" else None,
             })
     except Exception:  # noqa: BLE001
         logger.exception("active-jobs: failed to scan oxDNA jobs")
+
+    # ── LAMMPS · mrDNA · CanDo ────────────────────────────────────────────────
+    # The three newer engines share the same job model (list_jobs + a status enum
+    # + reconcile_*), so one loop covers them.  Resource class: LAMMPS (CPU-parallel
+    # oxDNA) and CanDo (in-process FEM) run on the CPU; mrDNA drives ARBD on the GPU.
+    # None has a remote backend (all local) and none reports a live ETA yet, so the
+    # welcome spinner shows a bare "running…" for these.
+    for engine, mod_job, mod_runner, cls_name, recon_name, res in (
+        ("lammps", "lammps_job", "lammps_runner", "LammpsJob", "reconcile_lammps_status", "cpu"),
+        ("mrdna",  "mrdna_job",  "mrdna_runner",  "MrdnaJob",  "reconcile_mrdna_status",  "gpu"),
+        ("cando",  "cando_job",  "cando_runner",  "CandoJob",  "reconcile_cando_status",  "cpu"),
+    ):
+        try:
+            JobCls = getattr(importlib.import_module(f"backend.core.{mod_job}"), cls_name)
+            reconcile = getattr(importlib.import_module(f"backend.core.{mod_runner}"), recon_name)
+            for j in JobCls.list_jobs(ws):
+                try:
+                    j = reconcile(j, ws)
+                except Exception:  # noqa: BLE001
+                    pass
+                if j.status.value not in _BUSY:
+                    continue
+                out.append({
+                    "engine": engine,
+                    "job_id": j.job_id,
+                    "design_name": j.design_name,
+                    "design_source_path": j.design_source_path,
+                    "status": j.status.value,
+                    "execution_target": "local",
+                    "resource_class": res,
+                    "eta_seconds": None,
+                })
+        except Exception:  # noqa: BLE001
+            logger.exception("active-jobs: failed to scan %s jobs", engine)
 
     return out
 

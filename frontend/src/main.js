@@ -199,6 +199,7 @@ import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initCandoDisplay } from './ui/cando_display.js'
 import { initCandoLegend } from './ui/cando_legend.js'
+import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
 import { initCandoCylinders } from './scene/cando_cylinders.js'
 import { initMrdnaConnections } from './scene/mrdna_connections.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
@@ -1994,6 +1995,10 @@ async function main() {
     if (e.detail?.activeTab !== 'dynamics') anchorGlow.clear()
   })
   if (import.meta.env.DEV) window.__nadocOxdnaFloor = oxdnaFloorSetup
+
+  // Spinner on each engine's section header while that engine has a running/preparing
+  // job (one shared /api/jobs/active poll drives all five headers).
+  initEngineActivityHeaders()
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {

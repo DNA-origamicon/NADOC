@@ -22,7 +22,7 @@ import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
-import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
+import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
 import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
 import { initShapeCompareCard } from './shape_compare_card.js'
 import { showConfirm } from './primitives/confirm.js'
@@ -35,7 +35,7 @@ import { flattenJobTree, descendantIds } from './job_tree.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
-import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
+import { confirmNoConcurrentJob, confirmGpuLaunch, confirmDiskSpaceOk } from './job_activity.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -393,7 +393,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, oxdnaLive = null, getDesignLattice = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -793,13 +793,24 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // init below, because the player's onBeforePlay callback reads _trajPrep).
   let _trajBaseText = '', _trajBaseColor = _C.ok, _heavyBuildKind = null, _trajPrep = null
   let _flexBaseText = '', _flexBaseColor = _C.dim
+  // Composite-trajectory stage list (each {name, kind, n_frames, field}) — lets the
+  // E-field arrow follow whichever run in a chain is on screen as the user scrubs.
+  // _lastTrajField tracks the last-applied field so a seek only re-aims the arrow at
+  // a stage boundary, not every frame.
+  let _trajStages = [], _lastTrajField
+  const _applyTrajField = (i) => {
+    const f = fieldAtFrame(_trajStages, i)
+    if (f === _lastTrajField) return
+    _lastTrajField = f
+    onTrajectoryField?.(f)
+  }
 
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
   // Heavy reps (atomistic/surface) rebuild each frame slowly, so PLAY first pre-builds
   // every coarse playback frame (spinner + "building k/N"), then runs the loop smoothly.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
-    onSeek: (i) => oxdnaDisplay?.showFrame(i),
+    onSeek: (i) => { oxdnaDisplay?.showFrame(i); _applyTrajField(i) },
     onBeforePlay: async () => {
       if (!oxdnaDisplay) return true
       oxdnaDisplay.setPlaying(true)
@@ -953,15 +964,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── Launch ─────────────────────────────────────────────────────────────────
   runBtn?.addEventListener('click', async () => {
     if (_launching || !_available) return
-    if (!(await confirmNoConcurrentJob())) return
-    if (!(await confirmGpuNotBusy(deviceInput?.value || '0'))) return
+    // Resource-aware guard: oxDNA can run its MD stages on the CPU backend, so if
+    // the GPU is busy the user is offered a CPU fallback instead of a hard block.
+    const wantGpu = (backendSel?.value || 'CUDA') === 'CUDA'
+    const gpuDecision = await confirmGpuLaunch({
+      usesGpu: wantGpu,
+      hasCpuAlternative: wantGpu,
+      devices: deviceInput?.value || '0',
+    })
+    if (gpuDecision === 'cancel') return
+    const runBackend = gpuDecision === 'cpu' ? 'CPU' : (backendSel?.value || 'CUDA')
     oxdnaLive?.stop()   // a relaxation supersedes any live session (shared overlay)
     _launching = true
     runBtn.disabled = true
     _setStatus('Preparing relaxation job…', _C.accent)
     _updateButtons(_selectedJob())   // show the relax spinner immediately
     const body = {
-      backend:            backendSel?.value || 'CUDA',
+      backend:            runBackend,
       device:             deviceInput?.value || '0',
       salt_concentration: parseFloat(saltInput?.value || '0.5'),
       mc_steps:           parseInt(mcStepsInput?.value || '1000', 10),
@@ -1111,7 +1130,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
     row.append(sym)
     row.dataset.jobId = job.job_id   // stable per-row selector (rows are otherwise id-less)
-    row.addEventListener('click', () => { _selectJob(job.job_id) })
+    // An explicit list click confirms before unloading a loaded trajectory (see _selectJob).
+    row.addEventListener('click', () => { _selectJob(job.job_id, { confirmTrajUnload: true }) })
     return row
   }
 
@@ -1119,9 +1139,27 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // conditions into every card (field arrow / surface / anchors), and follow the
   // OxDNA display to it.  Used by row clicks AND by auto-selecting a freshly
   // started run so the new list item is selected.
-  async function _selectJob(jobId) {
+  async function _selectJob(jobId, { confirmTrajUnload = false } = {}) {
     const job = _jobs.find(j => j.job_id === jobId)
     if (!job) return
+    // A loaded trajectory belongs to the job it was loaded from, so it stays on
+    // screen until the user closes the session (leaves the tab / switches design)
+    // or picks a DIFFERENT job here.  Switching jobs unloads it; on an explicit
+    // list click, confirm first so the trajectory isn't lost by accident.
+    const trajLoaded = trajToggle?.checked || oxdnaDisplay?.mode() === 'trajectory'
+    if (trajLoaded && jobId !== _selectedId) {
+      if (confirmTrajUnload) {
+        const ok = await showConfirm({
+          title: 'Unload trajectory?',
+          message: 'Viewing a different job will unload the trajectory currently on '
+            + 'screen. Continue?',
+          confirmLabel: 'Continue',
+          cancelLabel: 'Cancel',
+        })
+        if (!ok) return   // keep the current selection + its trajectory
+      }
+      _setTrajOff()
+    }
     _selectedId = jobId
     _progress = await api.getOxdnaProgress(jobId).catch(() => null)
     _renderList()
@@ -1481,7 +1519,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   prodBtn?.addEventListener('click', async () => {
     if (!_selectedId || prodBtn.disabled) return
     if (!(await _ensureJobCurrent('a production run'))) return
-    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
+    if (!(await confirmNoConcurrentJob({
+      excludeJobId: _selectedId,
+      usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',   // run inherits the job's backend
+    }))) return
     oxdnaLive?.stop()   // a production run supersedes any live session (shared overlay)
     const steps = parseInt(prodStepsInput?.value || '5000000', 10)
 
@@ -1660,6 +1701,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (trajControls) trajControls.style.display = 'none'
     _heavyBuildKind = null
     _trajPrep = null
+    // Scrubbing re-aimed the field arrow per stage; on toggle-off restore the
+    // selected job's own field (its arrow is shown whenever a field run is selected).
+    _trajStages = []
+    _lastTrajField = undefined
+    onTrajectoryField?.(runConfigForJob(_selectedJob()).field ?? null)
     _setTrajStatus('', _C.dim)
     _syncVizOffRadio()
   }
@@ -1681,6 +1727,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (r.ok) {
       if (trajControls) trajControls.style.display = ''
       trajPlayer.setTrajectory(r.n_frames, r.markers)
+      // Drive the E-field arrow from the per-stage field descriptors: reset the
+      // memo, then aim it at frame 0's stage (relaxation → arrow hidden).
+      _trajStages = r.stages || []
+      _lastTrajField = undefined
+      _applyTrajField(0)
       const nProd = (r.stages || []).filter(s => s.kind === 'production').length
       _setTrajStatus(`${r.n_frames} frames · relaxation + ${nProd} production run${nProd === 1 ? '' : 's'}`, _C.ok)
     } else {
@@ -1757,7 +1808,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // spam of clicks fires the request once, with an immediate spinner + gray-out.
   startBtn?.addEventListener('click', () => runExclusive(startBtn, async () => {
     if (!_selectedId) return
-    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
+    if (!(await confirmNoConcurrentJob({
+      excludeJobId: _selectedId,
+      usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',   // resume runs on the job's backend
+    }))) return
     await api.startOxdnaJob(_selectedId)
     await _fetchJobs()
   }, { label: 'Starting…' }))

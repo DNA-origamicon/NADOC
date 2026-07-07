@@ -12,9 +12,14 @@
  * are exported separately so they can be unit-tested without the network/DOM.
  */
 
-import { showConfirm } from './primitives/confirm.js'
+import { showConfirm, showChoice } from './primitives/confirm.js'
 import { formatBytes } from './format_bytes.js'
 import { listActiveJobs, gpuStatus } from '../api/client.js'
+
+/** Pure: short engine label for a job ("oxDNA" / "MD"). */
+function engLabel(job) {
+  return job?.engine === 'oxdna' ? 'oxDNA' : 'MD'
+}
 
 /** Pure: normalize a workspace path for comparison (slashes + trailing slash). */
 export function normPath(p) {
@@ -67,17 +72,47 @@ export function isLocalJob(job) {
   return (job?.execution_target ?? 'local') === 'local'
 }
 
+/** Pure: true if a job holds the GPU (NAMD, or a CUDA-backend oxDNA run).
+ *  Missing/legacy field → GPU (conservative: an untagged job blocks like before). */
+export function isGpuJob(job) {
+  return (job?.resource_class ?? 'gpu') === 'gpu'
+}
+
 /** Pure: a busy job (running/preparing) that should block a new launch, or null.
+ *
  *  Only LOCAL jobs block — a job running on the Alpine cluster consumes no local
  *  GPU/disk, so it can't contend with a new local run (and vice versa: an Alpine
  *  submit isn't gated by a local run — its launch handler skips this guard).
- *  ``excludeJobId`` skips the job being resumed so resuming it never warns about
- *  itself. */
-export function pickBlockingJob(activeJobs, excludeJobId = null) {
+ *
+ *  When ``newJobUsesGpu`` is given, only jobs of the SAME resource class block: a
+ *  GPU launch is blocked only by a busy GPU job (they'd fight over the card), and a
+ *  CPU launch only by a busy CPU job (spare-core contention). A CPU job and a GPU
+ *  job never block each other — the whole point of running them side by side.
+ *  Omit ``newJobUsesGpu`` (legacy calls) to block on any busy local job.
+ *
+ *  ``opts`` may be the options object ``{excludeJobId, newJobUsesGpu}`` or, for
+ *  back-compat, a bare ``excludeJobId`` string. */
+export function pickBlockingJob(activeJobs, opts = null) {
+  const isObj = opts && typeof opts === 'object'
+  const excludeJobId = isObj ? (opts.excludeJobId ?? null) : (opts ?? null)
+  const newJobUsesGpu = isObj ? (opts.newJobUsesGpu ?? null) : null
   return (activeJobs || []).find(
     j => j.job_id !== excludeJobId && isLocalJob(j)
-      && (j.status === 'running' || j.status === 'preparing'),
+      && (j.status === 'running' || j.status === 'preparing')
+      && (newJobUsesGpu === null || isGpuJob(j) === newJobUsesGpu),
   ) || null
+}
+
+/** Pure: the set of engine keys ('md'|'oxdna'|'lammps'|'mrdna'|'cando') that have a
+ *  currently-busy (running/preparing) job. Used to light a spinner on each engine's
+ *  sidebar section header. Jobs already come pre-filtered to busy ones by the
+ *  endpoint, but re-check the status so the helper is correct for any caller. */
+export function runningEngines(activeJobs) {
+  const set = new Set()
+  for (const j of activeJobs || []) {
+    if (j?.engine && (j.status === 'running' || j.status === 'preparing')) set.add(j.engine)
+  }
+  return set
 }
 
 /** Fetch the list of currently-busy MD/oxDNA jobs. Never throws — returns [] on error. */
@@ -97,22 +132,123 @@ export async function fetchActiveJobs() {
  *
  * @param {object}  [opts]
  * @param {?string} [opts.excludeJobId] job being resumed (won't block on itself)
+ * @param {boolean} [opts.usesGpu=true] does the NEW job hold the GPU? Only a job
+ *   of the same resource class blocks — a GPU launch ignores a busy CPU job and
+ *   vice versa (see {@link pickBlockingJob}).
  * @returns {Promise<boolean>} true to proceed with the launch, false to abort
  */
-export async function confirmNoConcurrentJob({ excludeJobId = null } = {}) {
-  const blocking = pickBlockingJob(await fetchActiveJobs(), excludeJobId)
+export async function confirmNoConcurrentJob({ excludeJobId = null, usesGpu = true } = {}) {
+  const blocking = pickBlockingJob(await fetchActiveJobs(), { excludeJobId, newJobUsesGpu: usesGpu })
   if (!blocking) return true
-  const eng = blocking.engine === 'oxdna' ? 'oxDNA' : 'MD'
+  const eng = engLabel(blocking)
   const name = jobDesignName(blocking)
+  const resource = usesGpu ? 'the GPU and memory' : 'CPU cores and memory'
   return showConfirm({
     title: 'A simulation is already running',
     message:
       `An ${eng} job for "${name}" is currently ${blocking.status}.\n\n` +
-      'Running two simulations at once makes them compete for the GPU and memory, ' +
+      `Running two simulations at once makes them compete for ${resource}, ` +
       'which can slow both down or fail with out-of-memory. Start this job anyway?',
     confirmLabel: 'Continue',
     cancelLabel: 'Cancel',
   })
+}
+
+/**
+ * Resource-aware launch guard for a job that CAN run on the GPU, offering a CPU
+ * fallback when the GPU is occupied. Resolves to one of three actions:
+ *
+ *   'gpu'    — proceed on the GPU as requested
+ *   'cpu'    — proceed, but on the CPU backend (leaves the GPU job untouched)
+ *   'cancel' — abort the launch
+ *
+ * Behaviour:
+ *  - A CPU launch (``usesGpu:false``) never contends for the GPU. It only warns if
+ *    another local CPU job is busy (spare-core/RAM sharing), then returns 'cpu'.
+ *  - A GPU launch checks whether the GPU is already occupied — by one of our own
+ *    local GPU jobs OR an external VRAM-holding process. If free, returns 'gpu'
+ *    with no prompt. If occupied and ``hasCpuAlternative``, shows the three-way
+ *    popup (GPU-anyway / CPU-instead / cancel). If occupied with no CPU fallback
+ *    (e.g. NAMD), shows the two-way "continue anyway / cancel" warning.
+ *
+ * Never blocks on its own detection errors (no nvidia-smi / fetch fail → proceeds
+ * as if the GPU were free).
+ *
+ * @param {object}  [opts]
+ * @param {boolean} [opts.usesGpu=true]           does the requested run hold the GPU?
+ * @param {boolean} [opts.hasCpuAlternative=false] can this job fall back to a CPU backend?
+ * @param {string}  [opts.devices='0']            CUDA device string for the external check
+ * @param {?string} [opts.excludeJobId=null]      job being resumed (won't block on itself)
+ * @returns {Promise<'gpu'|'cpu'|'cancel'>}
+ */
+export async function confirmGpuLaunch({
+  usesGpu = true,
+  hasCpuAlternative = false,
+  devices = '0',
+  excludeJobId = null,
+} = {}) {
+  const active = await fetchActiveJobs()
+
+  // CPU launch: only another local CPU job shares its cores/RAM; GPU jobs don't.
+  if (!usesGpu) {
+    const cpuBusy = pickBlockingJob(active, { excludeJobId, newJobUsesGpu: false })
+    if (!cpuBusy) return 'cpu'
+    const ok = await showConfirm({
+      title: 'Another CPU simulation is running',
+      message:
+        `A ${engLabel(cpuBusy)} job for "${jobDesignName(cpuBusy)}" is currently ` +
+        `${cpuBusy.status}. Both run on the CPU, so they will share cores and memory ` +
+        'and may each run slower. Start this job anyway?',
+      confirmLabel: 'Continue',
+      cancelLabel: 'Cancel',
+    })
+    return ok ? 'cpu' : 'cancel'
+  }
+
+  // GPU launch: is the card already occupied — by one of our GPU jobs, or by an
+  // external process holding VRAM?
+  const gpuJob = pickBlockingJob(active, { excludeJobId, newJobUsesGpu: true })
+  let externalMsg = ''
+  try {
+    const st = await gpuStatus(devices)
+    if (st?.busy) externalMsg = st.message || 'Another process is using the GPU.'
+  } catch { /* detection down → treat as free, never block on our own error */ }
+
+  if (!gpuJob && !externalMsg) return 'gpu'
+
+  const occupant = gpuJob
+    ? `A ${engLabel(gpuJob)} job for "${jobDesignName(gpuJob)}" is currently ${gpuJob.status}.`
+    : externalMsg
+
+  if (hasCpuAlternative) {
+    const pick = await showChoice({
+      title: 'The GPU is already busy',
+      message:
+        `${occupant}\n\n` +
+        'Running a second GPU job makes them compete for the card and its memory, which ' +
+        'can slow both to a crawl or fail with out-of-memory. You can instead run this ' +
+        'job on the CPU — slower per step, but it leaves the GPU job untouched and uses ' +
+        'your spare cores.',
+      choices: [
+        { label: 'Run on GPU anyway', value: 'gpu', variant: 'danger' },
+        { label: 'Run on CPU instead', value: 'cpu', variant: 'success' },
+        { label: 'Cancel', value: 'cancel' },
+      ],
+    })
+    return pick ?? 'cancel'   // ×/Escape/backdrop → cancel
+  }
+
+  const ok = await showConfirm({
+    title: 'The GPU is already busy',
+    message:
+      `${occupant}\n\n` +
+      'Running two GPU simulations at once makes them compete for the card and memory, ' +
+      'which can slow both down or fail with out-of-memory. Start this job anyway?',
+    danger: true,
+    confirmLabel: 'Continue',
+    cancelLabel: 'Cancel',
+  })
+  return ok ? 'gpu' : 'cancel'
 }
 
 /**
