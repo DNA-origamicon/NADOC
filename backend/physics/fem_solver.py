@@ -51,22 +51,44 @@ from backend.core.sequences import domain_bp_range
 # ── Duplex-core bp extraction ─────────────────────────────────────────────────
 
 def _duplex_bp_per_helix(design: Design) -> Dict[str, set]:
-    """Per helix, the bp indices covered by BOTH a scaffold and a staple strand.
+    """Per helix, the bp indices that behave as double-stranded DNA (the duplex core).
 
-    This is the duplex core — the region that behaves as double-stranded DNA. It
-    excludes ssDNA overhangs, the auto_scaffold cap extension past the staples, and
-    any single-stranded scaffold, matching CanDo's "nodes = base pairs" convention.
+    Two duplex sources, UNIONED:
+
+    * ``scaffold ∧ staple`` — the classic origami duplex. Excludes ssDNA overhangs,
+      the auto_scaffold cap extension past the staples, and single-stranded scaffold,
+      matching CanDo's "nodes = base pairs" convention.
+    * ``(forward ∧ reverse) ∧ linker`` — a LINKER strand (materialized by
+      ``connect_overhangs``) hybridizes to a partner backbone: a linked overhang is
+      *staple ∧ linker* and a ds ``__lnk__`` bridge is *linker ∧ linker*. A bp is
+      linker-duplex when a FORWARD and a REVERSE backbone both cover it AND at least
+      one of them is the linker. The ``∧ linker`` gate makes this term **empty on any
+      design with no linker strands**, so the classic term is returned byte-for-byte
+      unchanged there (no exp36-calibration shift). A ss linker's ``__lnk__`` bridge
+      has only ONE backbone → excluded (it is the compliant ssDNA tether, not duplex).
     """
     scaf: Dict[str, set] = {h.id: set() for h in design.helices}
     stap: Dict[str, set] = {h.id: set() for h in design.helices}
+    fwd:  Dict[str, set] = {h.id: set() for h in design.helices}
+    rev:  Dict[str, set] = {h.id: set() for h in design.helices}
+    link: Dict[str, set] = {h.id: set() for h in design.helices}
     for s in design.strands:
         if s.is_reference:
             continue
         target = scaf if s.strand_type == StrandType.SCAFFOLD else stap
+        is_linker = s.strand_type == StrandType.LINKER
         for dm in s.domains:
-            if dm.helix_id in target:
-                target[dm.helix_id].update(domain_bp_range(dm))
-    return {hid: scaf[hid] & stap[hid] for hid in scaf}
+            if dm.helix_id not in scaf:
+                continue
+            rng = set(domain_bp_range(dm))   # materialize: reused across the buckets below
+            target[dm.helix_id].update(rng)
+            (fwd if dm.direction == Direction.FORWARD else rev)[dm.helix_id].update(rng)
+            if is_linker:
+                link[dm.helix_id].update(rng)
+    return {
+        hid: (scaf[hid] & stap[hid]) | (fwd[hid] & rev[hid] & link[hid])
+        for hid in scaf
+    }
 
 
 def _nick_bps_per_helix(design: Design) -> Dict[str, set]:
@@ -296,7 +318,54 @@ def build_fem_mesh(design: Design) -> FEMMesh:
         offset = mesh.nodes[nj].position - mesh.nodes[ni].position
         mesh.rigid_links.append(FEMRigidLink(node_i=ni, node_j=nj, offset=offset))
 
+    # ── Linker (overhang-connection) hops ───────────────────────────────────────
+    # A LINKER strand (materialized by connect_overhangs) crosses helices at its
+    # inter-domain junctions — these are NOT Design.crossovers, so they must be
+    # coupled explicitly or the two joined parts stay mechanically disconnected.
+    # Walk each linker's meshed (duplex) domains in 5'→3' order (start_bp = 5',
+    # end_bp = 3'); couple consecutive meshed domains on different helices:
+    #   • directly adjacent (a ds bridge) → RIGID LINK (a stiff duplex bridge);
+    #   • flanking one or more UNMESHED ssDNA domains (a ss linker) → WLC SPRING
+    #     (compliant tether, contour = the skipped ssDNA run length).
+    _add_linker_hops(design, mesh, helix_bp_range, _resolve_node)
+
     return mesh
+
+
+def _add_linker_hops(design, mesh, helix_bp_range, resolve_node) -> None:
+    """Close the FEM load path across every LINKER strand's helix hops (see
+    ``build_fem_mesh``). Duplex-meshed linker domains couple; the ssDNA runs
+    between them become the WLC compliance."""
+    for s in design.strands:
+        if s.is_reference or s.strand_type != StrandType.LINKER or len(s.domains) < 2:
+            continue
+        # Ordered (domain, meshed?, ss-base-count) view of the strand's path.
+        steps = [(dm, dm.helix_id in helix_bp_range, len(set(domain_bp_range(dm))))
+                 for dm in s.domains]
+
+        prev = None          # last meshed domain seen
+        ss_between = 0       # ssDNA bases accumulated since `prev`
+        for dm, meshed, n_bp in steps:
+            if not meshed:
+                ss_between += n_bp
+                continue
+            if prev is not None and prev.helix_id != dm.helix_id:
+                ni = resolve_node(prev.helix_id, prev.end_bp)     # 3' exit of prev
+                nj = resolve_node(dm.helix_id, dm.start_bp)       # 5' entry of dm
+                if ni is not None and nj is not None and ni != nj:
+                    if ss_between > 0:
+                        # ss linker: compliant WLC tether across the ssDNA run.
+                        L_c = ss_between * RISE_SS
+                        k_trans = 3.0 * KBT / (2.0 * L_c * L_P_SS)
+                        mesh.springs.append(
+                            FEMSpring(node_i=ni, node_j=nj, k_trans=k_trans, k_rot=0.0))
+                    else:
+                        # ds bridge: rigid duplex link (like a crossover).
+                        offset = mesh.nodes[nj].position - mesh.nodes[ni].position
+                        mesh.rigid_links.append(
+                            FEMRigidLink(node_i=ni, node_j=nj, offset=offset))
+            prev = dm
+            ss_between = 0
 
 
 # ── Element stiffness matrices ────────────────────────────────────────────────

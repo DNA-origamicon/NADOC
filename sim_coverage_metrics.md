@@ -161,6 +161,26 @@ fills in as milestones complete.
   engine's ensemble/NMA RMSF at the same ssDNA inserts. **NO twist/bend direction asserted** (softening a
   distributed load is non-monotone; geometric crossover reasoning forbidden — RMSF is the sign-safe channel).
 
+- **`C4` — linkers / overhang connections as connector elements** (CLOSES M-CANDO-COMPLETE) · shape: two additive
+  `build_fem_mesh` changes, backend-only — (1) `_duplex_bp_per_helix` now `(scaf∧stap) ∪ (fwd∧rev∧linker)` so a
+  linked overhang (staple∧linker) + a ds `__lnk__` bridge (linker∧linker) are recognized as duplex, **byte-
+  identical on linker-free designs** (the `∧linker` gate → zero exp36 regression); (2) `_add_linker_hops` couples
+  each LINKER strand's helix-hop junctions — **ds → rigid link** (stiff duplex bridge), **ss → WLC spring**
+  (`k_rot=0`, contour = ssDNA-run × `RISE_SS`) · feature: linkers (CanDo's 4th unconventional feature) · engines
+  now comparable: CanDo predicts **inter-part mechanical coupling** through a linker (a ds bridge transmits a load
+  stiffly, a ss tether compliantly) — a coupling any engine that meshes/beads the same generated linker topology
+  (M4/N3) can cross-validate · oracle: `tests/test_cando_linkers.py` 5 **fast** (synthetic two-part coupling
+  bright line: WLC linker → part B moves, no linker → exactly 0, rigid `>10×` soft; additive-no-regression dict
+  equality vs legacy `scaf∧stap`; real ds duplex-bridge+rigid-hop connectivity to BOTH overhang helices; real ss
+  single +1 WLC spring across the two overhang helices) · user clarification reframed the task (a linked overhang
+  is DUPLEX; ask-first) · main.js LOC Δ = 0 (backend-only) · tests: 5/5 oracle, `just test` 4215 passed / 66
+  skipped / 1 xfailed (was 4210, +5, no drop), FEM+exp36 calibration guards green, ruff clean; fresh-context
+  review both changes correct+additive, strengthened 2 flagged oracle tests · display-vs-oracle: N/A (no card/UI,
+  like C1/C2/C3) ·
+  **Comparable prediction gained, not just a run:** a linker is no longer invisible to the FEM — the CanDo FEM now
+  predicts how a ds vs ss overhang-connection couples two parts (stiff duplex bridge vs compliant WLC tether),
+  completing CanDo's coverage of all four unconventional features and closing **M-CANDO-COMPLETE**.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -190,7 +210,7 @@ read/export the agreement) or a future headless two-engine cross-run.
 |---|---|---|
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | **DONE** (C1,C2,S4,S5,O1 shipped 2026-07-06) — FEM predicts the anchored field-deflection regime from oxDNA's per-nt force; real agreement number awaits C5 field-source |
-| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1,C2,C3,C5 ✅; only C4 linkers left) |
+| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | **DONE** (C1,C2,C3,C4,C5 shipped 2026-07-07) — anchors + E-field + extra-bases + linkers all covered, CanDo feeds the comparison card |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 

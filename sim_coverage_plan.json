@@ -47,7 +47,7 @@
         "C4",
         "C5"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "M-ALL-ANCHORS-FIELD",
@@ -235,8 +235,8 @@
       "fast_slow": "fast+slow",
       "oracle": "FAST: two parts joined by a linker element show coupled response under a test load on one part (the other moves); no linker -> decoupled.",
       "milestone": "M-CANDO-COMPLETE",
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "CLOSES M-CANDO-COMPLETE (C1,C2,C3,C4,C5 done). USER CLARIFICATION reframed the task: a linked overhang is DUPLEX (overhang staple hybridizes to the linker's RC binding domain) and connect_overhangs materializes REAL topology — the overhang complement strand + a __lnk__ bridge helix (ds: duplex 2-strand bridge; ss: single-stranded bridge = the flexible tether). The gap was NOT a missing connector element but that build_fem_mesh couldn't SEE the duplex the linker builds: _duplex_bp_per_helix counted scaffold∧staple only, dropping staple∧linker (linked overhang) and linker∧linker (ds bridge) -> linkers meshed to NOTHING. TWO additive changes (fem_solver.py): (1) _duplex_bp_per_helix now returns (scaf∧stap) ∪ (fwd∧rev∧linker) — UNION gated on a LINKER strand covering the bp, so a design with no linker strands is byte-for-byte identical (zero exp36 regression, asserted); a ss bridge (one backbone) is correctly excluded. (2) _add_linker_hops closes the load path at each LINKER strand's helix-hop junctions (NOT Design.crossovers): consecutive meshed duplex domains on different helices couple RIGID if adjacent (ds bridge, per user), WLC SPRING (k_rot=0, contour=skipped-ssDNA-run×RISE_SS) if flanking an unmeshed ss run (ss linker, per user). Reuses C3's WLC formula + existing beam/crossover/spring machinery; ds hops→rigid_links, ss hops→springs, no new mesh field, no assembler change. Oracle tests/test_cando_linkers.py 5 FAST: synthetic two-part mesh (THE bright line: WLC linker transmits a load part A->part B, NO linker->part B exactly 0; rigid couples >10x the soft tether); additive-no-regression (independent legacy scaf∧stap recompute == _duplex_bp_per_helix on a linker-free 6HB); real routed-6HB ds (overhangs+bridge gain duplex bp, bridge meshed, rigid hops WIRE bridge to BOTH overhang helices — connectivity, not just count, 0 springs) + ss (bridge stays ssDNA/unmeshed, exactly +1 WLC spring spanning the two DISTINCT overhang helices, k_trans==WLC(6)). Real fixture = _place_two_overhangs_on_6hb (well-formed 5'->3' domains; the hand-built _seed_two_overhang_leaves has malformed REVERSE start<end -> empty domain_bp_range -> won't mesh; noted for future FEM fixtures). Fresh-context review: BOTH code changes correct + genuinely additive, no bug; strengthened 2 oracle tests it flagged as census/green-by-construction. Gates: oracle 5/5, just test 4215 passed/66 skip/1 xfail (+5 new, no drop), FEM+exp36 calibration guards green (no regression), ruff clean on touched. No card/UI -> display-vs-oracle N/A (like C1/C2/C3). main.js LOC delta=0 (backend-only)."
     },
     {
       "id": "C5",

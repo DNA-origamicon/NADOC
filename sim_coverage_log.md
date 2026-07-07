@@ -45,6 +45,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(C5) CanDo source bundle** ✅ | descriptors == `compute_shape_descriptors` on the exact core-filtered `predict_shape` frame (same S1 estimator, self-consistent — ABSOLUTE); core mask drops ssDNA ends; per-bp NMA `rmsf`→card shape with **`direction=None`** (dropped None); field passthrough; empty core→None (RED); **integration: `[oxdna, cando]`→`build_comparison_report` ready, refs shape=oxdna/rmsf=cando, cando shape-RMSD finite (~0 rigid shift), oxDNA RMSF Pearson 1.0 n=24 (dir-less pairs per-strand via `_rmsf_per_bp`)** | `backend/core/cando_shape_source.py::build_cando_shape_source`, `backend/api/routes_cando.py::get_cando_shape_source`, `tests/test_cando_shape_source.py` | the SAME source-bundle contract for M5/N4; CanDo is the RMSF reference column |
 
+| **(C4) CanDo linker connector** ✅ | THE bright line on a synthetic two-part mesh: a WLC-spring linker transmits a load part A→part B (node moves), NO linker→part B exactly `0`; a rigid (ds) link couples >10× a soft (ss) tether. Additive-no-regression: an independent legacy `scaf∧stap` recompute == `_duplex_bp_per_helix` on a linker-free 6HB (byte-identical dict). Real routed-6HB **ds**: overhangs+`__lnk__` bridge gain duplex bp, bridge meshed, rigid hops WIRE the bridge to BOTH overhang helices (connectivity, not just count), 0 springs. Real **ss**: bridge stays ssDNA/unmeshed, exactly +1 WLC spring (`k_rot==0`, `k_trans==WLC(6)`) spanning the two DISTINCT overhang helices | `backend/physics/fem_solver.py::{_duplex_bp_per_helix,_add_linker_hops,build_fem_mesh}`, `tests/test_cando_linkers.py` | every engine's LINKER task (M4/N3) — a materialized ds bridge = duplex beams+rigid hops, a ss bridge = a WLC tether; the additive-duplex + hop-at-strand-junction pattern generalizes to any engine that meshes/beads the generated linker topology |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
@@ -436,6 +438,50 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   flexibility prediction for extra crossover bases** — inserts raise local per-bp RMSF ~1.87×, scored through the
   shared S3 RMSF channel, so an oxDNA/NAMD ensemble RMSF (which also rises at ssDNA inserts) can cross-validate it.
   CanDo's fourth-feature (extra-bases) coverage is now a proven prediction, not an untested code path.
+
+### 2026-07-07 — `C4` CanDo linkers / overhang connections (CLOSES M-CANDO-COMPLETE)
+
+- **Picked** `C4` — the handoff's `▶ NEXT` and last CanDo task (deps `C3` met); finishes the most-progressed
+  track and **closes M-CANDO-COMPLETE** (C1,C2,C3,C5 done). Rubric: prefer finishing an in-progress track +
+  milestone-unblock bonus.
+- **User clarification reframed the task (ask-first paid off).** The plan imagined a C3-style FJC spring between
+  two resolved overhang nodes. But a probe showed `connect_overhangs` **materializes real topology**: a linked
+  overhang is DUPLEX (the overhang staple hybridizes to the linker's reverse-complementary binding domain — the
+  user's correction) and the route generates the overhang complement strand + a `__lnk__` bridge helix (ds: a
+  duplex 2-strand bridge; ss: a single-stranded bridge = the flexible tether). The real gap was that
+  `build_fem_mesh` **couldn't see the duplex the linker builds**: `_duplex_bp_per_helix` counted *scaffold∧staple*
+  only, so *staple∧linker* (linked overhang) and *linker∧linker* (ds bridge) meshed to **nothing** (probe:
+  `Counter()` nodes, 0 springs, 0 links). Asked the user (2 focused questions) → approved **additive duplex +
+  hop-coupling**, **ds = duplex beams + rigid hops / ss = WLC spring**.
+- **What shipped (two additive changes, `backend/physics/fem_solver.py`, backend-only).**
+  1. **`_duplex_bp_per_helix`** now returns `(scaf∧stap) ∪ (fwd∧rev∧link)` — buckets bp by strand DIRECTION and by
+     LINKER type; the `∧link` gate makes the new term **empty on any design with no linker strands**, so the
+     classic set is byte-for-byte unchanged (zero exp36 regression). A ss bridge (one backbone) has empty
+     `fwd∧rev` → correctly excluded (it's the tether, not duplex).
+  2. **`_add_linker_hops`** closes the load path at each LINKER strand's helix-hop junctions (these are NOT
+     `Design.crossovers`): walks the strand's meshed duplex domains 5'→3', coupling consecutive meshed domains on
+     different helices — **RIGID link** if directly adjacent (a ds bridge), **WLC spring** (`k_rot=0`,
+     contour = skipped-ssDNA-run × `RISE_SS`) if they flank an unmeshed ss run (a ss linker). ds hops →
+     `rigid_links`, ss hops → `springs`; reuses the existing beam/crossover/spring assembler, **no new mesh field,
+     no assembler change.**
+- **Oracle** `tests/test_cando_linkers.py` — 5 FAST. THE bright line on a synthetic 2-part mesh (a WLC linker
+  transmits a load part A→part B; NO linker → part B exactly `0`; rigid couples `>10×` the soft tether).
+  Additive-no-regression (independent legacy `scaf∧stap` recompute `==` `_duplex_bp_per_helix` on a linker-free
+  6HB — full dict equality). Real routed-6HB **ds** (overhangs+bridge gain duplex bp, bridge meshed, rigid hops
+  **wire the bridge to BOTH overhang helices** — connectivity via `_connector_helix_pairs`, not a bare count;
+  0 springs) + **ss** (bridge stays unmeshed, exactly +1 WLC spring spanning the two DISTINCT overhang helices,
+  `k_trans==WLC(6)`). Real fixture = `_place_two_overhangs_on_6hb` (well-formed 5'→3' domains; the hand-built
+  `_seed_two_overhang_leaves` has malformed REVERSE `start<end` → empty `domain_bp_range` → won't mesh — noted).
+- **Gates.** oracle 5/5 (all fast, <1s); `just test` = **4215 passed / 66 skipped / 1 xfailed** (was 4210 → +5,
+  no drops); FEM-solver + exp36-curvature calibration guards green (no regression); ruff clean on touched.
+  Fresh-context review: **both code changes correct + genuinely additive, no bug** — flagged 2 census/
+  green-by-construction oracle tests, both **strengthened** (rigid>soft magnitude; ds rigid-hop connectivity).
+  No card/UI → display-vs-oracle **N/A** (backend-only, like C1/C2/C3). **main.js LOC Δ = 0.**
+- **Comparable prediction gained, not just a run:** the CanDo FEM now mechanically **couples two parts through a
+  linker** — a ds overhang-connection meshes as a stiff duplex bridge, a ss one as a compliant WLC tether — so a
+  load/eigenstrain on one part propagates to the other with a linker-type-dependent stiffness. This closes CanDo's
+  fourth feature: all four unconventional features (anchors, E-field, extra-bases, linkers) are covered predictions
+  feeding the comparison card. **M-CANDO-COMPLETE done.**
 
 ## Lessons (anti-patterns banked)
 
