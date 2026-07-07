@@ -181,6 +181,29 @@ fills in as milestones complete.
   predicts how a ds vs ss overhang-connection couples two parts (stiff duplex bridge vs compliant WLC tether),
   completing CanDo's coverage of all four unconventional features and closing **M-CANDO-COMPLETE**.
 
+- **`N2` — NAMD anchors (fixedAtoms)** (M-ALL-ANCHORS-FIELD track) · shape: backend anchor plumbing +
+  request field + MD-panel picker — anchors ride NAMD `fixedAtoms` (Dirichlet hold), orthogonal to the
+  slow-release `conskfile` restraint (NAMD allows only one), so they persist immobile across the ladder ·
+  resolver `resolve_anchor_residue_indices` reuses the SHARED `resolve_anchor_particles` scope resolver (same
+  one oxDNA + the CanDo FEM use) → `(helix,bp,dir)` keys → built-PDB residue ORDINALS via `Atom` provenance;
+  `write_anchor_restraints_pdb` marks B=1 on exactly those residues' heavy atoms · feature: anchors (NAMD's
+  anchor coverage; substrate for N1's anchored E-field) · engines now comparable: NAMD can hold a resolved
+  region fixed with the SAME scope descriptors CanDo/oxDNA use → the anchored-field deflection descriptor is
+  now expressible for NAMD too (toward M-ALL-ANCHORS-FIELD) · oracle: `tests/test_namd_anchors.py` 11 (9 fast
+  + 2 slow): base→exactly-that-nucleotide / strand→all-its-residues / stale→∅; marker marks EXACTLY the
+  resolved residue ordinals (heavy only, H free, HETATM never, RED empty→0); conf emits fixedAtoms only with
+  anchors; SLOW real-psfgen prepare marks-exactly + wires every ladder conf + manifest; SLOW 176-strand
+  `export_pdb` divergence proof · REVIEW-CAUGHT HIGH (fixed): the ordinal bridge must mirror WHICH generator
+  built the package PDB — `export_pdb` (natural chain order) vs psfgen (sorted) diverge past 26 strands;
+  `sort_chains`/`full_topology` selects the match, proven on 176 strands · main.js LOC Δ = +1 (getSelection
+  wiring) · tests: 11/11 oracle, `just test` 4226 (was 4215, +11, no drop), ruff clean on touched, vitest 2214, smoke
+  render/console-error gate green · display-vs-oracle: N/A (anchor card is an INPUT picker, not a prediction
+  display) · live picker gesture NOT hand-driven (no GPU MD job) → MV row ·
+  **Comparable prediction gained, not just a run:** NAMD can now hold a specific resolved region immobile
+  using the same anchor scopes as CanDo/oxDNA, so an anchored region's "held vs deflected" is a comparable
+  cross-engine descriptor for NAMD — the anchor half of M-ALL-ANCHORS-FIELD (with C1 done), and the substrate
+  N1's anchored E-field run needs to hold against COM drift.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -211,7 +234,7 @@ read/export the agreement) or a future headless two-engine cross-run.
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | **DONE** (C1,C2,S4,S5,O1 shipped 2026-07-06) — FEM predicts the anchored field-deflection regime from oxDNA's per-nt force; real agreement number awaits C5 field-source |
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | **DONE** (C1,C2,C3,C4,C5 shipped 2026-07-07) — anchors + E-field + extra-bases + linkers all covered, CanDo feeds the comparison card |
-| `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |
+| `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending — anchors: CanDo (C1)✓ + NAMD (N2)✓; remaining N1 (NAMD field), M1 (mrDNA anchors), M2 (mrDNA field) |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 
 ## Data summaries (plots + fits)

@@ -47,6 +47,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(C4) CanDo linker connector** ✅ | THE bright line on a synthetic two-part mesh: a WLC-spring linker transmits a load part A→part B (node moves), NO linker→part B exactly `0`; a rigid (ds) link couples >10× a soft (ss) tether. Additive-no-regression: an independent legacy `scaf∧stap` recompute == `_duplex_bp_per_helix` on a linker-free 6HB (byte-identical dict). Real routed-6HB **ds**: overhangs+`__lnk__` bridge gain duplex bp, bridge meshed, rigid hops WIRE the bridge to BOTH overhang helices (connectivity, not just count), 0 springs. Real **ss**: bridge stays ssDNA/unmeshed, exactly +1 WLC spring (`k_rot==0`, `k_trans==WLC(6)`) spanning the two DISTINCT overhang helices | `backend/physics/fem_solver.py::{_duplex_bp_per_helix,_add_linker_hops,build_fem_mesh}`, `tests/test_cando_linkers.py` | every engine's LINKER task (M4/N3) — a materialized ds bridge = duplex beams+rigid hops, a ss bridge = a WLC tether; the additive-duplex + hop-at-strand-junction pattern generalizes to any engine that meshes/beads the generated linker topology |
 
+| **(N2) NAMD anchors (fixedAtoms)** ✅ | resolver: base scope→EXACTLY that nucleotide's residue ordinals, strand→all its residues, stale/empty→∅ (drops silently, matches `resolve_anchor_particles`); `sort_chains` natural(export_pdb) vs lexicographic(psfgen) DIVERGES past 26 strands (the fix — wrong order silently pins offset residues); marker PDB marks B=1 on EXACTLY the resolved residues' heavy atoms (H free, HETATM never, RED empty→0 fixed) by contiguity-walk == the ENM's; conf emits `fixedAtoms on/File/Col B` only with anchors; SLOW real-psfgen prepare end-to-end marks exactly + every ladder conf enables it + manifest records it; SLOW 176-strand `export_pdb` output residue sequence == natural, ≠ sorted (divergence proof) | `backend/core/namd_topology.py::{built_pdb_residue_keys,resolve_anchor_residue_indices}`, `backend/core/md_protocols.py::{write_anchor_restraints_pdb,_segment_conf,_min_conf,prepare_mgh_slow_release}`, `tests/test_namd_anchors.py` | N1 (anchored E-field run reuses the fixedAtoms plumbing); the ordinal-bridge + shared-scope-resolver pattern for any atomistic engine; M1 (mrDNA anchors) via the same `resolve_anchor_particles`→bead map |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
@@ -482,6 +484,31 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   load/eigenstrain on one part propagates to the other with a linker-type-dependent stiffness. This closes CanDo's
   fourth feature: all four unconventional features (anchors, E-field, extra-bases, linkers) are covered predictions
   feeding the comparison card. **M-CANDO-COMPLETE done.**
+
+### 2026-07-07 — `N2` NAMD anchors (fixedAtoms) — M-ALL-ANCHORS-FIELD track
+
+- **Mechanism.** NAMD anchors = `fixedAtoms` (Dirichlet hold), NOT the ramped `consref`/`conskfile` block. NAMD
+  allows only ONE `conskfile`, already spent on the slow-release all-DNA restraint; `fixedAtoms` is orthogonal, so
+  anchors persist immobile across the whole ladder while the harmonic restraint ramps to zero. This matches the
+  CanDo Dirichlet-BC / oxDNA high-stiffness-trap semantics (an anchor holds hard), and makes the FAST oracle
+  ("marks EXACTLY the resolved atoms") IMPLY "held" via NAMD's fixed-atom guarantee — no GPU run needed.
+- **Shared-resolver reuse (the whole point).** `resolve_anchor_residue_indices` reuses the SAME
+  `resolve_anchor_particles` scope resolver (overhang/cluster/domain/strand/base) that oxDNA (C1's `resolve_anchor_nodes`
+  mirror) and the CanDo FEM use → per-nucleotide `(helix,bp,dir)` keys, mapped to atomistic residues by the
+  `Atom.helix_id/bp_index/direction` provenance (the same bridge `protein_enm._dna_terminus_model_atom` uses).
+- **THE lesson (review-caught HIGH): a positional mark must mirror the EXACT generator that built the target PDB.**
+  psfgen's `writepdb` blanks the segid column and the 1-char chain aliases past 62 strands, so a NAMD constraints/
+  fixedAtoms PDB (matched to the structure by atom ORDER) can only be addressed by residue ORDINAL — never segid or
+  (chain,resid). But there are TWO package-PDB generators with DIFFERENT residue orders: `export_pdb`
+  (`require_full_topology=False`, the `mgh_slow_release` default) groups chains by `itertools.groupby` in NATURAL
+  first-occurrence order (A,B,…,Z,AA,…); psfgen (`require_full_topology=True`) SORTS chains lexicographically
+  (A,AA,…,B). They coincide for ≤26 strands and DIVERGE past it → a resolver that hard-codes one sort silently
+  fixes offset residues on any real (100s-of-staples) origami. A DNA-only ≤12-strand test can't see it (natural==
+  sorted). Fix: `built_pdb_residue_keys(sort_chains=)` + `resolve_anchor_residue_indices(full_topology=)` select the
+  matching order (and `include_proteins`), threaded from prepare's `require_full_topology`; proven on the 176-strand
+  `make_18hb_routed_design` (real `export_pdb` output residue sequence == natural, ≠ sorted). Bank: **when marking a
+  file NAMD matches positionally, don't re-derive the order independently — reproduce the specific generator's
+  ordering, and test at a strand count that makes the orderings diverge.**
 
 ## Lessons (anti-patterns banked)
 

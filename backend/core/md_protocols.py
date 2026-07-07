@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import io
 import json
-import math
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -211,6 +210,7 @@ def _segment_conf(
     fast: bool = False,
     structure_psf: Optional[str] = None,
     colvars_file: Optional[str] = None,
+    anchors_file: Optional[str] = None,
 ) -> str:
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
@@ -267,6 +267,18 @@ def _segment_conf(
     else:
         lines.append("constraints        off\n")
 
+    # Anchors: hold selected nucleotides completely fixed via fixedAtoms (Dirichlet-
+    # style).  Orthogonal to the ramped all-DNA harmonic restraint above — NAMD allows
+    # only one conskfile, so anchors ride the independent fixedAtoms mechanism and
+    # persist across the whole ladder while the slow-release restraint ramps to zero.
+    # Caveat (NPT): fixed atoms are not rescaled by the barostat and add no virial, so a
+    # LARGE fixed region biases the pressure; for a small end-anchor (the field use case)
+    # this is negligible, and an anchored E-field run is typically NVT anyway.
+    if anchors_file:
+        lines.append("fixedAtoms         on\n")
+        lines.append(f"fixedAtomsFile     {anchors_file}\n")
+        lines.append("fixedAtomsCol      B\n")
+
     if spec.previous:
         lines.append(f"binCoordinates     output/{spec.previous}.coor\n")
         if not spec.reinit:
@@ -298,6 +310,7 @@ def _min_conf(
     scale: float,
     *,
     enm_file: Optional[str] = None,
+    anchors_file: Optional[str] = None,
 ) -> str:
     # enm_file overrides the default {name_stem}_k{scale}.enm.extra — used by the
     # declash protocol to minimise against an ss-excluded network.  Minimisation
@@ -318,6 +331,10 @@ def _min_conf(
         lines.append("extraBondsFile     mgh_extrabonds.txt\n")
     lines.append(f"extraBondsFile     {enm}\n")
     lines.append("constraints        off\n")
+    if anchors_file:
+        lines.append("fixedAtoms         on\n")
+        lines.append(f"fixedAtomsFile     {anchors_file}\n")
+        lines.append("fixedAtomsCol      B\n")
     lines.append(f"minimize           {minimize_steps}\n")
     return "".join(lines)
 
@@ -341,6 +358,49 @@ def write_restraints_pdb(pdb_path: Path, dst_path: Path) -> None:
             raw = _set_bfactor(raw, 0.0)
         lines.append(raw)
     dst_path.write_text("".join(lines))
+
+
+def write_anchor_restraints_pdb(
+    pdb_path: Path, dst_path: Path, anchored_indices: "set[int]"
+) -> int:
+    """Write a fixedAtoms marker PDB: B=1.0 for the heavy atoms of the anchored DNA
+    residues, B=0 for everything else (hydrogens, solvent, and every non-anchored
+    DNA atom).  NAMD reads col B via ``fixedAtomsCol B`` and holds the B=1 atoms
+    immobile — the Dirichlet-style "held" analogue of the oxDNA trap / CanDo BC.
+
+    ``anchored_indices`` is the 0-based residue-ordinal set from
+    :func:`backend.core.namd_topology.resolve_anchor_residue_indices`.  Residues are
+    counted positionally by contiguity (a boundary at any change of
+    ``(chain, resid, resname)`` or a ``TER`` record) — the same walk
+    :func:`backend.core.md_protocols._parse_base_ring_residues` uses — because psfgen's
+    ``writepdb`` blanks the segid column and the 1-char chain aliases past 62 strands, so
+    residues are only addressable by their order (which matches
+    :func:`~backend.core.namd_topology.built_pdb_residue_keys`).  Returns the number of
+    atoms marked fixed."""
+    n_marked = 0
+    lines = []
+    res_idx = -1
+    prev_id: tuple[str, str, str] | None = None
+    for raw in pdb_path.read_text().splitlines(keepends=True):
+        if raw.startswith("TER"):
+            prev_id = None  # force a residue boundary at every chain terminus
+            lines.append(raw)
+            continue
+        if raw.startswith("ATOM"):
+            ident = (raw[21:22].strip(), raw[22:26].strip(), raw[17:21].strip())
+            if ident != prev_id:
+                res_idx += 1
+                prev_id = ident
+            atom_name = raw[12:16].strip()
+            fixed = res_idx in anchored_indices and not atom_name.startswith("H")
+            if fixed:
+                n_marked += 1
+            raw = _set_bfactor(raw, 1.0 if fixed else 0.0)
+        elif raw.startswith("HETATM"):
+            raw = _set_bfactor(raw, 0.0)
+        lines.append(raw)
+    dst_path.write_text("".join(lines))
+    return n_marked
 
 
 def _set_bfactor(line: str, value: float) -> str:
@@ -934,6 +994,7 @@ def prepare_mgh_slow_release(
     declash: bool = False,
     force_soft: bool = False,
     fast: bool = False,
+    anchors: Optional[list] = None,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -1009,6 +1070,24 @@ def prepare_mgh_slow_release(
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
     enm_report = write_aksimentiev_enm_files(pdb_path, package_dir, name_stem, progress=progress)
 
+    # Anchors (optional): resolve the shared anchor scopes to DNA residues and write a
+    # fixedAtoms marker PDB the whole ladder reads.  A JOB-REQUEST annotation resolved
+    # read-only from the topology — never a Design edit (Three-Layer Law).  A selection
+    # that resolves to nothing (stale / ssDNA-only) leaves the run unanchored.
+    anchors_file: Optional[str] = None
+    anchor_indices: set = set()
+    n_anchored_atoms = 0
+    if anchors:
+        from backend.core.namd_topology import resolve_anchor_residue_indices  # noqa: PLC0415
+        # full_topology must match how the package {stem}.pdb was built (psfgen when
+        # require_full_topology, else export_pdb) so the residue ordinals line up.
+        anchor_indices = resolve_anchor_residue_indices(
+            design, anchors, model=atomistic_model, full_topology=require_full_topology)
+        if anchor_indices:
+            n_anchored_atoms = write_anchor_restraints_pdb(
+                pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
+            anchors_file = "restraints_anchors.pdb"
+
     # Declash: minimise against an ss-excluded ENM so inserted single-stranded
     # bases relax out of clash.  References are rebuilt from the declashed coords
     # by the runner after minimisation (rebuild_declashed_references).  Enabled
@@ -1068,6 +1147,7 @@ def prepare_mgh_slow_release(
             minimize_steps,
             min_scale,
             enm_file=declash_enm_file,
+            anchors_file=anchors_file,
         )
     )
 
@@ -1075,7 +1155,8 @@ def prepare_mgh_slow_release(
     for spec in segments:
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
-                          fast=fast, structure_psf=structure_psf)
+                          fast=fast, structure_psf=structure_psf,
+                          anchors_file=anchors_file)
         )
 
     charge_audit = {}
@@ -1118,9 +1199,17 @@ def prepare_mgh_slow_release(
             "output_dir": "output",
             "charge_audit": "charge_audit.json",
             "restraints": "restraints_dna_heavy.pdb",
+            **({"anchors": anchors_file} if anchors_file else {}),
         },
         "box_ang":     list(box),
         "mgh_extrabonds": mgh_extrabonds,
+        "anchors": {
+            "requested": anchors or [],
+            "file": anchors_file,
+            "n_residues": len(anchor_indices),
+            "n_atoms_fixed": n_anchored_atoms,
+            "mechanism": "fixedAtoms (fixedAtomsCol B); held immobile across the ladder",
+        },
         "declash": declash,
         "declash_min_coor": f"output/{min_name}.coor" if declash else None,
         "n_unpaired_excluded": n_unpaired if declash else 0,

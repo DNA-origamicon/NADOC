@@ -244,6 +244,86 @@ def _write_segment_pdbs(
     return segments, "\n".join(full_lines) + "\n"
 
 
+def built_pdb_residue_keys(
+    model: AtomisticModel, *, sort_chains: bool = False
+) -> list[tuple[str, int, str]]:
+    """The ordered per-residue ``(helix_id, bp_index, direction)`` keys of the built
+    ``{stem}.pdb`` — a key's list index equals its 0-based residue ordinal in the on-disk
+    PDB.
+
+    The two package-PDB generators order chains differently, so ``sort_chains`` must
+    match the one that built the package:
+
+    * ``sort_chains=False`` (default) — :func:`backend.core.pdb_export.export_pdb` groups
+      chains by ``itertools.groupby`` in FIRST-OCCURRENCE (strand-enumeration) order:
+      ``A, B, …, Z, AA, AB, …``.  This is the legacy ``mgh_slow_release`` path
+      (``require_full_topology=False``).
+    * ``sort_chains=True`` — psfgen's :func:`_write_segment_pdbs` sorts chains
+      lexicographically: ``A, AA, AB, …, B, …``.  This is the equilibrium-aware path
+      (``require_full_topology=True``).
+
+    Past 26 strands the two orders diverge, so the wrong ``sort_chains`` silently anchors
+    offset residues.  Within a chain, residues are always ascending ``seq_num``.  psfgen's
+    ``writepdb`` blanks the segid column, so residues can only be addressed positionally
+    (the same contiguity/ordinal bridge :func:`_parse_base_ring_residues` uses for the
+    ENM).  Protein residues keep their slot (``helix_id`` = sentinel) so DNA ordinals stay
+    aligned; they never match a DNA anchor key."""
+    atoms_by_chain: dict[str, list[Atom]] = {}
+    for atom in model.atoms:
+        atoms_by_chain.setdefault(atom.chain_id, []).append(atom)
+    chain_order = sorted(atoms_by_chain) if sort_chains else list(atoms_by_chain)
+    keys: list[tuple[str, int, str]] = []
+    for chain_id in chain_order:
+        rep: dict[int, Atom] = {}
+        for a in atoms_by_chain[chain_id]:
+            rep.setdefault(a.seq_num, a)  # any atom of a residue shares its key
+        for seq in sorted(rep):
+            a = rep[seq]
+            keys.append((a.helix_id, a.bp_index, a.direction))
+    return keys
+
+
+def resolve_anchor_residue_indices(
+    design: Design,
+    anchors: "list[dict] | None",
+    *,
+    model: AtomisticModel | None = None,
+    full_topology: bool = False,
+) -> set[int]:
+    """Resolve anchor descriptors → the set of 0-based residue ORDINALS to hold fixed in
+    a NAMD run (indices into :func:`built_pdb_residue_keys` == the built PDB's residue
+    order).
+
+    Reuses the shared oxDNA anchor-scope resolver
+    (:func:`backend.physics.oxdna_interface.resolve_anchor_particles` — overhang /
+    cluster / domain / strand / base) to turn scopes into per-nucleotide
+    ``(helix_id, bp, direction)`` keys, then maps each to its residue ordinal via the
+    :class:`~backend.core.atomistic.Atom` per-atom provenance (the same
+    ``(helix_id, bp_index, direction)`` bridge :mod:`backend.core.protein_enm` uses).
+
+    ``full_topology`` MUST match the ``require_full_topology`` the package was built with,
+    so the residue ordering mirrors the actual package PDB (psfgen sorts chains + includes
+    proteins; ``export_pdb`` keeps natural order + DNA only).  Pass the SAME ``model`` the
+    generator used when it is available (a seed model), else one is built to match.
+
+    Stale / ssDNA-only / extra-base-insert keys drop silently, matching
+    ``resolve_anchor_particles``' stale-selection tolerance.  Anchors are a
+    JOB-REQUEST annotation, never a topology edit (Three-Layer Law): this only reads
+    positions/keys."""
+    if not anchors:
+        return set()
+    from backend.physics.oxdna_interface import resolve_anchor_particles  # noqa: PLC0415
+
+    _parts, keys = resolve_anchor_particles(design, anchors)
+    key_set = {(k[0], k[1], k[2]) for k in keys if len(k) >= 3}
+    if not key_set:
+        return set()
+    if model is None:
+        model = build_atomistic_model(design, include_proteins=full_topology)
+    residue_keys = built_pdb_residue_keys(model, sort_chains=full_topology)
+    return {i for i, k in enumerate(residue_keys) if k in key_set}
+
+
 def _psfgen_script(segments: list[dict], output_prefix: Path) -> str:
     has_protein = any(seg.get("is_protein") for seg in segments)
     lines = [

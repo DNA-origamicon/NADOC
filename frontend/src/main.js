@@ -1833,6 +1833,8 @@ async function main() {
     getMdViz: () => mdViz,
     // Phase 4: gate the Alpine run-target on the live cluster-connection state.
     getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
+    // N2: the shared anchor-scope picker resolves the 3D selection to fixedAtoms scopes.
+    getSelection: () => store.getState(),
   })
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────

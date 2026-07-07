@@ -133,6 +133,13 @@ class CreateJobRequest(BaseModel):
     cluster_name: Optional[str] = Field(
         None, description="Cluster profile name for remote execution (default 'alpine').",
     )
+    anchors: Optional[list] = Field(
+        None,
+        description="Anchor scopes (shared oxDNA/CanDo picker format: overhang / cluster "
+                    "/ domain / strand / base) to hold immobile via NAMD fixedAtoms for the "
+                    "whole ladder. A JOB-REQUEST annotation, never a Design edit; a selection "
+                    "that resolves to nothing leaves the run unanchored.",
+    )
     early_stop_relax: bool = Field(
         False,
         description="Relaxation accelerator (opt-in, EXPERIMENTAL): skip a stage's "
@@ -1272,6 +1279,7 @@ async def _prepare_job_bg(
             declash         = body.declash,
             force_soft      = body.force_soft,
             fast            = body.fast,
+            anchors         = body.anchors,
             progress        = tracker.report,
         )
         logger.info("prep %s: done; package=%s name_stem=%s segments=%d",

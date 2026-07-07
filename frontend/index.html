@@ -4518,6 +4518,22 @@
                 </div>
               </div>
 
+              <!-- ── Anchors (collapsible card — NAMD fixedAtoms; mirrors the oxDNA/CanDo picker) ── -->
+              <div class="ox-card">
+                <div id="md-anchors-toggle" class="ox-card__header" style="color:#8b949e">
+                  <span id="md-anchors-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Anchors</span>
+                </div>
+                <div id="md-anchors-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Strands / bases held immobile for the whole run (NAMD <code>fixedAtoms</code>). Pin an end so an electric field bows the structure instead of drifting it. A selection that resolves to nothing leaves the run unanchored.</div>
+                  <div style="display:flex;align-items:center;gap:5px">
+                    <button id="md-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
+                    <button id="md-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                  </div>
+                  <div id="md-anchors-list" style="margin-top:5px"></div>
+                  <div id="md-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                </div>
+              </div>
+
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
                 <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">

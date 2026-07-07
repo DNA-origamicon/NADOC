@@ -21,6 +21,7 @@ import { resetControlsToDefaults } from './form_defaults.js'
 import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
 import { flattenJobTree } from './job_tree.js'
 import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
+import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { formatBytes } from './format_bytes.js'
@@ -272,7 +273,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getClusterState = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getClusterState = null, getSelection = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1403,6 +1404,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
+      anchors:        (_anchorsCard?.getAnchors?.() ?? []).length
+                        ? _anchorsCard.getAnchors() : null,
     }
 
     // Local-disk forecast only applies to a local run; an Alpine run writes its
@@ -2514,6 +2517,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const _metricsCard = initMdMetricsCard({
     getSelectedJob: _selectedJob,
     getJobs: () => _jobs,
+  })
+
+  // Anchors card — the shared oxDNA scope picker (parameterised ids), feeding NAMD
+  // fixedAtoms.  Resolves the current 3D selection to overhang/cluster/domain/strand/
+  // base scopes sent in the create payload as `anchors`.
+  const _anchorsCard = initOxdnaAnchorsSetup({
+    getSelection: () => (getSelection ? getSelection() : null),
+    ids: {
+      toggle: 'md-anchors-toggle', arrow: 'md-anchors-arrow', body: 'md-anchors-body',
+      add: 'md-anchors-add', clear: 'md-anchors-clear', list: 'md-anchors-list',
+      status: 'md-anchors-status',
+    },
   })
 
   // ── Init ───────────────────────────────────────────────────────────────────

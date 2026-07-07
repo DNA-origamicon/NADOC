@@ -321,6 +321,10 @@ _SLOW_MODULES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # N2 NAMD anchors: real psfgen topology build (stubbed solvate) + conf writing.
+    "test_prepare_writes_anchor_restraints_end_to_end",
+    # N2 NAMD anchors: 176-strand routed design build + real export_pdb (~30 s).
+    "test_export_pdb_residue_order_is_natural_not_sorted_on_many_strands",
     "test_oxdna_http_lifecycle",
     "test_runner_real_binary_status_lifecycle",
     "test_lammps_real_run_end_to_end",   # real lmp CG-DNA run
