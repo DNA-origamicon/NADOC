@@ -418,6 +418,9 @@ _SLOW_TESTS = {
     "test_deflection_is_monotone_in_field_magnitude",
     "test_zero_field_produces_no_deflection",
     "test_predict_shape_field_threads_through_and_changes_shape",
+    # test_cando_shape_source.py (C5 comparison source: the pure assembler tests stay
+    # fast — this one runs a real in-process FEM predict_shape + NMA RMSF on a 6HB)
+    "test_real_predict_shape_assembles_and_compares",
 }
 
 

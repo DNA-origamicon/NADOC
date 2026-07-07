@@ -1906,6 +1906,9 @@ async function main() {
     oxdnaDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
+    // Lazy: the CanDo panel is created below, so the compare card's getSources reads its
+    // selected job at generate time (C5 — the CanDo column of the cross-engine card).
+    getCandoJob: () => candoPanel?.getSelectedJob?.(),
     // Clicking a job echoes its run conditions into every card (field arrow,
     // surface, anchor chips + 3D glow) — what was used during that run.
     applyRunConfig: (cfg) => {
@@ -1946,7 +1949,7 @@ async function main() {
     setDesignVisible: (v) => _setDesignGeometryVisible(v),
     legend:           initCandoLegend(),
   })
-  initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
+  const candoPanel = initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
   // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
   // on every design sync; both panels self-listen, so no store subscription here.)

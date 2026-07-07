@@ -393,7 +393,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -2010,16 +2010,26 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   // Cross-engine Shape comparison card (S5) — engine-agnostic, hosted here.  `getSources`
   // returns the per-engine {engine, descriptors, rmsf, shape_frame, field} bundles for the
-  // current design.  O1 wires the oxDNA column: the selected job's shape-source bundle (its
-  // relaxed frame's shared descriptors + RMSF); the remaining engines (C5/M5/N4) will add
-  // their own bundles here (live cross-engine data = MV-21).
+  // current design.  O1 wired the oxDNA column (the selected oxDNA job's relaxed-frame
+  // descriptors + RMSF); C5 adds the CanDo column (the selected CanDo job's FEM shape
+  // descriptors + free-free NMA RMSF — the RMSF reference), so the card shows the first
+  // real oxDNA-vs-CanDo agreement.  Remaining engines (M5/N4) add their bundles the same
+  // way (live cross-engine data = MV-21).
   const _compareCard = initShapeCompareCard({
     api: { start: api.startShapeCompare, poll: api.getShapeCompareRun },
     getSources: async () => {
+      const out = []
       const job = _selectedJob()
-      if (!job) return []
-      const src = await api.getOxdnaShapeSource(job.job_id)
-      return src && src.ready ? [src] : []
+      if (job) {
+        const src = await api.getOxdnaShapeSource(job.job_id)
+        if (src && src.ready) out.push(src)
+      }
+      const candoJob = getCandoJob?.()
+      if (candoJob) {
+        const csrc = await api.getCandoShapeSource(candoJob.job_id)
+        if (csrc && csrc.ready) out.push(csrc)
+      }
+      return out
     },
   })
 

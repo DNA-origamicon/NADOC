@@ -126,6 +126,25 @@ fills in as milestones complete.
   field-deflection (along-field, monotone, same per-nt force) scored by the shared S4 descriptor — **closes
   M-CANDO-FIELD**; a real oxDNA-vs-CanDo field agreement number is one C5 field-source wiring away.
 
+- **`C5` — CanDo source bundle (second live card column)** · shape: new `backend/core` service
+  (`cando_shape_source.py`, the twin of O1's `oxdna_shape_source`) + new `GET /cando/jobs/{id}/shape-source`
+  route + frontend `getSources` now merges the CanDo source with the oxDNA one (no solver/card-machinery change —
+  binds the existing S5 card) · feature: comparison-metric (CanDo joins the shared card; the RMSF reference
+  column) · engines now comparable: **oxDNA ↔ CanDo** — the S5 card now carries two live sources, so it emits
+  the first real cross-engine agreement: CanDo's absolute shape descriptors + aligned-shape RMSD vs the oxDNA
+  shape reference, and oxDNA's RMSF Pearson/Spearman vs **CanDo as the RMSF reference** (dir-less CanDo NMA RMSF
+  pairs with oxDNA per-strand ensemble RMSF via the S3 per-bp collapse) · oracle:
+  `tests/test_cando_shape_source.py` 7 tests (6 pure **fast** incl. the `[oxdna,cando]`→`build_comparison_report`
+  integration: refs shape=oxdna/rmsf=cando, shape-RMSD≈0 on rigid shift, RMSF Pearson 1.0 n=24; 1 real-
+  `predict_shape` **slow**) · main.js LOC Δ = +4 (pure wiring: lazy `getCandoJob` dep + capturing the CanDo
+  panel's return) · tests: 7/7 oracle, `just test` 4206 passed / 66 skipped / 1 xfailed (no drop), vitest 2214,
+  smoke green · display-vs-oracle: the two-engine card rendering was S5-scraped (synthetic); C5 wires the real
+  route into that validated path → live eyeball = MV-21 (updated) ·
+  **Comparable prediction gained, not just a run:** the comparison card now produces the **first real oxDNA-vs-
+  CanDo agreement numbers** — two independent structure predictors (rigorous CG vs cheap FEM) cross-validate on
+  the same design through one shared generate/view/export card, with per-observable references (oxDNA=shape,
+  CanDo=RMSF).
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -143,13 +162,19 @@ _Reference cells = `ref`; candidate cells = the agreement score (%-delta / Pears
 yet emitted. Export each row's underlying data + PNG from the comparison card (per the generate/view/export
 requirement)._
 
+**C5 (2026-07-06):** the oxDNA↔CanDo rows above are now COMPUTABLE — with a completed oxDNA relaxed job + a
+completed CanDo FEM job on the same design, the card emits shape %-deltas + aligned-shape RMSD (oxDNA=shape ref)
+and RMSF Pearson/Spearman (CanDo=RMSF ref). The oracle proved the wiring on synthetic + real-`predict_shape`
+sources; the real per-fixture numbers land from the **MV-21** live check (run both engines on one design, Generate,
+read/export the agreement) or a future headless two-engine cross-run.
+
 ## Milestone status (derived from the JSON)
 
 | Milestone | Meaning | Status |
 |---|---|---|
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | **DONE** (C1,C2,S4,S5,O1 shipped 2026-07-06) — FEM predicts the anchored field-deflection regime from oxDNA's per-nt force; real agreement number awaits C5 field-source |
-| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1,C2 ✅; C3–C5 left) |
+| `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | pending (C1,C2,C5 ✅; C3 extra-bases + C4 linkers left) |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 

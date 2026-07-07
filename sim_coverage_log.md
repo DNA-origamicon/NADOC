@@ -41,6 +41,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
 | **(C2) CanDo E-field (S4 on FEM frame)** ✅ | `assemble_field_force`: uniform body load = 2·`field_pN`·dir_hat/node (duplex node = 2 backbones), translational DOF only, None/zero-mag/zero-dir→zero vector, linear in magnitude; end-to-end (S4 `field_response_profile` on the RAW clamped-solve frame, NOT Kabsch-reposed display frame): anchors held (drift≈0) + free deflects ALONG field (proj≥0.5nm) + MONOTONE in \|E\| + zero-field→no deflection (RED); `predict_shape(field=)` threads through & `field=None` is a byte-identical no-op | `backend/physics/fem_solver.py::{assemble_field_force,solve_prestress_shape,predict_shape}`, `tests/test_cando_field.py` | every engine's E-FIELD task (M2/N1) — same `{field_pN,dir}` per-nt-force descriptor; **C5 field-source must emit field-response from the RAW frame, not display positions** |
 
+| **(C5) CanDo source bundle** ✅ | descriptors == `compute_shape_descriptors` on the exact core-filtered `predict_shape` frame (same S1 estimator, self-consistent — ABSOLUTE); core mask drops ssDNA ends; per-bp NMA `rmsf`→card shape with **`direction=None`** (dropped None); field passthrough; empty core→None (RED); **integration: `[oxdna, cando]`→`build_comparison_report` ready, refs shape=oxdna/rmsf=cando, cando shape-RMSD finite (~0 rigid shift), oxDNA RMSF Pearson 1.0 n=24 (dir-less pairs per-strand via `_rmsf_per_bp`)** | `backend/core/cando_shape_source.py::build_cando_shape_source`, `backend/api/routes_cando.py::get_cando_shape_source`, `tests/test_cando_shape_source.py` | the SAME source-bundle contract for M5/N4; CanDo is the RMSF reference column |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
@@ -346,6 +348,49 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   magnitude, driven by the *same per-nucleotide force* oxDNA uses. **Closes M-CANDO-FIELD** (C1, C2, S4, S5, O1 all
   done): the shared S4 descriptor now scores both engines from the same load, so a real oxDNA-vs-CanDo field
   cross-validation is one C5 field-source wiring away.
+
+### 2026-07-06 — `C5` CanDo source bundle → SECOND live card column (first oxDNA-vs-CanDo agreement)
+
+- **Picked** `C5` — the handoff's `▶ NEXT` and highest-leverage eligible task (deps `S5` met). The shared-metric
+  track is done, so cross-val value dominates: C5 turns the S5 card from an oxDNA-only view (O1) into the **first
+  real cross-engine comparison** by adding CanDo as the second source. Low effort (mirror O1's proven template).
+- **What shipped.** CanDo is now the second live source of the S5 cross-engine comparison card — Physical-layer
+  read only, no topology touch.
+  - `backend/core/cando_shape_source.py` `build_cando_shape_source(shape_frame, core_reference, *, rmsf=None,
+    field=None)` — the CanDo twin of O1's `oxdna_shape_source`, same SOURCE-BUNDLE CONTRACT: core-filter
+    `predict_shape()['positions']` to the rigid dsDNA core (`_filter_to_reference_core` vs `core_reference_geometry`,
+    ssDNA ends dropped), emit CanDo's **ABSOLUTE** `compute_shape_descriptors` (S1 estimator, not a differential),
+    map `predict_shape()['rmsf']` (`{helix_id,bp_index,rmsf_nm}`) to the card's rmsf shape.
+  - **CanDo NMA RMSF is DIRECTION-LESS** (both strands share one axis node) → emitted with `direction=None`. The
+    cross-engine `_rmsf_per_bp` collapses over direction anyway (the S3 lesson), so `direction=None` still pairs
+    CanDo's per-bp RMSF with oxDNA's per-strand ensemble RMSF instead of a silent empty intersection.
+  - `GET /cando/jobs/{id}/shape-source` (`routes_cando.py`) — reads the job's cached display + rmsf + snapshot
+    design, builds the core reference, returns `{ready(=descriptors is not None), ...bundle}`; graceful
+    no-display → `{ready:False}`, no-snapshot → 500 (mirrors sibling `/cylinders`,`/deviation`).
+  - Frontend: `api.getCandoShapeSource` + the compare card's `getSources` (hosted in the oxDNA panel) now fetches
+    **both** the selected oxDNA job's bundle AND the selected CanDo job's bundle → `[oxdna, cando]`. `main.js`
+    captures `const candoPanel` and passes a lazy `getCandoJob: () => candoPanel?.getSelectedJob?.()` (the CanDo
+    panel is created after the oxDNA panel; the arrow only fires on a Generate click, so no TDZ).
+  - **Field deferred** (`field:None`) — like O1. When added it MUST come from the RAW `solve_prestress_shape`
+    frame, not `predict_shape`'s Kabsch-reposed display positions (C2 lesson).
+- **Oracle** `tests/test_cando_shape_source.py` (**7 tests**): 6 fast pure (engine tag + descriptor
+  self-consistency, core mask drops ssDNA ends, rmsf remap direction-less + drops None, field passthrough,
+  empty-core→None RED, **integration**: `[oxdna, cando]`→`build_comparison_report` ready, refs shape=oxdna /
+  rmsf=cando, CanDo shape-RMSD finite ≈0 on a rigid 0.2nm shift, oxDNA RMSF **Pearson 1.0 n=24**, cando
+  rmsf_profile `is_reference`); 1 SLOW (registered in conftest): routed 6HB → real `predict_shape` →
+  `build_cando_shape_source` → finite absolute descriptors + finite rmsf → ready lone-CanDo report (rmsf ref=cando).
+- **Gates.** oracle 7/7 (6 fast + 1 slow); `just test` = **4206 passed / 66 skipped / 1 xfailed**; ruff clean on
+  touched files (20 pre-existing debt in OTHER test files untouched per `feedback_no_bulk_reformat`); vitest 2214;
+  smoke green (assembly_exit_cleanup flaked once under parallel load, passes isolated — unrelated path). Fresh-
+  context review: **CONFIRMED-CORRECT**, no bugs, no TDZ, Three-Layer clean. **main.js LOC Δ = +4** (pure wiring:
+  a lazy dep + capturing an existing factory's return). **Display-vs-oracle:** the two-engine (oxdna+cando) card
+  RENDERING was already scraped-vs-oracle in S5 (synthetic sources → +10% twist delta, RMSF Pearson 1.000); C5
+  only wires the real backend route into that S5-validated render path → live cross-engine eyeball = **MV-21**
+  (updated with the C5 slice).
+- **Comparable prediction gained, not just a run:** the comparison card now produces the **first real oxDNA-vs-
+  CanDo agreement numbers** — CanDo's absolute shape descriptors + aligned-shape RMSD scored against the oxDNA
+  shape reference, and oxDNA's RMSF correlated (Pearson/Spearman) against **CanDo as the RMSF reference**. Two
+  independent structure predictors now cross-validate on the same design through one shared card.
 
 ## Lessons (anti-patterns banked)
 

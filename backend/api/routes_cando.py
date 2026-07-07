@@ -21,6 +21,7 @@ GET    /cando/jobs/{id}/display     predicted positions → applyFemPositions li
 GET    /cando/jobs/{id}/rmsf        per-bp RMSF (nm) for the flex map (Item 3)
 GET    /cando/jobs/{id}/deviation   per-bp deviation from the intended shape + RMSD (Item 3)
 GET    /cando/jobs/{id}/cylinders   CanDo-style jointed-cylinder geometry (tubes + joints)
+GET    /cando/jobs/{id}/shape-source shared cross-engine descriptors + RMSF bundle (S5/C5)
 GET    /cando/jobs/{id}/error-log   failure log for the UI popup
 GET    /cando/available             always {available:true} (in-process solver)
 
@@ -390,6 +391,39 @@ async def get_cando_cylinders(job_id: str) -> dict:
     axis_nodes = cached.get("axis") or axis_from_backbones(cached["positions"], rmsf)
     result = await run_in_threadpool(compute_cylinders, design, axis_nodes, rmsf)
     return {"job_id": job.job_id, "ready": True, **result}
+
+
+@router.get("/cando/jobs/{job_id}/shape-source")
+async def get_cando_shape_source(job_id: str) -> dict:
+    """The CanDo source bundle for the cross-engine comparison card (S5/C5).
+
+    Turns the job's cached FEM display frame + per-bp NMA RMSF into the shared
+    ``{engine, descriptors, rmsf, shape_frame, field}`` bundle
+    ``build_comparison_report`` consumes — CanDo's ABSOLUTE shape descriptors on the
+    rigid dsDNA core + its free-free RMSF (the RMSF reference column).  Uses the job's OWN
+    design snapshot for the core mask, so the descriptors match what the FEM solved, not
+    live editor state.  Physical-layer only (Three-Layer Law); field emission is deferred
+    (``field:None`` for now — see :mod:`backend.core.cando_shape_source`)."""
+    from backend.api.skip_twist_tuning import core_reference_geometry
+    from backend.core.cando_runner import _load_snapshot_design
+    from backend.core.cando_shape_source import build_cando_shape_source
+
+    job = _load_job(job_id)
+    jd = job.job_dir(_workspace())
+    cached = load_display(jd)
+    if not cached or not cached.get("positions"):
+        return {"job_id": job.job_id, "ready": False}
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise HTTPException(500, f"CanDo job {job_id!r} has no design snapshot to compare against")
+
+    rmsf_cached = load_rmsf(jd)
+    rmsf = rmsf_cached.get("rmsf") if rmsf_cached else None
+    reference = await run_in_threadpool(core_reference_geometry, design)
+    bundle = await run_in_threadpool(
+        build_cando_shape_source, cached["positions"], reference, rmsf=rmsf)
+    ready = bundle["descriptors"] is not None
+    return {"job_id": job.job_id, "ready": ready, **bundle}
 
 
 @router.get("/cando/available")

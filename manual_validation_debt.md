@@ -188,6 +188,22 @@ cards to show the same number.
 twist/bend/Rg/end-to-end + an RMSF overlay, and that Export produces a PNG + CSVs. (Single
 engine → no deltas yet; that's expected until C5.) Report pass/fail.
 
+**C5 update (2026-07-06) — CanDo column now live.** `getSources` now also fetches the
+selected CanDo job's bundle (`GET /cando/jobs/{id}/shape-source` →
+`build_cando_shape_source`: CanDo's absolute shape descriptors + free-free NMA RMSF, the
+RMSF reference). With BOTH a completed oxDNA relaxed job AND a completed CanDo FEM job on
+the same design selected, the card should now show the **first real cross-engine deltas**:
+oxDNA vs CanDo scalar %-deltas (oxDNA is the SHAPE reference), an aligned-shape RMSD row,
+and an RMSF Pearson/Spearman with **CanDo as the RMSF reference**. The card RENDERING of a
+two-engine (oxdna+cando) report was already display-vs-oracle-scraped in S5 (synthetic
+sources); C5 only wires the real backend route into that S5-validated render path, so this
+is a live-data eyeball, not a new render surface. **Test (C5 slice, do now):** load a
+design, run BOTH an oxDNA relax job and a CanDo FEM job, select both (oxDNA in its panel,
+CanDo in its panel), Generate the "Shape comparison" card → confirm a **CanDo column**
+appears next to oxDNA with sane twist/bend/Rg, the agreement table shows a finite
+shape-RMSD + RMSF Pearson (CanDo = RMSF ref), and Export still produces PNG + CSVs. Report
+pass/fail.
+
 ### MV-5 — Assembly right-click context menu (part / linker / belt)
 *Discharges fix #69 — the assembly right-click router moved onto the shared
 `createContextMenu` primitive. The router (`assembly_pointer.js`

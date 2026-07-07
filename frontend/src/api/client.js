@@ -2143,6 +2143,8 @@ export const getCandoRmsf        = (id)          => _oxdnaJSON('GET',  `/cando/j
 export const getCandoDeviation   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`)
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
 export const getCandoCylinders   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/cylinders`)
+/** CanDo source bundle for the cross-engine comparison card (S5/C5): shared descriptors + RMSF. */
+export const getCandoShapeSource = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/shape-source`)
 
 // ── CanDo-FEM autorefine (Phase-5 Item 4): greedy loop/skip tuning driven by the FEM shape oracle.
 /** Start a CanDo-FEM autorefine run on the active design → {autorefine_id, state}. */
