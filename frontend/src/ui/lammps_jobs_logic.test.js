@@ -99,4 +99,30 @@ describe('buildCreatePayload', () => {
     const p = buildCreatePayload({ steps: '5000', dumpEvery: '250', temperature: '0.09', salt: '0.3', ranks: '0' })
     expect(p).toEqual({ steps: 5000, dump_every: 250, temperature: 0.09, salt_molar: 0.3, ranks: 1 })
   })
+  it('omits design path + forces when absent', () => {
+    const p = buildCreatePayload({})
+    expect('design_source_path' in p).toBe(false)
+    expect('field' in p).toBe(false)
+    expect('anchors' in p).toBe(false)
+  })
+  it('attaches design path, a positive field, and non-empty anchors', () => {
+    const p = buildCreatePayload({
+      designSourcePath: '/ws/d.nadoc',
+      field: { field_pN: 30, dir: [1, 0, 0] },
+      anchors: [{ kind: 'strand', id: 's1' }],
+    })
+    expect(p.design_source_path).toBe('/ws/d.nadoc')
+    expect(p.field).toEqual({ field_pN: 30, dir: [1, 0, 0] })
+    expect(p.anchors).toEqual([{ kind: 'strand', id: 's1' }])
+  })
+  it('drops a zero-magnitude field and empty anchors', () => {
+    const p = buildCreatePayload({ field: { field_pN: 0, dir: [1, 0, 0] }, anchors: [] })
+    expect('field' in p).toBe(false)
+    expect('anchors' in p).toBe(false)
+  })
+  it('attaches a surface wall with positive stiffness, drops a zero-stiffness one', () => {
+    const wall = { dir: [0, 1, 0], offset_nm: 0.5, stiff: 5 }
+    expect(buildCreatePayload({ wall }).wall).toEqual(wall)
+    expect('wall' in buildCreatePayload({ wall: { dir: [0, 1, 0], offset_nm: 0, stiff: 0 } })).toBe(false)
+  })
 })

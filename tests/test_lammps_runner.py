@@ -76,6 +76,67 @@ def test_prepare_rejects_unsequenced_design(tmp_path):
         R.prepare_lammps_job(design, _geometry(design), tmp_path)
 
 
+# ── external-force mapping (oxDNA forces.txt → LAMMPS fixes) ───────────────────
+
+def _conf_for(design, tmp_path):
+    """Write the job's conf.dat (via prepare, no forces) and return its path."""
+    R.prepare_lammps_job(design, _geometry(design), tmp_path)
+    return tmp_path / "conf.dat"
+
+
+def test_resolve_forces_field_requires_an_anchor(tmp_path):
+    design = _sequenced_design()
+    conf = _conf_for(design, tmp_path)
+    with pytest.raises(R.LammpsError, match="needs ≥1 anchor"):
+        R.resolve_lammps_forces(design, conf, field={"field_pN": 20.0, "dir": [1, 0, 0]})
+
+
+def test_resolve_forces_field_and_anchor(tmp_path):
+    design = _sequenced_design()
+    conf = _conf_for(design, tmp_path)
+    anchors = [{"kind": "strand", "id": design.strands[0].id}]
+    spec, meta = R.resolve_lammps_forces(
+        design, conf, field={"field_pN": 48.63, "dir": [2, 0, 0]}, anchors=anchors)
+    # 48.63 pN = exactly 1.0 oxDNA force unit, along the normalised +x direction
+    assert spec.force == pytest.approx((1.0, 0.0, 0.0), abs=1e-6)
+    assert meta["field"]["field_oxdna"] == pytest.approx(1.0, abs=1e-6)
+    # oxDNA 0-based particles → LAMMPS 1-based atom ids
+    assert meta["n_anchored"] > 0
+    assert spec.anchor_ids == [p + 1 for p in meta["anchor_particles"]]
+    assert min(spec.anchor_ids) >= 1
+
+
+def test_resolve_forces_wall_axis_aligned(tmp_path):
+    design = _sequenced_design()
+    conf = _conf_for(design, tmp_path)
+    spec, meta = R.resolve_lammps_forces(
+        design, conf, wall={"dir": [0, 0, 1], "offset_nm": 0.5, "stiff": 50.0})
+    assert spec.wall["face"] == "zlo"
+    assert spec.wall["epsilon"] == 50.0
+    assert meta["wall"]["face"] == "zlo" and meta["wall"]["stiff"] == 50.0
+    assert spec.force is None and not spec.anchor_ids
+
+
+def test_prepare_with_forces_writes_fixes_and_meta(tmp_path):
+    design = _sequenced_design()
+    anchors = [{"kind": "strand", "id": design.strands[0].id}]
+    info = R.prepare_lammps_job(
+        design, _geometry(design), tmp_path,
+        field={"field_pN": 30.0, "dir": [1, 0, 0]}, anchors=anchors)
+    txt = (tmp_path / "in.lammps").read_text()
+    assert "fix efield all addforce" in txt
+    assert "fix anchors anchors spring/self" in txt
+    assert info["forces"]["field"]["field_pN"] == 30.0
+    assert info["forces"]["n_anchored"] > 0
+
+
+def test_prepare_without_forces_reports_none(tmp_path):
+    design = _sequenced_design()
+    info = R.prepare_lammps_job(design, _geometry(design), tmp_path)
+    assert info["forces"] is None
+    assert "addforce" not in (tmp_path / "in.lammps").read_text()
+
+
 # ── real end-to-end run (gated on a CG-DNA LAMMPS being installed) ─────────────
 
 _LMP = find_lammps()
@@ -92,6 +153,58 @@ def test_lammps_real_run_end_to_end(tmp_path):   # auto-marked slow via conftest
     assert result["rc"] == 0
     assert result["frames"] >= 2            # steps 0, 500, 1000
     assert (tmp_path / "traj.lammpstrj").stat().st_size > 0
+
+
+def _dump_frames(text):
+    """Parse a LAMMPS custom dump → list of id-sorted (N,3) position arrays."""
+    import numpy as np
+    frames = []
+    for blk in text.split("ITEM: TIMESTEP")[1:]:
+        lines = blk.splitlines()
+        start = cols = None
+        for i, ln in enumerate(lines):
+            if ln.startswith("ITEM: ATOMS"):
+                cols = ln.split()[2:]; start = i + 1; break
+        ci = {c: k for k, c in enumerate(cols)}
+        rows = []
+        for ln in lines[start:]:
+            p = ln.split()
+            if len(p) < len(cols):
+                break
+            rows.append((int(p[ci["id"]]), float(p[ci["x"]]), float(p[ci["y"]]), float(p[ci["z"]])))
+        rows.sort()
+        frames.append(np.array([[r[1], r[2], r[3]] for r in rows]))
+    return frames
+
+
+@pytest.mark.skipif(not _HAS_CGDNA, reason="no CG-DNA-capable LAMMPS installed")
+def test_lammps_field_holds_anchor_and_deflects_free(tmp_path):
+    """A real field+anchor run: anchored beads stay put; free beads drift ALONG the
+    field.  The physics proof that the oxDNA string/trap → addforce/spring mapping
+    steers a LAMMPS run correctly (auto-marked slow)."""
+    import numpy as np
+    design = _sequenced_design()
+    anchors = [{"kind": "strand", "id": design.strands[0].id}]
+    params = L.LammpsInputParams(steps=40000, dump_every=2000, relax_iters=300,
+                                 thermo_every=40000)
+    info = R.prepare_lammps_job(
+        design, _geometry(design), tmp_path, params,
+        field={"field_pN": 200.0, "dir": [1, 0, 0]}, anchors=anchors)
+    assert asyncio.run(R.run_lammps(tmp_path, ranks=1))["rc"] == 0
+
+    frames = _dump_frames((tmp_path / "traj.lammpstrj").read_text())
+    f0, fN = frames[0], frames[-1]          # frame 0 = the anchor tether point
+    anchored = np.array(info["forces"]["anchor_particles"])
+    mask = np.zeros(len(f0), bool); mask[anchored] = True
+    disp = fN - f0
+    anchored_drift = np.linalg.norm(disp[mask], axis=1).mean()
+    free_along_field = disp[~mask][:, 0].mean()
+    free_mag = np.linalg.norm(disp[~mask], axis=1).mean()
+    # anchors held (spring/self K=1000 → ≪0.1 oxDNA units)
+    assert anchored_drift < 0.1
+    # free part moved, and its motion is dominated by the +field (x) direction
+    assert free_along_field > 3 * anchored_drift
+    assert free_along_field > 0.5 * free_mag
 
 
 # ── managed-job orchestration ─────────────────────────────────────────────────

@@ -106,6 +106,49 @@ def test_create_runs_to_completion_and_lists(monkeypatch, tmp_path):
     assert dev["ready"] is True and dev["mean_deviation"] is not None
 
 
+@pytest.mark.skipif(not _HAS_CGDNA, reason="no CG-DNA-capable LAMMPS installed")
+def test_create_field_without_anchor_is_400(monkeypatch, tmp_path):
+    """An E-field with no resolvable anchor is rejected (an unanchored uniform force
+    just drifts the whole structure — oxDNA GOTCHA 1).  Fast: prepare raises before
+    any lmp run is launched."""
+    monkeypatch.setattr(routes_lammps, "_WORKSPACE_DIR", tmp_path)
+    design_state.set_design(_sequenced_design())
+    r = client.post("/api/lammps/jobs", json={
+        "steps": 500, "field": {"field_pN": 20.0, "dir": [1, 0, 0]}})
+    assert r.status_code == 400
+    assert "anchor" in r.json()["detail"].lower()
+
+
+@pytest.mark.skipif(not _HAS_CGDNA, reason="no CG-DNA-capable LAMMPS installed")
+def test_create_with_field_and_anchor_records_forces(monkeypatch, tmp_path):
+    """A steered create (field + strand anchor) writes the LAMMPS fixes and records
+    the applied-forces meta on the job (auto-marked slow — real lmp run)."""
+    monkeypatch.setattr(routes_lammps, "_WORKSPACE_DIR", tmp_path)
+    design = _sequenced_design()
+    design_state.set_design(design)
+    r = client.post("/api/lammps/jobs", json={
+        "steps": 1000, "dump_every": 500,
+        "field": {"field_pN": 30.0, "dir": [1, 0, 0]},
+        "anchors": [{"kind": "strand", "id": design.strands[0].id}]})
+    assert r.status_code == 200, r.text
+    job = r.json()
+    assert job["forces"]["field"]["field_pN"] == 30.0
+    assert job["forces"]["n_anchored"] > 0
+    inp = (tmp_path / "lammps_jobs" / job["job_id"] / "in.lammps").read_text()
+    assert "fix efield all addforce" in inp
+    assert "fix anchors anchors spring/self" in inp
+
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        if client.get(f"/api/lammps/jobs/{job['job_id']}").json()["status"] in (
+                "completed", "failed", "stopped"):
+            break
+        time.sleep(0.5)
+    final = client.get(f"/api/lammps/jobs/{job['job_id']}").json()
+    assert final["status"] == "completed", final.get("error")
+    assert final["forces"]["field"]["field_pN"] == 30.0   # persisted across the run
+
+
 def test_trajectory_guard_on_design_mismatch(monkeypatch, tmp_path):
     """A trajectory can't be mapped onto a different/edited design (nucleotide count differs)."""
     monkeypatch.setattr(routes_lammps, "_WORKSPACE_DIR", tmp_path)

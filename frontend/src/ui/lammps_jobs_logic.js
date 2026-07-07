@@ -80,8 +80,13 @@ export function jobRowLabel(job) {
   return `${name} — ${status}`
 }
 
-/** Validate + coerce the Advanced-card inputs into a create-job payload. */
-export function buildCreatePayload({ steps, dumpEvery, temperature, salt, ranks } = {}) {
+/** Validate + coerce the Advanced-card inputs (+ optional forces / design path) into
+ *  a create-job payload.  `field`/`anchors` are the external-force spec from
+ *  lammps_forces_setup; only non-empty ones are attached. */
+export function buildCreatePayload({
+  steps, dumpEvery, temperature, salt, ranks,
+  designSourcePath = null, field = null, anchors = null, wall = null,
+} = {}) {
   const posInt = (v, d) => {
     const n = Math.floor(Number(v))
     return Number.isFinite(n) && n > 0 ? n : d
@@ -90,11 +95,16 @@ export function buildCreatePayload({ steps, dumpEvery, temperature, salt, ranks 
     const n = Number(v)
     return Number.isFinite(n) && n > 0 ? n : d
   }
-  return {
+  const payload = {
     steps: posInt(steps, 100000),
     dump_every: posInt(dumpEvery, 1000),
     temperature: pos(temperature, 0.1),
     salt_molar: pos(salt, 0.5),
     ranks: Math.max(1, posInt(ranks, 1)),
   }
+  if (designSourcePath) payload.design_source_path = designSourcePath
+  if (field && Number(field.field_pN) > 0) payload.field = field
+  if (Array.isArray(anchors) && anchors.length) payload.anchors = anchors
+  if (wall && Number(wall.stiff) > 0) payload.wall = wall
+  return payload
 }

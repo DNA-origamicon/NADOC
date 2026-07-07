@@ -257,6 +257,89 @@ def test_resume_clears_stale_error_and_uses_checkpoint(
     assert _MIN_NAME not in confs
 
 
+def _mark_min_done(job: MdJob, tmp_path: Path) -> None:
+    """Pre-place the minimization outputs so run_job skips min and reaches seg 0."""
+    out = job.package_dir(tmp_path) / "output"
+    for ext in ("coor", "vel", "xsc"):
+        (out / f"{_MIN_NAME}.{ext}").write_text("min")
+
+
+def _install_cell_shrink_fake(
+    monkeypatch: pytest.MonkeyPatch, recorder: list[str] | None = None
+) -> None:
+    """Stub NAMD to crash with the self-healing 'periodic cell too small' fatal,
+    leaving a valid mid-segment checkpoint (restart.xsc, no final .coor)."""
+    monkeypatch.setattr(nr, "find_namd", lambda: "/fake/namd3")
+
+    async def fake_namd(
+        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
+        on_spawn=None,
+    ):
+        if recorder is not None:
+            recorder.append(conf_name)
+        if on_spawn is not None:
+            on_spawn(4242)
+        out = package_dir / "output"
+        out.mkdir(exist_ok=True)
+        base = conf_name.split(".resume")[0]
+        # Checkpoint present, final output absent → the crash is resumable.
+        for ext in ("coor", "vel"):
+            (out / f"{base}.restart.{ext}").write_text("checkpoint")
+        (out / f"{base}.restart.xsc").write_text(
+            "# restart\n#$LABELS step a_x\n500 138.9\n"
+        )
+        log_path.write_text(
+            "ENERGY: 500 300 300 1 1 100 1 1\n"
+            "FATAL ERROR: Periodic cell has become too small for original patch grid!\n"
+            "End of program\n"
+        )
+        return 1, 4242
+
+    monkeypatch.setattr(nr, "_run_namd_async", fake_namd)
+
+
+def test_cell_shrink_auto_resumes_instead_of_failing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 'periodic cell too small' fatal with a live checkpoint must leave the job
+    RUNNING (resumable) with the per-segment resume counter bumped — not failed —
+    so the supervisor restarts it and the patch grid rebuilds for the shrunk box."""
+    job = _setup_package(tmp_path)
+    _mark_min_done(job, tmp_path)
+    job.save(tmp_path)
+    confs: list[str] = []
+    _install_cell_shrink_fake(monkeypatch, confs)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    final = MdJob.load(job.job_id, tmp_path)
+    assert final.status == MdStatus.running
+    assert final.segments[0].status == "running"
+    assert final.segments[0].auto_resumes == 1
+    assert final.failure_kind is None
+    assert "auto-resuming" in (final.error or "").lower()
+    assert _MIN_NAME not in confs  # minimization was skipped
+
+
+def test_cell_shrink_gives_up_after_resume_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the per-segment auto-resume budget is spent, a repeat cell-shrink fatal
+    fails the job (classified 'cell_shrink') rather than resuming forever."""
+    job = _setup_package(tmp_path)
+    _mark_min_done(job, tmp_path)
+    job.segments[0].auto_resumes = nr.MAX_CELL_SHRINK_RESUMES
+    job.save(tmp_path)
+    _install_cell_shrink_fake(monkeypatch)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    final = MdJob.load(job.job_id, tmp_path)
+    assert final.status == MdStatus.failed
+    assert final.segments[0].status == "failed"
+    assert final.failure_kind == "cell_shrink"
+
+
 def test_rerun_on_completed_job_is_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

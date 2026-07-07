@@ -123,6 +123,21 @@ export function mdChildRowLabel(job, index) {
   return `Refit ${index}`
 }
 
+/** Pure: classify a segment's timeline glyph.  Separated from colour/symbol mapping
+ *  so the decision is unit-testable.  `skipped` (the early-stop accelerator marked a
+ *  redundant chunk done without running it) takes precedence over everything — it is
+ *  always a completed-but-not-run state, drawn distinctly from a chunk that ran. */
+export function mdSegGlyphKind(status, { skipped = false, advisory = false, jobLive = true } = {}) {
+  if (skipped) return 'skipped'
+  if (status === 'done' && advisory) return 'advisory'
+  // A "running" segment on a terminal job was interrupted mid-flight — pending, not active.
+  if (status === 'running' && !jobLive) return 'pending'
+  if (status === 'done') return 'done'
+  if (status === 'failed') return 'failed'
+  if (status === 'running') return 'running'
+  return 'pending'
+}
+
 /** Pure: should the one-click Resume button show, and can it be clicked?  A timed-out
  *  Alpine job (`resumable`) can resume from its last checkpoint, but only with a live
  *  cluster session (Duo).  Returns {show, disabled, reason}. */
@@ -2170,15 +2185,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       segs.forEach(seg => {
         const dot = document.createElement('span')
         const health = healthBySegment.get(seg.name)
-        const { symbol, color } = _segSymbol(seg.status, health, jobLive)
+        const { symbol, color } = _segSymbol(seg.status, health, jobLive, seg.skipped)
         dot.style.cssText = `color:${color};font-size:11px;cursor:default;flex-shrink:0`
         dot.textContent = symbol
         const warnNote = _productionAdvisory(health)
           ? 'WC below advisory'
           : (_isAdvisoryWarning(health) ? (health.reason || 'below health threshold') : null)
-        dot.title = warnNote
-          ? `${seg.name} · ${seg.percent}% · ${seg.status} · ${warnNote}`
-          : `${seg.name} · ${seg.percent}% · ${seg.status}`
+        dot.title = seg.skipped
+          ? `${seg.name} · skipped — the accelerator detected this stage had already `
+            + `satisfied its plateau (energy + base-pairing) requirements, so this `
+            + `redundant chunk was not run`
+          : (warnNote
+            ? `${seg.name} · ${seg.percent}% · ${seg.status} · ${warnNote}`
+            : `${seg.name} · ${seg.percent}% · ${seg.status}`)
         row.appendChild(dot)
       })
 
@@ -2211,17 +2230,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return !!health && health.passed === false
   }
 
-  function _segSymbol(status, health = null, jobLive = true) {
-    if (status === 'done' && (_productionAdvisory(health) || _isAdvisoryWarning(health)))
-      return { symbol: '⚠', color: _C.warn }
-    // A "running" segment on a terminal (stopped/failed/completed) job was
-    // interrupted mid-flight — show it as pending, not as an active stage.
-    if (status === 'running' && !jobLive) return { symbol: '·', color: _C.dim }
-    switch (status) {
-      case 'done':    return { symbol: '●', color: _C.ok }
-      case 'failed':  return { symbol: '✗', color: _C.err }
-      case 'running': return { symbol: '○', color: _C.warn }
-      default:        return { symbol: '·', color: _C.dim }
+  function _segSymbol(status, health = null, jobLive = true, skipped = false) {
+    const advisory = _productionAdvisory(health) || _isAdvisoryWarning(health)
+    switch (mdSegGlyphKind(status, { skipped, advisory, jobLive })) {
+      // Green right-arrow (not the solid circle): the early-stop accelerator skipped
+      // this redundant chunk, so "done but skipped" reads distinctly from "done + ran".
+      case 'skipped':  return { symbol: '→', color: _C.ok }
+      case 'advisory': return { symbol: '⚠', color: _C.warn }
+      case 'done':     return { symbol: '●', color: _C.ok }
+      case 'failed':   return { symbol: '✗', color: _C.err }
+      case 'running':  return { symbol: '○', color: _C.warn }
+      default:         return { symbol: '·', color: _C.dim }
     }
   }
 

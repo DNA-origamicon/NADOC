@@ -53,6 +53,14 @@ class MdSegmentStatus:
     percent: float
     steps:   int
     status:  str = "pending"   # pending / running / done / failed
+    # True when this chunk was never actually run: the early-stop accelerator
+    # (md_cutoff) found the stage had already plateaued, so this redundant chunk
+    # was marked done without executing.  status stays "done" (it counts as
+    # complete for all rollups); this flag only drives a distinct timeline glyph.
+    skipped: bool = False
+    # Bounded count of automatic checkpoint-resumes after a self-healing
+    # "periodic cell too small" fatal (NPT equilibration outgrew the patch grid).
+    auto_resumes: int = 0
 
 
 @dataclass

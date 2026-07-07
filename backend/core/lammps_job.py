@@ -55,6 +55,10 @@ class LammpsJob:
     lammps_path:        Optional[str] = None
     design_source_path: Optional[str] = None
     parent_job_id:      Optional[str] = None
+    # External-force metadata for a steered run (from resolve_lammps_forces): the
+    # applied E-field / surface wall / anchor summary, so the row/detail can show what
+    # was applied.  None for a plain (unforced) run.  Display-layer only.
+    forces:             Optional[dict] = None
 
     # ── paths ──────────────────────────────────────────────────────────────────
     def job_dir(self, workspace_dir: Path) -> Path:
@@ -77,7 +81,7 @@ class LammpsJob:
         data["status"] = LammpsStatus(data["status"])
         for k, v in (("parent_job_id", None), ("design_source_path", None),
                      ("lammps_path", None), ("lammps_pid", None), ("frames", 0),
-                     ("current_step", 0), ("ranks", 1)):
+                     ("current_step", 0), ("ranks", 1), ("forces", None)):
             data.setdefault(k, v)
         return cls(**data)
 
@@ -112,6 +116,7 @@ def new_lammps_job(
     ranks: int = 1,
     design_source_path: Optional[str] = None,
     parent_job_id: Optional[str] = None,
+    forces: Optional[dict] = None,
 ) -> LammpsJob:
     return LammpsJob(
         job_id             = uuid.uuid4().hex[:12],
@@ -127,4 +132,5 @@ def new_lammps_job(
         ranks              = ranks,
         design_source_path = design_source_path,
         parent_job_id      = parent_job_id,
+        forces             = forces,
     )

@@ -213,3 +213,73 @@ def test_input_file_soft_start_can_be_disabled():
     assert "reset_timestep" not in txt
     run_cmds = [ln for ln in txt.splitlines() if ln.startswith("run ")]
     assert len(run_cmds) == 1   # production run only, no warmup run
+
+
+# ── external forces (oxDNA forces.txt → LAMMPS fixes) ─────────────────────────
+
+def test_length_constant_matches_project_constants():
+    from backend.core.constants import OXDNA_LENGTH_UNIT
+    assert abs(L.OXDNA_LENGTH_UNIT - OXDNA_LENGTH_UNIT) < 1e-9
+    assert abs(L.NM_TO_OXDNA - 1.0 / OXDNA_LENGTH_UNIT) < 1e-9
+
+
+def test_compress_id_ranges_collapses_runs():
+    assert L.compress_id_ranges([1, 2, 3, 7, 8, 10]) == "1:3 7:8 10"
+    assert L.compress_id_ranges([5]) == "5"
+    assert L.compress_id_ranges([]) == ""
+    assert L.compress_id_ranges([3, 1, 2, 2]) == "1:3"        # sorted + deduped
+
+
+def test_axis_wall_from_extent_places_wall_past_structure():
+    pos = [[0, 0, 5.0], [0, 0, 9.0], [0, 0, 7.0]]
+    # dir +z → allowed side above → 'zlo' wall at min z minus the offset
+    assert L.axis_wall_from_extent(pos, [0, 0, 1], 0.0) == ("zlo", 5.0)
+    assert L.axis_wall_from_extent(pos, [0, 0, 1], 1.5) == ("zlo", 3.5)
+    # dir -z → allowed side below → 'zhi' wall at max z plus the offset
+    assert L.axis_wall_from_extent(pos, [0, 0, -1], 1.0) == ("zhi", 10.0)
+
+
+def test_axis_wall_rejects_non_axis_aligned_direction():
+    with pytest.raises(ValueError, match="axis-aligned"):
+        L.axis_wall_from_extent([[0, 0, 0]], [1, 1, 0], 0.0)
+
+
+def test_build_force_fixes_emits_addforce_spring_and_wall():
+    spec = L.LammpsForceSpec(
+        force=(0.1, 0.0, 0.0), anchor_ids=[1, 2, 3, 7], anchor_stiff=1000.0,
+        wall={"face": "zlo", "coord": 4.0, "epsilon": 50.0, "cutoff": 1.0})
+    txt = L.build_force_fixes(spec)
+    assert "fix efield all addforce 0.1 0 0" in txt
+    assert "group anchors id 1:3 7" in txt
+    assert "fix anchors anchors spring/self 1000" in txt
+    assert "fix surface all wall/harmonic zlo 4 50 1.0 1 units box" in txt
+
+
+def test_build_force_fixes_empty_when_no_forces():
+    assert L.build_force_fixes(None) == ""
+    assert L.build_force_fixes(L.LammpsForceSpec()) == ""
+
+
+def test_boundary_line_periodic_unless_walled():
+    assert L.boundary_line(None) == "boundary p p p"
+    assert L.boundary_line(L.LammpsForceSpec()) == "boundary p p p"
+    lo = L.LammpsForceSpec(wall={"face": "zlo", "coord": 0.0})
+    assert L.boundary_line(lo) == "boundary p p fm"       # wall face fixed, opposite shrink
+    hi = L.LammpsForceSpec(wall={"face": "xhi", "coord": 0.0})
+    assert L.boundary_line(hi) == "boundary mf p p"
+
+
+def test_input_file_injects_forces_into_production_block_after_minimise():
+    spec = L.LammpsForceSpec(force=(0.5, 0, 0), anchor_ids=[1, 2], anchor_stiff=1000.0)
+    txt = L.build_input_file(L.LammpsInputParams(relax_iters=100), spec)
+    assert "fix efield all addforce" in txt
+    assert "fix anchors anchors spring/self 1000" in txt
+    # spring/self must be created AFTER the minimise (tethers to production-start pos)
+    assert txt.index("minimize") < txt.index("spring/self")
+    # and before the production run
+    assert txt.index("spring/self") < txt.index("run 100")
+
+
+def test_input_file_without_force_spec_is_unchanged():
+    assert "addforce" not in L.build_input_file(L.LammpsInputParams())
+    assert L.build_input_file(L.LammpsInputParams()).count("boundary p p p") == 1

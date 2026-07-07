@@ -104,6 +104,24 @@ server/runner death. Three layers in `namd_runner.py`:
   continues in a fresh `<seg>.contN.dcd` (partial `<seg>.dcd` preserved —
   display picks the newest). `_resume_step` reads the checkpoint step from
   `.restart.xsc`; returns None (fresh run) if final `.coor` exists or no restart.
+- **Auto-resume on "periodic cell too small" (2026-07-06).** A full-solvation NPT
+  segment (`useFlexibleCell no` + langevinPiston) shrinks the box ~3% linear as it
+  relaxes to equilibrium density; NAMD fixes the patch grid at startup with only a
+  tiny auto margin (~0.4 Å), so the shrink crosses the grid floor and NAMD exits
+  `FATAL: Periodic cell has become too small for original patch grid!`. This is NOT
+  a blow-up (T/P/energy stay healthy) and is self-healing: restarting from the
+  checkpoint rebuilds the grid at the smaller box. New failure kind
+  `FAILURE_CELL_SHRINK` (`md_vram.classify_failure_log`, pattern "Periodic cell has
+  become too small") — kept distinct from `instability` ("Margin is too small" =
+  RATTLE blow-up, which would just re-crash). In `run_job`'s `rc!=0` handler, when
+  the kind is `cell_shrink` AND a usable checkpoint exists AND
+  `seg.auto_resumes < MAX_CELL_SHRINK_RESUMES` (4), the job is left `running`
+  (segment→running, `failure_kind=None`, `auto_resumes++`) so the supervisor
+  auto-resumes it instead of dead-ending; past the cap it fails normally. Tests:
+  `test_md_runner_proceeds::test_cell_shrink_*`, `test_md_vram` classifier row.
+  **DO NOT "fix" this with a `margin` keyword** — a large margin crashes NAMD's GPU
+  tile-list kernel on a carved box; pinned by `test_md_water_shell::test_no_explicit_margin_in_configs`
+  (see [[water-shell-carve]]).
 - **Orphan adoption.** A NAMD that outlived its orchestrator (dev-server reload —
   it runs with `start_new_session=True`) is detected via `/proc`
   (`_segment_process_running`) and *waited on* rather than duplicated.
@@ -232,7 +250,13 @@ deduped, vs `parse_namd_log`'s last-frame-only). `namd_runner.run_job`: after a 
 non-final chunk (`_stage_base`/`_stage_last_chunk_idx`, `_is_production_segment` excludes
 production/qualification), evaluate the plateau on that chunk's log; on a hit, mark the
 stage's remaining p50/p100 chunks `done` + jump `current_segment_idx` past them
-(`skip_until` guard at loop top). `MdJob.early_stop_relax: bool=False` (load-setdefault);
+(`skip_until` guard at loop top). **Skipped-chunk glyph (2026-07-06):** a skipped chunk
+also gets `MdSegmentStatus.skipped=True` (status stays `done` so all rollups/counts are
+unchanged); the stage timeline renders it as a green **right-arrow `→`** instead of the
+solid green circle, with a tooltip explaining the accelerator skipped it because the stage
+already satisfied its plateau requirements. Decision is a pure exported helper
+`mdSegGlyphKind(status,{skipped,advisory,jobLive})` (unit-tested), consumed by `_segSymbol`.
+`MdJob.early_stop_relax: bool=False` (load-setdefault);
 `CreateJobRequest.early_stop_relax` field → set on the job in create route. **Default OFF
 = zero behavior change to existing runs** (the whole hook is under `if job.early_stop_relax`).
 UI (2026-07-04): `#md-jobs-early-stop` checkbox in the MD launch Advanced card (index.html,

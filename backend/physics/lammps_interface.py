@@ -23,9 +23,20 @@ here is ever written back into Design topology.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
+
+# oxDNA length unit in nm (1 oxDNA length unit = 0.8518 nm; NM_TO_OXDNA = 1/0.8518).
+# Kept local to avoid importing the heavy oxdna_interface here; asserted equal to
+# constants.OXDNA_LENGTH_UNIT in the tests.
+OXDNA_LENGTH_UNIT: float = 0.8518
+NM_TO_OXDNA: float = 1.0 / OXDNA_LENGTH_UNIT
+# Anchor-trap stiffness (oxDNA/LAMMPS lj units).  Matches oxdna_interface's
+# DEFAULT_ANCHOR_STIFF: LAMMPS ``fix spring/self K`` is F=-K·(r-r0), E=½K·dr² — the
+# SAME harmonic convention as oxDNA's ``trap`` (verified against fix_spring_self.cpp),
+# so the stiffness maps 1:1 and an anchored bead pins to ~0.03 nm RMS.
+DEFAULT_ANCHOR_STIFF: float = 1000.0
 
 # ── oxDNA / LAMMPS CG-DNA constants (from the reference generator + examples) ──
 # A/C/G/T → LAMMPS atom types 1/2/3/4; the oxDNA2 sequence-dependent H-bond pairs
@@ -337,7 +348,138 @@ pair_coeff * * oxdna2/coaxstk 58.5 0.4 0.6 0.22 0.58 2.0 2.891592653589793 0.65 
 pair_coeff * * oxdna2/dh      {T} {RHOS} 0.815"""
 
 
-def build_input_file(p: LammpsInputParams) -> str:
+# ── external forces (steer a run like an oxDNA forces.txt) ────────────────────
+#
+# The oxDNA external forces NADOC writes (oxdna_interface: string field / trap
+# anchors / repulsion_plane surface) map onto LAMMPS fixes.  Because a NADOC LAMMPS
+# run uses ``units lj`` = oxDNA's native units, no unit conversion happens in this
+# module: forces are already in oxDNA force units, coordinates in oxDNA length units
+# (the runner does pN→oxDNA and nm→oxDNA before building the spec).
+#
+#   oxDNA `string`  (F0·dir on particle=-1) → ``fix addforce all fx fy fz``
+#   oxDNA `trap`    (pin to pos0, stiff)    → ``fix spring/self K`` on an id group
+#   oxDNA `repulsion_plane` (one-sided wall)→ ``fix wall/harmonic`` (axis-aligned)
+#
+# EXACTNESS: addforce and spring/self reproduce the oxDNA form exactly (same
+# constant force; same F=-K·(r-r0) harmonic tether).  wall/harmonic is a soft
+# harmonic *cushion* within a cutoff of the wall — it confines to the same
+# half-space but its functional form differs from repulsion_plane's zero-on-allowed,
+# linear-in-penetration form, and only AXIS-ALIGNED walls are supported (a general
+# plane orientation would need ``fix wall/region`` — deferred).
+@dataclass
+class LammpsForceSpec:
+    """External forces for a LAMMPS oxDNA run — the analog of oxDNA's forces.txt.
+
+    All values are oxDNA/LAMMPS lj units.
+    - ``force``: constant ``(fx,fy,fz)`` force applied to EVERY nucleotide (the
+      uniform E-field = oxDNA ``string`` with ``particle=-1``), or None.
+    - ``anchor_ids``: 1-based LAMMPS atom ids pinned to their start position (oxDNA
+      ``trap``); ``anchor_stiff`` is the harmonic K (maps 1:1 to oxDNA trap stiff).
+    - ``wall``: axis-aligned harmonic wall ``{'face':'zlo'|'zhi'|…, 'coord': float,
+      'epsilon': float, 'cutoff': float}`` (approximates ``repulsion_plane``), or None.
+    """
+    force: tuple[float, float, float] | None = None
+    anchor_ids: list[int] = field(default_factory=list)
+    anchor_stiff: float = DEFAULT_ANCHOR_STIFF
+    wall: dict | None = None
+
+    def is_empty(self) -> bool:
+        return self.force is None and not self.anchor_ids and self.wall is None
+
+
+def compress_id_ranges(ids) -> str:
+    """Render a sorted list of atom ids as a compact LAMMPS ``group … id`` argument,
+    collapsing consecutive runs into ``A:B`` ranges (e.g. ``[1,2,3,7] → '1:3 7'``).
+
+    Keeps the group line short for large anchor selections (a cluster can pin
+    thousands of nucleotides), which LAMMPS' ``id`` selector accepts as ranges."""
+    xs = sorted(set(int(i) for i in ids))
+    if not xs:
+        return ""
+    out: list[str] = []
+    start = prev = xs[0]
+    for v in xs[1:]:
+        if v == prev + 1:
+            prev = v
+            continue
+        out.append(str(start) if start == prev else f"{start}:{prev}")
+        start = prev = v
+    out.append(str(start) if start == prev else f"{start}:{prev}")
+    return " ".join(out)
+
+
+def axis_wall_from_extent(positions, wall_dir, offset_oxdna: float = 0.0):
+    """Axis-aligned LAMMPS wall placement from the structure's extent.  PURE.
+
+    ``wall_dir`` (oxDNA ``repulsion_plane`` convention) points toward the ALLOWED
+    half-space, so the wall sits just past the structure on the opposite side.  Must
+    be axis-aligned (one of ±x/±y/±z); ``ValueError`` otherwise (a general plane
+    would need ``fix wall/region``).  Returns ``(face, coord)`` — e.g. ``dir=+z``
+    (allowed side above) → the structure's minimum z minus ``offset_oxdna`` gives a
+    ``'zlo'`` wall the whole structure starts above.
+    """
+    d = _normalize3_np(wall_dir)
+    ax = int(np.argmax(np.abs(d)))
+    if abs(abs(d[ax]) - 1.0) > 1e-6:
+        raise ValueError(
+            f"LAMMPS surface wall must be axis-aligned (±x/±y/±z); got dir={list(d)}. "
+            f"A general plane orientation is not yet supported.")
+    axis_name = "xyz"[ax]
+    coords = [float(p[ax]) for p in positions]
+    if d[ax] > 0:                       # allowed side = +axis → wall below (lo face)
+        return f"{axis_name}lo", (min(coords) if coords else 0.0) - float(offset_oxdna)
+    return f"{axis_name}hi", (max(coords) if coords else 0.0) + float(offset_oxdna)
+
+
+def _normalize3_np(v) -> np.ndarray:
+    a = np.asarray(v, dtype=float)
+    n = float(np.linalg.norm(a))
+    return a / n if n > 1e-12 else np.zeros(3)
+
+
+def build_force_fixes(spec: LammpsForceSpec | None) -> str:
+    """Render the LAMMPS ``fix`` lines for a :class:`LammpsForceSpec` (empty string
+    if there are none).  Injected into the production block of ``build_input_file``.
+
+    ``fix spring/self`` tethers each anchored atom to its position at the moment the
+    fix is created, so it MUST be emitted AFTER the soft-start minimise — the caller
+    places this block at the top of the production run (post ``reset_timestep 0``),
+    which is the LAMMPS analog of oxDNA's ``pos0`` = the conf the field stage starts
+    from."""
+    if spec is None or spec.is_empty():
+        return ""
+    lines: list[str] = ["# ── external forces (NADOC oxDNA forces.txt → LAMMPS fixes) ──"]
+    if spec.force is not None:
+        fx, fy, fz = spec.force
+        lines.append(f"fix efield all addforce {fx:.8g} {fy:.8g} {fz:.8g}")
+    if spec.anchor_ids:
+        lines.append(f"group anchors id {compress_id_ranges(spec.anchor_ids)}")
+        lines.append(f"fix anchors anchors spring/self {spec.anchor_stiff:.8g}")
+    if spec.wall:
+        w = spec.wall
+        eps = float(w.get("epsilon", DEFAULT_ANCHOR_STIFF))
+        cutoff = float(w.get("cutoff", 1.0))
+        lines.append(
+            f"fix surface all wall/harmonic {w['face']} {float(w['coord']):.8g} "
+            f"{eps:.8g} 1.0 {cutoff:.8g} units box")
+    return "\n".join(lines) + "\n\n"
+
+
+def boundary_line(spec: LammpsForceSpec | None) -> str:
+    """The LAMMPS ``boundary`` command.  Fully periodic (``p p p``) unless a surface
+    wall is present — ``fix wall`` requires its axis to be NON-periodic, so the walled
+    axis becomes ``fm``/``mf`` (wall face fixed, opposite face shrink-wrapped so no
+    atom is lost if the free side is pushed out).  Physically a substrate breaks
+    periodicity along its normal, so this is correct, not a workaround."""
+    b = {"x": "p", "y": "p", "z": "p"}
+    if spec and spec.wall:
+        face = spec.wall["face"]
+        axis, side = face[0], face[1:]
+        b[axis] = "fm" if side == "lo" else "mf"
+    return f"boundary {b['x']} {b['y']} {b['z']}"
+
+
+def build_input_file(p: LammpsInputParams, force_spec: LammpsForceSpec | None = None) -> str:
     """Generate the LAMMPS ``in.lammps`` script for an oxDNA2 CG-DNA run.
 
     Langevin-thermostatted NVE of aspherical particles (``fix nve/asphere`` +
@@ -351,6 +493,11 @@ def build_input_file(p: LammpsInputParams) -> str:
     trajectory is the production run alone (steps 0…``steps``).  ``minimize`` relaxes
     translational positions only; nucleotide orientations keep their (correct) seed
     values and are re-thermalised by the production MD.
+
+    ``force_spec`` (optional) adds external forces — a uniform field, anchor tethers,
+    and/or a surface wall (see :func:`build_force_fixes`) — emitted at the top of the
+    production block so anchor springs tether to the post-minimise (production-start)
+    positions.
     """
     ff = _OXDNA2_FF.replace("{T}", repr(p.temperature)).replace("{RHOS}", repr(p.salt_molar))
     warmup = ""
@@ -361,11 +508,12 @@ def build_input_file(p: LammpsInputParams) -> str:
             f"minimize 1e-4 1e-6 {p.relax_iters} {p.relax_iters * 10}\n"
             "reset_timestep 0\n\n"
         )
+    forces = build_force_fixes(force_spec)
     return f"""# NADOC-generated LAMMPS oxDNA2 (CG-DNA) run
 units lj
 dimension 3
 newton on
-boundary p p p
+{boundary_line(force_spec)}
 
 atom_style hybrid bond ellipsoid oxdna
 atom_modify sort 0 1.0
@@ -389,7 +537,7 @@ thermo_style custom step temp epair ebond etotal
 
 {warmup}# ── production run ──
 timestep {p.timestep!r}
-compute quat all property/atom quatw quati quatj quatk
+{forces}compute quat all property/atom quatw quati quatj quatk
 dump traj all custom {p.dump_every} {p.traj_file} id mol type x y z c_quat[1] c_quat[2] c_quat[3] c_quat[4]
 dump_modify traj sort id
 

@@ -196,6 +196,7 @@ import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initMrdnaDisplay } from './ui/mrdna_display.js'
 import { initMrdnaJobsPanel } from './ui/mrdna_jobs_panel.js'
 import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
+import { initLammpsForcesSetup } from './ui/lammps_forces_setup.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initCandoDisplay } from './ui/cando_display.js'
 import { initCandoLegend } from './ui/cando_legend.js'
@@ -1931,7 +1932,8 @@ async function main() {
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
   })
   initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
-  initLammpsJobsPanel({ designRenderer })   // CPU-parallel oxDNA (LAMMPS CG-DNA)
+  // (LAMMPS panel + its External-forces cards are wired after the anchor-glow / View-grid
+  // setup below, so they can reuse the SAME purple anchor halo + surface grid as oxDNA.)
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
   // solver. The "Predicted shape (deform model)" toggle deforms the NADOC model to
   // the FEM-predicted positions via applyFemPositions (display-only, Three-Layer).
@@ -1996,6 +1998,25 @@ async function main() {
   })
   if (import.meta.env.DEV) window.__nadocOxdnaFloor = oxdnaFloorSetup
 
+  // CPU-parallel oxDNA (LAMMPS CG-DNA): own field-direction arrow (separate gizmo
+  // instance) + the Electric field / Anchors / Surface cards.  Reuses the SAME purple
+  // anchor halo (anchorGlow) and View surface grid (_viewToolButtons) as the oxDNA
+  // panel — the LAMMPS anchors glow whenever ≥1 is marked; the Surface toggle drives
+  // the grid.  onChange never fires during construction (lammps_forces_setup gates it).
+  const _refreshLammpsAnchorGlow = () => {
+    const anchors = lammpsForcesSetup?.getAnchors?.() || []
+    anchorGlow.setAnchors(anchors.length ? anchors : [])
+  }
+  const lammpsForcesSetup = initLammpsForcesSetup({
+    gizmo: initEfieldGizmo(scene, camera, canvas, controls, 'lammps-efield-gizmo'),
+    getSelection: () => store.getState(),
+    getBaseCount: () => store.getState().currentGeometry?.length || 0,
+    onChange: _refreshLammpsAnchorGlow,
+    setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
+  })
+  initLammpsJobsPanel({
+    designRenderer, getWorkspacePath: () => _workspacePath, forcesSetup: lammpsForcesSetup,
+  })
   // Spinner on each engine's section header while that engine has a running/preparing
   // job (one shared /api/jobs/active poll drives all five headers).
   initEngineActivityHeaders()

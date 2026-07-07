@@ -3856,10 +3856,97 @@
                 ▶ Run on LAMMPS
               </button>
 
+              <!-- ── Electric field (collapsible card; mirrors the oxDNA one) ── -->
+              <div class="ox-card">
+                <div id="lammps-field-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
+                  <span id="lammps-field-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Electric field</span>
+                </div>
+                <div id="lammps-field-body" class="ox-card__body" style="display:none">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer">
+                    <input id="lammps-field-enable" type="checkbox"> Apply a uniform E-field to the run
+                  </label>
+                  <div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-left:18px">
+                    <span style="font-size:var(--text-xs);color:#8b949e">Force</span>
+                    <input id="lammps-field-mag" type="number" min="0" step="0.1" value="0"
+                           style="width:64px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
+                    <span style="font-size:var(--text-xs);color:#8b949e">pN/nt</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:4px;margin-top:5px;margin-left:18px">
+                    <span style="font-size:var(--text-xs);color:#8b949e">Dir</span>
+                    <input id="lammps-field-dir-x" type="number" step="0.1" value="1" title="x"
+                           style="width:44px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
+                    <input id="lammps-field-dir-y" type="number" step="0.1" value="0" title="y"
+                           style="width:44px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
+                    <input id="lammps-field-dir-z" type="number" step="0.1" value="0" title="z"
+                           style="width:44px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
+                    <span style="font-size:10px;color:#6b7280">(drag the arrow in the scene)</span>
+                  </div>
+                  <div id="lammps-field-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;margin-left:18px;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Anchors (collapsible card; mirrors the oxDNA one) ───────── -->
+              <div class="ox-card">
+                <div id="lammps-anchors-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
+                  <span id="lammps-anchors-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Anchors</span>
+                </div>
+                <div id="lammps-anchors-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Nucleotides held fixed during the run. A field needs ≥1 anchor. Pin the duplex ends (not just floppy ssDNA overhangs) to bend a stiff bundle.</div>
+                  <div style="display:flex;gap:6px">
+                    <button id="lammps-anchors-add" title="Anchor the current scene selection (overhang / strand / domain / cluster / base)"
+                            style="font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Add selected</button>
+                    <button id="lammps-anchors-clear"
+                            style="font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                  </div>
+                  <div id="lammps-anchors-list" style="margin-top:5px"></div>
+                  <div id="lammps-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Surface (collapsible card; mirrors the oxDNA hard surface) ── -->
+              <div class="ox-card">
+                <div id="lammps-surface-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
+                  <span id="lammps-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Surface</span>
+                </div>
+                <div id="lammps-surface-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">An axis-aligned hard wall the structure can't pass through (a substrate). Add anchors to bind a floppy structure to it.</div>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
+                    <input type="checkbox" id="lammps-surface-enable"> Apply a hard surface to the run
+                  </label>
+                  <div id="lammps-surface-controls" style="display:none;flex-direction:column;gap:5px">
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e;font-size:var(--text-xs)">
+                      <span style="min-width:46px" title="Which side the surface sits on. −Y = below.">Side</span>
+                      <select id="lammps-surface-axis" style="flex:1;background:#161b22;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                        <option value="-y" selected>−Y (below)</option>
+                        <option value="+y">+Y (above)</option>
+                        <option value="-x">−X (left)</option>
+                        <option value="+x">+X (right)</option>
+                        <option value="-z">−Z (front)</option>
+                        <option value="+z">+Z (back)</option>
+                      </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e;font-size:var(--text-xs)">
+                      <span style="min-width:46px" title="nm of clearance the surface sits beyond the structure's edge">Offset</span>
+                      <input id="lammps-surface-offset" type="range" min="-20" max="20" step="0.1" value="0" style="flex:1;accent-color:#58a6ff">
+                      <span id="lammps-surface-offset-label" style="color:#c9d1d9;min-width:42px;text-align:right">0.0 nm</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e;font-size:var(--text-xs)">
+                      <span style="min-width:46px" title="Wall repulsion stiffness (oxDNA units)">Stiffness</span>
+                      <input id="lammps-surface-stiff" type="number" value="5" min="0.1" step="0.5" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    </div>
+                  </div>
+                  <div id="lammps-surface-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
+                </div>
+              </div>
+
               <!-- ── Jobs (list of runs) ────────────────────────────────────── -->
               <div class="ox-card">
-                <div class="ox-card__header" style="color:#c9d1d9">
+                <div class="ox-card__header" style="color:#c9d1d9;display:flex;align-items:center;justify-content:space-between">
                   <span class="ox-card__title">Jobs</span>
+                  <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:#8b949e;cursor:pointer;font-weight:400"
+                         title="Show LAMMPS runs from every design, not just the loaded one">
+                    <input id="lammps-jobs-show-all" type="checkbox"> show all designs
+                  </label>
                 </div>
                 <div class="ox-card__body">
                   <div id="lammps-jobs-list" style="max-height:120px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>

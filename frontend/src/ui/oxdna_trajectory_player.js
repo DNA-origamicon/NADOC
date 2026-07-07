@@ -28,6 +28,31 @@ export function markerPositions(markers, nFrames) {
   }))
 }
 
+/**
+ * Pure: which composite-trajectory stage a frame index falls in.  `stages` is the
+ * `[{name, kind, n_frames, field}]` list from the /trajectory payload (each stage's
+ * frames are contiguous, in order).  Returns the stage object, or null if `stages`
+ * is empty.  Past-the-end indices clamp to the last stage.
+ */
+export function stageAtFrame(stages, frameIndex) {
+  if (!Array.isArray(stages) || stages.length === 0) return null
+  let start = 0
+  for (const s of stages) {
+    const n = Math.max(0, s.n_frames | 0)
+    if (frameIndex < start + n) return s
+    start += n
+  }
+  return stages[stages.length - 1]
+}
+
+/**
+ * Pure: the E-field descriptor ({dir, field_pN}) active at a composite-trajectory
+ * frame, or null when that frame's stage ran no field (relaxation / plain run).
+ */
+export function fieldAtFrame(stages, frameIndex) {
+  return stageAtFrame(stages, frameIndex)?.field ?? null
+}
+
 const _MARKER_COLOR = { production: '#3fb950', equil: '#4a9eff', md_relax: '#e0a800', mc: '#8a8a8a' }
 
 export function initOxdnaTrajectoryPlayer({

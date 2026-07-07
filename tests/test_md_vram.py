@@ -37,6 +37,14 @@ def test_classify_failure_log_multikind():
     assert V.classify_failure_log("MINIMIZER RESTARTING\nEnd of program") == "other"
     # OOM wins even though it is also a "CUDA error" line.
     assert V.classify_failure_log("CUDA error cudaMalloc: out of memory") == "vram_oom"
+    # NPT equilibration outgrowing the patch grid — a self-healing, auto-resumable
+    # fatal, distinct from an instability blow-up.
+    assert V.classify_failure_log(
+        "FATAL ERROR: Periodic cell has become too small for original patch grid!"
+    ) == "cell_shrink"
+    # "Margin is too small" (a RATTLE blow-up) must NOT be mistaken for the cell
+    # shrink — it stays an instability so it is not auto-resumed into a re-crash.
+    assert V.classify_failure_log("ERROR: Margin is too small for 1 atoms") == "instability"
 
 
 # ── Error-line extraction (frontend cause surfacing) ──────────────────────────

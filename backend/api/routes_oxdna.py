@@ -349,11 +349,33 @@ def _stage_trajectories(stage_dir: Path) -> list[Path]:
     return out
 
 
+def _job_field(job: OxdnaJob) -> dict | None:
+    """The electric field a job's stages ran under, as ``{dir:[x,y,z], field_pN}``,
+    or ``None`` for a fieldless (relaxation / surface-only / plain-production) job.
+
+    Prefers the ``run_config.field`` record (consolidated runs); falls back to the
+    ``efield`` record older field children stored (``{force_pN, dir}``).  Used to tag
+    each composite-trajectory stage so the View-trajectory arrow can follow the field
+    direction of whichever run in a chain is on screen."""
+    rc = job.run_config or {}
+    f = rc.get("field")
+    if isinstance(f, dict) and isinstance(f.get("dir"), (list, tuple)) and len(f["dir"]) == 3:
+        return {"dir": [float(x) for x in f["dir"]], "field_pN": f.get("field_pN")}
+    ef = job.efield or {}
+    if isinstance(ef.get("dir"), (list, tuple)) and len(ef["dir"]) == 3 and ef.get("force_pN") is not None:
+        return {"dir": [float(x) for x in ef["dir"]], "field_pN": ef.get("force_pN")}
+    return None
+
+
 def _composite_inputs(job: OxdnaJob):
     """Assemble (design, stages, ref) for a job's WHOLE-LINEAGE composite trajectory
     (root → … → selected, every stage in time order, numbered boundary labels).
     Shared by the trajectory + per-frame atomistic/surface routes. Returns
     (design, [], None) when no stage has written a trajectory yet.
+
+    Each stage tuple is ``(label, kind, traj_path, marker_label, field)`` where
+    ``field`` is the owning job's E-field descriptor (or None) — the trajectory
+    player uses it to point the field arrow at whatever run in the chain is on screen.
 
     The whole lineage aligns to ONE origin frame (design geometry) — the same
     reference the field display uses, NOT the job's conf.dat (a field child's
@@ -370,6 +392,7 @@ def _composite_inputs(job: OxdnaJob):
         if not is_root:
             run_no += 1
         first_of_job = True
+        field = _job_field(j)
         for st in j.stages:
             files = _stage_trajectories(j.stage_dir(ws, st.name))
             for k, traj in enumerate(files):
@@ -378,7 +401,7 @@ def _composite_inputs(job: OxdnaJob):
                 if first_of_job and not is_root:
                     marker = f"→ {st.kind} {run_no}"
                     first_of_job = False
-                stages.append((label, st.kind, traj, marker))
+                stages.append((label, st.kind, traj, marker, field))
     if not stages:
         return None, [], None
     snap = jd / "design.json"

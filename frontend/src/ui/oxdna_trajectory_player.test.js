@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { markerPositions, initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
+import { markerPositions, initOxdnaTrajectoryPlayer, stageAtFrame, fieldAtFrame } from './oxdna_trajectory_player.js'
 
 describe('markerPositions', () => {
   it('maps frame index → slider pct', () => {
@@ -11,6 +11,33 @@ describe('markerPositions', () => {
   it('is empty for <2 frames or no markers', () => {
     expect(markerPositions([{ frame: 0 }], 1)).toEqual([])
     expect(markerPositions(null, 10)).toEqual([])
+  })
+})
+
+describe('stageAtFrame / fieldAtFrame', () => {
+  // relaxation (3 frames, no field) → field run +x (2 frames) → field run −x (2 frames)
+  const stages = [
+    { name: '1_relax', kind: 'equil', n_frames: 3, field: null },
+    { name: '1_field', kind: 'field', n_frames: 2, field: { dir: [1, 0, 0], field_pN: 5 } },
+    { name: '1_field', kind: 'field', n_frames: 2, field: { dir: [-1, 0, 0], field_pN: 5 } },
+  ]
+  it('maps a frame index to its contiguous stage', () => {
+    expect(stageAtFrame(stages, 0).name).toBe('1_relax')
+    expect(stageAtFrame(stages, 2).kind).toBe('equil')
+    expect(stageAtFrame(stages, 3).field.dir).toEqual([1, 0, 0])
+    expect(stageAtFrame(stages, 4).field.dir).toEqual([1, 0, 0])
+    expect(stageAtFrame(stages, 5).field.dir).toEqual([-1, 0, 0])
+  })
+  it('clamps a past-the-end index to the last stage; null for empty', () => {
+    expect(stageAtFrame(stages, 99).field.dir).toEqual([-1, 0, 0])
+    expect(stageAtFrame([], 0)).toBe(null)
+    expect(stageAtFrame(null, 0)).toBe(null)
+  })
+  it('fieldAtFrame is null in the relaxation stage and the run field elsewhere', () => {
+    expect(fieldAtFrame(stages, 1)).toBe(null)          // relaxation → arrow hidden
+    expect(fieldAtFrame(stages, 3).dir).toEqual([1, 0, 0])
+    expect(fieldAtFrame(stages, 5).dir).toEqual([-1, 0, 0])
+    expect(fieldAtFrame([], 0)).toBe(null)
   })
 })
 

@@ -52,11 +52,16 @@ _INSTABILITY_PAT = re.compile(
 )
 # A GPU/driver/kernel error that is not an out-of-memory condition.
 _GPU_ERR_PAT = re.compile(r"buildTileLists|cudaStreamSynchronize|CUDA error", re.IGNORECASE)
+# NPT equilibration shrank the box past the patch grid built at startup. This is
+# NOT a blow-up (energies stay healthy) — restarting from the last checkpoint
+# rebuilds the grid for the smaller box and continues, so it is auto-resumable.
+_CELL_SHRINK_PAT = re.compile(r"Periodic cell has become too small", re.IGNORECASE)
 
 # Known failure kinds (also the keys the UI maps to a remedy).
 FAILURE_VRAM_OOM = "vram_oom"
 FAILURE_INSTABILITY = "instability"
 FAILURE_GPU_ERROR = "gpu_error"
+FAILURE_CELL_SHRINK = "cell_shrink"
 FAILURE_OTHER = "other"
 
 
@@ -73,7 +78,8 @@ def classify_failure_log(text: str) -> str:
     """Classify a NAMD failure log into a FAILURE_* kind.
 
     Order matters: an OOM abort also prints "CUDA error", so it is matched first;
-    a RATTLE/margin blow-up is matched before the generic GPU-error pattern.
+    a RATTLE/margin blow-up is matched before the generic GPU-error pattern. The
+    cell-shrink fatal has a unique string and does not overlap the others.
     """
     if _OOM_PAT.search(text):
         return FAILURE_VRAM_OOM
@@ -81,6 +87,8 @@ def classify_failure_log(text: str) -> str:
         return FAILURE_INSTABILITY
     if _GPU_ERR_PAT.search(text):
         return FAILURE_GPU_ERROR
+    if _CELL_SHRINK_PAT.search(text):
+        return FAILURE_CELL_SHRINK
     return FAILURE_OTHER
 
 

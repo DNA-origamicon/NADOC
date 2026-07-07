@@ -199,6 +199,9 @@ def test_early_stop_skips_remaining_chunks(tmp_path: Path, monkeypatch: pytest.M
     assert confs == [_MIN, "T_01_p10", "T_02_p100"]
     # all segments still marked done (stage reached its endpoint early)
     assert [s.status for s in final.segments] == ["done", "done", "done", "done"]
+    # ...but the two never-run chunks are flagged skipped so the UI draws a distinct
+    # glyph; the chunk that actually ran (and the next stage) are not.
+    assert [s.skipped for s in final.segments] == [False, True, True, False]
     # The next stage (T_02_p100) restarts from T_01_p100 — the SKIPPED last chunk,
     # which never ran.  The runner must bridge the chain by aliasing the completed
     # chunk's (T_01_p10) coordinates onto every skipped chunk's expected output

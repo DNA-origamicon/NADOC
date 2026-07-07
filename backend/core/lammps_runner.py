@@ -27,11 +27,91 @@ from typing import Optional
 from backend.core.lammps_job import LammpsJob, LammpsStatus
 from backend.core.oxdna_runner import find_lammps, lammps_supports_cgdna
 from backend.physics import lammps_interface as L
-from backend.physics.oxdna_interface import write_configuration, write_topology
+from backend.physics.oxdna_interface import (
+    pn_to_oxdna_force,
+    resolve_anchor_particles,
+    write_configuration,
+    write_topology,
+)
 
 
 class LammpsError(RuntimeError):
     """LAMMPS was not found/CG-DNA-capable, or the run exited non-zero."""
+
+
+def resolve_lammps_forces(
+    design,
+    conf_path: str | Path,
+    *,
+    field: dict | None = None,
+    wall: dict | None = None,
+    anchors: list[dict] | None = None,
+    anchor_stiff: float = L.DEFAULT_ANCHOR_STIFF,
+) -> tuple[L.LammpsForceSpec, dict]:
+    """Turn high-level force descriptors into a :class:`LammpsForceSpec` + meta.
+
+    The LAMMPS analog of ``oxdna_interface.write_run_forces`` — same descriptor
+    shapes, so a LAMMPS run can be steered like an oxDNA one:
+      ``field``   = ``{"field_pN": p, "dir": [x,y,z]}`` (per-nucleotide, pN) or None,
+      ``wall``    = ``{"dir": [x,y,z], "offset_nm": d, "stiff": s}`` (axis-aligned) or None,
+      ``anchors`` = anchor-descriptor list (overhang/cluster/domain/strand/base).
+
+    Anchor resolution reuses the SAME ``resolve_anchor_particles`` traversal the oxDNA
+    forces use (no new topology reasoning); the wall is placed from the seed's extent
+    in ``conf_path``.  Returns ``(spec, meta)`` where meta mirrors ``write_run_forces``
+    (``n_anchored``/``n_total``/``anchor_particles``/``anchor_keys``/``field``/``wall``).
+    Raises ``LammpsError`` if a field is requested without any resolved anchor (an
+    unanchored uniform force just drifts the whole structure — oxDNA GOTCHA 1)."""
+    _box, entries = L.parse_configuration(Path(conf_path).read_text())
+    positions = [e.pos for e in entries]
+    n_total = len(positions)
+
+    anchor_ids: list[int] = []
+    anchor_keys: list = []
+    if anchors:
+        parts, keys = resolve_anchor_particles(design, anchors)
+        anchor_ids = [p + 1 for p in parts]        # oxDNA 0-based → LAMMPS 1-based
+        anchor_keys = [list(k[:3]) for k in keys]
+
+    force_vec = None
+    field_meta = None
+    if field:
+        f_pn = float(field.get("field_pN", field.get("force_pN", 0.0)))
+        if f_pn > 0:
+            f_ox = pn_to_oxdna_force(f_pn)
+            d = L._normalize3_np(field.get("dir"))
+            force_vec = (float(d[0] * f_ox), float(d[1] * f_ox), float(d[2] * f_ox))
+            field_meta = {"field_pN": f_pn, "field_oxdna": f_ox, "dir": d.tolist()}
+
+    if force_vec is not None and not anchor_ids:
+        raise LammpsError(
+            "an electric-field run needs ≥1 anchor; without one the uniform force "
+            "just streams the whole structure across the periodic box.")
+
+    wall_dict = None
+    wall_meta = None
+    if wall and float(wall.get("stiff", 0.0)) > 0:
+        offset_ox = float(wall.get("offset_nm", 0.0)) * L.NM_TO_OXDNA
+        face, coord = L.axis_wall_from_extent(positions, wall.get("dir"), offset_ox)
+        stiff = float(wall["stiff"])
+        wall_dict = {"face": face, "coord": coord, "epsilon": stiff,
+                     "cutoff": float(wall.get("cutoff_oxdna", 1.0))}
+        wall_meta = {"face": face, "coord": coord, "stiff": stiff,
+                     "dir": L._normalize3_np(wall.get("dir")).tolist()}
+
+    spec = L.LammpsForceSpec(
+        force=force_vec, anchor_ids=anchor_ids,
+        anchor_stiff=float(anchor_stiff), wall=wall_dict)
+    meta = {
+        "n_anchored": len(anchor_ids),
+        "n_total": n_total,
+        "anchor_particles": [i - 1 for i in anchor_ids],
+        "anchor_keys": anchor_keys,
+        "field": field_meta,
+        "wall": wall_meta,
+        "has_forces": not spec.is_empty(),
+    }
+    return spec, meta
 
 
 def prepare_lammps_job(
@@ -39,14 +119,22 @@ def prepare_lammps_job(
     geometry: list[dict],
     job_dir: str | Path,
     params: L.LammpsInputParams | None = None,
+    *,
+    field: dict | None = None,
+    wall: dict | None = None,
+    anchors: list[dict] | None = None,
+    anchor_stiff: float = L.DEFAULT_ANCHOR_STIFF,
 ) -> dict:
     """Write a self-contained LAMMPS oxDNA2 job into ``job_dir``.
 
     Emits ``topology.top`` + ``conf.dat`` via the *existing* oxDNA writers (with the
     oxDNA-native duplex seed so designed pairs start in bonding range, not NADOC's
     wide B-DNA), transcodes them to ``data.oxdna``, and renders ``in.lammps``.
-    Returns a dict of the written paths + atom/bond counts.  Raises ``ValueError``
-    (from the transcoder) if the design is not fully sequenced.
+    ``field``/``wall``/``anchors`` (optional) add external forces to the production
+    run — a uniform E-field, a substrate wall, and/or anchor tethers — resolved via
+    :func:`resolve_lammps_forces` (a field requires ≥1 anchor).  Returns a dict of the
+    written paths + atom/bond counts (plus ``forces`` meta when any were applied).
+    Raises ``ValueError`` (from the transcoder) if the design is not fully sequenced.
     """
     job = Path(job_dir)
     job.mkdir(parents=True, exist_ok=True)
@@ -62,8 +150,12 @@ def prepare_lammps_job(
     data_path = job / params.data_file
     data_path.write_text(data_text)
 
+    force_spec, force_meta = resolve_lammps_forces(
+        design, conf_path, field=field, wall=wall, anchors=anchors,
+        anchor_stiff=anchor_stiff)
+
     input_path = job / "in.lammps"
-    input_path.write_text(L.build_input_file(params))
+    input_path.write_text(L.build_input_file(params, force_spec))
 
     n_atoms = int(next(ln for ln in data_text.splitlines() if ln.endswith(" atoms")).split()[0])
     n_bonds = int(next(ln for ln in data_text.splitlines() if ln.endswith(" bonds")).split()[0])
@@ -77,6 +169,7 @@ def prepare_lammps_job(
         "n_atoms": n_atoms,
         "n_bonds": n_bonds,
         "params": asdict(params),
+        "forces": force_meta if force_meta["has_forces"] else None,
     }
 
 

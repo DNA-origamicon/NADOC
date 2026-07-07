@@ -2155,11 +2155,13 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     key_list = list(dict.fromkeys(
         (k if copies else k[:3]) for k in _strand_nucleotide_order(design)))
 
-    # A stage tuple is ``(name, kind, path)`` or ``(name, kind, path, marker_label)``.
+    # A stage tuple is ``(name, kind, path)``, ``(…, marker_label)`` or
+    # ``(…, marker_label, field)`` (field = the run's E-field descriptor or None).
     per_stage: list[dict] = []
     for item in stages:
         name, kind, path = item[0], item[1], item[2]
         marker_label = item[3] if len(item) > 3 else None
+        field = item[4] if len(item) > 4 else None
         frames = read_trajectory_frames_full(path, design, copies=copies)
         box = _parse_box_nm(path)
         aligned = [
@@ -2168,7 +2170,7 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
             for fr in frames
         ]
         per_stage.append({"name": name, "kind": kind, "frames": aligned,
-                          "marker_label": marker_label})
+                          "marker_label": marker_label, "field": field})
 
     # oxDNA's first trajectory write lands at print_conf_interval (not t=0); prepend
     # the seed configuration so the player starts on the true starting structure.
@@ -2209,7 +2211,8 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
             markers.append({"frame": len(ordered_frames),
                             "label": s.get("marker_label") or f"→ {s['kind']}",
                             "kind": s["kind"], "stage_name": s["name"]})
-        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked)})
+        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked),
+                           "field": s.get("field")})
         ordered_frames.extend(picked)
 
     return _store((key_list, ordered_frames, out_stages, markers))
@@ -2251,7 +2254,9 @@ def composite_trajectory(
     preload small:
       ``keys``   = [[helix_id, bp_index, direction], …]   (M nucleotides)
       ``frames`` = [[x,y,z,nx,ny,nz, … per key], …]        (backbone site + a1)
-      ``stages`` = [{name, kind, n_frames}]
+      ``stages`` = [{name, kind, n_frames, field}]         (field = the run's
+                   E-field descriptor {dir, field_pN} or None — lets the player
+                   point the field arrow at whichever run is on screen)
       ``markers``= [{frame, label, kind, stage_name}]      (transition at each
                    stage's first composite-frame; the very first frame is omitted)
     """
@@ -2293,8 +2298,10 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
     for item in stages:
         name, kind, path = item[0], item[1], item[2]
         marker_label = item[3] if len(item) > 3 else None
+        field = item[4] if len(item) > 4 else None
         per_stage.append({"name": name, "kind": kind,
-                          "count": _count_dat_frames(path), "marker_label": marker_label})
+                          "count": _count_dat_frames(path), "marker_label": marker_label,
+                          "field": field})
     # Seed frame is prepended to the first non-empty stage (mirrors the composite).
     for s in per_stage:
         if s["count"] > 0:
@@ -2316,7 +2323,8 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
         if out_n:
             markers.append({"frame": out_n, "label": s.get("marker_label") or f"→ {s['kind']}",
                             "kind": s["kind"], "stage_name": s["name"]})
-        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": keep})
+        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": keep,
+                           "field": s.get("field")})
         out_n += keep
     return {"n_frames": out_n, "n_nucleotides": len(key_list),
             "stages": out_stages, "markers": markers}

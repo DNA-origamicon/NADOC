@@ -1,5 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeWorkspacePath, filterJobsForPart, seededBadge } from './md_jobs_panel.js'
+import { normalizeWorkspacePath, filterJobsForPart, seededBadge, mdSegGlyphKind } from './md_jobs_panel.js'
+
+describe('mdSegGlyphKind', () => {
+  it('classifies a skipped chunk distinctly, even over done/advisory', () => {
+    expect(mdSegGlyphKind('done', { skipped: true })).toBe('skipped')
+    // skipped wins over an advisory health breach on the same chunk
+    expect(mdSegGlyphKind('done', { skipped: true, advisory: true })).toBe('skipped')
+  })
+
+  it('maps ordinary segment states', () => {
+    expect(mdSegGlyphKind('done')).toBe('done')
+    expect(mdSegGlyphKind('done', { advisory: true })).toBe('advisory')
+    expect(mdSegGlyphKind('failed')).toBe('failed')
+    expect(mdSegGlyphKind('running', { jobLive: true })).toBe('running')
+    expect(mdSegGlyphKind('pending')).toBe('pending')
+  })
+
+  it('renders a running chunk as pending once the job is terminal', () => {
+    expect(mdSegGlyphKind('running', { jobLive: false })).toBe('pending')
+  })
+})
 
 describe('seededBadge', () => {
   it('labels oxDNA- and mrDNA-seeded jobs and nothing else', () => {

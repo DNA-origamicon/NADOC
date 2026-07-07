@@ -33,8 +33,8 @@ const _SHAFT_R = 0.45
 const _HEAD_R  = 1.15
 const _UP      = new THREE.Vector3(0, 1, 0)
 
-export function initEfieldGizmo(scene, camera, canvas, controls) {
-  let _group   = null               // named THREE.Group (test locator: 'efield-gizmo')
+export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-gizmo') {
+  let _group   = null               // named THREE.Group (test locator: `name`, default 'efield-gizmo')
   let _arrow   = null               // THREE.Group: thick shaft cylinder + cone head
   let _shaft   = null
   let _head    = null
@@ -48,7 +48,7 @@ export function initEfieldGizmo(scene, camera, canvas, controls) {
 
   function _build() {
     _group = new THREE.Group()
-    _group.name = 'efield-gizmo'
+    _group.name = name
     // Emissive so the arrow reads as a bold solid even under flat lighting.
     _arrowMat = new THREE.MeshStandardMaterial({
       color: _ARROW_COLOR, emissive: _ARROW_COLOR, emissiveIntensity: 0.4,

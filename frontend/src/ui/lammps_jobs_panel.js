@@ -23,6 +23,7 @@ import {
   progressPct, jobIsActive, anyActive, runButtonState, availabilityMessage,
   jobRowLabel, buildCreatePayload, jobIsViewable, flexStatusText,
 } from './lammps_jobs_logic.js'
+import { filterJobsForPart } from './md_jobs_panel.js'
 import { initLammpsDisplay } from './lammps_display.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import * as api from '../api/client.js'
@@ -30,8 +31,9 @@ import * as api from '../api/client.js'
 const POLL_MS = 1500
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', dim: '#8b949e' }
 const _VIEW_RADIOS = ['display', 'flex', 'deviation', 'traj']
+const _SHOW_ALL_KEY = 'nadoc:lammps-jobs-show-all'
 
-export function initLammpsJobsPanel({ designRenderer = null } = {}) {
+export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = null, forcesSetup = null } = {}) {
   const $ = (id) => document.getElementById(id)
   const panel = $('lammps-jobs-panel')
   const heading = $('lammps-jobs-heading')
@@ -51,6 +53,7 @@ export function initLammpsJobsPanel({ designRenderer = null } = {}) {
   const inTemp = $('lammps-jobs-temp')
   const inSalt = $('lammps-jobs-salt')
   const inRanks = $('lammps-jobs-ranks')
+  const showAllToggle = $('lammps-jobs-show-all')
   // ── Visualizations & processing card ──
   const vizToggle = $('lammps-jobs-viz-toggle')
   const vizArrow = $('lammps-jobs-viz-arrow')
@@ -88,12 +91,25 @@ export function initLammpsJobsPanel({ designRenderer = null } = {}) {
   const _selectedJob = () => _jobs.find((j) => j.job_id === _selectedId) || null
   function _setStatus(el, text, color = _C.dim) { if (el) { el.textContent = text; el.style.color = color } }
 
+  // ── current-design filtering (mirror the oxDNA/MD panels) ───────────────────
+  function _currentPartPath() { return (getWorkspacePath ? getWorkspacePath() : null) || null }
+  function _visibleJobs() {
+    return filterJobsForPart(_jobs, _currentPartPath(), !!showAllToggle?.checked)
+  }
+  if (showAllToggle) {
+    showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
+    showAllToggle.addEventListener('change', () => {
+      localStorage.setItem(_SHOW_ALL_KEY, showAllToggle.checked ? '1' : '0')
+      _renderList()
+    })
+  }
+
   // ── collapse (section + viz card) ───────────────────────────────────────────
   function _applyCollapsed(collapsed) {
     body.style.display = collapsed ? 'none' : ''
     if (arrow) arrow.classList.toggle('is-collapsed', collapsed)
     if (!collapsed) { _onOpen() }
-    else { _clearPoll(); _viewsOff() }
+    else { _clearPoll(); _viewsOff(); forcesSetup?.detachGizmo?.() }
   }
   heading.addEventListener('click', () => {
     const next = body.style.display !== 'none'
@@ -134,12 +150,20 @@ export function initLammpsJobsPanel({ designRenderer = null } = {}) {
   }
   async function _launch() {
     if (_launching) return
+    if (forcesSetup?.fieldNeedsAnchor?.()) {
+      showToast('An E-field run needs ≥1 anchor — add a fixed strand/domain in External forces.',
+        { severity: 'warn' })
+      return
+    }
     _launching = true
     _syncRunButton()
     try {
+      const forces = forcesSetup?.getForces?.() || { field: null, anchors: [], wall: null }
       const payload = buildCreatePayload({
         steps: inSteps?.value, dumpEvery: inDump?.value,
         temperature: inTemp?.value, salt: inSalt?.value, ranks: inRanks?.value,
+        designSourcePath: _currentPartPath(),
+        field: forces.field, anchors: forces.anchors, wall: forces.wall,
       })
       const job = await api.createLammpsJob(payload)
       if (!job) {
@@ -168,21 +192,24 @@ export function initLammpsJobsPanel({ designRenderer = null } = {}) {
 
   function _renderProgress() {
     if (!progressBar) return
-    const active = _jobs.find(jobIsActive)
+    const active = _visibleJobs().find(jobIsActive)
     progressBar.style.width = active ? `${progressPct(active)}%` : '0%'
   }
 
   function _renderList() {
     if (!listEl) return
     listEl.replaceChildren()
-    if (!_jobs.length) {
+    const jobs = _visibleJobs()
+    if (!jobs.length) {
       const empty = document.createElement('div')
       empty.style.cssText = `font-size:var(--text-xs);color:${_C.dim};padding:4px`
-      empty.textContent = 'No LAMMPS runs yet.'
+      empty.textContent = _jobs.length
+        ? 'No LAMMPS runs for this design (tick "show all designs" to see others).'
+        : 'No LAMMPS runs yet.'
       listEl.appendChild(empty)
       return
     }
-    for (const job of _jobs) {
+    for (const job of jobs) {
       const selected = job.job_id === _selectedId
       const badge = statusBadge(statusKeyFor('lammps', job.status))
       const row = document.createElement('div')
@@ -223,7 +250,7 @@ export function initLammpsJobsPanel({ designRenderer = null } = {}) {
 
   function _schedulePoll() {
     _clearPoll()
-    if (anyActive(_jobs)) _pollTimer = setTimeout(_fetchJobs, POLL_MS)
+    if (anyActive(_visibleJobs())) _pollTimer = setTimeout(_fetchJobs, POLL_MS)
   }
   function _clearPoll() { if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null } }
 

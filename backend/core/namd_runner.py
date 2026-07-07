@@ -46,7 +46,16 @@ from backend.core.md_health import run_health_check, append_health_jsonl
 from backend.core.namd_metrics import parse_namd_log, parse_namd_log_frames
 from backend.core.md_cutoff import should_early_stop_stage
 from backend.core.md_protocols import segments_from_manifest
-from backend.core.md_vram import classify_failure_log_file, extract_error_line_from_file
+from backend.core.md_vram import (
+    FAILURE_CELL_SHRINK,
+    classify_failure_log_file,
+    extract_error_line_from_file,
+)
+
+# A "periodic cell too small" fatal is self-healing on a checkpoint restart (the
+# grid rebuilds for the shrunken box), but bound the automatic retries per segment
+# so a genuinely stuck run still fails instead of resuming forever.
+MAX_CELL_SHRINK_RESUMES = 4
 
 
 def _classify_namd_failure(log_path: Path) -> str:
@@ -942,10 +951,39 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     spec.name,
                     seg_log,
                 )
-                if idx < len(job.segments):
-                    job.segments[idx].status = "failed"
+                failure_kind = _classify_namd_failure(seg_log)
+                # "Periodic cell too small" is not a blow-up — NPT equilibration
+                # outgrew the patch grid built at startup. A checkpoint restart
+                # rebuilds the grid for the (now smaller) box and continues, so
+                # leave the job RUNNING and let the supervisor auto-resume it (up
+                # to a per-segment cap), instead of dead-ending on a healthy run.
+                seg = job.segments[idx] if idx < len(job.segments) else None
+                if (
+                    failure_kind == FAILURE_CELL_SHRINK
+                    and seg is not None
+                    and seg.auto_resumes < MAX_CELL_SHRINK_RESUMES
+                    and _resume_step(output_dir, spec.name, spec.steps) is not None
+                ):
+                    seg.auto_resumes += 1
+                    seg.status = "running"
+                    job.status = MdStatus.running
+                    job.failure_kind = None
+                    job.error = (
+                        f"{spec.name}: periodic cell outgrew the patch grid during "
+                        f"NPT equilibration; auto-resuming from the last checkpoint "
+                        f"(attempt {seg.auto_resumes}/{MAX_CELL_SHRINK_RESUMES})."
+                    )
+                    job.save(workspace_dir)
+                    logger.warning(
+                        "[%s] %s hit periodic-cell-too-small; auto-resuming from "
+                        "checkpoint (attempt %d/%d)",
+                        job.job_id, spec.name, seg.auto_resumes, MAX_CELL_SHRINK_RESUMES,
+                    )
+                    return
+                if seg is not None:
+                    seg.status = "failed"
                 job.status = MdStatus.failed
-                job.failure_kind = _classify_namd_failure(seg_log)
+                job.failure_kind = failure_kind
                 _cause = extract_error_line_from_file(seg_log)
                 job.error = (f"NAMD failed for {spec.name} (rc={rc}). {_cause} (see {seg_log.name})"
                              if _cause else f"NAMD failed for {spec.name} (rc={rc}). See {seg_log.name}")
@@ -1035,6 +1073,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     for j in range(idx + 1, last_idx + 1):
                         if j < len(job.segments):
                             job.segments[j].status = "done"
+                            job.segments[j].skipped = True
                         skipped_names.append(segments[j].name)
                     # Skipped chunks never ran, so their restart files are absent —
                     # bridge the chain so the next stage restarts from this chunk.

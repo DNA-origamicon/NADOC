@@ -2084,6 +2084,37 @@ def test_composite_trajectory(design, geometry, tmp_path):
     assert r["markers"][0]["frame"] == 3 and r["markers"][0]["kind"] == "production"
 
 
+def test_job_field_prefers_run_config_falls_back_to_efield():
+    """_job_field reads a job's field as {dir, field_pN}: run_config.field first, then
+    the older efield {force_pN, dir}; None for a fieldless (relaxation) job."""
+    from types import SimpleNamespace
+    from backend.api.routes_oxdna import _job_field
+    rc_job = SimpleNamespace(run_config={"field": {"dir": [1, 0, 0], "field_pN": 5}}, efield=None)
+    assert _job_field(rc_job) == {"dir": [1.0, 0.0, 0.0], "field_pN": 5}
+    ef_job = SimpleNamespace(run_config=None, efield={"dir": [0, -1, 0], "force_pN": 3, "n_anchored": 4})
+    assert _job_field(ef_job) == {"dir": [0.0, -1.0, 0.0], "field_pN": 3}
+    assert _job_field(SimpleNamespace(run_config=None, efield=None)) is None
+    # a run_config without a field record (surface-only / plain production) → None
+    assert _job_field(SimpleNamespace(run_config={"surface": {}}, efield=None)) is None
+
+
+def test_composite_trajectory_carries_per_stage_field(design, geometry, tmp_path):
+    """Each stage tuple's optional 5th element (the run's E-field descriptor) flows
+    through to stages[].field in BOTH the full composite and the lightweight meta, so
+    the View-trajectory arrow can follow a chained run's field direction per frame."""
+    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
+    ref = tmp_path / "conf.dat"; _write_traj(design, geometry, ref, 1)
+    e = tmp_path / "equil.dat";  _write_traj(design, geometry, e, 2)
+    f = tmp_path / "field.dat";  _write_traj(design, geometry, f, 3)
+    fld = {"dir": [1.0, 0.0, 0.0], "field_pN": 5.0}
+    # relaxation stage has no field; the field child's stage carries its descriptor.
+    stages = [("3_equil", "equil", e, None, None), ("1_field", "field", f, "→ field 1", fld)]
+    full = composite_trajectory(design, stages, ref)
+    meta = composite_trajectory_meta(design, stages)
+    assert [s.get("field") for s in full["stages"]] == [None, fld]
+    assert [s.get("field") for s in meta["stages"]] == [None, fld]
+
+
 def test_aligned_frames_cached_by_file_signature(design, geometry, tmp_path):
     """The expensive read+PBC-unwrap+Kabsch-align of a whole trajectory is memoized by
     file signature: a second call on the SAME (immutable) files reuses the aligned

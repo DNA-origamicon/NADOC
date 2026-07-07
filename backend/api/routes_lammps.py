@@ -38,6 +38,14 @@ class CreateLammpsJobRequest(BaseModel):
     salt_molar:         float = 0.5
     ranks:              int   = 1        # MPI ranks (>1 needs an MPI-enabled lmp)
     design_source_path: str | None = None
+    # External forces (steer the run like an oxDNA one — see resolve_lammps_forces):
+    #   field   = {"field_pN": p, "dir": [x,y,z]}      uniform E-field (needs ≥1 anchor)
+    #   wall    = {"dir": [x,y,z], "offset_nm": d, "stiff": s}   axis-aligned surface
+    #   anchors = [{"kind": "overhang"|"cluster"|"domain"|"strand"|"base", ...}]
+    field:              dict | None = None
+    wall:               dict | None = None
+    anchors:            list[dict] | None = None
+    anchor_stiff:       float | None = None
 
 
 @router.get("/lammps/available")
@@ -96,8 +104,23 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
     params = L.LammpsInputParams(
         steps=body.steps, dump_every=body.dump_every,
         temperature=body.temperature, salt_molar=body.salt_molar)
+    prep_kwargs: dict = {}
+    if body.field:
+        prep_kwargs["field"] = body.field
+    if body.wall:
+        prep_kwargs["wall"] = body.wall
+    if body.anchors:
+        prep_kwargs["anchors"] = body.anchors
+    if body.anchor_stiff is not None:
+        prep_kwargs["anchor_stiff"] = body.anchor_stiff
     try:
-        info = lammps_runner.prepare_lammps_job(design, geometry, job.job_dir(ws), params)
+        info = lammps_runner.prepare_lammps_job(
+            design, geometry, job.job_dir(ws), params, **prep_kwargs)
+    except lammps_runner.LammpsError as e:   # e.g. a field with no resolvable anchor
+        job.status = LammpsStatus.failed
+        job.error = str(e)
+        job.save(ws)
+        raise HTTPException(400, str(e)) from e
     except ValueError as e:     # e.g. an unsequenced base that slipped the pre-check
         job.status = LammpsStatus.failed
         job.error = str(e)
@@ -106,6 +129,7 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
 
     job.n_atoms = info["n_atoms"]
     job.n_bonds = info["n_bonds"]
+    job.forces = info.get("forces")
     job.save(ws)
 
     lammps_runner.start_job(job, ws)

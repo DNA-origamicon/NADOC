@@ -31,6 +31,7 @@ const MARKUP = `
       <div id="lammps-jobs-status"></div>
       <div id="lammps-jobs-progress"><div class="bar" style="width:0%"></div></div>
       <button id="lammps-jobs-run-btn" disabled>▶ Run on LAMMPS</button>
+      <label><input id="lammps-jobs-show-all" type="checkbox"> show all designs</label>
       <div id="lammps-jobs-list"></div>
       <div id="lammps-jobs-adv-toggle"><span id="lammps-jobs-adv-arrow">▸</span></div>
       <div id="lammps-jobs-adv-body" style="display:none">
@@ -60,14 +61,15 @@ const MARKUP = `
 
 const $ = (id) => document.getElementById(id)
 const openPanel = () => $('lammps-jobs-heading').click()
-const COMPLETED = [{ job_id: 'l1', design_name: '6hb', status: 'completed', frames: 3, n_atoms: 1, steps: 1000, current_step: 1000 }]
+const WS = '/ws/6hb.nadoc'
+const COMPLETED = [{ job_id: 'l1', design_name: '6hb', status: 'completed', frames: 3, n_atoms: 1, steps: 1000, current_step: 1000, design_source_path: WS }]
 
 function renderer() {
   return { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
 }
 async function openWithCompletedSelected(dr) {
   api.listLammpsJobs.mockResolvedValue(COMPLETED)
-  initLammpsJobsPanel({ designRenderer: dr })
+  initLammpsJobsPanel({ designRenderer: dr, getWorkspacePath: () => WS })
   openPanel(); await flush()
   ;[...$('lammps-jobs-list').children][0].click()   // select the run
   await flush()
@@ -104,10 +106,66 @@ describe('initLammpsJobsPanel — launch + list', () => {
   })
 })
 
+describe('initLammpsJobsPanel — current-design filtering', () => {
+  const MIX = [
+    { job_id: 'a', design_name: 'this', status: 'completed', frames: 2, steps: 1, current_step: 1, design_source_path: WS },
+    { job_id: 'b', design_name: 'other', status: 'completed', frames: 2, steps: 1, current_step: 1, design_source_path: '/ws/other.nadoc' },
+  ]
+  it('only shows jobs whose design_source_path matches the loaded design', async () => {
+    api.listLammpsJobs.mockResolvedValue(MIX)
+    initLammpsJobsPanel({ designRenderer: renderer(), getWorkspacePath: () => WS })
+    openPanel(); await flush()
+    const rows = [...$('lammps-jobs-list').children].map(c => c.textContent)
+    expect(rows.some(t => /this/.test(t))).toBe(true)
+    expect(rows.some(t => /other/.test(t))).toBe(false)
+  })
+  it('"show all designs" reveals other designs\' runs', async () => {
+    api.listLammpsJobs.mockResolvedValue(MIX)
+    initLammpsJobsPanel({ designRenderer: renderer(), getWorkspacePath: () => WS })
+    openPanel(); await flush()
+    $('lammps-jobs-show-all').checked = true
+    $('lammps-jobs-show-all').dispatchEvent(new Event('change'))
+    await flush()
+    expect([...$('lammps-jobs-list').children].some(c => /other/.test(c.textContent))).toBe(true)
+  })
+  it('empty-state notes other designs exist when filtered to none', async () => {
+    api.listLammpsJobs.mockResolvedValue([MIX[1]])   // only the other design's run
+    initLammpsJobsPanel({ designRenderer: renderer(), getWorkspacePath: () => WS })
+    openPanel(); await flush()
+    expect($('lammps-jobs-list').textContent).toMatch(/show all designs/)
+  })
+})
+
+describe('initLammpsJobsPanel — forces payload', () => {
+  it('Run includes design_source_path + forces from the forces setup', async () => {
+    const forcesSetup = {
+      fieldNeedsAnchor: () => false,
+      getForces: () => ({ field: { field_pN: 30, dir: [1, 0, 0] }, anchors: [{ kind: 'strand', id: 's1' }] }),
+      detachGizmo: () => {},
+    }
+    initLammpsJobsPanel({ getWorkspacePath: () => WS, forcesSetup })
+    openPanel(); await flush()
+    $('lammps-jobs-run-btn').click(); await flush()
+    expect(api.createLammpsJob).toHaveBeenCalledWith(expect.objectContaining({
+      design_source_path: WS,
+      field: { field_pN: 30, dir: [1, 0, 0] },
+      anchors: [{ kind: 'strand', id: 's1' }],
+    }))
+  })
+  it('blocks the run (no POST) when a field has no anchor', async () => {
+    const forcesSetup = { fieldNeedsAnchor: () => true, getForces: () => ({ field: { field_pN: 30, dir: [1, 0, 0] }, anchors: [] }), detachGizmo: () => {} }
+    initLammpsJobsPanel({ getWorkspacePath: () => WS, forcesSetup })
+    openPanel(); await flush()
+    api.createLammpsJob.mockClear()
+    $('lammps-jobs-run-btn').click(); await flush()
+    expect(api.createLammpsJob).not.toHaveBeenCalled()
+  })
+})
+
 describe('initLammpsJobsPanel — visualization card', () => {
   it('view radios are disabled until a finished run is selected', async () => {
     api.listLammpsJobs.mockResolvedValue(COMPLETED)
-    initLammpsJobsPanel({ designRenderer: renderer() })
+    initLammpsJobsPanel({ designRenderer: renderer(), getWorkspacePath: () => WS })
     openPanel(); await flush()
     expect($('lammps-jobs-display-toggle').disabled).toBe(true)   // nothing selected
     ;[...$('lammps-jobs-list').children][0].click(); await flush()

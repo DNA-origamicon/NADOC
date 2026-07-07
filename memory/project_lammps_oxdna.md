@@ -1,8 +1,10 @@
 ---
 name: project_lammps_oxdna
-description: LAMMPS + CG-DNA as a NADOC engine — CPU-parallel oxDNA for very large assemblies; Phases 1-6 shipped (detect→run→jobs→UI→trajectory→viz card), serial-verified; next = force mapping / torque / MPI
-metadata:
+description: "LAMMPS + CG-DNA as a NADOC engine — CPU-parallel oxDNA for very large assemblies; Phases 1-6 shipped (detect→run→jobs→UI→trajectory→viz card); MPI parallel run VERIFIED (5.85× @8 ranks); external-force mapping (field/anchor/wall → LAMMPS fixes) VERIFIED headless; next = wire forces through REST/UI, then torque"
+metadata: 
+  node_type: memory
   type: project
+  originSessionId: d8652554-53d4-4370-8c3d-913cab89c81f
 ---
 
 # LAMMPS + CG-DNA (parallel oxDNA) engine
@@ -14,21 +16,29 @@ native oxDNA→LAMMPS transcoder + runner (FIRE soft-start), managed jobs + REST
 (`/api/lammps/jobs`), a dedicated **"LAMMPS — parallel oxDNA"** sidebar section, and a
 full **"Visualizations & processing"** card (display / RMSF / deviation / trajectory)
 that reuses the oxDNA backend (`oxdna_health`) + frontend (`oxdna_display` pure mappers)
-verbatim. **Built + run SERIAL** and live-verified end-to-end on a 14,485-nt design.
-Backend 4108 tests / frontend 2253 green.
+verbatim. Live-verified end-to-end on a 14,485-nt design. **MPI parallel run now
+VERIFIED (2026-07-06)** — see the "MPI parallel — VERIFIED" block below.
 
 **Pick up with ONE of (in rough priority):**
-1. **MPI parallel run** — the engine's whole raison d'être is still UNVERIFIED. Needs
-   `sudo apt-get install -y libopenmpi-dev` → rebuild `~/lammps/build` with
-   `-D BUILD_MPI=on` → run `run_lammps(..., ranks=N)` and confirm domain decomposition
-   speedup + identical physics. Runner code path exists (`build_lammps_argv` mpirun).
-2. **External-force mapping** — NADOC E-field per-nt forces / surface wall / anchor
-   traps → LAMMPS `fix`es (mirror `oxdna_interface`'s forces.txt), so a LAMMPS run can
-   be steered like an oxDNA one. Groundwork for the torque study.
-3. **Torque-to-failure protocol** — the actual science goal (mechanical failure of
-   large assemblies). **READ the caveats block below first:** loading-rate dependence
-   (needs a rate series + Bell/Dudko–Hummer–Szabo, not a single ramp) and
-   full-sequencing requirement.
+1. **Field-run display alignment** — the field-run trajectory display still uses
+   whole-structure Kabsch, which partly rotates away a bend. A field run's deflection
+   would read better with anchor-positional alignment (like the oxDNA efield display —
+   thread `align_keys`/`rotate=False` through the LAMMPS `_traj_inputs` →
+   `composite_trajectory`). The anchor keys are already stored on `job.forces['anchor_keys']`.
+2. Health/metrics read-back polish; multi-scaffold per-strand sequencing UX.
+   (Torque-to-failure was a moonshot example, NOT a goal — dropped per the user.)
+
+**⚠ DEBUG LESSON (6hbx100 "no bowing", 2026-07-07):** a user's field run showed no
+dynamics/bowing. Root cause = the **field was ~150× too weak** (0.06 pN/nt, set by a
+GIZMO DRAG — the `nmPerPnForN` base-count scaling makes a normal drag map to a tiny
+per-nt force on a big design; TYPE the magnitude instead). Measured: anchors held
+(0.008 nm), free beads pure thermal jitter (0.09 nm), midpoint bow 0.064→0.067 nm (zero).
+Field dir was fine (84° off-axis ≈ perpendicular). Secondary: the anchors were on the
+**ssDNA overhangs** = flexible hinges that don't transmit a bending moment (the oxDNA
+efield lesson — anchor the DUPLEX ends to bend a bundle). Also a 48-nm 6hb is far
+shorter than its bending persistence length → nearly rigid; even a strong safe field
+bows it only modestly. Fix shipped: a **weak-field hint** (below `EFIELD_PN_LOW`=0.5
+pN/nt the field-card ready line warns "⚠ very weak — unlikely to visibly deform").
 
 **Owed manual validation:** the live 3D deform-in-browser (viz card → model) is the
 user's visual review; everything feeding it is verified. **Gotcha:** editing routes
@@ -154,15 +164,40 @@ port round-trips to 2.4e-15. Full backend suite 4091 passed (2 `test_md_executor
 fails are pre-existing xdist parallel-isolation flakes — pass isolated, executor
 untouched).
 
-### ⚠ MPI build gap on this box (parallel feature not yet exercised)
-`libopenmpi-dev` is NOT installed (only the runtime wrappers, whose include dir is
-dangling), so `-D BUILD_MPI=on` fails at cmake `find_package(MPI)`. Built **serial**
-via `-D BUILD_MPI=off -D CMAKE_DISABLE_FIND_PACKAGE_MPI=TRUE` (STUBS). The whole
-POINT of this engine — MPI domain decomposition — is therefore **not yet verified**;
-the physics/correctness IS (serial CG-DNA = same force field). To enable parallel:
-`sudo apt-get install -y libopenmpi-dev` → rebuild with `BUILD_MPI=on` → run with
-`run_lammps(..., ranks=N)`. The runner's `mpirun` path is coded but real-run
-unverified. **[[manual_validation_debt]]: MPI parallel run.**
+### ✅ MPI parallel — VERIFIED 2026-07-06 (was the ⚠ build gap)
+`libopenmpi-dev` (OpenMPI 4.1.6) now installed. **Build gotcha:** the conda toolchain
+(`~/miniforge3`) is on PATH; its linker can't find OpenMPI's `libopen-pal.so.40`/
+`libopen-rte.so.40` (in `/usr/lib/x86_64-linux-gnu`, ldconfig knows them). Fix = build
+with a **clean system toolchain**, not conda's:
+```
+rm -rf ~/lammps/build_mpi && mkdir ~/lammps/build_mpi && cd ~/lammps/build_mpi
+env -i PATH=/usr/bin:/bin HOME=$HOME cmake -D PKG_CG-DNA=on -D PKG_MOLECULE=on \
+  -D PKG_ASPHERE=on -D BUILD_MPI=on \
+  -D CMAKE_C_COMPILER=/usr/bin/gcc -D CMAKE_CXX_COMPILER=/usr/bin/g++ \
+  -D CMAKE_BUILD_TYPE=Release ../cmake
+env -i PATH=/usr/bin:/bin HOME=$HOME cmake --build . -j$(nproc)
+```
+→ real `MPI v3.1: Open MPI 4.1.6` binary (not STUBS), CG-DNA+oxdna2 present. Copied to
+the detection path `~/lammps/build/lmp` (serial backup at `~/lammps/lmp_serial_bak`);
+`find_lammps()`+`lammps_supports_cgdna` pick it up, `ldd` shows system libmpi.
+**Verified real (this box):** 6hb×1000bp = **12,000 atoms**, 3000 steps —
+box decomposes 1×1×1→1×1×8 and **wall time 73.6s(1)→41.4s(2)→20.9s(4)→12.6s(8) =
+1.78×/3.53×/5.85×** near-linear speedup. **Correctness:** step-0 thermo (E_pair,E_bond,
+TotEng) **bit-identical across 1/2/4/8 ranks** (force field is decomposition-invariant).
+6000-atom run gave 1.91×/3.49× at 2/4. Full **managed-job path** (`run_job` with
+`job.ranks=4`) → `completed`, log shows `1 by 1 by 4 MPI processor grid`. UI already has
+the "MPI ranks" input (`index.html:3940`) wired browser→REST→job→mpirun. All 40 LAMMPS
+tests pass against the MPI binary. **No code changed — only the binary.** [[manual_validation_debt]]
+MPI item is cleared.
+
+**⚠ Follow-up (auto-build path):** the in-app auto-build (`engine_install.install_steps`,
+`lammps_doctor.py --fix`, panel "Rebuild") runs cmake/make under the process's default
+env — on THIS box that means the conda toolchain, which hits the `libopen-pal`/`libopen-rte`
+linker failure above and would silently fall back to a STUBS (serial) build even though
+`tools["mpi"]` is now true. The working MPI build required `env -i PATH=/usr/bin:/bin` +
+explicit `/usr/bin/gcc,g++`. If MPI auto-build matters, `install_steps("lammps_oxdna")`
+needs to force the system toolchain when conda is on PATH. Not fixed this session (manual
+build done by hand).
 
 ## Phase 3 — SHIPPED 2026-07-06 (managed job + REST; backend-only, real-verified)
 User chose **backend managed job + REST only** (no UI this phase). A LAMMPS run is
@@ -331,11 +366,124 @@ all 5 toggles render in the running app; boot clean (console-error gate). The li
 **GOTCHA:** editing routes reloads uvicorn → drops the in-memory active design →
 view endpoints 404 until a design is re-loaded (not a bug; the job list persists).
 
+## External-force mapping — SHIPPED 2026-07-06 (backend primitive; real-verified)
+NADOC's oxDNA external forces (`oxdna_interface`: `string` field / `trap` anchors /
+`repulsion_plane` surface) now map onto LAMMPS fixes so a LAMMPS run can be steered
+like an oxDNA one. **No unit conversion in the mapping** — a NADOC LAMMPS run uses
+`units lj` = oxDNA's native units, so forces are already in oxDNA force units,
+coords in oxDNA length units (the runner does pN→oxDNA + nm→oxDNA before building
+the spec).
+
+**The three mappings (conventions verified against LAMMPS `src/`):**
+- oxDNA `string` (F0·dir, particle=-1) → **`fix addforce all fx fy fz`** — `f[i]+=value`,
+  a constant per-atom force. EXACT.
+- oxDNA `trap` (pin to pos0, stiff) → **`fix spring/self K`** on an id group — LAMMPS is
+  `F=-K·(r-r0)`, `E=½K·dr²` (checked `fix_spring_self.cpp`), the SAME harmonic form as
+  oxDNA's trap, so **K == anchor_stiff 1:1** (default 1000 → ~0.03 nm RMS). EXACT.
+- oxDNA `repulsion_plane` → **`fix wall/harmonic`** (AXIS-ALIGNED only) — a soft harmonic
+  cushion within a cutoff of the wall. Confines to the same half-space but its form
+  differs (repulsion_plane = zero on allowed side, linear in penetration; wall/harmonic
+  = `2ε·(cutoff−δ)` within cutoff). General plane orientation would need `fix wall/region`
+  — DEFERRED. **Real-run gotcha:** `fix wall` requires its axis to be NON-periodic, so a
+  walled run flips that axis's `boundary` to `fm`/`mf` (wall face fixed, opposite
+  shrink-wrapped so a pushed-out atom isn't lost) — physically correct (a substrate
+  breaks periodicity along its normal), see `boundary_line`.
+
+**File map:**
+- [lammps_interface.py](../backend/physics/lammps_interface.py) (pure): `LammpsForceSpec`
+  dataclass (`force`/`anchor_ids`/`anchor_stiff`/`wall`); `compress_id_ranges`
+  (atom-id list → compact `A:B` group arg); `axis_wall_from_extent` (dir+extent →
+  `(face,coord)`, raises on non-axis-aligned); `build_force_fixes` (spec → fix lines);
+  `boundary_line` (p-p-p unless walled); `build_input_file(p, force_spec=None)` injects
+  the fixes at the TOP of the production block (post-minimise, so `spring/self` tethers
+  to production-start positions = oxDNA `pos0`). `OXDNA_LENGTH_UNIT`/`NM_TO_OXDNA`/
+  `DEFAULT_ANCHOR_STIFF` mirrored locally (asserted == `constants` in tests).
+- [lammps_runner.py](../backend/core/lammps_runner.py): `resolve_lammps_forces(design,
+  conf, field=, wall=, anchors=, anchor_stiff=)` → `(LammpsForceSpec, meta)`, the analog
+  of `oxdna_interface.write_run_forces` (SAME descriptor shapes: `field={field_pN,dir}`,
+  `wall={dir,offset_nm,stiff}`, `anchors=[…]`). Reuses `resolve_anchor_particles` +
+  `pn_to_oxdna_force` (no new topology reasoning); **raises `LammpsError` on field-without-
+  anchor** (oxDNA GOTCHA 1). `prepare_lammps_job` gained `field=/wall=/anchors=/
+  anchor_stiff=` kwargs (all optional, backward-compatible) + a `forces` meta in its
+  return.
+
+**Verified REAL (this box, MPI lmp):** field(200 pN)+strand-anchor on a 6hb → anchored
+beads mean **0.008 nm** / max 0.024 nm from tether (spring holds), free beads **0.090 nm**
+of which **0.084 nm is along +x (the field dir)** — i.e. the field pushes the free part
+along the field while anchors hold, exactly oxDNA string+trap. Wall run completes rc0
+with `boundary p p fm`. Tests: `test_lammps_interface.py` (+9 pure: ranges/wall-extent/
+non-axis-raise/fix-lines/boundary/injection-order/const-match), `test_lammps_runner.py`
+(+6: resolve field-needs-anchor/field+anchor pN-conv+1-based-ids/wall/prepare-with-forces/
+prepare-none + the slow real field-holds-anchor-deflects-free, registered slow in conftest).
+
+## Force-mapping REST/UI wiring — SHIPPED 2026-07-06 (field + anchors + gizmo, live-verified)
+The headless force primitive is now driveable from the app.
+- **Backend.** `CreateLammpsJobRequest` += `field`/`wall`/`anchors`/`anchor_stiff`;
+  `create_lammps_job` passes them to `prepare_lammps_job`, **400s on a field-without-
+  anchor** (`LammpsError`), and stores the `forces` meta on the job. `LammpsJob` +=
+  `forces: dict|None` (persisted). Tests: `test_lammps_routes` (+ field-without-anchor
+  400 fast; + real steered create records forces meta / fixes in `in.lammps`, slow).
+- **Frontend — three separate collapsible cards** in the LAMMPS section, mirroring the
+  oxDNA panel (updated 2026-07-07 from the original single combined card): **Electric
+  field** (`lammps-field-*`), **Anchors** (`lammps-anchors-*`), **Surface**
+  (`lammps-surface-*`) — one module `ui/lammps_forces_setup.js`
+  (`initLammpsForcesSetup({gizmo,getSelection,getBaseCount,onChange})→{getForces,
+  fieldNeedsAnchor,detachGizmo,refresh}`) manages all three via a small `_card()`
+  collapse helper (each collapses independently). `getForces()→{field,anchors,wall}`.
+  **Reuses `scene/efield_math.js`** (field+anchor helpers: `resolveSelectionAnchors`,
+  `addAnchors`/`removeAnchor`, `arrowLenForPn`, `fieldColorHex`/`fieldZone`,
+  `EFIELD_PN_LOW`) **and `scene/oxdna_floor_math.js`** (`floorSurfaceSpec`/
+  `formatOffsetNm` → the surface `wall={dir,offset_nm,stiff}` payload, six-axis side
+  dropdown) + the **same `efield_gizmo`** (a SECOND instance —
+  `initEfieldGizmo(...,name)` gained an optional group-name arg, default unchanged;
+  LAMMPS uses `'lammps-efield-gizmo'`). Field = pN/nt + x/y/z dir (drag the scene arrow),
+  anchors = "Add selected" from the scene selection (overhang/strand/domain/cluster/base)
+  → chips. Gizmo attaches only when the card is open AND the field is enabled.
+  - **Jobs card now follows the oxDNA example:** filters to the **current design** via
+    the shared `filterJobsForPart(_jobs, getWorkspacePath(), showAll)` (job
+    `design_source_path` ↔ loaded design path) + a **"show all designs"** toggle
+    (`lammps-jobs-show-all`, localStorage-persisted); statuses already render via
+    `statusBadge`/`statusKeyFor('lammps',…)`. Create now sends `design_source_path` +
+    the forces; a field-without-anchor is blocked client-side with a toast.
+  - `buildCreatePayload` gained `designSourcePath`/`field`/`anchors` (attaches only
+    non-empty). `initLammpsJobsPanel` gained `getWorkspacePath` + `forcesSetup` deps.
+  - **main.js Δ = +9** (import + `initLammpsForcesSetup` factory + the LAMMPS gizmo
+    instance + the two new panel deps — wiring only, no cohesive logic).
+  - **Surface (wall) UI** (2026-07-07): the Surface card's enable/axis/offset/stiff →
+    `wall` payload; the backend `wall=` path (axis-aligned `fix wall/harmonic`, non-
+    periodic boundary) was already there. `buildCreatePayload` + the panel now also
+    forward `wall`. **`_card` gotcha:** the field card's `onClose:_syncGizmo` runs during
+    init before the card handle exists → `fieldCard` is a hoisted `let` (null-guarded in
+    `_syncGizmo`), NOT a `const` (a `const` TDZ throws even through `?.`).
+  - **Anchor glow + surface grid = same as oxDNA** (2026-07-07): LAMMPS anchors drive the
+    SAME purple `anchorGlow` instance (`designRenderer.setAnchorGlow`, InstancedMesh named
+    `'anchorGlow'`, count>0 = glowing) via `lammps_forces_setup.getAnchors()` +
+    `onChange → main._refreshLammpsAnchorGlow` (glows whenever ≥1 anchor is marked — not
+    gated on the field, unlike oxDNA's `fieldOn && anchors`). The Surface toggle drives the
+    shared View grid via a new `setSurfaceGrid` dep → `_viewToolButtons.setSurfaceGrid({
+    enabled,axis,offsetNm})` (identical to `oxdna_floor_setup`). **TDZ pattern:** onChange /
+    setSurfaceGrid reference main.js consts created after the factory, so the module GATES
+    them behind a `_ready` flag (`_notify`/`_pushGrid` no-op until construction settles) —
+    the same "never fire onChange during construction" rule the oxDNA glow relies on. The
+    LAMMPS panel+forces init was MOVED in main.js to AFTER the anchorGlow/`_viewToolButtons`
+    setup so it can share them. The existing `nadoc:left-tab-change` handler clears the glow
+    for both engines.
+  - Tests: `lammps_forces_setup.test.js` (field null-until-enabled, weak-field warning,
+    anchors-from-selection, fieldNeedsAnchor, gizmo attach-gating, **surface wall spec**,
+    **cards collapse independently**); `lammps_jobs_logic.test.js` (+payload path/forces/
+    **wall** attach+omit); `lammps_jobs_panel.test.js` (+current-design filtering, show-all,
+    forces payload, field-without-anchor blocked). Frontend suite 2269 green.
+- **Verified:** frontend vitest 2266 green; backend lammps suite 57 green (incl. slow
+  real steered run); vite build clean; smoke boot-clean (the 2 teardown-gate fails were
+  an auto-scaffold timing flake in a test helper — passed on isolated retry, unrelated).
+  **LIVE app-exercised** (throwaway Playwright on the running app, then deleted): loaded
+  a scaffolded part → Dynamics → LAMMPS → External forces card renders + opens, enabling
+  a field shows the graded "⚠ strong field — 25 pN/nt — add ≥1 anchor" ready line, the
+  scene gizmo attaches, the "show all designs" toggle is present, **zero console errors**.
+
 ## Follow-up phases (NOT started)
-- **Force mapping**: NADOC E-field per-nt forces, surface wall, anchor traps → LAMMPS
-  `fix`es.
 - **Torque-to-failure protocol** (+ the loading-rate/sequencing caveats above).
-- Enable + verify the **MPI parallel** run (`libopenmpi-dev` → `BUILD_MPI=on` → ranks>1).
+- ~~Enable + verify the **MPI parallel** run~~ **DONE 2026-07-06** (see the ✅ block above).
 - Health/metrics read-back (reuse oxDNA health on `traj.oxdna.dat`); multi-scaffold
   designs need every scaffold sequenced (assign per-strand) before a run.
 

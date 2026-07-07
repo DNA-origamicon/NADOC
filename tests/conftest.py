@@ -324,7 +324,9 @@ _SLOW_TESTS = {
     "test_oxdna_http_lifecycle",
     "test_runner_real_binary_status_lifecycle",
     "test_lammps_real_run_end_to_end",   # real lmp CG-DNA run
+    "test_lammps_field_holds_anchor_and_deflects_free",   # real lmp field+anchor run
     "test_create_runs_to_completion_and_lists",   # real lmp CG-DNA run via REST
+    "test_create_with_field_and_anchor_records_forces",   # real lmp steered run via REST
 
     # headless build+optimize (real router/oxdna passes)
     "test_build_and_optimize_oracle_fires_on_unreachable",
