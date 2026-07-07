@@ -4008,6 +4008,60 @@
                 </div>
               </div>
 
+              <!-- ── Anchors (collapsible card — fixed strands, Dirichlet BC; mimics the oxDNA card) ── -->
+              <div class="ox-card">
+                <div id="cando-anchors-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="cando-anchors-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Anchors</span>
+                </div>
+                <div id="cando-anchors-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Fixed strands held in place during the FEM solve (Dirichlet tethers). Used by the electric field, or on their own. A field needs at least one.</div>
+                  <div style="display:flex;align-items:center;gap:5px">
+                    <button id="cando-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
+                    <button id="cando-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                  </div>
+                  <div id="cando-anchors-list" style="margin-top:5px"></div>
+                  <div id="cando-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Electric field (collapsible card — uniform body load; mimics the oxDNA card, numeric-only) ── -->
+              <div class="ox-card">
+                <div id="cando-efield-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="cando-efield-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Electric field</span>
+                </div>
+                <div id="cando-efield-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">A uniform force on every nucleotide (same per-nt force convention as oxDNA). Needs ≥1 anchor (Anchors card) or it drifts the whole structure.</div>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
+                    <input type="checkbox" id="cando-efield-enable"> Apply an electric field to the solve
+                  </label>
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                    <label for="cando-efield-mag" style="font-size:var(--text-xs);color:#8b949e">Force / nt (pN)</label>
+                    <input id="cando-efield-mag" type="number" value="0" min="0" step="0.01"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <div style="display:flex;align-items:center;gap:4px;margin-top:5px">
+                    <span style="font-size:var(--text-xs);color:#8b949e">Direction</span>
+                    <input id="cando-efield-dir-x" type="number" step="0.1" title="x" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <input id="cando-efield-dir-y" type="number" step="0.1" title="y" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <input id="cando-efield-dir-z" type="number" step="0.1" title="z" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <div style="margin-top:5px">
+                    <div id="cando-efield-vpm-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#8b949e;display:flex;align-items:center;gap:4px">
+                      <span id="cando-efield-vpm-arrow" style="display:inline-block;transition:transform .15s">▸</span><span>from field (V/m)</span>
+                    </div>
+                    <div id="cando-efield-vpm-body" style="display:none;margin-top:4px;display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                      <label for="cando-efield-vpm" style="font-size:var(--text-xs);color:#8b949e">E (V/m)</label>
+                      <input id="cando-efield-vpm" type="number" step="1000" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <label for="cando-efield-qeff" style="font-size:var(--text-xs);color:#8b949e" title="Effective backbone charge (e/phosphate); ~0.25 after Manning condensation">q_eff (e)</label>
+                      <input id="cando-efield-qeff" type="number" step="0.05" min="0" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <span></span>
+                      <button id="cando-efield-vpm-apply" style="font-size:var(--text-xs);padding:3px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Compute pN</button>
+                    </div>
+                  </div>
+                  <div id="cando-efield-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:7px;min-height:14px"></div>
+                </div>
+              </div>
+
               <!-- ── Detail (selected job) ─────────────────────────────────── -->
               <div id="cando-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
                 <div id="cando-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>

@@ -60,6 +60,31 @@ describe('initOxdnaAnchorsSetup', () => {
     expect(api.getAnchors().map(a => a.id)).toEqual(['oX'])
   })
 
+  it('ids override drives a second (CanDo) skeleton, leaving the oxDNA one untouched', () => {
+    // The CanDo FEM panel mounts its own cando-anchors-* card and instantiates a parallel
+    // instance via the ids override; it must bind those ids, not the default oxDNA ones.
+    const CANDO = {
+      'cando-anchors-toggle': 'div', 'cando-anchors-arrow': 'span', 'cando-anchors-body': 'div',
+      'cando-anchors-add': 'button', 'cando-anchors-clear': 'button',
+      'cando-anchors-list': 'div', 'cando-anchors-status': 'div',
+    }
+    const cels = mountIds(CANDO)
+    const cstore = createMockStore({ multiSelectedOverhangIds: ['cq'] })
+    const capi = initOxdnaAnchorsSetup({
+      getSelection: () => cstore.getState(),
+      ids: {
+        toggle: 'cando-anchors-toggle', arrow: 'cando-anchors-arrow', body: 'cando-anchors-body',
+        add: 'cando-anchors-add', clear: 'cando-anchors-clear', list: 'cando-anchors-list',
+        status: 'cando-anchors-status',
+      },
+    })
+    cels['cando-anchors-add'].click()
+    expect(capi.getAnchors().map(a => a.id)).toEqual(['cq'])       // bound the cando ids
+    expect(cels['cando-anchors-list'].querySelector('[data-key="overhang:cq"]')).toBeTruthy()
+    expect(api.getAnchors()).toHaveLength(0)                        // default oxDNA instance untouched
+    expect(els['oxdna-anchors-list'].children.length).toBe(0)
+  })
+
   it('applyConfig replaces the anchor set + notifies onChange (job-select echo)', () => {
     const onChange = vi.fn()
     const a = initOxdnaAnchorsSetup({ getSelection: () => store.getState(), onChange })

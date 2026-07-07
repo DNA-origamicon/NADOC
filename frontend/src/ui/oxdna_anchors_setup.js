@@ -11,8 +11,10 @@
  * Display-layer only.  Anchor helpers are shared with the E-field math module
  * (scene/efield_math.js) — "fix these nucleotides" is the same concept.
  *
- * Factory: initOxdnaAnchorsSetup({ getSelection }) → { getAnchors,
- *   addSelectedAnchors, clear, refresh }.
+ * Factory: initOxdnaAnchorsSetup({ getSelection, ids }) → { getAnchors,
+ *   addSelectedAnchors, clear, refresh }.  ``ids`` overrides the DOM element ids so a
+ *   SECOND instance (e.g. the CanDo FEM panel's Anchors card, same shared scope resolver)
+ *   can drive its own ``cando-anchors-*`` skeleton; omit it and the oxDNA ids are used.
  */
 
 import {
@@ -21,17 +23,24 @@ import {
 
 const _C = { dim: '#8b949e', warn: '#e0a800' }
 
-export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null } = {}) {
-  const toggle = document.getElementById('oxdna-anchors-toggle')
-  const arrow  = document.getElementById('oxdna-anchors-arrow')
-  const bodyEl = document.getElementById('oxdna-anchors-body')
+const _DEFAULT_IDS = {
+  toggle: 'oxdna-anchors-toggle', arrow: 'oxdna-anchors-arrow', body: 'oxdna-anchors-body',
+  add: 'oxdna-anchors-add', clear: 'oxdna-anchors-clear', list: 'oxdna-anchors-list',
+  status: 'oxdna-anchors-status',
+}
+
+export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, ids = {} } = {}) {
+  const id = { ..._DEFAULT_IDS, ...ids }
+  const toggle = document.getElementById(id.toggle)
+  const arrow  = document.getElementById(id.arrow)
+  const bodyEl = document.getElementById(id.body)
   const noop = { getAnchors: () => [], addSelectedAnchors: () => 0, clear: () => {}, refresh: () => {}, applyConfig: () => {} }
   if (!toggle || !bodyEl) return noop
 
-  const addBtn   = document.getElementById('oxdna-anchors-add')
-  const clearBtn = document.getElementById('oxdna-anchors-clear')
-  const listEl   = document.getElementById('oxdna-anchors-list')
-  const statusEl = document.getElementById('oxdna-anchors-status')
+  const addBtn   = document.getElementById(id.add)
+  const clearBtn = document.getElementById(id.clear)
+  const listEl   = document.getElementById(id.list)
+  const statusEl = document.getElementById(id.status)
 
   let _open    = false
   let _anchors = []

@@ -104,6 +104,12 @@ class CreateCandoJobRequest(BaseModel):
     n_steps:    int = Field(20, ge=1, le=200,
                             description="Corotational load-step count (nonlinear only)")
     with_rmsf:  bool = Field(True, description="Also compute the free-free NMA per-bp RMSF")
+    # Job-request annotations (C1/C2): anchors held fixed (Dirichlet BC) + a uniform E-field body
+    # load, both threaded into predict_shape(...).  Never a topology edit (Three-Layer Law).
+    anchors:    Optional[list] = Field(None, description="Shared oxDNA anchor-scope descriptors "
+                                       "(overhang/cluster/domain/strand/base) held fixed during the solve")
+    field:      Optional[dict] = Field(None, description="Uniform E-field {field_pN, dir} — the same "
+                                       "per-nucleotide force oxDNA applies; needs ≥1 anchor (COM drift)")
     autostart:  bool = Field(True)
     design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
 
@@ -136,6 +142,10 @@ async def create_cando_job(body: CreateCandoJobRequest) -> dict:
         nonlinear          = body.nonlinear,
         n_steps            = body.n_steps,
         with_rmsf          = body.with_rmsf,
+        # Autorefine is a free-free design-optimization loop → don't drive it with anchors/field
+        # (they'd change the twist/bend objective); they apply only to a plain predict job.
+        anchors            = body.anchors if kind == "predict" else None,
+        field              = body.field if kind == "predict" else None,
         n_nucleotides      = len(_strand_nucleotide_order(design)),
         design_source_path = body.design_source_path,
         design_fingerprint = oxdna_design_fingerprint(design),

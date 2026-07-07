@@ -26,6 +26,8 @@ import { statusBadge, statusKeyFor } from './job_status_symbol.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { confirmNoConcurrentJob } from './job_activity.js'
 import { initCandoMetricsCard } from './cando_metrics_card.js'
+import { initCandoEfieldSetup } from './cando_efield_setup.js'
+import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -254,7 +256,7 @@ export function autorefineJobResultHtml(job) {
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
-export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = null } = {}) {
+export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = null, getSelection = null } = {}) {
   const $ = (id) => document.getElementById(id)
   const panel = $('cando-jobs-panel')
   const heading = $('cando-jobs-heading')
@@ -297,6 +299,19 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
 
   // Graphs & Metrics card — a child module reading the panel's job selection.
   const _metricsCard = initCandoMetricsCard({ getSelectedJob: _selectedJob })
+
+  // Anchors + Electric-field cards — mimics of the oxDNA panel's, feeding the FEM solve
+  // (C1/C2).  The anchors card shares the exact oxDNA scope resolver (parameterised ids);
+  // the field card is numeric-only (the oxDNA panel owns the one in-scene arrow gizmo).
+  const _anchorsCard = initOxdnaAnchorsSetup({
+    getSelection: () => (getSelection ? getSelection() : null),
+    ids: {
+      toggle: 'cando-anchors-toggle', arrow: 'cando-anchors-arrow', body: 'cando-anchors-body',
+      add: 'cando-anchors-add', clear: 'cando-anchors-clear', list: 'cando-anchors-list',
+      status: 'cando-anchors-status',
+    },
+  })
+  const _efieldCard = initCandoEfieldSetup({})
 
   // ── Collapse ────────────────────────────────────────────────────────────────
   function _applyCollapsed(collapsed) {
@@ -348,12 +363,24 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     _updateLaunchButtons()
     try {
       if (!(await confirmNoConcurrentJob())) return
+      const anchors = _anchorsCard.getAnchors()
+      const fieldSpec = _efieldCard.getFieldSpec()
+      const fieldOn = _efieldCard.isEnabled()
+      // A uniform field with no anchor just streams the whole structure (COM drift) — mirror
+      // the oxDNA panel's guard rather than launch a physically-meaningless solve.
+      if (fieldOn && !anchors.length) {
+        showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card.',
+          { severity: 'warn' })
+        return
+      }
       const body_ = {
         nonlinear,
         n_steps:   Math.max(1, parseInt(stepsInput?.value, 10) || 20),
         with_rmsf: rmsfInput ? !!rmsfInput.checked : true,
         autostart: true,
         design_source_path: getWorkspacePath?.() || null,
+        anchors: anchors.length ? anchors : null,
+        field:   fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
       }
       const job = await api.createCandoJob(body_)
       if (!job) {

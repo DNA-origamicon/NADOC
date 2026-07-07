@@ -1937,7 +1937,7 @@ async function main() {
     setDesignVisible: (v) => _setDesignGeometryVisible(v),
     legend:           initCandoLegend(),
   })
-  initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath })
+  initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
   // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
   // on every design sync; both panels self-listen, so no store subscription here.)

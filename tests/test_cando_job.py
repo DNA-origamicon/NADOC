@@ -73,6 +73,87 @@ def test_new_job_stage_name_tracks_solver(tmp_path):
     assert new_cando_job("d", nonlinear=False).stages[0].name == "linear"
 
 
+# ── C1/C2 job-request annotations: anchors + E-field (frontend cards drive these) ──
+
+def test_job_roundtrips_anchors_and_field(tmp_path):
+    """The anchor list + field spec are job-request annotations that survive save/load
+    (so the runner + a re-selected job see exactly what the cards submitted)."""
+    from backend.core.cando_job import CandoJob, new_cando_job
+
+    anchors = [{"kind": "cluster", "id": "c1"},
+               {"kind": "base", "helix_id": "h0", "bp": 5, "direction": "forward"}]
+    field = {"field_pN": 0.2, "dir": [0.0, 1.0, 0.0]}
+    job = new_cando_job("d", anchors=anchors, field=field)
+    job.save(tmp_path)
+    loaded = CandoJob.load(job.job_id, tmp_path)
+    assert loaded.anchors == anchors
+    assert loaded.field == field
+    # Default (no field/anchors) is None, not a mutable shared default.
+    plain = new_cando_job("d")
+    assert plain.anchors is None and plain.field is None
+
+
+def test_legacy_job_without_anchors_field_migrates_to_none(tmp_path):
+    """An old job.json written before C1/C2 (no anchors/field keys) loads cleanly."""
+    import json
+
+    from backend.core.cando_job import CandoJob, new_cando_job
+
+    job = new_cando_job("d")
+    job.save(tmp_path)
+    p = job.job_dir(tmp_path) / "job.json"
+    data = json.loads(p.read_text())
+    data.pop("anchors", None)
+    data.pop("field", None)
+    p.write_text(json.dumps(data))
+    loaded = CandoJob.load(job.job_id, tmp_path)
+    assert loaded.anchors is None and loaded.field is None
+
+
+def test_create_request_model_carries_anchors_and_field():
+    """The create-job request model accepts the two annotations (and defaults them None)."""
+    from backend.api.routes_cando import CreateCandoJobRequest
+
+    req = CreateCandoJobRequest(anchors=[{"kind": "cluster", "id": "c1"}],
+                                field={"field_pN": 0.1, "dir": [1, 0, 0]})
+    assert req.anchors == [{"kind": "cluster", "id": "c1"}]
+    assert req.field == {"field_pN": 0.1, "dir": [1, 0, 0]}
+    assert CreateCandoJobRequest().anchors is None
+    assert CreateCandoJobRequest().field is None
+
+
+def test_runner_forwards_anchors_and_field_to_predict_shape(routed_6hb, tmp_path, monkeypatch):
+    """The load-bearing wiring: a predict job's anchors + field reach predict_shape(...).
+    predict_shape is stubbed to capture its kwargs (no real solve → fast)."""
+    import backend.physics.fem_solver as fs
+    from backend.core import cando_runner as cr
+    from backend.core.cando_job import CandoStatus, new_cando_job
+
+    captured = {}
+
+    def _spy(design, **kw):
+        captured.update(kw)
+        raise RuntimeError("stop-after-capture")   # end the solve immediately
+
+    monkeypatch.setattr(fs, "predict_shape", _spy)
+
+    anchors = [{"kind": "base", "helix_id": routed_6hb.helices[0].id, "bp": 5,
+                "direction": "forward"}]
+    field = {"field_pN": 0.1, "dir": [1.0, 0.0, 0.0]}
+    job = new_cando_job("6hb", nonlinear=False, with_rmsf=False, n_steps=5,
+                        n_nucleotides=1000, anchors=anchors, field=field)
+    job.status = CandoStatus.preparing
+    job.save(tmp_path)
+    cr.prepare_cando_job(routed_6hb, job, tmp_path)
+    cr.start_job(job, tmp_path)
+    for _ in range(120):
+        if not cr.is_running(job.job_id):
+            break
+        time.sleep(0.5)
+    assert captured.get("anchors") == anchors
+    assert captured.get("field") == field
+
+
 def test_linear_job_completes_and_caches(routed_6hb, tmp_path):
     from backend.core import cando_runner as cr
     from backend.core.cando_job import CandoStatus

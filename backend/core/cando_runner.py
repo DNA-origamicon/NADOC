@@ -204,6 +204,11 @@ def _run_job(job: CandoJob, workspace_dir: Path) -> None:
             nonlinear = job.nonlinear,
             n_steps   = job.n_steps,
             with_rmsf = job.with_rmsf,
+            # Anchors (Dirichlet BC) + uniform E-field body load — job-request annotations, never a
+            # topology edit (C1/C2). A field needs ≥1 anchor to hold against (COM drift); predict_shape
+            # falls back to the free centroid-pinned solve if a selection resolves to nothing.
+            anchors   = getattr(job, "anchors", None),
+            field     = getattr(job, "field", None),
         )
         sim_seconds = time.monotonic() - t0
 
