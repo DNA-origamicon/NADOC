@@ -814,6 +814,50 @@ experimentally-anchored MD engine), the first time the roster is complete and NA
   so a future card reusing the shared `efield-toggle` id under a different engine could stay green; can't produce
   a current false result; left as-is (tripwires #1+#2 carry the parity).
 
+### 2026-07-08 — `U2` shared Forces (E-field) card factory — unified-panel track
+
+- **De-dup PROVEN by per-engine PARITY, not just wired:** the THREE triplicated Electric-field cards collapse
+  into ONE `forces_card.js` `initForcesCard({engine,ids?,gizmo?,getBaseCount?,getAnchorCount?,onChange?})` →
+  `{getFieldSpec,isEnabled,refresh,applyConfig,detachGizmo}`, `getFieldSpec()`→`{field_pN,dir,enabled}`. DELETED
+  `efield_setup.js` (oxDNA, gizmo) + `cando_efield_setup.js` (CanDo+NAMD, numeric); the LAMMPS field third of
+  `lammps_forces_setup.js` now DELEGATES to the factory (its Anchors + Surface cards + public API
+  `getForces/getAnchors/fieldNeedsAnchor/detachGizmo` unchanged). Rewired call sites: `main.js`
+  (`engine:'oxdna'`+gizmo), `cando_jobs_panel.js` (`engine:'cando'`), `md_jobs_panel.js` (`engine:'namd'`).
+- **Per-engine divergences are DATA, not code paths** (`FORCES_FIELD_VARIANTS` + `FORCES_FIELD_IDS`): gizmo vs
+  numeric (driven by whether a `gizmo` is passed), V/m sub-panel (driven by DOM-id presence — LAMMPS has none),
+  default dir `[0,1,0]` vs LAMMPS `[1,0,0]`, ready-line style (`apply` "needs ≥1 anchor", verb run/solve, vs
+  `lammps` weak-warn + contextual anchor note read from `getAnchorCount`), gizmo-visibility gate (`open-or-job`
+  oxDNA vs `open-and-enabled` LAMMPS), job-arrow persistence, close-on-leave-tab.
+- **ADAPTED-CODE PIN (CLAUDE.md), proven the right way:** the parity oracle drove the LIVE old bespoke factories
+  AND the new `initForcesCard` through the SAME input sequence on fresh DOMs and asserted byte-equal payloads for
+  all 4 engines — proof against the in-place old code, **not green-first-run** (13/13 green while both existed).
+  The durable `forces_card.test.js` then pins each engine's explicit payload + gizmo-drag + applyConfig + V/m +
+  ready lines. Independently, the refactored LAMMPS module still passes its **9 pre-existing** tests
+  (behaviour-preservation — those tests predate the change).
+- **The one thing unit tests can't cover, verified separately:** all field DOM ids in `FORCES_FIELD_IDS` confirmed
+  present in the live `index.html` (a typo'd id → silent no-op in the app), and `just smoke` (console-error gate,
+  loads a real design) green 23/23 → the rewired cards mount + boot clean in the running app.
+- **Gates:** forces_card oracle 13/13; frontend 182 files / 2315 passed (−16 = 2 deleted bespoke test files, their
+  coverage folded into `forces_card.test.js` + preserved LAMMPS tests — no product regression); smoke 23/23; ruff
+  N/A (frontend-only, no `.py`; the 19 pre-existing `just lint` errors are untouched Python debt). `main.js` LOC
+  Δ = +1 (import swap + `engine:'oxdna'` arg; no cohesive logic added — the field logic MOVED out, factory init
+  is thin wiring). Display-vs-oracle: DOM byte-identical rewire (same ids/markup) → live 4-panel gesture owes
+  **MV-22**.
+- **Review (fresh-context, read-only) caught ONE real regression, fixed:** the reviewer confirmed all 4 engines'
+  field payloads are byte-equivalent to the pre-refactor cards, but found that leaving the Dynamics tab with the
+  LAMMPS field card **open + enabled** no longer detached its scene arrow (old LAMMPS detached unconditionally;
+  the shared handler's `else _syncGizmo()` re-attached under LAMMPS's `open-and-enabled` gate). Fixed: the
+  tab-change handler now `_close_()`s where the card closes on leave (oxDNA) else `gizmo.detach()` directly —
+  reproducing both bespoke cards' always-detach-on-leave. Added a RED-verified regression test (both oxDNA +
+  LAMMPS detach on leave; fails on the old `_syncGizmo()` path). Benign non-regression the reviewer noted +
+  kept: the shared `magInput` handler also calls `_syncVpm()` for oxDNA (the old oxDNA card didn't) — updates the
+  V/m helper's display value only, never the `{field_pN,dir,enabled}` payload (harmonizes both cards to keep V/m
+  live). Final: 14/14 oracle, 2316 frontend, smoke 23/23.
+- **Comparable prediction / capability gained, not just a run:** the E-field job payload every engine POSTs is now
+  emitted by ONE factory with machine-proven byte-parity per engine — the field spec that drives CanDo's q·E load,
+  NAMD's eField, oxDNA's per-nt string force, and LAMMPS's CG force is provably identical across the consolidation,
+  so U3/U4 can collapse the panels with zero observable change to what each engine simulates.
+
 ### 2026-07-08 — `P2` chain EXECUTOR (advance / halt / resume-from-failed) — job-planner track
 
 - **CHAIN capability PROVEN, not just wired:** `backend/core/md_chain_executor.py` turns a P1 `MdPipeline` into a

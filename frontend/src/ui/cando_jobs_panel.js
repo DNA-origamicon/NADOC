@@ -26,7 +26,7 @@ import { statusBadge, statusKeyFor } from './job_status_symbol.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { confirmNoConcurrentJob } from './job_activity.js'
 import { initCandoMetricsCard } from './cando_metrics_card.js'
-import { initCandoEfieldSetup } from './cando_efield_setup.js'
+import { initForcesCard } from './forces_card.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import * as api from '../api/client.js'
 
@@ -311,7 +311,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       status: 'cando-anchors-status',
     },
   })
-  const _efieldCard = initCandoEfieldSetup({})
+  const _efieldCard = initForcesCard({ engine: 'cando' })
 
   // ── Collapse ────────────────────────────────────────────────────────────────
   function _applyCollapsed(collapsed) {

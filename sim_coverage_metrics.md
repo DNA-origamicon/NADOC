@@ -365,6 +365,27 @@ fills in as milestones complete.
   matrix each shared factory needs now exists as verified data, provably matching what every bespoke panel
   renders today — the parity contract U2/U3/U4 collapse against.
 
+- **`U2` — shared Forces (E-field) card factory** · shape: new frontend module (`forces_card.js`
+  `initForcesCard({engine,ids?,gizmo?,getBaseCount?,getAnchorCount?,onChange?})`) that REPLACES two bespoke
+  modules (`efield_setup.js` + `cando_efield_setup.js` DELETED) and absorbs the field third of
+  `lammps_forces_setup.js` (delegated) · feature: engine-consolidation (kills the E-field triplication) ·
+  engines now comparable: all 4 field-bearing panels (oxDNA/LAMMPS/CanDo/NAMD) render their Electric-field card
+  from ONE factory, each emitting the SAME `{field_pN,dir,enabled}` payload; per-engine divergences (gizmo vs
+  numeric, V/m sub-panel via DOM presence, +y vs +x default dir, apply-vs-lammps ready line, gizmo-visibility
+  gate, job-arrow persistence) are DATA (`FORCES_FIELD_VARIANTS`/`FORCES_FIELD_IDS`), not code paths · oracle
+  (FAST, 13 tests): PER-ENGINE PARITY — the ADAPTED-CODE PIN was proven by driving the LIVE old factories and the
+  new one through the same input sequence on fresh DOMs and asserting byte-equal payloads (13/13 green while both
+  existed); durable form pins each engine's explicit payload + gizmo-drag + applyConfig + V/m + ready lines. The
+  refactored LAMMPS module still passes its 9 PRE-EXISTING tests (behaviour-preservation, tests predate the
+  change). All field ids verified present in `index.html` (cards mount in the real app) · main.js LOC Δ = +1
+  (import line swap `initEfieldSetup`→`initForcesCard` + `engine:'oxdna'` arg; net cohesive-logic LOC in main.js
+  flat) · tests: frontend 182 files / 2315 passed (−16 = 2 deleted bespoke test files folded into
+  `forces_card.test.js` + preserved LAMMPS tests; no product regression); smoke 23/23 (console-error gate green);
+  backend not run (frontend-only, no `.py`) · display-vs-oracle: DOM byte-identical rewire (same ids/markup, JS
+  factory swapped) → covered by parity oracle + id-presence check + smoke boot-clean; live 4-panel gesture owes
+  **MV-22** · **De-dup proven, not just wired:** 3 field-card implementations → 1 factory, each engine's field
+  payload machine-proven byte-identical to what its bespoke card emitted before.
+
 - **`P1` — MdPipeline stage-spec data model + pure chain builder** · shape: new `backend/core` service
   (`md_pipeline.py`; pure data model + builder, no card/solver, no job submission) · feature: chaining
   (job-planner backbone) · engines now chainable: any engine's stage can be seeded from the previous stage's
@@ -412,7 +433,7 @@ read/export the agreement) or a future headless two-engine cross-run.
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | **DONE** (C1,C2,C3,C4,C5 shipped 2026-07-07) — anchors + E-field + extra-bases + linkers all covered, CanDo feeds the comparison card |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | **DONE** (2026-07-08) — anchors: CanDo (C1)✓ + NAMD (N2)✓ + mrDNA (M1)✓; field: CanDo (C2)✓ + NAMD (N1)✓ + **mrDNA (M2)✓**; every engine now runs an anchored E-field job producing a comparable along-field deflection descriptor |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
-| `M-UNIFIED-PANEL` | 6 sidebar panels → 1, proven by per-engine card PARITY | pending — **U1 shipped 2026-07-08** (capability descriptor: 5 engines × 8 cards, unsupported present-but-disabled; PARITY census oracle vs live `index.html`, 19 tests). U2 (Forces factory) / U3 (jobs-base) / U4 (selector) remain |
+| `M-UNIFIED-PANEL` | 6 sidebar panels → 1, proven by per-engine card PARITY | pending — **U1 + U2 shipped 2026-07-08**. U1 = capability descriptor (5 engines × 8 cards, PARITY census, 19 tests). **U2 = shared Forces (E-field) card factory** `forces_card.js` — collapses the 3 triplicated field cards (`efield_setup.js` + `cando_efield_setup.js` DELETED; LAMMPS field third delegated) into ONE `initForcesCard({engine})` emitting byte-identical `{field_pN,dir,enabled}` per engine (13-test parity oracle, proven vs live old code; LAMMPS's 9 pre-existing tests preserved). U3 (jobs-base) / U4 (selector) remain |
 | `M-JOB-PLANNER` | chain jobs unattended (stage-spec + executor + planner UI) | pending — **P1+P2 shipped 2026-07-08**. P1 = `MdPipeline` stage-spec + pure builder. **P2 = chain EXECUTOR** (`md_chain_executor.py`): stage N spawns SEEDED FROM N-1's realised child on completion; failure HALTS; `resume_chain` retries-only-failed (completed stages never re-run). Engine-agnostic (injected spawn/status); NAMD adapter reuses `spawn_md_production`; `advance_chains` driven by the MD supervisor = unattended; `POST /md/chains`+resume routes. CHAIN oracle 12 FAST + 4 route. P3 (cross-engine) / P4 (Plan Run UI) remain |
 | `M-DEPOSITION-CHAIN` | E-field→surface→anchors→field-sweep from one Plan Run | pending (P1✓ + **P2✓** + P4 + U2) — the executor can now chain deposition→immobilize→sweep stages; still needs P4 (planner UI to author the plan) + U2 (per-stage Forces card) + forces-into-reseed-conf wiring |
 

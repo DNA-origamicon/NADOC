@@ -206,7 +206,7 @@ import { initMrdnaConnections } from './scene/mrdna_connections.js'
 import { initOxdnaLive } from './ui/oxdna_live_controller.js'
 import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
-import { initEfieldSetup } from './ui/efield_setup.js'
+import { initForcesCard } from './ui/forces_card.js'
 import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
 import { initOxdnaAnchorsSetup } from './ui/oxdna_anchors_setup.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
@@ -1977,7 +1977,8 @@ async function main() {
     anchorGlow.setAnchors(fieldOn && anchors.length ? anchors : [])
   }
 
-  const efieldSetup = initEfieldSetup({
+  const efieldSetup = initForcesCard({
+    engine: 'oxdna',
     gizmo: efieldGizmo,
     // Field changed (gizmo drag / input edit): refresh the anchor halo AND, if a
     // live session is running, update it — re-aim the field live (magnitude/dir) or
@@ -2002,7 +2003,7 @@ async function main() {
     // Changing anchors refreshes the halo AND recomposes a running live session.
     onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onElementsChanged?.() },
   })
-  // Leaving the Dynamics tab drops the field gizmo (efield_setup) — clear the anchor
+  // Leaving the Dynamics tab drops the field gizmo (forces_card) — clear the anchor
   // halo too so it never lingers in other tabs.
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.activeTab !== 'dynamics') anchorGlow.clear()

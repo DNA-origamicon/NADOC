@@ -11,7 +11,7 @@
  *
  * Display-layer only: the gizmo never touches topology or the design; it just
  * reports its world vector via the onChange callback.  The owning panel
- * (ui/efield_setup.js) maps that vector to force-per-nucleotide (pN) + direction.
+ * (ui/forces_card.js) maps that vector to force-per-nucleotide (pN) + direction.
  *
  * Factory:
  *   const gizmo = initEfieldGizmo(scene, camera, canvas, controls)
