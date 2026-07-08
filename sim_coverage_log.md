@@ -55,9 +55,51 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(M2) mrDNA E-field (ARBD grid-potential force)** ✅ | per-bead force = `field_pN·(nt in bead)·(pN→kcal/mol/Å)·dir̂` with `nt in bead = mass/dpn`, `dpn = total_bead_mass/total_nt` (beads charge 0 → force applied directly), asserted vs a FIRST-PRINCIPLES pN→kcal/mol/Å (not the code constant); 2×mass→2×force; TOTAL force = `field_pN·total_nt`; constant force via a RAMP POTENTIAL `U=-(F·r)` through `add_grid_potential`/`gridFile` (`-∇U==F` round-tripped from the `.dx` via `loadGrid`) — **NOT `forceXGrid`, which crashes ARBD on a constant grid**; per-type grid wiring + dry-run conf emits `gridFile field_*.dx`; `install_field_force` wraps `generate_bead_model` so grids re-attach to fresh types after regen (RED-checked), idempotent (grid_potentials overwritten); REST guards field-needs-anchor/malformed(incl non-numeric)→400; runner RAISES if a field's anchors held 0 beads; SLOW **real ARBD field-on vs off, one strand anchored**: anchored held (~0.5 Å) while free bulk deflects ALONG +field (~8.5 Å vs field-off ±2 Å), \|Δ\| within [0.45,2.0]× the overdamped Brownian pred `D·F·T/(k_B·T)` from the engine's OWN diffusivity/mass + field_pN via the first-principles constant (independent of the emission constant) | `backend/core/mrdna_field.py::{field_force_vector,dalton_per_nucleotide,_write_ramp_grid,apply_field_force,install_field_force}`, `backend/core/{mrdna_job,mrdna_runner}.py`, `backend/api/routes_mrdna.py`, `tests/test_mrdna_field.py` | M4 (mrDNA linkers) + M3 (extra bases) reuse the per-type grid + regen-wrap; any CG engine's uniform-field task (the ramp-potential idiom + per-nt→per-bead mass-scaling + overdamped-drift oracle); N4/M5 field-source (emit deflection from the relaxed frame) |
 
+| **(N4) NAMD source bundle (gold override)** ✅ | descriptors == `compute_shape_descriptors` on the exact core-filtered frame (same S1 estimator, ABSOLUTE); core mask drops ssDNA ends; `md_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; empty core→None (RED); **THE HEADLINE: `[oxdna,cando,namd]`→`build_comparison_report` references.shape=='namd' AND references.rmsf=='namd' — NAMD overrides BOTH policy engines (gold override)**; negative control (absent NAMD → shape=oxdna/rmsf=cando, proving the flip is NAMD-caused); SLOW real 2hb NAMD DCD→`md_rmsf`→ready namd source, override holds on real data | `backend/core/namd_shape_source.py::build_namd_shape_source`, `backend/api/routes_md.py::get_md_shape_source`, `tests/test_namd_shape_source.py` | the source-bundle contract, complete — all four engines (O1/C5/M5/N4) now feed the card; the gold-override assertion pattern for any future NAMD-referenced observable |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `N4` NAMD source bundle → FOURTH/LAST live card column (gold-override reference)
+
+**Comparable prediction gained, not just a run:** the cross-engine comparison card now carries **all
+four engines** (oxDNA O1, CanDo C5, mrDNA M5, **NAMD N4**), and NAMD is the **gold-override reference** —
+when a NAMD job is selected the card scores oxDNA/CanDo/mrDNA's shape AND RMSF *against NAMD* (the
+experimentally-anchored MD engine), the first time the roster is complete and NAMD anchors the comparison.
+
+- **What shipped.** `backend/core/namd_shape_source.py` `build_namd_shape_source(shape_frame, core_reference,
+  *, rmsf_positions=None, field=None)` — the O1/C5/M5 twin, same SOURCE-BUNDLE CONTRACT `{engine:"namd",
+  descriptors, rmsf, shape_frame, field}`: core-filter to the rigid dsDNA core, emit NAMD's ABSOLUTE
+  `compute_shape_descriptors`, remap `rmsf`→`rmsf_nm`. Behaviorally the oxDNA builder with `engine="namd"` —
+  `md_trajectory.md_rmsf` emits the SAME positions shape as `production_rmsf` (each entry carries BOTH
+  `backbone_position` AND `rmsf`, string `direction`), so shape + RMSF come from ONE Kabsch-aligned pass
+  (time-mean structure = the low-noise shape; per-nt trajectory variance = the RMSF).
+- **Route** `GET /md/jobs/{id}/shape-source` (`get_md_shape_source`) reuses `_md_traj_inputs` (the job's
+  FROZEN prepared design snapshot, not live editor state) + `_run_md_analysis(...'rmsf','md_rmsf'...)` (shares
+  the flexibility-map RMSF cache) → passes `result["positions"]` as BOTH `shape_frame` and `rmsf_positions`
+  → `{ready(=descriptors is not None), n_frames, ...bundle}`.
+- **Frontend** `api.getMdShapeSource` + compare-card `getSources` fetches the selected MD job → `[oxdna, cando,
+  mrdna, namd]`; `main.js` captures `const mdPanel` + lazy `getMdJob` (no TDZ — `mdPanel` created via
+  `initMdJobsPanel` BEFORE `oxdnaPanel`'s init). **main.js LOC Δ = +3 (pure wiring).** Field deferred
+  (`field:None`, like O1/C5/M5).
+- **Gold override is the value-add, not the builder.** The builder is a near-clone of O1; N4's bright line is
+  that `shape_metrics.reference_for` (`_GOLD_ENGINE="namd"`, wired in S3) returns `"namd"` for every
+  observable once a NAMD source is present, and `build_comparison_report` honors it — so the oracle's headline
+  is `references.shape=="namd"` AND `references.rmsf=="namd"` on `[oxdna,cando,namd]`, with a negative-control
+  proving the flip is NAMD-caused.
+- **Oracle** `tests/test_namd_shape_source.py` 8 (7 fast + 1 slow, conftest-registered). The slow real-NAMD
+  test RAN on-machine (the 2hb fixture is present): real DCD → `md_rmsf` → ready namd source, override holds.
+- **Gates:** oracle 8/8; `just test` 4362 passed / 72 skip / 1 xfail (no drop; the prior xdist active-design
+  flake `test_namd_efield::test_no_field_skips_both_guards` PASSED this run); `just lint` clean on touched (19
+  pre-existing debt in OTHER files untouched — `feedback_no_bulk_reformat`); `just test-frontend` 2294; `just
+  smoke` green (pre + post). Fresh-context review: CONFIRMED-CORRECT, no bugs, no TDZ, Three-Layer clean.
+- **Display-vs-oracle:** NOT a new card — a new backend source route into the S5-validated render path (like
+  C5/M5). Live 4-engine eyeball → **MV-21** (updated with the N4 slice, including the reference-relabel check).
+- **NOTE — unrelated uncommitted `md_vram` work in the tree.** The session inherited a separate WIP stream
+  (md_vram/atomistic_cache/namd_runner host-OOM handling) uncommitted. Only the N4 hunk of `routes_md.py` was
+  staged (via `git apply --cached` of the trimmed hunk); the `md_vram` changes were left untouched for their
+  own commit.
 
 ### 2026-07-08 — `M5` mrDNA source bundle → THIRD live card column (CG-trajectory RMSF + copy-key fix)
 

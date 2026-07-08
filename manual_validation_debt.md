@@ -221,6 +221,22 @@ agreement table shows a finite mrDNA shape-RMSD vs oxDNA, and Export still produ
 Report pass/fail. NOTE: mrDNA's CG curvature is only ~18% quantitative (project_mrdna_panel),
 so expect its bend to read LOW vs oxDNA — that's the engine, not a bug.
 
+**N4 update (2026-07-08) — NAMD column now live; the card's engine roster is COMPLETE.**
+`getSources` now also fetches the selected MD (NAMD) job's bundle (`GET /md/jobs/{id}/shape-source`
+→ `build_namd_shape_source`: NAMD's absolute shape descriptors on the Kabsch-aligned time-mean
+structure + its per-nucleotide trajectory RMSF, both from one `md_rmsf` pass). NAMD is the
+**GOLD-OVERRIDE** reference: with a NAMD job selected, the card should relabel NAMD as the
+reference for **every** observable (shape, RMSF, field) — the oxDNA/CanDo policy columns become
+candidates scored *against* NAMD (aligned-shape RMSD vs NAMD, RMSF Pearson vs NAMD). Same
+S5-validated render path (new backend source route only), so this is a live-data eyeball, not a
+new render surface. **Test (N4 slice, do now):** load a design with a completed NAMD MD job (with
+≥1 written DCD) AND an oxDNA relax job, select both, Generate the "Shape comparison" card → confirm
+(a) a **NAMD column** appears with sane twist/bend/Rg + an RMSF overlay, and (b) the agreement
+table now names **NAMD as the shape AND RMSF reference** (oxDNA/CanDo shown as candidates with
+deltas vs NAMD), and Export still produces PNG + CSVs. Report pass/fail. NOTE: the NAMD shape is
+the time-mean over the trajectory (low-noise), NOT a single frame — expect it to read smoother than
+an instantaneous MD snapshot.
+
 ### MV-5 — Assembly right-click context menu (part / linker / belt)
 *Discharges fix #69 — the assembly right-click router moved onto the shared
 `createContextMenu` primitive. The router (`assembly_pointer.js`

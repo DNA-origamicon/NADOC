@@ -2147,6 +2147,8 @@ export const getCandoCylinders   = (id)          => _oxdnaJSON('GET',  `/cando/j
 export const getCandoShapeSource = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/shape-source`)
 /** mrDNA source bundle for the cross-engine comparison card (S5/M5): shared descriptors + CG-trajectory RMSF. */
 export const getMrdnaShapeSource = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/shape-source`)
+/** NAMD source bundle for the cross-engine comparison card (S5/N4): shared descriptors + trajectory RMSF (gold-override reference). */
+export const getMdShapeSource    = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/shape-source`)
 
 // ── CanDo-FEM autorefine (Phase-5 Item 4): greedy loop/skip tuning driven by the FEM shape oracle.
 /** Start a CanDo-FEM autorefine run on the active design → {autorefine_id, state}. */

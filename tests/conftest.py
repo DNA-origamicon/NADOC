@@ -339,6 +339,8 @@ _SLOW_TESTS = {
     "test_real_arbd_field_deflects_along_field",
     # M5 mrDNA shape source: a real ARBD coarse run → trajectory RMSF + ready source.
     "test_real_mrdna_trajectory_rmsf_and_source_ready",
+    # N4 NAMD shape source: real NAMD DCD → md_rmsf → ready gold-override source.
+    "test_real_namd_trajectory_builds_ready_source",
     "test_oxdna_http_lifecycle",
     "test_runner_real_binary_status_lifecycle",
     "test_lammps_real_run_end_to_end",   # real lmp CG-DNA run

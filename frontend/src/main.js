@@ -1824,7 +1824,7 @@ async function main() {
   // ── Compute-cluster (Alpine) connection chip (Phase 1 remote-execution backend) ─
   const clusterConn = initClusterConnection({ mount: document.getElementById('md-cluster-connection-mount') })
 
-  initMdJobsPanel({
+  const mdPanel = initMdJobsPanel({
     mdDisplayController,
     getWorkspacePath: () => _workspacePath,
     getOxdnaDisplay: () => oxdnaDisplay,
@@ -1914,6 +1914,9 @@ async function main() {
     // Lazy: the mrDNA panel is created below; the compare card reads its selection at
     // generate time (M5 — the mrDNA column of the cross-engine card).
     getMrdnaJob: () => mrdnaPanel?.getSelectedJob?.(),
+    // N4 — the MD panel (created above) supplies the NAMD column, the GOLD-OVERRIDE
+    // reference; the compare card reads its selection at generate time.
+    getMdJob: () => mdPanel?.getSelectedJob?.(),
     // Clicking a job echoes its run conditions into every card (field arrow,
     // surface, anchor chips + 3D glow) — what was used during that run.
     applyRunConfig: (cfg) => {

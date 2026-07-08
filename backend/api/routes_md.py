@@ -418,6 +418,43 @@ async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
     return result
 
 
+@router.get("/md/jobs/{job_id}/shape-source")
+async def get_md_shape_source(job_id: str, request: Request) -> dict:
+    """The NAMD source bundle for the cross-engine comparison card (S5/N4).
+
+    Turns the job's trajectory into the shared ``{engine, descriptors, rmsf, shape_frame,
+    field}`` bundle ``build_comparison_report`` consumes — NAMD's ABSOLUTE shape descriptors
+    on the rigid dsDNA core (from the Kabsch-aligned time-mean structure) + its per-nucleotide
+    trajectory RMSF.  NAMD is the GOLD-OVERRIDE engine: whenever this source is present it
+    becomes the reference for every observable (see :func:`shape_metrics.reference_for`).
+
+    Both the shape and the RMSF come from ONE ``md_rmsf`` pass (reusing the ``rmsf`` analysis
+    cache the flexibility map already fills), against the job's OWN prepared design snapshot so
+    the descriptors match the simulated topology, not live editor state.  Physical-layer only
+    (Three-Layer Law); field emission is deferred (``field:None`` — see
+    :mod:`backend.core.namd_shape_source`)."""
+    from backend.api.skip_twist_tuning import core_reference_geometry
+    from backend.core.namd_shape_source import build_namd_shape_source
+
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {"job_id": job_id, "ready": False,
+                "reason": "topology/reference or trajectory not found"}
+    psf, ref, segments, design = inputs
+    result = await _run_md_analysis(
+        request, job_id, "rmsf", "md_rmsf", (psf, segments, ref, design))
+    if not result.get("ready") or not result.get("positions"):
+        return {"job_id": job_id, "ready": False,
+                "reason": result.get("reason", "no trajectory frames")}
+    reference = await run_in_threadpool(core_reference_geometry, design)
+    bundle = await run_in_threadpool(
+        build_namd_shape_source, result["positions"], reference,
+        rmsf_positions=result["positions"])
+    ready = bundle["descriptors"] is not None
+    return {"job_id": job_id, "ready": ready,
+            "n_frames": result.get("n_frames", 0), **bundle}
+
+
 class MdFramesAtomisticBody(BaseModel):
     frame_indices: list[int]
 

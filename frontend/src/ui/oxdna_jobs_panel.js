@@ -393,7 +393,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -2013,8 +2013,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // current design.  O1 wired the oxDNA column (the selected oxDNA job's relaxed-frame
   // descriptors + RMSF); C5 adds the CanDo column (the selected CanDo job's FEM shape
   // descriptors + free-free NMA RMSF — the RMSF reference); M5 adds the mrDNA column (the
-  // selected mrDNA job's relaxed-frame descriptors + CG-trajectory RMSF), so the card shows
-  // three live engines cross-validated.  Remaining engine (N4) adds its bundle the same way
+  // selected mrDNA job's relaxed-frame descriptors + CG-trajectory RMSF), and N4 adds the NAMD
+  // column (the selected MD job's time-mean-structure descriptors + trajectory RMSF — the
+  // GOLD-OVERRIDE reference), so the card shows all four live engines cross-validated
   // (live cross-engine data = MV-21).
   const _compareCard = initShapeCompareCard({
     api: { start: api.startShapeCompare, poll: api.getShapeCompareRun },
@@ -2034,6 +2035,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       if (mrdnaJob) {
         const msrc = await api.getMrdnaShapeSource(mrdnaJob.job_id)
         if (msrc && msrc.ready) out.push(msrc)
+      }
+      const mdJob = getMdJob?.()
+      if (mdJob) {
+        const nsrc = await api.getMdShapeSource(mdJob.job_id)
+        if (nsrc && nsrc.ready) out.push(nsrc)
       }
       return out
     },

@@ -305,6 +305,30 @@ fills in as milestones complete.
   mrDNA's absolute CG-relaxed shape + aligned-shape RMSD scored against oxDNA, plus a CG-trajectory RMSF — so
   oxDNA, CanDo, and mrDNA cross-validate on the same design through one shared generate/view/export card.
 
+- **`N4` — NAMD source bundle (FOURTH/LAST live card column) + gold-override reference** · shape: new
+  `backend/core` service (`namd_shape_source.py`, the twin of O1/C5/M5) + new `GET /md/jobs/{id}/shape-source`
+  route (`get_md_shape_source`) + frontend `getSources` now merges the NAMD source → `[oxdna, cando, mrdna,
+  namd]` (no solver/card-machinery change — binds the S5 card) · feature: comparison-metric (NAMD joins the
+  shared card as the GOLD-OVERRIDE reference) · engines now comparable: **oxDNA ↔ CanDo ↔ mrDNA ↔ NAMD** — the
+  card's engine roster is COMPLETE, and when a NAMD job is present it becomes the reference for EVERY observable
+  (shape, RMSF, field), so oxDNA/CanDo/mrDNA are scored *against* the experimentally-anchored MD engine ·
+  builder is a near-clone of O1 (md_rmsf emits the same `{...,backbone_position, rmsf}` shape as production_rmsf;
+  shape + RMSF from ONE Kabsch-aligned `md_rmsf` pass — time-mean structure + per-nt trajectory variance) —
+  N4's value-add is the gold override, already wired in S3 (`reference_for` `_GOLD_ENGINE="namd"`), asserted here ·
+  oracle: `tests/test_namd_shape_source.py` 7 fast + 1 slow (fast incl. THE HEADLINE gold-override:
+  `[oxdna,cando,namd]`→`references.shape=='namd'` AND `references.rmsf=='namd'`, overriding both policy engines,
+  with a negative control proving the flip is NAMD-caused; rmsf remap, core-filter drops ssDNA ends, field
+  passthrough, empty-core→None RED; slow: real 2hb NAMD DCD → `md_rmsf` → ready namd source, override holds on
+  real data — RAN on-machine) · main.js LOC Δ = +3 (pure wiring: lazy `getMdJob` dep + capturing the MD panel's
+  return) · tests: 7 fast + 1 slow oracle, `just test` 4362 passed / 72 skipped / 1 xfailed (no drop; the prior
+  xdist active-design flake `test_namd_efield` PASSED this run), vitest 2294, smoke green (pre + post), ruff
+  clean on touched (19 pre-existing debt in OTHER files untouched) · display-vs-oracle: the multi-engine card
+  rendering was S5-scraped (synthetic); N4 wires the real route into that validated path → live 4-engine eyeball
+  = MV-21 (updated with the reference-relabel check) · fresh-context review: CONFIRMED-CORRECT, no bugs, no TDZ ·
+  **Comparable prediction gained, not just a run:** the comparison card now carries all FOUR engines, and NAMD
+  anchors it as the gold-override reference — oxDNA/CanDo/mrDNA's shape AND RMSF are now scored against the
+  experimentally-validated MD engine on the same design through one shared generate/view/export card.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
