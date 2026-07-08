@@ -48,6 +48,7 @@ from backend.core.md_cutoff import should_early_stop_stage
 from backend.core.md_protocols import segments_from_manifest
 from backend.core.md_vram import (
     FAILURE_CELL_SHRINK,
+    FAILURE_HOST_OOM,
     classify_failure_log_file,
     extract_error_line_from_file,
 )
@@ -57,12 +58,43 @@ from backend.core.md_vram import (
 # so a genuinely stuck run still fails instead of resuming forever.
 MAX_CELL_SHRINK_RESUMES = 4
 
+# A host pinned-memory OOM (cudaHostAlloc in the bonded-CUDA tuple staging — see
+# md_vram.FAILURE_HOST_OOM) is usually TRANSIENT: the same allocation succeeds when
+# the host isn't momentarily starved (e.g. another process spiked, or NADOC's own
+# live-model rebuild competed for RAM). The supervisor relaunch is on a ~30 s cadence,
+# giving that pressure time to clear, so a bounded auto-resume turns the barrier into
+# an invisible hiccup. A genuinely under-RAM machine exhausts the cap and then fails
+# normally (with the host-OOM Fix popup), so it never loops forever.
+MAX_HOST_OOM_RESUMES = 3
+
+# Before spawning a NAMD segment, if free host RAM is below this floor, release
+# NADOC's own live-viewer atomistic model cache so the run has headroom to pin its
+# GPU staging buffers. On a roomy machine free RAM stays above the floor and nothing
+# is dropped (no viewer thrash); it only bites when the host is genuinely tight.
+_HOST_HEADROOM_FLOOR_MB = 4096
+
+
+def _free_host_ram_for_namd(job_id: str, phase: str) -> None:
+    """Reclaim NADOC's discretionary host RAM before a NAMD spawn (best-effort)."""
+    try:
+        from backend.core.atomistic_cache import reclaim_cache_if_low  # noqa: PLC0415
+
+        freed = reclaim_cache_if_low(_HOST_HEADROOM_FLOOR_MB)
+        if freed:
+            logger.info(
+                "[%s] Host RAM low before %s; released %d cached atomistic model(s) "
+                "to give NAMD pinning headroom.", job_id, phase, freed,
+            )
+    except Exception:  # noqa: BLE001 — reclaim must never break a run
+        pass
+
 
 def _classify_namd_failure(log_path: Path) -> str:
     """Classify a failed NAMD run from its log into a FAILURE_* kind.
 
-    Drives the targeted "Fix" remedy: vram_oom → downsize, instability → gentler
-    relaxation, gpu_error → retry, other → generic guidance.
+    Drives the targeted "Fix" remedy: vram_oom → downsize, host_oom (pinned CPU
+    RAM) → free-RAM-and-resume, instability → gentler relaxation, gpu_error →
+    retry, other → generic guidance.
     """
     return classify_failure_log_file(log_path)
 
@@ -796,6 +828,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         job.save(workspace_dir)
 
         min_log = package_dir / f"{min_name}.log"
+        _free_host_ram_for_namd(job.job_id, "minimization")
         rc, pid = await _run_namd_async(
             namd_bin, min_name, package_dir, min_log, job.threads, job.devices, job.job_id,
             on_spawn=_persist_pid,
@@ -910,6 +943,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 )
             else:
                 conf_name = spec.name
+            _free_host_ram_for_namd(job.job_id, spec.name)
             rc, pid = await _run_namd_async(
                 namd_bin,
                 conf_name,
@@ -978,6 +1012,33 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                         "[%s] %s hit periodic-cell-too-small; auto-resuming from "
                         "checkpoint (attempt %d/%d)",
                         job.job_id, spec.name, seg.auto_resumes, MAX_CELL_SHRINK_RESUMES,
+                    )
+                    return
+                # A host pinned-memory OOM is usually a transient starvation, not a
+                # size limit (the same allocation succeeded on the previous segment).
+                # Leave the job RUNNING so the supervisor relaunches it after a short
+                # delay — from the mid-segment checkpoint if one exists, else fresh
+                # from the previous segment's coordinates. Bounded so a genuinely
+                # under-RAM machine still fails (with the host-OOM Fix popup).
+                if (
+                    failure_kind == FAILURE_HOST_OOM
+                    and seg is not None
+                    and seg.auto_resumes < MAX_HOST_OOM_RESUMES
+                ):
+                    seg.auto_resumes += 1
+                    seg.status = "running"
+                    job.status = MdStatus.running
+                    job.failure_kind = None
+                    job.error = (
+                        f"{spec.name}: host (CPU) memory was momentarily exhausted "
+                        f"while pinning GPU staging buffers; auto-resuming "
+                        f"(attempt {seg.auto_resumes}/{MAX_HOST_OOM_RESUMES})."
+                    )
+                    job.save(workspace_dir)
+                    logger.warning(
+                        "[%s] %s hit host pinned-memory OOM; auto-resuming "
+                        "(attempt %d/%d)",
+                        job.job_id, spec.name, seg.auto_resumes, MAX_HOST_OOM_RESUMES,
                     )
                     return
                 if seg is not None:

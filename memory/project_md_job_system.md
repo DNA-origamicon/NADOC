@@ -419,3 +419,16 @@ Unable to open extended system file` (job `3f4d932cd76c`). Fix:
 final coords onto every skipped chunk's expected output names (plain + `.restart.`)
 so the chain stays intact; called from the skip block in `run_job`. Pinned by
 `test_early_stop_skips_remaining_chunks` (asserts the bridge files exist).
+
+**Host-OOM bounded auto-resume (2026-07-07):** A host pinned-memory OOM (`FAILURE_HOST_OOM`,
+`cudaHostAlloc` in bonded-CUDA staging — [[water-shell-carve]]) is usually a TRANSIENT host
+starvation (the identical alloc succeeded on the previous segment; the supervisor's ~30 s relaunch
+cadence lets pressure clear). `run_job`'s `rc!=0` handler now mirrors the cell-shrink block for
+`host_oom`: leave the job RUNNING (segment→running, `failure_kind=None`, `auto_resumes++`), bounded by
+`MAX_HOST_OOM_RESUMES=3`, past which it fails normally with the host-OOM Fix popup. UNLIKE cell-shrink
+it does NOT require a mid-segment checkpoint — a step-0 death (no restart files) re-runs the segment
+fresh from the previous segment's coords. Also `_free_host_ram_for_namd` releases NADOC's atomistic
+cache before each spawn when RAM is low (see [[md-live-model-cache]]). Tests:
+`test_host_oom_auto_resumes_without_a_checkpoint`, `test_host_oom_gives_up_after_resume_cap`.
+Diagnosis of the original failure: WSL2 24 GB box, 404k ENM springs; real error was host pinned RAM,
+NOT the "3.0 GB / 8.0 GB card" the old classifier misreported.

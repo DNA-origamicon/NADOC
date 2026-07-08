@@ -56,3 +56,12 @@ Aksimentiev relax protocol itself is fine: default is fast mode (4 fs HMR +
 GPUresident, ~16 ns/day for 1 M atoms), NOT 1 fs. 1 fs only for the first
 strain-relief segment and for declash (extra_bases) designs. See
 [[md-job-system]], [[md-panel-status]]. Stage length 4 × 4.8 ns is the real cost.
+
+**Host-RAM reclaim before NAMD spawn (2026-07-07):** `atomistic_cache.reclaim_cache_if_low(min_free_mb)`
+drops the cached models (the largest discretionary host allocation, up to `_CACHE_MAX`
+~1 GB models) when `md_vram.detect_host_ram_mb()` < floor. `namd_runner._free_host_ram_for_namd`
+calls it (floor `_HOST_HEADROOM_FLOOR_MB=4096`) right before every NAMD segment/min spawn so
+the run has headroom to pin GPU staging buffers — the fix for a host pinned-memory OOM
+(`cudaHostAlloc`, [[water-shell-carve]] `FAILURE_HOST_OOM`). Roomy machine → free RAM stays
+above floor → nothing dropped (no viewer thrash); only bites under real pressure. None RAM
+reading → no-op (don't reclaim on a guess). Tests: `test_reclaim_cache_if_low_*`.

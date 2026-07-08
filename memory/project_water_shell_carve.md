@@ -170,3 +170,20 @@ patch/twoAway settings; or a thin bulk-water margin instead of hard vacuum).
 Net: shell is NOT a quick win for a compact bundle. The shipped **full-box 4 fs HMR**
 production (12.6 ns/day, paper-faithful) is the reliable path; >16 needs the shell
 (blocked) or a 2nd GPU. Scratch build/run scripts under the session scratchpad.
+
+## host_oom (pinned CPU RAM) vs vram_oom — 2026-07-07
+
+A NAMD `cudaHostAlloc ... out of memory` (in `ComputeBondedCUDA::copyTupleDataSN`, the bonded-CUDA
+tuple staging) is a **host** page-locked-RAM failure, NOT device VRAM — a water carve won't reliably
+fix it. `md_vram.classify_failure_log` now disambiguates: `_HOST_OOM_PAT` (cudaHostAlloc|cudaMallocHost|
+reallocate_host|allocate_host|copyTupleData) → new `FAILURE_HOST_OOM`; a plain device `cudaMalloc` OOM
+stays `vram_oom`. Remedy map: `host_oom → retry` (free RAM + resume, not downsize). Frontend
+`md_vram_fix.js` has a dedicated "host (CPU) memory — not GPU" popup. It is usually TRANSIENT (same
+alloc succeeded on the prior segment), so `namd_runner` bounded-auto-resumes it (see [[md-job-system]]).
+
+**Host-RAM preflight (2026-07-07):** `md_vram.detect_host_ram_mb()` (/proc/meminfo MemAvailable) +
+`max_atoms_for_host_ram` (`_HOST_MB_PER_MATOM=2500`, `_HOST_USABLE_FRACTION=0.6` — COARSE, conservative
+toward NOT carving). `auto_water_shell` now sizes the carve to `min(vram_cap, host_cap)` and names the
+binding constraint ("host RAM" vs "GPU") in the note; `recommend_downsize` gained a `max_atoms` override.
+Only carves genuinely low-RAM machines; adequate boxes unaffected. Tests: `test_auto_water_shell_carves_when_host_ram_tight`,
+`test_recommend_downsize_honours_max_atoms_override`, `test_detect_host_ram_mb_*`.

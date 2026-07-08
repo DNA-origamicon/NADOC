@@ -63,6 +63,16 @@ describe('fixMessage', () => {
     expect(m.applyLabel).toMatch(/Retry/i)
   })
 
+  it('host_oom → retry, and does NOT claim GPU memory', () => {
+    const m = fixMessage({ failure_kind: 'host_oom', remedy: 'retry', log_excerpt: 'cudaHostAlloc' })
+    expect(m.canApply).toBe(true)
+    expect(m.action).toEqual({ type: 'retry' })
+    expect(m.title).toMatch(/host|CPU/i)
+    // Must not offer a water-shell / shell input (wrong remedy for a host OOM).
+    expect(m.shellAng).toBeUndefined()
+    expect(m.lines.join(' ')).toMatch(/host|CPU RAM|pinned/i)
+  })
+
   it('other → no apply, surfaces the error + log', () => {
     const m = fixMessage({ failure_kind: 'other', remedy: 'none', error: 'boom', log_excerpt: 'X' })
     expect(m.canApply).toBe(false)

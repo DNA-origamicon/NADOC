@@ -47,6 +47,21 @@ def test_classify_failure_log_multikind():
     assert V.classify_failure_log("ERROR: Margin is too small for 1 atoms") == "instability"
 
 
+def test_classify_host_pinned_oom_not_vram():
+    # A cudaHostAlloc failure is a *host* pinned-RAM OOM (bonded-CUDA tuple staging),
+    # NOT device VRAM — it must not be routed to the water-shell downsize remedy.
+    real = (
+        "FATAL ERROR: CUDA error cudaHostAlloc(pp, sizeofT*(*curlen), flag) in file "
+        "src/CudaUtils.C, function reallocate_host_T, line 208\n"
+        " on Pe 2 (device 0): out of memory\n"
+        "  [2:5] namd3 ComputeBondedCUDA::copyTupleDataSN()"
+    )
+    assert V.classify_failure_log(real) == "host_oom"
+    assert V.classify_failure_log("cudaMallocHost failed: out of memory") == "host_oom"
+    # A plain device cudaMalloc OOM stays vram_oom (the downsize path).
+    assert V.classify_failure_log("CUDA error cudaMalloc: out of memory") == "vram_oom"
+
+
 # ── Error-line extraction (frontend cause surfacing) ──────────────────────────
 
 def test_extract_error_line_namd_fatal():
@@ -249,6 +264,43 @@ def test_auto_water_shell_no_vram_reading(monkeypatch):
     monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": None)
     out = V.auto_water_shell(make_6hb_design(42))
     assert out["shell_nm"] == 0.0 and out["note"] is None  # leave user's choice alone
+
+
+def test_detect_host_ram_mb_reads_or_degrades():
+    # On Linux this reads /proc/meminfo; anywhere else it returns None gracefully.
+    mb = V.detect_host_ram_mb()
+    assert mb is None or (isinstance(mb, int) and mb > 0)
+
+
+def test_max_atoms_for_host_ram_monotonic():
+    assert V.max_atoms_for_host_ram(2000) < V.max_atoms_for_host_ram(64000)
+    assert V.max_atoms_for_host_ram(0) == 0
+
+
+def test_recommend_downsize_honours_max_atoms_override():
+    import numpy as np
+    xyz = np.random.RandomState(0).rand(200, 3) * 8.0  # ~8 nm cube of DNA points
+    common = dict(dna_xyz_nm=xyz, box_nm=(12.0, 12.0, 12.0),
+                  full_water=400_000, dna_atoms=6_000, ion_atoms=200, vram_mb=12288)
+    loose = V.recommend_downsize(**common)                       # GPU budget only
+    tight = V.recommend_downsize(**common, max_atoms=50_000)     # host-tightened
+    assert tight["max_atoms"] == 50_000
+    assert loose["max_atoms"] == V.max_atoms_for_vram(12288)
+    # A tighter atom budget can never recommend a *larger* (less restrictive) shell.
+    ls = loose.get("recommended_shell_nm") or loose.get("tightest_shell_nm")
+    ts = tight.get("recommended_shell_nm") or tight.get("tightest_shell_nm")
+    assert ts <= ls
+
+
+def test_auto_water_shell_carves_when_host_ram_tight(monkeypatch):
+    from tests.conftest import make_6hb_design
+
+    # Huge GPU, but only a sliver of host RAM available → host is the binding cap.
+    monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 1_000_000)
+    monkeypatch.setattr(V, "detect_host_ram_mb", lambda: 30)  # ~30 MB free
+    out = V.auto_water_shell(make_6hb_design(42))
+    assert out["shell_nm"] > 0.0
+    assert out["note"] and "host RAM" in out["note"]  # names the real constraint
 
 
 # ── External GPU-contention detection (pre-launch warning) ────────────────────

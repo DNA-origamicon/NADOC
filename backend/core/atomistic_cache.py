@@ -111,3 +111,25 @@ def cache_size() -> int:
     """Number of models currently held (for tests / diagnostics)."""
     with _registry_lock:
         return len(_cache)
+
+
+def reclaim_cache_if_low(min_free_mb: int) -> int:
+    """Drop cached models when host RAM is tight; return how many were freed.
+
+    The live-viewer models are the largest *discretionary* host allocation NADOC
+    holds (up to ``_CACHE_MAX`` ~1 GB million-atom models). When free host RAM falls
+    below ``min_free_mb`` — e.g. just before a NAMD segment spawns and needs to pin
+    GPU staging buffers (see md_vram.FAILURE_HOST_OOM) — releasing them gives the run
+    maximum headroom. On a roomy machine free RAM stays above the floor, so nothing
+    is dropped and the viewer never thrashes. Best-effort: an unreadable RAM figure
+    leaves the cache untouched (we don't reclaim on a guess).
+    """
+    from backend.core.md_vram import detect_host_ram_mb  # noqa: PLC0415 (avoid import cycle at load)
+
+    free_mb = detect_host_ram_mb()
+    if free_mb is None or free_mb >= min_free_mb:
+        return 0
+    n = cache_size()
+    if n:
+        clear_atomistic_cache()
+    return n

@@ -340,6 +340,76 @@ def test_cell_shrink_gives_up_after_resume_cap(
     assert final.failure_kind == "cell_shrink"
 
 
+def _install_host_oom_fake(
+    monkeypatch: pytest.MonkeyPatch, recorder: list[str] | None = None
+) -> None:
+    """Stub NAMD to crash with a host pinned-memory OOM at the FIRST integration step
+    (cudaHostAlloc in the bonded-CUDA path) — i.e. AFTER startup but with NO
+    mid-segment checkpoint written, the way a transient host starvation aborts."""
+    monkeypatch.setattr(nr, "find_namd", lambda: "/fake/namd3")
+
+    async def fake_namd(
+        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
+        on_spawn=None,
+    ):
+        if recorder is not None:
+            recorder.append(conf_name)
+        if on_spawn is not None:
+            on_spawn(4242)
+        (package_dir / "output").mkdir(exist_ok=True)  # no restart files: step-0 death
+        log_path.write_text(
+            "Info: Finished startup at 7.1 s\n"
+            "TCL: Running for 480000 steps\n"
+            "FATAL ERROR: CUDA error cudaHostAlloc(pp, sizeofT*(*curlen), flag) in "
+            "file src/CudaUtils.C, function reallocate_host_T, line 208\n"
+            " on Pe 2 (device 0): out of memory\n"
+            "  ComputeBondedCUDA::copyTupleDataSN()\n"
+        )
+        return 1, 4242
+
+    monkeypatch.setattr(nr, "_run_namd_async", fake_namd)
+
+
+def test_host_oom_auto_resumes_without_a_checkpoint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A host pinned-memory OOM is transient, so the job stays RUNNING (resumable)
+    and the resume counter bumps — even though the step-0 death left no checkpoint
+    (it re-runs the segment fresh from the previous segment's coordinates)."""
+    job = _setup_package(tmp_path)
+    _mark_min_done(job, tmp_path)
+    job.save(tmp_path)
+    _install_host_oom_fake(monkeypatch)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    final = MdJob.load(job.job_id, tmp_path)
+    assert final.status == MdStatus.running
+    assert final.segments[0].status == "running"
+    assert final.segments[0].auto_resumes == 1
+    assert final.failure_kind is None
+    assert "auto-resuming" in (final.error or "").lower()
+
+
+def test_host_oom_gives_up_after_resume_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the host-OOM auto-resume budget is spent, a repeat failure fails the job
+    (classified 'host_oom' → the host-OOM Fix popup) instead of looping forever."""
+    job = _setup_package(tmp_path)
+    _mark_min_done(job, tmp_path)
+    job.segments[0].auto_resumes = nr.MAX_HOST_OOM_RESUMES
+    job.save(tmp_path)
+    _install_host_oom_fake(monkeypatch)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    final = MdJob.load(job.job_id, tmp_path)
+    assert final.status == MdStatus.failed
+    assert final.segments[0].status == "failed"
+    assert final.failure_kind == "host_oom"
+
+
 def test_rerun_on_completed_job_is_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

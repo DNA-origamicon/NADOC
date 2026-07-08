@@ -38,6 +38,25 @@ export function fixMessage(advice) {
 
   if (kind === 'vram_oom') return _vramMessage(advice, remedy, logExcerpt)
 
+  if (kind === 'host_oom') {
+    return {
+      title: 'Ran out of host (CPU) memory — not GPU',
+      lines: [
+        'NAMD aborted on a pinned host-memory allocation (cudaHostAlloc), which is '
+        + 'CPU RAM the GPU pins — not video memory. The card had room to spare; the '
+        + 'machine could not pin the bonded-interaction staging buffers.',
+        'This is usually transient (WSL2 memory pressure, other apps, or a large '
+        + 'elastic-network restraint set). Free up host RAM — close other apps, or '
+        + 'raise the WSL memory cap in .wslconfig — then resume from the last '
+        + 'checkpoint. A water-shell carve would NOT help here.',
+      ],
+      logExcerpt,
+      canApply: true,
+      applyLabel: 'Resume (free host RAM first)',
+      action: { type: 'retry' },
+    }
+  }
+
   if (kind === 'instability' && remedy === 'gentle') {
     return {
       title: 'The simulation went unstable',

@@ -131,3 +131,33 @@ def test_fingerprint_stable_and_sensitive():
     assert atomistic_fingerprint(d) == atomistic_fingerprint(d)
     d2 = make_minimal_design(n_helices=2)
     assert atomistic_fingerprint(d) != atomistic_fingerprint(d2)
+
+
+def test_reclaim_cache_if_low_frees_only_under_pressure(monkeypatch):
+    from backend.core import md_vram
+
+    _install_stub(monkeypatch)
+    build_atomistic_model_cached(make_minimal_design())
+    assert cache_size() >= 1
+
+    # Plenty of RAM → nothing dropped (roomy machine: no viewer thrash).
+    monkeypatch.setattr(md_vram, "detect_host_ram_mb", lambda: 32_000)
+    assert atomistic_cache.reclaim_cache_if_low(4096) == 0
+    assert cache_size() >= 1
+
+    # RAM below the floor → cache released so NAMD gets pinning headroom.
+    monkeypatch.setattr(md_vram, "detect_host_ram_mb", lambda: 1_000)
+    freed = atomistic_cache.reclaim_cache_if_low(4096)
+    assert freed >= 1
+    assert cache_size() == 0
+
+
+def test_reclaim_cache_if_low_no_ram_reading_is_noop(monkeypatch):
+    from backend.core import md_vram
+
+    _install_stub(monkeypatch)
+    build_atomistic_model_cached(make_minimal_design())
+    monkeypatch.setattr(md_vram, "detect_host_ram_mb", lambda: None)
+    assert atomistic_cache.reclaim_cache_if_low(4096) == 0  # don't reclaim on a guess
+    assert cache_size() >= 1
+    clear_atomistic_cache()

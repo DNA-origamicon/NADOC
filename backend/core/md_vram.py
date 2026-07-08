@@ -43,6 +43,17 @@ _FULL_BOX_WATER_DENSITY_NM3 = 30.0
 CANDIDATE_SHELLS_NM = (2.0, 1.8, 1.5, 1.2, 1.0, 0.8)
 
 _OOM_PAT = re.compile(r"out of memory", re.IGNORECASE)
+# A CUDA out-of-memory that is really a *host* (pinned CPU RAM) allocation failure,
+# not device VRAM: cudaHostAlloc / cudaMallocHost pin page-locked host memory, and
+# NAMD's bonded-CUDA path stages bond/angle/exclusion tuples through such buffers
+# (reallocate_host_T → ComputeBondedCUDA::copyTupleDataSN). These abort with the
+# same "out of memory" string but a water-shell carve won't fix them — the culprit
+# is host RAM / pinnable-pool pressure (common on WSL2 and with large ENM restraint
+# sets), so the remedy is to free host memory and resume, not to shrink the system.
+_HOST_OOM_PAT = re.compile(
+    r"cudaHostAlloc|cudaMallocHost|reallocate_host|allocate_host|copyTupleData",
+    re.IGNORECASE,
+)
 # A freshly built model that blows up on the first dynamics steps.
 _INSTABILITY_PAT = re.compile(
     r"Constraint failure|Margin is too small|atoms? moving too fast|"
@@ -59,6 +70,7 @@ _CELL_SHRINK_PAT = re.compile(r"Periodic cell has become too small", re.IGNORECA
 
 # Known failure kinds (also the keys the UI maps to a remedy).
 FAILURE_VRAM_OOM = "vram_oom"
+FAILURE_HOST_OOM = "host_oom"
 FAILURE_INSTABILITY = "instability"
 FAILURE_GPU_ERROR = "gpu_error"
 FAILURE_CELL_SHRINK = "cell_shrink"
@@ -78,11 +90,13 @@ def classify_failure_log(text: str) -> str:
     """Classify a NAMD failure log into a FAILURE_* kind.
 
     Order matters: an OOM abort also prints "CUDA error", so it is matched first;
-    a RATTLE/margin blow-up is matched before the generic GPU-error pattern. The
-    cell-shrink fatal has a unique string and does not overlap the others.
+    a host-pinned-memory OOM (cudaHostAlloc/copyTupleData) is disambiguated from a
+    device-VRAM OOM before either is returned; a RATTLE/margin blow-up is matched
+    before the generic GPU-error pattern. The cell-shrink fatal has a unique string
+    and does not overlap the others.
     """
     if _OOM_PAT.search(text):
-        return FAILURE_VRAM_OOM
+        return FAILURE_HOST_OOM if _HOST_OOM_PAT.search(text) else FAILURE_VRAM_OOM
     if _INSTABILITY_PAT.search(text):
         return FAILURE_INSTABILITY
     if _GPU_ERR_PAT.search(text):
@@ -278,6 +292,44 @@ def max_atoms_for_vram(vram_mb: float) -> int:
     return int(vram_mb * _USABLE_FRACTION / _MB_PER_MATOM * 1e6)
 
 
+# ── Empirical HOST-RAM model ──────────────────────────────────────────────────
+# A NAMD explicit-solvent run also needs host (CPU) RAM: the full topology + patch
+# metadata, and — the part that actually bit us — page-locked "pinned" staging
+# buffers the GPU bonded kernel allocates via cudaHostAlloc (see FAILURE_HOST_OOM).
+# This is a COARSE guard, deliberately conservative in the direction of NOT carving:
+# it should only shrink a run on a genuinely small-RAM machine, never second-guess a
+# box that has room (carving swaps the full periodic box for an NVT shell, a real
+# accuracy cost). ~2.5 GB per million atoms is a safety-margined figure for the
+# multicore-CUDA build under a dense elastic network; refine if a small-RAM machine
+# is seen to OOM below this or to over-carve above it.
+_HOST_MB_PER_MATOM = 2500.0
+# Fraction of *currently-available* host RAM a run may claim — leaves generous room
+# for the OS, the NADOC server, and a browser/live-viewer sharing the machine.
+_HOST_USABLE_FRACTION = 0.6
+
+
+def detect_host_ram_mb() -> Optional[int]:
+    """Currently-available host RAM (MB) from /proc/meminfo, or None if unreadable.
+
+    Uses ``MemAvailable`` (the kernel's estimate of what a new allocation can get
+    without swapping) rather than ``MemTotal`` — a preflight cares about headroom
+    *now*, not the installed size. Best-effort: any parse failure yields None so the
+    caller degrades to "unknown / keep the user's setting".
+    """
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) // 1024  # kB → MB
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def max_atoms_for_host_ram(host_mb: float) -> int:
+    """Largest system (atoms) expected to fit in *host_mb* of available host RAM."""
+    return int(host_mb * _HOST_USABLE_FRACTION / _HOST_MB_PER_MATOM * 1e6)
+
+
 def estimate_vram_mb(n_atoms: int) -> int:
     """Estimated peak VRAM (MB) for an *n_atoms* explicit-solvent NAMD run."""
     return int(round(n_atoms / 1e6 * _MB_PER_MATOM))
@@ -350,14 +402,20 @@ def recommend_downsize(
     dna_atoms: int,
     ion_atoms: int,
     vram_mb: float,
+    max_atoms: Optional[int] = None,
 ) -> dict:
-    """Recommend a water-shell thickness that fits *vram_mb*, or report infeasible.
+    """Recommend a water-shell thickness that fits the atom budget, or report infeasible.
 
     Picks the **largest** (least restrictive, most accurate) candidate shell whose
     estimated atom count fits; if none fit, reports the tightest shell's size and
     the VRAM a card would need.
+
+    ``max_atoms`` overrides the VRAM-derived budget — pass the tighter of the GPU and
+    host-RAM caps so the recommendation also respects host memory. ``vram_mb`` is
+    still reported for the message either way.
     """
-    max_atoms = max_atoms_for_vram(vram_mb)
+    if max_atoms is None:
+        max_atoms = max_atoms_for_vram(vram_mb)
     current_atoms = dna_atoms + full_water * 3 + ion_atoms
     grid = _grid_nearest_dna_dist(dna_xyz_nm, max(CANDIDATE_SHELLS_NM))
 
@@ -524,6 +582,12 @@ def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
     vram_mb = detect_vram_mb(devices)
     if vram_mb is None:
         return none
+    # The run must fit BOTH the GPU and host RAM; size the carve to the tighter cap.
+    host_mb = detect_host_ram_mb()
+    vram_cap = max_atoms_for_vram(vram_mb)
+    host_cap = max_atoms_for_host_ram(host_mb) if host_mb else None
+    effective_cap = min(vram_cap, host_cap) if host_cap is not None else vram_cap
+    bound = "host RAM" if host_cap is not None and host_cap < vram_cap else "GPU"
     # Best-effort: a preflight estimate must never fail the job — on any error,
     # fall back to the full box (the prior behaviour).
     try:
@@ -534,20 +598,21 @@ def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
         rec = recommend_downsize(
             dna_xyz_nm=profile["dna_xyz_nm"], box_nm=profile["box_nm"],
             full_water=profile["full_water"], dna_atoms=profile["dna_atoms"],
-            ion_atoms=profile["ion_atoms"], vram_mb=vram_mb,
+            ion_atoms=profile["ion_atoms"], vram_mb=vram_mb, max_atoms=effective_cap,
         )
     except Exception:
         return {**none, "vram_mb": vram_mb}
     gb = round(vram_mb / 1024)
+    limit = f"{gb} GB GPU" if bound == "GPU" else f"{round(host_mb / 1024)} GB free host RAM"
     if rec["current_atoms"] <= rec["max_atoms"]:
         return {"shell_nm": 0.0, "note": None, "fits": True, "vram_mb": vram_mb}
     if rec.get("feasible"):
         s = rec["recommended_shell_nm"]
-        note = (f"Auto-sized for {gb} GB GPU: full system ≈{rec['current_atoms']:,} "
+        note = (f"Auto-sized for {limit}: full system ≈{rec['current_atoms']:,} "
                 f"atoms won’t fit, so enabled a {round(s * 10)} Å water shell "
                 f"(≈{rec['estimated_atoms']:,} atoms, NVT).")
         return {"shell_nm": s, "note": note, "fits": True, "vram_mb": vram_mb}
     s = rec["tightest_shell_nm"]
     note = (f"Warning: even a {round(s * 10)} Å shell (≈{rec['tightest_atoms']:,} atoms) "
-            f"may exceed this {gb} GB GPU — running anyway; consider a larger GPU.")
+            f"may exceed this {limit} — running anyway; consider a larger GPU or more RAM.")
     return {"shell_nm": s, "note": note, "fits": False, "vram_mb": vram_mb}

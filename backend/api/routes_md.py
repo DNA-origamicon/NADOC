@@ -1887,6 +1887,7 @@ class RefitRequest(BaseModel):
 # Failure kind → the remedy the "Fix" popup offers.
 _REMEDY_BY_KIND = {
     "vram_oom": "downsize",     # refit with a water-shell carve sized to the GPU
+    "host_oom": "retry",        # host pinned-RAM alloc failed — free RAM & resume
     "instability": "gentle",    # refit with the soft integrator across the ladder
     "gpu_error": "retry",       # resume — often a transient GPU/driver state
     "other": "none",            # show the log; no automatic remedy
