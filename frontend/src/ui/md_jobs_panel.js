@@ -18,8 +18,8 @@ import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk } from '../api/client.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
-import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
-import { flattenJobTree } from './job_tree.js'
+import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
+import { renderJobList } from './jobs_panel_render.js'
 import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initForcesCard } from './forces_card.js'
@@ -348,13 +348,83 @@ export function mdHasMetrics(job, persisted = null) {
   return persisted != null && (persisted.temperature_k != null || persisted.ns_per_day != null)
 }
 
+/** Pure: the per-row render signature — everything a NAMD row's appearance depends on.
+ *  Shared by mdListSignature and the canonical jobs-panel ctx (rowSig) so the poll
+ *  short-circuit and the unified renderer key off the exact same fields. */
+export function mdJobRowSig(j) {
+  return `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}`
+    + `:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`
+    + `:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}:${j.ensemble_seed ?? ''}`
+}
+
 /** Pure: a stable signature of the job list so _renderList can skip a rebuild when
  *  nothing visible changed — otherwise the row spinners' CSS animation restarts on
  *  every poll (visible stutter).  Mirrors the oxDNA panel. */
 export function mdListSignature(jobs, selectedId) {
-  return (jobs ?? [])
-    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}:${j.ensemble_seed ?? ''}`)
-    .join('|') + `#${selectedId ?? ''}`
+  return (jobs ?? []).map(mdJobRowSig).join('|') + `#${selectedId ?? ''}`
+}
+
+/** Pure: the canonical jobs-panel ctx for NAMD (U3 unified panel).  NAMD is the
+ *  richest panel, so it drives every optional slot the shared model exposes: the
+ *  parent/child TREE + expand/collapse chevron, post-label markers (collapsed-ensemble
+ *  summary + oxDNA/mrDNA-seed + Alpine badges), a ⧗ remote-queued symbol override (with
+ *  a live-refresh dataset the panel re-titles without a rebuild), and the "Fix" VRAM-OOM
+ *  row action.  Extracted from the panel closure so the payload it emits — the exact
+ *  data the bespoke `_jobRow` rendered — is unit-testable in isolation. */
+export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [], dimColor = '#8b949e', warnColor = '#e0a800', formatTime = null } = {}) {
+  return {
+    engine: 'namd',
+    selectedId,
+    hierarchical: true,
+    collapsedIds,
+    displayName: (job) => job.design_name,
+    childLabel: (job, index) => mdIsProductionChild(job) ? mdProductionRowLabel(job, index)
+      : mdIsEnsembleReplica(job) ? mdReplicaRowLabel(job, index)
+      : mdChildRowLabel(job, index),
+    childTitle: (job) => mdIsProductionChild(job)
+      ? 'Production run branched from the relaxed parent (independent seed)'
+      : mdIsEnsembleReplica(job) ? 'Ensemble production replica (independent seed)'
+      : 'Refit / retry derived from the parent run',
+    isActive: mdJobIsActive,
+    isStale: jobOutOfDate,
+    staleTitle: 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.',
+    formatTime,
+    formatSize: formatBytes,
+    chevron: true,
+    postLabelMarkers: (job, { childCount, collapsed }) => {
+      const out = []
+      if (childCount > 0 && collapsed) {
+        const summary = ensembleChildSummary(job, jobs)
+        if (summary) out.push({ text: summary, css: 'font-size:9px;color:#8b949e;flex-shrink:0;margin-right:4px' })
+      }
+      const seeded = seededBadge(job)
+      if (seeded) out.push({
+        text: seeded,
+        title: job.seed_oxdna_job_id ? `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
+                                     : `Seeded from mrDNA job ${job.seed_mrdna_job_id}`,
+        css: 'font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px',
+      })
+      const remote = remoteJobBadge(job)
+      if (remote) out.push({
+        text: remote,
+        title: job.slurm_job_id ? `Running on Alpine (SLURM ${job.slurm_job_id})` : 'Targeted at the Alpine cluster',
+        css: 'font-size:9px;color:#58a6ff;border:1px solid #1f4b78;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px',
+      })
+      return out
+    },
+    symbolOverride: (job) => mdIsRemoteQueued(job)
+      ? { glyph: '⧗', color: warnColor, title: mdQueueWaitLabel(job), dataset: { mdQueued: job.job_id } }
+      : null,
+    rowAction: (job) => shouldShowFixButton(job)
+      ? {
+          text: 'Fix', title: 'Ran out of GPU memory — adjust settings to fit this card',
+          styleText: `flex-shrink:0;font-size:10px;color:#fff;background:${warnColor};`
+            + 'border:none;border-radius:3px;padding:1px 7px;cursor:pointer;font-weight:600',
+        }
+      : null,
+    rowSig: mdJobRowSig,
+    colors: { dim: dimColor, warn: warnColor },
+  }
 }
 
 /** Pure: should the Display-MD toggle fall back to the inherited oxDNA-seed
@@ -504,7 +574,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _displayMeta  = null
   let _prewarmKey   = null
   let _listSig      = null   // last-rendered list signature (avoids spinner-restart churn)
-  let _legendEl     = null   // status-symbol legend, inserted once after the list
+  const _legend     = { el: null }   // status-symbol legend, inserted once after the list (renderJobList memo)
   const _collapsedParents = new Set()   // parent job_ids whose child rows are hidden (chevron)
   const _autoCollapsed    = new Set()   // ensemble parents we've already default-collapsed once
   let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
@@ -1784,28 +1854,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   })
 
   // ── Job list rendering ─────────────────────────────────────────────────────
+  // Canonical job-list ctx (U3): NAMD converges its list rows onto the shared oxDNA
+  // renderer via the pure mdJobRowCtx factory (module scope, unit-tested).
+  const _rowCtx = () => mdJobRowCtx({
+    selectedId: _selectedId, collapsedIds: _collapsedParents, jobs: _jobs,
+    dimColor: _C.dim, warnColor: _C.warn, formatTime: _fmtJobTime,
+  })
+
   function _renderList() {
     if (!listEl) return
     const jobs = _visibleJobs().slice().sort((a, b) => b.created_at - a.created_at)
+    const ctx = _rowCtx()
     // Skip the rebuild when nothing visible changed, so the row spinners' CSS
     // animation doesn't restart on every poll (visible stutter).
-    const sig = mdListSignature(jobs, _selectedId)
+    const sig = jobListSignature(jobs, ctx)
     if (sig === _listSig && listEl.childElementCount) return
     _listSig = sig
-    listEl.innerHTML = ''
-    if (!jobs.length) {
-      const empty = document.createElement('div')
-      empty.style.cssText = `font-size:var(--text-xs);color:${_C.dim};padding:4px 0`
-      empty.textContent = _jobs.length && !_showAllJobs()
-        ? 'No jobs for this part.'
-        : 'No jobs yet.'
-      listEl.appendChild(empty)
-      return
-    }
     // Default-collapse an Alpine ENSEMBLE parent the first time we see it, so a fan-out
     // of N replicas reads as ONE expandable item.  Local production fan-outs are NOT
     // auto-collapsed: they're spawned one at a time and the user is watching the child
-    // they just started (auto-collapsing would hide it under the parent chevron).
+    // they just started (auto-collapsing would hide it under the parent chevron).  This
+    // mutates _collapsedParents before buildJobListModel reads ctx.collapsedIds.
     for (const j of jobs) {
       const hasAlpineReplica = jobs.some(c =>
         c?.parent_job_id === j.job_id && mdIsEnsembleReplica(c) && !mdIsProductionChild(c))
@@ -1814,18 +1883,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         _collapsedParents.add(j.job_id)
       }
     }
-    // Parent→child hierarchy (refit/retry children + ensemble replicas indent under
-    // their origin), mirroring the oxDNA panel's list.  Collapsed parents hide their
-    // subtree (chevron toggles it).
-    let rootNo = 0
-    for (const { job, depth, index, childCount } of flattenJobTree(jobs, { collapsedIds: _collapsedParents })) {
-      if (depth === 0) rootNo += 1
-      listEl.appendChild(_jobRow(job, {
-        isChild: depth > 0, index, depth, listIndex: rootNo, childCount,
-        collapsed: _collapsedParents.has(job.job_id),
-      }))
-    }
-    if (!_legendEl) { _legendEl = makeStatusLegend(); listEl.after(_legendEl) }
+    renderJobList(listEl, buildJobListModel(jobs, ctx), {
+      onClick: (jobId) => _selectJob(jobId),
+      onChevron: (jobId) => _toggleCollapse(jobId),
+      onAction: (jobId) => _openVramFix(jobId),   // the "Fix" VRAM-OOM row action
+      emptyText: _jobs.length && !_showAllJobs() ? 'No jobs for this part.' : 'No jobs yet.',
+      dimColor: _C.dim,
+      legendState: _legend,
+    })
   }
 
   /** Toggle a parent's collapsed state and force a list rebuild (bypassing the
@@ -1837,150 +1902,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _renderList()
   }
 
-  // One job row: [N] name · timestamp · status-symbol (a root relaxation, or a
-  // depth-indented numbered refit/retry child).
-  function _jobRow(job, { isChild = false, index = 0, depth = 0, listIndex = 0, childCount = 0, collapsed = false }) {
-    const row = document.createElement('div')
-    const isSelected = job.job_id === _selectedId
-    const isReplica = mdIsEnsembleReplica(job)
-    const isProdChild = mdIsProductionChild(job)
-    row.setAttribute('data-job-id', job.job_id)
-    row.style.cssText = [
-      'display:flex;align-items:center;gap:6px;padding:4px 5px;border-radius:3px;cursor:pointer;margin-bottom:2px',
-      depth ? `padding-left:${5 + depth * 14}px` : '',
-      `background:${isSelected ? '#161b22' : 'transparent'}`,
-      `border:1px solid ${isSelected ? _C.border : 'transparent'}`,
-    ].filter(Boolean).join(';')
-    row.addEventListener('click', () => _selectJob(job.job_id))
-    const sb = statusBadge(statusKeyFor('namd', job.status))
-
-    // Expand/collapse chevron for a parent with children (ensemble replicas or refits).
-    const chev = document.createElement('span')
-    chev.style.cssText = `flex-shrink:0;width:10px;font-size:9px;color:${_C.dim};cursor:pointer;user-select:none`
-    if (childCount > 0) {
-      chev.textContent = collapsed ? '▸' : '▾'
-      chev.title = collapsed ? `Expand ${childCount} child job${childCount === 1 ? '' : 's'}`
-                             : 'Collapse'
-      chev.addEventListener('click', (e) => { e.stopPropagation(); _toggleCollapse(job.job_id) })
-    }
-    row.appendChild(chev)
-
-    // Leading index: root jobs show their list number; children show their run number.
-    const idx = document.createElement('span')
-    idx.textContent = isChild ? '' : `[${listIndex}]`
-    idx.style.cssText = `flex-shrink:0;font-size:10px;color:${_C.dim};font-family:var(--font-mono)`
-    row.appendChild(idx)
-
-    const name = document.createElement('span')
-    name.style.cssText = `flex:1;font-size:var(--text-xs);color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
-    name.textContent = isProdChild ? mdProductionRowLabel(job, index)
-                     : isReplica ? mdReplicaRowLabel(job, index)
-                     : isChild ? mdChildRowLabel(job, index)
-                     : job.design_name
-    if (isProdChild) row.title = 'Production run branched from the relaxed parent (independent seed)'
-    else if (isReplica) row.title = 'Ensemble production replica (independent seed)'
-    else if (isChild) row.title = 'Refit / retry derived from the parent run'
-    row.appendChild(name)
-
-    // Collapsed ensemble parent: show an aggregate replica summary in place of details.
-    if (childCount > 0 && collapsed) {
-      const summary = ensembleChildSummary(job, _jobs)
-      if (summary) {
-        const s = document.createElement('span')
-        s.textContent = summary
-        s.style.cssText = `font-size:9px;color:#8b949e;flex-shrink:0;margin-right:4px`
-        row.appendChild(s)
-      }
-    }
-
-    // CG-seeded badge — this run started from oxDNA- or mrDNA-relaxed coordinates.
-    const badge = seededBadge(job)
-    if (badge) {
-      const seeded = document.createElement('span')
-      seeded.title = job.seed_oxdna_job_id
-        ? `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
-        : `Seeded from mrDNA job ${job.seed_mrdna_job_id}`
-      seeded.textContent = badge
-      seeded.style.cssText = `font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px`
-      row.appendChild(seeded)
-    }
-
-    // Remote (Alpine) badge — SLURM id + partition once submitted, else "Alpine".
-    const remote = remoteJobBadge(job)
-    if (remote) {
-      const rb = document.createElement('span')
-      rb.title = job.slurm_job_id
-        ? `Running on Alpine (SLURM ${job.slurm_job_id})`
-        : 'Targeted at the Alpine cluster'
-      rb.textContent = remote
-      rb.style.cssText = `font-size:9px;color:#58a6ff;border:1px solid #1f4b78;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px`
-      row.appendChild(rb)
-    }
-
-    // Timestamp (HH:MM today, else MM-DD HH:MM)
-    const ts = document.createElement('span')
-    ts.style.cssText = `font-size:10px;color:${_C.dim};flex-shrink:0;font-family:var(--font-mono)`
-    ts.textContent = _fmtJobTime(job.created_at)
-    row.appendChild(ts)
-
-    // On-disk size of this job's folder (archive location when archived).
-    const size = document.createElement('span')
-    size.style.cssText = `font-size:10px;color:${job.archived ? _C.warn : _C.dim};flex-shrink:0;font-family:var(--font-mono)`
-    size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
-    if (job.archived) size.title = `Archived → ${job.archive_path || ''}`
-    row.appendChild(size)
-    if (job.archived) {
-      const box = Object.assign(document.createElement('span'), { textContent: '📦' })
-      box.style.cssText = 'flex-shrink:0;font-size:10px'
-      box.title = `Archived → ${job.archive_path || ''}`
-      row.appendChild(box)
-    }
-
-    // Out-of-date marker: the design changed since this MD job was prepared.
-    if (jobOutOfDate(job)) {
-      const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
-      warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
-      warn.title = 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.'
-      row.appendChild(warn)
-    }
-
-    // "Fix" button for a GPU-out-of-memory failure → opens the downsize popup.
-    if (shouldShowFixButton(job)) {
-      const fix = document.createElement('button')
-      fix.textContent = 'Fix'
-      fix.title = 'Ran out of GPU memory — adjust settings to fit this card'
-      fix.style.cssText =
-        `flex-shrink:0;font-size:10px;color:#fff;background:${_C.warn};`
-        + 'border:none;border-radius:3px;padding:1px 7px;cursor:pointer;font-weight:600'
-      fix.addEventListener('click', (e) => {
-        e.stopPropagation()   // don't trigger row selection
-        _openVramFix(job.job_id)
-      })
-      row.appendChild(fix)
-    }
-
-    // Status symbol: a queued (PENDING) remote job gets the hourglass + a live
-    // "waiting Nm" tooltip (NOT a spinner — it isn't running yet); an active job
-    // spins; everything else shows its badge shape (tooltip = label).
-    let sym
-    if (mdIsRemoteQueued(job)) {
-      sym = Object.assign(document.createElement('span'), { textContent: '⧗' })
-      sym.style.color = _C.warn
-      sym.title = mdQueueWaitLabel(job)
-      sym.dataset.mdQueued = job.job_id     // for in-place tooltip refresh on poll
-    } else if (mdJobIsActive(job)) {
-      sym = makeSpinner(sb.color, 10)
-      sym.title = sb.label
-    } else {
-      sym = Object.assign(document.createElement('span'), { textContent: sb.symbol })
-      sym.title = sb.label
-      sym.style.color = sb.color
-    }
-    sym.style.flexShrink = '0'
-    row.appendChild(sym)
-
-    return row
-  }
 
   // ── "Fix" flow (downsize / gentle-retry / resume) ─────────────────────────
   async function _openVramFix(jobId) {

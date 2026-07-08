@@ -38,6 +38,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | _(display-vs-oracle)_ ✅ (S5) | card's displayed numbers == headless oracle within tol; else STOP+ask | one-off Playwright per card (deleted after) | S5 ✓, C5, M5, N4 |
 | **(U3) canonical job-row PARITY pin** ✅ | new pure model + DOM renderer reproduce the OLD oxDNA `_jobRow`/`_renderList` byte-for-byte: the test carries a VERBATIM copy of the old row/list code (`oldOxdnaJobRow`) and drives OLD+NEW on fresh DOMs → identical `outerHTML` across every branch (root/child/running-spinner/[AR]/archived+size+📦/stale-⚠/selected); flat-list convergence (mrDNA ctx) numbers rows + maps status key; poll-signature stable on health-only change; `runButtonEnabled` = available&&!launching&&!blocked | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` | U3 remainder (cando/lammps/md converge onto renderer; run-button base; stateful `initJobsPanelBase`); U4 selector iterates the same rows |
 | **(U3 s2a) cando+lammps conformance** ✅ | renderer's OPTIONAL per-row action (`m.action`/`onAction`, gated on `ctx.rowAction`): models the action ONLY for active jobs, renders a Stop button on active rows whose click fires `onAction(jobId)` with stopPropagation (row `onClick` does NOT fire), and a ctx WITHOUT `rowAction`→every `action===null`→no button (oxDNA-parity guard); cando flat ctx numbers rows newest-first + maps cando status key + spinner-while-active + surfaces Coarse/Fine as a LEADING TAG (not a bespoke column) + no button | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` (+5 it, 14/14) | U3 slice 2b (md chevron via the same optional-control mechanism); the action slot for any future per-row control |
+| **(U3 s2b) NAMD payload parity** ✅ | the pure `mdJobRowCtx` factory + canonical renderer emit the exact per-row payload the bespoke NAMD `_jobRow` produced: parent gets `chevron={childCount,collapsed,title}` (collapsed→ensemble-summary post-label marker + subtree hidden; open→no summary), replica child `label`/`title`/`indent`+empty index, CG-seed + Alpine `postLabelMarkers` (text+title), remote-queued `symbolOverride={glyph:'⧗',dataset:{mdQueued}}` (+ the `[data-md-queued]` DOM hook the poll-refresh needs), Fix `action` only on VRAM-OOM + out-of-date `stale`; chevron click fires `onChevron` NOT row `onClick`; leaf still gets an empty chevron span. Three generic slots (chevron/postLabelMarkers/symbolOverride) gated on ctx opt-in → oxDNA byte-parity pin re-ran green | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/md_jobs_panel.js` (`mdJobRowCtx`/`mdJobRowSig`), `frontend/src/ui/md_jobs_panel.test.js` (+8 it) | U3 slice 2c (stateful `initJobsPanelBase` — run buttons + poll loop + section collapse + advanced drawer); U4 selector iterates these same rows |
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
@@ -65,6 +66,54 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `U3` slice 2b — converge the NAMD (md) job list onto the canonical renderer (U3 stays in_progress)
+
+**Capability/de-dup proven, not just wired:** the 2882-line NAMD panel — the richest, the last non-converged
+one — now renders its job list through the SAME shared model+renderer as the other four. Its bespoke 144-line
+`_jobRow` is DELETED; the renderer now serves **5/5** panels. The convergence is proven by a payload-parity
+oracle: the extracted pure `mdJobRowCtx` factory emits the exact per-row payload the bespoke row produced for
+every NAMD-specific variant (tree chevron, collapsed-ensemble summary, CG-seed / Alpine post-label badges, the
+⧗ remote-queued symbol override with its live-refresh `[data-md-queued]` hook, the "Fix" VRAM-OOM action, the
+out-of-date ⚠) — not "the panel renders". oxDNA's byte-parity pin re-ran green, so the three new generic slots
+are provably invisible to the panels that don't opt in.
+
+- **Pick.** `U3` slice 2b — the NAMD outlier called out in the handoff; finishing it makes the canonical
+  renderer serve all five panels, leaving only slice 2c (stateful `initJobsPanelBase`) + `U4` on Track U.
+- **Model/renderer** (`jobs_panel_model.js`/`jobs_panel_render.js`): added THREE generic optional slots, each
+  gated on ctx opt-in so a ctx that omits them (oxDNA) is byte-unchanged — `chevron` (leading expand/collapse
+  span; every row gets an empty spacer, parents get the ▸/▾ toggle → `onChevron`, `stopPropagation`),
+  `postLabelMarkers(job,{childCount,collapsed})` (spans between label and timestamp), `symbolOverride(job)`
+  (replaces the spinner/badge status glyph, carries an optional `dataset`). `buildJobListModel` now threads
+  `childCount` from `flattenJobTree`; `collapsed` derives from `ctx.collapsedIds`. NAMD's Fix button reuses the
+  existing trailing `action` slot (a minor reposition — after the symbol — an intentional visual upgrade).
+- **md** (`md_jobs_panel.js`): extracted the row ctx into a module-scope pure factory `mdJobRowCtx({selectedId,
+  collapsedIds,jobs,dimColor,warnColor,formatTime})` + a shared `mdJobRowSig` (both `mdListSignature` and the
+  ctx's `rowSig` now key off the same per-row fields — single source of truth). Rewrote `_renderList` through
+  `jobListSignature`/`buildJobListModel`/`renderJobList` (auto-collapse of Alpine-ensemble parents preserved,
+  mutating `_collapsedParents` before the model reads `ctx.collapsedIds`); `_toggleCollapse` still nulls
+  `_listSig` (collapse isn't in the signature). Deleted the bespoke `_jobRow` + the `statusBadge`/`statusKeyFor`/
+  `makeStatusLegend`/`flattenJobTree` imports; `_legendEl`→`_legend={el:null}` (renderJobList's memo hook). Net
+  **−104 source LOC** across the three files.
+- **Oracle** (`md_jobs_panel.test.js`, +9 it): a NAMD payload-parity block driving `mdJobRowCtx` +
+  `buildJobListModel`/`renderJobList` — chevron on a parent (collapsed→summary marker, subtree hidden; open→no
+  summary), replica child labels/titles/indent, CG-seed + Alpine post-label badges, ⧗ symbol override + the
+  `[data-md-queued]` DOM hook the poll-refresh selector needs, Fix-action only on VRAM-OOM + out-of-date ⚠,
+  chevron click fires `onChevron` NOT the row `onClick`, a **wired Fix button** click fires `onAction` (not
+  select), and a leaf still gets an empty chevron span. The existing oxDNA byte-parity pin
+  (`jobs_panel_model.test.js` 14/14) re-ran green after the renderer change (adapted-code discipline: the
+  extension is proven invisible to oxDNA by the pin, not by green-first-run).
+- **Review** (fresh-context, read-only) caught a **HIGH regression**: the initial `_renderList` rewrite wired
+  `onClick`/`onChevron` but **omitted `onAction`**, leaving the Fix (VRAM-OOM) button rendered-but-inert and
+  `_openVramFix` dead. Fixed (added `onAction: (jobId)=>_openVramFix(jobId)`) + added the wired-Fix-click oracle
+  above so it can't silently recur. Two LOW/informational items (Fix button now sits after the status symbol =
+  intended oxDNA-chrome convergence; `statusKeyFor` third-arg `null` vs `undefined` = equivalent) accepted. All
+  six explicit checks (no dangling refs, auto-collapse ordering, poll short-circuit, closure-freeness of the
+  factory, oxDNA no-op for opt-out ctx) came back clean.
+- **Gate:** jobs-panel test files 238/238, full frontend **2339/2339** (+9, no drop), smoke 23/23; frontend
+  lint N/A (backend ruff only). No Python touched → backend `just test` not required. `main.js` LOC Δ = 0. Live
+  NAMD-row pixels (tree chevron/collapse, ensemble summary, seed/Alpine badges, ⧗ queued, Fix button) owe
+  **MV-25**.
 
 ### 2026-07-08 — `U3` slice 2a — converge cando + lammps job lists onto the canonical renderer (U3 stays in_progress)
 

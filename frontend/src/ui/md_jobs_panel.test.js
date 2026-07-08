@@ -467,3 +467,131 @@ describe('mdQueueWaitLabel', () => {
     expect(mdQueueWaitLabel({})).toMatch(/waiting for the cluster scheduler/)
   })
 })
+
+// ── U3 slice 2b — NAMD converges onto the canonical jobs-panel model+renderer ──
+// The bright line: the unified card must emit the SAME payload the bespoke `_jobRow`
+// produced. These pin the payload of mdJobRowCtx (the extracted, pure ctx factory) +
+// its rendered DOM for every NAMD-specific row variant: the tree chevron, the
+// collapsed-ensemble summary, the CG-seed / Alpine post-label badges, the ⧗
+// remote-queued symbol override (with the live-refresh dataset), the "Fix" VRAM-OOM
+// row action, and the out-of-date ⚠.
+import { mdJobRowCtx } from './md_jobs_panel.js'
+import { buildJobListModel, buildJobRowModel } from './jobs_panel_model.js'
+import { renderJobList } from './jobs_panel_render.js'
+
+describe('U3 slice 2b — NAMD canonical convergence (payload parity)', () => {
+  // A relaxation parent with 2 Alpine ensemble replicas, plus a seeded root, a
+  // remote-queued root, and a VRAM-failed + out-of-date root.
+  const JOBS = [
+    { job_id: 'p', status: 'completed', created_at: 100, design_name: 'origami' },
+    { job_id: 'r1', status: 'running', created_at: 90, parent_job_id: 'p', design_name: 'origami',
+      ensemble_seed: 7001, ensemble_index: 0, execution_target: 'alpine', slurm_job_id: '555', resources: { partition: 'amilan' } },
+    { job_id: 'r2', status: 'queued', created_at: 89, parent_job_id: 'p', design_name: 'origami',
+      ensemble_seed: 7002, ensemble_index: 1, execution_target: 'alpine' },
+    { job_id: 'seed', status: 'completed', created_at: 80, design_name: 'from-cg', seed_oxdna_job_id: 'ox42' },
+    { job_id: 'q', status: 'queued', created_at: 70, design_name: 'waiting', execution_target: 'alpine',
+      slurm_job_id: '999', queued_at: 1000 },
+    { job_id: 'boom', status: 'failed', created_at: 60, design_name: 'toobig',
+      failure_kind: 'cuda_oom', out_of_date: true },
+  ]
+  const fmt = () => 't'
+  const ctx = (over = {}) => mdJobRowCtx({
+    jobs: JOBS, dimColor: '#8b949e', warnColor: '#e0a800', formatTime: fmt, ...over,
+  })
+
+  it('models the parent/child TREE with a chevron on the parent (collapsed → summary marker)', () => {
+    const model = buildJobListModel(JOBS, ctx({ collapsedIds: new Set(['p']) }))
+    const p = model.rows.find(r => r.jobId === 'p')
+    expect(p.chevron).toEqual({ childCount: 2, collapsed: true, title: 'Expand 2 child jobs' })
+    // Collapsed → the ensemble summary rides the leading post-label marker; children hidden.
+    expect(p.postLabelMarkers[0].text).toMatch(/⧉ 2 replicas/)
+    expect(model.rows.map(r => r.jobId)).not.toContain('r1')   // subtree hidden while collapsed
+  })
+
+  it('expands the parent and labels replica children (no summary when open)', () => {
+    const model = buildJobListModel(JOBS, ctx())   // nothing collapsed
+    const p = model.rows.find(r => r.jobId === 'p')
+    expect(p.chevron).toEqual({ childCount: 2, collapsed: false, title: 'Collapse' })
+    expect(p.postLabelMarkers).toEqual([])          // open → no aggregate summary
+    const r1 = model.rows.find(r => r.jobId === 'r1')
+    expect(r1.depth).toBe(1)
+    expect(r1.indexLabel).toBe('')                  // children carry no list number
+    expect(r1.label).toBe('Replica 1 · seed 7001')
+    expect(r1.title).toBe('Ensemble production replica (independent seed)')
+  })
+
+  it('emits the CG-seed + Alpine post-label badges the bespoke row showed', () => {
+    const model = buildJobListModel(JOBS, ctx())
+    const seed = model.rows.find(r => r.jobId === 'seed')
+    expect(seed.postLabelMarkers).toEqual([
+      expect.objectContaining({ text: 'oxDNA seeded', title: 'Seeded from oxDNA job ox42' }),
+    ])
+    const r1 = model.rows.find(r => r.jobId === 'r1')
+    expect(r1.postLabelMarkers).toEqual([
+      expect.objectContaining({ text: 'SLURM 555 · amilan', title: 'Running on Alpine (SLURM 555)' }),
+    ])
+  })
+
+  it('overrides the status symbol for a remote-queued job (⧗ + live-refresh dataset)', () => {
+    const model = buildJobListModel(JOBS, ctx())
+    const q = model.rows.find(r => r.jobId === 'q')
+    expect(q.symbolOverride).toMatchObject({ glyph: '⧗', color: '#e0a800', dataset: { mdQueued: 'q' } })
+    expect(q.symbolOverride.title).toMatch(/Queued/)
+    // a non-queued job gets no override (falls through to spinner/badge)
+    expect(model.rows.find(r => r.jobId === 'seed').symbolOverride).toBe(null)
+  })
+
+  it('offers the "Fix" row action only for a VRAM-OOM failure, and marks it out-of-date', () => {
+    const model = buildJobListModel(JOBS, ctx())
+    const boom = model.rows.find(r => r.jobId === 'boom')
+    expect(boom.action).toMatchObject({ text: 'Fix' })
+    expect(boom.stale).toBe(true)
+    expect(model.rows.find(r => r.jobId === 'seed').action).toBe(null)
+  })
+
+  it('renders a wired "Fix" button whose click fires onAction (NOT row select)', () => {
+    const el = document.createElement('div')
+    const clicks = []
+    const actions = []
+    renderJobList(el, buildJobListModel(JOBS, ctx()), {
+      onClick: (id) => clicks.push(id), onAction: (id) => actions.push(id),
+      emptyText: 'none', dimColor: '#8b949e',
+    })
+    const boomRow = [...el.querySelectorAll('[data-job-id]')].find(r => r.dataset.jobId === 'boom')
+    const fixBtn = boomRow.querySelector('button')
+    expect(fixBtn.textContent).toBe('Fix')
+    fixBtn.click()
+    expect(actions).toEqual(['boom'])   // Fix action fired — guards the onAction wiring
+    expect(clicks).toEqual([])          // stopPropagation → row select did NOT fire
+  })
+
+  it('renders the queued ⧗ symbol with the [data-md-queued] hook the poll-refresh selector needs', () => {
+    const el = document.createElement('div')
+    renderJobList(el, buildJobListModel(JOBS, ctx()), { onClick: () => {}, emptyText: 'none', dimColor: '#8b949e' })
+    const hook = el.querySelector('[data-md-queued]')
+    expect(hook).toBeTruthy()
+    expect(hook.dataset.mdQueued).toBe('q')
+    expect(hook.textContent).toBe('⧗')
+  })
+
+  it('renders a chevron whose click fires onChevron (tree toggle), NOT the row onClick', () => {
+    const el = document.createElement('div')
+    const clicks = []
+    const chevrons = []
+    renderJobList(el, buildJobListModel(JOBS, ctx()), {
+      onClick: (id) => clicks.push(id), onChevron: (id) => chevrons.push(id),
+      emptyText: 'none', dimColor: '#8b949e',
+    })
+    const pRow = [...el.querySelectorAll('[data-job-id]')].find(r => r.dataset.jobId === 'p')
+    const chev = pRow.querySelector('span')   // leading-most span is the chevron
+    expect(chev.textContent).toBe('▾')
+    chev.click()
+    expect(chevrons).toEqual(['p'])            // chevron toggled the tree
+    expect(clicks).toEqual([])                 // stopPropagation → row select did NOT fire
+  })
+
+  it('a leaf row still gets an (empty) chevron span so indentation lines up', () => {
+    const m = buildJobRowModel(JOBS[3], ctx(), { depth: 0, listIndex: 1, childCount: 0 })
+    expect(m.chevron).toEqual({ childCount: 0, collapsed: false, title: '' })
+  })
+})

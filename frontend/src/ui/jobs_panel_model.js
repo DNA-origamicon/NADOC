@@ -36,6 +36,15 @@
  *   rowAction(job)          → optional trailing per-row control {text, title?, styleText}
  *                            or null (e.g. LAMMPS's inline Stop button); oxDNA/mrDNA/
  *                            cando omit it → null → no button (oxDNA parity preserved)
+ *   chevron                 → truthy → every row gets a leading expand/collapse chevron
+ *                            span (empty spacer for leaves, ▸/▾ for parents), toggling
+ *                            the tree; absent → no span (NAMD only; oxDNA parity preserved)
+ *   postLabelMarkers(job,{childCount,collapsed}) → [{ text, title?, css? }] spans rendered
+ *                            after the label, before the timestamp (e.g. NAMD's collapsed-
+ *                            ensemble summary + oxDNA/mrDNA-seeded + Alpine badges); default []
+ *   symbolOverride(job)     → { glyph, color?, title?, dataset? } to REPLACE the
+ *                            spinner/badge status symbol (e.g. NAMD's ⧗ remote-queued
+ *                            hourglass with a live-refresh dataset), or null
  *   colors                  → { dim, warn } row colors
  *   indentBase, indentStep  → child indent px (default 6 + depth*14, oxDNA's values)
  */
@@ -50,9 +59,10 @@ const _DEFAULT_COLORS = { dim: '#8a8a8a', warn: '#e0a800' }
  * Pure: one job → a canonical row descriptor. `pos` carries the tree position
  * ({ depth, index, listIndex }) computed by buildJobListModel.
  */
-export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0 } = {}) {
+export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0, childCount = 0 } = {}) {
   const isChild = depth > 0
   const colors = ctx.colors || _DEFAULT_COLORS
+  const collapsed = !!(ctx.collapsedIds && ctx.collapsedIds.has(job.job_id))
   const prodState = ctx.productionState ? ctx.productionState(job) : null
   const statusKey = statusKeyFor(ctx.engine, job.status, prodState)
   const isActive = ctx.isActive ? !!ctx.isActive(job) : _DEFAULT_ACTIVE(job)
@@ -83,6 +93,17 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     staleTitle: ctx.staleTitle || '',
     tags: ctx.tags ? (ctx.tags(job) || []) : [],
     action: ctx.rowAction ? (ctx.rowAction(job) || null) : null,
+    chevron: ctx.chevron
+      ? {
+          childCount,
+          collapsed,
+          title: childCount > 0
+            ? (collapsed ? `Expand ${childCount} child job${childCount === 1 ? '' : 's'}` : 'Collapse')
+            : '',
+        }
+      : null,
+    postLabelMarkers: ctx.postLabelMarkers ? (ctx.postLabelMarkers(job, { childCount, collapsed }) || []) : [],
+    symbolOverride: ctx.symbolOverride ? (ctx.symbolOverride(job) || null) : null,
     colors,
   }
 }
@@ -98,9 +119,9 @@ export function buildJobListModel(jobs, ctx) {
   const rows = []
   if (ctx.hierarchical) {
     let rootNo = 0
-    for (const { job, depth, index } of flattenJobTree(sorted, { collapsedIds: ctx.collapsedIds || null })) {
+    for (const { job, depth, index, childCount } of flattenJobTree(sorted, { collapsedIds: ctx.collapsedIds || null })) {
       if (depth === 0) rootNo += 1
-      rows.push(buildJobRowModel(job, ctx, { depth, index, listIndex: rootNo }))
+      rows.push(buildJobRowModel(job, ctx, { depth, index, listIndex: rootNo, childCount }))
     }
   } else {
     sorted.forEach((job, i) => rows.push(buildJobRowModel(job, ctx, { depth: 0, index: 0, listIndex: i + 1 })))
