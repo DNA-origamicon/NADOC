@@ -33,6 +33,9 @@
  *   formatTime(ts)          → timestamp string
  *   formatSize(bytes)       → size string
  *   rowSig(job)             → per-row render signature (drives the poll short-circuit)
+ *   rowAction(job)          → optional trailing per-row control {text, title?, styleText}
+ *                            or null (e.g. LAMMPS's inline Stop button); oxDNA/mrDNA/
+ *                            cando omit it → null → no button (oxDNA parity preserved)
  *   colors                  → { dim, warn } row colors
  *   indentBase, indentStep  → child indent px (default 6 + depth*14, oxDNA's values)
  */
@@ -79,6 +82,7 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     staleClass: ctx.staleClass || null,
     staleTitle: ctx.staleTitle || '',
     tags: ctx.tags ? (ctx.tags(job) || []) : [],
+    action: ctx.rowAction ? (ctx.rowAction(job) || null) : null,
     colors,
   }
 }

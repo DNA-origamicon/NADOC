@@ -15,7 +15,7 @@ import { statusBadge, makeSpinner, makeStatusLegend } from './job_status_symbol.
  * Render one canonical row model → a `<div>` row element. `onClick(jobId)` is
  * wired to a click on the row.
  */
-export function renderJobRow(m, { doc = document, onClick } = {}) {
+export function renderJobRow(m, { doc = document, onClick, onAction } = {}) {
   const row = doc.createElement('div')
   row.dataset.jobId = m.jobId
   row.style.cssText =
@@ -72,6 +72,16 @@ export function renderJobRow(m, { doc = document, onClick } = {}) {
     row.append(warn)
   }
   row.append(sym)
+  // Optional trailing per-row control (e.g. LAMMPS Stop). Absent for oxDNA/mrDNA/
+  // cando (m.action === null) → nothing appended, so their DOM is unchanged.
+  if (m.action) {
+    const btn = doc.createElement('button')
+    btn.textContent = m.action.text
+    if (m.action.title) btn.title = m.action.title
+    btn.style.cssText = m.action.styleText || ''
+    btn.addEventListener('click', (e) => { e.stopPropagation(); onAction?.(m.jobId) })
+    row.append(btn)
+  }
   if (onClick) row.addEventListener('click', () => onClick(m.jobId))
   return row
 }
@@ -83,7 +93,7 @@ export function renderJobRow(m, { doc = document, onClick } = {}) {
  * built once and not re-created every render.
  */
 export function renderJobList(listEl, model, {
-  doc = document, onClick, emptyText = 'No jobs yet.',
+  doc = document, onClick, onAction, emptyText = 'No jobs yet.',
   dimColor = '#8a8a8a', legendState = null,
 } = {}) {
   if (!listEl) return
@@ -92,7 +102,7 @@ export function renderJobList(listEl, model, {
     return
   }
   listEl.innerHTML = ''
-  for (const rm of model.rows) listEl.appendChild(renderJobRow(rm, { doc, onClick }))
+  for (const rm of model.rows) listEl.appendChild(renderJobRow(rm, { doc, onClick, onAction }))
   if (legendState && !legendState.el) {
     legendState.el = makeStatusLegend(doc)
     listEl.after(legendState.el)

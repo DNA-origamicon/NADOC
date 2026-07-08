@@ -18,11 +18,13 @@
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showToast } from './toast.js'
-import { statusBadge, statusKeyFor } from './job_status_symbol.js'
 import {
   progressPct, jobIsActive, anyActive, runButtonState, availabilityMessage,
   jobRowLabel, buildCreatePayload, jobIsViewable, flexStatusText,
 } from './lammps_jobs_logic.js'
+import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
+import { renderJobList } from './jobs_panel_render.js'
+import { formatJobTime } from '../scene/trajectory_range.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { initLammpsDisplay } from './lammps_display.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
@@ -77,6 +79,29 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
   let _pollTimer = null
   let _launching = false
   let _selectedId = null
+  let _listSig = null            // last-rendered list signature (avoids spinner-restart churn)
+  const _legend = { el: null }   // status-symbol legend, inserted once after the list
+
+  // Canonical job-list model + renderer (U3): LAMMPS converges to the oxDNA look
+  // (list index, status glyph/spinner, legend). Runs are flat (no tree/archive);
+  // the inline Stop button on active rows rides the canonical rowAction slot.
+  const _STOP_STYLE =
+    'flex:0 0 auto;font-size:var(--text-xs);padding:1px 6px;background:#2d1418;' +
+    'border:1px solid #d9534f;color:#f0a0a0;border-radius:3px;cursor:pointer'
+  function _rowCtx() {
+    return {
+      engine: 'lammps',
+      selectedId: _selectedId,
+      hierarchical: false,
+      displayName: jobRowLabel,
+      isActive: jobIsActive,
+      formatTime: formatJobTime,
+      rowAction: (job) => jobIsActive(job)
+        ? { text: 'Stop', title: 'Stop this run', styleText: _STOP_STYLE } : null,
+      rowSig: (j) => `${j.job_id}:${j.status}`,
+      colors: { dim: '#8a8a8a', warn: _C.warn },
+    }
+  }
 
   // ── display controller + trajectory player (reuse the validated oxDNA code) ──
   const _display = initLammpsDisplay({ designRenderer })
@@ -198,40 +223,20 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
 
   function _renderList() {
     if (!listEl) return
-    listEl.replaceChildren()
     const jobs = _visibleJobs()
-    if (!jobs.length) {
-      const empty = document.createElement('div')
-      empty.style.cssText = `font-size:var(--text-xs);color:${_C.dim};padding:4px`
-      empty.textContent = _jobs.length
+    const ctx = _rowCtx()
+    const sig = jobListSignature(jobs, ctx)
+    if (sig === _listSig && listEl.childElementCount > 0) return
+    _listSig = sig
+    renderJobList(listEl, buildJobListModel(jobs, ctx), {
+      onClick: (jobId) => _select(jobId),
+      onAction: (jobId) => _stop(jobId),
+      emptyText: _jobs.length
         ? 'No LAMMPS runs for this design (tick "show all designs" to see others).'
-        : 'No LAMMPS runs yet.'
-      listEl.appendChild(empty)
-      return
-    }
-    for (const job of jobs) {
-      const selected = job.job_id === _selectedId
-      const badge = statusBadge(statusKeyFor('lammps', job.status))
-      const row = document.createElement('div')
-      row.style.cssText = `display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:var(--text-xs);border-radius:3px;cursor:pointer;${selected ? 'background:#132a3a' : ''}`
-      const dot = document.createElement('span')
-      dot.textContent = jobIsActive(job) ? '⟳' : badge.symbol
-      dot.style.cssText = `color:${badge.color};flex:0 0 auto`
-      if (jobIsActive(job)) dot.classList.add('nadoc-spinner')
-      const label = document.createElement('span')
-      label.style.cssText = 'flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9d1d9'
-      label.textContent = jobRowLabel(job)
-      row.append(dot, label)
-      row.addEventListener('click', () => _select(job.job_id))
-      if (jobIsActive(job)) {
-        const stop = document.createElement('button')
-        stop.textContent = 'Stop'
-        stop.style.cssText = 'flex:0 0 auto;font-size:var(--text-xs);padding:1px 6px;background:#2d1418;border:1px solid #d9534f;color:#f0a0a0;border-radius:3px;cursor:pointer'
-        stop.addEventListener('click', (e) => { e.stopPropagation(); _stop(job.job_id) })
-        row.appendChild(stop)
-      }
-      listEl.appendChild(row)
-    }
+        : 'No LAMMPS runs yet.',
+      dimColor: _C.dim,
+      legendState: _legend,
+    })
   }
 
   function _select(jobId) {

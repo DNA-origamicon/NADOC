@@ -274,6 +274,107 @@ describe('U3 — flat-list convergence (mrDNA-shaped ctx)', () => {
   })
 })
 
+describe('U3 slice 2a — cando flat convergence (mode as a leading tag)', () => {
+  const CANDO_JOBS = [
+    { job_id: 'c1', status: 'completed', created_at: 10, design_name: 'a', nonlinear: false },
+    { job_id: 'c2', status: 'running', created_at: 20, design_name: 'b', nonlinear: true },
+  ]
+  const candoCtx = {
+    engine: 'cando',
+    selectedId: 'c2',
+    hierarchical: false,
+    displayName: jobDisplayName,
+    isActive: jobIsActive,
+    formatTime: formatJobTime,
+    tags: (job) => [{ text: job.nonlinear ? 'Fine' : 'Coarse', color: _C.dim,
+      title: job.nonlinear ? 'Fine (nonlinear)' : 'Coarse (linear)' }],
+    rowSig: (j) => `${j.job_id}:${j.status}:${j.nonlinear ? 1 : 0}`,
+    colors: { dim: _C.dim, warn: _C.warn },
+  }
+
+  it('numbers rows newest-first, maps the cando status key, spinner while active', () => {
+    const model = buildJobListModel(CANDO_JOBS, candoCtx)
+    expect(model.rows.map(r => r.jobId)).toEqual(['c2', 'c1'])       // newest first
+    expect(model.rows.map(r => r.indexLabel)).toEqual(['[1]', '[2]'])
+    expect(model.rows[0].statusKey).toBe(statusKeyFor('cando', 'running'))
+    expect(model.rows[0].isActive).toBe(true)
+    expect(model.rows[1].isActive).toBe(false)
+  })
+
+  it('renders the Coarse/Fine mode as a leading tag (canonical tag slot, not a bespoke column)', () => {
+    const model = buildJobListModel(CANDO_JOBS, candoCtx)
+    const el = document.createElement('div')
+    renderJobList(el, model, { onClick: () => {}, emptyText: 'No CanDo FEM jobs for this design yet.', dimColor: _C.dim })
+    const rows = el.querySelectorAll('[data-job-id]')
+    // row[0] is c2 (running, nonlinear) → 'Fine' tag + spinner
+    expect(rows[0].textContent).toContain('Fine')
+    expect(rows[0].querySelector('.nadoc-spinner')).toBeTruthy()
+    // row[1] is c1 (completed, linear) → 'Coarse' tag + static glyph
+    expect(rows[1].textContent).toContain('Coarse')
+    expect(rows[1].querySelector('.nadoc-spinner')).toBeFalsy()
+    // no per-row action button (cando has no rowAction)
+    expect(el.querySelector('button')).toBeFalsy()
+  })
+})
+
+describe('U3 slice 2a — per-row action button (LAMMPS inline Stop)', () => {
+  const LAMMPS_JOBS = [
+    { job_id: 'l1', status: 'running', created_at: 20, design_name: 'live' },
+    { job_id: 'l2', status: 'completed', created_at: 10, design_name: 'done' },
+  ]
+  const STOP_STYLE = 'flex:0 0 auto;padding:1px 6px'
+  const lammpsCtx = {
+    engine: 'lammps',
+    selectedId: null,
+    hierarchical: false,
+    displayName: jobDisplayName,
+    isActive: jobIsActive,
+    formatTime: formatJobTime,
+    rowAction: (job) => jobIsActive(job) ? { text: 'Stop', title: 'Stop this run', styleText: STOP_STYLE } : null,
+    rowSig: (j) => `${j.job_id}:${j.status}`,
+    colors: { dim: _C.dim, warn: _C.warn },
+  }
+
+  it('models the action only for active jobs', () => {
+    const model = buildJobListModel(LAMMPS_JOBS, lammpsCtx)
+    const running = model.rows.find(r => r.jobId === 'l1')
+    const done = model.rows.find(r => r.jobId === 'l2')
+    expect(running.action).toEqual({ text: 'Stop', title: 'Stop this run', styleText: STOP_STYLE })
+    expect(done.action).toBe(null)
+  })
+
+  it('renders a Stop button on active rows; clicking it fires onAction and NOT the row onClick', () => {
+    const model = buildJobListModel(LAMMPS_JOBS, lammpsCtx)
+    const el = document.createElement('div')
+    const clicks = []
+    const actions = []
+    renderJobList(el, model, {
+      onClick: (id) => clicks.push(id),
+      onAction: (id) => actions.push(id),
+      emptyText: 'none', dimColor: _C.dim,
+    })
+    const rows = el.querySelectorAll('[data-job-id]')
+    const runningRow = [...rows].find(r => r.dataset.jobId === 'l1')
+    const doneRow = [...rows].find(r => r.dataset.jobId === 'l2')
+    const stopBtn = runningRow.querySelector('button')
+    expect(stopBtn).toBeTruthy()
+    expect(stopBtn.textContent).toBe('Stop')
+    expect(doneRow.querySelector('button')).toBeFalsy()   // completed → no Stop
+    stopBtn.click()
+    expect(actions).toEqual(['l1'])   // action fired
+    expect(clicks).toEqual([])        // stopPropagation → row select did NOT fire
+  })
+
+  it('a ctx WITHOUT rowAction renders no button (oxDNA-parity guard)', () => {
+    const noActionCtx = { ...lammpsCtx, rowAction: undefined }
+    const model = buildJobListModel(LAMMPS_JOBS, noActionCtx)
+    expect(model.rows.every(r => r.action === null)).toBe(true)
+    const el = document.createElement('div')
+    renderJobList(el, model, { onClick: () => {}, emptyText: 'none', dimColor: _C.dim })
+    expect(el.querySelector('button')).toBeFalsy()
+  })
+})
+
 describe('U3 — poll signature short-circuit', () => {
   const ctx = { selectedId: 's', rowSig: (j) => `${j.job_id}:${j.status}` }
   it('is stable across a health-only change and flips on status/selection change', () => {
