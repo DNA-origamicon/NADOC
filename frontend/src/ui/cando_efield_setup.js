@@ -1,17 +1,22 @@
 /**
- * CanDo E-field setup UI — the "Electric field" collapsible card of the CanDo FEM
- * panel (Dynamics tab).  A numeric mimic of the oxDNA field card (ui/efield_setup.js):
- * a uniform force per nucleotide (pN) + direction that the FEM solve applies as a body
- * load, exposed via getFieldSpec() → { field_pN, dir, enabled }.
+ * Numeric E-field setup UI — the "Electric field" collapsible card of the CanDo FEM panel
+ * AND of the NAMD MD launch panel (both on the Dynamics tab).  A numeric mimic of the
+ * oxDNA field card (ui/efield_setup.js): a uniform force per nucleotide (pN) + direction,
+ * exposed via getFieldSpec() → { field_pN, dir, enabled }.
  *
- * Why a separate module (not the oxDNA factory reused): the CanDo panel shares the
- * Dynamics tab with the oxDNA panel, whose field card already owns the ONE in-scene
- * direction-arrow gizmo — a second gizmo would double-draw.  So this card is numeric
- * only (magnitude + x/y/z + V/m helper); all the field PHYSICS is still the shared,
- * unit-tested scene/efield_math.js (identical pN↔V/m + normalize), so there is no
+ * Why a separate module (not the oxDNA factory reused): the oxDNA field card owns the ONE
+ * in-scene direction-arrow gizmo — a second gizmo would double-draw.  So this card is
+ * numeric only (magnitude + x/y/z + V/m helper); all the field PHYSICS is still the
+ * shared, unit-tested scene/efield_math.js (identical pN↔V/m + normalize), so there is no
  * duplicated math.  Display-layer only: nothing here mutates topology.
  *
- * Factory: initCandoEfieldSetup({ onChange }) → { getFieldSpec, isEnabled, refresh,
+ * The element ids are parameterised (`ids`, defaulting to the CanDo card) exactly like the
+ * shared anchors picker (ui/oxdna_anchors_setup.js), so one factory drives every panel's
+ * field card.  Consumers differ only in what they do with the spec: CanDo applies q·E as a
+ * FEM body load, NAMD emits native eFieldOn/eField.  `field_pN` is the SHARED cross-engine
+ * descriptor in both cases.
+ *
+ * Factory: initCandoEfieldSetup({ onChange, ids }) → { getFieldSpec, isEnabled, refresh,
  *   applyConfig }.  getFieldSpec() → { field_pN, dir, enabled }.
  */
 
@@ -21,31 +26,43 @@ import {
 
 const _C = { dim: '#8b949e', warn: '#e0a800', err: '#d9534f' }
 
+/** Default element ids — the CanDo panel's card. */
+export const CANDO_EFIELD_IDS = {
+  toggle: 'cando-efield-toggle', arrow: 'cando-efield-arrow', body: 'cando-efield-body',
+  enable: 'cando-efield-enable', mag: 'cando-efield-mag',
+  vpmToggle: 'cando-efield-vpm-toggle', vpmArrow: 'cando-efield-vpm-arrow',
+  vpmBody: 'cando-efield-vpm-body', vpm: 'cando-efield-vpm', qeff: 'cando-efield-qeff',
+  vpmApply: 'cando-efield-vpm-apply',
+  dirX: 'cando-efield-dir-x', dirY: 'cando-efield-dir-y', dirZ: 'cando-efield-dir-z',
+  ready: 'cando-efield-ready',
+}
+
 function _fmtPn(p) {
   const n = Number(p) || 0
   if (n === 0) return '0'
   return n.toPrecision(4).replace(/\.?0+$/, '')
 }
 
-export function initCandoEfieldSetup({ onChange = null } = {}) {
-  const toggle = document.getElementById('cando-efield-toggle')
-  const arrow  = document.getElementById('cando-efield-arrow')
-  const bodyEl = document.getElementById('cando-efield-body')
+export function initCandoEfieldSetup({ onChange = null, ids = {} } = {}) {
+  const id = { ...CANDO_EFIELD_IDS, ...ids }
+  const toggle = document.getElementById(id.toggle)
+  const arrow  = document.getElementById(id.arrow)
+  const bodyEl = document.getElementById(id.body)
   const noop = { getFieldSpec: () => ({ field_pN: 0, dir: [0, 1, 0], enabled: false }), isEnabled: () => false, refresh: () => {}, applyConfig: () => {} }
   if (!toggle || !bodyEl) return noop
 
-  const enableChk = document.getElementById('cando-efield-enable')
-  const magInput  = document.getElementById('cando-efield-mag')
-  const vpmToggle = document.getElementById('cando-efield-vpm-toggle')
-  const vpmArrow  = document.getElementById('cando-efield-vpm-arrow')
-  const vpmBody   = document.getElementById('cando-efield-vpm-body')
-  const vpmInput  = document.getElementById('cando-efield-vpm')
-  const qeffInput = document.getElementById('cando-efield-qeff')
-  const vpmApply  = document.getElementById('cando-efield-vpm-apply')
-  const dirX = document.getElementById('cando-efield-dir-x')
-  const dirY = document.getElementById('cando-efield-dir-y')
-  const dirZ = document.getElementById('cando-efield-dir-z')
-  const readyEl = document.getElementById('cando-efield-ready')
+  const enableChk = document.getElementById(id.enable)
+  const magInput  = document.getElementById(id.mag)
+  const vpmToggle = document.getElementById(id.vpmToggle)
+  const vpmArrow  = document.getElementById(id.vpmArrow)
+  const vpmBody   = document.getElementById(id.vpmBody)
+  const vpmInput  = document.getElementById(id.vpm)
+  const qeffInput = document.getElementById(id.qeff)
+  const vpmApply  = document.getElementById(id.vpmApply)
+  const dirX = document.getElementById(id.dirX)
+  const dirY = document.getElementById(id.dirY)
+  const dirZ = document.getElementById(id.dirZ)
+  const readyEl = document.getElementById(id.ready)
 
   let _open    = false
   let _pN      = 0
@@ -94,7 +111,9 @@ export function initCandoEfieldSetup({ onChange = null } = {}) {
   })
   vpmToggle?.addEventListener('click', () => {
     const o = vpmBody && vpmBody.style.display !== 'none'
-    if (vpmBody) vpmBody.style.display = o ? 'none' : ''
+    // Re-open as `grid` explicitly: the sub-panel's layout IS a two-column grid, and
+    // clearing the inline display (`''`) would fall back to `block` and mangle it.
+    if (vpmBody) vpmBody.style.display = o ? 'none' : 'grid'
     if (vpmArrow) vpmArrow.style.transform = o ? '' : 'rotate(90deg)'
     if (!o) _syncVpm()
   })

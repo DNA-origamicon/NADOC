@@ -103,4 +103,74 @@ describe('initCandoEfieldSetup', () => {
     expect(api.isEnabled()).toBe(false)
     expect(api.getFieldSpec().enabled).toBe(false)
   })
+
+  // The V/m sub-panel is a two-column grid. Re-opening it must restore `grid`, not clear
+  // the inline display (which falls back to `block` and mangles the label/input columns).
+  it('the V/m sub-panel toggles none <-> grid', () => {
+    const vpm = els['cando-efield-vpm-body']
+    vpm.style.display = 'none'
+    els['cando-efield-vpm-toggle'].click()
+    expect(vpm.style.display).toBe('grid')
+    els['cando-efield-vpm-toggle'].click()
+    expect(vpm.style.display).toBe('none')
+  })
+})
+
+// The MD launch panel binds a SECOND instance of this factory against `md-efield-*` ids
+// (mirroring how initOxdnaAnchorsSetup is bound by three panels).  Two independent cards
+// must not cross-wire: the CanDo default ids must be invisible to the md-prefixed one.
+describe('initCandoEfieldSetup — parameterised ids (MD panel binding)', () => {
+  const MD_IDS = Object.fromEntries(
+    Object.entries(IDS).map(([k, tag]) => [k.replace('cando-', 'md-'), tag]),
+  )
+  const MD_ID_MAP = {
+    toggle: 'md-efield-toggle', arrow: 'md-efield-arrow', body: 'md-efield-body',
+    enable: 'md-efield-enable', mag: 'md-efield-mag',
+    vpmToggle: 'md-efield-vpm-toggle', vpmArrow: 'md-efield-vpm-arrow',
+    vpmBody: 'md-efield-vpm-body', vpm: 'md-efield-vpm', qeff: 'md-efield-qeff',
+    vpmApply: 'md-efield-vpm-apply',
+    dirX: 'md-efield-dir-x', dirY: 'md-efield-dir-y', dirZ: 'md-efield-dir-z',
+    ready: 'md-efield-ready',
+  }
+
+  afterEach(() => clearDom())
+
+  it('binds md-* ids and reads the field spec from them', () => {
+    const els = mountIds(MD_IDS)
+    const api = initCandoEfieldSetup({ ids: MD_ID_MAP })
+
+    els['md-efield-enable'].checked = true
+    els['md-efield-enable'].dispatchEvent(new Event('change', { bubbles: true }))
+    setInput(els['md-efield-mag'], 2.5)
+    setInput(els['md-efield-dir-x'], 0)
+    setInput(els['md-efield-dir-y'], 0)
+    setInput(els['md-efield-dir-z'], 1)
+
+    const spec = api.getFieldSpec()
+    expect(spec.field_pN).toBeCloseTo(2.5, 6)
+    expect(spec.dir[2]).toBeCloseTo(1, 6)
+    expect(spec.enabled).toBe(true)
+    expect(api.isEnabled()).toBe(true)
+  })
+
+  it('with only md-* ids present, the default (cando) binding is inert', () => {
+    mountIds(MD_IDS)
+    expect(initCandoEfieldSetup({}).isEnabled()).toBe(false)
+  })
+
+  it('two instances on the same page stay independent', () => {
+    mountIds({ ...IDS, ...MD_IDS })
+    const cando = initCandoEfieldSetup({})
+    const md = initCandoEfieldSetup({ ids: MD_ID_MAP })
+
+    const on = document.getElementById('md-efield-enable')
+    on.checked = true
+    on.dispatchEvent(new Event('change', { bubbles: true }))
+    setInput(document.getElementById('md-efield-mag'), 4)
+
+    expect(md.isEnabled()).toBe(true)
+    expect(md.getFieldSpec().field_pN).toBeCloseTo(4, 6)
+    expect(cando.isEnabled()).toBe(false)
+    expect(cando.getFieldSpec().field_pN).toBe(0)
+  })
 })

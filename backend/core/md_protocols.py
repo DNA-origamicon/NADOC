@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import zipfile
 from dataclasses import dataclass, field
@@ -35,6 +36,120 @@ LEGACY_PROTOCOL = "mgh_slow_release"
 EQUILIBRIUM_AWARE_PROTOCOL = "equilibrium_aware_namd"
 SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL}
 AKSIMENTIEV_STEPS_PER_CYCLE = 12
+
+
+# ── Electric field (NAMD native eFieldOn / eField) ────────────────────────────
+#
+# NAMD applies ``F_i = q_i · eField`` to EVERY atom, where ``q_i`` is the atom's CHARMM
+# partial charge; ``eField`` is in kcal·mol⁻¹·Å⁻¹·e⁻¹ and the resulting force in
+# kcal·mol⁻¹·Å⁻¹.  The net force on a nucleotide is therefore ``(Σ_i q_i)·eField``.
+#
+# The cross-engine descriptor is force-per-NUCLEOTIDE in pN — exactly what oxDNA puts on
+# each bead (a ``string`` force, ``OXDNA_FORCE_PN``), LAMMPS puts on each bead
+# (``fix addforce``) and CanDo puts on each duplex axis node (×2 backbones,
+# ``FEM_FIELD_CHARGES_PER_NODE``).  NAMD's bridge needs NO effective-charge fudge: an
+# INTERNAL DNA nucleotide carries a net −1 e by force-field construction (its one
+# phosphate), the same charge ``namd_solvate._count_dna_charge`` counts (one P per
+# nucleotide) to neutralise the box.  So the eField that delivers ``field_pN`` to an
+# internal nucleotide is exact, not calibrated.
+#
+# TERMINI (measured, not assumed — see tests/test_namd_efield.py): psfgen patches strand
+# ends with 5TER/3TER hydroxyls, so a strand's FIRST residue carries −0.47 e and its LAST
+# −0.53 e (CHARMM36 partial charges; they sum to −1.00, i.e. one phosphate's worth).  A
+# strand of N nucleotides therefore carries −(N−1) e — exactly its phosphate count.  So
+# NAMD applies slightly LESS total force than oxDNA's uniform per-bead ``field_pN``
+# (deficit = N_strands/N_nucleotides: ~2 % on a real origami, ~12 % on an 8-mer).  This is
+# NAMD being right and oxDNA approximating: a 5'-OH terminus genuinely has no phosphate.
+# Do not "fix" it by rescaling eField — that would corrupt the internal per-nucleotide
+# load, which is the quantity the engines actually share.
+#
+# Sign: the backbone charge is NEGATIVE, so the emitted eField points ANTIPARALLEL to the
+# force direction the user asked for (``project_oxdna_efield`` GOTCHA: "force on the
+# negative backbone is antiparallel to E").
+#
+# Physicality caveat — NAMD is the only engine here with explicit solvent, so eField also
+# pushes the ions and polarises the water (real electrophoresis/electroosmosis, which
+# oxDNA/CanDo/LAMMPS cannot represent).  The *applied load on the DNA* is identical to the
+# other engines; the *response* additionally carries counterion drag.  That is a feature —
+# it is why NAMD is the gold reference — but it means a NAMD-vs-oxDNA deflection delta is
+# a physical difference, not necessarily a disagreement.
+#
+# Manning condensation is therefore NOT folded in (unlike the frontend's V/m helper's
+# ``q_eff ≈ 0.25 e``): in explicit solvent the condensed counterions are actual particles
+# that screen the field themselves.  Applying the bare −1 e is the physically correct
+# driving force AND the cross-engine-comparable one.
+_KCAL_J = 4184.0                     # J per kcal (thermochemical)
+_AVOGADRO = 6.02214076e23            # mol⁻¹ (SI exact)
+#: 1 kcal·mol⁻¹·Å⁻¹ expressed in pN (≈ 69.4769).
+KCAL_MOL_A_IN_PN: float = _KCAL_J / _AVOGADRO / 1e-10 * 1e12
+#: CHARMM net charge of an INTERNAL DNA nucleotide (its one phosphate), in units of e.
+#: Strand termini are 5TER/3TER hydroxyls (−0.47 / −0.53 e); see the note above.
+NAMD_DNA_CHARGE_PER_NUCLEOTIDE_E: float = -1.0
+
+
+def namd_efield_vector(field: Optional[dict]) -> Optional[tuple[float, float, float]]:
+    """NAMD ``eField`` vector delivering the shared per-nucleotide load, or ``None``.
+
+    ``field`` mirrors the shared oxDNA descriptor ``{"field_pN": <force per NUCLEOTIDE,
+    pN>, "dir": [x, y, z]}`` (``force_pN`` — the persisted oxDNA job spelling — is also
+    accepted).  ``dir`` need not be a unit vector.
+
+    Returns the vector in NAMD's units (kcal·mol⁻¹·Å⁻¹·e⁻¹) such that
+
+        ``NAMD_DNA_CHARGE_PER_NUCLEOTIDE_E · eField · KCAL_MOL_A_IN_PN == field_pN · dir̂``
+
+    i.e. every nucleotide feels exactly ``field_pN`` along ``dir``.  ``None`` / empty /
+    zero magnitude / zero direction → ``None`` (an exact no-op, mirroring
+    ``fem_solver.assemble_field_force``).
+
+    Three-Layer Law: the field is a JOB-REQUEST annotation, read here only; it never
+    touches topology.
+    """
+    if not field:
+        return None
+    mag_pn = float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0)
+    dx, dy, dz = (float(c) for c in (field.get("dir") or (0.0, 0.0, 0.0)))
+    dnorm = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if mag_pn == 0.0 or dnorm <= 1e-12:
+        return None
+    # F = q·E  ⇒  E = F / q.  q < 0, so E is antiparallel to the requested force.
+    scale = mag_pn / (KCAL_MOL_A_IN_PN * NAMD_DNA_CHARGE_PER_NUCLEOTIDE_E * dnorm)
+    return (dx * scale, dy * scale, dz * scale)
+
+
+def _efield_lines(field: Optional[dict]) -> list[str]:
+    """The ``eFieldOn``/``eField`` conf directives for a field spec (empty when absent)."""
+    vec = namd_efield_vector(field)
+    if vec is None:
+        return []
+    return [
+        "eFieldOn           on\n",
+        "eField             {:.8g} {:.8g} {:.8g}\n".format(*vec),
+    ]
+
+
+def external_forces_block(anchors_file: Optional[str], field: Optional[dict]) -> str:
+    """The ``fixedAtoms`` + ``eField`` directives — the ONE emitter every conf writer uses.
+
+    Anchors hold selected nucleotides completely fixed (Dirichlet-style).  They are
+    orthogonal to the ramped all-DNA harmonic restraint: NAMD allows only one
+    ``conskfile``, already spent on the slow-release restraint, so anchors ride the
+    independent ``fixedAtoms`` mechanism and persist across the whole ladder while the
+    restraint ramps to zero.
+
+    Caveat (NPT): fixed atoms are not rescaled by the barostat and add no virial, so a
+    LARGE fixed region biases the pressure; for a small end-anchor (the field use case)
+    this is negligible.  Caveat (GPU): NAMD 3 refuses ``eField`` under *multi-GPU*
+    ``GPUresident`` ("EField is not compatible with multi-GPU GPUresident"); single-GPU
+    is fine, and the API rejects a multi-device field job up front.
+    """
+    lines: list[str] = []
+    if anchors_file:
+        lines.append("fixedAtoms         on\n")
+        lines.append(f"fixedAtomsFile     {anchors_file}\n")
+        lines.append("fixedAtomsCol      B\n")
+    lines.extend(_efield_lines(field))
+    return "".join(lines)
 
 
 # ── Segment spec ──────────────────────────────────────────────────────────────
@@ -211,6 +326,7 @@ def _segment_conf(
     structure_psf: Optional[str] = None,
     colvars_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
+    field: Optional[dict] = None,
 ) -> str:
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
@@ -267,17 +383,11 @@ def _segment_conf(
     else:
         lines.append("constraints        off\n")
 
-    # Anchors: hold selected nucleotides completely fixed via fixedAtoms (Dirichlet-
-    # style).  Orthogonal to the ramped all-DNA harmonic restraint above — NAMD allows
-    # only one conskfile, so anchors ride the independent fixedAtoms mechanism and
-    # persist across the whole ladder while the slow-release restraint ramps to zero.
-    # Caveat (NPT): fixed atoms are not rescaled by the barostat and add no virial, so a
-    # LARGE fixed region biases the pressure; for a small end-anchor (the field use case)
-    # this is negligible, and an anchored E-field run is typically NVT anyway.
-    if anchors_file:
-        lines.append("fixedAtoms         on\n")
-        lines.append(f"fixedAtomsFile     {anchors_file}\n")
-        lines.append("fixedAtomsCol      B\n")
+    # Anchors + uniform E-field (native NAMD q·E).  Both ride the whole ladder: while the
+    # slow-release restraint is still stiff the structure barely moves, and the deflection
+    # develops smoothly as k → 0 — a quasi-static ramp into the tethered-arm regime rather
+    # than a shock at the release segment.
+    lines.append(external_forces_block(anchors_file, field))
 
     if spec.previous:
         lines.append(f"binCoordinates     output/{spec.previous}.coor\n")
@@ -311,6 +421,7 @@ def _min_conf(
     *,
     enm_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
+    field: Optional[dict] = None,
 ) -> str:
     # enm_file overrides the default {name_stem}_k{scale}.enm.extra — used by the
     # declash protocol to minimise against an ss-excluded network.  Minimisation
@@ -331,10 +442,7 @@ def _min_conf(
         lines.append("extraBondsFile     mgh_extrabonds.txt\n")
     lines.append(f"extraBondsFile     {enm}\n")
     lines.append("constraints        off\n")
-    if anchors_file:
-        lines.append("fixedAtoms         on\n")
-        lines.append(f"fixedAtomsFile     {anchors_file}\n")
-        lines.append("fixedAtomsCol      B\n")
+    lines.append(external_forces_block(anchors_file, field))
     lines.append(f"minimize           {minimize_steps}\n")
     return "".join(lines)
 
@@ -995,6 +1103,7 @@ def prepare_mgh_slow_release(
     force_soft: bool = False,
     fast: bool = False,
     anchors: Optional[list] = None,
+    field: Optional[dict] = None,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -1088,6 +1197,20 @@ def prepare_mgh_slow_release(
                 pdb_path, package_dir / "restraints_anchors.pdb", anchor_indices)
             anchors_file = "restraints_anchors.pdb"
 
+    # E-field (optional): a uniform native NAMD q·E body force, also a JOB-REQUEST
+    # annotation.  A field with no anchor just streams the whole box (COM drift).
+    efield_vec = namd_efield_vector(field)
+    if efield_vec is not None and anchors_file is None:
+        # The API/UI reject a field with an EMPTY anchor list, but a NON-empty list that
+        # RESOLVES to nothing (stale selection, ssDNA-only scope) slips past them and
+        # would silently launch the unanchored field run those guards exist to prevent.
+        # Fail loudly at prep rather than burn GPU hours streaming the box.
+        raise ValueError(
+            "An electric field needs at least one anchor, but the requested anchor scopes "
+            f"resolved to no DNA residues: {anchors!r}. Re-pick the anchors — a stale "
+            "selection or a single-stranded-only scope resolves to nothing."
+        )
+
     # Declash: minimise against an ss-excluded ENM so inserted single-stranded
     # bases relax out of clash.  References are rebuilt from the declashed coords
     # by the runner after minimisation (rebuild_declashed_references).  Enabled
@@ -1148,6 +1271,7 @@ def prepare_mgh_slow_release(
             min_scale,
             enm_file=declash_enm_file,
             anchors_file=anchors_file,
+            field=field,
         )
     )
 
@@ -1156,7 +1280,7 @@ def prepare_mgh_slow_release(
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
                           fast=fast, structure_psf=structure_psf,
-                          anchors_file=anchors_file)
+                          anchors_file=anchors_file, field=field)
         )
 
     charge_audit = {}
@@ -1210,6 +1334,26 @@ def prepare_mgh_slow_release(
             "n_atoms_fixed": n_anchored_atoms,
             "mechanism": "fixedAtoms (fixedAtomsCol B); held immobile across the ladder",
         },
+        # The E-field as launched.  ``efield_vector`` is the NAMD-unit vector actually
+        # written into every conf; the production-stage writers read it back from here so
+        # an extended run keeps the same field (and the same anchors) as the ladder.
+        "field": (
+            {
+                "field_pN": float(field.get("field_pN", field.get("force_pN", 0.0)) or 0.0),
+                "dir": [float(c) for c in field["dir"]],
+                "efield_vector": list(efield_vec),
+                "efield_units": "kcal/mol/A/e",
+                "charge_per_nucleotide_e": NAMD_DNA_CHARGE_PER_NUCLEOTIDE_E,
+                "terminal_charge_note": (
+                    "internal nucleotides carry -1 e (one phosphate) and feel exactly "
+                    "field_pN; 5TER/3TER hydroxyl termini carry -0.47/-0.53 e, so a strand "
+                    "feels -(N-1) e worth of force (its phosphate count)"
+                ),
+                "mechanism": "native NAMD eFieldOn/eField (q·E on every charged atom)",
+            }
+            if efield_vec is not None
+            else None
+        ),
         "declash": declash,
         "declash_min_coor": f"output/{min_name}.coor" if declash else None,
         "n_unpaired_excluded": n_unpaired if declash else 0,

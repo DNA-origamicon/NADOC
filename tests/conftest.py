@@ -325,6 +325,14 @@ _SLOW_TESTS = {
     "test_prepare_writes_anchor_restraints_end_to_end",
     # N2 NAMD anchors: 176-strand routed design build + real export_pdb (~30 s).
     "test_export_pdb_residue_order_is_natural_not_sorted_on_many_strands",
+    # N1 NAMD E-field: real psfgen prepare (stubbed solvate) + conf writing.
+    "test_prepare_writes_efield_end_to_end_and_psf_charge_is_minus_one",
+    # N1 NAMD E-field: real psfgen prepare, asserts the unresolved-anchor guard raises.
+    "test_field_with_unresolvable_anchors_raises_at_prep",
+    # N1 NAMD E-field: real psfgen build, reads the force field's own residue charges.
+    "test_real_psf_charges_pin_the_conversion_and_the_terminal_deficit",
+    # N1 NAMD E-field: real psfgen + three real NAMD runs (differential field probe).
+    "test_real_namd_run_holds_anchor_and_accelerates_free_strand_along_field",
     "test_oxdna_http_lifecycle",
     "test_runner_real_binary_status_lifecycle",
     "test_lammps_real_run_end_to_end",   # real lmp CG-DNA run

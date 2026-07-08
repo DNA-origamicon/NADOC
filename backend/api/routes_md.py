@@ -39,6 +39,8 @@ from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     SUPPORTED_PROTOCOLS,
     SegmentSpec,
+    external_forces_block,
+    namd_efield_vector,
     prepare_mgh_slow_release,
     prepare_equilibrium_aware_namd,
     segments_from_manifest,
@@ -139,6 +141,16 @@ class CreateJobRequest(BaseModel):
                     "/ domain / strand / base) to hold immobile via NAMD fixedAtoms for the "
                     "whole ladder. A JOB-REQUEST annotation, never a Design edit; a selection "
                     "that resolves to nothing leaves the run unanchored.",
+    )
+    field: Optional[dict] = Field(
+        None,
+        description="Uniform electric field, shared cross-engine descriptor "
+                    "{'field_pN': <force per NUCLEOTIDE, pN>, 'dir': [x,y,z]} — the same "
+                    "per-nucleotide load oxDNA/LAMMPS apply per bead and CanDo applies per "
+                    "duplex node. Emitted as native NAMD eFieldOn/eField (q·E, exact: a DNA "
+                    "nucleotide carries -1 e). Requires >=1 anchor (an unanchored uniform "
+                    "force just streams the structure). A JOB-REQUEST annotation, never a "
+                    "Design edit.",
     )
     early_stop_relax: bool = Field(
         False,
@@ -620,7 +632,9 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   box: tuple[float, float, float],
                                   mgh_extrabonds: bool, *,
                                   fast: bool = False,
-                                  structure_psf: Optional[str] = None) -> str:
+                                  structure_psf: Optional[str] = None,
+                                  anchors_file: Optional[str] = None,
+                                  field: Optional[dict] = None) -> str:
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
     extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
@@ -634,6 +648,10 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
     # so the production ensemble is unchanged — only integrator/throughput knobs
     # move.  GPUresident is sound here because the solvated box is capped (no
     # covalent bond wraps the periodic image).
+    # Anchors + E-field carry into the unrestrained run — where a field's deflection
+    # actually develops.  Dropping them here would silently un-anchor the field job and
+    # let the uniform force stream the whole structure across the box (COM drift).
+    ext_forces = external_forces_block(anchors_file, field)
     if fast:
         psf = structure_psf or f"{name_stem}.psf"
         rigid, ts, gpu_line = "all", 4.0, "GPUresident        on\n"
@@ -694,7 +712,7 @@ xstFreq            1000
 restartfreq        1000
 binaryrestart      yes
 constraints        off
-outputName         output/{spec.name}
+{ext_forces}outputName         output/{spec.name}
 dcdFile            output/{spec.name}.dcd
 dcdFreq            {spec.dcd_freq}
 xstFile            output/{spec.name}.xst
@@ -707,7 +725,9 @@ run                {spec.steps}
 
 def _seed_production_conf(spec: SegmentSpec, name_stem: str,
                          box: tuple[float, float, float],
-                         mgh_extrabonds: bool, minimize_steps: int) -> str:
+                         mgh_extrabonds: bool, minimize_steps: int, *,
+                         anchors_file: Optional[str] = None,
+                         field: Optional[dict] = None) -> str:
     """Production conf that starts DIRECTLY from the oxDNA-seeded solvated
     structure (no relaxation checkpoint): minimize first to clear fresh-solvent
     clashes, assign velocities at 300 K, then run unrestrained.  Used when the
@@ -715,6 +735,7 @@ def _seed_production_conf(spec: SegmentSpec, name_stem: str,
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
     extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    ext_forces = external_forces_block(anchors_file, field)
     return f"""\
 structure          {name_stem}.psf
 coordinates        {name_stem}.pdb
@@ -763,7 +784,7 @@ xstFreq            1000
 restartfreq        1000
 binaryrestart      yes
 constraints        off
-outputName         output/{spec.name}
+{ext_forces}outputName         output/{spec.name}
 dcdFile            output/{spec.name}.dcd
 dcdFreq            {spec.dcd_freq}
 xstFile            output/{spec.name}.xst
@@ -870,6 +891,12 @@ def _append_production_segments(
         else:                       # no PSF to repartition — fall back to safe path
             fast, timestep_fs = False, 1.0
 
+    # Anchors + E-field are properties of the JOB, recorded at prep; an extended
+    # production stage must run under the same ones (a field job whose production stage
+    # silently lost its anchors would just drift the structure across the box).
+    anchors_file = (manifest.get("files") or {}).get("anchors")
+    field = manifest.get("field") or None
+
     existing = {s["name"] for s in manifest.get("segments", [])}
     stage_idx = len({s["stage"] for s in manifest.get("segments", [])}) + 1
     length_ns = total_steps * timestep_fs / 1_000_000.0
@@ -901,11 +928,13 @@ def _append_production_segments(
         # The FIRST from-seed segment starts from the solvated PDB (minimize +
         # heat); every later split-segment continues from the prior restart.
         if from_seed and not previous:
-            conf = _seed_production_conf(spec, name_stem, box, mgh_extrabonds, min_steps)
+            conf = _seed_production_conf(spec, name_stem, box, mgh_extrabonds, min_steps,
+                                         anchors_file=anchors_file, field=field)
         else:
             conf = _conservative_production_conf(
                 spec, name_stem, box, mgh_extrabonds,
                 fast=fast, structure_psf=structure_psf,
+                anchors_file=anchors_file, field=field,
             )
         (package_dir / f"{spec.name}.conf").write_text(conf)
         segments.append(spec)
@@ -994,6 +1023,29 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         raise HTTPException(400, f"Unknown protocol: {body.protocol!r}")
     if body.salt_mode not in {"screening", "custom"}:
         raise HTTPException(400, f"Unknown salt_mode: {body.salt_mode!r}")
+
+    # E-field guards.  Both are physics/engine facts, not preferences, so they belong
+    # here rather than only in the UI.  `field` is an untyped dict (mirroring CanDo's), so
+    # a malformed one must become a 400, not a 500 from float()/unpacking.
+    try:
+        _has_field = namd_efield_vector(body.field) is not None
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            400, f"Malformed field spec (expected {{'field_pN': <pN>, 'dir': [x,y,z]}}): {exc}")
+    if _has_field:
+        if not body.anchors:
+            # A uniform force on every nucleotide is a net force on the centre of mass:
+            # an unanchored structure just streams across the box instead of deflecting
+            # (the tethered-arm regime needs something to push against).  Same rule the
+            # oxDNA/CanDo panels enforce.
+            raise HTTPException(
+                400, "An electric field needs at least one anchor — otherwise the uniform "
+                     "force just drifts the whole structure across the box.")
+        if "," in (body.devices or ""):
+            # NAMD 3: "EField is not compatible with multi-GPU GPUresident".
+            raise HTTPException(
+                400, "NAMD cannot combine an electric field with a multi-GPU run. "
+                     "Use a single device (e.g. devices='0').")
 
     # Engine availability is cheap — fail fast (synchronously) so the user gets a
     # 400 instead of a job that immediately fails in the background.
@@ -1280,6 +1332,7 @@ async def _prepare_job_bg(
             force_soft      = body.force_soft,
             fast            = body.fast,
             anchors         = body.anchors,
+            field           = body.field,
             progress        = tracker.report,
         )
         logger.info("prep %s: done; package=%s name_stem=%s segments=%d",

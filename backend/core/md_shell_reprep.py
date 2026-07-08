@@ -140,6 +140,8 @@ def prepare_shell_nvt_production(
     prod_steps: int = 12_500_000,
     com_force_constant: float = 1.0,
     dcd_freq: int = 5000,
+    anchors: list | None = None,
+    field: dict | None = None,
 ) -> dict:
     """Re-solvate a design with a water shell and write an NVT production protocol
     into ``job_dir``.
@@ -193,6 +195,12 @@ def prepare_shell_nvt_production(
         minimize_steps=minimize_steps,
         require_full_topology=True,
         fast=True,
+        # Anchors + E-field must go through prepare, not be spliced in afterwards: the
+        # carve RE-SOLVATES, so the fixedAtoms marker PDB has to be rebuilt against the
+        # carved system's PDB (a marker from an earlier package would have the wrong atom
+        # count and NAMD requires fixedAtomsFile to match `structure` atom-for-atom).
+        anchors=anchors,
+        field=field,
     )
     package_dir = job_dir / subdir
     manifest_path = package_dir / "manifest.json"
@@ -233,13 +241,23 @@ def prepare_shell_nvt_production(
         ))
         prev = prod[-1].name
 
+    # Anchors + E-field, as prepare_mgh_slow_release just resolved them for the CARVED
+    # system (it wrote restraints_anchors.pdb against the re-solvated PDB above).  These
+    # confs replace the ladder's, so dropping either here would silently un-anchor /
+    # de-energise the re-prepped run — exactly where an anchored field run lives on a
+    # small GPU.
+    anchors_file = (manifest.get("files") or {}).get("anchors")
+    field = manifest.get("field") or None
+
     (package_dir / f"{equil.name}.conf").write_text(
-        P._segment_conf(equil, name_stem, box, mgh_extrabonds, fast=False)
+        P._segment_conf(equil, name_stem, box, mgh_extrabonds, fast=False,
+                        anchors_file=anchors_file, field=field)
     )
     for p in prod:
         (package_dir / f"{p.name}.conf").write_text(
             P._segment_conf(p, name_stem, box, mgh_extrabonds, fast=True,
-                            structure_psf=hmr_psf, colvars_file=colvars_name)
+                            structure_psf=hmr_psf, colvars_file=colvars_name,
+                            anchors_file=anchors_file, field=field)
         )
 
     # 5. Rewrite the manifest segment list to the short protocol (keep minimisation,

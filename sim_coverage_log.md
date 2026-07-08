@@ -49,6 +49,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(N2) NAMD anchors (fixedAtoms)** ✅ | resolver: base scope→EXACTLY that nucleotide's residue ordinals, strand→all its residues, stale/empty→∅ (drops silently, matches `resolve_anchor_particles`); `sort_chains` natural(export_pdb) vs lexicographic(psfgen) DIVERGES past 26 strands (the fix — wrong order silently pins offset residues); marker PDB marks B=1 on EXACTLY the resolved residues' heavy atoms (H free, HETATM never, RED empty→0 fixed) by contiguity-walk == the ENM's; conf emits `fixedAtoms on/File/Col B` only with anchors; SLOW real-psfgen prepare end-to-end marks exactly + every ladder conf enables it + manifest records it; SLOW 176-strand `export_pdb` output residue sequence == natural, ≠ sorted (divergence proof) | `backend/core/namd_topology.py::{built_pdb_residue_keys,resolve_anchor_residue_indices}`, `backend/core/md_protocols.py::{write_anchor_restraints_pdb,_segment_conf,_min_conf,prepare_mgh_slow_release}`, `tests/test_namd_anchors.py` | N1 (anchored E-field run reuses the fixedAtoms plumbing); the ordinal-bridge + shared-scope-resolver pattern for any atomistic engine; M1 (mrDNA anchors) via the same `resolve_anchor_particles`→bead map |
 
+| **(N1) NAMD native E-field (eField)** ✅ | `namd_efield_vector({field_pN,dir})`→NAMD `eField` (kcal/mol/Å/e) such that `q·E·K == field_pN·dir̂` per nucleotide (q=−1 e = one phosphate, NO fudge); F=q·E inversion pins magnitude+normalisation+SIGN (backbone q<0 → eField antiparallel); None/zero-mag/zero-dir→None; conf emits `eFieldOn/eField` only with a field, zero-field BYTE-IDENTICAL; every conf writer carries it (`_segment_conf`/`_min_conf`/both production/shell-reprep/remote+local resume); SLOW real psfgen: internal residue == −1.000 e, 5TER/3TER termini −0.47/−0.53 e (sum −1) → strand feels −(N−1) e (measured, not assumed); SLOW **real-NAMD differential probe** (field-on vs off, T=0, one strand fixed): fixed atoms move 0, free ΔCOM cosine 0.99996 along +dir, \|ΔCOM\| within 10% of ½(F/M)t² from `field_pN`×NAMD's-own −7 e (independent of `KCAL_MOL_A_IN_PN` — RED-checked, doubling it makes real NAMD falsify); REST guards: field-needs-anchor / field+multi-GPU / malformed→400; prep raises if a field's anchors resolve to ∅ | `backend/core/md_protocols.py::{namd_efield_vector,external_forces_block,_segment_conf,_min_conf,prepare_mgh_slow_release}`, `backend/api/routes_md.py`, `tests/test_namd_efield.py` | every engine's E-FIELD task (M2) — same `{field_pN,dir}` per-nt-force descriptor; the "predict from the ENGINE'S OWN charges, not the emitted vector" independence pattern; N4 field-source (emit from the pre-display frame) |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
@@ -510,6 +512,33 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   file NAMD matches positionally, don't re-derive the order independently — reproduce the specific generator's
   ordering, and test at a strand count that makes the orderings diverge.**
 
+### 2026-07-07 — `N1` NAMD native E-field (eFieldOn/eField) — closes NAMD's anchor+field pair
+
+- **Comparable prediction gained, not just a run:** NAMD now drives every nucleotide with the SAME per-nt force
+  `field_pN` oxDNA/LAMMPS/CanDo use — verified by a real-NAMD differential probe: an anchored strand holds
+  exactly, the free strand's field-isolated ΔCOM points along +field (cosine 0.99996) with magnitude within 10%
+  of `½(F/M)t²` computed from `field_pN` and NAMD's own −7 e strand charge. So a NAMD field-deflection descriptor
+  is now directly comparable to oxDNA's (S4) and CanDo's (C2) on the same tethered-arm regime.
+- **Mechanism.** `namd_efield_vector({field_pN,dir})` → NAMD `eField` (kcal·mol⁻¹·Å⁻¹·e⁻¹) with the exact
+  conversion `eField = field_pN·dir̂ / (K·q)`, `K=69.477 pN` per kcal·mol⁻¹·Å⁻¹, `q=−1 e`. NO effective-charge
+  fudge (unlike the frontend's V/m→pN `q_eff≈0.25` helper): in **explicit solvent** the condensed counterions are
+  real particles that screen the field themselves, so the physically-correct AND cross-engine-comparable driving
+  force on the DNA is the bare −1 e per phosphate. Emitted via `external_forces_block` — the ONE writer that now
+  owns both the N2 `fixedAtoms` block and the field, DRY across `_segment_conf`/`_min_conf`/both production
+  writers/shell-reprep/remote+local resume.
+- **Review-caught HIGH (fixed).** The API guard "a field needs an anchor" counts anchor CHIPS, but a non-empty
+  scope that RESOLVES to nothing (stale / ssDNA-only) slips past it → prep now raises rather than launch the
+  COM-drift run the guard exists to prevent. Two production conf writers (`_conservative`/`_seed`) also silently
+  dropped anchors since N2 — now carry both anchors and field. `md_shell_reprep` read anchors/field back from a
+  manifest it wrote WITHOUT them (no-op) — now threads them through prepare so the marker PDB is rebuilt for the
+  carved system.
+- **Engine facts extracted from the NAMD binary, not guessed.** `strings namd3` gave the exact fatal
+  "EField is not compatible with multi-GPU GPUresident" (→ a 400 guard; single-GPU is fine) and confirmed
+  NPT+`fixedAtoms` runs without error (a pressure-accuracy caveat for LARGE fixed regions, already documented in
+  the N2 code comment; negligible for end-anchors). Also fixed 2 pre-existing frontend bugs the review surfaced:
+  toast severity `'warn'`→`'warning'`, and a V/m sub-panel's duplicate inline `display:grid` (rendered visible
+  then inverted on first click).
+
 ## Lessons (anti-patterns banked)
 
 ### Banked from O1
@@ -546,6 +575,25 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   (`L→0`/huge → `L**3` overflow) before the physics is wrong. Pick load magnitudes in the converged, stable band
   and assert *properties* (monotone, along-field, held) rather than absolute deflection matching a calibration —
   the absolute V/m→force calibration is a separate, deferred concern (editable effective-charge, per the plan).
+
+### Banked from N1
+
+- **Predict the response from the ENGINE'S OWN quantities, not from the code under test.** The obvious
+  real-engine field oracle — "compute the expected deflection from the `eField` vector we emitted, assert NAMD
+  reproduces it" — is green-by-construction for the unit conversion: a wrong `KCAL_MOL_A_IN_PN` scales BOTH the
+  emitted `eField` (hence NAMD's real force) and the prediction, so they still agree. The fix is to state the
+  prediction in the SHARED DESCRIPTOR's own units (`field_pN`) and multiply by a charge read from NAMD's OWN PSF
+  (`abs(q_free)` phosphates) with an SI-only accel constant — nothing on the assertion side touches the
+  production constant. RED-checked: doubling `KCAL_MOL_A_IN_PN` then makes REAL NAMD falsify it. Generalize:
+  a cross-engine oracle that feeds the engine a value and predicts the result from that SAME value only tests
+  plumbing; predict from an INDEPENDENT measurement of the engine's state.
+- **A "force per nucleotide" is not uniform at strand ends — measure the force field, don't assume it.** Writing
+  the oracle first caught my own error: I assumed every DNA residue is −1 e. The real psfgen PSF shows 5TER/3TER
+  hydroxyl termini at −0.47/−0.53 e (they sum to one phosphate), so an N-mer feels −(N−1) e — NAMD is right,
+  oxDNA's uniform per-bead `field_pN` is the approximation. The deficit is ~2% on a real origami. Do NOT "fix" it
+  by rescaling `eField` to match oxDNA's total — that corrupts the internal per-nt load, which is the quantity
+  the engines actually share. Bank: when a descriptor claims "per X uniform", verify it against the force field
+  at the boundaries before pinning a total.
 
 ## Difficulties ledger (genuinely-stuck items + why)
 

@@ -22,6 +22,7 @@ import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol
 import { flattenJobTree } from './job_tree.js'
 import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
+import { initCandoEfieldSetup } from './cando_efield_setup.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { formatBytes } from './format_bytes.js'
@@ -1382,6 +1383,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // disk space) don't apply and would wrongly block a submit while a local job runs.
     const runTarget = _currentRunTarget()
     const isLocalRun = runTarget !== 'alpine'
+
+    const anchors = _anchorsCard?.getAnchors?.() ?? []
+    const fieldSpec = _efieldCard?.getFieldSpec?.()
+    const fieldOn = !!_efieldCard?.isEnabled?.() && (fieldSpec?.field_pN ?? 0) > 0
+    // A uniform field with no anchor just streams the whole structure (COM drift) —
+    // mirror the oxDNA/CanDo panels' guard rather than launch a meaningless run.
+    if (fieldOn && !anchors.length) {
+      showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card.',
+        { severity: 'warning' })
+      return
+    }
+    // NAMD 3: "EField is not compatible with multi-GPU GPUresident".
+    if (fieldOn && (devicesInput?.value?.trim() || '0').includes(',')) {
+      showToast('NAMD cannot combine an electric field with a multi-GPU run — use a single device.',
+        { severity: 'warning' })
+      return
+    }
+
     if (isLocalRun && !(await confirmNoConcurrentJob())) return
     if (isLocalRun && !(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
     _launching = true
@@ -1404,8 +1423,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
-      anchors:        (_anchorsCard?.getAnchors?.() ?? []).length
-                        ? _anchorsCard.getAnchors() : null,
+      anchors:        anchors.length ? anchors : null,
+      field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
     }
 
     // Local-disk forecast only applies to a local run; an Alpine run writes its
@@ -2528,6 +2547,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       toggle: 'md-anchors-toggle', arrow: 'md-anchors-arrow', body: 'md-anchors-body',
       add: 'md-anchors-add', clear: 'md-anchors-clear', list: 'md-anchors-list',
       status: 'md-anchors-status',
+    },
+  })
+
+  // Electric-field card — the shared numeric field factory (same one the CanDo panel
+  // binds), feeding NAMD's native eFieldOn/eField.  `field_pN` is the cross-engine
+  // per-nucleotide force descriptor; the oxDNA card owns the one in-scene arrow gizmo.
+  const _efieldCard = initCandoEfieldSetup({
+    ids: {
+      toggle: 'md-efield-toggle', arrow: 'md-efield-arrow', body: 'md-efield-body',
+      enable: 'md-efield-enable', mag: 'md-efield-mag',
+      vpmToggle: 'md-efield-vpm-toggle', vpmArrow: 'md-efield-vpm-arrow',
+      vpmBody: 'md-efield-vpm-body', vpm: 'md-efield-vpm', qeff: 'md-efield-qeff',
+      vpmApply: 'md-efield-vpm-apply',
+      dirX: 'md-efield-dir-x', dirY: 'md-efield-dir-y', dirZ: 'md-efield-dir-z',
+      ready: 'md-efield-ready',
     },
   })
 
