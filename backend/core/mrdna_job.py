@@ -65,6 +65,13 @@ class MrdnaJob:
     # resolves to nothing leaves the run unanchored.  See backend/core/mrdna_anchors.py.
     anchors:             Optional[list] = None
     stages:              list[MrdnaStageStatus] = field(default_factory=list)
+    # Uniform E-field descriptor (shared cross-engine form: {"field_pN": <force per
+    # NUCLEOTIDE, pN>, "dir": [x,y,z]}) applied as a constant per-bead force via ARBD
+    # force grids.  A JOB-REQUEST annotation, never a Design edit; needs >=1 anchor to
+    # hold against COM drift.  See backend/core/mrdna_field.py.  (Declared after
+    # ``stages`` so the ``field`` attribute name doesn't shadow ``dataclasses.field``
+    # used just above.)
+    e_field:             Optional[dict] = None
     error:               Optional[str] = None
     arbd_pid:            Optional[int] = None
     design_source_path:  Optional[str] = None
@@ -107,6 +114,8 @@ class MrdnaJob:
         data["stages"] = [MrdnaStageStatus(**s) for s in data.get("stages", [])]
         data.setdefault("fine_steps", 0)
         data.setdefault("design_source_path", None)
+        data.setdefault("anchors", None)
+        data.setdefault("e_field", None)
         data.setdefault("sim_seconds", None)
         data.setdefault("n_override", None)
         data.setdefault("n_beads", None)
@@ -154,6 +163,7 @@ def new_mrdna_job(
     n_nucleotides: int = 0,
     device: str = "0",
     anchors: Optional[list] = None,
+    e_field: Optional[dict] = None,
     design_source_path: Optional[str] = None,
     design_fingerprint: Optional[str] = None,
     feature_log_position: Optional[int] = None,
@@ -172,6 +182,7 @@ def new_mrdna_job(
         output_period      = output_period,
         device             = device,
         anchors            = anchors,
+        e_field            = e_field,
         stages             = stages,
         design_source_path = design_source_path,
         design_fingerprint = design_fingerprint,

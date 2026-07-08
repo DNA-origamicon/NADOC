@@ -335,6 +335,8 @@ _SLOW_TESTS = {
     "test_real_namd_run_holds_anchor_and_accelerates_free_strand_along_field",
     # M1 mrDNA anchors: real short ARBD coarse run (anchored beads hold vs free move).
     "test_real_arbd_anchored_beads_hold",
+    # M2 mrDNA E-field: two real ARBD coarse runs (field-on vs off deflection probe).
+    "test_real_arbd_field_deflects_along_field",
     "test_oxdna_http_lifecycle",
     "test_runner_real_binary_status_lifecycle",
     "test_lammps_real_run_end_to_end",   # real lmp CG-DNA run

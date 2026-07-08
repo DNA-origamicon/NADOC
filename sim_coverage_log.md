@@ -53,6 +53,8 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(M1) mrDNA anchors (ARBD RESTRAINT)** ✅ | shared `resolve_anchor_particles`→per-nt `(helix,bp,dir)` keys→nearest CG bead by 3D POSITION (mrDNA groups helices by base-pairing not NADOC helix id + collapses each bp to 1 fwd bead — name/index map unreliable, so position via the input `r` array; both r+beads in Å same frame, RED-checked); stale/ssDNA/extra-base keys drop→`[]`; strand scope→contiguous bead run, strict non-empty subset, every anchored-nt's nearest bead is held; **FAST end-to-end: real ARBD `.restraint.txt` (via `simulate(dry_run)`) carries EXACTLY `len(held)` RESTRAINT lines**; idx pinned two independent ways (flat `s.beads` enumerate == ARBD `.idx` for coarse/no-orientation-bead model) set-equal; k==our spring, pinned pos==bead's own pos (an anchor); `install_anchor_restraints` wraps `generate_bead_model` so RESTRAINTs survive `clear_beads()`+regen between multiresolution stages (RED: 0 without wrapper, ≥1 with); coarse single-pass pins the as-built beads; SLOW **real ARBD coarse run**: anchored beads hold 0.55 Å vs free 3.81 Å (**7×**, median, DCD final frame) | `backend/core/mrdna_anchors.py::{resolve_anchor_beads,apply_anchor_restraints,install_anchor_restraints,restraint_records}`, `backend/core/{mrdna_job,mrdna_runner}.py`, `backend/api/routes_mrdna.py`, `tests/test_mrdna_anchors.py` | M2 (mrDNA E-field needs anchors — reuse `install_anchor_restraints` + the position-bead resolver); any engine that beads a design + needs a job-request anchor (the shared-scope→engine-index bridge, position variant) |
 
+| **(M2) mrDNA E-field (ARBD grid-potential force)** ✅ | per-bead force = `field_pN·(nt in bead)·(pN→kcal/mol/Å)·dir̂` with `nt in bead = mass/dpn`, `dpn = total_bead_mass/total_nt` (beads charge 0 → force applied directly), asserted vs a FIRST-PRINCIPLES pN→kcal/mol/Å (not the code constant); 2×mass→2×force; TOTAL force = `field_pN·total_nt`; constant force via a RAMP POTENTIAL `U=-(F·r)` through `add_grid_potential`/`gridFile` (`-∇U==F` round-tripped from the `.dx` via `loadGrid`) — **NOT `forceXGrid`, which crashes ARBD on a constant grid**; per-type grid wiring + dry-run conf emits `gridFile field_*.dx`; `install_field_force` wraps `generate_bead_model` so grids re-attach to fresh types after regen (RED-checked), idempotent (grid_potentials overwritten); REST guards field-needs-anchor/malformed(incl non-numeric)→400; runner RAISES if a field's anchors held 0 beads; SLOW **real ARBD field-on vs off, one strand anchored**: anchored held (~0.5 Å) while free bulk deflects ALONG +field (~8.5 Å vs field-off ±2 Å), \|Δ\| within [0.45,2.0]× the overdamped Brownian pred `D·F·T/(k_B·T)` from the engine's OWN diffusivity/mass + field_pN via the first-principles constant (independent of the emission constant) | `backend/core/mrdna_field.py::{field_force_vector,dalton_per_nucleotide,_write_ramp_grid,apply_field_force,install_field_force}`, `backend/core/{mrdna_job,mrdna_runner}.py`, `backend/api/routes_mrdna.py`, `tests/test_mrdna_field.py` | M4 (mrDNA linkers) + M3 (extra bases) reuse the per-type grid + regen-wrap; any CG engine's uniform-field task (the ramp-potential idiom + per-nt→per-bead mass-scaling + overdamped-drift oracle); N4/M5 field-source (emit deflection from the relaxed frame) |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
@@ -90,6 +92,52 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
 - **Comparable prediction gained, not just a run**: a mrDNA CG run now *holds* a chosen scope (7× hold/move) while
   the rest relaxes — the anchored-region prediction the other engines (C1 CanDo BC, N2 NAMD fixedAtoms) already
   emit, on the SAME shared scope resolver; and it unblocks M2's anchored-field cross-validation.
+
+### 2026-07-08 — `M2` mrDNA uniform E-field (CLOSES M-ALL-ANCHORS-FIELD)
+
+- **Picked** `M2` — the handoff's `▶ NEXT` and the last piece of `M-ALL-ANCHORS-FIELD` (dep M1 done). Reuses M1's
+  anchor plumbing + the shared per-nt force descriptor CanDo (C2) / NAMD (N1) already emit.
+- **Investigated** the real mrDNA/ARBD force seams (read-only): ARBD restraints are harmonic-only (no constant
+  force); the ARBD-native uniform force is a per-`ParticleType` grid — either `forceXGrid` (tabulated force) or a
+  `gridFile` potential. Empirically (throwaway probes on a built 6HB): DNA beads carry **charge 0** (so no q·E
+  path — apply force directly), split into 2 types D000 (mass 690 ≈5 nt) / D001 (mass 1380 ≈10 nt) with mass ∝ nt
+  count; integrator is Langevin past a ~1-timestep relaxation ⇒ **overdamped** drift `Δx = D·F·T/(k_B·T)`.
+- **KEYSTONE (cost me a crash):** setting `forceXGrid`/`forceGridScale` with a constant 2×2×2 `.dx` → real ARBD
+  **CUDA illegal-memory-access crash** regardless of force magnitude (field-off ran clean, so it was the grid
+  format, not the force). The mrDNA-blessed idiom is a **ramp POTENTIAL** `U=-(F·r)` (`arbdmodel.grid.constant_force`)
+  applied via `add_grid_potential`/`gridFile` — `-∇U = F` gives the uniform force with no crash. Switched to that.
+- **Built** `backend/core/mrdna_field.py` (pure helpers, core imports no `backend/api`): `field_force_vector`
+  (per-bead force scaled by `mass/dalton_per_nucleotide`, so TOTAL force = `field_pN × total_nt` exactly),
+  `_write_ramp_grid` (linear ramp `.dx`), `apply_field_force` (per-type grid), `install_field_force` (wraps
+  `generate_bead_model` so grids survive bead regeneration between multiresolution stages, idempotent).
+  `MrdnaJob.e_field` (named `e_field` NOT `field` — `dataclasses.field` is used for `stages` just above and would
+  shadow) + `CreateMrdnaJobRequest.field` + guards + runner install after anchors (raises on 0 held beads).
+  All JOB-REQUEST annotation, nothing written to the Design (Three-Layer Law). **main.js LOC Δ = 0** (backend-only).
+- **Oracle** `tests/test_mrdna_field.py` (9 fast + 1 slow), oracle-first. FAST: per-bead force vs a FIRST-PRINCIPLES
+  pN→kcal/mol/Å (independent of the code constant), 2×mass→2×force, `.dx` ramp `-∇U==F` round-trip via `loadGrid`,
+  per-type grid wiring, dry-run conf emits `gridFile field_*.dx`, regen-survival RED-checked, 2 REST guards. SLOW
+  **real ARBD (2 coarse runs, field-on vs off, one strand anchored)**: anchored held ~0.5 Å while the free bulk
+  deflects ALONG +field ~8.5 Å (field-off ±2 Å wander), magnitude within [0.45,2.0]× the overdamped Brownian
+  prediction from the engine's OWN diffusivity/mass — **~12% agreement** at the operating point. Registered slow
+  in `conftest.py`. Field/steps chosen so the field drift dominates the anchored bulk's stochastic relaxation
+  wander while the anchor-adjacent bonds stay intact (a much stronger field rips them → ARBD instability).
+- **Fresh-context review** (read-only subagent): product code CORRECT; three findings, all fixed — (1) the
+  field-needs-anchor guard only counted anchor CHIPS → the runner now RAISES if the field's anchors resolve to 0
+  held beads (the actual COM-drift guard, mirroring N1's prep raise); (2) the slow oracle's magnitude prediction
+  used the code's `field_force_vector` so the emission constant CANCELLED in the ratio (green-by-construction for
+  the constant) → rebuilt the prediction from `field_pN × _PN_IN_KCAL_MOL_A` directly so a corrupted emission
+  constant now falsifies (the exact constant stays pinned by the FAST oracle); (3) a non-numeric field value
+  raised inside the route → now caught → clean 400. Band tightened [0.35,2.5]→[0.45,2.0] to catch a ≥2× error.
+- **Gates**: 10/10 oracle (9 fast + 1 slow, slow verified green ×4); `just test` 4345 passed / 72 skipped / 1 xfailed
+  (fresh full suite, no drop; lone xfail = pre-existing job-archive xdist flake); `ruff` clean on touched files
+  (pre-existing debt in other files untouched, per `feedback_no_bulk_reformat`).
+  No card/UI → display-vs-oracle N/A (like C1/C2/M1). Live field-job gesture owes an MV row (no in-app field
+  picker for mrDNA yet — the field is API-only, like M1's anchors).
+- **Comparable prediction gained, not just a run:** a mrDNA CG run now DEFLECTS a resolved free region ALONG a
+  uniform field (anchor held, ~8.5 Å along-field vs ±2 Å off) at ~12% of the overdamped Brownian prediction from
+  its OWN mobility — the anchored-field deflection CanDo (C2) + NAMD (N1) already emit, off the SAME per-nt force
+  descriptor — **closing M-ALL-ANCHORS-FIELD**: all three job engines run an anchored E-field job with a
+  comparable along-field descriptor.
 
 ### 2026-07-05 — `S1` shape descriptors (shared-metric track head)
 
@@ -630,6 +678,32 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
   by rescaling `eField` to match oxDNA's total — that corrupts the internal per-nt load, which is the quantity
   the engines actually share. Bank: when a descriptor claims "per X uniform", verify it against the force field
   at the boundaries before pinning a total.
+
+### Banked from M2
+
+- **ARBD constant force = a ramp POTENTIAL grid, NOT `forceXGrid`.** The obvious "tabulated force" path
+  (`ParticleType.forceXGrid`/`forceYGrid`/`forceZGrid` + a constant `.dx`) **crashes real ARBD** (CUDA illegal
+  memory access) regardless of force magnitude — confirmed by A/B (field-off ran clean, field-on with the grid
+  crashed at any strength). The mrDNA-blessed idiom is `arbdmodel.grid.constant_force` → a linear ramp potential
+  `U=-(F·r)` applied via `add_grid_potential`/`gridFile`, whose negative gradient is the uniform force. Bank:
+  reach for the engine's OWN helper (`constant_force`) before hand-rolling a grid; probe A/B (feature-off vs on)
+  isolates a format crash from a physics blow-up.
+- **A CG bead's field force scales with its nucleotide content, recovered from its MASS.** The shared descriptor
+  is force per NUCLEOTIDE; a coarse bead holds several bp. mrDNA CG beads carry **charge 0** (no q·E to lean on),
+  but their mass is ∝ nt count (measured: 1380 Da/full 5-bp bead, 690/half), so `nt in bead = mass/dpn` with
+  `dpn = total_bead_mass/total_nt`. Scaling the per-type force by mass makes the TOTAL applied force `field_pN ×
+  total_nt` exactly — the same total the per-nt engines apply — with NO per-bead approximation (one type = one
+  mass = exact). Generalizes to any CG engine whose beads coarse-grain multiple nucleotides.
+- **A damped CG (Langevin/Brownian) field oracle predicts OVERDAMPED drift, not ballistic ½at².** Past its
+  ~1-timestep velocity relaxation the bead is overdamped, so a constant force gives terminal drift `Δx =
+  D·F·T/(k_B·T)` from the engine's OWN per-type diffusivity `D` (Å²/ns) — not NAMD's short-time `½(F/M)t²`. On a
+  small tethered structure the field drift competes with a stochastic ±2 Å relaxation wander of the loosely-held
+  free bulk, so pick field/steps where the field drift is several × the wander (but gentle enough that
+  anchor-adjacent bonds don't rip → ARBD instability) and assert a field-on-vs-off DIFFERENTIAL. **Independence
+  (the N1 trap, re-hit here):** predicting the drift from the code's own `field_force_vector` cancels the
+  emission constant in the ratio (green-by-construction) — predict the force from `field_pN × first-principles
+  pN→kcal/mol/Å` instead, so a corrupted emission constant falsifies; keep the exact-constant check in the FAST
+  oracle.
 
 ## Difficulties ledger (genuinely-stuck items + why)
 

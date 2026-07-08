@@ -250,6 +250,35 @@ fills in as milestones complete.
   the rest relaxes — the anchored-region prediction C1/N2 already emit, on the SAME resolver — and unblocks M2's
   anchored-field cross-validation, the last piece of M-ALL-ANCHORS-FIELD.
 
+- **`M2` — mrDNA uniform E-field (ARBD grid-potential force)** (CLOSES M-ALL-ANCHORS-FIELD) · shape: backend field
+  plumbing, no card — `backend/core/mrdna_field.py` turns the SHARED `{field_pN, dir}` per-nucleotide descriptor
+  into a constant per-bead force = `field_pN × (nt in bead) × (pN→kcal/mol/Å) × dir̂`, with `nt in bead =
+  bead_mass/dalton_per_nucleotide` (DNA beads carry charge 0, so force is applied directly, not q·E), delivered
+  through ARBD's per-`ParticleType` grid potential — a linear ramp `U=-(F·r)` via `add_grid_potential`/`gridFile`
+  whose negative gradient is the uniform force (the `forceXGrid` tabulated-force path CRASHES ARBD on a constant
+  grid; the ramp-potential idiom is the fix). Total applied force = `field_pN × total_nt` exactly. `install_field_force`
+  wraps `generate_bead_model` so the grids re-attach to fresh `ParticleType`s after mrDNA's bead regeneration
+  (idempotent). `MrdnaJob.e_field` + route `field` + guards (malformed/zero→400 incl non-numeric; field-needs-anchor→400)
+  + runner install after anchors (RAISES if the field's anchors held 0 beads → COM-drift) · feature: E-field
+  (mrDNA's field coverage; needs M1's anchors to hold against drift) · engines now comparable: mrDNA now runs an
+  anchored uniform-field job producing an along-field deflection descriptor the same way CanDo (C2 nodal q·E) +
+  NAMD (N1 eField) do, off the SAME per-nt force descriptor · oracle: `tests/test_mrdna_field.py` 9 fast + 1 slow
+  (fast: per-bead force vs **FIRST-PRINCIPLES** pN→kcal/mol/Å — not the code constant, so a wrong constant fails;
+  2×mass→2×force; ramp `.dx` round-trip `-∇U==F`; per-type grid wiring; dry-run conf emits `gridFile field_*.dx`;
+  regen-survival RED-checked; 2 REST guards. slow: **real ARBD, field-on vs off, one strand anchored** — anchored
+  held (~0.5 Å) while free bulk deflects ALONG +field (~8.5 Å vs field-off ±2 Å wander), magnitude within
+  [0.45,2.0]× the overdamped Brownian prediction `D·F·T/(k_B·T)` from the engine's OWN diffusivity/mass + field_pN
+  via the first-principles constant, ~12% agreement observed) · main.js LOC Δ = 0 (backend only) · tests: 10/10
+  oracle, `just test` 4345 passed / 72 skipped / 1 xfailed (fresh full suite; +11 over the M1 4334 baseline, no drop), ruff clean on touched files ·
+  display-vs-oracle: N/A (headless field entry point, no card) · fresh-context review: product code correct; the
+  three review findings all fixed (runner 0-held-beads guard, slow-oracle prediction made independent of the
+  emission constant, malformed-type field → 400) ·
+  **Comparable prediction gained, not just a run:** a mrDNA CG run now DEFLECTS a resolved free region ALONG a
+  uniform field (held anchor, ~8.5 Å along-field vs ±2 Å off), at ~12% of the overdamped Brownian prediction from
+  its OWN mobility — the same anchored-field deflection CanDo (C2) + NAMD (N1) emit, off the SAME per-nt force
+  descriptor — closing **M-ALL-ANCHORS-FIELD**: all three job engines (CanDo, NAMD, mrDNA) now run an anchored
+  E-field job with a comparable along-field deflection descriptor.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -280,7 +309,7 @@ read/export the agreement) or a future headless two-engine cross-run.
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | **DONE** (C1,C2,S4,S5,O1 shipped 2026-07-06) — FEM predicts the anchored field-deflection regime from oxDNA's per-nt force; real agreement number awaits C5 field-source |
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | **DONE** (C1,C2,C3,C4,C5 shipped 2026-07-07) — anchors + E-field + extra-bases + linkers all covered, CanDo feeds the comparison card |
-| `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending — anchors: CanDo (C1)✓ + NAMD (N2)✓ + **mrDNA (M1)✓**; field: CanDo (C2)✓ + NAMD (N1)✓; **all three anchor engines done + NAMD's anchor+field pair COMPLETE**; remaining only M2 (mrDNA field, dep=M1 ✓ met) |
+| `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | **DONE** (2026-07-08) — anchors: CanDo (C1)✓ + NAMD (N2)✓ + mrDNA (M1)✓; field: CanDo (C2)✓ + NAMD (N1)✓ + **mrDNA (M2)✓**; every engine now runs an anchored E-field job producing a comparable along-field deflection descriptor |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 
 ## Data summaries (plots + fits)

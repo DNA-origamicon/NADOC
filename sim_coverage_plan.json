@@ -60,7 +60,7 @@
         "N1",
         "N2"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "M-FULL-COVERAGE",
@@ -284,8 +284,8 @@
       "fast_slow": "fast+slow",
       "oracle": "FAST: shared field-response on a mock deflected frame; force block written correctly. SLOW: real ARBD anchored field run -> deflection along field.",
       "milestone": "M-ALL-ANCHORS-FIELD",
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "mrDNA uniform E-field via ARBD grid-potential forces (backend-only, JOB-REQUEST annotation, never a Design edit). backend/core/mrdna_field.py turns the SHARED {field_pN (per NUCLEOTIDE), dir} descriptor into a constant per-bead force scaled by each bead's nucleotide content (= bead_mass/dalton_per_nucleotide; DNA beads carry charge 0 so force is applied directly, not q·E), applied through ARBD's per-ParticleType grid potential: a linear ramp U=-(F·r) via add_grid_potential/gridFile whose negative gradient is the uniform force F (kcal/mol/Å). KEY: the forceXGrid tabulated-force path CRASHES ARBD (illegal memory access) on a constant grid — the ramp-potential idiom (arbdmodel.grid.constant_force) is the correct mechanism. Total applied force = field_pN×total_nt exactly (mass terms collapse), matching the per-nt engines. install_field_force wraps generate_bead_model so the grids re-attach to the fresh ParticleType objects after mrDNA's bead regeneration between multiresolution stages (idempotent: grid_potentials overwritten). MrdnaJob.e_field (named e_field not 'field' to avoid shadowing dataclasses.field) + CreateMrdnaJobRequest.field + guards (malformed/zero →400 incl non-numeric caught; field-needs-anchor →400) + runner install after anchors, which RAISES if the field's anchors resolved to 0 held beads (else COM-drift). Oracle tests/test_mrdna_field.py 9 fast + 1 slow: fast = per-bead force vs FIRST-PRINCIPLES pN→kcal/mol/Å (not the code constant), 2×mass→2×force, ramp .dx round-trip (-∇U==F via loadGrid), per-type grid wiring, dry-run conf emits gridFile field_*.dx, regen-survival RED-checked, 2 REST guards. SLOW real ARBD (2 coarse runs, field-on vs off, one strand anchored): anchored held (0.5Å) while free bulk deflects ALONG +field (proj ~8.5Å vs field-off ±2Å wander), magnitude within [0.45,2.0]× the overdamped Brownian prediction D·F·T/(k_B·T) from the engine's OWN diffusivity/mass + field_pN via the first-principles constant (~12% agreement observed; independent of the emission constant, so a corrupted constant falsifies). Registered slow in conftest. ruff clean; main.js LOC Δ=0 (backend-only). Closes M-ALL-ANCHORS-FIELD (every engine — CanDo C1/C2, NAMD N1/N2, mrDNA M1/M2 — now runs an anchored E-field job with a comparable along-field deflection descriptor)."
     },
     {
       "id": "M3",

@@ -110,6 +110,14 @@ class CreateMrdnaJobRequest(BaseModel):
                     "a Design edit; a selection resolving to nothing leaves the run "
                     "unanchored (needed under a uniform field to stop COM drift).",
     )
+    field:         Optional[dict] = Field(
+        None,
+        description="Uniform E-field descriptor (shared oxDNA/NAMD/CanDo form: "
+                    "{\"field_pN\": <force per NUCLEOTIDE, pN>, \"dir\": [x,y,z]}) applied "
+                    "as a constant per-bead force via ARBD force grids, scaled by each "
+                    "bead's nucleotide content. A JOB-REQUEST annotation, never a Design "
+                    "edit. Requires >=1 anchor to hold against COM drift.",
+    )
 
 
 # ── Create / list / status ────────────────────────────────────────────────────
@@ -130,6 +138,26 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
     if not design.helices:
         raise HTTPException(400, "Design has no helices to relax.")
 
+    if body.field:
+        from backend.core.mrdna_field import parse_field
+        try:
+            parsed_field = parse_field(body.field)
+        except (ValueError, TypeError):
+            parsed_field = None
+        if parsed_field is None:
+            raise HTTPException(
+                400,
+                "Malformed E-field: expected {\"field_pN\": <non-zero pN>, "
+                "\"dir\": [x,y,z]} with a non-zero direction.",
+            )
+        if not body.anchors:
+            raise HTTPException(
+                400,
+                "A uniform E-field needs at least one anchor to hold against — "
+                "otherwise the whole structure just streams down-field (COM drift). "
+                "Add an anchor scope before launching a field run.",
+            )
+
     name = None
     if body.design_source_path:
         name = Path(body.design_source_path).stem or None
@@ -149,6 +177,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         n_nucleotides      = len(_strand_nucleotide_order(design)),
         device             = body.device,
         anchors            = body.anchors,
+        e_field            = body.field,
         design_source_path = body.design_source_path,
         design_fingerprint = oxdna_design_fingerprint(design),
         feature_log_position = effective_feature_log_position(design),
