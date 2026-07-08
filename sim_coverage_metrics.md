@@ -329,6 +329,28 @@ fills in as milestones complete.
   anchors it as the gold-override reference — oxDNA/CanDo/mrDNA's shape AND RMSF are now scored against the
   experimentally-validated MD engine on the same design through one shared generate/view/export card.
 
+- **`M3` — mrDNA extra crossover bases PRESENT as flexible ssDNA in the BUILT ARBD model** · shape: test-only
+  model-level oracle (no production code — the bridge that materializes `Crossover.extra_bases` as ssDNA beads
+  shipped pre-loop in `e47edb8`; M3 was the explicit VERIFY task); new `_model_seg_stats` helper in
+  `tests/test_mrdna_extra_bases.py` builds the `SegmentModel` (`mrdna_model_from_nadoc` →
+  `model_from_basepair_stack_3prime`) and sums nt by segment class + bead children · feature: extra-bases
+  (mrDNA feature row) · engines now comparable: mrDNA extra-base flexibility is now headlessly verifiable at the
+  built-model level and mirrors CanDo's C3 signal (inserts → more local flexibility, never a bend direction) ·
+  oracle: 3 mrdna-gated FAST pins (~0.8s each) — (a) built-model total nt grows by EXACTLY `n_extra` for a
+  single "TT" AND all-crossovers "TT"; (b) ALL growth in `SingleStrandedSegment`, `DoubleStrandedSegment` nt
+  INVARIANT (`ds_nt`=504) → inserts ssDNA/flexible/non-rigid; (c) bulk bead cloud grows 136→229; measured
+  all-crossovers deltas `d_tot=106,d_ss=106,d_ds=0,d_beads=93`; strengthens the pre-loop coarse pin #6
+  (`with_ss>base_ss`); can-go-red 3 ways (dropped→d_tot≠n_extra; ds-paired→ds changes; other type→ss≠n_extra) ·
+  main.js LOC Δ = 0 (backend/test-only) · tests: oracle 15/15 green, `just lint` clean on file (~19 pre-existing
+  ruff errors in OTHER files untouched — banked debt); full `just test` 4366 passed / 72 skip / 1 xfail + 1
+  **pre-existing** non-deterministic xdist isolation flake (`test_cando_extra_bases`, unrelated slow FEM file,
+  passes in isolation, different victim than the test-fast run) — no drop attributable to M3 (added 5 passing
+  tests); polluter bisected & logged to `issues_ledger.md` · display-vs-oracle: N/A (headless verification, no
+  new card/display; existing pin #7 slow-covers the display toggles) · fresh-context review: no real gaps ·
+  **Comparable prediction gained, not just a run:** the mrDNA CG model's flexible-ssDNA content provably tracks
+  extra crossover bases — one flexible ss nucleotide per inserted base in the simulated ARBD topology, a
+  sign-safe cross-engine flexibility signal (vs C3).
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×

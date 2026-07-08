@@ -57,9 +57,42 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(N4) NAMD source bundle (gold override)** ✅ | descriptors == `compute_shape_descriptors` on the exact core-filtered frame (same S1 estimator, ABSOLUTE); core mask drops ssDNA ends; `md_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; empty core→None (RED); **THE HEADLINE: `[oxdna,cando,namd]`→`build_comparison_report` references.shape=='namd' AND references.rmsf=='namd' — NAMD overrides BOTH policy engines (gold override)**; negative control (absent NAMD → shape=oxdna/rmsf=cando, proving the flip is NAMD-caused); SLOW real 2hb NAMD DCD→`md_rmsf`→ready namd source, override holds on real data | `backend/core/namd_shape_source.py::build_namd_shape_source`, `backend/api/routes_md.py::get_md_shape_source`, `tests/test_namd_shape_source.py` | the source-bundle contract, complete — all four engines (O1/C5/M5/N4) now feed the card; the gold-override assertion pattern for any future NAMD-referenced observable |
 
+| **(M3) mrDNA extra bases in the BUILT model** ✅ | inserts survive coarse-graining into the ARBD `SegmentModel` as flexible ssDNA — `_model_seg_stats` builds the model (`model_from_basepair_stack_3prime`) & sums nt by segment class + bead children: built-model total nt grows by EXACTLY `n_extra` (single insert AND all-crossovers); ALL growth lands in `SingleStrandedSegment` while `DoubleStrandedSegment` nt is INVARIANT (ds_nt=504 unchanged) → inserts are ssDNA/flexible/non-rigid, never WC-paired into a rigid segment; bulk bead cloud grows (136→229). Strengthens pre-loop coarse pin #6 (`with_ss>base_ss`) into a quantitative present-as-flexible-ssDNA proof. **PRESENCE+FLEXIBILITY only, NO bend/twist direction** (crossover-geometry reasoning forbidden). Can-go-red 3 ways (dropped insert→d_tot≠n_extra; paired into ds→ds changes; other type→ss≠n_extra). No production code (bridge shipped e47edb8) — M3 was the VERIFY task | `tests/test_mrdna_extra_bases.py` (`_model_seg_stats` + 3 pins), builds via `backend/core/mrdna_bridge.py::{mrdna_model_from_nadoc,_build_nt_arrays}` | N3 (NAMD extra-base/linker validation — assert insert/linker atoms present + descriptors computable, same PRESENCE/FLEXIBILITY-not-direction pattern); any engine's extra-base coverage check |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `M3` mrDNA extra bases PRESENT as flexible ssDNA in the built ARBD model
+
+**Comparable prediction gained, not just a run:** the mrDNA CG model's flexible-ssDNA content now provably
+**responds to extra crossover bases** — every inserted base becomes exactly one single-stranded (flexible,
+non-rigid) nucleotide in the built ARBD `SegmentModel`, verifiable headlessly and cross-comparable to CanDo's
+C3 signal (both engines say: inserts → more local flexibility, never a bend direction).
+
+- **Task shape.** M3 was explicitly a *verification* task ("verify past the existing display bridge →
+  beads present in the simulated model"). The bridge that materializes `Crossover.extra_bases` as ssDNA beads
+  shipped pre-loop (`e47edb8`), with pins #1–5 over the pre-model nt-ARRAYS and a coarse pin #6
+  (`with_ss > base_ss`). M3 adds the missing **built-model** oracle — no production code.
+- **Oracle** (`tests/test_mrdna_extra_bases.py`, new `_model_seg_stats` helper + 3 mrdna-gated FAST pins, ~0.8s
+  each): build the `SegmentModel` and sum nt by segment class + bead children. (a) total nt grows by EXACTLY
+  `n_extra` for a single "TT" AND for "TT" on all crossovers; (b) that growth is **entirely** in
+  `SingleStrandedSegment` while `DoubleStrandedSegment` nt is invariant (`ds_nt`=504 in every case) — the
+  flexibility/non-rigid property; (c) the CG bead cloud itself grows (136→229) in bulk, proving it is genuinely
+  *past* coarse-graining, not an nt-array re-count. Measured deltas (all-crossovers "TT", n_extra=106):
+  `d_tot=106, d_ss=106, d_ds=0, d_beads=93`.
+- **Can-go-red 3 ways:** a dropped insert → `d_tot≠n_extra`; an insert WC-paired into a rigid ds segment →
+  `ds` changes and `ss` delta ≠ n_extra; a third segment type → `ss` delta ≠ n_extra. Fresh-context review:
+  no real gaps.
+- **Banked gotcha honored:** extra-base softening is asserted only as **RMSF flexibility / bead-presence**,
+  never a twist/bend DIRECTION (the C3/M3/N3 rule — crossover-geometry reasoning forbidden).
+- **Gate:** oracle 15/15 green; `just lint` clean on the file (the ~19 repo ruff errors are the banked
+  pre-existing debt in other files). Full `just test` = 4366 passed / 72 skip / 1 xfail + **1 pre-existing
+  non-deterministic xdist isolation flake** (`test_cando_extra_bases::test_extra_bases_raise_local_flexibility_rmsf`
+  — a slow FEM test in an unrelated file/engine; passes in isolation in 7.9s; a *different* victim than the
+  `test-fast` run surfaced, confirming a reshuffle-exposed latent bug, not my test-only change). No pass-count
+  drop attributable to M3 (added 5 passing tests). The precisely-bisected polluter is logged to
+  `issues_ledger.md`.
 
 ### 2026-07-08 — `N4` NAMD source bundle → FOURTH/LAST live card column (gold-override reference)
 

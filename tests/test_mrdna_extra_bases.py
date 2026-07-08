@@ -182,6 +182,70 @@ def test_model_builds_with_ssdna_segments(routed_6hb):
     assert with_ss > base_ss
 
 
+# ── M3 model-level oracle: inserts PRESENT past the coarse-grainer, as flexible ss ─
+#   Pins #1-6 above test the input nt-arrays + a coarse ss-segment count.  M3 asks:
+#   do the inserts survive mrDNA's bead-model generation into the SIMULATED ARBD
+#   topology, and are they single-stranded (flexible/non-rigid) there?  These pins
+#   assert conservation at the built-model level: every extra base becomes exactly
+#   one simulated single-stranded nucleotide; the double-stranded (rigid, WC-paired)
+#   content is invariant.  A PRESENCE + FLEXIBILITY property — never a bend/twist
+#   direction (crossover-geometry reasoning forbidden).
+
+def _model_seg_stats(design):
+    """(tot_nt, ss_nt, ds_nt, n_beads) of the built mrDNA SegmentModel.
+
+    ss_nt/ds_nt = nucleotides classified into single-/double-stranded segments by
+    mrDNA's own coarse-grainer; n_beads = simulated CG particles across segments."""
+    from mrdna import SingleStrandedSegment, DoubleStrandedSegment
+    from mrdna.readers.segmentmodel_from_lists import model_from_basepair_stack_3prime
+
+    r, bp, stack, tp, orient, seq, _ = _build_nt_arrays(design, return_nt_key=True)
+    m = model_from_basepair_stack_3prime(r, bp, stack, tp, sequence=seq, orientation=orient)
+    ss_nt = sum(s.num_nt for s in m.segments if isinstance(s, SingleStrandedSegment))
+    ds_nt = sum(s.num_nt for s in m.segments if isinstance(s, DoubleStrandedSegment))
+    n_beads = sum(len(s.children) for s in m.segments)
+    return ss_nt + ds_nt, ss_nt, ds_nt, n_beads
+
+
+@skip_no_mrdna
+@pytest.mark.parametrize("all_crossovers", [False, True])
+def test_model_nt_grows_by_exactly_the_insert_total(routed_6hb, all_crossovers):
+    """Past the display bridge: the built ARBD model's simulated-nucleotide count
+    grows by EXACTLY the extra-base total — the inserts are not dropped by mrDNA's
+    coarse-grainer.  Holds for a single insert and for inserts on all crossovers."""
+    base_tot, *_ = _model_seg_stats(routed_6hb)
+    d = _with_extra(routed_6hb, "TT", all_crossovers=all_crossovers)
+    n_extra = sum(len(e) for _xo, e in ox.crossover_extra_base_junctions(d).values())
+    assert n_extra >= 2
+    with_tot, *_ = _model_seg_stats(d)
+    assert with_tot - base_tot == n_extra
+
+
+@skip_no_mrdna
+@pytest.mark.parametrize("all_crossovers", [False, True])
+def test_inserts_are_flexible_ssdna_in_the_model(routed_6hb, all_crossovers):
+    """The inserts are single-stranded (flexible/non-rigid) in the ARBD topology:
+    ALL of the growth lands in ssDNA segments and the double-stranded (rigid,
+    WC-paired) nucleotide content is invariant.  Can-go-red if an insert were
+    ever base-paired into a rigid ds segment instead of a flexible ss one."""
+    _bt, base_ss, base_ds, _bb = _model_seg_stats(routed_6hb)
+    d = _with_extra(routed_6hb, "TT", all_crossovers=all_crossovers)
+    n_extra = sum(len(e) for _xo, e in ox.crossover_extra_base_junctions(d).values())
+    _wt, with_ss, with_ds, _wb = _model_seg_stats(d)
+    assert with_ds == base_ds                    # rigid ds content untouched
+    assert with_ss - base_ss == n_extra          # every added nt is single-stranded
+
+
+@skip_no_mrdna
+def test_bead_cloud_grows_with_bulk_inserts(routed_6hb):
+    """The simulated CG bead cloud itself grows once enough inserts are added —
+    they are real particles in the model, not just a bookkeeping count."""
+    *_, base_beads = _model_seg_stats(routed_6hb)
+    d = _with_extra(routed_6hb, "TT", all_crossovers=True)
+    *_, with_beads = _model_seg_stats(d)
+    assert with_beads > base_beads
+
+
 # ── pin #7 (slow, opt-in): a real ARBD sim runs end-to-end with inserts ───────
 
 @pytest.mark.slow
