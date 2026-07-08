@@ -37,6 +37,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(S5) comparison report** ✅ | per-observable reference selection (oxDNA=shape/field, CanDo=RMSF, NAMD-override); scalar reference→0-delta & candidate recovers ±known %; zero-ref→None (no div0); identical RMSF→Pearson 1 + overlay points; rigid-shift→shape-RMSD≈0; field cosine +1/−1 & mag-ratio 3; 1-engine→raw-no-agreement; empty→not-ready; missing observable omits its rows; REST start→poll→result+404 | `backend/core/shape_compare.py::build_comparison_report`, `backend/api/routes_shape_metrics.py`, `tests/test_shape_compare_report.py` | the compare card; per-engine source-bundle contract for C5/O1/M5/N4 |
 | _(display-vs-oracle)_ ✅ (S5) | card's displayed numbers == headless oracle within tol; else STOP+ask | one-off Playwright per card (deleted after) | S5 ✓, C5, M5, N4 |
 | **(U3) canonical job-row PARITY pin** ✅ | new pure model + DOM renderer reproduce the OLD oxDNA `_jobRow`/`_renderList` byte-for-byte: the test carries a VERBATIM copy of the old row/list code (`oldOxdnaJobRow`) and drives OLD+NEW on fresh DOMs → identical `outerHTML` across every branch (root/child/running-spinner/[AR]/archived+size+📦/stale-⚠/selected); flat-list convergence (mrDNA ctx) numbers rows + maps status key; poll-signature stable on health-only change; `runButtonEnabled` = available&&!launching&&!blocked | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` | U3 remainder (cando/lammps/md converge onto renderer; run-button base; stateful `initJobsPanelBase`); U4 selector iterates the same rows |
+| **(U3 s2a) cando+lammps conformance** ✅ | renderer's OPTIONAL per-row action (`m.action`/`onAction`, gated on `ctx.rowAction`): models the action ONLY for active jobs, renders a Stop button on active rows whose click fires `onAction(jobId)` with stopPropagation (row `onClick` does NOT fire), and a ctx WITHOUT `rowAction`→every `action===null`→no button (oxDNA-parity guard); cando flat ctx numbers rows newest-first + maps cando status key + spinner-while-active + surfaces Coarse/Fine as a LEADING TAG (not a bespoke column) + no button | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` (+5 it, 14/14) | U3 slice 2b (md chevron via the same optional-control mechanism); the action slot for any future per-row control |
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
@@ -64,6 +65,38 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `U3` slice 2a — converge cando + lammps job lists onto the canonical renderer (U3 stays in_progress)
+
+**Capability/de-dup proven, not just wired:** the canonical job-list renderer now serves **4 of the 5** engine
+panels (oxDNA byte-identical, mrDNA + cando + lammps converged). oxDNA's byte-parity pin stayed green while the
+renderer gained an OPTIONAL per-row control — so consolidation provably changed nothing observable for oxDNA,
+and the two newly-converged panels are pinned by a CONFORMANCE oracle (mode-as-tag, active-only Stop that fires
+`onAction` with stopPropagation, no-`rowAction`⇒no-button guard), not "the panel renders".
+
+- **Pick.** U3 (continue) slice 2a — the cheap "flat like mrDNA" remainder; keeps Track U (the current
+  priority) moving. Deferred the md-outlier (2b) + stateful `initJobsPanelBase` (2c) to keep the session
+  session-sized.
+- **Renderer/model** (`jobs_panel_render.js`/`jobs_panel_model.js`): added an optional trailing per-row control
+  — `buildJobRowModel` sets `action = ctx.rowAction ? (ctx.rowAction(job)||null) : null`; `renderJobRow` appends
+  a `<button>` only when `m.action` truthy, click = `e.stopPropagation()` + `onAction(m.jobId)`; `renderJobList`
+  threads `onAction`. oxDNA/mrDNA/cando omit `rowAction` → `action===null` → no button → byte-parity intact.
+- **cando** (`cando_jobs_panel.js`): new `_rowCtx()` (engine `cando`, flat, `candoJobIsActive`, Coarse/Fine as a
+  leading tag with title) + `_listSig`/`_legend` + rewired `_renderList` through the canonical model+renderer;
+  deleted the old bespoke row + `statusBadge`/`statusKeyFor` imports. Gains `[N]` index, spinner, legend,
+  poll-sig short-circuit.
+- **lammps** (`lammps_jobs_panel.js`): new `_rowCtx()` (engine `lammps`, flat, `jobRowLabel`, `rowAction` →
+  active-only Stop button reusing the old Stop style) + `_listSig`/`_legend` + rewired `_renderList`; two-branch
+  empty text preserved, `_visibleJobs()`/show-all honored, Stop still calls `_stop(jobId)`.
+- **Oracle** (`jobs_panel_model.test.js`, +5 it → 14/14): cando flat convergence (mode tag, spinner, no button) +
+  the action-button block (active-only, click fires onAction not select, no-rowAction⇒no-button). The existing
+  oxDNA byte-parity pin re-ran green after the renderer change (adapted-code discipline: the extension is proven
+  invisible to oxDNA by the pin, not by green-first-run).
+- **Review** (fresh-context, read-only): no correctness bugs; traced the one edge (empty-text uses `_jobs.length`
+  while the sig uses `_visibleJobs()`) and confirmed it's unreachable via a real single-tab gesture.
+- **Gate:** affected panels 166/166, full frontend **2330/2330** (+5, no drop), smoke 23/23; frontend lint N/A
+  (no eslint config; `just lint` = backend ruff only). No Python touched → backend `just test` not required.
+  `main.js` LOC Δ = 0 (no wiring change). Live cando/lammps row pixels owe **MV-24**.
 
 ### 2026-07-08 — `P1` MdPipeline stage-spec data model + pure chain builder (opens Track P)
 
