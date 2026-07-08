@@ -728,6 +728,15 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
         override = CrossoverPotentialOverride.from_database("T0")
         model = mrdna_model_from_nadoc_parameterized(design, override)
 
+        # Anchors (job-request annotation, never a topology edit): pin the beads
+        # covering the chosen scopes so an unanchored uniform force / drift can't
+        # stream the structure.  Survives the bead regeneration a fine (multi-
+        # resolution) run does between stages.  See backend/core/mrdna_anchors.py.
+        if job.anchors:
+            from backend.core.mrdna_anchors import install_anchor_restraints
+            n_held = install_anchor_restraints(design, model, job.anchors)
+            logger.info("mrdna job %s: installed anchors on %d bead(s)", job.job_id, n_held)
+
         if _cancelled():
             raise _Cancelled()
 

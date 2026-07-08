@@ -59,6 +59,11 @@ class MrdnaJob:
     fine_steps:          int = 0
     output_period:       int = 10_000
     device:              str = "0"      # CUDA device index
+    # Anchor scopes (shared oxDNA/CanDo/NAMD picker format: overhang / cluster / domain
+    # / strand / base) held immobile via ARBD harmonic RESTRAINTs on the covering beads.
+    # A JOB-REQUEST annotation, never a Design edit (Three-Layer Law); a selection that
+    # resolves to nothing leaves the run unanchored.  See backend/core/mrdna_anchors.py.
+    anchors:             Optional[list] = None
     stages:              list[MrdnaStageStatus] = field(default_factory=list)
     error:               Optional[str] = None
     arbd_pid:            Optional[int] = None
@@ -148,6 +153,7 @@ def new_mrdna_job(
     output_period: int = 10_000,
     n_nucleotides: int = 0,
     device: str = "0",
+    anchors: Optional[list] = None,
     design_source_path: Optional[str] = None,
     design_fingerprint: Optional[str] = None,
     feature_log_position: Optional[int] = None,
@@ -165,6 +171,7 @@ def new_mrdna_job(
         fine_steps         = fine_steps,
         output_period      = output_period,
         device             = device,
+        anchors            = anchors,
         stages             = stages,
         design_source_path = design_source_path,
         design_fingerprint = design_fingerprint,

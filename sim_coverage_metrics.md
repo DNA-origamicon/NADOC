@@ -230,6 +230,26 @@ fills in as milestones complete.
   field reference) and CanDo's on the tethered-arm regime. Completes NAMD's anchor+field pair; M-ALL-ANCHORS-FIELD
   now needs only mrDNA M1 (anchors) + M2 (field).
 
+- **`M1` — mrDNA anchors (ARBD RESTRAINT)** (M-ALL-ANCHORS-FIELD track) · shape: backend anchor plumbing, no
+  card — `backend/core/mrdna_anchors.py` maps the SHARED `resolve_anchor_particles` scopes → per-nt keys → the
+  nearest CG bead by 3D POSITION (mrDNA groups helices by base-pairing not NADOC helix id, and collapses each bp
+  to one forward bead, so name/ordinal maps are unreliable — position via the input `r`-array, both in Å same
+  frame), pins each with an ARBD harmonic `RESTRAINT`, and `install_anchor_restraints` wraps `generate_bead_model`
+  so the restraints survive mrDNA's `clear_beads()`+regeneration between multiresolution stages · feature: anchors
+  (mrDNA's anchor coverage; the substrate M2's anchored field will need against COM drift) · engines now
+  comparable: mrDNA can now HOLD a resolved scope the same way CanDo (C1 Dirichlet BC) + NAMD (N2 fixedAtoms) do,
+  off the same scope resolver → "anchor scope X" = the same nucleotides across all three · oracle:
+  `tests/test_mrdna_anchors.py` 6 fast + 1 slow (fast: **real ARBD `.restraint.txt` via `simulate(dry_run)` carries
+  a line for EXACTLY the resolved beads**, idx pinned flat==ARBD-`.idx`, stale→∅, regen-survival RED-checked 0-vs-≥1;
+  slow: real ARBD coarse run holds 10/60 beads at 0.55 Å vs free 3.81 Å = **7×**) · main.js LOC Δ = 0 (backend
+  only) · tests: 7/7 oracle, `just test` 4334 passed / 72 skip (+6 over 4328; lone failure was the slow test's
+  output-path assumption — mrdna writes PSF to run dir, DCD under `output/` — fixed, green in isolation), ruff
+  clean on touched files · display-vs-oracle: N/A (headless anchor entry point, no card) · fresh-context review:
+  no gaps (frame/units, per-regen re-apply, Three-Layer, true end-to-end FAST check all verified) ·
+  **Comparable prediction gained, not just a run:** a mrDNA CG run now holds a chosen scope (7× hold/move) while
+  the rest relaxes — the anchored-region prediction C1/N2 already emit, on the SAME resolver — and unblocks M2's
+  anchored-field cross-validation, the last piece of M-ALL-ANCHORS-FIELD.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -260,7 +280,7 @@ read/export the agreement) or a future headless two-engine cross-run.
 | `M-METRIC-CORE` | comparison card generates/views/exports shared descriptors + agreement | **DONE** (S1–S5 shipped 2026-07-06) |
 | `M-CANDO-FIELD` | CanDo FEM field deflection cross-validates oxDNA within tol | **DONE** (C1,C2,S4,S5,O1 shipped 2026-07-06) — FEM predicts the anchored field-deflection regime from oxDNA's per-nt force; real agreement number awaits C5 field-source |
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | **DONE** (C1,C2,C3,C4,C5 shipped 2026-07-07) — anchors + E-field + extra-bases + linkers all covered, CanDo feeds the comparison card |
-| `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending — anchors: CanDo (C1)✓ + NAMD (N2)✓; field: CanDo (C2)✓ + NAMD (N1)✓; **NAMD's anchor+field pair COMPLETE**; remaining M1 (mrDNA anchors), M2 (mrDNA field) |
+| `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | pending — anchors: CanDo (C1)✓ + NAMD (N2)✓ + **mrDNA (M1)✓**; field: CanDo (C2)✓ + NAMD (N1)✓; **all three anchor engines done + NAMD's anchor+field pair COMPLETE**; remaining only M2 (mrDNA field, dep=M1 ✓ met) |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 
 ## Data summaries (plots + fits)

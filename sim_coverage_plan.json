@@ -267,8 +267,8 @@
       "fast_slow": "fast+slow",
       "oracle": "FAST: ARBD input carries the restraint block for resolved anchor beads. SLOW: real ARBD run -> anchored beads hold, free beads move.",
       "milestone": "M-ALL-ANCHORS-FIELD",
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Shared resolve_anchor_particles \u2192 per-nt keys \u2192 nearest CG bead by 3D position (mrDNA groups helices by base-pairing not NADOC helix id + collapses each bp to 1 fwd bead; input r-array & beads share the \u00c5 frame). install_anchor_restraints wraps generate_bead_model so RESTRAINTs survive clear_beads()+regen between multiresolution stages; coarse path pins the as-built beads. FAST oracle asserts real ARBD .restraint.txt (dry_run) carries a line for exactly the resolved beads; SLOW real ARBD: anchored beads hold 0.55A vs free 3.81A (7x). backend/core/mrdna_anchors.py + MrdnaJob.anchors + route passthrough + runner install."
     },
     {
       "id": "M2",

@@ -51,9 +51,45 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(N1) NAMD native E-field (eField)** ✅ | `namd_efield_vector({field_pN,dir})`→NAMD `eField` (kcal/mol/Å/e) such that `q·E·K == field_pN·dir̂` per nucleotide (q=−1 e = one phosphate, NO fudge); F=q·E inversion pins magnitude+normalisation+SIGN (backbone q<0 → eField antiparallel); None/zero-mag/zero-dir→None; conf emits `eFieldOn/eField` only with a field, zero-field BYTE-IDENTICAL; every conf writer carries it (`_segment_conf`/`_min_conf`/both production/shell-reprep/remote+local resume); SLOW real psfgen: internal residue == −1.000 e, 5TER/3TER termini −0.47/−0.53 e (sum −1) → strand feels −(N−1) e (measured, not assumed); SLOW **real-NAMD differential probe** (field-on vs off, T=0, one strand fixed): fixed atoms move 0, free ΔCOM cosine 0.99996 along +dir, \|ΔCOM\| within 10% of ½(F/M)t² from `field_pN`×NAMD's-own −7 e (independent of `KCAL_MOL_A_IN_PN` — RED-checked, doubling it makes real NAMD falsify); REST guards: field-needs-anchor / field+multi-GPU / malformed→400; prep raises if a field's anchors resolve to ∅ | `backend/core/md_protocols.py::{namd_efield_vector,external_forces_block,_segment_conf,_min_conf,prepare_mgh_slow_release}`, `backend/api/routes_md.py`, `tests/test_namd_efield.py` | every engine's E-FIELD task (M2) — same `{field_pN,dir}` per-nt-force descriptor; the "predict from the ENGINE'S OWN charges, not the emitted vector" independence pattern; N4 field-source (emit from the pre-display frame) |
 
+| **(M1) mrDNA anchors (ARBD RESTRAINT)** ✅ | shared `resolve_anchor_particles`→per-nt `(helix,bp,dir)` keys→nearest CG bead by 3D POSITION (mrDNA groups helices by base-pairing not NADOC helix id + collapses each bp to 1 fwd bead — name/index map unreliable, so position via the input `r` array; both r+beads in Å same frame, RED-checked); stale/ssDNA/extra-base keys drop→`[]`; strand scope→contiguous bead run, strict non-empty subset, every anchored-nt's nearest bead is held; **FAST end-to-end: real ARBD `.restraint.txt` (via `simulate(dry_run)`) carries EXACTLY `len(held)` RESTRAINT lines**; idx pinned two independent ways (flat `s.beads` enumerate == ARBD `.idx` for coarse/no-orientation-bead model) set-equal; k==our spring, pinned pos==bead's own pos (an anchor); `install_anchor_restraints` wraps `generate_bead_model` so RESTRAINTs survive `clear_beads()`+regen between multiresolution stages (RED: 0 without wrapper, ≥1 with); coarse single-pass pins the as-built beads; SLOW **real ARBD coarse run**: anchored beads hold 0.55 Å vs free 3.81 Å (**7×**, median, DCD final frame) | `backend/core/mrdna_anchors.py::{resolve_anchor_beads,apply_anchor_restraints,install_anchor_restraints,restraint_records}`, `backend/core/{mrdna_job,mrdna_runner}.py`, `backend/api/routes_mrdna.py`, `tests/test_mrdna_anchors.py` | M2 (mrDNA E-field needs anchors — reuse `install_anchor_restraints` + the position-bead resolver); any engine that beads a design + needs a job-request anchor (the shared-scope→engine-index bridge, position variant) |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-07 — `M1` mrDNA anchors (ARBD RESTRAINT)
+
+- **Picked** `M1` — per the handoff's rubric recommendation: reuses the SAME shared-scope-resolver→engine-index
+  bridge C1/N2 established, and unblocks `M2` (mrDNA field, dep=M1) → the LAST anchored-field milestone
+  (`M-ALL-ANCHORS-FIELD` now needs only M2).
+- **Investigated** the real mrDNA/ARBD seams: mrDNA groups helices by *base-pairing* (`basepairs_and_stacks_to_helixmap`),
+  NOT by NADOC `helix_id` — so a segment's `name` is unreliable for mapping; and the CG model collapses each base
+  pair to ONE forward bead. Empirically confirmed (throwaway probes): the model's beads share the input `r`-array
+  Å frame (Z matched exactly), `bead.add_restraint((k,))` pins a bead to its own position, `get_restraints()`→
+  `(bead,(k,))`, and `model.simulate(dry_run=True)` writes the real `potentials/<name>.restraint.txt`.
+- **Built** `backend/core/mrdna_anchors.py` (`initX`-style pure helpers, core imports no `backend/api`): the shared
+  `resolve_anchor_particles`→per-nt keys→**nearest CG bead by 3D position** (position-based sidesteps the helix
+  remap + 1-bead-per-bp collapse); `apply_anchor_restraints` pins them; `install_anchor_restraints` wraps the
+  model's `generate_bead_model` so the RESTRAINTs are re-applied after mrDNA's `clear_beads()`+regeneration between
+  multiresolution stages (coarse→fine→frozen-twist wipe beads several times), and applies immediately to the
+  as-built coarse beads for the single-pass path. `MrdnaJob.anchors` + route passthrough + runner install — all
+  JOB-REQUEST annotation, nothing written to the Design (Three-Layer Law). **main.js LOC Δ = 0** (backend-only).
+- **Oracle** `tests/test_mrdna_anchors.py` (6 fast + 1 slow), oracle-first. FAST asserts the bright line: the REAL
+  ARBD input file (`dry_run` writer, not our mirror) carries a RESTRAINT line for EXACTLY the resolved beads; idx
+  pinned two independent ways (flat enumerate == ARBD `.idx`); stale scope→∅; regeneration-survival RED-checked
+  (0 restraints without the wrapper, ≥1 with). SLOW **real ARBD coarse run**: strand-scope anchor holds 10/60
+  beads at 0.55 Å median vs free 3.81 Å (**7×**) — the physical anchor prediction, independent of the input check.
+  Registered slow in `conftest.py` (`test_real_arbd_anchored_beads_hold`).
+- **Gates**: `just test` 4334 passed / 72 skipped (+6 fast oracle over the 4328 baseline; the lone failure was the
+  slow test's output-path assumption — mrdna writes PSF to the run dir, DCD under `output/` — fixed, slow test
+  green in isolation). `ruff` clean on all M1 files (the ~20 pre-existing errors in other test files left alone
+  per `feedback_no_bulk_reformat`). Fresh-context review: no correctness gaps against the oracle (independently
+  verified frame/units, per-regen re-apply, no Three-Layer violation, FAST oracle is a true end-to-end check).
+- **No display-vs-oracle step**: M1 is a headless anchor entry point — no card/graph, so the Playwright display
+  check (step 8) does not apply.
+- **Comparable prediction gained, not just a run**: a mrDNA CG run now *holds* a chosen scope (7× hold/move) while
+  the rest relaxes — the anchored-region prediction the other engines (C1 CanDo BC, N2 NAMD fixedAtoms) already
+  emit, on the SAME shared scope resolver; and it unblocks M2's anchored-field cross-validation.
 
 ### 2026-07-05 — `S1` shape descriptors (shared-metric track head)
 

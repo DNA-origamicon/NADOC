@@ -102,6 +102,14 @@ class CreateMrdnaJobRequest(BaseModel):
     device:        str = Field("0", description="CUDA device index")
     autostart:     bool = Field(True)
     design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
+    anchors:       Optional[list] = Field(
+        None,
+        description="Anchor scopes (shared oxDNA/CanDo/NAMD picker format: overhang / "
+                    "cluster / domain / strand / base) held immobile via ARBD harmonic "
+                    "RESTRAINTs on the covering CG beads. A JOB-REQUEST annotation, never "
+                    "a Design edit; a selection resolving to nothing leaves the run "
+                    "unanchored (needed under a uniform field to stop COM drift).",
+    )
 
 
 # ── Create / list / status ────────────────────────────────────────────────────
@@ -140,6 +148,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         output_period      = body.output_period,
         n_nucleotides      = len(_strand_nucleotide_order(design)),
         device             = body.device,
+        anchors            = body.anchors,
         design_source_path = body.design_source_path,
         design_fingerprint = oxdna_design_fingerprint(design),
         feature_log_position = effective_feature_log_position(design),
