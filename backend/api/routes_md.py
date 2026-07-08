@@ -37,7 +37,7 @@ from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core import md_chain_executor as _chain
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
-from backend.core.md_pipeline import MdPipeline, PipelineStage
+from backend.core.md_pipeline import MdPipeline, PipelineStage, cross_engine_seed
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     SUPPORTED_PROTOCOLS,
@@ -2487,20 +2487,50 @@ def _chain_job_status(job_id: Optional[str]) -> str:
 
 
 async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
-    """Realise one chain stage as a production child, reusing ``spawn_md_production``.
+    """Realise one chain stage as a child job.
 
-    Stage 0's parent is the chain's root job; stage N's parent is the previous stage's
-    realised child.  ``spawn_md_production`` seeds a production child from ANY completed
-    job (relaxation OR production) — exactly the chain hop — so the previous stage's
-    equilibrated output becomes the next stage's start structure.  Run target / length
-    flow from the stage spec; a local child autostarts, an alpine child queues for the
-    submit-review card.
+    Two hop kinds, chosen by :func:`md_pipeline.cross_engine_seed`:
 
-    Forces (field/anchors) carry into the child conf through the shared
-    :func:`md_chain_executor.stage_forces_conf` -> ``external_forces_block`` path; wiring
-    them all the way into the production reseed conf is the remaining P2 follow-up (needs
-    ``ProductionRunRequest.field``/``anchors`` + reseed-conf emission)."""
+    * **Same-engine (NAMD→NAMD)** — the common case, reuses ``spawn_md_production``, which
+      seeds a production child from ANY completed NAMD job (relaxation OR production) by
+      restarting its equilibrated ``.coor/.xsc`` (no coordinate reconstruction).  Stage 0's
+      parent is the chain root; stage N's parent is the previous stage's realised child.
+
+    * **Cross-engine (oxDNA/mrDNA→NAMD)** — P3.  The upstream coarse frame has no NAMD
+      checkpoint to restart, so the stage instead reconstructs a fresh atomistic start
+      structure from the upstream job's relaxed coordinates via the create-time seed hop
+      (``create_md_job`` with ``oxdna_job_id`` / ``mrdna_job_id`` → ``build_namd_seed`` /
+      ``build_namd_seed_from_mrdna``, where the nm/sim-unit/Ångström conversion already
+      lives).  The stage's field/anchors ride the same ``CreateJobRequest`` the launch card
+      uses.  A create seeded from a still-downloading remote frame raises (fast 400), which
+      the supervisor treats as a transient precondition and retries (bounded).
+
+    Run target / length flow from the stage spec; a local child autostarts, an alpine child
+    queues for the submit-review card."""
     plan = ctx.plan
+    seed = cross_engine_seed(plan, ctx.parent_job_id)  # None ⇒ same-engine checkpoint hop
+    if seed is not None:
+        forces = ctx.forces or {}
+        # The cross-engine hop goes through the RELAXATION-creation endpoint (it builds +
+        # solvates + relaxes a fresh atomistic seed — there is no NAMD checkpoint to
+        # restart), so its protocol must be a relaxation preset.  A pipeline stage's
+        # protocol defaults to "production" (meaningful only for the same-engine restart
+        # path, which uses ProductionRunRequest); map any non-relaxation name onto the
+        # default relaxation preset so a default oxDNA/mrDNA→NAMD stage isn't rejected.
+        create_protocol = (
+            plan.protocol if plan.protocol in SUPPORTED_PROTOCOLS
+            else EQUILIBRIUM_AWARE_PROTOCOL)
+        body = CreateJobRequest(
+            protocol=create_protocol,
+            autostart=(plan.run_target == "local"),
+            execution_target=plan.run_target,
+            cluster_name=plan.cluster_name,
+            field=forces.get("field"),
+            anchors=forces.get("anchors"),
+            **{seed.seed_field: seed.seed_job_id},
+        )
+        result = await create_md_job(body)
+        return result["job_id"]
     body = ProductionRunRequest(
         steps=plan.steps,
         length_ns=plan.length_ns,
@@ -2590,16 +2620,35 @@ class CreateChainRequest(BaseModel):
 @router.post("/md/chains")
 async def create_md_chain(body: CreateChainRequest) -> dict:
     """Build + persist an ``MdPipeline`` chain, then spawn stage 0.  The MD supervisor
-    advances the remaining stages unattended (stage N on stage N-1's completion)."""
-    root = _load_job(body.root_job_id)  # 404 if missing
+    advances the remaining stages unattended (stage N on stage N-1's completion).
+
+    The root may be a completed NAMD job (same-engine seed) OR a completed oxDNA/mrDNA job
+    (cross-engine seed — stage 0 rebuilds an atomistic model from the coarse relaxed frame,
+    P3).  A CG root is validated by the SAME seed-available check the launch card uses
+    (the frame exists on disk), not by loading it as an ``MdJob``."""
     if not body.stages:
         raise HTTPException(400, "A chain needs at least one stage.")
-    if root.status != MdStatus.completed:
-        raise HTTPException(
-            400, "The chain's root job must be a completed run to seed the first stage.")
+    root_engine = (body.root_engine or "namd").lower()
+    if root_engine == "oxdna":
+        from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+        try:
+            await run_in_threadpool(assert_namd_seed_available, body.root_job_id, _workspace())
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc))
+    elif root_engine == "mrdna":
+        from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
+        try:
+            await run_in_threadpool(assert_mrdna_namd_seed_available, body.root_job_id, _workspace())
+        except FileNotFoundError as exc:
+            raise HTTPException(400, str(exc))
+    else:
+        root = _load_job(body.root_job_id)  # 404 if missing
+        if root.status != MdStatus.completed:
+            raise HTTPException(
+                400, "The chain's root job must be a completed run to seed the first stage.")
     pipeline = MdPipeline(
         root_job_id=body.root_job_id,
-        root_engine=body.root_engine or "namd",
+        root_engine=root_engine,
         stages=[PipelineStage(**s.model_dump()) for s in body.stages],
     )
     chain_id = uuid.uuid4().hex[:12]

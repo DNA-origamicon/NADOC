@@ -211,3 +211,82 @@ def build_pipeline_plan(
             cross_engine=cross_engine,
         ))
     return plans
+
+
+# ── cross-engine coordinate handoff (P3) ─────────────────────────────────────────
+# The upstream coarse-grained engines whose relaxed frame a downstream atomistic stage
+# can be seeded from, mapped to the seed field the create-time hop already consumes.
+# This GENERALIZES the two hand-wired seed hops (``MdJob.seed_oxdna_job_id`` /
+# ``seed_mrdna_job_id``): a chained cross-engine stage reconstructs an atomistic model
+# from the upstream job's relaxed coordinates through the SAME converters
+# (``oxdna_runner.build_namd_seed`` / ``mrdna_runner.build_namd_seed_from_mrdna``), where
+# the unit convention (NADOC nm ↔ oxDNA sim-units ↔ mrDNA Ångström) is already handled —
+# P3 reuses those builders rather than reinventing the frame/unit conversion.
+CROSS_ENGINE_SEED_FIELD: dict[str, str] = {
+    "oxdna": "oxdna_job_id",
+    "mrdna": "mrdna_job_id",
+}
+
+# The only engine that can currently CONSUME a cross-engine seed — i.e. rebuild an
+# atomistic start structure from a coarse frame.  oxDNA / mrDNA are CG sources, not
+# atomistic sinks, so a hop INTO them has no reconstructor and is rejected.
+CROSS_ENGINE_SINK = "namd"
+
+
+@dataclass
+class CrossEngineSeed:
+    """How a cross-engine stage takes the previous engine's relaxed coordinates.
+
+    ``seed_field`` is the ``CreateJobRequest`` kwarg / ``MdJob`` provenance field
+    (``oxdna_job_id`` → ``seed_oxdna_job_id``, ``mrdna_job_id`` → ``seed_mrdna_job_id``)
+    the create-time seed hop already consumes — so a chained cross-engine hop is
+    byte-identical to launching a seeded NAMD job by hand.  ``seed_job_id`` is the
+    RESOLVED upstream job (the chain's realised predecessor / root), never the ``stageN``
+    placeholder.
+    """
+
+    seed_engine: str
+    seed_job_id: str
+    seed_field: str
+    target_engine: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def cross_engine_seed(
+    plan: StagePlan, parent_job_id: Optional[str]
+) -> Optional[CrossEngineSeed]:
+    """Resolve a stage's cross-engine coordinate handoff, or ``None`` for a same-engine hop.
+
+    A same-engine stage (``plan.cross_engine`` False) returns ``None`` — it restarts from
+    its predecessor's checkpoint (pure NAMD ``.coor/.xsc``, no reconstruction) via
+    ``spawn_md_production``.  A cross-engine stage hands the upstream CG engine's relaxed
+    frame to the atomistic sink through the create-time seed converter; this returns the
+    seed spec the executor feeds to ``create_md_job``.
+
+    Raises ``ValueError`` on an unsupported hop: an unknown upstream engine (only
+    :data:`CROSS_ENGINE_SEED_FIELD` engines can hand off coordinates), a sink other than
+    :data:`CROSS_ENGINE_SINK` (only NAMD can rebuild an atomistic model from coarse
+    coords today), or a cross-engine stage whose parent job is unresolved.
+    """
+    if not plan.cross_engine:
+        return None
+    parent_engine = plan.parent_engine
+    if parent_engine not in CROSS_ENGINE_SEED_FIELD:
+        raise ValueError(
+            f"cannot seed a chain stage from engine {parent_engine!r}: only "
+            f"{sorted(CROSS_ENGINE_SEED_FIELD)} can hand relaxed coordinates to another engine")
+    if plan.engine != CROSS_ENGINE_SINK:
+        raise ValueError(
+            f"cross-engine seeding into {plan.engine!r} is not supported (only "
+            f"{CROSS_ENGINE_SINK!r} can rebuild an atomistic model from coarse coordinates)")
+    if not parent_job_id:
+        raise ValueError(
+            f"cross-engine stage {plan.index} has no resolved parent job to seed from")
+    return CrossEngineSeed(
+        seed_engine=parent_engine,
+        seed_job_id=parent_job_id,
+        seed_field=CROSS_ENGINE_SEED_FIELD[parent_engine],
+        target_engine=plan.engine,
+    )

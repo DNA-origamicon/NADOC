@@ -66,10 +66,67 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 
 | **(M3) mrDNA extra bases in the BUILT model** ✅ | inserts survive coarse-graining into the ARBD `SegmentModel` as flexible ssDNA — `_model_seg_stats` builds the model (`model_from_basepair_stack_3prime`) & sums nt by segment class + bead children: built-model total nt grows by EXACTLY `n_extra` (single insert AND all-crossovers); ALL growth lands in `SingleStrandedSegment` while `DoubleStrandedSegment` nt is INVARIANT (ds_nt=504 unchanged) → inserts are ssDNA/flexible/non-rigid, never WC-paired into a rigid segment; bulk bead cloud grows (136→229). Strengthens pre-loop coarse pin #6 (`with_ss>base_ss`) into a quantitative present-as-flexible-ssDNA proof. **PRESENCE+FLEXIBILITY only, NO bend/twist direction** (crossover-geometry reasoning forbidden). Can-go-red 3 ways (dropped insert→d_tot≠n_extra; paired into ds→ds changes; other type→ss≠n_extra). No production code (bridge shipped e47edb8) — M3 was the VERIFY task | `tests/test_mrdna_extra_bases.py` (`_model_seg_stats` + 3 pins), builds via `backend/core/mrdna_bridge.py::{mrdna_model_from_nadoc,_build_nt_arrays}` | N3 (NAMD extra-base/linker validation — assert insert/linker atoms present + descriptors computable, same PRESENCE/FLEXIBILITY-not-direction pattern); any engine's extra-base coverage check |
 | **(P1) MdPipeline stage-spec + chain builder** ✅ | ONE ordered object generalizes the 3 provenance hops (`parent_job_id` + `run_kind="production"` + `seed_oxdna/mrdna_job_id`); `build_pipeline_plan` chains each stage from its IMMEDIATE predecessor (stage 0 → `root_job_id`@`root_checkpoint`; stage N → `parent_job_id=stage{N-1}`, `start_checkpoint="stage{N-1}::output"`); distinct per-stage seeds == `generate_seeds(base,n)`; **1-stage parity: `parent_job_id`/`run_kind="production"`/seed=54321/checkpoint-passthrough == `spawn_md_production`'s first child**; `cross_engine` flag (parent_engine≠stage.engine) REPRESENTS the seed_oxdna/mrdna generalization (P3 converts coords); LITERAL-CONSTANT red guards (parent≠root, checkpoint≠root's, not-two-back) — RED-verified offline (always-seed-from-root mutation fails, revert→green); dict round-trip. PURE, no jobs/no topology (Three-Layer clean) | `backend/core/md_pipeline.py::{PipelineStage,MdPipeline,StagePlan,build_pipeline_plan,validate_pipeline,stage_output_ref}`, `tests/test_md_job_pipeline.py` | P2 (executor consumes `StagePlan`, submits stage N on N-1's completion, halt+resume-from-failed); P3 (`cross_engine` hop → coordinate conversion); P4 (Plan Run UI builds an `MdPipeline`, reuses U2's Forces card per stage) |
+| **(P3) cross-engine coordinate handoff** ✅ | PURE `cross_engine_seed(plan, resolved_parent_job_id)`→`CrossEngineSeed`\|`None` generalizes the two seed hops into one table `{oxdna:'oxdna_job_id', mrdna:'mrdna_job_id'}`: same-engine hop→`None` (checkpoint restart); oxDNA/mrDNA root→the matching seed field pointed at the RESOLVED predecessor (never the `stageN` placeholder); raises on unsupported sink (only NAMD rebuilds atomistic from coarse), unknown source engine, unresolved parent. `_chain_spawn` branches: cross-engine→`create_md_job(oxdna_job_id\|mrdna_job_id=parent, field/anchors from stage forces)` (the create-time converter `build_namd_seed`/`_from_mrdna` — nm↔sim-units↔Å already handled), same-engine→unchanged `spawn_md_production`. **Stage protocol default "production" REMAPPED to a valid relaxation preset for the create path** (else create 400s → chain fails; RED-verified vs forward-verbatim). `create_md_chain` accepts an oxDNA/mrDNA root, validated via `assert_namd_seed_available`/`assert_mrdna_namd_seed_available` (frame-on-disk, not MdJob). E2E CHAIN: oxDNA root seeds NAMD stage 0 via reconstruct → completed stage 0 chains same-engine NAMD stage 1 via checkpoint → completed; halt-on-stage0-failure then resume re-runs ONLY stage 0 via a fresh reconstruct. Pure over Physical layer (forces = job-request annotations, no Design write) | `backend/core/md_pipeline.py::{cross_engine_seed,CrossEngineSeed}`, `backend/api/routes_md.py::{_chain_spawn,create_md_chain}`, `tests/test_md_job_pipeline.py` (6 pure) + `tests/test_md_milestone1.py::TestMdCrossEngineChain` (7 route/CHAIN) | P4 (Plan Run UI: a plan's cross-engine stages now execute; reuse the create-path seed contract); any future engine-adapter that seeds NAMD from a new CG source (extend `CROSS_ENGINE_SEED_FIELD`) |
 
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `P3` cross-engine output→input (oxDNA/mrDNA relax → NAMD) through the chain executor
+
+**Capability/de-dup proven, not just wired:** a chain stage now runs *seeded from the previous ENGINE's relaxed
+frame* — a completed oxDNA/mrDNA root hands its coordinates to a NAMD stage 0, reconstructed via the *existing,
+validated* create-time converter (`build_namd_seed`/`build_namd_seed_from_mrdna`), NOT the same-engine
+`.coor/.xsc` checkpoint restart — and on a stage failure the chain HALTS and resume re-runs only the failed
+stage. The two hand-wired seed hops (`seed_oxdna_job_id`/`seed_mrdna_job_id`) are now one table the executor
+consumes.
+
+- **Pick.** P3 — the ▶ NEXT and the only P-track task eligible (P1+P2 done, P4 blocked on it); U/P tracks are the
+  current priority over the parked feature tail (M4/N3/O2).
+- **Investigation (read-only subagent) reframed the task.** The oxDNA/mrDNA→NAMD *coordinate + unit* conversion
+  ALREADY EXISTS and is validated: `oxdna_runner.build_namd_seed` reconstructs an atomistic model from the oxDNA
+  relaxed `last_conf` via CG spline (sim-units→nm inside `read_configuration`); `mrdna_runner`'s analogue does
+  Å→nm; both feed `build_atomistic_model` and are wired into `create_md_job` via `oxdna_job_id`/`mrdna_job_id`.
+  So P3 was NOT a new unit conversion — it was **routing the chain's `cross_engine` hop through that converter**.
+  The no-op seam: `_chain_spawn` ignored `plan.cross_engine` and always called `spawn_md_production` (a
+  same-engine restart that `_load_job`s the parent as an `MdJob` → fails on a CG parent).
+- **Module** (`backend/core/md_pipeline.py`, still pure, Three-Layer clean): new `cross_engine_seed(plan,
+  resolved_parent_job_id)`→`CrossEngineSeed`|`None`. Same-engine→`None` (checkpoint restart); cross-engine→the
+  seed field from `CROSS_ENGINE_SEED_FIELD={oxdna:'oxdna_job_id', mrdna:'mrdna_job_id'}` pointed at the RESOLVED
+  predecessor; raises on unsupported sink (only NAMD rebuilds atomistic from coarse), unknown source, or
+  unresolved parent.
+- **Executor wiring** (`backend/api/routes_md.py`): `_chain_spawn` branches on `cross_engine_seed` — cross-engine
+  builds a `CreateJobRequest(oxdna_job_id|mrdna_job_id=parent, field/anchors from the stage forces, run_target,
+  autostart)` and calls `create_md_job` (reusing its guards + the transient-precondition raise the executor's
+  bounded retry already handles); same-engine path unchanged. `create_md_chain` now accepts an oxDNA/mrDNA root,
+  validated via the same `assert_namd_seed_available`/`assert_mrdna_namd_seed_available` frame-on-disk check the
+  launch card uses. Realizable hop = a completed CG ROOT → NAMD stage 0 (the executor only spawns NAMD; a
+  mid-chain CG *stage* would need a CG spawn adapter — out of scope). `main.js` LOC Δ = 0.
+- **Review-caught bug (real, fixed).** A stage's protocol defaults to `"production"` (`ChainStageRequest`), but
+  `create_md_job` rejects any protocol ∉ `SUPPORTED_PROTOCOLS={mgh_slow_release,equilibrium_aware_namd}` → every
+  DEFAULT oxDNA/mrDNA→NAMD stage would 400 → retry×3 → chain fails. Fix: the cross-engine (relaxation-)create
+  path maps a non-relaxation stage protocol onto `EQUILIBRIUM_AWARE_PROTOCOL` (an explicit valid relaxation
+  protocol is forwarded). **RED-verified** against the pre-fix forward-verbatim code (`Unknown protocol:
+  'production'`).
+- **Oracle** — 13 new FAST. 6 PURE (`tests/test_md_job_pipeline.py`): oxdna-root→`oxdna_job_id`+resolved-parent,
+  mrdna-root→`mrdna_job_id`, same-engine→`None`, unsupported-sink raise, unknown-source raise, unresolved-parent
+  raise. 7 ROUTE/CHAIN (`tests/test_md_milestone1.py::TestMdCrossEngineChain`, spawns stubbed): cross-engine uses
+  the create path with `oxdna_job_id`+field+anchors (NOT `spawn_md_production`), mrdna→`mrdna_job_id`, same-engine
+  uses the checkpoint path, `"production"`→valid-relaxation-protocol REMAP (RED-proven), explicit relaxation
+  protocol forwarded, and the E2E CHAIN (oxDNA root → NAMD s0 reconstruct → same-engine NAMD s1 checkpoint →
+  completed) + halt-on-s0-failure then resume-reruns-only-s0. New logic ⇒ green-first-run valid; the one adapted
+  concern (the protocol bug) proven RED.
+- **Review** (fresh-context, read-only): routing (no same-engine→create, no cross-engine→`spawn_md_production`),
+  `create_md_chain` CG-root validation (still 400s on missing/incomplete; namd branch byte-unchanged), raise
+  conditions, the **all-or-nothing spawn invariant** (every `create_md_job` guard precedes the single
+  `_spawn_prep_job` that creates the job → a raised cross-engine spawn guarantees no job, so bounded-retry is
+  safe), and Three-Layer cleanliness all CONFIRMED. The one real finding (protocol) fixed + pinned.
+- **Gate:** oracle 13/13 (+ broader MD-chain files 99/99); `just test` = **4423 passed / 110 skip / 1 xfail**
+  (rerun after the protocol fix; +2 = the two protocol pins vs the pre-fix 4421 run, no drop, no xdist flake);
+  ruff clean on all touched files. No card/UI →
+  display-vs-oracle N/A (backend-only, like C1/C2/P1/P2). SLOW real oxDNA→NAMD handoff (a live completed oxDNA
+  job + real NAMD prep) NOT run → **MV-29** (precedent: P2's real 2-stage chain owed an MV). Substrate for P4;
+  `M-JOB-PLANNER` now needs only P4.
 
 ### 2026-07-08 — `U4` engine selector + one *Simulate* section → CLOSES `M-UNIFIED-PANEL`
 

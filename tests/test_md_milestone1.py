@@ -1385,3 +1385,260 @@ class TestMdChain:
         resumed = asyncio.run(routes_md.resume_md_chain(chain_id))["chain"]  # attempt 1 again
         assert resumed["stages"][0]["spawn_attempts"] == 1
         assert resumed["status"] != "failed"
+
+
+class TestMdCrossEngineChain:
+    """P3 oracle — cross-engine coordinate handoff through the chain executor.
+
+    Bright line (Track P = CHAIN): a stage runs SEEDED from the previous engine's relaxed
+    frame — an oxDNA/mrDNA root hands its coordinates to a NAMD stage 0 via the
+    create-time seed converter (``build_namd_seed`` — parity with launching a seeded NAMD
+    job by hand), NOT the same-engine ``.coor/.xsc`` checkpoint restart.  A same-engine hop
+    keeps the checkpoint path.  On a stage failure the chain HALTS and resumes from the
+    failed stage.  The engine callbacks are stubbed (no real solvation / NAMD); the
+    branching + seeding LOGIC is what's pinned."""
+
+    _tp = TestProductionAppend()
+
+    def _ctx(self, routes_md, *, root_engine, stage_engine, parent_job_id, forces=None,
+             protocol="production"):
+        """A real ``SpawnContext`` for stage 0 of a one-stage chain (via the P1 builder).
+
+        ``protocol`` defaults to ``"production"`` to mirror ``ChainStageRequest``'s real
+        default (the cross-engine create path must tolerate it)."""
+        from backend.core import md_chain_executor as chain
+        from backend.core.md_pipeline import MdPipeline, PipelineStage
+
+        pipe = MdPipeline(
+            root_job_id="root", root_engine=root_engine,
+            stages=[PipelineStage(engine=stage_engine, protocol=protocol,
+                                  **(forces or {}))])
+        run = chain.init_chain_run(pipe, chain_id="c", root_checkpoint="cp")
+        run.root_job_id = parent_job_id     # the resolved predecessor for stage 0
+        return chain.next_spawn(run)
+
+    def test_chain_spawn_cross_engine_uses_the_seed_create_path(self, tmp_path, monkeypatch):
+        """oxDNA->NAMD stage: reconstruct via ``create_md_job(oxdna_job_id=root)`` (the
+        converter), carrying the stage's field/anchors — NOT ``spawn_md_production``."""
+        import asyncio
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        calls: dict = {}
+
+        async def _fake_create(body):
+            calls["create"] = body
+            return {"job_id": "namd-child"}
+
+        async def _fake_prod(parent_id, body):
+            calls["prod"] = (parent_id, body)
+            return {"job": {"job_id": "prod-child"}}
+
+        monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
+        monkeypatch.setattr(routes_md, "spawn_md_production", _fake_prod)
+
+        ctx = self._ctx(
+            routes_md, root_engine="oxdna", stage_engine="namd", parent_job_id="ox-root",
+            forces={"field": {"field_pN": 5.0, "dir": [1, 0, 0]},
+                    "anchors": [{"scope": "base", "helix": 0, "bp": 0}]})
+        job_id = asyncio.run(routes_md._chain_spawn(ctx))
+
+        assert job_id == "namd-child"
+        assert "prod" not in calls                       # checkpoint path NOT taken
+        body = calls["create"]
+        assert body.oxdna_job_id == "ox-root"            # the create-time seed hop kwarg
+        assert body.mrdna_job_id is None
+        assert body.field == {"field_pN": 5.0, "dir": [1, 0, 0]}
+        assert body.anchors == [{"scope": "base", "helix": 0, "bp": 0}]
+        assert body.execution_target == "local" and body.autostart is True
+
+    def test_cross_engine_create_uses_a_valid_relaxation_protocol(self, tmp_path, monkeypatch):
+        """A pipeline stage's protocol defaults to "production", but the cross-engine hop
+        goes through the RELAXATION-creation endpoint (``create_md_job`` rejects any protocol
+        outside ``SUPPORTED_PROTOCOLS``).  The spawn must map "production" onto a valid
+        relaxation preset, else every default oxDNA/mrDNA→NAMD stage 400s and the chain
+        fails.  RED against forwarding ``plan.protocol`` verbatim."""
+        import asyncio
+
+        from backend.core.md_protocols import SUPPORTED_PROTOCOLS
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        calls: dict = {}
+
+        async def _fake_create(body):
+            calls["create"] = body
+            return {"job_id": "namd-child"}
+
+        monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
+        # protocol="production" is ChainStageRequest's default — the failure case.
+        ctx = self._ctx(routes_md, root_engine="oxdna", stage_engine="namd",
+                        parent_job_id="ox-root", protocol="production")
+        asyncio.run(routes_md._chain_spawn(ctx))
+        assert calls["create"].protocol in SUPPORTED_PROTOCOLS
+
+    def test_cross_engine_create_keeps_an_explicit_relaxation_protocol(self, tmp_path, monkeypatch):
+        """If a stage names a valid relaxation protocol, it's forwarded unchanged."""
+        import asyncio
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        calls: dict = {}
+
+        async def _fake_create(body):
+            calls["create"] = body
+            return {"job_id": "namd-child"}
+
+        monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
+        ctx = self._ctx(routes_md, root_engine="oxdna", stage_engine="namd",
+                        parent_job_id="ox-root", protocol="mgh_slow_release")
+        asyncio.run(routes_md._chain_spawn(ctx))
+        assert calls["create"].protocol == "mgh_slow_release"
+
+    def test_chain_spawn_mrdna_root_seeds_via_mrdna_job_id(self, tmp_path, monkeypatch):
+        import asyncio
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        calls: dict = {}
+
+        async def _fake_create(body):
+            calls["create"] = body
+            return {"job_id": "namd-child"}
+
+        monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
+        ctx = self._ctx(routes_md, root_engine="mrdna", stage_engine="namd",
+                        parent_job_id="mrdna-root")
+        asyncio.run(routes_md._chain_spawn(ctx))
+        assert calls["create"].mrdna_job_id == "mrdna-root"
+        assert calls["create"].oxdna_job_id is None
+
+    def test_chain_spawn_same_engine_uses_the_checkpoint_path(self, tmp_path, monkeypatch):
+        """NAMD->NAMD stage: restart the predecessor checkpoint via ``spawn_md_production``,
+        never the reconstruct path (a byte-for-byte no-regression of the P2 behaviour)."""
+        import asyncio
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        calls: dict = {}
+
+        async def _fake_create(body):
+            calls["create"] = body
+            return {"job_id": "should-not-happen"}
+
+        async def _fake_prod(parent_id, body):
+            calls["prod"] = (parent_id, body)
+            return {"job": {"job_id": "prod-child"}}
+
+        monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
+        monkeypatch.setattr(routes_md, "spawn_md_production", _fake_prod)
+
+        ctx = self._ctx(routes_md, root_engine="namd", stage_engine="namd",
+                        parent_job_id="namd-parent")
+        job_id = asyncio.run(routes_md._chain_spawn(ctx))
+        assert job_id == "prod-child"
+        assert "create" not in calls
+        assert calls["prod"][0] == "namd-parent"
+
+    def test_cross_engine_chain_seeds_stage0_from_root_then_chains_and_resumes(
+            self, tmp_path, monkeypatch):
+        """End-to-end CHAIN through the real ``advance_chains`` -> ``_chain_spawn`` ->
+        ``cross_engine_seed`` path (spawns stubbed): an oxDNA root seeds a NAMD stage 0 via
+        the reconstruct path; a completed stage 0 chains a same-engine NAMD stage 1 via the
+        checkpoint path; a failed stage 0 HALTS and resume re-runs it."""
+        import asyncio
+
+        import backend.core.oxdna_runner as oxr
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        # Root oxDNA frame available (the launch-card precheck) — no real oxDNA job needed.
+        monkeypatch.setattr(oxr, "assert_namd_seed_available", lambda job_id, ws: None)
+
+        status: dict = {}
+        created: list = []
+        produced: list = []
+        _n = {"i": 0}
+
+        async def _fake_create(body):
+            _n["i"] += 1
+            jid = f"s0-{_n['i']}"
+            created.append((jid, body.oxdna_job_id))
+            status[jid] = "running"
+            return {"job_id": jid}
+
+        async def _fake_prod(parent_id, body):
+            produced.append(parent_id)
+            status["s1"] = "running"
+            return {"job": {"job_id": "s1"}}
+
+        monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
+        monkeypatch.setattr(routes_md, "spawn_md_production", _fake_prod)
+        monkeypatch.setattr(routes_md, "_chain_job_status", lambda jid: status.get(jid, "running"))
+
+        body = routes_md.CreateChainRequest(
+            root_job_id="ox-root", root_engine="oxdna",
+            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
+                    routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+        chain = asyncio.run(routes_md.create_md_chain(body))["chain"]
+        chain_id = chain["chain_id"]
+
+        # Stage 0 spawned through the cross-engine reconstruct path (seeded from the root).
+        assert chain["stages"][0]["status"] == "running"
+        assert created and created[0] == ("s0-1", "ox-root")
+        assert produced == []                              # stage 1 not yet
+        s0 = chain["stages"][0]["job_id"]
+        assert s0 == "s0-1"
+
+        # Stage 0 completes -> stage 1 (NAMD->NAMD) chains via the checkpoint path off s0.
+        status["s0-1"] = "completed"
+        asyncio.run(routes_md.advance_chains(tmp_path))
+        mid = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
+        assert mid["stages"][0]["status"] == "done"
+        assert mid["stages"][1]["status"] == "running"
+        assert produced == ["s0-1"]                        # seeded from the realised stage 0
+
+        # Stage 1 completes -> the whole chain is completed.
+        status["s1"] = "completed"
+        asyncio.run(routes_md.advance_chains(tmp_path))
+        done = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
+        assert done["status"] == "completed"
+
+    def test_cross_engine_chain_halts_on_stage0_failure_then_resumes(self, tmp_path, monkeypatch):
+        import asyncio
+
+        import backend.core.oxdna_runner as oxr
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        monkeypatch.setattr(oxr, "assert_namd_seed_available", lambda job_id, ws: None)
+
+        status: dict = {}
+        created: list = []
+        _n = {"i": 0}
+
+        async def _fake_create(body):
+            _n["i"] += 1
+            jid = f"s0-{_n['i']}"
+            created.append(jid)
+            status[jid] = "running"
+            return {"job_id": jid}
+
+        monkeypatch.setattr(routes_md, "create_md_job", _fake_create)
+        monkeypatch.setattr(routes_md, "_chain_job_status", lambda jid: status.get(jid, "running"))
+
+        body = routes_md.CreateChainRequest(
+            root_job_id="ox-root", root_engine="oxdna",
+            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0),
+                    routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+        chain = asyncio.run(routes_md.create_md_chain(body))["chain"]
+        chain_id = chain["chain_id"]
+        assert created == ["s0-1"]
+
+        # Stage 0 fails -> the chain HALTS (no downstream spawn).
+        status["s0-1"] = "failed"
+        asyncio.run(routes_md.advance_chains(tmp_path))
+        halted = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
+        assert halted["status"] == "failed"
+        assert halted["stages"][0]["status"] == "failed"
+        assert halted["stages"][1]["status"] == "pending"
+
+        # Resume re-runs ONLY stage 0 (a fresh reconstruct), stage 1 still pending.
+        resumed = asyncio.run(routes_md.resume_md_chain(chain_id))["chain"]
+        assert resumed["status"] == "running"
+        assert resumed["stages"][0]["status"] == "running"
+        assert created == ["s0-1", "s0-2"]                 # cross-engine reconstruct re-ran
+        assert resumed["stages"][1]["status"] == "pending"

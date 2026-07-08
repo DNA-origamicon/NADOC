@@ -160,6 +160,81 @@ def test_cross_engine_hop_is_flagged():
     assert plan[1].cross_engine is True
 
 
+# ── P3: cross-engine coordinate handoff (generalizes seed_oxdna/mrdna_job_id) ─
+# The realizable cross-engine hop is a completed oxDNA/mrDNA ROOT -> a NAMD stage 0: the
+# CG job's relaxed frame reconstructs the NAMD start structure via the create-time seed
+# converter.  cross_engine_seed resolves the seed spec; a same-engine hop returns None
+# (checkpoint restart), and an unsupported hop raises rather than silently mis-seeding.
+
+def _ox_to_namd_plan(root_job="ox-relax"):
+    pipe = mp.MdPipeline(root_job_id=root_job, root_engine="oxdna",
+                         stages=[_stage(engine="namd", protocol="mgh_slow_release")])
+    return mp.build_pipeline_plan(pipe, root_checkpoint="last_conf")
+
+
+def test_cross_engine_seed_maps_oxdna_root_to_oxdna_job_id():
+    """A cross-engine oxDNA->NAMD stage resolves to the ``oxdna_job_id`` seed hop, pointed
+    at the RESOLVED predecessor job (not the ``stageN`` placeholder)."""
+    plan = _ox_to_namd_plan()
+    seed = mp.cross_engine_seed(plan[0], "ox-relax-realised")
+    assert seed is not None
+    assert seed.seed_engine == "oxdna"
+    assert seed.seed_field == "oxdna_job_id"       # the create-time / MdJob provenance kwarg
+    assert seed.seed_job_id == "ox-relax-realised"  # resolved parent, never "stage0"
+    assert seed.target_engine == "namd"
+
+
+def test_cross_engine_seed_maps_mrdna_root_to_mrdna_job_id():
+    pipe = mp.MdPipeline(root_job_id="m", root_engine="mrdna",
+                         stages=[_stage(engine="namd")])
+    plan = mp.build_pipeline_plan(pipe, root_checkpoint="fine")
+    seed = mp.cross_engine_seed(plan[0], "mrdna-realised")
+    assert seed.seed_field == "mrdna_job_id" and seed.seed_engine == "mrdna"
+    assert seed.seed_job_id == "mrdna-realised"
+
+
+def test_same_engine_stage_has_no_cross_engine_seed():
+    """A NAMD->NAMD hop returns None -> the executor restarts a checkpoint via
+    ``spawn_md_production``, never the reconstruct path."""
+    pipe = mp.MdPipeline(root_job_id="r", root_engine="namd",
+                         stages=[_stage(engine="namd"), _stage(engine="namd")])
+    plan = mp.build_pipeline_plan(pipe, root_checkpoint="eq")
+    assert mp.cross_engine_seed(plan[0], "r") is None
+    assert mp.cross_engine_seed(plan[1], "stage0-job") is None
+
+
+def test_cross_engine_seed_rejects_an_unsupported_sink():
+    """Only NAMD can rebuild an atomistic model from coarse coords; a hop INTO oxDNA
+    (namd->oxdna) is flagged cross but has no reconstructor -> raises, not mis-seeds."""
+    pipe = mp.MdPipeline(root_job_id="n", root_engine="namd",
+                         stages=[_stage(engine="oxdna", protocol="relax")])
+    plan = mp.build_pipeline_plan(pipe, root_checkpoint="eq")
+    assert plan[0].cross_engine is True
+    with pytest.raises(ValueError):
+        mp.cross_engine_seed(plan[0], "n")
+
+
+def test_cross_engine_seed_rejects_an_unknown_source_engine():
+    bad = mp.StagePlan(
+        index=0, stage_id="stage0", engine="namd", protocol="p",
+        parent_job_id="c", parent_engine="cando", run_kind="production", seed=1,
+        start_checkpoint=None, forces={}, run_target="local", cluster_name=None,
+        length_ns=None, steps=None, label=None, cross_engine=True)
+    with pytest.raises(ValueError):
+        mp.cross_engine_seed(bad, "c")
+
+
+def test_cross_engine_seed_requires_a_resolved_parent():
+    """The seed job must be the RESOLVED predecessor; an unresolved (None) parent raises
+    rather than seeding from nothing."""
+    pipe = mp.MdPipeline(root_job_id=None, root_engine="oxdna",
+                         stages=[_stage(engine="namd")])
+    plan = mp.build_pipeline_plan(pipe)
+    assert plan[0].cross_engine is True
+    with pytest.raises(ValueError):
+        mp.cross_engine_seed(plan[0], None)
+
+
 # ── persistence round-trip (P2/P4 persist the plan) ──────────────────────────
 
 def test_pipeline_dict_round_trip():
