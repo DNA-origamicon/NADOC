@@ -855,6 +855,27 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
 - **Repro FIRST + ASK before fixing** (loop discipline): re-run the single spec, read the captured error, then
   confirm the desired teardown behavior. Likely a stale-subscription / dispose-order bug (a known LESSONS class).
 
+## ISSUE-15 — `fetch_outputs` marks a remote MD job `completed` even when its output download failed (correctness; surfaced-by-review, ask-first)
+
+- **Status:** `[ ]` OPEN. Surfaced 2026-07-08 by the P2 chain-executor fresh-context review — **NOT reproduced/pinned**
+  (found by reading, not by a failing test). Pre-existing `md_executor` behavior, unrelated to the code P2 shipped.
+- **Symptom:** `backend/core/md_executor.py` `_poll_one`/reconcile calls `fetch_outputs` inside a try/except that
+  only **logs a warning** on failure and then **unconditionally** marks the remote (Alpine/SLURM) job
+  `completed` (around `md_executor.py:621-633`). So a job whose `output/<ckpt>.coor/.xsc` did not (fully) download
+  is still reported `completed`. A completed job is no longer re-polled by `poll_remote_jobs`, so the missing
+  outputs are never re-fetched automatically.
+- **Why it matters (the P2 trigger):** the job-planner chain executor (`advance_chains`) seeds stage N+1 from stage
+  N's checkpoint; a `completed`-but-outputs-missing stage makes `spawn_md_production` 400 ("Checkpoint … were not
+  found locally"). P2 now HARDENS its own side (bounded spawn retry, `_MAX_STAGE_SPAWN_ATTEMPTS`), but because the
+  completed job is never re-polled, retries exhaust and the chain halts requiring manual intervention — the true
+  fix is on the `md_executor` side (don't mark `completed` on a failed/partial fetch; keep it re-pollable).
+- **Where (leads, verify):** `md_executor.py` `fetch_outputs` + `_poll_one` completion transition; check whether a
+  partial/failed download can be distinguished (rc / expected-file manifest) and whether the job should stay
+  `running`/`fetching` for a re-poll instead of flipping to `completed`.
+- **Repro FIRST + ASK before fixing** (loop discipline): construct a remote job whose fetch fails (mock the
+  transfer) and assert it does NOT go `completed` with missing outputs; confirm the desired state (re-pollable vs
+  a distinct `fetch_failed`) with the user — it's a UX/semantics call, not purely mechanical.
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element

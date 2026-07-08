@@ -1246,3 +1246,142 @@ class TestReconcilePreparing:
         write_prep_progress(job.job_dir(tmp_path), {"phase": "solvate", "fraction": 0.3})
         out = runner.reconcile_job_status(job, tmp_path)
         assert out.status == MdStatus.preparing  # live heartbeat → untouched
+
+
+
+class TestMdChain:
+    """P2 chain executor wired end-to-end through the real NAMD spawn/status adapter
+    (NAMD launch stubbed): create -> a real stage-0 production child; halt-on-failure ->
+    resume-from-failed.  The stage-to-stage seeding logic itself is proven headless in
+    ``tests/test_md_chain_executor.py`` (the engine-agnostic CHAIN oracle).  Reuses
+    ``TestProductionAppend``'s ``_routes_md`` / ``_ready_job`` helpers (stateless)."""
+
+    _tp = TestProductionAppend()
+
+    def _create_chain(self, routes_md, tmp_path, monkeypatch, parent, *, n=2):
+        import asyncio
+
+        (parent.package_dir(tmp_path) / "D.pdb").write_text("* stub\n")
+        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
+        started: list = []
+        monkeypatch.setattr(routes_md, "start_job", lambda job, ws: started.append(job.job_id))
+        body = routes_md.CreateChainRequest(
+            root_job_id=parent.job_id, root_engine="namd",
+            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0) for _ in range(n)])
+        result = asyncio.run(routes_md.create_md_chain(body))
+        return result["chain"], started
+
+    def test_create_chain_spawns_real_stage0_child(self, tmp_path, monkeypatch):
+        from backend.core.md_job import MdJob
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        parent = self._tp._ready_job(tmp_path)
+        chain, started = self._create_chain(routes_md, tmp_path, monkeypatch, parent)
+
+        assert chain["status"] == "running"
+        assert chain["stages"][0]["status"] == "running"
+        assert chain["stages"][1]["status"] == "pending"
+        s0_job = chain["stages"][0]["job_id"]
+        assert s0_job
+        child0 = MdJob.load(s0_job, tmp_path)
+        assert child0.parent_job_id == parent.job_id     # stage 0 seeds from the root
+        assert child0.run_kind == "production"
+        assert started == [s0_job]                        # local child autostarted
+
+    def test_create_requires_completed_root(self, tmp_path, monkeypatch):
+        import asyncio
+
+        from backend.core.md_job import MdStatus
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        parent = self._tp._ready_job(tmp_path)
+        parent.status = MdStatus.failed          # a failed root reconciles to != completed
+        parent.save(tmp_path)
+        body = routes_md.CreateChainRequest(
+            root_job_id=parent.job_id,
+            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+        with pytest.raises(Exception) as exc:
+            asyncio.run(routes_md.create_md_chain(body))
+        assert getattr(exc.value, "status_code", None) == 400
+
+    def test_chain_halts_on_stage_failure_then_resumes_from_failed(self, tmp_path, monkeypatch):
+        import asyncio
+
+        from backend.core.md_job import MdJob, MdStatus
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        parent = self._tp._ready_job(tmp_path)
+        chain, _ = self._create_chain(routes_md, tmp_path, monkeypatch, parent)
+        chain_id = chain["chain_id"]
+        s0_job = chain["stages"][0]["job_id"]
+
+        # Stage-0 child fails -> the supervisor pass HALTS the chain (no downstream spawn).
+        child0 = MdJob.load(s0_job, tmp_path)
+        child0.status = MdStatus.failed
+        child0.save(tmp_path)
+        asyncio.run(routes_md.advance_chains(tmp_path))
+        halted = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
+        assert halted["status"] == "failed"
+        assert halted["stages"][0]["status"] == "failed"
+        assert halted["stages"][1]["status"] == "pending"
+
+        # Resume re-runs ONLY the failed stage: a NEW stage-0 child spawns; stage 1 stays
+        # pending (retry-only-failed, not a full restart).
+        resumed = asyncio.run(routes_md.resume_md_chain(chain_id))["chain"]
+        assert resumed["status"] == "running"
+        assert resumed["stages"][0]["status"] == "running"
+        new_s0 = resumed["stages"][0]["job_id"]
+        assert new_s0 and new_s0 != s0_job
+        assert resumed["stages"][1]["status"] == "pending"
+
+    def test_resume_rejects_a_non_failed_chain(self, tmp_path, monkeypatch):
+        import asyncio
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        parent = self._tp._ready_job(tmp_path)
+        chain, _ = self._create_chain(routes_md, tmp_path, monkeypatch, parent)
+        with pytest.raises(Exception) as exc:
+            asyncio.run(routes_md.resume_md_chain(chain["chain_id"]))
+        assert getattr(exc.value, "status_code", None) == 400
+
+    def test_transient_spawn_failure_retries_then_halts(self, tmp_path, monkeypatch):
+        """A spawn that keeps failing (e.g. the seed checkpoint hasn't downloaded yet)
+        does NOT dead-end the chain on the first hiccup: the stage stays pending and
+        retries for a bounded number of supervisor ticks, halting only past the cap —
+        so a transient issue self-heals but a permanent one still eventually fails."""
+        import asyncio
+
+        routes_md = self._tp._routes_md(tmp_path, monkeypatch)
+        parent = self._tp._ready_job(tmp_path)
+
+        async def _boom(ctx):
+            raise RuntimeError("seed checkpoint not on disk yet")
+
+        monkeypatch.setattr(routes_md, "_chain_spawn", _boom)
+        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
+        body = routes_md.CreateChainRequest(
+            root_job_id=parent.job_id, root_engine="namd",
+            stages=[routes_md.ChainStageRequest(engine="namd", length_ns=1.0)])
+        result = asyncio.run(routes_md.create_md_chain(body))  # attempt 1
+        chain_id = result["chain"]["chain_id"]
+
+        # After the first failed attempt the chain is NOT terminal — stage stays pending.
+        assert result["chain"]["status"] != "failed"
+        assert result["chain"]["stages"][0]["status"] == "pending"
+        assert result["chain"]["stages"][0]["spawn_attempts"] == 1
+
+        # Two more supervisor ticks reach the cap (3) → the chain halts, resumable.
+        asyncio.run(routes_md.advance_chains(tmp_path))  # attempt 2 (still pending)
+        mid = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
+        assert mid["status"] != "failed" and mid["stages"][0]["spawn_attempts"] == 2
+
+        asyncio.run(routes_md.advance_chains(tmp_path))  # attempt 3 → halt
+        halted = asyncio.run(routes_md.get_md_chain(chain_id))["chain"]
+        assert halted["status"] == "failed"
+        assert halted["stages"][0]["status"] == "failed"
+        assert halted["stages"][0]["spawn_attempts"] == 3
+
+        # A manual resume grants a fresh retry budget (attempts reset to 0 pre-retry).
+        resumed = asyncio.run(routes_md.resume_md_chain(chain_id))["chain"]  # attempt 1 again
+        assert resumed["stages"][0]["spawn_attempts"] == 1
+        assert resumed["status"] != "failed"

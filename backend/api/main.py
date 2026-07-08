@@ -115,6 +115,17 @@ async def _md_supervisor_loop() -> None:
             raise
         except Exception:
             logger.exception("MD remote poll pass failed")
+        # Chain executor (P2): advance any queued multi-stage MdPipeline chain — spawn
+        # stage N when stage N-1 completes; a halted chain waits for a manual resume.
+        try:
+            from backend.api.routes_md import advance_chains
+            advanced = await advance_chains(_WORKSPACE_DIR)
+            if advanced:
+                logger.info("MD supervisor advanced chains: %s", ", ".join(advanced))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MD chain advance pass failed")
         await asyncio.sleep(_MD_SUPERVISOR_INTERVAL_S)
 
 

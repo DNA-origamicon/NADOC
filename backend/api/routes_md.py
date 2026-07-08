@@ -24,6 +24,7 @@ import json
 import logging
 import shutil
 import time
+import uuid
 from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
@@ -34,7 +35,9 @@ from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
+from backend.core import md_chain_executor as _chain
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
+from backend.core.md_pipeline import MdPipeline, PipelineStage
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     SUPPORTED_PROTOCOLS,
@@ -2459,3 +2462,177 @@ def md_browse(dir: str = "", ext: str = "") -> dict:
             continue
 
     return {"path": str(base), "entries": entries}
+
+
+# ══ MD job PIPELINE / CHAIN executor (P2) ═══════════════════════════════════════
+# Run an MdPipeline's stages back-to-back unattended: each stage is a production child
+# seeded from the previous stage's output; on failure the chain halts and is resumable
+# from the failed stage.  The engine-agnostic state machine lives in
+# ``backend.core.md_chain_executor``; this is the NAMD spawn/status adapter + the
+# create/list/resume routes + the supervisor driver (`advance_chains`).
+
+def _chain_job_status(job_id: Optional[str]) -> str:
+    """Map an ``MdJob``'s status onto the executor's running/completed/failed vocabulary."""
+    if not job_id:
+        return "failed"
+    try:
+        job = _load_job(job_id)
+    except HTTPException:
+        return "failed"
+    if job.status == MdStatus.completed:
+        return "completed"
+    if job.status in (MdStatus.failed, MdStatus.stopped):
+        return "failed"
+    return "running"
+
+
+async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
+    """Realise one chain stage as a production child, reusing ``spawn_md_production``.
+
+    Stage 0's parent is the chain's root job; stage N's parent is the previous stage's
+    realised child.  ``spawn_md_production`` seeds a production child from ANY completed
+    job (relaxation OR production) — exactly the chain hop — so the previous stage's
+    equilibrated output becomes the next stage's start structure.  Run target / length
+    flow from the stage spec; a local child autostarts, an alpine child queues for the
+    submit-review card.
+
+    Forces (field/anchors) carry into the child conf through the shared
+    :func:`md_chain_executor.stage_forces_conf` -> ``external_forces_block`` path; wiring
+    them all the way into the production reseed conf is the remaining P2 follow-up (needs
+    ``ProductionRunRequest.field``/``anchors`` + reseed-conf emission)."""
+    plan = ctx.plan
+    body = ProductionRunRequest(
+        steps=plan.steps,
+        length_ns=plan.length_ns,
+        autostart=(plan.run_target == "local"),
+        execution_target=plan.run_target,
+        cluster_name=plan.cluster_name,
+    )
+    result = await spawn_md_production(ctx.parent_job_id, body)
+    return result["job"]["job_id"]
+
+
+# A stage spawn can fail on a TRANSIENT precondition — e.g. the previous stage's remote
+# outputs haven't finished downloading yet, so its seed checkpoint isn't on disk.  Rather
+# than dead-end the whole (unattended) chain on the first hiccup, the driver leaves the
+# stage pending and retries on the next supervisor tick, halting only after this many
+# consecutive failures (mirrors namd_runner's MAX_*_RESUMES bounded auto-resume).
+_MAX_STAGE_SPAWN_ATTEMPTS = 3
+
+
+async def advance_chains(workspace: Path) -> list[str]:
+    """Drive every persisted chain by at most one transition (the MD supervisor pass).
+
+    Reconcile the running stage against its job's status, then — if none is in flight —
+    spawn the next stage.  A transient spawn failure leaves the stage pending for a bounded
+    number of retries; past the cap the chain halts (resumable from that stage).  Returns
+    the ids of chains whose state changed (so the supervisor can log them)."""
+    touched: list[str] = []
+    for chain in _chain.list_chains(workspace):
+        if chain.status in (_chain.CHAIN_COMPLETED, _chain.CHAIN_FAILED):
+            continue
+        before = chain.to_dict()
+        _chain.reconcile_running(chain, _chain_job_status)
+        ctx = _chain.next_spawn(chain)
+        if ctx is not None:
+            try:
+                # _chain_spawn must be all-or-nothing: it currently only raises on a
+                # precondition BEFORE creating/starting the child, so the except path
+                # below can safely assume no job was spawned (the invariant that keeps
+                # "one stage runs at a time" intact — see spawn_md_production).
+                job_id = await _chain_spawn(ctx)
+            except Exception as exc:  # noqa: BLE001 — transient-tolerant bounded retry
+                stage = chain.stages[ctx.stage_index]
+                stage.spawn_attempts += 1
+                logger.exception(
+                    "chain %s stage %d spawn failed (attempt %d/%d)",
+                    chain.chain_id, ctx.stage_index, stage.spawn_attempts,
+                    _MAX_STAGE_SPAWN_ATTEMPTS)
+                if stage.spawn_attempts >= _MAX_STAGE_SPAWN_ATTEMPTS:
+                    stage.status = _chain.STAGE_FAILED
+                    chain.status = _chain.CHAIN_FAILED
+                    chain.error = (
+                        f"stage {ctx.stage_index} spawn failed after "
+                        f"{stage.spawn_attempts} attempts: {exc}")
+                else:  # leave the stage pending — the next tick retries
+                    chain.error = (
+                        f"stage {ctx.stage_index} spawn attempt {stage.spawn_attempts} "
+                        f"failed (will retry): {exc}")
+            else:
+                _chain.mark_spawned(chain, ctx.stage_index, job_id)
+        if chain.to_dict() != before:
+            _chain.save_chain(chain, workspace)
+            touched.append(chain.chain_id)
+    return touched
+
+
+class ChainStageRequest(BaseModel):
+    """One stage in a chain request (mirrors ``PipelineStage``)."""
+    engine: str = Field(..., description="Engine for this stage, e.g. 'namd'")
+    protocol: str = Field("production", description="Run protocol for the stage")
+    field: Optional[dict] = Field(None, description="Shared E-field descriptor")
+    anchors: Optional[list] = Field(None, description="Shared anchor-scope list")
+    surface: Optional[dict] = Field(None, description="Shared surface/floor descriptor")
+    run_target: str = Field("local", description="'local' or 'alpine'")
+    cluster_name: Optional[str] = Field(None, description="Cluster for an alpine stage")
+    length_ns: Optional[float] = Field(None, gt=0.0, le=100.0)
+    steps: Optional[int] = Field(None, ge=100, le=50_000_000)
+    label: Optional[str] = Field(None, description="Human label for the stage")
+
+
+class CreateChainRequest(BaseModel):
+    """Queue a multi-stage chain seeded from a completed root job."""
+    root_job_id: str = Field(..., description="Completed job whose checkpoint seeds stage 0")
+    root_engine: Optional[str] = Field(None, description="Engine of the root job")
+    stages: list[ChainStageRequest] = Field(..., description="Ordered stage specs")
+
+
+@router.post("/md/chains")
+async def create_md_chain(body: CreateChainRequest) -> dict:
+    """Build + persist an ``MdPipeline`` chain, then spawn stage 0.  The MD supervisor
+    advances the remaining stages unattended (stage N on stage N-1's completion)."""
+    root = _load_job(body.root_job_id)  # 404 if missing
+    if not body.stages:
+        raise HTTPException(400, "A chain needs at least one stage.")
+    if root.status != MdStatus.completed:
+        raise HTTPException(
+            400, "The chain's root job must be a completed run to seed the first stage.")
+    pipeline = MdPipeline(
+        root_job_id=body.root_job_id,
+        root_engine=body.root_engine or "namd",
+        stages=[PipelineStage(**s.model_dump()) for s in body.stages],
+    )
+    chain_id = uuid.uuid4().hex[:12]
+    chain = _chain.init_chain_run(pipeline, chain_id=chain_id)
+    _chain.save_chain(chain, _workspace())
+    # Kick stage 0 immediately so the chain is live before the first supervisor tick.
+    await advance_chains(_workspace())
+    return {"ok": True, "chain": _chain.load_chain(chain_id, _workspace()).to_dict()}
+
+
+@router.get("/md/chains")
+async def list_md_chains() -> dict:
+    return {"chains": [c.to_dict() for c in _chain.list_chains(_workspace())]}
+
+
+@router.get("/md/chains/{chain_id}")
+async def get_md_chain(chain_id: str) -> dict:
+    try:
+        return {"chain": _chain.load_chain(chain_id, _workspace()).to_dict()}
+    except FileNotFoundError:
+        raise HTTPException(404, f"No chain {chain_id}.")
+
+
+@router.post("/md/chains/{chain_id}/resume")
+async def resume_md_chain(chain_id: str) -> dict:
+    """Resume a HALTED chain from its failed stage (retry-only-failed) and re-advance."""
+    try:
+        chain = _chain.load_chain(chain_id, _workspace())
+    except FileNotFoundError:
+        raise HTTPException(404, f"No chain {chain_id}.")
+    if chain.status != _chain.CHAIN_FAILED:
+        raise HTTPException(400, "Only a halted (failed) chain can be resumed.")
+    _chain.resume_chain(chain)
+    _chain.save_chain(chain, _workspace())
+    await advance_chains(_workspace())
+    return {"ok": True, "chain": _chain.load_chain(chain_id, _workspace()).to_dict()}

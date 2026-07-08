@@ -814,6 +814,55 @@ experimentally-anchored MD engine), the first time the roster is complete and NA
   so a future card reusing the shared `efield-toggle` id under a different engine could stay green; can't produce
   a current false result; left as-is (tripwires #1+#2 carry the parity).
 
+### 2026-07-08 — `P2` chain EXECUTOR (advance / halt / resume-from-failed) — job-planner track
+
+- **CHAIN capability PROVEN, not just wired:** `backend/core/md_chain_executor.py` turns a P1 `MdPipeline` into a
+  live, self-advancing chain. The bright line — *stage N runs SEEDED FROM stage N-1's output; on failure the
+  chain HALTS and RESUMES from the failed stage (retry-only-failed)* — is proven headless by the FAST CHAIN
+  oracle (`tests/test_md_chain_executor.py`, 12 tests, fully mocked spawn/status). `test_advances_seeded_from_
+  predecessor` asserts stage 1's parent is stage 0's REALISED job id (not the root) with a literal RED guard;
+  `test_resume_reruns_only_the_failed_stage` asserts the completed stage keeps its job id + `done` status and is
+  never handed to the spawner twice.
+- **Engine-agnostic state machine, injected callbacks:** the only engine touch-points are `spawn(ctx)->job_id`
+  and `job_status(job_id)->running|completed|failed`. Primitives `reconcile_running` / `next_spawn` /
+  `mark_spawned` let the async driver `await` a real spawn between two pure transitions; `step_chain` composes
+  them sync for the oracle. `resume_chain` resets from `failed_stage_index()` down to pending. Persistence
+  (`save/load/list_chains` → `workspace/md_chains/{id}/chain.json`) round-trips the plan + stage states.
+- **Real NAMD wiring lives in the API layer** (keeps `backend/core` free of `backend/api`): `routes_md`
+  `_chain_job_status` maps `MdStatus`, `_chain_spawn` REUSES `spawn_md_production` VERBATIM (it already seeds a
+  production child from ANY completed job — relaxation OR production — which IS the chain hop; run target/length
+  flow from the stage; local autostarts, alpine queues). `advance_chains(workspace)` drives every persisted chain
+  one transition and is called from the MD supervisor loop (`main.py`) → a chain marches stage-to-stage
+  UNATTENDED. Routes: `POST /md/chains` (build+persist+kick stage 0), `GET /md/chains[/{id}]`,
+  `POST /md/chains/{id}/resume`. Headless route oracle `tests/test_md_milestone1.py::TestMdChain` (4): create →
+  real stage-0 production child (start stubbed); create refuses a non-completed root; halt-on-failure → resume
+  spawns a NEW stage-0 child while stage 1 stays pending; resume rejects a non-failed chain.
+- **Forces carry into the child conf via the SHARED emitter:** `stage_forces_conf(forces)` reuses
+  `md_protocols.external_forces_block` (the `fixedAtoms`+`eField` block every launch card writes); the oracle
+  asserts a field stage → `eField` line, an anchor stage → `fixedAtomsFile` line, byte-identical to the emitter.
+  **KNOWN P2 FOLLOW-UP (documented, not a gap in scope):** threading those forces all the way into the
+  production *reseed* conf needs `ProductionRunRequest.field`/`anchors` + reseed-conf emission — the shared-emitter
+  proof is at the conf-snippet level, not yet injected end-to-end. P3 (cross-engine seed) + P4 (planner UI) build
+  on this.
+- **Fresh-context review — core CLEAN, 3 edge findings acted on:** it CONFIRMED no double-spawn/skip/re-run-
+  completed/fail-to-halt bug, correct persistence round-trip, correct `failed_stage_index`+resume-reset, no
+  off-by-one, no event-loop concurrency double-spawn. (1 MED/HIGH) the broad-except spawn failure was a PERMANENT
+  halt → HARDENED `advance_chains` with a bounded retry (`StageState.spawn_attempts`, `_MAX_STAGE_SPAWN_ATTEMPTS=3`,
+  mirrors `namd_runner`'s `MAX_*_RESUMES`): a transient precondition (prev stage's remote outputs not yet
+  downloaded) leaves the stage pending + retries next tick, halting only past the cap; `resume_chain` resets the
+  budget (`test_transient_spawn_failure_retries_then_halts`). The ALPINE root cause it flagged — `md_executor.
+  fetch_outputs` marks a remote job `completed` even when its output download failed → **filed ISSUE-15** (pre-
+  existing `md_executor` bug, out of P2 scope). (2 LOW) `_chain_spawn` discards the plan's per-stage seed (all
+  stages get 54321; harmless — different coords) → documented follow-up. (3 latent) added the all-or-nothing
+  spawn-invariant comment.
+- **SLOW real 2-stage local chain NOT run** (needs live NAMD; a sim may be running → owes an **MV row**, precedent
+  = `md_cutoff`/N1). Three-Layer clean (no Design/topology touch; forces are job-request annotations). Gates:
+  oracle 12/12 + route 5/5; `just test` **4410 passed** / 110 skip / 1 xfail (was 4393; +17 = new tests, no drop,
+  xdist flake didn't fire); ruff clean on all touched. `main.js` LOC-Δ = 0 (backend-only, no frontend).
+- **Capability/de-dup proven, not just wired:** the CHAIN capability — stage N seeded from N-1's output, halt +
+  resume-from-failed-stage — is proven by the RED-verified FAST oracle + the real-child route oracle, not "a
+  Plan Run button exists".
+
 ## Lessons (anti-patterns banked)
 
 ### Banked from O1
