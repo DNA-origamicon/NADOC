@@ -16,6 +16,7 @@
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { initJobsPanelBase } from './jobs_panel_base.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
@@ -485,10 +486,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   let _jobs       = []
   let _selectedId = null
   let _progress   = null
-  let _pollTimer  = null
   let _listSig    = null   // last-rendered list signature (avoids spinner-restart churn)
   const _legend   = { el: null }   // status-symbol legend, inserted once after the list
-  let _collapsed  = getSectionCollapsed('dynamics', 'oxdna-jobs-panel', true)
   let _advOpen    = false
   let _available  = false
   let _launching  = false
@@ -829,15 +828,25 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
 
-  // ── Collapse ───────────────────────────────────────────────────────────────
-  body.style.display = _collapsed ? 'none' : ''
-  arrow?.classList.toggle('is-collapsed', _collapsed)
-  heading.addEventListener('click', () => {
-    _collapsed = !_collapsed
-    body.style.display = _collapsed ? 'none' : ''
-    arrow?.classList.toggle('is-collapsed', _collapsed)
-    setSectionCollapsed('dynamics', 'oxdna-jobs-panel', _collapsed)
-    if (!_collapsed) _onOpen()
+  // ── collapse (section) + poll — shared jobs-panel base (U3 slice 2c-3a) ──────
+  // oxDNA accommodations: section arrow via the `is-collapsed` class
+  // (arrowStyle:'class'); the poll gate is open AND (a visible job is active OR the
+  // selected job is running). The base adds a `clearPoll()` on collapse the bespoke
+  // path lacked (harmless: a trailing timer only ever re-fetched then found itself
+  // collapsed and stopped). The ADVANCED drawer stays bespoke below — oxDNA tracks
+  // it with an `_advOpen` boolean whose first click opens, whereas the base reads
+  // `display` (and the markup's `display:none;display:grid` computes to visible), so
+  // converging it would flip the first click. `initCollapsed` runs at the end (with
+  // the other mount probes) to preserve the original apply-then-onOpen ordering.
+  const _base = initJobsPanelBase({
+    section: 'oxdna-jobs-panel',
+    els: { heading, body, arrow },
+    pollMs: POLL_MS,
+    arrowStyle: 'class',
+    hasActive: () => _hasActiveJob() ||
+      (!!_selectedId && !!_jobs.find(j => j.job_id === _selectedId && j.status === 'running')),
+    tick: () => _fetchJobs(),
+    onOpen: () => _onOpen(),
   })
 
   advToggle?.addEventListener('click', () => {
@@ -935,18 +944,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
         }
       }
     }
-    _scheduleNextPoll()
+    _base.schedulePoll()
   }
 
   function _hasActiveJob() {
     return _visibleJobs().some(j => ['queued', 'preparing', 'running'].includes(j.status))
-  }
-  function _scheduleNextPoll() {
-    if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
-    if (_collapsed) return
-    if (_hasActiveJob() || (_selectedId && _jobs.find(j => j.job_id === _selectedId && j.status === 'running'))) {
-      _pollTimer = setTimeout(_fetchJobs, POLL_MS)
-    }
   }
 
   function _onOpen() {
@@ -1104,7 +1106,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       _lastFrameIndex = null
       await _refreshDisplay()
     }
-    _scheduleNextPoll()
+    _base.schedulePoll()
   }
 
   // Repopulate the panel's own relaxation/production inputs AND the external
@@ -1725,11 +1727,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // seeded job is visible right away.  Expanding MD via its own heading click
   // keeps its collapse state consistent and refreshes its job list.
   function _revealMdPanel() {
-    if (!_collapsed) {
-      _collapsed = true
-      body.style.display = 'none'
-      arrow?.classList.toggle('is-collapsed', true)
+    if (_base.isOpen()) {
       setSectionCollapsed('dynamics', 'oxdna-jobs-panel', true)
+      _base.applyCollapsed(true)
     }
     if (getSectionCollapsed('dynamics', 'md-jobs-panel', true)) {
       document.getElementById('md-jobs-panel-heading')?.click()
@@ -1900,8 +1900,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.activeTab !== 'dynamics') {
       if (oxdnaDisplay?.isActive()) _allDisplaysOff()
-      if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
-    } else if (!_collapsed) {
+      _base.clearPoll()
+    } else if (_base.isOpen()) {
       _onOpen()
     }
   })
@@ -1931,8 +1931,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _resetControlsToDefaults()   // drop the previous design's relaxation/run settings
     _updateButtons(null)
     _emitJobSelected()
-    if (_collapsed) _renderList()   // re-filter cached jobs to the new path
-    else _fetchJobs()               // fresh fetch + re-filter
+    if (!_base.isOpen()) _renderList()   // re-filter cached jobs to the new path
+    else _fetchJobs()                    // fresh fetch + re-filter
   })
 
   // Graphs & Metrics card — a child module reading the panel's job selection.
@@ -1980,7 +1980,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   // initial availability probe (cheap) so the status line is populated.
   _checkAvailable()
-  if (!_collapsed) _onOpen()
+  _base.initCollapsed(true)   // apply persisted collapse; fires _onOpen if starting open
 
   return { refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent }
 }

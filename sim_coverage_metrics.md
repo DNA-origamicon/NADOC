@@ -424,6 +424,26 @@ fills in as milestones complete.
   not just wired:** the stateful scaffold two panels re-implemented byte-for-byte now lives in one factory, pinned
   by a conformance oracle to behave identically.
 
+- **`U3` (slice 2c-3a) — oxDNA section-collapse + poll converged onto `initJobsPanelBase`** · shape: rewire an
+  existing panel onto the shared stateful factory (no new module) · feature: engine-consolidation (4th base
+  consumer after mrDNA/CanDo/LAMMPS) · engines now comparable: oxDNA's collapse state machine + poll timer
+  (`_collapsed`/`_pollTimer`/`_scheduleNextPoll` DELETED) now run through the same factory; `arrowStyle:'class'`,
+  hasActive = visible-active OR selected-running · oracle (FAST, +3 tests): jsdom PARITY driving the REAL
+  `initOxdnaJobsPanel` — heading-click collapse (body hidden + `is-collapsed` class), poll fires while open+active
+  & STOPS on collapse (fake timers), no-poll-when-idle; the stop-on-collapse assertion FAILED pre-rewire (3 vs 2:
+  bespoke let one trailing poll fire) and PASSES post-rewire = adapted-code pin, not green-by-construction · the
+  ADVANCED drawer LEFT bespoke (oxDNA's `_advOpen` boolean vs the base's display-read + markup `display:none;
+  display:grid`→visible ⇒ converging would flip first-click) · main.js LOC Δ = 0 · net panel LOC ≈ flat (the win
+  is the deleted duplicated poll+collapse machinery, not LOC) · tests: oracle 90/90; frontend 184 files / 2362
+  passed (+3, no drop); smoke 23/23; lint N/A (frontend-only; the 19 `just lint` errors are pre-existing Python) ·
+  display-vs-oracle: behaviour-preserving; the one-off Playwright was blocked by unrelated left-tab-switch
+  plumbing (`#tab-content-dynamics` stayed `display:none`) → live gesture deferred to **MV-26** · fresh-context
+  review: all 6 adapted sites CONFIRMED equivalent, only the intended `clearPoll`-on-collapse delta, no TDZ ·
+  **STATUS in_progress**: REMAINING = slice 2c-3b converge md (module-level `_collapsed` reads + 2nd remote
+  `setInterval` poll + cross-panel md-collapse coordination), then U4 selector · **De-dup proven, not just wired:**
+  oxDNA's bespoke collapse+poll is DELETED in favor of the shared base, pinned by a PARITY oracle that FAILS on the
+  bespoke code and PASSES on the converged code.
+
 - **`P1` — MdPipeline stage-spec data model + pure chain builder** · shape: new `backend/core` service
   (`md_pipeline.py`; pure data model + builder, no card/solver, no job submission) · feature: chaining
   (job-planner backbone) · engines now chainable: any engine's stage can be seeded from the previous stage's

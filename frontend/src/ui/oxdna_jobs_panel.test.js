@@ -967,3 +967,75 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-seed-btn').disabled).toBe(true)
   })
 })
+
+// PARITY oracle for the shared-scaffold convergence (U3 slice 2c-3a): the section
+// collapse (arrow via the `is-collapsed` class idiom — NOT the advanced drawer,
+// which stays bespoke because oxDNA's `_advOpen` boolean flips the first click
+// opposite to the base's display-reading model) and the open+active poll gate must
+// behave identically whether oxDNA drives its own bespoke `_collapsed`/
+// `_scheduleNextPoll` or the shared `initJobsPanelBase`. Written & run GREEN against
+// the bespoke code FIRST, then re-run post-rewire (adapted-code in-place-first pin).
+describe('initOxdnaJobsPanel — shared jobs-panel base parity (section collapse + poll)', () => {
+  const IDS = [
+    'oxdna-jobs-panel', 'oxdna-jobs-heading', 'oxdna-jobs-arrow', 'oxdna-jobs-body',
+    'oxdna-jobs-status', 'oxdna-jobs-run-btn', 'oxdna-jobs-prod-btn', 'oxdna-jobs-prod-status',
+    'oxdna-jobs-list', 'oxdna-jobs-detail', 'oxdna-jobs-show-all',
+  ]
+  const $ = (id) => document.getElementById(id)
+  const heading = () => $('oxdna-jobs-heading')
+
+  beforeEach(() => {
+    clearDom(); mountIds(IDS)
+    localStorage.clear()               // section starts at the default (collapsed)
+    api.oxdnaAvailable.mockResolvedValue({ available: true, oxdna_bin: 'x' })
+    vi.clearAllMocks()
+    api.oxdnaAvailable.mockResolvedValue({ available: true, oxdna_bin: 'x' })
+  })
+  afterEach(() => { clearDom(); vi.useRealTimers() })
+
+  it('section starts collapsed; the heading click toggles the body + `is-collapsed` arrow', async () => {
+    api.listOxdnaJobs.mockResolvedValue([])
+    initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await flush()
+    // default = collapsed
+    expect($('oxdna-jobs-body').style.display).toBe('none')
+    expect($('oxdna-jobs-arrow').classList.contains('is-collapsed')).toBe(true)
+
+    heading().click(); await flush()                                   // open
+    expect($('oxdna-jobs-body').style.display).not.toBe('none')
+    expect($('oxdna-jobs-arrow').classList.contains('is-collapsed')).toBe(false)
+
+    heading().click(); await flush()                                   // collapse
+    expect($('oxdna-jobs-body').style.display).toBe('none')
+    expect($('oxdna-jobs-arrow').classList.contains('is-collapsed')).toBe(true)
+  })
+
+  it('polls listOxdnaJobs on the interval while open with an active run, then stops once collapsed', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'r1', design_source_path: 'A.nadoc', status: 'running',
+      created_at: 1, current_stage_idx: 1, stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'running' }] }])
+    vi.useFakeTimers()
+    initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    heading().click()                                                  // open → onOpen fetch + schedule
+    await vi.advanceTimersByTimeAsync(0)
+    const n0 = api.listOxdnaJobs.mock.calls.length
+    await vi.advanceTimersByTimeAsync(1500)                            // one poll tick
+    const n1 = api.listOxdnaJobs.mock.calls.length
+    expect(n1).toBeGreaterThan(n0)                                     // poll fired while open
+
+    heading().click()                                                  // collapse
+    await vi.advanceTimersByTimeAsync(4500)
+    expect(api.listOxdnaJobs.mock.calls.length).toBe(n1)              // poll stopped after collapse
+  })
+
+  it('does not poll while open when no job is active (the shared open+active gate)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'c1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: [{ kind: 'mc', status: 'done' }] }])
+    vi.useFakeTimers()
+    initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    heading().click()                                                  // open, but no active run
+    await vi.advanceTimersByTimeAsync(0)
+    const n0 = api.listOxdnaJobs.mock.calls.length
+    await vi.advanceTimersByTimeAsync(4500)
+    expect(api.listOxdnaJobs.mock.calls.length).toBe(n0)             // no poll scheduled (gate off)
+  })
+})

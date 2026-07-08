@@ -41,6 +41,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(U3 s2b) NAMD payload parity** ✅ | the pure `mdJobRowCtx` factory + canonical renderer emit the exact per-row payload the bespoke NAMD `_jobRow` produced: parent gets `chevron={childCount,collapsed,title}` (collapsed→ensemble-summary post-label marker + subtree hidden; open→no summary), replica child `label`/`title`/`indent`+empty index, CG-seed + Alpine `postLabelMarkers` (text+title), remote-queued `symbolOverride={glyph:'⧗',dataset:{mdQueued}}` (+ the `[data-md-queued]` DOM hook the poll-refresh needs), Fix `action` only on VRAM-OOM + out-of-date `stale`; chevron click fires `onChevron` NOT row `onClick`; leaf still gets an empty chevron span. Three generic slots (chevron/postLabelMarkers/symbolOverride) gated on ctx opt-in → oxDNA byte-parity pin re-ran green | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/md_jobs_panel.js` (`mdJobRowCtx`/`mdJobRowSig`), `frontend/src/ui/md_jobs_panel.test.js` (+8 it) | U3 slice 2c (stateful `initJobsPanelBase` — run buttons + poll loop + section collapse + advanced drawer); U4 selector iterates these same rows |
 | **(U3 s2c) shared stateful scaffold de-dup** ✅ | one `initJobsPanelBase({section,els,pollMs,hasActive,tick,onOpen,onClose,arrowStyle})` reproduces the bespoke collapse + advanced-drawer + poll scaffold BYTE-FOR-BYTE: a jsdom conformance oracle pins each effect — `applyCollapsed(true/false)` sets `body.display`=`none`/`''` + arrow=▸/▾ + fires onClose(+clearPoll)/onOpen; heading click persists via `section_collapse_state` then applies; adv toggle shows/hides `advBody` + ▾/▸; poll `setTimeout(tick,pollMs)` ONLY when `shouldPoll({open,hasActive})` (open&&active), cleared on collapse — proven with fake timers; pure `bodyDisplay`/`arrowChar`/`shouldPoll`/`applyArrow` (text/class/rotate) unit-tested. mrDNA + CanDo deleted their identical scaffold (−21 LOC each) + drive the base with their own hooks; CanDo's display-card collapse stays bespoke | `frontend/src/ui/jobs_panel_base.js`, `frontend/src/ui/jobs_panel_base.test.js` (+17 it), `frontend/src/ui/{mrdna,cando}_jobs_panel.js` | U3 slice 2c-2 (LAMMPS `arrowStyle:'class'`+onClose-cleanup, oxDNA/md `'rotate'`+inline-collapse+remote poll); U4 selector mounts the base per selected engine |
 | **(U3 s2c-2) LAMMPS scaffold parity** ✅ | the LAMMPS panel drives `initJobsPanelBase` (first live `arrowStyle:'class'` consumer + first `onClose` that runs `_viewsOff()`+`detachGizmo()`) with IDENTICAL behaviour to its bespoke `_applyCollapsed`/`_schedulePoll`: a PARITY block drove the REAL `initLammpsJobsPanel` factory through the actual heading-click collapse (body hidden + `is-collapsed` class + views reset to Off + gizmo detached), the advanced-drawer toggle (`advBody` show/hide + ▾/▸ text arrow), and the open+active poll gate (poll fires while open, STOPS once collapsed) — with fake timers. Run GREEN against the pre-rewire code FIRST (pins real behaviour, not the new wiring), then re-run green after → parity, not green-by-construction (adapted-code pin: the base adds the open-guard the bespoke poll lacked) | `frontend/src/ui/lammps_jobs_panel.js`, `frontend/src/ui/lammps_jobs_panel.test.js` (+3 it, 19/19) | oxDNA/md 2c-3 (`'rotate'` arrow + inline `_collapsed` var + md's remote `setInterval`); U4 selector mounts the base per engine |
+| **(U3 s2c-3a) oxDNA scaffold parity** ✅ | the oxDNA panel drives `initJobsPanelBase` for its SECTION-COLLAPSE + POLL (arrowStyle:`'class'`; hasActive = visible-active OR selected-running) with IDENTICAL behaviour to its bespoke module-level `_collapsed`/`_scheduleNextPoll`/`_pollTimer`: a PARITY block drove the REAL `initOxdnaJobsPanel` through the heading-click collapse (body hidden + `is-collapsed` class), the open+active poll gate (poll fires while open, STOPS once collapsed), and no-poll-when-idle — with fake timers. The stop-on-collapse assertion FAILED pre-rewire (3 vs 2: bespoke let one trailing poll fire after collapse) and PASSES post-rewire = adapted-code pin proven, not green-by-construction (the base's `clearPoll()` on collapse is the one benign delta). The ADVANCED drawer stays BESPOKE on purpose: oxDNA's `_advOpen` boolean opens on first click, the base reads `display` and the markup's `display:none;display:grid` computes visible → converging would flip first-click. `_revealMdPanel`/left-tab-change/workspace-path-change/init-ordering all rewired to `_base.isOpen()/applyCollapsed/clearPoll/schedulePoll/initCollapsed` (fresh-context review: all 6 adapted sites CONFIRMED equivalent + no TDZ) | `frontend/src/ui/oxdna_jobs_panel.js`, `frontend/src/ui/oxdna_jobs_panel.test.js` (+3 it, 90/90) | md 2c-3b (module-level `_collapsed` reads + 2nd remote `setInterval` poll + cross-panel md-collapse coordination); U4 selector mounts the base per engine |
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
@@ -68,6 +69,46 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `U3` slice 2c-3a — converge the oxDNA panel's section-collapse + poll onto `initJobsPanelBase` (U3 stays in_progress)
+
+- **Pick.** `U3` slice 2c-3a (handoff ▶ NEXT was 2c-3 = oxDNA + md). Scoped to **oxDNA only** this session — oxDNA
+  (1986 LOC) and md (2803 LOC, with a 2nd remote `setInterval` poll + cross-panel md-collapse coordination) are
+  each substantial ADAPTED refactors; converging both in one session risks a parity error. oxDNA alone is a
+  complete, reviewable, oracle-backed unit; md is 2c-3b next session.
+- **Oracle FIRST (adapted-code, proven in-place-first).** Added a PARITY block driving the REAL
+  `initOxdnaJobsPanel` through the converged behaviours: (1) section starts collapsed, heading click toggles body
+  + `is-collapsed` arrow; (2) polls `listOxdnaJobs` on the interval while open with a running job, STOPS once
+  collapsed; (3) does NOT poll when open but idle (the shared gate). Ran GREEN against the BESPOKE code first —
+  and the stop-on-collapse assertion **FAILED** (3 vs 2): the bespoke collapse never cleared the pending
+  `_pollTimer`, so one trailing poll fired. That failure PROVES the pin is meaningful (not green-by-construction);
+  the base's `clearPoll()` on collapse clamps it. The other two assertions passed on both = byte-identical there.
+- **The convergence.** Created `_base = initJobsPanelBase({section, els:{heading,body,arrow}, pollMs:POLL_MS,
+  arrowStyle:'class', hasActive:()=>_hasActiveJob()||(selected&&running), tick:_fetchJobs, onOpen:_onOpen})`.
+  Removed the module-level `_collapsed`/`_pollTimer` vars + the `_scheduleNextPoll` def. Rewired: `_scheduleNextPoll()`
+  callsites→`_base.schedulePoll()`; the left-tab-change `_pollTimer` clear→`_base.clearPoll()`; the three
+  `_collapsed` reads (tab-change, workspace-path-change, `_revealMdPanel`)→`_base.isOpen()`/`applyCollapsed(true)`;
+  the terminal `if(!_collapsed) _onOpen()`→`_base.initCollapsed(true)`.
+- **ADVANCED drawer LEFT bespoke — deliberate.** oxDNA tracks it with an `_advOpen` boolean (first click OPENS);
+  the base reads `advBody.style.display`, and the real markup's `style="display:none;display:grid"` computes to
+  `'grid'` (last duplicate wins → visible), so a base-driven first click would HIDE. Converging would flip the
+  first-click direction = a behavior change, not a lift. Same rationale as the viz-card staying bespoke.
+- **Gates:** oracle +3 (oxDNA panel 90/90); full frontend **2362/2362** (was 2359, +3, no drop); smoke 23/23
+  (real app boots the oxDNA panel init path clean); `main.js` LOC Δ = 0; no Python touched (`just lint`'s 19
+  errors are pre-existing Python debt, none in my files). Fresh-context read-only review: all 6 adapted sites
+  CONFIRMED equivalent, only the intended `clearPoll`-on-collapse delta, no TDZ, no stray refs.
+- **In-app GESTURE not hand-driven → MV-26.** The one-off display-vs-oracle Playwright was blocked by unrelated
+  left-tab-switch plumbing (`#tab-content-dynamics` stayed `display:none` after both a force-click and a
+  localStorage-seeded restore) — the tab controller wiring is orthogonal to this change. Rather than rabbit-hole
+  (protocol: Playwright is troubleshooting-only), filed MV-26 for the live heading-click + reload-persistence +
+  live-poll-stop. The vitest PARITY drives the real panel at the DOM level = the behavioral proof; smoke covers
+  the in-app init path.
+- **STATUS = `in_progress` (slice 2c-3a of U3).** REMAINING for U3: slice 2c-3b (md: module-level `_collapsed`
+  reads + 2nd remote `setInterval` poll + cross-panel md-collapse coordination stay bespoke around the base),
+  then U4 (engine selector + one Simulate section).
+- **Capability/de-dup proven, not just wired:** oxDNA's collapse state machine + poll timer are DELETED and now
+  owned by the shared `initJobsPanelBase` (4th consumer after mrDNA/CanDo/LAMMPS), with a PARITY oracle that FAILS
+  on the bespoke code and PASSES on the converged code.
 
 ### 2026-07-08 — `U3` slice 2c-2 — converge the LAMMPS panel scaffold onto `initJobsPanelBase` (U3 stays in_progress)
 
