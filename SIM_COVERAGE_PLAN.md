@@ -5,6 +5,18 @@ unconventional design features (**extra crossover bases · linkers/overhang conn
 AND emit a **shared, comparable set of prediction descriptors** so the engines cross-validate one another
 across the quick→rigorous continuum.
 
+**Two UX/architecture tracks now ride the same loop** (user-authorized scope expansion 2026-07-08; see the
+JSON `meta.ux_overhaul_tracks`). The feature-coverage tail (M4, N3, O2) is *parked, not dropped* — these two
+tracks are the priority until their milestones land:
+- **Track U — Unified panel (proposal A):** collapse the **6 bespoke per-engine panels + triplicated
+  E-field/Anchors/Surface cards** into ONE *Simulate* section with an engine selector, driven by a capability
+  descriptor. Precedent: CHARMM-GUI (one interface, many MD backends). = **M-UNIFIED-PANEL**.
+- **Track P — Job planner (proposal B):** a generic **`MdPipeline`** so the user queues a **multi-stage chain**
+  that runs *unattended* — the motivating case: *E-field→hard-surface (deposition) → anchors (immobilize) →
+  E-field sweep in several directions*. Today that is three hand-babysat jobs. The backend already ships the
+  chaining primitives (`parent_job_id`, `run_kind="production"`, `seed_oxdna/mrdna_job_id`, ensemble); P
+  generalizes them into one object + an executor + a linear-stage-list UI. = **M-JOB-PLANNER** / **M-DEPOSITION-CHAIN**.
+
 Invoke with **`/continue-coverage`** (or say *"continue full simulation/feature coverage"*). One session = one
 task. The manager (this main-loop session) reads the authoritative plan + the last handoff, picks the
 next-best task by the rubric below, implements it with a machine-checkable oracle, validates, commits, and
@@ -26,6 +38,14 @@ field, descriptors agree within tol) — not HTTP 200, not "it completed". A fea
 against another engine isn't coverage; it's a passthrough. End every session's log row with the mandatory
 line: **"Comparable prediction gained, not just a run: ___."**
 
+**Bright line for the U/P tracks** (different work, same rigor): the pass criterion is a **capability or a
+de-duplication proven by an oracle**, never "the panel renders" or "a button exists". For **Track U** that's a
+**per-engine PARITY test** — the unified card/base emits the *same payload the bespoke card produced today*
+(shape/byte parity per engine), so consolidation provably changes nothing observable. For **Track P** it's a
+**CHAIN test** — a stage runs *seeded from the previous stage's output*, and on a stage failure the chain
+*halts and resumes from the failed stage* (not a full restart). End a U/P session's log row with:
+**"Capability/de-dup proven, not just wired: ___."**
+
 Three-Layer Law is absolute here: **every engine output is Physical/display-only.** Anchors + field specs are
 **job-request annotations**, never `Design` edits. CanDo extra-base/linker *elements* are mesh-build details
 derived from existing topology metadata (`Crossover.extra_bases`, `overhang_connections`) — not topology
@@ -45,6 +65,11 @@ veto.
    - Within an engine, feature deps hold: **anchors before E-field** (a uniform field needs ≥1 anchor or the
      structure just streams — the oxDNA COM-drift gotcha applies to every engine), **connector element (C3)
      before linkers (C4)**.
+   - **The U/P tracks are the current priority** (2026-07-08) over the parked feature tail (M4/N3/O2). Their
+     deps: **U1 (descriptor) before U2/U3**, **U2+U3 before U4 (the consolidation)**; **P1 (MdPipeline) before
+     P2/P3**, **P4 (planner UI) needs P2+P3+U2** (it reuses the unified Forces card). Prefer landing **U1 and
+     P1 first** — each is the foundation its track builds on, and they're independent so either is a valid
+     opener. The two tracks can interleave; finishing one track's in-progress task beats opening the other.
 3. **Rank the eligible set by leverage** = `(coverage-gap closed) × (cross-validation value) / effort`,
    with a bonus for **unblocking a milestone** (especially `M-METRIC-CORE`, then `M-CANDO-FIELD` — the headline
    result: does the cheap FEM predict oxDNA's field deflection?).
@@ -159,6 +184,27 @@ gold-override source.
 **M-ALL-ANCHORS-FIELD** = every engine runs an anchored field job with a comparable deflection descriptor.
 **M-FULL-COVERAGE** = all engines × all four features, all feeding the card.
 
+**Unified panel (U) — proposal A. Consolidate 6 panels → 1, proven by parity.** Seams (from the UI inventory):
+already-shared = `metrics_card.js` (bound by 3 thin ≤21-line files — the proven pattern to copy), `job_tree.js`
+(`flattenJobTree`, engine-agnostic), `md_engines_logic.js` (`ENGINE_ORDER` gating), and the physics math
+(`efield_math.js`, `oxdna_floor_math.js`). Still bespoke = the 5 `*_jobs_panel.js` shells + the *triplicated*
+E-field/Anchors/Surface DOM (`efield_setup.js` vs `cando_efield_setup.js` vs `lammps_forces_setup.js`, sharing
+math not markup).
+`U1` capability descriptor (the data that drives one card stack) → `U2` shared Forces card factory (kills the
+triplication) → `U3` shared jobs-panel base (run buttons + job list) → `U4` engine selector + one *Simulate*
+section, unsupported cards greyed-with-tooltip (NN/G spatial-consistency, CHARMM-GUI model). = **M-UNIFIED-PANEL**.
+
+**Job planner (P) — proposal B. Chain jobs that run unattended.** Today chaining exists only as three
+special-cased provenance hops (`parent_job_id` + `run_kind="production"`, `seed_oxdna_job_id`,
+`seed_mrdna_job_id`); there is **no** generic pipeline object. `job_tree.js` already *reconstructs* the
+provenance DAG, so the data model is half-built.
+`P1` `MdPipeline` stage-spec object (generalize the three hops into one ordered list) → `P2` chain executor
+(submit stage N+1 on N's completion; halt + resume-from-failed-stage per LogRocket) → `P3` cross-engine
+output→input (oxDNA relax → NAMD production, right coordinate convention) → `P4` linear stage-builder overlay
+(reuses U2's Forces card per stage; duplicate-stage for a field sweep). = **M-JOB-PLANNER**.
+**M-DEPOSITION-CHAIN** (headline, mirrors M-CANDO-FIELD) = the *E-field→surface → anchors → field-sweep* chain
+runs unattended from one Plan Run (P1+P2+P4+U2; reuses the already-done N1 field + N2 anchors plumbing).
+
 ## Single-line invocation
 
 > `/continue-coverage` — read `sim_coverage_plan.json` + the handoff, pick the highest-leverage eligible task,
@@ -170,13 +216,12 @@ gold-override source.
 *Living pointer — OVERWRITE this each session (protocol step 11). Keep it ≤8 lines. Live task status is the JSON,
 not here.*
 
-- ▶ STATE — **M3 DONE 2026-07-08** (mrDNA extra bases). Card roster COMPLETE (O1/C5/M5/N4); anchors+field all engines (M-ALL-ANCHORS-FIELD). M3 was a VERIFY task (bridge shipped pre-loop `e47edb8`): added a MODEL-LEVEL oracle to `tests/test_mrdna_extra_bases.py` (`_model_seg_stats` + 3 FAST mrdna-gated pins) proving inserts survive coarse-graining into the built `SegmentModel` as flexible ssDNA — built-model nt grows by EXACTLY n_extra (single + all-crossovers), ALL growth in `SingleStrandedSegment` while `DoubleStrandedSegment` nt INVARIANT (ds=504), bulk beads 136→229. Strengthens coarse pin #6. PRESENCE+FLEXIBILITY, never a direction. Oracle 15/15; full `just test` 4366 pass/72 skip/1 xfail + 1 PRE-EXISTING xdist flake (see below); no drop.
-- ▶ ⚠ PRE-EXISTING xdist ISOLATION FLAKE (NOT M3) — M3's +5 fast tests shifted the `loadfile` worker balance and surfaced a latent bug: a non-deterministic 1-test failure (`test_job_archive` in test-fast; `test_cando_extra_bases` in full test — different victim each run, BOTH pass in isolation, BOTH unrelated files/engines to M3). Root polluter BISECTED = `test_md_milestone1.py::TestProductionAppend._routes_md` leaks a stubbed `backend.api.routes_md` into `sys.modules` (see `memory/project_test_parallelization.md` — full repro + attempted fixes + the likely-correct fix). Fix is out of coverage-loop scope; do NOT chase M3.
-- ▶ ⚠ INHERITED uncommitted WIP still in the tree (md_vram host-OOM: `routes_md.py` one-liner, `md_vram.py`, `atomistic_cache.py`, `namd_runner.py`, `md_vram_fix.js/.test.js`, 3 memory/*.md, test_atomistic_cache/test_md_runner_proceeds/test_md_vram). M3's commit staged ONLY M3 files — leave the WIP for its own commit.
-- ▶ NEXT — feature-coverage TAIL toward **M-FULL-COVERAGE**: **`M4`** (mrDNA linkers — reuse C4's WLC-connector pattern + M2's per-type grid/regen-wrap; assert linker beads/bonds in the ARBD model, SLOW: joined parts co-move) · **`N3`** (NAMD extra-base/linker validation — already-atomistic; assert model includes insert/linker atoms + descriptors computable from an MD frame; FAST, independent). **Recommend `N3`** (fast, independent, closes NAMD feature row) or `M4`. · **`O2`** oxDNA maintenance only on a logged gap.
-- ▶ M3/M4/N3 RULE — extra-base/linker softening → assert RMSF FLEXIBILITY or bead/atom PRESENCE, **NEVER a twist/bend DIRECTION** (crossover-geometry reasoning forbidden — banked). M3 mirrors C3 (inserts → more local flexibility).
-- ▶ SOURCE-BUNDLE CONTRACT (O1+C5+M5+N4, COMPLETE) — `{engine, descriptors:compute_shape_descriptors(core_frame), rmsf:[{helix_id,bp_index,direction,copy,rmsf_nm}], shape_frame, field|None}`; core-filter first; ABSOLUTE descriptors. `build_comparison_report(sources)` math in `shape_metrics.py`.
-- ▶ REFERENCE — per-observable: oxDNA=shape+field, CanDo=RMSF, NAMD=gold-when-present. Metrics MUST be generate/view/export. Auto-commit to master, no push. Live 4-engine eyeball owes **MV-21**.
+- ▶ STATE — **UX overhaul tracks U + P ADDED 2026-07-08** (user-authorized scope expansion; proposals A + B). 8 new tasks (U1–U4, P1–P4) + 3 milestones (M-UNIFIED-PANEL, M-JOB-PLANNER, M-DEPOSITION-CHAIN) seeded pending. Feature tail (M4/N3/O2) is **parked, not dropped**. Card roster + anchors+field remain COMPLETE across all engines. This session was pull+plan only — no coverage task implemented yet.
+- ▶ NEXT — **U/P are the priority.** Recommend **`U1`** (unified-panel capability descriptor — the foundation the whole card-consolidation builds on; pure, low effort, fast oracle) OR **`P1`** (MdPipeline stage-spec — foundation of the chaining track; the backend already ships the primitives to generalize). Both are dep-free and independent; pick one per the rubric and state why. Then U1→U2/U3→U4; P1→P2/P3→P4 (P4 also needs U2).
+- ▶ U/P BRIGHT LINE — prove a **capability or a de-duplication**, not "it renders"/"a button exists". Track U = **per-engine PARITY** (unified card emits the same payload the bespoke card did). Track P = **CHAIN** (stage N seeded from N-1; halt + resume-from-failed-stage). Log row ends: "Capability/de-dup proven, not just wired: ___."
+- ▶ ⚠ PRE-EXISTING xdist ISOLATION FLAKE — non-deterministic 1-test failure (`test_job_archive` / `test_cando_extra_bases`, different victim each run, BOTH pass isolated, unrelated to these tracks). Root = `test_md_milestone1.py::TestProductionAppend._routes_md` leaks a stubbed `backend.api.routes_md` into `sys.modules` (see `memory/project_test_parallelization.md`). Out of loop scope; don't chase.
+- ▶ SEAMS (from the UI inventory) — already-shared to REUSE: `metrics_card.js` (the thin-binding pattern to copy), `job_tree.js`, `md_engines_logic.js`, `efield_math.js`/`oxdna_floor_math.js`. Still-bespoke to CONSOLIDATE: 5 `*_jobs_panel.js` + the triplicated `efield_setup.js`/`cando_efield_setup.js`/`lammps_forces_setup.js`. Chaining primitives to GENERALIZE: `MdJob.parent_job_id` + `run_kind="production"` + `seed_oxdna/mrdna_job_id`.
+- ▶ REFERENCE — per-observable: oxDNA=shape+field, CanDo=RMSF, NAMD=gold-when-present. Metrics MUST be generate/view/export. Auto-commit to master, no push. Live 4-engine eyeball owes **MV-21**; U4/P4 will each owe a new MV row.
 
 ## Don't
 

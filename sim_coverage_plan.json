@@ -2,7 +2,8 @@
   "meta": {
     "purpose": "Authoritative, machine-parseable task inventory for the full simulation/feature-coverage loop. Drive four engines (CanDo FEM, mrDNA, oxDNA, NAMD) to cover the four unconventional design features (extra crossover bases, linkers/overhang connections, E-fields, anchors) AND emit a shared, comparable set of prediction descriptors so engines cross-validate each other.",
     "reference_policy": "per-observable: oxDNA is reference for relaxed shape + field-deflection; CanDo is reference for RMSF/flexibility; NAMD becomes gold for any observable once a NAMD run for that design exists (overrides).",
-    "updated": "2026-07-05",
+    "ux_overhaul_tracks": "User-authorized scope expansion (2026-07-08): two UX/architecture tracks ride the same loop. TRACK U (unified-panel, proposal A) collapses the 6 bespoke per-engine panels + triplicated E-field/Anchors/Surface cards into ONE Simulate section with an engine selector, driven by a capability descriptor. TRACK P (job-planner, proposal B) adds a generic MdPipeline so a user queues a multi-stage chain (e.g. E-field->surface deposition -> anchors immobilize -> E-field sweep) that runs unattended. BRIGHT LINE for U/P tasks: a capability or de-duplication PROVEN BY AN ORACLE - a per-engine PARITY test (the unified card emits the SAME payload the bespoke card did) or a CHAIN test (stage N runs seeded from N-1's output; halts + resumes from the failed stage) - never 'the panel renders' or 'a button exists'. Same module-first + oracle-first + fast/slow + auto-commit protocol; frontend tasks use vitest pure-helper oracles + a one-off display-vs-oracle check + an MV row.",
+    "updated": "2026-07-08",
     "status_enum": [
       "pending",
       "in_progress",
@@ -87,6 +88,39 @@
         "N4",
         "O1",
         "O2"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M-UNIFIED-PANEL",
+      "title": "One Simulate section with an engine selector replaces the 6 bespoke panels; no duplicated Forces/jobs cards (proven by per-engine parity)",
+      "tasks": [
+        "U1",
+        "U2",
+        "U3",
+        "U4"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M-JOB-PLANNER",
+      "title": "Queue a multi-stage chain that runs unattended (local + Alpine, cross-engine, resume-from-failed-stage)",
+      "tasks": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "M-DEPOSITION-CHAIN",
+      "title": "Headline: the deposition->immobilize->field-sweep chain (E-field to a hard surface, then anchors, then E-fields in several directions) runs unattended from one Plan Run",
+      "tasks": [
+        "P1",
+        "P2",
+        "P4",
+        "U2"
       ],
       "status": "pending"
     }
@@ -427,6 +461,141 @@
       "fast_slow": "fast",
       "oracle": "per-gap; only pull when a concrete gap is logged.",
       "milestone": "M-FULL-COVERAGE",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "U1",
+      "track": "unified-panel",
+      "engine": "all",
+      "feature": "engine-consolidation",
+      "title": "Engine capability descriptor + registry: one source of truth (engine_capabilities.js) mapping each engine -> {supported cards, protocols, advanced-param schema}; the data that drives one shared card stack instead of 6 bespoke panels",
+      "deps": [],
+      "effort": "low",
+      "leverage": "critical",
+      "fast_slow": "fast",
+      "oracle": "PARITY census: each engine's descriptor lists EXACTLY the cards its current bespoke panel renders today (oxDNA/LAMMPS/mrDNA/CanDo/NAMD vs the index.html ox-card inventory); unsupported cards are marked present-but-disabled, never absent (NN/G spatial-consistency). Pure; can-go-red if a descriptor omits or invents a card for an engine.",
+      "milestone": "M-UNIFIED-PANEL",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "U2",
+      "track": "unified-panel",
+      "engine": "all",
+      "feature": "forces-card",
+      "title": "Shared Forces card factory: collapse the triplicated E-field/Anchors/Surface cards (efield_setup.js / cando_efield_setup.js / lammps_forces_setup.js) into one initForcesCard({engine,deps}) over the shared efield_math/oxdna_floor_math; grey unsupported sub-cards per the U1 descriptor",
+      "deps": [
+        "U1"
+      ],
+      "effort": "medium",
+      "leverage": "high",
+      "fast_slow": "fast+MV",
+      "oracle": "PARITY: for each engine the unified factory emits the SAME force payload (field vector, anchors, surface) its bespoke card produced today (shape/byte parity per engine); an unsupported sub-card is greyed not absent. ADAPTED-CODE PIN RULE (CLAUDE.md): prove each moved helper in-place-first or via a git-stash rerun, not green-first-run. Stateful -> one app exercise + smoke.",
+      "milestone": "M-UNIFIED-PANEL",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "U3",
+      "track": "unified-panel",
+      "engine": "all",
+      "feature": "jobs-panel-base",
+      "title": "Shared jobs-panel base: extract the common run-buttons + job-list (via job_tree) + Advanced-card host from the 5 bespoke *_jobs_panel.js into initJobsPanelBase({engine,descriptor,deps}); each engine supplies its U1 descriptor",
+      "deps": [
+        "U1"
+      ],
+      "effort": "high",
+      "leverage": "high",
+      "fast_slow": "fast+MV",
+      "oracle": "PARITY: the base renders each engine's job list + run controls identically to its bespoke panel (job-row model, run-button enablement) reusing the already-shared job_tree/metrics_card/shape_compare; pure helpers unit-tested; stateful -> app exercise + smoke. Adapted-code pin rule applies.",
+      "milestone": "M-UNIFIED-PANEL",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "U4",
+      "track": "unified-panel",
+      "engine": "all",
+      "feature": "engine-selector",
+      "title": "Engine selector + single Simulate section: collapse the 6 sidebar panels into ONE collapsible section with an engine segmented-control/dropdown; the card stack is driven by the U1 descriptor, unsupported cards greyed with a why-tooltip (CHARMM-GUI model)",
+      "deps": [
+        "U2",
+        "U3"
+      ],
+      "effort": "medium",
+      "leverage": "critical",
+      "fast_slow": "fast+MV",
+      "oracle": "selecting engine X shows EXACTLY X's supported cards (from U1) and greys the rest; pure selector-state helper unit-tested; one-off display-vs-oracle Playwright (rendered card set == descriptor) + MV row. main.js LOC flat-or-lower (consolidation, not growth).",
+      "milestone": "M-UNIFIED-PANEL",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "P1",
+      "track": "job-planner",
+      "engine": "all",
+      "feature": "chaining",
+      "title": "MdPipeline stage-spec data model: a generic ordered list of stage specs {engine, protocol, forces(field/anchors/surface), run_target} with provenance, generalizing the special-cased parent_job_id + run_kind='production' + seed_oxdna/mrdna_job_id hops into ONE object",
+      "deps": [],
+      "effort": "medium",
+      "leverage": "critical",
+      "fast_slow": "fast",
+      "oracle": "a 3-stage plan builds N child MdJobs chained by parent_job_id, stage N start_checkpoint == stage N-1 output; a 1-stage plan is byte-identical to today's spawn_md_production (parity, no regression). Pure builder; can-go-red if a stage's seed points at the wrong checkpoint.",
+      "milestone": "M-JOB-PLANNER",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "P2",
+      "track": "job-planner",
+      "engine": "all",
+      "feature": "chaining",
+      "title": "Chain executor: run stages back-to-back unattended (on stage completion submit the next), local + Alpine targets, partial-failure recovery (halt + resume-from-failed-stage, not full restart) reusing resumable/resubmit_count",
+      "deps": [
+        "P1"
+      ],
+      "effort": "high",
+      "leverage": "critical",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: a mocked 3-stage chain advances stage->stage on completion and HALTS on a stage failure with the chain resumable from the failed stage (LogRocket retry-only-failed); a stage's forces/anchors carry into its child conf (reuses external_forces_block). SLOW: a real 2-stage local chain runs unattended end-to-end.",
+      "milestone": "M-JOB-PLANNER",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "P3",
+      "track": "job-planner",
+      "engine": "all",
+      "feature": "cross-engine-chaining",
+      "title": "Cross-engine output->input: generalize seed_oxdna_job_id/seed_mrdna_job_id so a plan can hand one engine's relaxed coords to another (e.g. oxDNA relax -> NAMD production) in the correct coordinate convention",
+      "deps": [
+        "P1"
+      ],
+      "effort": "medium",
+      "leverage": "high",
+      "fast_slow": "fast+slow",
+      "oracle": "FAST: a 2-stage cross-engine plan seeds stage 2 from stage 1's frame with the right frame/units (parity with the existing seed hop). SLOW: a real oxDNA->NAMD seed handoff produces a valid start structure.",
+      "milestone": "M-JOB-PLANNER",
+      "status": "pending",
+      "notes": ""
+    },
+    {
+      "id": "P4",
+      "track": "job-planner",
+      "engine": "all",
+      "feature": "planner-ui",
+      "title": "Planner UI (linear stage builder overlay): the 'Plan Run' popup - ordered stage list, per-stage engine+protocol+Forces editor (reuses U2's shared card), duplicate-stage for field sweeps, Queue; status vocabulary (stage N of M, queued-behind, partial-failure)",
+      "deps": [
+        "P2",
+        "P3",
+        "U2"
+      ],
+      "effort": "high",
+      "leverage": "critical",
+      "fast_slow": "fast+MV",
+      "oracle": "pure stage-list model helpers (add/dup/reorder/remove, payload build) unit-tested; the built payload == a valid MdPipeline (P1); one-off display-vs-oracle Playwright (queued chain == payload) + MV row. main.js gains only imports + factory init + thin wiring.",
+      "milestone": "M-JOB-PLANNER",
       "status": "pending",
       "notes": ""
     }
