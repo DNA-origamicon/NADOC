@@ -244,10 +244,12 @@ and mrDNA sections, launch + monitor only (no trajectory viewer yet).
   `progressPct`, `jobIsActive`/`anyActive`, `runButtonState`, `availabilityMessage`,
   `jobRowLabel`, `buildCreatePayload` (input coercion). Unit-tested (10).
 - Factory: [lammps_jobs_panel.js](../frontend/src/ui/lammps_jobs_panel.js) —
-  `initLammpsJobsPanel()→{refresh}`, self-contained (imports `* as api`, mirrors the
-  mrDNA panel: collapse via `setSectionCollapsed('dynamics',…)`, REST-poll list @1.5s
-  while active, Run button, Advanced card params, per-row Stop). Reuses
-  `statusBadge`/`statusKeyFor`. jsdom-tested (8).
+  `initLammpsJobsPanel()→{refresh}`, self-contained (imports `* as api`). Converged onto
+  the unified-panel shared machinery (U3): job list via the canonical
+  `jobs_panel_model`/`jobs_panel_render` (slice 2a; keeps its inline Stop via the renderer's
+  row-action slot), and the section-collapse + advanced-drawer + REST-poll @1.5s scaffold via
+  `initJobsPanelBase` (slice 2c-2, `arrowStyle:'class'` + an onClose that drops views + the
+  forces gizmo; the viz-card collapse stays bespoke). jsdom-tested (19, incl. the 2c-2 parity block).
 - Markup: `#lammps-jobs-panel` section in [index.html](../frontend/index.html) (before
   `#mrdna-jobs-panel`); client fns `lammpsAvailable/createLammpsJob/listLammpsJobs/
   getLammpsJob/stopLammpsJob` in `api/client.js`.

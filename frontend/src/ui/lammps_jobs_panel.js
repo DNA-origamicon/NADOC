@@ -16,7 +16,7 @@
  * here or in the pure lammps_jobs_logic.js (module-first law); main.js only imports+inits.
  */
 
-import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showToast } from './toast.js'
 import {
   progressPct, jobIsActive, anyActive, runButtonState, availabilityMessage,
@@ -76,7 +76,6 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
 
   let _jobs = []
   let _available = null
-  let _pollTimer = null
   let _launching = false
   let _selectedId = null
   let _listSig = null            // last-rendered list signature (avoids spinner-restart churn)
@@ -129,25 +128,23 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     })
   }
 
-  // ── collapse (section + viz card) ───────────────────────────────────────────
-  function _applyCollapsed(collapsed) {
-    body.style.display = collapsed ? 'none' : ''
-    if (arrow) arrow.classList.toggle('is-collapsed', collapsed)
-    if (!collapsed) { _onOpen() }
-    else { _clearPoll(); _viewsOff(); forcesSetup?.detachGizmo?.() }
-  }
-  heading.addEventListener('click', () => {
-    const next = body.style.display !== 'none'
-    setSectionCollapsed('dynamics', 'lammps-jobs-panel', next)
-    _applyCollapsed(next)
+  // ── collapse (section) + advanced drawer + poll — shared jobs-panel base (U3) ──
+  // LAMMPS accommodations: section arrow via the `is-collapsed` class
+  // (arrowStyle:'class') and an onClose that turns overlays off + drops the
+  // forces gizmo. The base adds the open-guard the bespoke poll lacked (harmless:
+  // the old poll only ever rescheduled from `_fetchJobs`, itself open-only).
+  const _base = initJobsPanelBase({
+    section: 'lammps-jobs-panel',
+    els: { heading, body, arrow, advToggle, advArrow, advBody },
+    pollMs: POLL_MS,
+    arrowStyle: 'class',
+    hasActive: () => anyActive(_visibleJobs()),
+    tick: () => _fetchJobs(),
+    onOpen: () => _onOpen(),
+    onClose: () => { _viewsOff(); forcesSetup?.detachGizmo?.() },
   })
-  if (advToggle) {
-    advToggle.addEventListener('click', () => {
-      const hidden = advBody.style.display === 'none'
-      advBody.style.display = hidden ? '' : 'none'
-      if (advArrow) advArrow.textContent = hidden ? '▾' : '▸'
-    })
-  }
+
+  // ── collapse (viz card — separate persistence-free disclosure) ───────────────
   if (vizToggle) {
     vizToggle.addEventListener('click', () => {
       const hidden = vizBody.style.display === 'none'
@@ -212,7 +209,7 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     _renderList()
     _renderProgress()
     _updateVizToggles()
-    _schedulePoll()
+    _base.schedulePoll()
   }
 
   function _renderProgress() {
@@ -252,12 +249,6 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     if (!ok) showToast(api.lastErrorMessage() || 'Could not stop the run', { severity: 'error' })
     await _fetchJobs()
   }
-
-  function _schedulePoll() {
-    _clearPoll()
-    if (anyActive(_visibleJobs())) _pollTimer = setTimeout(_fetchJobs, POLL_MS)
-  }
-  function _clearPoll() { if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null } }
 
   // ── viz card: enable radios only for a viewable selection ───────────────────
   function _updateVizToggles() {
@@ -320,14 +311,14 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     await _checkAvailable()
     await _fetchJobs()
   }
-  function refresh() { if (body.style.display !== 'none') _onOpen() }
+  function refresh() { if (_base.isOpen()) _onOpen() }
 
-  _applyCollapsed(getSectionCollapsed('dynamics', 'lammps-jobs-panel', true))
+  _base.initCollapsed(true)
   // a design change invalidates any overlay (it's keyed to the old design)
   window.addEventListener('nadoc:design-changed', () => {
     _selectedId = null
     _viewsOff()
-    if (body.style.display !== 'none') _fetchJobs()
+    if (_base.isOpen()) _fetchJobs()
   })
 
   return { refresh }

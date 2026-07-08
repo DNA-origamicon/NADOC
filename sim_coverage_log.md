@@ -40,6 +40,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(U3 s2a) cando+lammps conformance** ✅ | renderer's OPTIONAL per-row action (`m.action`/`onAction`, gated on `ctx.rowAction`): models the action ONLY for active jobs, renders a Stop button on active rows whose click fires `onAction(jobId)` with stopPropagation (row `onClick` does NOT fire), and a ctx WITHOUT `rowAction`→every `action===null`→no button (oxDNA-parity guard); cando flat ctx numbers rows newest-first + maps cando status key + spinner-while-active + surfaces Coarse/Fine as a LEADING TAG (not a bespoke column) + no button | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` (+5 it, 14/14) | U3 slice 2b (md chevron via the same optional-control mechanism); the action slot for any future per-row control |
 | **(U3 s2b) NAMD payload parity** ✅ | the pure `mdJobRowCtx` factory + canonical renderer emit the exact per-row payload the bespoke NAMD `_jobRow` produced: parent gets `chevron={childCount,collapsed,title}` (collapsed→ensemble-summary post-label marker + subtree hidden; open→no summary), replica child `label`/`title`/`indent`+empty index, CG-seed + Alpine `postLabelMarkers` (text+title), remote-queued `symbolOverride={glyph:'⧗',dataset:{mdQueued}}` (+ the `[data-md-queued]` DOM hook the poll-refresh needs), Fix `action` only on VRAM-OOM + out-of-date `stale`; chevron click fires `onChevron` NOT row `onClick`; leaf still gets an empty chevron span. Three generic slots (chevron/postLabelMarkers/symbolOverride) gated on ctx opt-in → oxDNA byte-parity pin re-ran green | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/md_jobs_panel.js` (`mdJobRowCtx`/`mdJobRowSig`), `frontend/src/ui/md_jobs_panel.test.js` (+8 it) | U3 slice 2c (stateful `initJobsPanelBase` — run buttons + poll loop + section collapse + advanced drawer); U4 selector iterates these same rows |
 | **(U3 s2c) shared stateful scaffold de-dup** ✅ | one `initJobsPanelBase({section,els,pollMs,hasActive,tick,onOpen,onClose,arrowStyle})` reproduces the bespoke collapse + advanced-drawer + poll scaffold BYTE-FOR-BYTE: a jsdom conformance oracle pins each effect — `applyCollapsed(true/false)` sets `body.display`=`none`/`''` + arrow=▸/▾ + fires onClose(+clearPoll)/onOpen; heading click persists via `section_collapse_state` then applies; adv toggle shows/hides `advBody` + ▾/▸; poll `setTimeout(tick,pollMs)` ONLY when `shouldPoll({open,hasActive})` (open&&active), cleared on collapse — proven with fake timers; pure `bodyDisplay`/`arrowChar`/`shouldPoll`/`applyArrow` (text/class/rotate) unit-tested. mrDNA + CanDo deleted their identical scaffold (−21 LOC each) + drive the base with their own hooks; CanDo's display-card collapse stays bespoke | `frontend/src/ui/jobs_panel_base.js`, `frontend/src/ui/jobs_panel_base.test.js` (+17 it), `frontend/src/ui/{mrdna,cando}_jobs_panel.js` | U3 slice 2c-2 (LAMMPS `arrowStyle:'class'`+onClose-cleanup, oxDNA/md `'rotate'`+inline-collapse+remote poll); U4 selector mounts the base per selected engine |
+| **(U3 s2c-2) LAMMPS scaffold parity** ✅ | the LAMMPS panel drives `initJobsPanelBase` (first live `arrowStyle:'class'` consumer + first `onClose` that runs `_viewsOff()`+`detachGizmo()`) with IDENTICAL behaviour to its bespoke `_applyCollapsed`/`_schedulePoll`: a PARITY block drove the REAL `initLammpsJobsPanel` factory through the actual heading-click collapse (body hidden + `is-collapsed` class + views reset to Off + gizmo detached), the advanced-drawer toggle (`advBody` show/hide + ▾/▸ text arrow), and the open+active poll gate (poll fires while open, STOPS once collapsed) — with fake timers. Run GREEN against the pre-rewire code FIRST (pins real behaviour, not the new wiring), then re-run green after → parity, not green-by-construction (adapted-code pin: the base adds the open-guard the bespoke poll lacked) | `frontend/src/ui/lammps_jobs_panel.js`, `frontend/src/ui/lammps_jobs_panel.test.js` (+3 it, 19/19) | oxDNA/md 2c-3 (`'rotate'` arrow + inline `_collapsed` var + md's remote `setInterval`); U4 selector mounts the base per engine |
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
@@ -67,6 +68,42 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `U3` slice 2c-2 — converge the LAMMPS panel scaffold onto `initJobsPanelBase` (U3 stays in_progress)
+
+**Capability/de-dup proven, not just wired:** LAMMPS is the FIRST live consumer of the base's `arrowStyle:'class'`
+path and the first to use an `onClose` cleanup hook — its bespoke `_applyCollapsed` / heading-click /
+`advToggle` listener / `_clearPoll` / `_schedulePoll` (~20 LOC) are gone; it drives the shared
+`initJobsPanelBase` and its collapse/advanced-drawer/poll behaviour is proven IDENTICAL by a parity oracle that
+drove the real panel through the actual gestures — run green against the pre-rewire code first, then green again
+after. Slice 2c-1's `'class'`/`'rotate'` arrow idioms were unit-pinned but consumer-less; 2c-2 makes `'class'` load-bearing.
+
+- **Pick.** `U3` slice 2c-2 (handoff ▶ NEXT): converge the remaining three panels' scaffold. Scoped to **LAMMPS
+  only** — the base already supports everything it needs (section `arrowStyle:'class'`, an `onClose` hook, a
+  `'text'` advanced-drawer arrow) with exactly ONE *adapted* delta (its poll lacked the base's open-guard).
+  oxDNA/md (module-level `_collapsed` var read in ~6 sites, cross-panel md-collapse coordination, md's 2nd remote
+  `setInterval`) are a bigger, riskier convergence → deferred to slice 2c-3.
+- **Convergence** (`lammps_jobs_panel.js`): dropped the `section_collapse_state` import + `_pollTimer` + the
+  `_applyCollapsed`/heading/`advToggle`/`_schedulePoll`/`_clearPoll` blocks; added `const _base =
+  initJobsPanelBase({ section:'lammps-jobs-panel', els:{heading,body,arrow,advToggle,advArrow,advBody},
+  arrowStyle:'class', hasActive:()=>anyActive(_visibleJobs()), tick:()=>_fetchJobs(), onOpen:()=>_onOpen(),
+  onClose:()=>{_viewsOff(); forcesSetup?.detachGizmo?.()} })`. Rewired `_schedulePoll()`→`_base.schedulePoll()`,
+  mount `_applyCollapsed(getSectionCollapsed(...))`→`_base.initCollapsed(true)`, and the two
+  `body.style.display!=='none'` reads (refresh + design-changed) →`_base.isOpen()`. The bespoke viz-card
+  collapse (`vizToggle`/`vizArrow`, no persistence) stays bespoke. Net **−9 source LOC** (334→325).
+- **Oracle** (`lammps_jobs_panel.test.js`, +3 it → 19): a PARITY block drove the REAL `initLammpsJobsPanel` factory
+  — collapse via a heading click hides the body + sets `is-collapsed` + resets a live view to Off + calls
+  `detachGizmo`; the advanced-drawer toggle shows/hides `advBody` + flips the ▾/▸ text arrow; and with a running
+  job the poll fires a re-fetch after `pollMs` while open then STOPS once collapsed (fake timers). **Adapted-code
+  pin proven:** the block was run GREEN against the pre-rewire code first (pins real behaviour, not the base
+  wiring), then green again after the rewire.
+- **Gate:** LAMMPS panel+logic 38/38, full frontend **2359/2359** (+3, no drop), smoke 23/23; a one-off Playwright
+  drove the real LAMMPS section collapse + advanced-drawer gesture in-app (zero console errors, deleted after).
+  Fresh-context review CONFIRMED all six parity checks (collapse, adv drawer, poll, no-dangling-refs, viz-card
+  untouched, no TDZ) + noted the open-guard is an incidental HARDENING (cancels a collapse-during-in-flight-fetch
+  timer the old code would have armed). No Python touched → backend `just test` not required; frontend lint N/A.
+  `main.js` LOC Δ = 0. **No MV row owed** — behaviour-preserving, byte-identical DOM, no new pixels; the gesture
+  was Playwright-exercised.
 
 ### 2026-07-08 — `U3` slice 2c-1 — shared STATEFUL jobs-panel base (collapse + advanced + poll); converge mrDNA + CanDo (U3 stays in_progress)
 

@@ -63,6 +63,7 @@ const $ = (id) => document.getElementById(id)
 const openPanel = () => $('lammps-jobs-heading').click()
 const WS = '/ws/6hb.nadoc'
 const COMPLETED = [{ job_id: 'l1', design_name: '6hb', status: 'completed', frames: 3, n_atoms: 1, steps: 1000, current_step: 1000, design_source_path: WS }]
+const RUNNING = [{ job_id: 'l9', design_name: '6hb', status: 'running', current_step: 500, steps: 1000, n_atoms: 504, design_source_path: WS }]
 
 function renderer() {
   return { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
@@ -224,5 +225,55 @@ describe('initLammpsJobsPanel — visualization card', () => {
     $('lammps-jobs-display-toggle').click(); await flush()
     expect($('lammps-jobs-display-status').textContent).toMatch(/but this run used/)
     expect($('lammps-jobs-viz-off').checked).toBe(true)
+  })
+})
+
+// PARITY oracle for the shared-scaffold convergence (U3 slice 2c-2): the section
+// collapse (arrow via `is-collapsed` class), the advanced drawer, and the
+// open+active poll gate must behave identically whether LAMMPS drives its own
+// bespoke `_applyCollapsed`/`_schedulePoll` or the shared `initJobsPanelBase`.
+// These pin the LAMMPS-specific accommodations (arrowStyle:'class', an onClose
+// that runs `_viewsOff()`+`detachGizmo()`, and the poll open-guard the base adds).
+// Written + run GREEN against the pre-convergence code first, then re-run after
+// the rewire — parity, not green-by-construction (CLAUDE.md adapted-code pin rule).
+describe('initLammpsJobsPanel — shared scaffold parity (U3 slice 2c-2)', () => {
+  it('collapsing the section hides the body, sets is-collapsed, turns views off + detaches the gizmo', async () => {
+    const detachGizmo = vi.fn()
+    api.listLammpsJobs.mockResolvedValue(COMPLETED)
+    initLammpsJobsPanel({
+      designRenderer: renderer(), getWorkspacePath: () => WS,
+      forcesSetup: { getForces: () => ({ field: null, anchors: [], wall: null }), fieldNeedsAnchor: () => false, detachGizmo },
+    })
+    openPanel(); await flush()
+    ;[...$('lammps-jobs-list').children][0].click(); await flush()   // select the run
+    $('lammps-jobs-display-toggle').click(); await flush()           // turn a view ON
+    expect($('lammps-jobs-viz-off').checked).toBe(false)
+    openPanel()                                                      // heading click → collapse
+    expect($('lammps-jobs-body').style.display).toBe('none')
+    expect($('lammps-jobs-arrow').classList.contains('is-collapsed')).toBe(true)
+    expect($('lammps-jobs-viz-off').checked).toBe(true)             // _viewsOff() ran
+    expect(detachGizmo).toHaveBeenCalled()                          // onClose ran
+  })
+
+  it('the advanced-drawer toggle shows/hides its body and flips the text arrow', async () => {
+    initLammpsJobsPanel({ getWorkspacePath: () => WS }); openPanel(); await flush()
+    const advBody = $('lammps-jobs-adv-body'), advArrow = $('lammps-jobs-adv-arrow')
+    expect(advBody.style.display).toBe('none')
+    $('lammps-jobs-adv-toggle').click()
+    expect(advBody.style.display).toBe(''); expect(advArrow.textContent).toBe('▾')
+    $('lammps-jobs-adv-toggle').click()
+    expect(advBody.style.display).toBe('none'); expect(advArrow.textContent).toBe('▸')
+  })
+
+  it('polls while open with an active run, then stops once collapsed', async () => {
+    api.listLammpsJobs.mockResolvedValue(RUNNING)
+    initLammpsJobsPanel({ getWorkspacePath: () => WS }); openPanel(); await flush()
+    const n0 = api.listLammpsJobs.mock.calls.length
+    await vi.advanceTimersByTimeAsync(1500); await flush()
+    expect(api.listLammpsJobs.mock.calls.length).toBeGreaterThan(n0)  // poll fired while open
+    const n1 = api.listLammpsJobs.mock.calls.length
+    openPanel()                                                       // collapse
+    await vi.advanceTimersByTimeAsync(4500); await flush()
+    expect(api.listLammpsJobs.mock.calls.length).toBe(n1)            // poll stopped
   })
 })
