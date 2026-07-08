@@ -58,10 +58,45 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(N4) NAMD source bundle (gold override)** ✅ | descriptors == `compute_shape_descriptors` on the exact core-filtered frame (same S1 estimator, ABSOLUTE); core mask drops ssDNA ends; `md_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; empty core→None (RED); **THE HEADLINE: `[oxdna,cando,namd]`→`build_comparison_report` references.shape=='namd' AND references.rmsf=='namd' — NAMD overrides BOTH policy engines (gold override)**; negative control (absent NAMD → shape=oxdna/rmsf=cando, proving the flip is NAMD-caused); SLOW real 2hb NAMD DCD→`md_rmsf`→ready namd source, override holds on real data | `backend/core/namd_shape_source.py::build_namd_shape_source`, `backend/api/routes_md.py::get_md_shape_source`, `tests/test_namd_shape_source.py` | the source-bundle contract, complete — all four engines (O1/C5/M5/N4) now feed the card; the gold-override assertion pattern for any future NAMD-referenced observable |
 
 | **(M3) mrDNA extra bases in the BUILT model** ✅ | inserts survive coarse-graining into the ARBD `SegmentModel` as flexible ssDNA — `_model_seg_stats` builds the model (`model_from_basepair_stack_3prime`) & sums nt by segment class + bead children: built-model total nt grows by EXACTLY `n_extra` (single insert AND all-crossovers); ALL growth lands in `SingleStrandedSegment` while `DoubleStrandedSegment` nt is INVARIANT (ds_nt=504 unchanged) → inserts are ssDNA/flexible/non-rigid, never WC-paired into a rigid segment; bulk bead cloud grows (136→229). Strengthens pre-loop coarse pin #6 (`with_ss>base_ss`) into a quantitative present-as-flexible-ssDNA proof. **PRESENCE+FLEXIBILITY only, NO bend/twist direction** (crossover-geometry reasoning forbidden). Can-go-red 3 ways (dropped insert→d_tot≠n_extra; paired into ds→ds changes; other type→ss≠n_extra). No production code (bridge shipped e47edb8) — M3 was the VERIFY task | `tests/test_mrdna_extra_bases.py` (`_model_seg_stats` + 3 pins), builds via `backend/core/mrdna_bridge.py::{mrdna_model_from_nadoc,_build_nt_arrays}` | N3 (NAMD extra-base/linker validation — assert insert/linker atoms present + descriptors computable, same PRESENCE/FLEXIBILITY-not-direction pattern); any engine's extra-base coverage check |
+| **(P1) MdPipeline stage-spec + chain builder** ✅ | ONE ordered object generalizes the 3 provenance hops (`parent_job_id` + `run_kind="production"` + `seed_oxdna/mrdna_job_id`); `build_pipeline_plan` chains each stage from its IMMEDIATE predecessor (stage 0 → `root_job_id`@`root_checkpoint`; stage N → `parent_job_id=stage{N-1}`, `start_checkpoint="stage{N-1}::output"`); distinct per-stage seeds == `generate_seeds(base,n)`; **1-stage parity: `parent_job_id`/`run_kind="production"`/seed=54321/checkpoint-passthrough == `spawn_md_production`'s first child**; `cross_engine` flag (parent_engine≠stage.engine) REPRESENTS the seed_oxdna/mrdna generalization (P3 converts coords); LITERAL-CONSTANT red guards (parent≠root, checkpoint≠root's, not-two-back) — RED-verified offline (always-seed-from-root mutation fails, revert→green); dict round-trip. PURE, no jobs/no topology (Three-Layer clean) | `backend/core/md_pipeline.py::{PipelineStage,MdPipeline,StagePlan,build_pipeline_plan,validate_pipeline,stage_output_ref}`, `tests/test_md_job_pipeline.py` | P2 (executor consumes `StagePlan`, submits stage N on N-1's completion, halt+resume-from-failed); P3 (`cross_engine` hop → coordinate conversion); P4 (Plan Run UI builds an `MdPipeline`, reuses U2's Forces card per stage) |
 
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `P1` MdPipeline stage-spec data model + pure chain builder (opens Track P)
+
+**Capability/de-dup proven, not just wired:** ONE ordered `MdPipeline` object reproduces the three
+special-cased provenance hops and chains them — a headless builder turns *[field → surface → anchored
+field-sweep]* into a linear chain where **stage N is seeded from stage N-1's output**, the data backbone the
+whole job-planner track (P2 executor, P3 cross-engine, P4 Plan Run UI) stands on.
+
+- **Pick.** P1 — dep-free, pure-backend foundation; unblocks all of P2/P3/P4 + half of M-DEPOSITION-CHAIN, with
+  a clean fast oracle and none of U2's adapted-frontend-extraction risk.
+- **Module** (`backend/core/md_pipeline.py`, imports only `md_ensemble` — Three-Layer clean, no `Design` touch):
+  `PipelineStage{engine,protocol,field,anchors,surface,run_target,cluster_name,length_ns,steps,label}` +
+  `.forces()`; `MdPipeline{stages,root_job_id,root_engine}` + `to_dict/from_dict` (P2/P4 persist it);
+  `build_pipeline_plan(pipeline,*,root_checkpoint,base_seed=54321,stage_id_for)` → a chain of `StagePlan`
+  descriptors. Stage 0 seeds from `root_job_id`@`root_checkpoint`; stage N>0 from `parent_job_id=stage{N-1}`,
+  `start_checkpoint=stage_output_ref('stage{N-1}')="stage{N-1}::output"`. Every hop `run_kind="production"`;
+  seeds = `generate_seeds(base,n)` (base..base+n-1). `cross_engine` = parent_engine≠stage.engine (the
+  seed_oxdna/mrdna generalization; P3 does the coords). **Creates NO jobs, runs NO submission** (that's P2).
+- **Oracle** (`tests/test_md_job_pipeline.py`, 9 FAST): forces-bundle grouping; validation raises on
+  empty/bad-run_target/no-engine; **3-stage chain each-from-immediate-predecessor** with literal-constant red
+  guards (parent≠"relax-root", checkpoint≠"equilibrated", stage2 parent≠stage0 → not-two-back); distinct seeds
+  == `generate_seeds`; **1-stage parity** vs `spawn_md_production` (parent_job_id/run_kind/seed=54321/checkpoint
+  passthrough/cross_engine False); cross-engine hop flagged (oxdna→namd); dict round-trip + `StagePlan.to_dict`
+  JSON-serializable. **RED-verified offline:** an always-seed-from-root mutation fails the chaining test; revert
+  → 9/9 green.
+- **Review** (fresh-context, read-only): CONFIRMED-CORRECT — genuine immediate-predecessor chaining, genuine
+  1-stage provenance parity (cross-checked vs `routes_md.spawn_md_production` L1596-1611 + `generate_seeds`),
+  oracle genuinely red-capable (literal-constant guards, not tautological), no Three-Layer violation. Noted a
+  by-design semantic (a pipeline stage's seed axis = sequential stages, not production-sibling fan-out; only
+  1-stage parity is required and holds).
+- **Gate:** oracle 9/9; `just test` = **4393 passed / 110 skip / 1 xfail** (+9 new, no drop; the xdist
+  isolation flake did not fire this parallel run); ruff clean on both touched files (the 20 repo ruff errors are
+  banked pre-existing debt in OTHER files). No card/UI → display-vs-oracle N/A (like C1/C2); P4 owes the
+  planner-UI MV row. `main.js` LOC Δ = 0 (backend-only).
 
 ### 2026-07-08 — `M3` mrDNA extra bases PRESENT as flexible ssDNA in the built ARBD model
 

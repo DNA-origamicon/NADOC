@@ -365,6 +365,21 @@ fills in as milestones complete.
   matrix each shared factory needs now exists as verified data, provably matching what every bespoke panel
   renders today — the parity contract U2/U3/U4 collapse against.
 
+- **`P1` — MdPipeline stage-spec data model + pure chain builder** · shape: new `backend/core` service
+  (`md_pipeline.py`; pure data model + builder, no card/solver, no job submission) · feature: chaining
+  (job-planner backbone) · engines now chainable: any engine's stage can be seeded from the previous stage's
+  output in ONE ordered `MdPipeline` object — generalizing the 3 special-cased hops (`parent_job_id` +
+  `run_kind="production"` + `seed_oxdna/mrdna_job_id`) that P2/P3/P4 build on · oracle (FAST, 9 tests):
+  PARITY + CHAIN — a 3-stage plan chains each stage from its IMMEDIATE predecessor (literal-constant red guards:
+  parent≠root, checkpoint≠root's, not-two-back), 1-stage plan's provenance == `spawn_md_production`'s first child
+  (parent/run_kind/seed=54321/checkpoint), distinct per-stage seeds == `generate_seeds`, `cross_engine` hop
+  flagged, dict round-trip; RED-verified offline (always-seed-from-root mutation fails, revert→green) ·
+  main.js LOC Δ = 0 (backend-only) · tests: 9/9 oracle, `just test` 4393 passed / 110 skip / 1 xfail (+9, no drop) ·
+  display-vs-oracle: N/A (no card; P4 owes the planner-UI MV) · fresh-context review: CONFIRMED-CORRECT, no bugs,
+  no Three-Layer violation, oracle genuinely red-capable · **Capability proven, not just wired:** the
+  deposition-chain *[field → surface → anchored field-sweep]* now resolves headlessly to a linear chain of stage
+  descriptors where stage N seeds from stage N-1's output — the data backbone the unattended executor (P2) runs.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -398,8 +413,8 @@ read/export the agreement) or a future headless two-engine cross-run.
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | **DONE** (2026-07-08) — anchors: CanDo (C1)✓ + NAMD (N2)✓ + mrDNA (M1)✓; field: CanDo (C2)✓ + NAMD (N1)✓ + **mrDNA (M2)✓**; every engine now runs an anchored E-field job producing a comparable along-field deflection descriptor |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
 | `M-UNIFIED-PANEL` | 6 sidebar panels → 1, proven by per-engine card PARITY | pending — **U1 shipped 2026-07-08** (capability descriptor: 5 engines × 8 cards, unsupported present-but-disabled; PARITY census oracle vs live `index.html`, 19 tests). U2 (Forces factory) / U3 (jobs-base) / U4 (selector) remain |
-| `M-JOB-PLANNER` | chain jobs unattended (stage-spec + executor + planner UI) | pending (P1–P4) |
-| `M-DEPOSITION-CHAIN` | E-field→surface→anchors→field-sweep from one Plan Run | pending (P1+P2+P4+U2) |
+| `M-JOB-PLANNER` | chain jobs unattended (stage-spec + executor + planner UI) | pending — **P1 shipped 2026-07-08** (`MdPipeline` stage-spec + pure chain builder: stage N seeded from N-1's output; 1-stage parity vs `spawn_md_production`; `cross_engine` flag; PARITY/CHAIN oracle 9 FAST). P2 (executor) / P3 (cross-engine) / P4 (Plan Run UI) remain |
+| `M-DEPOSITION-CHAIN` | E-field→surface→anchors→field-sweep from one Plan Run | pending (P1✓ + P2 + P4 + U2) |
 
 ## Data summaries (plots + fits)
 
