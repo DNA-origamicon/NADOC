@@ -753,6 +753,32 @@ experimentally-anchored MD engine), the first time the roster is complete and NA
   toast severity `'warn'`→`'warning'`, and a V/m sub-panel's duplicate inline `display:grid` (rendered visible
   then inverted on first click).
 
+### 2026-07-08 — `U1` engine capability descriptor + registry (unified-panel track foundation)
+
+- **De-dup PROVEN as a single source of truth, not just wired:** `engine_capabilities.js` now names, for all 5
+  engines × 8 cards (run/efield/anchors/surface/advanced/viz/metrics/joblist), exactly what each bespoke panel
+  renders today — the data the shared U2 Forces factory / U3 jobs-base / U4 selector will iterate INSTEAD of the
+  5 hand-written `*_jobs_panel.js`. Every unsupported card is **present-but-disabled with a why-reason**
+  (mrDNA efield/anchors "run at the ARBD model level, no per-run card yet"; CanDo/NAMD "no hard-surface BC";
+  LAMMPS/mrDNA "no standalone metrics card") — so U4 can grey-with-tooltip where today the panel simply OMITS
+  the card. That absent→disabled shift is the whole point of the descriptor.
+- **PARITY census oracle (19 tests), three independent tripwires:** (1) descriptor's enabled/disabled flags +
+  anchor ids must match a hand-audited census field-for-field → editing the descriptor alone goes red;
+  (2) every ENABLED card's `domAnchorId` must EXIST in the live `index.html` (no inventing a card) — read via
+  `fs`, grep-equivalent; (3) every UNSUPPORTED card's conventional probe id must be ABSENT from `index.html`
+  (no silent support). Plus a completeness check: every engine carries an entry for every card (`never absent`).
+- **Oracle caught a real anchor error:** LAMMPS renders its job list as a bare `lammps-jobs-list` container with
+  NO collapsible `-toggle` (unlike the other 4 engines) — the first descriptor guessed `lammps-jobs-list-toggle`
+  and tripwire #2 went red against the DOM. Fixed the anchor; the census is now the true panel inventory.
+- **Pure data + helpers** (`supportsCard`/`cardReason`/`enabledCardKeys`/`engineCards`, all safe on unknown
+  keys); no DOM, no I/O, no `main.js` wiring yet (consumed by U2–U4). `main.js` LOC-Δ = 0. New module → green-
+  first-run is valid proof (not adapted/moved code). No card rendered → no display-vs-oracle Playwright; the
+  standing eyeball owes an MV row when U4 renders the unified stack.
+- **Review (fresh-context, read-only):** census + oracle + helpers CLEAN; verified all 34 enabled anchors exist
+  and all 7 disabled probes absent. One LOW future-drift note — tripwire #3 guesses a card's *conventional* id,
+  so a future card reusing the shared `efield-toggle` id under a different engine could stay green; can't produce
+  a current false result; left as-is (tripwires #1+#2 carry the parity).
+
 ## Lessons (anti-patterns banked)
 
 ### Banked from O1

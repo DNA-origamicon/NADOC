@@ -351,6 +351,20 @@ fills in as milestones complete.
   extra crossover bases — one flexible ss nucleotide per inserted base in the simulated ARBD topology, a
   sign-safe cross-engine flexibility signal (vs C3).
 
+- **`U1` — engine capability descriptor + registry** · shape: new frontend data module (`engine_capabilities.js`;
+  pure data + helpers, no service/card/solver) · feature: engine-consolidation (unified-panel foundation) ·
+  engines now comparable: all 5 sim engines described in ONE source of truth (5 × 8 cards) that the shared U2/U3/U4
+  factories will iterate instead of the 5 bespoke `*_jobs_panel.js`; unsupported cards **present-but-disabled with
+  a reason** (the absent→greyed-with-tooltip shift) · oracle (FAST, 19 tests): PARITY census — 3 tripwires
+  (descriptor↔audited census field-for-field; every ENABLED anchor EXISTS in live `index.html`; every UNSUPPORTED
+  probe ABSENT) + completeness (every engine carries every card). Caught a real anchor bug (LAMMPS joblist is a
+  bare `lammps-jobs-list`, no `-toggle`) · main.js LOC Δ = 0 (no wiring; consumed by U2–U4) · tests: frontend
+  183 files / 2331 passed (+19, no drop); backend suite not run (frontend-only, no `.py` touched) · display-vs-
+  oracle: N/A (no card rendered; U4 will owe an MV row) · fresh-context review: census + oracle + helpers CLEAN,
+  one LOW future-drift note (tripwire #3 guesses conventional ids) · **De-dup proven, not just wired:** the card
+  matrix each shared factory needs now exists as verified data, provably matching what every bespoke panel
+  renders today — the parity contract U2/U3/U4 collapse against.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
@@ -383,6 +397,9 @@ read/export the agreement) or a future headless two-engine cross-run.
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | **DONE** (C1,C2,C3,C4,C5 shipped 2026-07-07) — anchors + E-field + extra-bases + linkers all covered, CanDo feeds the comparison card |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | **DONE** (2026-07-08) — anchors: CanDo (C1)✓ + NAMD (N2)✓ + mrDNA (M1)✓; field: CanDo (C2)✓ + NAMD (N1)✓ + **mrDNA (M2)✓**; every engine now runs an anchored E-field job producing a comparable along-field deflection descriptor |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
+| `M-UNIFIED-PANEL` | 6 sidebar panels → 1, proven by per-engine card PARITY | pending — **U1 shipped 2026-07-08** (capability descriptor: 5 engines × 8 cards, unsupported present-but-disabled; PARITY census oracle vs live `index.html`, 19 tests). U2 (Forces factory) / U3 (jobs-base) / U4 (selector) remain |
+| `M-JOB-PLANNER` | chain jobs unattended (stage-spec + executor + planner UI) | pending (P1–P4) |
+| `M-DEPOSITION-CHAIN` | E-field→surface→anchors→field-sweep from one Plan Run | pending (P1+P2+P4+U2) |
 
 ## Data summaries (plots + fits)
 

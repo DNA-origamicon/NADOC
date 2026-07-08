@@ -476,8 +476,8 @@
       "fast_slow": "fast",
       "oracle": "PARITY census: each engine's descriptor lists EXACTLY the cards its current bespoke panel renders today (oxDNA/LAMMPS/mrDNA/CanDo/NAMD vs the index.html ox-card inventory); unsupported cards are marked present-but-disabled, never absent (NN/G spatial-consistency). Pure; can-go-red if a descriptor omits or invents a card for an engine.",
       "milestone": "M-UNIFIED-PANEL",
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "engine_capabilities.js: per-engine card matrix (8 cards) + protocols + advanced-param schema; unsupported cards present-but-disabled w/ reason (not absent). PARITY oracle (19 tests): census matches descriptor + every enabled anchor EXISTS in index.html + every unsupported probe ABSENT. Caught real lammps joblist anchor (bare lammps-jobs-list, no toggle). Pure data+helpers; main.js LOC delta=0."
     },
     {
       "id": "U2",
