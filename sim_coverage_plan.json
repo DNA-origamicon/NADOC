@@ -510,8 +510,8 @@
       "fast_slow": "fast+MV",
       "oracle": "PARITY: the base renders each engine's job list + run controls identically to its bespoke panel (job-row model, run-button enablement) reusing the already-shared job_tree/metrics_card/shape_compare; pure helpers unit-tested; stateful -> app exercise + smoke. Adapted-code pin rule applies.",
       "milestone": "M-UNIFIED-PANEL",
-      "status": "pending",
-      "notes": ""
+      "status": "in_progress",
+      "notes": "SLICE 1 shipped 2026-07-08. User steer: oxDNA panel is CANONICAL; all engines converge to conform to it. Extracted the oxDNA row/list SHAPE into PURE jobs_panel_model.js (buildJobRowModel/buildJobListModel/jobListSignature/runButtonEnabled) + DOM jobs_panel_render.js (renderJobRow/renderJobList). Rewired oxDNA onto them = BYTE-IDENTICAL DOM (parity pin in jobs_panel_model.test.js drives a VERBATIM copy of the old _jobRow/_renderList vs new → identical outerHTML across every branch; +oxDNA panel 87/87 +smoke). Converged mrDNA (smallest) = intentional visual upgrade (rows gain [N] index + spinner-while-running + legend + poll short-circuit); bespoke mrDNA row rendering DELETED. makeSpinner moved to job_status_symbol.js (re-exported from oxDNA for importers/tests). main.js LOC Δ=0; net -48 LOC across panels. Gates: oracle 9/9, frontend 183/2325 (+9 no drop), smoke 23/23, ruff N/A (frontend-only). Live mrDNA-row pixels owe MV-23. REMAINING (U3 not done): converge cando/lammps/md onto the renderer (md=2882-line outlier: tree+collapse chevron, setInterval + remote/Alpine timers, no returned api); factor the shared run-button/poll/collapse/advanced-drawer into a stateful initJobsPanelBase({engine,descriptor,deps}) each engine drives with its U1 descriptor; runButtonEnabled exists but no panel consumes it yet."
     },
     {
       "id": "U4",

@@ -33,6 +33,17 @@ export function statusBadge(key) {
   return STATUS_BADGE[key] || STATUS_BADGE.unknown
 }
 
+/** A spinning circular activity indicator (CSS class .nadoc-spinner). Shared by
+ *  every job list for the "active" row glyph. */
+export function makeSpinner(color = 'currentColor', size = 11, doc = document) {
+  const s = doc.createElement('span')
+  s.className = 'nadoc-spinner'
+  s.style.width = s.style.height = `${size}px`
+  if (color) s.style.color = color
+  s.setAttribute('aria-hidden', 'true')
+  return s
+}
+
 /**
  * Normalize an engine + raw job status (+ oxDNA production state) to a badge key.
  * ``prodState`` is oxDNA's productionState(job) ('none'|'running'|'done'|'failed');

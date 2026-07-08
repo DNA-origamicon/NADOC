@@ -36,6 +36,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(S3) descriptor agreement** ✅ | identical→signed %Δ 0 & Pearson 1 & shape-RMSD 0; +10/−10° twist→±10% signed; scaled RMSF→Pearson 1, reversed→<−0.99, constant→None (not NaN); rigid pose→shape-RMSD≈0 but shear survives; **CanDo dir-less RMSF vs oxDNA per-strand collapses to per-bp & correlates**; `reference_for` honors oxdna=shape/field, cando=rmsf, NAMD-override, missing→None | `backend/core/shape_metrics.py::{compare_descriptors,reference_for}`, `tests/test_shape_compare.py` | all cross-validation milestones (S5 card, O1/C5/M5/N4 sources) |
 | **(S5) comparison report** ✅ | per-observable reference selection (oxDNA=shape/field, CanDo=RMSF, NAMD-override); scalar reference→0-delta & candidate recovers ±known %; zero-ref→None (no div0); identical RMSF→Pearson 1 + overlay points; rigid-shift→shape-RMSD≈0; field cosine +1/−1 & mag-ratio 3; 1-engine→raw-no-agreement; empty→not-ready; missing observable omits its rows; REST start→poll→result+404 | `backend/core/shape_compare.py::build_comparison_report`, `backend/api/routes_shape_metrics.py`, `tests/test_shape_compare_report.py` | the compare card; per-engine source-bundle contract for C5/O1/M5/N4 |
 | _(display-vs-oracle)_ ✅ (S5) | card's displayed numbers == headless oracle within tol; else STOP+ask | one-off Playwright per card (deleted after) | S5 ✓, C5, M5, N4 |
+| **(U3) canonical job-row PARITY pin** ✅ | new pure model + DOM renderer reproduce the OLD oxDNA `_jobRow`/`_renderList` byte-for-byte: the test carries a VERBATIM copy of the old row/list code (`oldOxdnaJobRow`) and drives OLD+NEW on fresh DOMs → identical `outerHTML` across every branch (root/child/running-spinner/[AR]/archived+size+📦/stale-⚠/selected); flat-list convergence (mrDNA ctx) numbers rows + maps status key; poll-signature stable on health-only change; `runButtonEnabled` = available&&!launching&&!blocked | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` | U3 remainder (cando/lammps/md converge onto renderer; run-button base; stateful `initJobsPanelBase`); U4 selector iterates the same rows |
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
@@ -813,6 +814,39 @@ experimentally-anchored MD engine), the first time the roster is complete and NA
   and all 7 disabled probes absent. One LOW future-drift note — tripwire #3 guesses a card's *conventional* id,
   so a future card reusing the shared `efield-toggle` id under a different engine could stay green; can't produce
   a current false result; left as-is (tripwires #1+#2 carry the parity).
+
+### 2026-07-08 — `U3` (slice 1) canonical job-list model + renderer — unified-panel track
+
+- **User steer reframed the task:** the oxDNA jobs panel is the CANONICAL one (correct parent/child indent,
+  list index, status icons, legend, naming); all engines should CONVERGE to conform to it — the shared base is
+  the oxDNA model, not a lowest-common-denominator. Re-scoped this session's slice accordingly (effort=high; a
+  5-panel big-bang incl. the 2882-line md outlier is reckless in one session).
+- **De-dup PROVEN by byte-parity PIN, not just wired:** extracted the oxDNA row/list SHAPE into a PURE
+  `jobs_panel_model.js` (`buildJobRowModel`/`buildJobListModel`/`jobListSignature`/`runButtonEnabled`) + a DOM
+  `jobs_panel_render.js` (`renderJobRow`/`renderJobList`). The oracle `jobs_panel_model.test.js` carries a
+  VERBATIM copy of the OLD oxDNA `_jobRow`/`_renderList` (`oldOxdnaJobRow`) and drives OLD+NEW on fresh DOMs →
+  identical `outerHTML` across every branch (root/child/running-spinner/[AR]/archived+size+📦/stale-⚠/selected).
+  This is the ADAPTED-CODE PIN done right (old-vs-new byte-equal, not green-first-run).
+- **Rewired the CANONICAL panel (oxDNA) onto the shared module** — deleted its `_jobRow`/`_listSignature`/local
+  `makeSpinner`; `_renderList` now `renderJobList(buildJobListModel(jobs, _rowCtx()), …)` with the same
+  signature short-circuit; oxDNA-specific data (displayName/childLabel/[AR] tags/stale/archive/size) all supplied
+  as `_rowCtx()` callbacks. oxDNA DOM is byte-identical (pin + its own 87/87 tests + smoke). `makeSpinner` moved
+  to the shared `job_status_symbol.js` (re-exported from oxDNA for its importers/tests).
+- **Converged the smallest panel (mrDNA) as the first real de-dup:** mrDNA's ad-hoc flat innerHTML `_renderList`
+  replaced by the same `buildJobListModel`+`renderJobList` — an intentional VISUAL UPGRADE: mrDNA rows now gain a
+  `[N]` list index, a spinner while running (was a static glyph), a status legend, and the poll short-circuit.
+  Its `_rowCtx` is flat (`hierarchical:false`, no tree/archive/size). Vitest render test builds real DOM for 2
+  mrDNA jobs (spinner on running, glyph on completed). Live-pixel eyeball owes **MV-23**.
+- **Gates:** oracle 9/9; affected panels 112/112; frontend 183 files / 2325 passed (+9 new, no drop); smoke
+  23/23; ruff N/A (frontend-only; the 19 pre-existing `just lint` errors are untouched Python debt). `main.js`
+  LOC Δ = 0 (no wiring change — the two panels self-rewire). Net −48 LOC across the panels (de-dup). Fresh-context
+  read-only review: no confirmed issues; the pin is genuine (old-vs-old-free).
+- **STATUS = `in_progress` (slice 1 of U3).** REMAINING: converge cando/lammps/md onto the renderer (md is the
+  2882-line outlier — tree via `flattenJobTree` w/ collapse chevron, setInterval + remote/Alpine timers, no
+  returned api); factor the shared run-button/poll/collapse/advanced-drawer into a stateful
+  `initJobsPanelBase({engine,descriptor,deps})`; `runButtonEnabled` exists but no panel consumes it yet.
+- **Capability/de-dup proven, not just wired:** the canonical oxDNA job-row DOM is now emitted from ONE shared
+  model+renderer (byte-identical pin), and mrDNA's bespoke row rendering is DELETED in favor of it.
 
 ### 2026-07-08 — `U2` shared Forces (E-field) card factory — unified-panel track
 

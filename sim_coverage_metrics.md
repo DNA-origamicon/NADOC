@@ -386,6 +386,25 @@ fills in as milestones complete.
   **MV-22** · **De-dup proven, not just wired:** 3 field-card implementations → 1 factory, each engine's field
   payload machine-proven byte-identical to what its bespoke card emitted before.
 
+- **`U3` (slice 1) — canonical job-list model + renderer** · shape: 2 new frontend modules — PURE
+  `jobs_panel_model.js` (`buildJobRowModel`/`buildJobListModel`/`jobListSignature`/`runButtonEnabled`) + DOM
+  `jobs_panel_render.js` (`renderJobRow`/`renderJobList`); lifts the oxDNA (CANONICAL) row/list SHAPE out of the
+  bespoke panels · feature: engine-consolidation (all panels converge to the oxDNA job-list look) · engines now
+  comparable: oxDNA + mrDNA job lists render from ONE model+renderer; oxDNA is byte-identical (proven), mrDNA
+  UPGRADED to the canonical look (list index + spinner-while-running + legend) · oracle (FAST, 9 tests):
+  BYTE-PARITY PIN — a verbatim copy of the OLD oxDNA `_jobRow`/`_renderList` (`oldOxdnaJobRow`) driven alongside
+  the new model+renderer on fresh DOMs → identical `outerHTML` for every row branch (root/child/spinner/[AR]/
+  archived+📦/stale-⚠/selected); flat-list convergence maps mrDNA status key + numbers rows; poll-sig stable on
+  health-only change; `runButtonEnabled`=available&&!launching&&!blocked · main.js LOC Δ = 0 (panels self-rewire;
+  no wiring change) · net −48 LOC across the two panels (de-dup) · tests: oracle 9/9; affected panels 112/112;
+  frontend 183 files / 2325 passed (+9, no drop); smoke 23/23; ruff N/A (frontend-only; 19 pre-existing Python
+  lint errors untouched) · display-vs-oracle: oxDNA DOM byte-identical (pin + 87/87 + smoke); mrDNA visual upgrade
+  render-tested in jsdom, live pixels owe **MV-23** · fresh-context review: no confirmed issues, pin genuine ·
+  **STATUS in_progress** (slice 1): REMAINING = converge cando/lammps/md (md = 2882-line outlier) + factor the
+  stateful `initJobsPanelBase` (run-button/poll/collapse/advanced host; `runButtonEnabled` unconsumed yet) ·
+  **De-dup proven, not just wired:** oxDNA's canonical job-row DOM now emitted from ONE shared model+renderer
+  (byte-identical pin) and mrDNA's bespoke row rendering DELETED in favor of it.
+
 - **`P1` — MdPipeline stage-spec data model + pure chain builder** · shape: new `backend/core` service
   (`md_pipeline.py`; pure data model + builder, no card/solver, no job submission) · feature: chaining
   (job-planner backbone) · engines now chainable: any engine's stage can be seeded from the previous stage's
@@ -433,7 +452,7 @@ read/export the agreement) or a future headless two-engine cross-run.
 | `M-CANDO-COMPLETE` | CanDo covers all four features + feeds the card | **DONE** (C1,C2,C3,C4,C5 shipped 2026-07-07) — anchors + E-field + extra-bases + linkers all covered, CanDo feeds the comparison card |
 | `M-ALL-ANCHORS-FIELD` | every engine runs an anchored field job with a comparable descriptor | **DONE** (2026-07-08) — anchors: CanDo (C1)✓ + NAMD (N2)✓ + mrDNA (M1)✓; field: CanDo (C2)✓ + NAMD (N1)✓ + **mrDNA (M2)✓**; every engine now runs an anchored E-field job producing a comparable along-field deflection descriptor |
 | `M-FULL-COVERAGE` | all engines × all four features, all feeding the card | pending |
-| `M-UNIFIED-PANEL` | 6 sidebar panels → 1, proven by per-engine card PARITY | pending — **U1 + U2 shipped 2026-07-08**. U1 = capability descriptor (5 engines × 8 cards, PARITY census, 19 tests). **U2 = shared Forces (E-field) card factory** `forces_card.js` — collapses the 3 triplicated field cards (`efield_setup.js` + `cando_efield_setup.js` DELETED; LAMMPS field third delegated) into ONE `initForcesCard({engine})` emitting byte-identical `{field_pN,dir,enabled}` per engine (13-test parity oracle, proven vs live old code; LAMMPS's 9 pre-existing tests preserved). U3 (jobs-base) / U4 (selector) remain |
+| `M-UNIFIED-PANEL` | 6 sidebar panels → 1, proven by per-engine card PARITY | pending — **U1 + U2 shipped 2026-07-08**. U1 = capability descriptor (5 engines × 8 cards, PARITY census, 19 tests). **U2 = shared Forces (E-field) card factory** `forces_card.js` — collapses the 3 triplicated field cards (`efield_setup.js` + `cando_efield_setup.js` DELETED; LAMMPS field third delegated) into ONE `initForcesCard({engine})` emitting byte-identical `{field_pN,dir,enabled}` per engine (13-test parity oracle, proven vs live old code; LAMMPS's 9 pre-existing tests preserved). **U3 slice 1 shipped 2026-07-08** = canonical job-list model+renderer (`jobs_panel_model.js`/`jobs_panel_render.js`) extracted from oxDNA (byte-parity pin) + mrDNA converged; U3 remainder = converge cando/lammps/md + stateful `initJobsPanelBase`. U4 (selector) remains |
 | `M-JOB-PLANNER` | chain jobs unattended (stage-spec + executor + planner UI) | pending — **P1+P2 shipped 2026-07-08**. P1 = `MdPipeline` stage-spec + pure builder. **P2 = chain EXECUTOR** (`md_chain_executor.py`): stage N spawns SEEDED FROM N-1's realised child on completion; failure HALTS; `resume_chain` retries-only-failed (completed stages never re-run). Engine-agnostic (injected spawn/status); NAMD adapter reuses `spawn_md_production`; `advance_chains` driven by the MD supervisor = unattended; `POST /md/chains`+resume routes. CHAIN oracle 12 FAST + 4 route. P3 (cross-engine) / P4 (Plan Run UI) remain |
 | `M-DEPOSITION-CHAIN` | E-field→surface→anchors→field-sweep from one Plan Run | pending (P1✓ + **P2✓** + P4 + U2) — the executor can now chain deposition→immobilize→sweep stages; still needs P4 (planner UI to author the plan) + U2 (per-stage Forces card) + forces-into-reseed-conf wiring |
 

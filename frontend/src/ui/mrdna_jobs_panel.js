@@ -20,7 +20,8 @@
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
-import { statusBadge, statusKeyFor } from './job_status_symbol.js'
+import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
+import { renderJobList } from './jobs_panel_render.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { confirmNoConcurrentJob, confirmGpuNotBusy } from './job_activity.js'
 import * as api from '../api/client.js'
@@ -172,8 +173,26 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   let _progress = null
   let _available = null
   let _pollTimer = null
+  let _listSig = null            // last-rendered list signature (avoids spinner-restart churn)
+  const _legend = { el: null }   // status-symbol legend, inserted once after the list
 
   const _selectedJob = () => _jobs.find((j) => j.job_id === _selectedId) || null
+
+  // Canonical job-list model + renderer (U3): mrDNA converges to the oxDNA look
+  // (list index, status glyph/spinner, legend). mrDNA relaxations are flat (no
+  // parent/child tree, no archive/size), so the ctx omits those callbacks.
+  function _rowCtx() {
+    return {
+      engine: 'mrdna',
+      selectedId: _selectedId,
+      hierarchical: false,
+      displayName: jobDisplayName,
+      isActive: mrdnaJobIsActive,
+      formatTime: formatJobTime,
+      rowSig: (j) => `${j.job_id}:${j.status}`,
+      colors: { dim: _C.dim, warn: _C.warn },
+    }
+  }
 
   // ── Collapse ────────────────────────────────────────────────────────────────
   function _applyCollapsed(collapsed) {
@@ -276,27 +295,16 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
 
   function _renderList() {
     if (!listEl) return
-    listEl.innerHTML = ''
-    if (!_jobs.length) {
-      const empty = document.createElement('div')
-      empty.style.cssText = `color:${_C.dim};font-size:11px;padding:4px`
-      empty.textContent = 'No mrDNA jobs for this design yet.'
-      listEl.appendChild(empty)
-      return
-    }
-    for (const job of _jobs) {
-      const row = document.createElement('div')
-      row.style.cssText =
-        `display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;font-size:11px;` +
-        `border-radius:3px;${job.job_id === _selectedId ? 'background:#2a3a4a;' : ''}`
-      const badge = statusBadge(statusKeyFor('mrdna', job.status))
-      row.innerHTML =
-        `<span title="${job.status}">${badge?.symbol ?? '•'}</span>` +
-        `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${jobDisplayName(job)}</span>` +
-        `<span style="color:${_C.dim}">${formatJobTime(job.created_at)}</span>`
-      row.addEventListener('click', () => _selectJob(job.job_id))
-      listEl.appendChild(row)
-    }
+    const ctx = _rowCtx()
+    const sig = jobListSignature(_jobs, ctx)
+    if (sig === _listSig && listEl.childElementCount > 0) return
+    _listSig = sig
+    renderJobList(listEl, buildJobListModel(_jobs, ctx), {
+      onClick: (jobId) => _selectJob(jobId),
+      emptyText: 'No mrDNA jobs for this design yet.',
+      dimColor: _C.dim,
+      legendState: _legend,
+    })
   }
 
   async function _selectJob(jobId) {

@@ -30,8 +30,9 @@ import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { runExclusive } from './primitives/button_busy.js'
 import { el } from './primitives/dom.js'
-import { statusBadge, statusKeyFor, makeStatusLegend } from './job_status_symbol.js'
-import { flattenJobTree, descendantIds } from './job_tree.js'
+import { makeSpinner } from './job_status_symbol.js'
+import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
+import { renderJobList } from './jobs_panel_render.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
@@ -208,16 +209,6 @@ export function isProductionRunning(job) {
 // Out-of-date detection + the roll-or-cancel guard are shared with the MD panel.
 export { jobOutOfDate }
 
-/** A spinning circular activity indicator (CSS class .nadoc-spinner). */
-export function makeSpinner(color = 'currentColor', size = 11) {
-  const s = document.createElement('span')
-  s.className = 'nadoc-spinner'
-  s.style.width = s.style.height = `${size}px`
-  if (color) s.style.color = color
-  s.setAttribute('aria-hidden', 'true')
-  return s
-}
-
 /** Pure: a job whose relaxation has completed can seed a NAMD run (Phase 2).
  *  A completed status means the relaxation (and any production) finished, so a
  *  relaxed last_conf exists to hand off to NAMD. */
@@ -274,9 +265,11 @@ export function jobListStatus(job) {
 }
 
 // Job-tree flatten + descendant-cascade helpers now live in the shared job_tree.js
-// (both panels render the same parent→child hierarchy; imported at the top).
+// (both panels render the same parent→child hierarchy). The canonical row/list
+// model + renderer live in jobs_panel_model.js / jobs_panel_render.js (U3).
 // Re-exported so existing importers (and tests) keep resolving them from here.
-export { flattenJobTree, descendantIds }
+export { flattenJobTree, descendantIds } from './job_tree.js'
+export { makeSpinner } from './job_status_symbol.js'
 
 /** Pure: the confirm-dialog copy for deleting a job.  A relaxed parent with
  *  field children warns that the children go too (cascade); a field child / a
@@ -494,7 +487,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   let _progress   = null
   let _pollTimer  = null
   let _listSig    = null   // last-rendered list signature (avoids spinner-restart churn)
-  let _legendEl   = null   // status-symbol legend, inserted once after the list
+  const _legend   = { el: null }   // status-symbol legend, inserted once after the list
   let _collapsed  = getSectionCollapsed('dynamics', 'oxdna-jobs-panel', true)
   let _advOpen    = false
   let _available  = false
@@ -1030,109 +1023,49 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   })
 
   // ── List ─────────────────────────────────────────────────────────────────
-  // Signature of what the list actually renders (id + status + production state +
-  // selection) — a running job's health/progress changing must NOT re-render the
-  // list, or the row spinners restart their animation every poll.
-  function _listSignature(jobs) {
-    return jobs.map(j => `${j.job_id}:${j.status}:${productionState(j)}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`).join(',') +
-           `|sel=${_selectedId}`
+  // The canonical row/list model + renderer live in jobs_panel_model.js /
+  // jobs_panel_render.js (U3) — oxDNA is the reference the shared model was lifted
+  // from (correct parent/child indent, list index, status icons, [AR]/archive/
+  // stale markers). `_rowCtx()` supplies the oxDNA-specific data + callbacks; the
+  // list-signature short-circuit still guards against spinner-restart churn.
+  function _rowCtx() {
+    return {
+      engine: 'oxdna',
+      selectedId: _selectedId,
+      hierarchical: true,
+      displayName: jobDisplayName,
+      childLabel: runRowLabel,
+      childTitle: runChildTitle,
+      productionState,
+      isActive: jobIsActive,
+      isStale: (job) => jobOutOfDate(job) && !_autorefineRunning,
+      staleClass: 'oxdna-job-stale-warn',   // stable hook for the AF-26 staleness e2e
+      staleTitle: 'Design changed since this job was relaxed — run a new Relax, or roll the feature log back, before live/production.',
+      tags: (job) => _arJobIds.has(job.job_id)
+        ? [{ text: '[AR]', color: '#e3b341', title: 'Created by Autorefine skips/loops' }] : [],
+      archived: (job) => !!job.archived,
+      archivePath: (job) => job.archive_path || '',
+      sizeBytes: (job) => job.size_bytes ?? null,
+      formatTime: formatJobTime,
+      formatSize: formatBytes,
+      rowSig: (j) => `${j.job_id}:${j.status}:${productionState(j)}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`,
+      colors: { dim: _C.dim, warn: _C.warn },
+    }
   }
 
   function _renderList() {
     if (!listEl) return
-    const jobs = _visibleJobs().slice().sort((a, b) => b.created_at - a.created_at)
-    const sig = _listSignature(jobs)
+    const jobs = _visibleJobs()
+    const ctx = _rowCtx()
+    const sig = jobListSignature(jobs, ctx)
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
-    if (!jobs.length) {
-      listEl.innerHTML = `<div style="color:${_C.dim};padding:6px 4px;font-size:11px">No oxDNA jobs for this design yet.</div>`
-      return
-    }
-    listEl.innerHTML = ''
-    let rootNo = 0
-    for (const { job, depth, index } of flattenJobTree(jobs)) {
-      if (depth === 0) rootNo += 1
-      listEl.appendChild(_jobRow(job, { isChild: depth > 0, index, depth, listIndex: rootNo }))
-    }
-    if (!_legendEl) { _legendEl = makeStatusLegend(); listEl.after(_legendEl) }
-  }
-
-  // One job row: [N] name · timestamp · status-symbol (parent relaxation, or a
-  // depth-indented numbered E-field child).
-  function _jobRow(job, { isChild = false, index = 0, depth = 0, listIndex = 0 }) {
-    const row = document.createElement('div')
-    row.dataset.jobId = job.job_id
-    row.style.cssText =
-      `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:4px;` +
-      `font-size:11px;${depth ? `padding-left:${6 + depth * 14}px;` : ''}` +
-      `${job.job_id === _selectedId ? 'background:#2a3a4a;' : ''}`
-    const badge = statusBadge(statusKeyFor('oxdna', job.status, productionState(job)))
-
-    // Leading list index (root jobs only; children show their run number).
-    const idx = document.createElement('span')
-    idx.textContent = isChild ? '' : `[${listIndex}]`
-    idx.style.cssText = `flex-shrink:0;color:${_C.dim};font-family:var(--font-mono)`
-
-    const label = document.createElement('span')
-    label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
-    if (isChild) {
-      label.textContent = runRowLabel(job, index)
-      row.title = runChildTitle(job)
-    } else {
-      label.textContent = jobDisplayName(job)
-    }
-
-    const ts = document.createElement('span')
-    ts.textContent = formatJobTime(job.created_at)
-    ts.style.cssText = `flex-shrink:0;color:${_C.dim};font-size:10px;font-family:var(--font-mono)`
-
-    // On-disk size of this job's folder (resolves to the archive location when archived).
-    const size = document.createElement('span')
-    size.textContent = job.size_bytes ? formatBytes(job.size_bytes) : ''
-    size.style.cssText = `flex-shrink:0;color:${job.archived ? _C.warn : _C.dim};font-size:10px;font-family:var(--font-mono)`
-    if (job.archived) size.title = `Archived → ${job.archive_path || ''}`
-
-    // Status symbol: animated spinner while active, else the badge shape.
-    const sym = jobIsActive(job)
-      ? makeSpinner(badge.color, 10)
-      : Object.assign(document.createElement('span'), { textContent: badge.symbol })
-    sym.style.flexShrink = '0'
-    sym.title = badge.label
-    if (!jobIsActive(job)) sym.style.color = badge.color
-
-    row.append(idx)
-    // [AR] designation for jobs created by an Autorefine run.
-    if (_arJobIds.has(job.job_id)) {
-      const ar = Object.assign(document.createElement('span'), { textContent: '[AR]' })
-      ar.style.cssText = `flex-shrink:0;color:#e3b341;font-family:var(--font-mono);font-weight:600`
-      ar.title = 'Created by Autorefine skips/loops'
-      row.append(ar)
-    }
-    row.append(label, ts, size)
-    if (job.archived) {
-      const box = Object.assign(document.createElement('span'), { textContent: '📦' })
-      box.style.cssText = 'flex-shrink:0;font-size:10px'
-      box.title = `Archived → ${job.archive_path || ''}`
-      row.append(box)
-    }
-    // Out-of-date marker: the design changed since this job was relaxed, so
-    // live/production would be inconsistent (only Relax stays available).
-    // Suppressed WHILE an autorefine run is active: the loop deliberately edits the
-    // design (it lands each iteration's skip pattern live), which would otherwise flag
-    // every job stale mid-run — don't surface design-difference warnings until the run
-    // completes.
-    if (jobOutOfDate(job) && !_autorefineRunning) {
-      const warn = Object.assign(document.createElement('span'), { textContent: '⚠' })
-      warn.className = 'oxdna-job-stale-warn'   // stable hook for the AF-26 staleness e2e
-      warn.style.cssText = `flex-shrink:0;color:${_C.warn};font-size:11px`
-      warn.title = 'Design changed since this job was relaxed — run a new Relax, or roll the feature log back, before live/production.'
-      row.append(warn)
-    }
-    row.append(sym)
-    row.dataset.jobId = job.job_id   // stable per-row selector (rows are otherwise id-less)
-    // An explicit list click confirms before unloading a loaded trajectory (see _selectJob).
-    row.addEventListener('click', () => { _selectJob(job.job_id, { confirmTrajUnload: true }) })
-    return row
+    renderJobList(listEl, buildJobListModel(jobs, ctx), {
+      onClick: (jobId) => { _selectJob(jobId, { confirmTrajUnload: true }) },
+      emptyText: 'No oxDNA jobs for this design yet.',
+      dimColor: _C.dim,
+      legendState: _legend,
+    })
   }
 
   // Select a job by id: pull its progress, render list + detail, echo its run
