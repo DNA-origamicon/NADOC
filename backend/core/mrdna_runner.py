@@ -402,6 +402,55 @@ def load_display(job_dir: Path) -> Optional[dict]:
     return out
 
 
+def mrdna_trajectory_rmsf(
+    design: Design, job_dir: Path, *, max_frames: int = 40
+) -> Optional[dict]:
+    """Per-nucleotide RMSF (nm) from the CG relaxation TRAJECTORY — the mrDNA flexibility
+    contribution to the cross-engine comparison card (M5).
+
+    Reconstructs the per-nucleotide relaxed backbone frame at each DCD timestep (the SAME
+    actual-relaxed-axis reconstruction the display uses, per frame) and feeds the ensemble to
+    the shared ``rmsf_from_ensemble`` (Kabsch-aligned to strip the CG bundle's box diffusion/
+    tumbling, so what's left is site fluctuation).  Returns the ``rmsf_from_ensemble`` payload
+    (``{positions:[{helix_id,bp_index,direction,copy,rmsf_nm,...}], n_frames, ...}``) or None
+    when there is no trajectory / fewer than two frames.  Frames are evenly subsampled to
+    ``max_frames`` (each reconstruction re-reads the DCD, so this bounds the cost).
+
+    Physical-layer / read-only: reads positions off the trajectory, never mutates topology.
+    """
+    from backend.core.mrdna_bridge import (
+        _ensure_mrdna,
+        nuc_pos_override_display_from_coarse,
+    )
+    from backend.core.shape_metrics import rmsf_from_ensemble
+
+    _ensure_mrdna()
+    psf, dcd = _sim_paths(job_dir)
+    if not (psf.exists() and dcd.exists()):
+        return None
+
+    import MDAnalysis as mda
+    n = len(mda.Universe(str(psf), str(dcd)).trajectory)
+    if n < 2:
+        return None
+    if n <= max_frames:
+        idxs = list(range(n))
+    else:
+        idxs = sorted({round(i * (n - 1) / (max_frames - 1)) for i in range(max_frames)})
+
+    frames: list[list[dict]] = []
+    for i in idxs:
+        override = nuc_pos_override_display_from_coarse(design, str(psf), str(dcd), frame=i)
+        frames.append([
+            {"helix_id": k[0], "bp_index": k[1], "direction": k[2],
+             "backbone_position": v.tolist()}
+            for k, v in override.items()
+        ])
+    if len([f for f in frames if f]) < 2:
+        return None
+    return rmsf_from_ensemble(frames, align=True)
+
+
 def _extract_beads_aligned(psf: str, dcd: str) -> tuple[list[list[float]], list[list[int]]]:
     """The coarse DNA bead cloud (last DCD frame), rigid-body (Kabsch) aligned onto
     the initial coarse PDB — which mrDNA writes in the NADOC coordinate frame — so

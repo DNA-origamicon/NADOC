@@ -357,6 +357,40 @@ async def get_mrdna_curvature(job_id: str) -> dict:
     }
 
 
+@router.get("/mrdna/jobs/{job_id}/shape-source")
+async def get_mrdna_shape_source(job_id: str) -> dict:
+    """The mrDNA source bundle for the cross-engine comparison card (S5/M5).
+
+    Turns the job's relaxed display frame + a per-nucleotide RMSF from the CG trajectory
+    ensemble into the shared ``{engine, descriptors, rmsf, shape_frame, field}`` bundle
+    ``build_comparison_report`` consumes — mrDNA's ABSOLUTE twist/bend on the rigid dsDNA
+    core (a third live column, cross-validated against oxDNA's relaxed shape) + its
+    trajectory-variance RMSF.  Uses the job's OWN design snapshot for the core mask + the
+    per-frame reconstruction, so the descriptors match what mrDNA relaxed, not live editor
+    state.  Physical-layer only (Three-Layer Law); field emission is deferred
+    (``field:None`` — see :mod:`backend.core.mrdna_shape_source`)."""
+    from backend.api.skip_twist_tuning import core_reference_geometry
+    from backend.core.mrdna_runner import _load_snapshot_design, mrdna_trajectory_rmsf
+    from backend.core.mrdna_shape_source import build_mrdna_shape_source
+
+    job = _load_job(job_id)
+    jd = job.job_dir(_workspace())
+    cached = load_display(jd)
+    if not cached or not cached.get("positions"):
+        return {"job_id": job.job_id, "ready": False}
+    design = _load_snapshot_design(jd)
+    if design is None:
+        raise HTTPException(500, f"mrDNA job {job_id!r} has no design snapshot to compare against")
+
+    rmsf = await run_in_threadpool(mrdna_trajectory_rmsf, design, jd)
+    reference = await run_in_threadpool(core_reference_geometry, design)
+    bundle = await run_in_threadpool(
+        build_mrdna_shape_source, cached["positions"], reference,
+        rmsf=(rmsf["positions"] if rmsf else None))
+    return {"job_id": job.job_id, "ready": bundle["descriptors"] is not None,
+            "n_frames": (rmsf["n_frames"] if rmsf else None), **bundle}
+
+
 @router.get("/mrdna/curvature/analytic")
 async def get_mrdna_analytic_curvature() -> dict:
     """Analytic Dietz curvature of the ACTIVE design's loop/skip pattern — available

@@ -59,6 +59,61 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
 
+### 2026-07-08 — `M5` mrDNA source bundle → THIRD live card column (CG-trajectory RMSF + copy-key fix)
+
+- **Picked** `M5` — the handoff's `▶ NEXT` recommendation and highest cross-val value among the eligible set
+  (deps `S5` met). Card-source tasks lead on cross-validation value, and mrDNA context was warm from M1/M2 (rubric
+  #4, finish the in-progress track). Puts a THIRD live engine column on the S5 comparison card via the proven
+  SOURCE-BUNDLE CONTRACT: does the cheap CG relaxation predict oxDNA's relaxed shape?
+- **What shipped.** mrDNA is now the third live source of the S5 cross-engine comparison card — Physical-layer read
+  only, no topology touch.
+  - `backend/core/mrdna_shape_source.py` `build_mrdna_shape_source(shape_frame, core_reference, *, rmsf=None,
+    field=None)` — the mrDNA twin of O1/C5, same contract `{engine, descriptors, rmsf, shape_frame, field}`:
+    core-filter the reconstructed relaxed display frame to the rigid dsDNA core (`_filter_to_reference_core` vs
+    `core_reference_geometry`), emit mrDNA's **ABSOLUTE** `compute_shape_descriptors` (S1 estimator), map a per-nt
+    RMSF list to the card's rmsf shape.
+  - **CG-trajectory RMSF** — `mrdna_runner.mrdna_trajectory_rmsf(design, job_dir)` reconstructs the per-nt relaxed
+    frame at each DCD timestep (the same actual-relaxed-axis reconstruction `nuc_pos_override_display_from_coarse`,
+    per frame; frames evenly subsampled to `max_frames=40` to bound the per-frame Universe reload) and feeds the
+    ensemble to the shared S2 `rmsf_from_ensemble(align=True)` (Kabsch strips the CG bundle's box diffusion). The
+    trajectory-variance RMSF source the descriptor set names for oxDNA/NAMD/mrDNA.
+  - **COPY-KEY GAP fix (the M5-specific engineering).** mrDNA's `_display_positions` emits crossover extra-base
+    inserts as `{helix_id:"__xb__", bp_index:<crossover-id STRING>, direction:k}` — a **string** bp_index that
+    crashes the shared `_dev_key` (`int(bp_index)`) oxDNA never lets into its source. The gap bites the SHAPE
+    column: the display frame handed to the builder carries those inserts, and `_filter_to_reference_core` /
+    `_core_column_key` drop them (non-int bp → not in the core) before the descriptors run. The RMSF list comes
+    from the trajectory reconstruction (int keys only, no `__xb__`); `_rmsf_profile` still skips non-int bp
+    defensively so a hand-built list can't smuggle one in.
+  - `GET /mrdna/jobs/{id}/shape-source` (`routes_mrdna.py`) — reads the job's cached display + a threadpooled
+    trajectory RMSF + snapshot design's core reference, returns `{ready(=descriptors is not None), n_frames,
+    ...bundle}`; graceful no-display → `{ready:False}`, no-snapshot → 500 (mirrors sibling C5 route).
+  - Frontend: `api.getMrdnaShapeSource` + the compare card's `getSources` now also fetches the selected mrDNA job's
+    bundle → `[oxdna, cando, mrdna]`. `main.js` captures `const mrdnaPanel` + passes a lazy `getMrdnaJob: () =>
+    mrdnaPanel?.getSelectedJob?.()` (same proven no-TDZ pattern as `getCandoJob`).
+  - **Field deferred** (`field:None`) — like O1/C5; a follow-up once an anchored mrDNA field run's relaxed frame is
+    on hand (build it the M2 way).
+- **Oracle** `tests/test_mrdna_shape_source.py` (**9 tests: 8 fast + 1 slow**): engine tag + descriptor
+  self-consistency, core mask drops ssDNA ends, **copy-key coverage** (a real display frame with string-bp `__xb__`
+  inserts builds a valid bundle — inserts dropped, core intact, descriptors unchanged; RED if the guard were
+  gone), rmsf remap (copy preserved, drops None + non-int), field passthrough, empty-core→None RED, **trajectory-
+  RMSF path** (monkeypatched reconstruction + fake trajectory length: subsamples to `max_frames`, int keys feed
+  `rmsf_from_ensemble`, <2-frame→None), **cross-engine integration** (`[oxdna, mrdna]`→`build_comparison_report`
+  ready, shape ref=oxdna, mrdna shape-RMSD ≈0 on a rigid shift); 1 SLOW (registered in conftest): a real ARBD
+  coarse run → `_display_positions` + `mrdna_trajectory_rmsf` (n_frames≥2, finite rmsf) → ready mrDNA source.
+- **Gates.** oracle 8 fast + 1 slow green; `just test` = **4352 passed / 72 skipped / 1 xfailed / 1 failed** — the
+  1 failure is the **documented xdist active-design flake** `test_namd_efield::test_no_field_skips_both_guards`
+  (the `/api/md/jobs` create route reads global `design_state` another file's test left; passes ISOLATED and
+  ALONGSIDE the new file; my change is additive mrDNA/card code that never touches `design_state`). ruff clean on
+  touched; vitest + smoke below. Fresh-context review: product CONFIRMED-CORRECT (contract, key types, guards,
+  route, no-TDZ); it flagged the RMSF `__xb__` guard as defending an impossible production input → addressed by
+  adding the FAST trajectory-RMSF pin + honest docstring (the gap's real locus is the shape column). **main.js LOC
+  Δ = +4** (pure wiring: capture the factory return + one lazy dep). **Display-vs-oracle:** NOT a new card — only a
+  new backend source route into the S5-validated render path (already scraped-vs-oracle in S5), exactly like C5 →
+  live cross-engine eyeball = **MV-21** (updated with the M5 slice).
+- **Comparable prediction gained, not just a run:** the comparison card now carries a THIRD independent engine —
+  mrDNA's absolute CG-relaxed shape descriptors + aligned-shape RMSD scored against oxDNA's shape reference, plus a
+  CG-trajectory RMSF. oxDNA, CanDo, and mrDNA now cross-validate on the same design through one shared card.
+
 ### 2026-07-07 — `M1` mrDNA anchors (ARBD RESTRAINT)
 
 - **Picked** `M1` — per the handoff's rubric recommendation: reuses the SAME shared-scope-resolver→engine-index

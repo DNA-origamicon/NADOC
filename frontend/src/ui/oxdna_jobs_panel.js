@@ -393,7 +393,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -2012,9 +2012,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // returns the per-engine {engine, descriptors, rmsf, shape_frame, field} bundles for the
   // current design.  O1 wired the oxDNA column (the selected oxDNA job's relaxed-frame
   // descriptors + RMSF); C5 adds the CanDo column (the selected CanDo job's FEM shape
-  // descriptors + free-free NMA RMSF — the RMSF reference), so the card shows the first
-  // real oxDNA-vs-CanDo agreement.  Remaining engines (M5/N4) add their bundles the same
-  // way (live cross-engine data = MV-21).
+  // descriptors + free-free NMA RMSF — the RMSF reference); M5 adds the mrDNA column (the
+  // selected mrDNA job's relaxed-frame descriptors + CG-trajectory RMSF), so the card shows
+  // three live engines cross-validated.  Remaining engine (N4) adds its bundle the same way
+  // (live cross-engine data = MV-21).
   const _compareCard = initShapeCompareCard({
     api: { start: api.startShapeCompare, poll: api.getShapeCompareRun },
     getSources: async () => {
@@ -2028,6 +2029,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       if (candoJob) {
         const csrc = await api.getCandoShapeSource(candoJob.job_id)
         if (csrc && csrc.ready) out.push(csrc)
+      }
+      const mrdnaJob = getMrdnaJob?.()
+      if (mrdnaJob) {
+        const msrc = await api.getMrdnaShapeSource(mrdnaJob.job_id)
+        if (msrc && msrc.ready) out.push(msrc)
       }
       return out
     },

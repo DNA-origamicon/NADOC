@@ -206,6 +206,21 @@ appears next to oxDNA with sane twist/bend/Rg, the agreement table shows a finit
 shape-RMSD + RMSF Pearson (CanDo = RMSF ref), and Export still produces PNG + CSVs. Report
 pass/fail.
 
+**M5 update (2026-07-08) — mrDNA column now live.** `getSources` now also fetches the
+selected mrDNA job's bundle (`GET /mrdna/jobs/{id}/shape-source` →
+`build_mrdna_shape_source`: mrDNA's absolute shape descriptors on the relaxed CG-reconstructed
+frame + a per-nucleotide RMSF from the CG **trajectory** ensemble via `mrdna_trajectory_rmsf`).
+With a completed mrDNA relaxation selected alongside oxDNA (and/or CanDo), the card gains a
+third **mrDNA column**: oxDNA-vs-mrDNA scalar %-deltas (oxDNA is the SHAPE reference — does the
+cheap CG relaxation predict oxDNA's relaxed shape?), an aligned-shape RMSD, and mrDNA's RMSF in
+the overlay. Same S5-validated render path (only a new backend source route), so this is a
+live-data eyeball, not a new render surface. **Test (M5 slice, do now):** load a design, run
+an oxDNA relax job AND a mrDNA relaxation on it, select both, Generate the "Shape comparison"
+card → confirm a **mrDNA column** appears with sane twist/bend/Rg + an RMSF overlay, the
+agreement table shows a finite mrDNA shape-RMSD vs oxDNA, and Export still produces PNG + CSVs.
+Report pass/fail. NOTE: mrDNA's CG curvature is only ~18% quantitative (project_mrdna_panel),
+so expect its bend to read LOW vs oxDNA — that's the engine, not a bug.
+
 ### MV-5 — Assembly right-click context menu (part / linker / belt)
 *Discharges fix #69 — the assembly right-click router moved onto the shared
 `createContextMenu` primitive. The router (`assembly_pointer.js`

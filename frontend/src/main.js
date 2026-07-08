@@ -1911,6 +1911,9 @@ async function main() {
     // Lazy: the CanDo panel is created below, so the compare card's getSources reads its
     // selected job at generate time (C5 — the CanDo column of the cross-engine card).
     getCandoJob: () => candoPanel?.getSelectedJob?.(),
+    // Lazy: the mrDNA panel is created below; the compare card reads its selection at
+    // generate time (M5 — the mrDNA column of the cross-engine card).
+    getMrdnaJob: () => mrdnaPanel?.getSelectedJob?.(),
     // Clicking a job echoes its run conditions into every card (field arrow,
     // surface, anchor chips + 3D glow) — what was used during that run.
     applyRunConfig: (cfg) => {
@@ -1936,7 +1939,7 @@ async function main() {
     connectionOverlay: mrdnaConnOverlay,
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
   })
-  initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
+  const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
   // (LAMMPS panel + its External-forces cards are wired after the anchor-glow / View-grid
   // setup below, so they can reuse the SAME purple anchor halo + surface grid as oxDNA.)
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
