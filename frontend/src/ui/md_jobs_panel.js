@@ -11,7 +11,7 @@
  * Falls back to REST polling for completed jobs.
  */
 
-import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
@@ -561,8 +561,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _selectedId   = null   // currently displayed job_id
   let _ws           = null   // active WebSocket
   let _pollTimer    = null   // REST fallback poll interval
-  let _advOpen      = false
-  let _collapsed    = getSectionCollapsed('dynamics', 'md-jobs-panel', true)
   let _launching    = false
   let _enginesOk    = false  // both NAMD + GROMACS found
   let _threadsInit  = false  // seeded the threads input from server recommendation once
@@ -623,23 +621,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
 
-  // ── Collapse ───────────────────────────────────────────────────────────────
-  body.style.display = _collapsed ? 'none' : ''
-  arrow.classList.toggle('is-collapsed', _collapsed)
-  heading.addEventListener('click', () => {
-    _collapsed = !_collapsed
-    body.style.display = _collapsed ? 'none' : ''
-    arrow.classList.toggle('is-collapsed', _collapsed)
-    setSectionCollapsed('dynamics', 'md-jobs-panel', _collapsed)
-    if (!_collapsed) _onOpen()
-    else { _stopMdPrewarm(); _stopRemotePoll() }   // collapsing tears down background timers
-  })
-
-  // ── Advanced drawer (collapsible card) ──────────────────────────────────────
-  advToggle?.addEventListener('click', () => {
-    _advOpen = !_advOpen
-    if (advBody) advBody.style.display = _advOpen ? '' : 'none'
-    if (advArrow) advArrow.style.transform = _advOpen ? 'rotate(90deg)' : ''
+  // ── Section collapse + advanced drawer — shared jobs-panel base (U3 slice 2c-3b) ──
+  // md accommodations: the section arrow is the `is-collapsed` class idiom
+  // (arrowStyle:'class'), the advanced-drawer arrow is the CSS-transform idiom
+  // (advArrowStyle:'rotate'). The advanced drawer CONVERGES too (unlike oxDNA's): its
+  // markup is a clean `display:none`, so the base's display-reading toggle opens on
+  // the first click exactly as md's old `_advOpen` boolean did — no flip hazard.
+  // md does NOT use the base's primary poll: live updates ride a WebSocket and the
+  // Alpine SLURM state rides `_remotePollTimer` (setInterval), both bespoke and torn
+  // down by the onClose hook. `initCollapsed` runs at the end (with the other mount
+  // probes) to preserve the original apply-then-onOpen ordering.
+  const _base = initJobsPanelBase({
+    section: 'md-jobs-panel',
+    els: { heading, body, arrow, advToggle, advArrow, advBody },
+    arrowStyle: 'class',
+    advArrowStyle: 'rotate',
+    onOpen: () => _onOpen(),
+    onClose: () => { _stopMdPrewarm(); _stopRemotePoll() },   // collapsing tears down background timers
   })
 
   // ── Jobs + Visualizations cards: simple collapse (start open), mirror oxDNA ──
@@ -2798,6 +2796,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Init ───────────────────────────────────────────────────────────────────
   _setDisplayStatus('Off', _C.dim)
   console.log(`[${_ts()}] md-jobs: panel initialised`)
-  if (!_collapsed) _onOpen()
+  _base.initCollapsed(true)   // apply persisted collapse; fires _onOpen if starting open
   if (_isDynamicsTabVisible()) _startMdPrewarm()
 }

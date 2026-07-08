@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { normalizeWorkspacePath, filterJobsForPart, seededBadge, mdSegGlyphKind } from './md_jobs_panel.js'
+
+// Auto-mock the API client so the real panel constructs without touching the network
+// (only the shared-base parity block at the bottom drives the real panel; the
+// pure-helper describes above never call the client). Every export → a vi.fn().
+vi.mock('../api/client.js')
 
 describe('mdSegGlyphKind', () => {
   it('classifies a skipped chunk distinctly, even over done/advisory', () => {
@@ -593,5 +598,97 @@ describe('U3 slice 2b — NAMD canonical convergence (payload parity)', () => {
   it('a leaf row still gets an (empty) chevron span so indentation lines up', () => {
     const m = buildJobRowModel(JOBS[3], ctx(), { depth: 0, listIndex: 1, childCount: 0 })
     expect(m.chevron).toEqual({ childCount: 0, collapsed: false, title: '' })
+  })
+})
+
+// ── U3 slice 2c-3b — shared jobs-panel base parity (section collapse + adv drawer) ──
+// The 5th and final panel converges onto initJobsPanelBase. md accommodations:
+// the SECTION arrow is the `is-collapsed` class idiom (arrowStyle:'class'); the
+// ADVANCED drawer arrow is the CSS-transform idiom (advArrowStyle:'rotate'). Unlike
+// oxDNA's slice, md's advanced drawer ALSO converges (its markup is a clean
+// `display:none`, so the base's display-reading toggle opens on the first click
+// exactly as md's old `_advOpen` boolean did — no flip hazard). md does NOT use the
+// base's primary poll: live updates ride a WebSocket + `_remotePollTimer`
+// (setInterval), torn down by the onClose hook. These PARITY assertions drive the
+// REAL initMdJobsPanel and were run GREEN against the pre-rewire bespoke code first
+// (git-stash rerun) → behaviour-preserving adapted-code pin, not green-by-construction.
+import * as mdApi from '../api/client.js'
+import { initMdJobsPanel } from './md_jobs_panel.js'
+import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
+
+describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', () => {
+  const IDS = [
+    'md-jobs-panel', 'md-jobs-panel-heading', 'md-jobs-panel-arrow', 'md-jobs-panel-body',
+    'md-jobs-adv-toggle', 'md-jobs-adv-arrow', 'md-jobs-adv-body',
+  ]
+  const $ = (id) => document.getElementById(id)
+  const heading = () => $('md-jobs-panel-heading')
+  const flushMicro = async (n = 12) => { for (let i = 0; i < n; i++) await Promise.resolve() }
+
+  beforeEach(() => {
+    clearDom(); mountIds(IDS); localStorage.clear()
+    vi.clearAllMocks()
+    // markup default: section body collapsed, arrow shows the is-collapsed class.
+    $('md-jobs-panel-body').style.display = 'none'
+    $('md-jobs-panel-arrow').classList.add('is-collapsed')
+    // markup default: advanced drawer body hidden, arrow un-rotated.
+    $('md-jobs-adv-body').style.display = 'none'
+  })
+  afterEach(() => { clearDom(); vi.useRealTimers() })
+
+  it('section starts collapsed; the heading click toggles the body + `is-collapsed` arrow', async () => {
+    mdApi.listMdJobs.mockResolvedValue([])
+    initMdJobsPanel()
+    await flushMicro()
+    // default (persisted absent) = collapsed
+    expect($('md-jobs-panel-body').style.display).toBe('none')
+    expect($('md-jobs-panel-arrow').classList.contains('is-collapsed')).toBe(true)
+
+    heading().click(); await flushMicro()                              // open
+    expect($('md-jobs-panel-body').style.display).not.toBe('none')
+    expect($('md-jobs-panel-arrow').classList.contains('is-collapsed')).toBe(false)
+
+    heading().click(); await flushMicro()                              // collapse
+    expect($('md-jobs-panel-body').style.display).toBe('none')
+    expect($('md-jobs-panel-arrow').classList.contains('is-collapsed')).toBe(true)
+  })
+
+  it('the advanced drawer toggles its body + a `rotate(90deg)` arrow (first click opens)', async () => {
+    mdApi.listMdJobs.mockResolvedValue([])
+    initMdJobsPanel()
+    await flushMicro()
+    const advBody = $('md-jobs-adv-body'), advArrow = $('md-jobs-adv-arrow')
+    expect(advBody.style.display).toBe('none')                         // starts hidden
+
+    $('md-jobs-adv-toggle').click()                                    // first click → open
+    expect(advBody.style.display).not.toBe('none')
+    expect(advArrow.style.transform).toBe('rotate(90deg)')
+
+    $('md-jobs-adv-toggle').click()                                    // close
+    expect(advBody.style.display).toBe('none')
+    expect(advArrow.style.transform).toBe('')
+  })
+
+  it('opening fires _onOpen (fetches the job list); collapsing stops the remote SLURM poll', async () => {
+    // A running Alpine job keeps the remote-poll setInterval firing _fetchJobs while
+    // open; onClose must stop it (the bespoke `else { _stopRemotePoll() }` branch).
+    mdApi.listMdJobs.mockResolvedValue([{
+      job_id: 'a1', execution_target: 'alpine', status: 'running',
+      slurm_job_id: '999', created_at: 1,
+    }])
+    vi.useFakeTimers()
+    initMdJobsPanel()
+    heading().click()                                                  // open → _onOpen fetch + start remote poll
+    await vi.advanceTimersByTimeAsync(0)
+    const nOpen = mdApi.listMdJobs.mock.calls.length
+    expect(nOpen).toBeGreaterThan(0)                                   // onOpen fetched
+
+    await vi.advanceTimersByTimeAsync(20000)                           // one remote-poll tick
+    const nPolled = mdApi.listMdJobs.mock.calls.length
+    expect(nPolled).toBeGreaterThan(nOpen)                             // remote poll fired while open
+
+    heading().click()                                                  // collapse → onClose stops remote poll
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(mdApi.listMdJobs.mock.calls.length).toBe(nPolled)           // poll stopped after collapse
   })
 })
