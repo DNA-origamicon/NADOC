@@ -17,7 +17,7 @@
  * only imports + inits + does thin wiring.
  */
 
-import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -172,7 +172,6 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   let _selectedId = null
   let _progress = null
   let _available = null
-  let _pollTimer = null
   let _listSig = null            // last-rendered list signature (avoids spinner-restart churn)
   const _legend = { el: null }   // status-symbol legend, inserted once after the list
 
@@ -194,25 +193,15 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     }
   }
 
-  // ── Collapse ────────────────────────────────────────────────────────────────
-  function _applyCollapsed(collapsed) {
-    body.style.display = collapsed ? 'none' : ''
-    if (arrow) arrow.textContent = collapsed ? '▸' : '▾'
-    if (!collapsed) _onOpen()
-    else _clearPoll()
-  }
-  heading.addEventListener('click', () => {
-    const next = body.style.display !== 'none'
-    setSectionCollapsed('dynamics', 'mrdna-jobs-panel', next)
-    _applyCollapsed(next)
+  // ── Shared scaffold: collapse + advanced drawer + poll loop (U3 base) ─────────
+  const _base = initJobsPanelBase({
+    section: 'mrdna-jobs-panel',
+    els: { heading, body, arrow, advToggle, advArrow, advBody },
+    pollMs: POLL_MS,
+    hasActive: () => _hasActiveJob(),
+    tick: () => _fetchJobs(),
+    onOpen: () => _onOpen(),
   })
-  if (advToggle) {
-    advToggle.addEventListener('click', () => {
-      const hidden = advBody.style.display === 'none'
-      advBody.style.display = hidden ? '' : 'none'
-      if (advArrow) advArrow.textContent = hidden ? '▾' : '▸'
-    })
-  }
 
   // ── Availability ──────────────────────────────────────────────────────────────
   async function _checkAvailable() {
@@ -275,22 +264,13 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       }
       _renderDetail()
     }
-    _scheduleNextPoll()
+    _base.schedulePoll()
   }
 
   function _hasActiveJob() {
     if (_jobs.some(mrdnaJobIsActive)) return true
     const job = _selectedJob()
     return job ? mrdnaJobIsActive(job) : false
-  }
-
-  function _clearPoll() {
-    if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
-  }
-  function _scheduleNextPoll() {
-    _clearPoll()
-    if (body.style.display === 'none') return
-    if (_hasActiveJob()) _pollTimer = setTimeout(_fetchJobs, POLL_MS)
   }
 
   function _renderList() {
@@ -312,7 +292,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     _progress = await api.getMrdnaProgress(jobId)
     _renderList()
     _renderDetail()
-    _scheduleNextPoll()
+    _base.schedulePoll()
   }
 
   function _renderDetail() {
@@ -461,8 +441,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     _fetchJobs()
   }
 
-  const collapsed = getSectionCollapsed('dynamics', 'mrdna-jobs-panel', true)
-  _applyCollapsed(collapsed)
+  _base.initCollapsed(true)
 
   return { refresh: _fetchJobs, getSelectedJob: _selectedJob }
 }

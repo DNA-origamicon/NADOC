@@ -39,6 +39,7 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(U3) canonical job-row PARITY pin** ✅ | new pure model + DOM renderer reproduce the OLD oxDNA `_jobRow`/`_renderList` byte-for-byte: the test carries a VERBATIM copy of the old row/list code (`oldOxdnaJobRow`) and drives OLD+NEW on fresh DOMs → identical `outerHTML` across every branch (root/child/running-spinner/[AR]/archived+size+📦/stale-⚠/selected); flat-list convergence (mrDNA ctx) numbers rows + maps status key; poll-signature stable on health-only change; `runButtonEnabled` = available&&!launching&&!blocked | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` | U3 remainder (cando/lammps/md converge onto renderer; run-button base; stateful `initJobsPanelBase`); U4 selector iterates the same rows |
 | **(U3 s2a) cando+lammps conformance** ✅ | renderer's OPTIONAL per-row action (`m.action`/`onAction`, gated on `ctx.rowAction`): models the action ONLY for active jobs, renders a Stop button on active rows whose click fires `onAction(jobId)` with stopPropagation (row `onClick` does NOT fire), and a ctx WITHOUT `rowAction`→every `action===null`→no button (oxDNA-parity guard); cando flat ctx numbers rows newest-first + maps cando status key + spinner-while-active + surfaces Coarse/Fine as a LEADING TAG (not a bespoke column) + no button | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/jobs_panel_model.test.js` (+5 it, 14/14) | U3 slice 2b (md chevron via the same optional-control mechanism); the action slot for any future per-row control |
 | **(U3 s2b) NAMD payload parity** ✅ | the pure `mdJobRowCtx` factory + canonical renderer emit the exact per-row payload the bespoke NAMD `_jobRow` produced: parent gets `chevron={childCount,collapsed,title}` (collapsed→ensemble-summary post-label marker + subtree hidden; open→no summary), replica child `label`/`title`/`indent`+empty index, CG-seed + Alpine `postLabelMarkers` (text+title), remote-queued `symbolOverride={glyph:'⧗',dataset:{mdQueued}}` (+ the `[data-md-queued]` DOM hook the poll-refresh needs), Fix `action` only on VRAM-OOM + out-of-date `stale`; chevron click fires `onChevron` NOT row `onClick`; leaf still gets an empty chevron span. Three generic slots (chevron/postLabelMarkers/symbolOverride) gated on ctx opt-in → oxDNA byte-parity pin re-ran green | `frontend/src/ui/{jobs_panel_model.js,jobs_panel_render.js}`, `frontend/src/ui/md_jobs_panel.js` (`mdJobRowCtx`/`mdJobRowSig`), `frontend/src/ui/md_jobs_panel.test.js` (+8 it) | U3 slice 2c (stateful `initJobsPanelBase` — run buttons + poll loop + section collapse + advanced drawer); U4 selector iterates these same rows |
+| **(U3 s2c) shared stateful scaffold de-dup** ✅ | one `initJobsPanelBase({section,els,pollMs,hasActive,tick,onOpen,onClose,arrowStyle})` reproduces the bespoke collapse + advanced-drawer + poll scaffold BYTE-FOR-BYTE: a jsdom conformance oracle pins each effect — `applyCollapsed(true/false)` sets `body.display`=`none`/`''` + arrow=▸/▾ + fires onClose(+clearPoll)/onOpen; heading click persists via `section_collapse_state` then applies; adv toggle shows/hides `advBody` + ▾/▸; poll `setTimeout(tick,pollMs)` ONLY when `shouldPoll({open,hasActive})` (open&&active), cleared on collapse — proven with fake timers; pure `bodyDisplay`/`arrowChar`/`shouldPoll`/`applyArrow` (text/class/rotate) unit-tested. mrDNA + CanDo deleted their identical scaffold (−21 LOC each) + drive the base with their own hooks; CanDo's display-card collapse stays bespoke | `frontend/src/ui/jobs_panel_base.js`, `frontend/src/ui/jobs_panel_base.test.js` (+17 it), `frontend/src/ui/{mrdna,cando}_jobs_panel.js` | U3 slice 2c-2 (LAMMPS `arrowStyle:'class'`+onClose-cleanup, oxDNA/md `'rotate'`+inline-collapse+remote poll); U4 selector mounts the base per selected engine |
 | **(O1) oxDNA source bundle** ✅ | descriptors == `measure_bundle_twist(core)` on the exact core-filtered frame (same estimator, self-consistent — ABSOLUTE not the differential graph); core mask drops ssDNA ends; `production_rmsf` `rmsf`→`rmsf_nm` remap (None dropped); field passthrough; drops into `build_comparison_report` as ready `oxdna` SHAPE reference; empty core ref→None descriptors (RED) | `backend/core/oxdna_shape_source.py::build_oxdna_shape_source`, `backend/api/routes_oxdna.py::get_oxdna_shape_source`, `tests/test_oxdna_shape_source.py` | the SAME source-bundle contract for C5/M5/N4 (each engine builds `{engine, descriptors, rmsf, shape_frame, field}` from its own frame + core mask) |
 
 | **(C1) CanDo anchors (Dirichlet BC)** ✅ | synthetic beam: pinned node u==0 at its DOFs, free tip moves under a test load; BC pins EXACTLY the requested nodes' 6 DOF, `None`/`[]`→centroid (never singular); resolver maps base+cluster scopes→duplex-core node indices (both strands→one node) & drops stale/out-of-core; prestress solve holds the clamped node <1e-9 while the rest deflects >1e-3; unresolved anchor = no-op (positions identical, free-free RMSF preserved) | `backend/physics/fem_solver.py::{apply_boundary_conditions,solve_prestress_shape,resolve_anchor_nodes,predict_shape}`, `tests/test_cando_anchors.py` | every engine's ANCHOR task (M1/N2) via the SAME `resolve_anchor_particles` scope resolver → node/bead/atom indices; C2 (E-field needs anchors) |
@@ -66,6 +67,45 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `U3` slice 2c-1 — shared STATEFUL jobs-panel base (collapse + advanced + poll); converge mrDNA + CanDo (U3 stays in_progress)
+
+**Capability/de-dup proven, not just wired:** the three behaviours that wrap every jobs panel identically —
+section-collapse, the advanced-parameters drawer, and the REST poll loop — no longer live copy-pasted in each
+`*_jobs_panel.js`. They're one factory (`initJobsPanelBase`); mrDNA + CanDo deleted their verbatim `_applyCollapsed`
+/ heading-click / advToggle / `_clearPoll` / `_scheduleNextPoll` and drive the base instead. The de-dup is proven
+by a jsdom **conformance oracle** that pins the base reproduces each bespoke DOM effect (body/arrow toggle +
+persisted collapse state, advanced-drawer show/hide, poll fires `tick` after `pollMs` ONLY when open && active and
+clears on collapse) — with fake timers, not "the panel renders".
+
+- **Pick.** `U3` slice 2c (the last Track-U piece before U4): the stateful base the handoff called out. Scoped to
+  mrDNA + CanDo — the two panels whose scaffold was **byte-identical** (same `_applyCollapsed`, same text-arrow ▸/▾,
+  same open-guarded `_scheduleNextPoll`), so the extraction is a verbatim lift with a clean parity proof. LAMMPS
+  (arrow via `is-collapsed` class + a poll that lacks the open-guard = *adapted*, not verbatim), oxDNA and md
+  (`style.transform` arrow + inline `_collapsed` var + md's extra remote `setInterval`) are deferred to 2c-2 so
+  their non-identical scaffold doesn't muddy this slice's parity claim.
+- **Base** (`jobs_panel_base.js`, 129 LOC, ONE reason to change, deps = `section_collapse_state` + injected
+  els/hooks): pure exported decisions `bodyDisplay`/`arrowChar`/`shouldPoll`/`applyArrow` + the factory
+  `initJobsPanelBase({tab,section,els,pollMs,arrowStyle,advArrowStyle,hasActive,tick,onOpen,onClose})` →
+  `{isOpen,applyCollapsed,clearPoll,schedulePoll,initCollapsed}`. `arrowStyle` covers all three panel idioms
+  (`text`/`class`/`rotate`), each unit-tested, but only `text` has a live consumer this slice — so 2c-2 is a pure
+  consumer-add.
+- **mrDNA + CanDo** (`{mrdna,cando}_jobs_panel.js`): dropped the `section_collapse_state` import + `_pollTimer` +
+  the collapse/adv/poll blocks; added a lazy-arrow-wired `const _base = initJobsPanelBase({...})` and rewired
+  `_scheduleNextPoll()`→`_base.schedulePoll()`, final `_applyCollapsed(getSectionCollapsed(...))`→
+  `_base.initCollapsed(true)`. Each panel keeps its own `_hasActiveJob`/`_onOpen`; CanDo's separate display-card
+  collapse block is untouched. Callbacks are lazy arrows (`()=>_fetchJobs()`) so the base captures functions
+  defined later in the closure — no TDZ. Net **−42 source LOC** across the two panels.
+- **Oracle** (`jobs_panel_base.test.js`, +17 it): pure-helper units (bodyDisplay, arrowChar ▾/▸, shouldPoll's
+  open&&active gate, applyArrow across text/class/rotate + null-safe) + a jsdom conformance block against a fixture
+  DOM — collapse hides/shows + sets the arrow + fires the right hook + persists (a fresh base reads the persisted
+  collapsed state), advanced-drawer toggles both ways, and the poll (fake timers) fires only under open+active,
+  doesn't fire collapsed/idle, and is cleared by `applyCollapsed(true)`.
+- **Gate:** base+mrdna+cando+model tests 83/83, full frontend **2356/2356** (+17, no drop), smoke 23/23; a one-off
+  Playwright drove the real mrDNA + CanDo collapse + advanced-drawer gestures in-app (zero console errors, deleted
+  after). No Python touched → backend `just test` not required; frontend lint N/A. `main.js` LOC Δ = 0. **No MV row
+  owed** — this is a behaviour-preserving refactor with no new pixels (MV-25 already covers the NAMD row features);
+  the gestures were Playwright-exercised.
 
 ### 2026-07-08 — `U3` slice 2b — converge the NAMD (md) job list onto the canonical renderer (U3 stays in_progress)
 

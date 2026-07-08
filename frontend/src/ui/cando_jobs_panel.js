@@ -19,7 +19,7 @@
  * imports + inits + does thin wiring.
  */
 
-import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -293,7 +293,6 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   let _jobs = []
   let _selectedId = null
   let _progress = null
-  let _pollTimer = null
   let _launching = false   // re-entrancy guard: a launch is between click and job-registered
   let _listSig = null            // last-rendered list signature (avoids spinner-restart churn)
   const _legend = { el: null }   // status-symbol legend, inserted once after the list
@@ -337,25 +336,15 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   })
   const _efieldCard = initForcesCard({ engine: 'cando' })
 
-  // ── Collapse ────────────────────────────────────────────────────────────────
-  function _applyCollapsed(collapsed) {
-    body.style.display = collapsed ? 'none' : ''
-    if (arrow) arrow.textContent = collapsed ? '▸' : '▾'
-    if (!collapsed) _onOpen()
-    else _clearPoll()
-  }
-  heading.addEventListener('click', () => {
-    const next = body.style.display !== 'none'
-    setSectionCollapsed('dynamics', 'cando-jobs-panel', next)
-    _applyCollapsed(next)
+  // ── Shared scaffold: collapse + advanced drawer + poll loop (U3 base) ─────────
+  const _base = initJobsPanelBase({
+    section: 'cando-jobs-panel',
+    els: { heading, body, arrow, advToggle, advArrow, advBody },
+    pollMs: POLL_MS,
+    hasActive: () => _hasActiveJob(),
+    tick: () => _fetchJobs(),
+    onOpen: () => _onOpen(),
   })
-  if (advToggle) {
-    advToggle.addEventListener('click', () => {
-      const hidden = advBody.style.display === 'none'
-      advBody.style.display = hidden ? '' : 'none'
-      if (advArrow) advArrow.textContent = hidden ? '▾' : '▸'
-    })
-  }
   // Display card (the mutually-exclusive viz-mode radios) — collapsible, starts open.
   if (displayToggle) {
     displayToggle.addEventListener('click', () => {
@@ -535,20 +524,11 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       }
       _renderDetail()
     }
-    _scheduleNextPoll()
+    _base.schedulePoll()
   }
 
   function _hasActiveJob() {
     return launchBlocked(false, _jobs, _selectedJob())
-  }
-
-  function _clearPoll() {
-    if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null }
-  }
-  function _scheduleNextPoll() {
-    _clearPoll()
-    if (body.style.display === 'none') return
-    if (_hasActiveJob()) _pollTimer = setTimeout(_fetchJobs, POLL_MS)
   }
 
   function _renderList() {
@@ -571,7 +551,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     _renderList()
     _renderDetail()
     await _retargetDisplayToSelection()
-    _scheduleNextPoll()
+    _base.schedulePoll()
   }
 
   /** When a display mode is active and the user selects a DIFFERENT job, retarget the
@@ -713,8 +693,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     _fetchJobs()
   }
 
-  const collapsed = getSectionCollapsed('dynamics', 'cando-jobs-panel', true)
-  _applyCollapsed(collapsed)
+  _base.initCollapsed(true)
 
   return { refresh: _fetchJobs, getSelectedJob: _selectedJob }
 }
