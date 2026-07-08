@@ -737,6 +737,211 @@ class TestProductionAppend:
                 job, {"total_steps": 1000, "length_ns": 0.001, "timestep_fs": 1.0, "fast": False})
         assert getattr(exc.value, "status_code", None) == 400
 
+    # ── production-run child jobs (mirror oxDNA: relaxation stays, productions nest) ──
+
+    def _spawn(self, routes_md, tmp_path, monkeypatch, parent, *, autostart=False):
+        """Call the production-run endpoint with staleness + NAMD launch stubbed out."""
+        import asyncio
+        # build_replica_package hardlinks the parent PSF *and* PDB into the child pkg;
+        # the _ready_job fixture only writes the PSF, so add the PDB it copies.
+        (parent.package_dir(tmp_path) / "D.pdb").write_text("* stub\n")
+        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
+        started: list = []
+        monkeypatch.setattr(routes_md, "start_job", lambda job, ws: started.append(job.job_id))
+        result = asyncio.run(routes_md.spawn_md_production(
+            parent.job_id, routes_md.ProductionRunRequest(length_ns=1.0, autostart=autostart)))
+        return result, started
+
+    def test_production_spawns_child_leaving_relaxation_intact(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Production creates a CHILD job under the relaxation; the relaxation job is
+        NOT mutated (its segments/manifest are untouched), so it stays visible and
+        selectable — the whole point of the child-job model."""
+        from backend.core.md_job import MdJob, MdStatus
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+        parent_seg_names = [s.name for s in parent.segments]
+
+        result, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+
+        assert child.parent_job_id == parent.job_id
+        assert child.run_kind == "production"
+        assert child.ensemble_seed == 54321 and child.ensemble_index == 0
+        assert child.execution_target == "local"
+        assert child.status == MdStatus.queued          # autostart False
+        # Child package is a fresh production-only package (reseed + one production seg).
+        pkg = child.package_dir(tmp_path)
+        assert (pkg / "demo_00_reseed.conf").exists() or list(pkg.glob("*_00_reseed.conf"))
+        assert len(child.segments) == 1
+        # The parent relaxation is byte-for-byte unchanged.
+        reloaded = MdJob.load(parent.job_id, tmp_path)
+        assert reloaded.status == MdStatus.completed
+        assert [s.name for s in reloaded.segments] == parent_seg_names
+        assert reloaded.run_kind is None
+
+    def test_repeated_productions_get_distinct_seeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Each production child of the same parent draws its own velocity seed, so a
+        fan-out samples independent trajectories."""
+        from backend.core.md_job import MdJob
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+
+        r0, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
+        r1, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
+        r2, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
+
+        seeds = [MdJob.load(r["job"]["job_id"], tmp_path).ensemble_seed for r in (r0, r1, r2)]
+        assert seeds == [54321, 54322, 54323]
+        idxs = [MdJob.load(r["job"]["job_id"], tmp_path).ensemble_index for r in (r0, r1, r2)]
+        assert idxs == [0, 1, 2]
+
+    def test_production_autostart_launches_local(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from backend.core.md_job import MdJob, MdStatus
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+        result, started = self._spawn(routes_md, tmp_path, monkeypatch, parent, autostart=True)
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+        assert child.status == MdStatus.running
+        assert started == [child.job_id]
+
+    # ── revert an old-style appended production back to a clean relaxation ──────────
+
+    def _append_fake_production(self, tmp_path, job, names):
+        """Bolt production segments + confs + output onto a relaxation job (mimics the
+        legacy same-job append), including a stopped/partial run's files."""
+        import json
+        from backend.core.md_job import MdSegmentStatus, MdStatus
+
+        pkg = job.package_dir(tmp_path)
+        for n in names:
+            job.segments.append(MdSegmentStatus(
+                name=n, stage="1 ns production run", percent=100.0, steps=1000, status="pending"))
+            (pkg / f"{n}.conf").write_text("conf")
+            (pkg / f"{n}.log").write_text("log")
+            (pkg / "output" / f"{n}.dcd").write_text("dcd")
+            (pkg / "output" / f"{n}.restart.coor").write_text("coor")
+        job.status = MdStatus.stopped
+        job.user_stopped = True
+        job.current_segment_idx = 1
+        job.save(tmp_path)
+        manifest = json.loads((pkg / "manifest.json").read_text())
+        manifest["segments"].extend(
+            {"name": n, "stage": "1 ns production run", "percent": 100.0, "steps": 1000}
+            for n in names)
+        manifest["production_extension"] = {"length_ns": 1.0, "last_new_segment": names[-1]}
+        (pkg / "manifest.json").write_text(json.dumps(manifest, indent=2))
+        return pkg
+
+    def test_revert_appended_production_restores_clean_relaxation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import json
+        from backend.core.md_job import MdJob, MdStatus, revert_appended_production
+
+        self._routes_md(tmp_path, monkeypatch)
+        job = self._ready_job(tmp_path)
+        relax_only = [s.name for s in job.segments]
+        # "_p10" and "_p100" together prove the dot-prefixed glob doesn't over-match.
+        prod = ["D_17_production_1ns_k0_p10", "D_17_production_1ns_k0_p100"]
+        pkg = self._append_fake_production(tmp_path, job, prod)
+
+        report = revert_appended_production(job, tmp_path)
+        assert report["reverted"] is True
+        assert set(report["removed_segments"]) == set(prod)
+
+        j = MdJob.load(job.job_id, tmp_path)
+        assert [s.name for s in j.segments] == relax_only     # production peeled off
+        assert j.status == MdStatus.completed and j.user_stopped is False
+        assert j.current_segment_idx == len(relax_only)
+
+        m = json.loads((pkg / "manifest.json").read_text())
+        assert "production_extension" not in m
+        assert all("production" not in s["name"] for s in m["segments"])
+
+        # Production artifacts MOVED (not deleted) to the backup folder.
+        for n in prod:
+            assert not (pkg / f"{n}.conf").exists()
+            assert not (pkg / "output" / f"{n}.dcd").exists()
+        backup = job.job_dir(tmp_path) / "_superseded_production"
+        assert len(list(backup.rglob("*.dcd"))) == 2
+        assert len(list(backup.rglob("*.conf"))) == 2
+        # The relaxation checkpoint's own output is UNTOUCHED (a future child seeds from it).
+        assert (pkg / "output" / "D_16_310K_NPT_k0_qualification_p100.coor").exists()
+
+    def test_revert_is_idempotent_and_guards_non_legacy_jobs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from backend.core.md_job import MdJob, revert_appended_production
+
+        self._routes_md(tmp_path, monkeypatch)
+        job = self._ready_job(tmp_path)
+        # No production appended → nothing to do.
+        assert revert_appended_production(job, tmp_path)["reverted"] is False
+
+        # After one revert of an appended job, a second call is a no-op.
+        self._append_fake_production(tmp_path, job, ["D_17_production_1ns_k0_p10"])
+        assert revert_appended_production(job, tmp_path)["reverted"] is True
+        assert revert_appended_production(MdJob.load(job.job_id, tmp_path), tmp_path)["reverted"] is False
+
+        # A real production CHILD must never be reverted (that would nuke a legit run).
+        child = self._ready_job(tmp_path)
+        child.run_kind = "production"
+        child.parent_job_id = "some_parent"
+        child.save(tmp_path)
+        self._append_fake_production(tmp_path, child, ["C_01_production_1ns_k0_p100"])
+        assert revert_appended_production(child, tmp_path)["reverted"] is False
+
+    def test_production_alpine_target_queues_without_local_start(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An Alpine-targeted production child is created 'queued' (for the submit-review
+        card) and is NEVER started locally — even with autostart=True — regardless of
+        where the parent relaxation ran."""
+        import asyncio
+        from backend.core.md_job import MdJob, MdStatus
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
+        started: list = []
+        monkeypatch.setattr(routes_md, "start_job", lambda job, ws: started.append(job.job_id))
+        parent = self._ready_job(tmp_path)                       # a LOCAL relaxation
+        (parent.package_dir(tmp_path) / "D.pdb").write_text("* stub\n")
+
+        result = asyncio.run(routes_md.spawn_md_production(
+            parent.job_id,
+            routes_md.ProductionRunRequest(length_ns=1.0, autostart=True,
+                                           execution_target="alpine")))
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+        assert child.execution_target == "alpine"
+        assert child.cluster_name == "alpine"
+        assert child.status == MdStatus.queued
+        assert started == []                                     # never launched locally
+
+    def test_production_refused_while_parent_is_running(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No new production child may be spawned while the parent job is actively
+        running on the GPU (a completed status by segment state isn't enough)."""
+        import asyncio
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda job: None)
+        monkeypatch.setattr(routes_md, "is_running", lambda jid: True)
+        parent = self._ready_job(tmp_path)
+        with pytest.raises(Exception) as exc:
+            asyncio.run(routes_md.spawn_md_production(
+                parent.job_id, routes_md.ProductionRunRequest(length_ns=1.0)))
+        assert getattr(exc.value, "status_code", None) == 400
+
 
 # ── namd_runner (pure helpers only) ──────────────────────────────────────────
 

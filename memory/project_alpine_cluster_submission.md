@@ -56,6 +56,213 @@ present for Duo 2FA** to validate end-to-end. Auth cannot be fully headless
   auto-resubmit → **user-driven one-click Resume from mid-segment checkpoint** ✓ (increment 10). See
   the "Resume model (2026-07-03 pivot)" block below before touching resume logic. Live-validation of
   the actual Resume round-trip still needs a real short-walltime timeout + Duo.
+- [x] **Ensemble production replicas** (2026-07-07) — see "Ensemble production" block below.
+- [x] **In-sbatch relaxation early-stop (Tier B + Tier A)** (2026-07-07) — see "In-sbatch early-stop" block below.
+
+## In-sbatch relaxation early-stop / cutoff acceleration — 2026-07-07 (Tier B + Tier A shipped)
+
+Port the local `early_stop_relax` accelerator ([[md-job-system]] "Relaxation early-stop
+accelerator") to a whole-ladder Alpine sbatch, so a submitted relaxation **self-truncates
+on the node with NO Python runner in the loop**. Purpose: fire off ~10 unattended CPU
+relaxations for different designs (locally you can only run one GPU relaxation at a time).
+
+**How it works (the node does what the local runner does, in bash):** after each conf,
+the sbatch already has an idempotent `if [ -f output/<conf>.coor ]; then skip; else run; fi`
+guard. Early-stop inserts, after each **non-final chunk of a well-restrained relaxation
+stage**, an *evaluate-then-bridge* block: run a staged `python3 nadoc_cutoff_eval.py --log
+output/<conf>.log`; on exit 0 (plateau), `cp` that chunk's final `{coor,vel,xsc}` onto
+EVERY remaining chunk's expected names — both plain `<name>.<ext>` and `.restart.<ext>` —
+exactly like `namd_runner._alias_skipped_stage_outputs`. The existing per-conf `.coor`
+guards then no-op the bridged runs, and the next stage's first conf (which reads the
+stage's LAST chunk by relative path) finds its checkpoint. Names are listed explicitly
+(never globbed, full `_pNN` suffix) so `_p50`/`_p100` can't collide (ensemble revert-glob
+lesson).
+
+**New module `backend/core/remote_cutoff_eval.py`** — the node-side evaluator. **STDLIB-ONLY**
+(a copy is staged and run on a bare node with no NADOC on `sys.path`): VENDORS
+`md_cutoff.{CutoffParams,_series_flat,energy_plateaued,wc_plateaued,should_early_stop_stage}`
++ `namd_metrics.parse_namd_log_frames` verbatim. `tests/test_remote_cutoff_eval.py` pins the
+copies stay in LOCKSTEP (same thresholds, same decisions on synthesized frames + the exp36
+bank + real `workspace/md_jobs` logs, same parse on real log text) and the exit-code contract:
+**0 = plateau (skip), 1 = hold, 2 = insufficient/error (fail-safe = run)**. Tier B (default)
+= energy(+volume) only; `--wc <json>` gives Tier A (energy AND WC = `should_early_stop_stage`).
+
+**Tier A (WC-gated, full local parity) — shipped 2026-07-07:** the on-node WC health step is
+now wired. **New `backend/core/remote_health_eval.py`** (`nadoc_health_eval.py` on the node):
+imports a STAGED verbatim copy of `md_health.py` (falls back to `backend.core.md_health` in-
+repo), runs the REAL `run_health_check(package_dir, seg, stem)` on the chunk's `output/<seg>.dcd`
+(reads only the staged PSF/PDB + DCD — its one `backend` import is declash-only + try-guarded,
+so a non-declash design needs only numpy/scipy/MDAnalysis), and writes the chunk's `wc_per_frame`
+to `output/<conf>.wc.json`. The sbatch (tier A) emits: run health (`|| true`, best-effort) →
+`if [ -f wc.json ] && python3 nadoc_cutoff_eval.py --log <conf>.log --wc wc.json; then bridge`.
+**Fails SAFE:** missing MDAnalysis / no frames / read error → no `wc.json` → gate falls through
+to HOLD (Tier A never skips on energy alone). Tier A eligibility drops the k-gate (the WC series
+holds fragile/low-k stages directly), so it considers EVERY non-final relaxation chunk incl.
+k=0.01 and the k=0/MGHH melt — matching the local path (~60–70% skip on over-provisioned ladders).
+**node-cwd log path:** the sbatch redirects each conf to `<conf>.log` in the run cwd (NOT
+`output/`), coords/DCD go to `output/` — the early-stop guard/evaluator read `<conf>.log`
+accordingly (fixed a first-cut bug where it read `output/<conf>.log` and never fired).
+`early_stop_health_python` manifest override points the health step at a specific MDAnalysis
+interpreter (default `python3`). `MdJob.early_stop_tier` ("B"|"A", default B, load-setdefault) +
+`CreateJobRequest.early_stop_tier` select it; executor writes it into the (in-memory) manifest
+before `generate_sbatch` and stages `nadoc_health_eval.py`+`md_health.py` when A. **OFFLINE-
+VALIDATED end-to-end (minus the cluster):** `tests/test_remote_health_eval.py` runs the real node
+path against a real 2hb_noT chunk DCD (MDAnalysis IS in the dev env) — produces a `wc.json`
+byte-matching `run_health_check.wc_per_frame`, fed through the stdlib cutoff gate.
+
+**`slurm_script.generate_sbatch`** — new `early_stop_relax: bool|None=None` param (None →
+`manifest['early_stop_relax']`, absent → OFF → **byte-identical to before**, pinned). Pure
+helpers `_stage_base`/`_is_production_segment`/`_stage_last_chunk_index`/`_chain_scales`
+mirror the runner's (regex must stay identical). Eligibility (Tier B): non-min, non-
+production/qualification, NOT the stage's last chunk, and **ENM `scale` (k) is not None AND
+≥ `early_stop_min_k` (default 0.1)** — so k=0.5 & k=0.1 stages skip their p50/p100, but
+**k=0.01 and the k=0/MGHH melt (scale None) always run in full** (energy-alone is unsafe at
+low restraint — md_cutoff notes; 2hb_noT k=0.01). `early_stop_tier="A"` → `ValueError` (not
+wired). `early_stop_min_k` tunable via manifest.
+
+**Threading (`md_executor.py`):** `_early_stop_on(job,manifest)` = `job.early_stop_relax and
+not manifest['declash']`; `submit_job`/`resume_job` pass `early_stop_relax=` to
+`generate_sbatch` and `_stage_early_stop_evaluator` uploads the exact source of
+`remote_cutoff_eval` as `nadoc_cutoff_eval.py` (into project→mirrored to scratch on submit;
+straight to scratch on resume). `MdJob.early_stop_relax` already existed + is set at create
+regardless of target.
+
+**Coverage vs the local path:** Tier B conservatively skips the two well-restrained stages'
+tails (~4 of ~12 chunks ≈ ⅓ of the canonical 4-stage ladder). Tier A adds the WC guard →
+full local parity (~60–70%, incl. k=0.01/MGHH). Use B when unsure MDAnalysis is on the node
+(it degrades to no-skip); A once the node python is confirmed to import MDAnalysis.
+
+**DECLASH DEPENDENCY (out of scope, unchanged):** `generate_sbatch` still RAISES on a declash
+manifest (mid-chain `rebuild_declashed_references` can't run in a bare sbatch). Early-stop is
+a clean no-op there (`_early_stop_on` returns False AND the declash guard fires first).
+Remote relaxation of extra-base designs (e.g. 6hbx100_1xT) is blocked independently. Validate
+early-stop on a NON-declash design.
+
+**Tests:** `tests/test_remote_cutoff_eval.py` (14 — parity/replay/exit-codes/standalone-run/
+no-backend-import), `tests/test_remote_health_eval.py` (3 — real-DCD wc.json parity, missing-DCD
+fail-safe, backend fallback), `tests/test_slurm_script.py` +~16 early-stop (off=byte-identical,
+param>manifest, non-final-restrained-only, dot-safe bridge, never-production, min_k widening,
+invalid-tier reject, declash-still-rejected, run-guards-intact; **Tier A**: health+wc gate emitted,
+low-k/MGHH eligible, health_python override, tier-B emits no health), `tests/test_md_executor.py`
++4 (off=no staging, B=stdlib only, A=stages health+md_health). `bash -n` clean on B and A scripts.
+**main.js Δ = 0 (backend-only).**
+
+**LIVE VALIDATION 2026-07-08 — pipeline PROVEN, node-python BLOCKER found (fail-safe held):**
+submitted a Tier-A early-stop 2hb_noT relaxation to Alpine — job `93592ef8d9e9`, **SLURM 29736115**,
+amilan/32c/qos normal/2h walltime, via curl against the running backend (isolated `X-NADOC-Doc:
+es-validate` doc so the browser session was untouched). **Confirmed live end-to-end:** prep→stage→
+sbatch accepted→ran on amilan node c3cpu-c15-u9-4; the ladder ran `min→p10→p50→p100`; the node
+**invoked `nadoc_health_eval.py` at exactly the right points** (after p10 AND p50 — the two non-final
+k=0.5 chunks); p10 correctly held (13 frames < min_frames=20 → insufficient → defer to p50, matching
+local calibration).
+- **BLOCKER (fix owed):** the `.err` shows `nadoc_health_eval.py line 21: SyntaxError: future feature
+  annotations is not defined` — amilan's default `python3` (after `module purge`; `/usr/bin/python3`
+  ~3.6, node c3cpu) is **older than 3.7**, so `from __future__ import annotations` won't parse. Health
+  crashed → no `wc.json` → Tier A gate held → **ladder ran full with NO corrupt skip (fail-safe worked
+  exactly as designed).** The SAME `from __future__` line is in `remote_cutoff_eval.py` (line 30), so
+  **Tier B would break identically on this node.** So neither tier can skip on Alpine as shipped.
+- **FIX:** make BOTH node scripts parse+run on Python 3.6 — drop `from __future__ import annotations`
+  and stringify/remove runtime-evaluated `list[...]`/`X|Y` annotations. Then **Tier B works on the bare
+  node python3**; Tier A's cutoff-eval too, and only the WC **health** step needs a modern python (for
+  MDAnalysis) via `early_stop_health_python`/a `module load python`. (Offline tests run on 3.12 so they
+  DID NOT catch this — add an `ast`/`py_compile`-with-3.6-feature guard on the node scripts.)
+- **Recovery lesson:** a user `/stop` (scancel + `apply_user_stop`) does NOT fetch outputs, and
+  `poll_remote_jobs` skips stopped jobs → the `.out`/`.err` were stranded on scratch. Recovered with
+  ZERO SU by editing job.json `status→running` so the 30 s supervisor reconciled it → `poll_status`
+  saw SLURM CANCELLED → terminal → `fetch_outputs` pulled the scratch files → re-settled to stopped.
+  (Better: let a validation run TIME OUT naturally, which fetches; or add a manual-fetch endpoint.)
+- Everything else (submission, staging, sbatch acceptance, correct per-chunk invocation, fail-safe)
+  is now LIVE-PROVEN. A successful SKIP still needs a re-run AFTER the node-python fix is staged.
+
+**2nd live run (Tier B, job `069229d580f9`, SLURM 29739270) + node = Python 3.6 confirmed:** after
+the `__future__` fix, the node got PAST that and hit `ModuleNotFoundError: No module named
+'dataclasses'` (3.7+) — so **amilan's bare node `python3` is 3.6**. Fail-safe held again (ladder ran
+min→p10→p50→p100, no corrupt skip). **FIX #2:** replaced the `@dataclass CutoffParams` in
+`remote_cutoff_eval.py` with a plain class (class-level attrs) — `dataclasses` was the LAST 3.7+
+feature; audited the rest (statistics/argparse/json/f-strings all 3.6-safe). Guard test extended to
+reject any 3.7+ stdlib import at module scope (`PY37_PLUS` denylist). `md_health.py` (Tier A) is NOT
+made 3.6-safe on purpose — Tier A needs a MODERN python for MDAnalysis anyway (`early_stop_health_python`).
+- **DEFINITIVE (ran the FIXED evaluator on the REAL fetched cluster logs):** p10 → 13 frames < 20 →
+  insufficient → hold (correct); **p50 → 51 frames, `energy_plateaued=False` → HOLD** because the
+  POTENTIAL mean is still DRIFTING **+0.12%/window (+2.3% over the chunk)** — 2hb_noT (small, floppy,
+  unsequenced) genuinely hasn't equilibrated by k=0.5 p50. So the live no-skip was the CORRECT decision
+  once the crash is removed, NOT a bug.
+- **Feature demonstrably skips (offline, on 4 REAL exp36 reference runs):** Tier-B energy-plateau would
+  skip **18hb 8/8, 3x4SQ 26/30, 2hb 5/8, 3x6x200 4/8** non-final chunks. So the gate works; 2hb's live
+  k=0.5 p50 just hit a slow trajectory. To WITNESS the live bridge-cp+jump, re-run a stiff design (18hb
+  = 8/8) — bigger/more-SU; the mechanic itself is offline unit-tested + `bash -n` clean.
+- **VALIDATION VERDICT:** pipeline + staging + sbatch-accept + correct per-chunk invocation + fail-safe
+  (×2) + the 3.6-fixed evaluator making CORRECT decisions on real cluster data = ALL PROVEN. Only the
+  cp+jump firing on the cluster is unwitnessed live (design-dependent; offline-proven). Node python = 3.6.
+- **FIX APPLIED 2026-07-08:** removed `from __future__ import annotations` from BOTH
+  `remote_cutoff_eval.py` (line 30) and `remote_health_eval.py` (line 21) — the only <3.7 blocker
+  (all remaining new-generic annotations are function-LOCAL vars, which Python never evaluates).
+  Now Tier B runs on Alpine's bare node `python3`; Tier A's cutoff too (health/MDAnalysis still needs
+  a modern python via `early_stop_health_python` + `module load`, unbuilt). Regression guard
+  `test_node_scripts_are_old_python_safe` (AST: no `__future__` ImportFrom, no EVALUATED
+  list[]/dict[]/X|Y annotations in signatures or module/class scope, `py_compile` clean) — the offline
+  suite runs on 3.12 so it could NOT catch this; the AST guard does. **Backend edit reloaded uvicorn →
+  dropped the live Duo session** (expected). **OWED: reconnect + re-submit a short Tier B 2hb_noT run to
+  witness an actual skip** (p10 holds on frames<20; p50 completes → energy plateau → bridges p100 →
+  seg2 flips done + jumps to seg3/k=0.1 — observable via segment progress, no fetch needed).
+
+**OWED — LIVE VALIDATION (needs Duo):** submit ONE real NON-declash relaxation to Alpine with
+early-stop ON (set `#md-jobs-early-stop` before Relax→Alpine). Tier B: confirm the node skips
+chunks (`.out` shows `[NADOC] early-stop: … plateaued — bridging N`), the ladder completes, the
+skipped-endpoint structure ≈ a full run's endpoint, and `python3` (system, stdlib) is on PATH
+after `module purge`/`module load namd`. **Tier A additionally:** confirm the node python imports
+MDAnalysis (else it silently degrades to no-skip — check `.out` for `[nadoc-health]` errors); a
+quick pre-check is `md_executor` / a manual remote `python3 -c "import MDAnalysis"`; set
+`early_stop_health_python`/the right `module load` if the default `python3` lacks it. Log an MV
+row. Same owed live check as the local path's (never exercised on a live GPU relax either).
+
+## Ensemble production (multi-seed replicas on amilan) — 2026-07-07
+
+Fan out **N independent NAMD production replicas** (distinct seeds) from ONE equilibrated
+structure across Alpine's free CPU cores. Model: the completed relaxation is the PARENT
+`MdJob`; each replica is a child (`parent_job_id` set, `execution_target="alpine"`,
+`ensemble_seed`/`ensemble_index`) with its own production-only package, its own sbatch →
+own `slurm_job_id`, polled independently by the existing `poll_remote_jobs` loop. Reuses
+the whole per-job remote infra unchanged. Confirmed decisions: relax-once→N-production
+(not N full runs); N separate sbatch (not a job array); auto-generated distinct seeds
+(`base+i`); default **amilan CPU**; independence via **reinitvels** (same equilibrated
+coords, fresh MB velocities per seed).
+
+- **New module `backend/core/md_ensemble.py`**: `generate_seeds`, `build_replica_package`
+  (production-only child pkg: hardlinks parent PSF/PDB/forcefield/hmr; copies the parent's
+  `_production_ready_checkpoint` `output/{ready}.{coor,xsc}` → package-root
+  `equilibrated.{coor,xsc}` so `stage_plan` uploads them; writes a **reseed** conf
+  [manifest `minimization` slot: reads root equilibrated coords, `reinitvels 300` from the
+  seed, `run 0` → writes `output/{reseed}.{coor,vel,xsc}`] + a **production** conf reading
+  that; manifest is production-only, NO `declash` key, `total_ns == length_ns`).
+- **`md_protocols.build_production_conf`** (+`build_reseed_conf`) — the production conf
+  template MOVED out of `routes_md._conservative_production_conf` (now a thin delegate,
+  byte-identical by test) so it's parameterized by `seed` + `start_checkpoint` and callable
+  from the ensemble module without a circular import.
+- **Endpoints** (`routes_md.py`): `POST /md/jobs/{parent}/ensemble-production` (offline —
+  stage N prepared replica children; validates parent completed + production-ready) and
+  `POST /md/jobs/{parent}/ensemble-submit` (live — sizes amilan resources ONCE, loops
+  `md_executor.submit_job` over the replicas; one failure doesn't abort the rest).
+- **`MdJob`** +`ensemble_seed`/`ensemble_index` (setdefaults + new_job kwargs).
+- **Frontend**: `job_tree.flattenJobTree(jobs,{collapsedIds})` gains `childCount` + subtree
+  hiding; `md_jobs_panel` gets an expand/collapse chevron (ensemble parents **default
+  collapsed** → one expandable item), `ensembleChildSummary`/`mdReplicaRowLabel`/
+  `mdIsEnsembleParent`/`mdIsEnsembleReplica` pure helpers, and a **☁ Ensemble on Alpine**
+  detail control (count input; shown for a completed non-replica job, disabled+tooltip until
+  connected) that stages then opens `md_submit_review` in **`mode:'ensemble'`** (sizes a
+  replica child on amilan, button "Submit N replicas" → `submitMdEnsemble`). `main.js` Δ = 0.
+- Tests: `tests/test_md_ensemble.py` (13, incl. conf byte-parity delegate proof),
+  `job_tree.test.js` + `md_jobs_panel.test.js` ensemble helpers. `just test` green (the 2
+  `test_remote_recommendation_*` fails are PRE-EXISTING flaky xdist-isolation on clean
+  master — verified by stashing). `just test-frontend` 2295, `just smoke` 23 (0 console err).
+- **Offline-verified live vs real data** (job `acc229c76c42`, 2hb): staged 2 replicas →
+  distinct seeds 54321/54322, correct reseed+production confs + equilibrated coords at root,
+  amilan recommendation (31790 atoms / cpu / 32 core / normal qos), parent lists 2 replica
+  children; test children then deleted. **NOT live-validated on Alpine** — the actual
+  ensemble-submit round-trip (N sbatch, per-replica SLURM tracking) needs the user + Duo;
+  scheduled for the user's next connect. Gate note: the **☁ Ensemble** button is disabled
+  while disconnected (staging is offline-capable but currently gated on connection to match
+  the single-job Alpine flow) — revisit if offline staging is wanted.
 
 ---
 

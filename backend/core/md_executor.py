@@ -33,7 +33,13 @@ from backend.core.cluster_config import ClusterProfile, resolve_paths
 from backend.core.md_job import MdJob, MdStatus
 from backend.core import md_protocols
 from backend.core.md_protocols import strip_gpu_resident
-from backend.core.slurm_script import generate_sbatch, is_gpu_target
+from backend.core.slurm_script import (
+    EARLY_STOP_EVAL_NAME,
+    EARLY_STOP_HEALTH_NAME,
+    STAGED_MD_HEALTH_NAME,
+    generate_sbatch,
+    is_gpu_target,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +233,46 @@ def _default_conn():
     return cluster_ssh.get_manager()
 
 
+def _early_stop_on(job: MdJob, manifest: dict) -> bool:
+    """Whether to emit + stage the in-sbatch early-stop accelerator for this run.
+
+    On only when the job opted in AND the package is not a declash design (a declash
+    manifest is rejected by ``generate_sbatch`` anyway — its mid-chain reference
+    rebuild can't run in a bare sbatch, so early-stop is moot there).  Production-only
+    replica packages carry no eligible relaxation chunks, so this is a harmless no-op
+    even if a replica ever inherited the flag.
+    """
+    return bool(getattr(job, "early_stop_relax", False)) and not manifest.get("declash")
+
+
+def _early_stop_tier(job: MdJob) -> str:
+    t = str(getattr(job, "early_stop_tier", "B") or "B").upper()
+    return t if t in ("A", "B") else "B"
+
+
+async def _stage_early_stop_evaluator(conn, remote_dir: str, workspace_dir: Path,
+                                      job: MdJob, *, tier: str) -> None:
+    """Upload the node early-stop scripts next to the confs.
+
+    Tier B: just the stdlib ``nadoc_cutoff_eval.py`` (the sbatch runs
+    ``python3 nadoc_cutoff_eval.py`` from the run cwd).  Tier A additionally ships
+    ``nadoc_health_eval.py`` + a verbatim ``md_health.py`` (the WC step needs the
+    real ``run_health_check``; it imports numpy/scipy/MDAnalysis on the node).  We
+    ship the exact module sources the tests pin, so the node runs byte-for-byte what
+    was validated offline.
+    """
+    from backend.core import md_health, remote_cutoff_eval, remote_health_eval
+
+    async def _stage(module, remote_name):
+        await _put_text(conn, Path(module.__file__).read_text(),
+                        f"{remote_dir}/{remote_name}", workspace_dir, job)
+
+    await _stage(remote_cutoff_eval, EARLY_STOP_EVAL_NAME)
+    if tier == "A":
+        await _stage(remote_health_eval, EARLY_STOP_HEALTH_NAME)
+        await _stage(md_health, STAGED_MD_HEALTH_NAME)
+
+
 async def submit_job(
     job: MdJob,
     workspace_dir: Path,
@@ -262,8 +308,13 @@ async def submit_job(
 
     # Build the sbatch first — a declash / bad-partition manifest raises here,
     # before we touch the network.
+    early_stop = _early_stop_on(job, manifest)
+    es_tier = _early_stop_tier(job)
+    if early_stop:
+        manifest["early_stop_tier"] = es_tier          # generate_sbatch reads this
     sbatch = generate_sbatch(manifest, profile, resources, scratch_dir,
-                             job_name=job.name_stem or job.design_name)
+                             job_name=job.name_stem or job.design_name,
+                             early_stop_relax=early_stop)
 
     # 1) stage package → project (persistent), skipping local output/logs.
     #    NADOC's confs bake ``GPUresident on`` into the fast (HMR/4 fs) segments —
@@ -282,6 +333,10 @@ async def submit_job(
             await _put_text(conn, amended, remote, workspace_dir, job)
         else:
             await conn.sftp_put(str(local_path), remote)
+
+    # 1b) stage the node early-stop scripts into project (mirrored to scratch next).
+    if early_stop:
+        await _stage_early_stop_evaluator(conn, project_dir, workspace_dir, job, tier=es_tier)
 
     # 2) mirror project → scratch (two-filesystem model — jobs MUST run on scratch).
     await conn.mirror(project_dir, scratch_dir)
@@ -429,11 +484,21 @@ async def resume_job(
                         job.job_id, interrupted.name, step, total_steps)
 
     # 4) regenerate the sbatch (skip done; resume the interrupted one) and submit.
+    early_stop = _early_stop_on(job, manifest)
+    es_tier = _early_stop_tier(job)
+    if early_stop:
+        manifest["early_stop_tier"] = es_tier
     sbatch = generate_sbatch(
         manifest, profile, job.resources or {}, scratch,
         job_name=job.name_stem or job.design_name,
         resume_conf_for=resume_conf_for or None,
+        early_stop_relax=early_stop,
     )
+    # Re-stage the evaluator(s) straight into scratch (resume uploads only the sbatch/
+    # resume conf; the original copy is normally still there, but this keeps a resumed
+    # run self-consistent even if scratch was partially purged).
+    if early_stop:
+        await _stage_early_stop_evaluator(conn, scratch, workspace_dir, job, tier=es_tier)
     await _put_text(conn, sbatch, f"{scratch}/{_SBATCH_NAME}", workspace_dir, job)
     res = await conn.run(f"cd {_shq(scratch)} && sbatch {_SBATCH_NAME}")
     if res.rc != 0:

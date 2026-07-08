@@ -10,14 +10,20 @@
 
 /** Pure: flatten the job set into a pre-order render list, following the
  *  parent_job_id chain to ANY depth (relax → child1 → child2 → …).  Returns
- *  [{ job, depth, index }] where depth 0 = a root and depth≥1 = a derived child
- *  (indent by depth); `index` is the GLOBAL run number (1..N) of a child among all
- *  non-root jobs in created_at order, so chained runs read Run 1 → Run 2 → …
- *  regardless of nesting.  Roots are newest first; children oldest first (run
- *  order).  An orphan child (parent absent) is treated as its own root. */
-export function flattenJobTree(jobs) {
+ *  [{ job, depth, index, childCount }] where depth 0 = a root and depth≥1 = a derived
+ *  child (indent by depth); `index` is the GLOBAL run number (1..N) of a child among
+ *  all non-root jobs in created_at order, so chained runs read Run 1 → Run 2 → …
+ *  regardless of nesting; `childCount` is the number of direct children a node has
+ *  (drives the expand/collapse chevron).  Roots are newest first; children oldest
+ *  first (run order).  An orphan child (parent absent) is treated as its own root.
+ *
+ *  Pass `{ collapsedIds }` (a Set of job ids) to NOT recurse into those parents —
+ *  their subtree is hidden but the parent row still reports its `childCount`, so an
+ *  ensemble of N production replicas can render as one collapsible item. */
+export function flattenJobTree(jobs, { collapsedIds = null } = {}) {
   const list = jobs || []
   const ids = new Set(list.map(j => j.job_id))
+  const collapsed = collapsedIds || new Set()
   const childrenOf = new Map()
   const roots = []
   for (const j of list) {
@@ -36,9 +42,10 @@ export function flattenJobTree(jobs) {
     .forEach((j, i) => runNo.set(j.job_id, i + 1))
   const out = []
   const visit = (job, depth) => {
-    out.push({ job, depth, index: runNo.get(job.job_id) || 0 })
-    for (const k of (childrenOf.get(job.job_id) || [])
-      .slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))) {
+    const kids = (childrenOf.get(job.job_id) || [])
+    out.push({ job, depth, index: runNo.get(job.job_id) || 0, childCount: kids.length })
+    if (collapsed.has(job.job_id)) return   // hide this node's subtree
+    for (const k of kids.slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))) {
       visit(k, depth + 1)
     }
   }

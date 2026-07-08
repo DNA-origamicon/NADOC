@@ -253,6 +253,204 @@ def build_remote_resume_conf(
     return "\n".join(kept) + "\n"
 
 
+def build_production_conf(
+    spec: "SegmentSpec",
+    name_stem: str,
+    box: tuple[float, float, float],
+    mgh_extrabonds: bool,
+    *,
+    seed: int = 54321,
+    fast: bool = False,
+    structure_psf: Optional[str] = None,
+    start_checkpoint: Optional[str] = None,
+    anchors_file: Optional[str] = None,
+    field: Optional[dict] = None,
+) -> str:
+    """Unrestrained NPT production conf, continuing from a prior checkpoint (pure).
+
+    Shared by the local production path (``routes_md._conservative_production_conf``,
+    which delegates here with the defaults → byte-identical output) and the Alpine
+    ensemble path, which passes a per-replica ``seed`` and ``start_checkpoint`` (the
+    reseed step's output name) so each replica draws its own Langevin/velocity RNG
+    stream while reading the same equilibrated coordinates.
+
+    ``fast`` = the HMR + ``rigidBonds all`` + 4 fs + GPUresident throughput mode (see
+    ``routes_md._production_fast_plan``); ``structure_psf`` overrides the PSF (the HMR
+    PSF for fast runs).  ``start_checkpoint`` overrides ``spec.previous`` as the source
+    of ``binCoordinates``/``binVelocities``/``extendedSystem`` (default None keeps
+    ``spec.previous`` — the local segment-chain behaviour).
+    """
+    bx, by, bz = box
+    cx, cy, cz = bx / 2, by / 2, bz / 2
+    extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    # Fast mode = the fast-relaxation win applied to unrestrained production.  The
+    # HMR PSF (non-water hydrogens x3) lets ``rigidBonds all`` run stably at a 4 fs
+    # timestep; ``GPUresident on`` keeps integration + bonded forces on the GPU;
+    # light multiple-timestepping (fullElectFrequency 2) skips a PME evaluation
+    # every other step.  Together ~10x throughput vs the 1 fs / rigidBonds none /
+    # CPU-integrated conservative path (1.3 -> >16 ns/day).  Electrostatics (PME
+    # grid, cutoff, barostat coupling) are LEFT IDENTICAL to the conservative run,
+    # so the production ensemble is unchanged — only integrator/throughput knobs
+    # move.  GPUresident is sound here because the solvated box is capped (no
+    # covalent bond wraps the periodic image).
+    if fast:
+        psf = structure_psf or f"{name_stem}.psf"
+        rigid, ts, gpu_line = "all", 4.0, "GPUresident        on\n"
+        # fullElectFrequency 1 at 4 fs → reciprocal PME every 4 fs, matching the
+        # Aksimentiev reference (2 fs x 2).  fullElect 2 here would be PME every
+        # 8 fs, past the r-RESPA resonance-stability limit (~4 fs) — and it only
+        # bought ~0.7 ns/day.  stepspercycle 10 → 40 fs pairlist rebuild.
+        nbf, fef, spc = 1, 1, 10
+    else:
+        psf = f"{name_stem}.psf"
+        rigid, ts, gpu_line = "none", 1.0, ""
+        nbf, fef, spc = 1, 1, 10
+    prev = start_checkpoint or spec.previous
+    # Anchors + E-field carry into the unrestrained run — where a field's deflection
+    # actually develops.  Dropping them here would silently un-anchor the field job and
+    # let the uniform force stream the whole structure across the box (COM drift).
+    # Default (None, None) → "" so the ensemble path stays byte-identical.
+    ext_forces = external_forces_block(anchors_file, field)
+    return f"""\
+structure          {psf}
+coordinates        {name_stem}.pdb
+
+seed               {seed}
+paraTypeCharmm     on
+parameters         forcefield/par_all36_na.prm
+parameters         forcefield/toppar_water_ions_cufix.str
+parameters         forcefield/par_stub_ions_nbfix.str
+{extras}
+cellBasisVector1   {bx:.3f}  0.000    0.000
+cellBasisVector2   0.000    {by:.3f}  0.000
+cellBasisVector3   0.000    0.000    {bz:.3f}
+cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}
+
+wrapAll            on
+wrapWater          on
+exclude            scaled1-4
+oneFourScaling     1.0
+switching          on
+switchdist         10.0
+cutoff             12.0
+pairlistdist       14.0
+PME                yes
+PMEGridSpacing     1.0
+rigidBonds         {rigid}
+rigidTolerance     1.0e-8
+timestep           {ts:g}
+nonbondedFreq      {nbf}
+fullElectFrequency {fef}
+stepspercycle      {spc}
+{gpu_line}langevin           on
+langevinTemp       300
+langevinDamping    5
+langevinHydrogen   off
+useGroupPressure   yes
+useFlexibleCell    no
+useConstantArea    no
+langevinPiston     on
+langevinPistonTarget  1.01325
+langevinPistonPeriod  200.0
+langevinPistonDecay   100.0
+langevinPistonTemp 300
+outputEnergies     100
+xstFreq            1000
+restartfreq        1000
+binaryrestart      yes
+constraints        off
+{ext_forces}outputName         output/{spec.name}
+dcdFile            output/{spec.name}.dcd
+dcdFreq            {spec.dcd_freq}
+xstFile            output/{spec.name}.xst
+binCoordinates     output/{prev}.coor
+binVelocities      output/{prev}.vel
+extendedSystem     output/{prev}.xsc
+run                {spec.steps}
+"""
+
+
+def build_reseed_conf(
+    reseed_name: str,
+    name_stem: str,
+    box: tuple[float, float, float],
+    mgh_extrabonds: bool,
+    *,
+    seed: int,
+    equil_base: str = "equilibrated",
+    structure_psf: Optional[str] = None,
+) -> str:
+    """Velocity-reseed bridge conf for an ensemble replica (pure).
+
+    Reads the shared equilibrated coordinates + box from PACKAGE-ROOT files
+    (``{equil_base}.coor`` / ``{equil_base}.xsc`` — staged, unlike ``output/``),
+    assigns a fresh Maxwell-Boltzmann velocity set at 300 K from this replica's
+    ``seed`` (``reinitvels``), and writes ``output/{reseed_name}.{coor,vel,xsc}`` with a
+    zero-step run — coordinates are preserved exactly, only the velocities differ per
+    replica.  It occupies the manifest ``minimization`` slot so the production segment
+    (which reads ``output/{reseed_name}``) chains from it via the standard sbatch.
+    """
+    bx, by, bz = box
+    cx, cy, cz = bx / 2, by / 2, bz / 2
+    extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
+    psf = structure_psf or f"{name_stem}.psf"
+    return f"""\
+structure          {psf}
+coordinates        {name_stem}.pdb
+
+seed               {seed}
+paraTypeCharmm     on
+parameters         forcefield/par_all36_na.prm
+parameters         forcefield/toppar_water_ions_cufix.str
+parameters         forcefield/par_stub_ions_nbfix.str
+{extras}
+cellBasisVector1   {bx:.3f}  0.000    0.000
+cellBasisVector2   0.000    {by:.3f}  0.000
+cellBasisVector3   0.000    0.000    {bz:.3f}
+cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}
+
+wrapAll            on
+wrapWater          on
+exclude            scaled1-4
+oneFourScaling     1.0
+switching          on
+switchdist         10.0
+cutoff             12.0
+pairlistdist       14.0
+PME                yes
+PMEGridSpacing     1.0
+rigidBonds         none
+rigidTolerance     1.0e-8
+timestep           1.0
+nonbondedFreq      1
+fullElectFrequency 1
+stepspercycle      10
+langevin           on
+langevinTemp       300
+langevinDamping    5
+langevinHydrogen   off
+useGroupPressure   yes
+useFlexibleCell    no
+useConstantArea    no
+langevinPiston     on
+langevinPistonTarget  1.01325
+langevinPistonPeriod  200.0
+langevinPistonDecay   100.0
+langevinPistonTemp 300
+outputEnergies     100
+xstFreq            1000
+restartfreq        1000
+binaryrestart      yes
+constraints        off
+outputName         output/{reseed_name}
+binCoordinates     {equil_base}.coor
+extendedSystem     {equil_base}.xsc
+temperature        300
+reinitvels         300
+run                0
+"""
+
+
 def _common_header(
     name_stem: str,
     box: tuple[float, float, float],

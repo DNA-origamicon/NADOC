@@ -219,6 +219,134 @@ describe('mdListSignature', () => {
     expect(mdListSignature([{ ...jobs[0], status: 'completed' }], 'a')).not.toBe(base)
     expect(mdListSignature([{ ...jobs[0], current_segment_idx: 2 }], 'a')).not.toBe(base)
     expect(mdListSignature(jobs, 'b')).not.toBe(base)                               // selection
+    expect(mdListSignature([{ ...jobs[0], ensemble_seed: 54322 }], 'a')).not.toBe(base)  // replica badge refresh
+  })
+})
+
+import { mdIsEnsembleReplica, mdIsEnsembleParent, mdReplicaRowLabel, ensembleChildSummary } from './md_jobs_panel.js'
+
+describe('ensemble helpers', () => {
+  const parent = { job_id: 'P', status: 'completed' }
+  const reps = [
+    { job_id: 'r0', parent_job_id: 'P', ensemble_seed: 54321, ensemble_index: 0, status: 'running' },
+    { job_id: 'r1', parent_job_id: 'P', ensemble_seed: 54322, ensemble_index: 1, status: 'queued' },
+    { job_id: 'r2', parent_job_id: 'P', ensemble_seed: 54323, ensemble_index: 2, status: 'completed' },
+  ]
+  const jobs = [parent, ...reps]
+
+  it('mdIsEnsembleReplica keys off ensemble_seed', () => {
+    expect(mdIsEnsembleReplica(reps[0])).toBe(true)
+    expect(mdIsEnsembleReplica({ job_id: 'x', parent_job_id: 'P' })).toBe(false)   // refit child, not a replica
+    expect(mdIsEnsembleReplica(parent)).toBe(false)
+  })
+
+  it('mdIsEnsembleParent true only when a job has replica children', () => {
+    expect(mdIsEnsembleParent(parent, jobs)).toBe(true)
+    expect(mdIsEnsembleParent(reps[0], jobs)).toBe(false)
+    expect(mdIsEnsembleParent(parent, [parent, { job_id: 'f', parent_job_id: 'P' }])).toBe(false)  // refit child only
+  })
+
+  it('mdReplicaRowLabel uses ensemble_index+1 and the seed', () => {
+    expect(mdReplicaRowLabel(reps[0], 9)).toBe('Replica 1 · seed 54321')
+    expect(mdReplicaRowLabel(reps[2], 9)).toBe('Replica 3 · seed 54323')
+  })
+
+  it('ensembleChildSummary aggregates replica statuses', () => {
+    expect(ensembleChildSummary(parent, jobs)).toBe('⧉ 3 replicas · 1 running · 1 queued · 1 done')
+    expect(ensembleChildSummary(parent, [parent])).toBe('')                        // no replicas
+  })
+})
+
+import { mdIsProductionChild, mdProductionRowLabel } from './md_jobs_panel.js'
+
+describe('production child helpers (local production fan-out under a relaxation)', () => {
+  const relax = { job_id: 'P', status: 'completed' }
+  const prods = [
+    { job_id: 'p0', parent_job_id: 'P', ensemble_seed: 54321, ensemble_index: 0, run_kind: 'production', status: 'running' },
+    { job_id: 'p1', parent_job_id: 'P', ensemble_seed: 54322, ensemble_index: 1, run_kind: 'production', status: 'completed' },
+  ]
+  const jobs = [relax, ...prods]
+
+  it('mdIsProductionChild keys off run_kind', () => {
+    expect(mdIsProductionChild(prods[0])).toBe(true)
+    expect(mdIsProductionChild({ job_id: 'r', ensemble_seed: 1 })).toBe(false)     // ensemble replica, not production
+    expect(mdIsProductionChild(relax)).toBe(false)
+  })
+
+  it('a production child still counts as a seeded (nesting) child', () => {
+    expect(mdIsEnsembleReplica(prods[0])).toBe(true)                               // indents + collapses under the parent
+    expect(mdIsEnsembleParent(relax, jobs)).toBe(true)
+  })
+
+  it('mdProductionRowLabel reads "Production N · seed S"', () => {
+    expect(mdProductionRowLabel(prods[0], 9)).toBe('Production 1 · seed 54321')
+    expect(mdProductionRowLabel(prods[1], 9)).toBe('Production 2 · seed 54322')
+  })
+
+  it('ensembleChildSummary says "production runs" for a production fan-out', () => {
+    expect(ensembleChildSummary(relax, jobs)).toBe('⧉ 2 production runs · 1 running · 1 done')
+  })
+})
+
+import { mdHasAppendedProduction } from './md_jobs_panel.js'
+
+describe('mdHasAppendedProduction (legacy same-job production detection)', () => {
+  const relaxSeg = { name: 'D_04_300K_NPT_MGHH_only_p100', stage: '300K NPT k=0' }
+  const prodSeg = { name: 'D_05_production_0p5ns_k0_p10', stage: '0.5 ns production run' }
+
+  it('true for a root relaxation carrying appended production segments', () => {
+    expect(mdHasAppendedProduction({ job_id: 'a', segments: [relaxSeg, prodSeg] })).toBe(true)
+  })
+  it('false for a pure relaxation (no production segment)', () => {
+    expect(mdHasAppendedProduction({ job_id: 'a', segments: [relaxSeg] })).toBe(false)
+  })
+  it('false for a production CHILD (run_kind) or any derived job', () => {
+    expect(mdHasAppendedProduction({ job_id: 'c', run_kind: 'production', segments: [prodSeg] })).toBe(false)
+    expect(mdHasAppendedProduction({ job_id: 'c', parent_job_id: 'P', segments: [prodSeg] })).toBe(false)
+  })
+  it('false for null / no segments', () => {
+    expect(mdHasAppendedProduction(null)).toBe(false)
+    expect(mdHasAppendedProduction({ job_id: 'a' })).toBe(false)
+  })
+})
+
+import { mdHasLocalReadouts, mdRemoteReadoutNote, mdReplicaStateText, ensembleReplicas } from './md_jobs_panel.js'
+
+describe('remote-job readout handling (Alpine replicas have no local metrics in flight)', () => {
+  const localRunning = { job_id: 'L', execution_target: 'local', status: 'running', health_samples: [] }
+  const remoteRunning = { job_id: 'R', execution_target: 'alpine', status: 'running', slurm_job_id: '2973', health_samples: [] }
+  const remoteDone = { job_id: 'D', execution_target: 'alpine', status: 'completed', slurm_job_id: '2973', health_samples: [{ c1_paired_fraction: 0.98 }] }
+  const awaiting = { job_id: 'A', execution_target: 'alpine', status: 'queued', health_samples: [] }  // no slurm id
+
+  it('mdHasLocalReadouts: local always true; remote only once results fetched', () => {
+    expect(mdHasLocalReadouts(localRunning)).toBe(true)
+    expect(mdHasLocalReadouts(remoteRunning)).toBe(false)   // in flight, no local samples
+    expect(mdHasLocalReadouts(remoteDone)).toBe(true)       // results fetched → samples present
+  })
+
+  it('mdRemoteReadoutNote: a cluster-side note for an in-flight remote job, else null', () => {
+    expect(mdRemoteReadoutNote(remoteRunning)).toMatch(/Running on Alpine \(SLURM 2973\)/)
+    expect(mdRemoteReadoutNote(localRunning)).toBeNull()    // local shows the real grid
+    expect(mdRemoteReadoutNote(remoteDone)).toBeNull()      // has local readouts
+    expect(mdRemoteReadoutNote(awaiting)).toBeNull()        // awaiting-submit has its own status line
+  })
+
+  it('mdReplicaStateText: SLURM state for remote, plain status otherwise', () => {
+    expect(mdReplicaStateText({ ...remoteRunning, slurm_state: 'RUNNING' })).toBe('RUNNING · 2973')
+    expect(mdReplicaStateText(remoteRunning)).toBe('running · SLURM 2973')
+    expect(mdReplicaStateText(awaiting)).toBe('awaiting submit')
+    expect(mdReplicaStateText(localRunning)).toBe('running')
+  })
+
+  it('ensembleReplicas: parent → its seeded children sorted by ensemble_index', () => {
+    const parent = { job_id: 'P' }
+    const jobs = [
+      parent,
+      { job_id: 'r1', parent_job_id: 'P', ensemble_seed: 2, ensemble_index: 1, status: 'running' },
+      { job_id: 'r0', parent_job_id: 'P', ensemble_seed: 1, ensemble_index: 0, status: 'running' },
+      { job_id: 'x', parent_job_id: 'P' },   // refit child, not a replica
+    ]
+    expect(ensembleReplicas(parent, jobs).map(j => j.job_id)).toEqual(['r0', 'r1'])
   })
 })
 

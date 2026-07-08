@@ -373,8 +373,8 @@ toggles mutually-exclusive radios in a "Visualizations & processing" card.
 - `MdJob.parent_job_id` (new field; `new_job(parent_job_id=…)`, load-setdefault).
   `routes_md._spawn_prep_job(parent_job_id=…)`; the **refit** endpoint passes
   `parent_job_id=<old job id>` so a refit/retry-derived job nests under its origin.
-  (MD production is still appended *segments* on the same job — NOT a child job —
-  so it does not create a nested row; only refits do.)
+  (SUPERSEDED 2026-07-07 — production now ALSO spawns a nested child job, not
+  same-job segments; see "Production = child job" below.)
 - Frontend: `flattenJobTree`/`descendantIds` moved out of `oxdna_jobs_panel.js` into
   shared `ui/job_tree.js` (re-exported from the oxDNA panel for existing importers;
   `job_tree.test.js`). MD `_renderList` rewritten to flatten + indent by depth via a
@@ -432,3 +432,103 @@ cache before each spawn when RAM is low (see [[md-live-model-cache]]). Tests:
 `test_host_oom_auto_resumes_without_a_checkpoint`, `test_host_oom_gives_up_after_resume_cap`.
 Diagnosis of the original failure: WSL2 24 GB box, 404k ENM springs; real error was host pinned RAM,
 NOT the "3.0 GB / 8.0 GB card" the old classifier misreported.
+
+**Production = child job (mirrors oxDNA `/oxdna/jobs/{id}/run`) — 2026-07-07:** MD
+production used to APPEND p10/p50/p100 segments onto the SAME relaxation `MdJob`, so
+the relaxation stopped being a distinct entry and you couldn't fan out several
+productions. Now the Production button spawns a **child `MdJob`** seeded from the
+parent's equilibrated checkpoint, exactly like oxDNA's child runs — the relaxation
+stays a selectable root row and each production nests under it.
+- **Endpoint** `POST /md/jobs/{parent_id}/production-run` (`routes_md.spawn_md_production`,
+  body `ProductionRunRequest{steps,length_ns,autostart}`). Resolves the seed coords via
+  `_production_seed_checkpoint(parent)` — a relaxation parent → `_production_ready_checkpoint`;
+  a completed production child → `_completed_production_checkpoint` (so selecting a finished
+  production and clicking Production **chains** a fresh run off its end state). Reuses
+  `md_ensemble.build_replica_package` VERBATIM (single seed) to build the production-only
+  child package (reseed conf in the `minimization` slot → one production segment). Child gets
+  `parent_job_id=parent`, `run_kind="production"`, a distinct velocity `ensemble_seed`
+  (`54321+N` where N = existing production siblings → independent trajectories), takes its
+  run target from the request; local + autostart → `start_job` immediately. Parent job is
+  NEVER mutated (its segments/manifest untouched) — verified live on `c0e02dadf996` (2hb_noT).
+- **Alpine target (fix 2026-07-07):** the Production button must honor the panel's
+  Local/Alpine radio (`_currentRunTarget()`), NOT the parent's target — a locally-relaxed
+  structure is commonly produced on Alpine. `ProductionRunRequest` gained
+  `execution_target`/`cluster_name`; `spawn_md_production` sets `child.execution_target =
+  body.execution_target or parent's or "local"` and **only autostarts when target=="local"**
+  — an `alpine` child is left `queued` (no `start_job`) for the submit-review card. Frontend
+  prodBtn: reads the radio, skips the local disk/concurrent guards for Alpine, passes
+  `execution_target`+`autostart:isLocalRun`, and on an Alpine spawn opens
+  `_submitReview.open(childId)` (same card the relax/ensemble Alpine paths use → resource
+  sizing + SLURM submit; Duo needed). Bug it fixed: the first cut inherited the parent's
+  `execution_target`, so selecting Alpine still launched a LOCAL production. Test
+  `test_production_alpine_target_queues_without_local_start` (queued alpine child, `start_job`
+  never called); verified live (child `queued`, exec=alpine, namd_pid None).
+
+**Ensemble/remote readout UX (2026-07-07, frontend-only):** the detail panel was built for
+a single LOCAL job; selecting an ensemble parent or a remote replica mis-behaved. Fixes in
+`md_jobs_panel.js`:
+- **No local WS for cluster jobs.** `_openDetailForJob` opened `ws://…/ws/md-jobs/{id}` for
+  any non-terminal job, but a job handed to SLURM (`slurm_job_id` set) pushes nothing locally.
+  Now gated on `!job.slurm_job_id` — a remote job's detail is refreshed by the SLURM poll
+  (`_maybePollRemote → _applyJobState`), not a dead WS. (A LOCAL prep of an Alpine relaxation,
+  no slurm id yet, still gets its WS for the solvation bar.)
+- **Remote in-flight jobs show a note, not a perpetual spinner.** A running Alpine replica has
+  0 local health_samples (metrics live on cluster scratch until results fetch), so `mdJobIsActive`
+  true + no metrics → the old code span "Waiting for first metrics…" forever. New pure
+  `mdHasLocalReadouts(job)` (local always; remote only once `health_samples` present) +
+  `mdRemoteReadoutNote(job)`; `_renderMetrics` short-circuits to the note ("Running on Alpine
+  (SLURM …) — live metrics aren't streamed for cluster runs…") + `_setHealthSpinner(false)`.
+- **Ensemble roll-up in the detail.** New `#md-jobs-ensemble-rollup` + `_renderEnsembleRollup(job)`:
+  when a parent OR one of its replicas is selected, lists every replica (`mdReplicaRowLabel` /
+  `mdProductionRowLabel`) with its SLURM state (`mdReplicaStateText`), clickable to jump. Header
+  reuses `ensembleChildSummary`. Pure `ensembleReplicas(job, jobs)` (sorted by ensemble_index).
+  So selecting the "N replicas" parent reads as the ensemble, not just the underlying relaxation.
+- Pins: `md_jobs_panel.test.js` (+4 blocks: mdHasLocalReadouts / mdRemoteReadoutNote /
+  mdReplicaStateText / ensembleReplicas). VERIFIED LIVE against the 4-replica 6hbx100_1xT
+  ensemble (parent roll-up lists 4 RUNNING replicas w/ SLURM ids; replica shows the Alpine note;
+  no local WS opened for a cluster job). **Watch:** when a replica finishes, local health/metrics
+  populate only if the backend fetches results on SLURM completion — confirm that path once a
+  replica completes so the grid fills in (else it stays on the note).
+- **New `MdJob.run_kind: Optional[str]=None`** (load-setdefault; `new_job(run_kind=)`).
+  `"production"` marks a production child; None = relaxation / refit / Alpine ensemble replica.
+- **Old `append_md_production` (`/md/jobs/{id}/production`) endpoint kept** (still client-exported
+  + doc-header-tested) but the app no longer calls it.
+- **Frontend:** `client.spawnMdProduction`; the prodBtn handler calls it then selects the NEW
+  child. `_renderProductionControls` gates on `production_ready || production_continue_available`
+  (chain mode) — the old `continue_from_production` checkbox (`#md-jobs-prod-continue`) is GONE,
+  replaced by a static hint. New pure helpers `mdIsProductionChild(job)` (run_kind check) +
+  `mdProductionRowLabel` ("Production N · seed S"); `_jobRow` branches label/title on it.
+  `mdIsEnsembleReplica` still matches production children (ensemble_seed set) so they indent +
+  collapse under the parent via `flattenJobTree` — but auto-collapse is now scoped to
+  Alpine ensembles ONLY (a production fan-out keeps the just-started child visible).
+  `ensembleChildSummary` says "N production runs" vs "N replicas" by child kind.
+- **Tests:** `test_md_milestone1.py::TestProductionAppend` (+4: child-created-parent-intact,
+  distinct-seeds, autostart-launches-local, refused-while-running); vitest
+  `md_jobs_panel.test.js` production-child block (+4). Full backend `just test` green apart
+  from 2 pre-existing xdist cross-file ordering flakes in `test_md_executor.py`
+  (`test_remote_recommendation_unknown_{profile,partition}` — pass in isolation, unrelated
+  cluster-recommendation code). NOT hand-clicked in the browser, but the full backend path +
+  rendered data shape were exercised live via curl against a real completed relaxation.
+  [[alpine-cluster-submission]] (ensemble replica machinery this reuses).
+
+**Legacy-job migration — revert appended production (2026-07-07):** Jobs created before
+the child-model have production p10/p50/p100 segments APPENDED onto the relaxation, so
+they show as ONE combined entry. `md_job.revert_appended_production(job, ws)` peels them
+back to a clean completed relaxation: drops the production segments from `job.segments` +
+`manifest["segments"]`, removes `production_extension`, restores `status=completed` /
+`current_segment_idx=len(relax)` / `user_stopped=False` / `error=None`. **Non-destructive**
+— the production confs/logs/output are MOVED (`Path.replace`) to
+`{job_dir}/_superseded_production/` (preserving the package-relative tree), NOT deleted, so
+a stopped-mid-run partial trajectory is recoverable. Dot-prefixed output globs
+(`output/{name}.`) so a `_p10` segment never sweeps `_p100` files. Idempotent; refuses a
+production child (`run_kind=="production"`) or any derived job (`parent_job_id`) so it can't
+nuke a legit run. Helper `segment_is_production(job)` / `_is_production_segment_name`.
+Endpoint `POST /md/jobs/{id}/revert-production` (`routes_md.revert_md_production`, 400 if
+running / nothing to revert). Frontend: pure `mdHasAppendedProduction(job)` (root relaxation
+carrying a production segment) gates a `#md-jobs-revert-prod-btn` "⧉ Separate production into
+its own run" button in the production box (`_renderProductionControls`), `client.revertMdProduction`,
+`window.confirm` + toast, reselects the now-clean relaxation. Tests: `test_md_milestone1.py`
+(+2: restores-clean-relaxation incl. p10/p100 glob + backup-not-deleted + relax-checkpoint-intact;
+idempotent-and-guards-children); vitest `mdHasAppendedProduction` (+4). VERIFIED LIVE on
+`a0e54cdbf20f` (6hbx100_1xT): 15→12 segs, 80 MB partial production moved to backup, then a
+fresh production child spawned off the cleaned relaxation.

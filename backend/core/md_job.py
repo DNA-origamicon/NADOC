@@ -99,6 +99,22 @@ class MdJob:
     # spawns a fresh job from a failed one).  Drives the indented job-list
     # hierarchy: a derived job renders nested under its parent, mirroring oxDNA.
     parent_job_id: Optional[str] = None
+    # Ensemble production replica marker (see backend.core.md_ensemble).  When set,
+    # this job is one of N production replicas fanned out from the parent's
+    # equilibrated structure with a distinct NAMD ``seed`` — ``ensemble_seed`` is that
+    # seed, ``ensemble_index`` its 0-based position.  Both None for ordinary jobs and
+    # refit children; the panel uses them to label replica rows and to render the
+    # parent as one collapsible ensemble item.
+    ensemble_seed: Optional[int] = None
+    ensemble_index: Optional[int] = None
+    # Flavor of a derived (parent_job_id) child.  None for a relaxation or a refit/retry
+    # child; "production" for a production run branched from a completed relaxation (or
+    # from another completed production, i.e. chaining).  A production child is seeded
+    # with a distinct velocity ``ensemble_seed`` so multiple productions fanned out from
+    # ONE equilibrated structure are independent.  Drives the child-row label
+    # ("Production N" vs. an Alpine ensemble's "Replica N") and keeps the relaxation
+    # parent visible + selectable while its productions nest under it.
+    run_kind: Optional[str] = None
     # True when the user explicitly stopped the job — keeps the startup/supervisor
     # auto-resume from relaunching a deliberately-paused run.  Reset on manual start.
     user_stopped: bool = False
@@ -106,6 +122,12 @@ class MdJob:
     # remaining p50/p100 chunks once its first chunk shows an energy+WC plateau
     # (backend/core/md_cutoff.py).  Default OFF — never changes existing runs.
     early_stop_relax: bool = False
+    # Early-stop criterion tier for a REMOTE (Alpine) relaxation.  "B" (default) =
+    # energy(+volume) plateau only, stdlib evaluator, restricted to well-restrained
+    # stages.  "A" = energy AND WC base-pairing (full local parity), which needs an
+    # on-node MDAnalysis health step (numpy/scipy/MDAnalysis on the compute node).
+    # Ignored by the LOCAL runner (which always uses the full multi-criteria path).
+    early_stop_tier: str = "B"
     # Out-of-date detection (mirrors OxdnaJob).  ``design_fingerprint`` is a content
     # hash of the design this run was PREPARED from (set during background prep, after
     # the seed/active design is resolved — see backend.core.oxdna_staleness); a current
@@ -190,7 +212,11 @@ class MdJob:
         data.setdefault("seed_oxdna_job_id", None)
         data.setdefault("seed_mrdna_job_id", None)
         data.setdefault("parent_job_id", None)
+        data.setdefault("ensemble_seed", None)
+        data.setdefault("ensemble_index", None)
+        data.setdefault("run_kind", None)
         data.setdefault("early_stop_relax", False)
+        data.setdefault("early_stop_tier", "B")
         data.setdefault("failure_kind", None)
         data.setdefault("prep_params", None)
         data.setdefault("design_fingerprint", None)
@@ -252,6 +278,9 @@ def new_job(
     seed_oxdna_job_id: Optional[str] = None,
     seed_mrdna_job_id: Optional[str] = None,
     parent_job_id: Optional[str] = None,
+    ensemble_seed: Optional[int] = None,
+    ensemble_index: Optional[int] = None,
+    run_kind: Optional[str] = None,
 ) -> MdJob:
     return MdJob(
         job_id         = uuid.uuid4().hex[:12],
@@ -267,4 +296,92 @@ def new_job(
         seed_oxdna_job_id = seed_oxdna_job_id,
         seed_mrdna_job_id = seed_mrdna_job_id,
         parent_job_id  = parent_job_id,
+        ensemble_seed  = ensemble_seed,
+        ensemble_index = ensemble_index,
+        run_kind       = run_kind,
     )
+
+
+def _is_production_segment_name(name: str, stage: str = "") -> bool:
+    """True for an (old-style appended) production segment, by name or stage text."""
+    n, s = (name or "").lower(), (stage or "").lower()
+    return "production" in n or "production" in s or "_prod" in n
+
+
+def segment_is_production(job: "MdJob") -> bool:
+    """True when a root relaxation job has old-style production segments appended onto
+    it (the pre-child-model layout) — i.e. it can be reverted to a clean relaxation."""
+    if job.parent_job_id is not None or job.run_kind == "production":
+        return False
+    return any(_is_production_segment_name(s.name, s.stage) for s in job.segments)
+
+
+def revert_appended_production(job: "MdJob", workspace_dir: Path) -> dict:
+    """Peel an old-style *appended* production run back off a relaxation ``MdJob`` so it
+    becomes a clean completed relaxation again (the current model spawns production as a
+    separate child job — see backend.core.md_ensemble / routes_md.spawn_md_production).
+
+    The production segments are dropped from the job + manifest and their conf/log/output
+    files are **moved** (never deleted) to ``job_dir/_superseded_production/`` so nothing
+    is lost irreversibly.  Idempotent and non-destructive; returns a report dict.
+
+    Refuses to touch a production child (``run_kind == "production"``) or a derived job —
+    it only reverts a root relaxation that carries appended production segments."""
+    if job.parent_job_id is not None or job.run_kind == "production":
+        return {"reverted": False, "reason": "not a root relaxation job"}
+
+    pkg = job.package_dir(workspace_dir)
+    manifest_path = pkg / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+
+    prod_names = [s.name for s in job.segments if _is_production_segment_name(s.name, s.stage)]
+    has_manifest_ext = bool(manifest and "production_extension" in manifest)
+    if not prod_names and not has_manifest_ext:
+        return {"reverted": False, "reason": "no appended production found"}
+
+    # Move each production segment's artifacts to a backup folder (dot-prefixed globs so
+    # a "..._p10" segment never sweeps up "..._p100" files).
+    backup = job.job_dir(workspace_dir) / "_superseded_production"
+    output = pkg / "output"
+    moved = 0
+    for name in prod_names:
+        candidates = [pkg / f"{name}.conf", pkg / f"{name}.log"]
+        if output.exists():
+            candidates.extend(sorted(output.glob(f"{name}.*")))
+        for src in candidates:
+            if not src.exists():
+                continue
+            rel = src.relative_to(job.job_dir(workspace_dir))
+            dst = backup / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            src.replace(dst)
+            moved += 1
+
+    # Trim the job's segment list back to relaxation.
+    job.segments = [s for s in job.segments if not _is_production_segment_name(s.name, s.stage)]
+
+    # Trim the manifest + drop the production_extension record.
+    if manifest is not None:
+        manifest["segments"] = [
+            s for s in manifest.get("segments", [])
+            if not _is_production_segment_name(s.get("name", ""), s.get("stage", ""))
+        ]
+        manifest.pop("production_extension", None)
+        text = json.dumps(manifest, indent=2)
+        manifest_path.write_text(text)
+        (pkg / "nadoc_md_run.json").write_text(text)
+
+    # Restore a clean completed-relaxation state.
+    job.current_segment_idx = len(job.segments)
+    job.status = MdStatus.completed
+    job.user_stopped = False
+    job.error = None
+    job.failure_kind = None
+    job.save(workspace_dir)
+
+    return {
+        "reverted": True,
+        "removed_segments": prod_names,
+        "moved_files": moved,
+        "backup_dir": str(backup),
+    }

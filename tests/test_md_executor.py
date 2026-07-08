@@ -235,6 +235,48 @@ def test_submit_job_raises_on_sbatch_failure(tmp_path, alpine, resources):
         _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
 
 
+# ── early-stop evaluator staging ───────────────────────────────────────────────
+
+def _staged_basenames(conn):
+    return {r.rsplit("/", 1)[-1] for _, r in conn.puts} | set(conn.put_contents)
+
+
+def _submit(job, tmp_path, alpine, resources):
+    conn = FakeConn(canned={"sbatch": RunResult(0, "Submitted batch job 555", "")})
+    _run(ex.submit_job(job, tmp_path, profile=alpine, resources=resources, conn=conn))
+    return conn
+
+
+def test_no_early_stop_staging_when_off(tmp_path, alpine, resources):
+    conn = _submit(_make_prepared_job(tmp_path), tmp_path, alpine, resources)
+    staged = {r for r in conn.put_contents}
+    assert not any("nadoc_cutoff_eval.py" in r for r in staged)
+
+
+def test_tier_b_stages_only_stdlib_evaluator(tmp_path, alpine, resources):
+    job = _make_prepared_job(tmp_path)
+    job.early_stop_relax = True                     # tier defaults to B
+    conn = _submit(job, tmp_path, alpine, resources)
+    staged = {r for r in conn.put_contents}
+    assert any(r.endswith("/nadoc_cutoff_eval.py") for r in staged)
+    assert not any("nadoc_health_eval.py" in r for r in staged)
+    assert not any(r.endswith("/md_health.py") for r in staged)
+
+
+def test_tier_a_stages_health_scripts(tmp_path, alpine, resources):
+    job = _make_prepared_job(tmp_path)
+    job.early_stop_relax = True
+    job.early_stop_tier = "A"
+    conn = _submit(job, tmp_path, alpine, resources)
+    staged = {r for r in conn.put_contents}
+    assert any(r.endswith("/nadoc_cutoff_eval.py") for r in staged)
+    assert any(r.endswith("/nadoc_health_eval.py") for r in staged)
+    assert any(r.endswith("/md_health.py") for r in staged)
+    # the staged md_health is the verbatim backend module (has run_health_check)
+    md_health_text = next(t for r, t in conn.put_contents.items() if r.endswith("/md_health.py"))
+    assert "def run_health_check" in md_health_text
+
+
 # ── NAMD module discovery ─────────────────────────────────────────────────────
 
 def test_parse_namd_modules_keeps_only_namd_tokens():

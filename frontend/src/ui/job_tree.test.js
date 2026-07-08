@@ -33,6 +33,27 @@ describe('job_tree.flattenJobTree', () => {
     expect(flattenJobTree()).toEqual([])
     expect(flattenJobTree([])).toEqual([])
   })
+  it('reports childCount per node (drives the expand chevron)', () => {
+    const jobs = [
+      { job_id: 'P', created_at: 100 },
+      { job_id: 'R1', parent_job_id: 'P', created_at: 210 },
+      { job_id: 'R2', parent_job_id: 'P', created_at: 220 },
+    ]
+    const rows = flattenJobTree(jobs)
+    const byId = Object.fromEntries(rows.map(r => [r.job.job_id, r.childCount]))
+    expect(byId).toEqual({ P: 2, R1: 0, R2: 0 })
+  })
+  it('collapsedIds hides a subtree but keeps the parent row + its childCount', () => {
+    const jobs = [
+      { job_id: 'P', created_at: 100 },
+      { job_id: 'R1', parent_job_id: 'P', created_at: 210 },
+      { job_id: 'R2', parent_job_id: 'P', created_at: 220 },
+      { job_id: 'Q', created_at: 50 },
+    ]
+    const rows = flattenJobTree(jobs, { collapsedIds: new Set(['P']) })
+    expect(rows.map(r => r.job.job_id)).toEqual(['P', 'Q'])
+    expect(rows.find(r => r.job.job_id === 'P').childCount).toBe(2)
+  })
 })
 
 describe('job_tree.descendantIds', () => {

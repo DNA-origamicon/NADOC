@@ -2221,6 +2221,14 @@ export const setMdEarlyStop      = (id, enabled) => _oxdnaJSON('POST',   `/md/jo
  *  {steps, autostart, continue_from_production}. 409 when the active design ≠ the
  *  job's — hence the doc header must be correct (see block comment above). */
 export const appendMdProduction  = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/production`, body)
+/** Branch a production run off a completed relaxation (or production) as a CHILD job,
+ *  seeded from the parent's equilibrated coords with a distinct velocity seed. Body:
+ *  {steps, length_ns, autostart}. Relaxation stays selectable; children nest under it. */
+export const spawnMdProduction   = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/production-run`, body)
+/** Migrate a legacy job whose production was appended onto the relaxation back to a
+ *  clean relaxation (production artifacts moved to _superseded_production/, not deleted),
+ *  so relax + production become separate entries. */
+export const revertMdProduction  = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/revert-production`)
 export const refitMdJob          = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/refit`, body)
 /** Live-display metadata for a job ({ready, config_path, …}). */
 export const getMdDisplayMeta    = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/display`)
@@ -2242,6 +2250,10 @@ export const getMdRemoteRecommendation = (id, { clusterName = 'alpine', safetyFa
 export const submitMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/submit-remote`, body)
 /** Resume a timed-out remote job from its last checkpoint (new SLURM submission). */
 export const resumeMdJobRemote   = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/resume-remote`, body)
+/** Stage N production replicas (distinct seeds) from a completed parent (offline; no cluster session). */
+export const stageMdEnsemble     = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/ensemble-production`, body)
+/** Submit every prepared replica of a parent to the cluster in one action (needs a live session). */
+export const submitMdEnsemble    = (id, body = {}) => _oxdnaJSON('POST', `/md/jobs/${id}/ensemble-submit`, body)
 /** Current cluster connection status ({state, who, host}); used to gate the Alpine target. */
 export const getClusterStatus    = ()            => _oxdnaJSON('GET',    '/cluster/status')
 

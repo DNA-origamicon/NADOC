@@ -177,21 +177,27 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
     _ctx = null
   }
 
-  async function open(jobId, { clusterName = 'alpine', mode = 'submit' } = {}) {
+  async function open(jobId, { clusterName = 'alpine', mode = 'submit', parentId = null, count = 0, partition = null } = {}) {
     if (!jobId) return
     dispose()
-    _ctx = { jobId, clusterName, editOpen: false, mode }
+    // `jobId` is the job to SIZE against (a replica child in ensemble mode); `parentId`
+    // is what an ensemble submit posts to.  `partition` (ensemble) forces the initial
+    // sizing partition (amilan by default).
+    _ctx = { jobId, clusterName, editOpen: false, mode, parentId, count, partition }
     await _load(null)
   }
 
   /** Fetch the recommendation (optionally forcing a partition) and (re)render.
    *  Resume mode seeds the card with the job's CURRENT resources (`current:true`) so
-   *  the user reviews/edits what they last ran, and skips the already-submitted gate. */
+   *  the user reviews/edits what they last ran, and skips the already-submitted gate.
+   *  Ensemble mode forces the initial partition (amilan) so replicas size on CPU. */
   async function _load(partition) {
     if (!_ctx) return
     const { jobId, clusterName, mode } = _ctx
     const resume = mode === 'resume'
-    const rec = await api.getMdRemoteRecommendation(jobId, { clusterName, partition, current: resume && !partition }).catch(() => null)
+    const ensemble = mode === 'ensemble'
+    const effPartition = partition ?? (ensemble ? (_ctx.partition || 'amilan') : null)
+    const rec = await api.getMdRemoteRecommendation(jobId, { clusterName, partition: effPartition, current: resume && !partition }).catch(() => null)
     if (!_ctx) return   // disposed while awaiting
     if (!rec) {
       _notify(api.lastErrorMessage?.() ?? 'Could not load cluster recommendation', 'error')
@@ -203,7 +209,7 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
       dispose()
       return
     }
-    if (rec.already_submitted && !resume) {
+    if (rec.already_submitted && !resume && !ensemble) {
       _notify(`Already submitted to the cluster as SLURM ${rec.slurm_job_id}.`, 'warn')
       dispose()
       return
@@ -220,8 +226,9 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
   }
 
   function _render(rec) {
-    const { jobId, clusterName, mode } = _ctx
+    const { jobId, clusterName, mode, parentId, count } = _ctx
     const resume = mode === 'resume'
+    const ensemble = mode === 'ensemble'
     const s = formatResourceSummary(rec)
     const r = rec.resources || {}
     const _optsHtml = (opts) => opts
@@ -239,8 +246,9 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
       `background:${_C.bg};border:1px solid ${_C.border};border-radius:6px;padding:16px;width:360px;` +
       `max-height:90vh;overflow-y:auto;font-size:var(--text-xs);color:${_C.text}`
     box.innerHTML = `
-      <div style="font-weight:600;font-size:13px;margin-bottom:10px">${resume ? 'Resume from checkpoint — review' : 'Submit to Alpine — review'}</div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:10px">${ensemble ? `Ensemble production — ${count} replica${count === 1 ? '' : 's'}` : resume ? 'Resume from checkpoint — review' : 'Submit to Alpine — review'}</div>
       <div style="color:${_C.muted};margin-bottom:8px">${rec.design_name ?? jobId}</div>
+      ${ensemble ? `<div style="color:${_C.muted};margin-bottom:8px;line-height:1.4">Each replica runs the same per-replica resources below (shown for one). All ${count} submit as independent SLURM jobs with distinct seeds.</div>` : ''}
       ${resume ? `<div style="color:${_C.warn};margin-bottom:8px;line-height:1.4">Resuming from the last checkpoint (skips completed segments; continues the interrupted one). Adjust walltime/resources below, then Resume.</div>` : ''}
       <div style="background:${_C.panel};border:1px solid ${_C.border};border-radius:4px;padding:8px;margin-bottom:8px">
         ${_row('System', s.system)}
@@ -272,7 +280,7 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
       <div id="mr-err" style="color:${_C.err};min-height:14px;margin-bottom:6px"></div>
       <div style="display:flex;gap:6px;justify-content:flex-end">
         <button id="mr-cancel" style="padding:4px 10px;background:${_C.panel};border:1px solid ${_C.border};color:${_C.text};border-radius:3px;cursor:pointer">Cancel</button>
-        <button id="mr-go" style="padding:4px 10px;background:#12261a;border:1px solid #238636;color:${_C.ok};border-radius:3px;cursor:pointer;font-weight:600">${resume ? 'Resume job' : 'Submit job'}</button>
+        <button id="mr-go" style="padding:4px 10px;background:#12261a;border:1px solid #238636;color:${_C.ok};border-radius:3px;cursor:pointer;font-weight:600">${ensemble ? `Submit ${count} replica${count === 1 ? '' : 's'}` : resume ? 'Resume job' : 'Submit job'}</button>
       </div>`
     _overlay.appendChild(box)
     document.body.appendChild(_overlay)
@@ -309,8 +317,20 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
       const goBtn = box.querySelector('#mr-go')
       goBtn.disabled = true
       errEl.style.color = _C.muted
-      errEl.textContent = resume ? 'Resuming from checkpoint…' : 'Staging package + submitting…'
+      errEl.textContent = ensemble ? `Submitting ${count} replicas…`
+                        : resume ? 'Resuming from checkpoint…' : 'Staging package + submitting…'
       try {
+        if (ensemble) {
+          const result = await api.submitMdEnsemble(parentId, { ...payload, partition: _ctx.partition || 'amilan' })
+          if (!result) throw new Error(api.lastErrorMessage?.() ?? 'Ensemble submit failed')
+          const nSub = result.submitted?.length ?? 0
+          const nErr = result.errors?.length ?? 0
+          _notify(`Submitted ${nSub}/${nSub + nErr} replica${nSub === 1 ? '' : 's'} on Alpine${nErr ? ` (${nErr} failed)` : ''}`,
+                  nErr ? 'warn' : 'ok')
+          dispose()
+          onSubmitted(parentId, result)
+          return
+        }
         const result = resume
           ? await api.resumeMdJobRemote(jobId, payload)
           : await api.submitMdJobRemote(jobId, payload)
@@ -321,7 +341,7 @@ export function initMdSubmitReview({ api, onSubmitted = () => {}, toast = null }
       } catch (err) {
         goBtn.disabled = false
         errEl.style.color = _C.err
-        errEl.textContent = err?.message || (resume ? 'Resume failed' : 'Submit failed')
+        errEl.textContent = err?.message || (ensemble ? 'Ensemble submit failed' : resume ? 'Resume failed' : 'Submit failed')
       }
     }
   }

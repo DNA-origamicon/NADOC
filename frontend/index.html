@@ -4393,11 +4393,17 @@
                     <span style="font-size:var(--text-xs);color:#8b949e">Total time</span>
                     <span id="md-jobs-prod-time" style="font-size:var(--text-xs);color:#c9d1d9;font-family:var(--font-mono)">1.000 ns</span>
                   </div>
-                  <label style="display:flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;color:#8b949e;cursor:pointer">
-                    <input id="md-jobs-prod-continue" type="checkbox" style="accent-color:#3fb950">
-                    Continue from latest production checkpoint
-                  </label>
+                  <div style="margin-top:5px;font-size:10px;color:#6e7681;line-height:1.35">
+                    Each production spawns a <strong>child job</strong> under the relaxation
+                    (own seed) — the relaxation stays selectable and you can fan out several.
+                    To chain, select a completed production child and run again.
+                  </div>
                   <div id="md-jobs-prod-status" style="font-size:10px;color:#484f58;margin-top:3px;min-height:12px"></div>
+                  <button id="md-jobs-revert-prod-btn"
+                          title="This job's production was appended onto the relaxation (old layout). Peel it back into a clean relaxation so relax + production show as separate entries; the partial production is moved to a _superseded_production/ backup, not deleted."
+                          style="display:none;width:100%;margin-top:5px;font-size:10px;padding:4px;background:#1c2333;border:1px solid #30456d;color:#8fb3ff;border-radius:3px;cursor:pointer">
+                    ⧉ Separate production into its own run
+                  </button>
                 </div>
               </div>
 
@@ -4662,6 +4668,27 @@
                   <button id="md-jobs-stop-btn"
                           style="font-size:var(--text-xs);padding:3px 8px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer;display:none">
                     ■ Stop
+                  </button>
+                </div>
+
+                <!-- Ensemble roll-up: the replicas nested under this parent (or, when a
+                     replica is selected, its siblings) with their SLURM states, so the
+                     parent selection reads as the ensemble at a glance instead of only the
+                     underlying relaxation. Populated by _renderEnsembleRollup. -->
+                <div id="md-jobs-ensemble-rollup" style="display:none;margin-bottom:6px"></div>
+
+                <!-- Ensemble production on Alpine: stage N production replicas (distinct
+                     seeds) from THIS completed relaxation, fanned out across free CPU cores.
+                     Shown only for a completed, non-replica job. -->
+                <div id="md-jobs-ensemble-wrap"
+                     style="display:none;align-items:center;gap:6px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e;flex-wrap:wrap">
+                  <span title="Run several independent NAMD production copies with different random seeds to sample an ensemble, using Alpine's free CPU cores.">Ensemble replicas:</span>
+                  <input id="md-jobs-ensemble-count" type="number" min="1" max="64" value="4"
+                         style="width:48px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  <button id="md-jobs-ensemble-btn"
+                          title="Stage N independent production replicas (distinct seeds) on the Alpine cluster"
+                          style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">
+                    ☁ Ensemble on Alpine
                   </button>
                 </div>
 

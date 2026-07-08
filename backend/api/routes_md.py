@@ -39,6 +39,7 @@ from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     SUPPORTED_PROTOCOLS,
     SegmentSpec,
+    build_production_conf,
     external_forces_block,
     namd_efield_vector,
     prepare_mgh_slow_release,
@@ -158,6 +159,15 @@ class CreateJobRequest(BaseModel):
                     "remaining p50/p100 chunks once its first chunk shows an energy+WC "
                     "plateau (multi-criteria, backend/core/md_cutoff.py). Never skips "
                     "production/qualification stages. Off by default.",
+    )
+    early_stop_tier: str = Field(
+        "B",
+        description="Remote (Alpine) early-stop criterion tier. 'B' (default) = "
+                    "energy(+volume) only, stdlib on-node evaluator, well-restrained "
+                    "stages only. 'A' = energy AND WC base-pairing (full local parity) "
+                    "via an on-node MDAnalysis health step (numpy/scipy/MDAnalysis must "
+                    "be on the node python; fails safe to no-skip otherwise). Ignored "
+                    "for local runs.",
     )
 
 
@@ -672,92 +682,15 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   structure_psf: Optional[str] = None,
                                   anchors_file: Optional[str] = None,
                                   field: Optional[dict] = None) -> str:
-    bx, by, bz = box
-    cx, cy, cz = bx / 2, by / 2, bz / 2
-    extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
-    # Fast mode = the fast-relaxation win applied to unrestrained production.  The
-    # HMR PSF (non-water hydrogens x3) lets ``rigidBonds all`` run stably at a 4 fs
-    # timestep; ``GPUresident on`` keeps integration + bonded forces on the GPU;
-    # light multiple-timestepping (fullElectFrequency 2) skips a PME evaluation
-    # every other step.  Together ~10x throughput vs the 1 fs / rigidBonds none /
-    # CPU-integrated conservative path (1.3 -> >16 ns/day).  Electrostatics (PME
-    # grid, cutoff, barostat coupling) are LEFT IDENTICAL to the conservative run,
-    # so the production ensemble is unchanged — only integrator/throughput knobs
-    # move.  GPUresident is sound here because the solvated box is capped (no
-    # covalent bond wraps the periodic image).
-    # Anchors + E-field carry into the unrestrained run — where a field's deflection
-    # actually develops.  Dropping them here would silently un-anchor the field job and
-    # let the uniform force stream the whole structure across the box (COM drift).
-    ext_forces = external_forces_block(anchors_file, field)
-    if fast:
-        psf = structure_psf or f"{name_stem}.psf"
-        rigid, ts, gpu_line = "all", 4.0, "GPUresident        on\n"
-        # fullElectFrequency 1 at 4 fs → reciprocal PME every 4 fs, matching the
-        # Aksimentiev reference (2 fs x 2).  fullElect 2 here would be PME every
-        # 8 fs, past the r-RESPA resonance-stability limit (~4 fs) — and it only
-        # bought ~0.7 ns/day.  stepspercycle 10 → 40 fs pairlist rebuild.
-        nbf, fef, spc = 1, 1, 10
-    else:
-        psf = f"{name_stem}.psf"
-        rigid, ts, gpu_line = "none", 1.0, ""
-        nbf, fef, spc = 1, 1, 10
-    return f"""\
-structure          {psf}
-coordinates        {name_stem}.pdb
-
-seed               54321
-paraTypeCharmm     on
-parameters         forcefield/par_all36_na.prm
-parameters         forcefield/toppar_water_ions_cufix.str
-parameters         forcefield/par_stub_ions_nbfix.str
-{extras}
-cellBasisVector1   {bx:.3f}  0.000    0.000
-cellBasisVector2   0.000    {by:.3f}  0.000
-cellBasisVector3   0.000    0.000    {bz:.3f}
-cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}
-
-wrapAll            on
-wrapWater          on
-exclude            scaled1-4
-oneFourScaling     1.0
-switching          on
-switchdist         10.0
-cutoff             12.0
-pairlistdist       14.0
-PME                yes
-PMEGridSpacing     1.0
-rigidBonds         {rigid}
-rigidTolerance     1.0e-8
-timestep           {ts:g}
-nonbondedFreq      {nbf}
-fullElectFrequency {fef}
-stepspercycle      {spc}
-{gpu_line}langevin           on
-langevinTemp       300
-langevinDamping    5
-langevinHydrogen   off
-useGroupPressure   yes
-useFlexibleCell    no
-useConstantArea    no
-langevinPiston     on
-langevinPistonTarget  1.01325
-langevinPistonPeriod  200.0
-langevinPistonDecay   100.0
-langevinPistonTemp 300
-outputEnergies     100
-xstFreq            1000
-restartfreq        1000
-binaryrestart      yes
-constraints        off
-{ext_forces}outputName         output/{spec.name}
-dcdFile            output/{spec.name}.dcd
-dcdFreq            {spec.dcd_freq}
-xstFile            output/{spec.name}.xst
-binCoordinates     output/{spec.previous}.coor
-binVelocities      output/{spec.previous}.vel
-extendedSystem     output/{spec.previous}.xsc
-run                {spec.steps}
-"""
+    # Thin delegate to the shared, parameterized builder in md_protocols (the ensemble
+    # path calls the same builder with a per-replica seed + start_checkpoint).  Defaults
+    # here reproduce the original template byte-for-byte; anchors_file/field weave the
+    # external-forces block in for anchored/E-field production runs.
+    return build_production_conf(
+        spec, name_stem, box, mgh_extrabonds,
+        fast=fast, structure_psf=structure_psf,
+        anchors_file=anchors_file, field=field,
+    )
 
 
 def _seed_production_conf(spec: SegmentSpec, name_stem: str,
@@ -1231,6 +1164,7 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
     job.early_stop_relax = body.early_stop_relax
+    job.early_stop_tier = (body.early_stop_tier or "B").upper()
     # Capture the request so a later refit can rebuild the job with one knob moved.
     job.prep_params = body.model_dump()
     job.status = MdStatus.preparing
@@ -1591,6 +1525,297 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
         "steps": total_steps,
         "length_ns": length_ns,
         "autostart": body.autostart,
+    }
+
+
+class ProductionRunRequest(BaseModel):
+    """Spawn ONE production run as a child job seeded from a completed parent.
+
+    Mirrors the oxDNA ``/oxdna/jobs/{id}/run`` child-job model: the relaxation stays a
+    distinct, selectable entry and each production nests under it, so the user can fan
+    out several independent productions (distinct velocity seeds) from one equilibrated
+    structure — or chain one (spawn a production off a completed production child)."""
+    steps: Optional[int] = Field(None, ge=100, le=50_000_000,
+                                 description="Raw integration steps (falls back to length_ns)")
+    length_ns: Optional[float] = Field(None, gt=0.0, le=100.0,
+                                       description="Simulated ns (used if steps omitted)")
+    autostart: bool = Field(True, description="Start the child right away (local target only)")
+    execution_target: Optional[str] = Field(
+        None, description="'local' or 'alpine'; defaults to the parent's target. An "
+                          "'alpine' child is left queued for the submit-review card.")
+    cluster_name: Optional[str] = Field(None, description="Cluster for an alpine target")
+
+
+def _production_seed_checkpoint(parent: MdJob) -> tuple[Optional[SegmentSpec], str, str]:
+    """Resolve the coords a production child should seed from: ``(spec, warning, reason)``.
+
+    A production child (chaining) seeds from the parent's completed production stage;
+    a relaxation parent seeds from its equilibrated (restraint-released) checkpoint."""
+    if parent.run_kind == "production":
+        _idx, spec, reason = _completed_production_checkpoint(parent)
+        return spec, "", reason
+    _idx, spec, reason, warning = _production_ready_checkpoint(parent)
+    return spec, warning, reason
+
+
+@router.post("/md/jobs/{parent_id}/production-run")
+async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dict:
+    """Branch a production run off a completed relaxation (or production) as a CHILD job.
+
+    The parent relaxation is left untouched and stays selectable; the child is a
+    production-only package seeded from the parent's equilibrated coordinates with a
+    distinct NAMD velocity seed (``reinitvels``), so repeated calls fan out independent
+    productions that render nested under the parent (mirroring oxDNA's child runs)."""
+    from backend.core import md_ensemble
+
+    parent = _load_job(parent_id)
+    if is_running(parent_id) or parent.status != MdStatus.completed:
+        raise HTTPException(
+            400, "Production requires a completed relaxation (or production) to seed from.")
+    _assert_md_job_current(parent)
+
+    spec, warning, reason = _production_seed_checkpoint(parent)
+    if spec is None:
+        raise HTTPException(
+            400, reason or "No equilibrated checkpoint is available to seed production from.")
+    output = parent.package_dir(_workspace()) / "output"
+    if not all((output / f"{spec.name}.{ext}").exists() for ext in ("coor", "xsc")):
+        raise HTTPException(400, f"Checkpoint {spec.name} coordinates were not found locally.")
+
+    plan = _production_fast_plan(parent, ProductionRequest(
+        steps=body.steps, length_ns=body.length_ns, autostart=False,
+    ))
+
+    # Distinct velocity seed per production child of this parent, so a fan-out samples
+    # independent trajectories from the same equilibrated coords.  Replica 0 uses the
+    # same 54321 as the historical single-run production path.
+    siblings = [
+        j for j in MdJob.list_jobs(_workspace())
+        if j.parent_job_id == parent.job_id and j.run_kind == "production"
+    ]
+    index = len(siblings)
+    seed = md_ensemble.generate_seeds(md_ensemble._DEFAULT_BASE_SEED, index + 1)[-1]
+
+    child = new_job(
+        design_name=parent.design_name,
+        protocol=parent.protocol,
+        name_stem=parent.name_stem,
+        package_subdir=parent.package_subdir,
+        threads=parent.threads,
+        devices=parent.devices,
+        design_source_path=parent.design_source_path,
+        parent_job_id=parent.job_id,
+        ensemble_seed=seed,
+        ensemble_index=index,
+        run_kind="production",
+    )
+    # Run target comes from the request (the panel's Local/Alpine radio), NOT the
+    # parent — a locally-relaxed structure can be produced on Alpine and vice-versa.
+    target = (body.execution_target or parent.execution_target or "local").lower()
+    child.execution_target = target
+    child.cluster_name = (
+        body.cluster_name or (parent.cluster_name if target == "alpine" else None)
+        or ("alpine" if target == "alpine" else None))
+    # Carry the parent's staleness provenance so a production child never spuriously
+    # flags out-of-date — it derives from the parent's frozen package, not the live design.
+    child.design_fingerprint = parent.design_fingerprint
+    child.feature_log_position = parent.feature_log_position
+
+    md_ensemble.build_replica_package(
+        parent, child,
+        seed=seed, index=index,
+        total_steps=plan["total_steps"], length_ns=plan["length_ns"],
+        timestep_fs=plan["timestep_fs"], fast=plan["fast"],
+        ready_checkpoint=spec.name, workspace=_workspace(),
+    )
+
+    # Local target autostarts the NAMD run immediately; an Alpine child is left
+    # 'queued' so the submit-review card can size resources + hand it to SLURM
+    # (mirrors the relaxation + ensemble Alpine flow).
+    if body.autostart and target == "local":
+        child.status = MdStatus.running
+        child.save(_workspace())
+        start_job(child, _workspace())
+
+    return {
+        "ok": True,
+        "job": child.to_dict(),
+        "parent_job_id": parent.job_id,
+        "seed": seed,
+        "index": index,
+        "length_ns": plan["length_ns"],
+        "steps": plan["total_steps"],
+        "warning": warning,
+        "autostart": bool(body.autostart),
+    }
+
+
+@router.post("/md/jobs/{job_id}/revert-production")
+async def revert_md_production(job_id: str) -> dict:
+    """Migrate a legacy job whose production was APPENDED onto the relaxation (the old
+    same-job layout) back to a clean completed relaxation, so relax + production become
+    separate entries.  Non-destructive — the production confs/output are moved to
+    ``_superseded_production/`` in the job dir, not deleted.  After this the Production
+    button spawns a proper child run (``spawn_md_production``)."""
+    from backend.core.md_job import revert_appended_production
+
+    job = _load_job(job_id)
+    if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
+        raise HTTPException(400, "Stop the job before separating its production run.")
+    report = revert_appended_production(job, _workspace())
+    if not report.get("reverted"):
+        raise HTTPException(400, report.get("reason", "Nothing to revert on this job."))
+    return {"ok": True, "job": _load_job(job_id).to_dict(), **report}
+
+
+class EnsembleProductionRequest(BaseModel):
+    """Stage N independent NAMD production replicas (distinct seeds) from a parent."""
+    n_replicas: int = Field(4, ge=1, le=64, description="Number of independent replicas")
+    steps: Optional[int] = Field(None, ge=100, le=50_000_000,
+                                 description="Raw integration steps per replica")
+    length_ns: Optional[float] = Field(None, gt=0.0, le=100.0,
+                                       description="Simulated ns per replica (used if steps omitted)")
+    base_seed: int = Field(54321, description="First NAMD seed; replica i uses base_seed + i")
+    cluster_name: str = Field("alpine")
+    partition: str = Field("amilan", description="Default SLURM partition (CPU by default)")
+    safety_factor: float = Field(1.5, gt=0.0)
+
+
+@router.post("/md/jobs/{parent_id}/ensemble-production")
+async def stage_md_ensemble(parent_id: str, body: EnsembleProductionRequest) -> dict:
+    """Create N production-only replica child jobs from a completed relaxation parent.
+
+    Offline file ops — no cluster connection needed.  Each replica shares the parent's
+    equilibrated coordinates but reinitialises velocities from its own seed, and is left
+    PREPARED (``queued``, no SLURM id) for a subsequent one-shot ``ensemble-submit``.
+    """
+    from backend.core import md_ensemble
+
+    parent = _load_job(parent_id)
+    if parent.status != MdStatus.completed:
+        raise HTTPException(400, "The parent relaxation must be completed before staging an ensemble.")
+
+    _idx, spec, reason, _warning = _production_ready_checkpoint(parent)
+    if spec is None:
+        raise HTTPException(400, reason or "No equilibrated checkpoint is available on the parent.")
+    output = parent.package_dir(_workspace()) / "output"
+    if not all((output / f"{spec.name}.{ext}").exists() for ext in ("coor", "xsc")):
+        raise HTTPException(400, f"Equilibrated checkpoint {spec.name} coordinates were not found locally.")
+
+    plan = _production_fast_plan(parent, ProductionRequest(
+        steps=body.steps, length_ns=body.length_ns, autostart=False,
+    ))
+    seeds = md_ensemble.generate_seeds(body.base_seed, body.n_replicas)
+
+    children = []
+    for i, seed in enumerate(seeds):
+        child = new_job(
+            design_name=parent.design_name,
+            protocol=parent.protocol,
+            name_stem=parent.name_stem,
+            package_subdir=parent.package_subdir,
+            threads=parent.threads,
+            devices=parent.devices,
+            design_source_path=parent.design_source_path,
+            parent_job_id=parent.job_id,
+            ensemble_seed=seed,
+            ensemble_index=i,
+        )
+        child.execution_target = "alpine"
+        child.cluster_name = body.cluster_name
+        # Carry the parent's staleness provenance so replica rows never spuriously flag
+        # out-of-date — they derive from the parent's frozen package, not the live design.
+        child.design_fingerprint = parent.design_fingerprint
+        child.feature_log_position = parent.feature_log_position
+        md_ensemble.build_replica_package(
+            parent, child,
+            seed=seed, index=i,
+            total_steps=plan["total_steps"], length_ns=plan["length_ns"],
+            timestep_fs=plan["timestep_fs"], fast=plan["fast"],
+            ready_checkpoint=spec.name, workspace=_workspace(),
+        )
+        children.append(child.to_dict())
+
+    return {
+        "ok": True,
+        "parent_job_id": parent_id,
+        "n_replicas": body.n_replicas,
+        "seeds": seeds,
+        "partition": body.partition,
+        "length_ns": plan["length_ns"],
+        "children": children,
+    }
+
+
+class EnsembleSubmitRequest(BaseModel):
+    """Submit every prepared replica of a parent to the cluster in one action."""
+    cluster_name: str = Field("alpine")
+    resources: Optional[dict] = Field(
+        None, description="Shared SLURM resources applied to every replica (override; "
+                          "omit to auto-size on the partition below).",
+    )
+    partition: str = Field("amilan")
+    safety_factor: float = Field(1.5, gt=0.0)
+
+
+@router.post("/md/jobs/{parent_id}/ensemble-submit")
+async def submit_md_ensemble(parent_id: str, body: EnsembleSubmitRequest) -> dict:
+    """Submit every prepared, not-yet-submitted replica of a parent (needs a live session).
+
+    Replicas are identical size, so resources are sized ONCE (default amilan CPU) and
+    applied to all.  One child's failure doesn't abort the rest — the response lists
+    per-replica slurm ids + errors, and each is submitted as its own sbatch (own SLURM
+    id) so the supervisor tracks them independently.
+    """
+    from backend.core import cluster_config, cluster_ssh, md_executor
+
+    _load_job(parent_id)  # 404 if the parent is gone
+    mgr = cluster_ssh.get_manager()
+    if not mgr.is_connected():
+        raise HTTPException(409, "Not connected to a cluster — connect first (Duo).")
+
+    profiles = cluster_config.load_profiles(_workspace())
+    profile = profiles.get(body.cluster_name)
+    if profile is None:
+        raise HTTPException(404, f"Unknown cluster profile {body.cluster_name!r}.")
+
+    replicas = [
+        j for j in MdJob.list_jobs(_workspace())
+        if j.parent_job_id == parent_id and j.ensemble_seed is not None
+        and j.execution_target == "alpine" and not j.slurm_job_id
+    ]
+    replicas.sort(key=lambda j: (j.ensemble_index if j.ensemble_index is not None else 0))
+    if not replicas:
+        raise HTTPException(400, "No prepared, unsubmitted replicas for this parent.")
+
+    if body.resources:
+        resources = body.resources
+    else:
+        sizing = _size_prepared_job(replicas[0], profile, body.safety_factor, partition=body.partition)
+        if sizing is None:
+            raise HTTPException(400, "Replica package is not prepared yet — cannot size resources.")
+        resources = sizing["resources"]
+
+    submitted, errors = [], []
+    for child in replicas:
+        try:
+            job = await md_executor.submit_job(
+                child, _workspace(), profile=profile, resources=resources, conn=mgr,
+            )
+            submitted.append({"job_id": job.job_id, "slurm_job_id": job.slurm_job_id})
+        except cluster_ssh.ClusterSSHError as exc:
+            _record_submit_failure(child, f"Cluster transport error: {exc}")
+            errors.append({"job_id": child.job_id, "error": f"Cluster transport error: {exc}"})
+        except (ValueError, RuntimeError) as exc:
+            _record_submit_failure(child, str(exc))
+            errors.append({"job_id": child.job_id, "error": str(exc)})
+
+    return {
+        "ok": not errors,
+        "parent_job_id": parent_id,
+        "submitted": submitted,
+        "errors": errors,
+        "resources": resources,
     }
 
 

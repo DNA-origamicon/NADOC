@@ -125,6 +125,117 @@ export function mdChildRowLabel(job, index) {
   return `Refit ${index}`
 }
 
+/** Pure: is this job a SEEDED child (fanned out from a parent with a distinct NAMD
+ *  velocity seed)?  Covers both an Alpine ensemble replica and a local production child;
+ *  both indent + collapse under the parent, so the tree logic keys off this. */
+export function mdIsEnsembleReplica(job) {
+  return job?.ensemble_seed != null
+}
+
+/** Pure: is this job a local production run branched off a completed parent (its own
+ *  seed + coords, nested under the relaxation)?  Distinguishes it from an Alpine
+ *  ensemble replica so the row reads "Production N" rather than "Replica N". */
+export function mdIsProductionChild(job) {
+  return job?.run_kind === 'production'
+}
+
+/** Pure: is this a LEGACY job whose production was appended onto the relaxation (the
+ *  old same-job layout, before production became a child job)?  True for a root
+ *  relaxation (no parent, not itself a production child) that carries a production
+ *  segment — such a job can be reverted to a clean relaxation via /revert-production. */
+export function mdHasAppendedProduction(job) {
+  if (!job || job.parent_job_id || job.run_kind === 'production') return false
+  return (job.segments ?? []).some(s =>
+    /production/i.test(s?.name ?? '') || /production/i.test(s?.stage ?? ''))
+}
+
+/** Pure: list-row label for a production child — "Production N · seed S" (N is 1-based
+ *  from ensemble_index; falls back to the global run index). */
+export function mdProductionRowLabel(job, index) {
+  const n = (job?.ensemble_index != null ? job.ensemble_index + 1 : index)
+  return `Production ${n} · seed ${job?.ensemble_seed}`
+}
+
+/** Pure: does this job have ensemble replica children (so its row is the one
+ *  collapsible ensemble item)? */
+export function mdIsEnsembleParent(job, jobs) {
+  return (jobs ?? []).some(j => j?.parent_job_id === job?.job_id && mdIsEnsembleReplica(j))
+}
+
+/** Pure: list-row label for an ensemble replica — "Replica N · seed S" (N is 1-based
+ *  from ensemble_index; falls back to the global run index). */
+export function mdReplicaRowLabel(job, index) {
+  const n = (job?.ensemble_index != null ? job.ensemble_index + 1 : index)
+  return `Replica ${n} · seed ${job?.ensemble_seed}`
+}
+
+/** Pure: one-line summary of a parent's seeded children for the collapsed parent row,
+ *  e.g. "⧉ 8 replicas · 2 running · 5 queued · 1 done" (Alpine ensemble) or
+ *  "⧉ 3 production runs · 1 running · 2 done" (local production fan-out).  Returns ''
+ *  when the job has no seeded children. */
+export function ensembleChildSummary(job, jobs) {
+  const reps = (jobs ?? []).filter(j => j?.parent_job_id === job?.job_id && mdIsEnsembleReplica(j))
+  if (!reps.length) return ''
+  let running = 0, queued = 0, done = 0, failed = 0
+  for (const r of reps) {
+    if (r.status === 'running') running++
+    else if (r.status === 'completed') done++
+    else if (r.status === 'failed' || r.status === 'stopped') failed++
+    else queued++   // queued / preparing / paused (awaiting or in the SLURM queue)
+  }
+  const noun = reps.every(mdIsProductionChild) ? 'production run' : 'replica'
+  const parts = [`⧉ ${reps.length} ${noun}${reps.length === 1 ? '' : 's'}`]
+  if (running) parts.push(`${running} running`)
+  if (queued) parts.push(`${queued} queued`)
+  if (done) parts.push(`${done} done`)
+  if (failed) parts.push(`${failed} failed`)
+  return parts.join(' · ')
+}
+
+/** Pure: the seeded children (ensemble replicas / production fan-out) of a parent,
+ *  sorted by ensemble_index then creation, for the detail roll-up. */
+export function ensembleReplicas(job, jobs) {
+  return (jobs ?? [])
+    .filter(j => j?.parent_job_id === job?.job_id && mdIsEnsembleReplica(j))
+    .sort((a, b) =>
+      (a.ensemble_index ?? 0) - (b.ensemble_index ?? 0) ||
+      (a.created_at ?? 0) - (b.created_at ?? 0))
+}
+
+/** Pure: compact per-replica state text for the ensemble roll-up — the SLURM state for
+ *  a remote replica (with its id), else the plain status. */
+export function mdReplicaStateText(job) {
+  if (job?.execution_target === 'alpine') {
+    if (mdRemoteAwaitingSubmit(job)) return 'awaiting submit'
+    if (job?.slurm_state) return `${job.slurm_state}${job?.slurm_job_id ? ` · ${job.slurm_job_id}` : ''}`
+    if (job?.slurm_job_id) return `${job.status} · SLURM ${job.slurm_job_id}`
+  }
+  return job?.status ?? ''
+}
+
+/** Pure: does this job's health/metrics come from LOCAL files the panel can read?
+ *  A remote (Alpine) run streams nothing locally while in flight — its health/metrics
+ *  land only after it finishes and results are fetched (health_samples populated).  So a
+ *  remote job has local readouts only once it carries samples; before that the metric
+ *  grid + health spinner would spin forever on data that lives on the cluster. */
+export function mdHasLocalReadouts(job) {
+  if (job?.execution_target !== 'alpine') return true
+  return (job?.health_samples?.length ?? 0) > 0
+}
+
+/** Pure: one-line note for a remote job whose live metrics aren't available locally
+ *  (in flight on the cluster), or null when local readouts apply / the awaiting-submit
+ *  status line already covers it. */
+export function mdRemoteReadoutNote(job) {
+  if (mdHasLocalReadouts(job) || mdRemoteAwaitingSubmit(job)) return null
+  const slurm = job?.slurm_job_id ? ` (SLURM ${job.slurm_job_id})` : ''
+  if (job?.status === 'running' || (job?.execution_target === 'alpine' && job?.status === 'queued')) {
+    return `Running on Alpine${slurm}. Live metrics aren’t streamed for cluster runs — ` +
+           `health and graphs appear after the run completes and results are fetched.`
+  }
+  return `On Alpine${slurm} — no local metrics for this run.`
+}
+
 /** Pure: classify a segment's timeline glyph.  Separated from colour/symbol mapping
  *  so the decision is unit-testable.  `skipped` (the early-stop accelerator marked a
  *  redundant chunk done without running it) takes precedence over everything — it is
@@ -242,7 +353,7 @@ export function mdHasMetrics(job, persisted = null) {
  *  every poll (visible stutter).  Mirrors the oxDNA panel. */
 export function mdListSignature(jobs, selectedId) {
   return (jobs ?? [])
-    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}`)
+    .map(j => `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}:${j.ensemble_seed ?? ''}`)
     .join('|') + `#${selectedId ?? ''}`
 }
 
@@ -290,6 +401,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
   const runTargetHint   = document.getElementById('md-run-target-hint')
   const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
+  const ensembleBtn   = document.getElementById('md-jobs-ensemble-btn')
+  const ensembleCount = document.getElementById('md-jobs-ensemble-count')
   const resumeBtn     = document.getElementById('md-jobs-resume-btn')
   const resumeHistWrap   = document.getElementById('md-jobs-resume-history-wrap')
   const resumeHistToggle = document.getElementById('md-jobs-resume-history-toggle')
@@ -355,9 +468,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const prodBox       = document.getElementById('md-jobs-production')
   const prodStepsInput = document.getElementById('md-jobs-prod-steps')
   const prodTimeEl    = document.getElementById('md-jobs-prod-time')
-  const prodContinueChk = document.getElementById('md-jobs-prod-continue')
   const prodBtn       = document.getElementById('md-jobs-prod-btn')
   const prodStatus    = document.getElementById('md-jobs-prod-status')
+  const revertProdBtn = document.getElementById('md-jobs-revert-prod-btn')
+  const ensembleRollupEl = document.getElementById('md-jobs-ensemble-rollup')
 
   // Visualization tools (flexibility map + trajectory scrub) — mirror the oxDNA panel.
   const flexToggle   = document.getElementById('md-jobs-flex-toggle')
@@ -391,6 +505,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _prewarmKey   = null
   let _listSig      = null   // last-rendered list signature (avoids spinner-restart churn)
   let _legendEl     = null   // status-symbol legend, inserted once after the list
+  const _collapsedParents = new Set()   // parent job_ids whose child rows are hidden (chevron)
+  const _autoCollapsed    = new Set()   // ensemble parents we've already default-collapsed once
   let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
   let _inheritedSeedShown = null  // oxDNA job id whose seed positions are currently displayed
   let _mdFrameShown = false       // has a real MD frame been displayed for the current display job?
@@ -626,6 +742,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (progressEl) progressEl.textContent = ''
     if (timelineEl) timelineEl.textContent = ''
     if (metricsEl) metricsEl.textContent = ''
+    if (ensembleRollupEl) { ensembleRollupEl.style.display = 'none'; ensembleRollupEl.innerHTML = '' }
     _setHealthSpinner(false)
     _renderProductionControls(null)
     _updateVizToggles(null)   // no job selected → only "Off" is selectable
@@ -639,7 +756,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _resetControlsToDefaults() {
     resetControlsToDefaults([
       presetSel, threadsInput, devicesInput, saltModeSel, mgInput, naclInput,
-      paddingInput, watershellInput, minstepsInput, autostartChk, prodStepsInput, prodContinueChk,
+      paddingInput, watershellInput, minstepsInput, autostartChk, prodStepsInput,
     ])
     _threadsInit = false
     _applySaltMode()
@@ -688,27 +805,33 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }
 
   function _renderProductionControls(job, meta = _displayMeta) {
+    // Legacy-migration button: only for a root job whose production was appended
+    // onto the relaxation (old same-job layout).  Peels it back to a clean relaxation.
+    if (revertProdBtn) revertProdBtn.style.display = mdHasAppendedProduction(job) ? '' : 'none'
     if (!job) {
       _setProductionEnabled(false)
       _setProductionStatus('Select a relaxed job to enable production', _C.dim)
       return
     }
-    const terminalOk = ['completed', 'queued', 'stopped', 'failed'].includes(job.status)
-    const continueMode = !!prodContinueChk?.checked
-    const ready = terminalOk && (continueMode ? !!meta?.production_continue_available : !!meta?.production_ready)
+    // Production spawns a CHILD job seeded from the selected job's equilibrated coords.
+    // Enable off a completed relaxation (production_ready) OR a completed production
+    // (production_continue_available → chaining a fresh run off that run's end state).
+    const terminalOk = job.status === 'completed'
+    const chainMode = !meta?.production_ready && !!meta?.production_continue_available
+    const ready = terminalOk && (!!meta?.production_ready || !!meta?.production_continue_available)
     if (prodBox) prodBox.style.display = ''
     _setProductionEnabled(ready)
     _updateProductionTime()
     if (!ready) {
-      const reason = continueMode
-        ? (meta?.production_continue_reason || 'No completed production run is available to continue from')
-        : (meta?.production_ready_reason || 'Production unlocks after minimization and restraint release pass health checks')
+      const reason = meta?.production_ready_reason
+        || 'Production unlocks after minimization and restraint release complete'
       _setProductionStatus(reason, _C.dim)
       return
     }
-    const checkpoint = continueMode ? meta.production_continue_checkpoint : meta.production_checkpoint
-    const readyText = `${continueMode ? 'Continue' : 'Ready'} from ${checkpoint}; ${_productionSteps().toLocaleString()} steps = ${_productionNs().toFixed(3)} ns`
-    if (!continueMode && meta.production_warning) {
+    const checkpoint = chainMode ? meta.production_continue_checkpoint : meta.production_checkpoint
+    const verb = chainMode ? 'Chain a new production child from' : 'Spawn a production child from'
+    const readyText = `${verb} ${checkpoint}; ${_productionSteps().toLocaleString()} steps = ${_productionNs().toFixed(3)} ns`
+    if (!chainMode && meta.production_warning) {
       _setProductionStatus(`${readyText}. Warning: ${meta.production_warning}`, _C.warn)
       return
     }
@@ -717,10 +840,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   prodStepsInput?.addEventListener('input', () => {
     _updateProductionTime()
-    const job = _jobs.find(j => j.job_id === _selectedId)
-    _renderProductionControls(job)
-  })
-  prodContinueChk?.addEventListener('change', () => {
     const job = _jobs.find(j => j.job_id === _selectedId)
     _renderProductionControls(job)
   })
@@ -1229,6 +1348,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   })
 
+  revertProdBtn?.addEventListener('click', async () => {
+    if (!_selectedId) return
+    if (!window.confirm(
+      'Separate this job\'s appended production into its own run?\n\n' +
+      'The relaxation becomes a clean completed job you can spawn fresh production ' +
+      'children from. The existing (partial) production trajectory is MOVED to a ' +
+      '_superseded_production/ backup folder in the job — not deleted.')) return
+    revertProdBtn.disabled = true
+    try {
+      const d = await api.revertMdProduction(_selectedId)
+      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
+      showToast(`Production separated (${d.moved_files} files backed up)`, 'ok')
+      await _fetchJobs()
+      _selectJob(_selectedId)   // now a clean relaxation
+    } catch (err) {
+      showToast(`Separate failed: ${err.message}`, 'error')
+    } finally {
+      revertProdBtn.disabled = false
+    }
+  })
+
   function _setArchiveProgress(st) {
     if (!archiveProgressEl) return
     if (!st) { archiveProgressEl.style.display = 'none'; archiveProgressEl.textContent = ''; return }
@@ -1266,28 +1406,47 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       actionLabel: 'a production run',
     })
     if (!proceed) return
-    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
+    // The Local/Alpine radio decides where THIS production runs (independent of where
+    // the relaxation ran).  Local-resource guards (concurrent job, disk) apply only to
+    // a local run — an Alpine run writes on the cluster's scratch.
+    const runTarget = _currentRunTarget()
+    const isLocalRun = runTarget !== 'alpine'
+    if (isLocalRun && !(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     const steps = _productionSteps()
     const ns = _productionNs(steps)
-    try {
-      const fc = await estimateMdProductionDisk(_selectedId, { steps, autostart: true })
-      if (!(await confirmDiskSpaceOk(fc))) return
-    } catch { /* forecast is best-effort — never block a launch on it */ }
+    if (isLocalRun) {
+      try {
+        const fc = await estimateMdProductionDisk(_selectedId, { steps, autostart: true })
+        if (!(await confirmDiskSpaceOk(fc))) return
+      } catch { /* forecast is best-effort — never block a launch on it */ }
+    }
     if (prodStatus) {
-      prodStatus.textContent = `Appending ${steps.toLocaleString()} production steps (${ns.toFixed(3)} ns)...`
+      prodStatus.textContent = isLocalRun
+        ? `Spawning production child: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)...`
+        : `Staging Alpine production child: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)...`
       prodStatus.style.color = _C.muted
     }
     prodBtn.disabled = true
     try {
-      const d = await api.appendMdProduction(_selectedId, {
+      // Child-job model (mirrors oxDNA): the relaxation stays a distinct entry and each
+      // production nests under it as a new, independently-seeded child.  A local child
+      // autostarts; an Alpine child is left queued and handed to the submit-review card.
+      const d = await api.spawnMdProduction(_selectedId, {
         steps,
-        autostart: true,
-        continue_from_production: !!prodContinueChk?.checked,
+        autostart: isLocalRun,
+        execution_target: runTarget,
+        cluster_name: runTarget === 'alpine' ? 'alpine' : null,
       })
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
-      showToast(`Production started: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)`, 'ok')
+      const childId = d.job?.job_id
       await _fetchJobs()
-      _selectJob(_selectedId)
+      if (isLocalRun) {
+        showToast(`Production started: ${steps.toLocaleString()} steps (${ns.toFixed(3)} ns)`, 'ok')
+        _selectJob(childId || _selectedId)
+      } else {
+        showToast('Alpine production staged — review resources to submit', 'ok')
+        if (childId) { _selectJob(childId); _submitReview.open(childId) }
+      }
     } catch (err) {
       if (prodStatus) {
         prodStatus.textContent = err.message
@@ -1537,6 +1696,37 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (_selectedId) _submitReview.open(_selectedId)
   })
 
+  function _ensembleCount() {
+    const n = parseInt(ensembleCount?.value ?? '', 10)
+    return Number.isFinite(n) && n >= 1 ? Math.min(64, n) : 4
+  }
+
+  // Ensemble on Alpine: stage N production replicas (distinct seeds) from THIS completed
+  // relaxation, then open the review card (ensemble mode) to submit them all to amilan.
+  ensembleBtn?.addEventListener('click', () => runExclusive(ensembleBtn, async () => {
+    const parentId = _selectedId
+    if (!parentId) return
+    const n = _ensembleCount()
+    const steps = _productionSteps()
+    try {
+      const d = await api.stageMdEnsemble(parentId, {
+        n_replicas: n, steps, cluster_name: 'alpine', partition: 'amilan',
+      })
+      if (!d) throw new Error(api.lastErrorMessage?.() ?? 'Server error')
+      showToast(`Staged ${n} production replica${n === 1 ? '' : 's'}`, 'ok')
+      await _fetchJobs()
+      _renderList()
+      const firstChild = d.children?.[0]?.job_id
+      if (firstChild) {
+        _submitReview.open(firstChild, {
+          mode: 'ensemble', parentId, count: n, clusterName: 'alpine', partition: 'amilan',
+        })
+      }
+    } catch (err) {
+      showToast(`Ensemble staging failed: ${err.message}`, 'error')
+    }
+  }, { label: 'Staging…' }))
+
   let _resumeHistOpen = false
   resumeHistToggle?.addEventListener('click', () => {
     _resumeHistOpen = !_resumeHistOpen
@@ -1612,21 +1802,48 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       listEl.appendChild(empty)
       return
     }
-    // Parent→child hierarchy (refit/retry children indent under their origin),
-    // mirroring the oxDNA panel's list.
+    // Default-collapse an Alpine ENSEMBLE parent the first time we see it, so a fan-out
+    // of N replicas reads as ONE expandable item.  Local production fan-outs are NOT
+    // auto-collapsed: they're spawned one at a time and the user is watching the child
+    // they just started (auto-collapsing would hide it under the parent chevron).
+    for (const j of jobs) {
+      const hasAlpineReplica = jobs.some(c =>
+        c?.parent_job_id === j.job_id && mdIsEnsembleReplica(c) && !mdIsProductionChild(c))
+      if (hasAlpineReplica && !_autoCollapsed.has(j.job_id)) {
+        _autoCollapsed.add(j.job_id)
+        _collapsedParents.add(j.job_id)
+      }
+    }
+    // Parent→child hierarchy (refit/retry children + ensemble replicas indent under
+    // their origin), mirroring the oxDNA panel's list.  Collapsed parents hide their
+    // subtree (chevron toggles it).
     let rootNo = 0
-    for (const { job, depth, index } of flattenJobTree(jobs)) {
+    for (const { job, depth, index, childCount } of flattenJobTree(jobs, { collapsedIds: _collapsedParents })) {
       if (depth === 0) rootNo += 1
-      listEl.appendChild(_jobRow(job, { isChild: depth > 0, index, depth, listIndex: rootNo }))
+      listEl.appendChild(_jobRow(job, {
+        isChild: depth > 0, index, depth, listIndex: rootNo, childCount,
+        collapsed: _collapsedParents.has(job.job_id),
+      }))
     }
     if (!_legendEl) { _legendEl = makeStatusLegend(); listEl.after(_legendEl) }
   }
 
+  /** Toggle a parent's collapsed state and force a list rebuild (bypassing the
+   *  signature short-circuit, since collapse state isn't part of the signature). */
+  function _toggleCollapse(jobId) {
+    if (_collapsedParents.has(jobId)) _collapsedParents.delete(jobId)
+    else _collapsedParents.add(jobId)
+    _listSig = null
+    _renderList()
+  }
+
   // One job row: [N] name · timestamp · status-symbol (a root relaxation, or a
   // depth-indented numbered refit/retry child).
-  function _jobRow(job, { isChild = false, index = 0, depth = 0, listIndex = 0 }) {
+  function _jobRow(job, { isChild = false, index = 0, depth = 0, listIndex = 0, childCount = 0, collapsed = false }) {
     const row = document.createElement('div')
     const isSelected = job.job_id === _selectedId
+    const isReplica = mdIsEnsembleReplica(job)
+    const isProdChild = mdIsProductionChild(job)
     row.setAttribute('data-job-id', job.job_id)
     row.style.cssText = [
       'display:flex;align-items:center;gap:6px;padding:4px 5px;border-radius:3px;cursor:pointer;margin-bottom:2px',
@@ -1637,6 +1854,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     row.addEventListener('click', () => _selectJob(job.job_id))
     const sb = statusBadge(statusKeyFor('namd', job.status))
 
+    // Expand/collapse chevron for a parent with children (ensemble replicas or refits).
+    const chev = document.createElement('span')
+    chev.style.cssText = `flex-shrink:0;width:10px;font-size:9px;color:${_C.dim};cursor:pointer;user-select:none`
+    if (childCount > 0) {
+      chev.textContent = collapsed ? '▸' : '▾'
+      chev.title = collapsed ? `Expand ${childCount} child job${childCount === 1 ? '' : 's'}`
+                             : 'Collapse'
+      chev.addEventListener('click', (e) => { e.stopPropagation(); _toggleCollapse(job.job_id) })
+    }
+    row.appendChild(chev)
+
     // Leading index: root jobs show their list number; children show their run number.
     const idx = document.createElement('span')
     idx.textContent = isChild ? '' : `[${listIndex}]`
@@ -1645,9 +1873,25 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
     const name = document.createElement('span')
     name.style.cssText = `flex:1;font-size:var(--text-xs);color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
-    name.textContent = isChild ? mdChildRowLabel(job, index) : job.design_name
-    if (isChild) row.title = 'Refit / retry derived from the parent run'
+    name.textContent = isProdChild ? mdProductionRowLabel(job, index)
+                     : isReplica ? mdReplicaRowLabel(job, index)
+                     : isChild ? mdChildRowLabel(job, index)
+                     : job.design_name
+    if (isProdChild) row.title = 'Production run branched from the relaxed parent (independent seed)'
+    else if (isReplica) row.title = 'Ensemble production replica (independent seed)'
+    else if (isChild) row.title = 'Refit / retry derived from the parent run'
     row.appendChild(name)
+
+    // Collapsed ensemble parent: show an aggregate replica summary in place of details.
+    if (childCount > 0 && collapsed) {
+      const summary = ensembleChildSummary(job, _jobs)
+      if (summary) {
+        const s = document.createElement('span')
+        s.textContent = summary
+        s.style.cssText = `font-size:9px;color:#8b949e;flex-shrink:0;margin-right:4px`
+        row.appendChild(s)
+      }
+    }
 
     // CG-seeded badge — this run started from oxDNA- or mrDNA-relaxed coordinates.
     const badge = seededBadge(job)
@@ -1799,13 +2043,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _fetchDisplayMeta(jobId)
     _fetchJobMetrics(jobId)
 
-    if (!job || !_TERMINAL_STATUSES.has(job.status)) {
+    // A job handed to SLURM (slurm_job_id set) runs on the cluster — it pushes NOTHING
+    // over the local WebSocket; its detail is refreshed by the SLURM poll
+    // (_maybePollRemote → _applyJobState).  Only open the WS for a job running/prepping
+    // LOCALLY.  Otherwise do a single REST refresh.
+    const onCluster = !!job?.slurm_job_id
+    if (!onCluster && (!job || !_TERMINAL_STATUSES.has(job.status))) {
       _openWs(jobId)
     } else {
       api.getMdJob(jobId)
         .then(j => {
           if (!j) return
-          console.log(`[${_ts()}] md-jobs: REST refresh for completed job`, j.status)
+          console.log(`[${_ts()}] md-jobs: REST refresh (terminal/remote)`, j.status)
           _applyJobState(j)
         })
         .catch(err => console.warn(`[${_ts()}] md-jobs: REST refresh failed`, err))
@@ -1922,6 +2171,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       const canSubmit = isAlpine && !job.slurm_job_id && ['queued', 'stopped', 'failed'].includes(job.status)
       submitAlpineBtn.style.display = canSubmit ? '' : 'none'
     }
+    // Ensemble on Alpine: a COMPLETED relaxation (not itself a replica) can fan out N
+    // production replicas.  Disabled + tooltip until a cluster session is connected.
+    const ensembleWrap = document.getElementById('md-jobs-ensemble-wrap')
+    if (ensembleWrap) {
+      const eligible = job.status === 'completed' && !mdIsEnsembleReplica(job)
+      ensembleWrap.style.display = eligible ? '' : 'none'
+      if (eligible && ensembleBtn) {
+        const reason = alpineTargetDisabledReason(getClusterState?.() ?? 'disconnected')
+        ensembleBtn.disabled = !!reason
+        ensembleBtn.style.opacity = reason ? '0.5' : ''
+        ensembleBtn.style.cursor = reason ? 'not-allowed' : 'pointer'
+        ensembleBtn.title = reason || 'Stage N independent production replicas (distinct seeds) on the Alpine cluster'
+      }
+    }
     // Resume: a timed-out remote job, one-click continue from its last checkpoint.
     if (resumeBtn) {
       const rs = mdResumeButtonState(job, getClusterState?.() ?? 'disconnected')
@@ -1942,6 +2205,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // Show the error box for terminal failures AND for a failed Alpine submit
     // (queued-but-errored) so the rejection reason is visible with the retry button.
     _showDetailError(mdDetailErrorText(job))
+    _renderEnsembleRollup(job)
     _renderProgress(job, liveMetrics)
     _renderTimeline(job)
     _renderMetrics(job, liveMetrics)
@@ -1950,6 +2214,45 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (_TERMINAL_STATUSES.has(job.status) && _displayMeta?.job_id !== job.job_id) {
       _fetchDisplayMeta(job.job_id)
     }
+  }
+
+  // Ensemble roll-up: when a parent (or one of its replicas) is selected, list every
+  // replica with its SLURM state so the parent view reads as the ensemble, and clicking
+  // a row jumps to that replica.  Hidden for non-ensemble jobs.
+  function _renderEnsembleRollup(job) {
+    if (!ensembleRollupEl) return
+    const parentId = mdIsEnsembleReplica(job) ? job.parent_job_id : job.job_id
+    const parent = _jobs.find(j => j.job_id === parentId)
+    const reps = parent ? ensembleReplicas(parent, _jobs) : []
+    if (!reps.length) {
+      ensembleRollupEl.style.display = 'none'
+      ensembleRollupEl.innerHTML = ''
+      return
+    }
+    ensembleRollupEl.style.display = ''
+    ensembleRollupEl.innerHTML = ''
+    const header = document.createElement('div')
+    header.style.cssText = `font-size:var(--text-xs);color:${_C.text};margin-bottom:3px`
+    header.textContent = ensembleChildSummary(parent, _jobs).replace(/^⧉\s*/, 'Ensemble · ')
+    ensembleRollupEl.appendChild(header)
+    const listWrap = document.createElement('div')
+    listWrap.style.cssText = `background:${_C.bg};border:1px solid ${_C.border};border-radius:3px;padding:3px;max-height:140px;overflow-y:auto`
+    reps.forEach((r, i) => {
+      const row = document.createElement('div')
+      const sel = r.job_id === _selectedId
+      row.style.cssText = `display:flex;align-items:center;gap:6px;padding:2px 4px;border-radius:3px;cursor:pointer;font-size:10px;${sel ? `background:${_C.bg2}` : ''}`
+      row.addEventListener('click', () => _selectJob(r.job_id))
+      const name = document.createElement('span')
+      name.style.cssText = `flex:1;color:${_C.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap`
+      name.textContent = mdIsProductionChild(r) ? mdProductionRowLabel(r, i + 1) : mdReplicaRowLabel(r, i + 1)
+      const state = document.createElement('span')
+      state.style.cssText = `color:${_statusColor(r.status)};flex-shrink:0;font-family:var(--font-mono)`
+      state.textContent = mdReplicaStateText(r)
+      row.appendChild(name)
+      row.appendChild(state)
+      listWrap.appendChild(row)
+    })
+    ensembleRollupEl.appendChild(listWrap)
   }
 
   function _renderResumeHistory(job) {
@@ -2284,6 +2587,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── Metric cards ──────────────────────────────────────────────────────────
   function _renderMetrics(job, live) {
     if (!metricsEl) return
+
+    // Remote (Alpine) run with no local health/metrics: they live on the cluster's
+    // scratch until the run finishes and results are fetched.  Show a clear note
+    // instead of a metric grid / perpetual "Waiting for first metrics…" spinner.
+    if (!mdHasLocalReadouts(job)) {
+      _setHealthSpinner(false)
+      metricsEl.innerHTML = ''
+      const note = mdRemoteReadoutNote(job)
+      if (note) {
+        const n = document.createElement('div')
+        n.style.cssText = `grid-column:1 / -1;font-size:var(--text-xs);color:${_C.muted};padding:4px 2px;line-height:1.4`
+        n.textContent = note
+        metricsEl.appendChild(n)
+      }
+      return
+    }
 
     const health = job.health_samples?.[job.health_samples.length - 1]
     const persisted = _latestRecord(_metricsByJob.get(job.job_id) ?? [])
