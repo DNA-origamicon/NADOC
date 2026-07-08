@@ -198,6 +198,7 @@ import { initMrdnaJobsPanel } from './ui/mrdna_jobs_panel.js'
 import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
 import { initLammpsForcesSetup } from './ui/lammps_forces_setup.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
+import { initEngineSelector } from './ui/engine_selector.js'
 import { initCandoDisplay } from './ui/cando_display.js'
 import { initCandoLegend } from './ui/cando_legend.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
@@ -2032,6 +2033,21 @@ async function main() {
   // Spinner on each engine's section header while that engine has a running/preparing
   // job (one shared /api/jobs/active poll drives all five headers).
   initEngineActivityHeaders()
+
+  // Simulate section: one engine selector fronts the 5 stacked engine panels —
+  // shows the selected engine's panel, hides the rest, and renders the U1
+  // capability strip (unsupported cards greyed-with-tooltip). (U4)
+  initEngineSelector({
+    selectorMount: document.getElementById('engine-selector-mount'),
+    stripMount:    document.getElementById('engine-capability-strip'),
+    panelEls: {
+      oxdna:  document.getElementById('oxdna-jobs-panel'),
+      lammps: document.getElementById('lammps-jobs-panel'),
+      mrdna:  document.getElementById('mrdna-jobs-panel'),
+      cando:  document.getElementById('cando-jobs-panel'),
+      namd:   document.getElementById('md-jobs-panel'),
+    },
+  })
 
   const periodicMdOverlay = initPeriodicMdOverlay(scene)
   initPeriodicMdPanel(store, {

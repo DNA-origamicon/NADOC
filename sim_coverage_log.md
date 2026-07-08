@@ -71,6 +71,51 @@ _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
 
+### 2026-07-08 — `U4` engine selector + one *Simulate* section → CLOSES `M-UNIFIED-PANEL`
+
+- **Pick.** `U4` (handoff ▶ NEXT; deps U2+U3 both `done`; critical leverage). The last unified-panel task —
+  fronting the 5 stacked engine panels with one selector closes M-UNIFIED-PANEL.
+- **Oracle FIRST — a per-engine PARITY/de-dup pin, not "it renders".** `engine_selector.test.js` (11 tests):
+  (1) PURE STATE — `panelVisibility(e)` shows EXACTLY engine `e`, hides the other four (unknown → all hidden);
+  `selectedEngineCards(e)` returns the FULL 8-card universe (never absent), its `state:'enabled'` subset ===
+  EXACTLY the U1 `enabledCardKeys(e)`, and every `'greyed'` card carries the descriptor's `cardReason(e,·)` (a
+  non-empty string). Ground truth is the U1 descriptor's own helpers, so a selector that omitted/invented a card
+  diverges → red. (2) FACTORY — a jsdom harness with 5 stub panel elements: `initEngineSelector` renders one
+  button per engine in `ENGINE_KEYS` order; `select(x)` shows only x's panel (`display:''`) + hides the rest
+  (`display:'none'`) + marks the active button; a bad `select()` is a no-op; the strip renders one chip per
+  universe card with greyed chips carrying the reason as a `title`; `onSelect` fires once per selection; a
+  button click selects. Green first run — this is **new logic** (not a moved/adapted lift), so green-first-run is
+  valid proof.
+- **Module-first build.** New `frontend/src/ui/engine_selector.js` — `initEngineSelector({selectorMount,
+  stripMount, panelEls, initial, onSelect})→{select,getSelected,el}`; pure `panelVisibility`/
+  `selectedEngineCards`/`isEngine` exported for the oracle. It reads card facts ONLY from the U1
+  `engine_capabilities.js` (`ENGINE_KEYS`/`ENGINE_LABELS`/`engineCards`) — single source, so no re-audit. It owns
+  no engine logic and no panel internals: it toggles whole-panel `display` (verified none of the 5 panels toggle
+  their own whole-panel display — the panels own only their body-collapse, so the selector is the sole owner).
+- **DOM + CSS.** A new `#simulate-panel` section (heading "Simulate" + `#engine-selector-mount` +
+  `#engine-capability-strip`) inserted before `#oxdna-jobs-panel` in the Dynamics tab; CSS for the segmented
+  control (`.engine-selector`/`.engine-selector-btn.is-active`) + capability chips
+  (`.capability-chip.is-enabled`/`.is-greyed[cursor:help]`).
+- **Wiring.** `main.js` +16 lines — 1 import + one `initEngineSelector({...})` with the 5 panel-element lookups,
+  placed right after `initEngineActivityHeaders()` (all 5 panels mounted by then). ALL pure wiring (imports +
+  factory init + element lookups), NO cohesive logic — logic lives in the module. (Handoff hoped flat-or-lower;
+  +16 is pure wiring per the module-first law, which flags only a *cohesive* net rise. Routing the 5 panel
+  inits through a loop to offset is a riskier change beyond U4's oracle scope — deferred.)
+- **Gates.** Oracle 11/11; full frontend **2376/2376** (was 2365, +11, no drop); `just lint` fails only on **19
+  pre-existing Python ruff** errors (backend/core + tests — none in files I touched; I touched no `.py`); smoke
+  23/23 (real app boots the selector init path clean). One-off display-vs-oracle Playwright drove the REAL app
+  DOM: 5 buttons render, each engine's `select` shows exactly its panel + hides four, the rendered chip set ===
+  the descriptor, greyed chips carry a `title` — PASSED, but it ran against the **welcome overlay** (the API
+  design-load didn't reach the frontend view — doc-context), so it exercised the selector DOM without a rendered
+  design. Spec deleted after; **MV-28** filed for the live-with-design gesture + hover-tooltip.
+- **STATUS = `done` — CLOSES `M-UNIFIED-PANEL`** (U1 descriptor + U2 Forces card + U3 job-list/scaffold base +
+  U4 selector). The 6 sidebar panels are now fronted by ONE engine selector whose card visibility is driven by
+  the U1 capability descriptor; unsupported cards are **greyed-with-a-why-tooltip, not absent**. NEXT = Track P
+  resumes (`P3` cross-engine output→input) toward M-JOB-PLANNER.
+- **Capability/de-dup proven, not just wired:** selecting engine X shows EXACTLY X's U1-supported cards and greys
+  the rest (present-with-reason) — a single descriptor now drives per-engine visibility across all 5 panels,
+  machine-pinned by the 11-test parity/pure-state oracle.
+
 ### 2026-07-08 — `U3` slice 2c-3b — converge the md (NAMD) panel scaffold onto `initJobsPanelBase` → CLOSES `U3` (all 5 panels)
 
 - **Pick.** `U3` slice 2c-3b (handoff ▶ NEXT, and rubric #4 "finish the in-progress track"). The last of the 5
