@@ -479,6 +479,26 @@ fills in as milestones complete.
   across all 5 panels — selecting engine X yields EXACTLY X's supported cards + greys the rest, machine-pinned by
   the 11-test parity/pure-state oracle. **M-UNIFIED-PANEL CLOSED** (U1+U2+U3+U4).
 
+- **`M4` — linkers / overhang connections into the ARBD model** · shape: VERIFY (no solver/production change —
+  the mrDNA bridge `_build_nt_arrays` already threads the linker's real topology through, since it iterates
+  `design.strands` + builds `helix_geom` from `design.helices`, so the `__lnk__` bridge helix + linker strands
+  flow like any other) · feature: linkers (mrDNA) · engines now comparable: mrDNA joins CanDo (C4) + NAMD (N3) in
+  materializing a linker's connector at the right mechanical class — mrDNA's `ds` bridge coarse-grains as a rigid
+  duplex segment, its `ss` bridge as a flexible ssDNA tether, mirroring C4's rigid-link-vs-WLC-spring FEM
+  distinction · oracle: `tests/test_mrdna_linkers.py` **10 fast + 2 slow** — FAST arrays (ds bridge all-paired
+  `2·L`, ss bridge all-unpaired `L` threaded in-chain between the two parts, no-linker control) + FAST built
+  SegmentModel (`ds.ds_nt−ss.ds_nt == L` and `ss.ss_nt−ds.ss_nt == L` for L∈{4,6,8} on the SAME overhangs — the
+  ds-vs-ss diff isolates the bridge because the complement is attach-independent; bridge beads scale with bridge
+  length) + SLOW real ARBD (bridge `__lnk__` positions survive the coarse run, absent unlinked; ran+passed 15 s) ·
+  main.js LOC Δ = **0** (backend-only) · tests: oracle 10 fast + 2 slow green; full `just test` **4447 passed** /
+  110 skipped / 1 xfailed (baseline 4435, +12 incl the 2 real-ARBD that ran+passed, no drop); ruff clean;
+  backend-only ⇒ no vitest/smoke · display-vs-oracle: N/A (no card, like C1–C4/M3) · review: FAST pins CONFIRMED
+  sound + bridge-drop-sensitive; the two weaker "adds particles"/SLOW `n_beads` assertions it flagged as
+  complement-satisfiable were tightened to bridge-length-scaling + `__lnk__`-presence · **Comparable prediction
+  gained, not just a run:** a linker's bridge now provably coarse-grains into the ARBD model with the correct
+  mechanical identity — `ds` = `L` base-pairs of rigid duplex, `ss` = `L` nucleotides of flexible tether — the
+  same rigid-vs-compliant call C4's CanDo FEM makes, so the two engines agree on what a linker *is*.
+
 ## Cross-engine agreement table (the deliverable)
 
 Fills in as `compare_descriptors` (S3) + the card (S5) land and each engine emits descriptors. Per design ×
