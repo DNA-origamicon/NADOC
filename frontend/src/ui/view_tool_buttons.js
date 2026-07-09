@@ -39,6 +39,8 @@ export function initViewToolButtons({
   toggleDeformView,
   toggleUnfold,
   toggleCadnano,
+  toggleClashes,
+  getClashesOn,
 }) {
   // Length heatmap
   let _lengthHeatmapOn = false
@@ -145,6 +147,7 @@ export function initViewToolButtons({
     document.querySelector('.vt-btn[data-vt="loopSkips"]')?.classList.toggle('active', showLoopSkips)
     document.querySelector('.vt-btn[data-vt="grid"]')?.classList.toggle('active', _gridHelper.visible)
     document.querySelector('.vt-btn[data-vt="overhangNames"]')?.classList.toggle('active', showOverhangNames)
+    document.querySelector('.vt-btn[data-vt="clashes"]')?.classList.toggle('active', getClashesOn?.() ?? false)
     document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expandedSpacing.isActive())
     document.querySelector('.vt-btn[data-vt="deform"]')?.classList.toggle('active', deformVisuActive)
     document.querySelector('.vt-btn[data-vt="unfold"]')?.classList.toggle('active', unfoldActive)
@@ -188,6 +191,11 @@ export function initViewToolButtons({
     const { showOverhangNames } = store.getState()
     store.setState({ showOverhangNames: !showOverhangNames })
     setMenuToggle('menu-view-overhang-names', !showOverhangNames)
+  })
+
+  document.querySelector('.vt-btn[data-vt="clashes"]')?.addEventListener('click', () => {
+    toggleClashes?.()
+    _syncVtButtons()
   })
 
   document.querySelector('.vt-btn[data-vt="expanded"]')?.addEventListener('click', () => {

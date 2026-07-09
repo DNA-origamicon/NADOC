@@ -2841,11 +2841,81 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     else { _applyMultiHighlight(next); store.setState({ multiSelectedStrandIds: next }) }
   }
 
+  // When a Ctrl/Shift+click EXTENDS a selection, first fold the current SINGLE
+  // selection (from a prior plain click) into the matching multi-pool — so
+  // "plain-click A, then Ctrl-click B" ends with BOTH A and B selected, not just B.
+  // The single-selection state and the multi-select pools are separate; without
+  // this the plain-click selection is dropped and only the Ctrl-clicked element
+  // survives. No-op once already multi-selecting (a plain click leaves the pools
+  // empty and seeds `selectedObject`; entering multi mode nulls `selectedObject`).
+  function _promoteSelectionToMulti() {
+    const sel = store.getState().selectedObject
+    if (!sel) return
+    const st = store.getState().selectableTypes
+
+    // END → seed the gold end-bead set with the selected 5′/3′ terminus.
+    if (_selLevel === 'end') {
+      if (_ctrlBeads.length) return
+      if (sel.type !== 'nucleotide' || !(sel.data?.is_five_prime || sel.data?.is_three_prime)) return
+      const d = sel.data
+      const entry = designRenderer.getBackboneEntries().find(en =>
+        en.nuc.helix_id === d.helix_id && en.nuc.bp_index === d.bp_index && en.nuc.direction === d.direction)
+      if (!entry) return
+      _restoreStrand()
+      store.setState({ selectedObject: null })
+      designRenderer.setEntryColor(entry, C_CTRL_BEAD)
+      designRenderer.setBeadScale(entry, 1.6)
+      if (entry.instMesh.instanceColor)  entry.instMesh.instanceColor.needsUpdate  = true
+      if (entry.instMesh.instanceMatrix) entry.instMesh.instanceMatrix.needsUpdate = true
+      _ctrlBeads.push({ entry, nuc: entry.nuc })
+      _refreshCtrlGlow()
+      _notifyCtrlBeadsChange()
+      return
+    }
+
+    // XOVER → seed the multi-crossover set with the selected crossover's arc.
+    if (_selLevel === 'xover' || st.crossoverArcs) {
+      if (_multiCrossoverArcs.length || _mode !== 'crossover' || !_crossoverId) return
+      const arc = (getUnfoldView?.()?.getArcEntries() ?? []).find(a => a.crossover_id === _crossoverId)
+      if (!arc) return
+      _restoreStrand()
+      store.setState({ selectedObject: null })
+      _applyMultiCrossoverHighlight([arc])
+      return
+    }
+
+    // DOMAIN → seed the domain multi-pool with the selected domain.
+    if (_selLevel === 'domain') {
+      if (_multiDomainIds.length || sel.type !== 'domain') return
+      const strandId = sel.data?.strand_id
+      if (!strandId) return
+      const domainIndex = sel.data?.domain_index ?? 0
+      _restoreStrand()
+      store.setState({ selectedObject: null })
+      _applyMultiDomainHighlight([{ strandId, domainIndex }])
+      store.setState({ multiSelectedDomainIds: [{ strandId, domainIndex }] })
+      return
+    }
+
+    // STRAND / DEFAULT → seed the strand multi-pool with the selected strand
+    // (default-level Ctrl-click multi-selects whole strands).
+    if ((_selLevel === 'strand' || _selLevel === 'default') && _strandId) {
+      if (_multiStrandIds.length) return
+      const sid = _strandId
+      _restoreStrand()
+      store.setState({ selectedObject: null })
+      _applyMultiHighlight([sid])
+      store.setState({ multiSelectedStrandIds: [sid] })
+    }
+  }
+
   // Dispatch a Ctrl/Shift+click to the right toggle for the active selection level —
   // the same element type a plain click selects at that level (overhang filter wins,
   // like a plain click). Snap-to-nearest within _NEAR_HOVER_PX so it matches the
   // hover preview the user sees.
   function _toggleAtLevel(e) {
+    // Fold any prior plain-click selection into the multi-pool first (additive).
+    _promoteSelectionToMulti()
     if (e.clientX > window.innerWidth - 300) return
     const rect = canvas.getBoundingClientRect()
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top
@@ -4006,6 +4076,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Returns the current multi-selected crossover arc entries. */
     getMultiCrossoverArcs() { return [..._multiCrossoverArcs] },
+
+    /** The arc entry for the SINGLE plain-clicked crossover/forced-ligation
+     *  (null when none is single-selected). Carries `fromNuc` (helix/bp/dir) so
+     *  Delete can nick a crossover or resolve a forced ligation — the same arc
+     *  the multi-select Delete path consumes, just for the one-at-a-time case. */
+    getSelectedCrossoverArc() {
+      if (_mode !== 'crossover' || !_crossoverId) return null
+      return (getUnfoldView?.()?.getArcEntries() ?? []).find(a => a.crossover_id === _crossoverId) ?? null
+    },
 
     /** Clear multi-crossover arc selection, restoring default arc colors. */
     clearMultiCrossoverArcs() { _clearMultiCrossoverArcs() },

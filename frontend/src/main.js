@@ -188,6 +188,7 @@ import { initMdJobsPanel } from './ui/md_jobs_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
+import { initClashOverlay } from './scene/clash_overlay.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { mdVizApiAdapter } from './ui/md_viz_adapter.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
@@ -1971,6 +1972,9 @@ async function main() {
   // the field direction, the purple glow shows what's pinned.  Both setups call
   // _refreshAnchorGlow on change (never during construction → no TDZ on the consts below).
   const anchorGlow = initAnchorGlow({ designRenderer, store })
+  // Steric-clash overlay (the "clash" view-tool button) — owns its on/off + red
+  // glow + count badge; re-fetches GET /design/clashes on posed-geometry change.
+  const clashOverlay = initClashOverlay({ store, designRenderer })
   const _refreshAnchorGlow = () => {
     const fieldOn = efieldSetup?.isEnabled?.()
     const anchors = oxdnaAnchorsSetup?.getAnchors?.() || []
@@ -3956,6 +3960,8 @@ async function main() {
     toggleDeformView: () => _toggleDeformView(),
     toggleUnfold: () => _toggleUnfold(),
     toggleCadnano: () => _toggleCadnano(),
+    toggleClashes: () => clashOverlay.toggle(),
+    getClashesOn: () => clashOverlay.isOn(),
   })
 
   // ── Nucleotide Slab collapse toggle ──────────────────────────────────────────
@@ -6956,6 +6962,36 @@ async function main() {
           out.push({
             x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
             y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
+          })
+        }
+        return out
+      },
+      /** Screen {x,y} + strand-end identity of every visible 5′/3′ terminus bead.
+       *  Gesture e2e for the End-level multi-select → forced-ligation ('x') flow:
+       *  lets a spec pick a valid opposite-polarity pair on different strands and
+       *  click each end deterministically. */
+      getEndBeadScreenPositions() {
+        const rect = canvas.getBoundingClientRect()
+        const out = []
+        const v = new THREE.Vector3(), m = new THREE.Matrix4()
+        for (const e of designRenderer.getBackboneEntries?.() ?? []) {
+          const nuc = e.nuc
+          if (!nuc?.strand_id) continue
+          if (!nuc.is_five_prime && !nuc.is_three_prime) continue
+          if (!e.instMesh?.visible) continue
+          e.instMesh.getMatrixAt(e.id, m)
+          v.setFromMatrixPosition(m).applyMatrix4(e.instMesh.matrixWorld)
+          const ndc = v.clone().project(camera)
+          if (ndc.z > 1 || Math.abs(ndc.x) > 1 || Math.abs(ndc.y) > 1) continue
+          out.push({
+            x: rect.left + (ndc.x  *  0.5 + 0.5) * rect.width,
+            y: rect.top  + (-ndc.y * 0.5 + 0.5) * rect.height,
+            strand_id: nuc.strand_id,
+            helix_id:  nuc.helix_id,
+            bp_index:  nuc.bp_index,
+            direction: nuc.direction,
+            is_five_prime:  !!nuc.is_five_prime,
+            is_three_prime: !!nuc.is_three_prime,
           })
         }
         return out

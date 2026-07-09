@@ -9,6 +9,8 @@ molecular-surface representations:
     whole design.
   - ``POST /design/surface/region``  — molecular surface over only the columns
     covered by a set of representation segments (the per-region SURFACE rep).
+  - ``GET  /design/clashes``         — design-layer steric-clash report over the
+    POSED (cluster/deformation-applied) backbone beads.
 
 One reason to change: the *render-feed* JSON these emit for the atomistic /
 surface display. They share the surface *pipeline* (build_atomistic_model →
@@ -39,12 +41,13 @@ router = APIRouter()
 class SurfaceRegionRequest(BaseModel):
     """Compute a molecular surface over ONLY the columns covered by `segments`
     (the surface-rep regions). Stateless; same knobs as GET /design/surface."""
+
     segments: List[RepresentationSegment]
-    color_mode:     str   = "strand"
-    grid_spacing:   float = 0.20
-    probe_radius:   float = 0.28
+    color_mode: str = "strand"
+    grid_spacing: float = 0.20
+    probe_radius: float = 0.28
     radius_inflate: float = 1.30
-    smooth:         int   = 15
+    smooth: int = 15
 
 
 # ── Atomistic + molecular-surface display geometry ────────────────────────────
@@ -68,7 +71,11 @@ def get_atomistic() -> dict:
     The −32° helical phase offset (aligning the all-atom backbone groove with the
     NADOC CG model) is baked into build_atomistic_model via _ATOMISTIC_PHASE_OFFSET_RAD.
     """
-    from backend.core.atomistic import build_atomistic_model, atomistic_to_json, merge_models
+    from backend.core.atomistic import (
+        build_atomistic_model,
+        atomistic_to_json,
+        merge_models,
+    )
 
     design = design_state.get_or_404()
     nuc_frame_override = _flexible_display_override(design)
@@ -90,19 +97,58 @@ def get_atomistic() -> dict:
         )
         return atomistic_to_json(merge_models(pdb_model, template_model))
 
-    return atomistic_to_json(build_atomistic_model(
+    return atomistic_to_json(
+        build_atomistic_model(
+            design,
+            nuc_frame_override=nuc_frame_override,
+        )
+    )
+
+
+@router.get("/design/clashes")
+def get_clashes(
+    threshold_nm: float = 0.65,
+    designed_margin_nm: float = 2.0,
+) -> dict:
+    """
+    Return the design-layer steric-clash report for the active design.
+
+    Backbone beads are placed in their POSED positions (cluster poses +
+    bend/twist deformations applied).  A pair is a clash when it overlaps now
+    (``< threshold_nm``) but was NOT close in the straight, un-posed design
+    (``> designed_margin_nm``) — i.e. the collision came from folding, not from
+    designed packing (WC partners, covalent neighbours, crossovers, tight
+    lattice packing are all close straight and are therefore excluded).
+
+    Read-only — never mutates topology.  This is the no-simulation counterpart
+    to the MD-time NAMD declash.
+
+    Response: {
+      clashes: [ { a: {helix_id, bp_index, direction, position:[x,y,z]},
+                   b: {...}, distance_nm }, ... ],   nearest first
+      count: int,
+      threshold_nm: float,
+      designed_margin_nm: float,
+    }
+    """
+    from backend.core.clash import clash_report
+
+    design = design_state.get_or_404()
+    report = clash_report(
         design,
-        nuc_frame_override=nuc_frame_override,
-    ))
+        threshold_nm=threshold_nm,
+        designed_margin_nm=designed_margin_nm,
+    )
+    return report.to_dict()
 
 
 @router.get("/design/surface")
 def get_surface(
-    color_mode:     str   = "strand",
-    grid_spacing:   float = 0.20,
-    probe_radius:   float = 0.28,
+    color_mode: str = "strand",
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
     radius_inflate: float = 1.30,
-    smooth:         int   = 15,
+    smooth: int = 15,
 ) -> dict:
     """
     Compute and return a triangulated molecular surface mesh.
@@ -172,8 +218,12 @@ def get_region_surface(body: SurfaceRegionRequest) -> dict:
             colset.add((seg.helix_id, bp))
 
     if not colset:
-        return {"vertices": [], "faces": [], "vertex_colors": None,
-                "stats": {"n_verts": 0, "n_faces": 0, "compute_ms": 0.0}}
+        return {
+            "vertices": [],
+            "faces": [],
+            "vertex_colors": None,
+            "stats": {"n_verts": 0, "n_faces": 0, "compute_ms": 0.0},
+        }
 
     model = build_atomistic_model(
         design,

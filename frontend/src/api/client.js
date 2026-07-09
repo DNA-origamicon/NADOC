@@ -2556,6 +2556,16 @@ export async function getGeometryBatch(positions, { signal, suppressBusy = false
 }
 
 /**
+ * Fetch the design-layer steric-clash report over the POSED geometry.
+ * Read-only; never mutates the design.
+ * @returns {Promise<{clashes: object[], count: number, threshold_nm: number,
+ *                     designed_margin_nm: number} | null>}
+ */
+export async function getClashes() {
+  return _request('GET', '/design/clashes')
+}
+
+/**
  * Return flat atom-position arrays for multiple feature-log positions.
  * @param {number[]} positions  e.g. [-2, 0, 1, -1]
  * @returns {Promise<Record<string, number[]> | null>}  pos → [x0,y0,z0, x1,y1,z1, ...]

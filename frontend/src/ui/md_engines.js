@@ -164,7 +164,12 @@ export function initMdEngines({ api }) {
     ws.onopen = () => ws.send(JSON.stringify(payload))
     ws.onmessage = ({ data }) => {
       let msg; try { msg = JSON.parse(data) } catch { return }
-      if (msg.type === 'progress') { stage.textContent = msg.stage; bar.style.width = `${msg.pct}%` }
+      if (msg.type === 'progress') {
+        // Show the live number next to the stage: a climbing % is what tells the
+        // user the build is progressing and not stuck in a loop.
+        stage.textContent = (msg.pct != null) ? `${msg.stage} — ${msg.pct}%` : msg.stage
+        bar.style.width = `${msg.pct}%`
+      }
       else if (msg.type === 'log') { _append(msg.line) }
       else if (msg.type === 'complete') { done = true; _closeWs(); modal.close(); onComplete && onComplete(msg) }
       else if (msg.type === 'manual_step') { done = true; _closeWs(); modal.close(); (onManualStep || _showManualStep)(msg) }
@@ -187,12 +192,50 @@ export function initMdEngines({ api }) {
     })
   }
 
+  // "Where do I paste these?" callout — renders the backend's terminal_help
+  // (WSL / macOS / Linux specific) as a prominent, hard-to-miss box with a
+  // one-line self-check so the user confirms they're in the right shell.
+  function _terminalHelpBlock() {
+    const help = _status && _status.terminal_help
+    if (!help) return null
+    const children = [
+      el('div', { text: help.heading, attrs: { style: 'font-size:13px;font-weight:600;color:#f0b429;margin-bottom:6px' } }),
+    ]
+    for (const s of (help.steps || [])) {
+      children.push(el('div', { text: '• ' + s, attrs: { style: 'font-size:12px;color:#c9d1d9;margin:3px 0;line-height:1.45' } }))
+    }
+    const chk = help.check
+    if (chk && chk.cmd) {
+      children.push(el('div', {
+        attrs: { style: 'margin-top:8px;padding-top:8px;border-top:1px solid #3a2f0a' },
+        children: [
+          el('div', { text: `Not sure? Type  ${chk.cmd}  and press Enter to check:`, attrs: { style: _DIM } }),
+          ...(chk.pass ? [el('div', { text: '✓ ' + chk.pass, attrs: { style: `color:${_TONE.ok};font-size:12px;margin-top:2px` } })] : []),
+          ...(chk.fail ? [el('div', { text: '✗ ' + chk.fail, attrs: { style: `color:${_TONE.err};font-size:12px;margin-top:2px` } })] : []),
+        ],
+      }))
+    }
+    return el('div', {
+      attrs: { style: 'border:1px solid #d29922;background:#1c1908;border-radius:6px;padding:10px;margin:6px 0 10px' },
+      children,
+    })
+  }
+
   // instructions popup: download links + copy-paste commands + doc pointer
   function _showInstructions(eng, errorNote) {
     const inst = eng.install || {}
     const parts = []
     if (errorNote) parts.push(el('div', { text: errorNote, attrs: { style: `color:${_TONE.err};font-size:12px;margin-bottom:8px` } }))
     if (inst.note) parts.push(el('div', { text: inst.note, attrs: { style: 'font-size:13px;margin-bottom:10px' } }))
+    // Any "what/why is being installed" explanation goes behind an expandable
+    // Details section — the commands themselves (below) are the primary content.
+    if (inst.details) parts.push(el('details', {
+      attrs: { style: 'margin:-4px 0 10px' },
+      children: [
+        el('summary', { text: 'Details', attrs: { style: _DIM + ';cursor:pointer;user-select:none' } }),
+        el('div', { text: inst.details, attrs: { style: 'font-size:12px;color:#c9d1d9;margin-top:6px;line-height:1.45' } }),
+      ],
+    }))
     if ((inst.missing_prereqs || []).length) {
       parts.push(el('div', {
         attrs: { style: `color:${_TONE.warn};font-size:12px;margin-bottom:10px` },
@@ -210,7 +253,12 @@ export function initMdEngines({ api }) {
     if (actionKind(eng) === 'download') parts.push(_downloadFinishBlock(eng))
     const cmds = commandText(eng)
     if (cmds) {
-      parts.push(el('div', { text: 'Run in a terminal:', attrs: { style: _DIM + ';margin:10px 0 4px' } }))
+      // Where exactly to paste — the #1 install failure is the right command in the
+      // wrong shell (Windows PowerShell instead of WSL, or a C:\ path). Backend-driven
+      // so the wording is accurate for this machine (WSL / macOS / Linux).
+      const help = _terminalHelpBlock()
+      if (help) parts.push(help)
+      parts.push(el('div', { text: 'Then paste these, in order:', attrs: { style: _DIM + ';margin:10px 0 4px' } }))
       parts.push(el('pre', { text: cmds, attrs: { style: 'background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px;font-size:12px;color:#c9d1d9;margin:0;white-space:pre-wrap;word-break:break-all' } }))
     }
     if (inst.doc) parts.push(el('div', { text: `Full guide: ${inst.doc}`, attrs: { style: _DIM + ';margin-top:8px' } }))

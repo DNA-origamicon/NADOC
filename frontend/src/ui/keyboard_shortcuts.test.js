@@ -45,6 +45,7 @@ function makeDeps(overrides = {}) {
       deleteOverhangs: vi.fn(async () => ({})), addNick: vi.fn(async () => ({})),
       addNickBatch: vi.fn(async () => ({})),
       deleteForcedLigation: vi.fn(async () => ({})), batchDeleteForcedLigations: vi.fn(async () => ({})),
+      forcedLigation: vi.fn(async () => ({})),
     },
     slicePlane: { isVisible: vi.fn(() => false), hide: vi.fn() },
     expandedSpacing: { toggle: vi.fn() },
@@ -59,6 +60,8 @@ function makeDeps(overrides = {}) {
       clearMultiOverhangSelection: vi.fn(),
       getMultiCrossoverArcs: vi.fn(() => []),
       clearMultiCrossoverArcs: vi.fn(),
+      getSelectedCrossoverArc: vi.fn(() => null),
+      clearSelection: vi.fn(),
     },
     extrudePanel: { hide: vi.fn() },
     deformView: { isActive: vi.fn(() => false), activate: vi.fn(async () => {}) },
@@ -223,6 +226,50 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     expect(document.getElementById('mode-indicator').textContent).toMatch(/not available/i)
   })
 
+  it("'x' forced-ligates a valid 5′/3′ end pair (order-independent → 3p→three, 5p→five)", async () => {
+    const d = makeDeps()
+    // The two ends the user multi-selected at End level (lasso / Ctrl / Shift-click
+    // all land in the same end-bead set): a 5′ on strand A + a 3′ on strand B.
+    d.selectionManager.getCtrlBeads.mockReturnValue([
+      { nuc: { strand_id: 'A', is_five_prime: true } },
+      { nuc: { strand_id: 'B', is_three_prime: true } },
+    ])
+    initKeyboardShortcuts(d)
+    await press('x')
+    expect(d.api.forcedLigation).toHaveBeenCalledWith('B', 'A')   // 3′=B, 5′=A
+    expect(d.selectionManager.clearCtrlBeads).toHaveBeenCalled()
+  })
+
+  it("'x' rejects an invalid pair (same polarity / same strand) without calling the api", async () => {
+    const d = makeDeps()
+    // Two 5′ ends → not a 3′/5′ pair.
+    d.selectionManager.getCtrlBeads.mockReturnValue([
+      { nuc: { strand_id: 'A', is_five_prime: true } },
+      { nuc: { strand_id: 'B', is_five_prime: true } },
+    ])
+    initKeyboardShortcuts(d)
+    await press('x')
+    expect(d.api.forcedLigation).not.toHaveBeenCalled()
+    expect(d.selectionManager.clearCtrlBeads).not.toHaveBeenCalled()
+  })
+
+  it("'x' is a no-op unless exactly 2 ends are selected, and never in assembly mode", async () => {
+    const d = makeDeps()
+    d.selectionManager.getCtrlBeads.mockReturnValue([{ nuc: { strand_id: 'A', is_five_prime: true } }])
+    initKeyboardShortcuts(d)
+    await press('x')
+    expect(d.api.forcedLigation).not.toHaveBeenCalled()
+
+    // Even a valid pair is ignored while an assembly is active.
+    d.store.setState({ assemblyActive: true })
+    d.selectionManager.getCtrlBeads.mockReturnValue([
+      { nuc: { strand_id: 'A', is_five_prime: true } },
+      { nuc: { strand_id: 'B', is_three_prime: true } },
+    ])
+    await press('x')
+    expect(d.api.forcedLigation).not.toHaveBeenCalled()
+  })
+
   it("'b'/'o' flip their toolFilters flags; key-repeat is ignored (noRepeat)", async () => {
     const d = makeDeps()
     initKeyboardShortcuts(d)
@@ -371,6 +418,29 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     initKeyboardShortcuts(d)
     await press('Delete')
     expect(d.api.deleteStrand).toHaveBeenCalledWith('s7')
+  })
+
+  it('Delete: single selected forced ligation → deleteForcedLigation(id) + clears selection', async () => {
+    const d = makeDeps()
+    d.store.setState({ selectedObject: { type: 'forced_ligation', id: 'fl9', data: {} } })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.deleteForcedLigation).toHaveBeenCalledWith('fl9')
+    expect(d.selectionManager.clearSelection).toHaveBeenCalled()
+    expect(d.api.deleteStrand).not.toHaveBeenCalled()
+  })
+
+  it('Delete: single selected crossover → nick at its arc origin (unplace)', async () => {
+    const d = makeDeps()
+    d.store.setState({ selectedObject: { type: 'crossover', id: 'xo3', data: {} } })
+    d.selectionManager.getSelectedCrossoverArc.mockReturnValue({
+      fromNuc: { helix_id: 'h2', bp_index: 14, direction: 'FORWARD' },
+    })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.addNick).toHaveBeenCalledWith({ helixId: 'h2', bpIndex: 14, direction: 'FORWARD' })
+    expect(d.selectionManager.clearSelection).toHaveBeenCalled()
+    expect(d.api.deleteForcedLigation).not.toHaveBeenCalled()
   })
 
   it('Delete with no selection is a no-op (no api calls)', async () => {

@@ -377,6 +377,37 @@ helix is bent. Same family as D9 (chord approximations are silently fine for str
 
 ---
 
+### D11. Moving a cluster: the AXIS follows but BEADS/SLABS snap back — an inactive display overlay's `stopAndRestore` reverts geometry on every `nadoc:design-changed` (2026-07-08)
+Symptom: drag/commit a cluster (Move/Rotate tool) → the helix **axis** moves to the new pose but the
+**beads + slabs** stay at the un-posed position. Backend is CORRECT (geometry + `cluster_transforms`
+reflect the move); the live *drag* is correct (`applyClusterTransform` moves beads); only the **commit**
+reverts them. Root cause was NOT in the cluster/commit code at all: the LAMMPS display panel
+(`lammps_jobs_panel.js`) subscribes to `window.addEventListener('nadoc:design-changed', …)` and calls
+`_viewsOff()` → `lammps_display.stopAndRestore()`. That fired on the cluster commit (which broadcasts
+`nadoc:design-changed` via `_signalDesignChanged`), and `stopAndRestore()` **unconditionally** ran
+`_restore()` → `designRenderer.applyFemPositions(null)` → `helixCtrl.revertToGeometry()`, which resets
+EVERY backbone bead to `currentGeometry.backbone_position`. With Plan-B `skipGeometry`, that array is the
+STALE pre-move geometry → beads snapped to the un-posed position. The axis survived because it's rebaked
+separately (`_rebakeHelixAxesForClusterDelta` / `currentHelixAxes`), and `design_renderer`'s own
+visual-only-design-change early-return DID fire (so no full `_rebuild`) — the clobber came from a
+*different* subscriber, a fired-later display overlay, not the renderer's rebuild path.
+
+**Fix**: guard `stopAndRestore()` to no-op when nothing is displayed (`if (_mode === null) return`) —
+matching the sibling displays that already had it (`oxdna_display` `!_active`, `cando_display`
+`_mode===null`, `mrdna_display` `_deformJobId===null`). `lammps_display` was the ONE missing the guard.
+Pinned by `frontend/src/ui/lammps_display.test.js` (stopAndRestore no-ops when inactive, reverts when
+active — proven red without the guard).
+
+**How to avoid**: any display/physical-layer overlay teardown that calls `applyFemPositions(null)` /
+`revertToGeometry()` (the "restore the model" path) MUST be gated on the overlay actually being active.
+An unconditional restore is a silent global-position clobber: it reverts EVERY bead to
+`currentGeometry`, wiping any legitimate live pose (cluster move, drag preview) the renderer is holding.
+Diagnosis technique that nailed it: a temporary `console.log(new Error().stack)` inside `revertToGeometry`
+during the failing gesture pointed straight at the caller chain — do that BEFORE theorizing about the
+cluster/commit code. Same family as the "late subscriber calls `revertToGeometry` and wins" rendering rule.
+
+---
+
 ## E. Cluster / deformation edge cases
 
 ### E1. Restricting arm-helices to a cluster broke deformation geometry (April 2026)
@@ -544,3 +575,8 @@ The Aksel breaker's `_candidate_break_offsets` only keeps breaks >= min_segment 
 
 ### J5. A scaffold-router test that flaps pass/fail run-to-run is hash-seed set-iteration order, NOT a cross-test state leak (2026-06-08, ISSUE-6)
 `tests/test_seamless_router.py::test_teeth_closing_zig` was a long-standing "known flake" (carried in REFACTOR_AUDIT.md's `KNOWN_FLAKES`); the ledger had diagnosed it as a cross-test global-state leak and prescribed a reset fixture. **Wrong.** The tell: it fails/passes in a *single fresh pytest process with no other test running* — pin/fail is deterministic for a fixed `PYTHONHASHSEED` and varies across seeds (≈30% gave 4 scaffold strands, ≈70% gave 5). A state leak would be order-dependent *across tests*, not seed-dependent *within one process*. **Root cause:** the shared `_hamiltonian_path` ([backend/core/seamed_router.py](backend/core/seamed_router.py)) sorted candidate helices by degree only — `sorted(ids, key=lambda n: len(adj[n]))` — with no tiebreaker, so equal-degree helices fell out in `set`-iteration (hash-seed) order → different Hamiltonian path → different scaffold-strand count. (A 2026-06-01 refactor — see [[J1]] — routed teeth through this shared search and dropped the `(len(adj[n]), n)` tiebreaker that `seamless_router._ham_path_ending` already had; a standing FIXME named it.) **Fix:** add the `(len(adj[n]), n)` lex tiebreaker to BOTH the starter sort and the neighbor key. Verified deterministic across 13 seeds. **Second, subtler trap:** the tiebreaker alone made it deterministic at **5** strands — the test asserted **4**, so "just add the tiebreaker" still left it red. The real defect was the *assertion*: `auto_scaffold_seamless` is an INTERMEDIATE stage (it places crossovers; a fully-routed scaffold is later ligated to 1 strand), so the count of leftover scaffold pieces is a path-ordering artifact, never an invariant. The test is named for the *closing-zig crossover event*, which I confirmed fires in BOTH the 4- and 5-piece orderings — so the count never even measured the intent. Re-pinned the test to the topological events (`bridge_xovers==6`, no warnings, closing-zig crossover `h_XY_2_2↔h_XY_2_3` present), matching the process-count style of every other test in the file. **How to avoid:** (1) any code that iterates a `set`/`dict`-keys and the *order* affects the output (path choice, "pick first", tie resolution) must sort with a total-order tiebreaker — degree/score-only keys are a latent hash-seed flake. (2) When a test flaps, run it ALONE in a fresh process across a few `PYTHONHASHSEED` values *before* assuming a cross-test leak — single-process seed-variance ⇒ algorithmic nondeterminism; cross-test-order-variance ⇒ state residue. (3) Don't assert absolute counts of an intermediate-stage artifact; assert the topological event the stage is responsible for.
+
+## K. Environment / GPU / toolchain
+
+### K1. Every CUDA GPU job segfaults (`rc=-11`) after a LAMMPS/CUDA apt install = a native Linux NVIDIA driver shadowing the WSL passthrough, NOT a bad design/params/driver-downgrade (2026-07-09)
+Symptom: oxDNA relax `md_relax` (and every GPU job — incl. a previously-PASSING 6hb_curved and oxDNA's OWN shipped `CUDA_EXAMPLE`) died `rc=-11` (SIGSEGV) at the FIRST force step, right after `INFO: Initial kinetic energy: …`. **Wrong hypotheses I burned time on first** (all disproven): a bad folded-corner config; mutual traps; `max_backbone_force`; the CUDA verlet neighbor-list overflowing on a dense fold; precision; a Windows driver *downgrade*. The tell that it's environmental, not the design: **CPU backend runs the identical input fine**, and the failure is design-INDEPENDENT (oxDNA's own example crashes too). **Root cause:** a LAMMPS setup ran `apt install nvidia-cuda-toolkit`, which pulled in `libnvidia-compute-535` — a *native Linux* NVIDIA driver userspace package. In WSL the GPU is reachable ONLY via the Windows-driver passthrough libs in `/usr/lib/wsl/`. That package dropped `/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.535` (+ `libcuda.so.535`) and registered it in the ldconfig cache. oxDNA (built with a newer CUDA than the driver's ceiling) JIT-compiles its embedded PTX at the first kernel launch and grabbed that version-mismatched 535 JIT compiler instead of the driver-matched one in `/usr/lib/wsl/drivers/<inf>/` (that dir is NOT on the ldconfig path) → SIGSEGV. **How to diagnose fast:** (1) reproduce on CPU (`backend = CPU`) — if it runs, it's the GPU env; (2) run oxDNA's shipped `~/oxDNA/examples/CUDA_EXAMPLE` — if THAT segfaults, it's machine-wide, not your design; (3) `LD_DEBUG=libs LD_DEBUG_OUTPUT=… <binary> …` then grep `calling init` for `ptxjitcompiler`/`libcuda` — a `/lib/x86_64-linux-gnu/libnvidia-*` line instead of a `/usr/lib/wsl/…` one is the shadow; (4) `nvidia-smi` "CUDA Version" is the driver ceiling, `ldd <binary> | grep cudart` is the binary's runtime — compare. **Fix (shipped, no sudo):** `oxdna_runner.oxdna_subprocess_env()` prepends the active WSL driver dir (`/usr/lib/wsl/drivers/*/` containing `libnvidia-ptxjitcompiler.so.1`) to `LD_LIBRARY_PATH` for the oxDNA child so the driver-matched libs win. **Trap:** `apt remove libnvidia-compute-535` does NOT fully clear it — the `libnvidia-compute-535-server` variant ships the same files and often stays installed, so bare GPU still segfaults and the env fix stays load-bearing. **Never install Ubuntu's `nvidia-cuda-toolkit` / native `libnvidia-*` driver packages in WSL** — use the `cuda-toolkit-XX-Y` packages + the WSL passthrough driver only. Full write-up: [[project_oxdna_relaxation]] §"UPDATE 2026-07-09", [[project_lammps_oxdna]].

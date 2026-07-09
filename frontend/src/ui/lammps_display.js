@@ -81,6 +81,15 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   }
 
   function stopAndRestore() {
+    // No-op when nothing is displayed. `_restore()` reverts every backbone bead to
+    // the design geometry (applyFemPositions(null) → revertToGeometry), so calling
+    // it while inactive CLOBBERS positions this overlay never set — e.g. the live
+    // cluster-move preview: a cluster commit fires `nadoc:design-changed`, the panel
+    // calls _viewsOff() → stopAndRestore(), and an unconditional restore snapped the
+    // moved beads/slabs back to the un-posed geometry while the axis kept the new
+    // pose. The sibling displays (oxdna `!_active`, cando/mrdna `_mode/_jobId===null`)
+    // already guard this; match them.
+    if (_mode === null) return
     _mode = null; _traj = null; _jobId = null
     _restore()
   }

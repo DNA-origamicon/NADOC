@@ -20,6 +20,7 @@ Three building blocks:
 Nothing here mutates the active session: :func:`roundtrip_nadoc` runs inside an
 isolated scratch document and returns a standalone deep copy.
 """
+
 from __future__ import annotations
 
 import inspect
@@ -38,6 +39,7 @@ from backend.core.validator import validate_design
 
 # ── Topology fingerprint ──────────────────────────────────────────────────────
 
+
 def canonical_topology(d: Design):
     """ID- and order-independent fingerprint of a design's topology.
 
@@ -53,16 +55,25 @@ def canonical_topology(d: Design):
     gp = {h.id: h.grid_pos for h in d.helices}
     helices = sorted(
         (
-            h.grid_pos, h.length_bp, h.bp_start,
-            round(h.axis_start.x, 4), round(h.axis_start.y, 4), round(h.axis_start.z, 4),
-            round(h.axis_end.x, 4), round(h.axis_end.y, 4), round(h.axis_end.z, 4),
+            h.grid_pos,
+            h.length_bp,
+            h.bp_start,
+            round(h.axis_start.x, 4),
+            round(h.axis_start.y, 4),
+            round(h.axis_start.z, 4),
+            round(h.axis_end.x, 4),
+            round(h.axis_end.y, 4),
+            round(h.axis_end.z, 4),
         )
         for h in d.helices
     )
     strands = sorted(
         (
             str(s.strand_type),
-            tuple((gp[dm.helix_id], dm.start_bp, dm.end_bp, str(dm.direction)) for dm in s.domains),
+            tuple(
+                (gp[dm.helix_id], dm.start_bp, dm.end_bp, str(dm.direction))
+                for dm in s.domains
+            ),
         )
         for s in d.strands
     )
@@ -70,6 +81,7 @@ def canonical_topology(d: Design):
 
 
 # ── Assembly topology fingerprint ─────────────────────────────────────────────
+
 
 def canonical_assembly(a):
     """ID- and order-independent fingerprint of an assembly's structure.
@@ -105,6 +117,7 @@ def canonical_assembly(a):
     Returns a 5-tuple ``(instances, joints, gears, belts, bindings)``; callers
     compare the whole tuple for equality.
     """
+
     def _src_key(src):
         if getattr(src, "type", None) == "file":
             return ("file", src.path, getattr(src, "sha256", None) or "")
@@ -131,7 +144,10 @@ def canonical_assembly(a):
         (
             _src_key(inst.source),
             tuple(round(float(v), 4) for v in inst.transform.values),
-            str(inst.mode), str(inst.representation), bool(inst.fixed), bool(inst.visible),
+            str(inst.mode),
+            str(inst.representation),
+            bool(inst.fixed),
+            bool(inst.visible),
         )
         for inst in a.instances
     )
@@ -158,8 +174,10 @@ def canonical_assembly(a):
             # the params ``_belt_to_relation`` turns into the gear-equivalent ratio.
             joint_fp.get(b.pulley_a.joint_id, ("missing",)),
             joint_fp.get(b.pulley_b.joint_id, ("missing",)),
-            round(float(b.pulley_a.radius), 6), str(b.pulley_a.side),
-            round(float(b.pulley_b.radius), 6), str(b.pulley_b.side),
+            round(float(b.pulley_a.radius), 6),
+            str(b.pulley_a.side),
+            round(float(b.pulley_b.radius), 6),
+            str(b.pulley_b.side),
             round(float(b.joint_a_anchor), 6),
             round(float(b.joint_b_anchor), 6),
         )
@@ -171,10 +189,22 @@ def canonical_assembly(a):
             # check is unordered): each endpoint = (instance source fingerprint,
             # overhang id, sub-domain id). Keying the instance by source fingerprint
             # — NOT its uuid — keeps the binding id-independent like the joint keys.
-            tuple(sorted((
-                (inst_src.get(ob.instance_a_id, ("missing",)), ob.overhang_a_id, ob.sub_domain_a_id),
-                (inst_src.get(ob.instance_b_id, ("missing",)), ob.overhang_b_id, ob.sub_domain_b_id),
-            ))),
+            tuple(
+                sorted(
+                    (
+                        (
+                            inst_src.get(ob.instance_a_id, ("missing",)),
+                            ob.overhang_a_id,
+                            ob.sub_domain_a_id,
+                        ),
+                        (
+                            inst_src.get(ob.instance_b_id, ("missing",)),
+                            ob.overhang_b_id,
+                            ob.sub_domain_b_id,
+                        ),
+                    )
+                )
+            ),
             str(ob.binding_mode),
             bool(ob.allow_n_wildcard),
         )
@@ -184,6 +214,7 @@ def canonical_assembly(a):
 
 
 # ── Round-trip oracle ─────────────────────────────────────────────────────────
+
 
 def roundtrip_nadoc(design: Design) -> Design:
     """Faithful ``.nadoc`` export→import round-trip.
@@ -223,12 +254,16 @@ def assert_roundtrip_stable(
     """
     built = build_fn()
     report_before = validate_design(built)
-    assert report_before.passed, f"build did not validate before round-trip:\n{report_before}"
+    assert report_before.passed, (
+        f"build did not validate before round-trip:\n{report_before}"
+    )
 
     reloaded = roundtrip(built)
 
     report_after = validate_design(reloaded)
-    assert report_after.passed, f"design did not validate after round-trip:\n{report_after}"
+    assert report_after.passed, (
+        f"design did not validate after round-trip:\n{report_after}"
+    )
 
     before, after = canonical_topology(built), canonical_topology(reloaded)
     assert before == after, (
@@ -240,6 +275,7 @@ def assert_roundtrip_stable(
 
 
 # ── Assembly round-trip oracle ────────────────────────────────────────────────
+
 
 def roundtrip_nass(assembly):
     """Faithful ``.nass`` export→import round-trip (the assembly analog of
@@ -314,6 +350,7 @@ def assert_assembly_roundtrip_stable(
 
 # ── Build-spec faithfulness oracle (AF-11) ────────────────────────────────────
 
+
 def assert_spec_matches_calls(
     build_from_spec: Callable[[], "object"],
     build_by_hand: Callable[[], "object"],
@@ -367,6 +404,7 @@ def assert_spec_matches_calls(
 
 # ── Mate-coincidence oracle (assembly joints) ─────────────────────────────────
 
+
 def assert_mate_coincident(
     assembly,
     joint_id: str,
@@ -399,7 +437,10 @@ def assert_mate_coincident(
     """
     import numpy as np
 
-    from backend.api.assembly import _assembly_source_path, _design_with_instance_overrides
+    from backend.api.assembly import (
+        _assembly_source_path,
+        _design_with_instance_overrides,
+    )
     from backend.core.assembly_connectors import _get_connector_world
 
     joint = next((j for j in assembly.joints if j.id == joint_id), None)
@@ -443,6 +484,7 @@ def assert_mate_coincident(
 
 
 # ── Gear-ratio oracle (assembly resolve-invariant) ────────────────────────────
+
 
 def assert_gear_ratio(
     assembly_before,
@@ -505,7 +547,11 @@ def assert_gear_ratio(
     # radius_a / radius_b`` (the gear path is unchanged: gears are first in the list).
     joints_after = {j.id: j for j in assembly_after.joints}
     rel = next(
-        (g for g in _coupling_relations(assembly_after, joints_after) if g.id == rel_id),
+        (
+            g
+            for g in _coupling_relations(assembly_after, joints_after)
+            if g.id == rel_id
+        ),
         None,
     )
     assert rel is not None, f"no coupling relation {rel_id!r} in the assembly"
@@ -553,6 +599,7 @@ def assert_gear_ratio(
 
 
 # ── Polymer-chain oracle ──────────────────────────────────────────────────────
+
 
 def assert_polymer_chain(
     assembly_before,
@@ -719,16 +766,21 @@ def assert_periodic_chain_tiles(
     """
     import numpy as np
 
-    from backend.api.assembly import _assembly_source_path, _design_with_instance_overrides
+    from backend.api.assembly import (
+        _assembly_source_path,
+        _design_with_instance_overrides,
+    )
     from backend.core.assembly_connectors import _get_connector_world
 
     inst_by_id = {i.id: i for i in assembly.instances}
     junctions = [
-        j for j in assembly.joints
+        j
+        for j in assembly.joints
         if j.joint_type == "rigid"
         and (j.connector_a_label or "").startswith("seam0:")
         and (j.connector_b_label or "").startswith("seam0:")
-        and j.instance_a_id in inst_by_id and j.instance_b_id in inst_by_id
+        and j.instance_a_id in inst_by_id
+        and j.instance_b_id in inst_by_id
     ]
     assert junctions, (
         "no rigid periodic-seam junctions in the assembly — nothing was polymerized "
@@ -744,8 +796,8 @@ def assert_periodic_chain_tiles(
     steps: list[float] = []
     angles: list[float] = []
     for j in junctions:
-        a = inst_by_id[j.instance_a_id]   # low copy, presents seam0:3p
-        b = inst_by_id[j.instance_b_id]   # high copy, presents seam0:5p
+        a = inst_by_id[j.instance_a_id]  # low copy, presents seam0:3p
+        b = inst_by_id[j.instance_b_id]  # high copy, presents seam0:5p
         design_a = _design_with_instance_overrides(a, asm_path)
         design_b = _design_with_instance_overrides(b, asm_path)
         ca = _get_connector_world(a, j.connector_a_label, design_a)
@@ -783,11 +835,16 @@ def assert_periodic_chain_tiles(
         "every copy is stacked on the seed, so this oracle would pass vacuously (use a "
         "part whose seam-to-seam length is non-zero)."
     )
-    return {"n_junctions": len(junctions), "max_gap_nm": max_gap,
-            "step_nm": step, "angle_deg": angle}
+    return {
+        "n_junctions": len(junctions),
+        "max_gap_nm": max_gap,
+        "step_nm": step,
+        "angle_deg": angle,
+    }
 
 
 # ── Overhang-binding referential-integrity oracle ─────────────────────────────
+
 
 def assert_binding_resolves(
     assembly,
@@ -864,6 +921,7 @@ def assert_binding_resolves(
 
 
 # ── Overhang-linker connection oracle (AF-27 — the hinge-confinement keystone) ──
+
 
 def assert_linker_connects(
     design: Design,
@@ -971,6 +1029,7 @@ def assert_direct_binding_applied(
     not relocate (B's tip still on its own helix) fails clause 3; a missing/unbound
     binding fails clause 2. Returns the re-imported design.
     """
+
     def _backing_domain(d: Design, ovhg_id: str):
         for s in d.strands:
             for dom in s.domains:
@@ -994,14 +1053,17 @@ def assert_direct_binding_applied(
 
         # 2. Exactly one bound binding for the pair, driver/driven recorded.
         pair = {overhang_a_id, overhang_b_id}
-        bindings = [b for b in d.overhang_bindings
-                    if {b.overhang_a_id, b.overhang_b_id} == pair]
+        bindings = [
+            b for b in d.overhang_bindings if {b.overhang_a_id, b.overhang_b_id} == pair
+        ]
         assert len(bindings) == 1, (
             f"{where}: expected exactly 1 binding for the pair, got {len(bindings)}"
         )
         bnd = bindings[0]
         assert bnd.bound, f"{where}: binding is not bound (apply must relocate)"
-        assert bnd.driver_oh_id == overhang_a_id and bnd.driven_oh_id == overhang_b_id, (
+        assert (
+            bnd.driver_oh_id == overhang_a_id and bnd.driven_oh_id == overhang_b_id
+        ), (
             f"{where}: driver/driven = {bnd.driver_oh_id}/{bnd.driven_oh_id}, "
             f"expected {overhang_a_id}/{overhang_b_id}"
         )
@@ -1039,17 +1101,24 @@ def assert_direct_binding_applied(
         #    non-adjacent helix at a mismatched bp, so it MUST be a ForcedLigation, not a
         #    crossover (else the cadnano editor draws a line to the wrong end). Every
         #    remaining crossover must be a valid lattice crossover (halves at the same bp).
-        bad_xo = [xo for xo in d.crossovers
-                  if int(xo.half_a.index) != int(xo.half_b.index)]
+        bad_xo = [
+            xo for xo in d.crossovers if int(xo.half_a.index) != int(xo.half_b.index)
+        ]
         assert not bad_xo, (
             f"{where}: improper crossover(s) at mismatched bp (must be forced ligations): "
             f"{[(xo.id, xo.half_a.helix_id, xo.half_a.index, xo.half_b.helix_id, xo.half_b.index) for xo in bad_xo]}"
         )
         # And validate_design must agree (the improper-crossover guard).
         from backend.core.validator import validate_design
-        bad_msgs = [r.message for r in validate_design(d).results
-                    if not r.ok and "Improper crossover" in r.message]
-        assert not bad_msgs, f"{where}: validate_design flagged improper crossovers: {bad_msgs}"
+
+        bad_msgs = [
+            r.message
+            for r in validate_design(d).results
+            if not r.ok and "Improper crossover" in r.message
+        ]
+        assert not bad_msgs, (
+            f"{where}: validate_design flagged improper crossovers: {bad_msgs}"
+        )
         return bnd
 
     _check(design, "in-memory")
@@ -1088,6 +1157,7 @@ def assert_duplex_relocated(
     clause 3; a driven stretched to the driver's length fails clause 3's length pin;
     a missing/unbound duplex fails clause 2. Returns the re-imported design.
     """
+
     def _backing_domain(d: Design, ovhg_id: str):
         for s in d.strands:
             for dom in s.domains:
@@ -1098,41 +1168,61 @@ def assert_duplex_relocated(
     def _check(d: Design, where: str):
         spec_drv = next((o for o in d.overhangs if o.id == driver_oh_id), None)
         spec_dvn = next((o for o in d.overhangs if o.id == driven_oh_id), None)
-        assert spec_drv is not None, f"{where}: driver overhang {driver_oh_id!r} vanished"
-        assert spec_dvn is not None, f"{where}: driven overhang {driven_oh_id!r} vanished"
+        assert spec_drv is not None, (
+            f"{where}: driver overhang {driver_oh_id!r} vanished"
+        )
+        assert spec_dvn is not None, (
+            f"{where}: driven overhang {driven_oh_id!r} vanished"
+        )
         dom_drv = _backing_domain(d, driver_oh_id)
         dom_dvn = _backing_domain(d, driven_oh_id)
-        assert dom_drv is not None and dom_dvn is not None, f"{where}: missing backing domain"
+        assert dom_drv is not None and dom_dvn is not None, (
+            f"{where}: missing backing domain"
+        )
 
         pair = {driver_oh_id, driven_oh_id}
-        dux = [dx for dx in d.duplexes
-               if {dx.left.overhang_id, dx.right.overhang_id} == pair]
+        dux = [
+            dx
+            for dx in d.duplexes
+            if {dx.left.overhang_id, dx.right.overhang_id} == pair
+        ]
         assert len(dux) == 1, f"{where}: expected 1 duplex for the pair, got {len(dux)}"
         dx = dux[0]
         assert dx.bound, f"{where}: duplex not bound (connect must relocate)"
         assert dx.prior_driven_topology is not None, (
-            f"{where}: relocated duplex has no prior_driven_topology snapshot")
-        driver_side_oh = dx.left.overhang_id if dx.driver == 'left' else dx.right.overhang_id
+            f"{where}: relocated duplex has no prior_driven_topology snapshot"
+        )
+        driver_side_oh = (
+            dx.left.overhang_id if dx.driver == "left" else dx.right.overhang_id
+        )
         assert driver_side_oh == driver_oh_id, (
-            f"{where}: duplex driver is {driver_side_oh!r}, expected {driver_oh_id!r}")
+            f"{where}: duplex driver is {driver_side_oh!r}, expected {driver_oh_id!r}"
+        )
 
         # 3. Driven relocated onto driver's helix, keeping its OWN length.
         assert dom_dvn.helix_id == dom_drv.helix_id, (
             f"{where}: driven on helix {dom_dvn.helix_id!r}, driver on {dom_drv.helix_id!r} "
-            f"— connect must relocate the driven onto the driver's helix")
+            f"— connect must relocate the driven onto the driver's helix"
+        )
         assert spec_dvn.helix_id == dom_drv.helix_id, (
-            f"{where}: driven OverhangSpec.helix_id not moved to the driver's helix")
+            f"{where}: driven OverhangSpec.helix_id not moved to the driver's helix"
+        )
         got_len = abs(dom_dvn.end_bp - dom_dvn.start_bp) + 1
         assert got_len == driven_length_bp, (
             f"{where}: driven relocated to {got_len} bp, expected {driven_length_bp} "
-            f"(a short driven must NOT be stretched to the driver's length)")
+            f"(a short driven must NOT be stretched to the driver's length)"
+        )
 
         used_helices = {dom.helix_id for s in d.strands for dom in s.domains}
         orphans = [h.id for h in d.helices if h.id not in used_helices]
         assert not orphans, f"{where}: orphaned helices: {orphans}"
         from backend.core.validator import validate_design
-        bad = [r.message for r in validate_design(d).results
-               if not r.ok and "Improper crossover" in r.message]
+
+        bad = [
+            r.message
+            for r in validate_design(d).results
+            if not r.ok and "Improper crossover" in r.message
+        ]
         assert not bad, f"{where}: validate_design flagged improper crossovers: {bad}"
         return dx
 
@@ -1169,22 +1259,31 @@ def assert_extension_present(
     an unknown modification or dangling strand (3) / a label the import lost
     (round-trip). Returns the re-imported design.
     """
+
     def _check(d: Design, where: str):
         ext = next((e for e in d.extensions if e.id == ext_id), None)
         assert ext is not None, (
-            f"{where}: no extension {ext_id!r} (of {[e.id for e in d.extensions]})")
+            f"{where}: no extension {ext_id!r} (of {[e.id for e in d.extensions]})"
+        )
         assert ext.strand_id == strand_id and ext.end == end, (
             f"{where}: extension on {ext.strand_id!r}/{ext.end}, "
-            f"expected {strand_id!r}/{end}")
+            f"expected {strand_id!r}/{end}"
+        )
         if modification is not None:
             assert ext.modification == modification, (
-                f"{where}: modification {ext.modification!r} != {modification!r}")
+                f"{where}: modification {ext.modification!r} != {modification!r}"
+            )
         if sequence is not None:
             assert ext.sequence == sequence, (
-                f"{where}: sequence {ext.sequence!r} != {sequence!r}")
+                f"{where}: sequence {ext.sequence!r} != {sequence!r}"
+            )
         from backend.core.validator import validate_design
-        bad = [r.message for r in validate_design(d).results
-               if not r.ok and "Strand extension" in r.message]
+
+        bad = [
+            r.message
+            for r in validate_design(d).results
+            if not r.ok and "Strand extension" in r.message
+        ]
         assert not bad, f"{where}: validate_design flagged the extension: {bad}"
         return ext
 
@@ -1195,6 +1294,7 @@ def assert_extension_present(
 
 
 # ── Flexible ssDNA-segment relax oracle (hinge scaffold-tether minimisation) ──
+
 
 def assert_flexible_segments_relaxed(
     before: Design,
@@ -1253,7 +1353,8 @@ def assert_flexible_segments_relaxed(
 
     if require_moved:
         before_poses = {
-            ct.id: (tuple(ct.translation), tuple(ct.rotation)) for ct in before.cluster_transforms
+            ct.id: (tuple(ct.translation), tuple(ct.rotation))
+            for ct in before.cluster_transforms
         }
         moved = any(
             before_poses.get(ct.id) != (tuple(ct.translation), tuple(ct.rotation))
@@ -1271,6 +1372,7 @@ def assert_flexible_segments_relaxed(
 
 
 # ── Linker / bond relax pose oracles (AF-27 P2) ───────────────────────────────
+
 
 def _relax_pose_moved(before: Design, after: Design) -> bool:
     """True iff at least one cluster's rigid transform (translation/rotation)
@@ -1376,12 +1478,21 @@ def assert_linker_relaxed_pose(
         return math.dist(tuple(pa), tuple(pb))
 
     c_after = _conn(after)
-    span = natural_span_nm if natural_span_nm is not None else _ds_target_length_nm(c_after)
+    span = (
+        natural_span_nm
+        if natural_span_nm is not None
+        else _ds_target_length_nm(c_after)
+    )
     strain_before = abs(_chord(before, _conn(before)) - span)
     strain_after = abs(_chord(after, c_after) - span)
     _assert_relax_pose(
-        before, after, strain_before, strain_after,
-        label=f"linker {conn_id!r}", require_reduced=require_reduced, eps=eps,
+        before,
+        after,
+        strain_before,
+        strain_after,
+        label=f"linker {conn_id!r}",
+        require_reduced=require_reduced,
+        eps=eps,
     )
 
 
@@ -1409,6 +1520,7 @@ def assert_bond_relaxed_pose(
     re-measured between the two named nucleotides on the POSED geometry (so the
     pin is independent of the relax's own ``relax_info``).  Can-go-red identically.
     """
+
     def _pos(d: Design, side: dict):
         nucs = _geometry_for_design(d)
         for n in nucs:
@@ -1431,8 +1543,13 @@ def assert_bond_relaxed_pose(
     strain_before = abs(_chord(before) - target_nm)
     strain_after = abs(_chord(after) - target_nm)
     _assert_relax_pose(
-        before, after, strain_before, strain_after,
-        label="bond", require_reduced=require_reduced, eps=eps,
+        before,
+        after,
+        strain_before,
+        strain_after,
+        label="bond",
+        require_reduced=require_reduced,
+        eps=eps,
     )
 
 
@@ -1480,8 +1597,13 @@ def assert_binding_relaxed_pose(
     strain_before = abs(_chord(before, _binding(before)) - target_nm)
     strain_after = abs(_chord(after, b_after) - target_nm)
     _assert_relax_pose(
-        before, after, strain_before, strain_after,
-        label=f"binding {binding_id!r}", require_reduced=require_reduced, eps=eps,
+        before,
+        after,
+        strain_before,
+        strain_after,
+        label=f"binding {binding_id!r}",
+        require_reduced=require_reduced,
+        eps=eps,
     )
 
 
@@ -1489,7 +1611,9 @@ def _overhang_rotation_changed(before: Design, after: Design, overhang_id: str) 
     """True iff *overhang_id*'s ball-joint rotation quaternion differs — the
     pose-moved guard for the end-to-root relax, whose 2-DOF duplex swing is
     stored on ``OverhangSpec.rotation`` (not a cluster transform)."""
-    rb = next((tuple(o.rotation) for o in before.overhangs if o.id == overhang_id), None)
+    rb = next(
+        (tuple(o.rotation) for o in before.overhangs if o.id == overhang_id), None
+    )
     ra = next((tuple(o.rotation) for o in after.overhangs if o.id == overhang_id), None)
     return rb != ra
 
@@ -1515,10 +1639,16 @@ def assert_duplex_cluster_materialized(
     Can-go-red: a no-op (no cluster created) fails clause 2; a conjugation bug that shifts
     the beads fails clause 1; any strand-graph edit fails clause 3.
     """
+
     def _ovhg_beads(d: Design) -> dict:
-        return {n["bp_index"]: tuple(round(x, 6) for x in
-                (n.get("backbone_position") or n.get("base_position")))
-                for n in _geometry_for_design(d) if n.get("overhang_id") == driver_oh_id}
+        return {
+            n["bp_index"]: tuple(
+                round(x, 6)
+                for x in (n.get("backbone_position") or n.get("base_position"))
+            )
+            for n in _geometry_for_design(d)
+            if n.get("overhang_id") == driver_oh_id
+        }
 
     gb, ga = _ovhg_beads(before), _ovhg_beads(after)
     assert gb, f"driver overhang {driver_oh_id!r} has no beads before — vacuous check"
@@ -1526,20 +1656,30 @@ def assert_duplex_cluster_materialized(
     for bp in gb:
         assert all(abs(x - y) <= eps for x, y in zip(gb[bp], ga[bp])), (
             f"materialize moved driver overhang bead {bp}: {gb[bp]} → {ga[bp]} "
-            "(the conjugation is not geometry-neutral)")
+            "(the conjugation is not geometry-neutral)"
+        )
 
-    cl = next((c for c in after.cluster_transforms
-               if c.overhang_duplex_driver_id == driver_oh_id), None)
+    cl = next(
+        (
+            c
+            for c in after.cluster_transforms
+            if c.overhang_duplex_driver_id == driver_oh_id
+        ),
+        None,
+    )
     assert cl is not None, "no duplex cluster was created for the driver overhang"
     assert cl.domain_ids, "duplex cluster has no domain_ids (must be domain-level)"
     spec = next((o for o in after.overhangs if o.id == driver_oh_id), None)
     assert spec is not None, f"driver overhang {driver_oh_id!r} vanished"
     assert list(spec.rotation) == [0.0, 0.0, 0.0, 1.0] and all(
-        abs(float(t)) <= eps for t in spec.translation), (
-        "driver OverhangSpec pose was not cleared — would double-transform with the cluster")
+        abs(float(t)) <= eps for t in spec.translation
+    ), (
+        "driver OverhangSpec pose was not cleared — would double-transform with the cluster"
+    )
 
     assert canonical_topology(before) == canonical_topology(after), (
-        "materialize changed the strand-graph topology — it must be pose-layer only")
+        "materialize changed the strand-graph topology — it must be pose-layer only"
+    )
 
 
 def assert_direct_binding_relaxed_pose(
@@ -1576,7 +1716,8 @@ def assert_direct_binding_relaxed_pose(
 
     def _chord(d: Design) -> float:
         strand, _bi, tip_dom, root_dom, cb_bp, cr_bp = _find_driven_tip_and_root(
-            d, driven_oh_id)
+            d, driven_oh_id
+        )
         nucs = _geometry_for_design(d)
         pb = _bead_pos(nucs, strand_id=strand.id, helix_id=tip_dom.helix_id, bp=cb_bp)
         pr = _bead_pos(nucs, strand_id=strand.id, helix_id=root_dom.helix_id, bp=cr_bp)
@@ -1594,8 +1735,9 @@ def assert_direct_binding_relaxed_pose(
             f"tip↔root chord strain |chord − {target_nm}|: "
             f"{strain_before:.4f} → {strain_after:.4f} nm (can-go-red on a no-op)"
         )
-        moved = (_relax_pose_moved(before, after)
-                 or _overhang_rotation_changed(before, after, driver_oh_id))
+        moved = _relax_pose_moved(before, after) or _overhang_rotation_changed(
+            before, after, driver_oh_id
+        )
         assert moved, (
             f"direct binding {driven_oh_id!r}: neither a cluster pose nor the driver's "
             "overhang rotation changed — a strain-reducing relax must move a pose"
@@ -1631,12 +1773,18 @@ def assert_duplex_relaxed(
     driver_oh_id = dx.right.overhang_id if dx.driver == "right" else dx.left.overhang_id
     driven_oh_id = dx.left.overhang_id if dx.driver == "right" else dx.right.overhang_id
     assert_direct_binding_relaxed_pose(
-        before, after, driver_oh_id, driven_oh_id,
-        target_nm=target_nm, require_reduced=require_reduced, eps=eps,
+        before,
+        after,
+        driver_oh_id,
+        driven_oh_id,
+        target_nm=target_nm,
+        require_reduced=require_reduced,
+        eps=eps,
     )
 
 
 # ── File-backed part oracle (AF-12 — build from a saved validated primitive) ──
+
 
 def assert_part_from_file(assembly, instance_id, expected_topology):
     """AF-12: a file-backed part instance resolves to **exactly** the saved ``.nadoc``'s
@@ -1697,7 +1845,8 @@ def assert_instances_from_file(assembly, expected_topology, *, instance_ids=None
     → :func:`assert_part_from_file` raises; an empty selection → the non-vacuity guard.
     """
     insts = [
-        i for i in assembly.instances
+        i
+        for i in assembly.instances
         if instance_ids is None or i.id in set(instance_ids)
     ]
     assert insts, (
@@ -1785,13 +1934,16 @@ def assert_part_is_circular_disc(
     )
     design = _load_design_from_source(inst.source, _assembly_source_path(assembly))
     assert_circular_disc(
-        design, requested_radius_nm,
-        max_spread_nm=max_spread_nm, radius_tol_nm=radius_tol_nm,
+        design,
+        requested_radius_nm,
+        max_spread_nm=max_spread_nm,
+        radius_tol_nm=radius_tol_nm,
     )
     return design
 
 
 # ── Instance-layout oracles (parametric grid / ring placement) ────────────────
+
 
 def _instance_origin(inst):
     """World origin (translation column) of a placed instance, as ``(x, y, z)``."""
@@ -1869,7 +2021,8 @@ def assert_instances_on_grid(
     )
 
     insts = [
-        i for i in assembly.instances
+        i
+        for i in assembly.instances
         if instance_ids is None or i.id in set(instance_ids)
     ]
     assert len(insts) == rows * cols, (
@@ -1951,7 +2104,8 @@ def assert_instances_on_ring(
     )
 
     insts = [
-        i for i in assembly.instances
+        i
+        for i in assembly.instances
         if instance_ids is None or i.id in set(instance_ids)
     ]
     assert len(insts) == n, f"ring placed {len(insts)} instances, expected {n}."
@@ -1984,6 +2138,7 @@ def assert_instances_on_ring(
 
 
 # ── Inverse-pair oracle ───────────────────────────────────────────────────────
+
 
 def assert_inverse_pair(
     start: Design,
@@ -2036,13 +2191,17 @@ def assert_inverse_pair(
 
 # ── Manual crossover-placement oracle ──────────────────────────────────────────
 
+
 def _strand_spans_both(design: Design, half_a, half_b) -> bool:
     """True iff a SINGLE strand has a domain covering ``half_a``'s (helix, index)
     AND a domain covering ``half_b``'s — i.e. the backbone actually crosses between
     the two helices at those bp (the crossover ligated, merging the two fragments).
     """
+
     def _covers(dm, helix_id, index) -> bool:
-        return dm.helix_id == helix_id and min(dm.start_bp, dm.end_bp) <= index <= max(dm.start_bp, dm.end_bp)
+        return dm.helix_id == helix_id and min(dm.start_bp, dm.end_bp) <= index <= max(
+            dm.start_bp, dm.end_bp
+        )
 
     for s in design.strands:
         on_a = any(_covers(dm, half_a.helix_id, half_a.index) for dm in s.domains)
@@ -2136,6 +2295,7 @@ def assert_crossover_joins(
 
 # ── Forced-ligation oracle ─────────────────────────────────────────────────────
 
+
 def assert_forced_ligation(
     before: Design,
     after: Design,
@@ -2179,6 +2339,7 @@ def assert_forced_ligation(
     merge / wrong strand count (3); a record appended without the backbone merge
     (4); a round-trip that dropped the record (5).  Returns the FL record.
     """
+
     class _Site:
         __slots__ = ("helix_id", "index")
 
@@ -2205,8 +2366,16 @@ def assert_forced_ligation(
             f"no forced ligation {fl_id!r} in {label} "
             f"(of {[f.id for f in design.forced_ligations]})"
         )
-        got_three = (fl.three_prime_helix_id, fl.three_prime_bp, str(fl.three_prime_direction))
-        got_five = (fl.five_prime_helix_id, fl.five_prime_bp, str(fl.five_prime_direction))
+        got_three = (
+            fl.three_prime_helix_id,
+            fl.three_prime_bp,
+            str(fl.three_prime_direction),
+        )
+        got_five = (
+            fl.five_prime_helix_id,
+            fl.five_prime_bp,
+            str(fl.five_prime_direction),
+        )
         assert got_three == exp_three, (
             f"forced ligation {fl_id!r} 3' endpoint {got_three} != expected {exp_three} "
             f"in {label}"
@@ -2247,8 +2416,12 @@ def _fl_endpoint_set(design: Design):
     """
     return frozenset(
         (
-            fl.three_prime_helix_id, fl.three_prime_bp, str(fl.three_prime_direction),
-            fl.five_prime_helix_id, fl.five_prime_bp, str(fl.five_prime_direction),
+            fl.three_prime_helix_id,
+            fl.three_prime_bp,
+            str(fl.three_prime_direction),
+            fl.five_prime_helix_id,
+            fl.five_prime_bp,
+            str(fl.five_prime_direction),
         )
         for fl in design.forced_ligations
     )
@@ -2363,14 +2536,19 @@ def _placement_subdesign(design: Design, helix_ids) -> Design:
         lattice_type=design.lattice_type,
         helices=[h for h in design.helices if h.id in hids],
         strands=[
-            s for s in design.strands if s.domains and all(dm.helix_id in hids for dm in s.domains)
+            s
+            for s in design.strands
+            if s.domains and all(dm.helix_id in hids for dm in s.domains)
         ],
         forced_ligations=[
-            fl for fl in design.forced_ligations
+            fl
+            for fl in design.forced_ligations
             if fl.three_prime_helix_id in hids and fl.five_prime_helix_id in hids
         ],
         cluster_transforms=[
-            c for c in design.cluster_transforms if c.helix_ids and all(h in hids for h in c.helix_ids)
+            c
+            for c in design.cluster_transforms
+            if c.helix_ids and all(h in hids for h in c.helix_ids)
         ],
     )
 
@@ -2405,8 +2583,12 @@ def _fl_grid_set(design: Design):
     gp = {h.id: h.grid_pos for h in design.helices}
     return frozenset(
         (
-            gp[fl.three_prime_helix_id], fl.three_prime_bp, str(fl.three_prime_direction),
-            gp[fl.five_prime_helix_id], fl.five_prime_bp, str(fl.five_prime_direction),
+            gp[fl.three_prime_helix_id],
+            fl.three_prime_bp,
+            str(fl.three_prime_direction),
+            gp[fl.five_prime_helix_id],
+            fl.five_prime_bp,
+            str(fl.five_prime_direction),
         )
         for fl in design.forced_ligations
     )
@@ -2415,7 +2597,9 @@ def _fl_grid_set(design: Design):
 def _cluster_grid_sets(design: Design):
     """Cluster groupings keyed by member helix *grid_pos* (id-independent)."""
     gp = {h.id: h.grid_pos for h in design.helices}
-    return frozenset(frozenset(gp[h] for h in c.helix_ids) for c in design.cluster_transforms)
+    return frozenset(
+        frozenset(gp[h] for h in c.helix_ids) for c in design.cluster_transforms
+    )
 
 
 def assert_primitive_placed(
@@ -2509,8 +2693,11 @@ def assert_primitive_placed(
 
 # ── Scaffold-routing-compliance oracle (AF-34) ────────────────────────────────
 
+
 def assert_scaffold_routing_compliant(
-    design: Design, *, require_seams: bool = True,
+    design: Design,
+    *,
+    require_seams: bool = True,
 ):
     """AF-34: a headless autoscaffold output is *routing-compliant* origami — a real
     seamed (or seamless) route, NOT a single-pass raster with scaffold crossovers
@@ -2543,9 +2730,7 @@ def assert_scaffold_routing_compliant(
     """
     from backend.core.scaffold_invariants import scaffold_routing_invariants
 
-    scaffolds = [
-        s for s in design.strands if s.is_scaffold and not s.is_reference
-    ]
+    scaffolds = [s for s in design.strands if s.is_scaffold and not s.is_reference]
     assert scaffolds, (
         "non-vacuity: design has no scaffold strand, so routing compliance is "
         "vacuous — did auto_scaffold actually route a scaffold?"
@@ -2559,6 +2744,7 @@ def assert_scaffold_routing_compliant(
 
 
 # ── Geometric length oracle ───────────────────────────────────────────────────
+
 
 def geometric_nucleotide_count(design: Design, helix_id: str | None = None) -> int:
     """Number of nucleotides the geometry kernel emits for *design*.
@@ -2620,6 +2806,7 @@ def assert_geometric_length_delta(
 
 # ── Crossover extra-bases oracle ──────────────────────────────────────────────
 
+
 def assert_crossover_extra_bases(
     design: Design,
     sequence: str,
@@ -2664,7 +2851,8 @@ def assert_crossover_extra_bases(
             f"crossover_filter must be all|scaffold|staple, got {crossover_filter!r}"
         )
         targeted = {
-            rec["id"] for rec in enumerate_crossovers(design)
+            rec["id"]
+            for rec in enumerate_crossovers(design)
             if crossover_filter == "all" or rec["crossover_type"] == crossover_filter
         }
         assert targeted, (
@@ -2700,6 +2888,7 @@ def assert_crossover_extra_bases(
 
 # ── Circularity oracle (parametric disc primitives) ───────────────────────────
 
+
 def assert_circular_disc(
     design: Design,
     requested_radius_nm: float,
@@ -2732,7 +2921,8 @@ def assert_circular_disc(
     from backend.core.circle_primitive import circularity_spread, fit_radius
 
     helices = [
-        h for h in design.helices
+        h
+        for h in design.helices
         if (helix_ids is None or h.id in helix_ids) and h.grid_pos is not None
     ]
     assert helices, "no disc helices found to assess circularity"
@@ -2762,6 +2952,7 @@ def assert_circular_disc(
 
 
 # ── Deformed-placement oracle (continuation onto a bent/twisted frame) ─────────
+
 
 def assert_on_deformed_frame(
     design_before: Design,
@@ -2861,6 +3052,7 @@ def assert_on_deformed_frame(
 
 # ── Deformation-angle oracle (bend/twist magnitude) ───────────────────────────
 
+
 def assert_deformation_angle(
     design_after: Design,
     plane_a_bp: int,
@@ -2936,6 +3128,7 @@ def assert_deformation_angle(
 
 # ── Cluster-pose oracle (rigid-translation, geometric) ────────────────────────
 
+
 def assert_cluster_translated(
     design_before,
     design_after,
@@ -2989,10 +3182,14 @@ def assert_cluster_translated(
         "oracle would pass vacuously (pose the cluster by a non-zero translation)."
     )
 
-    cluster = next((c for c in design_after.cluster_transforms if c.id == cluster_id), None)
+    cluster = next(
+        (c for c in design_after.cluster_transforms if c.id == cluster_id), None
+    )
     assert cluster is not None, f"no cluster {cluster_id!r} in design_after"
     cluster_helix_ids = set(cluster.helix_ids)
-    assert cluster_helix_ids, f"cluster {cluster_id!r} has no helices — nothing to measure"
+    assert cluster_helix_ids, (
+        f"cluster {cluster_id!r} has no helices — nothing to measure"
+    )
 
     before_axes = {a["helix_id"]: a for a in deformed_helix_axes(design_before)}
     after_axes = {a["helix_id"]: a for a in deformed_helix_axes(design_after)}
@@ -3000,18 +3197,24 @@ def assert_cluster_translated(
     moved = 0
     for hid, after_a in after_axes.items():
         before_a = before_axes.get(hid)
-        assert before_a is not None, f"helix {hid} present after but not before the pose"
+        assert before_a is not None, (
+            f"helix {hid} present after but not before the pose"
+        )
         bs, be = np.asarray(before_a["start"]), np.asarray(before_a["end"])
         as_, ae = np.asarray(after_a["start"]), np.asarray(after_a["end"])
         if hid in cluster_helix_ids:
-            assert np.allclose(as_, bs + T, atol=tol_nm) and np.allclose(ae, be + T, atol=tol_nm), (
+            assert np.allclose(as_, bs + T, atol=tol_nm) and np.allclose(
+                ae, be + T, atol=tol_nm
+            ), (
                 f"cluster helix {hid} did not translate by {list(translation)} nm: "
                 f"start {np.round(bs, 3)} → {np.round(as_, 3)} "
                 f"(expected {np.round(bs + T, 3)})."
             )
             moved += 1
         else:
-            assert np.allclose(as_, bs, atol=tol_nm) and np.allclose(ae, be, atol=tol_nm), (
+            assert np.allclose(as_, bs, atol=tol_nm) and np.allclose(
+                ae, be, atol=tol_nm
+            ), (
                 f"non-cluster helix {hid} moved {np.round(as_ - bs, 3)} nm — a cluster "
                 "pose must be local to its own helices."
             )
@@ -3051,11 +3254,15 @@ def assert_cluster_in_feature_log(design, cluster_id: str, *, expect_helix_ids=N
     Returns the matched log entry.
     """
     cluster = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
-    assert cluster is not None, f"no cluster {cluster_id!r} in design.cluster_transforms"
+    assert cluster is not None, (
+        f"no cluster {cluster_id!r} in design.cluster_transforms"
+    )
 
     entries = [
-        e for e in design.feature_log
-        if getattr(e, "feature_type", None) == "cluster_create" and e.cluster_id == cluster_id
+        e
+        for e in design.feature_log
+        if getattr(e, "feature_type", None) == "cluster_create"
+        and e.cluster_id == cluster_id
     ]
     assert entries, (
         f"no 'cluster_create' feature-log entry for cluster {cluster_id!r} — the cluster "
@@ -3067,7 +3274,11 @@ def assert_cluster_in_feature_log(design, cluster_id: str, *, expect_helix_ids=N
     )
     entry = entries[0]
 
-    expected = set(expect_helix_ids) if expect_helix_ids is not None else set(cluster.helix_ids)
+    expected = (
+        set(expect_helix_ids)
+        if expect_helix_ids is not None
+        else set(cluster.helix_ids)
+    )
     source = "requested" if expect_helix_ids is not None else "live cluster"
     assert set(entry.helix_ids) == expected, (
         f"cluster_create entry helix set {sorted(entry.helix_ids)} != {source} helix set "
@@ -3263,8 +3474,12 @@ def assert_roll_return_lifecycle(
     # 0. precondition
     pre = design_state.get_or_404()
     full_len = len(pre.feature_log)
-    assert edit_probe(pre), "precondition failed: the edit must be present before rolling."
-    assert out_of_date() is True, "precondition failed: the job should be out_of_date after the edit."
+    assert edit_probe(pre), (
+        "precondition failed: the edit must be present before rolling."
+    )
+    assert out_of_date() is True, (
+        "precondition failed: the job should be out_of_date after the edit."
+    )
 
     # 1. crash-guard: a live op on the stale job is refused with 409
     raised: BaseException | None = None
@@ -3305,7 +3520,9 @@ def assert_roll_return_lifecycle(
 
     # 5. return to latest
     back = return_to_latest(rid)
-    assert edit_probe(back), "return-to-latest lost the edits (the overhang did not come back)."
+    assert edit_probe(back), (
+        "return-to-latest lost the edits (the overhang did not come back)."
+    )
     return rid
 
 
@@ -3467,7 +3684,9 @@ def assert_joint_on_hull_corner(
     assert cluster is not None, f"joint {joint_id!r} references missing cluster"
 
     world_origin, world_dir = _local_to_world_joint(
-        joint.local_axis_origin, joint.local_axis_direction, cluster,
+        joint.local_axis_origin,
+        joint.local_axis_direction,
+        cluster,
     )
     o = np.asarray(world_origin, dtype=float)
     dlen = float(np.linalg.norm(world_dir))
@@ -3558,9 +3777,13 @@ def assert_range_of_motion(
     if pad is None:
         pad = HELIX_RADIUS
     rom = cluster_range_of_motion(
-        design, cluster_id, axis,
-        min_angle_deg=min_angle_deg, max_angle_deg=max_angle_deg,
-        pad=pad, step_deg=step_deg,
+        design,
+        cluster_id,
+        axis,
+        min_angle_deg=min_angle_deg,
+        max_angle_deg=max_angle_deg,
+        pad=pad,
+        step_deg=step_deg,
     )
     full = max_angle_deg - min_angle_deg
     assert -1e-6 <= rom <= full + tol_deg, (
@@ -3638,8 +3861,9 @@ def assert_parallelogram_linkage(
     obbs = [cluster_obb(design, bid) for bid in bar_ids]
 
     def _corners(o):
-        return [o.corner(su, sv, sw)
-                for su in (-1, 1) for sv in (-1, 1) for sw in (-1, 1)]
+        return [
+            o.corner(su, sv, sw) for su in (-1, 1) for sv in (-1, 1) for sw in (-1, 1)
+        ]
 
     def _long_axis(o):
         i = int(np.argmax(o.half))
@@ -3651,8 +3875,9 @@ def assert_parallelogram_linkage(
     shared = []
     for k in range(n):
         ci, cj = corners[k], corners[(k + 1) % n]
-        best = min(((np.linalg.norm(x - y), x, y) for x in ci for y in cj),
-                   key=lambda t: t[0])
+        best = min(
+            ((np.linalg.norm(x - y), x, y) for x in ci for y in cj), key=lambda t: t[0]
+        )
         d, x, _ = best
         assert d < tol_nm, (
             f"bars {bar_ids[k]!r} and {bar_ids[(k + 1) % n]!r} do not meet at a shared "
@@ -3708,17 +3933,24 @@ def assert_parallelogram_linkage(
             assert i is not None, (
                 f"joint {jid!r} is on cluster {joint.cluster_id!r}, not one of the bars"
             )
-            cluster = next(c for c in design.cluster_transforms
-                           if c.id == joint.cluster_id)
+            cluster = next(
+                c for c in design.cluster_transforms if c.id == joint.cluster_id
+            )
             origin, direction = _local_to_world_joint(
-                joint.local_axis_origin, joint.local_axis_direction, cluster,
+                joint.local_axis_origin,
+                joint.local_axis_direction,
+                cluster,
             )
             # non-adjacent bars = those not pinned to bar i (its neighbours co-move in a
             # real linkage; the collision concern is the un-connected bar(s)).
-            obstacles = [bar_ids[j] for j in range(n)
-                         if j not in {(i - 1) % n, i, (i + 1) % n}]
+            obstacles = [
+                bar_ids[j] for j in range(n) if j not in {(i - 1) % n, i, (i + 1) % n}
+            ]
             rom = cluster_range_of_motion(
-                design, bar_ids[i], (origin, direction), obstacles=obstacles or None,
+                design,
+                bar_ids[i],
+                (origin, direction),
+                obstacles=obstacles or None,
             )
             assert rom > tol_deg, (
                 f"hinge {jid!r} on bar {bar_ids[i]!r} has ROM {rom:.2f}° — the joint is "
@@ -3813,8 +4045,9 @@ def assert_recommended_hinge(
     # is far from every corner and fails this single check (the can-go-red guard).
     origin = np.asarray(top["axis_origin"], dtype=float)
     midpoint = (p_lo + p_hi) / 2.0
-    d_corner = min(float(np.linalg.norm(origin - p_lo)),
-                   float(np.linalg.norm(origin - p_hi)))
+    d_corner = min(
+        float(np.linalg.norm(origin - p_lo)), float(np.linalg.norm(origin - p_hi))
+    )
     at_midpoint = float(np.linalg.norm(origin - midpoint)) < tol_nm
     assert d_corner < tol_nm, (
         f"hinge anchor {np.round(origin, 3)} is {d_corner:.3f} nm from the nearest edge "
@@ -3827,6 +4060,7 @@ def assert_recommended_hinge(
 # ── Headless-coverage audit ───────────────────────────────────────────────────
 
 # ── Full-sequencing oracle (every base defined + WC-complementary) ────────────
+
 
 def assert_fully_sequenced(design: Design, *, require_wc: bool = True) -> int:
     """A design carries a *complete, correct* sequence: no undefined base AND every
@@ -3852,7 +4086,8 @@ def assert_fully_sequenced(design: Design, *, require_wc: bool = True) -> int:
     undefined, total = count_undefined_bases(design, exclude_reference=True)
     assert total > 0, "design has no sequenceable nucleotides (oracle would be vacuous)"
     assert undefined == 0, (
-        f"{undefined}/{total} bases still undefined — design is not fully sequenced")
+        f"{undefined}/{total} bases still undefined — design is not fully sequenced"
+    )
 
     if not require_wc:
         return 0
@@ -3861,8 +4096,11 @@ def assert_fully_sequenced(design: Design, *, require_wc: bool = True) -> int:
         out = []
         for dm in strand.domains:
             lo, hi = min(dm.start_bp, dm.end_bp), max(dm.start_bp, dm.end_bp)
-            rng = (range(lo, hi + 1) if dm.direction == Direction.FORWARD
-                   else range(hi, lo - 1, -1))
+            rng = (
+                range(lo, hi + 1)
+                if dm.direction == Direction.FORWARD
+                else range(hi, lo - 1, -1)
+            )
             out.extend((dm.helix_id, bp) for bp in rng)
         return out
 
@@ -3884,17 +4122,21 @@ def assert_fully_sequenced(design: Design, *, require_wc: bool = True) -> int:
             expected = complement_base(scaf)
             assert base.upper() == expected, (
                 f"staple base {base!r} at {key} is not the WC complement of "
-                f"scaffold base {scaf!r} (expected {expected!r})")
+                f"scaffold base {scaf!r} (expected {expected!r})"
+            )
             checked += 1
     assert checked > 0, (
-        "no scaffold-paired staple positions to verify — WC check would be vacuous")
+        "no scaffold-paired staple positions to verify — WC check would be vacuous"
+    )
     return checked
 
 
 # ── Physical-layer (oxDNA) relaxation oracle (AF-13, Tier 5) ──────────────────
 
-def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
-                                      expected_count: int | None = None) -> dict:
+
+def assert_relaxed_geometry_recovered(
+    job, design: Design, workspace, *, expected_count: int | None = None
+) -> dict:
     """Tier-5 foundational oracle: a headless oxDNA relaxation reached
     ``completed`` AND its relaxed last frame reads back into a full per-nucleotide
     position map — "we can drive oxDNA headlessly and recover the relaxed geometry."
@@ -3918,11 +4160,13 @@ def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
 
     status = getattr(job.status, "value", str(job.status))
     assert status == "completed", (
-        f"oxDNA job did not reach completed (status={status!r}); error={job.error!r}")
+        f"oxDNA job did not reach completed (status={status!r}); error={job.error!r}"
+    )
 
     display = hox.read_relaxed_positions(job.job_id, workspace)
     assert display.get("ready") is True, (
-        "relaxed last_conf did not read back (display route not ready)")
+        "relaxed last_conf did not read back (display route not ready)"
+    )
     # The /display route also surfaces crossover extra-base inserts (helix_id
     # "__xb__") so they render at their real simulated positions; this oracle pins
     # the REAL design nucleotides, so drop the inserts before the design-key checks.
@@ -3932,27 +4176,32 @@ def assert_relaxed_geometry_recovered(job, design: Design, workspace, *,
     expected = expected_count if expected_count is not None else len(geom)
     assert len(positions) == expected, (
         f"recovered {len(positions)} relaxed positions, expected {expected} "
-        "(one per design nucleotide)")
+        "(one per design nucleotide)"
+    )
 
     design_keys = {(g["helix_id"], g["bp_index"], g["direction"]) for g in geom}
     for p in positions:
         bb = p["backbone_position"]
         assert len(bb) == 3 and all(math.isfinite(float(c)) for c in bb), (
-            f"recovered a non-finite backbone position: {bb!r}")
+            f"recovered a non-finite backbone position: {bb!r}"
+        )
         key = (p["helix_id"], p["bp_index"], p["direction"])
         assert key in design_keys, (
-            f"recovered position key {key!r} is not a nucleotide of the design")
+            f"recovered position key {key!r} is not a nucleotide of the design"
+        )
 
     recovered_keys = {(p["helix_id"], p["bp_index"], p["direction"]) for p in positions}
     assert recovered_keys == design_keys, (
         f"recovered geometry does not cover every design nucleotide "
         f"(missing {len(design_keys - recovered_keys)}, extra "
-        f"{len(recovered_keys - design_keys)})")
+        f"{len(recovered_keys - design_keys)})"
+    )
     return display
 
 
-def assert_extra_bases_in_oxdna(design: Design, *, expected_count: int,
-                                expected_sequence: str | None = None) -> list:
+def assert_extra_bases_in_oxdna(
+    design: Design, *, expected_count: int, expected_sequence: str | None = None
+) -> list:
     """Physical-layer oracle: crossover ``extra_bases`` are materialized as
     single-stranded nucleotides in the oxDNA topology — inserted on the
     crossover-owning strand, threaded in-chain (3′/5′) between their flanking real
@@ -3972,7 +4221,8 @@ def assert_extra_bases_in_oxdna(design: Design, *, expected_count: int,
 
     assert expected_count > 0, "vacuity: expected_count must be > 0 to pin an insertion"
     assert any(x.extra_bases for x in design.crossovers), (
-        "design carries no crossover extra_bases — nothing to materialize")
+        "design carries no crossover extra_bases — nothing to materialize"
+    )
 
     bare = design.model_copy(deep=True)
     for x in bare.crossovers:
@@ -3982,24 +4232,29 @@ def assert_extra_bases_in_oxdna(design: Design, *, expected_count: int,
     order = ox._strand_nucleotide_order(design)
     assert len(order) - len(order_bare) == expected_count, (
         f"oxDNA order grew by {len(order) - len(order_bare)}, "
-        f"expected {expected_count} extra-base nucleotides")
+        f"expected {expected_count} extra-base nucleotides"
+    )
 
     rows, _ = ox.topology_rows(design)
     assert len(rows) == len(order), "topology row count must equal the nucleotide order"
     xb_keys = [k for k in order if k[0] == ox._XB_SENTINEL]
     assert len(xb_keys) == expected_count, (
-        f"{len(xb_keys)} extra-base keys in topology order, expected {expected_count}")
+        f"{len(xb_keys)} extra-base keys in topology order, expected {expected_count}"
+    )
 
     # The inserts add to the total nucleotide count but do not consume the strand's
     # designed sequence (so real nucleotides keep their assigned bases).
     _, t_bare = ox.count_undefined_bases(bare)
     _, t = ox.count_undefined_bases(design)
     assert t - t_bare == expected_count, (
-        "count_undefined total did not grow by exactly the inserted nucleotides")
+        "count_undefined total did not grow by exactly the inserted nucleotides"
+    )
 
     idx = {k: i for i, k in enumerate(order)}
     inserts = ox._extra_base_inserts(design)
-    assert len(inserts) == expected_count, "insert map size must equal the inserted count"
+    assert len(inserts) == expected_count, (
+        "insert map size must equal the inserted count"
+    )
 
     runs: dict = defaultdict(list)
     for xbkey, (prev_key, next_key, k, n) in inserts.items():
@@ -4007,10 +4262,12 @@ def assert_extra_bases_in_oxdna(design: Design, *, expected_count: int,
         si, base, _n3, _n5 = rows[i]
         if expected_sequence is not None:
             assert base.upper() == expected_sequence[k].upper(), (
-                f"extra base index {k} is {base!r}, expected {expected_sequence[k]!r}")
+                f"extra base index {k} is {base!r}, expected {expected_sequence[k]!r}"
+            )
         # Same strand as its flanking real nucleotides (the junction's owning strand).
         assert rows[idx[prev_key]][0] == si == rows[idx[next_key]][0], (
-            "extra base assigned to a different strand than its crossover junction")
+            "extra base assigned to a different strand than its crossover junction"
+        )
         runs[(prev_key, next_key)].append((k, xbkey))
 
     # Backbone chain continuity through each run: prev → eb0 → … → eb(n-1) → next.
@@ -4023,10 +4280,17 @@ def assert_extra_bases_in_oxdna(design: Design, *, expected_count: int,
     return order
 
 
-def assert_field_ready_specimen(result, design: Design, workspace, *,
-                                field_pN: float = 4.0, field_dir=(0, 0, 1),
-                                field_steps: int = 2000, anchor_tol_nm: float = 1.0,
-                                min_free_proj_nm: float = 0.5) -> dict:
+def assert_field_ready_specimen(
+    result,
+    design: Design,
+    workspace,
+    *,
+    field_pN: float = 4.0,
+    field_dir=(0, 0, 1),
+    field_steps: int = 2000,
+    anchor_tol_nm: float = 1.0,
+    min_free_proj_nm: float = 0.5,
+) -> dict:
     """AF-18 (Tier 6) composite oracle: an end-to-end-built design is *ready to run
     an electric-field experiment* — fully sequenced, relaxed, and anchorable so that
     a field holds the anchored beads while the rest deflects.
@@ -4077,32 +4341,56 @@ def assert_field_ready_specimen(result, design: Design, workspace, *,
     anchor_keys = result["anchor_keys"]
     assert anchor_keys, (
         "specimen resolved no anchor nucleotides — not field-anchorable (a uniform "
-        "field would just stream the whole structure across the box)")
+        "field would just stream the whole structure across the box)"
+    )
     anchor = result["anchor"]
-    child = hox.append_field(job.job_id, workspace, field_pN=field_pN,
-                             dir=list(field_dir), anchors=[anchor], steps=field_steps)
+    child = hox.append_field(
+        job.job_id,
+        workspace,
+        field_pN=field_pN,
+        dir=list(field_dir),
+        anchors=[anchor],
+        steps=field_steps,
+    )
     field_job = hox.wait_for_terminal(child["job_id"], workspace)
     status = getattr(field_job.status, "value", str(field_job.status))
     assert status == "completed", (
-        f"probe field run did not complete (status={status!r}); error={field_job.error!r}")
+        f"probe field run did not complete (status={status!r}); error={field_job.error!r}"
+    )
 
     ws = Path(workspace)
     field_conf = field_job.stage_dir(ws, field_job.stages[-1].name) / "last_conf.dat"
     ref_conf = field_job.job_dir(ws) / "conf.dat"
     response = field_response_from_confs(
-        design, field_conf, ref_conf, field_dir=list(field_dir),
-        anchor_keys=anchor_keys, anchor_tol_nm=anchor_tol_nm,
-        min_free_proj_nm=min_free_proj_nm)
+        design,
+        field_conf,
+        ref_conf,
+        field_dir=list(field_dir),
+        anchor_keys=anchor_keys,
+        anchor_tol_nm=anchor_tol_nm,
+        min_free_proj_nm=min_free_proj_nm,
+    )
     assert response["passed"], (
         f"specimen is not field-ready — the probe field did not confirm "
-        f"anchor-held/body-deflected: {response['reason']}")
-    return {"n_wc_checked": n_wc, "n_anchored": len(anchor_keys),
-            "field_response": response}
+        f"anchor-held/body-deflected: {response['reason']}"
+    )
+    return {
+        "n_wc_checked": n_wc,
+        "n_anchored": len(anchor_keys),
+        "field_response": response,
+    }
 
 
-def assert_equilibration_timeline(job, workspace, field_dir, anchor_keys, *,
-                                  design: Design, melt_floor: float = 0.5,
-                                  min_confidence: int = 10):
+def assert_equilibration_timeline(
+    job,
+    workspace,
+    field_dir,
+    anchor_keys,
+    *,
+    design: Design,
+    melt_floor: float = 0.5,
+    min_confidence: int = 10,
+):
     """AF-19 (Tier 6) oracle: a field run reaches a stable equilibrium in finite time
     *without melting* — the structure swings to a new pose and holds together.
 
@@ -4140,7 +4428,8 @@ def assert_equilibration_timeline(job, workspace, field_dir, anchor_keys, *,
 
     status = getattr(job.status, "value", str(job.status))
     assert status == "completed", (
-        f"field job did not reach completed (status={status!r}); error={job.error!r}")
+        f"field job did not reach completed (status={status!r}); error={job.error!r}"
+    )
 
     ws = Path(workspace)
     field_idx = next((i for i, s in enumerate(job.stages) if s.kind == "field"), None)
@@ -4154,28 +4443,43 @@ def assert_equilibration_timeline(job, workspace, field_dir, anchor_keys, *,
     assert n_frames >= min_confidence, (
         f"field equilibration is INCONCLUSIVE — only {n_frames} trajectory "
         f"frame(s) (need >= {min_confidence}); run a longer field stage to certify "
-        "a timescale (the confidence gate)")
+        "a timescale (the confidence gate)"
+    )
 
     total_steps = getattr(stage, "steps", None)
     steps_per_frame = (total_steps / n_frames) if total_steps else 1.0
 
     result = measure_field_equilibration(
-        frames, field_dir, anchor_keys, design=design,
-        steps_per_frame=steps_per_frame, melt_floor=melt_floor)
+        frames,
+        field_dir,
+        anchor_keys,
+        design=design,
+        steps_per_frame=steps_per_frame,
+        melt_floor=melt_floor,
+    )
 
     assert result["converged"], (
-        f"field response did not equilibrate to a stable plateau: {result['reason']}")
+        f"field response did not equilibrate to a stable plateau: {result['reason']}"
+    )
     assert result["tau_steps"] is not None and result["tau_steps"] > 0, (
-        f"no finite positive equilibration time τ (tau_steps={result['tau_steps']!r})")
+        f"no finite positive equilibration time τ (tau_steps={result['tau_steps']!r})"
+    )
     assert not result["melted"], (
         f"structure melted during the field swing — base-pair retention dropped to "
-        f"{result['bp_min']:.0%} below the {melt_floor:.0%} floor (it was ripped apart)")
+        f"{result['bp_min']:.0%} below the {melt_floor:.0%} floor (it was ripped apart)"
+    )
     return result
 
 
-def assert_field_sweep_map(sweep, *, benign_range, destructive_range,
-                           melt_floor=0.5, tau_tol_steps=1e-6,
-                           min_tau_drop_steps=1.0):
+def assert_field_sweep_map(
+    sweep,
+    *,
+    benign_range,
+    destructive_range,
+    melt_floor=0.5,
+    tau_tol_steps=1e-6,
+    min_tau_drop_steps=1.0,
+):
     """AF-20 (Tier 6) oracle: a swept ``(|E|, direction)`` field response surface is
     a *complete, physically-sensible* map — the first automated MULTI-config physical
     experiment.  Where Tier 5 measured one structure at one condition, this asserts a
@@ -4214,13 +4518,16 @@ def assert_field_sweep_map(sweep, *, benign_range, destructive_range,
     assert not sweep["skipped"], (
         f"field sweep skipped {len(sweep['skipped'])} cell(s) {sweep['skipped']} — "
         "the response surface is incomplete (a field job failed or wrote no "
-        "trajectory); no silent truncation of the grid")
+        "trajectory); no silent truncation of the grid"
+    )
 
     # Clause 1 — every grid cell present.
     grid = [(pN, d) for pN in sweep["intensities_pN"] for d in sweep["directions"]]
     assert grid, "field sweep covered no (|E|, direction) cells (empty grid)"
     for key in grid:
-        assert key in cells, f"field sweep has no verdict for cell {key} (a gap in the map)"
+        assert key in cells, (
+            f"field sweep has no verdict for cell {key} (a gap in the map)"
+        )
 
     def _nondestructive(cell):
         # Recompute from the raw measured fields (NOT cell["destructive"]).
@@ -4228,45 +4535,57 @@ def assert_field_sweep_map(sweep, *, benign_range, destructive_range,
 
     # Clause 2 — a non-destructive operating window exists in the benign band.
     blo, bhi = benign_range
-    benign_safe = [k for k, c in cells.items()
-                   if blo <= k[0] <= bhi and _nondestructive(c)]
+    benign_safe = [
+        k for k, c in cells.items() if blo <= k[0] <= bhi and _nondestructive(c)
+    ]
     assert benign_safe, (
         f"no non-destructive cell in the benign |E| range {benign_range} pN — the "
-        "specimen has no safe operating window where it aligns without melting")
+        "specimen has no safe operating window where it aligns without melting"
+    )
 
     # Clause 3 — the destructive band covers real cells and they all melted.
     dlo, dhi = destructive_range
     destr_cells = [(k, c) for k, c in cells.items() if dlo <= k[0] <= dhi]
     assert destr_cells, (
         f"destructive |E| range {destructive_range} pN covers no swept cell — the "
-        "sweep cannot certify an upper bound (vacuous)")
+        "sweep cannot certify an upper bound (vacuous)"
+    )
     still_intact = [k for k, c in destr_cells if _nondestructive(c)]
     assert not still_intact, (
         f"cells {still_intact} in the destructive range {destructive_range} pN did "
         "NOT melt — the non-destructive window is not bounded above (the structure "
-        "survives a field that should rip it apart)")
+        "survives a field that should rip it apart)"
+    )
 
     # Clause 4 — τ decreases with |E| in each direction's responsive band.
     n_checked = 0
     for d in sweep["directions"]:
-        band = sorted((k[0], c) for k, c in cells.items()
-                      if k[1] == d and _nondestructive(c))
+        band = sorted(
+            (k[0], c) for k, c in cells.items() if k[1] == d and _nondestructive(c)
+        )
         taus = [c["tau_steps"] for _pN, c in band]
         assert len(taus) >= 2, (
             f"direction {d}: responsive band has {len(taus)} cell(s) (<2) — cannot "
-            "test a τ-vs-|E| trend; widen the responsive intensity range")
+            "test a τ-vs-|E| trend; widen the responsive intensity range"
+        )
         for (lo_pN, a), (hi_pN, b) in zip(band, band[1:]):
             assert b["tau_steps"] <= a["tau_steps"] + tau_tol_steps, (
                 f"direction {d}: equilibration time τ rose from {a['tau_steps']:.1f} "
                 f"({lo_pN} pN) to {b['tau_steps']:.1f} ({hi_pN} pN) — stronger field "
-                "should equilibrate at least as fast (τ non-increasing in |E|)")
+                "should equilibrate at least as fast (τ non-increasing in |E|)"
+            )
         assert taus[0] - taus[-1] >= min_tau_drop_steps, (
             f"direction {d}: τ is flat across |E| ({taus}) — no field↔equilibration "
-            "correlation (the response is field-strength independent)")
+            "correlation (the response is field-strength independent)"
+        )
         n_checked += 1
 
-    return {"n_cells": len(cells), "n_benign_safe": len(benign_safe),
-            "n_destructive": len(destr_cells), "n_directions_checked": n_checked}
+    return {
+        "n_cells": len(cells),
+        "n_benign_safe": len(benign_safe),
+        "n_destructive": len(destr_cells),
+        "n_directions_checked": n_checked,
+    }
 
 
 def _campaign_tau_signature(sweep, *, melt_floor):
@@ -4282,10 +4601,18 @@ def _campaign_tau_signature(sweep, *, melt_floor):
     return sig
 
 
-def assert_field_campaign(campaign, *, benign_range, destructive_range,
-                          expect_distinguishable=True, melt_floor=0.5,
-                          min_tau_separation_steps=1.0, repro=None,
-                          tau_tol_steps=1e-6, min_tau_drop_steps=1.0):
+def assert_field_campaign(
+    campaign,
+    *,
+    benign_range,
+    destructive_range,
+    expect_distinguishable=True,
+    melt_floor=0.5,
+    min_tau_separation_steps=1.0,
+    repro=None,
+    tau_tol_steps=1e-6,
+    min_tau_drop_steps=1.0,
+):
     """AF-23 (Tier 6 CAPSTONE) oracle: a cross-design field-response *campaign* is a
     complete, design-discriminating, reproducible study — the user's stated goal,
     tying text→design (the AF-11/12 grammar) + field sweep (AF-20) + equilibration
@@ -4331,27 +4658,35 @@ def assert_field_campaign(campaign, *, benign_range, destructive_range,
     assert not campaign["skipped"], (
         f"field campaign skipped {len(campaign['skipped'])} design(s) "
         f"{campaign['skipped']} — a build/sweep failed; the cross-design study is "
-        "incomplete (no silent truncation of the campaign)")
+        "incomplete (no silent truncation of the campaign)"
+    )
     assert sweeps, "field campaign produced no design response surfaces (empty)"
 
     # Clause 2 — every design is itself a valid, windowed response surface.
     per_design = {}
     for name, sweep in sweeps.items():
         per_design[name] = assert_field_sweep_map(
-            sweep, benign_range=benign_range, destructive_range=destructive_range,
-            melt_floor=melt_floor, tau_tol_steps=tau_tol_steps,
-            min_tau_drop_steps=min_tau_drop_steps)
+            sweep,
+            benign_range=benign_range,
+            destructive_range=destructive_range,
+            melt_floor=melt_floor,
+            tau_tol_steps=tau_tol_steps,
+            min_tau_drop_steps=min_tau_drop_steps,
+        )
 
     # Build each design's τ signature over its non-destructive cells.
-    signatures = {name: _campaign_tau_signature(sweep, melt_floor=melt_floor)
-                  for name, sweep in sweeps.items()}
+    signatures = {
+        name: _campaign_tau_signature(sweep, melt_floor=melt_floor)
+        for name, sweep in sweeps.items()
+    }
 
     # Clause 3 — the designs are distinguishable (the capstone's reason to exist).
     n_distinguishing = 0
     if expect_distinguishable:
         assert len(sweeps) >= 2, (
             "expect_distinguishable requires >= 2 designs to compare (the campaign "
-            f"has {len(sweeps)})")
+            f"has {len(sweeps)})"
+        )
         names = list(signatures)
         max_sep = 0.0
         sep_cell = None
@@ -4370,36 +4705,52 @@ def assert_field_campaign(campaign, *, benign_range, destructive_range,
             f"(|E|, direction) cell separates any two designs' τ by >= "
             f"{min_tau_separation_steps} steps (largest τ separation seen: "
             f"{max_sep:.1f} steps at {sep_cell}); the campaign cannot tell the "
-            "structures apart")
+            "structures apart"
+        )
 
     # Clause 4 — deterministic re-run reproduces every τ.
     n_repro = 0
     if repro is not None:
-        repro_sigs = {name: _campaign_tau_signature(sweep, melt_floor=melt_floor)
-                      for name, sweep in repro["sweeps"].items()}
+        repro_sigs = {
+            name: _campaign_tau_signature(sweep, melt_floor=melt_floor)
+            for name, sweep in repro["sweeps"].items()
+        }
         shared_designs = set(signatures) & set(repro_sigs)
         assert shared_designs, (
             "reproducibility check: the re-run campaign shares no design names with "
-            "the original (nothing to compare)")
+            "the original (nothing to compare)"
+        )
         for name in shared_designs:
             a, b = signatures[name], repro_sigs[name]
             assert set(a) == set(b), (
                 f"design {name!r}: re-run's responsive cell set differs from the "
-                f"original ({set(a) ^ set(b)}) — the campaign is not deterministic")
+                f"original ({set(a) ^ set(b)}) — the campaign is not deterministic"
+            )
             for cell, tau in a.items():
                 assert abs(tau - b[cell]) <= tau_tol_steps, (
                     f"design {name!r} cell {cell}: τ {tau:.3f} (run 1) vs "
                     f"{b[cell]:.3f} (run 2) differ > {tau_tol_steps} — the campaign "
-                    "is not reproducible")
+                    "is not reproducible"
+                )
                 n_repro += 1
 
-    return {"n_designs": len(sweeps), "n_distinguishing_cells": n_distinguishing,
-            "n_repro_cells": n_repro, "per_design": per_design}
+    return {
+        "n_designs": len(sweeps),
+        "n_distinguishing_cells": n_distinguishing,
+        "n_repro_cells": n_repro,
+        "per_design": per_design,
+    }
 
 
-def assert_oxpy_equilibrium_parity(live_result, batch_result, *, tol_nm: float = 0.5,
-                                   bp_tol: float = 0.05, min_confidence: int = 2,
-                                   require_mutation: bool = True):
+def assert_oxpy_equilibrium_parity(
+    live_result,
+    batch_result,
+    *,
+    tol_nm: float = 0.5,
+    bp_tol: float = 0.05,
+    min_confidence: int = 2,
+    require_mutation: bool = True,
+):
     """AF-21 (Tier 6) oracle: the PERSISTENT in-process oxpy engine is physically
     equivalent to the validated one-shot batch engine, AND its live field control
     actually steers the body.
@@ -4439,7 +4790,8 @@ def assert_oxpy_equilibrium_parity(live_result, batch_result, *, tol_nm: float =
     bc = int(batch_result.get("confidence", 0))
     assert lc >= min_confidence and bc >= min_confidence, (
         f"oxpy parity is INCONCLUSIVE — confidence live={lc} batch={bc} "
-        f"(need >= {min_confidence}); run more bursts/frames (the confidence gate)")
+        f"(need >= {min_confidence}); run more bursts/frames (the confidence gate)"
+    )
 
     lo = live_result["observables"]
     bo = batch_result["observables"]
@@ -4450,15 +4802,18 @@ def assert_oxpy_equilibrium_parity(live_result, batch_result, *, tol_nm: float =
         f"oxpy/batch equilibrium DIVERGED in alignment: live "
         f"{lo['alignment_nm']:.3f} nm vs batch {bo['alignment_nm']:.3f} nm "
         f"(Δ {da:.3f} > {tol_nm} nm) — the interactive engine is not reaching the "
-        "batch engine's equilibrium pose")
+        "batch engine's equilibrium pose"
+    )
     assert dr <= tol_nm, (
         f"oxpy/batch equilibrium DIVERGED in radius of gyration: live "
         f"{lo['radius_of_gyration_nm']:.3f} nm vs batch "
-        f"{bo['radius_of_gyration_nm']:.3f} nm (Δ {dr:.3f} > {tol_nm} nm)")
+        f"{bo['radius_of_gyration_nm']:.3f} nm (Δ {dr:.3f} > {tol_nm} nm)"
+    )
     assert db <= bp_tol, (
         f"oxpy/batch equilibrium DIVERGED in base-pair retention: live "
         f"{lo['bp_retention']:.3f} vs batch {bo['bp_retention']:.3f} "
-        f"(Δ {db:.3f} > {bp_tol})")
+        f"(Δ {db:.3f} > {bp_tol})"
+    )
 
     followed = None
     if require_mutation:
@@ -4466,20 +4821,27 @@ def assert_oxpy_equilibrium_parity(live_result, batch_result, *, tol_nm: float =
         assert mut is not None, (
             "live run carries no field-mutation record — cannot prove the field "
             "steers the body (pass mutate_dir to run_live_field, or "
-            "require_mutation=False for a parity-only check)")
+            "require_mutation=False for a parity-only check)"
+        )
         followed = bool(mut["followed"])
         assert followed, (
             f"the live field re-aim did NOT steer the body: deflection along the "
             f"new vector went {mut['proj_on_to_before_nm']:.3f} → "
             f"{mut['proj_on_to_after_nm']:.3f} nm (expected an increase) — a dead "
-            "field vector mutation")
+            "field vector mutation"
+        )
 
-    return {"alignment_delta_nm": da, "rg_delta_nm": dr, "bp_delta": db,
-            "followed": followed}
+    return {
+        "alignment_delta_nm": da,
+        "rg_delta_nm": dr,
+        "bp_delta": db,
+        "followed": followed,
+    }
 
 
-def assert_live_field_following(timeline, *, melt_floor: float = 0.5,
-                                min_following_nm: float = 0.5):
+def assert_live_field_following(
+    timeline, *, melt_floor: float = 0.5, min_following_nm: float = 0.5
+):
     """AF-22 (Tier 6) oracle: a STEERED live-field timeline produces real
     field-following without melting — the substance behind "play with the field in
     real time", distinct from a merely responsive UI.
@@ -4516,7 +4878,8 @@ def assert_live_field_following(timeline, *, melt_floor: float = 0.5,
     wps = timeline["timeline"] if isinstance(timeline, dict) else list(timeline)
     assert len(wps) >= 2, (
         f"a steered field timeline needs >= 2 waypoints to prove following "
-        f"(got {len(wps)}) — a single field cannot show the body chasing a re-aim")
+        f"(got {len(wps)}) — a single field cannot show the body chasing a re-aim"
+    )
 
     moves = [float(wp["proj_after_nm"]) - float(wp["proj_before_nm"]) for wp in wps]
     bps = [float(wp["bp_retention"]) for wp in wps]
@@ -4525,25 +4888,39 @@ def assert_live_field_following(timeline, *, melt_floor: float = 0.5,
         assert bp >= melt_floor, (
             f"waypoint {i} (field {wp['field_dir']}) MELTED during steering: "
             f"bp retention {bp:.3f} < {melt_floor} — the structure ripped apart "
-            "following the field")
+            "following the field"
+        )
         assert move > 1e-9, (
             f"waypoint {i} (field {wp['field_dir']}) did NOT follow the field "
             f"re-aim: deflection along its vector went {wp['proj_before_nm']:.3f} "
             f"→ {wp['proj_after_nm']:.3f} nm (expected a rise) — a dead waypoint "
-            "the body ignored")
+            "the body ignored"
+        )
 
     n_following = sum(1 for m in moves if m >= min_following_nm)
     assert n_following >= 1, (
         f"no waypoint moved the body by >= {min_following_nm} nm along its field "
         f"(max move {max(moves):.3f} nm) — the steering is vacuous (the body never "
-        "substantially chased a re-aim)")
+        "substantially chased a re-aim)"
+    )
 
-    return {"n_waypoints": len(wps), "n_following_moves": n_following,
-            "min_bp": min(bps), "max_following_nm": max(moves)}
+    return {
+        "n_waypoints": len(wps),
+        "n_following_moves": n_following,
+        "min_bp": min(bps),
+        "max_following_nm": max(moves),
+    }
 
 
-def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
-                               workspace, min_confidence=RMSF_PRELIM_FRAMES):
+def assert_relaxed_measurement(
+    job,
+    measure_spec,
+    target_nm,
+    tol_nm,
+    *,
+    workspace,
+    min_confidence=RMSF_PRELIM_FRAMES,
+):
     """Tier-5 constraint primitive: a *measured* geometric property of the
     relaxed, **noise-averaged** structure lies within ``tol_nm`` of ``target_nm``,
     **gated by confidence** — the first stochastic-class oracle.
@@ -4594,18 +4971,21 @@ def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
 
     status = getattr(job.status, "value", str(job.status))
     assert status == "completed", (
-        f"oxDNA job did not reach completed (status={status!r}); error={job.error!r}")
+        f"oxDNA job did not reach completed (status={status!r}); error={job.error!r}"
+    )
 
     rmsf = hox.read_flexibility_map(job.job_id, workspace)
     assert rmsf.get("ready") is True, (
         "no production mean structure available — run append_production before "
-        f"measuring (rmsf route: {rmsf.get('reason')!r})")
+        f"measuring (rmsf route: {rmsf.get('reason')!r})"
+    )
     confidence = rmsf.get("confidence") or {}
     n_frames = confidence.get("n_frames", rmsf.get("n_frames", 0))
     assert n_frames >= min_confidence, (
         f"relaxed measurement is INCONCLUSIVE — only {n_frames} production "
         f"frame(s) pooled (need >= {min_confidence}); run a longer production to "
-        "certify the target (the confidence gate)")
+        "certify the target (the confidence gate)"
+    )
 
     kind = measure_spec.get("measure")
     unit = "nm"
@@ -4621,7 +5001,8 @@ def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
         # for backward compatibility); the vertex is the middle landmark.
         landmark_a, landmark_b, landmark_c = measure_spec["landmarks"]
         measured = measure_segment_angle(
-            rmsf["positions"], landmark_a, landmark_b, landmark_c)
+            rmsf["positions"], landmark_a, landmark_b, landmark_c
+        )
         label, unit = "segment angle", "deg"
     elif kind == "inter_helix_spacing":
         # Each landmark names a helix (any nucleotide on it); the measure groups
@@ -4629,22 +5010,31 @@ def assert_relaxed_measurement(job, measure_spec, target_nm, tol_nm, *,
         # spacing in nm.
         landmark_a, landmark_b = measure_spec["landmarks"]
         measured = measure_inter_helix_spacing(
-            rmsf["positions"], landmark_a, landmark_b)
+            rmsf["positions"], landmark_a, landmark_b
+        )
         label = "inter-helix spacing"
     else:
         raise AssertionError(
             f"assert_relaxed_measurement: unsupported measure {kind!r} "
-            "(implemented: 'end_to_end', 'radius_of_gyration', 'segment_angle')")
+            "(implemented: 'end_to_end', 'radius_of_gyration', 'segment_angle')"
+        )
     assert abs(measured - target_nm) <= tol_nm, (
         f"relaxed {label} {measured:.3f} {unit} is not within {tol_nm} {unit} of "
         f"the target {target_nm} {unit} (off by {abs(measured - target_nm):.3f} "
-        f"{unit})")
-    return {"measured_nm": measured, "target_nm": target_nm, "tol_nm": tol_nm,
-            "n_frames": n_frames, "confidence": confidence}
+        f"{unit})"
+    )
+    return {
+        "measured_nm": measured,
+        "target_nm": target_nm,
+        "tol_nm": tol_nm,
+        "n_frames": n_frames,
+        "confidence": confidence,
+    }
 
 
-def assert_relax_honors_hardware_default(design: Design, workspace, *,
-                                         backend: str, device: str = "0", **params):
+def assert_relax_honors_hardware_default(
+    design: Design, workspace, *, backend: str, device: str = "0", **params
+):
     """Tier-5 bridge oracle: a benchmarked hardware default actually *reaches the
     simulation* — a headless relaxation tuned from ``metadata.hardware_defaults``
     runs on the recommended ``backend``/``device``, with a safe CPU fallback when
@@ -4678,36 +5068,45 @@ def assert_relax_honors_hardware_default(design: Design, workspace, *,
     if (backend, device) == ("CPU", "0"):
         raise AssertionError(
             "assert_relax_honors_hardware_default is vacuous for the CPU/0 fallback — "
-            "request a non-default config (e.g. backend='CUDA', device='1')")
+            "request a non-default config (e.g. backend='CUDA', device='1')"
+        )
 
     host = hardware.hostname()
     if design.metadata.hardware_defaults.get(host) is not None:
         raise AssertionError(
             "design already carries a hardware default for this host — pass a design "
-            "with no benchmarked default so the baseline fallback is meaningful")
+            "with no benchmarked default so the baseline fallback is meaningful"
+        )
 
     base = hox.run_relaxation_tuned(design, workspace, **params)
     base_status = getattr(base.status, "value", str(base.status))
     assert base_status == "completed", (
         f"baseline relaxation did not complete (status={base_status!r}); "
-        f"error={base.error!r}")
+        f"error={base.error!r}"
+    )
     assert (base.backend, base.device) == ("CPU", "0"), (
         f"expected the CPU/0 fallback with no benchmarked default, got "
-        f"{base.backend}/{base.device}")
+        f"{base.backend}/{base.device}"
+    )
 
-    tuned_design = hox.apply_oxdna_benchmark(design, {"backend": backend, "device": device})
+    tuned_design = hox.apply_oxdna_benchmark(
+        design, {"backend": backend, "device": device}
+    )
     job = hox.run_relaxation_tuned(tuned_design, workspace, **params)
     status = getattr(job.status, "value", str(job.status))
     assert status == "completed", (
-        f"tuned relaxation did not complete (status={status!r}); error={job.error!r}")
+        f"tuned relaxation did not complete (status={status!r}); error={job.error!r}"
+    )
     assert (job.backend, job.device) == (backend, device), (
         f"relaxation did not honour the benchmarked default: requested "
-        f"{backend}/{device}, but the job ran {job.backend}/{job.device}")
+        f"{backend}/{device}, but the job ran {job.backend}/{job.device}"
+    )
     return job
 
 
-def assert_converges_to_constraint(result, *, target_nm, tol_nm,
-                                   min_confidence=RMSF_PRELIM_FRAMES):
+def assert_converges_to_constraint(
+    result, *, target_nm, tol_nm, min_confidence=RMSF_PRELIM_FRAMES
+):
     """AF-13 Phase 4 capstone oracle: a closed build→relax→measure→adjust loop
     (:func:`~backend.api.headless_oxdna_build.iterate_to_constraint`) *converged* a
     parametric topology knob to a relaxed-structure target — and got there honestly,
@@ -4733,25 +5132,29 @@ def assert_converges_to_constraint(result, *, target_nm, tol_nm,
     """
     assert isinstance(result, dict) and "status" in result, (
         f"assert_converges_to_constraint expects an iterate_to_constraint result "
-        f"dict, got {result!r}")
+        f"dict, got {result!r}"
+    )
     history = result.get("iterations") or []
     assert history, "iterate loop ran zero iterations — nothing was attempted"
 
     assert result["status"] == "met", (
         f"iterate loop did not converge (status={result['status']!r} after "
-        f"{len(history)} iteration(s)); final verdict={result.get('verdict')!r}")
+        f"{len(history)} iteration(s)); final verdict={result.get('verdict')!r}"
+    )
 
     final = result.get("verdict")
     assert final and final.get("status") == "met" and final.get("met") is True, (
-        f"loop reported converged but the final verdict is not a clean 'met': "
-        f"{final!r}")
+        f"loop reported converged but the final verdict is not a clean 'met': {final!r}"
+    )
     assert final["n_frames"] >= min_confidence, (
         f"loop declared the target met on only {final['n_frames']} pooled frame(s) "
         f"(< {min_confidence}) — the confidence gate was bypassed on the winning "
-        "verdict")
+        "verdict"
+    )
     assert abs(final["measured_nm"] - target_nm) <= tol_nm, (
         f"final measured {final['measured_nm']:.3f} nm is not within {tol_nm} nm of "
-        f"the target {target_nm} nm (off by {abs(final['measured_nm'] - target_nm):.3f})")
+        f"the target {target_nm} nm (off by {abs(final['measured_nm'] - target_nm):.3f})"
+    )
 
     for i, step in enumerate(history):
         v = step.get("verdict")
@@ -4759,13 +5162,15 @@ def assert_converges_to_constraint(result, *, target_nm, tol_nm,
             assert v["n_frames"] >= min_confidence, (
                 f"iteration {i} flipped 'met' on only {v['n_frames']} frame(s) "
                 f"(< {min_confidence}) — the confidence gate must hold on EVERY "
-                "step, not just the last")
+                "step, not just the last"
+            )
 
     first = history[0].get("verdict")
     assert first is not None and first.get("status") != "met", (
         "loop converged on the FIRST attempt — the initial knob already met the "
         "constraint, so this run does not exercise the adjust loop (vacuous); start "
-        "from a knob that is off-target")
+        "from a knob that is off-target"
+    )
     return result
 
 
@@ -4798,30 +5203,37 @@ def assert_spec_constraints_reported(spec_result, hand_verdicts, *, measured_tol
     """
     assert isinstance(spec_result, dict) and "verdicts" in spec_result, (
         f"assert_spec_constraints_reported expects a build_and_check_design result "
-        f"dict, got {spec_result!r}")
+        f"dict, got {spec_result!r}"
+    )
     spec_verdicts = spec_result["verdicts"]
     assert spec_verdicts, (
         "the spec reported no constraint verdicts — this oracle would pass vacuously; "
-        "use a spec that actually carries a 'constraints' block")
+        "use a spec that actually carries a 'constraints' block"
+    )
     assert len(spec_verdicts) == len(hand_verdicts), (
         f"constraint count mismatch: the spec reported {len(spec_verdicts)} verdict(s) "
         f"but the hand build reported {len(hand_verdicts)} — a constraint was dropped "
-        "or duplicated in the lowering")
+        "or duplicated in the lowering"
+    )
     for i, (sv, hv) in enumerate(zip(spec_verdicts, hand_verdicts)):
         assert sv["status"] == hv["status"], (
             f"constraint {i}: spec status {sv['status']!r} != hand status "
-            f"{hv['status']!r} — the grammar reported a different verdict")
+            f"{hv['status']!r} — the grammar reported a different verdict"
+        )
         assert sv["met"] == hv["met"], (
-            f"constraint {i}: spec met={sv['met']} != hand met={hv['met']}")
+            f"constraint {i}: spec met={sv['met']} != hand met={hv['met']}"
+        )
         sm, hm = sv["measured_nm"], hv["measured_nm"]
         if sm is None or hm is None:
             assert sm == hm, (
-                f"constraint {i}: spec measured {sm!r} != hand measured {hm!r}")
+                f"constraint {i}: spec measured {sm!r} != hand measured {hm!r}"
+            )
         else:
             assert abs(sm - hm) <= measured_tol, (
                 f"constraint {i}: spec measured {sm:.4f} != hand measured {hm:.4f} "
                 f"(off by {abs(sm - hm):.4g}) — a landmark resolved to the wrong helix "
-                "or the wrong measure ran")
+                "or the wrong measure ran"
+            )
     return spec_verdicts
 
 
@@ -4892,7 +5304,9 @@ def _coverage_report(modules, path_predicate) -> dict:
             "path": path,
             "endpoint": route.endpoint.__name__,
         }
-        (covered_routes if route.endpoint in wrapped_fns else uncovered_routes).append(row)
+        (covered_routes if route.endpoint in wrapped_fns else uncovered_routes).append(
+            row
+        )
 
     covered_routes.sort(key=lambda r: r["path"])
     uncovered_routes.sort(key=lambda r: r["path"])
@@ -4937,12 +5351,12 @@ def _chord_sagitta_bend(centerline) -> tuple[float, float]:
         return 0.0, float("inf")
     u = chord_v / c
     perp = (cen - a) - np.outer((cen - a) @ u, u)
-    s = float(np.linalg.norm(perp, axis=1).max())     # sagitta (max deviation)
+    s = float(np.linalg.norm(perp, axis=1).max())  # sagitta (max deviation)
     if s < 1e-6:
         return 0.0, float("inf")
     R = (c * c / 4.0 + s * s) / (2.0 * s)
     bend = float(np.degrees(2.0 * np.arcsin(np.clip((c / 2.0) / R, -1.0, 1.0))))
-    if s > R:                                          # arc past 180° (hairpin)
+    if s > R:  # arc past 180° (hairpin)
         bend = 360.0 - bend
     return bend, R
 
@@ -4992,8 +5406,12 @@ def measure_fem_bundle_bend(
         f = fem.assemble_prestress_force(mesh, design)
         K_free, f_free, free = fem.apply_boundary_conditions(K, f, mesh)
         u = fem.solve_equilibrium(K_free, f_free, K.shape[0], free)
-        pos = np.array([mesh.nodes[i].position + u[6 * i:6 * i + 3]
-                        for i in range(len(mesh.nodes))])
+        pos = np.array(
+            [
+                mesh.nodes[i].position + u[6 * i : 6 * i + 3]
+                for i in range(len(mesh.nodes))
+            ]
+        )
 
     # Centerline = mean of every helix node at each axial station (global_bp), ordered.
     by_station: dict[int, list] = defaultdict(list)
@@ -5073,7 +5491,9 @@ def assert_fem_autorefine_relieves_twist(
     from backend.core.models import LatticeType
 
     res = car.fem_refine(design, nonlinear=nonlinear, max_hotspots=max_hotspots)
-    assert res["status"] == "done", f"autorefine did not finish: status={res['status']!r}"
+    assert res["status"] == "done", (
+        f"autorefine did not finish: status={res['status']!r}"
+    )
     before, after = res["before"]["rmsd"], res["after"]["rmsd"]
     assert before > min_before_rmsd, (
         f"autorefine oracle is vacuous: the design deviates only {before:.3f} nm before refining "
@@ -5112,12 +5532,144 @@ def assert_fem_autorefine_relieves_twist(
     forbidden, _interior = car._forbidden_bps(design)
     for hid, bps in marks.items():
         stray = set(bps) & forbidden.get(hid, set())
-        assert not stray, f"autorefine placed a mark on forbidden bp(s) {sorted(stray)} of helix {hid}."
-    skips_only = (design.lattice_type == LatticeType.SQUARE
-                  if require_skips_only is None else require_skips_only)
+        assert not stray, (
+            f"autorefine placed a mark on forbidden bp(s) {sorted(stray)} of helix {hid}."
+        )
+    skips_only = (
+        design.lattice_type == LatticeType.SQUARE
+        if require_skips_only is None
+        else require_skips_only
+    )
     if skips_only:
         assert all(dl == -1 for bps in marks.values() for dl in bps.values()), (
             "square-lattice refinement produced a loop (+1) mark — the register over-twist is "
             "relieved by DELETIONS only."
         )
     return res
+
+
+# ── Mitred-corner primitive oracle (headless_corner_build) ──────────────────────
+
+
+def assert_corner_folded(
+    design: Design,
+    *,
+    n_helices: int = 6,
+    target_angle_deg: float = 90.0,
+    angle_tol_deg: float = 5.0,
+    max_stretch_nm: float = 1.0,
+    baseline_total_nm: float | None = None,
+    baseline_steric_clashes: int | None = None,
+):
+    """Oracle for :func:`backend.api.headless_corner_build.build_corner`.
+
+    A mitred corner is two SQUARE sheets folded to a target angle and stitched by
+    ``n_helices`` cross-seam forced ligations.  Its correctness spans all three
+    layers, so several independent checks are needed — ``canonical_topology`` is
+    blind to both the fold pose *and* the forced-ligation records, so only measured
+    geometry + a real round-trip prove them.  Asserts, in order:
+
+      1. **Corner angle.** The angle between the two flush faces (posed mean helix
+         axes) is within ``angle_tol_deg`` of ``target_angle_deg`` — the fold
+         actually happened and landed square (can-go-red: no fold → ~0° or ~180°).
+      2. **Seam count.** Exactly ``n_helices`` forced ligations (one per seam).
+      3. **Every seam bond is short.** Each posed forced-ligation backbone stretch
+         is ``< max_stretch_nm`` — no over-stretched ligation survived.
+      4. **The optimiser helped** (when ``baseline_total_nm`` is given): the total
+         posed stretch is ``≤ baseline_total_nm`` (the unoptimised uniform build) —
+         proves the phase-aware search is not a no-op.
+      5. **No worse steric clashes** (when ``baseline_steric_clashes`` is given):
+         :func:`steric_clash_count` (real clashes, seam FL bonds excluded) is
+         ``≤ baseline_steric_clashes`` — the optimiser introduced no new folding
+         collisions.
+      6. **The fold is logged.** A ``cluster_op`` feature-log entry records the
+         folded sheet-B cluster's pose (the load-bearing replayability pin — the
+         pose lives off the strand graph, so ``canonical_topology`` can't see it).
+      7. **Round-trip stable.** The build passes ``validate_design`` and survives a
+         real ``.nadoc`` export→import with identical ``canonical_topology`` — and
+         all six forced-ligation records persist (re-checked on the reload).
+
+    Returns the resolved :class:`CornerSpec`.
+    """
+    from backend.api.headless_corner_build import (
+        corner_face_angle_deg,
+        forced_ligation_stretches,
+        resolve_corner_spec,
+        steric_clash_count,
+    )
+
+    spec = resolve_corner_spec(design)
+
+    # 1. corner angle
+    angle = corner_face_angle_deg(design, spec)
+    assert abs(angle - target_angle_deg) <= angle_tol_deg, (
+        f"corner angle {angle:.1f}° is not within {angle_tol_deg}° of the target "
+        f"{target_angle_deg}° — the fold did not land square."
+    )
+
+    # 2. seam count
+    assert len(design.forced_ligations) == n_helices, (
+        f"expected {n_helices} seam forced ligations, got {len(design.forced_ligations)}."
+    )
+
+    # 3. every seam bond short
+    stretches = forced_ligation_stretches(design)
+    assert len(stretches) == n_helices, (
+        f"only {len(stretches)}/{n_helices} forced ligations have posed positions."
+    )
+    worst = max(stretches)
+    assert worst < max_stretch_nm, (
+        f"a seam forced ligation is over-stretched: {worst:.3f} nm ≥ {max_stretch_nm} nm "
+        f"(all: {[round(s, 3) for s in stretches]})."
+    )
+
+    # 4. optimiser beat the baseline
+    total = sum(stretches)
+    if baseline_total_nm is not None:
+        assert total <= baseline_total_nm + 1e-6, (
+            f"optimised total seam stretch {total:.3f} nm is not ≤ the unoptimised "
+            f"baseline {baseline_total_nm:.3f} nm — the optimiser did not help."
+        )
+
+    # 5. no worse steric clashes
+    if baseline_steric_clashes is not None:
+        real = steric_clash_count(design)
+        assert real <= baseline_steric_clashes, (
+            f"optimised build has {real} steric clashes, worse than the unoptimised "
+            f"baseline {baseline_steric_clashes} (seam FL bonds excluded from both)."
+        )
+
+    # 6. the fold is logged as a cluster_op
+    b_cluster = next(
+        (
+            c
+            for c in design.cluster_transforms
+            if f"h_XY_0_{spec.b_cols[0]}" in c.helix_ids
+        ),
+        None,
+    )
+    assert b_cluster is not None, "sheet-B cluster not found in cluster_transforms."
+    cluster_ops = [
+        e
+        for e in design.feature_log
+        if getattr(e, "feature_type", None) == "cluster_op"
+        and getattr(e, "cluster_id", None) == b_cluster.id
+    ]
+    assert cluster_ops, (
+        "no 'cluster_op' feature-log entry for the folded sheet-B cluster — the fold "
+        "was applied without log=True; its pose is unrepresentable in the design history "
+        "(and canonical_topology is blind to it)."
+    )
+
+    # 7. round-trip stable, and every FL record persists
+    reloaded = roundtrip_nadoc(design)
+    assert validate_design(design).passed, "corner did not validate before round-trip."
+    assert validate_design(reloaded).passed, "corner did not validate after round-trip."
+    assert canonical_topology(design) == canonical_topology(reloaded), (
+        "round-trip changed the corner topology."
+    )
+    assert len(reloaded.forced_ligations) == n_helices, (
+        f"round-trip dropped forced ligations ({len(reloaded.forced_ligations)}/{n_helices} "
+        "survived) — the seam records did not persist across save/load."
+    )
+    return spec

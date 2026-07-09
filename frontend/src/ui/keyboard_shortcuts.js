@@ -39,6 +39,7 @@ import { registerShortcut, dispatchKeyEvent } from '../input/shortcuts.js'
 import { showToast } from './toast.js'
 import { nextTabLevel } from '../scene/selection_level.js'
 import { nearestWorkspaceAxis, signedAlong } from '../scene/axis_snap.js'
+import { isValidPair, ligationArgs } from '../scene/force_crossover_tool.js'
 
 export function initKeyboardShortcuts(deps) {
   const {
@@ -432,6 +433,41 @@ export function initKeyboardShortcuts(deps) {
     },
   })
 
+  // 'x' — forced ligation. Multi-select a 5′ end and a 3′ end at the End
+  // selection level (the End filter button / Tab-to-ends), using the NORMAL
+  // selection gestures — lasso the two ends, or Ctrl-click / Shift-click each —
+  // then press x to merge the two strands into one. All three of those gestures
+  // land the picked ends in the same gold end-bead set that `getCtrlBeads()`
+  // returns (see `_toggleEndBead` / the end branch of the lasso in
+  // selection_manager.js), so this reads straight from there. Reuses the
+  // force-crossover tool's pure validators (one 5′ + one 3′, on different
+  // strands) and the /design/forced-ligation backend. Any 3′↔5′ pair is allowed
+  // regardless of helix adjacency, matching the toolbar fxover tool + the
+  // cadnano pencil.
+  registerShortcut({
+    key: 'x', ctrl: false, shift: false, alt: false,
+    description: 'Forced ligation (select a 5′ and a 3′ end, then x)',
+    blockedInInput: true,
+    async handler(e) {
+      if (store.getState().assemblyActive) return   // design-mode only
+      const ctrlBeads = selectionManager.getCtrlBeads()
+      if (ctrlBeads.length !== 2) return
+      e.preventDefault()
+      const [a, b] = ctrlBeads
+      if (!isValidPair(a.nuc, b.nuc)) {
+        showToast('Forced ligation needs one 5′ and one 3′ end on different strands')
+        return
+      }
+      const { three_prime_strand_id, five_prime_strand_id } = ligationArgs(a.nuc, b.nuc)
+      selectionManager.clearCtrlBeads()
+      const ok = await api.forcedLigation(three_prime_strand_id, five_prime_strand_id)
+      if (!ok) {
+        const err = store.getState().lastError
+        showToast(`Forced ligation failed: ${err?.message ?? 'unknown error'}`)
+      }
+    },
+  })
+
   registerShortcut({
     key: 'b', ctrl: false, shift: false,
     description: 'Toggle blunt ends',
@@ -458,7 +494,7 @@ export function initKeyboardShortcuts(deps) {
 
   registerShortcut({
     key: 'Delete',
-    description: 'Delete selected strand, overhang, or unplace selected crossover',
+    description: 'Delete selected strand/overhang/forced ligation, or unplace selected crossover',
     blockedInInput: true,
     async handler(e) {
       e.preventDefault()
@@ -520,6 +556,29 @@ export function initKeyboardShortcuts(deps) {
       }
 
       if (!selectedObject) return
+
+      // Single plain-clicked forced ligation → split the strands + drop the FL
+      // record (same backend call as the multi path, one id).
+      if (selectedObject.type === 'forced_ligation') {
+        selectionManager.clearSelection?.()
+        await api.deleteForcedLigation(selectedObject.id)
+        return
+      }
+
+      // Single plain-clicked crossover → unplace it by nicking at its arc
+      // origin (mirrors the multi path's per-arc nick).
+      if (selectedObject.type === 'crossover') {
+        const arc = selectionManager.getSelectedCrossoverArc?.()
+        selectionManager.clearSelection?.()
+        if (arc?.fromNuc) {
+          await api.addNick({
+            helixId:   arc.fromNuc.helix_id,
+            bpIndex:   arc.fromNuc.bp_index,
+            direction: arc.fromNuc.direction,
+          })
+        }
+        return
+      }
 
       if (selectedObject.type === 'strand' || selectedObject.type === 'bead' || selectedObject.type === 'nucleotide') {
         const strandId = selectedObject.data?.strand_id

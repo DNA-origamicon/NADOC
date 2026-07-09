@@ -30,6 +30,14 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
+from pathlib import Path
+
+# NADOC project root (this file is backend/core/engines.py → up 3).  The from-source
+# engine scripts live under ``scripts/`` here; the copy-paste commands must reference
+# them by ABSOLUTE path (with a ``cd`` into the root) so a user pasting into any
+# terminal — not just one already sitting at the project root — actually runs them.
+_PROJECT_ROOT = str(Path(__file__).resolve().parents[2])
 
 from backend.core import hardware
 from backend.core.oxdna_runner import (
@@ -43,6 +51,7 @@ from backend.core.oxdna_runner import (
 from backend.core.namd_runner import find_gmx, find_namd
 from backend.core.namd_topology import find_psfgen
 from backend.core.mrdna_bridge import find_arbd, find_arbd_build, find_mrdna
+
 
 # ── simulation switch ─────────────────────────────────────────────────────────
 # `NADOC_ENGINES_FORCE_MISSING=oxdna,namd` makes those engines REPORT as not
@@ -68,7 +77,9 @@ NAMD_DOWNLOAD_URL = "https://www.ks.uiuc.edu/Research/namd/"
 MRDNA_SETUP_SCRIPT = "./scripts/setup-mrdna.sh"
 # ARBD ships from the UIUC KS group's download portal (register + accept the license,
 # like NAMD) — not a public one-click repo.
-ARBD_DOWNLOAD_URL = "https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=ARBD"
+ARBD_DOWNLOAD_URL = (
+    "https://www.ks.uiuc.edu/Development/Download/download.cgi?PackageName=ARBD"
+)
 CUDA_DOWNLOAD_URL = "https://developer.nvidia.com/cuda-downloads"
 
 # Build tools we probe for.  `cxx` resolves either g++ or clang++.
@@ -85,6 +96,7 @@ _TOOLCHAIN_PROBES = {
 
 
 # ── hardware / toolchain probes ───────────────────────────────────────────────
+
 
 def _try_find(fn) -> str | None:
     """Call a ``find_*`` helper that may either return None or raise, → path|None."""
@@ -122,10 +134,14 @@ def _gpu_arch() -> str | None:
     if not exe:
         return None
     import subprocess
+
     try:
         out = subprocess.run(
             [exe, "--query-gpu=compute_cap", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -146,12 +162,52 @@ def parse_compute_cap(text: str) -> str | None:
     return None
 
 
+def _mpi_build_usable() -> bool:
+    """True when MPI can actually be *compiled* against — not merely runtime wrappers on PATH.
+
+    OpenMPI's ``openmpi-bin`` puts ``mpicxx``/``mpirun`` on PATH, but ``mpi.h`` (the
+    include dir) ships only in ``libopenmpi-dev``.  Without the headers LAMMPS's
+    ``find_package(MPI)`` doesn't skip MPI gracefully — it hard-errors the *entire*
+    cmake configure (the wrapper advertises an include path that doesn't exist), so
+    no Makefile is generated and the build fails with a cryptic "No rule to make
+    target 'Makefile'".  The only reliable signal is whether the MPI compiler
+    wrapper can preprocess ``#include <mpi.h>`` — works for OpenMPI and MPICH alike.
+    """
+    wrapper = shutil.which("mpicxx") or shutil.which("mpic++") or shutil.which("mpiCC")
+    if not wrapper:
+        return False
+    import subprocess
+
+    try:
+        r = subprocess.run(
+            [wrapper, "-E", "-x", "c++", "-"],
+            input="#include <mpi.h>\n",
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def toolchain_info() -> dict:
-    """Which build tools are on PATH → ``{"git": bool, "cmake": bool, ...}``."""
-    return {
+    """Which build tools are on PATH → ``{"git": bool, "cmake": bool, ...}``.
+
+    ``mpi`` means **build-usable** MPI — dev headers present, verified by actually
+    preprocessing ``mpi.h`` — NOT just a runtime wrapper on PATH, because a
+    runtime-only OpenMPI (``openmpi-bin`` without ``libopenmpi-dev``) makes LAMMPS's
+    cmake configure fail outright.  ``mpi_runtime`` keeps the raw wrapper-on-PATH
+    signal so the UI can tell the user to install the ``-dev`` package.
+    """
+    tools = {
         name: any(shutil.which(c) for c in cmds)
         for name, cmds in _TOOLCHAIN_PROBES.items()
     }
+    tools["mpi_runtime"] = tools["mpi"]
+    tools["mpi"] = _mpi_build_usable()
+    return tools
 
 
 def is_wsl() -> bool:
@@ -171,7 +227,67 @@ def is_wsl() -> bool:
         return False
 
 
+def terminal_guidance(*, wsl: bool, distro: str | None, platform: str) -> dict:
+    """Explicit *where do I paste these commands?* help for the install popup.  PURE.
+
+    The most common install failure isn't a bad command — it's the right command
+    pasted into the WRONG shell: Windows PowerShell/CMD instead of the WSL Linux
+    shell, or a VS Code integrated terminal running the Windows profile.  NADOC's
+    backend runs on the Linux side, so the build has to happen there too.  We hand
+    the UI a plain-language, platform-specific block plus a one-line self-check
+    (``pwd``) so the user can confirm they're in the right place before pasting.
+
+    Shape: ``{heading, steps:[...], check:{cmd, pass, fail}}``.
+    """
+    if wsl:
+        name = distro or "your Linux (WSL) distro"
+        return {
+            "heading": f"Paste these in a WSL (Linux) terminal for “{name}” — NOT Windows PowerShell or CMD",
+            "steps": [
+                "NADOC's engine build must run on the Linux side (where the backend runs), "
+                "never in Windows PowerShell/CMD and never from a C:\\ or /mnt/c/ location.",
+                f"Easiest: open Windows Terminal, click the ⌄ tab dropdown, and choose “{name}” "
+                f"(or open the Start menu and launch “{name}”). The window title shows your Linux user@host.",
+                "Prefer VS Code? Its terminal must be the WSL one. If the prompt reads "
+                "`PS C:\\>` or `C:\\Users\\…>`, that's Windows — open the terminal ⌄ dropdown → "
+                "“Select Default Profile” → pick your WSL/Ubuntu profile, then Terminal → New Terminal "
+                "(or just type `wsl` and press Enter in the current one).",
+            ],
+            "check": {
+                "cmd": "pwd",
+                "pass": "Prints a path starting with /home/ → you're in the right (Linux) terminal; paste away.",
+                "fail": "Prints C:\\… or errors out → that's a Windows shell. Switch to the WSL one first.",
+            },
+        }
+    if platform == "darwin":
+        return {
+            "heading": "Paste these in the Terminal app",
+            "steps": [
+                "Open Terminal (press ⌘-Space, type “Terminal”, Enter) — or iTerm if you use it.",
+                "VS Code's integrated terminal (Terminal → New Terminal) also works; on macOS it's a normal shell.",
+            ],
+            "check": {
+                "cmd": "pwd",
+                "pass": "Prints a /Users/… path → you're good.",
+                "fail": "",
+            },
+        }
+    return {  # plain Linux
+        "heading": "Paste these in a terminal",
+        "steps": [
+            "Open your terminal app (on Ubuntu/GNOME: press Ctrl+Alt+T).",
+            "VS Code's integrated terminal (Terminal → New Terminal) also works — on Linux it's a normal shell.",
+        ],
+        "check": {
+            "cmd": "pwd",
+            "pass": "Prints a /home/… path → you're good.",
+            "fail": "",
+        },
+    }
+
+
 # ── per-engine install-plan builders (pure: (gpu, toolchain) → dict) ───────────
+
 
 def _missing(tools: dict, needed: list[str]) -> list[str]:
     return [t for t in needed if not tools.get(t)]
@@ -206,7 +322,11 @@ def _oxdna_commands(target: str, arch: str) -> list[str]:
     # Build into the conventional ~/oxDNA/build/ — the path find_oxdna() auto-detects,
     # so no OXDNA_BIN env var is needed afterward.  -DCUDA=ON makes one binary that
     # runs on GPU *or* CPU (oxDNA picks the backend from the input file).
-    cmake = "cmake .." if target == "CPU" else f"cmake .. -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES={arch}"
+    cmake = (
+        "cmake .."
+        if target == "CPU"
+        else f"cmake .. -DCUDA=ON -DCMAKE_CUDA_ARCHITECTURES={arch}"
+    )
     return [
         f"git clone {OXDNA_REPO} ~/oxDNA",
         "cd ~/oxDNA && mkdir -p build && cd build",
@@ -216,27 +336,44 @@ def _oxdna_commands(target: str, arch: str) -> list[str]:
 
 
 def _oxdna_anm_commands(target: str, arch: str) -> list[str]:
-    # The build script self-detects CPU/CUDA; arch via OXDNA_CUDA_ARCH.
+    # The build script self-detects CPU/CUDA; arch via OXDNA_CUDA_ARCH.  Absolute
+    # `cd` into the project root FIRST — the script lives there and is referenced by
+    # a relative path, so a bare paste from the wrong directory would fail with
+    # "No such file or directory".
     env = f"OXDNA_CUDA_ARCH={arch} " if target == "CUDA" else ""
-    return [f"{env}{ANM_OXDNA_BUILD_SCRIPT}"]
+    return [f"cd {_PROJECT_ROOT} && {env}bash {ANM_OXDNA_BUILD_SCRIPT}"]
 
 
-def _lammps_commands(mpi: bool) -> list[str]:
+def _lammps_commands(*, parallel: bool, install_mpi: bool) -> list[str]:
     # LAMMPS's CMake source dir is the ``cmake`` subfolder, not the repo root.
     # CG-DNA carries the oxDNA/oxDNA2 styles; it *requires* MOLECULE + ASPHERE.
-    # BUILD_MPI=on is what makes it the CPU-*parallel* oxDNA (the whole point);
-    # without an MPI toolchain it still builds serial.  A shallow clone avoids
-    # pulling LAMMPS's very large full git history.  Binary: ~/lammps/build/lmp.
+    # BUILD_MPI=on is what makes it the CPU-*parallel* oxDNA (the whole point).
+    # A shallow clone avoids LAMMPS's very large full history.  Binary: ~/lammps/build/lmp.
     cmake = "cmake -D PKG_CG-DNA=on -D PKG_MOLECULE=on -D PKG_ASPHERE=on"
-    if mpi:
+    if parallel:
         cmake += " -D BUILD_MPI=on"
+    else:
+        # Serial build.  Simply omitting BUILD_MPI is NOT enough: LAMMPS calls
+        # find_package(MPI) unconditionally, and a runtime-only MPI (mpicxx on PATH
+        # but no dev headers) poisons that probe and aborts the whole configure.
+        # This flag makes cmake skip the MPI search entirely for a clean build.
+        cmake += " -D CMAKE_DISABLE_FIND_PACKAGE_MPI=ON"
     cmake += " ../cmake"
-    return [
+    steps = []
+    if install_mpi:
+        # The MPI dev headers needed for the parallel build.  We assume the user
+        # wants multi-core (the whole point of this engine), so this is folded into
+        # the copy-paste block rather than left as a "you might want to…" note.
+        steps.append("sudo apt-get install -y libopenmpi-dev")
+    steps += [
         f"git clone --depth 1 {LAMMPS_REPO} ~/lammps",
-        "cd ~/lammps && mkdir -p build && cd build",
+        # Wipe build/ so a poisoned CMakeCache from a previous failed attempt can't
+        # linger (re-running cmake reuses a stale cache and fails the same way).
+        "cd ~/lammps && rm -rf build && mkdir build && cd build",
         cmake,
         "cmake --build . -j$(nproc)",
     ]
+    return steps
 
 
 def _lammps_plan(gpu: dict, tools: dict) -> dict:
@@ -245,38 +382,57 @@ def _lammps_plan(gpu: dict, tools: dict) -> dict:
     Unlike standalone oxDNA (whose accelerator is a single GPU), the value of the
     LAMMPS CG-DNA build is **MPI domain decomposition** across CPU cores, which is
     how the oxDNA force field scales to very large assemblies.  So the target is
-    always CPU (MPI when an MPI toolchain is present), never CUDA.  Auto-buildable
-    when the base toolchain (git/cmake/make/cxx) is present; MPI is optional and
-    only decides whether the build is parallel.
+    always CPU, never CUDA.
+
+    We **assume the user wants the parallel build** (it's the point of the engine).
+    When MPI isn't build-usable but the dev headers can be apt-installed, the
+    ``sudo apt-get install -y libopenmpi-dev`` line is folded straight into the
+    copy-paste commands and the build stays parallel — no judgement-call note.
+    That case needs a sudo step the background service can't run, so it's surfaced
+    as copy-paste (``can_auto=False``) rather than one-click.  Only when MPI can't
+    be obtained at all (no apt) does it fall back to a serial build.
     """
-    mpi = bool(tools.get("mpi"))
     base_needed = ["git", "cmake", "make", "cxx"]
     missing = _missing(tools, base_needed)
-    target = "CPU (MPI)" if mpi else "CPU"
-    mpi_note = (
-        "MPI toolchain detected — building the parallel (multi-core) engine."
-        if mpi else
-        "No MPI toolchain found — this will build a single-core LAMMPS. Install "
-        "an MPI implementation (e.g. `sudo apt-get install -y libopenmpi-dev`) for "
-        "the parallel speedup, then rebuild."
-    )
+    mpi = bool(tools.get("mpi"))  # build-usable (headers present) right now
+    apt = bool(tools.get("apt"))
+    install_mpi = (not mpi) and apt  # get parallel via a one-line sudo apt install
+    parallel = mpi or install_mpi
+    target = "CPU (MPI)" if parallel else "CPU"
+    # One-click auto only when no sudo step is needed (the service can't run sudo).
+    can_auto = (not missing) and not install_mpi
+
+    if mpi:
+        details = "MPI is already available, so this builds the multi-core (parallel) engine directly."
+    elif install_mpi:
+        details = (
+            "The parallel build needs MPI. The first command installs the MPI "
+            "development headers (libopenmpi-dev); the rest clone and compile LAMMPS "
+            "with the CG-DNA package across all your CPU cores. Parallel MPI is the "
+            "only oxDNA that scales to very large assemblies."
+        )
+    else:
+        details = (
+            "No MPI toolchain is available and it can't be auto-installed here, so "
+            "this builds a single-core LAMMPS. Install an MPI implementation "
+            "(e.g. libopenmpi-dev) and rebuild for the multi-core speedup."
+        )
     return {
         "method": "auto",
         "target": target,
-        "can_auto": not missing,
+        "can_auto": can_auto,
         "missing_prereqs": [_pretty_tool(m) for m in missing],
-        "commands": _lammps_commands(mpi),
+        "commands": _lammps_commands(parallel=parallel, install_mpi=install_mpi),
         "downloads": [],
         "doc": "docs/lammps_setup.md",
         # Frontend degraded-rebuild label overrides (this rebuild is about the
         # CG-DNA package, not a GPU — see md_engines_logic.actionLabel).
         "degraded_action_label": "Rebuild with CG-DNA",
         "degraded_guided_label": "Add CG-DNA…",
-        "note": (
-            "The CPU-parallel oxDNA: LAMMPS with the CG-DNA package runs the same "
-            "oxDNA/oxDNA2 force field across many cores (MPI), the only oxDNA that "
-            "scales to very large assemblies. " + mpi_note
-        ),
+        # Short, factual top line — no judgement calls.  The "why" lives in `details`,
+        # rendered behind an expandable section in the popup.
+        "note": "LAMMPS with the CG-DNA package — the CPU-parallel oxDNA, for assemblies too large for single-GPU oxDNA.",
+        "details": details,
     }
 
 
@@ -319,8 +475,7 @@ def _namd_plan(gpu: dict, tools: dict) -> dict:
     when a GPU is present.
     """
     build = (
-        "Linux-x86_64-multicore-CUDA" if gpu["present"]
-        else "Linux-x86_64-multicore"
+        "Linux-x86_64-multicore-CUDA" if gpu["present"] else "Linux-x86_64-multicore"
     )
     extract = "tar xf NAMD_*_%s.tar.gz -C ~/Applications/" % build
     return {
@@ -330,7 +485,10 @@ def _namd_plan(gpu: dict, tools: dict) -> dict:
         "missing_prereqs": [],
         "commands": ["mkdir -p ~/Applications", extract],
         "downloads": [
-            {"label": "NAMD 3 download (register + accept license)", "url": NAMD_DOWNLOAD_URL},
+            {
+                "label": "NAMD 3 download (register + accept license)",
+                "url": NAMD_DOWNLOAD_URL,
+            },
         ],
         "doc": "docs/namd_setup.md",
         "note": _namd_note(gpu, build),
@@ -350,7 +508,9 @@ def _mrdna_plan(gpu: dict, tools: dict) -> dict:
         "target": "CPU",
         "can_auto": not missing,
         "missing_prereqs": [_pretty_tool(m) for m in missing],
-        "commands": [MRDNA_SETUP_SCRIPT],
+        # Absolute `cd` into the project root — the setup script is referenced
+        # relatively, so a paste from elsewhere would not find it.
+        "commands": [f"cd {_PROJECT_ROOT} && bash {MRDNA_SETUP_SCRIPT}"],
         "downloads": [],
         "doc": "docs/mrdna_setup.md",
         "note": (
@@ -361,7 +521,9 @@ def _mrdna_plan(gpu: dict, tools: dict) -> dict:
     }
 
 
-def _arbd_plan(gpu: dict, tools: dict, *, built_path: str | None = None, wsl: bool = False) -> dict:
+def _arbd_plan(
+    gpu: dict, tools: dict, *, built_path: str | None = None, wsl: bool = False
+) -> dict:
     """ARBD GPU engine: download the source tarball, build it here, then install.
 
     Not a public one-click repo — the user downloads the tarball from the KS/UIUC
@@ -384,7 +546,10 @@ def _arbd_plan(gpu: dict, tools: dict, *, built_path: str | None = None, wsl: bo
         "can_finish_built": bool(built_path),
         "missing_prereqs": [_pretty_tool(m) for m in missing],
         "downloads": [
-            {"label": "ARBD download (register + accept license)", "url": ARBD_DOWNLOAD_URL},
+            {
+                "label": "ARBD download (register + accept license)",
+                "url": ARBD_DOWNLOAD_URL,
+            },
         ],
         "doc": "docs/mrdna_setup.md",
     }
@@ -446,7 +611,8 @@ def _arbd_note(gpu: dict, tools: dict, wsl: bool = False) -> str:
         " You're running NADOC inside WSL, so ARBD must be the **Linux** build "
         "installed on the Linux side — a Windows download (under /mnt/c/…) won't run. "
         "NADOC builds the Linux binary for you."
-        if wsl else ""
+        if wsl
+        else ""
     )
     if not tools.get("nvcc"):
         return (
@@ -497,6 +663,7 @@ def _namd_note(gpu: dict, build: str) -> str:
 
 
 # ── per-engine status ─────────────────────────────────────────────────────────
+
 
 def _engine(key, name, purpose, path, plan, *, required_note="", forced=False) -> dict:
     installed = (path is not None) and not forced
@@ -550,14 +717,16 @@ def engines_status() -> dict:
 
     engines = {
         "oxdna": _engine(
-            "oxdna", "oxDNA",
+            "oxdna",
+            "oxDNA",
             "Coarse-grained DNA molecular dynamics — relax, E-field, health.",
             ox_path,
             _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_oxdna_commands),
             forced=_f("oxdna"),
         ),
         "lammps_oxdna": _engine(
-            "lammps_oxdna", "LAMMPS (CG-DNA / oxDNA)",
+            "lammps_oxdna",
+            "LAMMPS (CG-DNA / oxDNA)",
             "CPU-parallel oxDNA (MPI) — the only oxDNA that scales to very large assemblies.",
             lammps_path,
             _lammps_plan(gpu, tools),
@@ -565,22 +734,27 @@ def engines_status() -> dict:
             forced=_f("lammps_oxdna"),
         ),
         "oxdna_anm": _engine(
-            "oxdna_anm", "ANM-oxDNA (protein fork)",
+            "oxdna_anm",
+            "ANM-oxDNA (protein fork)",
             "oxDNA's DNANM hybrid — required only for designs that include proteins.",
             anm_path,
-            _source_build_plan(gpu, tools, name="ANM-oxDNA", commands_fn=_oxdna_anm_commands),
+            _source_build_plan(
+                gpu, tools, name="ANM-oxDNA", commands_fn=_oxdna_anm_commands
+            ),
             required_note="Only needed for protein-bearing designs.",
             forced=_f("oxdna_anm"),
         ),
         "namd": _engine(
-            "namd", "NAMD 3",
+            "namd",
+            "NAMD 3",
             "All-atom molecular dynamics engine.",
             namd_path,
             _namd_plan(gpu, tools),
             forced=_f("namd"),
         ),
         "gromacs": _engine(
-            "gromacs", "GROMACS",
+            "gromacs",
+            "GROMACS",
             "Solvation + energy minimisation for the all-atom MD pipeline.",
             gmx_path,
             _gromacs_plan(gpu, tools),
@@ -589,7 +763,8 @@ def engines_status() -> dict:
         # These ship *inside* another engine's install — reported, never installed
         # on their own.
         "psfgen": _engine(
-            "psfgen", "psfgen",
+            "psfgen",
+            "psfgen",
             "CHARMM topology builder — ships inside the NAMD download.",
             psfgen_path,
             _namd_plan(gpu, tools),
@@ -597,7 +772,8 @@ def engines_status() -> dict:
             forced=_f("psfgen"),
         ),
         "dnanalysis": _engine(
-            "dnanalysis", "DNAnalysis",
+            "dnanalysis",
+            "DNAnalysis",
             "oxDNA H-bond health oracle — builds alongside oxDNA.",
             dnanalysis_path,
             _source_build_plan(gpu, tools, name="oxDNA", commands_fn=_oxdna_commands),
@@ -606,25 +782,29 @@ def engines_status() -> dict:
         ),
         # ── mrDNA coarse-grained pipeline (mrdna Python + ARBD GPU engine + CUDA) ──
         "mrdna": _engine(
-            "mrdna", "mrDNA",
+            "mrdna",
+            "mrDNA",
             "Coarse-grained multi-resolution relaxation — converts a design to a bead model.",
             mrdna_path,
             _mrdna_plan(gpu, tools),
             forced=_f("mrdna"),
         ),
         "arbd": _engine(
-            "arbd", "ARBD",
+            "arbd",
+            "ARBD",
             "GPU Brownian-dynamics engine that runs the mrDNA coarse-grained simulation.",
             arbd_path,
             _arbd_plan(gpu, tools, built_path=arbd_built, wsl=wsl),
             required_note=(
                 "Built on the Linux side but not installed yet — finish below."
-                if arbd_built else "Needs the CUDA toolkit to build; drives mrDNA."
+                if arbd_built
+                else "Needs the CUDA toolkit to build; drives mrDNA."
             ),
             forced=_f("arbd"),
         ),
         "cuda": _engine(
-            "cuda", "CUDA toolkit",
+            "cuda",
+            "CUDA toolkit",
             "GPU compiler toolkit (nvcc) — needed to build ARBD and the GPU oxDNA/NAMD engines.",
             nvcc_path,
             _cuda_plan(gpu, tools),
@@ -647,7 +827,9 @@ def engines_status() -> dict:
         eng["degraded"] = degraded
         if degraded:
             eng["install"] = _source_build_plan(
-                gpu, tools, name=eng["name"],
+                gpu,
+                tools,
+                name=eng["name"],
                 commands_fn=_oxdna_commands if key == "oxdna" else _oxdna_anm_commands,
             )
             names = ", ".join(gpu["names"]) or "a CUDA GPU"
@@ -685,6 +867,9 @@ def engines_status() -> dict:
         "gpu": gpu,
         "toolchain": tools,
         "wsl": wsl,
+        "terminal_help": terminal_guidance(
+            wsl=wsl, distro=os.environ.get("WSL_DISTRO_NAME"), platform=sys.platform
+        ),
         "engines": engines,
         "sections": {
             "oxdna": _section(["oxdna"]),

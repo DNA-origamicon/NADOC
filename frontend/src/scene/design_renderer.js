@@ -58,6 +58,9 @@ export function initDesignRenderer(scene, storeRef) {
   // oxDNA anchor highlight: purple, distinct from the green selection glow — marks the
   // strands/clusters pinned as FIXED during an E-field (or other) run.
   const _anchorGlowLayer    = createGlowLayer(scene, 0xb14aff, 3.6, 'anchorGlow')
+  // Steric-clash highlight: bright red, marks backbone beads that collide once the
+  // design is posed (clash_overlay drives it). Named so gesture e2e can detect it.
+  const _clashGlowLayer     = createGlowLayer(scene, 0xff2b2b, 5.6, 'clashGlow')
   // Drill-v2 hover preview: yellow glow on the would-be-selected leaf (vs the green
   // selection glow). Larger than the green so its halo reads yellow over a selected
   // (green-glowing) strand. Named so gesture e2e can detect it.
@@ -370,6 +373,7 @@ export function initDesignRenderer(scene, storeRef) {
     _glowLayer.clear()          // stale entries after rebuild; selection_manager re-applies if needed
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _anchorGlowLayer.clear()    // caller (anchor_glow) re-applies after a rebuild
+    _clashGlowLayer.clear()     // caller (clash_overlay) re-applies after a rebuild
     _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
     if (_previewArcTube) _previewArcTube.visible = false
     if (_selectionArcTube) _selectionArcTube.visible = false
@@ -848,6 +852,12 @@ export function initDesignRenderer(scene, storeRef) {
     setAnchorGlow(entries) { _anchorGlowLayer.setEntries(entries) },
     clearAnchorGlow()      { _anchorGlowLayer.clear() },
 
+    /** Show red glow over backbone entries flagged as steric clashes. */
+    setClashHighlight(entries) { _clashGlowLayer.setEntries(entries) },
+    clearClashHighlight()      { _clashGlowLayer.clear() },
+    /** Active clash glow-sprite count (e2e uses it to confirm the clash toggle rendered). */
+    clashGlowCount()           { return _clashGlowLayer.count() },
+
     /**
      * Show emission-color glows for fluorophore beads.
      * @param {Array<{pos: THREE.Vector3, emissionColor: number}>} entries
@@ -866,6 +876,7 @@ export function initDesignRenderer(scene, storeRef) {
       _glowLayer.refresh()
       _undefinedGlowLayer.refresh()
       _anchorGlowLayer.refresh()
+      _clashGlowLayer.refresh()
       _previewGlowLayer.refresh()
       _fluoroGlowLayer.refresh()
     },

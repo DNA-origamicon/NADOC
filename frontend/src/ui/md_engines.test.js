@@ -9,6 +9,11 @@ function status({ oxdnaInstalled = false, arbdBuilt = false } = {}) {
     gpu: { present: true, names: ['RTX 2080'], toolkit: true, arch: '75' },
     toolchain: { git: true, cmake: true, make: true, cxx: true, nvcc: true },
     wsl: true,
+    terminal_help: {
+      heading: 'Paste these in a WSL (Linux) terminal for “Ubuntu” — NOT Windows PowerShell or CMD',
+      steps: ['NADOC builds on the Linux side.', 'Open Windows Terminal → “Ubuntu”.'],
+      check: { cmd: 'pwd', pass: 'Prints /home/… → correct terminal.', fail: 'Prints C:\\… → wrong shell.' },
+    },
     engines: {
       oxdna: {
         key: 'oxdna', name: 'oxDNA', purpose: 'CG DNA MD.', installed: oxdnaInstalled,
@@ -25,6 +30,7 @@ function status({ oxdnaInstalled = false, arbdBuilt = false } = {}) {
           method: 'download', can_auto: false, target: 'CUDA', commands: ['tar xf …'],
           downloads: [{ label: 'NAMD download', url: 'https://www.ks.uiuc.edu/Research/namd/' }],
           doc: 'docs/namd_setup.md', missing_prereqs: [], note: 'register + license',
+          details: 'The download bundles psfgen too — accept the license first.',
         },
       },
       gromacs: { key: 'gromacs', name: 'GROMACS', purpose: 'Solvation.', installed: true, path: '/usr/bin/gmx', install: null },
@@ -115,6 +121,40 @@ describe('initMdEngines — status modal', () => {
     link.click()
     expect(openSpy).toHaveBeenCalledWith('https://www.ks.uiuc.edu/Research/namd/', '_blank', 'noopener')
     openSpy.mockRestore()
+  })
+
+  it('instructions popup shows the where-to-paste terminal callout above the commands', async () => {
+    const api = makeApi(status())
+    const eng = initMdEngines({ api })
+    await eng.showStatusModal()
+
+    const dlBtn = [...document.querySelectorAll('.modal__overlay button')].find(b => b.textContent === 'Download…')
+    dlBtn.click()
+
+    const instr = [...document.querySelectorAll('.modal__overlay')].pop()
+    // the backend-driven WSL guidance + the self-check are both present
+    expect(instr.textContent).toMatch(/WSL \(Linux\) terminal/)
+    expect(instr.textContent).toMatch(/NOT Windows PowerShell/)
+    expect(instr.textContent).toMatch(/pwd/)
+    expect(instr.textContent).toMatch(/wrong shell/)
+    // and the commands still render after it
+    expect(instr.textContent).toMatch(/Then paste these, in order:/)
+  })
+
+  it('puts the install explanation behind an expandable Details section', async () => {
+    const api = makeApi(status())
+    const eng = initMdEngines({ api })
+    await eng.showStatusModal()
+    const dlBtn = [...document.querySelectorAll('.modal__overlay button')].find(b => b.textContent === 'Download…')
+    dlBtn.click()
+
+    const instr = [...document.querySelectorAll('.modal__overlay')].pop()
+    const det = instr.querySelector('details')
+    expect(det).toBeTruthy()
+    expect(det.querySelector('summary').textContent).toBe('Details')
+    expect(det.textContent).toMatch(/accept the license first/)
+    // it's collapsed by default (open attribute absent)
+    expect(det.hasAttribute('open')).toBe(false)
   })
 
   it('download popup offers a Browse… folder picker + Check & install', async () => {

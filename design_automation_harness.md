@@ -1221,3 +1221,81 @@ assert_on_deformed_frame, assert_deformation_angle, headless_coverage_report`.
 
 ---
 
+
+---
+
+## `headless_corner_build` — mitred-corner primitive + phase-aware optimizer (2026-07-08)
+
+**`backend/api/headless_corner_build.build_corner(*, n_helices=6, base_length_bp=56, lattice=SQUARE, target_angle_deg=90, optimize=True, window_bp=2, col_offset=None) -> Design`**
+Two 1×N SQUARE sheets folded into a 90° corner. Composes existing wrappers only:
+`create_bundle` (two sheets, each its own cluster) → `resize_strand_end` (trim each
+far end into a 45° staircase miter — BOTH scaffold + staple by the same delta) →
+`transform_cluster(log=True)` (fold sheet B 180° about the miter diagonal) →
+`force_ligate` (N cross-seam scaffold links). Returns a standalone copy. `optimize=False`
+= uniform axial-exact miter lengths (`base − round(i·6.74)`); `optimize=True` = the
+phase-aware search. `col_offset` MUST be odd (parity flip) — default `_default_col_offset`.
+
+**The two-constraint principle** (the point): a mitred helix length must satisfy (1) AXIAL —
+end lands on the 45° plane (ideal stagger 2.25/0.334 ≈ 6.74 bp, non-integer) AND (2)
+ROTATIONAL — the ±1-bp-swings-33.75° phase so the A_i 3′ bead and B_i 5′ bead FACE each
+other. Uniform stagger honours only #1 (≈5.3 nm total stretch); the optimizer searches
+±`window_bp` around each seam's ideal length and minimises the posed FL stretch → ≈1.87 nm
+(beats the 3.43 nm human-tuned reference).
+
+**Optimizer is path-B fast** (do NOT rebuild per candidate): straight backbone beads are
+TRIM-INVARIANT (a bead at bp k doesn't move when the helix is trimmed past k — verified,
+max move 0), so build the straight sheets ONCE, then per coordinate-descent pass capture the
+fold transform from ONE real build and search all candidate lengths ANALYTICALLY
+(`R@(bead−pivot)+pivot+trans` on the recorded beads reproduces the geometry kernel EXACTLY,
+diff 0). Converges in ~2 passes / ~5 builds / 1.3s.
+
+**Measurement/oracle helpers (reusable):** `forced_ligation_stretches(design)` (posed FL
+bond lengths via `deformed_nucleotide_positions`), `corner_face_angle_deg(design, spec)`
+(angle between the two clusters' posed mean axes), `steric_clash_count(design)` (=
+`clash.clash_report` count MINUS the FL-partner pairs — a designed bond is not a clash),
+`resolve_corner_spec(design)` (recover columns + lengths from a built/reloaded design).
+Oracle: `assert_corner_folded` (see the log's oracle catalog).
+
+**GOTCHAS banked:**
+- A good forced ligation (~0.3 nm) is itself a sub-0.65 nm "clash" (FL partners are ~20 nm
+  apart STRAIGHT → the clash detector's straight-vs-posed exclusion does NOT drop them). So
+  raw `clash_report.count` is ANTI-correlated with ligation quality; the corner metric MUST
+  exclude the seam FL bonds (`steric_clash_count`). This is what the task's "ideally 0 after
+  seam design" means. The optimized build has FEWER genuine (FL-excluded) clashes than the
+  uniform baseline even though its RAW count is 1 higher.
+- The fold pivot/rotation is DETERMINISTIC (miter direction `dA` from first/last A far-end;
+  pivot = B far-end centroid; translation = A centroid − B centroid) — this reproduces the
+  task's stated uniform baseline (5.31 nm) exactly. The reference `.nadoc`'s fold was
+  HAND-tuned in the gizmo (pivot z 12.58 vs the deterministic 12.02) → it packs looser (11
+  vs 24 genuine clashes) but that's manual tuning we don't reproduce; the LENGTH optimizer
+  beats its ligation quality regardless.
+- `create_bundle(ligate_adjacent=True)` does NOT merge adjacent scaffolds (24 strands = 12
+  scaf + 12 stpl, each single-helix); the 6 seam `force_ligate` calls do the merging (→18).
+
+### `headless_corner_build` — fold-pose optimizer added (2026-07-08, user request)
+
+`build_corner(..., optimize_fold=True, max_stretch_nm=1.0, angle_tol_deg=5.0)` now runs a
+SECOND optimizer stage after the length optimizer. The length optimizer mates the miter
+teeth as tightly as possible → PACKS the cross-sheet backbones, so the residual seam clashes
+are a property of the FOLD, not the lengths (a pure translation trades clashes 1:1 for bond
+length — it only slides the tradeoff). A small extra ROTATION of sheet B (a few °) about the
+fold pivot + a small shift swings B's bulk off A while the seam beads stay mated → genuinely
+lowers clashes.
+
+**Co-optimizer:** stage A lengths → stage B fold (grid over single-axis rotation × 3-D shift,
+minimise `clash + 4·Σbond` s.t. every bond < `max_stretch_nm` and angle within `angle_tol_deg`)
+→ stage C re-optimize lengths under the tweaked fold (`_optimize_lengths(..., perturbation=)`).
+Result (n=6): genuine clashes **24→11**, FL total **2.82 nm** (max 0.72), angle 93° — beats
+the hand-tuned reference on BOTH clashes AND bonds (11 / 3.43 / 0.94). `optimize_fold=False`
+keeps the tight-bonds-only 1.87 nm / 24-clash result.
+
+- `_compose_fold(rot,piv,tr, Rextra,off)` folds the perturbation into ONE `transform_cluster`
+  pose: rotation `Rextra·R0`, SAME pivot, translation `tr0+off` (still one logged `cluster_op`).
+- **Speed (~5.5 s, was 16 s):** the fold grid is analytic (path-B) and pre-filters to B beads
+  within reach of A — only cross-sheet A–B pairs can clash under a rigid B pose, so an A-bead
+  KD-tree is built once and only the near-seam transformed B beads are queried; straight-close
+  and seam-FL pairs are pre-excluded (candidate-independent).
+- GOTCHA: coordinate-descent over the 6 fold DOF got stuck in a weak local min (17 clashes);
+  the rotation/translation coupling needs a grid (or block search), not naive coord-descent.
+- The fold optimizer's analytic clash count was verified == the real `clash_report`-based
+  `steric_clash_count` (24==24) for the identity perturbation before trusting the search.

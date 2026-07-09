@@ -2117,3 +2117,15 @@ both relax paths are driveable headlessly AND a reusable oracle proves the *resu
 junction (root-to-root) / spliced ForcedLigation (end-to-root) chord is pulled toward one backbone bond on the
 posed geometry, a pose moved (cluster and/or the end-to-root duplex swing), and the strand graph is untouched —
 none of which any prior pin asserted for the direct-bind relax."
+
+---
+
+### CORNER — mitred-corner primitive + phase-aware scaffold-length optimizer (2026-07-08)
+
+- **Shape:** new headless module `backend/api/headless_corner_build.py` (mirrors
+  `headless_hinge_build.py`) + oracle in `tests/automation_harness.py` + `tests/test_headless_corner_build.py` (13 tests).
+- **God-file LOC Δ:** `crud.py` / `assembly.py` / `main.js` **0** (composes existing wrappers only; no route added).
+- **Cohesion:** one reason to change — how a 90° mitred corner is built + how its seam lengths are optimized.
+- **Coverage:** wraps NO new route (all via existing `create_bundle`/`resize_strand_end`/`transform_cluster`/`force_ligate`) → coverage count unchanged.
+- **Metrics (n=6, base=56):** uniform baseline total posed FL stretch **5.51 nm** (max 1.36); optimized **1.87 nm** (max 0.69, all bonds <0.7) — beats the human-tuned reference **3.43 nm**. Corner angle 91.2° (target 90). Genuine steric clashes (FL-excluded): uniform 26 → optimized 24 (guardrail: not worse). Optimizer cost ~5 builds / 1.3 s (path-B analytic search; naive per-candidate rebuild = 451 builds / 59 s).
+- **Validation gained, not just a passthrough:** `assert_corner_folded` proves — across all three layers — that the fold landed at 90°, every one of the N seam forced ligations is a short (<1 nm) posed backbone bond, the phase-aware optimizer's total stretch is ≤ the uniform baseline (so the search is not a no-op), the optimizer introduced no new genuine steric clashes (via the design-layer `clash_report`, seam bonds excluded), the fold is logged as a replayable `cluster_op`, and every FL record survives a `.nadoc` round-trip. This is the FIRST oracle to use the clash detector as a build-time metric, and it banks the calibration insight that a designed forced-ligation bond registers as a sub-0.65 nm "clash" and must be excluded (`steric_clash_count`). Nothing before could build a folded corner headlessly OR prove its seam ligations are physical.

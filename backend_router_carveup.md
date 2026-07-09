@@ -164,47 +164,32 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-06-16 after Refactor #49
-(**assembly.py: geometry-cache + override-merge kernel → NEW `backend/core/assembly_geometry.py`**, the
-post-review Tier-3 primary target). Service push, **B=0**. The PURE half moved: LRU state
-(`_GEO_CACHE`/`_GEO_CACHE_MAX`) + ops (`geo_cache_get`/`geo_cache_set`/`clear_geo_cache`) + cache-key compute
-(`geo_cache_key`, `workspace_dir` now an explicit param — L16/L20 monkeypatch fidelity) + the pure override-merge
-of `_design_with_instance_overrides` (`merge_cluster_overrides`). assembly.py keeps thin shims under the original
-`_`-names so the back-importing routers work unchanged; `routes_assembly_geometry` repointed `geo_cache_get`/`_set`
-DIRECTLY to core → its **raw-B 8→6**. +15 unit tests (`tests/test_assembly_geometry_core.py`). Orphaned
-`hashlib`/`json`/`OrderedDict` imports removed from assembly.py; ruff clean on all 4 touched files. assembly.py
-**29 routes** unchanged (service push), −44 net LOC. **2155→2170 passed** / 55 skipped (the +15, no drops).
-NOT committed yet (awaiting user) — stacks on uncommitted #43–#48 (crud display-metadata/3D-print/display-geometry/
-design-geometry/render-diff/compaction). #42 (4550772, MD-load); #41 (8e4a0cc, Protein)._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-07-08
+(`/carve-router assembly`, no extraction — TERMINAL DECISION). The prior row was Refactor #49
+(**assembly.py: geometry-cache + override-merge kernel → NEW `backend/core/assembly_geometry.py`**, service
+push B=0, +15 unit tests, assembly.py **29 routes**, still NOT committed — stacks on uncommitted #43–#49)._
 
-**▶ STATUS (both files near terminal):** crud.py = **113 routes**, pure-compute kernel FULLY DRAINED (residual is
-the L4-blocked api-bound response kernel `_design_response*`/`_design_replace_response`/`_inject_joint_world_axes`/
-`_strip_feature_log_payloads`). assembly.py = **29 routes**, geometry-cache + override-merge now in core (#49).
-The only broad god-file surface the assembly routers still lean on is the **file-IO design-load infra**
-(`_load_design_from_source`/`_design_with_instance_overrides`/`_assembly_source_path`) — genuinely L4-blocked
-(HTTPException + file IO + `_WORKSPACE_DIR`/`_PROJECT_ROOT` module globals). It still counts toward
-`routes_assembly_joints`(raw-B 11)/`_frames`/`_overhangs`/`_loadouts`/`_polymerize` back-imports.
+**▶ BOTH GOD-FILES AT TERMINAL STATE — the backend router carve-up is COMPLETE (2026-07-08).** crud.py =
+**113 routes** (pure-compute kernel fully drained; residual = L4-blocked api-bound response kernel
+`_design_response*`/`_design_replace_response`/`_inject_joint_world_axes`/`_strip_feature_log_payloads`).
+assembly.py = **29 routes** (geometry-cache + override-merge in core via #49; residual = kernel CRUD + replay
+dispatcher + L4-blocked file-IO load infra). Every cohesive sub-resource is in its own `routes_<area>.py`
+(176 routes across the extracted routers); every pure-compute cluster is in tested `backend/core`. **Do not
+re-open either file for the carve-up loop** unless NEW route clusters are added by feature work.
 
-**▶ NEXT — assembly.py (the last service-push candidate, MARGINAL — classify before committing):** an **L15 split
-of `_load_design_from_source`** — push the pure path-resolution + `Design.from_json` parse to a core
-`load_design_from_source(source, workspace_dir, project_root, assembly_path) -> Design` raising a custom
-`PartLoadError`, leaving a thin api shim that translates to `HTTPException`. This is the only remaining way to
-shrink the assembly routers' raw-B (the load infra is their last broad back-import). **CAVEAT:** the shim still
-gets imported back for error translation, AND `_design_with_instance_overrides` wraps the load — so the raw-B drop
-is partial and the value is marginal (L13/L20: a forced-shared api-bound wrapper). Probe the actual raw-B
-reduction before committing; if the shim must stay imported anyway, this is a "leave in the kernel" region and
-**assembly.py is at terminal state — declare it done.** Module globals `_WORKSPACE_DIR`/`_PROJECT_ROOT` are
-read at call time (monkeypatched by `test_primitives_router`/`test_md_milestone1`) → thread them as explicit
-params exactly like #49 did for `geo_cache_key` (L16). **If you decide NOT to do this split, the backend
-god-file carve-up is COMPLETE** — both files hold only their core routes + shared/L4-blocked kernel, every
-cohesive sub-resource is in its own `routes_<area>.py`, and every pure-compute cluster is in tested `backend/core`.
-
-**▶ LOOP PHASE SHIFT (2026-06-16, post-review) — now mostly executed.** The cheap B=1 router lifts drained in
-BOTH files (176 routes in extracted routers; crud.py 113 / assembly.py 29). The review's flag — "next jump is
-SERVICE extraction" — drove the Tier-3 pushes: crud's pure geometry/diff/cluster kernel (#34/#46/#47/#48) and
-assembly's geometry-cache + override-merge (#49) are now in tested `backend/core`. **The only remaining broad
-god-file surface is assembly's file-IO design-load infra** (`_load_design_from_source` &c.), an L15-split
-candidate of marginal value — see the `## Next-session handoff` block above for the go/no-go.
+**▶ THE LAST TWO CANDIDATES — BOTH CLASSIFIED NO-GO (2026-07-08, this session's work):**
+- **L15 split of `_load_design_from_source` → NO-GO.** The api shim MUST stay in assembly.py (a route handler
+  needs `HTTPException(400)`, not a raw `PartLoadError` → 500), and it is imported back by **6 routers**
+  (`routes_assembly_geometry`/`_overhangs`/`_loadouts`/`_frames`/`_joints`/`_polymerize`) **+ `tests/automation_harness.py`**
+  as the canonical load path. So raw-B on every router is **unchanged** and bespoke-B is already 0 (exempt
+  file-IO infra) — the gate metric doesn't move; only ~20 file-IO-dominated lines would relocate. This is
+  precisely the "shim must stay imported → leave in the kernel" case the prior handoff flagged.
+- **Instance-routes cluster (538–1702) → NO-GO.** Probed raw back-import surface = 13 symbols, ALL exempt/kernel
+  (`_assembly_response`×12 kernel, `_find_instance`×6 lookup, load-infra trio L4-blocked, `_mat4_from/to_model`+
+  `_apply_prismatic_joint` 26+-caller shared math, `_geo_cache_key`/`_display_design`/`_dedup_filename`/
+  `_safe_workspace_path` shared infra, `_propagate_cluster_delta_to_mates` L4-blocked). No cohesive sub-resource
+  to peel — this 1164-line instance CRUD (add/patch/delete + FK propagation + source-swap) IS the assembly
+  kernel, welded to the `_replay_assembly_op` replay dispatcher. Extracting it = renaming the kernel = shovel.
 
 **▶ crud.py is at terminal state — RE-VERIFIED against the live file 2026-06-16 (`/carve-router crud`, no extraction).**
 113 routes; banner walk + probes confirmed nothing ships honestly: (a) file tail is a single B=0 debug route
@@ -242,7 +227,9 @@ cross-test state leak — it was hash-seed-dependent nondeterminism in the share
 topological event instead of a brittle strand count. **Full-suite green is now 1753 passed / 0 failed.**
 See ISSUE-6 in `issues_ledger.md`.
 
-**▶ NEXT — assembly.py (PRIMARY = service push, per the phase shift above):** assembly.py is at **29 routes**
+**▶ [SUPERSEDED 2026-07-08 — the geometry-cache service push below WAS done as #49; assembly.py is now TERMINAL,
+see the top handoff block. Kept only for the banked gotchas at the end.] NEXT — assembly.py (PRIMARY = service
+push, per the phase shift above):** assembly.py is at **29 routes**
 ("routes drained") but is **NOT done** — `routes_assembly_geometry`/`_joints`/`_frames` lean on a broad 8–11-symbol
 kernel surface (the `_geo_cache_*` trio tied to module global `_GEO_CACHE`, + `_load_design_from_source`/
 `_design_with_instance_overrides` file-IO design-load). **The remaining real work is a SERVICE push of that

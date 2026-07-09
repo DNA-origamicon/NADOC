@@ -155,16 +155,28 @@ export function buildClusterLookup(design) {
   }
 }
 
+// Per-design pinned staple colours: designId → Map(strandId → hex). A staple
+// with no explicit colour gets a palette slot the FIRST time it is seen and
+// keeps it for the life of the design (mirrors the 2D editor's
+// pathview/palette.js ensureStapleColors). Without this the palette slot was
+// re-derived from the strand's *array position* on every rebuild, so any edit
+// that reshuffles design.strands — a scaffold nick/crossover, a forced-ligation
+// delete (splits a strand → appends fragments at the end) — shifted every later
+// staple's index and silently recoloured untouched staples. Keying on strand.id
+// pins each colour so only strands an op actually creates change colour. Keyed
+// by design.id (stable across mutations) so multiple assembly-part designs each
+// keep their own pins. First-encounter slot is still the array index, so a fresh
+// design shows the exact same colours on load as before.
+const _pinnedByDesign = new Map()   // designId → Map(strandId → hex)
+
 export function buildStapleColorMap(geometry, design) {
   const strands    = design?.strands   ?? []
   const crossovers = design?.crossovers ?? []
 
-  // Palette index = position in design.strands (full list, including scaffolds).
-  // This mirrors the 2D cadnano editor's pathview `strandColor(strands[si], si)`
-  // exactly so that staples without an explicit strand.color render the same
-  // colour in both views on initial load. Filtering scaffolds out (as the old
-  // implementation did) shifted every staple's palette slot relative to
-  // pathview, which is why colours diverged before any user color assignment.
+  const designId = design?.id ?? '__anon__'
+  let pinned = _pinnedByDesign.get(designId)
+  if (!pinned) { pinned = new Map(); _pinnedByDesign.set(designId, pinned) }
+
   const strandIdxOf = new Map(strands.map((s, i) => [s.id, i]))
 
   // Union-find over design.strands indices: strands joined by a non-ligated
@@ -187,14 +199,27 @@ export function buildStapleColorMap(geometry, design) {
     union(sA, sB)
   }
 
-  const map = new Map()   // strand_id → hex color
+  const map = new Map()   // strand_id → hex color (for strands present in geometry)
   for (const nuc of geometry) {
     if (!nuc.strand_id || nuc.strand_type === 'scaffold' || map.has(nuc.strand_id)) continue
-    const si         = strandIdxOf.get(nuc.strand_id) ?? -1
-    const paletteIdx = si >= 0 ? find(si) : map.size
-    map.set(nuc.strand_id, STAPLE_PALETTE[paletteIdx % STAPLE_PALETTE.length])
+    let color = pinned.get(nuc.strand_id)
+    if (color === undefined) {
+      const si         = strandIdxOf.get(nuc.strand_id) ?? -1
+      const paletteIdx = si >= 0 ? find(si) : pinned.size
+      color = STAPLE_PALETTE[paletteIdx % STAPLE_PALETTE.length]
+      pinned.set(nuc.strand_id, color)
+    }
+    map.set(nuc.strand_id, color)
   }
   return map
+}
+
+/** Test/lifecycle hook: drop pinned staple colours (all designs, or one). The
+ *  main app never needs this — pins are keyed by design.id and simply go unused
+ *  when a design is replaced — but tests assert first-encounter behaviour. */
+export function _resetStapleColorPins(designId) {
+  if (designId === undefined) _pinnedByDesign.clear()
+  else _pinnedByDesign.delete(designId)
 }
 
 export function nucColor(nuc, stapleColorMap, customColors, loopSet) {
