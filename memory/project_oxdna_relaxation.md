@@ -2370,3 +2370,46 @@ bead, the rest stayed put. Fix = surface + address a **loop-copy index** end-to-
   1). Verified: wrap-the-structure-across-the-box then unwrap → worst loop-copy bond 1.99 nm, 0 giant (>3 nm).
   Pin `test_unwrap_adjacency_keeps_loop_copies_in_one_component` (can-go-red: pre-fix 469 components). This
   fix benefits EVERY unwrap consumer (display/flex/deviation/trajectory/field/rmsf) since they share the graph.
+
+---
+
+## UPDATE 2026-07-09 — WSL CUDA segfault (`rc=-11` / md_relax) root-caused: native NVIDIA driver shadowing
+
+**Symptom:** every GPU oxDNA job (any design, incl. the corner_miter_optimized fold + previously-passing
+6hb_curved) died `rc=-11` (SIGSEGV) at the FIRST MD force step of `2_md_relax`, right after
+`INFO: Initial kinetic energy: …`. Job error: `oxDNA failed for 2_md_relax (rc=-11)`. CPU backend ran the
+identical input fine — so NOT the config, NOT the traps, NOT precision, NOT the neighbor list (tested all).
+
+**Root cause (environmental, not code):** a LAMMPS setup ran `apt install nvidia-cuda-toolkit` (2026-07-02
+14:30, AFTER the last good GPU run at 11:16). That pulled in **`libnvidia-compute-535`** — a *native Linux*
+NVIDIA driver userspace package — which dropped `/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.535…`
+(+ `libcuda.so.535`, CUDA-12 runtime) and registered them in the ldconfig cache. In WSL the GPU is reachable
+ONLY through the Windows-driver passthrough libs in `/usr/lib/wsl/`. oxDNA (built w/ CUDA 13.3, driver ceiling
+13.2) JIT-compiles its embedded PTX at the first kernel launch and grabbed the **mismatched native 535 JIT
+compiler** instead of the driver-matched one in `/usr/lib/wsl/drivers/<inf>/` (that dir is NOT on the ldconfig
+path, so it loses) → SIGSEGV. Diagnosis nailed with `LD_DEBUG=libs` showing
+`calling init: /lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.1`.
+
+**Fix (shipped, no sudo, keeps LAMMPS packages):** `oxdna_runner.oxdna_subprocess_env()` prepends the active
+WSL driver dir (newest `/usr/lib/wsl/drivers/*/` that ships `libnvidia-ptxjitcompiler.so.1`, via
+`_wsl_gpu_driver_dir()`) to `LD_LIBRARY_PATH` for the oxDNA child process, so the driver-matched CUDA/JIT libs
+win. Passed as `env=` to the single `create_subprocess_exec` in `_run_oxdna_async`. Returns None off WSL / when
+absent → child inherits `os.environ` unchanged. Verified: corner md_relax GPU run → `rc=0`, "everything went
+OK!". Tests: `test_wsl_driver_dir_picks_newest_with_jit`, `test_subprocess_env_prepends_driver_dir`,
+`test_subprocess_env_none_off_wsl` (test_oxdna_relaxation.py, 209 green).
+
+**Cleaner system-level alternative (needs user sudo, not required):** `apt remove nvidia-cuda-toolkit
+libnvidia-compute-535` (Ubuntu's meta-pkg should never be installed in WSL — use the `cuda-toolkit-13-3`
+packages + WSL driver for LAMMPS). The LD_LIBRARY_PATH fix makes this optional. See [[project_lammps_oxdna]].
+
+**Post-removal reality (2026-07-09):** the user ran that `apt remove`, but it did NOT clear the shadow —
+`libnvidia-compute-535-server` is still installed and STILL ships `libnvidia-ptxjitcompiler.so.535` +
+`libcuda.so.535` in `/lib/x86_64-linux-gnu`, so a BARE oxDNA GPU run still segfaults (`rc=-11`) and the code
+fix stays load-bearing (verified: bare rc=-11, with-fix rc=0). The removal broke NO engine — only two pkgs
+went (`nvidia-cuda-toolkit`, `libnvidia-compute-535`), no cascade; every engine binary's `ldd` is clean
+(oxDNA/DNAnalysis→cuda-13.3, NAMD/ARBD/anm-oxDNA/lmp self-contained or WSL-driver), CUDA-12 runtime
+(`libcudart.so.12`/`libcublas.so.12`, needed by the KOKKOS+GPU LAMMPS) still present, cuda-13.3 intact.
+NAMD-CUDA enumerates the GPU via the WSL driver WITHOUT loading the JIT compiler (native sm_75 SASS) → not
+affected by the shadow. To fully purge the shadow the user would also need `apt remove
+libnvidia-compute-535-server`. If any OTHER GPU engine (LAMMPS-GPU/ARBD/mrdna) is ever seen to segfault the
+same way, the identical env fix applies — factor `oxdna_subprocess_env`'s driver-dir logic into their runners.

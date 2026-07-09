@@ -184,6 +184,66 @@ def _usable_path(candidate: str) -> Optional[str]:
     )
 
 
+# ── WSL CUDA driver-library fix ───────────────────────────────────────────────
+# On WSL the GPU is reachable ONLY through the Windows-driver passthrough libs in
+# /usr/lib/wsl/.  Installing a *native* Linux NVIDIA driver package (e.g.
+# ``libnvidia-compute-535``, pulled in as a dependency of Ubuntu's
+# ``nvidia-cuda-toolkit`` during a LAMMPS setup) drops a
+# ``libnvidia-ptxjitcompiler.so.1`` into /lib/x86_64-linux-gnu and registers it in
+# the ldconfig cache.  oxDNA (built with a newer CUDA than the driver's ceiling)
+# JIT-compiles its embedded PTX at the first kernel launch and grabs that native
+# JIT compiler, which is version-mismatched with the actual WSL driver → SIGSEGV
+# on the first force step.  The correct, driver-matched JIT compiler lives in the
+# active driver's dir under /usr/lib/wsl/drivers/<inf>/ but that dir is not on the
+# ldconfig path, so it loses.  Prepending it to LD_LIBRARY_PATH for the oxDNA
+# subprocess makes the WSL driver libs win again.  No sudo, no system changes,
+# scoped to the child process; a no-op off WSL or when the dir is absent.
+_WSL_DRIVER_DIR_CACHE: list[Optional[str]] = []  # single-slot memo (unset when empty)
+
+
+def _wsl_gpu_driver_dir() -> Optional[str]:
+    """Active WSL GPU-driver library dir containing the PTX JIT compiler, or None.
+
+    Picks the newest (by mtime) /usr/lib/wsl/drivers/*/ dir that ships
+    ``libnvidia-ptxjitcompiler.so.1`` — the file that must match the running WSL
+    driver.  Returns None off WSL / when no such dir exists.
+    """
+    if _WSL_DRIVER_DIR_CACHE:
+        return _WSL_DRIVER_DIR_CACHE[0]
+    result: Optional[str] = None
+    try:
+        import glob
+        matches = glob.glob(
+            "/usr/lib/wsl/drivers/*/libnvidia-ptxjitcompiler.so.1"
+        )
+        if matches:
+            newest = max(matches, key=lambda p: os.path.getmtime(p))
+            result = os.path.dirname(newest)
+    except OSError:
+        result = None
+    _WSL_DRIVER_DIR_CACHE.append(result)
+    return result
+
+
+def oxdna_subprocess_env() -> Optional[dict]:
+    """Environment for the oxDNA subprocess, or None to inherit unchanged.
+
+    On WSL, prepend the active GPU-driver dir to LD_LIBRARY_PATH so the
+    driver-matched CUDA/PTX-JIT libs load ahead of any shadowing native Linux
+    NVIDIA package (see the module note above).  Returns None when no adjustment
+    is needed so the caller can keep inheriting os.environ verbatim.
+    """
+    driver_dir = _wsl_gpu_driver_dir()
+    if not driver_dir:
+        return None
+    env = os.environ.copy()
+    existing = env.get("LD_LIBRARY_PATH", "")
+    parts = existing.split(os.pathsep) if existing else []
+    if driver_dir not in parts:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join([driver_dir, *parts]) if parts else driver_dir
+    return env
+
+
 def find_oxdna(*, prefer_cuda: bool = True) -> Optional[str]:
     """Return the best usable oxDNA binary path, or None if not found.
 
@@ -733,6 +793,7 @@ async def _run_oxdna_async(
             stdout=log_fh,
             stderr=asyncio.subprocess.STDOUT,
             start_new_session=True,
+            env=oxdna_subprocess_env(),
         )
         pid = proc.pid
         _ACTIVE_PIDS[job_id] = pid

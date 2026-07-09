@@ -499,3 +499,16 @@ The headless force primitive is now driveable from the app.
 Sibling engine features: [[project_md_engines_panel]] (the panel this plugs into),
 [[project_oxdna_relaxation]], [[project_oxpy_binding_patch]]. Pipeline pitfalls:
 [[feedback_cg_pipeline_lessons]].
+
+---
+
+## ⚠️ WSL GPU HAZARD — installing LAMMPS's CUDA deps broke ALL GPU engines (2026-07-09)
+
+Installing LAMMPS's GPU/CUDA stack via Ubuntu's `apt install nvidia-cuda-toolkit` pulled in
+`libnvidia-compute-535` (a *native Linux* NVIDIA driver). In WSL the GPU is reachable ONLY through the
+Windows-driver passthrough (`/usr/lib/wsl/`); the native package dropped a mismatched
+`libnvidia-ptxjitcompiler.so.535` into the ldconfig path that shadows the driver-matched one → **every CUDA
+engine that JIT-compiles PTX segfaults (`rc=-11`) at first kernel launch**, oxDNA relax included. See
+[[project_oxdna_relaxation]] §"UPDATE 2026-07-09" and [[LESSONS]] K1 for the full diagnosis + the shipped
+`oxdna_subprocess_env` LD_LIBRARY_PATH fix. **Do NOT install `nvidia-cuda-toolkit` / native `libnvidia-*`
+in WSL** — build LAMMPS against the `cuda-toolkit-13-3` packages + the WSL passthrough driver instead.

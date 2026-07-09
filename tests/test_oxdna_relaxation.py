@@ -4146,3 +4146,56 @@ def test_detect_equilibration_finds_burn_in():
     # already-stationary input → little/no burn-in
     flat = detect_equilibration([5.0 + 2.0 * math.sin(i) for i in range(300)])
     assert flat["t0"] <= 30
+
+
+# ── WSL CUDA driver-library fix (oxdna_subprocess_env) ────────────────────────
+
+def test_wsl_driver_dir_picks_newest_with_jit(tmp_path, monkeypatch):
+    """_wsl_gpu_driver_dir globs /usr/lib/wsl/drivers/*/ and returns the NEWEST dir
+    that ships libnvidia-ptxjitcompiler.so.1 (the driver-matched JIT compiler)."""
+    from backend.core import oxdna_runner
+
+    root = tmp_path / "drivers"
+    old = root / "nv_old.inf"; new = root / "nv_new.inf"; nojit = root / "nv_nojit.inf"
+    for d in (old, new, nojit):
+        d.mkdir(parents=True)
+    (old / "libnvidia-ptxjitcompiler.so.1").write_text("x")
+    (new / "libnvidia-ptxjitcompiler.so.1").write_text("x")
+    (nojit / "libcuda.so.1").write_text("x")  # no JIT compiler → ineligible
+    import os as _os
+    _os.utime(old / "libnvidia-ptxjitcompiler.so.1", (1000, 1000))
+    _os.utime(new / "libnvidia-ptxjitcompiler.so.1", (2000, 2000))
+
+    monkeypatch.setattr(oxdna_runner, "_WSL_DRIVER_DIR_CACHE", [])
+    # glob is imported lazily inside the function; patch the stdlib module it uses
+    import glob as _glob
+    monkeypatch.setattr(
+        _glob, "glob",
+        lambda pat: [str(old / "libnvidia-ptxjitcompiler.so.1"),
+                     str(new / "libnvidia-ptxjitcompiler.so.1")],
+    )
+    assert oxdna_runner._wsl_gpu_driver_dir() == str(new)
+
+
+def test_subprocess_env_prepends_driver_dir(monkeypatch):
+    """oxdna_subprocess_env prepends the driver dir to LD_LIBRARY_PATH (preserving
+    any existing entries) so the WSL driver libs win over a shadowing native pkg."""
+    from backend.core import oxdna_runner
+
+    monkeypatch.setattr(oxdna_runner, "_wsl_gpu_driver_dir", lambda: "/usr/lib/wsl/drivers/nv.inf")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/existing/path")
+    env = oxdna_runner.oxdna_subprocess_env()
+    assert env["LD_LIBRARY_PATH"] == "/usr/lib/wsl/drivers/nv.inf:/existing/path"
+
+    # idempotent — already-present dir is not duplicated
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/lib/wsl/drivers/nv.inf:/x")
+    env2 = oxdna_runner.oxdna_subprocess_env()
+    assert env2["LD_LIBRARY_PATH"] == "/usr/lib/wsl/drivers/nv.inf:/x"
+
+
+def test_subprocess_env_none_off_wsl(monkeypatch):
+    """Off WSL (no driver dir) the helper returns None so the child inherits os.environ."""
+    from backend.core import oxdna_runner
+
+    monkeypatch.setattr(oxdna_runner, "_wsl_gpu_driver_dir", lambda: None)
+    assert oxdna_runner.oxdna_subprocess_env() is None

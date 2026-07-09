@@ -169,3 +169,6 @@ experiments/*/results/longrun_result.json
 .codex
 .coverage
 .vscode/
+
+# LAMMPS default runtime log (dropped in cwd on a run)
+log.lammps
