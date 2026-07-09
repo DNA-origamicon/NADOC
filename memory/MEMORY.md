@@ -116,6 +116,8 @@ One line per entry, grouped by area. Open the topic file for detail.
 
 **MD job system / runners:** [md_job_system](project_md_job_system.md) (`md_job.py`, `namd_runner`, `routes_md`) · [md_prep_relaxation](project_md_prep_relaxation.md) (exp29; ENM k-release; read HANDOFF first) · [oxdna_metrics_card](project_oxdna_metrics_card.md) (Graphs+Metrics card; MV-20)
 
+**Simulate-panel UX overhaul (IN PROGRESS):** [simulate_panel_overhaul](project_simulate_panel_overhaul.md) (**one collapsible Simulate section, static engine headers, Periodic MD removed, context Run/Stop/Resume via shared `job_run_control.js`; oxDNA+NAMD wired, LAMMPS/mrDNA/CanDo + master Job-status-card consolidation REMAIN**; `collapsible:false` on `jobs_panel_base`; MV-30/MV-31 owed)
+
 **MD visualization / overlay:** [md_viz_tools](project_md_viz_tools.md) (trajectory + RMSF; **per-frame de-unwrapped 2026-07-02, ~15000× faster**) · [md_panel_status](project_md_panel_status.md) (stale-Universe + PBC) · [md_sidebar_audit](project_md_sidebar_audit.md) (R1–R12; R1/R2 fixed) · [md_live_model_cache](project_md_live_model_cache.md) (single-flight `atomistic_cache.py`)
 
 **Automation / jobs infra:** [staleness_diagnostics](project_staleness_diagnostics.md) (**staleness compares vs LIVE design → check `GET /api/design` first**; `describe_staleness`) · [af25_af26_job_log_sync](project_af25_af26_job_log_sync.md) (COMPLETE) · [job_activity_spinner](project_job_activity_spinner.md) (`/api/jobs/active`) · [job_disk_usage](project_job_disk_usage.md) · [job_archive](project_job_archive.md) (`job_dir()` archive-aware invariant)

@@ -10,9 +10,13 @@ instead of the full design. The main implementation is:
   model, adds wrap bonds, solvates, places ions, and emits a NAMD package.
 - `backend/core/namd_solvate.py` — provides periodic GROMACS solvation and
   renders the periodic NAMD configuration.
-- `frontend/src/ui/periodic_md_panel.js` and
-  `frontend/src/scene/periodic_md_overlay.js` — load PSF/PDB/DCD output,
-  preview the periodic cell, and tile frames onto periodic 21 bp windows.
+- ~~`frontend/src/ui/periodic_md_panel.js` and
+  `frontend/src/scene/periodic_md_overlay.js`~~ — **REMOVED 2026-07-08** (Simulate-panel
+  overhaul, see [[project_simulate_panel_overhaul]]). This was a *client-only* PSF/PDB/DCD
+  file-preview panel (no backend route); the sidebar "Periodic MD" section was deleted. The
+  BACKEND periodic-cell workflow (`periodic_cell.py`, `namd_solvate.py`) is untouched — only
+  the standalone frontend previewer went. If a periodic-cell preview UI is revived, rebuild
+  it inside the unified Simulate section, not as a separate panel-section.
 - `frontend/src/scene/md_segmentation_overlay.js` — classifies 21 bp windows as
   `periodic`, `deviant`, or `end` based on crossover-count agreement with the
   modal interior window.
