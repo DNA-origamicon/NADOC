@@ -41,11 +41,21 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
     """Map ``md_rmsf`` positions (``{helix_id, bp_index, direction, backbone_position, rmsf}``)
     to the comparison card's RMSF-profile shape (``{helix_id, bp_index, direction, copy,
     rmsf_nm}``).  Entries with no ``rmsf`` value are dropped (a base with no fluctuation
-    sample).  Identical to O1's remap — NAMD's trajectory RMSF uses the same ``rmsf`` key."""
+    sample).  Identical to O1's remap — NAMD's trajectory RMSF uses the same ``rmsf`` key.
+
+    Crossover extra-base inserts are dropped: ``md_rmsf`` keys them
+    ``("__xb__", crossover_id, k)`` — a NON-INT ``bp_index`` (see
+    :func:`backend.core.atomistic_to_nadoc.md_pkey`).  They are flexible ssDNA with no
+    dsDNA-core column, so they carry no cross-engine RMSF counterpart — the same reason
+    ``_core_column_key`` (used by the shape core filter) returns ``None`` for them.
+    Guarding here keeps the str-vs-int compare from crashing the gold-override column on
+    any design with a linker (the class of bug ``md_pkey`` records having hit live)."""
     out: list[dict] = []
     for p in rmsf_positions or []:
         r = p.get("rmsf")
         if r is None:
+            continue
+        if not isinstance(p.get("bp_index"), int):
             continue
         direction = p.get("direction")
         out.append({

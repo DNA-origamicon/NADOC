@@ -28,7 +28,15 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
     """Map ``production_rmsf`` positions (``{helix_id, bp_index, direction, copy, rmsf}``)
     to the comparison card's RMSF profile shape (``{helix_id, bp_index, direction, copy,
     rmsf_nm}``).  Entries with no ``rmsf`` value are dropped (a base with no fluctuation
-    sample), so a partial map yields a partial profile rather than ``None`` rmsf_nm."""
+    sample), so a partial map yields a partial profile rather than ``None`` rmsf_nm.
+
+    INVARIANT: ``production_rmsf`` reads positions via ``read_configuration_full`` /
+    ``read_trajectory_frames_full`` with ``include_extra_bases=False``, so crossover
+    inserts (the ``("__xb__", crossover_id, k)`` string ``bp_index`` keys) are stripped
+    at the reader and never reach here.  The NAMD twin (:mod:`namd_shape_source`) does
+    NOT get that guarantee — ``md_rmsf`` keeps inserts in its positions list — so it
+    guards ``bp_index`` explicitly.  If this path ever flips to ``include_extra_bases=True``,
+    add the same ``isinstance(p["bp_index"], int)`` guard or ``int(...)`` below crashes."""
     out: list[dict] = []
     for p in rmsf_positions or []:
         r = p.get("rmsf")
