@@ -579,7 +579,7 @@ describe('initOxdnaJobsPanel — per-design job filtering', () => {
     await panel.refresh()
     currentPath = 'BetaJob.nadoc'
     window.dispatchEvent(new CustomEvent('nadoc:workspace-path-change', { detail: { path: 'BetaJob.nadoc' } }))
-    await Promise.resolve()
+    await flush()   // the always-open panel now re-fetches (async) on a design switch
     expect(listText()).toContain('BetaJob')
     expect(listText()).not.toContain('AlphaJob')
   })
@@ -589,7 +589,7 @@ describe('initOxdnaJobsPanel — per-design job filtering', () => {
     await panel.refresh()
     currentPath = 'new_design.nadoc'                 // a fresh design, no jobs
     window.dispatchEvent(new CustomEvent('nadoc:workspace-path-change', { detail: { path: 'new_design.nadoc' } }))
-    await Promise.resolve()
+    await flush()   // the always-open panel now re-fetches (async) on a design switch
     expect(listText().toLowerCase()).toContain('no oxdna jobs')
   })
 
@@ -735,16 +735,23 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(prog).toContain('ETA ~3m 20s')                    // 200 s
   })
 
-  // ── Activity spinners (reload-safe: driven by live job state, no selection) ──
-  it('a running relaxation spins the list row + Relax button (no selection needed)', async () => {
+  // ── Activity spinners (reload-safe: driven by live job state) ──
+  // The Relax button is now the context control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) tied to the
+  // SELECTED job, so with nothing selected it reads "▶ Relax" (no spinner); a running relax
+  // still shows activity on its list row. SELECTING the running relax flips it to Stop.
+  it('a running relaxation spins its list row; the Relax button reflects the selected job', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jRlx', design_source_path: 'A.nadoc', status: 'running',
       created_at: 1, current_stage_idx: 1, stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'running' }] }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await panel.refresh()
     await Promise.resolve(); await Promise.resolve()
-    expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()
-    expect($('oxdna-jobs-run-btn').querySelector('.nadoc-spinner')).toBeTruthy()
+    expect($('oxdna-jobs-list').querySelector('.nadoc-spinner')).toBeTruthy()   // row shows activity
+    expect($('oxdna-jobs-run-btn').textContent.trim()).toBe('▶ Relax')          // nothing selected → launch
     expect($('oxdna-jobs-prod-btn').querySelector('.nadoc-spinner')).toBeFalsy()
+
+    await selectFirstJob(panel)   // select the running relaxation → Relax flips to Stop
+    expect($('oxdna-jobs-run-btn').textContent).toContain('Stop Relax')
+    expect($('oxdna-jobs-run-btn').dataset.runAction).toBe('stop')
   })
 
   it('a running production spins the list row + Production button, not Relax', async () => {
@@ -836,14 +843,15 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('flex-scale-max').value).toBe('1.40')
   })
 
-  it('a stopped (killed) job → Start button reads "Resume"', async () => {
+  it('a stopped (killed) job selected → the primary Relax control reads "Resume"', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jKilled', design_source_path: 'A.nadoc', status: 'stopped',
       created_at: 1, current_stage_idx: 1, stages: relaxStages({ kind: 'production', status: 'running', steps: 5000 }) }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    const start = $('oxdna-jobs-start-btn')
-    expect(start.style.display).not.toBe('none')
-    expect(start.textContent).toContain('Resume')
+    const run = $('oxdna-jobs-run-btn')
+    expect(run.textContent).toContain('Resume')
+    expect(run.dataset.runAction).toBe('resume')
+    expect($('oxdna-jobs-start-btn').style.display).toBe('none')   // detail Start is retired
   })
 
   it('flexibility map unlocks mid-run + flags the map preliminary while production runs', async () => {
@@ -975,7 +983,11 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
 // behave identically whether oxDNA drives its own bespoke `_collapsed`/
 // `_scheduleNextPoll` or the shared `initJobsPanelBase`. Written & run GREEN against
 // the bespoke code FIRST, then re-run post-rewire (adapted-code in-place-first pin).
-describe('initOxdnaJobsPanel — shared jobs-panel base parity (section collapse + poll)', () => {
+// UNIFIED-PANEL UPDATE: the per-engine section no longer collapses — the *Simulate*
+// header owns the one collapse and the engine header is a static label
+// (`collapsible:false` on initJobsPanelBase). These pins now assert the panel is
+// PERMANENTLY OPEN (heading click is a no-op) and polls whenever a job is active.
+describe('initOxdnaJobsPanel — permanently-open section (no per-engine collapse) + poll', () => {
   const IDS = [
     'oxdna-jobs-panel', 'oxdna-jobs-heading', 'oxdna-jobs-arrow', 'oxdna-jobs-body',
     'oxdna-jobs-status', 'oxdna-jobs-run-btn', 'oxdna-jobs-prod-btn', 'oxdna-jobs-prod-status',
@@ -986,45 +998,40 @@ describe('initOxdnaJobsPanel — shared jobs-panel base parity (section collapse
 
   beforeEach(() => {
     clearDom(); mountIds(IDS)
-    localStorage.clear()               // section starts at the default (collapsed)
+    localStorage.clear()
     api.oxdnaAvailable.mockResolvedValue({ available: true, oxdna_bin: 'x' })
     vi.clearAllMocks()
     api.oxdnaAvailable.mockResolvedValue({ available: true, oxdna_bin: 'x' })
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
-  it('section starts collapsed; the heading click toggles the body + `is-collapsed` arrow', async () => {
+  it('starts OPEN regardless of persisted state; the heading click does not collapse it', async () => {
+    // Seed a stale "collapsed" preference — a non-collapsible section must ignore it.
+    localStorage.setItem('nadoc.leftSidebar.sections.v1',
+      JSON.stringify({ dynamics: { 'oxdna-jobs-panel': true } }))
     api.listOxdnaJobs.mockResolvedValue([])
     initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await flush()
-    // default = collapsed
-    expect($('oxdna-jobs-body').style.display).toBe('none')
-    expect($('oxdna-jobs-arrow').classList.contains('is-collapsed')).toBe(true)
+    expect($('oxdna-jobs-body').style.display).not.toBe('none')        // forced open
 
-    heading().click(); await flush()                                   // open
-    expect($('oxdna-jobs-body').style.display).not.toBe('none')
-    expect($('oxdna-jobs-arrow').classList.contains('is-collapsed')).toBe(false)
-
-    heading().click(); await flush()                                   // collapse
-    expect($('oxdna-jobs-body').style.display).toBe('none')
-    expect($('oxdna-jobs-arrow').classList.contains('is-collapsed')).toBe(true)
+    heading().click(); await flush()                                   // no-op now
+    expect($('oxdna-jobs-body').style.display).not.toBe('none')        // still open
   })
 
-  it('polls listOxdnaJobs on the interval while open with an active run, then stops once collapsed', async () => {
+  it('polls listOxdnaJobs on the interval while a run is active (section is always open)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'r1', design_source_path: 'A.nadoc', status: 'running',
       created_at: 1, current_stage_idx: 1, stages: [{ kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'running' }] }])
     vi.useFakeTimers()
-    initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
-    heading().click()                                                  // open → onOpen fetch + schedule
+    initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })          // opens + fetches + schedules on init
     await vi.advanceTimersByTimeAsync(0)
     const n0 = api.listOxdnaJobs.mock.calls.length
     await vi.advanceTimersByTimeAsync(1500)                            // one poll tick
     const n1 = api.listOxdnaJobs.mock.calls.length
-    expect(n1).toBeGreaterThan(n0)                                     // poll fired while open
+    expect(n1).toBeGreaterThan(n0)                                     // poll fired (open + active)
 
-    heading().click()                                                  // collapse
-    await vi.advanceTimersByTimeAsync(4500)
-    expect(api.listOxdnaJobs.mock.calls.length).toBe(n1)              // poll stopped after collapse
+    heading().click()                                                  // no collapse → poll keeps running
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(api.listOxdnaJobs.mock.calls.length).toBeGreaterThan(n1)
   })
 
   it('does not poll while open when no job is active (the shared open+active gate)', async () => {

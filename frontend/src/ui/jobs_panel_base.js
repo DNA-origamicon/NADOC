@@ -22,6 +22,13 @@
  * textContent — mrDNA/CanDo), 'class' (`is-collapsed` class — LAMMPS), 'rotate'
  * (CSS transform — oxDNA/md). Only 'text' has live consumers today (slice 2c-1);
  * the others are pinned by the oracle so converging those panels is a pure add.
+ *
+ * `collapsible:false` makes a SECTION permanently open — no heading toggle, the
+ * persisted collapse state is ignored, and `initCollapsed()` forces the body open
+ * (firing `onOpen` once). The advanced-parameters drawer and the poll loop are
+ * unaffected. This is how the engine panels behave under the unified Simulate
+ * section: the *Simulate* header owns the one collapse; each engine's own header
+ * is a static label (the engine selector shows/hides whole panels).
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
@@ -76,6 +83,7 @@ export function initJobsPanelBase({
   pollMs = 1500,
   arrowStyle = 'text',
   advArrowStyle = 'text',
+  collapsible = true,
   hasActive = null,
   tick = null,
   onOpen = null,
@@ -104,7 +112,7 @@ export function initJobsPanelBase({
     else { clearPoll(); onClose?.() }
   }
 
-  if (heading && body) {
+  if (collapsible && heading && body) {
     heading.addEventListener('click', () => {
       const next = isOpen()           // currently open → collapse it
       setSectionCollapsed(tab, section, next)
@@ -120,8 +128,21 @@ export function initJobsPanelBase({
     })
   }
 
-  /** Apply the persisted collapse state on mount (defaults to collapsed). */
+  /** Apply the persisted collapse state on mount (defaults to collapsed).
+   *
+   * A non-collapsible section ignores persistence and forces itself open. Its body +
+   * arrow open synchronously, but `onOpen` is DEFERRED to a microtask: a permanently-open
+   * engine panel is initialised early in the composition root, and firing its onOpen fetch
+   * synchronously here would run before late-declared deps (e.g. main.js's `_workspacePath`,
+   * read lazily by `getWorkspacePath()`) exist → a TDZ. The microtask fires after the
+   * synchronous init body completes, so those deps are ready. */
   function initCollapsed(defaultCollapsed = true) {
+    if (!collapsible) {
+      if (body) body.style.display = bodyDisplay(false)
+      applyArrow(arrow, true, arrowStyle)
+      if (onOpen) queueMicrotask(onOpen)
+      return
+    }
     applyCollapsed(getSectionCollapsed(tab, section, defaultCollapsed))
   }
 

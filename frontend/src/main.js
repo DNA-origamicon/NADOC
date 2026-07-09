@@ -180,8 +180,6 @@ import { nadocBroadcast } from './shared/broadcast.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
 import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
-import { initPeriodicMdOverlay }    from './scene/periodic_md_overlay.js'
-import { initPeriodicMdPanel }      from './ui/periodic_md_panel.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
@@ -199,6 +197,7 @@ import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
 import { initLammpsForcesSetup } from './ui/lammps_forces_setup.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initEngineSelector } from './ui/engine_selector.js'
+import { initJobsPanelBase } from './ui/jobs_panel_base.js'
 import { initCandoDisplay } from './ui/cando_display.js'
 import { initCandoLegend } from './ui/cando_legend.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
@@ -2049,21 +2048,17 @@ async function main() {
     },
   })
 
-  const periodicMdOverlay = initPeriodicMdOverlay(scene)
-  initPeriodicMdPanel(store, {
-    periodicMdOverlay,
-    setCGVisible: (...a) => _atomSurface.setCGVisible(...a),
-    getDesign:   () => store.getState().currentDesign,
-  })
-
-  // Log sub-panel collapse toggle
-  document.getElementById('pmd-log-heading')?.addEventListener('click', () => {
-    const logBody  = document.getElementById('pmd-log-body')
-    const logArrow = document.getElementById('pmd-log-arrow')
-    const open = logBody?.style.display !== 'none'
-    if (logBody)  logBody.style.display = open ? 'none' : 'block'
-    logArrow?.classList.toggle('is-collapsed', open)
-  })
+  // The Simulate section collapses as one (its header owns the collapse; each engine
+  // header is a static label). Reuse the shared jobs-panel base for persist + arrow.
+  initJobsPanelBase({
+    section: 'simulate-panel',
+    els: {
+      heading: document.getElementById('simulate-heading'),
+      body:    document.getElementById('simulate-body'),
+      arrow:   document.getElementById('simulate-arrow'),
+    },
+    arrowStyle: 'class',
+  }).initCollapsed(false)   // default expanded
 
   // ── Surface renderer (VdW / SES) ─────────────────────────────────────────────
   const surfaceRenderer = initSurfaceRenderer(scene)
@@ -3152,8 +3147,6 @@ async function main() {
     // cylinder overlay, and hides the CanDo RMSF/deviation legend (#cando-legend),
     // which otherwise lingered on the welcome screen after closing a session.
     candoDisplay.stopAndRestore()
-    if (periodicMdOverlay.isApplied()) _setCGVisible(true)
-    periodicMdOverlay.clear()
     // Reset representation to Full — deactivates atomistic/surface renderers,
     // resets the representation radio, and hides mode-specific option rows.
     _setRepresentation('full')
@@ -6922,7 +6915,6 @@ async function main() {
         return capturePosesGif({ renderer, scene, camera, controls, poses, ...opts })
       },
       getAtomisticRenderer: () => atomisticRenderer,
-      getPeriodicMdOverlay: () => periodicMdOverlay,
       isCGVisible: () => !!(designRenderer.getHelixCtrl()?.root?.visible),
       /** Return cone entries (crossover connections) with screen {x, y} midpoints. */
       getConeScreenPositions() {

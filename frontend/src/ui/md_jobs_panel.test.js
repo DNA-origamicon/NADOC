@@ -636,21 +636,19 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
   })
   afterEach(() => { clearDom(); vi.useRealTimers() })
 
-  it('section starts collapsed; the heading click toggles the body + `is-collapsed` arrow', async () => {
+  it('starts OPEN regardless of markup/persisted collapse; the heading click is a no-op', async () => {
+    // Seed a stale "collapsed" preference + collapsed markup — a non-collapsible
+    // section must ignore both and force itself open.
+    localStorage.setItem('nadoc.leftSidebar.sections.v1',
+      JSON.stringify({ dynamics: { 'md-jobs-panel': true } }))
     mdApi.listMdJobs.mockResolvedValue([])
     initMdJobsPanel()
     await flushMicro()
-    // default (persisted absent) = collapsed
-    expect($('md-jobs-panel-body').style.display).toBe('none')
-    expect($('md-jobs-panel-arrow').classList.contains('is-collapsed')).toBe(true)
-
-    heading().click(); await flushMicro()                              // open
-    expect($('md-jobs-panel-body').style.display).not.toBe('none')
+    expect($('md-jobs-panel-body').style.display).not.toBe('none')     // forced open
     expect($('md-jobs-panel-arrow').classList.contains('is-collapsed')).toBe(false)
 
-    heading().click(); await flushMicro()                              // collapse
-    expect($('md-jobs-panel-body').style.display).toBe('none')
-    expect($('md-jobs-panel-arrow').classList.contains('is-collapsed')).toBe(true)
+    heading().click(); await flushMicro()                              // no-op now
+    expect($('md-jobs-panel-body').style.display).not.toBe('none')     // still open
   })
 
   it('the advanced drawer toggles its body + a `rotate(90deg)` arrow (first click opens)', async () => {
@@ -669,26 +667,26 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     expect(advArrow.style.transform).toBe('')
   })
 
-  it('opening fires _onOpen (fetches the job list); collapsing stops the remote SLURM poll', async () => {
-    // A running Alpine job keeps the remote-poll setInterval firing _fetchJobs while
-    // open; onClose must stop it (the bespoke `else { _stopRemotePoll() }` branch).
+  it('_onOpen fires on init (fetches the job list) and the remote SLURM poll runs while open', async () => {
+    // A running Alpine job keeps the remote-poll setInterval firing _fetchJobs. The
+    // section is always open now, so _onOpen fires on init and the poll keeps running
+    // (the heading click no longer collapses / stops it).
     mdApi.listMdJobs.mockResolvedValue([{
       job_id: 'a1', execution_target: 'alpine', status: 'running',
       slurm_job_id: '999', created_at: 1,
     }])
     vi.useFakeTimers()
-    initMdJobsPanel()
-    heading().click()                                                  // open → _onOpen fetch + start remote poll
+    initMdJobsPanel()                                                  // opens → _onOpen fetch + start remote poll
     await vi.advanceTimersByTimeAsync(0)
     const nOpen = mdApi.listMdJobs.mock.calls.length
-    expect(nOpen).toBeGreaterThan(0)                                   // onOpen fetched
+    expect(nOpen).toBeGreaterThan(0)                                   // onOpen fetched on init
 
     await vi.advanceTimersByTimeAsync(20000)                           // one remote-poll tick
     const nPolled = mdApi.listMdJobs.mock.calls.length
     expect(nPolled).toBeGreaterThan(nOpen)                             // remote poll fired while open
 
-    heading().click()                                                  // collapse → onClose stops remote poll
-    await vi.advanceTimersByTimeAsync(60000)
-    expect(mdApi.listMdJobs.mock.calls.length).toBe(nPolled)           // poll stopped after collapse
+    heading().click()                                                  // no-op → poll keeps running
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(mdApi.listMdJobs.mock.calls.length).toBeGreaterThan(nPolled)
   })
 })

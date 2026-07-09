@@ -228,35 +228,32 @@ describe('initLammpsJobsPanel — visualization card', () => {
   })
 })
 
-// PARITY oracle for the shared-scaffold convergence (U3 slice 2c-2): the section
-// collapse (arrow via `is-collapsed` class), the advanced drawer, and the
-// open+active poll gate must behave identically whether LAMMPS drives its own
-// bespoke `_applyCollapsed`/`_schedulePoll` or the shared `initJobsPanelBase`.
-// These pin the LAMMPS-specific accommodations (arrowStyle:'class', an onClose
-// that runs `_viewsOff()`+`detachGizmo()`, and the poll open-guard the base adds).
-// Written + run GREEN against the pre-convergence code first, then re-run after
-// the rewire — parity, not green-by-construction (CLAUDE.md adapted-code pin rule).
-describe('initLammpsJobsPanel — shared scaffold parity (U3 slice 2c-2)', () => {
-  it('collapsing the section hides the body, sets is-collapsed, turns views off + detaches the gizmo', async () => {
+// UNIFIED-PANEL UPDATE (was the U3 slice 2c-2 collapse parity): the per-engine
+// section no longer collapses — the *Simulate* header owns the one collapse and the
+// LAMMPS header is a static label (`collapsible:false`). These pin the new invariant:
+// the panel is PERMANENTLY OPEN (heading click is a no-op, views are NOT torn down),
+// the advanced drawer still works, and the poll runs whenever a run is active.
+describe('initLammpsJobsPanel — permanently-open section (no per-engine collapse)', () => {
+  it('the heading click does not collapse the section or tear down views', async () => {
     const detachGizmo = vi.fn()
     api.listLammpsJobs.mockResolvedValue(COMPLETED)
     initLammpsJobsPanel({
       designRenderer: renderer(), getWorkspacePath: () => WS,
       forcesSetup: { getForces: () => ({ field: null, anchors: [], wall: null }), fieldNeedsAnchor: () => false, detachGizmo },
     })
-    openPanel(); await flush()
+    await flush()
+    expect($('lammps-jobs-body').style.display).not.toBe('none')     // open on init
     ;[...$('lammps-jobs-list').children][0].click(); await flush()   // select the run
     $('lammps-jobs-display-toggle').click(); await flush()           // turn a view ON
     expect($('lammps-jobs-viz-off').checked).toBe(false)
-    openPanel()                                                      // heading click → collapse
-    expect($('lammps-jobs-body').style.display).toBe('none')
-    expect($('lammps-jobs-arrow').classList.contains('is-collapsed')).toBe(true)
-    expect($('lammps-jobs-viz-off').checked).toBe(true)             // _viewsOff() ran
-    expect(detachGizmo).toHaveBeenCalled()                          // onClose ran
+    openPanel()                                                      // heading click → no-op
+    expect($('lammps-jobs-body').style.display).not.toBe('none')     // still open
+    expect($('lammps-jobs-viz-off').checked).toBe(false)            // view NOT torn down
+    expect(detachGizmo).not.toHaveBeenCalled()
   })
 
   it('the advanced-drawer toggle shows/hides its body and flips the text arrow', async () => {
-    initLammpsJobsPanel({ getWorkspacePath: () => WS }); openPanel(); await flush()
+    initLammpsJobsPanel({ getWorkspacePath: () => WS }); await flush()
     const advBody = $('lammps-jobs-adv-body'), advArrow = $('lammps-jobs-adv-arrow')
     expect(advBody.style.display).toBe('none')
     $('lammps-jobs-adv-toggle').click()
@@ -265,15 +262,15 @@ describe('initLammpsJobsPanel — shared scaffold parity (U3 slice 2c-2)', () =>
     expect(advBody.style.display).toBe('none'); expect(advArrow.textContent).toBe('▸')
   })
 
-  it('polls while open with an active run, then stops once collapsed', async () => {
+  it('polls while a run is active (section is always open)', async () => {
     api.listLammpsJobs.mockResolvedValue(RUNNING)
-    initLammpsJobsPanel({ getWorkspacePath: () => WS }); openPanel(); await flush()
+    initLammpsJobsPanel({ getWorkspacePath: () => WS }); await flush()
     const n0 = api.listLammpsJobs.mock.calls.length
     await vi.advanceTimersByTimeAsync(1500); await flush()
-    expect(api.listLammpsJobs.mock.calls.length).toBeGreaterThan(n0)  // poll fired while open
+    expect(api.listLammpsJobs.mock.calls.length).toBeGreaterThan(n0)  // poll fired (open + active)
     const n1 = api.listLammpsJobs.mock.calls.length
-    openPanel()                                                       // collapse
-    await vi.advanceTimersByTimeAsync(4500); await flush()
-    expect(api.listLammpsJobs.mock.calls.length).toBe(n1)            // poll stopped
+    openPanel()                                                       // no collapse → poll keeps running
+    await vi.advanceTimersByTimeAsync(1500); await flush()
+    expect(api.listLammpsJobs.mock.calls.length).toBeGreaterThan(n1)
   })
 })

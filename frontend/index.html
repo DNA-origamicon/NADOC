@@ -3512,20 +3512,20 @@
           </div>
 
 
-          <!-- ── Simulate: engine selector fronting the 5 engine panels (U4) ──── -->
+          <!-- ── Simulate: collapsible section — engine selector fronting the 5 engine panels ──── -->
           <div class="panel-section" id="simulate-panel">
-            <h2 id="simulate-heading" style="margin-bottom:8px">Simulate</h2>
-            <div id="engine-selector-mount"></div>
-            <div id="engine-capability-strip"></div>
-          </div>
+            <h2 id="simulate-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span>Simulate</span>
+              <span id="simulate-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="simulate-body">
+              <div id="engine-selector-mount"></div>
+              <div id="engine-capability-strip"></div>
 
           <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
           <div class="panel-section" id="oxdna-jobs-panel">
-            <h2 id="oxdna-jobs-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>oxDNA</span>
-              <span id="oxdna-jobs-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="oxdna-jobs-body" style="display:none;margin-top:8px">
+            <h2 id="oxdna-jobs-heading" style="margin-bottom:0"><span>oxDNA</span></h2>
+            <div id="oxdna-jobs-body" style="margin-top:8px">
 
               <!-- availability badge -->
               <div id="oxdna-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
@@ -3716,7 +3716,7 @@
                    the view radios enable only once a job is selected) ── -->
               <div class="ox-card">
                 <div id="oxdna-jobs-viz-toggle" class="ox-card__header" style="color:#c9d1d9">
-                  <span id="oxdna-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations &amp; processing</span>
+                  <span id="oxdna-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations</span>
                 </div>
                 <div id="oxdna-jobs-viz-body" class="ox-card__body">
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
@@ -3891,11 +3891,8 @@
 
           <!-- ── LAMMPS (CPU-parallel oxDNA — CG-DNA, for very large assemblies) ──── -->
           <div class="panel-section" id="lammps-jobs-panel">
-            <h2 id="lammps-jobs-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>LAMMPS <span style="font-size:var(--text-xs);color:var(--color-text-dim);font-weight:400">— parallel oxDNA</span></span>
-              <span id="lammps-jobs-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="lammps-jobs-body" style="display:none;margin-top:8px">
+            <h2 id="lammps-jobs-heading" style="margin-bottom:0"><span>LAMMPS <span style="font-size:var(--text-xs);color:var(--color-text-dim);font-weight:400">— parallel oxDNA</span></span></h2>
+            <div id="lammps-jobs-body" style="margin-top:8px">
 
               <!-- availability badge (LAMMPS + CG-DNA) -->
               <div id="lammps-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
@@ -3964,7 +3961,7 @@
               <!-- ── Surface (collapsible card; mirrors the oxDNA hard surface) ── -->
               <div class="ox-card">
                 <div id="lammps-surface-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
-                  <span id="lammps-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Surface</span>
+                  <span id="lammps-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Hard surface</span>
                 </div>
                 <div id="lammps-surface-body" class="ox-card__body" style="display:none">
                   <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">An axis-aligned hard wall the structure can't pass through (a substrate). Add anchors to bind a floppy structure to it.</div>
@@ -4015,7 +4012,7 @@
                    the view radios enable once a finished run is selected in the list) ── -->
               <div class="ox-card">
                 <div id="lammps-jobs-viz-toggle" class="ox-card__header" style="color:#c9d1d9">
-                  <span id="lammps-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations &amp; processing</span>
+                  <span id="lammps-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations</span>
                 </div>
                 <div id="lammps-jobs-viz-body" class="ox-card__body">
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
@@ -4094,11 +4091,8 @@
 
           <!-- ── mrDNA (coarse ARBD relaxation: single Run + CG display) ──── -->
           <div class="panel-section" id="mrdna-jobs-panel">
-            <h2 id="mrdna-jobs-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>mrDNA</span>
-              <span id="mrdna-jobs-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="mrdna-jobs-body" style="display:none;margin-top:8px">
+            <h2 id="mrdna-jobs-heading" style="margin-bottom:0"><span>mrDNA</span></h2>
+            <div id="mrdna-jobs-body" style="margin-top:8px">
 
               <!-- availability badge (mrDNA + ARBD + GPU) -->
               <div id="mrdna-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
@@ -4193,11 +4187,8 @@
 
           <!-- ── CanDo FEM (native shape predictor: linear/nonlinear solve) ──── -->
           <div class="panel-section" id="cando-jobs-panel">
-            <h2 id="cando-jobs-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>CanDo FEM</span>
-              <span id="cando-jobs-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="cando-jobs-body" style="display:none;margin-top:8px">
+            <h2 id="cando-jobs-heading" style="margin-bottom:0"><span>CanDo FEM</span></h2>
+            <div id="cando-jobs-body" style="margin-top:8px">
 
               <!-- running job's progress bar -->
               <div id="cando-jobs-progress" style="margin-bottom:6px">
@@ -4343,7 +4334,7 @@
               <!-- All modes are Physical-layer / display-only (topology untouched). -->
               <div class="ox-card" style="margin-top:8px">
                 <div id="cando-display-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
-                  <span id="cando-display-arrow" style="display:inline-block;transition:transform .15s">▾</span><span class="ox-card__title">Display</span>
+                  <span id="cando-display-arrow" style="display:inline-block;transition:transform .15s">▾</span><span class="ox-card__title">Visualizations</span>
                 </div>
                 <div id="cando-display-card" class="ox-card__body">
                   <div id="cando-jobs-display-modes" style="display:flex;flex-direction:column;gap:2px;margin-bottom:3px">
@@ -4400,11 +4391,8 @@
 
           <!-- ── MD relaxation panel (job launcher + live progress) ───────── -->
           <div class="panel-section" id="md-jobs-panel">
-            <h2 id="md-jobs-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Molecular Dynamics</span>
-              <span id="md-jobs-panel-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="md-jobs-panel-body" style="display:none;margin-top:8px">
+            <h2 id="md-jobs-panel-heading" style="margin-bottom:0"><span>Molecular Dynamics</span></h2>
+            <div id="md-jobs-panel-body" style="margin-top:8px">
 
               <!-- NAMD availability badge -->
               <div id="md-jobs-namd-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
@@ -4486,7 +4474,7 @@
                    the view radios enable only once a job is selected) ── -->
               <div class="ox-card">
                 <div id="md-jobs-viz-toggle" class="ox-card__header" style="color:#c9d1d9">
-                  <span id="md-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations &amp; processing</span>
+                  <span id="md-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations</span>
                 </div>
                 <div id="md-jobs-viz-body" class="ox-card__body">
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
@@ -4960,101 +4948,8 @@
             </div>
           </div><!-- /md-panel -->
 
-          <!-- ── Periodic MD panel ──────────────────────────────────────────── -->
-          <div class="panel-section" id="periodic-md-panel">
-            <h2 id="periodic-md-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Periodic MD</span>
-              <span id="periodic-md-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="periodic-md-body" style="display:none;margin-top:8px">
-
-              <!-- PSF picker -->
-              <div style="margin-bottom:5px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Topology (.psf)</div>
-                <div style="display:flex;gap:4px">
-                  <span id="pmd-psf-name" title=""
-                        style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
-                    Not selected
-                  </span>
-                  <button id="pmd-psf-browse"
-                          style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
-                    Browse
-                  </button>
-                </div>
-              </div>
-
-              <!-- PDB picker -->
-              <div style="margin-bottom:5px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Coordinates (.pdb)</div>
-                <div style="display:flex;gap:4px">
-                  <span id="pmd-pdb-name" title=""
-                        style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
-                    Not selected
-                  </span>
-                  <button id="pmd-pdb-browse"
-                          style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
-                    Browse
-                  </button>
-                </div>
-              </div>
-
-              <!-- DCD picker -->
-              <div style="margin-bottom:7px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:2px">Trajectory (.dcd)</div>
-                <div style="display:flex;gap:4px">
-                  <span id="pmd-dcd-name" title=""
-                        style="flex:1;min-width:0;font-size:var(--text-xs);color:#484f58;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;background:#0d1117;border:1px solid #30363d;border-radius:3px">
-                    Not selected
-                  </span>
-                  <button id="pmd-dcd-browse"
-                          style="flex-shrink:0;font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
-                    Browse
-                  </button>
-                </div>
-              </div>
-
-              <!-- Load button (enabled once PDB selected) -->
-              <button id="pmd-load-btn" disabled
-                      style="width:100%;font-size:var(--text-xs);padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
-                Load &amp; Preview
-              </button>
-
-              <!-- Status (hidden until loaded) -->
-              <div id="pmd-status"
-                   style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;padding:6px;background:#161b22;border-radius:3px;line-height:1.8;font-family:monospace">
-              </div>
-
-              <!-- DCD scrubber (hidden until DCD loaded) -->
-              <div id="pmd-scrub-wrap" style="display:none">
-                <input type="range" id="pmd-scrubber" min="0" max="0" value="0"
-                       style="width:100%;margin-bottom:3px;accent-color:#58a6ff">
-                <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">
-                  <span id="pmd-time-cur">0.000 ns</span>
-                  <span id="pmd-time-tot">0.000 ns</span>
-                </div>
-              </div>
-
-              <!-- Apply to design toggle -->
-              <button id="pmd-apply-btn" disabled
-                      style="width:100%;font-size:var(--text-xs);padding:4px 0;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;margin-bottom:7px">
-                Apply to Design
-              </button>
-
-              <!-- Log (collapsible) -->
-              <div>
-                <div id="pmd-log-heading"
-                     style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;font-size:var(--text-xs);color:#484f58;padding:1px 0;margin-bottom:0">
-                  <span>Log</span>
-                  <span id="pmd-log-arrow" class="icon icon--xs icon--rotates is-collapsed" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-                </div>
-                <div id="pmd-log-body" style="display:none;margin-top:3px">
-                  <div id="pmd-log"
-                       style="max-height:120px;overflow-y:auto;font-size:var(--text-xs);font-family:monospace;line-height:1.5;background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:4px 6px;white-space:pre-wrap"></div>
-                </div>
-              </div>
-
-            </div>
-          </div><!-- /periodic-md-panel -->
+            </div><!-- /#simulate-body -->
+          </div><!-- /#simulate-panel -->
 
         </div><!-- /#tab-content-dynamics -->
 

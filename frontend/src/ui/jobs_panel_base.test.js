@@ -143,6 +143,60 @@ describe('initJobsPanelBase — collapse', () => {
   })
 })
 
+// collapsible:false — the engine panels under the unified Simulate section. The
+// *Simulate* header owns the one collapse; each engine header is a static label.
+describe('initJobsPanelBase — collapsible:false (permanently open)', () => {
+  it('the heading click does NOT collapse (no listener attached)', () => {
+    const els = makeDom()
+    els.body.style.display = ''
+    const closed = vi.fn()
+    const base = initJobsPanelBase({ section: 'p', els, collapsible: false, onClose: closed })
+    els.heading.click()
+    expect(els.body.style.display).toBe('')       // still open
+    expect(base.isOpen()).toBe(true)
+    expect(closed).not.toHaveBeenCalled()
+  })
+
+  it('initCollapsed forces the body OPEN (ignoring persisted state); onOpen fires deferred', async () => {
+    // Persist a "collapsed" preference for section 'p' via a collapsible base's heading.
+    const seedEls = makeDom(); seedEls.body.style.display = ''
+    initJobsPanelBase({ section: 'p', els: seedEls }).initCollapsed(false)
+    seedEls.heading.click()                          // collapse → persists collapsed=true
+    // A collapsible:false base for the same section must ignore that and open.
+    const els = makeDom()
+    const opened = vi.fn()
+    const base = initJobsPanelBase({ section: 'p', els, collapsible: false, onOpen: opened })
+    base.initCollapsed(true)                         // arg ignored → forced open
+    expect(els.body.style.display).toBe('')          // body opens synchronously
+    expect(base.isOpen()).toBe(true)
+    expect(opened).not.toHaveBeenCalled()            // onOpen is deferred (avoids init-time TDZ)
+    await Promise.resolve()
+    expect(opened).toHaveBeenCalledTimes(1)          // ...then fires on the microtask
+  })
+
+  it('still polls when a job is active (body is always open)', () => {
+    const els = makeDom()
+    const tick = vi.fn()
+    const base = initJobsPanelBase({
+      section: 'p', els, collapsible: false, pollMs: 1000, hasActive: () => true, tick,
+    })
+    base.initCollapsed(true)     // forced open
+    base.schedulePoll()
+    vi.advanceTimersByTime(1000)
+    expect(tick).toHaveBeenCalledTimes(1)
+  })
+
+  it('the advanced drawer still toggles under collapsible:false', () => {
+    const els = makeDom()
+    initJobsPanelBase({ section: 'p', els, collapsible: false })
+    expect(els.advBody.style.display).toBe('none')
+    els.advToggle.click()
+    expect(els.advBody.style.display).toBe('')
+    els.advToggle.click()
+    expect(els.advBody.style.display).toBe('none')
+  })
+})
+
 describe('initJobsPanelBase — advanced drawer', () => {
   it('toggle shows the hidden advanced body + sets ▾, then hides + ▸', () => {
     const els = makeDom()

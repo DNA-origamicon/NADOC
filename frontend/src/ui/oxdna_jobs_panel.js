@@ -30,6 +30,7 @@ import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { runExclusive } from './primitives/button_busy.js'
+import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { el } from './primitives/dom.js'
 import { makeSpinner } from './job_status_symbol.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -843,6 +844,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     els: { heading, body, arrow },
     pollMs: POLL_MS,
     arrowStyle: 'class',
+    collapsible: false,   // engine header is a static label; Simulate owns the collapse
     hasActive: () => _hasActiveJob() ||
       (!!_selectedId && !!_jobs.find(j => j.job_id === _selectedId && j.status === 'running')),
     tick: () => _fetchJobs(),
@@ -956,8 +958,45 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _fetchJobs()
   }
 
+  // ── Primary run control: ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume (Phase C) ─────────────
+  // One button, three meanings driven by the SELECTED job's state (job_run_control).
+  function _runControl() {
+    // Gated to the RELAXATION phase: a job running its PRODUCTION phase keeps the
+    // Relax button as "▶ Relax" (disabled) and is stopped via the production control.
+    return runControlState(_selectedJob(), {
+      verb: 'Relax',
+      isActive: isRelaxRunning,
+      isResumable,
+      busy: _launching,
+    })
+  }
+  function _stopSelected() {
+    return runExclusive(runBtn, async () => {
+      if (!_selectedId) return
+      await api.stopOxdnaJob(_selectedId)
+      await _fetchJobs()
+    }, { label: 'Stopping…' })
+  }
+  function _resumeSelected() {
+    return runExclusive(runBtn, async () => {
+      if (!_selectedId) return
+      if (!(await confirmNoConcurrentJob({
+        excludeJobId: _selectedId,
+        usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',
+      }))) return
+      await api.startOxdnaJob(_selectedId)
+      await _fetchJobs()
+    }, { label: 'Resuming…' })
+  }
+  runBtn?.addEventListener('click', () => {
+    const action = _runControl().action
+    if (action === RUN_ACTION.STOP) return _stopSelected()
+    if (action === RUN_ACTION.RESUME) return _resumeSelected()
+    return _launchRelax()
+  })
+
   // ── Launch ─────────────────────────────────────────────────────────────────
-  runBtn?.addEventListener('click', async () => {
+  async function _launchRelax() {
     if (_launching || !_available) return
     // Resource-aware guard: oxDNA can run its MD stages on the CPU backend, so if
     // the GPU is busy the user is offered a CPU fallback instead of a hard block.
@@ -1022,7 +1061,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
         _setStatus(detail || 'Failed to start relaxation (see console)', _C.err)
       }
     }
-  })
+  }
 
   // ── List ─────────────────────────────────────────────────────────────────
   // The canonical row/list model + renderer live in jobs_panel_model.js /
@@ -1172,11 +1211,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       detailStatus.style.color = ls.color
     }
 
-    if (startBtn) {
-      startBtn.style.display = ['queued', 'stopped', 'failed'].includes(job.status) ? '' : 'none'
-      startBtn.textContent = startButtonLabel(job)
-    }
-    if (stopBtn)  stopBtn.style.display  = job.status === 'running' ? '' : 'none'
+    // The primary run control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) covers relaxation start/
+    // stop + resume for the selected job, so the detail Start is redundant; the detail
+    // Stop is kept only for the PRODUCTION phase (which the Relax control doesn't own).
+    if (startBtn) startBtn.style.display = 'none'
+    if (stopBtn)  stopBtn.style.display  = isProductionRunning(job) ? '' : 'none'
     if (deleteBtn) deleteBtn.style.display = job.status === 'running' ? 'none' : ''
     if (archiveBtn) {
       // Archive/unarchive only for non-running jobs; label tracks archived state.
@@ -1334,14 +1373,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     // re-run _updateButtons).
     const liveOn = !!oxdnaLive?.isOn?.()
 
-    // Relax — disabled while unavailable, launching, or a production run is active.
-    if (runBtn) runBtn.disabled = !_available || _launching || prodRunning
-
-    // Activity spinners — derived from live job state (across this design's jobs),
-    // so they re-appear correctly after a page reload while a job is still running.
-    const relaxActive = _launching || _visibleJobs().some(isRelaxRunning)
+    // Relax — the primary CONTEXT control: ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume (Phase C).
+    // Label + action come from the selected job's state; a spinner shows only while a
+    // fresh launch is in flight. RUN is gated by availability + an active production.
     const prodActive  = _visibleJobs().some(isProductionRunning)
-    if (runBtn)  _setBtnSpinner(runBtn,  relaxActive, '▶ Relax', 'Relaxing…')
+    if (runBtn) {
+      const rc = _runControl()
+      if (_launching) {
+        _setBtnSpinner(runBtn, true, rc.label, 'Starting…')
+      } else {
+        runBtn.dataset.spinning = '0'          // drop any spinner state, then set the label
+        runBtn.textContent = rc.label
+      }
+      runBtn.disabled = !_available || _launching ||
+        (rc.action === RUN_ACTION.RUN && prodRunning)
+      runBtn.dataset.runAction = rc.action
+    }
     if (prodBtn) _setBtnSpinner(prodBtn, prodActive,  'Full Sim', 'Running…')
     _updateAutorefineButton()   // gate by lattice + availability + in-flight autorefine
 

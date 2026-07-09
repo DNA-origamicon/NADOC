@@ -138,10 +138,11 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     els: { heading, body, arrow, advToggle, advArrow, advBody },
     pollMs: POLL_MS,
     arrowStyle: 'class',
+    collapsible: false,   // engine header is a static label; Simulate owns the collapse
     hasActive: () => anyActive(_visibleJobs()),
     tick: () => _fetchJobs(),
     onOpen: () => _onOpen(),
-    onClose: () => { _viewsOff(); forcesSetup?.detachGizmo?.() },
+    onClose: () => { _viewsOff(); forcesSetup?.detachGizmo?.() },   // retained (no per-panel collapse fires it now)
   })
 
   // ── collapse (viz card — separate persistence-free disclosure) ───────────────

@@ -636,8 +636,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     els: { heading, body, arrow, advToggle, advArrow, advBody },
     arrowStyle: 'class',
     advArrowStyle: 'rotate',
+    collapsible: false,   // engine header is a static label; Simulate owns the collapse
     onOpen: () => _onOpen(),
-    onClose: () => { _stopMdPrewarm(); _stopRemotePoll() },   // collapsing tears down background timers
+    onClose: () => { _stopMdPrewarm(); _stopRemotePoll() },   // retained for teardown symmetry (no per-panel collapse fires it now)
   })
 
   // ── Jobs + Visualizations cards: simple collapse (start open), mirror oxDNA ──

@@ -341,6 +341,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     section: 'cando-jobs-panel',
     els: { heading, body, arrow, advToggle, advArrow, advBody },
     pollMs: POLL_MS,
+    collapsible: false,   // engine header is a static label; Simulate owns the collapse
     hasActive: () => _hasActiveJob(),
     tick: () => _fetchJobs(),
     onOpen: () => _onOpen(),
