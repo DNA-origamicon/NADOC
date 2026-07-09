@@ -185,6 +185,7 @@ import { initReprOptionSliders } from './ui/repr_option_sliders.js'
 import { initColoringOptionsPanel } from './ui/coloring_options_panel.js'
 import { initRepresentationSwitcher } from './ui/representation_switcher.js'
 import { initMdJobsPanel } from './ui/md_jobs_panel.js'
+import { initMdPlanRun } from './ui/md_plan_run.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
@@ -1837,6 +1838,15 @@ async function main() {
     // N2: the shared anchor-scope picker resolves the 3D selection to fixedAtoms scopes.
     getSelection: () => store.getState(),
   })
+
+  // P4: the "Plan Run" overlay — author a multi-stage chain (reuses the shared Forces +
+  // Anchors cards per stage) queued as one MdPipeline that runs unattended.
+  const mdPlanRun = initMdPlanRun({
+    getSelectedJob: () => mdPanel?.getSelectedJob?.(),
+    getSelection: () => store.getState(),
+    getBaseCount: () => store.getState().currentGeometry?.length || 0,
+  })
+  document.getElementById('md-jobs-plan-btn')?.addEventListener('click', () => mdPlanRun.openModal())
 
   // ── Benchmark controls (auto-tune oxDNA/NAMD hardware config per machine) ─────
   const benchmarkPanel = initBenchmarkPanel({ api, getWorkspacePath: () => _workspacePath })

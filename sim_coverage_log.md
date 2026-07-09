@@ -68,9 +68,51 @@ Fill one row per shipped oracle so later tasks reuse rather than re-derive.
 | **(P1) MdPipeline stage-spec + chain builder** ✅ | ONE ordered object generalizes the 3 provenance hops (`parent_job_id` + `run_kind="production"` + `seed_oxdna/mrdna_job_id`); `build_pipeline_plan` chains each stage from its IMMEDIATE predecessor (stage 0 → `root_job_id`@`root_checkpoint`; stage N → `parent_job_id=stage{N-1}`, `start_checkpoint="stage{N-1}::output"`); distinct per-stage seeds == `generate_seeds(base,n)`; **1-stage parity: `parent_job_id`/`run_kind="production"`/seed=54321/checkpoint-passthrough == `spawn_md_production`'s first child**; `cross_engine` flag (parent_engine≠stage.engine) REPRESENTS the seed_oxdna/mrdna generalization (P3 converts coords); LITERAL-CONSTANT red guards (parent≠root, checkpoint≠root's, not-two-back) — RED-verified offline (always-seed-from-root mutation fails, revert→green); dict round-trip. PURE, no jobs/no topology (Three-Layer clean) | `backend/core/md_pipeline.py::{PipelineStage,MdPipeline,StagePlan,build_pipeline_plan,validate_pipeline,stage_output_ref}`, `tests/test_md_job_pipeline.py` | P2 (executor consumes `StagePlan`, submits stage N on N-1's completion, halt+resume-from-failed); P3 (`cross_engine` hop → coordinate conversion); P4 (Plan Run UI builds an `MdPipeline`, reuses U2's Forces card per stage) |
 | **(P3) cross-engine coordinate handoff** ✅ | PURE `cross_engine_seed(plan, resolved_parent_job_id)`→`CrossEngineSeed`\|`None` generalizes the two seed hops into one table `{oxdna:'oxdna_job_id', mrdna:'mrdna_job_id'}`: same-engine hop→`None` (checkpoint restart); oxDNA/mrDNA root→the matching seed field pointed at the RESOLVED predecessor (never the `stageN` placeholder); raises on unsupported sink (only NAMD rebuilds atomistic from coarse), unknown source engine, unresolved parent. `_chain_spawn` branches: cross-engine→`create_md_job(oxdna_job_id\|mrdna_job_id=parent, field/anchors from stage forces)` (the create-time converter `build_namd_seed`/`_from_mrdna` — nm↔sim-units↔Å already handled), same-engine→unchanged `spawn_md_production`. **Stage protocol default "production" REMAPPED to a valid relaxation preset for the create path** (else create 400s → chain fails; RED-verified vs forward-verbatim). `create_md_chain` accepts an oxDNA/mrDNA root, validated via `assert_namd_seed_available`/`assert_mrdna_namd_seed_available` (frame-on-disk, not MdJob). E2E CHAIN: oxDNA root seeds NAMD stage 0 via reconstruct → completed stage 0 chains same-engine NAMD stage 1 via checkpoint → completed; halt-on-stage0-failure then resume re-runs ONLY stage 0 via a fresh reconstruct. Pure over Physical layer (forces = job-request annotations, no Design write) | `backend/core/md_pipeline.py::{cross_engine_seed,CrossEngineSeed}`, `backend/api/routes_md.py::{_chain_spawn,create_md_chain}`, `tests/test_md_job_pipeline.py` (6 pure) + `tests/test_md_milestone1.py::TestMdCrossEngineChain` (7 route/CHAIN) | P4 (Plan Run UI: a plan's cross-engine stages now execute; reuse the create-path seed contract); any future engine-adapter that seeds NAMD from a new CG source (extend `CROSS_ENGINE_SEED_FIELD`) |
 
+| **(P4) planner payload == MdPipeline** ✅ | TWO-HALF parity: `stage_planner_model.buildChainPayload(model)` (pure add/dup/reorder/remove/setStage/setRoot; immutable, deep-copies field.dir+anchors; `_cleanField` drops disabled/zero field→null) builds a `CreateChainRequest` JSON BYTE-EQUAL to the Python `DEPOSITION_SWEEP_PAYLOAD` literal, which parses through the route's `CreateChainRequest`/`ChainStageRequest` pydantic contract → valid `MdPipeline` (`validate_pipeline`) → `build_pipeline_plan` LINEAR chain (stage N parent=stage{N-1}, checkpoint=stage{N-1}::output, cross_engine on the oxdna→namd stage 0, distinct seeds; RED: downstream≠root). `chainStatusSummary(chainDict)`→ 'stage N of M / queued-behind / partial-failure / resumable' from the executor's `ChainRun.to_dict` shape | `frontend/src/ui/stage_planner_model.js`, `frontend/src/ui/stage_planner_model.test.js` (12), `tests/test_stage_planner_payload.py` (4) | any future chain-authoring UI; the status vocabulary for a job-status card; validating a hand-built chain payload |
+
 _(rows above are seeded targets; mark them shipped as the tasks land.)_
 
 ## Session entries
+
+### 2026-07-08 — `P4` Plan Run overlay → CLOSES M-JOB-PLANNER + M-DEPOSITION-CHAIN
+
+**Capability/de-dup proven, not just wired:** the user can now *author a multi-stage chain in one overlay and
+queue it as a single `MdPipeline` that runs unattended* — and the **queued chain provably equals the payload the
+UI built**. The bright line is a TWO-HALF parity oracle: the pure `stage_planner_model.buildChainPayload` (vitest)
+constructs a 3-stage *deposition→immobilize→field-sweep* payload BYTE-EQUAL to a Python literal that the backend
+half proves parses through the route's `CreateChainRequest` contract and resolves via `build_pipeline_plan` into a
+LINEAR chain (stage N seeded from stage N-1, cross-engine on stage 0). So the UI authors a *runnable P1/P2/P3
+chain*, not "a button".
+
+- **Pick.** P4 — the ▶ NEXT and the only U/P-track eligible task (deps P2+P3+U2 all done); closes two milestones.
+- **Module-first.** Load-bearing logic is the PURE `stage_planner_model.js` (no DOM/fetch/topology). `md_plan_run.js`
+  is thin `createModal` glue that REUSES the shared U2 Forces card (`initForcesCard` engine:'namd', private
+  `plan-efield-*` ids) + the shared Anchors card (`initOxdnaAnchorsSetup`, `plan-anchors-*` ids) for the active
+  stage — edits write back through `setStage`, switching stages loads via `applyConfig`. No triplicated markup.
+- **Wiring.** `client.js` +4 (`createChain`/`listMdChains`/`getMdChain`/`resumeMdChain`, `_oxdnaJSON` style);
+  `md_jobs_panel.js` gained `return {getSelectedJob:_selectedJob}` (was `undefined`) → also finally activates N4's
+  `getMdJob` compare-source wiring in main.js. `main.js` LOC Δ=+10 (import + factory init + one `⛓ Plan Run…`
+  button listener — pure wiring). Stage engine is FIXED 'namd' (the executor only spawns NAMD stages; cross-engine
+  is the ROOT hop, and the model/payload support a CG root — proven by the parity fixture using an oxdna root).
+- **Review.** Fresh-context read-only review CONFIRMED payload/parity/status/immutability correct and caught TWO
+  real `_activeIndex`-tracking bugs in `md_plan_run.js` (removing/reordering a stage *before* the active one left
+  the editor pinned to the wrong stage → later edits landed on the wrong stage). FIXED by extracting pure
+  `activeIndexAfterRemove`/`activeIndexAfterReorder` (remap the selection through the same transform the model
+  applied) + 5 vitest cases for the exact failing scenarios.
+- **Gate.** oracle 12+5 vitest + 4 pytest green; `just test` 4427 passed/110 skip/1 xfail (no failures); `just
+  test-frontend` 2415; lint clean on touched (19 pre-existing debt untouched); `just smoke` 23/23.
+- **Display-vs-oracle.** A one-off Playwright drove the REAL overlay in the running app: stubbed a completed job
+  list, authored a 2-stage plan (stage 0 field 7 pN +y), captured `POST /md/chains`, asserted the body == the
+  authored payload + `chainStatusSummary` renders "stage 1 of 2" + **0 console errors** → deleted. Live gesture
+  (3D-selection→anchor-chip inside a stage; a real unattended chain run + halt/Resume) owes **MV-32**.
+- **Gotcha (not a product bug).** The one-off first flagged `_jobs.find is not a function` — my stub returned
+  `{jobs:[...]}` but the real `/md/jobs` is a BARE array; the overlay's `_loadRoots` handles both, so fixing the
+  STUB (not the product) cleared it. Second gotcha: raw `npx vitest` silently resolved a broken global 4.1.10
+  (no jsdom → mass DOM-test failure); the pinned 4.1.1 via `just test-frontend` is correct — always use `just`.
+
+**Comparable prediction gained, not just a run:** N/A for a UI task — the CHAIN capability is the deliverable, and
+it's proven (queued chain == a valid `MdPipeline` linear chain), not "the panel renders". M-JOB-PLANNER and
+M-DEPOSITION-CHAIN both CLOSED.
 
 ### 2026-07-08 — `P3` cross-engine output→input (oxDNA/mrDNA relax → NAMD) through the chain executor
 

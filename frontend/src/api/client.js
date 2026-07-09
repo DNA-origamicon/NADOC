@@ -2237,6 +2237,13 @@ export const getMdJobFixAdvice   = (id)          => _oxdnaJSON('GET',    `/md/jo
 /** NAMD/GROMACS availability + recommended thread count. */
 export const namdAvailable       = ()            => _oxdnaJSON('GET',    '/md/namd-available')
 
+// ── Multi-stage chains (P — job planner). Queue an MdPipeline that runs unattended,
+//    stage N seeded from stage N-1; a halted chain resumes from its failed stage. ─────
+export const createChain         = (body)        => _oxdnaJSON('POST', '/md/chains', body)
+export const listMdChains        = ()            => _oxdnaJSON('GET',  '/md/chains')
+export const getMdChain          = (id)          => _oxdnaJSON('GET',  `/md/chains/${id}`)
+export const resumeMdChain       = (id, body = {}) => _oxdnaJSON('POST', `/md/chains/${id}/resume`, body)
+
 // ── Remote (Alpine/SLURM) execution — Phase 4 submit-review flow ───────────────
 /** Preview the auto-recommended SLURM resources for a prepared job (read-only, no
  *  cluster connection needed). Returns {prepared:false,…} while still preparing. */

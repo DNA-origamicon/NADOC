@@ -2867,4 +2867,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   console.log(`[${_ts()}] md-jobs: panel initialised`)
   _base.initCollapsed(true)   // apply persisted collapse; fires _onOpen if starting open
   if (_isDynamicsTabVisible()) _startMdPrewarm()
+
+  // The panel's external surface: the currently-selected job (consumed by the shared
+  // comparison card's getSources and by the Plan-Run overlay's default root, P4).
+  return { getSelectedJob: _selectedJob }
 }
