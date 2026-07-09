@@ -148,6 +148,14 @@ def is_remote_active(status: MdStatus) -> bool:
     return status in (MdStatus.queued, MdStatus.running)
 
 
+# A SLURM job can report COMPLETED while its checkpoint restart files fail to
+# download (transient SFTP/network drop).  Rather than lie ``completed`` (which ends
+# polling and strands the missing files — see ISSUE-15), we keep the job re-pollable
+# and let the supervisor re-fetch on subsequent passes.  This bounds those retries so
+# a genuinely-never-produced file can't spin forever before we surface a failure.
+_MAX_FETCH_ATTEMPTS = 3
+
+
 def parse_progress_listing(text: str) -> tuple[set[str], set[str]]:
     """From a remote ``ls output/*.coor; ls *.log`` dump → ``(finished, started)``
     segment-name sets.
@@ -586,6 +594,24 @@ async def cancel_job(job: MdJob, *, conn=None) -> bool:
     return res.rc == 0
 
 
+def _completion_checkpoint_present(job: MdJob, workspace_dir: Path) -> bool:
+    """True if a SLURM-completed remote job's checkpoint actually landed locally.
+
+    A genuinely-finished NAMD run leaves at least one segment's restart set
+    (``.coor``/``.vel``/``.xsc``) in ``output/``; the resume + downstream chain-seed
+    paths restart from it.  If the completion fetch dropped every restart file (a
+    partial/failed SFTP download) none are present — that is the ISSUE-15 signal that
+    the job must NOT be reported ``completed`` yet.  Conservative by design: a job
+    with no segments (nothing to checkpoint) or any surviving checkpoint passes, so a
+    good fetch is never falsely flagged.
+    """
+    if not job.segments:
+        return True
+    from backend.core.namd_runner import _segment_outputs_complete
+    output_dir = job.package_dir(workspace_dir) / "output"
+    return any(_segment_outputs_complete(output_dir, seg.name) for seg in job.segments)
+
+
 async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) -> MdJob:
     """Poll one remote job and advance its persisted state.
 
@@ -623,6 +649,42 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
     except Exception as exc:  # noqa: BLE001
         logger.warning("[%s] output fetch failed: %s", job.job_id, exc)
 
+    # A SLURM-completed job whose checkpoint restart files did not (fully) download
+    # must NOT be reported ``completed`` — a completed job leaves the poll set
+    # (is_remote_active), so the missing files would never be re-fetched and any
+    # downstream chain-stage seed (spawn_md_production) 400s on the absent checkpoint.
+    # Keep it re-pollable so the next supervisor pass re-fetches; only give up (→
+    # failed) once the bounded retries exhaust.  (ISSUE-15)
+    if bucket == "completed" and not _completion_checkpoint_present(job, workspace_dir):
+        job.fetch_attempts += 1
+        if job.fetch_attempts < _MAX_FETCH_ATTEMPTS:
+            logger.warning(
+                "[%s] remote job %s COMPLETED but no checkpoint restart files "
+                "downloaded — keeping re-pollable, retry %d/%d on next poll",
+                job.job_id, job.slurm_job_id, job.fetch_attempts, _MAX_FETCH_ATTEMPTS,
+            )
+            job.status = MdStatus.running   # stays is_remote_active → re-polled + re-fetched
+            job.error = (
+                "Completed remotely but the checkpoint restart files failed to "
+                f"download (attempt {job.fetch_attempts}/{_MAX_FETCH_ATTEMPTS}) — retrying."
+            )
+            job.save(workspace_dir)
+            return job
+        # Retries exhausted — surface a genuine failure naming the missing checkpoint.
+        _append_history(job, raw or "unknown")
+        job.status = MdStatus.failed
+        job.resumable = False
+        job.failure_kind = "fetch_incomplete"
+        job.error = (
+            f"Remote job {job.slurm_job_id} finished but its checkpoint restart files "
+            f"(.coor/.vel/.xsc) failed to download after {_MAX_FETCH_ATTEMPTS} attempts. "
+            "Check the SSH connection and re-run."
+        )
+        job.save(workspace_dir)
+        logger.info("[%s] remote job %s → failed (fetch incomplete)",
+                    job.job_id, job.slurm_job_id)
+        return job
+
     # Record this finished submission so the panel's expand chevron can show the
     # full resumption chain (original + each resume).
     _append_history(job, raw or "unknown")
@@ -633,6 +695,7 @@ async def reconcile_remote_job(job: MdJob, workspace_dir: Path, *, conn=None) ->
         job.status = MdStatus.completed
         job.error = None
         job.resumable = False
+        job.fetch_attempts = 0
     elif bucket == "cancelled":
         job.status = MdStatus.stopped
         job.user_stopped = True

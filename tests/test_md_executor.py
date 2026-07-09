@@ -349,16 +349,64 @@ def test_reconcile_completed_fetches_and_marks_done(tmp_path, alpine, resources)
     job.slurm_job_id = "42"
     job.remote_scratch_dir = "/scratch/alpine/jojo/nadoc_jobs/" + job.job_id
     job.remote_project_dir = "/projects/jojo/nadoc_jobs/" + job.job_id
+    # A genuinely-completed run brings back the segment's restart set (.coor/.vel/.xsc)
+    # — that checkpoint is what resume + downstream chain-seeds restart from.
+    conn = FakeConn(canned={
+        "squeue": RunResult(0, "", ""),
+        "sacct": RunResult(0, "42|COMPLETED", ""),
+        "find": RunResult(
+            0,
+            "output/6hb_demo_01_p100.coor\noutput/6hb_demo_01_p100.vel\n"
+            "output/6hb_demo_01_p100.xsc\noutput/6hb_demo_01_p100.dcd\n"
+            "6hb_demo_01_p100.log\n",
+            "",
+        ),
+    })
+    out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
+    assert out.status == MdStatus.completed
+    assert out.fetch_attempts == 0
+    # scratch→project mirror happened; the listed files were pulled down locally.
+    assert conn.mirrors and conn.mirrors[-1][0] == job.remote_scratch_dir
+    assert conn.gets
+
+
+def test_reconcile_completed_missing_checkpoint_stays_repollable(tmp_path, alpine, resources):
+    """ISSUE-15: SLURM says COMPLETED but the checkpoint restart files failed to
+    download → the job must NOT flip to `completed` (that ends polling and strands the
+    missing files). It stays re-pollable so the supervisor re-fetches next pass."""
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.remote_scratch_dir = "/scratch/x/" + job.job_id
+    # Fetch brings back only trajectory/log — NO .coor/.vel/.xsc (the dropped restart).
     conn = FakeConn(canned={
         "squeue": RunResult(0, "", ""),
         "sacct": RunResult(0, "42|COMPLETED", ""),
         "find": RunResult(0, "output/6hb_demo_01_p100.dcd\n6hb_demo_01_p100.log\n", ""),
     })
     out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
-    assert out.status == MdStatus.completed
-    # scratch→project mirror happened; the listed files were pulled down locally.
-    assert conn.mirrors and conn.mirrors[-1][0] == job.remote_scratch_dir
-    assert conn.gets
+    assert out.status != MdStatus.completed
+    assert ex.is_remote_active(out.status)          # still polled → will re-fetch
+    assert out.fetch_attempts == 1
+    assert "download" in (out.error or "").lower()
+
+
+def test_reconcile_completed_missing_checkpoint_fails_after_retries(tmp_path, alpine, resources):
+    """Once the bounded re-fetch retries exhaust, a completed-but-never-downloaded
+    checkpoint surfaces as a genuine failure naming the missing restart files."""
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "42"
+    job.remote_scratch_dir = "/scratch/x/" + job.job_id
+    job.fetch_attempts = ex._MAX_FETCH_ATTEMPTS - 1   # this pass is the last
+    conn = FakeConn(canned={
+        "squeue": RunResult(0, "", ""),
+        "sacct": RunResult(0, "42|COMPLETED", ""),
+        "find": RunResult(0, "output/6hb_demo_01_p100.dcd\n6hb_demo_01_p100.log\n", ""),
+    })
+    out = _run(ex.reconcile_remote_job(job, tmp_path, conn=conn))
+    assert out.status == MdStatus.failed
+    assert out.fetch_attempts == ex._MAX_FETCH_ATTEMPTS
+    assert out.failure_kind == "fetch_incomplete"
+    assert ".coor" in (out.error or "")
 
 
 def test_reconcile_cancelled_marks_stopped(tmp_path):
@@ -629,6 +677,9 @@ def test_reconcile_completed_records_learned_throughput(tmp_path):
     (out_dir / "metrics.jsonl").write_text(
         '{"segment": "6hb_demo_01_p100", "ns_per_day": 12.5}\n'
     )
+    # A completed run has its checkpoint restart set present (else it stays re-pollable).
+    for ext in ("coor", "vel", "xsc"):
+        (out_dir / f"6hb_demo_01_p100.{ext}").write_text("restart")
     conn = FakeConn(canned={
         "squeue": RunResult(0, "", ""),
         "sacct": RunResult(0, "42|COMPLETED", ""),

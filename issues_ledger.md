@@ -857,8 +857,17 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
 
 ## ISSUE-15 — `fetch_outputs` marks a remote MD job `completed` even when its output download failed (correctness; surfaced-by-review, ask-first)
 
-- **Status:** `[ ]` OPEN. Surfaced 2026-07-08 by the P2 chain-executor fresh-context review — **NOT reproduced/pinned**
-  (found by reading, not by a failing test). Pre-existing `md_executor` behavior, unrelated to the code P2 shipped.
+- **Status:** `[x]` FIXED 2026-07-08. A SLURM-COMPLETED job whose checkpoint restart set
+  (`.coor/.vel/.xsc`) failed to download is no longer reported `completed`: `reconcile_remote_job` now checks
+  `_completion_checkpoint_present` after `fetch_outputs` and, if no segment has a complete local restart set,
+  keeps the job **re-pollable** (`status=running`, stays in `is_remote_active`) so the supervisor re-fetches on
+  the next pass; after `_MAX_FETCH_ATTEMPTS` (3) it surfaces a genuine `failed` (`failure_kind="fetch_incomplete"`)
+  naming the missing files. New `MdJob.fetch_attempts` counter (reset to 0 on a clean completion). End-state
+  semantics (re-pollable auto-retry vs a distinct `fetch_failed` state) confirmed with the user = re-pollable.
+  Pinned by `tests/test_md_executor.py::test_reconcile_completed_missing_checkpoint_{stays_repollable,fails_after_retries}`
+  (both can-go-red against the old source, verified via stash-rerun). Conservative predicate: a job with any
+  surviving checkpoint or no segments passes, so a good fetch is never falsely flagged; a *partial* drop that
+  keeps some-but-not-the-seed checkpoint is not caught (acceptable — the reported total/near-total failure is).
 - **Symptom:** `backend/core/md_executor.py` `_poll_one`/reconcile calls `fetch_outputs` inside a try/except that
   only **logs a warning** on failure and then **unconditionally** marks the remote (Alpine/SLURM) job
   `completed` (around `md_executor.py:621-633`). So a job whose `output/<ckpt>.coor/.xsc` did not (fully) download

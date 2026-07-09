@@ -173,6 +173,13 @@ class MdJob:
     # so the panel's expand chevron can show the full resumption chain.  Shape:
     # {slurm_job_id, state, segment_reached, segments_total, walltime, at}.
     resume_history: list = field(default_factory=list)
+    # Count of consecutive supervisor passes on which a SLURM-completed remote job's
+    # checkpoint restart files failed to download.  A completed job leaves the poll
+    # set, so a partial/failed fetch would strand the missing restart files forever
+    # (and 400 any downstream chain-stage seed).  We instead keep the job re-pollable
+    # and re-fetch for a bounded number of passes; this counts them (reset to 0 on a
+    # clean fetch, → failed once it hits the cap).  See md_executor.reconcile_remote_job.
+    fetch_attempts: int = 0
 
     # ── Paths ──────────────────────────────────────────────────────────────────
 
@@ -234,6 +241,7 @@ class MdJob:
         data.setdefault("resubmit_count", 0)
         data.setdefault("resumable", False)
         data.setdefault("resume_history", [])
+        data.setdefault("fetch_attempts", 0)
         return cls(**data)
 
     @classmethod
