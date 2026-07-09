@@ -87,7 +87,7 @@ describe('filterJobsForPart', () => {
   })
 })
 
-import { mdJobIsActive, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob } from './md_jobs_panel.js'
+import { mdJobIsActive, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob } from './md_jobs_panel.js'
 
 describe('mdChildRowLabel', () => {
   it('labels a derived child by its global run number', () => {
@@ -117,6 +117,42 @@ describe('mdJobIsActive', () => {
   })
   it('local jobs are unaffected (queued = active)', () => {
     expect(mdJobIsActive({ status: 'queued', execution_target: 'local' })).toBe(true)
+  })
+})
+
+describe('mdRunControl (primary ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume)', () => {
+  it('nothing selected → ▶ Relax (launch)', () => {
+    const rc = mdRunControl(null)
+    expect(rc.action).toBe('run')
+    expect(rc.label).toBe('▶ Relax')
+  })
+  it('a completed job selected → still ▶ Relax', () => {
+    expect(mdRunControl({ status: 'completed' }).action).toBe('run')
+  })
+  it('a running local job → ■ Stop Relax', () => {
+    const rc = mdRunControl({ status: 'running', execution_target: 'local' })
+    expect(rc.action).toBe('stop')
+    expect(rc.label).toBe('■ Stop Relax')
+  })
+  it('a stopped LOCAL job → ↻ Resume Relax (resumes via this control)', () => {
+    const rc = mdRunControl({ status: 'stopped', execution_target: 'local' })
+    expect(rc.action).toBe('resume')
+    expect(rc.label).toBe('↻ Resume Relax')
+  })
+  it('a failed local job → ↻ Resume Relax', () => {
+    expect(mdRunControl({ status: 'failed', execution_target: 'local' }).action).toBe('resume')
+  })
+  it('a stopped ALPINE job → RUN, NOT resume (its resume is the cluster-gated button)', () => {
+    expect(mdRunControl({ status: 'stopped', execution_target: 'alpine' }).action).toBe('run')
+  })
+  it('an in-flight Alpine job (SLURM id) → ■ Stop (scancel), even though resume is dedicated', () => {
+    expect(mdRunControl({ status: 'running', execution_target: 'alpine', slurm_job_id: '9' }).action).toBe('stop')
+  })
+  it('an Alpine job queued-but-never-submitted → RUN (not active, not resumable here)', () => {
+    expect(mdRunControl({ status: 'queued', execution_target: 'alpine' }).action).toBe('run')
+  })
+  it('busy → disabled', () => {
+    expect(mdRunControl({ status: 'running' }, { busy: true }).disabled).toBe(true)
   })
 })
 

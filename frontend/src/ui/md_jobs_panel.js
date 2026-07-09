@@ -31,6 +31,7 @@ import { initMdMetricsCard } from './md_metrics_card.js'
 import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import { runExclusive } from './primitives/button_busy.js'
+import { runControlState, RUN_ACTION } from './job_run_control.js'
 import * as api from '../api/client.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -110,6 +111,21 @@ export function mdJobIsActive(job) {
   if (!['queued', 'preparing', 'running'].includes(job?.status)) return false
   if (mdRemoteAwaitingSubmit(job)) return false
   return true
+}
+
+/** Pure: the primary run-control state (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) for a selected
+ *  NAMD job. `isActive` = mdJobIsActive (queued/preparing/running, minus awaiting-submit).
+ *  A LOCAL stopped/failed job resumes via this control; an Alpine job's cluster-gated
+ *  resume stays on its dedicated resume button, so Alpine jobs are never "Resume" here
+ *  (but an active Alpine job still shows Stop). */
+export function mdRunControl(selectedJob, { busy = false } = {}) {
+  const isAlpine = selectedJob?.execution_target === 'alpine'
+  return runControlState(selectedJob, {
+    verb: 'Relax',
+    isActive: mdJobIsActive,
+    isResumable: (j) => !isAlpine && ['stopped', 'failed'].includes(j?.status),
+    busy,
+  })
 }
 
 /** Pure: is any Alpine job submitted-and-in-flight (so the panel should keep polling
@@ -694,15 +710,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (d.namd_available && d.gmx_available) {
         namdStatusEl.textContent = `NAMD3 + GROMACS found`
         namdStatusEl.style.color = _C.ok
-        if (runBtn) runBtn.disabled = false
       } else {
         const missing = []
         if (!d.namd_available) missing.push('NAMD3 (install to ~/Applications/NAMD_3.0.2/)')
         if (!d.gmx_available)  missing.push('GROMACS (install + add gmx to PATH)')
         namdStatusEl.textContent = `Missing: ${missing.join(', ')}`
         namdStatusEl.style.color = _C.err
-        if (runBtn) runBtn.disabled = true
       }
+      _paintRunControl()   // reflect engine availability on the primary control
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: engine check failed`, err)
       namdStatusEl.textContent = 'Could not check engine status'
@@ -815,6 +830,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _setHealthSpinner(false)
     _renderProductionControls(null)
     _updateVizToggles(null)   // no job selected → only "Off" is selectable
+    _paintRunControl()        // nothing selected → the control reverts to "▶ Relax"
   }
 
   // Reset every MD INPUT back to its index.html default — used when a design is
@@ -1601,7 +1617,55 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   })
 
   // ── Relax button ──────────────────────────────────────────────────────────
-  runBtn?.addEventListener('click', async () => {
+  // ── Primary run control: ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume (Phase C) ─────────────
+  // One button, three meanings driven by the SELECTED job (job_run_control). A LOCAL
+  // stopped/failed job resumes here; an Alpine job's cluster-gated resume stays on the
+  // dedicated resume button.
+  function _runControl() {
+    return mdRunControl(_selectedJob(), { busy: _launching })
+  }
+  function _paintRunControl() {
+    if (!runBtn) return
+    const rc = _runControl()
+    runBtn.textContent = rc.label
+    runBtn.dataset.runAction = rc.action
+    // RUN needs the engines present; STOP/RESUME act on an already-created job.
+    runBtn.disabled = _launching || (rc.action === RUN_ACTION.RUN && !_enginesOk)
+  }
+  function _stopSelected() {
+    return runExclusive(runBtn, async () => {
+      if (!_selectedId) return
+      try {
+        await api.stopMdJob(_selectedId)
+        showToast('Stop requested', 'warn')
+      } catch (err) {
+        console.warn(`[${_ts()}] md-jobs: stop failed`, err)
+      }
+    }, { label: 'Stopping…' })
+  }
+  function _resumeSelected() {
+    return runExclusive(runBtn, async () => {
+      if (!_selectedId) return
+      if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
+      try {
+        const d = await api.startMdJob(_selectedId)
+        if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
+        showToast('Resume requested', 'ok')
+        await _fetchJobs()
+        _reselectJob(_selectedId)
+      } catch (err) {
+        showToast(`Resume failed: ${err.message}`, 'error')
+      }
+    }, { label: 'Resuming…' })
+  }
+  runBtn?.addEventListener('click', () => {
+    const action = _runControl().action
+    if (action === RUN_ACTION.STOP) return _stopSelected()
+    if (action === RUN_ACTION.RESUME) return _resumeSelected()
+    return _launchRelax()
+  })
+
+  async function _launchRelax() {
     if (_launching) {
       console.log(`[${_ts()}] md-jobs: Relax clicked but already launching`)
       return
@@ -1722,9 +1786,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       showToast(`Error: ${err.message}`, 'error')
     } finally {
       _launching = false
-      runBtn.disabled = !_enginesOk
+      _paintRunControl()   // reflect the new/selected job's state on the primary control
     }
-  })
+  }
 
   // ── Stop button ────────────────────────────────────────────────────────────
   // Busy-guard Start: an immediate spinner + gray-out, and the request fires once
@@ -2069,8 +2133,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
     const isAlpine = job.execution_target === 'alpine'
     // Local "Start" only applies to local jobs; an Alpine job is launched via Submit-to-Alpine.
-    if (startBtn) startBtn.style.display = (!isAlpine && ['queued', 'stopped', 'failed'].includes(job.status)) ? '' : 'none'
-    if (stopBtn) stopBtn.style.display = (job.status === 'running') ? '' : 'none'
+    // The primary Relax control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) now covers local
+    // start/stop/resume for the selected job, so the detail Start/Stop are retired.
+    // (Alpine submit/resume/ensemble keep their dedicated cluster-gated buttons below.)
+    if (startBtn) startBtn.style.display = 'none'
+    if (stopBtn) stopBtn.style.display = 'none'
+    _paintRunControl()
     // Mid-run early-stop toggle: shown for a running LOCAL relaxation job.  The
     // requested value can lag the persisted flag until the runner consumes it at a
     // chunk boundary, so drive checked/disabled from mdEarlyStopToggleState (which
