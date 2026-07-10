@@ -52,6 +52,9 @@ This project uses Claude Code's hierarchical memory — load only what's relevan
 - `memory/REFERENCE_*.md` — stable domain knowledge (DNA topology, B-DNA constants, atomistic, FEM theory).
 - `memory/feedback_*.md` — user feedback rules. Read whenever they touch the area you're editing.
 - `.claude/rules/*.md` — path-scoped architectural maps + diagnostic patterns. Loaded automatically when you read matching files.
+- `.claude/skills/*/SKILL.md` — the session loops (`/carve-router`, `/automate-feature`, `/continue-coverage`, …).
+
+**What syncs between the two computers.** `.gitignore` uses `.claude/*` plus negations, so **`.claude/rules/` and `.claude/skills/` are versioned and shared** — edit them like any other source file and they reach the other machine on push. **`.claude/settings.local.json` (permission allowlist) and `.claude/worktrees/` stay machine-local** and are never committed. `memory/` is tracked too, and `~/.claude/projects/-home-joshua-NADOC/memory/` is a **symlink** to it, so there is exactly one copy of every memory file to maintain. Consequence: a rule or skill edited on one computer and not pushed will silently diverge — if you change guidance, commit it.
 
 **Working scope guidance**: when working on assemblies, you don't need the cadnano editor's context. When editing physics, you don't need scaffold routing. Trust path-scoping and the index — don't preemptively load everything.
 

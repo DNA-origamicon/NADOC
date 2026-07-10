@@ -59,6 +59,11 @@ must-keep verbatim content — sim-coverage's oracle catalog alone is 27 KB. The
 
 - `.claude/rules/*.md` auto-load via a `paths:` frontmatter key. A rule's detail file must live **outside**
   `.claude/rules/` (this one went to `memory/main_init_detail.md`) — don't rely on "no `paths:` means no load".
+- `.claude/` was gitignored, so rule/skill edits never reached the other computer. Un-ignoring needs
+  **`.claude/*`, not `.claude/`** — git cannot re-include a file whose parent *directory* is excluded, so
+  `.claude/` + `!.claude/rules/` silently does nothing. `settings.local.json` + `worktrees/` stay ignored.
+- `physics-fem` was listed in the rules index but had been retired to `archive/physics_xpbd_fem/`. Stale
+  pointers in an always-loaded index cost tokens and mislead; check the directory, don't trust the list.
 - `~/.claude/projects/-home-joshua-NADOC/memory/` is a **symlink** to the repo's `memory/`. One file to maintain.
 - Behavioral, not file-shaped: `/clear` between unrelated tasks; work in bursts (prompt cache TTL ~5 min);
   a 200k-context model beats a 1M one for small edits because it forces a compact instead of letting

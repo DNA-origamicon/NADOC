@@ -29,9 +29,12 @@ prompt prefix, so every change to it invalidates the prompt cache for all sessio
 
 ## Path-scoped architecture maps
 
-`.claude/rules/*.md` auto-load when a matching file is read — don't open manually.
-`api-and-state` · `rendering` · `selection` · `cadnano-2d` · `unfold` · `deformation` · `physics-fem` ·
+`.claude/rules/*.md` auto-load when a matching file is read — don't open manually. They are versioned
+and shared across both computers (see `CLAUDE.md` → Memory layout).
+`api-and-state` · `rendering` · `selection` · `cadnano-2d` · `unfold` · `deformation` ·
 `animation` · `scaffold-and-loops` · `main-init` · `strand-anim`
+
+(`physics-fem` was retired with the FEM/XPBD code — see `archive/physics_xpbd_fem/physics-fem-rule.md`.)
 
 ## Domain references (load on demand)
 
