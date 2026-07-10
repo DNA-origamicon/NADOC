@@ -150,6 +150,47 @@ def test_rmsf_agreement_and_profiles():
                                        [3.0, 4.0], [4.0, 5.0]]
 
 
+def _twisted_frame(n_helix=3, n_axial=30, radius=1.2, rise=0.34, deg_per_bp=6.0):
+    """A bundle whose cross-section rotates by ``deg_per_bp`` per axial step → a known,
+    monotone cumulative twist along the axis (so the profile is non-trivial + signed)."""
+    out = []
+    for i in range(n_axial):
+        phi = math.radians(deg_per_bp * i)
+        for h in range(n_helix):
+            ang = 2 * math.pi * h / n_helix + phi
+            out.append(_pos(h, i, "forward",
+                            (radius * math.cos(ang), radius * math.sin(ang), rise * i)))
+    return out
+
+
+def test_twist_profiles_per_engine_endpoint_matches_scalar():
+    from backend.core.shape_metrics import compute_shape_descriptors
+    frame = _twisted_frame()
+    scalar = compute_shape_descriptors(frame)["twist_total_deg"]
+    rep = build_comparison_report([
+        _src("oxdna", descriptors=_descriptors(), shape_frame=frame),
+        _src("cando", descriptors=_descriptors(), shape_frame=list(frame)),
+    ])
+    engs = {p["engine"]: p for p in rep["twist_profiles"]}
+    assert set(engs) == {"oxdna", "cando"}
+    assert engs["oxdna"]["is_reference"] is True     # oxDNA is the SHAPE reference
+    assert engs["cando"]["is_reference"] is False
+    prof = engs["oxdna"]["points"]
+    assert len(prof) >= 3
+    assert prof[0][0] == 0.0                          # x-axis normalised to start at 0 nm
+    assert prof[-1][1] == pytest.approx(scalar)       # last y == the scalar twist_total_deg
+    assert abs(scalar) > 20.0                         # non-trivial (can-go-red on a flat frame)
+
+
+def test_twist_profile_absent_without_a_shape_frame():
+    # An engine that supplied only descriptors (no frame) contributes no twist curve.
+    rep = build_comparison_report([
+        _src("oxdna", descriptors=_descriptors()),
+        _src("cando", descriptors=_descriptors()),
+    ])
+    assert rep["twist_profiles"] == []
+
+
 def test_shape_rmsd_zero_for_identical_frames_survives_rigid_shift():
     frame = _grid_frame()
     shifted = _grid_frame(shift=(10.0, -5.0, 3.0))   # pure rigid translation

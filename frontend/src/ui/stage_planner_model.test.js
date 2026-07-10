@@ -187,4 +187,18 @@ describe('stage_planner_model — chain status vocabulary', () => {
     expect(s.headline).toMatch(/Chain complete — 2 of 2/)
     expect(s.doneCount).toBe(2)
   })
+
+  it('failed → surfaces the backend error verbatim so the sidebar can explain WHY', () => {
+    const chain = mkChain('failed', ['done', 'failed', 'pending'])
+    chain.error = "409: A different design is loaded ... Open '6hbx100_1xT' to continue this run."
+    const s = chainStatusSummary(chain)
+    expect(s.error).toBe(chain.error)
+  })
+
+  it('healthy chains carry no error (only a halt surfaces one)', () => {
+    expect(chainStatusSummary(mkChain('running', ['running', 'pending'])).error).toBeNull()
+    // even if a stray error rode along on a non-failed chain, it is not surfaced
+    const c = mkChain('completed', ['done', 'done']); c.error = 'stale'
+    expect(chainStatusSummary(c).error).toBeNull()
+  })
 })

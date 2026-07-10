@@ -295,7 +295,14 @@ def _assert_job_current(job: OxdnaJob) -> None:
     """Refuse (409) a live/production op when the design changed since this job was
     relaxed — otherwise it resolves the current design's selections against the job's
     frozen topology and crashes with an internal error.  The frontend turns this 409
-    into the 'design has changed' roll-or-cancel popup."""
+    into the 'design has changed' roll-or-cancel popup.
+
+    Stands down for an UNATTENDED chain spawn: a chain stage seeds from this job's own
+    frozen snapshot, not the loaded design, so which design is open is irrelevant (see
+    ``md_chain_executor.in_unattended_chain_spawn``)."""
+    from backend.core.md_chain_executor import in_unattended_chain_spawn
+    if in_unattended_chain_spawn():
+        return
     if _job_is_out_of_date(job, _current_design_fingerprint()):
         from backend.api import state as design_state
         from backend.core.oxdna_staleness import describe_staleness
@@ -912,11 +919,16 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     _assert_job_current(parent)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
-    if body.field and not body.anchors:
+    from backend.core.field_anchor import field_needs_strand_anchor
+    if field_needs_strand_anchor(
+            has_field=bool(body.field), has_anchors=bool(body.anchors),
+            field_dir=body.field.dir if body.field else None,
+            surface_dir=body.surface.dir if body.surface else None):
         raise HTTPException(
-            400, "An electric field needs ≥1 anchor (without one the field just "
-            "drifts the whole structure across the box). Add a fixed strand in the "
-            "Anchors card, or disable the field.")
+            400, "An electric field needs ≥1 anchor OR a hard surface it pushes into "
+            "(without either, the field just drifts the whole structure across the box). "
+            "Add a fixed strand in the Anchors card, orient a surface for the field to "
+            "press into, or disable the field.")
 
     ws = _workspace()
     pjd = parent.job_dir(ws)
@@ -1297,15 +1309,23 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
         for k, v in full_map.items()
     ]
 
-    # RMSF from any production/field run that has written frames (optional — the shape
-    # column stands on the relaxed frame alone when no sampling has run).
+    # RMSF (per-nt trajectory-variance flexibility) from whichever sampling stage has
+    # frames.  Prefer a production/field run; a relaxation-only job (no production stage)
+    # falls back to its EQUILIBRATION run — MD sampling at the target conditions, a valid
+    # flexibility ensemble (mirrors mrDNA's use of its CG-relaxation trajectory for RMSF),
+    # then the MD-relax stage.  So the oxDNA column appears in the comparison card's RMSF
+    # overlay for relaxation-only jobs, not only production runs.  Optional — the shape
+    # column stands on the relaxed frame alone when no dynamics stage has frames.
     rmsf_positions = None
     n_frames = None
-    prod = [s for s in job.stages if s.kind in ("production", "field")
-            and s.status in ("done", "running")]
     trajs: list[Path] = []
-    for s in prod:
-        trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
+    for kinds in (("production", "field"), ("equil",), ("md_relax",)):
+        stages = [s for s in job.stages
+                  if s.kind in kinds and s.status in ("done", "running")]
+        for s in stages:
+            trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
+        if trajs:
+            break
     if trajs:
         res = await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
         if res.get("ready"):

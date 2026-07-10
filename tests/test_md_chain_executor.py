@@ -220,6 +220,88 @@ def test_stage_forces_conf_reuses_external_forces_block():
     assert ce.stage_forces_conf({}) == ""
 
 
+# ── failure diagnosis (the shared brain behind scripts/chain_doctor.py) ──────────
+
+def test_diagnose_healthy_chain_has_no_cause_or_action():
+    h = _harness(2)
+    h.step()                       # stage 0 running, chain running
+    dx = ce.diagnose_chain(h.chain)
+    assert dx["status"] == ce.CHAIN_RUNNING
+    assert dx["cause"] is None and dx["action"] is None
+    assert dx["error"] is None
+
+
+def test_diagnose_completed_chain():
+    h = _harness(1)
+    h.step()
+    h.complete("job0")
+    h.step()
+    dx = ce.diagnose_chain(h.chain)
+    assert dx["status"] == ce.CHAIN_COMPLETED
+    assert "complete" in dx["headline"].lower()
+    assert dx["cause"] is None
+
+
+def test_diagnose_classifies_the_design_mismatch_spawn_failure():
+    # The REAL 6hbx100_1xT failure: stage 1 could not spawn because a different design
+    # was loaded. A spawn failure has NO job on the failed stage.
+    h = _harness(3)
+    h.step()
+    h.chain.status = ce.CHAIN_FAILED
+    h.chain.stages[1].status = ce.STAGE_FAILED
+    h.chain.error = ("stage 1 spawn failed after 3 attempts: 409: A different design is "
+                     "loaded: the app currently has 'Bundle' ...")
+    dx = ce.diagnose_chain(h.chain)
+    assert dx["failed_index"] == 1
+    assert dx["failed_job_id"] is None            # spawn failure — no job realised
+    assert "different design" in dx["cause"].lower()
+    assert "resume" in dx["action"].lower()
+
+
+def test_diagnose_classifies_the_field_without_anchor_spawn_failure():
+    h = _harness(2)
+    h.chain.status = ce.CHAIN_FAILED
+    h.chain.stages[1].status = ce.STAGE_FAILED
+    h.chain.error = ("stage 1 spawn failed after 3 attempts: 400: An electric field needs "
+                     "≥1 anchor OR a hard surface it pushes into")
+    dx = ce.diagnose_chain(h.chain)
+    assert "field" in dx["cause"].lower() and "hold" in dx["cause"].lower()
+    assert "anchor" in dx["action"].lower() or "surface" in dx["action"].lower()
+
+
+def test_diagnose_missing_seed_checkpoint_is_a_retry():
+    h = _harness(2)
+    h.chain.status = ce.CHAIN_FAILED
+    h.chain.stages[0].status = ce.STAGE_FAILED
+    h.chain.error = "stage 0 spawn failed: FileNotFoundError: no such file seed.dat"
+    dx = ce.diagnose_chain(h.chain)
+    assert "seed" in dx["cause"].lower() or "checkpoint" in dx["cause"].lower()
+    assert "retry" in dx["action"].lower()
+
+
+def test_diagnose_job_failure_points_at_the_jobs_log():
+    # A stage that SPAWNED a job which then failed — the failed stage keeps its job_id,
+    # so the diagnosis routes the user to that job's log (not a spawn-error classifier).
+    h = _harness(2)
+    h.step()                       # stage 0 running with job0
+    h.fail("job0")
+    h.step()                       # reconcile -> chain failed, stage 0 keeps job0
+    dx = ce.diagnose_chain(h.chain)
+    assert dx["failed_index"] == 0
+    assert dx["failed_job_id"] == "job0"
+    assert "job0" in dx["cause"] and "job0" in dx["action"]
+
+
+def test_diagnose_unknown_spawn_error_falls_back_to_generic_resume():
+    h = _harness(1)
+    h.chain.status = ce.CHAIN_FAILED
+    h.chain.stages[0].status = ce.STAGE_FAILED
+    h.chain.error = "stage 0 spawn failed: something nobody has a pattern for"
+    dx = ce.diagnose_chain(h.chain)
+    assert dx["cause"] and dx["action"]
+    assert "resume" in dx["action"].lower()
+
+
 # ── persistence ──────────────────────────────────────────────────────────────────
 
 def test_chain_run_dict_roundtrip_preserves_state_and_plan():

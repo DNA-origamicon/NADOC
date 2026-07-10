@@ -190,6 +190,17 @@ def test_real_namd_trajectory_builds_ready_source():
     r = md_rmsf(_PSF, segments, _REF, design, max_frames=20)
     assert r["ready"] is True and r["n_frames"] > 0
 
+    # Regression: md_rmsf recovers each strand's 5'-terminal nucleotide (no P atom —
+    # pdb2gmx strips the 5' phosphate) via its O5', so EVERY design nucleotide carries a
+    # position + RMSF.  The P-only path silently dropped one nucleotide per strand, which
+    # then rendered un-moved/un-coloured in the flexibility map.
+    from backend.physics.oxdna_interface import _XB_SENTINEL, _strand_nucleotide_order
+    design_nt = {(k[0], int(k[1]), getattr(k[2], "value", k[2]))
+                 for k in _strand_nucleotide_order(design) if k[0] != _XB_SENTINEL}
+    rmsf_nt = {(p["helix_id"], int(p["bp_index"]), str(p["direction"]).upper())
+               for p in r["positions"] if p["helix_id"] != _XB_SENTINEL}
+    assert design_nt <= rmsf_nt, f"design nucleotides missing from RMSF map: {sorted(design_nt - rmsf_nt)[:5]}"
+
     reference = core_reference_geometry(design)
     bundle = build_namd_shape_source(r["positions"], reference, rmsf_positions=r["positions"])
     assert bundle["engine"] == "namd"

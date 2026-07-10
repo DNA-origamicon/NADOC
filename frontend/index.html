@@ -841,53 +841,23 @@
 
     /* ── Engine selector (U4 — Simulate section) ────────────────────── */
     .engine-selector {
-      display: flex;
-      gap: 2px;
+      margin-bottom: 10px;
+    }
+    .engine-selector-dropdown {
+      width: 100%;
       background: #0d1117;
       border: 1px solid #30363d;
       border-radius: 4px;
-      padding: 2px;
-      margin-bottom: 8px;
-    }
-    .engine-selector-btn {
-      flex: 1;
-      min-width: 0;
-      background: transparent;
-      border: none;
-      border-radius: 3px;
-      color: #8b949e;
+      color: #c9d1d9;
       font-size: var(--text-xs);
       font-weight: 600;
-      padding: 4px 2px;
+      padding: 5px 6px;
       cursor: pointer;
     }
-    .engine-selector-btn:hover { color: #c9d1d9; }
-    .engine-selector-btn.is-active {
-      background: #1f6feb;
-      color: #fff;
-    }
-    .engine-capability-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      margin-bottom: 10px;
-    }
-    .capability-chip {
-      font-size: 10px;
-      line-height: 1.4;
-      padding: 1px 6px;
-      border-radius: 10px;
-      border: 1px solid #30363d;
-    }
-    .capability-chip.is-enabled {
-      color: #58a6ff;
-      border-color: #1f6feb55;
-      background: #1f6feb1a;
-    }
-    .capability-chip.is-greyed {
-      color: #545d68;
-      background: #161b22;
-      cursor: help;
+    .engine-selector-dropdown:hover { border-color: #484f58; }
+    .engine-selector-dropdown:focus {
+      outline: none;
+      border-color: #1f6feb;
     }
 
     /* ── Primitives library (Tools → Add Primitive) ─────────────────── */
@@ -3539,6 +3509,36 @@
           </div>
 
 
+          <!-- ── Chain Simulations: queue oxDNA/NAMD relax→production chains that run unattended ──── -->
+          <div class="panel-section" id="chain-sim-panel">
+            <h2 id="chain-sim-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span>Chain Simulations</span>
+              <span id="chain-sim-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+            </h2>
+            <div id="chain-sim-body">
+              <!-- Enable toggle: flips the oxDNA/NAMD Relax/Production buttons to "Queue …" -->
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c9d1d9;margin-bottom:8px;cursor:pointer">
+                <input id="chain-sim-enable" type="checkbox">
+                <span>Enable chain simulations</span>
+              </label>
+              <!-- Project selector row (mirrors Animations): select + New / Duplicate / Delete -->
+              <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+                <select id="chain-sim-project-select" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px"></select>
+                <input id="chain-sim-rename-input" type="text" style="flex:1;min-width:0;display:none;background:#0d1117;border:1px solid #388bfd;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:11px">
+                <button id="chain-sim-new-btn" class="panel-action-btn" style="width:auto;padding:2px 7px;font-size:13px;line-height:1" title="New chain project">+</button>
+                <button id="chain-sim-dup-btn" class="panel-action-btn" style="width:auto;padding:2px 7px;font-size:13px;line-height:1" title="Duplicate this project">⧉</button>
+                <button id="chain-sim-del-btn" class="panel-action-btn" style="width:auto;padding:2px 7px;font-size:13px;line-height:1;color:#c93c3c" title="Delete this project">×</button>
+              </div>
+              <!-- Scrollable queue of stages (rendered by chain_sim_panel.js) -->
+              <div id="chain-sim-queue" style="max-height:240px;overflow-y:auto;border:1px solid #21262d;border-radius:4px;padding:4px;margin-bottom:6px"></div>
+              <!-- Total ETA -->
+              <div id="chain-sim-total" style="font-size:11px;color:#8b949e;margin-bottom:6px"></div>
+              <!-- Launch + live chain status -->
+              <button id="chain-sim-launch-btn" class="panel-action-btn" style="width:100%;margin-bottom:4px" disabled>Launch chain</button>
+              <div id="chain-sim-status" style="font-size:11px;color:#8b949e"></div>
+            </div>
+          </div>
+
           <!-- ── Simulate: collapsible section — engine selector fronting the 5 engine panels ──── -->
           <div class="panel-section" id="simulate-panel">
             <h2 id="simulate-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -3547,7 +3547,6 @@
             </h2>
             <div id="simulate-body">
               <div id="engine-selector-mount"></div>
-              <div id="engine-capability-strip"></div>
 
           <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
           <div class="panel-section" id="oxdna-jobs-panel">
@@ -3625,7 +3624,7 @@
                 <div id="oxdna-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
                   <span id="oxdna-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
                 </div>
-                <div id="oxdna-jobs-adv-body" class="ox-card__body" style="display:none;display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                <div id="oxdna-jobs-adv-body" class="ox-card__body" style="display:none;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
                   <label style="font-size:var(--text-xs);color:#8b949e">Backend</label>
                   <select id="oxdna-jobs-backend" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
                     <option value="CUDA">CUDA (GPU)</option>
@@ -3897,14 +3896,10 @@
                   <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Compare each engine's predicted shape, flexibility (RMSF) &amp; E-field deflection for this design. Per-observable reference: oxDNA=shape/field, CanDo=RMSF, NAMD overrides when present.</div>
                   <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
                     <button id="shape-compare-gen"    title="Gather every engine's prediction for this design and compare" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
-                    <button id="shape-compare-export" title="Export the RMSF overlay (PNG) and the tables (CSV)" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">Export</button>
+                    <button id="shape-compare-view" title="Open the comparison results (tables + RMSF overlay) in a popup" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">View Results…</button>
                   </div>
                   <div id="shape-compare-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-bottom:4px;overflow:hidden"><div id="shape-compare-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
                   <div id="shape-compare-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:12px"></div>
-                  <div id="shape-compare-scalars" style="margin-bottom:8px"></div>
-                  <canvas id="shape-compare-rmsf" width="520" height="260" style="width:100%;max-width:520px;background:#0d1117;border-radius:4px;margin-bottom:8px"></canvas>
-                  <div id="shape-compare-agreement" style="margin-bottom:4px"></div>
-                  <div id="shape-compare-field"></div>
                 </div>
               </div>
 
@@ -4455,13 +4450,6 @@
                           disabled
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
                     Start Production
-                  </button>
-                </div>
-                <div style="display:flex;margin-bottom:6px">
-                  <button id="md-jobs-plan-btn"
-                          title="Queue a multi-stage chain (E-field → surface → anchors → field sweep) that runs unattended"
-                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#101826;border:1px solid #30475e;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
-                    ⛓ Plan Run…
                   </button>
                 </div>
                 <div id="md-jobs-production"

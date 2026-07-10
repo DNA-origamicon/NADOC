@@ -79,12 +79,18 @@ class MdPipeline:
     stages: list[PipelineStage] = field(default_factory=list)
     root_job_id: Optional[str] = None
     root_engine: Optional[str] = None
+    # Workspace path of the design the chain runs on.  A fresh-relax root (and a
+    # cross-engine create hop) stamps this onto its child job so it appears in the
+    # per-design engine job list exactly like a hand-launched run (the list filters on
+    # ``design_source_path``); parent-seeded children inherit it from their parent.
+    design_source_path: Optional[str] = None
 
     # ── persistence (P2/P4 store the plan) ───────────────────────────────────
     def to_dict(self) -> dict:
         return {
             "root_job_id": self.root_job_id,
             "root_engine": self.root_engine,
+            "design_source_path": self.design_source_path,
             "stages": [asdict(s) for s in self.stages],
         }
 
@@ -93,6 +99,7 @@ class MdPipeline:
         return cls(
             root_job_id=data.get("root_job_id"),
             root_engine=data.get("root_engine"),
+            design_source_path=data.get("design_source_path"),
             stages=[PipelineStage(**s) for s in data.get("stages", [])],
         )
 
@@ -125,6 +132,7 @@ class StagePlan:
     steps: Optional[int]
     label: Optional[str]
     cross_engine: bool
+    design_source_path: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -209,6 +217,7 @@ def build_pipeline_plan(
             steps=st.steps,
             label=st.label,
             cross_engine=cross_engine,
+            design_source_path=pipeline.design_source_path,
         ))
     return plans
 

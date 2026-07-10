@@ -538,9 +538,10 @@ def test_skip_after_sequencing_deregisters_complementarity():
 
 
 def test_large_structure_oxdna_files_self_consistent(tmp_path):
-    """Topology N, configuration data lines, and the strand-order count must all
-    agree for a large skipped design — the mismatch class behind the 33,716-vs-
-    14,774 miscount.  Geometry slots (empty lattice) must NOT leak into the run."""
+    """Topology N, configuration data lines, geometry, and the strand-order count must all
+    agree for a large skipped design — the mismatch class behind the 33,716-vs-14,774
+    miscount.  Geometry now emits only real strand nucleotides (empty lattice slots produce
+    no ghost base), so every count matches exactly."""
     from backend.api.crud import _geometry_for_design
     from backend.physics.oxdna_interface import (
         _strand_nucleotide_order, write_topology,
@@ -551,7 +552,7 @@ def test_large_structure_oxdna_files_self_consistent(tmp_path):
 
     n_order = len(_strand_nucleotide_order(design))
     n_geom = len(_geometry_for_design(design, compact_skips=True))
-    assert n_geom > n_order                          # empty lattice slots exist (must not leak)
+    assert n_geom == n_order                         # empty lattice slots no longer inflate
 
     top = tmp_path / "topology.top"
     write_topology(design, top)
@@ -3111,10 +3112,11 @@ def test_oxdna_create_rejects_deregistered_sequences(monkeypatch, tmp_path):
 
 
 def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_path):
-    """n_nucleotides must be the simulated nucleotide count (strand order), NOT
-    len(geometry): the geometry endpoint emits a slot for every lattice position
-    in each helix's full length_bp grid, so a helix with empty sites (the norm for
-    imported cadnano designs) would over-count the real oxDNA system size."""
+    """n_nucleotides must be the simulated nucleotide count (strand order).  The geometry
+    now emits ONLY real strand nucleotides: empty lattice slots no longer leak a ghost
+    "_missing" base (ghost-suppression fix — ss-overhang regions render single-stranded),
+    so len(geometry) == the strand count even with empty sites, and the oxDNA create still
+    counts strand nucleotides."""
     from fastapi.testclient import TestClient
     from backend.api.main import app
     from backend.api.crud import _geometry_for_design
@@ -3128,7 +3130,7 @@ def test_oxdna_create_counts_strand_nucleotides_not_lattice(monkeypatch, tmp_pat
 
     n_strand = len(_strand_nucleotide_order(d))
     n_geom = len(_geometry_for_design(d))
-    assert n_geom > n_strand              # empty slots inflate the geometry count
+    assert n_geom == n_strand             # empty slots no longer inflate — no ghost bases
 
     created = TestClient(app).post("/api/oxdna/jobs", json={"backend": "CPU", "autostart": False})
     assert created.status_code == 200, created.text

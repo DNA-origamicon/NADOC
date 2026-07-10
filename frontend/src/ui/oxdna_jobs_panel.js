@@ -20,7 +20,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
-import { filterJobsForPart } from './md_jobs_panel.js'
+import { filterJobsForPart, newestCompletedForPart } from './md_jobs_panel.js'
 import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
@@ -269,8 +269,11 @@ export function jobListStatus(job) {
 // Job-tree flatten + descendant-cascade helpers now live in the shared job_tree.js
 // (both panels render the same parent→child hierarchy). The canonical row/list
 // model + renderer live in jobs_panel_model.js / jobs_panel_render.js (U3).
-// Re-exported so existing importers (and tests) keep resolving them from here.
-export { flattenJobTree, descendantIds } from './job_tree.js'
+// IMPORT them (a bare `export … from` re-export does NOT create a local binding, so
+// the delete handler's descendantIds() call threw ReferenceError → the cascade-delete
+// silently did nothing), then re-export so existing importers/tests keep resolving them.
+import { flattenJobTree, descendantIds } from './job_tree.js'
+export { flattenJobTree, descendantIds }
 export { makeSpinner } from './job_status_symbol.js'
 
 /** Pure: the confirm-dialog copy for deleting a job.  A relaxed parent with
@@ -388,7 +391,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -835,9 +838,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // selected job is running). The base adds a `clearPoll()` on collapse the bespoke
   // path lacked (harmless: a trailing timer only ever re-fetched then found itself
   // collapsed and stopped). The ADVANCED drawer stays bespoke below — oxDNA tracks
-  // it with an `_advOpen` boolean whose first click opens, whereas the base reads
-  // `display` (and the markup's `display:none;display:grid` computes to visible), so
-  // converging it would flip the first click. `initCollapsed` runs at the end (with
+  // it with an `_advOpen` boolean (starts closed) whose first click opens to `grid`
+  // (the body is a 2-col grid, so it can't use the base's `display:''` open which
+  // would drop to block). `initCollapsed` runs at the end (with
   // the other mount probes) to preserve the original apply-then-onOpen ordering.
   const _base = initJobsPanelBase({
     section: 'oxdna-jobs-panel',
@@ -853,7 +856,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   advToggle?.addEventListener('click', () => {
     _advOpen = !_advOpen
-    if (advBody) advBody.style.display = _advOpen ? '' : 'none'
+    // Open to `grid` (the body is a 2-col grid): setting display '' would strip the
+    // inline rule entirely and drop to `.ox-card__body`'s block, losing the layout.
+    if (advBody) advBody.style.display = _advOpen ? 'grid' : 'none'
     if (advArrow) advArrow.style.transform = _advOpen ? 'rotate(90deg)' : ''
   })
 
@@ -961,6 +966,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── Primary run control: ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume (Phase C) ─────────────
   // One button, three meanings driven by the SELECTED job's state (job_run_control).
   function _runControl() {
+    // Chain mode: the Relax button becomes "Queue Relax" — a plain launcher (no
+    // stop/resume semantics; queued stages aren't a live job yet).
+    if (getChainMode?.()) {
+      // Queuing authors a plan — always enabled (the engine need only be present at Launch).
+      return { action: RUN_ACTION.RUN, label: '＋ Queue Relax', disabled: false }
+    }
     // Gated to the RELAXATION phase: a job running its PRODUCTION phase keeps the
     // Relax button as "▶ Relax" (disabled) and is stopped via the production control.
     return runControlState(_selectedJob(), {
@@ -989,11 +1000,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }, { label: 'Resuming…' })
   }
   runBtn?.addEventListener('click', () => {
+    if (getChainMode?.()) return enqueueChainStage?.('relax')
     const action = _runControl().action
     if (action === RUN_ACTION.STOP) return _stopSelected()
     if (action === RUN_ACTION.RESUME) return _resumeSelected()
     return _launchRelax()
   })
+  // Repaint the Relax/Production button labels when chain mode is toggled.
+  window.addEventListener('nadoc:chain-mode-change', () => _updateButtons(_selectedJob()))
 
   // ── Launch ─────────────────────────────────────────────────────────────────
   async function _launchRelax() {
@@ -1385,19 +1399,28 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
         runBtn.dataset.spinning = '0'          // drop any spinner state, then set the label
         runBtn.textContent = rc.label
       }
-      runBtn.disabled = !_available || _launching ||
-        (rc.action === RUN_ACTION.RUN && prodRunning)
+      runBtn.disabled = getChainMode?.() ? false : (!_available || _launching ||
+        (rc.action === RUN_ACTION.RUN && prodRunning))
       runBtn.dataset.runAction = rc.action
     }
-    if (prodBtn) _setBtnSpinner(prodBtn, prodActive,  'Full Sim', 'Running…')
+    const chainMode = !!getChainMode?.()
+    const prodLabel = chainMode ? '＋ Queue Production' : 'Full Sim'
+    if (prodBtn) {
+      if (prodActive) _setBtnSpinner(prodBtn, true, prodLabel, 'Running…')
+      else { prodBtn.dataset.spinning = '0'; prodBtn.textContent = prodLabel }  // repaint idle label directly
+    }
     _updateAutorefineButton()   // gate by lattice + availability + in-flight autorefine
 
     if (prodBtn) {
-      prodBtn.disabled = !prodReady
-      prodBtn.style.cursor = prodReady ? 'pointer' : 'not-allowed'
-      prodBtn.style.background = prodReady ? '#1a4a1a' : '#122117'
-      prodBtn.style.borderColor = prodReady ? '#3fb950' : '#30363d'
-      prodBtn.style.color = prodReady ? '#3fb950' : '#484f58'
+      // Chain mode: the button always queues a production STAGE — enabled regardless of
+      // a relaxed parent or engine install (queue ordering is preflight's job; the engine
+      // need only be present at Launch).
+      const prodEnabled = chainMode ? true : prodReady
+      prodBtn.disabled = !prodEnabled
+      prodBtn.style.cursor = prodEnabled ? 'pointer' : 'not-allowed'
+      prodBtn.style.background = prodEnabled ? '#1a4a1a' : '#122117'
+      prodBtn.style.borderColor = prodEnabled ? '#3fb950' : '#30363d'
+      prodBtn.style.color = prodEnabled ? '#3fb950' : '#484f58'
     }
     if (prodRunning) _setProdStatus('Production running…', _C.warn)
     else if (ps === 'failed') _setProdStatus('Production failed.', _C.err)
@@ -1499,6 +1522,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
 
   prodBtn?.addEventListener('click', async () => {
+    if (getChainMode?.()) return enqueueChainStage?.('production')
     if (!_selectedId || prodBtn.disabled) return
     if (!(await _ensureJobCurrent('a production run'))) return
     if (!(await confirmNoConcurrentJob({
@@ -2000,26 +2024,31 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const _compareCard = initShapeCompareCard({
     api: { start: api.startShapeCompare, poll: api.getShapeCompareRun },
     getSources: async () => {
+      // Resolve each engine's job for the comparison: honour an explicit panel
+      // selection, else fall back to the newest COMPLETED job for the current design
+      // (via listFn) so a design where every engine ran compares all of them without
+      // the user hunting for a row to click in each of the four panels — this is what
+      // was silently dropping NAMD when its section had never been opened/selected.
+      const _resolveJob = async (getSelected, listFn) => {
+        const sel = getSelected?.()
+        if (sel?.job_id) return sel
+        const list = await listFn().catch(() => null)
+        return newestCompletedForPart(list, _currentPartPath())
+      }
+      // [get-selected, list-all, build-shape-source] per engine, oxDNA first (its
+      // relaxed shape is the default reference).
+      const engines = [
+        [_selectedJob, api.listOxdnaJobs, api.getOxdnaShapeSource],
+        [() => getCandoJob?.(), api.listCandoJobs, api.getCandoShapeSource],
+        [() => getMrdnaJob?.(), api.listMrdnaJobs, api.getMrdnaShapeSource],
+        [() => getMdJob?.(), api.listMdJobs, api.getMdShapeSource],
+      ]
       const out = []
-      const job = _selectedJob()
-      if (job) {
-        const src = await api.getOxdnaShapeSource(job.job_id)
+      for (const [getSel, listFn, srcFn] of engines) {
+        const job = await _resolveJob(getSel, listFn)
+        if (!job?.job_id) continue
+        const src = await srcFn(job.job_id).catch(() => null)
         if (src && src.ready) out.push(src)
-      }
-      const candoJob = getCandoJob?.()
-      if (candoJob) {
-        const csrc = await api.getCandoShapeSource(candoJob.job_id)
-        if (csrc && csrc.ready) out.push(csrc)
-      }
-      const mrdnaJob = getMrdnaJob?.()
-      if (mrdnaJob) {
-        const msrc = await api.getMrdnaShapeSource(mrdnaJob.job_id)
-        if (msrc && msrc.ready) out.push(msrc)
-      }
-      const mdJob = getMdJob?.()
-      if (mdJob) {
-        const nsrc = await api.getMdShapeSource(mdJob.job_id)
-        if (nsrc && nsrc.ready) out.push(nsrc)
       }
       return out
     },
@@ -2029,5 +2058,16 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   _checkAvailable()
   _base.initCollapsed(true)   // apply persisted collapse; fires _onOpen if starting open
 
-  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent }
+  return {
+    refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent,
+    // Select a job in this panel's list (highlight the row + populate every card) exactly
+    // as a row click does — used by the Chain Simulations queue so clicking a launched
+    // stage selects its real job here. Refetches first if the job isn't in the list yet
+    // (a just-spawned chain stage the poll hasn't picked up).
+    selectJob: async (jobId) => {
+      if (!jobId) return
+      if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
+      return _selectJob(jobId, { confirmTrajUnload: true })
+    },
+  }
 }

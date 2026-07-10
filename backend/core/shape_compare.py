@@ -38,6 +38,7 @@ from backend.core.shape_metrics import (
     compare_descriptors,
     compare_field_response,
     reference_for,
+    twist_profile,
 )
 
 
@@ -48,6 +49,14 @@ def _rmsf_profile_points(profile) -> list[list[float]]:
     quantitative bp-matched agreement is the Pearson/Spearman in the agreement table."""
     per_bp = _rmsf_per_bp(profile or [])
     return [[float(i), float(per_bp[k])] for i, k in enumerate(sorted(per_bp))]
+
+
+def _twist_profile_points(shape_frame) -> list[list[float]]:
+    """A plottable ``[[axial_nm, cumulative_twist_deg], …]`` series for one engine's
+    core-filtered ``shape_frame`` (its bundle CUMULATIVE twist vs axial distance from the
+    start, the last y = the scalar ``twist_total_deg``).  ``[]`` for a frame that can't
+    define twist (<2 helices)."""
+    return [[float(x), float(y)] for x, y in twist_profile(shape_frame or [])]
 
 
 def build_comparison_report(sources) -> dict:
@@ -61,6 +70,7 @@ def build_comparison_report(sources) -> dict:
          "scalars": [{"name", "reference",
                       "cells": {engine: {"value", "signed_pct_delta"}}}, …],
          "rmsf_profiles": [{"engine", "is_reference", "points": [[ord, rmsf], …]}, …],
+         "twist_profiles": [{"engine", "is_reference", "points": [[axial_nm, twist_deg], …]}, …],
          "agreement": [{"engine",                      # one row per non-trivial candidate
                         "shape_rmsd_nm",               # vs the shape reference | None
                         "rmsf": {pearson, spearman, n, …} | None,   # vs the RMSF reference
@@ -113,6 +123,17 @@ def build_comparison_report(sources) -> dict:
         for eng in engines if by_engine[eng].get("rmsf")
     ]
 
+    # ── Twist profiles (per-engine overlay) ────────────────────────────────────────
+    # Cumulative twist vs axial distance, from each engine's core-filtered shape_frame;
+    # the reference (shape) engine is flagged so the overlay colours it consistently.
+    # Only engines whose frame actually defines twist (≥2 helices) contribute a curve.
+    twist_profiles = []
+    for eng in engines:
+        pts = _twist_profile_points(by_engine[eng].get("shape_frame"))
+        if pts:
+            twist_profiles.append(
+                {"engine": eng, "is_reference": eng == shape_ref, "points": pts})
+
     # ── Agreement rows: each candidate engine scored against the per-observable refs ─
     agreement: list[dict] = []
     for eng in engines:
@@ -162,6 +183,7 @@ def build_comparison_report(sources) -> dict:
         "references": {"shape": shape_ref, "rmsf": rmsf_ref, "field": field_ref},
         "scalars": scalars,
         "rmsf_profiles": rmsf_profiles,
+        "twist_profiles": twist_profiles,
         "agreement": agreement,
         "field": field,
     }

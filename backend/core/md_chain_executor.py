@@ -33,7 +33,9 @@ shared :func:`backend.core.md_protocols.external_forces_block` emitter
 
 from __future__ import annotations
 
+import contextvars
 import json
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -61,6 +63,37 @@ CHAIN_COMPLETED = "completed"
 CHAIN_FAILED = "failed"
 
 _CHAIN_TERMINAL = (CHAIN_COMPLETED, CHAIN_FAILED)
+
+
+# ── unattended-spawn ambient flag ─────────────────────────────────────────────────
+# The per-engine "is the loaded design current?" guards (routes_oxdna._assert_job_current
+# / routes_md._assert_md_job_current) refuse a production/append when the app's LIVE
+# active design differs from the job's — the interactive UX guard ("open the right design
+# first").  But the UNATTENDED chain supervisor spawns a stage's child from the parent
+# job's OWN frozen snapshot + the stage's explicit forces; the loaded design is irrelevant
+# to it.  Without a way to say "this spawn isn't a user gesture", switching designs while a
+# chain runs halts it (the 6hbx100_1xT failure).  The supervisor sets this flag around each
+# spawn; the guards consult it and stand down.  A ContextVar (not a global) so it is scoped
+# to the awaiting task and never leaks across concurrent work.
+_unattended_chain_spawn: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "unattended_chain_spawn", default=False)
+
+
+def in_unattended_chain_spawn() -> bool:
+    """True while a stage's child is being spawned by the unattended chain supervisor
+    (so the interactive live-design currentness guards should stand down)."""
+    return _unattended_chain_spawn.get()
+
+
+@contextmanager
+def unattended_chain_spawn():
+    """Mark the enclosed (supervisor-driven) spawn as unattended, so the live-design
+    guards skip their interactive "loaded design must match" check."""
+    token = _unattended_chain_spawn.set(True)
+    try:
+        yield
+    finally:
+        _unattended_chain_spawn.reset(token)
 
 
 @dataclass
@@ -282,6 +315,110 @@ def resume_chain(chain: ChainRun) -> ChainRun:
     chain.status = CHAIN_RUNNING
     chain.error = None
     return chain
+
+
+# ── failure diagnosis (the shared brain behind scripts/chain_doctor.py) ──────────
+# A halted chain records WHY in ``chain.error`` — but that raw string (a 409 body, a
+# FileNotFoundError, a bare exception repr) is not something the queue readout should
+# show verbatim, nor is it obvious what to DO about it.  This turns a ChainRun into a
+# plain-language {cause, action} so both the CLI doctor and the UI can explain a failure
+# and point at the fix.  Pure + engine-agnostic: it pattern-matches the recorded message,
+# it does not touch jobs or disk (the doctor pulls job logs separately).
+
+# Substring needles matched (case-insensitively) against ``chain.error``, most specific
+# first.  Match the STABLE phrase, not the whole sentence, so a reworded message still
+# classifies.  Each maps to (cause, action).
+_FAILURE_PATTERNS: list[tuple[tuple[str, ...], str, str]] = [
+    (
+        ("different design is loaded",),
+        "A DIFFERENT design was loaded in the app when the supervisor tried to spawn "
+        "this stage. The production/append spawn validates against the LIVE active "
+        "design, so switching designs mid-chain halts it — even though the chain seeds "
+        "from the previous stage's own job, not whatever is loaded.",
+        "Re-open the design this chain was built from (the stage plan's "
+        "design_source_path), then Resume the chain.",
+    ),
+    (
+        ("has been edited", "design has changed"),
+        "The design this chain runs on was EDITED after the stage's job was prepared, so "
+        "its topology/sequence/geometry no longer matches the job's frozen copy.",
+        "Roll the design's feature log back to the run state (or re-run the upstream "
+        "stage), then Resume.",
+    ),
+    (
+        ("needs ≥1 anchor", "nothing to hold", "drifts the whole structure"),
+        "This stage applies a uniform electric field but nothing holds the structure "
+        "against the resulting centre-of-mass drift — no strand anchor, and no hard "
+        "surface the field presses into.",
+        "Add ≥1 strand anchor to the stage, orient a hard surface for the field to press "
+        "into (a deposition setup), or disable the field; then re-launch.",
+    ),
+    (
+        ("no such file", "filenotfounderror", "not available", "seed", "checkpoint"),
+        "The stage could not find the checkpoint it seeds from — the previous stage's "
+        "output frame isn't on disk yet (a remote run still downloading) or was removed.",
+        "Resume to retry (a transient missing seed self-heals within the retry budget); "
+        "if it persists, re-run the upstream stage so its output frame exists.",
+    ),
+]
+
+
+def diagnose_chain(chain: ChainRun) -> dict:
+    """Plain-language diagnosis of a chain's state.
+
+    Returns ``{status, headline, failed_index, failed_job_id, error, cause, action}``:
+
+    * ``error`` — the raw ``chain.error`` (``None`` when healthy);
+    * ``cause`` — a classified, human reason the chain HALTED (``None`` if not failed);
+    * ``action`` — the concrete next step (``None`` if not failed).
+
+    Two failure shapes are told apart: a **spawn** failure (the failed stage never got a
+    job — ``chain.error`` is classified by :data:`_FAILURE_PATTERNS`) vs a **job** failure
+    (the stage's job ran and crashed — ``failed_job_id`` is set so the caller can pull
+    that job's log).
+    """
+    done = sum(1 for s in chain.stages if s.status == STAGE_DONE)
+    total = len(chain.stages)
+    fi = chain.failed_stage_index()
+    failed_job_id = chain.stages[fi].job_id if fi is not None else None
+
+    if chain.status == CHAIN_COMPLETED:
+        headline = f"Chain complete — {total} of {total} stages done."
+    elif chain.status == CHAIN_FAILED:
+        at = (fi + 1) if fi is not None else "?"
+        headline = f"Halted at stage {at} of {total} — {done} done, then failed."
+    elif chain.status == CHAIN_RUNNING:
+        headline = f"Running — {done} of {total} stages done."
+    else:
+        headline = f"Queued — {total} stage{'' if total == 1 else 's'} pending."
+
+    cause = action = None
+    if chain.status == CHAIN_FAILED:
+        if failed_job_id:
+            # The stage spawned a job that then failed — the crash is INSIDE the job.
+            cause = (f"Stage {fi}'s job ({failed_job_id}) ran but failed — the simulation "
+                     "crashed or was stopped. Its own error/log carries the detail.")
+            action = (f"Inspect job {failed_job_id}'s log (chain_doctor prints the tail), "
+                      "fix the cause, then Resume the chain.")
+        else:
+            err = (chain.error or "").lower()
+            for needles, why, act in _FAILURE_PATTERNS:
+                if any(n in err for n in needles):
+                    cause, action = why, act
+                    break
+            if cause is None:
+                cause = "The stage's child job could not be spawned (see the raw error)."
+                action = "Resume to retry from the failed stage."
+
+    return {
+        "status": chain.status,
+        "headline": headline,
+        "failed_index": fi,
+        "failed_job_id": failed_job_id,
+        "error": chain.error,
+        "cause": cause,
+        "action": action,
+    }
 
 
 # ── forces carry-through (the shared conf emitter) ───────────────────────────────

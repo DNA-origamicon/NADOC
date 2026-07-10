@@ -1,8 +1,10 @@
 /**
- * stage_planner_model.js — the PURE stage-list model behind the "Plan Run" overlay
- * (P4, job-planner track).  No DOM, no fetch, no topology: it owns the ordered list of
- * pipeline stages the user is authoring and turns it into the exact `CreateChainRequest`
- * payload the backend `POST /md/chains` route consumes (P1's `MdPipeline` shape).
+ * stage_planner_model.js — PURE stage-list + chain-status helpers (originally the model
+ * behind the removed "Plan Run" overlay; now the live consumer is the Chain Simulations
+ * sidebar, which uses `chainStatusSummary` for its running-chain readout, while the
+ * queue's own preflight/ETA/grouping live in `chain_sim_model.js`).  No DOM, no fetch, no
+ * topology: it owns an ordered list of pipeline stages and turns it into the exact
+ * `CreateChainRequest` payload the backend `POST /md/chains` route consumes (`MdPipeline`).
  *
  * A stage's `field` / `anchors` / `surface` are the same job-request force annotations
  * the per-engine launch cards emit (the shared efield_math / oxdna_floor_math payloads) —
@@ -193,6 +195,10 @@ export function chainStatusSummary(chain) {
 
   return {
     headline,
+    // The backend's own actionable failure message (a 409 body / spawn error). Already
+    // human-readable ("Open 'X' to continue this run") — surface it verbatim on failure
+    // so the sidebar explains WHY it halted, not just that it did. null when healthy.
+    error: status === 'failed' ? (chain?.error ?? null) : null,
     total,
     doneCount,
     currentIndex: currentIdx,

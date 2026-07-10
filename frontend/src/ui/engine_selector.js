@@ -6,19 +6,14 @@
  * Today the five `*_jobs_panel.js` panels stack vertically in the Dynamics tab,
  * all visible at once, and where an engine can't do a card the panel simply omits
  * it — so "unsupported" reads as "missing". This module is the selector that
- * fronts them: a segmented control (one button per engine, in the U1
- * `ENGINE_KEYS` order) shows EXACTLY the selected engine's panel and hides the
- * rest, and a capability card-strip — driven by the U1 descriptor — renders every
- * card in the universe, supported cards as live chips and unsupported cards as
- * GREYED chips carrying the descriptor's why-reason as a tooltip (present, never
- * absent — the "CHARMM-GUI model").
+ * fronts them: a dropdown (one option per engine, in the U1 `ENGINE_KEYS` order)
+ * shows EXACTLY the selected engine's panel and hides the rest.
  *
  * It owns no engine logic and no panel internals: it toggles whole-panel
  * `display` (the panels own their own collapse/advanced/poll — none of them
- * touch whole-panel display, so the selector is the sole owner) and reads the
- * card facts from `engine_capabilities.js`. The pure decisions
- * (`panelVisibility`, `selectedEngineCards`) are exported for the unit oracle;
- * the factory wires them to the DOM.
+ * touch whole-panel display, so the selector is the sole owner). The pure
+ * decisions (`panelVisibility`, `selectedEngineCards`) are exported for the unit
+ * oracle; the factory wires the panel visibility to the DOM.
  */
 
 import {
@@ -64,8 +59,7 @@ export function isEngine(engineKey) {
 
 /**
  * @param {object}   deps
- * @param {Element}  deps.selectorMount  where the segmented control is rendered
- * @param {Element}  [deps.stripMount]   optional element for the capability strip
+ * @param {Element}  deps.selectorMount  where the dropdown is rendered
  * @param {Object<string,Element>} deps.panelEls  engineKey -> panel-section element
  * @param {string}   [deps.initial]      engine selected on init (default first key)
  * @param {Object<string,string>} [deps.labels]   engineKey -> display label
@@ -74,48 +68,26 @@ export function isEngine(engineKey) {
  */
 export function initEngineSelector({
   selectorMount,
-  stripMount = null,
   panelEls,
   initial = ENGINE_KEYS[0],
   labels = ENGINE_LABELS,
   onSelect = null,
 }) {
   let _selected = null
-  const buttons = {}
 
-  // Build the segmented control once.
+  // Build the dropdown once.
   selectorMount.classList.add('engine-selector')
-  selectorMount.setAttribute('role', 'tablist')
+  const dropdown = document.createElement('select')
+  dropdown.className = 'engine-selector-dropdown'
+  dropdown.setAttribute('aria-label', 'Simulation engine')
   for (const key of ENGINE_KEYS) {
-    const btn = document.createElement('button')
-    btn.type = 'button'
-    btn.className = 'engine-selector-btn'
-    btn.dataset.engine = key
-    btn.textContent = labels[key] ?? key
-    btn.setAttribute('role', 'tab')
-    btn.addEventListener('click', () => select(key))
-    selectorMount.appendChild(btn)
-    buttons[key] = btn
+    const opt = document.createElement('option')
+    opt.value = key
+    opt.textContent = labels[key] ?? key
+    dropdown.appendChild(opt)
   }
-
-  function renderStrip(engineKey) {
-    if (!stripMount) return
-    stripMount.replaceChildren()
-    stripMount.classList.add('engine-capability-strip')
-    for (const card of selectedEngineCards(engineKey)) {
-      const chip = document.createElement('span')
-      chip.className = `capability-chip is-${card.state}`
-      chip.dataset.card = card.key
-      chip.textContent = card.label
-      if (card.state === 'greyed' && card.reason) {
-        chip.title = card.reason
-        chip.setAttribute('aria-disabled', 'true')
-      } else if (card.domAnchorId) {
-        chip.dataset.anchor = card.domAnchorId
-      }
-      stripMount.appendChild(chip)
-    }
-  }
+  dropdown.addEventListener('change', () => select(dropdown.value))
+  selectorMount.appendChild(dropdown)
 
   function select(engineKey) {
     if (!isEngine(engineKey)) return
@@ -125,14 +97,8 @@ export function initEngineSelector({
       const el = panelEls?.[key]
       if (el) el.style.display = vis[key] ? '' : 'none'
       else console.warn(`[engine-selector] no panel element for "${key}" — its panel won't hide/show`)
-      const btn = buttons[key]
-      if (btn) {
-        const active = key === engineKey
-        btn.classList.toggle('is-active', active)
-        btn.setAttribute('aria-selected', active ? 'true' : 'false')
-      }
     }
-    renderStrip(engineKey)
+    if (dropdown.value !== engineKey) dropdown.value = engineKey
     if (onSelect) onSelect(engineKey)
   }
 

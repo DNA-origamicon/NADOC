@@ -3395,4 +3395,5 @@ export async function cancelBenchmark(id) {
 // (`import { createAnimation } from '.../api/client.js'` and
 //  `import * as api from '.../api/client.js'`) keep working unchanged.
 export * from './animation_endpoints.js'
+export * from './chain_sim_endpoints.js'
 export * from './overhang_endpoints.js'

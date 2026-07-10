@@ -30,17 +30,21 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
     rmsf_nm}``).  Entries with no ``rmsf`` value are dropped (a base with no fluctuation
     sample), so a partial map yields a partial profile rather than ``None`` rmsf_nm.
 
-    INVARIANT: ``production_rmsf`` reads positions via ``read_configuration_full`` /
-    ``read_trajectory_frames_full`` with ``include_extra_bases=False``, so crossover
-    inserts (the ``("__xb__", crossover_id, k)`` string ``bp_index`` keys) are stripped
-    at the reader and never reach here.  The NAMD twin (:mod:`namd_shape_source`) does
-    NOT get that guarantee — ``md_rmsf`` keeps inserts in its positions list — so it
-    guards ``bp_index`` explicitly.  If this path ever flips to ``include_extra_bases=True``,
-    add the same ``isinstance(p["bp_index"], int)`` guard or ``int(...)`` below crashes."""
+    Crossover extra-base inserts are dropped: ``production_rmsf`` DOES emit them (keyed
+    ``("__xb__", crossover_id, k)`` with a STRING ``bp_index``) — ``read_trajectory_frames_full``
+    keeps the insert particles and ``unwrap_align_to_reference`` applies the alignment to every
+    frame key, so the flexibility map carries their real per-nt RMSF (only the design-keyed
+    *reference* conf drops them, which does not strip them from the trajectory output).  They are
+    flexible ssDNA with no dsDNA-core column and no cross-engine RMSF counterpart, so — like the
+    NAMD twin (:mod:`namd_shape_source`) — we guard ``bp_index`` explicitly and skip them here.
+    (Pre-fix this ``int(...)`` raised on ANY design with a linker/extra base, 500-ing the oxDNA
+    comparison-card column — the class of bug ``md_pkey`` records having hit the live MD display.)"""
     out: list[dict] = []
     for p in rmsf_positions or []:
         r = p.get("rmsf")
         if r is None:
+            continue
+        if not isinstance(p.get("bp_index"), int):
             continue
         direction = p.get("direction")
         out.append({

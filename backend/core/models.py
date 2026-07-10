@@ -1673,6 +1673,52 @@ class DesignAnimation(BaseModel):
     keyframes: List[AnimationKeyframe] = Field(default_factory=list)
 
 
+class ChainSimStage(BaseModel):
+    """One queued stage in a Chain Simulations project.
+
+    Mirrors the backend ``PipelineStage`` / ``ChainStageRequest`` shape (the launch
+    step converts a project into ``MdPipeline`` chains via ``POST /md/chains``) plus
+    the two fields the authoring UI needs that a resolved pipeline stage does not:
+
+    * ``protocol`` — ``"relax"`` (a chain root: a fresh equilibration) vs
+      ``"production"`` (seeded from the previous relax/production, or from
+      ``seed_job_id``);
+    * ``seed_job_id`` — an EXISTING completed job this stage chains off (the "already
+      ran a relax, now queueing productions" case). ``None`` = seed from an earlier
+      stage in the same project, or (for a relax) a fresh root.
+
+    ``field`` / ``anchors`` / ``surface`` are the same job-request force annotations
+    the per-engine launch cards emit — never ``Design`` edits (Three-Layer Law).
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    engine: Literal["oxdna", "namd"] = "namd"
+    protocol: Literal["relax", "production"] = "production"
+    field: Optional[dict] = None
+    anchors: Optional[list] = None
+    surface: Optional[dict] = None
+    run_target: Literal["local", "alpine"] = "local"
+    cluster_name: Optional[str] = None
+    length_ns: Optional[float] = None
+    steps: Optional[int] = None
+    label: Optional[str] = None
+    seed_job_id: Optional[str] = None
+    seed_job_name: Optional[str] = None   # display name of the seed job (UI only)
+    seed_engine: Optional[str] = None     # engine of the seed job (seed-compat check)
+
+
+class ChainSimProject(BaseModel):
+    """A named, editable queue of chain-simulation stages (like a DesignAnimation).
+
+    Display/job-request annotation state only — persisted on the design so a chain
+    plan travels with the ``.nadoc`` and survives reload. The Launch step turns it
+    into one or more live ``MdPipeline`` chains; the project itself creates no jobs
+    and touches no topology.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = "Chain"
+    stages: List[ChainSimStage] = Field(default_factory=list)
+
+
 class OxdnaHardwareDefault(BaseModel):
     """Best oxDNA hardware config for one machine, discovered by the Benchmark button.
 
@@ -2135,6 +2181,9 @@ class Design(BaseModel):
     forced_ligations: List[ForcedLigation] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)
+    # Chain Simulations projects — named queues of MD chain stages (display/job-request
+    # annotation only; launched into MdPipeline chains, never a topology edit).
+    chain_sim_projects: List[ChainSimProject] = Field(default_factory=list)
     loadouts: List[DesignLoadout] = Field(default_factory=list)
     atomistic_reference: Optional[AtomisticReference] = None
     active_loadout_id: Optional[str] = None

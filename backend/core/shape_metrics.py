@@ -42,6 +42,7 @@ from backend.core.oxdna_health import (
     _kabsch_superpose,
     bundle_slab_centreline,
     measure_bundle_twist,
+    measure_bundle_twist_profile,
     measure_radius_of_gyration,
 )
 
@@ -123,6 +124,21 @@ def compute_shape_descriptors(positions, *, n_slices: int = 0) -> dict:
         "axial_span_nm": axial_span,
         "n_nucleotides": n,
     }
+
+
+def twist_profile(positions, *, n_slices: int = 0) -> list[tuple[float, float]]:
+    """The spatially-resolved twist descriptor: ``[(axial_nm, cumulative_twist_deg), …]``
+    from the bundle start, whose LAST y equals the scalar ``twist_total_deg``.  Wraps the
+    locked ``oxdna_health.measure_bundle_twist_profile`` estimator and shifts the x-axis so
+    the profile starts at 0 nm (each engine fits its own axis origin — the common
+    quantity is axial DISTANCE from the bundle start, so the curves overlay).  Engine-
+    agnostic like :func:`compute_shape_descriptors`; a degenerate frame (<2 helices, zero
+    span) → ``[]`` rather than raising."""
+    prof = _safe(measure_bundle_twist_profile, positions, n_slices=n_slices) if positions else None
+    if not prof:
+        return []
+    x0 = prof[0][0]
+    return [(float(t) - float(x0), float(v)) for t, v in prof]
 
 
 # ── Deviation + RMSF profiles (S2) ─────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { normalizeWorkspacePath, filterJobsForPart, seededBadge, mdSegGlyphKind } from './md_jobs_panel.js'
+import { normalizeWorkspacePath, filterJobsForPart, newestCompletedForPart, seededBadge, mdSegGlyphKind } from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
 // (only the shared-base parity block at the bottom drives the real panel; the
@@ -84,6 +84,33 @@ describe('filterJobsForPart', () => {
   it('showAll returns every job unfiltered', () => {
     expect(filterJobsForPart(jobs, '18hb.nadoc', true)).toEqual(jobs)
     expect(filterJobsForPart(jobs, null, true)).toEqual(jobs)
+  })
+})
+
+describe('newestCompletedForPart (cross-engine compare fallback)', () => {
+  const jobs = [
+    { job_id: 'old', design_source_path: '18hb.nadoc', status: 'completed', created_at: 100 },
+    { job_id: 'new', design_source_path: '18hb.nadoc', status: 'completed', created_at: 300 },
+    { job_id: 'running', design_source_path: '18hb.nadoc', status: 'running', created_at: 400 },
+    { job_id: 'other', design_source_path: '6hb.nadoc', status: 'completed', created_at: 999 },
+  ]
+
+  it('picks the newest COMPLETED job for the active part', () => {
+    expect(newestCompletedForPart(jobs, '18hb.nadoc').job_id).toBe('new')
+  })
+
+  it('ignores non-completed and other-design jobs', () => {
+    // 'running' is newer but not completed; 'other' is completed+newest but wrong design.
+    const out = newestCompletedForPart(jobs, '18hb.nadoc')
+    expect(out.status).toBe('completed')
+    expect(out.design_source_path).toBe('18hb.nadoc')
+  })
+
+  it('returns null when no completed job matches the part (or no part is known)', () => {
+    expect(newestCompletedForPart(jobs, '6hb.nadoc').job_id).toBe('other')
+    expect(newestCompletedForPart(jobs, null)).toBeNull()
+    expect(newestCompletedForPart([], '18hb.nadoc')).toBeNull()
+    expect(newestCompletedForPart(null, '18hb.nadoc')).toBeNull()
   })
 })
 

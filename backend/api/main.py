@@ -28,6 +28,7 @@ from backend.api.documents import router as documents_router
 from backend.api.routes import router
 from backend.api.routes_animations import router as animations_router
 from backend.api.routes_assembly_animations import router as assembly_animations_router
+from backend.api.routes_chain_sim import router as chain_sim_router
 from backend.api.routes_assembly_belts import router as assembly_belts_router
 from backend.api.routes_assembly_configs import router as assembly_configs_router
 from backend.api.routes_assembly_connectors import router as assembly_connectors_router
@@ -182,6 +183,7 @@ app.include_router(clusters_router,    prefix="/api")
 app.include_router(cluster_router,     prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")
 app.include_router(animations_router,  prefix="/api")
+app.include_router(chain_sim_router,    prefix="/api")
 app.include_router(extensions_router,  prefix="/api")
 app.include_router(feature_log_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")

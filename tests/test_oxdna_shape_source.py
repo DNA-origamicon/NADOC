@@ -111,6 +111,25 @@ def test_no_rmsf_positions_yields_none():
     assert src["rmsf"] is None
 
 
+def test_rmsf_profile_drops_extra_base_inserts_without_crashing():
+    # production_rmsf DOES emit crossover extra-base inserts (helix_id "__xb__", a STRING
+    # bp_index = crossover id). Before the guard, int(bp_index) raised → 500 on ANY design
+    # with a linker/extra base. They are flexible ssDNA with no dsDNA-core RMSF counterpart,
+    # so they are dropped; real design nucleotides survive.
+    frame = _twist_bundle(0.0, n_axial=6)
+    ref = _core_reference(frame)
+    rmsf_positions = [
+        {"helix_id": 0, "bp_index": 0, "direction": "forward", "copy": 0, "rmsf": 0.15},
+        {"helix_id": "__xb__", "bp_index": "d8565ee9-9f77-48dc-bde6-a4e9fa24e02c",
+         "direction": 0, "copy": 0, "rmsf": 0.42},   # string bp_index → would crash int()
+    ]
+    src = build_oxdna_shape_source(frame, ref, rmsf_positions=rmsf_positions)
+    prof = src["rmsf"]
+    assert prof is not None
+    assert len(prof) == 1                       # the __xb__ insert is dropped
+    assert prof[0]["helix_id"] == 0 and prof[0]["bp_index"] == 0
+
+
 # ── field profile passes through untouched ───────────────────────────────────────
 
 def test_field_profile_passes_through():

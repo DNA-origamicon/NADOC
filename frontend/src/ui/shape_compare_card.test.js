@@ -13,7 +13,7 @@ const start = vi.fn()
 const poll = vi.fn()
 
 import {
-  fmtNum, fmtDelta, scalarTableModel, rmsfOverlaySpec, comparisonCSVs,
+  fmtNum, fmtDelta, scalarTableModel, rmsfOverlaySpec, twistOverlaySpec, comparisonCSVs,
   initShapeCompareCard, SCALAR_LABELS,
 } from './shape_compare_card.js'
 
@@ -33,6 +33,10 @@ function makeReport() {
     rmsf_profiles: [
       { engine: 'cando', is_reference: true, points: [[0, 1], [1, 2], [2, 3]] },
       { engine: 'oxdna', is_reference: false, points: [[0, 1.1], [1, 1.9], [2, 3.2]] },
+    ],
+    twist_profiles: [
+      { engine: 'oxdna', is_reference: true, points: [[0, 0], [5, 40], [10, 100]] },
+      { engine: 'cando', is_reference: false, points: [[0, 0], [5, 30], [10, 90]] },
     ],
     agreement: [
       { engine: 'cando', shape_rmsd_nm: 0.5,
@@ -86,6 +90,20 @@ describe('pure helpers', () => {
     expect(spec.empty).toBe(true)
   })
 
+  it('twistOverlaySpec builds one series per engine, reference first', () => {
+    const spec = twistOverlaySpec(makeReport(), { width: 400, height: 200 })
+    expect(spec.empty).toBe(false)
+    expect(spec.series).toHaveLength(2)
+    expect(spec.series[0].label).toBe('oxdna (ref)')   // reference sorted first
+    expect(spec.series[1].label).toBe('cando')
+    expect(spec.series[0].pts).toHaveLength(3)         // 3 axial points → 3 pixel pts
+  })
+
+  it('twistOverlaySpec is empty when no twist profiles', () => {
+    expect(twistOverlaySpec({ twist_profiles: [] }).empty).toBe(true)
+    expect(twistOverlaySpec({}).empty).toBe(true)
+  })
+
   it('comparisonCSVs emits scalar, agreement + field sections with the right numbers', () => {
     const csv = comparisonCSVs(makeReport())
     expect(csv.scalars).toContain('# shape reference: oxdna')
@@ -96,6 +114,10 @@ describe('pure helpers', () => {
     expect(csv.agreement).toContain('oxdna,,0.98,0.95,3')
     expect(csv.field).toContain('# field reference: oxdna')
     expect(csv.field).toContain('cando,0,0.3,6,1,1,3')
+    expect(csv.twist).toContain('engine,is_reference,axial_nm,cumulative_twist_deg')
+    expect(csv.twist).toContain('oxdna,1,0,0')       // reference flag + first point
+    expect(csv.twist).toContain('oxdna,1,10,100')    // last point = scalar twist_total
+    expect(csv.twist).toContain('cando,0,5,30')
   })
 
   it('comparisonCSVs omits the field section when no field data', () => {
@@ -109,14 +131,10 @@ const IDS = {
   'shape-compare-toggle': 'div',
   'shape-compare-arrow': 'span',
   'shape-compare-gen': 'button',
-  'shape-compare-export': 'button',
+  'shape-compare-view': 'button',
   'shape-compare-bar': 'div',
   'shape-compare-fill': 'div',
   'shape-compare-status': 'div',
-  'shape-compare-scalars': 'div',
-  'shape-compare-agreement': 'div',
-  'shape-compare-field': 'div',
-  'shape-compare-rmsf': 'canvas',
 }
 
 beforeEach(() => {
@@ -124,8 +142,10 @@ beforeEach(() => {
   start.mockReset(); poll.mockReset()
 })
 
+// The results render into a modal (appended to document.body when opened) — after a
+// generate + View Results, scrape the whole document rather than fixed sidebar ids.
 describe('initShapeCompareCard wiring', () => {
-  it('Generate with sources → poll → render fills tables + enables Export', async () => {
+  it('Generate → poll → View Results opens a popup with the tables + enables the button', async () => {
     start.mockResolvedValue({ metrics_id: 'r1', state: 'running' })
     poll.mockResolvedValue({ state: 'done', progress: 1, result: makeReport() })
     const card = initShapeCompareCard({
@@ -135,12 +155,20 @@ describe('initShapeCompareCard wiring', () => {
     await card._generate()
     await new Promise(r => setTimeout(r, 0))   // let the poll tick resolve
     expect(start).toHaveBeenCalledOnce()
-    const scalars = document.getElementById('shape-compare-scalars').innerHTML
-    expect(scalars).toContain('Twist total')
-    expect(scalars).toContain('+10.0%')
-    const field = document.getElementById('shape-compare-field').innerHTML
-    expect(field).toContain('E-field deflection')
-    expect(document.getElementById('shape-compare-export').disabled).toBe(false)
+    // Results are NOT in the sidebar until View Results is clicked.
+    expect(document.querySelector('.modal__overlay')).toBeNull()
+    const viewBtn = document.getElementById('shape-compare-view')
+    expect(viewBtn.disabled).toBe(false)
+    viewBtn.click()
+    const modal = document.querySelector('.modal__overlay')
+    expect(modal).not.toBeNull()
+    expect(modal.innerHTML).toContain('Twist total')
+    expect(modal.innerHTML).toContain('+10.0%')
+    expect(modal.innerHTML).toContain('E-field deflection')
+    // Both overlay charts present (RMSF flexibility + cumulative twist).
+    expect(modal.innerHTML).toContain('Per-bp RMSF')
+    expect(modal.innerHTML).toContain('Cumulative twist')
+    expect(modal.querySelectorAll('canvas')).toHaveLength(2)
   })
 
   it('Generate with no sources reports not-ready and never starts a run', async () => {
@@ -152,10 +180,10 @@ describe('initShapeCompareCard wiring', () => {
     expect(start).not.toHaveBeenCalled()
     expect(document.getElementById('shape-compare-status').textContent)
       .toContain('No engine predictions available')
-    expect(document.getElementById('shape-compare-export').disabled).toBe(true)
+    expect(document.getElementById('shape-compare-view').disabled).toBe(true)
   })
 
-  it('refresh clears the rendered tables + disables Export', async () => {
+  it('refresh clears the report, closes the popup + disables View Results', async () => {
     start.mockResolvedValue({ metrics_id: 'r1', state: 'running' })
     poll.mockResolvedValue({ state: 'done', progress: 1, result: makeReport() })
     const card = initShapeCompareCard({
@@ -164,8 +192,10 @@ describe('initShapeCompareCard wiring', () => {
     })
     await card._generate()
     await new Promise(r => setTimeout(r, 0))
+    card._viewResults()
+    expect(document.querySelector('.modal__overlay')).not.toBeNull()
     card.refresh()
-    expect(document.getElementById('shape-compare-scalars').innerHTML).toBe('')
-    expect(document.getElementById('shape-compare-export').disabled).toBe(true)
+    expect(document.querySelector('.modal__overlay')).toBeNull()
+    expect(document.getElementById('shape-compare-view').disabled).toBe(true)
   })
 })

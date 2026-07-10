@@ -248,7 +248,11 @@ def _md_job_out_of_date(job: MdJob, current_fp: "str | None") -> bool:
 def _assert_md_job_current(job: MdJob) -> None:
     """Refuse (409) running production/start on a job whose design has changed since
     it was prepared (mirrors the oxDNA guard); the frontend turns it into the roll
-    popup."""
+    popup.  Stands down for an unattended chain spawn (seeds from the job's own frozen
+    state, not the loaded design — see ``md_chain_executor.in_unattended_chain_spawn``)."""
+    from backend.core.md_chain_executor import in_unattended_chain_spawn
+    if in_unattended_chain_spawn():
+        return
     from backend.core.oxdna_staleness import (
         current_active_design_fingerprint, describe_staleness, job_out_of_date)
     if job_out_of_date(_md_job_fingerprint(job), current_active_design_fingerprint()):
@@ -2472,18 +2476,46 @@ def md_browse(dir: str = "", ext: str = "") -> dict:
 # create/list/resume routes + the supervisor driver (`advance_chains`).
 
 def _chain_job_status(job_id: Optional[str]) -> str:
-    """Map an ``MdJob``'s status onto the executor's running/completed/failed vocabulary."""
+    """Map a chain stage's job status onto the executor's running/completed/failed vocab.
+
+    Engine-agnostic: a stage's realised job is a NAMD ``MdJob`` OR an oxDNA job (the two
+    stores share no id space — uuids), so resolve whichever owns ``job_id``. NAMD first
+    (the common case); on a miss, fall back to the oxDNA store."""
     if not job_id:
         return "failed"
     try:
         job = _load_job(job_id)
     except HTTPException:
-        return "failed"
+        return _oxdna_chain_job_status(job_id)
     if job.status == MdStatus.completed:
         return "completed"
     if job.status in (MdStatus.failed, MdStatus.stopped):
         return "failed"
     return "running"
+
+
+def _oxdna_chain_job_status(job_id: str) -> str:
+    """Status of an oxDNA chain stage's job, in the executor's vocabulary."""
+    from backend.api.routes_oxdna import _load_job as _load_oxdna_job  # noqa: PLC0415
+    from backend.core.oxdna_job import OxdnaStatus  # noqa: PLC0415
+    try:
+        job = _load_oxdna_job(job_id)  # already reconciles status from disk
+    except HTTPException:
+        return "failed"
+    if job.status == OxdnaStatus.completed:
+        return "completed"
+    if job.status in (OxdnaStatus.failed, OxdnaStatus.stopped):
+        return "failed"
+    return "running"
+
+
+# Protocol names that mark a stage as a structure-CREATING relaxation (a chain root that
+# has no upstream job to seed from), vs a production restart.
+_RELAX_PROTOCOLS = frozenset({"relax", "relaxation", "equilibration", "equilibrate"})
+
+
+def _is_relax_protocol(protocol: Optional[str]) -> bool:
+    return (protocol or "").lower() in _RELAX_PROTOCOLS
 
 
 async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
@@ -2508,6 +2540,14 @@ async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
     Run target / length flow from the stage spec; a local child autostarts, an alpine child
     queues for the submit-review card."""
     plan = ctx.plan
+    if ctx.parent_job_id is None:
+        # Fresh-relax root: no upstream job — CREATE the initial structure from the active
+        # design via a relaxation for this engine (the "Queue Relax" stage).
+        return await _spawn_fresh_relax(plan)
+    if plan.engine == "oxdna":
+        # Same-engine oxDNA hop: a production/field child branched off the completed
+        # previous oxDNA stage (or an existing completed oxDNA root job).
+        return await _spawn_oxdna_child(ctx.parent_job_id, plan)
     seed = cross_engine_seed(plan, ctx.parent_job_id)  # None ⇒ same-engine checkpoint hop
     if seed is not None:
         forces = ctx.forces or {}
@@ -2527,6 +2567,7 @@ async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
             cluster_name=plan.cluster_name,
             field=forces.get("field"),
             anchors=forces.get("anchors"),
+            design_source_path=plan.design_source_path,
             **{seed.seed_field: seed.seed_job_id},
         )
         result = await create_md_job(body)
@@ -2540,6 +2581,64 @@ async def _chain_spawn(ctx: _chain.SpawnContext) -> str:
     )
     result = await spawn_md_production(ctx.parent_job_id, body)
     return result["job"]["job_id"]
+
+
+async def _spawn_fresh_relax(plan: "StagePlan") -> str:
+    """Stage 0 of a rootless chain: create the initial structure from the ACTIVE design
+    via a fresh relaxation for this engine (no upstream job to seed from).
+
+    * oxDNA — a 3-stage relaxation (``create_oxdna_job``) carrying the stage's hard
+      surface + anchors (an oxDNA relaxation excludes the E-field by design — a
+      field-relaxed structure isn't how it settles);
+    * NAMD — a fresh atomistic relaxation (``create_md_job``) carrying field + anchors.
+    """
+    forces = plan.forces or {}
+    if plan.engine == "oxdna":
+        from backend.api.routes_oxdna import (  # noqa: PLC0415
+            CreateOxdnaJobRequest, create_oxdna_job,
+        )
+        surface = forces.get("surface")
+        anchors = forces.get("anchors") or []
+        body = CreateOxdnaJobRequest.model_validate({
+            "autostart": plan.run_target == "local",
+            "surface": surface,
+            "anchors": anchors,
+            "design_source_path": plan.design_source_path,
+        })
+        result = await create_oxdna_job(body)
+        job_id = result.get("job_id")
+        if not job_id or result.get("status") == "failed":
+            raise RuntimeError(f"oxDNA relax spawn failed: {result.get('error') or 'no job id'}")
+        return job_id
+    body = CreateJobRequest(
+        protocol=EQUILIBRIUM_AWARE_PROTOCOL,
+        autostart=(plan.run_target == "local"),
+        execution_target=plan.run_target,
+        cluster_name=plan.cluster_name,
+        field=forces.get("field"),
+        anchors=forces.get("anchors"),
+        design_source_path=plan.design_source_path,
+    )
+    result = await create_md_job(body)
+    return result["job_id"]
+
+
+async def _spawn_oxdna_child(parent_job_id: str, plan: "StagePlan") -> str:
+    """A same-engine oxDNA hop: a consolidated production/field run branched off the
+    completed previous oxDNA stage (``append_oxdna_run`` → a fresh child job seeded from
+    the parent's relaxed conf), carrying the stage's field / surface / anchors."""
+    from backend.api.routes_oxdna import RunRequest, append_oxdna_run  # noqa: PLC0415
+    forces = plan.forces or {}
+    run_body: dict = {"steps": plan.steps or 2_000_000}
+    field = forces.get("field")
+    if field and field.get("field_pN"):
+        run_body["field"] = field
+    if forces.get("surface"):
+        run_body["surface"] = forces["surface"]
+    if forces.get("anchors"):
+        run_body["anchors"] = forces["anchors"]
+    result = await append_oxdna_run(parent_job_id, RunRequest.model_validate(run_body))
+    return result["job_id"]
 
 
 # A stage spawn can fail on a TRANSIENT precondition — e.g. the previous stage's remote
@@ -2570,7 +2669,11 @@ async def advance_chains(workspace: Path) -> list[str]:
                 # precondition BEFORE creating/starting the child, so the except path
                 # below can safely assume no job was spawned (the invariant that keeps
                 # "one stage runs at a time" intact — see spawn_md_production).
-                job_id = await _chain_spawn(ctx)
+                # Mark the spawn unattended so the per-engine live-design guards stand
+                # down (this stage seeds from the parent job's frozen state, not whatever
+                # design is loaded — otherwise switching designs mid-run halts the chain).
+                with _chain.unattended_chain_spawn():
+                    job_id = await _chain_spawn(ctx)
             except Exception as exc:  # noqa: BLE001 — transient-tolerant bounded retry
                 stage = chain.stages[ctx.stage_index]
                 stage.spawn_attempts += 1
@@ -2611,9 +2714,22 @@ class ChainStageRequest(BaseModel):
 
 
 class CreateChainRequest(BaseModel):
-    """Queue a multi-stage chain seeded from a completed root job."""
-    root_job_id: str = Field(..., description="Completed job whose checkpoint seeds stage 0")
+    """Queue a multi-stage chain.
+
+    Two rooting modes:
+
+    * ``root_job_id`` set — the chain seeds stage 0 from that ALREADY-COMPLETED job's
+      checkpoint (the "already ran a relax, now queue a series of productions" case);
+    * ``root_job_id`` None — stage 0 is a *fresh relaxation* that CREATES the initial
+      structure from the active design (the "Queue Relax → Queue Production" case). Its
+      first stage must be a relaxation (``protocol == "relax"``).
+    """
+    root_job_id: Optional[str] = Field(
+        None, description="Completed job whose checkpoint seeds stage 0; None = stage 0 is a fresh relax")
     root_engine: Optional[str] = Field(None, description="Engine of the root job")
+    design_source_path: Optional[str] = Field(
+        None, description="Workspace path of the active design — stamped onto spawned jobs so "
+        "they appear in the per-design engine job list")
     stages: list[ChainStageRequest] = Field(..., description="Ordered stage specs")
 
 
@@ -2628,27 +2744,60 @@ async def create_md_chain(body: CreateChainRequest) -> dict:
     (the frame exists on disk), not by loading it as an ``MdJob``."""
     if not body.stages:
         raise HTTPException(400, "A chain needs at least one stage.")
-    root_engine = (body.root_engine or "namd").lower()
-    if root_engine == "oxdna":
-        from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
-        try:
-            await run_in_threadpool(assert_namd_seed_available, body.root_job_id, _workspace())
-        except FileNotFoundError as exc:
-            raise HTTPException(400, str(exc))
-    elif root_engine == "mrdna":
-        from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
-        try:
-            await run_in_threadpool(assert_mrdna_namd_seed_available, body.root_job_id, _workspace())
-        except FileNotFoundError as exc:
-            raise HTTPException(400, str(exc))
-    else:
-        root = _load_job(body.root_job_id)  # 404 if missing
-        if root.status != MdStatus.completed:
+    # Validate the WHOLE plan up front against the same spawn preconditions each stage
+    # would hit mid-run — so a doomed chain fails at Launch with a clear per-stage reason
+    # instead of running the relax for minutes then dying when stage N spawns.  A uniform
+    # field on a production stage needs a strand anchor OR a surface it presses into (an
+    # oxDNA relax drops the field, so the rule only applies to productions).
+    from backend.core.field_anchor import field_needs_strand_anchor
+    for i, st in enumerate(body.stages):
+        if _is_relax_protocol(st.protocol):
+            continue
+        if field_needs_strand_anchor(
+                has_field=bool(st.field), has_anchors=bool(st.anchors),
+                field_dir=(st.field or {}).get("dir"),
+                surface_dir=(st.surface or {}).get("dir")):
             raise HTTPException(
-                400, "The chain's root job must be a completed run to seed the first stage.")
+                400, f"Stage {i}"
+                + (f" ({st.label})" if st.label else "")
+                + " has an electric field but nothing to hold the structure: add ≥1 "
+                "strand anchor, orient a hard surface for the field to press into, or "
+                "disable the field (an unanchored uniform field drifts the whole "
+                "structure across the box).")
+    if body.root_job_id is None:
+        # Fresh-relax root: stage 0 CREATES the initial structure from the active design.
+        # It must therefore be a relaxation — a production has nothing to seed from.
+        if not _is_relax_protocol(body.stages[0].protocol):
+            raise HTTPException(
+                400, "A rootless chain's first stage must be a relaxation (it creates the "
+                "initial structure); a production needs an upstream job to seed from.")
+        root_engine = (body.root_engine or body.stages[0].engine or "namd").lower()
+    else:
+        root_engine = (body.root_engine or "namd").lower()
+        if root_engine == "oxdna":
+            from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+            # A cross-engine oxDNA→NAMD root needs a NAMD seed frame; a same-engine
+            # oxDNA→oxDNA production just restarts the completed oxDNA job's relaxed conf.
+            if body.stages[0].engine != "oxdna":
+                try:
+                    await run_in_threadpool(assert_namd_seed_available, body.root_job_id, _workspace())
+                except FileNotFoundError as exc:
+                    raise HTTPException(400, str(exc))
+        elif root_engine == "mrdna":
+            from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
+            try:
+                await run_in_threadpool(assert_mrdna_namd_seed_available, body.root_job_id, _workspace())
+            except FileNotFoundError as exc:
+                raise HTTPException(400, str(exc))
+        else:
+            root = _load_job(body.root_job_id)  # 404 if missing
+            if root.status != MdStatus.completed:
+                raise HTTPException(
+                    400, "The chain's root job must be a completed run to seed the first stage.")
     pipeline = MdPipeline(
         root_job_id=body.root_job_id,
         root_engine=root_engine,
+        design_source_path=body.design_source_path,
         stages=[PipelineStage(**s.model_dump()) for s in body.stages],
     )
     chain_id = uuid.uuid4().hex[:12]

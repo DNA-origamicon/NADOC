@@ -12,7 +12,9 @@ a list of {helix_id, bp_index, direction, backbone_position} dicts).
 """
 import math
 
-from backend.core.shape_metrics import compute_shape_descriptors
+import pytest
+
+from backend.core.shape_metrics import compute_shape_descriptors, twist_profile
 
 
 def _pos(hid, bp, direction, xyz):
@@ -90,6 +92,24 @@ def test_known_twist_recovered_and_scaled_per_turn():
     assert d["twist_per_turn_deg"] > 0.0
     n_turns = d["twist_total_deg"] / d["twist_per_turn_deg"]
     assert 1.0 < n_turns < 4.0                              # ~7.8 nm / ~3.5 nm/turn
+
+
+def test_twist_profile_endpoint_matches_scalar_and_starts_at_zero():
+    frame = _twist_bundle(60.0, n_axial=24)
+    prof = twist_profile(frame)
+    scalar = compute_shape_descriptors(frame)["twist_total_deg"]
+    assert len(prof) >= 3
+    assert prof[0][0] == 0.0                       # x normalised to the bundle start
+    xs = [x for x, _ in prof]
+    assert xs == sorted(xs)                        # monotone axial coordinate
+    assert prof[-1][1] == pytest.approx(scalar)    # last cumulative twist == scalar total
+
+
+def test_twist_profile_empty_on_single_helix():
+    # <2 helices → twist undefined → [] (not a raise), same partial-safe policy as descriptors.
+    single = [p for p in _twist_bundle(60.0, n_axial=24) if p["helix_id"] == 0]
+    assert twist_profile(single) == []
+    assert twist_profile([]) == []
 
 
 def test_twist_is_monotone_and_signed():

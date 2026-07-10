@@ -78,6 +78,20 @@ export function filterJobsForPart(jobs, partPath, showAll) {
   return jobs.filter(j => normalizeWorkspacePath(j.design_source_path) === current)
 }
 
+/**
+ * The newest `completed` job for the active part — the cross-engine comparison card's
+ * fallback when the user hasn't explicitly clicked a job in that engine's panel, so a
+ * design where every engine ran compares all of them without hunting for a row to select.
+ * Pure: filters to the active part (never leaks another design's jobs) → completed →
+ * most recent by `created_at`.  Returns `null` when nothing qualifies.
+ */
+export function newestCompletedForPart(jobs, partPath) {
+  const forPart = filterJobsForPart(jobs || [], partPath, false)
+  const done = forPart.filter(j => j?.status === 'completed')
+  done.sort((a, b) => (b?.created_at ?? 0) - (a?.created_at ?? 0))
+  return done[0] ?? null
+}
+
 /** Pure: list badge for a job seeded from a CG relaxation (oxDNA or mrDNA), else ''. */
 export function seededBadge(job) {
   if (job?.seed_oxdna_job_id) return 'oxDNA seeded'
@@ -471,7 +485,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getClusterState = null, getSelection = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -890,6 +904,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }
 
   function _renderProductionControls(job, meta = _displayMeta) {
+    // Chain mode: the Production button queues a production STAGE (enabled whenever the
+    // engines are present — queue ordering is preflight's job, not a live-parent check).
+    if (getChainMode?.()) {
+      if (revertProdBtn) revertProdBtn.style.display = 'none'
+      if (prodBox) prodBox.style.display = ''
+      if (prodBtn) prodBtn.textContent = '＋ Queue Production'
+      _setProductionEnabled(true)
+      _setProductionStatus('Queues a production stage into the active chain.', _C.dim)
+      return
+    }
+    if (prodBtn) prodBtn.textContent = 'Start Production'
     // Legacy-migration button: only for a root job whose production was appended
     // onto the relaxation (old same-job layout).  Peels it back to a clean relaxation.
     if (revertProdBtn) revertProdBtn.style.display = mdHasAppendedProduction(job) ? '' : 'none'
@@ -1479,6 +1504,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   })
 
   prodBtn?.addEventListener('click', async () => {
+    if (getChainMode?.()) return enqueueChainStage?.('production')
     if (!_selectedId) return
     if (prodBtn.disabled) return
     // Stale-design guard: if the design changed since this job was prepared, offer to
@@ -1622,6 +1648,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // stopped/failed job resumes here; an Alpine job's cluster-gated resume stays on the
   // dedicated resume button.
   function _runControl() {
+    // Chain mode: the Relax button becomes "Queue Relax" — a plain launcher.
+    if (getChainMode?.()) {
+      // Queuing authors a plan — always enabled (engines need only be present at Launch).
+      return { action: RUN_ACTION.RUN, label: '＋ Queue Relax', disabled: false }
+    }
     return mdRunControl(_selectedJob(), { busy: _launching })
   }
   function _paintRunControl() {
@@ -1629,8 +1660,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const rc = _runControl()
     runBtn.textContent = rc.label
     runBtn.dataset.runAction = rc.action
-    // RUN needs the engines present; STOP/RESUME act on an already-created job.
-    runBtn.disabled = _launching || (rc.action === RUN_ACTION.RUN && !_enginesOk)
+    // RUN needs the engines present; STOP/RESUME act on an already-created job. Chain mode
+    // only queues a plan, so it's always enabled (engines need only be present at Launch).
+    runBtn.disabled = getChainMode?.() ? false : (_launching || (rc.action === RUN_ACTION.RUN && !_enginesOk))
   }
   function _stopSelected() {
     return runExclusive(runBtn, async () => {
@@ -1659,10 +1691,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }, { label: 'Resuming…' })
   }
   runBtn?.addEventListener('click', () => {
+    if (getChainMode?.()) return enqueueChainStage?.('relax')
     const action = _runControl().action
     if (action === RUN_ACTION.STOP) return _stopSelected()
     if (action === RUN_ACTION.RESUME) return _resumeSelected()
     return _launchRelax()
+  })
+  // Repaint the Relax/Production controls when chain mode is toggled.
+  window.addEventListener('nadoc:chain-mode-change', () => {
+    _paintRunControl()
+    _renderProductionControls(_jobs.find(j => j.job_id === _selectedId) || null)
   })
 
   async function _launchRelax() {
@@ -2870,5 +2908,40 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   // The panel's external surface: the currently-selected job (consumed by the shared
   // comparison card's getSources and by the Plan-Run overlay's default root, P4).
-  return { getSelectedJob: _selectedJob }
+  return {
+    getSelectedJob: _selectedJob,
+    // Immediately re-fetch the job list (used when a chain launch spawns a NAMD job from
+    // the Chain Simulations panel — this panel wouldn't otherwise know to poll). A single
+    // fetch populates the list AND re-arms the poll once the new job reads active.
+    refresh: _fetchJobs,
+    // Select a job in this panel's list (highlight + populate cards) as a row click does —
+    // used by the Chain Simulations queue to select a launched stage's real NAMD job.
+    // Refetches first if the job isn't listed yet (a just-spawned chain stage).
+    selectJob: async (jobId) => {
+      if (!jobId) return
+      if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
+      return _selectJob(jobId)
+    },
+    // Chain Simulations wiring: read/write this engine's field + anchor cards, and its
+    // advanced run knobs, so a queued stage captures — and a queue click restores — the
+    // exact conditions (the NAMD panel owns these cards internally).
+    getRunElements: () => ({
+      field: _efieldCard?.getFieldSpec?.() ?? null,
+      surface: null,   // NAMD has no hard-surface card
+      anchors: _anchorsCard?.getAnchors?.() ?? [],
+    }),
+    applyRunConfig: (cfg = {}) => {
+      _efieldCard?.applyConfig?.(cfg.field ?? null)
+      _anchorsCard?.applyConfig?.(cfg.anchors ?? [])
+    },
+    getAdvanced: () => {
+      const runTarget = _currentRunTarget()
+      return {
+        run_target: runTarget,
+        cluster_name: runTarget === 'alpine' ? 'alpine' : null,
+        steps: _productionSteps(),
+        length_ns: _productionNs(),
+      }
+    },
+  }
 }

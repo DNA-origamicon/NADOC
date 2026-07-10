@@ -6,6 +6,7 @@ import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 vi.mock('../api/client.js', () => ({
   oxdnaAvailable: vi.fn().mockResolvedValue({ available: false }),
   listOxdnaJobs: vi.fn(),
+  deleteOxdnaJob: vi.fn().mockResolvedValue({ ok: true, deleted: ['j1'] }),
   getOxdnaProgress: vi.fn().mockResolvedValue({ overall: 1, stage_fraction: 0 }),
   getOxdnaRmsd: vi.fn().mockResolvedValue({ ready: true, mean: 2.31, max: 2.53, n_frames: 10 }),
   getOxdnaRmsf: vi.fn().mockResolvedValue({ ready: true, n_frames: 10, positions: [], min_rmsf: 0.1, max_rmsf: 1.4, mean_rmsf: 0.7 }),
@@ -674,6 +675,25 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     await flush()
     expect(document.querySelector('.modal__overlay')).toBeTruthy()  // modal actually opened
     expect(document.querySelector('.modal__overlay').textContent).toContain('everything went OK')
+  })
+
+  it('deleting a job opens the confirm modal and calls deleteOxdnaJob (regression: descendantIds was re-exported but not imported → the click threw ReferenceError so delete silently did nothing)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
+    api.deleteOxdnaJob.mockClear()
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
+    await selectFirstJob(panel)
+    const del = $('oxdna-jobs-delete-btn')
+    expect(del.style.display).not.toBe('none')          // shown for a completed job
+    del.click()                                          // must NOT throw ReferenceError
+    await flush()
+    // The handler ran past descendantIds() → the confirm modal actually opened.
+    const overlay = document.querySelector('.modal__overlay')
+    expect(overlay).toBeTruthy()
+    const confirmBtn = [...overlay.querySelectorAll('button')].find(b => /^Delete/.test(b.textContent.trim()))
+    confirmBtn.click()
+    await flush()
+    expect(api.deleteOxdnaJob).toHaveBeenCalledWith('j1')
   })
 
   it('a completed relaxation → Production enabled, Flexibility map disabled (waiting for production)', async () => {

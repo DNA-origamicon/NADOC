@@ -1249,10 +1249,12 @@ def _scaffold_on_grid(design, grid_pos):
 
 
 def test_resize_strand_end_grows_helix_geometry_by_exactly_delta():
-    """A +δ resize of the scaffold's 3′ end grows the helix's emitted geometry by
-    exactly δ bp (one nucleotide per strand → δ×2).  Reuses the AF-3 conservation
-    oracle: a resize that silently clamps, no-ops, hits the wrong helix, or drops the
-    inline-overhang split would fail the per-helix length-delta count."""
+    """A +δ resize of the scaffold's 3′ end grows the helix's emitted geometry by exactly
+    δ bases.  Only the scaffold strand extends — the new bases are single-stranded (no
+    staple complement), and the geometry no longer emits a phantom complementary base for
+    them, so the delta is δ×1 (``strands_per_bp=1``).  Reuses the AF-3 conservation oracle:
+    a resize that silently clamps, no-ops, hits the wrong helix, or drops the inline-
+    overhang split would fail the per-helix length-delta count."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
         d0 = hb.create_bundle(
             [[0, 0], [0, 1]], 42, lattice=LatticeType.HONEYCOMB, name="2hb",
@@ -1260,6 +1262,7 @@ def test_resize_strand_end_grows_helix_geometry_by_exactly_delta():
         hid, sid = _scaffold_on_grid(d0, (0, 0))
         assert_geometric_length_delta(
             d0, lambda: hb.resize_strand_end(sid, hid, "3p", 5), 5, helix_id=hid,
+            strands_per_bp=1,
         )
 
 

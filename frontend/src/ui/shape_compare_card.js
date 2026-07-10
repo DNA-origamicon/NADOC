@@ -26,6 +26,9 @@ import {
 import {
   openMetricExportModal, exportChoiceFiles, downloadText, downloadHref,
 } from './metric_export_modal.js'
+import { createModal } from './primitives/modal.js'
+import { createButton } from './primitives/button.js'
+import { el } from './primitives/dom.js'
 
 const POLL_MS = 300
 
@@ -94,7 +97,25 @@ export function rmsfOverlaySpec(report, { width = 520, height = 260 } = {}) {
   })
 }
 
-/** CSV text for the comparison → `{ scalars, agreement, field }` (field '' when absent). */
+/**
+ * A `buildChartSpec` spec overlaying each engine's cumulative-twist profile (one series
+ * per engine, reference drawn first).  Empty (no profiles) → an `{empty:true}` spec.
+ */
+export function twistOverlaySpec(report, { width = 520, height = 260 } = {}) {
+  const profiles = (report?.twist_profiles || []).slice()
+  profiles.sort((a, b) => (b.is_reference ? 1 : 0) - (a.is_reference ? 1 : 0))
+  const series = profiles.map((p, i) => ({
+    label: p.is_reference ? `${p.engine} (ref)` : p.engine,
+    color: SERIES_COLORS[i % SERIES_COLORS.length],
+    points: (p.points || []).map(([x, y]) => [x, y]),
+  }))
+  return buildChartSpec({
+    series, width, height, title: 'Cumulative twist profile',
+    xLabel: 'axial distance (nm)', yLabel: 'twist (°)',
+  })
+}
+
+/** CSV text for the comparison → `{ scalars, agreement, field, twist }` ('' when absent). */
 export function comparisonCSVs(report) {
   const engines = report?.engines || []
   const ref = report?.references?.shape ?? ''
@@ -134,7 +155,19 @@ export function comparisonCSVs(report) {
     }
     fieldCSV = `# field reference: ${report.field.reference ?? ''}\n${fRows.join('\n')}\n`
   }
-  return { scalars: scalarsCSV, agreement: agreementCSV, field: fieldCSV }
+
+  // Twist profiles: one row per (engine, axial position) — long form (curves differ in length).
+  let twistCSV = ''
+  if (report?.twist_profiles?.length) {
+    const tRows = ['engine,is_reference,axial_nm,cumulative_twist_deg']
+    for (const p of report.twist_profiles) {
+      for (const [x, y] of (p.points || [])) {
+        tRows.push([p.engine, p.is_reference ? 1 : 0, x, y].join(','))
+      }
+    }
+    twistCSV = `${tRows.join('\n')}\n`
+  }
+  return { scalars: scalarsCSV, agreement: agreementCSV, field: fieldCSV, twist: twistCSV }
 }
 
 // ── HTML builders (pure string → innerHTML; engine names are controlled tokens) ──
@@ -192,14 +225,42 @@ export function initShapeCompareCard({ api, getSources = () => [] } = {}) {
   })
 
   const genBtn = document.getElementById('shape-compare-gen')
-  const expBtn = document.getElementById('shape-compare-export')
+  const viewBtn = document.getElementById('shape-compare-view')
   const status = document.getElementById('shape-compare-status')
   const bar = document.getElementById('shape-compare-bar')
   const fill = document.getElementById('shape-compare-fill')
-  const scalarsEl = document.getElementById('shape-compare-scalars')
-  const agreementEl = document.getElementById('shape-compare-agreement')
-  const fieldEl = document.getElementById('shape-compare-field')
-  const canvas = document.getElementById('shape-compare-rmsf')
+
+  // The results (scalar table, RMSF overlay, agreement + E-field tables) render into a
+  // MODAL rather than the sidebar — four engines' worth of tables is too crowded for the
+  // narrow panel.  These nodes are created once (detached) and mounted into the modal body
+  // the first time it's built; `render` writes into them whether or not the modal is open.
+  const scalarsEl = el('div')
+  scalarsEl.style.marginBottom = '10px'
+  const _chartCss = 'width:100%;max-width:640px;background:#0d1117;border-radius:4px;margin-bottom:10px'
+  const rmsfCaption = el('div', { text: 'Per-bp RMSF (flexibility) — one curve per engine' })
+  rmsfCaption.style.cssText = 'font-size:var(--text-xs);color:#8b949e;margin-bottom:2px'
+  const canvas = el('canvas', { attrs: { width: 640, height: 300 } })
+  canvas.style.cssText = _chartCss
+  const twistCaption = el('div', { text: 'Cumulative twist vs axial position — one curve per engine' })
+  twistCaption.style.cssText = 'font-size:var(--text-xs);color:#8b949e;margin:4px 0 2px'
+  const twistCanvas = el('canvas', { attrs: { width: 640, height: 300 } })
+  twistCanvas.style.cssText = _chartCss
+  const agreementEl = el('div')
+  agreementEl.style.marginBottom = '6px'
+  const fieldEl = el('div')
+  let _modal = null
+
+  function _ensureModal() {
+    if (_modal) return _modal
+    const exportBtn = createButton({ label: 'Export (PNG / CSV)', onClick: () => _export() })
+    _modal = createModal({
+      title: 'Shape comparison (cross-engine)',
+      size: 'xl',
+      body: [scalarsEl, rmsfCaption, canvas, twistCaption, twistCanvas, agreementEl, fieldEl],
+      actions: [exportBtn],
+    })
+    return _modal
+  }
 
   let _report = null
   let _busy = false
@@ -217,21 +278,29 @@ export function initShapeCompareCard({ api, getSources = () => [] } = {}) {
   function _styleBtns() {
     const ready = !!_report?.ready
     if (genBtn) { genBtn.disabled = _busy; genBtn.style.cursor = _busy ? 'not-allowed' : 'pointer' }
-    if (expBtn) {
-      expBtn.disabled = _busy || !ready
-      expBtn.style.color = (_busy || !ready) ? '#484f58' : '#c9d1d9'
-      expBtn.style.cursor = (_busy || !ready) ? 'not-allowed' : 'pointer'
+    if (viewBtn) {
+      viewBtn.disabled = _busy || !ready
+      viewBtn.style.color = (_busy || !ready) ? '#484f58' : '#c9d1d9'
+      viewBtn.style.cursor = (_busy || !ready) ? 'not-allowed' : 'pointer'
     }
   }
 
-  /** Render a completed report into the card's tables + overlay. */
+  /** Write a completed report into the (modal) result nodes + overlay. */
   function render(report) {
     _report = report
-    if (scalarsEl) scalarsEl.innerHTML = _scalarTableHTML(report)
-    if (agreementEl) agreementEl.innerHTML = _agreementTableHTML(report)
-    if (fieldEl) fieldEl.innerHTML = _fieldTableHTML(report)
-    if (canvas) drawChart(canvas, rmsfOverlaySpec(report, { width: canvas.width || 520 }))
+    scalarsEl.innerHTML = _scalarTableHTML(report)
+    agreementEl.innerHTML = _agreementTableHTML(report)
+    fieldEl.innerHTML = _fieldTableHTML(report)
+    drawChart(canvas, rmsfOverlaySpec(report, { width: canvas.width || 640 }))
+    drawChart(twistCanvas, twistOverlaySpec(report, { width: twistCanvas.width || 640 }))
     _styleBtns()
+  }
+
+  /** Open the results modal on the current report (the "View Results" action). */
+  function _viewResults() {
+    if (!_report?.ready) return
+    render(_report)          // ensure the (possibly rebuilt) nodes reflect the latest
+    _ensureModal().open()
   }
 
   async function _generate() {
@@ -276,8 +345,8 @@ export function initShapeCompareCard({ api, getSources = () => [] } = {}) {
       render(report)
       const nCmp = report.agreement?.length || 0
       _setStatus(`Ready — ${report.engines.length} engine(s), ${nCmp} scored. ` +
-        `Reference: shape=${report.references.shape ?? '—'}, rmsf=${report.references.rmsf ?? '—'}.`,
-        '#3fb950')
+        `Reference: shape=${report.references.shape ?? '—'}, rmsf=${report.references.rmsf ?? '—'}. ` +
+        'Click View Results.', '#3fb950')
     }
     tick()
   }
@@ -293,27 +362,33 @@ export function initShapeCompareCard({ api, getSources = () => [] } = {}) {
     const kinds = exportChoiceFiles(choice)
     if (kinds.includes('png')) {
       downloadHref('shape_compare_rmsf.png', renderToDataURL(rmsfOverlaySpec(_report)))
+      if (_report.twist_profiles?.length) {
+        downloadHref('shape_compare_twist.png', renderToDataURL(twistOverlaySpec(_report)))
+      }
     }
     if (kinds.includes('data')) {
       const csv = comparisonCSVs(_report)
       downloadText('shape_compare_scalars.csv', csv.scalars)
       downloadText('shape_compare_agreement.csv', csv.agreement)
       if (csv.field) downloadText('shape_compare_field.csv', csv.field)
+      if (csv.twist) downloadText('shape_compare_twist.csv', csv.twist)
     }
   }
 
   genBtn?.addEventListener('click', _generate)
-  expBtn?.addEventListener('click', _export)
+  viewBtn?.addEventListener('click', _viewResults)
   _styleBtns()
 
   /** Panel calls this when the design changes → the cached comparison is stale. */
   function refresh() {
     _report = null
-    if (scalarsEl) scalarsEl.innerHTML = ''
-    if (agreementEl) agreementEl.innerHTML = ''
-    if (fieldEl) fieldEl.innerHTML = ''
+    scalarsEl.innerHTML = ''
+    agreementEl.innerHTML = ''
+    fieldEl.innerHTML = ''
+    _modal?.close()
     _setBar(null); _setStatus(''); _styleBtns()
   }
 
-  return { refresh, render, _generate, _export }   // render + actions exposed for tests
+  // render + actions exposed for tests (_viewResults opens the modal on the last report).
+  return { refresh, render, _generate, _export, _viewResults }
 }
