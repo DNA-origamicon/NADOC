@@ -45,8 +45,9 @@ App URL when both servers run: `http://localhost:5173` (or WSL eth0 IP if `mirro
 This project uses Claude Code's hierarchical memory — load only what's relevant:
 
 - `CLAUDE.md` (this file) — durable rules, always loaded.
-- `memory/MEMORY.md` — auto-memory index. Lean pointer-only file; content lives in topic files.
-- `memory/LESSONS.md` — past struggles, anti-patterns, things that previously misled fixes. Read when debugging an unclear symptom or when you suspect the codebase has seen this kind of bug before. Not a substitute for `project_*.md` topic files on clean refactors with named feature areas.
+- `memory/MEMORY.md` — auto-memory index. Lean pointer-only file; content lives in topic files. **Edit it rarely** — it sits in the always-loaded prompt prefix, so every change invalidates the prompt cache for all sessions. Feature updates go in the topic file, not here.
+- `memory/LESSONS.md` — **index** of past struggles and anti-patterns, one line per entry with a symptom hook. Scan it when debugging an unclear symptom; open only the matching entry's detail in `memory/LESSONS_archive.md`. Not a substitute for `project_*.md` topic files on clean refactors with named feature areas.
+- **`*_archive.md` (anywhere) — history, never read in a routine loop.** Every large ledger and topic file is split into a lean *head* (current state, invariants, open items, handoff) and an archive holding the completed/superseded history. Read the head. Open an archive only to mine a specific past decision you know is in there. Reading archives by reflex is the single largest avoidable token cost in this repo.
 - `memory/project_*.md` — current-work topic files. Open the one(s) relevant to the task.
 - `memory/REFERENCE_*.md` — stable domain knowledge (DNA topology, B-DNA constants, atomistic, FEM theory).
 - `memory/feedback_*.md` — user feedback rules. Read whenever they touch the area you're editing.
@@ -56,7 +57,7 @@ This project uses Claude Code's hierarchical memory — load only what's relevan
 
 ## Workflow conventions
 
-- **Before claiming any non-trivial code change done, confirm you have read the relevant `memory/project_*.md` topic file from `MEMORY.md`'s index.** Order doesn't matter — grep first, read topic file second is fine — but skipping the topic file entirely is the failure mode. The Done checklist enforces this.
+- **Before claiming done on a change that alters behavior in a subsystem with a `memory/project_*.md` topic file, confirm you have read that topic file's head.** Order doesn't matter — grep first, read topic file second is fine — but skipping it entirely is the failure mode. Changes that do *not* alter subsystem behavior (renames, comments, test-only edits, formatting, a fix wholly described by the prompt) don't need it — say so in the done message instead of reading it. Never read the topic file's `*_archive.md` for this.
 - **Skim `memory/feedback_*.md` filenames against the area you're touching.** If one matches (e.g. `feedback_crossover_no_reasoning` while editing crossover code), open it. They're short and the cost of skipping a relevant one is high.
 - Before claiming a feature works, run `just test` and verify the affected behavior in the running app.
 - For UI changes: `just frontend` must be running and you must exercise the feature. Type-checking and tests do not validate UI correctness.
@@ -102,6 +103,7 @@ Two rules, every session:
 - Never amend, rebase published commits, or force-push (especially to master).
 - Never use `--no-verify` or skip hooks.
 - Run `git status` and `git log -1` at the start of any git work to confirm we're where we expect.
+- **More than one Claude session may be working in this tree at once.** Never run `git stash`, `git reset`, `git checkout -- <path>`, or `git restore` without asking — they revert the *whole tree* and will clobber the other session's in-flight work (and yours). Read files from disk, not from `git show HEAD:<path>`. **Forbid git commands explicitly in every subagent prompt.** Dirty files in `git status` may not be yours. If a file you just wrote reverts to its committed state, check `git stash list` / `git reflog` before re-applying anything. Snapshot to the scratchpad before bulk rewrites — git is not a safe backup here.
 
 ### Commit message style
 
@@ -132,9 +134,10 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 
 - [ ] Tests run (cite the command + pass count). Frontend-only changes can skip backend test suite if no Python touched — say so explicitly.
 - [ ] Frontend changes exercised in running app, OR `NOT VERIFIED IN APP` caveat at top of message
-- [ ] Relevant `project_*.md` topic file from `MEMORY.md` was read this session (cite which one); if not, justify why
-- [ ] Topic file scanned for stale claims this change addressed; updated if needed
-- [ ] If you touched a known-bug area (crossover, three-layer boundary, length/index conventions, cluster/deformation, rendering invariants, stale-state) — cite which LESSONS.md entry you checked, or explicitly say "LESSONS not relevant: [why]"
+- [ ] If the change alters subsystem behavior: relevant `project_*.md` topic file **head** was read this session (cite which one). If it doesn't alter behavior, say "no topic file needed: [why]" — don't read one to satisfy the checklist
+- [ ] Topic file **head** scanned for stale claims this change addressed; updated if needed (update the head, not the archive)
+- [ ] If you touched a known-bug area (crossover, three-layer boundary, length/index conventions, cluster/deformation, rendering invariants, stale-state) — scan the `LESSONS.md` index and cite the entry you checked, or explicitly say "LESSONS not relevant: [why]". Open `LESSONS_archive.md` only for the one entry that matches
+- [ ] No `*_archive.md` was read unless you were mining a specific past decision (name it)
 - [ ] If this was a refactor extraction from a closure: ≥1 vitest test per extracted pure function, `just test-frontend` green (cite count); stateful extractions also ran `just smoke` + one app exercise. **Adapted (non-verbatim) code: cite how the pin was proven** (in-place-first / stash-rerun). **Done judged by coupling+cohesion** (one reason to change, small dep surface), not LOC.
 
 ## Risky-action policy
