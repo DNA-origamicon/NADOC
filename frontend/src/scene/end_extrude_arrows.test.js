@@ -27,7 +27,7 @@ vi.mock('../api/client.js', () => ({
 }))
 
 import { store } from '../state/store.js'
-import { initEndExtrudeArrows, terminalRunLength } from './end_extrude_arrows.js'
+import { initEndExtrudeArrows, terminalRunLength, adjacentBpFree, oneNtResizableEnd } from './end_extrude_arrows.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -393,6 +393,20 @@ describe('terminalRunLength', () => {
   it('returns 1 for empty / missing strands', () => {
     expect(terminalRunLength(null, true)).toBe(1)
     expect(terminalRunLength({ domains: [] }, false)).toBe(1)
+  })
+})
+
+// ── 1-nt resizable-end picker: re-export smoke ────────────────────────────────
+// Canonical tests live in shared/strand_end_resize.test.js. This only guards the
+// re-export binding (a bare `export … from` would forward to importers but leave
+// the picker unusable inside this module — see LESSONS H9).
+
+describe('adjacentBpFree / oneNtResizableEnd re-export', () => {
+  it('re-exports the shared picker and it resolves the pinned-5′ stub to 3′', () => {
+    expect(typeof adjacentBpFree).toBe('function')
+    const stub = { helix_id: 'h0', direction: 'FORWARD', bp_index: 16, strand_id: 'stub' }
+    const strands = [{ id: 'xo', domains: [{ helix_id: 'h0', start_bp: 0, end_bp: 15, direction: 'FORWARD' }] }]
+    expect(oneNtResizableEnd(stub, strands)).toBe('3p')
   })
 })
 

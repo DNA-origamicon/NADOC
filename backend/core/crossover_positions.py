@@ -293,6 +293,33 @@ def extract_crossovers_from_strands(
     return crossovers, forced_ligations
 
 
+def crossover_junction_slots(design: Design) -> set[tuple[str, int, object]]:
+    """``(helix_id, bp, direction)`` slots already occupied by a crossover junction.
+
+    A *junction* is the exit/entry of a cross-helix domain transition inside a
+    multi-domain strand: for each consecutive domain pair ``(d0, d1)`` on
+    DIFFERENT helices, both ``(d0.helix_id, d0.end_bp, d0.direction)`` (the
+    3′ exit) and ``(d1.helix_id, d1.start_bp, d1.direction)`` (the 5′ entry)
+    are occupied.
+
+    A new crossover must never land on one of these slots — that slot is where
+    an existing crossover already turns the backbone, so re-nicking there would
+    corrupt the existing junction (see ``crossover_edge_cases`` helices 2/3).
+    Free strand termini and single-domain helix-end strands are NOT junctions,
+    so helix-end u-turn crossovers stay allowed.
+    """
+    slots: set[tuple[str, int, object]] = set()
+    for s in design.strands:
+        doms = s.domains
+        for i in range(len(doms) - 1):
+            d0, d1 = doms[i], doms[i + 1]
+            if d0.helix_id == d1.helix_id:
+                continue
+            slots.add((d0.helix_id, d0.end_bp, d0.direction))
+            slots.add((d1.helix_id, d1.start_bp, d1.direction))
+    return slots
+
+
 def validate_crossover(
     design: Design,
     half_a: HalfCrossover,

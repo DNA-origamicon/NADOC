@@ -22,6 +22,7 @@
 import * as THREE from 'three'
 import { store }           from '../state/store.js'
 import { resizeStrandEnds } from '../api/client.js'
+import { adjacentBpFree, oneNtResizableEnd } from '../shared/strand_end_resize.js'
 
 // ── Arrow dimensions (nm) ─────────────────────────────────────────────────────
 
@@ -77,6 +78,10 @@ export function terminalRunLength(strand, isFivePrime) {
   }
   return len
 }
+
+// Re-exported for existing tests; canonical home is shared/strand_end_resize.js
+// (shared with the cadnano 2D editor's end-drag).
+export { adjacentBpFree, oneNtResizableEnd }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -310,6 +315,17 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       const helix = helixById.get(nuc.helix_id)
       if (!helix) continue
 
+      // Which terminus this arrow drives. A 1-nt strand's bead is BOTH ends;
+      // pick the end that can actually be resized (free extension side) so a stub
+      // pinned by a crossover on one side is still resizable on the other.
+      const isOneNt = nuc.is_five_prime && nuc.is_three_prime
+      const endRole = isOneNt
+        ? oneNtResizableEnd(nuc, currentDesign.strands)
+        : (nuc.is_five_prime ? '5p' : '3p')
+      // Extension direction of the chosen end (only used to override the ambiguous
+      // position-based direction for 1-nt beads).
+      const oneNtToward = isOneNt ? ((endRole === '3p') !== (nuc.direction === 'REVERSE')) : null
+
       // ── Axis endpoints (deformed if available) ──────────────────────────
       const axDef  = currentHelixAxes?.[nuc.helix_id]
       const aStart = axDef
@@ -325,13 +341,16 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       // ── Outward direction ────────────────────────────────────────────────
       const beadPos   = bead.entry.pos
       const nearStart = beadPos.distanceToSquared(aStart) <= beadPos.distanceToSquared(aEnd)
-      const outwardSign = nearStart ? -1 : +1   // +1 = toward aEnd, -1 = toward aStart
+      // For a 1-nt bead position is ambiguous (both ends coincide) → use the chosen
+      // end's extension direction; otherwise keep the position-based direction.
+      const towardHigherBp = isOneNt ? oneNtToward : !nearStart
+      const outwardSign = towardHigherBp ? +1 : -1   // +1 = toward aEnd, -1 = toward aStart
 
       let outward
       if (axDef?.samples?.length >= 2) {
         const s = axDef.samples
         const n = s.length
-        if (nearStart) {
+        if (!towardHigherBp) {
           outward = new THREE.Vector3(
             s[0][0] - s[1][0], s[0][1] - s[1][1], s[0][2] - s[1][2],
           ).normalize()
@@ -341,7 +360,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
           ).normalize()
         }
       } else {
-        outward = nearStart ? axisDir.clone().negate() : axisDir.clone()
+        outward = towardHigherBp ? axisDir.clone() : axisDir.clone().negate()
       }
 
       // ── Terminal run length (for shorten limit) ──────────────────────────
@@ -349,7 +368,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       // inline overhang, so the end can be dragged through the scaffold boundary
       // (dissolving the overhang) — see terminalRunLength.
       const strand = strandById.get(nuc.strand_id)
-      const terminalLen = strand ? terminalRunLength(strand, nuc.is_five_prime) : 1
+      const terminalLen = strand ? terminalRunLength(strand, endRole === '5p') : 1
 
       // sOrigin = distance along axis (nm) from aStart to bead position
       const sOrigin = beadPos.clone().sub(aStart).dot(axisDir)
@@ -364,7 +383,9 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       let _axisDir = axisDir, _aStart = aStart, _sOrigin = sOrigin
       let _outward = outward, _outwardSign = outwardSign
       if (cadnanoActive) {
-        const goesHigherZ = nuc.direction === 'FORWARD' ? nuc.is_three_prime : nuc.is_five_prime
+        const goesHigherZ = isOneNt
+          ? oneNtToward
+          : (nuc.direction === 'FORWARD' ? nuc.is_three_prime : nuc.is_five_prime)
         _outwardSign = goesHigherZ ? +1 : -1
         _outward     = new THREE.Vector3(0, 0, _outwardSign)
         _axisDir     = new THREE.Vector3(0, 0, 1)
@@ -388,6 +409,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       // Store metadata for drag
       ag.userData.dragMeta = {
         bead,
+        endRole,
         outwardSign: _outwardSign,
         sOrigin:     _sOrigin,
         aStart:      _aStart.clone(),
@@ -461,7 +483,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     const entries = dragBeads.map(meta => ({
       strand_id: meta.bead.nuc.strand_id,
       helix_id:  meta.bead.nuc.helix_id,
-      end:       meta.bead.nuc.is_five_prime ? '5p' : '3p',
+      end:       meta.endRole ?? (meta.bead.nuc.is_five_prime ? '5p' : '3p'),
       delta_bp:  delta * meta.outwardSign,
     }))
 
@@ -475,17 +497,18 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     const { currentGeometry, selectedObject } = store.getState()
     if (!currentGeometry || selectedObject?.type !== 'nucleotide') return
     const oldNuc = selectedObject.data
+    const _isFiveEnd = (meta) => (meta.endRole ?? (meta.bead.nuc.is_five_prime ? '5p' : '3p')) === '5p'
     const movedMeta = dragBeads.find(meta =>
       meta.bead.nuc.strand_id === oldNuc?.strand_id &&
       meta.bead.nuc.helix_id  === oldNuc?.helix_id  &&
-      (meta.bead.nuc.is_five_prime ? oldNuc.is_five_prime : oldNuc.is_three_prime),
+      (_isFiveEnd(meta) ? oldNuc.is_five_prime : oldNuc.is_three_prime),
     )
     if (!movedMeta) return
     const newNuc = currentGeometry.find(n =>
       n.strand_id === movedMeta.bead.nuc.strand_id &&
       n.helix_id  === movedMeta.bead.nuc.helix_id  &&
       n.direction === movedMeta.bead.nuc.direction  &&
-      (movedMeta.bead.nuc.is_five_prime ? n.is_five_prime : n.is_three_prime),
+      (_isFiveEnd(movedMeta) ? n.is_five_prime : n.is_three_prime),
     )
     if (newNuc) selectionManager.selectNucleotide(newNuc)
   }

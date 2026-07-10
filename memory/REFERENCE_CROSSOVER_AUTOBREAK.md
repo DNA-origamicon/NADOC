@@ -60,6 +60,52 @@ No domain pattern `[longer, shorter, longer]` (e.g. 14-7-14). Checked by `_has_s
 
 `_ligate(design, s1, s2)` joins s2's domains onto s1's 3' end. It calls `_merge_adjacent_domains()` to collapse same-helix same-direction adjacent domains into one. Without this merge, domain fragmentation breaks crossover junction pattern detection.
 
+## Manual placement near a strand end (edge cases)
+
+`_build_place_crossover` (crud.py) — two rules for crossovers placed close to a
+strand end (from `workspace/crossover_edge_cases.nadoc`):
+
+1. **Junction-only rejection.** A placement is rejected (422) when either half's
+   `(helix, index, direction)` slot is already a **crossover junction** — the
+   3′-exit / 5′-entry of a cross-helix domain transition inside a multi-domain
+   strand (`crossover_junction_slots()` in `crossover_positions.py`). This blocks
+   placing a crossover on top of an existing junction (helices 2/3 case). Free
+   strand termini and single-domain helix-end strands are **not** junctions, so
+   helix-end u-turn crossovers stay allowed. Slots backed by a recorded
+   `Crossover` fall through to `validate_crossover`'s "already occupied" (400).
+   The frontend mirrors this via `crossoverJunctionSlots()` in
+   `cadnano-editor/element_keys.js` to suppress the clickable number sprite.
+
+3. **Edge-of-coverage rejection (bow side).** A crossover connects material on
+   the side its bow points — **bow-right** (the sprite is the upper member of the
+   HJ pair; `min(nick_a, nick_b) < index`) toward bp `index+1`, **bow-left** toward
+   `index-1`. That bp must be strand-covered on **both** helices, else the crossover
+   sits at the extreme edge (rightmost/leftmost bp) with only a stub to connect and
+   is rejected (422). Backend derives the bow side from the nick offset (no bow-set
+   constant needed); frontend uses `_xoverBowDir(bp, isScaffold)` → `bp + bowDir`.
+   Consequence: at a helix's right end only the inward (bow-left) crossover is
+   offered, at the left end only the inward (bow-right) one — the outward u-turn bp
+   is suppressed. `test_crossover_at_bp0_family` still passes (all its bps bow inward).
+
+4. **Crossover through a same-helix overhang boundary.** The `_nick_if_needed`
+   inter-domain guard skips a nick only when the next domain is on a **different**
+   helix (a real cross-helix crossover junction). A **same-helix** boundary (e.g. an
+   inline-overhang tail continuing on this helix) is NOT a junction — the nick goes
+   through, severing the beyond-part into its own strand so the connection bp becomes
+   a terminus the crossover can ligate to. Then `_strip_orphan_inline_overhangs`
+   clears `ovhg_inline_*` tags from any strand left with no paired anchor domain (an
+   inline overhang is a tail on a paired staple; a standalone all-overhang strand is
+   just a plain staple). Net: the crossover connects the paired domains and the
+   severed overhang becomes a plain length-1 staple. See `crossover_edge_cases`
+   helices 1/2 (the bp-0 crossover).
+
+2. **1-nt stub is legitimate.** `_nick_if_needed` has **no** "1-nt stub" guard.
+   A crossover one bp short of a strand end nicks normally, connecting the long
+   domains and leaving the single-nt stub past the crossover (helices 0/1 case).
+   A crossover *exactly* on a free terminus is a no-op via `make_nick`'s
+   "terminus" branch. (The old stub guards encoded flawed 1-bp-off reasoning and
+   were removed — see `feedback_crossover_no_reasoning`.)
+
 ## Crossover avoidance during nicking
 
 Autobreak skips any nick position where the bp or tick boundary matches a crossover record position:

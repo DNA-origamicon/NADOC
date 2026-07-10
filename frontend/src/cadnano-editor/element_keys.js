@@ -42,6 +42,30 @@ export function forcedLigKey(fl) {
   return `fl:${fl.id}`
 }
 
+/**
+ * Set of `"{helix_id}_{bp}_{direction}"` slots already occupied by a crossover
+ * junction — the exit/entry of a cross-helix domain transition inside a
+ * multi-domain strand. Mirrors backend `crossover_junction_slots`.
+ *
+ * A new crossover must never land on one of these (it would re-nick an existing
+ * junction). Free strand termini and single-domain helix-end strands are NOT
+ * junctions, so helix-end u-turn crossovers stay allowed. Used to suppress the
+ * clickable crossover number sprite at occupied junctions.
+ */
+export function crossoverJunctionSlots(design) {
+  const slots = new Set()
+  for (const strand of (design?.strands ?? [])) {
+    const doms = strand.domains ?? []
+    for (let i = 0; i < doms.length - 1; i++) {
+      const d0 = doms[i], d1 = doms[i + 1]
+      if (d0.helix_id === d1.helix_id) continue
+      slots.add(`${d0.helix_id}_${d0.end_bp}_${d0.direction}`)
+      slots.add(`${d1.helix_id}_${d1.start_bp}_${d1.direction}`)
+    }
+  }
+  return slots
+}
+
 /** `ls:{helix_id}_{bpIndex}_{loop|skip}` — a loop/skip marker. bpIndex may be < 0. */
 export function loopSkipKey(helixId, bpIndex, delta) {
   return `ls:${helixId}_${bpIndex}_${delta > 0 ? 'loop' : 'skip'}`

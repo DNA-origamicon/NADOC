@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   domainLineKey, domainEndKey, xoverKey, forcedLigKey, loopSkipKey,
+  crossoverJunctionSlots,
   parseLineKey, parseEndKey, parseXoverKey, parseForcedLigKey, parseLoopSkipKey,
 } from './element_keys.js'
 
@@ -87,5 +88,45 @@ describe('element_keys — non-matching keys return null', () => {
     expect(parseEndKey('line:h_XY_0_0_-17_-6_FORWARD')).toBeNull()
     expect(parseXoverKey('ls:h_XY_0_0_-17_skip')).toBeNull()
     expect(parseForcedLigKey('xo:h_XY_0_0_-5_FORWARD')).toBeNull()
+  })
+})
+
+// Mirrors backend crossover_junction_slots — reproduced from
+// workspace/crossover_edge_cases.nadoc helices 0/1 (no junction) vs 2/3 (junction).
+describe('crossoverJunctionSlots — occupied crossover junctions', () => {
+  it('flags both slots of a multi-domain strand turn (helices 2/3)', () => {
+    const design = { strands: [{
+      domains: [
+        { helix_id: 'h2', start_bp: 0, end_bp: 16, direction: 'FORWARD' },
+        { helix_id: 'h3', start_bp: 16, end_bp: 0, direction: 'REVERSE' },
+      ],
+    }] }
+    const slots = crossoverJunctionSlots(design)
+    expect(slots.has('h2_16_FORWARD')).toBe(true)   // 3' exit of domain 0
+    expect(slots.has('h3_16_REVERSE')).toBe(true)   // 5' entry of domain 1
+    expect(slots.size).toBe(2)
+  })
+
+  it('does not flag single-domain strands / free termini (helices 0/1)', () => {
+    const design = { strands: [
+      { domains: [{ helix_id: 'h0', start_bp: 0, end_bp: 16, direction: 'FORWARD' }] },
+      { domains: [{ helix_id: 'h1', start_bp: 16, end_bp: 0, direction: 'REVERSE' }] },
+    ] }
+    expect(crossoverJunctionSlots(design).size).toBe(0)
+  })
+
+  it('ignores same-helix domain boundaries (not a crossover)', () => {
+    const design = { strands: [{
+      domains: [
+        { helix_id: 'hA', start_bp: 0, end_bp: 10, direction: 'FORWARD' },
+        { helix_id: 'hA', start_bp: 11, end_bp: 20, direction: 'FORWARD' },
+      ],
+    }] }
+    expect(crossoverJunctionSlots(design).size).toBe(0)
+  })
+
+  it('handles empty / missing design gracefully', () => {
+    expect(crossoverJunctionSlots(null).size).toBe(0)
+    expect(crossoverJunctionSlots({ strands: [] }).size).toBe(0)
   })
 })

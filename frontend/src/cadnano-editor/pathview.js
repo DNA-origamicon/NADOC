@@ -91,9 +91,11 @@ import {
   xoverKey as _xoverKey,
   forcedLigKey as _forcedLigKey,
   loopSkipKey as _loopSkipKey,
+  crossoverJunctionSlots as _crossoverJunctionSlots,
   parseEndKey,
   parseLineKey,
 } from './element_keys.js'
+import { oneNtResizableEnd } from '../shared/strand_end_resize.js'
 import { skipMapFromHelices, sequenceColumns } from './sequence_layout.js'
 
 // Crossover indicator geometry
@@ -931,9 +933,20 @@ export function initPathview(canvasEl, containerEl, {
           }
           const elementType = isEnd ? 'end' : 'line'
           const isFwd = dom.direction === 'FORWARD'
-          const endWhich = isEnd
-            ? ((isFwd && bp === lo) || (!isFwd && bp === hi) ? '5p' : '3p')
-            : null
+          let endWhich = null
+          if (isEnd) {
+            if (strand.domains.length === 1 && lo === hi) {
+              // 1-nt strand: the bead is BOTH 5′ and 3′ → pick the end that can
+              // actually be resized (free extension side), so a stub pinned by a
+              // crossover on one side stays resizable on the other.
+              endWhich = oneNtResizableEnd(
+                { helix_id: dom.helix_id, direction: dom.direction, bp_index: bp, strand_id: strand.id },
+                _design.strands,
+              )
+            } else {
+              endWhich = (isFwd && bp === lo) || (!isFwd && bp === hi) ? '5p' : '3p'
+            }
+          }
           return { strand, strandIdx: si, dom, domainIdx: di, elementType, endWhich }
         }
       }
@@ -2577,6 +2590,12 @@ export function initPathview(canvasEl, containerEl, {
       const ranges = strandRanges.get(`${helixId}_${direction}`) ?? []
       return ranges.some(([lo, hi]) => lo <= bp && bp <= hi)
     }
+    // Slots already occupied by a crossover junction (a multi-domain strand's
+    // turn). A new crossover must not land here — suppress its sprite. Mirrors
+    // the backend rejection in _build_place_crossover.
+    const junctionSlots = _crossoverJunctionSlots(_design)
+    const _slotIsJunction = (helixId, bp, direction) =>
+      junctionSlots.has(`${helixId}_${bp}_${direction}`)
     const _slotIsReference = (helixId, bp, direction) => {
       const ranges = refRanges.get(`${helixId}_${direction}`) ?? []
       return ranges.some(([lo, hi]) => lo <= bp && bp <= hi)
@@ -2673,9 +2692,17 @@ export function initPathview(canvasEl, containerEl, {
           if (target) {
             const stapA = scaffoldFwd ? 'REVERSE' : 'FORWARD'
             const stapB = scaffoldFwd ? 'FORWARD' : 'REVERSE'
+            // The crossover connects toward the bp its bow points at (bp+bowDir);
+            // that bp must be covered on both helices, else it sits at the extreme
+            // edge of coverage with nothing to connect (right/left-most bp).
+            const stapReq = bp + _xoverBowDir(bp, false)
             if (!occupied.has(`${hid}_${bp}_${stapA}`) &&
                 _slotOccupied(hid, bp, stapA) &&
                 _slotOccupied(target.hid, bp, stapB) &&
+                _slotOccupied(hid, stapReq, stapA) &&
+                _slotOccupied(target.hid, stapReq, stapB) &&
+                !_slotIsJunction(hid, bp, stapA) &&
+                !_slotIsJunction(target.hid, bp, stapB) &&
                 !_slotIsReference(hid, bp, stapA) &&
                 !_slotIsReference(target.hid, bp, stapB)) {
               _xoverSprites.push({ hid, bp, targetHid: target.hid, cx, indY: stapIndY, halfAStrand: stapA, halfBStrand: stapB, isScaffold: false })
@@ -2697,9 +2724,14 @@ export function initPathview(canvasEl, containerEl, {
             if (target) {
               const scafA = scaffoldFwd ? 'FORWARD' : 'REVERSE'
               const scafB = scaffoldFwd ? 'REVERSE' : 'FORWARD'
+              const scafReq = bp + _xoverBowDir(bp, true)
               if (!occupied.has(`${hid}_${bp}_${scafA}`) &&
                   _slotOccupied(hid, bp, scafA) &&
                   _slotOccupied(target.hid, bp, scafB) &&
+                  _slotOccupied(hid, scafReq, scafA) &&
+                  _slotOccupied(target.hid, scafReq, scafB) &&
+                  !_slotIsJunction(hid, bp, scafA) &&
+                  !_slotIsJunction(target.hid, bp, scafB) &&
                   !_slotIsReference(hid, bp, scafA) &&
                   !_slotIsReference(target.hid, bp, scafB)) {
                 _xoverSprites.push({ hid, bp, targetHid: target.hid, cx, indY: scafIndY, halfAStrand: scafA, halfBStrand: scafB, isScaffold: true })
@@ -2743,12 +2775,17 @@ export function initPathview(canvasEl, containerEl, {
           const hi    = Math.max(dom.start_bp, dom.end_bp)
           if (bp !== lo && bp !== hi) continue
           const isFwd = direction === 'FORWARD'
-          const is5p  = isFwd ? bp === lo : bp === hi
+          // 1-nt strand: both ends coincide at `bp`, so bp-position can't tell them
+          // apart (it always reads 5′). Pick the resizable end instead so a stub
+          // pinned by a crossover on its 5′ side is dragged from its free 3′ side.
+          const end = (strand.domains.length === 1 && lo === hi)
+            ? oneNtResizableEnd({ helix_id, direction, bp_index: bp, strand_id: strand.id }, _design.strands)
+            : ((isFwd ? bp === lo : bp === hi) ? '5p' : '3p')
           const helix = _design.helices.find(h => h.id === helix_id)
           entries.push({
             strandId: strand.id,
             helixId:  helix_id,
-            end:      is5p ? '5p' : '3p',
+            end,
             origBp:   bp,
             direction,
             domLo:    lo,

@@ -2939,24 +2939,66 @@ def _nick_if_needed(d: "Design", helix_id: str, bp_index: int, direction: "Direc
     domain = strand.domains[domain_idx]
     n_doms = len(strand.domains)
     if bp_index == domain.end_bp and domain_idx < n_doms - 1:
-        return d   # inter-domain boundary (crossover junction) — no-op
-    # 1-nt left stub: nick at the strand's 5′ terminal nucleotide.
-    if domain_idx == 0 and bp_index == domain.start_bp:
-        return d
-    # 1-nt right stub: nick one step inside the strand's 3′ terminal nucleotide.
-    if domain_idx == n_doms - 1:
-        three_prime_stub = (
-            (direction == Direction.FORWARD and bp_index == domain.end_bp - 1) or
-            (direction == Direction.REVERSE and bp_index == domain.end_bp + 1)
-        )
-        if three_prime_stub:
-            return d
+        # Only a CROSS-helix boundary is a crossover junction we must not undo.
+        # A same-helix boundary (e.g. an inline-overhang tail continuing on this
+        # helix) is not a junction — nick through it, severing the beyond-part into
+        # its own strand so bp_index becomes a terminus the crossover can ligate to.
+        if strand.domains[domain_idx + 1].helix_id != helix_id:
+            return d   # cross-helix crossover junction — no-op
+    # NOTE: no 1-nt-stub guard here.  A nick that lands one bp inside a strand's
+    # terminus (or on a first domain's 5′ start) legitimately splits off a single-
+    # nucleotide stub — that is the intended result when a crossover sits just
+    # short of a strand end (crossover_edge_cases helices 0/1).  Crossovers that
+    # land *exactly* on an existing junction are rejected upstream in
+    # _build_place_crossover; a crossover exactly on a free terminus is a no-op
+    # via the make_nick "terminus" branch below.
     try:
         return make_nick(d, helix_id, bp_index, direction)
     except ValueError as exc:
         if "terminus" in str(exc):
             return d   # already nicked — no-op
         raise
+
+
+def _strip_orphan_inline_overhangs(design: "Design") -> "Design":
+    """Clear ``ovhg_inline_*`` tags from strands that have no paired anchor domain.
+
+    An inline overhang is, by definition, an unpaired *tail* on a scaffold-paired
+    staple. When a crossover nicks through a same-helix overhang boundary, the
+    overhang sub-domain can be severed into its own strand — which then has no
+    paired anchor, so it is just a plain unpaired staple, not an overhang. This
+    enforces that invariant (and drops the now-orphaned auto-created OverhangSpec).
+    User-placed / extruded overhangs (non ``ovhg_inline_`` ids) are untouched.
+    """
+    _INLINE = "ovhg_inline_"
+    dropped: set[str] = set()
+    new_strands = []
+    changed = False
+    for s in design.strands:
+        if s.strand_type != StrandType.STAPLE:
+            new_strands.append(s)
+            continue
+        # A "paired anchor" domain is any domain that is NOT an inline overhang.
+        has_anchor = any(
+            not (d.overhang_id and d.overhang_id.startswith(_INLINE))
+            for d in s.domains
+        )
+        if has_anchor:
+            new_strands.append(s)
+            continue
+        new_doms = []
+        for d in s.domains:
+            if d.overhang_id and d.overhang_id.startswith(_INLINE):
+                dropped.add(d.overhang_id)
+                new_doms.append(d.model_copy(update={"overhang_id": None}))
+            else:
+                new_doms.append(d)
+        new_strands.append(s.model_copy(update={"domains": new_doms}))
+        changed = True
+    if not changed:
+        return design
+    new_overhangs = [o for o in design.overhangs if o.id not in dropped]
+    return design.copy_with(strands=new_strands, overhangs=new_overhangs)
 
 
 def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[Design, 'Crossover', bool]:
@@ -2969,7 +3011,9 @@ def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[De
 
     CROSSOVER = nick + ligate + record. If changing this, ask user first.
     """
-    from backend.core.crossover_positions import validate_crossover
+    from backend.core.crossover_positions import (
+        build_strand_ranges, crossover_junction_slots, slot_covered, validate_crossover,
+    )
 
     half_a = HalfCrossover(
         helix_id=body.half_a.helix_id,
@@ -2981,6 +3025,45 @@ def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[De
         index=body.half_b.index,
         strand=body.half_b.strand,
     )
+    # Reject a crossover that lands on an existing crossover junction (either half).
+    # Checked on the pre-nick design so the nicks we are about to place don't count
+    # as junctions. Free termini / helix-end u-turns are not junctions → still allowed.
+    # Slots backed by a recorded Crossover fall through to validate_crossover's more
+    # specific "already occupied" error (duplicate placement).
+    junctions = crossover_junction_slots(d)
+    recorded = set()
+    for xo in d.crossovers:
+        recorded.add((xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand))
+        recorded.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand))
+    for half in (half_a, half_b):
+        slot = (half.helix_id, half.index, half.strand)
+        if slot in junctions and slot not in recorded:
+            raise HTTPException(
+                422,
+                detail=(
+                    f"Crossover slot (helix {_helix_label(d, half.helix_id)}, bp "
+                    f"{half.index}, {half.strand.value}) is already a crossover junction"
+                ),
+            )
+
+    # Reject a crossover at the extreme edge of strand coverage. A crossover
+    # connects material on the side its bow points — bow-right (the sprite is the
+    # upper member of the pair, min(nick) < index) toward bp index+1, bow-left
+    # toward index-1. That side must have strand on both helices, else the
+    # crossover would only join a stub (nothing beyond the rightmost/leftmost bp).
+    lower_bp = min(body.nick_bp_a, body.nick_bp_b)
+    required_bp = half_a.index + 1 if lower_bp < half_a.index else half_a.index - 1
+    sr = build_strand_ranges(d)
+    if not (slot_covered(sr, half_a.helix_id, required_bp, half_a.strand.value)
+            and slot_covered(sr, half_b.helix_id, required_bp, half_b.strand.value)):
+        raise HTTPException(
+            422,
+            detail=(
+                f"Crossover at bp {half_a.index} has no strand at bp {required_bp} "
+                "on the side it would connect toward (nothing beyond the edge)"
+            ),
+        )
+
     current = _nick_if_needed(d, body.half_a.helix_id, body.nick_bp_a, body.half_a.strand)
     current = _nick_if_needed(current, body.half_b.helix_id, body.nick_bp_b, body.half_b.strand)
 
@@ -2993,6 +3076,9 @@ def _build_place_crossover(d: Design, body: 'PlaceCrossoverRequest') -> tuple[De
     # is not mutated (copy_with is shallow).
     current = current.copy_with(crossovers=list(current.crossovers) + [xover])
     current, ligated = _ligate_crossover(current, xover)
+    # A same-helix overhang tail severed by this crossover becomes a standalone
+    # unpaired staple — no longer an overhang. Enforce that invariant.
+    current = _strip_orphan_inline_overhangs(current)
     return current, xover, ligated
 
 
