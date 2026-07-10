@@ -20,8 +20,18 @@ never open a hole in basic geometry/topology coverage.
 
 Usage:
     python scripts/select_tests.py            # vs working-tree changes (uncommitted)
+    python scripts/select_tests.py --since-last-full  # vs the last full-suite pass
     python scripts/select_tests.py --base origin/master   # everything since a ref
     python scripts/select_tests.py --dry-run  # print the decision + pytest cmd, don't run
+
+``--since-last-full`` (the default for ``just test-smart``) diffs against the git
+SHA recorded the last time the FULL suite passed on THIS machine (stored in the
+gitignored ``.nadoc-test-watermark`` at the repo root). This makes affected slow
+groups accumulate across sessions/commits: committing your work no longer hides
+it from the scope. Whenever this script's decision is FULL and pytest passes, the
+watermark is bumped to HEAD, so the expensive full run is only needed before a
+push or when a foundational file changes. No watermark yet (fresh clone) -> FULL,
+which then establishes the baseline.
 
 Runs pytest with the computed ``-m`` expression and the repo's standard
 ``-n auto --dist loadfile``. Extra args after ``--`` are forwarded to pytest.
@@ -33,6 +43,10 @@ import argparse
 import os
 import subprocess
 import sys
+
+# Machine-local marker: git SHA at which the FULL suite last passed here. Gitignored
+# (each computer tracks its own baseline; never synced). Bumped on any FULL pass.
+WATERMARK_FILE = ".nadoc-test-watermark"
 
 # Area markers that exist on slow tests (must match tests/conftest.py AREA_MARKERS
 # and the markers registered in pyproject.toml).
@@ -115,6 +129,36 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("build_spec", ("headless",)),
     ("headless", ("headless",)),
 ]
+
+
+def repo_root() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def read_watermark() -> str | None:
+    """Return the SHA at which the full suite last passed here, or None if unset."""
+    path = os.path.join(repo_root(), WATERMARK_FILE)
+    try:
+        with open(path) as fh:
+            sha = fh.read().strip()
+    except FileNotFoundError:
+        return None
+    return sha or None
+
+
+def write_watermark() -> str:
+    """Record current HEAD as the last full-suite pass. Returns the SHA written."""
+    root = repo_root()
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    with open(os.path.join(root, WATERMARK_FILE), "w") as fh:
+        fh.write(head + "\n")
+    return head
 
 
 def changed_files(base: str | None) -> list[str]:
@@ -217,14 +261,35 @@ def main() -> int:
     ap.add_argument("--base", default=None,
                     help="git ref to diff against (e.g. origin/master). "
                          "Default: uncommitted working-tree changes.")
+    ap.add_argument("--since-last-full", action="store_true",
+                    help="diff against the last full-suite pass on this machine "
+                         f"(SHA in {WATERMARK_FILE}); no watermark yet -> FULL. "
+                         "This is the default for `just test-smart`.")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the decision + pytest command, don't run it.")
     ap.add_argument("pytest_args", nargs="*",
                     help="extra args forwarded to pytest (put after --).")
     args = ap.parse_args()
 
-    files = changed_files(args.base)
-    decision, areas, reasons = classify(files)
+    # --since-last-full resolves the diff base from the watermark. If there is no
+    # watermark (or the recorded SHA is gone after a rebase/gc), we can't scope
+    # safely -> force FULL, which then re-establishes the baseline on a green run.
+    force_full = False
+    base = args.base
+    if args.since_last_full and base is None:
+        wm = read_watermark()
+        if wm and subprocess.run(["git", "cat-file", "-e", wm],
+                                 cwd=repo_root()).returncode == 0:
+            base = wm
+        else:
+            force_full = True
+
+    files = changed_files(base)
+    if force_full:
+        decision, areas, reasons = "FULL", set(), [
+            f"FULL: no valid {WATERMARK_FILE} baseline -> full run establishes it"]
+    else:
+        decision, areas, reasons = classify(files)
 
     print("=== select_tests: change-based test selection ===", file=sys.stderr)
     print(f"changed files ({len(files)}):", file=sys.stderr)
@@ -247,7 +312,14 @@ def main() -> int:
     print(f"$ {' '.join(cmd)}", file=sys.stderr)
     if args.dry_run:
         return 0
-    return subprocess.call(cmd, cwd=os.getcwd())
+    rc = subprocess.call(cmd, cwd=os.getcwd())
+    # A green FULL run is a fresh baseline: bump the watermark so subsequent scoped
+    # runs only re-test what changes after this point.
+    if rc == 0 and decision == "FULL":
+        sha = write_watermark()
+        print(f"watermark: {WATERMARK_FILE} -> {sha[:12]} (full suite passed)",
+              file=sys.stderr)
+    return rc
 
 
 if __name__ == "__main__":

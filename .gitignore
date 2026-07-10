@@ -175,6 +175,9 @@ experiments/*/results/longrun_result.json
 .codex
 .coverage
 .vscode/
+# `just test`/`test-all` record the SHA of the last FULL-suite pass here so
+# `just test-smart` can scope against it. Per-machine baseline; never synced.
+.nadoc-test-watermark
 
 # LAMMPS default runtime log (dropped in cwd on a run)
 log.lammps

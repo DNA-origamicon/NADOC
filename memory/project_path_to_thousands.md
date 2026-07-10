@@ -86,7 +86,7 @@ PartInstances stop being independent rendered objects. They become indices into 
 
 Each phase chunk is "done" when ALL of these are true:
 
-1. **Tests run green.** Subagent must execute `just test` and paste the pass count. Cite any new tests added.
+1. **Tests run green.** Subagent must execute `just test-smart` (cite its decision + pass count; a fresh worktree has no watermark → it runs FULL, which is what these broad chunks want anyway). Cite any new tests added.
 2. **No file outside the chunk's declared scope was touched** (the chunk's PR adds files OR modifies the files named in this plan; if it touched something else, justify in the report).
 3. **Frontend chunks include a `NOT VERIFIED IN APP` caveat in the report** unless the subagent confirmed it in `just frontend` against `workspace/hinge_test.nass`.
 4. **Three-Layer Law preserved** (no topology mutation from rendering or display state).
@@ -107,7 +107,7 @@ After a chunk lands, the manager spawns an **evaluator agent** that:
 - **You work in a git worktree** (`isolation: worktree`). Your CWD is your own copy. Other agents have their own worktrees. Do not touch master.
 - **Pull the plan from this file before starting.** Find your assigned chunk in the Phase map above. Read its checklist, then dive in.
 - **Read CLAUDE.md** at the project root and obey its risky-action policy + git defaults.
-- **Run `just test` before claiming done.** No exceptions.
+- **Run `just test-smart` before claiming done** (cite its decision; fresh worktree → FULL). No exceptions.
 - **Update your phase's status line** in this file when you start (`IN_PROGRESS:<branch>`) and when you finish (`DONE:<commit>`).
 - **Write a short completion report** in the section below: branch name, commit sha, files touched, test count, benchmark deltas if applicable, and anything surprising.
 - **Do not push or open PRs.** The manager merges to master after evaluator approval.

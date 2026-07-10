@@ -33,7 +33,7 @@ box and append a one-line "shipped:" note under that phase** before ending the
 session. The user starts each with *"proceed to next phase of the alpine cluster md"*.
 
 **Standing rules for every phase** (from `CLAUDE.md`):
-- Backend change → run `just test`, cite pass count. Flag any test-count drop.
+- Backend change → run `just test-smart`, cite its decision + pass count. Flag any test-count drop. (Full `just test` = pre-push gate.)
 - Frontend change → exercise in the running app, or lead with `NOT VERIFIED IN APP`.
 - **Module-first law.** New cohesive logic lands in the **new modules named per
   phase**, NOT in `main.js` or as a fat block in an existing file. `main.js` gets

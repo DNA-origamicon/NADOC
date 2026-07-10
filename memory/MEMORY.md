@@ -15,7 +15,7 @@ prompt prefix, so every change to it invalidates the prompt cache for all sessio
 - **[tech_debt](project_tech_debt.md)** — code flagged for review/removal.
 - **[reference_assembly_test_fixture](reference_assembly_test_fixture.md)** — `workspace/Belt_test1.nass`, any assembly test.
 - **[reference_efield_crossval_fixture](reference_efield_crossval_fixture.md)** — `workspace/6hb_e_test.nadoc`, E-field cross-val.
-- [test_parallelization](project_test_parallelization.md) — `just test` ≈2.5min parallel; `just test-fast` ≈45s.
+- [test_parallelization](project_test_parallelization.md) — **`just test-smart` is the DEFAULT per-change loop** (scopes to areas changed since the last full pass via a machine-local watermark); full `just test` = pre-push gate only.
 
 ## Session loops (root files; each head is lean, read its handoff first)
 

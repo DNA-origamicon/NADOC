@@ -57,7 +57,7 @@ nothing. So:
    The wrapper runs the *same* service the route runs; it does not re-implement logic. No god-file growth.
    - **Topology/geometry/directionality (esp. AF-6 deformation): ASK THE USER FIRST** per `CLAUDE.md` —
      don't reason out bend/twist sign or frame conventions.
-6. **Gate:** `just test` green — cite pass count, flag any *drop*. `just lint` clean on touched files.
+6. **Gate:** `just test-smart` green — cite its decision + pass count, flag any *drop*. `just lint` clean on touched files. (Full `just test` is the pre-push gate, not this loop.)
    A feature without its validation augment does not ship.
 7. **Commit** (one item): `feat(automation): headless <op> + <oracle>`. Only when the user has asked, per
    CLAUDE.md git rules.

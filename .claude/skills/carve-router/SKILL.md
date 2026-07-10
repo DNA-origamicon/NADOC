@@ -48,7 +48,7 @@ the umbilical cord. So:
      **direct input→output unit test** in `tests/`. The handler keeps its decorator and shrinks to
      parse→delegate→respond.
    - Both? Do the service push first (separate commit).
-7. **Gate:** `just test` green — cite pass count, flag any *drop*. `just lint` clean on touched files. A
+7. **Gate:** `just test-smart` green — cite its decision + pass count, flag any *drop*. `just lint` clean on touched files. (Full `just test` is the pre-push gate, not this loop.) A
    service extraction without a new unit test does not ship.
 8. **Commit** (one region): `<area>: extract <cluster> router/service from <file>.py`. Only when the user has
    asked to commit, per CLAUDE.md git rules.

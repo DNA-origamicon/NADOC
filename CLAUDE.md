@@ -24,11 +24,13 @@ export PATH="$HOME/.local/bin:$PATH"
 
 just dev            # backend (FastAPI on :8000)
 just frontend       # Vite dev server (:5173)
-just test           # full backend test suite (~2.5-3 min, parallel)
-just test-fast      # skip heavy sim/FEM tests (~20s) — the pre-push loop
-just test-smart     # run fast suite + only the heavy groups your changes affect
-                    #   (foundational/unknown change -> full; --dry-run to preview)
-just test-affected FILE... # scoped inner loop: point pytest at the area you edit
+just test-smart     # DEFAULT per-change loop: fast suite + only the heavy groups
+                    #   your changes affect since the last full pass (watermark).
+                    #   frontend-only -> fast only; foundational -> full; --dry-run
+just test           # FULL backend suite — the PRE-PUSH gate (~2.5-3 min fast tail,
+                    #   up to ~16 min with slow sims). Bumps the watermark on a pass.
+just test-fast      # skip heavy sim/FEM tests (~20s) — quick spot check
+just test-affected FILE... # tightest inner loop: point pytest at the area you edit
 just test-file FILE # single test file
 just fmt            # format
 just lint           # lint
@@ -62,7 +64,7 @@ This project uses Claude Code's hierarchical memory — load only what's relevan
 
 - **Before claiming done on a change that alters behavior in a subsystem with a `memory/project_*.md` topic file, confirm you have read that topic file's head.** Order doesn't matter — grep first, read topic file second is fine — but skipping it entirely is the failure mode. Changes that do *not* alter subsystem behavior (renames, comments, test-only edits, formatting, a fix wholly described by the prompt) don't need it — say so in the done message instead of reading it. Never read the topic file's `*_archive.md` for this.
 - **Skim `memory/feedback_*.md` filenames against the area you're touching.** If one matches (e.g. `feedback_crossover_no_reasoning` while editing crossover code), open it. They're short and the cost of skipping a relevant one is high.
-- Before claiming a feature works, run `just test` and verify the affected behavior in the running app.
+- Before claiming a feature works, run `just test-smart` (it scopes to what your change affects) and verify the affected behavior in the running app.
 - For UI changes: `just frontend` must be running and you must exercise the feature. Type-checking and tests do not validate UI correctness.
 - Prefer modifying existing modules over adding new ones — this codebase has many small interconnected files already. **But never grow `main.js` (or any composition root) with new cohesive logic** (see next bullet): the precedence is existing module > new module > *never* a new block in the closure.
 - **Module-first law (anti-backslip — read [FEATURE_DEVELOPMENT.md](FEATURE_DEVELOPMENT.md) before adding any feature).** The carve-up shrank `main.js` 16.5k→~7.5k by pulling cohesive subsystems into modules. Feature work must not re-grow it. New cohesive logic (multi-function behavior, owned state, subscribers) lands in a **new/existing tested module** (`initX({deps})→{api}`); `main.js` gains ONLY an import + a one-line factory init + thin per-action wiring (Feathers' Sprout Method). A feature commit leaves `main.js` LOC **flat or lower** — a net rise that isn't pure wiring means a cohesive block crept in; extract it before committing. Cite `main.js` LOC Δ in the done message.
@@ -123,7 +125,7 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 
 ## Verification expectations
 
-- **Every backend code change runs `just test` before claiming done — no exceptions, even for one-line changes that mirror a documented fix.** Flag any unexpected test-count drop.
+- **Every backend code change runs `just test-smart` before claiming done — no exceptions, even for one-line changes that mirror a documented fix.** It always runs the full fast suite and adds only the heavy groups your change affects (foundational/unknown change → it escalates to the full suite itself). Cite the decision it printed (`FAST` / `fast+slow[area]` / `FULL`) **and** the pass count; flag any unexpected drop. Reserve the bare full `just test` for the **pre-push gate** — running it there bumps the watermark so scoped runs stay honest. Frontend-only changes touch no Python → `just test-smart` returns `FAST`; run `just test-frontend` for the JS.
 - **Every frontend code change must be exercised in the running app before claiming done.** If `just frontend` isn't running or no representative design has been loaded, your "done" message must lead with `NOT VERIFIED IN APP` and explain why. Type-checking and tests do not validate UI correctness.
 - Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/26hb_platform_v3.nadoc`) and visually confirm.
 - Don't claim "tests pass" without running them.
@@ -135,7 +137,7 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 
 ### Done checklist (acknowledge each before claiming a task done)
 
-- [ ] Tests run (cite the command + pass count). Frontend-only changes can skip backend test suite if no Python touched — say so explicitly.
+- [ ] Tests run: `just test-smart` (cite its decision — `FAST`/`fast+slow[area]`/`FULL` — and the pass count). Frontend-only changes get `FAST` (no Python touched → no backend tests); run `just test-frontend` and say so explicitly. Full `just test` is the pre-push gate, not a per-change step.
 - [ ] Frontend changes exercised in running app, OR `NOT VERIFIED IN APP` caveat at top of message
 - [ ] If the change alters subsystem behavior: relevant `project_*.md` topic file **head** was read this session (cite which one). If it doesn't alter behavior, say "no topic file needed: [why]" — don't read one to satisfy the checklist
 - [ ] Topic file **head** scanned for stale claims this change addressed; updated if needed (update the head, not the archive)

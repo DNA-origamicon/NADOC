@@ -22,8 +22,11 @@ dev:
 # module-level TestClient(app) over global per-doc backend state, so a file's
 # tests must stay in-process and in-order. Dropped -v (printed all 3410 names
 # for no signal); failures still print full tracebacks.
+# The FULL suite is the pre-push gate, not the per-change loop — use `just
+# test-smart` day-to-day. A green run bumps .nadoc-test-watermark (machine-local
+# last-full-pass SHA) so test-smart scopes against it afterwards.
 test:
-    uv run pytest tests/ -n auto --dist loadfile
+    uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark
 
 # Fast dev loop: skip the heavy real-binary sims AND the CanDo-FEM/autorefine
 # numeric solves (all carry the `slow` marker via tests/conftest.py). Parallel.
@@ -34,13 +37,15 @@ test:
 test-fast:
     uv run pytest tests/ -n auto --dist loadfile -m "not slow"
 
-# Change-based selection: run the fast suite (always) + only the HEAVY test
-# groups affected by your uncommitted changes. Foundational/unknown changes ->
-# full suite; a leaf change (oxDNA, CanDo/FEM, NAMD, ...) -> just that group.
-# `just test-smart --dry-run` shows the decision without running. Forward pytest
-# args after `--`, or diff against a ref with `--base origin/master`.
+# DEFAULT per-change test loop. Runs the fast suite (always) + only the HEAVY test
+# groups affected by what changed since the last full-suite pass on this machine
+# (.nadoc-test-watermark). Foundational/unknown change -> full suite; a leaf change
+# (oxDNA, CanDo/FEM, NAMD, ...) -> just that group; frontend/docs-only -> fast only
+# (run `just test-frontend` for JS). No watermark yet -> full (establishes it).
+# `just test-smart --dry-run` shows the decision without running. `--base origin/master`
+# overrides the watermark; forward pytest args after `--`.
 test-smart *ARGS:
-    uv run python scripts/select_tests.py {{ARGS}}
+    uv run python scripts/select_tests.py --since-last-full {{ARGS}}
 
 # Tightest inner loop: point pytest at the area you're editing. Pass file paths
 # and/or `-k pattern`; heavy solves are dropped (`-m 'not slow'`) so it stays
@@ -63,7 +68,7 @@ test-frontend-watch:
 
 # Run backend + frontend unit tests together ("is everything green?")
 test-all:
-    uv run pytest tests/ -n auto --dist loadfile
+    uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark
     cd frontend && npm test
 
 # Commit gate for main.js refactor work: the full smoke suite — app boot, the

@@ -52,8 +52,8 @@ implement nothing.**
 6. **Fast/slow tag.** Fast: oracle math, descriptors, card helpers, conf-emission. Slow (register in
    `tests/conftest.py` `_SLOW_MODULES`/`_SLOW_TESTS`): real oxDNA CUDA / NAMD / mrDNA ARBD / CanDo-nonlinear-on-
    large runs. Keep `just test-fast` fast.
-7. **Gate.** Oracle green; `just test` (or `just test-fast` for fast-only — say which) + `just lint`;
-   `just test-frontend` + `just smoke` for stateful frontend. Cite pass counts; flag drops.
+7. **Gate.** Oracle green; `just test-smart` (default — scopes to affected areas; say the decision) + `just lint`;
+   `just test-frontend` + `just smoke` for stateful frontend. Cite pass counts; flag drops. (Full `just test` = pre-push gate.)
 8. **Display-vs-oracle (per new validation/card).** One-off Playwright: doc-pinned design → run/mock engine →
    open card → **scrape displayed numbers/graph, assert == headless oracle within tol** + screenshot. **If they
    diverge, STOP and ask the user** (the display may measure something the oracle doesn't). Delete the spec;
