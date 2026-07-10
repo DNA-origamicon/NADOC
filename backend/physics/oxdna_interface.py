@@ -1313,6 +1313,42 @@ def unwrap_align_to_reference(
     return _ret({k: {**relax[k], "backbone_position": placed[k]} for k in keys})
 
 
+def _parse_trajectory_frame_lines(
+    data: list[str],
+    order: list[tuple],
+    *,
+    copies: bool = False,
+) -> dict[tuple, dict]:
+    """Parse one oxDNA trajectory frame's nucleotide rows.
+
+    ``data`` must exclude the ``t/b/E`` header rows.  A live trajectory can end in a
+    half-written frame; callers can detect that by comparing the returned map size
+    to the nucleotide order length.
+    """
+    offset = _protein_lead_offset(data, order)   # skip leading protein beads (hybrid)
+    m: dict[tuple, dict] = {}
+    for i, key in enumerate(order):
+        if offset + i >= len(data):
+            break
+        parts = data[offset + i].split()
+        if len(parts) < 9:
+            continue
+        try:
+            vals = [float(x) for x in parts[:9]]
+        except ValueError:
+            # A frame still being written by a live oxDNA run can leave a
+            # half-flushed numeric token on the final line; skip it rather than
+            # crash a mid-run progress/trajectory read.
+            continue
+        a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
+        m[key if copies else key[:3]] = {
+            "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
+            "a1": a1 / (np.linalg.norm(a1) + 1e-14),
+            "a3": a3 / (np.linalg.norm(a3) + 1e-14),
+        }
+    return m
+
+
 def read_trajectory_frames_full(
     traj_path: str | Path,
     design:    Design,
@@ -1330,30 +1366,50 @@ def read_trajectory_frames_full(
     for fi, s in enumerate(starts):
         e = starts[fi + 1] if fi + 1 < len(starts) else len(lines)
         data = [l for l in lines[s:e] if l.strip() and not l.startswith(("t ", "b ", "E "))]
-        offset = _protein_lead_offset(data, order)   # skip leading protein beads (hybrid)
-        m: dict[tuple, dict] = {}
-        for i, key in enumerate(order):
-            if offset + i >= len(data):
-                break
-            parts = data[offset + i].split()
-            if len(parts) < 9:
-                continue
-            try:
-                vals = [float(x) for x in parts[:9]]
-            except ValueError:
-                # A frame still being written by a live oxDNA run can leave a
-                # half-flushed numeric token on the final line — skip it rather
-                # than crash the mid-run flexibility-map / trajectory read.
-                continue
-            a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
-            m[key if copies else key[:3]] = {
-                "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
-                "a1": a1 / (np.linalg.norm(a1) + 1e-14),
-                "a3": a3 / (np.linalg.norm(a3) + 1e-14),
-            }
+        m = _parse_trajectory_frame_lines(data, order, copies=copies)
         if m:
             frames.append(m)
     return frames
+
+
+def read_latest_trajectory_frame_full(
+    traj_path: str | Path,
+    design:    Design,
+    *,
+    copies:    bool = False,
+    initial_tail_bytes: int = 8 * 1024 * 1024,
+    max_tail_bytes:     int = 128 * 1024 * 1024,
+) -> Optional[dict[tuple, dict]]:
+    """Parse the latest complete frame of an oxDNA trajectory.
+
+    This is for live status/progress polling.  Reading every frame of a large,
+    still-growing trajectory can monopolize the backend; tailing a bounded suffix
+    keeps polling proportional to one frame instead of the whole run.
+    """
+    p = Path(traj_path)
+    if not p.exists() or p.stat().st_size <= 0:
+        return None
+    order = _strand_nucleotide_order(design)
+    size = p.stat().st_size
+    tail_bytes = min(size, initial_tail_bytes)
+    while True:
+        with p.open("rb") as fh:
+            fh.seek(max(0, size - tail_bytes))
+            text = fh.read().decode("utf-8", errors="replace")
+        lines = text.splitlines()
+        starts = [i for i, line in enumerate(lines) if line.startswith("t ")]
+        for idx in reversed(starts):
+            e = next((j for j in starts if j > idx), len(lines))
+            data = [
+                line for line in lines[idx:e]
+                if line.strip() and not line.startswith(("t ", "b ", "E "))
+            ]
+            m = _parse_trajectory_frame_lines(data, order, copies=copies)
+            if len(m) >= len(order):
+                return m
+        if tail_bytes >= size or tail_bytes >= max_tail_bytes:
+            return None
+        tail_bytes = min(size, tail_bytes * 2)
 
 
 def count_hbonds(

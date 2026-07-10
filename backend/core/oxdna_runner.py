@@ -649,7 +649,7 @@ def _live_health_snapshot(design, stage_dir: Path, steps_per_s: float | None) ->
         max_backbone_stretch,
         parse_energy_dat,
     )
-    from backend.physics.oxdna_interface import read_trajectory_frames_full
+    from backend.physics.oxdna_interface import read_latest_trajectory_frame_full
 
     out: dict = {
         "bp_retained_fraction": None, "potential_energy": None,
@@ -662,9 +662,8 @@ def _live_health_snapshot(design, stage_dir: Path, steps_per_s: float | None) ->
     except Exception:
         pass
     try:
-        frames = read_trajectory_frames_full(stage_dir / "trajectory.dat", design)
-        if frames:
-            frame = frames[-1]
+        frame = read_latest_trajectory_frame_full(stage_dir / "trajectory.dat", design)
+        if frame:
             out["bp_retained_fraction"] = base_pair_retention(design, frame)[0]
             out["max_backbone_clash"] = max_backbone_stretch(design, frame)[0]
     except Exception:
