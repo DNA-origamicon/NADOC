@@ -130,6 +130,57 @@ export function rebaseClusterTranslationForPivot(cluster, nextPivot) {
 }
 
 /**
+ * Combined centroid of a group of clusters, moved together as one rigid body.
+ * Each member's current visual centroid is `pivot + translation` (rotation about the
+ * pivot leaves the centroid fixed), so the group centroid is their unweighted mean.
+ *
+ * @param {Array<{pivot:number[], translation:number[]}>} members
+ * @returns {[number,number,number]}
+ */
+export function combinedGroupCentroid(members) {
+  const G = new THREE.Vector3()
+  if (!members?.length) return [0, 0, 0]
+  for (const m of members) {
+    const [px, py, pz] = m.pivot ?? [0, 0, 0]
+    const [tx, ty, tz] = m.translation ?? [0, 0, 0]
+    G.add(_scratchV.set(px + tx, py + ty, pz + tz))
+  }
+  G.divideScalar(members.length)
+  return [G.x, G.y, G.z]
+}
+
+/**
+ * Compose a group rigid delta onto one member's baseline transform.
+ *
+ * The group delta rotates about the combined centroid `G` by `dummyQuat` and translates
+ * so `G → dummyPos`. Baseline `(P, T0, Q0)` maps original point p to the current visual
+ * `x = Q0·(p − P) + P + T0`; the delta maps `x → dummyQuat·(x − G) + dummyPos`. Written
+ * in the backend's `R·(p − P) + P + T` form (keeping the member's pivot P) that is
+ *   R = dummyQuat·Q0,   T = dummyQuat·(P + T0 − G) + dummyPos − P.
+ *
+ * @param {{pivot:number[], translation:number[], rotation:number[]}} baseline
+ * @param {number[]} G          combined centroid [x,y,z]
+ * @param {number[]} dummyQuat  group rotation quaternion [x,y,z,w]
+ * @param {number[]} dummyPos   dummy world position [x,y,z]
+ * @returns {{pivot:number[], translation:number[], rotation:number[]}}
+ */
+export function composeGroupMemberTransform(baseline, G, dummyQuat, dummyPos) {
+  const Gv  = new THREE.Vector3(...G)
+  const Rd  = new THREE.Quaternion(...dummyQuat)
+  const pos = new THREE.Vector3(...dummyPos)
+  const Pc  = new THREE.Vector3(...(baseline.pivot ?? [0, 0, 0]))
+  const Tc  = new THREE.Vector3(...(baseline.translation ?? [0, 0, 0]))
+  const Qc  = new THREE.Quaternion(...(baseline.rotation ?? [0, 0, 0, 1]))
+  const Rp  = Rd.clone().multiply(Qc)
+  const Tp  = Pc.clone().add(Tc).sub(Gv).applyQuaternion(Rd).add(pos).sub(Pc)
+  return {
+    pivot:       [Pc.x, Pc.y, Pc.z],
+    translation: [Tp.x, Tp.y, Tp.z],
+    rotation:    [Rp.x, Rp.y, Rp.z, Rp.w],
+  }
+}
+
+/**
  * Is a constraint tether violated? Free-until-taut tethers (ssDNA, direct duplex, ss linker)
  * resist only OVER-extension (dist > contour). A RIGID tether (a ds-linker rod acting as a
  * fixed-length strut with ball joints) is bilateral — violated when dist differs from contour
@@ -192,6 +243,16 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _isDragging     = false
   let _mode           = 'translate'   // 'translate' | 'rotate'
 
+  // ── Group (multi-cluster) state ──────────────────────────────────────────────
+  // When several clusters are selected, the tool drives them as ONE rigid body:
+  // a single dummy sits at the combined centroid, and every drag/rotate is applied
+  // to every member cluster about that shared centroid. `_groupClusterIds` holds the
+  // member ids (length >= 2 when group mode is active); `_groupBaseline` snapshots
+  // each member's transform at attach time so the composed commit is measured from a
+  // stable baseline regardless of how many drags happen this session.
+  let _groupClusterIds = null   // string[] | null
+  let _groupBaseline   = null   // Map<clusterId, {pivot, translation, rotation}> | null
+
   // ── Constraint state ─────────────────────────────────────────────────────────
   let _constraintType  = 'centroid'  // 'centroid' | 'joint' | 'ssdna'
   let _constraintJoint = null        // ClusterJoint object when type = 'joint'
@@ -245,6 +306,20 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   function _withPendingTransform(cluster) {
     const pending = cluster ? _pendingTransforms.get(cluster.id) : null
     return pending ? { ...cluster, ...pending } : cluster
+  }
+
+  function _isGroup() {
+    return !!(_groupClusterIds && _groupClusterIds.length > 1)
+  }
+
+  /** The live (pending-merged) ClusterRigidTransform objects for the group members,
+   *  in `_groupClusterIds` order, dropping any that no longer exist. */
+  function _groupClusterList() {
+    const { currentDesign } = store.getState()
+    const byId = new Map((currentDesign?.cluster_transforms ?? []).map(c => [c.id, c]))
+    return (_groupClusterIds ?? [])
+      .map(id => _withPendingTransform(byId.get(id)))
+      .filter(Boolean)
   }
 
   function setPendingTransform(clusterId, transform) {
@@ -699,6 +774,103 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
    * @param {THREE.Camera}  camera
    * @param {HTMLElement}   canvas   — renderer.domElement (for TC event binding)
    */
+  // ── Group drag handlers (multi-cluster rigid body) ───────────────────────────
+  function _onGroupDraggingChanged(e) {
+    controls.enabled = !e.value
+    if (e.value) {
+      _isDragging    = true
+      _startDummyPos = _dummy.position.clone()
+      _startQuat     = _dummy.quaternion.clone()
+      if (captureBase) {
+        // Snapshot every member's current rendered beads. append=true for all but the
+        // first so each capture ADDs to the base snapshot instead of clearing it.
+        _groupClusterList().forEach((cl, i) =>
+          captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null, i > 0))
+      }
+    } else {
+      _isDragging = false
+      _recordCurrentTransform()
+    }
+  }
+
+  function _onGroupChange() {
+    if (!_isDragging) return
+    _incrQuat.copy(_dummy.quaternion).multiply(_startQuat.clone().invert())
+    if (onLiveTransform) {
+      // Same rigid delta (rotate about the drag-start dummy pos by _incrQuat, translate
+      // to the current dummy pos) applied to every member — that IS "move as one cluster".
+      for (const cl of _groupClusterList()) {
+        onLiveTransform(cl.helix_ids, _startDummyPos, _dummy.position, _incrQuat,
+                        cl.domain_ids?.length ? cl.domain_ids : null)
+      }
+    }
+    if (onTransformUpdate) {
+      const [px, py, pz] = _pivot
+      const p = _dummy.position
+      onTransformUpdate([p.x - px, p.y - py, p.z - pz], _dummy.quaternion)
+    }
+  }
+
+  /**
+   * Attach the gizmo to several clusters at once, driving them as ONE rigid body.
+   * The dummy is placed at the combined centroid (average of each member's current
+   * visual centroid = pivot + translation) with identity rotation, so the transform
+   * fields read the GROUP delta (starts at 0). Falls back to single-cluster attach()
+   * when fewer than two members resolve. Joint / ssDNA constraints are disabled in
+   * group mode — it is free translate/rotate only.
+   */
+  function attachGroup(clusterIds, scene, camera, canvas) {
+    detach()   // always clean up first
+
+    const { currentDesign } = store.getState()
+    const byId = new Map((currentDesign?.cluster_transforms ?? []).map(c => [c.id, c]))
+    const clusters = (clusterIds ?? [])
+      .map(id => _withPendingTransform(byId.get(id)))
+      .filter(Boolean)
+    if (clusters.length < 2) {
+      if (clusters.length === 1) attach(clusters[0].id, scene, camera, canvas)
+      return
+    }
+
+    // Combined centroid G + per-member baseline for the composed commit.
+    const baseline = new Map()
+    for (const c of clusters) {
+      baseline.set(c.id, {
+        pivot:       [...(c.pivot ?? [0, 0, 0])],
+        translation: [...(c.translation ?? [0, 0, 0])],
+        rotation:    [...(c.rotation ?? [0, 0, 0, 1])],
+      })
+    }
+    const G = combinedGroupCentroid([...baseline.values()])
+
+    _groupClusterIds = clusters.map(c => c.id)
+    _groupBaseline   = baseline
+    _clusterId       = _groupClusterIds[0]   // representative id for code that reads the active cluster
+    _pivot           = [...G]
+    _ringScene  = scene
+    _ringCamera = camera
+    _ringCanvas = canvas
+    _constraintType  = 'centroid'
+    _constraintJoint = null
+
+    _dummy = new THREE.Object3D()
+    _dummy.position.set(G[0], G[1], G[2])
+    _dummy.quaternion.identity()
+    scene.add(_dummy)
+
+    _tc = new TransformControls(camera, canvas)
+    _tc.attach(_dummy)
+    _tc.setMode('translate')
+    _tc.setSpace('world')
+    _tc.setRotationSnap(_rotationSnapDeg == null ? null : THREE.MathUtils.degToRad(_rotationSnapDeg))
+    scene.add(_tc.getHelper())
+    _tc.addEventListener('dragging-changed', _onGroupDraggingChanged)
+    _tc.addEventListener('change', _onGroupChange)
+
+    document.addEventListener('keydown', _onKey)
+    store.setState({ activeClusterId: _clusterId })
+  }
+
   function attach(clusterId, scene, camera, canvas) {
     detach()   // always clean up first
 
@@ -829,6 +1001,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   }
 
   function _recordCurrentTransform() {
+    if (_isGroup()) { _recordGroupTransforms(); return }
     if (!_clusterId || !_dummy || !_pivot) return
     const [px, py, pz] = _pivot
     const p = _dummy.position
@@ -838,6 +1011,30 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
       translation: [p.x - px, p.y - py, p.z - pz],
       rotation:    [q.x, q.y, q.z, q.w],
     })
+  }
+
+  /**
+   * Compose the group rigid delta (measured from attach: rotate about the combined
+   * centroid G by the dummy quaternion, translate so G → dummy.position) onto each
+   * member's baseline transform, and queue the ABSOLUTE result per member. The
+   * standard confirm path already PATCHes every pending cluster and reconciles their
+   * geometry, so no group-specific commit path is needed.
+   *
+   * For a member with baseline (P, T0, Q0) the current-visual point is
+   *   x = Q0·(p − P) + P + T0
+   * and the group delta maps x → Rd·(x − G) + G + Δ (Δ = dummy.pos − G). Expressing
+   * that as the backend form R'·(p − P) + P + T' keeps the pivot P and gives
+   *   R' = Rd·Q0,   T' = Rd·(P + T0 − G) + dummy.pos − P.
+   */
+  function _recordGroupTransforms() {
+    if (!_dummy || !_pivot || !_groupBaseline) return
+    const q = _dummy.quaternion
+    const p = _dummy.position
+    const dummyQuat = [q.x, q.y, q.z, q.w]
+    const dummyPos  = [p.x, p.y, p.z]
+    for (const [cid, base] of _groupBaseline.entries()) {
+      setPendingTransform(cid, composeGroupMemberTransform(base, _pivot, dummyQuat, dummyPos))
+    }
   }
 
   async function commitPendingTransforms({ log = true } = {}) {
@@ -1207,6 +1404,8 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _isDragging      = false
     _ringDragging    = false
     _lineDragging    = false
+    _groupClusterIds = null
+    _groupBaseline   = null
     _clusterId       = null
     _pivot           = null
     _startDummyPos   = null
@@ -1248,6 +1447,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
    */
   function setTransform(translation, rotation) {
     if (!_dummy || !_pivot) return
+    if (_isGroup()) { _setGroupTransform(translation, rotation); return }
     const [px, py, pz] = _pivot
 
     // Snapshot current rendered positions as base for the incremental transform.
@@ -1278,6 +1478,41 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     // Notify the transform panel (marks the tool dirty so Cancel restores, and
     // re-syncs the number boxes to the committed value). `translation` is already
     // expressed relative to the pivot — the same convention the fields use.
+    if (onTransformUpdate) onTransformUpdate([...translation], _dummy.quaternion.clone())
+
+    _recordCurrentTransform()
+  }
+
+  /**
+   * Group-mode variant of setTransform: interpret [tx,ty,tz]+quat as the GROUP delta
+   * relative to the combined centroid, drive the shared dummy, live-paint every member,
+   * and queue the composed per-member transforms. Mirrors the single-cluster setTransform
+   * but loops the group and never touches joint/ssDNA state.
+   */
+  function _setGroupTransform(translation, rotation) {
+    const [px, py, pz] = _pivot
+    const prevPos  = _dummy.position.clone()
+    const prevQuat = _dummy.quaternion.clone()
+
+    if (captureBase) {
+      _groupClusterList().forEach((cl, i) =>
+        captureBase(cl.helix_ids, cl.domain_ids?.length ? cl.domain_ids : null, i > 0))
+    }
+
+    _dummy.position.set(px + translation[0], py + translation[1], pz + translation[2])
+    _dummy.quaternion.set(rotation[0], rotation[1], rotation[2], rotation[3])
+
+    if (onLiveTransform) {
+      _incrQuat.copy(_dummy.quaternion).multiply(prevQuat.clone().invert())
+      for (const cl of _groupClusterList()) {
+        onLiveTransform(cl.helix_ids, prevPos, _dummy.position, _incrQuat,
+                        cl.domain_ids?.length ? cl.domain_ids : null)
+      }
+    }
+
+    _startDummyPos = _dummy.position.clone()
+    _startQuat     = _dummy.quaternion.clone()
+
     if (onTransformUpdate) onTransformUpdate([...translation], _dummy.quaternion.clone())
 
     _recordCurrentTransform()
@@ -1360,6 +1595,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
   return {
     attach,
+    attachGroup,
     detach,
     computePivot,
     setTransform,
@@ -1380,10 +1616,12 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     commitPendingTransforms,
     beginConstrainedRotation,
     isActive: () => _clusterId !== null,
+    isGroupActive: () => _isGroup(),
     getMode:  () => _mode,
-    isJointConstraintActive: () => _constraintType === 'joint' && !!((_constraintJoint) ?? _activeJoint()),
-    /** Returns the active constraint joint (explicitly set or design-level), or null. */
-    getActiveJoint: () => (_constraintJoint) ?? _activeJoint(),
+    isJointConstraintActive: () => !_isGroup() && _constraintType === 'joint' && !!((_constraintJoint) ?? _activeJoint()),
+    /** Returns the active constraint joint (explicitly set or design-level), or null.
+     *  Always null in group mode — a multi-cluster move is free translate/rotate only. */
+    getActiveJoint: () => (_isGroup() ? null : ((_constraintJoint) ?? _activeJoint())),
     /** Returns the pivot [x, y, z] at attach time, or null if not attached. */
     getPivot: () => _pivot,
     /** Returns the gizmo dummy's world position [x, y, z] (where the handles render), or null. */

@@ -26,7 +26,7 @@ import { registerShortcut } from '../input/shortcuts.js'
  *
  * @returns {{ action: 'open'|'retarget'|'close'|'none', clusterId: string|null }}
  */
-export function decideSelectionAction({ newSel, toolActive, autoOpened, activeClusterId, mode }) {
+export function decideSelectionAction({ newSel, toolActive, autoOpened, activeClusterId, mode, multiSelectedCount = 0 }) {
   const partsEditor = !!mode && !mode.assemblyActive && !mode.cadnanoActive && !mode.unfoldActive
   const newCid = newSel?.type === 'cluster' ? (newSel.data?.cluster_id ?? newSel.id ?? null) : null
   if (!toolActive) {
@@ -35,7 +35,11 @@ export function decideSelectionAction({ newSel, toolActive, autoOpened, activeCl
   }
   // Tool active: only selection-opened tools react to selection changes.
   if (!autoOpened) return { action: 'none', clusterId: null }
-  if (!newCid) return { action: 'close', clusterId: null }
+  if (!newCid) {
+    // A bare deselection while clusters are multi-selected is a promote-to-group, not a
+    // close — the multi-cluster subscriber keeps the gizmo alive and re-centers it.
+    return { action: multiSelectedCount >= 1 ? 'none' : 'close', clusterId: null }
+  }
   if (newCid !== activeClusterId) return { action: 'retarget', clusterId: newCid }
   return { action: 'none', clusterId: null }
 }
@@ -195,6 +199,19 @@ export function initTranslateRotateTool(deps) {
     setClusterDirty(false)
     setActive(true)
     document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
+
+    // ── Multi-selected clusters → drive them all as one rigid body ──────────────
+    // Only when the caller did NOT pre-target a specific cluster (Rotate button,
+    // joint rotate, strand-click retarget all pass one). The selection lives in
+    // store.multiSelectedClusterIds; keep only ids that are real movable clusters.
+    if (!targetClusterId) {
+      const groupIds = (store.getState().multiSelectedClusterIds ?? [])
+        .filter(id => clusters.some(c => c.id === id))
+      if (groupIds.length > 1) {
+        await _showClusterGroup(groupIds, clusters)
+        return
+      }
+    }
 
     // Attach gizmo to the target cluster (from Rotate button), the active cluster, or the last cluster.
     const { activeClusterId } = store.getState()
@@ -501,6 +518,44 @@ export function initTranslateRotateTool(deps) {
     if (cancelRestoreCursor !== null) await api.seekFeatures(cancelRestoreCursor)
   }
 
+  // Attach the gizmo across `groupIds` as one rigid body and switch the panel into
+  // group mode (dropdowns disabled, fields show the group delta = 0). Shared by tool
+  // activation and the live multi-select subscriber, so a group can be entered either
+  // by pressing `t` with a multi-selection OR by adding a cluster while the tool is open.
+  async function _showClusterGroup(groupIds, clusters) {
+    for (const id of groupIds) await _refreshClusterPivotForAttach(id)
+    clusterGizmo.attachGroup(groupIds, scene, camera, canvas)
+    _removeToolPickListeners()   // group mode has no joint picking
+    document.getElementById('mode-indicator').textContent =
+      `MOVE/ROTATE (${groupIds.length} clusters) — Tab: move/rotate · Esc: cancel`
+    _moveRotatePanel.setAssemblyCtx(null)
+    if (_mrClusterSel) _mrClusterSel.disabled = true   // can't retarget within a group
+    if (_mrPivotSel) _mrPivotSel.disabled = true       // pivot is the combined centroid
+    _mrSetClusterOptions(
+      groupIds.map(id => ({ id, name: clusters.find(c => c.id === id)?.name ?? id })),
+      groupIds[0],
+    )
+    _mrSetPivotOptions([])
+    _mrSetSelectedPivot('centroid')
+    _mrSetTransformValues(0, 0, 0, 0, 0, 0)   // fields show the group delta, starting at identity
+    await _flexRelax.refreshFlexGates()
+    if (_mrPanel) _mrPanel.style.display = ''
+  }
+
+  // Re-attach the gizmo to a SINGLE cluster (e.g. a group shrank back to one member).
+  // attach() re-sets activeClusterId → the main.js active-cluster subscriber repopulates
+  // the number boxes / pivot options / centroid constraint (it early-outs while a group
+  // is active, so it only runs once we're back in single mode).
+  async function _showClusterSingle(clusterId, clusters) {
+    if (_mrClusterSel) _mrClusterSel.disabled = false
+    if (_mrPivotSel) _mrPivotSel.disabled = false
+    document.getElementById('mode-indicator').textContent = 'MOVE/ROTATE — Esc: cancel'
+    _mrSetClusterOptions(clusters, clusterId)
+    canvas.addEventListener('pointerdown', _onToolPickPointerDown)   // dedup by the browser
+    await _refreshClusterPivotForAttach(clusterId)
+    clusterGizmo.attach(clusterId, scene, camera, canvas)
+  }
+
   // Selection→tool bridge: opening/re-targeting/closing the tool in response to cluster
   // selection (3D cluster-filter click OR Movable Clusters sidebar row — both surface as a
   // `selectedObject` of type 'cluster'). Registered from main.js beside the other tool
@@ -512,6 +567,7 @@ export function initTranslateRotateTool(deps) {
       toolActive:      getActive(),
       autoOpened:      _autoOpened,
       activeClusterId: newState.activeClusterId,
+      multiSelectedCount: (newState.multiSelectedClusterIds ?? []).length,
       mode: {
         assemblyActive: newState.assemblyActive,
         cadnanoActive:  newState.cadnanoActive,
@@ -528,6 +584,27 @@ export function initTranslateRotateTool(deps) {
     } else if (action === 'close') {
       // Deselection auto-commits pending transforms (safer than discarding a stray move).
       await _confirmTranslateRotateTool()
+    }
+  }
+
+  // Live multi-select bridge: while the design-mode tool is active, follow changes to
+  // store.multiSelectedClusterIds so the gizmo stays up and re-centers as clusters are
+  // ctrl/shift-clicked or lassoed in/out. >=2 → group; exactly 1 → single (only when
+  // leaving a group or landing on a different cluster); 0 → leave it to _handleSelectionChange.
+  async function _handleMultiClusterSelectionChange(newState, prevState) {
+    if (newState.multiSelectedClusterIds === prevState.multiSelectedClusterIds) return
+    if (!getActive()) return
+    if (newState.assemblyActive || newState.cadnanoActive || newState.unfoldActive) return
+    const clusters = newState.currentDesign?.cluster_transforms ?? []
+    const groupIds = (newState.multiSelectedClusterIds ?? []).filter(id => clusters.some(c => c.id === id))
+    if (groupIds.length >= 2) {
+      await _showClusterGroup(groupIds, clusters)
+    } else if (groupIds.length === 1) {
+      // Re-attach single only if we were a group (or somehow point elsewhere) — otherwise
+      // the gizmo is already on this cluster (e.g. the promote seed) and re-attaching flickers.
+      if (clusterGizmo.isGroupActive?.() || groupIds[0] !== newState.activeClusterId) {
+        await _showClusterSingle(groupIds[0], clusters)
+      }
     }
   }
 
@@ -611,6 +688,7 @@ export function initTranslateRotateTool(deps) {
     resetToSaved: _resetActiveClusterToSaved,
     rotateJoint: _rotateJoint,
     handleSelectionChange: _handleSelectionChange,
+    handleMultiClusterSelectionChange: _handleMultiClusterSelectionChange,
     removeToolPickListeners: _removeToolPickListeners,
     hideConfirmBtn: () => { _confirmBtn.style.display = 'none' },
   }

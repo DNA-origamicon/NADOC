@@ -20,6 +20,54 @@ Sub-cluster (`domain_ids`) moves skip the rebake because the helix isn't rigidly
 
 **Don't break:** `_rebakeHelixAxesForClusterDelta` MUST mutate in place. The hull-rebuild subscriber gates on `n.currentHelixAxes !== p.currentHelixAxes`; the explicit `jointRenderer.rebuildHulls()` call in the same code paths is what triggers the rebuild. Replacing the mutation with clone-and-replace will cascade rebuilds across unrelated subscribers.
 
+## Multi-cluster group move/rotate (2026-07-10)
+
+Selecting >1 movable cluster (Ctrl/Shift-click → `store.multiSelectedClusterIds`) then
+opening Move/Rotate (`t` / Tools menu — NOT a pre-targeted Rotate button) drives them all
+as **one rigid body**. `_activateTranslateRotateTool` (translate_rotate_tool.js) detects
+`multiSelectedClusterIds.length > 1` (and only when `targetClusterId` is null) and calls
+the new `clusterGizmo.attachGroup(ids, …)` instead of `attach(one, …)`.
+
+**Additive selection keeps the gizmo alive and re-centers it (2026-07-10 follow-up).**
+Click cluster 1 → single gizmo; Ctrl+click / lasso cluster 2 → the gizmo STAYS and
+re-centers on the combined centroid. Two pieces make this work:
+- `_promoteSelectionToMulti` (selection_manager.js) now nulls `selectedObject` AND seeds
+  `multiSelectedClusterIds` in ONE `setState`. Previously the null landed first (empty
+  pool), and the tool bridge read it as a deselection and closed the gizmo.
+- `decideSelectionAction` returns `none` (not `close`) on a bare deselection when
+  `multiSelectedCount >= 1`, and a new `handleMultiClusterSelectionChange` subscriber
+  (wired in main.js next to `handleSelectionChange`) follows `multiSelectedClusterIds`
+  while the tool is active: >=2 → `_showClusterGroup`, exactly 1 → `_showClusterSingle`
+  (only when leaving a group), 0 → left to the selectedObject bridge. `_showClusterGroup`/
+  `_showClusterSingle` are shared by activation and the subscriber. In-progress moves
+  survive re-attach because `attachGroup` reads `_withPendingTransform` for the baseline.
+
+How it works (cluster_gizmo.js):
+- One dummy at the **combined centroid** G = mean of each member's visual centroid
+  (`pivot + translation`; rotation about the pivot leaves the centroid fixed). Dummy starts
+  at identity rotation, so the panel's number boxes read the GROUP delta (0 at open).
+- Live paint: the same `(startDummyPos, dummyPos, incrQuat)` rigid delta is fed to
+  `onLiveTransform` once **per member** (each with its own `helix_ids`/`domain_ids`), so
+  mixed full/sub-domain clusters both paint correctly. captureBase appends across members.
+- Commit: `_recordGroupTransforms` composes the group delta onto each member's **attach-time
+  baseline** and queues an absolute per-member transform. The standard confirm path already
+  loops `commitPendingTransforms` → per-cluster `commitClusterPositions` + axis rebake, so no
+  group-specific commit path was needed. `_pendingTransforms` was already a Map.
+- Pure, unit-tested math: `combinedGroupCentroid(members)` and
+  `composeGroupMemberTransform(baseline, G, dummyQuat, dummyPos)` → for baseline (P,T0,Q0):
+  `R' = Rd·Q0`, `T' = Rd·(P + T0 − G) + dummyPos − P`, pivot kept at P (backend form
+  `R·(p−P)+P+T`). Tests in cluster_gizmo.test.js verify every member reproduces the shared
+  rigid delta, and identity delta is a no-op.
+- Group mode is **free translate/rotate only**: joints / ssDNA constraints disabled
+  (`getActiveJoint`/`isJointConstraintActive` return null/false when `_isGroup()`), pivot +
+  cluster dropdowns disabled. Two main.js subscribers (activeClusterId panel-repopulate,
+  strand-click retarget) early-out on `clusterGizmo.isGroupActive()` so they don't clobber
+  the group panel or break the group by retargeting to one member.
+
+NOT verified in the running app yet (frontend suite green: 2553 tests). Needs a real
+multi-cluster design (e.g. `workspace/2x4_Hinge_autoscaff_test1.nadoc`, 2 clusters) to
+confirm the live drag + commit visually.
+
 ## What's been built (2026-04-03)
 
 Full ClusterJoint system across backend + frontend — revolute joint axes defined by clicking a face on a surface approximation of the cluster.

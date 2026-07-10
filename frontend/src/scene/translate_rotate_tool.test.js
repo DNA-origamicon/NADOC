@@ -483,6 +483,19 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
     })).toEqual({ action: 'close', clusterId: null })
   })
 
+  it('does NOT close on a bare deselection that is really a promote-to-group', () => {
+    // selectedObject nulled but >=1 cluster is multi-selected → the group subscriber owns
+    // the gizmo; closing here would tear it down mid-promote.
+    expect(decideSelectionAction({
+      newSel: null, toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
+      multiSelectedCount: 1,
+    })).toEqual({ action: 'none', clusterId: null })
+    expect(decideSelectionAction({
+      newSel: null, toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,
+      multiSelectedCount: 2,
+    })).toEqual({ action: 'none', clusterId: null })
+  })
+
   it('re-targets an AUTO-opened tool when a different cluster is selected', () => {
     expect(decideSelectionAction({
       newSel: cluster('c2'), toolActive: true, autoOpened: true, activeClusterId: 'c1', mode: PARTS,

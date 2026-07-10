@@ -2889,9 +2889,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       if (!members.length) return
       _restoreStrand()
       _mode = 'none'; _strandId = null; _drillClusterId = null
-      store.setState({ selectedObject: null })
       _applyMultiHighlight(members)
-      store.setState({ multiSelectedStrandIds: members, multiSelectedClusterIds: [cid] })
+      // Null the single selection AND seed the cluster pool in ONE setState so no
+      // subscriber ever sees "selectedObject null + empty pool" — the Move/Rotate tool
+      // bridge reads that transient as a deselection and would tear the gizmo down.
+      store.setState({ selectedObject: null, multiSelectedStrandIds: members, multiSelectedClusterIds: [cid] })
       return
     }
 

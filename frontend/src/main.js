@@ -6401,6 +6401,10 @@ async function main() {
   store.subscribe((newState, prevState) => {
     if (newState.activeClusterId === prevState.activeClusterId) return
     if (!newState.activeClusterId || !newState.translateRotateActive) return
+    // Group (multi-cluster) mode owns the panel itself — number boxes show the group
+    // delta and the pivot/cluster dropdowns are disabled. Don't overwrite them with a
+    // single member's stored transform.
+    if (clusterGizmo.isGroupActive?.()) return
     const cluster = newState.currentDesign?.cluster_transforms?.find(c => c.id === newState.activeClusterId)
     if (!cluster) return
     // Read from the gizmo's pending (pivot-rebased) transform when present so the number
@@ -6424,6 +6428,10 @@ async function main() {
   // when the cluster is deselected. Parts-editor only; sticky for manually-opened tools.
   // Logic + guards live in translate_rotate_tool.js; this is thin wiring.
   store.subscribe((newState, prevState) => { _translateRotateTool.handleSelectionChange(newState, prevState) })
+
+  // Live multi-select bridge: keep Move/Rotate active and re-center it as a group when
+  // clusters are ctrl/shift-clicked or lassoed in/out while the tool is open.
+  store.subscribe((newState, prevState) => { _translateRotateTool.handleMultiClusterSelectionChange(newState, prevState) })
 
   // Save/restore selectableTypes when translate/rotate tool activates/deactivates.
   let _savedClusterST = null
@@ -6449,6 +6457,7 @@ async function main() {
   // When a strand is clicked while the tool is active, switch to that strand's cluster (if any).
   store.subscribe((newState, prevState) => {
     if (!_translateRotateActive) return
+    if (clusterGizmo.isGroupActive?.()) return   // don't break a multi-cluster group by retargeting to one
     if (newState.selectedObject === prevState.selectedObject) return
     const strandId = newState.selectedObject?.data?.strand_id
     if (!strandId) return
