@@ -111,6 +111,30 @@ export function lassoCaptureType({ selLevel, overhangFilter = false }) {
   }
 }
 
+/**
+ * Cluster multi-select toggle rule. A cluster's presence is decided by the CLUSTER id
+ * pool, never by its member strands: two clusters can share a strand (a staple that
+ * bridges them), so "are all its strands selected?" answers the wrong question.
+ * The member strands are what the highlight renders, so they ride along.
+ *
+ * @param {{clusterIds?:string[], strandIds?:string[], clusterId:string, memberStrandIds?:string[]}} o
+ * @returns {{clusterIds:string[], strandIds:string[]}}
+ */
+export function toggleClusterSelection({ clusterIds = [], strandIds = [], clusterId, memberStrandIds = [] }) {
+  if (!clusterId) return { clusterIds: [...clusterIds], strandIds: [...strandIds] }
+  if (clusterIds.includes(clusterId)) {
+    const drop = new Set(memberStrandIds)
+    return {
+      clusterIds: clusterIds.filter(id => id !== clusterId),
+      strandIds:  strandIds.filter(id => !drop.has(id)),
+    }
+  }
+  return {
+    clusterIds: [...clusterIds, clusterId],
+    strandIds:  [...new Set([...strandIds, ...memberStrandIds])],
+  }
+}
+
 export function hoverPreviewTarget({ selLevel, mode, strandId, hit }) {
   if (selLevel !== 'default' || mode !== 'strand' || !hit) return null
   if (hit.kind === 'bead') {

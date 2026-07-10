@@ -132,7 +132,7 @@ const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
  * @param {import('three').OrbitControls} controls
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
-export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel, onPlace, getBluntEnds } = {}) {
+export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel, onPlace, onPlacePaste, getBluntEnds } = {}) {
   // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
   let _camera = camera
 
@@ -1284,7 +1284,30 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       strandFilter: spec.strandFilter ?? 'both',
       ligateAdjacent: spec.ligateAdjacent ?? true,
       latticeType: spec.latticeType ?? 'HONEYCOMB',
+      // ── Escape hatch for non-segment placements (cluster paste) ──────────────
+      // 'segment' (the default) draws the pooled ghost cylinders and commits via
+      // onPlace. Any other kind delegates the ghost drawing (onGhostUpdate) and the
+      // commit (onPlacePaste) to the caller, while still reusing this module's hover
+      // raycast, anchor snapping and occupied-cell conflict detection.
+      commitKind: spec.commitKind ?? 'segment',
+      onGhostUpdate: spec.onGhostUpdate ?? null,
+      // Override the anchor-snap candidate rule. Cluster paste needs even (row+col)
+      // parity on BOTH lattices (it grafts helices verbatim, so an odd SQUARE shift
+      // keeps the shape but inverts every polarity) — stricter than
+      // validParityCandidates, whose question is only "does the shape survive".
+      candidateCells: spec.candidateCells ?? null,
     }
+  }
+
+  /** True when an existing helix occupies this lattice cell, at ANY bp range.
+   *
+   * Reads the DESIGN, not `_circleMeshes`: a circle's state is computed at the current
+   * slice offset, so a helix spanning z=2.3–14 nm reads 'free' at offset 0. Cluster
+   * paste is offset-independent (Δbp=0, whole helices), and this must agree exactly
+   * with the backend's collision guard, which compares helix `grid_pos`. */
+  function _cellOccupied(row, col) {
+    const helices = getDesign?.()?.helices ?? []
+    return helices.some(h => h.grid_pos && h.grid_pos[0] === row && h.grid_pos[1] === col)
   }
 
   /** Cell world position for the placement ghost/snap — deformed frame when active, else flat. */
@@ -1303,7 +1326,8 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
    */
   function _snapPlacementCell(raw) {
     if (!raw || !_placementSpec) return raw
-    const cands = validParityCandidates(raw, _placementSpec.anchorCell, _placementSpec.latticeType)
+    const candidateFn = _placementSpec.candidateCells ?? validParityCandidates
+    const cands = candidateFn(raw, _placementSpec.anchorCell, _placementSpec.latticeType)
     if (cands.length === 1) return { row: cands[0][0], col: cands[0][1] }
     const cw = _cursorPlanePoint()
     let best = null, bestD = Infinity
@@ -1353,6 +1377,26 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     _placementHasConflict = false
     if (!_placementMode || !_placementSpec) { _hidePreview(); return }
     const { cells, anchorCell, lengthBp, cellLengths } = _placementSpec
+
+    // Cluster paste (and any future non-segment placement) owns its own ghost: this
+    // module contributes the snapped hover cell + occupied-cell conflict, and the
+    // caller draws. No pooled cylinders — the ghost is a posed clone of real helices.
+    if (_placementSpec.commitKind !== 'segment') {
+      _hidePreview()
+      if (!_hoverCell) { _placementSpec.onGhostUpdate?.(null); return }
+      const placed = translateFootprint(cells, anchorCell, _hoverCell)
+      _placementHasConflict = placed.some(([r, c]) => _cellOccupied(r, c))
+      const worldOffset = _placementCellWorldPos(_hoverCell.row, _hoverCell.col)
+        .clone()
+        .sub(_placementCellWorldPos(anchorCell[0], anchorCell[1]))
+      _placementSpec.onGhostUpdate?.({
+        worldOffset,
+        conflict: _placementHasConflict,
+        gridDelta: [_hoverCell.row - anchorCell[0], _hoverCell.col - anchorCell[1]],
+      })
+      return
+    }
+
     // A circle carries per-cell lengths; a uniform primitive carries one lengthBp.
     const hasLen = cellLengths ? cellLengths.length > 0 : !!lengthBp
     if (!_hoverCell || !hasLen) { _hidePreview(); return }
@@ -1389,6 +1433,12 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     if (!_placementMode || !_placementSpec || !_hoverCell) return
     if (_placementHasConflict) {
       showToast('Placement overlaps existing DNA — move to a clear spot.', { severity: 'error' })
+      return
+    }
+    if (_placementSpec.commitKind !== 'segment') {
+      const { anchorCell: aCell } = _placementSpec
+      const gridDelta = [_hoverCell.row - aCell[0], _hoverCell.col - aCell[1]]
+      onPlacePaste?.({ gridDelta, anchorCell: aCell, hoverCell: { ..._hoverCell } })
       return
     }
     const { cells, anchorCell, lengthBp, cellLengths, strandFilter, ligateAdjacent, latticeType, continuation } = _placementSpec

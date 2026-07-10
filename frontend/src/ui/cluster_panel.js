@@ -11,7 +11,7 @@
  *
  * @param {object} store
  * @param {object} opts
- * @param {function} opts.onClusterClick    — called with (clusterId) when user clicks a row
+ * @param {function} opts.onClusterClick    — called with (clusterId, {additive}) when user clicks a row
  * @param {object}  opts.api               — api module for createCluster / deleteCluster
  * @param {function} [opts.onVisibilityChange] — called with Set<clusterId> of hidden clusters
  */
@@ -80,7 +80,8 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
   // ── Rebuild list when design or active cluster changes ───────────────────────
   store.subscribe((n, p) => {
-    if (n.currentDesign === p.currentDesign && n.activeClusterId === p.activeClusterId) return
+    if (n.currentDesign === p.currentDesign && n.activeClusterId === p.activeClusterId &&
+        n.multiSelectedClusterIds === p.multiSelectedClusterIds) return
     if (_assemblyMode) return
     if (!_collapsed) _rebuild(n.currentDesign?.cluster_transforms ?? [], n.activeClusterId)
   })
@@ -101,6 +102,14 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     _rebuildFlat(clusters, activeId)
   }
 
+  /** A row is lit for the single active cluster OR any cluster in the multi-selection
+   *  (Ctrl+click / lasso at cluster level — the two are mutually exclusive states). */
+  function _isSelected(clusterId) {
+    const s = store.getState()
+    return clusterId === s.activeClusterId ||
+      (s.multiSelectedClusterIds ?? []).includes(clusterId)
+  }
+
   function _rebuildFlat(clusters, activeId) {
     listEl.innerHTML = ''
 
@@ -113,7 +122,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     }
 
     for (const cluster of clusters) {
-      const isActive = cluster.id === activeId
+      const isActive = _isSelected(cluster.id)
 
       const row = document.createElement('div')
       row.style.cssText = [
@@ -125,13 +134,10 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
       // Hover highlight
       row.addEventListener('mouseenter', () => {
-        if (cluster.id !== store.getState().activeClusterId) {
-          row.style.background = '#161b22'
-        }
+        if (!_isSelected(cluster.id)) row.style.background = '#161b22'
       })
       row.addEventListener('mouseleave', () => {
-        row.style.background = cluster.id === store.getState().activeClusterId
-          ? '#1c3a2a' : 'transparent'
+        row.style.background = _isSelected(cluster.id) ? '#1c3a2a' : 'transparent'
       })
 
       // Selected-cluster indicator dot — green, matching the 3D selection glow.
@@ -141,7 +147,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         background:${isActive ? '#3fb950' : '#3a4a5a'};
         transition:background 0.15s;
       `
-      dot.title = isActive ? 'Selected — click to deselect' : 'Click to select'
+      dot.title = isActive ? 'Selected — click to deselect' : 'Click to select (Ctrl+click to add)'
 
       const _editStyle = 'background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
       const _saveStyle = 'background:#162420;border:1px solid #3fb950;color:#3fb950;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
@@ -259,9 +265,10 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         await api.deleteCluster(cluster.id)
       })
 
-      // Row click → notify parent
-      row.addEventListener('click', () => {
-        onClusterClick(cluster.id)
+      // Row click → notify parent. Ctrl/Cmd/Shift+click = additive multi-select, the
+      // same modifier set the 3D canvas uses.
+      row.addEventListener('click', e => {
+        onClusterClick(cluster.id, { additive: e.ctrlKey || e.metaKey || e.shiftKey })
       })
 
       row.append(dot, nameSpan, ...(duplexTag ? [duplexTag] : []), badge, visBtn, editBtn, delBtn)

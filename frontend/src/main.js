@@ -20,6 +20,7 @@ import { initDesignRenderer }        from './scene/design_renderer.js'
 import { buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
+import { initClusterClipboard }      from './scene/cluster_clipboard.js'
 import { initExtrudePanel }          from './ui/extrude_panel.js'
 import { initPrimitiveLibrary }      from './ui/primitive_library.js'
 import { axesVisibleForDesign }      from './ui/extrude_panel_logic.js'
@@ -2383,6 +2384,7 @@ async function main() {
   // is constructed just after slicePlane (deferred handlers, so it's assigned by
   // the time they fire). Mirrors the `let clusterPanel = null` pattern.
   let _extrudePanel = null
+  let _clusterClipboard = null
   const slicePlane = initSlicePlane(scene, camera, canvas, controls, {
     onExtrude: async ({ cells, lengthBp, plane, offsetNm, continuationMode, newBundle, latticeType = 'HONEYCOMB', deformedFrame, refHelixId, sourceBp = null, strandFilter = 'both', ligateAdjacent = true }) => {
       // A "new bundle" only RESETS the workspace when it's empty. With a part
@@ -2477,7 +2479,12 @@ async function main() {
     // Lazy (bluntEnds is created later): lets placement YIELD a ring click to the
     // domain-end pick so it retargets the footprint onto that face.
     getBluntEnds: () => bluntEnds,
+    // Lazy (clusterClipboard is created just below): a cluster-paste ghost commits here.
+    onPlacePaste: (args) => _clusterClipboard?.onCommit(args),
   })
+
+  // ── Cluster copy/paste (Ctrl+C / Ctrl+V) → scene/cluster_clipboard.js ────────
+  _clusterClipboard = initClusterClipboard({ store, api, scene, slicePlane, showToast })
 
   // ── Extrude tool (right-sidebar panel + plane dropdown) → ui/extrude_panel.js ──
   // Owns #extrude-panel visibility, the "Extrude from" origin-plane dropdown, and
@@ -4150,6 +4157,7 @@ async function main() {
   initKeyboardShortcuts({
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
+    clusterClipboard: _clusterClipboard,
     extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     primitiveLibrary: _primitiveLibrary,
     viewCube, camera, controls,
@@ -5870,7 +5878,13 @@ async function main() {
       _selectedAssemblyCluster = { instanceId, clusterId }
       instanceGizmo.detach()
     },
-    onClusterClick: async (clusterId) => {
+    onClusterClick: async (clusterId, { additive = false } = {}) => {
+      // Ctrl/Shift+click → multi-select, never the gizmo (which drives ONE cluster).
+      // The toggle nulls `selectedObject`, which auto-closes an auto-opened Move/Rotate.
+      if (additive) {
+        selectionManager.toggleCluster(clusterId)
+        return
+      }
       if (!_translateRotateActive) {
         // Unify with the 3D cluster-filter click: same green glow + bead scale +
         // cluster selectedObject. The selectedObject→activeClusterId sync below
@@ -7065,6 +7079,11 @@ async function main() {
       getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
       /** Current single-selection ({type,id,...}) or null. */
       getSelectedObject: () => store.getState().selectedObject ?? null,
+      /** Multi-selection pools (cluster multi-select gesture e2e). */
+      getMultiSelection: () => ({
+        clusterIds: store.getState().multiSelectedClusterIds ?? [],
+        strandIds:  store.getState().multiSelectedStrandIds ?? [],
+      }),
       /** Drill-v2 engaged selection level ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
       getSelectionLevel: () => selectionManager.getSelectionLevel?.() ?? 'default',
 

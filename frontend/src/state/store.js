@@ -114,6 +114,15 @@ const _initialState = {
   multiSelectedOverhangIds: [],
 
   /**
+   * Cluster IDs multi-selected at the 'cluster' selection level (Ctrl/Shift+click).
+   * Kept ALONGSIDE multiSelectedStrandIds, which holds those clusters' member strands
+   * for highlighting — that union loses which strand came from which cluster, and
+   * cluster copy/paste needs the cluster granularity.
+   * Empty array when no cluster multi-selection is active.
+   */
+  multiSelectedClusterIds: [],
+
+  /**
    * The lattice plane used for the most recent extrude.  Set by main.js after
    * a successful createBundle call.  Used to initialise the slice plane.
    * Shape: 'XY' | 'XZ' | 'YZ' | null
@@ -385,7 +394,7 @@ const _SLICES = {
 
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',
-                      'multiSelectedOverhangIds',
+                      'multiSelectedOverhangIds', 'multiSelectedClusterIds',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
                       'activeClusterId', 'translateRotateActive', 'debugOverlayActive',
                       'domainDesigner']),

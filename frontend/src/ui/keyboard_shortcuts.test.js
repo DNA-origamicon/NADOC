@@ -51,6 +51,9 @@ function makeDeps(overrides = {}) {
     expandedSpacing: { toggle: vi.fn() },
     debugOverlay: { toggle: vi.fn(), isActive: vi.fn(() => true) },
     measurementTool: { isActive: vi.fn(() => false), clear: vi.fn(), show: vi.fn() },
+    clusterClipboard: {
+      copy: vi.fn(), paste: vi.fn(), cancel: vi.fn(), isActive: vi.fn(() => false),
+    },
     selectionManager: {
       getSelectionLevel: vi.fn(() => 'default'),
       setSelectionLevel: vi.fn(),
@@ -303,6 +306,65 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     document.getElementById('menu-file-open').click = click
     await press('o', { ctrl: true })
     expect(click).toHaveBeenCalledTimes(1)
+  })
+
+  it('Ctrl+C copies when a cluster is selected', async () => {
+    const d = makeDeps()
+    d.store.setState({ selectedObject: { type: 'cluster', id: 'cA' } })
+    initKeyboardShortcuts(d)
+    const e = await press('c', { ctrl: true })
+    expect(d.clusterClipboard.copy).toHaveBeenCalledTimes(1)
+    expect(e.preventDefault).toHaveBeenCalled()
+  })
+
+  it('Ctrl+C copies from the cluster multi-select pool', async () => {
+    const d = makeDeps()
+    d.store.setState({ multiSelectedClusterIds: ['cA', 'cB'] })
+    initKeyboardShortcuts(d)
+    await press('c', { ctrl: true })
+    expect(d.clusterClipboard.copy).toHaveBeenCalledTimes(1)
+  })
+
+  it('Ctrl+C yields to the browser text copy when no cluster is selected', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    const e = await press('c', { ctrl: true })
+    expect(d.clusterClipboard.copy).not.toHaveBeenCalled()
+    expect(e.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('Ctrl+C and Ctrl+V are blocked in assembly mode', async () => {
+    const d = makeDeps()
+    d.store.setState({ assemblyActive: true, selectedObject: { type: 'cluster', id: 'cA' } })
+    initKeyboardShortcuts(d)
+    await press('c', { ctrl: true })
+    await press('v', { ctrl: true })
+    expect(d.clusterClipboard.copy).not.toHaveBeenCalled()
+    expect(d.clusterClipboard.paste).not.toHaveBeenCalled()
+  })
+
+  it('Ctrl+V arms the paste ghost', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    await press('v', { ctrl: true })
+    expect(d.clusterClipboard.paste).toHaveBeenCalledTimes(1)
+  })
+
+  it('Ctrl+V does not fire the plain-v camera-pose capture', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+    await press('v', { ctrl: true })
+    expect(d.captureCurrentCamera).not.toHaveBeenCalled()
+  })
+
+  it('Escape cancels an armed paste ghost before anything else', async () => {
+    const d = makeDeps()
+    d.clusterClipboard.isActive.mockReturnValue(true)
+    d.getOoActiveIds = vi.fn(() => ['oh1'])   // would otherwise win
+    initKeyboardShortcuts(d)
+    await press('Escape')
+    expect(d.clusterClipboard.cancel).toHaveBeenCalledTimes(1)
+    expect(d.ooClose).not.toHaveBeenCalled()
   })
 
   it("Ctrl+S routes by mode: part-edit→savePartToAssembly, assembly→saveAssemblyToWorkspace, else menu Save", async () => {

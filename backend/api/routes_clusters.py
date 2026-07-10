@@ -16,6 +16,7 @@ Routes
   POST   /design/cluster               — create a named cluster (pushes undo)
   PATCH  /design/cluster/{cluster_id}  — update pose/membership (silent; commit→undo; +log→feature_log)
   DELETE /design/cluster/{cluster_id}  — remove a cluster (pushes undo)
+  POST   /design/cluster-paste         — duplicate cluster(s) at a lattice offset (feature-logged)
 
 URLs are unchanged from their previous home in crud.py. Mounting is done in
 ``backend/api/main.py`` via ``app.include_router(...)``.
@@ -34,6 +35,8 @@ from backend.api import state as design_state
 # crud.py's auto-clustering path). Both stay in crud.py and are imported back
 # here (same convention as routes_camera_poses.py / routes_deformation.py).
 from backend.api.crud import _design_response, _ensure_default_cluster
+from backend.core.cluster_copy import paste_clusters
+from backend.core.cluster_reconcile import MutationReport
 from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry
 
 router = APIRouter()
@@ -281,3 +284,63 @@ def set_cluster_rotation_point(cluster_id: str, body: RotationPointBody) -> dict
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
+
+
+class ClusterPasteBody(BaseModel):
+    """A cluster copy/paste: duplicate `cluster_ids` at a lattice offset.
+
+    The offset is (row, col) only — bp indices are copied verbatim (Δbp = 0).
+    ``(delta_row + delta_col)`` must be EVEN; an odd shift flips every helix's
+    FORWARD/REVERSE polarity and moves every crossover off its allowed bp phase.
+    The core layer enforces this and 400s.
+    """
+    cluster_ids: List[str]
+    delta_row: int
+    delta_col: int
+
+
+@router.post("/design/cluster-paste", status_code=200)
+def cluster_paste(body: ClusterPasteBody) -> dict:
+    """Paste a copy of the selected cluster(s) at a lattice offset.
+
+    Emits a ``cluster-paste`` feature-log entry, which is what gives the user
+    rollback / revert / delete and feature-slider seek for free.
+    """
+    holder: dict = {}
+
+    def _fn(design):
+        try:
+            grafted, pasted_helix_ids, report = paste_clusters(
+                design, body.cluster_ids, (body.delta_row, body.delta_col)
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        holder["report"] = report
+        # Explicit orphans: without this hint reconcile_cluster_membership sweeps
+        # the pasted helices into whichever existing cluster is lattice-adjacent
+        # (Manhattan <= 2) — usually the SOURCE cluster they were copied from.
+        return grafted, MutationReport(
+            new_helix_origins={hid: None for hid in pasted_helix_ids}
+        )
+
+    n = len(body.cluster_ids)
+    updated, report, _entry = design_state.mutate_with_feature_log(
+        op_kind="cluster-paste",
+        label=f"Paste {n} cluster{'s' if n != 1 else ''} "
+              f"(Δrow {body.delta_row:+d}, Δcol {body.delta_col:+d})",
+        params=body.model_dump(mode="json"),
+        fn=_fn,
+    )
+
+    resp = _design_response(updated, report)
+    copy_report = holder["report"]
+    resp["paste_report"] = {
+        "requested_cluster_ids": copy_report.requested_cluster_ids,
+        "closure_cluster_ids": copy_report.closure_cluster_ids,
+        "auto_added_cluster_ids": copy_report.auto_added_cluster_ids,
+        "copied_helix_ids": copy_report.copied_helix_ids,
+        "truncated_strand_count": copy_report.truncated_strand_count,
+        "dropped_boundary_crossovers": copy_report.dropped_boundary_crossovers,
+        "dropped_boundary_fls": copy_report.dropped_boundary_fls,
+    }
+    return resp

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   LEVELS, TAB_CYCLE, BTN_LEVEL, LEVEL_BTN,
   normalizeLevel, nextTabLevel, toggleLevel, hoverPreviewTarget,
-  lassoCaptureType,
+  lassoCaptureType, toggleClusterSelection,
 } from './selection_level.js'
 
 describe('selection_level — constants & maps', () => {
@@ -172,5 +172,58 @@ describe('lassoCaptureType — the engaged selLevel is the single source of trut
     expect(r.ends).toBe(false)
     expect(r.xover).toBe(false)
     expect(r.cluster).toBe(false)
+  })
+})
+
+describe('selection_level — toggleClusterSelection', () => {
+  it('adds an absent cluster and unions its member strands', () => {
+    const r = toggleClusterSelection({ clusterId: 'c1', memberStrandIds: ['s1', 's2'] })
+    expect(r.clusterIds).toEqual(['c1'])
+    expect(r.strandIds).toEqual(['s1', 's2'])
+  })
+
+  it('accumulates a second cluster (Ctrl+click after a plain click)', () => {
+    const r = toggleClusterSelection({
+      clusterIds: ['c1'], strandIds: ['s1', 's2'],
+      clusterId: 'c2', memberStrandIds: ['s3'],
+    })
+    expect(r.clusterIds).toEqual(['c1', 'c2'])
+    expect(r.strandIds).toEqual(['s1', 's2', 's3'])
+  })
+
+  it('removes a present cluster and drops its member strands', () => {
+    const r = toggleClusterSelection({
+      clusterIds: ['c1', 'c2'], strandIds: ['s1', 's2', 's3'],
+      clusterId: 'c1', memberStrandIds: ['s1', 's2'],
+    })
+    expect(r.clusterIds).toEqual(['c2'])
+    expect(r.strandIds).toEqual(['s3'])
+  })
+
+  it('presence is decided by the cluster pool, not by its strands being selected', () => {
+    // s1/s2 already selected at STRAND level; the cluster itself is not in the pool,
+    // so Ctrl+clicking it must ADD it, not toggle it off.
+    const r = toggleClusterSelection({
+      clusterIds: [], strandIds: ['s1', 's2'],
+      clusterId: 'c1', memberStrandIds: ['s1', 's2'],
+    })
+    expect(r.clusterIds).toEqual(['c1'])
+    expect(r.strandIds).toEqual(['s1', 's2'])
+  })
+
+  it('does not duplicate a strand shared by two selected clusters', () => {
+    const r = toggleClusterSelection({
+      clusterIds: ['c1'], strandIds: ['s1', 'shared'],
+      clusterId: 'c2', memberStrandIds: ['shared', 's3'],
+    })
+    expect(r.strandIds).toEqual(['s1', 'shared', 's3'])
+  })
+
+  it('no clusterId → identity (returns copies)', () => {
+    const clusterIds = ['c1'], strandIds = ['s1']
+    const r = toggleClusterSelection({ clusterIds, strandIds, clusterId: null })
+    expect(r.clusterIds).toEqual(['c1'])
+    expect(r.strandIds).toEqual(['s1'])
+    expect(r.clusterIds).not.toBe(clusterIds)
   })
 })

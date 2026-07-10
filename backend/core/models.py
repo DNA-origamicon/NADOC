@@ -1362,6 +1362,7 @@ class OverhangRotationLogEntry(BaseModel):
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
     'bundle-create',
+    'cluster-paste',
     'extrude-segment',
     'circle-segment',
     'extrude-continuation',

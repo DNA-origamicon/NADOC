@@ -37,7 +37,7 @@ import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_gizmo.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
-import { normalizeLevel, hoverPreviewTarget, lassoCaptureType } from './selection_level.js'
+import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection } from './selection_level.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1709,6 +1709,25 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     return backboneEntries.filter(e => f(e.nuc))
   }
 
+  // Strand ids of a cluster's members. Beads are the primary source; at cylinder LOD
+  // there are no bead entries, so fall back to the per-domain cylinder records.
+  function _clusterMemberStrandIds(clusterId, design) {
+    const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
+    const f = cluster ? clusterMemberFilter(cluster, design) : null
+    if (!f) return []
+    const out = new Set()
+    for (const e of designRenderer.getBackboneEntries()) {
+      if (e.nuc.strand_id && f(e.nuc)) out.add(e.nuc.strand_id)
+    }
+    if (out.size === 0) {
+      for (const d of designRenderer.getCylinderDomainData()) {
+        if (!d.strandId) continue
+        if (f({ helix_id: d.helixId, strand_id: d.strandId, domain_index: d.domainIndex })) out.add(d.strandId)
+      }
+    }
+    return [...out]
+  }
+
   function _clusterSelection(clusterId) {
     const design = store.getState().currentDesign
     const c = design?.cluster_transforms?.find(c => c.id === clusterId)
@@ -1747,6 +1766,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // cluster `selectedObject` state. Re-selecting the active cluster toggles it off.
   function _applyClusterSelection(cid, { toggle = false } = {}) {
     if (toggle && _mode === 'cluster' && _drillClusterId === cid) { _clearAll(); return true }
+    // A plain (non-additive) cluster pick replaces any multi-cluster selection. The 3D
+    // click path already cleared it; the sidebar row calls straight in here.
+    if (_multiStrandIds.length > 0) _clearMultiSelection()
     const backboneEntries = designRenderer.getBackboneEntries()
     _mode = 'cluster'; _strandId = null
     _highlightCluster(cid, backboneEntries)   // restores prior selection, green glow + _drillClusterId
@@ -2438,7 +2460,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _multiEntries      = []
     _multiConeEntries  = []
     _multiStrandIds    = []
-    store.setState({ multiSelectedStrandIds: [] })
+    store.setState({ multiSelectedStrandIds: [], multiSelectedClusterIds: [] })
     _clearMultiLoopSkips()
   }
 
@@ -2820,25 +2842,30 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   // Cluster toggle: a cluster's multi-selection is its member strands (mirrors the
-  // lasso-at-cluster-level expansion). Toggle = remove all members if every one is
-  // already selected, else add them all.
-  function _toggleCluster(nuc) {
-    const design = store.getState().currentDesign
-    const cid = _resolveClusterId(nuc, design)
+  // lasso-at-cluster-level expansion) PLUS its id in `multiSelectedClusterIds` — the
+  // strand union drives the highlight but can't say which cluster a strand came from,
+  // and cluster copy/paste needs exactly that.
+  function _toggleClusterById(cid, { promote = true } = {}) {
     if (!cid) return
-    const f = clusterMemberFilter(design?.cluster_transforms?.find(c => c.id === cid), design)
-    if (!f) return
-    const members = new Set()
-    for (const e of designRenderer.getBackboneEntries()) {
-      if (f(e.nuc) && e.nuc.strand_id) members.add(e.nuc.strand_id)
+    if (promote) _promoteSelectionToMulti()
+    const design  = store.getState().currentDesign
+    const members = _clusterMemberStrandIds(cid, design)
+    if (!members.length) return
+    const next = toggleClusterSelection({
+      clusterIds:      store.getState().multiSelectedClusterIds ?? [],
+      strandIds:       _multiStrandIds,
+      clusterId:       cid,
+      memberStrandIds: members,
+    })
+    if (next.strandIds.length === 0) _clearMultiSelection()
+    else {
+      _applyMultiHighlight(next.strandIds)
+      store.setState({ multiSelectedStrandIds: next.strandIds, multiSelectedClusterIds: next.clusterIds })
     }
-    if (members.size === 0) return
-    const allPresent = [...members].every(id => _multiStrandIds.includes(id))
-    const next = allPresent
-      ? _multiStrandIds.filter(id => !members.has(id))
-      : [...new Set([..._multiStrandIds, ...members])]
-    if (next.length === 0) _clearMultiSelection()
-    else { _applyMultiHighlight(next); store.setState({ multiSelectedStrandIds: next }) }
+  }
+
+  function _toggleCluster(nuc) {
+    _toggleClusterById(_resolveClusterId(nuc, store.getState().currentDesign))
   }
 
   // When a Ctrl/Shift+click EXTENDS a selection, first fold the current SINGLE
@@ -2852,6 +2879,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const sel = store.getState().selectedObject
     if (!sel) return
     const st = store.getState().selectableTypes
+
+    // CLUSTER → seed the cluster pool with the plain-clicked cluster (3D click or
+    // sidebar row; both surface as a `selectedObject` of type 'cluster').
+    if (sel.type === 'cluster') {
+      if ((store.getState().multiSelectedClusterIds ?? []).length) return
+      const cid = sel.id
+      const members = _clusterMemberStrandIds(cid, store.getState().currentDesign)
+      if (!members.length) return
+      _restoreStrand()
+      _mode = 'none'; _strandId = null; _drillClusterId = null
+      store.setState({ selectedObject: null })
+      _applyMultiHighlight(members)
+      store.setState({ multiSelectedStrandIds: members, multiSelectedClusterIds: [cid] })
+      return
+    }
 
     // END → seed the gold end-bead set with the selected 5′/3′ terminus.
     if (_selLevel === 'end') {
@@ -2981,6 +3023,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const ovhangIdSet   = new Set()   // overhang_id strings
     const endEntries    = []   // beads captured into _ctrlBeads (ends, or all at bead drill level)
     const clusterHitNucs = []  // nucs of in-rect beads, when drilling at cluster level
+    const clusterIdSet  = new Set()   // clusters those nucs resolve to
 
     const st = store.getState().selectableTypes
     // What the lasso captures (single source of truth, unit-tested in
@@ -2997,6 +3040,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const useSkips    = cap.skips
     const useXover    = cap.xover
     const useCluster  = cap.cluster
+    // A lasso is additive: fold a prior plain-click cluster into the pool first, so
+    // "click cluster A, Ctrl+drag over B" ends with both selected.
+    if (useCluster) _promoteSelectionToMulti()
     const cylMesh = designRenderer.getCylinderMesh()
     // Global LOD level, not mesh .visible — mixed-rep makes cylinders visible at full LOD.
     const inCylinderLOD = (designRenderer.getDetailLevel?.() ?? 0) === 2
@@ -3017,7 +3063,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         cylMesh.getMatrixAt(dom.cylIdx, mat)
         pos.setFromMatrixPosition(mat)
         const sp = _toScreen(pos)
-        if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
+        if (sp.x < cx1 || sp.x > cx2 || sp.y < cy1 || sp.y > cy2) continue
+        // Cluster level resolves the whole cluster below; strand level takes the strand.
+        if (useCluster) {
+          clusterHitNucs.push({ helix_id: dom.helixId, strand_id: dom.strandId, domain_index: dom.domainIndex })
+        } else {
           strandIdSet.add(dom.strandId)
         }
       }
@@ -3070,18 +3120,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // ── Cluster drill level → expand hit beads to their clusters' strands ──────
     if (useCluster && clusterHitNucs.length) {
       const design = store.getState().currentDesign
-      const cts = design?.cluster_transforms ?? []
-      const cidSet = new Set()
       for (const nuc of clusterHitNucs) {
         const cid = _resolveClusterId(nuc, design)
-        if (cid) cidSet.add(cid)
+        if (cid) clusterIdSet.add(cid)
       }
-      for (const cid of cidSet) {
-        const f = clusterMemberFilter(cts.find(c => c.id === cid), design)
-        if (!f) continue
-        for (const e of designRenderer.getBackboneEntries()) {
-          if (f(e.nuc) && e.nuc.strand_id) strandIdSet.add(e.nuc.strand_id)
-        }
+      for (const cid of clusterIdSet) {
+        for (const sid of _clusterMemberStrandIds(cid, design)) strandIdSet.add(sid)
       }
     }
 
@@ -3149,7 +3193,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (strandIds.length) {
       const allStrands = [...new Set([..._multiStrandIds, ...strandIds])]
       _applyMultiHighlight(allStrands)
-      store.setState({ multiSelectedStrandIds: allStrands })
+      const patch = { multiSelectedStrandIds: allStrands }
+      if (clusterIdSet.size) {
+        patch.multiSelectedClusterIds =
+          [...new Set([...(store.getState().multiSelectedClusterIds ?? []), ...clusterIdSet])]
+      }
+      store.setState(patch)
     }
 
     // ── End bead ctrl-selection (applied after strand highlight so gold wins) ─
@@ -4033,6 +4082,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
      *  by the sidebar "Movable clusters" list so the two paths share one selected
      *  state. Re-selecting the active cluster toggles it off. */
     selectCluster(clusterId) { _applyClusterSelection(clusterId, { toggle: true }) },
+
+    /** Programmatically add/remove a cluster from the multi-selection — the same
+     *  additive toggle as Ctrl+click at cluster level (folds a prior plain-click
+     *  cluster into the pool first). Used by Ctrl/Shift+click on the sidebar
+     *  "Movable clusters" rows. */
+    toggleCluster(clusterId) { _toggleClusterById(clusterId) },
 
     /** The active selectionLevel ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
     getSelectionLevel() { return _selLevel },

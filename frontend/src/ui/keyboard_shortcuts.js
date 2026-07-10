@@ -45,6 +45,7 @@ export function initKeyboardShortcuts(deps) {
   const {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, measurementTool, selectionManager,
+    clusterClipboard,
     extrudePanel, deformView, crossSectionMinimap, sliceHighlighter, primitiveLibrary,
     viewCube, camera, controls,
     isUnfoldActive, isDeformActive,
@@ -102,6 +103,37 @@ export function initKeyboardShortcuts(deps) {
       } else {
         document.getElementById('menu-file-save-as')?.click()
       }
+    },
+  })
+
+  // Cluster copy/paste. Part-editor only: an assembly's cluster poses are per-instance
+  // overrides, and a paste there would mint clusters the instances know nothing about.
+  registerShortcut({
+    key: 'c', ctrl: true, shift: false,
+    description: 'Copy selected cluster(s)',
+    blockedInInput: true,
+    noRepeat: true,
+    blockedWhen: () => store.getState().assemblyActive || isDeformActive(),
+    handler(e) {
+      // Don't steal a real text copy — only claim the key when a cluster is selected.
+      const st = store.getState()
+      const hasCluster = st.selectedObject?.type === 'cluster'
+        || (st.multiSelectedClusterIds?.length ?? 0) > 0
+      if (!hasCluster) return
+      e.preventDefault()
+      clusterClipboard.copy()
+    },
+  })
+
+  registerShortcut({
+    key: 'v', ctrl: true, shift: false,
+    description: 'Paste copied cluster(s) — ghost follows the cursor, click to place',
+    blockedInInput: true,
+    noRepeat: true,
+    blockedWhen: () => store.getState().assemblyActive || isDeformActive(),
+    handler(e) {
+      e.preventDefault()
+      clusterClipboard.paste()
     },
   })
 
@@ -610,6 +642,11 @@ export function initKeyboardShortcuts(deps) {
     key: 'Escape',
     description: 'Cancel active tool / clear selection',
     handler() {
+      // The paste ghost is the most transient thing on screen — drop it first.
+      if (clusterClipboard.isActive()) {
+        clusterClipboard.cancel()
+        return
+      }
       if (getOoActiveIds().length > 0) {
         ooClose()
         return

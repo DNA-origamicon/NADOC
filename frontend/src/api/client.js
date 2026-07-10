@@ -2301,6 +2301,22 @@ export async function deleteCluster(clusterId) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Paste a copy of `clusterIds` at a lattice offset (Ctrl+C / Ctrl+V).
+ * `(deltaRow + deltaCol)` must be EVEN — an odd shift flips helix polarity and moves
+ * every crossover off its allowed bp phase; the backend 400s on it. bp indices are
+ * copied verbatim (Δbp = 0). Emits a `cluster-paste` feature-log entry.
+ * Returns the design response plus `pasteReport` (what the copy actually grabbed).
+ */
+export async function pasteClusters({ clusterIds, deltaRow, deltaCol }) {
+  const json = await _request('POST', '/design/cluster-paste', {
+    cluster_ids: clusterIds, delta_row: deltaRow, delta_col: deltaCol,
+  })
+  if (!json) return null
+  await _syncFromDesignResponse(json)
+  return { ...json, pasteReport: json.paste_report }
+}
+
 /** List an overhang-DUPLEX cluster's candidate rotation points (each overhang's root bead
  *  + the centroid). Returns [{kind, overhang_id, label, point}]. Doc-aware (routes to this
  *  tab's backend document). [[overhang-duplex-cluster]] P2. */
