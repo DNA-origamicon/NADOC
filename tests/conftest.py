@@ -2,6 +2,7 @@
 Shared pytest fixtures and hooks.
 """
 
+import pytest
 
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
@@ -14,6 +15,28 @@ from backend.core.models import (
     StrandType,
     Vec3,
 )
+
+
+# ── Workspace isolation (autouse) ────────────────────────────────────────────────
+# The single source of truth for the on-disk design library is
+# ``backend.api.assembly._WORKSPACE_DIR``.  Every server-side write path that can
+# create loose ``.nadoc`` / ``.nass`` files reads it *dynamically*:
+#   • ``_replace_instance_design`` — auto-saves an inline part as ``<name>_N.nadoc``
+#     (the source of the ``Bundle_N.nadoc`` clutter: an inline part's design name
+#     defaults to "Bundle", so the overhang-extrude / part-editor / loadout / seek
+#     endpoints each drop a ``Bundle_N.nadoc`` into the real repo ``workspace/``).
+#   • ``/assembly/save`` and ``/design/save-workspace`` (via the ``_asm`` alias).
+# Point that one attribute at a throwaway per-test temp dir so NO test — present or
+# future — writes into the real ``workspace/``.  Tests that need their own workspace
+# (or the real one) just ``monkeypatch.setattr(assembly, "_WORKSPACE_DIR", ...)``
+# again; a function-scoped monkeypatch runs after this autouse fixture and wins.
+@pytest.fixture(autouse=True)
+def _isolate_workspace(tmp_path_factory, monkeypatch):
+    from backend.api import assembly
+
+    ws = tmp_path_factory.mktemp("workspace")
+    monkeypatch.setattr(assembly, "_WORKSPACE_DIR", ws)
+    yield
 
 
 def make_minimal_design(
@@ -165,6 +188,61 @@ def make_6hb_design(length_bp: int = 42) -> Design:
     return build_extruded_bundle(
         SIX_HB_CELLS, length_bp, lattice=LatticeType.HONEYCOMB, name="6hb",
     )
+
+
+def make_deposition_chain_design() -> Design:
+    """6hb bundle carrying ONE authored 3-stage oxDNA chain-sim project.
+
+    Deterministic replacement for the old gitignored ``workspace/6hbx100_1xT.nadoc``
+    (workspace/ isn't synced across the two computers, so a test bound to it failed on
+    the machine that never authored the file — the source of the 6 chain-completion
+    failures).  Builds the SAME authored lineage
+    ``relax -> production[field+surface] -> production[field+surface+anchors]`` the
+    file shipped, mouse-free, so ``test_chain_completion_e2e`` can drive it.
+
+    The uniform field points anti-parallel INTO the surface normal — a legal deposition
+    setup: the hard surface holds the field (see ``surface_opposes_field``), so the two
+    production stages need no strand anchor to pass ``create_md_chain`` validation.
+    Stage 2 additionally pins a real staple-strand anchor.
+
+    The design is fully ROUTED (auto-scaffold-seamed → auto-crossover → auto-break) and
+    SEQUENCED (M13 scaffold + Watson-Crick staples), so the real oxDNA-export path
+    (``test_full_chain_runs_end_to_end_with_a_mock_binary``) sees no undefined bases.
+    """
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.core.models import ChainSimProject, ChainSimStage
+    from backend.core.sequences import (
+        assign_scaffold_sequence,
+        assign_staple_sequences,
+    )
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        d = design_state.get_or_404().model_copy(deep=True)
+    for sid in [s.id for s in d.strands if s.strand_type == StrandType.SCAFFOLD]:
+        d, _, _ = assign_scaffold_sequence(d, "M13mp18", strand_id=sid)
+    d = assign_staple_sequences(d)
+    d.metadata.name = "6hbx100_1xT"
+    field = {"field_pN": 5.0, "dir": [0.0, 0.0, -1.0]}
+    surface = {"dir": [0.0, 0.0, 1.0]}   # normal opposes the field → holds the structure
+    anchor_strand = next(
+        (s.id for s in d.strands if s.strand_type == StrandType.STAPLE),
+        d.strands[0].id if d.strands else "s1",
+    )
+    stages = [
+        ChainSimStage(engine="oxdna", protocol="relax", label="relax"),
+        ChainSimStage(engine="oxdna", protocol="production", label="deposition",
+                      field=field, surface=surface),
+        ChainSimStage(engine="oxdna", protocol="production", label="deposition+anchor",
+                      field=field, surface=surface,
+                      anchors=[{"kind": "domain", "strand_id": anchor_strand, "domain_index": 0}]),
+    ]
+    d.chain_sim_projects = [ChainSimProject(name="Deposition", stages=stages)]
+    return d
 
 
 def make_6hb_curved_design(length_bp: int = 192) -> Design:

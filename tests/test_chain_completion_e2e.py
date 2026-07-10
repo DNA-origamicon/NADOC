@@ -6,8 +6,9 @@ Where the sibling files stop:
 * ``test_md_chain_executor.py`` proves the PURE state machine (``step_chain``);
 * ``test_chain_spawn_dispatch.py`` proves the engine ROUTING of one ``_chain_spawn``.
 
-Neither runs the API-layer supervisor. This file does: it loads
-``workspace/6hbx100_1xT.nadoc`` (which ships a 3-stage oxDNA chain-sim project:
+Neither runs the API-layer supervisor. This file does: it builds the authored design
+``make_deposition_chain_design`` (a deterministic rebuild of the old un-synced
+``workspace/6hbx100_1xT.nadoc`` — a 3-stage oxDNA chain-sim project:
 relax -> production[field+surface] -> production[field+surface+anchors]), folds that
 authored project into the ``POST /md/chains`` payload the frontend Launch would send,
 then drives ``routes_md.advance_chains`` — the *actual* MD-supervisor tick — flipping
@@ -23,7 +24,6 @@ gap (MV-33) at the integration layer, minus the binaries.
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 
 import pytest
@@ -34,10 +34,14 @@ from backend.api import state as design_state
 from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core import md_chain_executor as ce
-from backend.core.models import Design
+from tests.conftest import make_deposition_chain_design
 
 client = TestClient(app)
 
+# Provenance identifier stamped onto the chain's root spawn (design_source_path).  The
+# authored design is now BUILT deterministically (make_deposition_chain_design) rather
+# than read from this gitignored, un-synced workspace file — so nothing opens this path;
+# it is only the stable string the visibility assertions pin.
 FIXTURE = Path(__file__).resolve().parents[1] / "workspace" / "6hbx100_1xT.nadoc"
 
 # The fields a ChainSimStage contributes to the backend ChainStageRequest (drops the
@@ -125,7 +129,7 @@ def _load_authored_chain_request():
     The fixture's single lineage (relax -> production -> production) is exactly the
     ``chainGroups`` "relax starts a rootless chain, each production appends" case, so it
     yields ONE rootless chain carrying all three stages in order."""
-    design = Design.model_validate(json.loads(FIXTURE.read_text()))
+    design = make_deposition_chain_design()
     project = design.chain_sim_projects[0]
     stages = [_stage_payload(st) for st in project.stages]
     request = {
