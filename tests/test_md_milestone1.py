@@ -464,12 +464,42 @@ class TestProductionAppend:
         assembly = types.ModuleType("backend.api.assembly")
         assembly._WORKSPACE_DIR = tmp_path
 
-        monkeypatch.setitem(sys.modules, "fastapi", fastapi)
-        monkeypatch.setitem(sys.modules, "fastapi.concurrency", concurrency)
-        monkeypatch.setitem(sys.modules, "backend.api.assembly", assembly)
-        sys.modules.pop("backend.api.routes_md", None)
-
-        import backend.api.routes_md as routes_md
+        # Re-import routes_md under the stubbed fastapi so we get a lightweight
+        # module bound to the fakes above.  CRITICAL: this must NOT leak the
+        # stub-bound module (or any transitively re-imported module) into
+        # sys.modules — under `--dist loadfile` the next test file on this xdist
+        # worker imports `backend.api.main` fresh, and a leaked stub `routes_md`
+        # makes its `md_router` a fake `_Router` → `include_router` fails with
+        # "'function' object is not iterable" (see project_test_parallelization.md).
+        # monkeypatch.setitem can't manage this: the fresh `import` re-inserts the
+        # module by a raw sys.modules write it never recorded, so teardown wouldn't
+        # restore the real one.  Snapshot sys.modules and revert it EXACTLY in a
+        # finally — independent of monkeypatch's undo ordering.  The returned local
+        # `routes_md` still references the stub module, which is all the test needs.
+        import backend.api.routes_md  # ensure the real module is the baseline
+        _modules_before = dict(sys.modules)
+        try:
+            sys.modules["fastapi"] = fastapi
+            sys.modules["fastapi.concurrency"] = concurrency
+            sys.modules["backend.api.assembly"] = assembly
+            sys.modules.pop("backend.api.routes_md", None)
+            import backend.api.routes_md as routes_md
+        finally:
+            for _name in list(sys.modules):
+                if _name not in _modules_before:
+                    del sys.modules[_name]
+            sys.modules.update(_modules_before)
+            # Restoring sys.modules is NOT enough: `import backend.api.routes_md`
+            # also rebinds the submodule ATTRIBUTE on the parent package object
+            # (`backend.api.routes_md` → the stub), and `from backend.api import
+            # routes_md` reads that attribute, not sys.modules — so the victim
+            # file would still patch/serve the stub. Re-point every drifted parent
+            # attribute back at the real module.
+            for _name, _mod in _modules_before.items():
+                _parent, _, _child = _name.rpartition(".")
+                _pkg = sys.modules.get(_parent)
+                if _pkg is not None and getattr(_pkg, _child, _mod) is not _mod:
+                    setattr(_pkg, _child, _mod)
 
         monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
         return routes_md

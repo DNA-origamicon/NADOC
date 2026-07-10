@@ -397,6 +397,20 @@ _SLOW_MODULES = {
     "test_md_pipeline",
 }
 
+# Whole test CLASSES that share an expensive class-scoped fixture (the build runs
+# once in ``setup`` for the first surviving test, so marking individual tests
+# wouldn't help — the cost just hops to a sibling). Match by bare class name.
+#   • TestSyntheticRoundTrip / TestRoutedPrimitiveIntegration — test_mrdna_pipeline:
+#     each does a full mrDNA round-trip build in a ~26–32 s class-scoped fixture.
+#   • TestMinimize3ExtraBase — test_atomistic_minimisers: real 3-extra-base minimise
+#     (marked by class because its methods have generic names like ``test_cache_path``
+#     that would over-match same-named tests in other files if listed individually).
+_SLOW_CLASSES = {
+    "TestSyntheticRoundTrip",
+    "TestRoutedPrimitiveIntegration",
+    "TestMinimize3ExtraBase",
+}
+
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
     # N2 NAMD anchors: real psfgen topology build (stubbed solvate) + conf writing.
@@ -522,6 +536,68 @@ _SLOW_TESTS = {
     # test_cando_extra_bases.py (C3 extra-base compliant connectors: the mesh/compliance
     # tests are fast pure-math; this one runs several real predict_shape + NMA RMSF solves)
     "test_extra_bases_raise_local_flexibility_rmsf",
+
+    # ---------------------------------------------------------------------------
+    # Refreshed 2026-07-10: heavy (>=~2 s) sim/FEM/routing/trajectory tests that had
+    # slipped past the registry and were dominating the "fast" suite (`just test-fast`
+    # was ~2 min; one 75 s FEM test alone pinned a worker). Grouped by file; the fast
+    # pure-logic tests in each of these files stay in the fast suite. Non-sim slow-ish
+    # tests (assembly/cluster/geometry/browse ~2–4 s) were deliberately LEFT fast to
+    # keep those subsystems' quick feedback — they don't threaten the wall-clock floor.
+    # ---------------------------------------------------------------------------
+    # test_cando_anchors.py (real prestress / predict_shape FEM solves on a 6HB)
+    "test_prestress_solve_holds_anchored_node_at_rest",
+    "test_predict_shape_unresolved_anchor_is_a_noop",
+    "test_predict_shape_anchor_changes_output_and_reports_keys",
+    # test_cando_autorefine.py (the 75 s shape-iter refine loop + a real FEM measure)
+    "test_shape_iter_events_carry_current_and_target_metrics",
+    "test_fem_measure_returns_rmsd_and_field",
+    # test_cando_cylinders.py (real 6HB axis-node/crossover-joint build)
+    "test_real_6hb_yields_a_tube_per_helix_and_crossover_joints",
+    # test_fem_curvature_validation.py (the linear-solve variant slipped past the batch)
+    "test_fem_reproduces_cando_bend_90_linear",
+    # test_fem_solver.py (register-overtwist + curved-axis deform + prestress twist solves)
+    "test_square_lattice_register_overtwist_present_and_relieved_by_skips",
+    "test_deform_backbones_wind_around_the_curved_axis",
+    "test_deform_slabs_carry_the_wound_frame_not_the_straight_orientation",
+    "test_prestress_produces_damped_bundle_twist",
+    # test_headless_corner_build.py (real fold/oracle optimizer passes)
+    "test_fold_optimizer_reduces_clashes_and_beats_reference",
+    "test_corner_passes_the_full_oracle",
+    # test_headless_hinge_build.py (real KxN hinge routing passes; all params slow)
+    "test_build_kxn_hinge_routes_compliantly",
+    "test_build_kxn_hinge_routes_seamless",
+    "test_hinge_with_staple_only_helix_still_routes_to_one_strand",
+    "test_scaffold_fls_filter_excludes_staple_only_endpoint_fl",
+    "test_build_2x6_has_the_hinge_shape",
+    # test_headless_oxdna_build.py (real oxpy relax/field/iterate passes that slipped past)
+    "test_autorefine_regional_runs_end_to_end_and_reports_pattern",
+    "test_field_sweep_oracle_fires_on_gap",
+    "test_relaxed_measurement_fires_on_low_confidence",
+    "test_oxpy_live_field_matches_batch_and_steers",
+    "test_relax_honors_benchmarked_backend",
+    "test_iterate_grows_production_on_inconclusive",
+    "test_archive_unarchive_round_trip_preserves_job_and_chaining",
+    "test_bridge_oracle_fires_when_default_ignored",
+    "test_assert_relaxed_measurement_inter_helix_spacing",
+    "test_check_relaxed_constraint_inconclusive_on_low_frames",
+    # test_mrdna_extra_bases.py / test_mrdna_linkers.py (real mrDNA model builds)
+    "test_model_builds_with_ssdna_segments",
+    "test_overhangs_hybridize_into_duplex_in_the_model",
+    "test_bridge_mechanical_class_ds_duplex_vs_ss_tether_in_the_model",
+    "test_bridge_beads_scale_with_bridge_length",
+    # test_atomistic.py (large-design PDB/NAMD-package writes)
+    "test_namd_package_includes_identity_sidecars",
+    "test_pdb_atom_records_fixed_width_large_design",
+    # test_remote_health_eval.py (MDAnalysis DCD load + WC-health eval)
+    "test_health_eval_writes_wc_json_matching_run_health_check",
+    # test_md_prep_wiring.py / test_md_analysis_runner.py (real solvation-progress + watched-subprocess timing)
+    "test_progress_threads_through_solvation",
+    "test_progress_feeds_tracker_monotonic",
+    "test_run_watched_kills_hung_process",
+    "test_subprocess_self_timeout_via_alarm",
+    # test_exp28_hierarchical_tube_cg.py (window-expansion CG design + atomistic model build)
+    "test_window_expansion_produces_unique_design_and_atomistic_model",
 }
 
 
@@ -573,7 +649,8 @@ def pytest_collection_modifyitems(config, items):
         module = item.module.__name__.rsplit(".", 1)[-1] if item.module else ""
         # item.originalname is the bare function name without any param id.
         name = getattr(item, "originalname", None) or item.name.split("[")[0]
-        if module in _SLOW_MODULES or name in _SLOW_TESTS:
+        cls = item.cls.__name__ if getattr(item, "cls", None) else None
+        if module in _SLOW_MODULES or name in _SLOW_TESTS or cls in _SLOW_CLASSES:
             item.add_marker(pytest.mark.slow)
             item.add_marker(getattr(pytest.mark, _slow_area_for(module)))
 
