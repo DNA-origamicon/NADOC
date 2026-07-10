@@ -9,15 +9,28 @@ metadata:
 
 # LAMMPS + CG-DNA (parallel oxDNA) engine
 
+## ⚠ UI CHANGED 2026-07-10 — LAMMPS is no longer a tab/panel
+The dedicated **"LAMMPS — parallel oxDNA"** sidebar section + its tab in the engine
+selector were **REMOVED**. LAMMPS is now the auto engine-policy's CPU fallback (GPU busy
+→ same oxDNA2 FF, multi-core), so its runs appear in the **unified Simulate job list**
+with a subtle **[L]** badge, feeding the Phase-C master card ([[project_simulate_panel_overhaul]]).
+**Backend / runner / transcoder / viz endpoints (`/api/lammps/*`) are UNCHANGED** — only the
+frontend consolidated. `lammps_jobs_panel.js` was deleted; **`lammps_jobs_logic.js`,
+`lammps_display.js`, `lammps_forces_setup.js` survive** (the master card owns `initLammpsDisplay`
+for [L]-node viz). A LAMMPS run is created only via the CPU fallback (`createLammpsJob`) or a
+re-run from the master card — the old launch/forces UI is unreachable by design. Everything
+below documents the still-valid engine internals; ignore its "dedicated sidebar section" wording.
+
 ## ▶ RESUME HERE (handoff 2026-07-06)
 **State:** Phases 1-6 SHIPPED + committed to master (`feat(lammps): …`). LAMMPS is a
 full NADOC engine: detect/install (MD Engines panel + `scripts/lammps_doctor.py`),
 native oxDNA→LAMMPS transcoder + runner (FIRE soft-start), managed jobs + REST
-(`/api/lammps/jobs`), a dedicated **"LAMMPS — parallel oxDNA"** sidebar section, and a
-full **"Visualizations & processing"** card (display / RMSF / deviation / trajectory)
-that reuses the oxDNA backend (`oxdna_health`) + frontend (`oxdna_display` pure mappers)
-verbatim. Live-verified end-to-end on a 14,485-nt design. **MPI parallel run now
-VERIFIED (2026-07-06)** — see the "MPI parallel — VERIFIED" block below.
+(`/api/lammps/jobs`), and a full **"Visualizations & processing"** view (display / RMSF /
+deviation / trajectory) that reuses the oxDNA backend (`oxdna_health`) + frontend
+(`oxdna_display` pure mappers) verbatim. Live-verified end-to-end on a 14,485-nt design.
+**MPI parallel run VERIFIED (2026-07-06)** — see the "MPI parallel — VERIFIED" block below.
+(The run/viz UI now lives in the unified Simulate list, not a dedicated panel — see the
+2026-07-10 note above.)
 
 **Pick up with ONE of (in rough priority):**
 1. **Field-run display alignment** — the field-run trajectory display still uses

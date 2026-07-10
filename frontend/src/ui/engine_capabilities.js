@@ -21,13 +21,15 @@
  * sync with the panels until U2–U4 delete them; the test fails loudly otherwise.
  */
 
-// Engine keys in sidebar-panel order (oxDNA, LAMMPS, mrDNA, CanDo, NAMD). "namd"
-// is the backend/engine key; its DOM ids use the historical "md-" prefix.
-export const ENGINE_KEYS = ['oxdna', 'lammps', 'mrdna', 'cando', 'namd']
+// Engine keys in sidebar-panel order (oxDNA, mrDNA, CanDo, NAMD). "namd" is the
+// backend/engine key; its DOM ids use the historical "md-" prefix.
+// LAMMPS is deliberately NOT a selectable engine: it's the auto-policy's CPU fallback
+// (GPU busy → same oxDNA2 FF on multi-core), so its runs appear in the unified Simulate
+// job list with an [L] badge instead of behind a tab (Phase C).
+export const ENGINE_KEYS = ['oxdna', 'mrdna', 'cando', 'namd']
 
 export const ENGINE_LABELS = {
   oxdna: 'oxDNA',
-  lammps: 'LAMMPS',
   mrdna: 'mrDNA',
   cando: 'CanDo',
   namd: 'NAMD',
@@ -83,24 +85,6 @@ export const ENGINE_CAPABILITIES = {
       'oxdna-jobs-backend', 'oxdna-jobs-device', 'oxdna-jobs-salt',
       'oxdna-jobs-mc-steps', 'oxdna-jobs-md-steps', 'oxdna-jobs-equil-steps',
       'oxdna-jobs-bp-gate',
-    ],
-  },
-  lammps: {
-    label: ENGINE_LABELS.lammps,
-    cards: {
-      run: on('lammps-jobs-run-btn'),
-      efield: on('lammps-field-toggle'),
-      anchors: on('lammps-anchors-toggle'),
-      surface: on('lammps-surface-toggle'),
-      advanced: on('lammps-jobs-adv-toggle'),
-      viz: on('lammps-jobs-viz-toggle'),
-      metrics: off('LAMMPS feeds the shape-comparison card; no standalone metrics card yet.'),
-      joblist: on('lammps-jobs-list'),
-    },
-    protocols: ['run'],
-    advancedParams: [
-      'lammps-jobs-steps', 'lammps-jobs-dump', 'lammps-jobs-temp',
-      'lammps-jobs-salt', 'lammps-jobs-ranks',
     ],
   },
   mrdna: {

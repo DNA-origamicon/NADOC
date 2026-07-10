@@ -5,7 +5,9 @@
  *  1. `refresh()` renders the resource + recommended-engine status line.
  *  2. `guardOxdnaLaunch()` is injected into the oxDNA panel's launch: when the GPU is
  *     busy it shows the cross-engine dialog and, if the user takes the CPU fallback,
- *     switches to LAMMPS and launches it there (returning 'cpu' so oxDNA aborts).
+ *     creates a LAMMPS run DIRECTLY (returning 'cpu' so oxDNA aborts). The run then
+ *     appears in the unified simulate job list on the next refresh — LAMMPS is no
+ *     longer a tab, so there is no engine to "switch to".
  *
  * The CPU alternative is a DIFFERENT engine (LAMMPS, multi-core), not oxDNA's
  * single-core CPU backend — that cross-engine routing is the whole point.
@@ -16,7 +18,6 @@ import { statusLineText, translateOxdnaToLammps } from './simulate_policy.js'
 import { confirmSimEngineLaunch, confirmGpuLaunch } from './job_activity.js'
 
 export function initSimulateLaunch({
-  engineSelector = null,
   statusMount = null,
   getDevices = () => '0',
   oxdnaForm = () => ({}),
@@ -41,8 +42,8 @@ export function initSimulateLaunch({
    * Guard for the oxDNA launch → 'gpu' | 'cpu' | 'cancel'.
    *  - GPU free/unknown → 'gpu' (oxDNA proceeds on GPU).
    *  - GPU busy + proteins → two-way GPU/cancel (LAMMPS can't do proteins).
-   *  - GPU busy + no proteins → 3-way dialog; 'cpu' launches LAMMPS here and returns 'cpu'
-   *    so the oxDNA panel aborts its own launch.
+   *  - GPU busy + no proteins → 3-way dialog; 'cpu' creates a LAMMPS run directly and
+   *    returns 'cpu' so the oxDNA panel aborts its own launch.
    * Re-fetches the recommendation so the decision uses live GPU state.
    */
   async function guardOxdnaLaunch() {
@@ -62,7 +63,8 @@ export function initSimulateLaunch({
       freeCores: rec.free_cores,
     })
     if (pick === 'cpu') {
-      engineSelector?.select?.('lammps')
+      // Create the LAMMPS run directly (no tab to switch to); it lands in the unified
+      // simulate job list on refresh.
       await launchLammps(translateOxdnaToLammps({
         oxdnaForm: oxdnaForm() || {},
         forces: getForces() || {},

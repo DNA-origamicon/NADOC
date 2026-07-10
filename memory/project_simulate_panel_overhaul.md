@@ -121,13 +121,55 @@ it, retire the redundant detail Start/Stop):**
   submit/resume/ensemble keep their dedicated buttons. +9 `mdRunControl` tests.
 
 **REMAINING:**
-1. Wire the context button into **LAMMPS, mrDNA, CanDo** (lighter — no Alpine; mrDNA/CanDo have
-   Coarse+Fine, so decide which action the context verb tracks — likely the primary/Coarse).
-2. **Master Job status card consolidation**: fold the 5 bespoke `#*-jobs-progress` bars, status
-   lines, Health cards, Metrics cards, and detail blocks into ONE global card in the Simulate
-   section that reflects the selected engine's active/selected job; "visually clean when
-   running"; apply the canonical CARD_KEYS order. Reuse the shared seams
-   (`jobs_panel_render.js`, `metrics_card.js`, `job_tree.js`).
+1. Wire the context button into **mrDNA, CanDo** (lighter — no Alpine; both have Coarse+Fine, so
+   decide which action the context verb tracks — likely the primary/Coarse). *(LAMMPS is DONE —
+   folded into the master card below; it's no longer a tab.)*
+2. **Master card — full consolidation** of mrDNA/CanDo/NAMD: fold their bespoke `#*-jobs-progress`
+   bars, status lines, Health/Metrics/detail blocks into the ONE global card built below. oxDNA +
+   LAMMPS already feed it (substrate shipped); oxDNA delegates its rich detail/viz via `selectJob`.
+
+## ⚡ LAMMPS folded into the unified job list + master card (SHIPPED 2026-07-10)
+The auto engine-policy runs oxDNA-GPU when free, CPU-LAMMPS (same oxDNA2 FF) when the GPU is busy —
+the user shouldn't know which. So **LAMMPS is no longer an engine tab**; every Simulate run appears
+in ONE hierarchical list with a subtle **[L]** badge on LAMMPS rows, feeding the Phase-C master card.
+- **Backend:** `backend/core/sim_jobs.py` (PURE — `normalize_oxdna_job`/`normalize_lammps_job`/
+  `filter_nodes`; a node = the full job dict + `{engine,kind,production_state,is_child,viewable,n_units}`
+  overlay so the frontend label fns work on it verbatim). `GET /simulate/jobs?design_source_path=&show_all=`
+  in `routes_simulate.py` reuses `routes_oxdna.list_oxdna_jobs`'s enrichment (reconcile + out_of_date +
+  `dir_size_bytes_cached`) + LAMMPS reconcile, then normalize+merge+filter. Never raises. Path filter
+  mirrors `normalizeWorkspacePath`. Tests: `tests/test_sim_jobs.py` (10). Backend 4608 pass.
+- **Frontend master card** `ui/simulate_jobs.js` (`initSimulateJobs({api,getWorkspacePath,designRenderer,
+  oxdnaPanel,engineSelector,getFlexScale})→{refresh,selectJob,getSelected}`): unified list (job_tree +
+  jobs_panel_model/render; `[L]` tag; `{engine,id}` selection) + master status/progress + a context
+  Run/Stop/Resume button (`runControlState`) that is **LAMMPS-only** (hidden for oxDNA / no selection —
+  an oxDNA job's Relax/Stop/Resume already lives in the oxDNA panel below the title, so showing one here
+  too duplicated it; an `[L]` node has no other control so the master card owns its Stop / re-Run) + viz.
+  **Viz dispatch:** an oxDNA node
+  → `oxdnaPanel.selectJob(id)` (its rich viz stays in the oxDNA panel); an **[L]** node → this card OWNS
+  `initLammpsDisplay` + a viz sub-card (relocated from the deleted LAMMPS panel). Markup = new `#simulate-jobs`
+  block in `#simulate-body`. Pure helpers (`verbForNode`/`nodeIsActive`/`nodeIsResumable`/`masterProgressPct`/
+  `masterStatusText`/`nodeDetailText`) unit-tested; jsdom factory drive in `ui/simulate_jobs.test.js`.
+- **oxDNA panel:** its in-panel Jobs card is hidden (`#simulate-jobs` is the one list); added
+  `launchRelax`/`autorefineJobIds` to its return API (the master RUN action + the `[AR]` tag). No internals removed.
+- **Removed:** `lammps_jobs_panel.js` + its markup + test; `lammps` dropped from `engine_capabilities`
+  ENGINE_KEYS/LABELS/CAPABILITIES + selector `panelEls`. **KEPT:** `lammps_jobs_logic.js`, `lammps_display.js`,
+  `lammps_forces_setup.js` (orphaned now — the LAMMPS launch/forces UI is unreachable by design; LAMMPS is
+  born only from the CPU fallback).
+- **CPU fallback decoupled:** `simulate_launch.js::guardOxdnaLaunch` no longer `select('lammps')`; on CPU it
+  calls `launchLammps(params)` which main.js wires to `api.createLammpsJob(buildLammpsPayload(...))` +
+  `simulateJobs.refresh()`. Test updated.
+- **main.js Δ:** ≈ pure wiring — removed `initLammpsJobsPanel`/`initLammpsForcesSetup` + anchor-glow/gizmo
+  (net **−12 LOC**), added `initSimulateJobs` + the direct-create fallback helper.
+- **Tests/verify:** frontend `vitest` 2576 pass; `just smoke` 23/23. Backend `just test` 4608 pass.
+  **Live:** engine tabs = oxDNA/mrDNA/CanDo/NAMD (no LAMMPS); `#simulate-jobs` list + master card + viz DOM
+  present; `#lammps-jobs-panel` gone; `GET /simulate/jobs` serves 36 merged nodes (30 ox + 6 [L]) in-browser;
+  0 console errors. **NOT live-exercised (doc-context limit, MV-28 family):** the POPULATED per-design list
+  rendering an actual [L] row + master card + [L] viz — API `design/load` doesn't set the frontend
+  `_workspacePath` so the per-design filter returns [] in Playwright. Covered by the vitest factory drive
+  (real factory → mock nodes → asserts the [L] badge, viz-show, run-control + selection dispatch). → owes an
+  MV row for the live populated [L] path.
+- **Interim asymmetry (documented):** oxDNA viz still in the oxDNA panel; only LAMMPS viz is in the master
+  card. Full oxDNA-viz + mrDNA/CanDo/NAMD consolidation is the Phase-C follow-up above.
 
 ## Chain Simulations sidebar — replaced the "Plan Run" popup (2026-07-09)
 

@@ -49,16 +49,6 @@ const CENSUS = {
     metrics:    { on: 'oxdna-metrics-toggle' },
     joblist:    { on: 'oxdna-jobs-list-toggle' },
   },
-  lammps: {
-    run:        { on: 'lammps-jobs-run-btn' },
-    efield:     { on: 'lammps-field-toggle' },
-    anchors:    { on: 'lammps-anchors-toggle' },
-    surface:    { on: 'lammps-surface-toggle' },
-    advanced:   { on: 'lammps-jobs-adv-toggle' },
-    viz:        { on: 'lammps-jobs-viz-toggle' },
-    metrics:    { off: 'lammps-metrics-toggle' },
-    joblist:    { on: 'lammps-jobs-list' },
-  },
   mrdna: {
     run:        { on: 'mrdna-jobs-coarse-btn' },
     efield:     { off: 'mrdna-efield-toggle' },
@@ -92,8 +82,10 @@ const CENSUS = {
 }
 
 describe('engine capability descriptor — shape + completeness', () => {
-  it('covers exactly the five simulation engines, panel order', () => {
-    expect(ENGINE_KEYS).toEqual(['oxdna', 'lammps', 'mrdna', 'cando', 'namd'])
+  it('covers exactly the four selectable simulation engines, panel order', () => {
+    // LAMMPS is deliberately NOT a selectable engine — it's the auto-policy CPU fallback
+    // and its runs appear in the unified Simulate job list with an [L] badge (Phase C).
+    expect(ENGINE_KEYS).toEqual(['oxdna', 'mrdna', 'cando', 'namd'])
   })
 
   it('every engine has an entry for EVERY card in the universe (never absent)', () => {
@@ -177,7 +169,8 @@ describe('engine capability descriptor — helper API', () => {
     expect(supportsCard('oxdna', 'surface')).toBe(true)
     expect(supportsCard('cando', 'surface')).toBe(false)
     expect(supportsCard('mrdna', 'efield')).toBe(false)
-    expect(supportsCard('lammps', 'metrics')).toBe(false)
+    expect(supportsCard('namd', 'surface')).toBe(false)
+    expect(supportsCard('lammps', 'metrics')).toBe(false)   // no longer a selectable engine → false
     expect(supportsCard('bogus', 'efield')).toBe(false)
     expect(supportsCard('oxdna', 'bogus')).toBe(false)
   })

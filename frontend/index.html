@@ -3552,6 +3552,77 @@
               <!-- Auto engine-policy resource line: GPU state · free CPU cores · recommended engine -->
               <div id="simulate-status-line" style="font-size:var(--text-xs);color:#8b949e;padding:2px 2px 4px"></div>
 
+              <!-- ── Unified simulation jobs + master Job status card (Phase C) ──────────
+                   ONE hierarchical list of every oxDNA + LAMMPS run for the design (a LAMMPS
+                   run carries a subtle [L] badge), plus the master status/progress + context
+                   Run/Stop/Resume that reflects the selected job regardless of engine. An
+                   [L] node's viz uses the LAMMPS controller below; an oxDNA node drives the
+                   oxDNA panel's own viz. -->
+              <div id="simulate-jobs" style="margin-bottom:8px">
+                <div id="simulate-jobs-list" style="max-height:150px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                <div id="simulate-jobs-progress" style="margin-top:6px">
+                  <div style="height:5px;background:#161b22;border-radius:2px;overflow:hidden">
+                    <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
+                  </div>
+                </div>
+                <div id="simulate-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                <!-- LAMMPS-only context control: an oxDNA job's Relax/Stop/Resume lives in
+                     the oxDNA panel below, so this stays hidden for oxDNA / no selection to
+                     avoid a duplicate button; it appears only when an [L] node is selected. -->
+                <button id="simulate-jobs-run-btn"
+                        style="width:100%;font-size:var(--text-xs);padding:6px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600;margin-top:6px;display:none">
+                  ▶ Run
+                </button>
+                <div id="simulate-jobs-detail" style="font-size:11px;color:#6e7681;margin-top:5px;min-height:0"></div>
+
+                <!-- LAMMPS visualizations (shown only when an [L] node is selected) — the
+                     master card owns the LAMMPS display controller; oxDNA viz stays in the
+                     oxDNA panel. Radios are mutually-exclusive views on the selected run. -->
+                <div id="simulate-jobs-viz" class="ox-card" style="display:none;margin-top:6px">
+                  <div class="ox-card__header" style="color:#c9d1d9"><span class="ox-card__title">Visualizations (LAMMPS run)</span></div>
+                  <div class="ox-card__body">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                      <input id="simulate-jobs-viz-off" name="simulate-viz" type="radio" value="off" checked> Off (native positions)
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:pointer">
+                      <input id="simulate-jobs-display-toggle" name="simulate-viz" type="radio" value="display" disabled> LAMMPS display
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
+                           title="On: superpose the final structure onto the design pose. Off: show it in its own simulation frame.">
+                      <input id="simulate-jobs-align-toggle" type="checkbox" checked> Align to design pose
+                    </label>
+                    <div id="simulate-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer"
+                           title="Average structure over the run, recoloured rigid→flexible by per-base RMSF">
+                      <input id="simulate-jobs-flex-toggle" name="simulate-viz" type="radio" value="flex" disabled> Flexibility map (RMSF)
+                    </label>
+                    <div id="simulate-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer"
+                           title="Average structure, each base recoloured green (matches design) → red (far from design).">
+                      <input id="simulate-jobs-deviation-toggle" name="simulate-viz" type="radio" value="deviation" disabled> Deviation map
+                    </label>
+                    <div id="simulate-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer"
+                           title="Play/scrub the run's trajectory">
+                      <input id="simulate-jobs-traj-toggle" name="simulate-viz" type="radio" value="traj" disabled> View trajectory
+                    </label>
+                    <div id="simulate-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                    <div id="simulate-jobs-traj-controls" style="display:none;margin-top:4px">
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <button id="simulate-jobs-traj-play" title="Play / pause"
+                                style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                        <div style="position:relative;flex:1;min-width:0">
+                          <input id="simulate-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
+                                 style="width:100%;display:block;margin:0">
+                          <div id="simulate-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
+                        </div>
+                      </div>
+                      <div id="simulate-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
           <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
           <div class="panel-section" id="oxdna-jobs-panel">
             <h2 id="oxdna-jobs-heading" style="margin-bottom:0"><span>oxDNA</span></h2>
@@ -3610,8 +3681,11 @@
               <!-- ── Benchmark (auto-tune backend/device for this machine) ──── -->
               <div id="oxdna-benchmark-mount" style="margin-bottom:6px"></div>
 
-              <!-- ── Jobs (collapsible card — list of runs) ─────────────────── -->
-              <div class="ox-card">
+              <!-- ── Jobs (list of runs) — HIDDEN: the unified #simulate-jobs list above
+                   is now the one job list (Phase C). The oxDNA panel still renders into
+                   #oxdna-jobs-list (harmlessly, into this hidden node) and selectJob() still
+                   works, so no oxDNA internals changed. -->
+              <div class="ox-card" style="display:none">
                 <div id="oxdna-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="oxdna-jobs-list-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Jobs</span>
                 </div>
@@ -3915,209 +3989,6 @@
             </div>
           </div><!-- /oxdna-jobs-panel -->
 
-          <!-- ── LAMMPS (CPU-parallel oxDNA — CG-DNA, for very large assemblies) ──── -->
-          <div class="panel-section" id="lammps-jobs-panel">
-            <h2 id="lammps-jobs-heading" style="margin-bottom:0"><span>LAMMPS <span style="font-size:var(--text-xs);color:var(--color-text-dim);font-weight:400">— parallel oxDNA</span></span></h2>
-            <div id="lammps-jobs-body" style="margin-top:8px">
-
-              <!-- availability badge (LAMMPS + CG-DNA) -->
-              <div id="lammps-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
-
-              <!-- running job's progress bar -->
-              <div id="lammps-jobs-progress" style="margin-bottom:6px">
-                <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
-                  <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
-                </div>
-              </div>
-
-              <!-- one run button: CPU-parallel oxDNA on the loaded design -->
-              <button id="lammps-jobs-run-btn" disabled
-                      title="Run the oxDNA2 force field in LAMMPS (CPU-parallel). For assemblies too large for single-GPU oxDNA."
-                      style="width:100%;font-size:var(--text-xs);padding:6px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600;margin-bottom:6px">
-                ▶ Run on LAMMPS
-              </button>
-
-              <!-- ── Electric field (collapsible card; mirrors the oxDNA one) ── -->
-              <div class="ox-card">
-                <div id="lammps-field-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
-                  <span id="lammps-field-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Electric field</span>
-                </div>
-                <div id="lammps-field-body" class="ox-card__body" style="display:none">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer">
-                    <input id="lammps-field-enable" type="checkbox"> Apply a uniform E-field to the run
-                  </label>
-                  <div style="display:flex;align-items:center;gap:6px;margin-top:6px;margin-left:18px">
-                    <span style="font-size:var(--text-xs);color:#8b949e">Force</span>
-                    <input id="lammps-field-mag" type="number" min="0" step="0.1" value="0"
-                           style="width:64px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
-                    <span style="font-size:var(--text-xs);color:#8b949e">pN/nt</span>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;margin-top:5px;margin-left:18px">
-                    <span style="font-size:var(--text-xs);color:#8b949e">Dir</span>
-                    <input id="lammps-field-dir-x" type="number" step="0.1" value="1" title="x"
-                           style="width:44px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
-                    <input id="lammps-field-dir-y" type="number" step="0.1" value="0" title="y"
-                           style="width:44px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
-                    <input id="lammps-field-dir-z" type="number" step="0.1" value="0" title="z"
-                           style="width:44px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
-                    <span style="font-size:10px;color:#6b7280">(drag the arrow in the scene)</span>
-                  </div>
-                  <div id="lammps-field-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;margin-left:18px;min-height:14px"></div>
-                </div>
-              </div>
-
-              <!-- ── Anchors (collapsible card; mirrors the oxDNA one) ───────── -->
-              <div class="ox-card">
-                <div id="lammps-anchors-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
-                  <span id="lammps-anchors-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Anchors</span>
-                </div>
-                <div id="lammps-anchors-body" class="ox-card__body" style="display:none">
-                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Nucleotides held fixed during the run. A field needs ≥1 anchor. Pin the duplex ends (not just floppy ssDNA overhangs) to bend a stiff bundle.</div>
-                  <div style="display:flex;gap:6px">
-                    <button id="lammps-anchors-add" title="Anchor the current scene selection (overhang / strand / domain / cluster / base)"
-                            style="font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Add selected</button>
-                    <button id="lammps-anchors-clear"
-                            style="font-size:var(--text-xs);padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
-                  </div>
-                  <div id="lammps-anchors-list" style="margin-top:5px"></div>
-                  <div id="lammps-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                </div>
-              </div>
-
-              <!-- ── Surface (collapsible card; mirrors the oxDNA hard surface) ── -->
-              <div class="ox-card">
-                <div id="lammps-surface-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
-                  <span id="lammps-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Hard surface</span>
-                </div>
-                <div id="lammps-surface-body" class="ox-card__body" style="display:none">
-                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">An axis-aligned hard wall the structure can't pass through (a substrate). Add anchors to bind a floppy structure to it.</div>
-                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
-                    <input type="checkbox" id="lammps-surface-enable"> Apply a hard surface to the run
-                  </label>
-                  <div id="lammps-surface-controls" style="display:none;flex-direction:column;gap:5px">
-                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e;font-size:var(--text-xs)">
-                      <span style="min-width:46px" title="Which side the surface sits on. −Y = below.">Side</span>
-                      <select id="lammps-surface-axis" style="flex:1;background:#161b22;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
-                        <option value="-y" selected>−Y (below)</option>
-                        <option value="+y">+Y (above)</option>
-                        <option value="-x">−X (left)</option>
-                        <option value="+x">+X (right)</option>
-                        <option value="-z">−Z (front)</option>
-                        <option value="+z">+Z (back)</option>
-                      </select>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e;font-size:var(--text-xs)">
-                      <span style="min-width:46px" title="nm of clearance the surface sits beyond the structure's edge">Offset</span>
-                      <input id="lammps-surface-offset" type="range" min="-20" max="20" step="0.1" value="0" style="flex:1;accent-color:#58a6ff">
-                      <span id="lammps-surface-offset-label" style="color:#c9d1d9;min-width:42px;text-align:right">0.0 nm</span>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e;font-size:var(--text-xs)">
-                      <span style="min-width:46px" title="Wall repulsion stiffness (oxDNA units)">Stiffness</span>
-                      <input id="lammps-surface-stiff" type="number" value="5" min="0.1" step="0.5" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    </div>
-                  </div>
-                  <div id="lammps-surface-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
-                </div>
-              </div>
-
-              <!-- ── Jobs (list of runs) ────────────────────────────────────── -->
-              <div class="ox-card">
-                <div class="ox-card__header" style="color:#c9d1d9;display:flex;align-items:center;justify-content:space-between">
-                  <span class="ox-card__title">Jobs</span>
-                  <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:#8b949e;cursor:pointer;font-weight:400"
-                         title="Show LAMMPS runs from every design, not just the loaded one">
-                    <input id="lammps-jobs-show-all" type="checkbox"> show all designs
-                  </label>
-                </div>
-                <div class="ox-card__body">
-                  <div id="lammps-jobs-list" style="max-height:120px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
-                </div>
-              </div>
-
-              <!-- ── Visualizations & processing (collapsible; mutually-exclusive views;
-                   the view radios enable once a finished run is selected in the list) ── -->
-              <div class="ox-card">
-                <div id="lammps-jobs-viz-toggle" class="ox-card__header" style="color:#c9d1d9">
-                  <span id="lammps-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations</span>
-                </div>
-                <div id="lammps-jobs-viz-body" class="ox-card__body">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
-                    <input id="lammps-jobs-viz-off" name="lammps-viz" type="radio" value="off" checked> Off (native positions)
-                  </label>
-                  <!-- display toggle -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:pointer">
-                    <input id="lammps-jobs-display-toggle" name="lammps-viz" type="radio" value="display" disabled> LAMMPS display
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
-                         title="On: superpose the final structure onto the design pose. Off: show it in its own simulation frame.">
-                    <input id="lammps-jobs-align-toggle" type="checkbox" checked> Align to design pose
-                  </label>
-                  <div id="lammps-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                  <!-- Flexibility map (avg structure recoloured by per-base RMSF) -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                         title="Average structure over the run, recoloured rigid→flexible by per-base RMSF">
-                    <input id="lammps-jobs-flex-toggle" name="lammps-viz" type="radio" value="flex" disabled> Flexibility map (RMSF)
-                  </label>
-                  <div id="lammps-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                  <!-- Deviation map: mean structure coloured by per-base deviation from design -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                         title="Average structure, each base recoloured green (matches design) → red (far from design).">
-                    <input id="lammps-jobs-deviation-toggle" name="lammps-viz" type="radio" value="deviation" disabled> Deviation map
-                  </label>
-                  <div id="lammps-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                  <!-- View trajectory: scrub the run -->
-                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                         title="Play/scrub the run's trajectory">
-                    <input id="lammps-jobs-traj-toggle" name="lammps-viz" type="radio" value="traj" disabled> View trajectory
-                  </label>
-                  <div id="lammps-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                  <div id="lammps-jobs-traj-controls" style="display:none;margin-top:4px">
-                    <div style="display:flex;align-items:center;gap:6px">
-                      <button id="lammps-jobs-traj-play" title="Play / pause"
-                              style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
-                      <div style="position:relative;flex:1;min-width:0">
-                        <input id="lammps-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
-                               style="width:100%;display:block;margin:0">
-                        <div id="lammps-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
-                      </div>
-                    </div>
-                    <div id="lammps-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- ── Advanced (collapsible card) ────────────────────────────── -->
-              <div class="ox-card">
-                <div id="lammps-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e;cursor:pointer">
-                  <span id="lammps-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
-                </div>
-                <div id="lammps-jobs-adv-body" class="ox-card__body" style="display:none">
-                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
-                    <label for="lammps-jobs-steps" style="font-size:var(--text-xs);color:#8b949e">Steps</label>
-                    <input id="lammps-jobs-steps" type="number" value="100000" min="1000" max="500000000" step="10000"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label for="lammps-jobs-dump" style="font-size:var(--text-xs);color:#8b949e">Dump every</label>
-                    <input id="lammps-jobs-dump" type="number" value="1000" min="1" max="10000000" step="100"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label for="lammps-jobs-temp" style="font-size:var(--text-xs);color:#8b949e">Temperature</label>
-                    <input id="lammps-jobs-temp" type="number" value="0.1" min="0.001" max="1" step="0.01"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label for="lammps-jobs-salt" style="font-size:var(--text-xs);color:#8b949e">Salt (M)</label>
-                    <input id="lammps-jobs-salt" type="number" value="0.5" min="0.01" max="2" step="0.1"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label for="lammps-jobs-ranks" style="font-size:var(--text-xs);color:#8b949e">CPU cores</label>
-                    <div style="display:flex;gap:4px;min-width:0;align-items:center">
-                      <input id="lammps-jobs-ranks" type="number" value="1" min="1" max="1" step="1"
-                             style="flex:1 1 auto;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <button id="lammps-jobs-cores-auto" type="button" title="Use all currently-free CPU cores (accounts for other running jobs, e.g. NAMD)"
-                              style="flex:0 0 auto;font-size:var(--text-xs);line-height:1;padding:3px 7px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">⚡</button>
-                    </div>
-                  </div>
-                  <div style="font-size:var(--text-xs);color:#6e7681;margin-top:4px">Runs the design on this many CPU cores in parallel (MPI). Needs an MPI-enabled LAMMPS build; capped at the machine's physical-core count. ⚡ sets it to the cores free right now. Big assemblies benefit; small designs gain little.</div>
-                </div>
-              </div>
-            </div>
-          </div><!-- /lammps-jobs-panel -->
 
           <!-- ── mrDNA (coarse ARBD relaxation: single Run + CG display) ──── -->
           <div class="panel-section" id="mrdna-jobs-panel">

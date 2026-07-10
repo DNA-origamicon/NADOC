@@ -24,16 +24,15 @@ const REC_BUSY_PROTEIN = { ...REC_BUSY, has_proteins: true,
   recommendation: { engine: 'oxdna', backend: 'CUDA', cpu_slowdown_factor: 47 } }
 
 function make(overrides = {}) {
-  const engineSelector = { select: vi.fn() }
   const launchLammps = vi.fn().mockResolvedValue({ job_id: 'l1' })
   const statusMount = document.createElement('div')
   const sim = initSimulateLaunch({
-    engineSelector, statusMount, getDevices: () => '0',
+    statusMount, getDevices: () => '0',
     oxdnaForm: () => ({ mdRelaxSteps: 5000, salt: 0.4 }),
     getForces: () => ({ field: null, anchors: [], wall: null }),
     launchLammps, ...overrides,
   })
-  return { sim, engineSelector, launchLammps, statusMount }
+  return { sim, launchLammps, statusMount }
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -63,12 +62,11 @@ describe('guardOxdnaLaunch', () => {
     expect(launchLammps).not.toHaveBeenCalled()
   })
 
-  it('GPU busy + CPU chosen → switches to LAMMPS, launches it, returns cpu', async () => {
+  it('GPU busy + CPU chosen → creates a LAMMPS run directly, returns cpu (no tab switch)', async () => {
     simulateRecommendation.mockResolvedValue(REC_BUSY)
     confirmSimEngineLaunch.mockResolvedValue('cpu')
-    const { sim, engineSelector, launchLammps } = make()
+    const { sim, launchLammps } = make()
     expect(await sim.guardOxdnaLaunch()).toBe('cpu')
-    expect(engineSelector.select).toHaveBeenCalledWith('lammps')
     expect(launchLammps).toHaveBeenCalledTimes(1)
     const params = launchLammps.mock.calls[0][0]
     expect(params).toMatchObject({ steps: 5000, salt: 0.4, cores: 12, ranks: 12 })

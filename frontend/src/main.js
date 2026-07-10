@@ -196,8 +196,8 @@ import { mdVizApiAdapter } from './ui/md_viz_adapter.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initMrdnaDisplay } from './ui/mrdna_display.js'
 import { initMrdnaJobsPanel } from './ui/mrdna_jobs_panel.js'
-import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
-import { initLammpsForcesSetup } from './ui/lammps_forces_setup.js'
+import { initSimulateJobs } from './ui/simulate_jobs.js'
+import { buildCreatePayload as buildLammpsPayload } from './ui/lammps_jobs_logic.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initEngineSelector } from './ui/engine_selector.js'
 import { initSimulateLaunch } from './ui/simulate_launch.js'
@@ -1890,6 +1890,7 @@ async function main() {
   // Lazy getters resolve the panel + field/anchor cards (all declared below).
   let oxdnaPanel = null
   let simulateLaunch = null   // auto engine-policy coordinator (created after the engine selector)
+  let simulateJobs = null     // unified sim-job list + master status card (Phase C)
   // Both the "Full Sim" run AND the Live session compose the same independently-
   // enabled elements (field / hard surface / anchors).
   const _oxdnaRunElements = () => ({
@@ -1974,8 +1975,6 @@ async function main() {
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
   })
   const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
-  // (LAMMPS panel + its External-forces cards are wired after the anchor-glow / View-grid
-  // setup below, so they can reuse the SAME purple anchor halo + surface grid as oxDNA.)
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
   // solver. The "Predicted shape (deform model)" toggle deforms the NADOC model to
   // the FEM-predicted positions via applyFemPositions (display-only, Three-Layer).
@@ -2044,39 +2043,19 @@ async function main() {
   })
   if (import.meta.env.DEV) window.__nadocOxdnaFloor = oxdnaFloorSetup
 
-  // CPU-parallel oxDNA (LAMMPS CG-DNA): own field-direction arrow (separate gizmo
-  // instance) + the Electric field / Anchors / Surface cards.  Reuses the SAME purple
-  // anchor halo (anchorGlow) and View surface grid (_viewToolButtons) as the oxDNA
-  // panel — the LAMMPS anchors glow whenever ≥1 is marked; the Surface toggle drives
-  // the grid.  onChange never fires during construction (lammps_forces_setup gates it).
-  const _refreshLammpsAnchorGlow = () => {
-    const anchors = lammpsForcesSetup?.getAnchors?.() || []
-    anchorGlow.setAnchors(anchors.length ? anchors : [])
-  }
-  const lammpsForcesSetup = initLammpsForcesSetup({
-    gizmo: initEfieldGizmo(scene, camera, canvas, controls, 'lammps-efield-gizmo'),
-    getSelection: () => store.getState(),
-    getBaseCount: () => store.getState().currentGeometry?.length || 0,
-    onChange: _refreshLammpsAnchorGlow,
-    setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
-  })
-  const lammpsPanel = initLammpsJobsPanel({
-    designRenderer, getWorkspacePath: () => _workspacePath, forcesSetup: lammpsForcesSetup,
-    getFlexScale: () => flexScale,
-  })
   // Spinner on each engine's section header while that engine has a running/preparing
-  // job (one shared /api/jobs/active poll drives all five headers).
+  // job (one shared /api/jobs/active poll drives all the headers).
   initEngineActivityHeaders()
 
-  // Simulate section: one engine selector (segmented tabs) fronts the 5 stacked
-  // engine panels — shows the selected engine's panel, hides the rest — plus a
-  // capability strip (unsupported cards greyed-with-tooltip). (U4)
+  // Simulate section: one engine selector (segmented tabs) fronts the stacked engine
+  // panels — shows the selected engine's panel, hides the rest — plus a capability
+  // strip (unsupported cards greyed-with-tooltip). (U4)  LAMMPS is NOT a tab: it's the
+  // auto-policy CPU fallback and its runs appear in the unified #simulate-jobs list.
   const engineSelector = initEngineSelector({
     selectorMount: document.getElementById('engine-selector-mount'),
     stripMount:    document.getElementById('engine-capability-strip'),
     panelEls: {
       oxdna:  document.getElementById('oxdna-jobs-panel'),
-      lammps: document.getElementById('lammps-jobs-panel'),
       mrdna:  document.getElementById('mrdna-jobs-panel'),
       cando:  document.getElementById('cando-jobs-panel'),
       namd:   document.getElementById('md-jobs-panel'),
@@ -2092,11 +2071,24 @@ async function main() {
     if (eng) engineSelector?.select?.(eng)
   })
 
-  // Auto engine-policy coordinator: renders the resource status line (GPU state ·
-  // free cores · recommended engine) and guards the oxDNA launch (see simGuard above)
-  // — on a GPU-busy CPU fallback it switches to LAMMPS and launches it there.
-  simulateLaunch = initSimulateLaunch({
+  // Unified simulation job list + master Job status card (Phase C): ONE hierarchical
+  // list of every oxDNA + LAMMPS run for the design, with the master status/progress +
+  // context Run/Stop/Resume. Delegates oxDNA detail/viz to the oxDNA panel; owns the
+  // LAMMPS viz itself. Constructed after the panels so it can hold their handles.
+  simulateJobs = initSimulateJobs({
+    api,
+    getWorkspacePath: () => _workspacePath,
+    designRenderer,
+    oxdnaPanel,
     engineSelector,
+    getFlexScale: () => flexScale,
+  })
+
+  // Auto engine-policy coordinator: renders the resource status line (GPU state · free
+  // cores · recommended engine) and guards the oxDNA launch (see simGuard above) — on a
+  // GPU-busy CPU fallback it creates a LAMMPS run DIRECTLY (no tab to switch to), which
+  // then lands in the unified #simulate-jobs list on the next refresh.
+  simulateLaunch = initSimulateLaunch({
     statusMount: document.getElementById('simulate-status-line'),
     getDevices: () => document.getElementById('oxdna-jobs-device')?.value || '0',
     oxdnaForm: () => ({
@@ -2104,7 +2096,12 @@ async function main() {
       salt: parseFloat(document.getElementById('oxdna-jobs-salt')?.value || '0.5'),
     }),
     getForces: _oxdnaRunElements,
-    launchLammps: (params) => lammpsPanel?.launch?.(params),
+    launchLammps: async (params) => {
+      const payload = buildLammpsPayload({ ...params, designSourcePath: _workspacePath })
+      const job = await api.createLammpsJob(payload)
+      if (job) simulateJobs?.refresh?.()
+      return job
+    },
   })
   const _refreshSimPolicy = () => simulateLaunch?.refresh?.()
   window.addEventListener('nadoc:workspace-path-change', _refreshSimPolicy)
@@ -3306,7 +3303,7 @@ async function main() {
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'oxdna-jobs-panel', 'lammps-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'md-panel',
+    'oxdna-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}

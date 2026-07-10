@@ -2073,6 +2073,13 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
 
   return {
     refresh: _fetchJobs, getSelectedJob: _selectedJob, ensureJobCurrent: _ensureJobCurrent,
+    // Start a new oxDNA relaxation (the front-door "Relax" action) — used by the unified
+    // Simulate master card's context Run button when nothing / an oxDNA job is selected,
+    // so the GPU-busy dialog + disk forecast + sequence guard all stay in one place.
+    launchRelax: _launchRelax,
+    // Session-only set of job ids created by an Autorefine run → the [AR] tag; the master
+    // card reads this to tag those rows in the unified list (it can't come from the backend).
+    autorefineJobIds: () => _arJobIds,
     // Select a job in this panel's list (highlight the row + populate every card) exactly
     // as a row click does — used by the Chain Simulations queue so clicking a launched
     // stage selects its real job here. Refetches first if the job isn't in the list yet

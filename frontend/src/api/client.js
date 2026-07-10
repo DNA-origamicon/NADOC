@@ -3319,6 +3319,17 @@ export async function simulateRecommendation(devices = '0') {
   return _request('GET', `/simulate/recommendation?devices=${encodeURIComponent(devices)}`)
 }
 
+/** The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
+ *  normalized into one common node shape (engine/kind/status/parent_job_id/…) so the
+ *  Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in one hierarchical list. */
+export async function listSimJobs(designSourcePath = null, showAll = false) {
+  const q = new URLSearchParams()
+  if (designSourcePath) q.set('design_source_path', designSourcePath)
+  if (showAll) q.set('show_all', 'true')
+  const s = q.toString()
+  return _request('GET', `/simulate/jobs${s ? `?${s}` : ''}`)
+}
+
 export async function getLibraryFileContent(path) {
   return _request('GET', `/library/content?path=${encodeURIComponent(path)}`)
 }

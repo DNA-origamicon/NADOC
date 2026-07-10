@@ -99,3 +99,47 @@ async def get_recommendation(devices: str = "0") -> dict:
 
     return {"recommendation": rec, "gpu": gpu, "free_cores": free,
             "has_proteins": proteins, "n_nucleotides": n_nt, "gpu_eta_seconds": gpu_eta}
+
+
+@router.get("/simulate/jobs")
+async def list_simulate_jobs(design_source_path: str | None = None,
+                             show_all: bool = False) -> list[dict]:
+    """The UNIFIED simulation job list — every oxDNA + LAMMPS run for the active design,
+    normalized into one common node shape (see :mod:`backend.core.sim_jobs`) so the
+    Simulate panel renders GPU-oxDNA and CPU-LAMMPS runs in the SAME hierarchical list.
+
+    Reuses the exact enrichment ``routes_oxdna.list_oxdna_jobs`` does (reconcile status,
+    out-of-date fingerprint, on-disk size) plus the LAMMPS reconcile, then normalizes +
+    merges + filters by ``design_source_path`` (parity with the frontend
+    ``filterJobsForPart``).  Never raises — a failed engine list degrades to no nodes.
+    """
+    from backend.api.assembly import _WORKSPACE_DIR
+    from backend.api.routes_oxdna import _current_design_fingerprint, _job_is_out_of_date
+    from backend.core import sim_jobs
+    from backend.core.design_disk_usage import dir_size_bytes_cached
+    from backend.core.lammps_job import LammpsJob
+    from backend.core.lammps_runner import reconcile_lammps_status
+    from backend.core.oxdna_job import OxdnaJob
+    from backend.core.oxdna_runner import reconcile_oxdna_status
+
+    ws = _WORKSPACE_DIR  # noqa: F821 — imported lazily just above
+    nodes: list[dict] = []
+    try:
+        current_fp = _current_design_fingerprint()   # computed once for the whole list
+        for j in OxdnaJob.list_jobs(ws):
+            j = reconcile_oxdna_status(j, ws)
+            d = j.to_dict()
+            d["out_of_date"] = _job_is_out_of_date(j, current_fp)
+            d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+            nodes.append(sim_jobs.normalize_oxdna_job(d))
+    except Exception:  # noqa: BLE001 — a broken oxDNA list must not sink the LAMMPS one
+        pass
+    try:
+        for j in LammpsJob.list_jobs(ws):
+            j = reconcile_lammps_status(j, ws)
+            d = j.to_dict()
+            d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+            nodes.append(sim_jobs.normalize_lammps_job(d))
+    except Exception:  # noqa: BLE001
+        pass
+    return sim_jobs.filter_nodes(nodes, design_source_path, show_all)
