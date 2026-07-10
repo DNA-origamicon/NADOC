@@ -42,6 +42,30 @@ def test_argv_mpi_prefixes_mpirun():
     assert argv == ["mpirun", "-np", "8", "/x/lmp", "-in", "in.lammps"]
 
 
+def test_available_cpu_cores_is_a_positive_int_no_more_than_logical():
+    n = R.available_cpu_cores()
+    assert isinstance(n, int) and n >= 1
+    logical = os.cpu_count() or 1
+    assert n <= logical   # physical cores never exceed logical
+
+
+def test_free_cpu_cores_within_one_and_total():
+    total = R.available_cpu_cores()
+    free = R.free_cpu_cores()
+    assert isinstance(free, int) and 1 <= free <= total
+
+
+def test_free_cpu_cores_drops_under_load(monkeypatch):
+    """A busy machine (high load average) leaves fewer free cores than the total."""
+    monkeypatch.setattr(R, "available_cpu_cores", lambda: 16)
+    monkeypatch.setattr(R.os, "getloadavg", lambda: (10.0, 8.0, 4.0))
+    assert R.free_cpu_cores() == 6            # 16 - round(10)
+    monkeypatch.setattr(R.os, "getloadavg", lambda: (0.2, 0.1, 0.1))
+    assert R.free_cpu_cores() == 16           # idle → all free
+    monkeypatch.setattr(R.os, "getloadavg", lambda: (99.0, 99.0, 99.0))
+    assert R.free_cpu_cores() == 1            # over-loaded → clamp to ≥1
+
+
 # ── resolve_lammps ────────────────────────────────────────────────────────────
 
 def test_resolve_lammps_raises_when_missing(monkeypatch):
@@ -198,13 +222,18 @@ def test_lammps_field_holds_anchor_and_deflects_free(tmp_path):
     mask = np.zeros(len(f0), bool); mask[anchored] = True
     disp = fN - f0
     anchored_drift = np.linalg.norm(disp[mask], axis=1).mean()
-    free_along_field = disp[~mask][:, 0].mean()
-    free_mag = np.linalg.norm(disp[~mask], axis=1).mean()
+    # Mean displacement VECTOR of the free beads: the field imposes a NET drift along
+    # +x while thermal motion averages to ~0 in y/z.  (We test the net drift vector,
+    # not per-bead magnitude: at the physical timestep free beads also diffuse
+    # thermally, so |displacement| is thermal-dominated even though the net drift is
+    # cleanly along the field.)
+    net = disp[~mask].mean(axis=0)
     # anchors held (spring/self K=1000 → ≪0.1 oxDNA units)
     assert anchored_drift < 0.1
-    # free part moved, and its motion is dominated by the +field (x) direction
-    assert free_along_field > 3 * anchored_drift
-    assert free_along_field > 0.5 * free_mag
+    # free part drifted along the +field (x) direction, far more than the anchors moved
+    assert net[0] > 3 * anchored_drift
+    # and +x (the field) is the dominant direction of the NET drift (y/z average out)
+    assert net[0] > abs(net[1]) and net[0] > abs(net[2])
 
 
 # ── managed-job orchestration ─────────────────────────────────────────────────

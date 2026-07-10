@@ -485,7 +485,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1337,6 +1337,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _setFlexOff() {
     if (getMdViz?.()?.mode?.() === 'rmsf') getMdViz().stopAndRestore()
     if (flexToggle) flexToggle.checked = false
+    getFlexScale?.()?.hide?.()
     _setFlexBar('off')
     _setFlexLegend(null, null)
     _setFlexStatus('', _C.dim)
@@ -1351,6 +1352,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (r.ok) {
       _setFlexBar('done')
       _setFlexLegend(r.min, r.max)
+      getFlexScale?.()?.show?.({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
+        onRecolor: (lo, hi, cmap) => getMdViz?.()?.recolorRmsf?.(lo, hi, cmap) })
       const conf = r.confidence || {}
       const note = conf.preliminary ? ' · preliminary (short run)' : ''
       _setFlexStatus(`Avg structure · ${r.n} bases · ${r.nFrames ?? '?'} frames${note}`,

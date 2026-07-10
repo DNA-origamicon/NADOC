@@ -29,18 +29,20 @@ describe('valueToFraction / fractionToValue', () => {
 
 describe('initFlexScale', () => {
   const SPEC = {
-    'flex-scale': 'div', 'flex-scale-track': 'div',
+    'flex-scale': 'div', 'flex-scale-track': 'div', 'flex-scale-title': 'div',
     'flex-scale-handle-hi': 'div', 'flex-scale-handle-lo': 'div',
-    'flex-scale-max': 'input', 'flex-scale-min': 'input', 'flex-scale-reset': 'button',
+    'flex-scale-max': 'input', 'flex-scale-min': 'input',
+    'flex-scale-reset': 'button', 'flex-scale-cmap': 'button',
   }
   const $ = (id) => document.getElementById(id)
-  beforeEach(() => { clearDom(); mountIds(SPEC) })
+  beforeEach(() => { clearDom(); try { window.localStorage.clear() } catch { /* ignore */ } ; mountIds(SPEC) })
   afterEach(() => clearDom())
 
-  it('show seeds inputs + handle positions with the data min→max and reveals; hide conceals', () => {
-    const fs = initFlexScale({})
-    fs.show(0.0, 1.0)
+  it('show seeds title, inputs + handle positions with the data min→max and reveals; hide conceals', () => {
+    const fs = initFlexScale()
+    fs.show({ title: 'RMSF (nm)', min: 0.0, max: 1.0, mapType: 'flex' })
     expect($('flex-scale').style.display).not.toBe('none')
+    expect($('flex-scale-title').textContent).toBe('RMSF (nm)')
     expect($('flex-scale-min').value).toBe('0.00')
     expect($('flex-scale-max').value).toBe('1.00')
     expect($('flex-scale-handle-hi').style.top).toBe('0%')     // max at top
@@ -49,37 +51,47 @@ describe('initFlexScale', () => {
     expect($('flex-scale').style.display).toBe('none')
   })
 
-  it('editing a bound emits the clamped (lo, hi)', () => {
+  it('show applies the map-type default colormap and calls onRecolor once to reconcile', () => {
     const cb = vi.fn()
-    const fs = initFlexScale({ onBoundsChange: cb })
-    fs.show(0.2, 1.0)
+    const fs = initFlexScale()
+    fs.show({ min: 0, max: 1, mapType: 'deviation', onRecolor: cb })
+    expect(fs.getColormap()).toBe('devramp')               // deviation default
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(cb).toHaveBeenLastCalledWith(0, 1, 'devramp')
+  })
+
+  it('editing a bound emits the clamped (lo, hi, colormap)', () => {
+    const cb = vi.fn()
+    const fs = initFlexScale()
+    fs.show({ min: 0.2, max: 1.0, mapType: 'flex', onRecolor: cb })
+    cb.mockClear()
     $('flex-scale-max').value = '0.6'
     $('flex-scale-max').dispatchEvent(new Event('change'))
-    expect(cb).toHaveBeenLastCalledWith(0.2, 0.6)
+    expect(cb).toHaveBeenLastCalledWith(0.2, 0.6, 'viridis')
   })
 
   it('reset restores the data min→max and re-emits', () => {
     const cb = vi.fn()
-    const fs = initFlexScale({ onBoundsChange: cb })
-    fs.show(0.3, 1.1)
+    const fs = initFlexScale()
+    fs.show({ min: 0.3, max: 1.1, mapType: 'flex', onRecolor: cb })
     $('flex-scale-min').value = '0.5'
     $('flex-scale-min').dispatchEvent(new Event('change'))
     cb.mockClear()
     $('flex-scale-reset').dispatchEvent(new Event('click'))
-    expect(cb).toHaveBeenLastCalledWith(0.3, 1.1)
+    expect(cb).toHaveBeenLastCalledWith(0.3, 1.1, 'viridis')
     expect($('flex-scale-min').value).toBe('0.30')
   })
 
   it('dragging the upper handle windows the range, recolours live, and repositions the handle', () => {
     const cb = vi.fn()
-    const fs = initFlexScale({ onBoundsChange: cb })
-    fs.show(0, 1)
+    const fs = initFlexScale()
+    fs.show({ min: 0, max: 1, mapType: 'flex', onRecolor: cb })
     const track = $('flex-scale-track')
     track.getBoundingClientRect = () => ({ top: 0, height: 100, left: 0, right: 18, bottom: 100, width: 18, x: 0, y: 0 })
 
     $('flex-scale-handle-hi').dispatchEvent(new MouseEvent('pointerdown', { clientY: 0, bubbles: true }))
     window.dispatchEvent(new MouseEvent('pointermove', { clientY: 50 }))   // mid track → 0.5
-    expect(cb).toHaveBeenLastCalledWith(0, 0.5)
+    expect(cb).toHaveBeenLastCalledWith(0, 0.5, 'viridis')
     expect(fs.getBounds()).toEqual({ lo: 0, hi: 0.5 })
     expect($('flex-scale-handle-hi').style.top).toBe('50%')
 
@@ -91,8 +103,8 @@ describe('initFlexScale', () => {
 
   it('dragging the lower handle cannot cross the upper handle', () => {
     const cb = vi.fn()
-    const fs = initFlexScale({ onBoundsChange: cb })
-    fs.show(0, 1)
+    const fs = initFlexScale()
+    fs.show({ min: 0, max: 1, mapType: 'flex', onRecolor: cb })
     const track = $('flex-scale-track')
     track.getBoundingClientRect = () => ({ top: 0, height: 100, left: 0, right: 18, bottom: 100, width: 18, x: 0, y: 0 })
 
@@ -104,10 +116,45 @@ describe('initFlexScale', () => {
     expect(lo).toBeGreaterThan(0.9)
   })
 
+  it('colormap picker: opening lists all maps; choosing one recolours, persists, and updates the track', () => {
+    const cb = vi.fn()
+    const fs = initFlexScale()
+    fs.show({ min: 0, max: 1, mapType: 'flex', onRecolor: cb })
+    cb.mockClear()
+
+    $('flex-scale-cmap').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    const popup = document.getElementById('flex-scale-cmap-popup')
+    expect(popup).toBeTruthy()
+    expect(popup.style.display).toBe('block')
+    expect(popup.querySelectorAll('[data-cmap]').length).toBe(10)
+
+    popup.querySelector('[data-cmap="turbo"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(fs.getColormap()).toBe('turbo')
+    expect(cb).toHaveBeenLastCalledWith(0, 1, 'turbo')
+    expect($('flex-scale-track').style.background).toContain('linear-gradient')
+    expect(popup.style.display).toBe('none')                 // closes after pick
+
+    // Remembered per map-type: a fresh widget showing 'flex' restores turbo.
+    const fs2 = initFlexScale()
+    fs2.show({ min: 0, max: 1, mapType: 'flex' })
+    expect(fs2.getColormap()).toBe('turbo')
+  })
+
+  it('setColormap(name) recolours + persists without the popup', () => {
+    const cb = vi.fn()
+    const fs = initFlexScale()
+    fs.show({ min: 0, max: 1, mapType: 'cando', onRecolor: cb })
+    expect(fs.getColormap()).toBe('jet')                     // cando default
+    cb.mockClear()
+    fs.setColormap('magma')
+    expect(fs.getColormap()).toBe('magma')
+    expect(cb).toHaveBeenLastCalledWith(0, 1, 'magma')
+  })
+
   it('tolerates a missing root (no DOM) without throwing', () => {
     clearDom()
-    const fs = initFlexScale({})
-    expect(() => { fs.show(0, 1); fs.hide() }).not.toThrow()
+    const fs = initFlexScale()
+    expect(() => { fs.show({ min: 0, max: 1 }); fs.hide(); fs.setColormap('jet') }).not.toThrow()
     expect(fs.isVisible()).toBe(false)
   })
 })

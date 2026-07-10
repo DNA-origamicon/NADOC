@@ -23,6 +23,7 @@
  */
 
 import * as THREE from 'three'
+import { colormapRGB } from '../ui/colormaps.js'
 
 const _GREY = new THREE.Color(0x8a8a8a)   // fallback when a segment has no RMSF
 // Dim the jet ramp: full-saturation jet under an unlit material reads as glaring neon;
@@ -101,9 +102,10 @@ export function initCandoCylinders(scene) {
     _meshes.length = 0
   }
 
-  /** One InstancedMesh of cylinders for `segs` ({a,b,rmsf}); per-instance jet colour
-   *  over [lo,hi] (grey when a segment has no RMSF / no ramp). */
-  function _instanced(segs, radius, lo, hi, hasRmsf) {
+  /** One InstancedMesh of cylinders for `segs` ({a,b,rmsf}); per-instance colormap
+   *  colour over [lo,hi] (grey when a segment has no RMSF / no ramp).  `colormap`
+   *  names the shared registry ramp (default jet — CanDo's heat map). */
+  function _instanced(segs, radius, lo, hi, hasRmsf, colormap = 'jet') {
     if (!segs.length) return
     // Unlit white material tinted PER-INSTANCE via instanceColor (setColorAt) — the jet
     // ramp then reads VIVID like CanDo's flat colormap render, independent of scene
@@ -129,7 +131,7 @@ export function initCandoCylinders(scene) {
       _m.compose(_mid, _quat, _scale)
       mesh.setMatrixAt(n, _m)
       if (hasRmsf && Number.isFinite(s.rmsf) && span > 1e-9) {
-        const [r, g, bl] = jetRGB((s.rmsf - lo) / span)
+        const [r, g, bl] = colormapRGB(colormap, (s.rmsf - lo) / span)
         // treat ramp values as display (sRGB) colours, dimmed from neon toward CanDo's tone
         _col.setRGB(r * JET_BRIGHTNESS, g * JET_BRIGHTNESS, bl * JET_BRIGHTNESS, THREE.SRGBColorSpace)
       } else {
@@ -145,20 +147,32 @@ export function initCandoCylinders(scene) {
     _meshes.push(mesh)
   }
 
+  let _lastData = null   // cached response so the colour scale / colormap can recolour live
+
+  /** Rebuild the tube overlay from the cached data at [lo,hi] on `colormap`. */
+  function _draw(lo, hi, colormap) {
+    clear()
+    const data = _lastData
+    if (!data || (!data.helices?.length && !data.joints?.length)) return
+    const { tubes, joints } = cylinderSegments(data)
+    const tubeR = Number.isFinite(data.tube_radius_nm) ? data.tube_radius_nm : 1.125
+    const jointR = Number.isFinite(data.joint_radius_nm) ? data.joint_radius_nm : 0.2
+    const hasRmsf = !!data.has_rmsf
+    _instanced(tubes, tubeR, lo, hi, hasRmsf, colormap)
+    _instanced(joints, jointR, lo, hi, hasRmsf, colormap)
+  }
+
   return {
-    /** Rebuild the tube overlay from a /cando/jobs/{id}/cylinders response. */
-    update(data) {
-      clear()
-      if (!data?.helices?.length && !data?.joints?.length) return
-      const { tubes, joints } = cylinderSegments(data)
-      const tubeR = Number.isFinite(data.tube_radius_nm) ? data.tube_radius_nm : 1.125
-      const jointR = Number.isFinite(data.joint_radius_nm) ? data.joint_radius_nm : 0.2
-      const hasRmsf = !!data.has_rmsf
-      const lo = Number.isFinite(data.rmsf_min) ? data.rmsf_min : 0
-      const hi = Number.isFinite(data.rmsf_p95) ? data.rmsf_p95 : 0
-      _instanced(tubes, tubeR, lo, hi, hasRmsf)
-      _instanced(joints, jointR, lo, hi, hasRmsf)
+    /** Rebuild the tube overlay from a /cando/jobs/{id}/cylinders response.  Optional
+     *  {lo, hi, colormap} override the RMSF window + ramp (default data min→p95, jet). */
+    update(data, { lo = null, hi = null, colormap = 'jet' } = {}) {
+      _lastData = data
+      const dlo = Number.isFinite(lo) ? lo : (Number.isFinite(data?.rmsf_min) ? data.rmsf_min : 0)
+      const dhi = Number.isFinite(hi) ? hi : (Number.isFinite(data?.rmsf_p95) ? data.rmsf_p95 : 0)
+      _draw(dlo, dhi, colormap)
     },
+    /** Recolour the current tubes to a new RMSF window / colormap (no re-fetch). */
+    recolor(lo, hi, colormap = 'jet') { _draw(lo, hi, colormap) },
     clear,
     active: () => _meshes.length > 0,
   }

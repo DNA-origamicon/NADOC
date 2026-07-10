@@ -173,6 +173,65 @@ def prepare_lammps_job(
     }
 
 
+def available_cpu_cores() -> int:
+    """Best-effort count of **physical** CPU cores usable for MPI ranks.
+
+    This is the hard ceiling for a run's ``ranks``.  Two reasons it must be the
+    *physical* core count, not the logical/hyperthread count:
+
+    * OpenMPI treats physical cores as launch *slots* and flat-out refuses
+      ``mpirun -np N`` when ``N`` exceeds them (a confusing "There are not enough
+      slots available" error), so a rank count above the physical cores would
+      never even start.
+    * Hyperthread siblings share execution units and give no speed-up for
+      compute-bound MD — one rank per physical core is the useful maximum.
+
+    Detection order: ``psutil`` (reliable, but only an optional dependency) →
+    distinct ``(physical id, core id)`` pairs in ``/proc/cpuinfo`` (Linux) →
+    the logical count → 1.  Always returns ≥ 1.
+    """
+    try:
+        import psutil  # noqa: PLC0415 — optional; used only if already installed
+
+        n = psutil.cpu_count(logical=False)
+        if n:
+            return int(n)
+    except Exception:  # noqa: BLE001 — any import/probe failure → next strategy
+        pass
+    try:
+        cores: set[tuple[str, str]] = set()
+        phys = ""
+        with open("/proc/cpuinfo") as fh:
+            for line in fh:
+                if line.startswith("physical id"):
+                    phys = line.split(":", 1)[1].strip()
+                elif line.startswith("core id"):
+                    cores.add((phys, line.split(":", 1)[1].strip()))
+        if cores:
+            return len(cores)
+    except Exception:  # noqa: BLE001
+        pass
+    return os.cpu_count() or 1
+
+
+def free_cpu_cores() -> int:
+    """Best-effort count of physical cores currently **free** for a new MPI job.
+
+    Subtracts the machine's live run-queue demand (the 1-minute load average,
+    which counts running+runnable threads ≈ busy cores) from the physical-core
+    ceiling, so a NAMD/oxDNA/mrDNA run already pinning cores leaves fewer cores
+    "free" for a LAMMPS run.  Always ``1 ≤ result ≤ available_cpu_cores()``.
+    Falls back to the full physical count when no load average is available
+    (e.g. a non-Unix platform).
+    """
+    total = available_cpu_cores()
+    try:
+        load1 = os.getloadavg()[0]
+    except (OSError, AttributeError):  # getloadavg unavailable on this platform
+        return total
+    return max(1, min(total, total - round(load1)))
+
+
 def build_lammps_argv(
     lmp_path: str, input_file: str, *, ranks: int = 1, mpirun: str = "mpirun"
 ) -> list[str]:

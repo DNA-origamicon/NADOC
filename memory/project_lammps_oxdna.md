@@ -190,6 +190,59 @@ the "MPI ranks" input (`index.html:3940`) wired browser→REST→job→mpirun. A
 tests pass against the MPI binary. **No code changed — only the binary.** [[manual_validation_debt]]
 MPI item is cleared.
 
+**Rank guard (core-count cap) — SHIPPED 2026-07-10.** The MPI-ranks input was
+unbounded (hardcoded `max="64"`); a user could request more ranks than the machine
+has, and OpenMPI **refuses `-np N` above the physical-core count** ("not enough
+slots") — a confusing hard launch failure. Fix caps ranks at the **physical** core
+count (NOT logical/hyperthread: OpenMPI slots = physical cores, and HT siblings give
+no MD speed-up — verified on this box, 16 phys / 32 logical, `mpirun -np 17 refused`).
+- `lammps_runner.available_cpu_cores()` — physical-core count (psutil if present →
+  `/proc/cpuinfo` distinct (physical id, core id) → `os.cpu_count()` → 1).
+- `GET /lammps/available` now includes `max_ranks`; `POST /lammps/jobs` 400s on
+  `ranks > max_ranks` (fires before design/prep). Verified live: `ranks=17/32 → 400`.
+- Frontend: `lammps_jobs_logic.maxRanks`/`ranksError` + `buildCreatePayload({cores})`
+  clamp; panel `_boundRanksInput()` sets the input `max`+tooltip from availability and
+  the `_launch` guard toasts before a doomed create. Browser-verified: input `max=16`,
+  tooltip "Up to 16 physical CPU cores available", 0 console errors. **main.js Δ = 0.**
+  Tests: backend +3 (runner core-count, availability shape, ranks-over-cores 400),
+  frontend +4 (maxRanks/ranksError/clamp). Full backend suite 4586 passed.
+
+**"Cores" relabel + ⚡ auto-optimize — SHIPPED 2026-07-10.** "MPI ranks" was jargon;
+the input is now labelled **"CPU cores"** (payload still sends `ranks` — backend
+unchanged). A ⚡ button next to it (`#lammps-jobs-cores-auto`) sets the input to the
+cores **free right now**, so a LAMMPS run launched while a NAMD/oxDNA job is using
+cores won't oversubscribe.
+- `lammps_runner.free_cpu_cores()` — physical ceiling minus the 1-min load average
+  (`os.getloadavg()[0]` ≈ busy cores), clamped to [1, total]. `GET /lammps/available`
+  now also returns `free_ranks` (re-sampled per call). Live: idle load 0.42 → free 16.
+- Frontend: `lammps_jobs_logic.freeRanks(available)`; panel `_optimizeCores()` re-fetches
+  availability (fresh sample) and sets the input to `freeRanks`, toasting "Set to N free
+  cores (M busy…)". Browser-verified: label "CPU cores", ⚡ sets 2→16 (all free), 0 errors.
+  **main.js Δ = 0.** Tests: backend +3 (free-core bounds/under-load/availability field),
+  frontend +5 (freeRanks + panel bound/optimize/over-cores-blocked).
+- **Higher-rank run VERIFIED (2026-07-10):** user's ranks=6 run on `6hbx100_noT` (1328
+  atoms) decomposed 1×2×3, 6 MPI tasks @99.4% CPU, **80 s vs ~226–293 s @ rank 1 =
+  ~2.8–3.7×** (sub-linear — tiny design, strong-scaling limit; larger designs scale better).
+
+**⚡ TIMESTEP FIX — SHIPPED 2026-07-10 (~500× faster LAMMPS).** `LammpsInputParams.timestep`
+was `1e-5`, copied verbatim from the upstream **lj_units** oxDNA2 demo (`in.duplex2`) — an
+ultra-conservative showcase value. Standalone oxDNA runs this exact FF at `dt=0.005`. Changed
+the default `1e-5 → 5e-3` ([lammps_interface.py](../backend/physics/lammps_interface.py) —
+`LammpsInputParams.timestep`). **Validation (throwaway scripts, all on `6hbx100_noT`):**
+(1) stability sweep — clean energies `1e-5 … 1e-2`; (2) NVE energy conservation — drift/τ
+smallest at `5e-3`, degradation only past it; (3) **dt-convergence `0.005` vs `0.001`** at
+matched physical time / real M13+WC seq / T=0.1 — mean E_pair within 1.3%, E_bond 0.8%,
+**mean RMSF within 0.1%** ⇒ timestep-converged = accurate. NB: a cross-engine oxDNA-vs-LAMMPS
+mean-RMSF comparison is a POOR dt probe — dominated by equilibration state + global bending of
+the long flexible bundle (oxDNA fully MC→MD→equil-equilibrated → floppy ends ~30 nm; LAMMPS
+fresh-from-FIRE → stiff ~0.44 nm); use the within-engine dt-convergence instead.
+
+**⇒ GPU-vs-CPU BENCHMARK (matched dt=0.005, GPU idle):** oxDNA-CUDA is **13.3×** faster than
+LAMMPS-CPU-16 on 6hbx100 (1328 nt) and **46.6×** on 18hb (14172 nt); GPU always wins when free,
+gap grows with size. ⇒ **oxDNA-GPU is the default engine; LAMMPS-CPU is a fallback** for GPU-busy
+(esp. small designs / long queues) or VRAM-overflow. Proteins force oxDNA. Feeds the planned
+auto engine-policy + resource status line + GPU-busy dialog (plan `enchanted-riding-balloon`).
+
 **⚠ Follow-up (auto-build path):** the in-app auto-build (`engine_install.install_steps`,
 `lammps_doctor.py --fix`, panel "Rebuild") runs cmake/make under the process's default
 env — on THIS box that means the conda toolchain, which hits the `libopen-pal`/`libopen-rte`

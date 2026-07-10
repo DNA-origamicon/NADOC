@@ -214,15 +214,33 @@ _MD_DERIVED_FP_CACHE: dict[str, str] = {}
 
 def _md_snapshot_design(job: MdJob):
     """The exact design this MD job was prepared from (its frozen design.json), or
-    None for a job that predates snapshot-saving."""
-    p = job.job_dir(_workspace()) / "design.json"
-    if not p.exists():
-        return None
+    None for a job that predates snapshot-saving.
+
+    Production/ensemble children don't prepare their own topology — they run the parent's
+    PSF/PDB — so a child that lacks its own snapshot inherits it by walking up the
+    ``parent_job_id`` chain to the nearest ancestor that has one.  This is what lets a
+    production run be measured against the relaxation it was seeded from."""
     from backend.core.models import Design
-    try:
-        return Design.model_validate_json(p.read_text())
-    except Exception:  # noqa: BLE001
-        return None
+
+    ws = _workspace()
+    cur = job
+    seen: set[str] = set()
+    while cur is not None and cur.job_id not in seen:
+        seen.add(cur.job_id)
+        p = cur.job_dir(ws) / "design.json"
+        if p.exists():
+            try:
+                return Design.model_validate_json(p.read_text())
+            except Exception:  # noqa: BLE001
+                return None
+        pid = getattr(cur, "parent_job_id", None)
+        if not pid:
+            break
+        try:
+            cur = MdJob.load(pid, ws)
+        except Exception:  # noqa: BLE001
+            break
+    return None
 
 
 def _md_job_fingerprint(job: MdJob) -> "str | None":

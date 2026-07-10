@@ -541,26 +541,32 @@
     }
 
     /* ── Sidebar resize handles ──────────────────────────────────────── */
-    /* Thin vertical strip on the inner edge of each sidebar; drag to resize.
-       Stays atop the panel content (z-index above the panel's own children but
-       below modals/menus). Hidden while the panel is collapsed. */
+    /* Vertical strip on the outer edge of each sidebar (the border with the
+       3D viewport); drag to resize. The left handle rides the tab strip's
+       right edge so it's easy to find. Subtle highlight on hover, brighter
+       while dragging. Sits above panel content but below modals/menus. */
     .panel-resize-handle {
       position: absolute;
       top: 0;
       bottom: 0;
-      width: 4px;
+      width: 6px;
       cursor: ew-resize;
       z-index: 30;
       background: transparent;
       transition: background var(--motion-fast) var(--motion-ease);
     }
-    .panel-resize-handle:hover,
+    .panel-resize-handle:hover {
+      background: rgba(88, 166, 255, 0.35);   /* subtle accent tint */
+    }
     .panel-resize-handle.is-dragging {
       background: var(--color-accent);
     }
-    #left-panel  > .panel-resize-handle { right: 0; }
-    #right-panel > .panel-resize-handle { left:  0; }
-    #left-panel.hidden > .panel-resize-handle,
+    /* Left handle lives in the tab strip; straddle its right border so it
+       reads as the sidebar↔viewport divider. */
+    #left-tab-strip > .panel-resize-handle { right: -1px; }
+    #right-panel    > .panel-resize-handle { left:   0;  }
+    /* Hide the left handle when the panel is collapsed (nothing to resize). */
+    #left-panel.hidden ~ #left-tab-strip > .panel-resize-handle,
     #right-panel.locked-inactive > .panel-resize-handle {
       display: none;
     }
@@ -3488,8 +3494,6 @@
 
       <!-- Left panel — three tabs (Feature Log / Dynamics / Scene) -->
       <div id="left-panel">
-        <div class="panel-resize-handle" data-resize="left" title="Drag to resize"></div>
-
         <!-- ── Feature Log tab ───────────────────────────────────────────── -->
         <div id="tab-content-feature-log" class="tab-content">
           <!-- Feature Log panel (unified with Configurations) -->
@@ -3545,6 +3549,8 @@
             <div id="simulate-body">
               <div id="engine-selector-mount"></div>
               <div id="engine-capability-strip"></div>
+              <!-- Auto engine-policy resource line: GPU state · free CPU cores · recommended engine -->
+              <div id="simulate-status-line" style="font-size:var(--text-xs);color:#8b949e;padding:2px 2px 4px"></div>
 
           <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
           <div class="panel-section" id="oxdna-jobs-panel">
@@ -4099,11 +4105,15 @@
                     <label for="lammps-jobs-salt" style="font-size:var(--text-xs);color:#8b949e">Salt (M)</label>
                     <input id="lammps-jobs-salt" type="number" value="0.5" min="0.01" max="2" step="0.1"
                            style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label for="lammps-jobs-ranks" style="font-size:var(--text-xs);color:#8b949e">MPI ranks</label>
-                    <input id="lammps-jobs-ranks" type="number" value="1" min="1" max="64" step="1"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label for="lammps-jobs-ranks" style="font-size:var(--text-xs);color:#8b949e">CPU cores</label>
+                    <div style="display:flex;gap:4px;min-width:0;align-items:center">
+                      <input id="lammps-jobs-ranks" type="number" value="1" min="1" max="1" step="1"
+                             style="flex:1 1 auto;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <button id="lammps-jobs-cores-auto" type="button" title="Use all currently-free CPU cores (accounts for other running jobs, e.g. NAMD)"
+                              style="flex:0 0 auto;font-size:var(--text-xs);line-height:1;padding:3px 7px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">⚡</button>
+                    </div>
                   </div>
-                  <div style="font-size:var(--text-xs);color:#6e7681;margin-top:4px">Temperature is in oxDNA units (0.1 ≈ 300 K). Ranks &gt; 1 needs an MPI-enabled LAMMPS build.</div>
+                  <div style="font-size:var(--text-xs);color:#6e7681;margin-top:4px">Runs the design on this many CPU cores in parallel (MPI). Needs an MPI-enabled LAMMPS build; capped at the machine's physical-core count. ⚡ sets it to the cores free right now. Big assemblies benefit; small designs gain little.</div>
                 </div>
               </div>
             </div>
@@ -5598,6 +5608,9 @@
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
         <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — high-resolution export" id="photo-tab-btn" data-test="photo-tab-btn">Photo</button>
         <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
+        <!-- Drag-to-resize the sidebar; lives on the tab strip's outer edge
+             (the border with the 3D viewport) so it's easy to find. -->
+        <div class="panel-resize-handle" data-resize="left" title="Drag to resize sidebar"></div>
       </div>
 
       <!-- 3D viewport -->
@@ -5733,12 +5746,18 @@
           "></div>
           <!-- oxDNA flexibility-map colour scale (middle-right; shown only while the RMSF map is active).
                Two draggable handles window the RMSF→colour range; dragging recolours in real time. -->
+          <style>
+            /* Hide the native up/down spinner arrows on the flex-scale bound inputs. */
+            #flex-scale input[type="number"] { -moz-appearance:textfield; appearance:textfield; }
+            #flex-scale input[type="number"]::-webkit-outer-spin-button,
+            #flex-scale input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+          </style>
           <div id="flex-scale" style="
             position:absolute; right:14px; top:50%; transform:translateY(-50%); display:none;
             z-index:var(--z-overlay); width:56px; padding:7px 6px;
             background:var(--color-bg-raised); border:1px solid var(--color-border-default);
             border-radius:6px; box-shadow:var(--shadow-sm); font-family:var(--font-ui);">
-            <div style="font-size:9px;color:var(--color-text-secondary);text-align:center;margin-bottom:4px">RMSF (nm)</div>
+            <div id="flex-scale-title" style="font-size:9px;color:var(--color-text-secondary);text-align:center;margin-bottom:4px">RMSF (nm)</div>
             <input id="flex-scale-max" type="number" step="0.05" min="0" title="Upper bound"
                    style="width:100%;box-sizing:border-box;font-size:10px;text-align:center;padding:1px;margin-bottom:5px;
                           background:var(--color-bg-inset);color:var(--color-text-primary);
@@ -5756,24 +5775,14 @@
                    style="width:100%;box-sizing:border-box;font-size:10px;text-align:center;padding:1px;margin-top:5px;
                           background:var(--color-bg-inset);color:var(--color-text-primary);
                           border:1px solid var(--color-border-default);border-radius:3px">
+            <button id="flex-scale-cmap" title="Colormap"
+                    style="width:100%;height:13px;margin-top:6px;padding:0;cursor:pointer;
+                           border:1px solid var(--color-border-default);border-radius:3px;
+                           background:linear-gradient(to right,#440154,#3b528b,#21918c,#5dc863,#fde725)"></button>
             <button id="flex-scale-reset" title="Reset to data min→max"
-                    style="width:100%;margin-top:6px;font-size:9px;padding:2px;cursor:pointer;
+                    style="width:100%;margin-top:5px;font-size:9px;padding:2px;cursor:pointer;
                            background:var(--color-bg-inset);color:var(--color-text-secondary);
                            border:1px solid var(--color-border-default);border-radius:3px">Reset</button>
-          </div>
-          <!-- CanDo FEM colour-map legend (middle-right, same slot as the oxDNA flex scale;
-               shown only while a CanDo Flexibility (RMSF) / Deviation map is active). Static
-               ramp + data max/min readout — the ramp + bounds come from cando_display's stats. -->
-          <div id="cando-legend" style="
-            position:absolute; right:14px; top:50%; transform:translateY(-50%); display:none;
-            z-index:var(--z-overlay); width:56px; padding:7px 6px;
-            background:var(--color-bg-raised); border:1px solid var(--color-border-default);
-            border-radius:6px; box-shadow:var(--shadow-sm); font-family:var(--font-ui);">
-            <div id="cando-legend-title" style="font-size:9px;color:var(--color-text-secondary);text-align:center;margin-bottom:4px">RMSF (nm)</div>
-            <div id="cando-legend-max" style="font-size:10px;color:var(--color-text-primary);text-align:center;margin-bottom:3px">—</div>
-            <div id="cando-legend-bar" style="width:18px;height:140px;margin:0 auto;border-radius:3px;
-                        background:linear-gradient(to top,#440154,#3b528b,#21918c,#5dc863,#fde725)"></div>
-            <div id="cando-legend-min" style="font-size:10px;color:var(--color-text-primary);text-align:center;margin-top:3px">—</div>
           </div>
 
           <div id="length-heatmap-legend">

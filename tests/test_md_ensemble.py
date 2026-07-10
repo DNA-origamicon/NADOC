@@ -187,6 +187,26 @@ def test_mgh_extrabonds_propagates(tmp_path):
     assert "extraBondsFile     mgh_extrabonds.txt" in reseed
 
 
+def test_design_snapshot_propagates_to_child(tmp_path):
+    # A production/ensemble child runs the parent's PSF/PDB, so it must inherit the
+    # parent's frozen design.json — else the metrics/trajectory endpoints can't map
+    # P atoms → base pairs and fail with a misleading "no NAMD trajectory".
+    parent = _make_parent(tmp_path)
+    (parent.job_dir(tmp_path) / "design.json").write_text('{"snapshot": true}')
+    child = _build_replica(tmp_path, parent)
+    child_snap = child.job_dir(tmp_path) / "design.json"
+    assert child_snap.exists()
+    assert json.loads(child_snap.read_text()) == {"snapshot": True}
+
+
+def test_child_build_tolerates_missing_parent_snapshot(tmp_path):
+    # Legacy parent with no snapshot: the build must still succeed (the read-side
+    # parent-chain walk in routes_md._md_snapshot_design covers this case).
+    parent = _make_parent(tmp_path)
+    child = _build_replica(tmp_path, parent)
+    assert not (child.job_dir(tmp_path) / "design.json").exists()
+
+
 def test_missing_checkpoint_raises(tmp_path):
     parent = _make_parent(tmp_path)
     (parent.package_dir(tmp_path) / "output" / f"{READY}.coor").unlink()

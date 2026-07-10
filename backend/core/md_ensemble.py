@@ -111,6 +111,16 @@ def build_replica_package(
     child_pkg.mkdir(parents=True, exist_ok=True)
     (child_pkg / "output").mkdir(exist_ok=True)
 
+    # Topology snapshot: a production/ensemble child runs the parent's PSF/PDB, so it
+    # shares the parent's frozen design.json.  Copy it into the child's job dir (mirrors
+    # oxDNA's child spawn).  Without it the metrics/trajectory endpoints can't map P atoms
+    # → base pairs and fall back to whatever design is loaded — or fail with a misleading
+    # "no NAMD trajectory" even though the DCD is present.
+    parent_snapshot = parent.job_dir(workspace) / "design.json"
+    if parent_snapshot.exists():
+        child.job_dir(workspace).mkdir(parents=True, exist_ok=True)
+        shutil.copy2(parent_snapshot, child.job_dir(workspace) / "design.json")
+
     # ── Structure files (shared, immutable) ────────────────────────────────────
     for rel in (f"{name_stem}.psf", f"{name_stem}.pdb"):
         _link_or_copy(parent_pkg / rel, child_pkg / rel)

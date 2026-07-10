@@ -200,10 +200,11 @@ import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
 import { initLammpsForcesSetup } from './ui/lammps_forces_setup.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initEngineSelector } from './ui/engine_selector.js'
+import { initSimulateLaunch } from './ui/simulate_launch.js'
 import { fetchActiveJobs, runningEngineForPath } from './ui/job_activity.js'
 import { initJobsPanelBase } from './ui/jobs_panel_base.js'
 import { initCandoDisplay } from './ui/cando_display.js'
-import { initCandoLegend } from './ui/cando_legend.js'
+import { initFlexScale } from './ui/flex_scale.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
 import { initCandoCylinders } from './scene/cando_cylinders.js'
 import { initMrdnaConnections } from './scene/mrdna_connections.js'
@@ -1834,9 +1835,16 @@ async function main() {
   let chainSim = null
   const _chainMode = () => chainSim?.isEnabled() ?? false
 
+  // The single adjustable workspace colour-scale legend (middle-right), shared by every
+  // scalar-coloured sim output — oxDNA/MD flexibility + deviation maps and the CanDo
+  // RMSF/deviation/cylinder heat maps. Each engine's display controller drives it via
+  // show({ mapType, onRecolor }); the widget owns the draggable bounds + colormap picker.
+  const flexScale = initFlexScale()
+
   const mdPanel = initMdJobsPanel({
     mdDisplayController,
     getWorkspacePath: () => _workspacePath,
+    getFlexScale: () => flexScale,
     getOxdnaDisplay: () => oxdnaDisplay,
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
     // flexibility-map tools reuse the oxDNA display controller via an MD api adapter.
@@ -1881,6 +1889,7 @@ async function main() {
   // toggle, seeds from the panel's selected relaxed job, and pushes field re-aims.
   // Lazy getters resolve the panel + field/anchor cards (all declared below).
   let oxdnaPanel = null
+  let simulateLaunch = null   // auto engine-policy coordinator (created after the engine selector)
   // Both the "Full Sim" run AND the Live session compose the same independently-
   // enabled elements (field / hard surface / anchors).
   const _oxdnaRunElements = () => ({
@@ -1926,6 +1935,7 @@ async function main() {
   // (initMdJobsPanel) is wired to mdViz separately above via getMdViz.
   oxdnaPanel = initOxdnaJobsPanel({
     oxdnaDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
+    flexScale,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
     // Lazy: the CanDo panel is created below, so the compare card's getSources reads its
@@ -1947,6 +1957,10 @@ async function main() {
     // Chain Simulations: Relax/Production → "Queue …" when chain mode is on.
     getChainMode: _chainMode,
     enqueueChainStage: (protocol) => chainSim?.enqueue('oxdna', protocol),
+    // Auto engine policy: when the GPU is busy, this guard shows the cross-engine
+    // dialog and (on "Run on CPU") launches LAMMPS instead. Lazy — the coordinator is
+    // built after the engine selector below.
+    simGuard: (opts) => simulateLaunch?.guardOxdnaLaunch(opts),
   })
   // mrDNA (coarse ARBD relaxation) — sibling of the oxDNA panel, single Run button.
   // CG-beads mode is a STANDALONE rep: bead cloud (md_overlay InstancedMesh) +
@@ -1972,7 +1986,7 @@ async function main() {
     designRenderer, api,
     cylinderOverlay:  candoCylinderOverlay,
     setDesignVisible: (v) => _setDesignGeometryVisible(v),
-    legend:           initCandoLegend(),
+    flexScale,
   })
   const candoPanel = initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
@@ -2046,8 +2060,9 @@ async function main() {
     onChange: _refreshLammpsAnchorGlow,
     setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
   })
-  initLammpsJobsPanel({
+  const lammpsPanel = initLammpsJobsPanel({
     designRenderer, getWorkspacePath: () => _workspacePath, forcesSetup: lammpsForcesSetup,
+    getFlexScale: () => flexScale,
   })
   // Spinner on each engine's section header while that engine has a running/preparing
   // job (one shared /api/jobs/active poll drives all five headers).
@@ -2076,6 +2091,25 @@ async function main() {
     const eng = runningEngineForPath(await fetchActiveJobs(), _workspacePath)
     if (eng) engineSelector?.select?.(eng)
   })
+
+  // Auto engine-policy coordinator: renders the resource status line (GPU state ·
+  // free cores · recommended engine) and guards the oxDNA launch (see simGuard above)
+  // — on a GPU-busy CPU fallback it switches to LAMMPS and launches it there.
+  simulateLaunch = initSimulateLaunch({
+    engineSelector,
+    statusMount: document.getElementById('simulate-status-line'),
+    getDevices: () => document.getElementById('oxdna-jobs-device')?.value || '0',
+    oxdnaForm: () => ({
+      mdRelaxSteps: parseInt(document.getElementById('oxdna-jobs-md-steps')?.value || '', 10) || null,
+      salt: parseFloat(document.getElementById('oxdna-jobs-salt')?.value || '0.5'),
+    }),
+    getForces: _oxdnaRunElements,
+    launchLammps: (params) => lammpsPanel?.launch?.(params),
+  })
+  const _refreshSimPolicy = () => simulateLaunch?.refresh?.()
+  window.addEventListener('nadoc:workspace-path-change', _refreshSimPolicy)
+  window.addEventListener('nadoc:design-changed', _refreshSimPolicy)
+  _refreshSimPolicy()
 
   // Chain Simulations panel (above Simulate): a named-project queue of oxDNA/NAMD
   // relax→production stages that Launch turns into unattended MdPipeline chains. Wires
@@ -3220,8 +3254,8 @@ async function main() {
     _setMenuToggle('menu-view-axes', true)
     viewLegends.reset()
     // Tear down any active CanDo FEM display — restores the native model, clears the
-    // cylinder overlay, and hides the CanDo RMSF/deviation legend (#cando-legend),
-    // which otherwise lingered on the welcome screen after closing a session.
+    // cylinder overlay, and hides the shared colour-scale legend (#flex-scale), which
+    // otherwise lingered on the welcome screen after closing a session.
     candoDisplay.stopAndRestore()
     // Reset representation to Full — deactivates atomistic/surface renderers,
     // resets the representation radio, and hides mode-specific option rows.

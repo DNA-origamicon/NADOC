@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
+import { initFlexScale } from './flex_scale.js'
 
 // Mock the API client so the panel fetches a controlled job set.
 vi.mock('../api/client.js', () => ({
@@ -842,7 +843,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const disp = fakeDisplay()
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j3', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
-    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp, flexScale: initFlexScale() })
     await selectFirstJob(panel)
 
     const flex = $('oxdna-jobs-flex-toggle')
@@ -913,7 +914,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     disp.recolorRmsf = vi.fn()
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jB', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done', steps: 100 }) }])
-    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp, flexScale: initFlexScale() })
     await selectFirstJob(panel)
     const flex = $('oxdna-jobs-flex-toggle')
     flex.checked = true; flex.dispatchEvent(new Event('change'))
@@ -921,7 +922,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
 
     $('flex-scale-max').value = '0.8'
     $('flex-scale-max').dispatchEvent(new Event('change'))
-    expect(disp.recolorRmsf).toHaveBeenLastCalledWith(0.1, 0.8)
+    expect(disp.recolorRmsf).toHaveBeenLastCalledWith(0.1, 0.8, 'viridis')
   })
 
   it('flexibility map and OxDNA display are mutually exclusive', async () => {

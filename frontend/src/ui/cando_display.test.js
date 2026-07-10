@@ -274,23 +274,27 @@ describe('initCandoDisplay — flex / deviation modes', () => {
     expect(api.getCandoDeviation).toHaveBeenCalledWith('j')
   })
 
-  it('drives the colour-map legend: shown for flex/deviation, hidden for deform/off', async () => {
+  it('drives the shared colour-scale widget: shown for flex/deviation, hidden for deform/off', async () => {
     const { designRenderer, api } = makeFullDeps()
-    const legend = { show: vi.fn(), hide: vi.fn() }
-    const c = initCandoDisplay({ designRenderer, api, legend })
+    const flexScale = { show: vi.fn(), hide: vi.fn() }
+    const c = initCandoDisplay({ designRenderer, api, flexScale })
 
     await c.showFlex('j')
-    expect(legend.show).toHaveBeenLastCalledWith('flex', 0.5, 1.5)
+    expect(flexScale.show).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: 'RMSF (nm)', min: 0.5, max: 1.5, mapType: 'flex', onRecolor: expect.any(Function),
+    }))
 
     await c.showDeviation('j')
-    expect(legend.show).toHaveBeenLastCalledWith('deviation', 0, 3)
+    expect(flexScale.show).toHaveBeenLastCalledWith(expect.objectContaining({
+      title: 'Deviation (nm)', min: 0, max: 3, mapType: 'deviation', onRecolor: expect.any(Function),
+    }))
 
-    await c.showDeform('j')          // non-colour-mapped → legend hidden via teardown
-    expect(legend.hide).toHaveBeenCalled()
+    await c.showDeform('j')          // non-colour-mapped → widget hidden via teardown
+    expect(flexScale.hide).toHaveBeenCalled()
 
-    legend.hide.mockClear()
+    flexScale.hide.mockClear()
     c.stopDeform()
-    expect(legend.hide).toHaveBeenCalled()
+    expect(flexScale.hide).toHaveBeenCalled()
   })
 })
 
@@ -323,29 +327,33 @@ describe('initCandoDisplay — CanDo-style cylinder mode', () => {
     const c = initCandoDisplay({ designRenderer, api, cylinderOverlay, setDesignVisible })
     const r = await c.showCandoStyle('j')
     expect(r.ok).toBe(true)
-    expect(cylinderOverlay.update).toHaveBeenCalledWith(expect.objectContaining({ n_helices: 2 }))
+    expect(cylinderOverlay.update).toHaveBeenCalledWith(
+      expect.objectContaining({ n_helices: 2 }),
+      expect.objectContaining({ colormap: expect.any(String) }))
     expect(setDesignVisible).toHaveBeenCalledWith(false)          // native model hidden
     expect(c.mode()).toBe('cando')
     expect(c.lastStats()).toMatchObject({ kind: 'cando', helices: 2, joints: 3 })
   })
 
-  it('shows the jet RMSF legend (min→p95) for the cylinder heat map; hidden when no RMSF', async () => {
+  it('shows the RMSF scale (min→p95) for the cylinder heat map; hidden when no RMSF', async () => {
     const { designRenderer, api, cylinderOverlay, setDesignVisible } = makeCylDeps()
-    const legend = { show: vi.fn(), hide: vi.fn() }
-    const c = initCandoDisplay({ designRenderer, api, cylinderOverlay, setDesignVisible, legend })
+    const flexScale = { show: vi.fn(), hide: vi.fn() }
+    const c = initCandoDisplay({ designRenderer, api, cylinderOverlay, setDesignVisible, flexScale })
 
     await c.showCandoStyle('j')
-    expect(legend.show).toHaveBeenLastCalledWith('cando', 0.44, 1.21)
+    expect(flexScale.show).toHaveBeenLastCalledWith(expect.objectContaining({
+      min: 0.44, max: 1.21, mapType: 'cando', onRecolor: expect.any(Function),
+    }))
 
-    // A job run without RMSF → grey tubes → no legend (only the teardown hide fires).
+    // A job run without RMSF → grey tubes → no scale (only the teardown hide fires).
     api.getCandoCylinders.mockResolvedValueOnce({
       ready: true, n_helices: 2, n_joints: 3, has_rmsf: false,
       helices: [{ helix_id: 'h', points: [[0, 0, 0], [1, 0, 0]] }], joints: [],
     })
-    legend.show.mockClear()
+    flexScale.show.mockClear()
     await c.showCandoStyle('j')
-    expect(legend.show).not.toHaveBeenCalled()
-    expect(legend.hide).toHaveBeenCalled()
+    expect(flexScale.show).not.toHaveBeenCalled()
+    expect(flexScale.hide).toHaveBeenCalled()
   })
 
   it('stopDeform clears the tubes and restores the native model', async () => {

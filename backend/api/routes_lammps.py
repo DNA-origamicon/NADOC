@@ -50,8 +50,18 @@ class CreateLammpsJobRequest(BaseModel):
 
 @router.get("/lammps/available")
 async def get_lammps_available() -> dict:
-    """Is a CG-DNA-capable LAMMPS installed? → ``{available, lammps_bin, cgdna_capable}``."""
-    return lammps_available()
+    """Is a CG-DNA-capable LAMMPS installed?
+    → ``{available, lammps_bin, cgdna_capable, max_ranks, free_ranks}``.
+
+    ``max_ranks`` is the physical-core ceiling for a run's cores (see
+    ``lammps_runner.available_cpu_cores`` for why physical, not logical) so the UI
+    can bound the cores input; ``free_ranks`` is how many of those cores are *not*
+    currently busy (drives the "use free cores" button — accounts for a NAMD/oxDNA
+    run already using cores).  ``free_ranks`` is re-sampled on every call.
+    """
+    return {**lammps_available(),
+            "max_ranks": lammps_runner.available_cpu_cores(),
+            "free_ranks": lammps_runner.free_cpu_cores()}
 
 
 @router.post("/lammps/jobs")
@@ -73,6 +83,14 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
                  "cannot run the oxDNA force field. Rebuild with -D PKG_CG-DNA=on.")
     if body.ranks < 1:
         raise HTTPException(400, "ranks must be >= 1")
+    max_ranks = lammps_runner.available_cpu_cores()
+    if body.ranks > max_ranks:
+        plural = "s" if max_ranks != 1 else ""
+        raise HTTPException(
+            400,
+            f"Requested {body.ranks} MPI ranks but only {max_ranks} physical CPU "
+            f"core{plural} are available. MPI cannot launch more ranks than cores "
+            f"(and hyperthreads don't speed up MD) — reduce ranks to {max_ranks} or fewer.")
 
     design = design_state.get_or_404()
     name = None

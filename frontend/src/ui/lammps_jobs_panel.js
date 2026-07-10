@@ -20,7 +20,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showToast } from './toast.js'
 import {
   progressPct, jobIsActive, anyActive, runButtonState, availabilityMessage,
-  jobRowLabel, buildCreatePayload, jobIsViewable, flexStatusText,
+  jobRowLabel, buildCreatePayload, jobIsViewable, flexStatusText, maxRanks, ranksError, freeRanks,
 } from './lammps_jobs_logic.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
@@ -35,7 +35,7 @@ const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', dim: '#8b949e' }
 const _VIEW_RADIOS = ['display', 'flex', 'deviation', 'traj']
 const _SHOW_ALL_KEY = 'nadoc:lammps-jobs-show-all'
 
-export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = null, forcesSetup = null } = {}) {
+export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = null, forcesSetup = null, getFlexScale = null } = {}) {
   const $ = (id) => document.getElementById(id)
   const panel = $('lammps-jobs-panel')
   const heading = $('lammps-jobs-heading')
@@ -55,6 +55,7 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
   const inTemp = $('lammps-jobs-temp')
   const inSalt = $('lammps-jobs-salt')
   const inRanks = $('lammps-jobs-ranks')
+  const coresAutoBtn = $('lammps-jobs-cores-auto')
   const showAllToggle = $('lammps-jobs-show-all')
   // ── Visualizations & processing card ──
   const vizToggle = $('lammps-jobs-viz-toggle')
@@ -162,8 +163,34 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
       const ok = !!_available?.available && !!_available?.cgdna_capable
       statusEl.style.color = ok ? _C.ok : _C.warn
     }
+    _boundRanksInput()
     _syncRunButton()
   }
+  // Cap the ranks input at the physical-core ceiling reported by the backend so
+  // the user can't dial in a rank count MPI would refuse to launch.
+  function _boundRanksInput() {
+    if (!inRanks) return
+    const cores = maxRanks(_available)
+    inRanks.max = String(cores)
+    inRanks.title = `Up to ${cores} physical CPU core${cores === 1 ? '' : 's'} available`
+    if (Math.floor(Number(inRanks.value)) > cores) inRanks.value = String(cores)
+  }
+  // ⚡ Set the cores input to however many are FREE right now (re-samples the
+  // backend load average → accounts for a NAMD/oxDNA run already using cores).
+  async function _optimizeCores() {
+    if (!inRanks) return
+    _available = await api.lammpsAvailable()   // fresh free-core sample
+    _boundRanksInput()
+    const free = freeRanks(_available)
+    inRanks.value = String(free)
+    const total = maxRanks(_available)
+    showToast(
+      free < total
+        ? `Set to ${free} free core${free === 1 ? '' : 's'} (${total - free} busy with other work).`
+        : `Set to ${free} core${free === 1 ? '' : 's'} — all free.`,
+      { severity: 'ok' })
+  }
+  coresAutoBtn?.addEventListener('click', _optimizeCores)
   function _syncRunButton() {
     if (!runBtn) return
     const st = runButtonState(_available)
@@ -171,23 +198,43 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     runBtn.textContent = _launching ? 'Starting…' : st.label
     runBtn.title = st.title
   }
-  async function _launch() {
+  // `overrides` (when passed by the simulate coordinator's CPU-fallback path) supplies
+  // the create-payload args programmatically instead of reading the DOM inputs — this is
+  // how "Run on CPU instead" in the GPU-busy dialog launches a LAMMPS run from the oxDNA
+  // form. The DOM-driven forces/ranks guards only apply to a user-initiated Run.
+  async function _launch(overrides = null) {
     if (_launching) return
-    if (forcesSetup?.fieldNeedsAnchor?.()) {
-      showToast('An E-field run needs ≥1 anchor — add a fixed strand/domain in External forces.',
-        { severity: 'warn' })
-      return
+    const cores = maxRanks(_available)
+    if (!overrides) {
+      if (forcesSetup?.fieldNeedsAnchor?.()) {
+        showToast('An E-field run needs ≥1 anchor — add a fixed strand/domain in External forces.',
+          { severity: 'warn' })
+        return
+      }
+      const rankMsg = ranksError(inRanks?.value, cores)
+      if (rankMsg) {
+        showToast(rankMsg, { severity: 'warn' })
+        return
+      }
     }
     _launching = true
     _syncRunButton()
     try {
-      const forces = forcesSetup?.getForces?.() || { field: null, anchors: [], wall: null }
-      const payload = buildCreatePayload({
-        steps: inSteps?.value, dumpEvery: inDump?.value,
-        temperature: inTemp?.value, salt: inSalt?.value, ranks: inRanks?.value,
-        designSourcePath: _currentPartPath(),
-        field: forces.field, anchors: forces.anchors, wall: forces.wall,
-      })
+      let payload
+      if (overrides) {
+        payload = buildCreatePayload({
+          ...overrides, cores,
+          designSourcePath: overrides.designSourcePath ?? _currentPartPath(),
+        })
+      } else {
+        const forces = forcesSetup?.getForces?.() || { field: null, anchors: [], wall: null }
+        payload = buildCreatePayload({
+          steps: inSteps?.value, dumpEvery: inDump?.value,
+          temperature: inTemp?.value, salt: inSalt?.value, ranks: inRanks?.value, cores,
+          designSourcePath: _currentPartPath(),
+          field: forces.field, anchors: forces.anchors, wall: forces.wall,
+        })
+      }
       const job = await api.createLammpsJob(payload)
       if (!job) {
         showToast(api.lastErrorMessage() || 'Could not start LAMMPS run', { severity: 'error' })
@@ -200,7 +247,7 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
       _syncRunButton()
     }
   }
-  runBtn?.addEventListener('click', _launch)
+  runBtn?.addEventListener('click', () => _launch())   // no arg → DOM-driven launch (not the click Event)
 
   // ── jobs list + selection + polling ─────────────────────────────────────────
   async function _fetchJobs() {
@@ -269,6 +316,7 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     _player.pause?.(); _player.stop()
     if (trajControls) trajControls.style.display = 'none'
     _display.stopAndRestore()
+    getFlexScale?.()?.hide?.()
     for (const k of _VIEW_RADIOS) _setStatus(_status[k], '')
     if (rOff) rOff.checked = true
   }
@@ -280,6 +328,7 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     if (!sel) { _viewsOff(); return }
     const st = _status[kind]
     _setStatus(st, 'Loading…')
+    if (kind !== 'flex' && kind !== 'deviation') getFlexScale?.()?.hide?.()   // colour scale only for the maps
     let r
     if (kind === 'display') r = await _display.displayJob(sel, !!alignToggle?.checked)
     else if (kind === 'flex') r = await _display.displayRmsf(sel)
@@ -295,9 +344,15 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
       return
     }
     if (kind === 'display') _setStatus(st, `Showing the final structure (${r.n} beads).`)
-    else if (kind === 'flex') _setStatus(st, flexStatusText(r), _C.dim)
-    else if (kind === 'deviation') _setStatus(st, `Deviation from design: mean ${(r.mean ?? 0).toFixed(2)} nm over ${r.nFrames} frames.`)
-    else if (kind === 'traj') { _player.setTrajectory(r.n_frames, r.markers); _setStatus(st, `${r.n_frames} frames — play or scrub.`) }
+    else if (kind === 'flex') {
+      _setStatus(st, flexStatusText(r), _C.dim)
+      getFlexScale?.()?.show?.({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
+        onRecolor: (lo, hi, cmap) => _display.recolorRmsf(lo, hi, cmap) })
+    } else if (kind === 'deviation') {
+      _setStatus(st, `Deviation from design: mean ${(r.mean ?? 0).toFixed(2)} nm over ${r.nFrames} frames.`)
+      getFlexScale?.()?.show?.({ title: 'Deviation (nm)', min: r.min, max: r.max, mapType: 'deviation',
+        onRecolor: (lo, hi, cmap) => _display.recolorDeviation(lo, hi, cmap) })
+    } else if (kind === 'traj') { _player.setTrajectory(r.n_frames, r.markers); _setStatus(st, `${r.n_frames} frames — play or scrub.`) }
   }
 
   rOff?.addEventListener('change', () => { if (rOff.checked) _viewsOff() })
@@ -322,5 +377,7 @@ export function initLammpsJobsPanel({ designRenderer = null, getWorkspacePath = 
     if (_base.isOpen()) _fetchJobs()
   })
 
-  return { refresh }
+  // `launch(overrides)` lets the simulate coordinator start a LAMMPS run from the
+  // oxDNA form (the GPU-busy "Run on CPU instead" path); the Run button uses `_launch()`.
+  return { refresh, launch: (overrides) => _launch(overrides) }
 }

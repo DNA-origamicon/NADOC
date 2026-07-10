@@ -80,11 +80,38 @@ export function jobRowLabel(job) {
   return `${name} — ${status}`
 }
 
+/** Max selectable cores from the availability payload (physical-core ceiling).
+ *  Falls back to 1 until the probe lands so the input can't over-request. */
+export function maxRanks(available) {
+  const n = Math.floor(Number(available?.max_ranks))
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
+/** Currently-free cores from the availability payload (for the "use free cores"
+ *  button), clamped into [1, maxRanks]. Falls back to the ceiling when absent. */
+export function freeRanks(available) {
+  const cap = maxRanks(available)
+  const n = Math.floor(Number(available?.free_ranks))
+  if (!Number.isFinite(n) || n < 1) return cap
+  return Math.min(cap, n)
+}
+
+/** Guard message for a rank request that exceeds the available cores, else null.
+ *  Mirrors the backend 400 so the user never launches a job MPI would refuse. */
+export function ranksError(ranks, cores) {
+  const r = Math.floor(Number(ranks))
+  const c = Math.floor(Number(cores))
+  if (!Number.isFinite(r) || r <= (c || 1)) return null
+  const s = c === 1 ? '' : 's'
+  return `${r} MPI ranks requested but only ${c} CPU core${s} available — reduce to ${c} or fewer.`
+}
+
 /** Validate + coerce the Advanced-card inputs (+ optional forces / design path) into
  *  a create-job payload.  `field`/`anchors` are the external-force spec from
- *  lammps_forces_setup; only non-empty ones are attached. */
+ *  lammps_forces_setup; only non-empty ones are attached.  `cores` (when given)
+ *  clamps ranks to the physical-core ceiling as a belt-and-suspenders guard. */
 export function buildCreatePayload({
-  steps, dumpEvery, temperature, salt, ranks,
+  steps, dumpEvery, temperature, salt, ranks, cores = null,
   designSourcePath = null, field = null, anchors = null, wall = null,
 } = {}) {
   const posInt = (v, d) => {
@@ -102,6 +129,8 @@ export function buildCreatePayload({
     salt_molar: pos(salt, 0.5),
     ranks: Math.max(1, posInt(ranks, 1)),
   }
+  const ceiling = Math.floor(Number(cores))
+  if (Number.isFinite(ceiling) && ceiling >= 1) payload.ranks = Math.min(payload.ranks, ceiling)
   if (designSourcePath) payload.design_source_path = designSourcePath
   if (field && Number(field.field_pN) > 0) payload.field = field
   if (Array.isArray(anchors) && anchors.length) payload.anchors = anchors

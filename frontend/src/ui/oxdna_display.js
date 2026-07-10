@@ -18,6 +18,7 @@
  */
 
 import { strideIndices, nearestOf } from '../scene/trajectory_range.js'
+import { colormapHex } from './colormaps.js'
 
 /**
  * Pure mapping: a /oxdna/jobs/{id}/display response → applyFemPositions updates.
@@ -37,23 +38,10 @@ export function toFemUpdates(displayResponse) {
   }))
 }
 
-// Viridis colormap anchors (perceptually uniform). t in [0,1] → [r,g,b] 0-255.
-const _VIRIDIS = [
-  [68, 1, 84], [59, 82, 139], [33, 144, 140], [93, 201, 99], [253, 231, 37],
-]
-
-/** Pure: viridis colour for t∈[0,1] as a 0xRRGGBB int (rigid→flexible ramp). */
-export function viridisHex(t) {
-  const x = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0))
-  const seg = x * (_VIRIDIS.length - 1)
-  const i = Math.min(_VIRIDIS.length - 2, Math.floor(seg))
-  const f = seg - i
-  const a = _VIRIDIS[i], b = _VIRIDIS[i + 1]
-  const r = Math.round(a[0] + (b[0] - a[0]) * f)
-  const g = Math.round(a[1] + (b[1] - a[1]) * f)
-  const bl = Math.round(a[2] + (b[2] - a[2]) * f)
-  return (r << 16) | (g << 8) | bl
-}
+/** Pure: viridis colour for t∈[0,1] as a 0xRRGGBB int (rigid→flexible ramp).
+ *  Delegates to the shared colormap registry so the flex map, its legend, and the
+ *  colormap picker can never drift apart. */
+export function viridisHex(t) { return colormapHex('viridis', t) }
 
 /**
  * Pure: a /oxdna/jobs/{id}/rmsf response → { updates, colorByKey, min, max }.
@@ -62,7 +50,7 @@ export function viridisHex(t) {
  * rigid-vs-flexible contrast is maximised.  colorByKey maps "helix:bp:dir" →
  * viridis hex.  Returns null for a not-ready / empty response.
  */
-export function rmsfColorMap(resp, loBound, hiBound) {
+export function rmsfColorMap(resp, loBound, hiBound, cmap = 'viridis') {
   if (!resp || !resp.ready || !Array.isArray(resp.positions) || !resp.positions.length) {
     return null
   }
@@ -78,8 +66,8 @@ export function rmsfColorMap(resp, loBound, hiBound) {
       helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy: p.copy ?? 0,
       backbone_position: p.backbone_position, nx: p.nx, ny: p.ny, nz: p.nz,
     })
-    const t = span > 1e-9 ? (p.rmsf - lo) / span : 0.0   // viridisHex clamps to [0,1]
-    const hex = viridisHex(t)
+    const t = span > 1e-9 ? (p.rmsf - lo) / span : 0.0   // colormapHex clamps to [0,1]
+    const hex = colormapHex(cmap, t)
     // 4-part key → each loop copy's bead/slab/cone; 3-part alias (copy 0 only) keeps
     // 3-part consumers working (crossover-arc recolour, which lands on real nucleotides).
     colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}:${p.copy ?? 0}`] = hex
@@ -91,12 +79,12 @@ export function rmsfColorMap(resp, loBound, hiBound) {
 /** Pure: per-vertex RMSF floats → flat RGB Float32Array (0-1), viridis over
  *  [lo,hi] (values outside clamp).  Lets the surface use the SAME ramp/scale as
  *  the beads + atomistic.  Kept pure for unit testing. */
-export function rmsfToVertexColors(rmsf, lo, hi) {
+export function rmsfToVertexColors(rmsf, lo, hi, cmap = 'viridis') {
   const span = hi - lo
   const out = new Float32Array((rmsf?.length || 0) * 3)
   for (let i = 0; i < (rmsf?.length || 0); i++) {
     const t = span > 1e-9 ? (rmsf[i] - lo) / span : 0
-    const hex = viridisHex(t)
+    const hex = colormapHex(cmap, t)
     out[i * 3]     = ((hex >> 16) & 0xFF) / 255
     out[i * 3 + 1] = ((hex >> 8) & 0xFF) / 255
     out[i * 3 + 2] = (hex & 0xFF) / 255
@@ -106,23 +94,12 @@ export function rmsfToVertexColors(rmsf, lo, hi) {
 
 // Deviation ramp: green (matches design) → amber → red (far from design).  A
 // good→bad ramp reads more naturally than viridis for "how wrong is each base".
-const _DEV_RAMP = [[63, 185, 80], [210, 153, 34], [248, 81, 73]]
-
-export function deviationHex(t) {
-  const x = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0))
-  const seg = x * (_DEV_RAMP.length - 1)
-  const i = Math.min(_DEV_RAMP.length - 2, Math.floor(seg))
-  const f = seg - i
-  const a = _DEV_RAMP[i], b = _DEV_RAMP[i + 1]
-  const r = Math.round(a[0] + (b[0] - a[0]) * f)
-  const g = Math.round(a[1] + (b[1] - a[1]) * f)
-  const bl = Math.round(a[2] + (b[2] - a[2]) * f)
-  return (r << 16) | (g << 8) | bl
-}
+// Sourced from the shared registry ('devramp') so map + legend + picker agree.
+export function deviationHex(t) { return colormapHex('devramp', t) }
 
 /** Pure: deviation-map response → {updates, colorByKey, min, max} (mirrors
  *  rmsfColorMap, but reads per-nucleotide `deviation` and colours green→red). */
-export function deviationColorMap(resp, loBound, hiBound) {
+export function deviationColorMap(resp, loBound, hiBound, cmap = 'devramp') {
   if (!resp || !resp.ready || !Array.isArray(resp.positions) || !resp.positions.length) {
     return null
   }
@@ -139,7 +116,7 @@ export function deviationColorMap(resp, loBound, hiBound) {
       backbone_position: p.backbone_position, nx: p.nx, ny: p.ny, nz: p.nz,
     })
     const t = span > 1e-9 ? (p.deviation - lo) / span : 0.0
-    const hex = deviationHex(t)
+    const hex = colormapHex(cmap, t)
     colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}:${p.copy ?? 0}`] = hex
     if ((p.copy ?? 0) === 0) colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}`] = hex
   }
@@ -215,8 +192,11 @@ export function initOxdnaDisplay({
   }
   let _active = false
   let _jobId = null
-  let _mode = null     // 'relaxed' | 'rmsf' | 'trajectory'
+  let _mode = null     // 'relaxed' | 'rmsf' | 'deviation' | 'trajectory'
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
+  let _devResp = null  // cached /deviation payload so the scale can recolour without re-fetching
+  let _rmsfCmap = 'viridis'    // active flex-map colormap (widget-driven)
+  let _devCmap  = 'devramp'    // active deviation-map colormap (widget-driven)
   let _traj = null     // cached /trajectory payload {keys, frames, markers, n_frames, stages}
   // Monotonic token: bumped by every display call AND by stopAndRestore, so an
   // async fetch (live-follow poll / job-switch) that resolves AFTER the overlay
@@ -297,8 +277,8 @@ export function initOxdnaDisplay({
     if (!sr || sr.getMode?.() === 'off' || !data?.vertices?.length) return
     if (rmsf && Array.isArray(data.vertex_rmsf)) {
       const { lo, hi } = _activeBounds()
-      data.vertex_colors = rmsfToVertexColors(data.vertex_rmsf, lo, hi)
-      data.scalar = true                 // force the viridis colours through any colour mode
+      data.vertex_colors = rmsfToVertexColors(data.vertex_rmsf, lo, hi, _rmsfCmap)
+      data.scalar = true                 // force the scalar colours through any colour mode
       _lastSurfRmsf = data.vertex_rmsf   // cache for live scale recolour
     } else {
       _lastSurfRmsf = null
@@ -419,8 +399,8 @@ export function initOxdnaDisplay({
           const r = await api.getOxdnaRmsfAtomistic(_jobId)
           if (live() && r?.ready) {
             const { lo, hi } = _activeBounds()
-            const cmap = rmsfColorMap(_rmsfResp, lo, hi)   // same ramp/scale as the beads
-            await _pushAtomistic(r.atomistic, epoch, live, cmap?.colorByKey || null)
+            const m = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)   // same ramp/scale as the beads
+            await _pushAtomistic(r.atomistic, epoch, live, m?.colorByKey || null)
           }
         } else {
           const r = await api.getOxdnaRmsfSurface(_jobId)
@@ -537,7 +517,7 @@ export function initOxdnaDisplay({
       resp = await api.getOxdnaRmsf(jobId)
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
-    const map = rmsfColorMap(resp)
+    const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
     if (!map) {
       return { ok: false, reason: resp?.reason || 'not ready' }
     }
@@ -565,8 +545,9 @@ export function initOxdnaDisplay({
   function displayDeviation(resp) {
     if (!designRenderer) return { ok: false, reason: 'no renderer' }
     _epoch++
-    const map = deviationColorMap(resp)
+    const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
+    _devResp = resp   // cache so the scale widget can recolour without re-fetching
     _applyFem(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _active = true
@@ -584,9 +565,10 @@ export function initOxdnaDisplay({
    * Positions are untouched (only colours change).  No-op unless the RMSF map is
    * the active overlay and its data is cached.
    */
-  function recolorRmsf(lo, hi) {
+  function recolorRmsf(lo, hi, cmap) {
     if (_mode !== 'rmsf' || !_rmsfResp || !designRenderer) return false
-    const map = rmsfColorMap(_rmsfResp, lo, hi)
+    if (cmap) _rmsfCmap = cmap
+    const map = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)
     if (!map) return false
     _rmsfBounds = { lo: Number.isFinite(lo) ? lo : _activeBounds().lo,
                     hi: Number.isFinite(hi) ? hi : _activeBounds().hi }
@@ -599,9 +581,23 @@ export function initOxdnaDisplay({
     } else if (kind === 'surface' && _lastSurfRmsf) {
       const sr = getSurfaceRenderer?.()
       if (sr && sr.getMode?.() !== 'off') {
-        sr.applyScalarVertexColors?.(rmsfToVertexColors(_lastSurfRmsf, _rmsfBounds.lo, _rmsfBounds.hi))
+        sr.applyScalarVertexColors?.(rmsfToVertexColors(_lastSurfRmsf, _rmsfBounds.lo, _rmsfBounds.hi, _rmsfCmap))
       }
     }
+    return true
+  }
+
+  /**
+   * Recolour the active DEVIATION map to a custom range [lo, hi] on colormap `cmap`
+   * — driven by the workspace scale widget.  CG beads only (deviation has no heavy
+   * rep).  No-op unless the deviation map is active and its data is cached.
+   */
+  function recolorDeviation(lo, hi, cmap) {
+    if (_mode !== 'deviation' || !_devResp || !designRenderer) return false
+    if (cmap) _devCmap = cmap
+    const map = deviationColorMap(_devResp, lo, hi, _devCmap)
+    if (!map) return false
+    designRenderer.applyScalarColors(map.colorByKey)
     return true
   }
 
@@ -691,6 +687,7 @@ export function initOxdnaDisplay({
     displayRmsf,
     displayDeviation,
     recolorRmsf,
+    recolorDeviation,
     loadTrajectory,
     showFrame,
     refresh,

@@ -3312,6 +3312,13 @@ export async function gpuStatus(devices = '0') {
   return _request('GET', `/md/gpu-status?devices=${encodeURIComponent(devices)}`)
 }
 
+/** Auto engine recommendation for the active design given live GPU/CPU state
+ *  → {recommendation, gpu, free_cores, has_proteins, n_nucleotides, gpu_eta_seconds}.
+ *  Returns null on error so callers can degrade to "GPU unknown / recommend oxDNA". */
+export async function simulateRecommendation(devices = '0') {
+  return _request('GET', `/simulate/recommendation?devices=${encodeURIComponent(devices)}`)
+}
+
 export async function getLibraryFileContent(path) {
   return _request('GET', `/library/content?path=${encodeURIComponent(path)}`)
 }

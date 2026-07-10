@@ -9,6 +9,38 @@ metadata:
 
 # Simulate panel UX overhaul (2026-07-08, in progress)
 
+## ⚡ AUTO ENGINE-POLICY + resource status line + GPU-busy dialog — SHIPPED 2026-07-10
+Novice-proof engine selection ("press one button → optimal speed"). Driven by a
+benchmark: **oxDNA-GPU is 13× (small) to 47× (large) faster than LAMMPS-CPU at matched
+dt**, so oxDNA-GPU is the default; LAMMPS-CPU is a *fallback* only when the GPU is busy or
+a design is protein-free but the GPU is occupied. Proteins → oxDNA (LAMMPS can't). Also
+fixed the LAMMPS timestep (`1e-5→5e-3`, ~500× faster — see [[project_lammps_oxdna]]).
+- **Backend:** `backend/core/engine_policy.py` (PURE — `cpu_slowdown_factor`,
+  `recommend_engine`); `backend/api/routes_simulate.py` → `GET /simulate/recommendation`
+  (reuses `has_proteins`, `md_vram.detect_gpu_activity`/`gpu_contention_summary`,
+  `lammps_runner.free_cpu_cores`, `/jobs/active` ETA). **Busy semantics differ from
+  `/md/gpu-status`:** our own running NAMD/oxDNA-CUDA job DOES count as busy (a new run
+  would contend) and its ETA is shown; external hogs are named but can't be timed.
+- **Frontend:** `client.simulateRecommendation`; `ui/simulate_policy.js` (PURE —
+  `statusLineText`, `recommendationDialogCopy`, `dialogChoices`, `translateOxdnaToLammps`);
+  `job_activity.confirmSimEngineLaunch` (cross-engine 3-way — **CPU = switch to LAMMPS**, not
+  oxDNA-CPU); `ui/simulate_launch.js` factory (`refresh` renders `#simulate-status-line`,
+  `guardOxdnaLaunch` shows the dialog + on "CPU" launches LAMMPS via `lammpsPanel.launch()`).
+  oxDNA panel gained `simGuard` dep (falls back to `confirmGpuLaunch`); LAMMPS panel exposes
+  `launch(overrides)`. **main.js Δ = +25, pure wiring.**
+- **GOTCHA fixed:** `runBtn.addEventListener('click', _launch)` passed the click Event as
+  `_launch`'s new `overrides` arg → wrap as `() => _launch()`.
+- **Scoped out (not needed for correctness):** auto-*switching* the engine tab on a poll
+  (the existing `runningEngineForPath` handler + the status line + the launch dialog already
+  route correctly regardless of the selected tab). Reconsider if the UX wants it.
+- **Tests:** backend `test_engine_policy` (7) + `test_routes_simulate` (3); frontend
+  `simulate_policy.test` (11) + `simulate_launch.test` (6). Backend 4598 pass, frontend 2583
+  pass, smoke 23/23. Live: endpoint serves oxDNA/CUDA when GPU free; status line renders
+  "GPU: free · 13 cores free · Engine: oxDNA (GPU) — fastest here", 0 console errors.
+  **NOT live-exercised:** the actual GPU-busy dialog (hard to force a busy GPU live; covered
+  by the unit tests + the route's busy-branch test).
+
+
 Direct user request (not the coverage loop). Consolidate the Dynamics-tab simulation UI
 into one clean **Simulate** section with a **master Job status card** and context
 Run/Stop/Resume buttons. Builds on the U-track (unified panel) work — the engine selector

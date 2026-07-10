@@ -153,6 +153,44 @@ def test_md_job_chain_resolves_refit_lineage():
     assert _md_job_chain("missing", allj) == []
 
 
+def test_md_snapshot_design_walks_parent_chain(tmp_path, monkeypatch):
+    # A production child with no snapshot of its own inherits the relaxation root's
+    # frozen design.json by walking up parent_job_id — so it can be measured against the
+    # design it was seeded from (the 6hbx100_noT "no NAMD trajectory" bug).
+    from backend.api import routes_md
+    from backend.core.md_job import new_job
+    from backend.core.models import Design
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    root = new_job("demo", "p", name_stem="demo", package_subdir="pkg")
+    root.save(tmp_path)
+    child = new_job("demo", "p", name_stem="demo", package_subdir="pkg",
+                    parent_job_id=root.job_id)
+    child.save(tmp_path)
+    grandchild = new_job("demo", "p", name_stem="demo", package_subdir="pkg",
+                         parent_job_id=child.job_id)
+    grandchild.save(tmp_path)
+    # Snapshot lives ONLY on the root; neither child nor grandchild has its own.
+    (root.job_dir(tmp_path) / "design.json").write_text(Design().model_dump_json())
+
+    assert routes_md._md_snapshot_design(grandchild) is not None
+    assert routes_md._md_snapshot_design(child) is not None
+    assert routes_md._md_snapshot_design(root) is not None
+
+
+def test_md_snapshot_design_none_when_no_lineage_snapshot(tmp_path, monkeypatch):
+    from backend.api import routes_md
+    from backend.core.md_job import new_job
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    root = new_job("demo", "p", name_stem="demo", package_subdir="pkg")
+    root.save(tmp_path)
+    child = new_job("demo", "p", name_stem="demo", package_subdir="pkg",
+                    parent_job_id=root.job_id)
+    child.save(tmp_path)
+    assert routes_md._md_snapshot_design(child) is None
+
+
 def test_md_metrics_route_unknown_job_404():
     from fastapi import HTTPException
 

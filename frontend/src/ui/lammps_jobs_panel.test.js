@@ -36,7 +36,8 @@ const MARKUP = `
       <div id="lammps-jobs-adv-toggle"><span id="lammps-jobs-adv-arrow">▸</span></div>
       <div id="lammps-jobs-adv-body" style="display:none">
         <input id="lammps-jobs-steps" value="100000"><input id="lammps-jobs-dump" value="1000">
-        <input id="lammps-jobs-temp" value="0.1"><input id="lammps-jobs-salt" value="0.5"><input id="lammps-jobs-ranks" value="1">
+        <input id="lammps-jobs-temp" value="0.1"><input id="lammps-jobs-salt" value="0.5">
+        <input id="lammps-jobs-ranks" value="1"><button id="lammps-jobs-cores-auto">⚡</button>
       </div>
       <div id="lammps-jobs-viz-toggle"><span id="lammps-jobs-viz-arrow"></span></div>
       <div id="lammps-jobs-viz-body">
@@ -104,6 +105,25 @@ describe('initLammpsJobsPanel — launch + list', () => {
   it('shows an empty-state with no runs', async () => {
     initLammpsJobsPanel(); openPanel(); await flush()
     expect($('lammps-jobs-list').textContent).toMatch(/No LAMMPS runs yet/)
+  })
+  it('opening bounds the cores input to the physical-core ceiling', async () => {
+    api.lammpsAvailable.mockResolvedValue({ available: true, cgdna_capable: true, max_ranks: 16, free_ranks: 12 })
+    initLammpsJobsPanel(); openPanel(); await flush()
+    expect($('lammps-jobs-ranks').getAttribute('max')).toBe('16')
+  })
+  it('⚡ sets the cores input to the currently-free cores', async () => {
+    api.lammpsAvailable.mockResolvedValue({ available: true, cgdna_capable: true, max_ranks: 16, free_ranks: 12 })
+    initLammpsJobsPanel(); openPanel(); await flush()
+    $('lammps-jobs-cores-auto').click(); await flush()
+    expect($('lammps-jobs-ranks').value).toBe('12')
+  })
+  it('blocks a Run that asks for more cores than available', async () => {
+    api.lammpsAvailable.mockResolvedValue({ available: true, cgdna_capable: true, max_ranks: 4, free_ranks: 4 })
+    initLammpsJobsPanel(); openPanel(); await flush()
+    api.createLammpsJob.mockClear()
+    $('lammps-jobs-ranks').value = '9'   // over the ceiling
+    $('lammps-jobs-run-btn').click(); await flush()
+    expect(api.createLammpsJob).not.toHaveBeenCalled()
   })
 })
 

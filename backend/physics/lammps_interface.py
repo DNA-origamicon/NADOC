@@ -315,7 +315,12 @@ class LammpsInputParams:
     dump_every: int = 1000              # frames every N steps
     temperature: float = 0.1            # oxDNA reduced units (0.1 ≈ 300 K)
     salt_molar: float = 0.5             # Debye-Hückel salt concentration [M]
-    timestep: float = 1e-5              # oxDNA lj-unit timestep
+    # oxDNA lj-unit timestep.  The upstream CG-DNA lj_units demo (in.duplex2) ships an
+    # ultra-conservative 1e-5; standalone oxDNA runs this SAME force field at 0.005, and
+    # a NADOC validation (2026-07-10) confirmed 0.005 is stable (sweep to ≥1e-2), best-
+    # conserving in NVE, and dt-converged (0.005 ≡ 0.001 physics: energies within ~1%,
+    # mean RMSF within 0.1%) — a ~500× throughput win over the demo value.
+    timestep: float = 5e-3
     langevin_damp: float = 2.5          # thermostat damping (oxDNA time units)
     seed: int = 457145                  # Langevin RNG seed
     thermo_every: int = 1000            # console thermo cadence

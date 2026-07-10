@@ -21,7 +21,6 @@ import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { filterJobsForPart, newestCompletedForPart } from './md_jobs_panel.js'
-import { initFlexScale } from './flex_scale.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
 import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
@@ -391,7 +390,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -747,6 +746,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   function _setDeviationOff() {
     if (oxdnaDisplay?.mode() === 'deviation') oxdnaDisplay.stopAndRestore()
     if (autorefineDevToggle) autorefineDevToggle.checked = false
+    _flexScale.hide()
     _setDevStatus('')
     _syncVizOffRadio()
     _updateButtons(_selectedJob())
@@ -770,6 +770,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
     _setDevStatus(`Mean vs design — deviation ${_fmtNm(r.min)} (green) → ${_fmtNm(r.max)} (red), `
       + `mean ${_fmtNm(r.mean)}, ${r.nFrames ?? '?'} frames`, '#3fb950')
+    _flexScale.show({ title: 'Deviation (nm)', min: r.min, max: r.max, mapType: 'deviation',
+      onRecolor: (lo, hi, cmap) => oxdnaDisplay?.recolorDeviation?.(lo, hi, cmap) })
     _updateButtons(_selectedJob())
   }
   autorefineDevToggle?.addEventListener('change', async () => {
@@ -823,11 +825,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     },
   })
 
-  // Workspace colour-scale widget (middle-right); editing its bounds re-colours
-  // the active flexibility map live without re-fetching.
-  const flexScale = initFlexScale({
-    onBoundsChange: (lo, hi) => oxdnaDisplay?.recolorRmsf(lo, hi),
-  })
+  // The shared workspace colour-scale widget (middle-right, injected from main.js) is
+  // driven per-map via flexScale.show({ mapType, onRecolor }); editing its bounds /
+  // colormap re-colours the active map live without re-fetching.  A no-op stub keeps
+  // the panel safe if the widget wasn't provided (e.g. isolated tests).
+  const _flexScale = flexScale || { show: () => {}, hide: () => {} }
   const _SHOW_ALL_KEY = 'nadoc:oxdna-jobs-show-all'
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
@@ -1015,12 +1017,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     // Resource-aware guard: oxDNA can run its MD stages on the CPU backend, so if
     // the GPU is busy the user is offered a CPU fallback instead of a hard block.
     const wantGpu = (backendSel?.value || 'CUDA') === 'CUDA'
-    const gpuDecision = await confirmGpuLaunch({
-      usesGpu: wantGpu,
-      hasCpuAlternative: wantGpu,
-      devices: deviceInput?.value || '0',
-    })
-    if (gpuDecision === 'cancel') return
+    // With the simulate coordinator, the CPU alternative is a DIFFERENT engine (LAMMPS,
+    // multi-core), not oxDNA's single-core CPU backend — so 'cpu' means the coordinator
+    // has already launched LAMMPS and oxDNA must abort. Without it, fall back to the
+    // per-panel GPU guard (oxDNA-CPU backend as the alternative).
+    let gpuDecision
+    if (simGuard) {
+      gpuDecision = await simGuard({ backendWanted: backendSel?.value || 'CUDA' })
+      if (gpuDecision === 'cpu' || gpuDecision === 'cancel') return
+    } else {
+      gpuDecision = await confirmGpuLaunch({
+        usesGpu: wantGpu,
+        hasCpuAlternative: wantGpu,
+        devices: deviceInput?.value || '0',
+      })
+      if (gpuDecision === 'cancel') return
+    }
     const runBackend = gpuDecision === 'cpu' ? 'CPU' : (backendSel?.value || 'CUDA')
     oxdnaLive?.stop()   // a relaxation supersedes any live session (shared overlay)
     _launching = true
@@ -1633,7 +1645,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   function _setFlexOff() {
     if (oxdnaDisplay?.mode() === 'rmsf') oxdnaDisplay.stopAndRestore()
     if (flexToggle) flexToggle.checked = false
-    flexScale.hide()
+    _flexScale.hide()
     _setFlexBar('off')
     _setFlexLegend(null, null)
     _setFlexStatus('Off', _C.dim)
@@ -1649,7 +1661,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (r.ok) {
       _setFlexBar('done')
       _setFlexLegend(r.min, r.max)
-      flexScale.show(r.min, r.max)
+      _flexScale.show({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
+        onRecolor: (lo, hi, cmap) => oxdnaDisplay?.recolorRmsf?.(lo, hi, cmap) })
       const conf = flexConfidenceText(r)
       _setFlexStatus(`Avg structure · ${r.n} bases · ${conf.text}`,
                      conf.preliminary ? _C.warn : _C.ok)

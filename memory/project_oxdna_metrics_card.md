@@ -87,9 +87,14 @@ base-pairing metric differ.
   base normal). `count_md_frames(segments)` sizes the ETA (DCD headers).
 - `backend/api/routes_md_metrics.py` — mirrors `routes_oxdna_metrics` (daemon-thread registry +
   `on_frame` ETA): `POST /md/jobs/{id}/metrics/start` → `{metrics_id}`; `GET /md/metrics/{run_id}`.
-  Loads inputs via `routes_md._md_segment_dcds`/`_md_snapshot_design` (FROZEN design.json, no active
-  fallback except legacy). `chain` scope = refit lineage via `_md_job_chain` (parent_job_id walk).
-  Registered in main.py.
+  Loads inputs via `routes_md._md_segment_dcds`/`_md_snapshot_design`. Snapshot resolution **walks up
+  `parent_job_id`** to the nearest ancestor with a `design.json` — a production/ensemble child runs the
+  parent's PSF/PDB so it inherits the parent's topology (else metrics fail with a misleading "no NAMD
+  trajectory" when the design isn't loaded). Active-design fallback only if the whole lineage lacks a
+  snapshot. `_job_inputs` returns a **str reason** on failure (missing-snapshot ≠ missing-trajectory) so
+  the card names the real cause. Write side: `md_ensemble.build_replica_package` copies the parent's
+  design.json into the child (mirrors oxDNA child spawn). `chain` scope = refit lineage via
+  `_md_job_chain`. Registered in main.py.
 - **Frontend**: `md_metrics_card.js` (thin wrapper, `idPrefix:'md-metrics'` + `startMdMetrics`/
   `getMdMetricsRun`); `#md-metrics-card` in index.html AFTER the MD viz card; wired from
   `initMdJobsPanel` (`_metricsCard`, refreshed on `nadoc:design-changed`). Tests:

@@ -48,27 +48,30 @@ def _set(run_id: str, **fields) -> None:
 
 
 def _job_inputs(job, ws: Path):
-    """(psf, ref_pdb, segments, design) for one MD job's composite, or None if it has no
-    usable topology/trajectory yet.  Mirrors ``routes_md._md_traj_inputs`` but analyses
-    the job's FROZEN ``design.json`` snapshot only (no active-design fallback — a metric
-    run over a drifted/other design mis-maps P atoms and voids the result)."""
+    """(psf, ref_pdb, segments, design) for one MD job's composite, or a ``str`` reason
+    it can't be measured yet.  Prefers the job's FROZEN ``design.json`` snapshot (inherited
+    from the parent for production/ensemble children — see ``routes_md._md_snapshot_design``);
+    only a pre-snapshot legacy job with none in its whole lineage falls back to the active
+    design.  Returning a *reason* (rather than a bare ``None``) lets the card say WHY a run
+    couldn't start — a missing snapshot is not the same as a missing trajectory."""
     from backend.api import state as design_state
 
     package_dir = job.package_dir(ws)
     psf = package_dir / f"{job.name_stem}.psf"
     ref = package_dir / f"{job.name_stem}.pdb"
     if not psf.exists() or not ref.exists():
-        return None
+        return "topology (PSF/PDB) not built for this job yet"
     segments = _md_segment_dcds(job)
     if not segments:
-        return None
+        return "no NAMD trajectory yet"
     design = _md_snapshot_design(job)
     if design is None:
-        # Legacy pre-snapshot job: fall back to the active design (best effort).
+        # No snapshot anywhere in the lineage: fall back to the active design (best effort).
         try:
             design = design_state.get_or_404()
         except Exception:
-            return None
+            return ("design snapshot missing for this job — load its design "
+                    "(File → Open) so the trajectory can be measured")
     return psf, ref, segments, design
 
 
@@ -125,11 +128,16 @@ def _compute(run_id: str, job_id: str, req: MdMetricsStartRequest, ws: Path) -> 
 
     try:
         jobs = _resolve_jobs(job_id, req.scope, ws)
-        inputs = [(j, _job_inputs(j, ws)) for j in jobs]
-        inputs = [(j, io) for j, io in inputs if io is not None]
+        resolved = [(j, _job_inputs(j, ws)) for j in jobs]
+        inputs = [(j, io) for j, io in resolved if not isinstance(io, str)]
         if not inputs:
-            _set(run_id, state="done", result={"ready": False,
-                 "reason": "no NAMD trajectory yet for the selected job(s)"})
+            # Every selected job was unusable — surface the specific reason(s) rather than
+            # a blanket "no trajectory" (which is wrong when a DCD is present but its
+            # design snapshot isn't).  De-dupe while preserving order.
+            reasons = list(dict.fromkeys(io for _j, io in resolved if isinstance(io, str)))
+            reason = "; ".join(reasons) if reasons else \
+                "no NAMD trajectory yet for the selected job(s)"
+            _set(run_id, state="done", result={"ready": False, "reason": reason})
             return
 
         total = 0

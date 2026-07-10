@@ -74,6 +74,7 @@ from backend.api.routes_oxdna_live import router as oxdna_live_router
 from backend.api.routes_autorefine import router as autorefine_router
 from backend.api.routes_oxdna_metrics import router as oxdna_metrics_router
 from backend.api.routes_shape_metrics import router as shape_metrics_router
+from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
 from backend.api.routes_assign_sequences import router as assign_sequences_router
@@ -184,6 +185,7 @@ app.include_router(cluster_router,     prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")
 app.include_router(animations_router,  prefix="/api")
 app.include_router(chain_sim_router,    prefix="/api")
+app.include_router(simulate_router,     prefix="/api")
 app.include_router(extensions_router,  prefix="/api")
 app.include_router(feature_log_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")

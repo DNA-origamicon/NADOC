@@ -23,6 +23,10 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   let _mode = null          // 'display' | 'rmsf' | 'deviation' | 'trajectory' | null
   let _traj = null          // { keys, frames } while in trajectory mode
   let _jobId = null
+  let _rmsfResp = null      // cached payloads so the scale widget can recolour without a re-fetch
+  let _devResp = null
+  let _rmsfCmap = 'viridis'
+  let _devCmap = 'devramp'
 
   function _restore() {
     designRenderer?.applyFemPositions(null)
@@ -43,8 +47,9 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   async function displayRmsf(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const resp = await api.getLammpsRmsf(jobId)
-    const map = rmsfColorMap(resp)
+    const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
+    _rmsfResp = resp
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _mode = 'rmsf'; _traj = null; _jobId = jobId
@@ -55,12 +60,33 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   async function displayDeviation(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const resp = await api.getLammpsDeviation(jobId)
-    const map = deviationColorMap(resp)
+    const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
+    _devResp = resp
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _mode = 'deviation'; _traj = null; _jobId = jobId
     return { ok: true, min: map.min, max: map.max, mean: resp.mean_deviation, nFrames: resp.n_frames }
+  }
+
+  /** Recolour the active RMSF map to [lo,hi] on colormap `cmap` (scale-widget driven). */
+  function recolorRmsf(lo, hi, cmap) {
+    if (_mode !== 'rmsf' || !_rmsfResp || !designRenderer) return false
+    if (cmap) _rmsfCmap = cmap
+    const map = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)
+    if (!map) return false
+    designRenderer.applyScalarColors(map.colorByKey)
+    return true
+  }
+
+  /** Recolour the active deviation map to [lo,hi] on colormap `cmap` (scale-widget driven). */
+  function recolorDeviation(lo, hi, cmap) {
+    if (_mode !== 'deviation' || !_devResp || !designRenderer) return false
+    if (cmap) _devCmap = cmap
+    const map = deviationColorMap(_devResp, lo, hi, _devCmap)
+    if (!map) return false
+    designRenderer.applyScalarColors(map.colorByKey)
+    return true
   }
 
   async function loadTrajectory(jobId) {
@@ -95,7 +121,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   }
 
   return {
-    displayJob, displayRmsf, displayDeviation, loadTrajectory, showFrame, stopAndRestore,
+    displayJob, displayRmsf, displayDeviation, recolorRmsf, recolorDeviation, loadTrajectory, showFrame, stopAndRestore,
     mode: () => _mode, activeJobId: () => _jobId, isActive: () => _mode !== null,
   }
 }

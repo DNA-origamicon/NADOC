@@ -1,10 +1,11 @@
 /**
- * Sidebar resize — drag-to-resize on the inside edge of the left/right panels,
- * with per-panel width persisted to localStorage.
+ * Sidebar resize — drag-to-resize the left/right panels, with per-panel width
+ * persisted to localStorage.
  *
- * Handle DOM lives in index.html as `.panel-resize-handle[data-resize="left|right"]`
- * inside each sidebar. CSS positions the handle on the inner edge with
- * `cursor: ew-resize`.
+ * Handle DOM lives in index.html as `.panel-resize-handle[data-resize="left|right"]`.
+ * The left handle sits on the tab strip's outer edge (the border with the 3D
+ * viewport) so it's easy to find; the right handle sits on the right panel's
+ * inner edge. CSS positions each with `cursor: ew-resize`.
  *
  * Width clamps: MIN..MAX (px). Below MIN the panel hides itself via the
  * existing `.hidden` class so it can still be re-opened from the tab strip.
@@ -40,7 +41,9 @@ function _applyWidth(panel, w) {
 function _wireHandle(side) {
   const panel = document.getElementById(side === 'left' ? 'left-panel' : 'right-panel')
   if (!panel) return
-  const handle = panel.querySelector(`.panel-resize-handle[data-resize="${side}"]`)
+  // The left handle lives in the tab strip (outer edge), the right handle in
+  // its panel — locate document-wide so either placement works.
+  const handle = document.querySelector(`.panel-resize-handle[data-resize="${side}"]`)
   if (!handle) return
   const lsKey = side === 'left' ? LS_LEFT : LS_RIGHT
 

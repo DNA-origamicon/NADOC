@@ -34,6 +34,21 @@ def test_available_reports_shape():
     assert r.status_code == 200
     body = r.json()
     assert "available" in body and "cgdna_capable" in body
+    assert isinstance(body["max_ranks"], int) and body["max_ranks"] >= 1
+    assert isinstance(body["free_ranks"], int) and 1 <= body["free_ranks"] <= body["max_ranks"]
+
+
+def test_create_rejects_ranks_over_core_count(monkeypatch, tmp_path):
+    """ranks > physical cores is refused fast (before any design/prep work) — MPI
+    would otherwise fail to launch. Guard runs regardless of LAMMPS being installed."""
+    monkeypatch.setattr(routes_lammps, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(
+        routes_lammps, "lammps_available",
+        lambda: {"available": True, "lammps_bin": "/x/lmp", "cgdna_capable": True})
+    monkeypatch.setattr(routes_lammps.lammps_runner, "available_cpu_cores", lambda: 2)
+    r = client.post("/api/lammps/jobs", json={"steps": 500, "ranks": 3})
+    assert r.status_code == 400
+    assert "MPI ranks" in r.json()["detail"] and "2" in r.json()["detail"]
 
 
 @pytest.mark.skipif(not _HAS_CGDNA, reason="no CG-DNA-capable LAMMPS installed")

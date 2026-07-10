@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   progressPct, jobIsActive, anyActive, runButtonState, availabilityMessage,
-  jobRowLabel, buildCreatePayload, jobIsViewable, flexStatusText,
+  jobRowLabel, buildCreatePayload, jobIsViewable, flexStatusText, maxRanks, ranksError, freeRanks,
 } from './lammps_jobs_logic.js'
 
 describe('progressPct', () => {
@@ -124,5 +124,40 @@ describe('buildCreatePayload', () => {
     const wall = { dir: [0, 1, 0], offset_nm: 0.5, stiff: 5 }
     expect(buildCreatePayload({ wall }).wall).toEqual(wall)
     expect('wall' in buildCreatePayload({ wall: { dir: [0, 1, 0], offset_nm: 0, stiff: 0 } })).toBe(false)
+  })
+  it('clamps ranks to the core ceiling when cores is given', () => {
+    expect(buildCreatePayload({ ranks: '16', cores: 4 }).ranks).toBe(4)
+    expect(buildCreatePayload({ ranks: '2', cores: 4 }).ranks).toBe(2)   // under → unchanged
+    expect(buildCreatePayload({ ranks: '16' }).ranks).toBe(16)           // no ceiling → unclamped
+  })
+})
+
+describe('maxRanks', () => {
+  it('reads a positive max_ranks, else falls back to 1', () => {
+    expect(maxRanks({ max_ranks: 16 })).toBe(16)
+    expect(maxRanks({ max_ranks: 0 })).toBe(1)
+    expect(maxRanks(null)).toBe(1)
+    expect(maxRanks({})).toBe(1)
+  })
+})
+
+describe('freeRanks', () => {
+  it('reads free_ranks, clamps to the ceiling, falls back to the ceiling', () => {
+    expect(freeRanks({ max_ranks: 16, free_ranks: 6 })).toBe(6)
+    expect(freeRanks({ max_ranks: 16, free_ranks: 99 })).toBe(16)   // clamp to cap
+    expect(freeRanks({ max_ranks: 16 })).toBe(16)                   // missing → cap
+    expect(freeRanks({ max_ranks: 16, free_ranks: 0 })).toBe(16)    // invalid → cap
+    expect(freeRanks(null)).toBe(1)                                 // nothing → 1
+  })
+})
+
+describe('ranksError', () => {
+  it('flags a request over the core count and passes when within', () => {
+    expect(ranksError(3, 2)).toMatch(/only 2 CPU cores/)
+    expect(ranksError(2, 2)).toBeNull()
+    expect(ranksError(1, 16)).toBeNull()
+  })
+  it('singularizes a one-core machine', () => {
+    expect(ranksError(2, 1)).toMatch(/1 CPU core /)
   })
 })

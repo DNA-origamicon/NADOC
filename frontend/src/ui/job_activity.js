@@ -15,6 +15,7 @@
 import { showConfirm, showChoice } from './primitives/confirm.js'
 import { formatBytes } from './format_bytes.js'
 import { listActiveJobs, gpuStatus } from '../api/client.js'
+import { recommendationDialogCopy, dialogChoices } from './simulate_policy.js'
 
 /** Pure: short engine label for a job ("oxDNA" / "MD"). */
 function engLabel(job) {
@@ -269,6 +270,25 @@ export async function confirmGpuLaunch({
     cancelLabel: 'Cancel',
   })
   return ok ? 'gpu' : 'cancel'
+}
+
+/**
+ * Cross-engine GPU-busy dialog for the auto engine policy. Unlike
+ * {@link confirmGpuLaunch}, "Run on CPU" here means SWITCH ENGINE to LAMMPS
+ * (multi-core), not "run the same engine on its CPU backend" (oxDNA-CPU is
+ * single-core and undesired). Copy comes from the pure simulate_policy helpers.
+ * Returns 'gpu' | 'cpu' | 'cancel' ('cpu' ⇒ caller launches LAMMPS instead).
+ */
+export async function confirmSimEngineLaunch({ recommendation, gpu, gpuEtaSeconds, freeCores } = {}) {
+  const rec = recommendation || {}
+  const { title, message } = recommendationDialogCopy({
+    hogName: gpu?.holder_name,
+    etaSeconds: gpuEtaSeconds,
+    slowdownFactor: rec.cpu_slowdown_factor,
+    freeCores,
+  })
+  const pick = await showChoice({ title, message, choices: dialogChoices() })
+  return pick ?? 'cancel'   // ×/Escape/backdrop → cancel
 }
 
 /**

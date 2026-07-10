@@ -31,6 +31,8 @@
  * / mode / lastStats).
  */
 
+import { colormapHex } from './colormaps.js'
+
 /**
  * Pure mapping: a /cando/jobs/{id}/display response → applyFemPositions updates.
  * When the FEM display carries the WOUND slab frame (nx/ny/nz base-normal + tx/ty/tz
@@ -62,28 +64,13 @@ function _femUpdate(p) {
 }
 
 // ── Colour ramps (pure) ───────────────────────────────────────────────────────
-// Local copies of the viridis (flex) + green→red (deviation) ramps used by
-// oxdna_display.js, so this sibling has no cross-module colour dependency.  t∈[0,1].
-
-const _VIRIDIS = [[68, 1, 84], [59, 82, 139], [33, 144, 140], [93, 201, 99], [253, 231, 37]]
-const _DEV_RAMP = [[63, 185, 80], [210, 153, 34], [248, 81, 73]]  // green → amber → red
-
-function _rampHex(anchors, t) {
-  const x = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0))
-  const seg = x * (anchors.length - 1)
-  const i = Math.min(anchors.length - 2, Math.floor(seg))
-  const f = seg - i
-  const a = anchors[i], b = anchors[i + 1]
-  const r = Math.round(a[0] + (b[0] - a[0]) * f)
-  const g = Math.round(a[1] + (b[1] - a[1]) * f)
-  const bl = Math.round(a[2] + (b[2] - a[2]) * f)
-  return (r << 16) | (g << 8) | bl
-}
+// Sourced from the shared colormap registry so the CanDo maps, the workspace scale
+// legend, and the colormap picker can never drift apart.  t∈[0,1].
 
 /** viridis (rigid→flexible) hex for t∈[0,1]. */
-export function viridisHex(t) { return _rampHex(_VIRIDIS, t) }
+export function viridisHex(t) { return colormapHex('viridis', t) }
 /** green→red (matches design → far from design) hex for t∈[0,1]. */
-export function deviationHex(t) { return _rampHex(_DEV_RAMP, t) }
+export function deviationHex(t) { return colormapHex('devramp', t) }
 
 /** Scalar-colour key for a nucleotide: the 4-part "helix:bp:dir:copy" that
  *  helix_renderer.applyScalarColors keys on (so each LOOP COPY colours its own bead),
@@ -101,7 +88,7 @@ function _putColor(colorByKey, helix, bp, dir, copy, hex) {
  * share the colour.  Uncovered bp (no RMSF node) are left uncoloured (keep design
  * colour).  Scaled over [lo,hi] (default: the design's own RMSF min→max).
  */
-export function flexColorMap(displayResp, rmsfResp, loBound, hiBound) {
+export function flexColorMap(displayResp, rmsfResp, loBound, hiBound, cmap = 'viridis') {
   const updates = toFemUpdates(displayResp)
   if (!updates.length || !rmsfResp?.rmsf?.length) return null
   const byBp = new Map()
@@ -118,7 +105,7 @@ export function flexColorMap(displayResp, rmsfResp, loBound, hiBound) {
     const t = span > 1e-9 ? (val - lo) / span : 0.0
     // RMSF is per axis node (direction- + copy-independent), so a bp's loop copies all
     // take that bp's colour — but keyed by their own copy so each loop bead recolours.
-    _putColor(colorByKey, u.helix_id, u.bp_index, u.direction, u.copy ?? 0, viridisHex(t))
+    _putColor(colorByKey, u.helix_id, u.bp_index, u.direction, u.copy ?? 0, colormapHex(cmap, t))
   }
   return { updates, colorByKey, min: dataLo, max: dataHi }
 }
@@ -129,34 +116,47 @@ export function flexColorMap(displayResp, rmsfResp, loBound, hiBound) {
  * coloured green→red over [0, max deviation] (0 anchored so "matches design" always
  * reads green).  Returns null for a not-ready / empty response.
  */
-export function deviationColorMap(devResp) {
+export function deviationColorMap(devResp, loBound, hiBound, cmap = 'devramp') {
   if (!devResp || !devResp.ready || !Array.isArray(devResp.positions) || !devResp.positions.length) {
     return null
   }
-  const hi = Number.isFinite(devResp.max_deviation) ? devResp.max_deviation : 0
+  const dataHi = Number.isFinite(devResp.max_deviation) ? devResp.max_deviation : 0
+  // Default scale is 0-anchored [0, max] so "matches design" always reads as the ramp
+  // start; the scale widget may override with an explicit [lo, hi] window.
+  const lo = Number.isFinite(loBound) ? loBound : 0
+  const hi = Number.isFinite(hiBound) ? hiBound : dataHi
+  const span = hi - lo
   const updates = []
   const colorByKey = {}
   for (const p of devResp.positions) {
     const copy = p.copy ?? 0
     updates.push(_femUpdate(p))   // carries the wound slab frame (nx/ny/nz + tx/ty/tz) when present
-    const t = hi > 1e-9 ? p.deviation / hi : 0.0
-    _putColor(colorByKey, p.helix_id, p.bp_index, p.direction, copy, deviationHex(t))
+    const t = span > 1e-9 ? (p.deviation - lo) / span : 0.0
+    _putColor(colorByKey, p.helix_id, p.bp_index, p.direction, copy, colormapHex(cmap, t))
   }
   return {
     updates, colorByKey,
     min: Number.isFinite(devResp.min_deviation) ? devResp.min_deviation : 0,
-    max: hi,
+    max: dataHi,
     rmsd: Number.isFinite(devResp.rmsd_nm) ? devResp.rmsd_nm : 0,
   }
 }
 
 export function initCandoDisplay({
-  designRenderer, api, cylinderOverlay = null, setDesignVisible = null, legend = null,
+  designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
 }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
   let _jobId = null         // job whose overlay is applied (or null)
   let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
   let _stats = null         // last flex/deviation/cando summary for the panel readout
+  // Cached responses so the workspace scale widget can recolour / rescale live
+  // without a re-fetch, plus the active per-map colormap.
+  let _flexResp = null      // { disp, rmsf } for the flex map
+  let _devResp = null       // deviation response
+  let _candoResp = null     // cylinder response
+  let _flexCmap = 'viridis'
+  let _devCmap = 'devramp'
+  let _candoCmap = 'jet'
 
   // Show/hide the native NADOC model while the CanDo-style cylinder rep owns the view
   // (mirrors the mrDNA CG-beads mode).  The injected setDesignVisible (main.js
@@ -171,7 +171,7 @@ export function initCandoDisplay({
   // drew (cylinder tubes, scalar recolour, AND the job-snapshot render).  Used when
   // turning a mode off, and before the cylinder mode (which hides the live model).
   function _clearAll() {
-    legend?.hide()
+    flexScale?.hide()
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     designRenderer.clearExternalGeometry?.()   // rebuilds the live model (no-op if not external)
@@ -182,7 +182,7 @@ export function initCandoDisplay({
   // tubes / colours and make sure visibility isn't left off by the cylinder mode.  The
   // subsequent renderExternalGeometry() rebuilds the model in one pass (no live rebuild).
   function _prepareForExternal() {
-    legend?.hide()
+    flexScale?.hide()
     cylinderOverlay?.clear()
     designRenderer.clearScalarColors?.()
     _nativeVisible(true)
@@ -221,21 +221,43 @@ export function initCandoDisplay({
     return { ok: true, n: updates.length }
   }
 
+  // ── Live recolour hooks driven by the shared workspace scale widget ──────────
+  function _recolorFlex(lo, hi, cmap) {
+    if (_mode !== 'flex' || !_flexResp) return
+    if (cmap) _flexCmap = cmap
+    const map = flexColorMap(_flexResp.disp, _flexResp.rmsf, lo, hi, _flexCmap)
+    if (map) designRenderer.applyScalarColors(map.colorByKey)
+  }
+  function _recolorDeviation(lo, hi, cmap) {
+    if (_mode !== 'deviation' || !_devResp) return
+    if (cmap) _devCmap = cmap
+    const map = deviationColorMap(_devResp, lo, hi, _devCmap)
+    if (map) designRenderer.applyScalarColors(map.colorByKey)
+  }
+  function _recolorCando(lo, hi, cmap) {
+    if (_mode !== 'cando' || !_candoResp) return
+    if (cmap) _candoCmap = cmap
+    cylinderOverlay?.recolor(lo, hi, _candoCmap)
+  }
+
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
   async function showFlex(jobId) {
     const epoch = ++_epoch
     const [disp, rmsf, snap] = await Promise.all([
       api.getCandoDisplay(jobId), api.getCandoRmsf(jobId), api.getCandoSnapshotGeometry(jobId)])
     if (epoch !== _epoch) return { ok: false }
-    const map = flexColorMap(disp, rmsf)
+    const map = flexColorMap(disp, rmsf, undefined, undefined, _flexCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
     _prepareForExternal()
     _renderExternal(snap)
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _flexResp = { disp, rmsf }
     _jobId = jobId; _mode = 'flex'
     _stats = { kind: 'flex', min: map.min, max: map.max }
-    legend?.show('flex', map.min, map.max)
+    // Hand the shared scale widget this map's range + a live recolour callback; it
+    // reconciles the on-structure colours to the remembered colormap on show.
+    flexScale?.show({ title: 'RMSF (nm)', min: map.min, max: map.max, mapType: 'flex', onRecolor: _recolorFlex })
     return { ok: true, n: map.updates.length, min: map.min, max: map.max }
   }
 
@@ -246,15 +268,16 @@ export function initCandoDisplay({
     const [resp, snap] = await Promise.all([
       api.getCandoDeviation(jobId), api.getCandoSnapshotGeometry(jobId)])
     if (epoch !== _epoch) return { ok: false }
-    const map = deviationColorMap(resp)
+    const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
     _prepareForExternal()
     _renderExternal(snap)
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
+    _devResp = resp
     _jobId = jobId; _mode = 'deviation'
     _stats = { kind: 'deviation', min: map.min, max: map.max, rmsd: map.rmsd }
-    legend?.show('deviation', map.min, map.max)
+    flexScale?.show({ title: 'Deviation (nm)', min: map.min, max: map.max, mapType: 'deviation', onRecolor: _recolorDeviation })
     return { ok: true, n: map.updates.length, min: map.min, max: map.max, rmsd: map.rmsd }
   }
 
@@ -269,13 +292,18 @@ export function initCandoDisplay({
       return { ok: false, reason: 'not-ready' }
     }
     _clearAll()   // restore the live model first, then hide it under the tubes
-    cylinderOverlay.update(resp)
+    cylinderOverlay.update(resp, {
+      lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
+    })
     _nativeVisible(false)
+    _candoResp = resp
     _jobId = jobId; _mode = 'cando'
     _stats = { kind: 'cando', helices: resp.n_helices || 0, joints: resp.n_joints || 0 }
-    // The tubes are an RMSF jet heat map (min→p95); show the matching legend when the
-    // job carried RMSF, otherwise the tubes are plain grey and there's nothing to key.
-    if (resp.has_rmsf) legend?.show('cando', resp.rmsf_min, resp.rmsf_p95)
+    // The tubes are an RMSF heat map (min→p95); show the adjustable scale + colormap
+    // picker when the job carried RMSF, otherwise the tubes are plain grey.
+    if (resp.has_rmsf) {
+      flexScale?.show({ title: 'RMSF (nm)', min: resp.rmsf_min, max: resp.rmsf_p95, mapType: 'cando', onRecolor: _recolorCando })
+    }
     return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
   }
 

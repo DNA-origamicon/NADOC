@@ -17,7 +17,24 @@ The MD jobs panel got oxDNA-parity visualization tools (trajectory scrub + flexi
 
 **Panel (md_jobs_panel.js).** flex + traj toggles/controls mirror oxdna_jobs_panel; reuse `oxdna_trajectory_player.js`. Three display modes (live "Display MD" / flexibility map / trajectory) are MUTUALLY EXCLUSIVE — each deforms the same design model, so activating one calls stopAndRestore on the others. Rows now have `data-job-id` (for the e2e + the existing md_live_no_stale spec).
 
-**v1 scope = CG/nadoc representation only.** Deliberate follow-ons: (1) heavy-rep (atomistic/surface) RMSF colouring — the per-frame atomistic data shapes differ between oxDNA (template) and NAMD (real DCD atoms), needs its own mapping, so the adapter intentionally omits the heavy methods (controller heavy path is a no-op for CG, fails closed for atomistic/surface scenes); (2) the draggable colour-rescale widget (flex_scale.js is a single global DOM widget — sharing it between the oxDNA + MD panels needs main.js coordination); v1 flex map uses viridis colouring + a min/max legend.
+**v1 scope = CG/nadoc representation only.** Deliberate follow-ons: (1) heavy-rep (atomistic/surface) RMSF colouring — the per-frame atomistic data shapes differ between oxDNA (template) and NAMD (real DCD atoms), needs its own mapping, so the adapter intentionally omits the heavy methods (controller heavy path is a no-op for CG, fails closed for atomistic/surface scenes); ~~(2) the draggable colour-rescale widget~~ **DONE 2026-07-10** — see below.
+
+**SHARED ADJUSTABLE LEGEND + COLORMAP PICKER (2026-07-10).** `flex_scale.js` is now the ONE adjustable
+workspace legend for EVERY scalar sim map — oxDNA/MD flexibility (RMSF) + deviation maps and CanDo
+RMSF/deviation/cylinder heat maps. Architecture: a single `flexScale = initFlexScale()` is created in
+`main.js` and injected into every engine panel/controller; each drives it per-activation via
+`flexScale.show({ title, min, max, mapType, onRecolor })` where `onRecolor(lo,hi,cmap)` is that map's live
+recolour. The MD flex map reaches it because `mdViz` is the same `initOxdnaDisplay` controller (its
+`recolorRmsf(lo,hi,cmap)` now takes a colormap) — `md_jobs_panel` gets `getFlexScale`. New shared colormap
+registry `frontend/src/ui/colormaps.js` (10 ramps: viridis/magma/plasma/inferno/cividis/turbo/jet/coolwarm/
+Green→Red/Grayscale) is the single source of truth — `oxdna_display`/`cando_display`/`cando_cylinders` all
+delegate their ramps to it (killed the duplicate viridis/dev/jet LUTs). The picker is a small swatch button
+in `#flex-scale` → popup of 10 gradient swatches; the choice is remembered **per map-type** in localStorage
+(flex→viridis, deviation→Green→Red, cando→jet defaults) so each map keeps its "respective colours" unless
+overridden. The old static `#cando-legend` + `cando_legend.js` were retired (deleted). Engines wired: oxDNA
+(flex+deviation), MD (flex), CanDo (flex+deviation+cylinders), LAMMPS (flex+deviation). Known minor debt: the
+in-panel static viridis mini-strips (`_setFlexLegend` in oxdna/md panels) still draw viridis regardless of the
+picked colormap — candidate to remove or sync.
 
 **PERFORMANCE — per-frame extraction fixed 2026-07-02.** The old bottleneck was NOT the select/Kabsch (measured <0.03s/frame) — it was the whole-system `mda_unwrap` PBC make-whole transformation added in `_build_md_nadoc_ctx`: it make-wholes ALL ~1M solvated atoms on EVERY frame seek → **~180 s/frame** for the 3x6x200 (RMSF max_frames=2 took 24 min). FIX: removed the transformation entirely. Both per-frame extractors already reconstruct DNA from RAW wrapped coords — the bead path via the vectorised `_unwrap_min_image` + design-eq min-image correction, the heavy path via residue-local `minimum_image(atom−its P)`. The only thing the global unwrap affected was the P→C1' base-normal for a nucleotide split across PBC, now handled by a direct min-image on that 7229-vector. Verified numerically identical to the unwrapped reference to ~1.5e-8 nm (float32 noise) on real 3x6x200 frames. Result: **186 s → 0.01 s per frame** (~15000×); full 3x6x200 ctx build ~13s; a 150-frame flex map goes from hours to ~20s. Equivalence pin: `test_md_extraction_matches_unwrap_reference` (env-gated NADOC_RUN_HEAVY_MD_FIXTURE=1, reference side pays the slow unwrap). ws.py's live-display path still adds its own unwrap for interactive single-frame seeks — untouched, and the fast path's output matches it. Remaining v1 gaps unchanged: cache built ctx across requests; the "Loading…/Computing…" overlays still show.
 

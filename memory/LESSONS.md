@@ -36,6 +36,15 @@ FIX (two layers): (A) `build_replica_package` now `_link_or_copy`s `charge_audit
 
 **How to avoid**: when a code path reads a file straight from a package dir (`load_segid_chain_map`, etc.), audit EVERY package builder — full-prep AND the replica/reseed/child builders in `md_ensemble.py` — to confirm they emit that file. A fallback that reads the same data from the manifest makes the loader resilient to a builder that forgets. And **verify the actual job the user clicks**, not a sibling: parent vs. child jobs can have different package contents even for the same design. See [[project_alpine_cluster_submission]], [[project_md_viz_tools]].
 
+### A11. NAMD metrics say "no NAMD trajectory yet" on a finished production run — the production child never inherited the parent's `design.json` snapshot (SAME failure mode as A10) (2026-07-10)
+Symptom: 20 ns production run for `6hbx100_noT` (child job `892ad3d12d4f`) completes, a 1.9 GB DCD sits in `output/`, but clicking Generate for twist/curvature/base-pairing returns **"no NAMD trajectory yet for the selected job(s)"** — a lie: the trajectory is fine.
+
+ROOT CAUSE: `md_ensemble.build_replica_package` copied PSF/PDB/forcefield/`charge_audit.json` into the child but **not `design.json`** (the frozen topology snapshot). `routes_md_metrics._job_inputs` needs it to map P atoms → base pairs; when absent it falls back to the *active* design, and when no design is loaded (`GET /api/design` → 404) that fallback raises → `_job_inputs` returns `None` for every job → the code hits its blanket "no trajectory" branch, misattributing a **missing-snapshot** failure to a missing trajectory. Only the relaxation-prep path ([routes_md.py](../backend/api/routes_md.py) ~L1287) writes `design.json`; the `spawn_md_production` / `stage_md_ensemble` child paths (both via `build_replica_package`) forgot it — while **oxDNA's child spawn already `shutil.copy`s it** (engine-parity drift).
+
+FIX (both layers): (A) write side — `build_replica_package` now copies `parent.job_dir/design.json` → child (mirrors oxDNA). (B) read side — `_md_snapshot_design` **walks up `parent_job_id`** to the nearest ancestor with a snapshot (self-heals existing children + robust vs a legacy parent that also lacks one), and `_job_inputs` returns a **str reason** so a missing snapshot no longer masquerades as "no trajectory". Backfilled the two stuck jobs by copying the relaxation root's snapshot down. Verified: live metrics run on `892ad3d12d4f` → `ready=True`, 520 frames.
+
+**How to avoid**: this is A10 again — **any per-child MD package builder must propagate EVERY parent artifact a downstream reader expects.** When oxDNA and NAMD have parallel child-spawn paths, diff them: if oxDNA copies a file into children and NAMD doesn't, that's the bug. And never let a resolver report the FIRST thing it couldn't find ("no trajectory") when it actually failed on the SECOND ("no topology") — return the specific reason. See [[project_oxdna_metrics_card]], [[project_md_job_system]].
+
 ---
 
 ## B. Three-Layer Law violations
