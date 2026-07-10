@@ -37,6 +37,9 @@ def _make_parent(ws: Path, *, fast: bool = False, mgh: bool = False):
         (pkg / "mgh_extrabonds.txt").write_text("bonds")
     (pkg / "output" / f"{READY}.coor").write_text("coor")
     (pkg / "output" / f"{READY}.xsc").write_text("xsc")
+    (pkg / "charge_audit.json").write_text(json.dumps({
+        "topology_metadata": {"segments": [{"segid": "D000", "chain_id": "A"}]}
+    }))
     manifest = {
         "name_stem": "demo",
         "protocol": "mgh_slow_release",
@@ -103,6 +106,9 @@ def test_replica_package_layout(tmp_path):
     assert (pkg / "demo.psf").exists()
     assert (pkg / "demo.pdb").exists()
     assert (pkg / "forcefield" / "par_all36_na.prm").exists()
+    # Segid→chain map shared in so the replica flexibility map resolves the 5' termini
+    # via the segid P-order path (else those 21 bases render un-positioned/un-coloured).
+    assert (pkg / "charge_audit.json").exists()
 
     manifest = json.loads((pkg / "manifest.json").read_text())
     assert manifest["minimization"]["name"] == "demo_00_reseed"

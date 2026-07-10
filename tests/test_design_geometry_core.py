@@ -107,15 +107,17 @@ def test_straight_helix_axes_uses_stored_endpoints():
 
 
 def test_geometry_for_design_emits_one_bead_per_bp():
-    """Full geometry yields a dict per bp with the four position arrays."""
+    """Full geometry yields a dict per REAL nucleotide with the four position arrays."""
     d = _single_helix_design(direction=Direction.FORWARD, length_bp=10)
     nucs = _geometry_for_design(d)
-    # The helix slot carries both strands of the duplex (FORWARD + REVERSE),
-    # so a 10-bp helix emits 20 positions; the occupied FORWARD side is 10.
+    # Only the occupied strand is emitted — the empty REVERSE side no longer produces a
+    # ghost base (ss-overhang regions render single-stranded), so a 10-bp single-FORWARD
+    # strand emits exactly 10 positions, all FORWARD.
     on_helix = [n for n in nucs if n["helix_id"] == "h0"]
-    assert len(on_helix) == 20
+    assert len(on_helix) == 10
     fwd = [n for n in on_helix if n["direction"] == Direction.FORWARD.value]
     assert len(fwd) == 10
+    assert not [n for n in on_helix if n.get("strand_id") is None]   # no phantom bases
     sample = fwd[0]
     for key in ("backbone_position", "base_position", "base_normal", "axis_tangent"):
         assert len(sample[key]) == 3  # xyz vector

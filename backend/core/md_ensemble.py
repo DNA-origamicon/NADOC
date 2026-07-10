@@ -124,6 +124,13 @@ def build_replica_package(
     if mgh_extrabonds and (parent_pkg / "mgh_extrabonds.txt").exists():
         _link_or_copy(parent_pkg / "mgh_extrabonds.txt", child_pkg / "mgh_extrabonds.txt")
 
+    # Segid → NADOC chain map: the flexibility map / trajectory P-order path reads
+    # this from the package dir (load_segid_chain_map).  Without it the replica falls
+    # back to the reference-PDB P-order, which can't build the 5'-termini specs → the
+    # 21 phosphate-less 5' bases render un-positioned/un-coloured.  Immutable, shared.
+    if (parent_pkg / "charge_audit.json").exists():
+        _link_or_copy(parent_pkg / "charge_audit.json", child_pkg / "charge_audit.json")
+
     ff = parent_pkg / "forcefield"
     if ff.is_dir():
         for f in sorted(ff.rglob("*")):

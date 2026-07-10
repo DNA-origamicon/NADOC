@@ -185,6 +185,50 @@ export function initDesignRenderer(scene, storeRef) {
     if (_xoverConnMesh?.instanceColor) _xoverConnMesh.instanceColor.needsUpdate = true
   }
 
+  /**
+   * Recolour the extra-base crossover beads/slabs by a scalar map (the RMSF / deviation
+   * flexibility overlay).  The helix renderer's applyScalarColors only touches real-helix
+   * nucleotides; the inserted crossover bases live in a separate instanced mesh and were
+   * left at their strand colour, so a flexibility map ignored them.  The map keys inserts
+   * as `"__xb__:<crossoverId>:<insertIndex>"` (the same key rmsfColorMap builds from an MD
+   * frame's `{helix_id:"__xb__", bp_index:<crossoverId>, direction:<k>}` entries).
+   */
+  function _applyExtraBaseScalarColors(colorByKey) {
+    if (!colorByKey || !_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+    const _col = new THREE.Color()
+    let dirty = false
+    for (const ad of _xoverArcData) {
+      for (let k = 0; k < ad.beadCount; k++) {
+        const hex = colorByKey[`__xb__:${ad.xoId}:${k}`]
+        if (hex == null) continue
+        const idx = ad.beadStartIdx + k
+        _xoverBeadsMesh.setColorAt(idx, _col.setHex(hex))
+        _xoverSlabsMesh.setColorAt(idx, _col.setHex(hex))
+        dirty = true
+      }
+    }
+    if (dirty) {
+      if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
+      if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
+    }
+  }
+
+  /** Restore extra-base beads/slabs to their build-time strand colours (leaving a scalar
+   *  flexibility map) — the insert counterpart of helix_renderer.clearScalarColors. */
+  function _restoreExtraBaseColors() {
+    if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+    const _col = new THREE.Color()
+    for (const ad of _xoverArcData) {
+      for (let k = 0; k < ad.beadCount; k++) {
+        const idx = ad.beadStartIdx + k
+        _xoverBeadsMesh.setColorAt(idx, _col.setHex(ad.beadBaseColor))
+        _xoverSlabsMesh.setColorAt(idx, _col.setHex(ad.slabBaseColor))
+      }
+    }
+    if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
+    if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
+  }
+
   /** Crossover extra-base beads/slabs are children of root, NOT part of the helix
    *  LOD meshes, so _helixCtrl.setDetailLevel() doesn't touch them — they'd stay
    *  visible in the coarse cylinders/sticks rep and poke through empty domain gaps.
@@ -974,10 +1018,12 @@ export function initDesignRenderer(scene, storeRef) {
     applyScalarColors(colorByKey) {
       _helixCtrl?.applyScalarColors(colorByKey)
       _scalarArcUpdater?.(colorByKey)
+      _applyExtraBaseScalarColors(colorByKey)
     },
     clearScalarColors() {
       _helixCtrl?.clearScalarColors()
       _scalarArcUpdater?.(null)
+      _restoreExtraBaseColors()
     },
 
     setDetailLevel(level) {

@@ -52,7 +52,7 @@ def _select_p_order(u, chain_map, run_dir, coordinate_path):
 
 
 def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design,
-                        with_atoms: bool = False) -> dict:
+                        with_atoms: bool = False, with_termini: bool = False) -> dict:
     """Open the PSF + DCD(s), build the P-atom → (helix,bp,dir) order, design
     equilibrium positions, Kabsch reference, and C1' index map. Mirrors the
     ``nadoc``-relevant setup of ws.py ``_load_sync`` (NAMD branch).
@@ -141,6 +141,21 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         heavy_idx = dna_heavy.indices
         atom_meta = [{"serial": int(a.index), "element": _element(a)} for a in dna_heavy]
 
+    # 5'-terminal nucleotides (one per strand) have NO phosphate — pdb2gmx strips the
+    # 5' P — so they are absent from the P-indexed p_order and go un-positioned/un-coloured
+    # in the flexibility map.  Recover each via its O5' atom, placed in the aligned frame
+    # off its 3'-neighbour's P (which IS in p_order): O5'_aligned = neighbourP_aligned +
+    # R·minimage(O5'_raw − neighbourP_raw), exact under the rigid transform.  Only built on
+    # demand (md_rmsf) so the metrics / live-display P path is byte-unchanged.
+    term_specs: list[tuple] = []
+    if with_termini:
+        from backend.core.atomistic_to_nadoc import (
+            build_termini_specs,
+            load_segid_chain_map,
+        )
+        seg2chain = load_segid_chain_map(Path(topology_path).parent)
+        term_specs = build_termini_specs(u, cm, seg2chain, p_order)
+
     return {
         "universe": u, "p_order": p_order, "n_frames": n_frames,
         "centroid_T": T, "eq_positions": eq_positions, "eq_valid": eq_valid,
@@ -148,10 +163,12 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         "c1p_idx": c1p_idx, "heavy_idx": heavy_idx, "atom_meta": atom_meta,
         "R_prev": None, "prev_frame_idx": -999,
         "n_dna_p": n_dna_p, "p_order_source": p_order_source,
+        "term_specs": term_specs,
     }
 
 
-def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False):
+def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
+                            with_termini: bool = False):
     """Per-frame DNA P-atom positions (nm, NADOC frame) + base normals for one DCD
     frame. Ported from ws.py ``_seek_sync`` (nadoc path). Returns ``(p_nm, normals)``
     where ``p_nm`` is (N,3) and ``normals`` is (N,3) or ``None``.
@@ -268,6 +285,16 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False):
         norms = np.linalg.norm(dn, axis=1, keepdims=True)
         norms = np.where(norms > 1e-6, norms, 1.0)
         normals = dn / norms
+
+    # 5'-terminal nucleotides via their O5' atom, placed off the aligned 3'-neighbour P.
+    if with_termini:
+        from backend.core.atomistic_to_nadoc import recover_termini
+        _box = (dims[:3] / 10.0) if (dims is not None and dims[0] > 0) else None
+        term_pos, term_norm = recover_termini(
+            u, ctx.get("term_specs") or [], p_raw, p_nm, R_align, _box)
+        if with_c1p:
+            return p_nm, normals, c1p_nm, term_pos, term_norm
+        return p_nm, normals, term_pos, term_norm
 
     if with_c1p:
         return p_nm, normals, c1p_nm
@@ -461,7 +488,11 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
     cost; each sampled frame is aligned independently (the sequential rotation-flip
     guard only fires for adjacent frames, which strided sampling never hits)."""
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design)
+    # with_termini: also recover each strand's 5'-terminal base (no P atom → absent from
+    # p_order) so the flexibility map positions + colours every nucleotide, not only the
+    # P-bearing ones.  Only md_rmsf opts in — the metrics / live-display P path is unchanged.
+    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
+                              with_termini=True)
     p_order = ctx["p_order"]
     n = ctx["n_frames"]
     n_keys = len(p_order)
@@ -472,14 +503,20 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
 
     idxs = list(range(n)) if n <= max_frames else _stride_pick(list(range(n)), max_frames)
 
+    term_specs = ctx.get("term_specs") or []
+    n_term = len(term_specs)
+
     # One-pass accumulation: RMSF^2 = mean_f|p_f|^2 - |mean_f p_f|^2 (per nucleotide).
     sum_pos = np.zeros((n_keys, 3))
     sum_sq = np.zeros(n_keys)        # Σ_f |p_f|^2
     sum_norm = np.zeros((n_keys, 3))
+    sum_tpos = np.zeros((n_term, 3))
+    sum_tsq = np.zeros(n_term)
+    sum_tnorm = np.zeros((n_term, 3))
     have_norm = False
     used = 0
     for gidx in idxs:
-        p_nm, normals = _extract_md_nadoc_frame(ctx, gidx)
+        p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(ctx, gidx, with_termini=True)
         if p_nm is None or len(p_nm) != n_keys:
             continue
         sum_pos += p_nm
@@ -487,6 +524,10 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
         if normals is not None and len(normals) == n_keys:
             sum_norm += normals
             have_norm = True
+        if n_term and tpos is not None and len(tpos) == n_term:
+            sum_tpos += tpos
+            sum_tsq += np.einsum("ij,ij->i", tpos, tpos)
+            sum_tnorm += tnorm
         used += 1
     if used == 0:
         reason = "no usable trajectory frames"
@@ -523,13 +564,34 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
             "rmsf": float(rmsf[i]),
         })
 
+    # Append the recovered 5'-terminal nucleotides (same payload shape, real keys).
+    rmsf_all = rmsf
+    if n_term:
+        mean_t = sum_tpos / used
+        rmsf_t = np.sqrt(np.maximum(sum_tsq / used - np.einsum("ij,ij->i", mean_t, mean_t), 0.0))
+        tn = np.linalg.norm(sum_tnorm, axis=1, keepdims=True)
+        mean_tnorm = sum_tnorm / np.where(tn > 1e-6, tn, 1.0)
+        for j, (key, *_rest) in enumerate(term_specs):
+            positions.append({
+                "helix_id": key[0],
+                "bp_index": key[1],
+                "direction": key[2],
+                "backbone_position": [float(mean_t[j, 0]), float(mean_t[j, 1]),
+                                      float(mean_t[j, 2])],
+                "nx": float(mean_tnorm[j, 0]),
+                "ny": float(mean_tnorm[j, 1]),
+                "nz": float(mean_tnorm[j, 2]),
+                "rmsf": float(rmsf_t[j]),
+            })
+        rmsf_all = np.concatenate([rmsf, rmsf_t]) if len(rmsf_t) else rmsf
+
     return {
         "ready": True,
         "n_frames": used,
         "positions": positions,
-        "min_rmsf": float(rmsf.min()),
-        "max_rmsf": float(rmsf.max()),
-        "mean_rmsf": float(rmsf.mean()),
+        "min_rmsf": float(rmsf_all.min()),
+        "max_rmsf": float(rmsf_all.max()),
+        "mean_rmsf": float(rmsf_all.mean()),
     }
 
 
@@ -730,9 +792,16 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
     import MDAnalysis as mda  # type: ignore
 
     seg_paths = [s[2] for s in segments]
-    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design)
+    # with_termini: recover each strand's 5'-terminal base (no P atom) so the scrubbable
+    # trajectory positions + colours every nucleotide, matching the flexibility map + the
+    # ghost-free render (single-stranded regions no longer draw phantom bases).
+    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
+                              with_termini=True)
     p_order = ctx["p_order"]
-    key_list = [list(k) for k in p_order]
+    term_specs = ctx.get("term_specs") or []
+    # keys = P-order nucleotides THEN the recovered 5' termini (frame floats follow the
+    # same order below), so the frontend's key→nucleotide map covers every base.
+    key_list = [list(k) for k in p_order] + [list(s[0]) for s in term_specs]
 
     # Per-segment frame counts (for boundary markers + per-segment downsample).
     seg_counts: list[int] = []
@@ -761,7 +830,7 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
                             "kind": stage or "md", "stage_name": name})
         out_stages.append({"name": name, "kind": stage or "md", "n_frames": len(picked)})
         for gidx in picked:
-            p_nm, normals = _extract_md_nadoc_frame(ctx, gidx)
+            p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(ctx, gidx, with_termini=True)
             flat: list[float] = []
             for i in range(len(p_order)):
                 flat.extend((float(p_nm[i, 0]), float(p_nm[i, 1]), float(p_nm[i, 2])))
@@ -769,6 +838,12 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
                     flat.extend((float(normals[i, 0]), float(normals[i, 1]), float(normals[i, 2])))
                 else:
                     flat.extend((0.0, 0.0, 1.0))
+            for j in range(len(term_specs)):
+                if j < len(tpos):
+                    flat.extend((float(tpos[j, 0]), float(tpos[j, 1]), float(tpos[j, 2])))
+                    flat.extend((float(tnorm[j, 0]), float(tnorm[j, 1]), float(tnorm[j, 2])))
+                else:
+                    flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
             out_frames.append(flat)
         offset += count
 

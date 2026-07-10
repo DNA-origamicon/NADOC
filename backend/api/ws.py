@@ -223,6 +223,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
         # Build p_order: the design (helix,bp,dir) key per trajectory DNA P atom, in
         # trajectory atom order (the index-based frame extraction relies on this).
+        term_specs: list = []   # 5'-terminal bases (no P) recovered via O5' — NAMD only
         if is_namd:
             # Prefer mapping via the PSF segids + the package's charge_audit
             # segid→chain_id table.  psfgen collapses NADOC's multi-char chain ids
@@ -246,6 +247,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 pdb_text = input_pdb.read_text(errors="replace")
                 p_order = build_p_pdb_order(pdb_text, cm)
                 logs.append(f"P-order   : reference-PDB ({len(p_order)} entries)")
+            # Recover each strand's 5'-terminal base (stripped of its P by pdb2gmx) via its
+            # O5', so the live display covers every nucleotide — matching the ghost-free
+            # geometry + the flexibility map (returns [] when the segid map is unavailable).
+            from backend.core.atomistic_to_nadoc import build_termini_specs
+            term_specs = build_termini_specs(u, cm, seg2chain, p_order)
+            if term_specs:
+                logs.append(f"5' termini: recovered {len(term_specs)} (O5'-anchored)")
         else:
             pdb_text = input_pdb.read_text(errors="replace")
             p_order = build_p_gro_order(pdb_text, cm)
@@ -402,6 +410,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "atom_meta":     None,
             "heavy_idx":     None,
             "c1p_idx":       c1p_idx,
+            "term_specs":    term_specs,          # 5'-terminal bases recovered via O5'
             "dna_p_idx":     dna_p_sel.indices,   # cached for the O(1) last-frame fast path
             "logs":          logs,
             "warnings":      load_warnings,
@@ -627,6 +636,29 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     entry["ny"] = float(normals[i, 1])
                     entry["nz"] = float(normals[i, 2])
                 positions.append(entry)
+
+            # 5'-terminal bases (no P atom) recovered via O5', anchored off the aligned
+            # 3'-neighbour P — so the live display covers every nucleotide.
+            term_specs = _ctx.get("term_specs") or []
+            if term_specs and R_align is not None:
+                from backend.core.atomistic_to_nadoc import recover_termini
+                _box = (dims[:3] / 10.0) if (dims is not None and dims[0] > 0) else None
+                tpos, tnorm = recover_termini(
+                    u, term_specs, p_raw, p_nm, R_align, _box,
+                    all_pos_A=(_all_pos if _injected is not None else None))
+                for j, spec in enumerate(term_specs):
+                    if j >= len(tpos):
+                        break
+                    key = spec[0]
+                    tentry: dict = {
+                        "helix_id": key[0], "bp_index": key[1], "direction": key[2],
+                        "x": float(tpos[j, 0]), "y": float(tpos[j, 1]), "z": float(tpos[j, 2]),
+                    }
+                    if len(tnorm):
+                        tentry["nx"] = float(tnorm[j, 0])
+                        tentry["ny"] = float(tnorm[j, 1])
+                        tentry["nz"] = float(tnorm[j, 2])
+                    positions.append(tentry)
             return {
                 "type":      "frame",
                 "frame_idx": frame_idx,

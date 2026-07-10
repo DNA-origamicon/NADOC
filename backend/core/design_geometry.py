@@ -29,7 +29,6 @@ from backend.core.models import (
     Direction,
     Domain,  # noqa: F401  (string annotation in _emit_bridge_nucs)
     Strand,  # noqa: F401  (string annotation in _emit_bridge_nucs)
-    StrandType,
 )
 from backend.core.geometry import (
     nucleotide_positions_arrays_extended,
@@ -277,9 +276,6 @@ def _geometry_for_helices(
         if entry and entry.get("is_five_prime"):
             nuc_info[key] = {**entry, "is_five_prime": False}
 
-    _missing   = {"strand_id": None, "strand_type": StrandType.STAPLE.value,
-                  "is_five_prime": False, "is_three_prime": False, "domain_index": 0,
-                  "overhang_id": None}
     _dir_enums = (Direction.FORWARD, Direction.REVERSE)  # index by int 0/1
     needs_pos_map = full_mode and bool(design.extensions)
     result:      list[dict] = []
@@ -320,7 +316,18 @@ def _geometry_for_helices(
                     axis_tangent = arrs['axis_tangents'][i],
                     base_normal  = arrs['base_normals'][i],
                 )
-            sinfo = nuc_info.get(key, _missing)
+            sinfo = nuc_info.get(key)
+            if sinfo is None:
+                # No real strand occupies this helix-lattice slot — this is a
+                # single-stranded overhang region where only the complementary strand
+                # exists.  Emitting a phantom base here (the old `_missing` placeholder)
+                # drew a non-existent nucleotide that misrepresents ssDNA as duplex and
+                # could never receive MD data (the persistent "bright slab" in MD views).
+                # Skip it so ssDNA regions render single-stranded.  Every export/sim keys
+                # off the real strand order, so they are unaffected (see the blast-radius
+                # audit); only rendering changes.  nuc_pos_map above still carries the
+                # slot for extension anchoring.
+                continue
             result.append({
                 "helix_id":          helix_id,
                 "bp_index":          bp,
@@ -649,6 +656,11 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
     )
 
     positions: dict = {}
+    # Occupancy map (real strand nucleotides) — used to suppress ghost lattice slots so
+    # this fast path stays IDENTICAL to _geometry_for_helices (both emit only real bases;
+    # ss-overhang regions render single-stranded, no phantom complementary base).
+    nuc_info = _strand_nucleotide_info(design)
+    _dir_enums = (Direction.FORWARD, Direction.REVERSE)  # index by int 0/1
 
     # Strand-domain bp range per helix (needed for ss-scaffold loop extensions).
     min_domain_bp: dict[str, int] = {}
@@ -680,6 +692,8 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
             helix_bucket = {}
             positions[helix_id] = helix_bucket
         for i in range(M):
+            if (helix_id, bp_list[i], _dir_enums[dir_arr[i]]) not in nuc_info:
+                continue   # ghost lattice slot (no real strand) — suppress, as _emit_arrs does
             dir_name = _DIR_NAMES[dir_arr[i]]
             dir_bucket = helix_bucket.get(dir_name)
             if dir_bucket is None:
@@ -724,7 +738,6 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
     # work without us materialising per-nuc dicts. Direction here uses
     # string form to match the dict-based legacy API.
     nuc_lookup: dict = {}
-    from backend.core.models import Direction
     for hid, by_dir in positions.items():
         for dir_name, bucket in by_dir.items():
             d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE

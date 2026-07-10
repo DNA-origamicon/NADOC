@@ -245,25 +245,48 @@ def load_segid_chain_map(run_dir: Path) -> dict[str, str] | None:
     strands.  The package's ``charge_audit.json`` records the true correspondence
     (per-segment ``segid`` + ``chain_id``), which lets us recover each atom's real
     NADOC chain from the PSF's ``segid``.  Returns ``None`` when unavailable.
+
+    Ensemble-replica production packages (``build_replica_package``) don't carry a
+    standalone ``charge_audit.json`` — they only hardlink the immutable structure
+    files — but their ``manifest.json`` embeds the identical segment metadata under
+    ``charge_audit``.  Fall back to that so a replica's flexibility map / P-order
+    still resolves via the segid path; otherwise it silently drops the 21
+    phosphate-less 5' termini to un-positioned, un-coloured beads.
     """
     import json
 
+    def _segs_to_map(segs) -> dict[str, str] | None:
+        if not segs:
+            return None
+        mapping: dict[str, str] = {}
+        for s in segs:
+            sid, cid = s.get("segid"), s.get("chain_id")
+            if sid is not None and cid is not None:
+                mapping[str(sid)] = str(cid)
+        return mapping or None
+
     ca_path = run_dir / "charge_audit.json"
-    if not ca_path.exists():
-        return None
-    try:
-        ca = json.loads(ca_path.read_text())
-    except Exception:
-        return None
-    segs = (ca.get("topology_metadata") or {}).get("segments") or ca.get("segments")
-    if not segs:
-        return None
-    mapping: dict[str, str] = {}
-    for s in segs:
-        sid, cid = s.get("segid"), s.get("chain_id")
-        if sid is not None and cid is not None:
-            mapping[str(sid)] = str(cid)
-    return mapping or None
+    if ca_path.exists():
+        try:
+            ca = json.loads(ca_path.read_text())
+            segs = (ca.get("topology_metadata") or {}).get("segments") or ca.get("segments")
+            m = _segs_to_map(segs)
+            if m:
+                return m
+        except Exception:
+            pass
+
+    # Replica packages (no standalone charge_audit.json): the manifest carries the
+    # same map under its "charge_audit" field.
+    mf_path = run_dir / "manifest.json"
+    if mf_path.exists():
+        try:
+            ca = (json.loads(mf_path.read_text()) or {}).get("charge_audit") or {}
+            segs = (ca.get("topology_metadata") or {}).get("segments") or ca.get("segments")
+            return _segs_to_map(segs)
+        except Exception:
+            return None
+    return None
 
 
 def build_p_order_from_universe(u, chain_map: ChainMap, seg2chain: dict[str, str]):
@@ -290,6 +313,76 @@ def build_p_order_from_universe(u, chain_map: ChainMap, seg2chain: dict[str, str
             continue
         order.append(entry)
     return order, n_unmapped
+
+
+def build_termini_specs(u, chain_map: ChainMap, seg2chain: dict[str, str], p_order):
+    """Specs for recovering each strand's 5'-terminal nucleotide in a NAMD Universe.
+
+    The 5'-terminal base has NO phosphate — pdb2gmx strips the 5' P — so it is absent
+    from the P-indexed ``p_order`` and renders un-positioned/un-coloured in EVERY NAMD
+    view (flexibility map, trajectory scrub, live Display-MD).  Each such terminus is
+    recovered via its O5' atom, placed off its 3'-neighbour's P (which IS in ``p_order``).
+
+    Returns ``[(design_key, o5_atom_idx, c1_atom_idx, neighbour_p_order_idx), …]`` — one
+    per terminus.  Empty when the segid→chain map is unavailable (the same condition under
+    which ``build_p_order_from_universe`` is bypassed)."""
+    if not seg2chain:
+        return []
+    p_key_to_idx = {tuple(k): i for i, k in enumerate(p_order)}
+    specs: list[tuple] = []
+    dna = u.select_atoms("resname " + " ".join(_GRO_DNA_RESNAMES))
+    for res in dna.residues:
+        if len(res.atoms.select_atoms("name P")):
+            continue  # has a P → already in p_order
+        o5 = res.atoms.select_atoms("name O5'")
+        c1 = res.atoms.select_atoms("name C1'")
+        if not len(o5) or not len(c1):
+            continue
+        cid = seg2chain.get(str(getattr(res.atoms[0], "segid", "")))
+        if cid is None:
+            continue
+        key = chain_map.get((cid, int(res.resid)))               # 5' terminus design key
+        nbr_key = chain_map.get((cid, int(res.resid) + 1))       # its 3' neighbour (has P)
+        nbr_idx = p_key_to_idx.get(tuple(nbr_key)) if nbr_key is not None else None
+        if key is None or nbr_idx is None:
+            continue
+        specs.append((key, int(o5[0].index), int(c1[0].index), nbr_idx))
+    return specs
+
+
+def recover_termini(u, term_specs, p_raw, p_nm, R_align, box_nm, all_pos_A=None):
+    """Aligned NADOC-frame positions + base normals for the 5'-terminal nucleotides.
+
+    ``O5'_aligned = neighbourP_aligned + R·minimage(O5'_raw − neighbourP_raw)`` — the
+    terminus and its 3'-neighbour P undergo the same rigid transform, so rotating the local
+    O5'→neighbourP offset onto the neighbour's already-aligned position is exact.  The base
+    normal uses the O5'→C1' vector (the P→C1' analogue).  ``all_pos_A`` (Å) supplies the
+    frame's atom positions for the injected fast-path (else read from ``u``).  Returns
+    ``(term_pos (M,3) nm, term_norm (M,3))`` — empty arrays when there are no termini or no
+    alignment."""
+    if not term_specs or R_align is None:
+        return np.zeros((0, 3)), np.zeros((0, 3))
+    o5_idx = np.array([s[1] for s in term_specs])
+    c1_idx = np.array([s[2] for s in term_specs])
+    nbr = np.array([s[3] for s in term_specs])
+    if all_pos_A is not None:
+        o5_raw = all_pos_A[o5_idx] / 10.0
+        c1_raw = all_pos_A[c1_idx] / 10.0
+    else:
+        o5_raw = u.atoms[o5_idx].positions / 10.0
+        c1_raw = u.atoms[c1_idx].positions / 10.0
+    off = o5_raw - p_raw[nbr]      # O5' relative to its 3'-neighbour's raw P
+    dnn = c1_raw - o5_raw          # O5'→C1' base-normal proxy
+    if box_nm is not None:
+        for _d in range(3):
+            if box_nm[_d] > 0:
+                off[:, _d] -= np.round(off[:, _d] / box_nm[_d]) * box_nm[_d]
+                dnn[:, _d] -= np.round(dnn[:, _d] / box_nm[_d]) * box_nm[_d]
+    term_pos = p_nm[nbr] + off @ R_align.T
+    dnn = dnn @ R_align.T
+    tn = np.linalg.norm(dnn, axis=1, keepdims=True)
+    term_norm = dnn / np.where(tn > 1e-6, tn, 1.0)
+    return term_pos, term_norm
 
 
 def extract_from_gro(

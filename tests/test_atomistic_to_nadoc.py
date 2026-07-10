@@ -773,6 +773,35 @@ class TestSegidChainMap:
         (tmp_path / "charge_audit.json").write_text("{}")
         assert load_segid_chain_map(tmp_path) is None            # no segments
 
+    def test_fallback_to_manifest_charge_audit(self, tmp_path):
+        # Ensemble-replica production packages carry no standalone charge_audit.json,
+        # but their manifest.json embeds the same segment map under "charge_audit".
+        # Without this fallback the replica flexibility map drops the 5' termini.
+        import json
+        (tmp_path / "manifest.json").write_text(json.dumps({
+            "name_stem": "x",
+            "charge_audit": {"topology_metadata": {"segments": [
+                {"segid": "D000", "chain_id": "A"},
+                {"segid": "D001", "chain_id": "AA"},
+            ]}},
+        }))
+        assert load_segid_chain_map(tmp_path) == {"D000": "A", "D001": "AA"}
+
+    def test_standalone_charge_audit_wins_over_manifest(self, tmp_path):
+        import json
+        (tmp_path / "charge_audit.json").write_text(json.dumps({
+            "topology_metadata": {"segments": [{"segid": "D000", "chain_id": "A"}]}
+        }))
+        (tmp_path / "manifest.json").write_text(json.dumps({
+            "charge_audit": {"segments": [{"segid": "Z999", "chain_id": "ZZ"}]}
+        }))
+        assert load_segid_chain_map(tmp_path) == {"D000": "A"}
+
+    def test_manifest_without_charge_audit_returns_none(self, tmp_path):
+        import json
+        (tmp_path / "manifest.json").write_text(json.dumps({"name_stem": "x"}))
+        assert load_segid_chain_map(tmp_path) is None
+
 
 class TestBuildPOrderFromUniverse:
     @staticmethod

@@ -228,6 +228,16 @@ the whole per-job remote infra unchanged. Confirmed decisions: relax-once→N-pr
 (`base+i`); default **amilan CPU**; independence via **reinitvels** (same equilibrated
 coords, fresh MB velocities per seed).
 
+- **Flexibility-map fix (2026-07-09)**: a replica production package must ALSO carry
+  `charge_audit.json` (the segid→NADOC-chain map). `build_replica_package` originally
+  hardlinked only PSF/PDB/forcefield/hmr, so `load_segid_chain_map` fell back to the
+  reference-PDB P-order — which can't build the 21 phosphate-less 5'-termini specs → those
+  bases rendered un-positioned/un-coloured in the Flexibility map (RMSF returned 1307/1328
+  keys). Fix = two layers: (A) `build_replica_package` now `_link_or_copy`s
+  `charge_audit.json`; (B) `load_segid_chain_map` falls back to `manifest.json`'s embedded
+  `charge_audit` field when the standalone file is absent (fixes replicas already on disk —
+  the child manifest already carries the map). Verified on prod job `6d7c2e38e455`: RMSF
+  route now returns 1328/1328. See LESSONS A10.
 - **New module `backend/core/md_ensemble.py`**: `generate_seeds`, `build_replica_package`
   (production-only child pkg: hardlinks parent PSF/PDB/forcefield/hmr; copies the parent's
   `_production_ready_checkpoint` `output/{ready}.{coor,xsc}` → package-root
