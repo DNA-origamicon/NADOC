@@ -105,6 +105,9 @@ def _collect_active() -> list[dict]:
                 "design_name": j.design_name,
                 "design_source_path": j.design_source_path,
                 "status": j.status.value,
+                # Epoch seconds — lets the frontend break ties by most-recent job
+                # (e.g. defaulting the Simulate engine dropdown to the newest run).
+                "created_at": getattr(j, "created_at", None),
                 # "local" runs on this machine's GPU/CPU; "alpine" runs on the remote
                 # cluster and consumes no local resources — the concurrent-launch guard
                 # ignores remote jobs (they can't contend for the local GPU/disk).
@@ -136,6 +139,7 @@ def _collect_active() -> list[dict]:
                 "design_name": j.design_name,
                 "design_source_path": j.design_source_path,
                 "status": j.status.value,
+                "created_at": getattr(j, "created_at", None),
                 # oxDNA has no remote backend — every oxDNA job runs locally.
                 "execution_target": "local",
                 # A CUDA-backend oxDNA run holds the GPU; a CPU-backend run (e.g. an
@@ -174,6 +178,7 @@ def _collect_active() -> list[dict]:
                     "design_name": j.design_name,
                     "design_source_path": j.design_source_path,
                     "status": j.status.value,
+                    "created_at": getattr(j, "created_at", None),
                     "execution_target": "local",
                     "resource_class": res,
                     "eta_seconds": None,

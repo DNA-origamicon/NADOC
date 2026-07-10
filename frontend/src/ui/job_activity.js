@@ -55,6 +55,26 @@ export function activeJobForPath(activeJobs, path) {
   return (activeJobs || []).find(j => normPath(j.design_source_path) === key) || null
 }
 
+/** Pure: the engine key of the currently-busy (running/preparing) job for this
+ *  design path, or null when none is busy. Maps the backend NAMD engine key
+ *  ('md') to the Simulate selector's key ('namd'); the other four already match
+ *  ('oxdna'|'lammps'|'mrdna'|'cando'). Ties (several busy jobs on the same
+ *  design) break to the most recently created job (`created_at`, epoch seconds).
+ *  Used to default the Simulate engine dropdown to whatever the loaded design is
+ *  already simulating. */
+export function runningEngineForPath(activeJobs, path) {
+  const key = normPath(path)
+  if (!key) return null
+  const busy = (activeJobs || []).filter(
+    j => normPath(j.design_source_path) === key
+      && (j.status === 'running' || j.status === 'preparing'),
+  )
+  if (!busy.length) return null
+  busy.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
+  const eng = busy[0].engine
+  return eng === 'md' ? 'namd' : eng
+}
+
 /** Pure: hover-tooltip text for a file's activity spinner. */
 export function jobActivityTooltip(job) {
   if (!job) return ''

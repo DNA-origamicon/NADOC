@@ -200,6 +200,7 @@ import { initLammpsJobsPanel } from './ui/lammps_jobs_panel.js'
 import { initLammpsForcesSetup } from './ui/lammps_forces_setup.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initEngineSelector } from './ui/engine_selector.js'
+import { fetchActiveJobs, runningEngineForPath } from './ui/job_activity.js'
 import { initJobsPanelBase } from './ui/jobs_panel_base.js'
 import { initCandoDisplay } from './ui/cando_display.js'
 import { initCandoLegend } from './ui/cando_legend.js'
@@ -2052,10 +2053,12 @@ async function main() {
   // job (one shared /api/jobs/active poll drives all five headers).
   initEngineActivityHeaders()
 
-  // Simulate section: one engine dropdown fronts the 5 stacked engine panels —
-  // shows the selected engine's panel, hides the rest. (U4)
+  // Simulate section: one engine selector (segmented tabs) fronts the 5 stacked
+  // engine panels — shows the selected engine's panel, hides the rest — plus a
+  // capability strip (unsupported cards greyed-with-tooltip). (U4)
   const engineSelector = initEngineSelector({
     selectorMount: document.getElementById('engine-selector-mount'),
+    stripMount:    document.getElementById('engine-capability-strip'),
     panelEls: {
       oxdna:  document.getElementById('oxdna-jobs-panel'),
       lammps: document.getElementById('lammps-jobs-panel'),
@@ -2063,6 +2066,15 @@ async function main() {
       cando:  document.getElementById('cando-jobs-panel'),
       namd:   document.getElementById('md-jobs-panel'),
     },
+  })
+
+  // When a design is opened that is already running a simulation, default the
+  // Simulate engine selector to that engine (tie-break: the most recent job).
+  // Fires on every workspace-path change (i.e. each file open); leaves the
+  // selector untouched when the loaded design has no busy job.
+  window.addEventListener('nadoc:workspace-path-change', async () => {
+    const eng = runningEngineForPath(await fetchActiveJobs(), _workspacePath)
+    if (eng) engineSelector?.select?.(eng)
   })
 
   // Chain Simulations panel (above Simulate): a named-project queue of oxDNA/NAMD

@@ -26,14 +26,22 @@ Run/Stop/Resume buttons. Builds on the U-track (unified panel) work — the engi
 - User decisions (AskUserQuestion): one global master card · context buttons IN the card ·
   implement directly (no mockup) · structural changes first.
 
-## Phase A2 — selector = dropdown, strip removed (SHIPPED 2026-07-08, uncommitted)
-- Engine selector is now a **`<select>` dropdown** (`.engine-selector-dropdown`), not a
-  segmented button control. `engine_selector.js` factory builds one `<option>` per
-  `ENGINE_KEYS`; `select()` syncs `dropdown.value`. Old `.engine-selector-btn` / tablist
-  removed. Tests rewritten (dropdown options + change-event).
-- **Capability strip removed** — the `#engine-capability-strip` div, `renderStrip`,
-  `stripMount` param, and `.capability-chip`/`.engine-capability-strip` CSS are gone.
-  `selectedEngineCards()` (pure census) kept + still unit-tested, just no longer rendered.
+## Phase A2 — selector = dropdown, strip removed (SHIPPED 2026-07-08) → REVERTED 2026-07-10
+A2 briefly turned the selector into a `<select>` dropdown and deleted the capability strip.
+**Reverted 2026-07-10 at user request** ("we want the engine tabs back as well as the tags
+listing what each is capable of") — the segmented-tab selector + capability strip are the
+current shipped state again (identical to the U4/db4895f version; see next block). The
+oxDNA Advanced-card chevron fix from A2 was in a different file and is unaffected.
+- **RESTORED (current):** `engine_selector.js` + its test restored wholesale from db4895f —
+  segmented control (`.engine-selector-btn`, `role=tablist`, `is-active`), `stripMount` param,
+  `renderStrip` (one `.capability-chip` per `CARD_KEYS`; unsupported → `is-greyed` + reason
+  tooltip). `index.html`: `#engine-capability-strip` div back under `#engine-selector-mount`;
+  tab + strip + chip CSS restored (dropdown CSS removed). `main.js` passes `stripMount` again.
+- **oxDNA Advanced-card chevron bug fixed** (unchanged by the revert): markup was
+  `display:none;display:grid` (last wins → shown-on-load despite ▸), and the toggle opened with
+  `style.display=''` which stripped the inline rule to `.ox-card__body`'s block, losing the
+  2-col grid permanently. Now markup is `display:none` + grid props, toggle opens to
+  `display:'grid'`. Starts closed, toggles none↔grid cleanly (verified in-app).
 - **oxDNA Advanced-card chevron bug fixed**: markup was `display:none;display:grid` (last
   wins → shown-on-load despite ▸), and the toggle opened with `style.display=''` which
   stripped the inline rule to `.ox-card__body`'s block, losing the 2-col grid permanently.
@@ -299,6 +307,26 @@ Entirely in `chain_sim_panel.js` (no main.js change). Test: enqueue field A → 
 cards to field B + anchor → click ✎ → persisted stage is field B, same id (unit). App-verified
 on a throwaway project: ✎ renders, captured a changed prod-steps value (1234000) into the
 persisted stage, re-persisted, zero console errors. `just test-frontend` **2454**; `just smoke` 23/23.
+
+## Simulate dropdown defaults to the running engine (2026-07-09)
+
+User request: opening a design that is already simulating should default the Simulate
+engine dropdown to that engine (open a file running a NAMD job → dropdown = NAMD).
+Tie-break: the most recent job when several are busy on the same design.
+- **Backend:** `/api/jobs/active` (`routes_jobs._collect_active`) now carries `created_at`
+  (epoch seconds) on every entry — all 5 job models already have it. Needed for the
+  most-recent tie-break; nothing else consumed a timestamp before.
+- **Pure decision** `runningEngineForPath(activeJobs, path)` in
+  [job_activity.js](frontend/src/ui/job_activity.js): filters busy (running/preparing)
+  jobs matching the normalized `design_source_path`, sorts by `created_at` desc, returns
+  the winner's engine key, **mapping the backend `'md'` → the selector's `'namd'`** (the
+  other four keys already match). 5 unit tests.
+- **Wiring** (`main.js`, thin): a `nadoc:workspace-path-change` listener (fires on every
+  real workspace file-open via `_setWorkspacePath`) fetches active jobs and, when the
+  loaded design has a busy job, calls `engineSelector.select(eng)`. No-op when nothing is
+  busy (leaves the selector as-is). +import +listener, no cohesive logic.
+- **Live-verified** on the running dev servers: opened `6hbx100_noT.nadoc` (real active
+  NAMD job) via the library row → dropdown defaulted to `namd`, zero console errors.
 
 ## Verification + debt
 - Gates each slice: `just test-frontend` (vitest, **2439 passed** after Chain Simulations) +

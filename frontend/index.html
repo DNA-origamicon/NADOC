@@ -841,23 +841,53 @@
 
     /* ── Engine selector (U4 — Simulate section) ────────────────────── */
     .engine-selector {
-      margin-bottom: 10px;
-    }
-    .engine-selector-dropdown {
-      width: 100%;
+      display: flex;
+      gap: 2px;
       background: #0d1117;
       border: 1px solid #30363d;
       border-radius: 4px;
-      color: #c9d1d9;
+      padding: 2px;
+      margin-bottom: 8px;
+    }
+    .engine-selector-btn {
+      flex: 1;
+      min-width: 0;
+      background: transparent;
+      border: none;
+      border-radius: 3px;
+      color: #8b949e;
       font-size: var(--text-xs);
       font-weight: 600;
-      padding: 5px 6px;
+      padding: 4px 2px;
       cursor: pointer;
     }
-    .engine-selector-dropdown:hover { border-color: #484f58; }
-    .engine-selector-dropdown:focus {
-      outline: none;
-      border-color: #1f6feb;
+    .engine-selector-btn:hover { color: #c9d1d9; }
+    .engine-selector-btn.is-active {
+      background: #1f6feb;
+      color: #fff;
+    }
+    .engine-capability-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .capability-chip {
+      font-size: 10px;
+      line-height: 1.4;
+      padding: 1px 6px;
+      border-radius: 10px;
+      border: 1px solid #30363d;
+    }
+    .capability-chip.is-enabled {
+      color: #58a6ff;
+      border-color: #1f6feb55;
+      background: #1f6feb1a;
+    }
+    .capability-chip.is-greyed {
+      color: #545d68;
+      background: #161b22;
+      cursor: help;
     }
 
     /* ── Primitives library (Tools → Add Primitive) ─────────────────── */
@@ -3473,41 +3503,8 @@
           </div>
         </div>
 
-        <!-- ── Dynamics tab ──────────────────────────────────────────────── -->
+        <!-- ── Simulations tab (data-tab="dynamics") ─────────────────────── -->
         <div id="tab-content-dynamics" class="tab-content" hidden>
-
-          <!-- Cluster rigid transforms panel -->
-          <div class="panel-section" id="cluster-panel">
-            <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Movable Clusters</span>
-              <span id="cluster-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="cluster-panel-body" style="margin-top:8px">
-              <div id="cluster-list"></div>
-              <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
-                + New Cluster from Selection
-              </button>
-            </div>
-          </div>
-
-          <!-- Joints panel -->
-          <div class="panel-section" id="joints-panel">
-            <h2 id="joints-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
-              <span>Joints</span>
-              <span id="joints-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
-            </h2>
-            <div id="joints-panel-body" style="margin-top:8px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span style="font-size:var(--text-xs);color:#6e7681;flex-shrink:0">Cluster:</span>
-                <select id="joints-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)"></select>
-              </div>
-              <div id="joints-list"></div>
-              <button id="joints-place-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
-                + Place Joint
-              </button>
-            </div>
-          </div>
-
 
           <!-- ── Chain Simulations: queue oxDNA/NAMD relax→production chains that run unattended ──── -->
           <div class="panel-section" id="chain-sim-panel">
@@ -3547,6 +3544,7 @@
             </h2>
             <div id="simulate-body">
               <div id="engine-selector-mount"></div>
+              <div id="engine-capability-strip"></div>
 
           <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
           <div class="panel-section" id="oxdna-jobs-panel">
@@ -3841,7 +3839,7 @@
               </div>
 
               <!-- ── Graphs and Metrics (collapsible) ─────────────────────────── -->
-              <div class="ox-card" style="margin-top:8px">
+              <div class="ox-card">
                 <div id="oxdna-metrics-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="oxdna-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
@@ -3888,7 +3886,7 @@
               </div>
 
               <!-- ── Cross-engine shape comparison (S5, collapsible) ──────────── -->
-              <div class="ox-card" style="margin-top:8px">
+              <div class="ox-card">
                 <div id="shape-compare-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="shape-compare-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Shape comparison (cross-engine)</span>
                 </div>
@@ -4354,7 +4352,7 @@
               <!-- ── Display (mutually-exclusive viz modes; collapsible card) ────────── -->
               <!-- Always visible; the radios stay locked until a completed job is selected. -->
               <!-- All modes are Physical-layer / display-only (topology untouched). -->
-              <div class="ox-card" style="margin-top:8px">
+              <div class="ox-card">
                 <div id="cando-display-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
                   <span id="cando-display-arrow" style="display:inline-block;transition:transform .15s">▾</span><span class="ox-card__title">Visualizations</span>
                 </div>
@@ -4381,7 +4379,7 @@
               </div>
 
               <!-- ── Graphs and Metrics (per-bp flexibility + deviation; collapsible) ── -->
-              <div class="ox-card" style="margin-top:8px">
+              <div class="ox-card">
                 <div id="cando-metrics-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="cando-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
@@ -4546,7 +4544,7 @@
               </div>
 
               <!-- ── Graphs and Metrics (collapsible; MD twin of the oxDNA card) ── -->
-              <div class="ox-card" style="margin-top:8px">
+              <div class="ox-card">
                 <div id="md-metrics-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="md-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
@@ -5596,7 +5594,7 @@
       <div id="left-tab-strip">
         <button id="left-tab-toggle" title="Hide sidebar">◀</button>
         <button class="left-tab-btn active" data-tab="feature-log" title="Feature Log">Feature Log</button>
-        <button class="left-tab-btn"        data-tab="dynamics"     title="Dynamics">Dynamics</button>
+        <button class="left-tab-btn"        data-tab="dynamics"     title="Simulations">Simulations</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
         <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — high-resolution export" id="photo-tab-btn" data-test="photo-tab-btn">Photo</button>
         <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
@@ -6137,6 +6135,38 @@
           <button id="groups-new-btn" style="width:100%;margin-top:4px;padding:4px;background:#1c2a38;border:1px dashed #3a4a5a;border-radius:4px;color:#8b949e;font-size:11px;cursor:pointer">
             + New Group
           </button>
+        </div>
+
+        <!-- Cluster rigid transforms panel -->
+        <div class="panel-section" id="cluster-panel">
+          <h2 id="cluster-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Movable Clusters</span>
+            <span id="cluster-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="cluster-panel-body" style="margin-top:8px">
+            <div id="cluster-list"></div>
+            <button id="cluster-new-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
+              + New Cluster from Selection
+            </button>
+          </div>
+        </div>
+
+        <!-- Joints panel -->
+        <div class="panel-section" id="joints-panel">
+          <h2 id="joints-panel-heading" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+            <span>Joints</span>
+            <span id="joints-panel-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
+          </h2>
+          <div id="joints-panel-body" style="margin-top:8px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <span style="font-size:var(--text-xs);color:#6e7681;flex-shrink:0">Cluster:</span>
+              <select id="joints-cluster-sel" style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)"></select>
+            </div>
+            <div id="joints-list"></div>
+            <button id="joints-place-btn" class="panel-action-btn" style="width:100%;margin-top:6px" disabled>
+              + Place Joint
+            </button>
+          </div>
         </div>
 
         <!-- Overhang sequences panel (shown when overhangs exist) -->

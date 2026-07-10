@@ -76,6 +76,7 @@ describe('U4 pure selector state — driven by the U1 descriptor', () => {
 describe('U4 factory — wires the pure state to the DOM', () => {
   function harness() {
     const selectorMount = document.createElement('div')
+    const stripMount = document.createElement('div')
     const panelEls = {}
     for (const k of ENGINE_KEYS) {
       const el = document.createElement('div')
@@ -83,22 +84,19 @@ describe('U4 factory — wires the pure state to the DOM', () => {
       document.body.appendChild(el)
       panelEls[k] = el
     }
-    return { selectorMount, panelEls }
+    return { selectorMount, stripMount, panelEls }
   }
 
-  it('renders a dropdown with one option per engine in U1 order', () => {
+  it('renders one button per engine in U1 order', () => {
     const { selectorMount, panelEls } = harness()
     initEngineSelector({ selectorMount, panelEls })
-    const dropdown = selectorMount.querySelector('.engine-selector-dropdown')
-    expect(dropdown.tagName).toBe('SELECT')
-    const opts = [...dropdown.querySelectorAll('option')]
-    expect(opts.map((o) => o.value)).toEqual([...ENGINE_KEYS])
+    const btns = [...selectorMount.querySelectorAll('.engine-selector-btn')]
+    expect(btns.map((b) => b.dataset.engine)).toEqual([...ENGINE_KEYS])
   })
 
   it('shows exactly the selected panel and hides the other four', () => {
     const { selectorMount, panelEls } = harness()
     const sel = initEngineSelector({ selectorMount, panelEls, initial: ENGINE_KEYS[0] })
-    const dropdown = selectorMount.querySelector('.engine-selector-dropdown')
     for (const target of ENGINE_KEYS) {
       sel.select(target)
       expect(sel.getSelected()).toBe(target)
@@ -106,8 +104,9 @@ describe('U4 factory — wires the pure state to the DOM', () => {
         const hidden = panelEls[k].style.display === 'none'
         expect(hidden).toBe(k !== target)
       }
-      // dropdown value tracks the selection
-      expect(dropdown.value).toBe(target)
+      // active button marked
+      const active = selectorMount.querySelector('.engine-selector-btn.is-active')
+      expect(active.dataset.engine).toBe(target)
     }
   })
 
@@ -117,6 +116,25 @@ describe('U4 factory — wires the pure state to the DOM', () => {
     sel.select('bogus')
     expect(sel.getSelected()).toBe('namd')
     expect(panelEls.namd.style.display).not.toBe('none')
+  })
+
+  it('strip renders one chip per universe card; greyed chips carry the reason tooltip', () => {
+    const { selectorMount, stripMount, panelEls } = harness()
+    const sel = initEngineSelector({ selectorMount, stripMount, panelEls })
+    for (const e of ENGINE_KEYS) {
+      sel.select(e)
+      const chips = [...stripMount.querySelectorAll('.capability-chip')]
+      expect(chips.map((c) => c.dataset.card)).toEqual([...CARD_KEYS])
+      for (const chip of chips) {
+        const key = chip.dataset.card
+        if (supportsCard(e, key)) {
+          expect(chip.classList.contains('is-enabled')).toBe(true)
+        } else {
+          expect(chip.classList.contains('is-greyed')).toBe(true)
+          expect(chip.title).toBe(cardReason(e, key))
+        }
+      }
+    }
   })
 
   it('fires onSelect once per selection with the engine key', () => {
@@ -130,12 +148,11 @@ describe('U4 factory — wires the pure state to the DOM', () => {
     expect(onSelect).toHaveBeenCalledWith('cando')
   })
 
-  it('changing the dropdown selects that engine', () => {
+  it('clicking a segmented-control button selects that engine', () => {
     const { selectorMount, panelEls } = harness()
     const sel = initEngineSelector({ selectorMount, panelEls, initial: ENGINE_KEYS[0] })
-    const dropdown = selectorMount.querySelector('.engine-selector-dropdown')
-    dropdown.value = 'cando'
-    dropdown.dispatchEvent(new Event('change'))
+    const candoBtn = selectorMount.querySelector('.engine-selector-btn[data-engine="cando"]')
+    candoBtn.click()
     expect(sel.getSelected()).toBe('cando')
     expect(panelEls.cando.style.display).not.toBe('none')
   })

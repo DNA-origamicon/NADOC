@@ -61,6 +61,11 @@ def test_collect_active_covers_lammps_mrdna_cando(tmp_path, monkeypatch):
     # Carries the design source path (drives the welcome-row spinner match).
     assert by_engine["lammps"]["design_source_path"] == "/w/lam.nadoc"
 
+    # Carries created_at (epoch seconds) so the frontend can break ties by the
+    # most recent job (e.g. defaulting the Simulate engine dropdown).
+    for j in active:
+        assert isinstance(j["created_at"], (int, float))
+
 
 def test_collect_active_skips_non_busy_new_engines(tmp_path, monkeypatch):
     ws = tmp_path

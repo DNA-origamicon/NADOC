@@ -314,7 +314,7 @@
   border: var(--border-thin) solid var(--color-border-default);
   border-radius: 6px;
   background: rgba(177, 186, 196, 0.03);
-  margin-bottom: var(--space-3);
+  margin-bottom: 2px;
   overflow: hidden;
 }
 .ox-card:last-child { margin-bottom: 0; }

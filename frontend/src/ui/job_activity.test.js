@@ -9,6 +9,7 @@ import {
   isLocalJob,
   isGpuJob,
   runningEngines,
+  runningEngineForPath,
   diskWarningMessage,
 } from './job_activity.js'
 
@@ -90,6 +91,40 @@ describe('activeJobForPath', () => {
     expect(activeJobForPath(jobs, 'parts/missing.nadoc')).toBeNull()
     expect(activeJobForPath(jobs, '')).toBeNull()
     expect(activeJobForPath(null, 'x')).toBeNull()
+  })
+})
+
+describe('runningEngineForPath', () => {
+  it('returns the selector engine key of the busy job for the path', () => {
+    const jobs = [
+      { engine: 'oxdna', status: 'running', design_source_path: 'a.nadoc', created_at: 1 },
+      { engine: 'lammps', status: 'preparing', design_source_path: 'b.nadoc', created_at: 2 },
+    ]
+    expect(runningEngineForPath(jobs, 'a.nadoc')).toBe('oxdna')
+    expect(runningEngineForPath(jobs, 'b.nadoc')).toBe('lammps')
+  })
+  it("maps the backend NAMD key 'md' to the selector key 'namd'", () => {
+    const jobs = [{ engine: 'md', status: 'running', design_source_path: 'a.nadoc', created_at: 1 }]
+    expect(runningEngineForPath(jobs, 'a.nadoc')).toBe('namd')
+  })
+  it('breaks ties on the same design by the most recent created_at', () => {
+    const jobs = [
+      { engine: 'oxdna', status: 'running', design_source_path: 'a.nadoc', created_at: 10 },
+      { engine: 'md', status: 'running', design_source_path: 'a.nadoc', created_at: 20 },
+    ]
+    expect(runningEngineForPath(jobs, 'a.nadoc')).toBe('namd')
+  })
+  it('ignores jobs that are not busy or belong to another design', () => {
+    const jobs = [
+      { engine: 'oxdna', status: 'completed', design_source_path: 'a.nadoc', created_at: 5 },
+      { engine: 'mrdna', status: 'running', design_source_path: 'other.nadoc', created_at: 9 },
+    ]
+    expect(runningEngineForPath(jobs, 'a.nadoc')).toBeNull()
+  })
+  it('returns null for an empty path or no jobs', () => {
+    expect(runningEngineForPath([], 'a.nadoc')).toBeNull()
+    expect(runningEngineForPath(null, 'a.nadoc')).toBeNull()
+    expect(runningEngineForPath([{ engine: 'oxdna', status: 'running', design_source_path: 'a.nadoc' }], '')).toBeNull()
   })
 })
 
