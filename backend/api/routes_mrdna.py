@@ -116,7 +116,16 @@ class CreateMrdnaJobRequest(BaseModel):
                     "{\"field_pN\": <force per NUCLEOTIDE, pN>, \"dir\": [x,y,z]}) applied "
                     "as a constant per-bead force via ARBD force grids, scaled by each "
                     "bead's nucleotide content. A JOB-REQUEST annotation, never a Design "
-                    "edit. Requires >=1 anchor to hold against COM drift.",
+                    "edit. Requires >=1 anchor (or an opposing surface) to hold against "
+                    "COM drift.",
+    )
+    surface:       Optional[dict] = Field(
+        None,
+        description="Hard-surface (repulsion-plane) descriptor (shared oxDNA/LAMMPS form: "
+                    "{\"dir\": [x,y,z], \"offset_nm\": d, \"stiff\": s}) realised as a "
+                    "one-sided harmonic wall via an ARBD grid potential. A JOB-REQUEST "
+                    "annotation, never a Design edit. A field pressing straight into the "
+                    "surface is held by its reaction, so it needs no strand anchor.",
     )
 
 
@@ -137,6 +146,19 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
     design = design_state.get_or_404()
     if not design.helices:
         raise HTTPException(400, "Design has no helices to relax.")
+
+    if body.surface:
+        from backend.core.mrdna_surface import parse_surface
+        try:
+            parsed_surface = parse_surface(body.surface)
+        except (ValueError, TypeError):
+            parsed_surface = None
+        if parsed_surface is None:
+            raise HTTPException(
+                400,
+                "Malformed surface: expected {\"dir\": [x,y,z], \"offset_nm\": d, "
+                "\"stiff\": <non-zero>} with a non-zero direction.",
+            )
 
     if body.field:
         from backend.core.mrdna_field import parse_field
@@ -173,6 +195,7 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
         device             = body.device,
         anchors            = body.anchors,
         e_field            = body.field,
+        surface            = body.surface,
         design_source_path = body.design_source_path,
         design_fingerprint = oxdna_design_fingerprint(design),
         feature_log_position = effective_feature_log_position(design),

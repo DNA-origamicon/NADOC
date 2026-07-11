@@ -429,6 +429,9 @@ _SLOW_TESTS = {
     "test_real_arbd_anchored_beads_hold",
     # M2 mrDNA E-field: two real ARBD coarse runs (field-on vs off deflection probe).
     "test_real_arbd_field_deflects_along_field",
+    # M7 mrDNA hard surface: two real ARBD coarse runs (field-into-surface deposition
+    # vs unbounded free drift).
+    "test_real_arbd_field_deposits_on_surface",
     # M5 mrDNA shape source: a real ARBD coarse run → trajectory RMSF + ready source.
     "test_real_mrdna_trajectory_rmsf_and_source_ready",
     # N4 NAMD shape source: real NAMD DCD → md_rmsf → ready gold-override source.

@@ -72,6 +72,12 @@ class MrdnaJob:
     # ``stages`` so the ``field`` attribute name doesn't shadow ``dataclasses.field``
     # used just above.)
     e_field:             Optional[dict] = None
+    # Hard-surface (repulsion-plane) descriptor (shared cross-engine form: {"dir":
+    # [x,y,z], "offset_nm": d, "stiff": s}) realised as a one-sided harmonic wall via an
+    # ARBD grid potential.  A JOB-REQUEST annotation, never a Design edit; a field
+    # pressing INTO the surface is held by its reaction (no strand anchor needed).  See
+    # backend/core/mrdna_surface.py.
+    surface:             Optional[dict] = None
     error:               Optional[str] = None
     arbd_pid:            Optional[int] = None
     design_source_path:  Optional[str] = None
@@ -116,6 +122,7 @@ class MrdnaJob:
         data.setdefault("design_source_path", None)
         data.setdefault("anchors", None)
         data.setdefault("e_field", None)
+        data.setdefault("surface", None)
         data.setdefault("sim_seconds", None)
         data.setdefault("n_override", None)
         data.setdefault("n_beads", None)
@@ -164,6 +171,7 @@ def new_mrdna_job(
     device: str = "0",
     anchors: Optional[list] = None,
     e_field: Optional[dict] = None,
+    surface: Optional[dict] = None,
     design_source_path: Optional[str] = None,
     design_fingerprint: Optional[str] = None,
     feature_log_position: Optional[int] = None,
@@ -183,6 +191,7 @@ def new_mrdna_job(
         device             = device,
         anchors            = anchors,
         e_field            = e_field,
+        surface            = surface,
         stages             = stages,
         design_source_path = design_source_path,
         design_fingerprint = design_fingerprint,

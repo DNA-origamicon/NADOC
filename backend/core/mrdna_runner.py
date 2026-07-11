@@ -805,6 +805,18 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
             logger.info("mrdna job %s: installed E-field on %d bead type(s)",
                         job.job_id, n_types)
 
+        # Hard surface (job-request annotation, never a topology edit): a one-sided
+        # repulsion plane from the shared {dir, offset_nm, stiff} descriptor, applied via
+        # an ARBD grid potential.  Installed AFTER the field so its regen wrapper is the
+        # outer one — on every bead regeneration the field re-applies (overwrite) first
+        # and the surface re-appends after, so both grids survive.  See
+        # backend/core/mrdna_surface.py.
+        if job.surface:
+            from backend.core.mrdna_surface import install_surface_force
+            n_surf = install_surface_force(design, model, job.surface, out_dir=jd)
+            logger.info("mrdna job %s: installed hard surface on %d bead type(s)",
+                        job.job_id, n_surf)
+
         if _cancelled():
             raise _Cancelled()
 
