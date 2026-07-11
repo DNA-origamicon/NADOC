@@ -1075,9 +1075,28 @@ def oxdna_backbone_site(cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray) -> np
     return cm_nm + (_POS_MM_BACK1 * a1 + _POS_MM_BACK2 * a2) * OXDNA_LENGTH_UNIT
 
 
+def oxdna_backbone_sites(cm_nm: np.ndarray, a1: np.ndarray, a3: np.ndarray) -> np.ndarray:
+    """Vectorized :func:`oxdna_backbone_site` over stacked ``(N, 3)`` arrays — one
+    ``np.cross`` for the whole frame instead of one per nucleotide.  Per-call numpy
+    dispatch on 3-vectors dominates the composite-trajectory build (hundreds of frames ×
+    tens of thousands of nucleotides), so the batched form is ~20× faster there."""
+    a2 = np.cross(a3, a1)                              # (N,3) × (N,3) → (N,3), single call
+    return cm_nm + (_POS_MM_BACK1 * a1 + _POS_MM_BACK2 * a2) * OXDNA_LENGTH_UNIT
+
+
 def _parse_box_nm(conf_path: str | Path) -> Optional[np.ndarray]:
-    """Read the oxDNA box edge lengths (`b = Lx Ly Lz`) → per-axis nm, or None."""
-    for line in Path(conf_path).read_text(encoding="utf-8").splitlines():
+    """Read the oxDNA box edge lengths (`b = Lx Ly Lz`) → per-axis nm, or None.
+
+    The ``b =`` line is the second line of the first frame, so read only a small head
+    of the file — slurping a multi-hundred-MB trajectory just to reach line 2 was a
+    measurable slice of the composite-trajectory load."""
+    from itertools import islice
+    try:
+        with Path(conf_path).open("r", encoding="utf-8") as fh:
+            head = list(islice(fh, 8))
+    except OSError:
+        return None
+    for line in head:
         s = line.strip()
         if s.startswith("b"):
             parts = s.replace("=", " ").split()
@@ -1189,6 +1208,94 @@ def _build_unwrap_adjacency(relax: dict[tuple, dict], design: Design) -> dict[tu
     return adj
 
 
+def _build_unwrap_plan(relax: dict[tuple, dict], design: Design,
+                       adj: Optional[dict] = None) -> dict:
+    """Precompute the constant traversal structure the unwrap BFS needs so a whole
+    trajectory can be unwrapped with vectorized numpy instead of a per-nucleotide
+    Python graph walk on every frame.
+
+    Replays the EXACT DFS ``unwrap_align_to_reference`` uses (seed order = ``relax``
+    key order, LIFO ``stack.pop()``, neighbour order = ``adj[u]``) and records, in
+    discovery order: the key sequence, each node's parent index, and its connected-
+    component id.  Depends only on topology + the key set (constant for a design/
+    frame-shape), so it is cached per key set and reused for every frame.  See
+    :func:`_apply_unwrap_plan`."""
+    if adj is None:
+        adj = _build_unwrap_adjacency(relax, design)
+    order: list[tuple] = []
+    parent: list[int] = []
+    comp: list[int] = []
+    idx_of: dict[tuple, int] = {}
+    cid = -1
+    for seed in relax:
+        if seed in idx_of:
+            continue
+        cid += 1
+        idx_of[seed] = len(order); order.append(seed); parent.append(-1); comp.append(cid)
+        stack = [seed]
+        while stack:
+            u = stack.pop()
+            for v in adj[u]:
+                if v in idx_of:
+                    continue
+                idx_of[v] = len(order); order.append(v)
+                parent.append(idx_of[u]); comp.append(cid)
+                stack.append(v)
+    return {"order": order,
+            "parent": np.array(parent, dtype=np.int64),
+            "comp": np.array(comp, dtype=np.int64),
+            "n_comp": cid + 1}
+
+
+def _apply_unwrap_plan(relax: dict[tuple, dict], ref: dict[tuple, dict],
+                       box: np.ndarray, plan: dict) -> dict[tuple, np.ndarray]:
+    """Vectorized equivalent of ``unwrap_align_to_reference``'s BFS + per-component
+    box-shift, using a precomputed :func:`_build_unwrap_plan`.  Returns ``{key: placed
+    position}`` identical (to float precision) to the graph-walk version.
+
+    The BFS min-image recurrence ``placed[v] = raw[v] − box·round((raw[v] −
+    placed[parent])/box)`` telescopes to ``placed = raw + box·K`` where the integer
+    shift ``K[v] = K[parent] − round((raw[v] − raw[parent])/box)`` — a tree prefix-sum
+    of a fully vectorized local term.  When nothing wraps (the common case for a
+    compact relaxed structure) every local term is 0 and the prefix-sum is skipped."""
+    order = plan["order"]; parent = plan["parent"]; comp = plan["comp"]; ncomp = plan["n_comp"]
+    n = len(order)
+    raw = np.empty((n, 3))
+    for i, k in enumerate(order):
+        raw[i] = relax[k]["backbone_position"]
+
+    K = np.zeros((n, 3))
+    has_parent = parent >= 0
+    if has_parent.any():
+        K[has_parent] = -np.round((raw[has_parent] - raw[parent[has_parent]]) / box)
+        if K.any():                                   # something wraps → prefix-sum along the tree
+            for i in range(n):                        # parents precede children in discovery order
+                p = parent[i]
+                if p >= 0:
+                    K[i] += K[p]
+    placed = raw + box * K if K.any() else raw
+
+    # Box-shift each component toward its reference image (mean over comp nodes present
+    # in ref).  Vectorized via segment sums over the component ids.
+    psum = np.zeros((ncomp, 3)); pcnt = np.zeros(ncomp)
+    np.add.at(psum, comp, placed); np.add.at(pcnt, comp, 1.0)
+    pc = psum / pcnt[:, None]                          # placed centroid per component
+    in_ref = np.fromiter((k in ref for k in order), dtype=bool, count=n)
+    shift = np.zeros((ncomp, 3))
+    if in_ref.any():
+        rpos = np.zeros((n, 3))
+        for i, k in enumerate(order):
+            if in_ref[i]:
+                rpos[i] = ref[k]["backbone_position"]
+        rsum = np.zeros((ncomp, 3)); rcnt = np.zeros(ncomp)
+        np.add.at(rsum, comp[in_ref], rpos[in_ref]); np.add.at(rcnt, comp[in_ref], 1.0)
+        has = rcnt > 0
+        oc = np.zeros((ncomp, 3)); oc[has] = rsum[has] / rcnt[has, None]
+        shift[has] = box * np.round((oc[has] - pc[has]) / box)
+    placed = placed + shift[comp]
+    return {k: placed[i] for i, k in enumerate(order)}
+
+
 def unwrap_align_to_reference(
     relax: dict[tuple, dict],
     ref:   dict[tuple, dict],
@@ -1200,6 +1307,7 @@ def unwrap_align_to_reference(
     align:      bool = True,
     extra_points: Optional[list] = None,
     adj:        Optional[dict] = None,
+    plan:       Optional[dict] = None,
 ):
     """In-memory core of read_configuration_unwrapped: BFS-unwrap each bonded
     component to whole, box-shift it toward its reference image, then superpose
@@ -1219,35 +1327,42 @@ def unwrap_align_to_reference(
 
     ``adj`` may be a precomputed bond-adjacency (:func:`_build_unwrap_adjacency`);
     when omitted it is built here.  A live session passes a cached one so the
-    constant topology graph is not rebuilt every frame."""
-    if adj is None:
-        adj = _build_unwrap_adjacency(relax, design)
+    constant topology graph is not rebuilt every frame.  ``plan`` is a precomputed
+    :func:`_build_unwrap_plan` — when supplied (and no ``extra_points``), the BFS +
+    per-component box-shift run as vectorized numpy instead of a per-nucleotide Python
+    graph walk (identical result to float precision), the big win for the whole-
+    trajectory composite build."""
+    if plan is not None and extra_points is None:
+        placed = _apply_unwrap_plan(relax, ref, box, plan)
+    else:
+        if adj is None:
+            adj = _build_unwrap_adjacency(relax, design)
 
-    placed: dict[tuple, np.ndarray] = {}
-    for seed in relax:
-        if seed in placed:
-            continue
-        # BFS this component, unwrapping to whole.
-        comp = [seed]
-        placed[seed] = relax[seed]["backbone_position"].copy()
-        stack = [seed]
-        while stack:
-            u = stack.pop()
-            for v in adj[u]:
-                if v in placed:
-                    continue
-                p = relax[v]["backbone_position"].copy()
-                placed[v] = p - box * np.round((p - placed[u]) / box)
-                comp.append(v)
-                stack.append(v)
-        # Box-shift the whole component toward its reference image.
-        ref_keys = [k for k in comp if k in ref]
-        if ref_keys:
-            rc = np.mean([placed[k] for k in comp], axis=0)
-            oc = np.mean([ref[k]["backbone_position"] for k in ref_keys], axis=0)
-            shift = box * np.round((oc - rc) / box)
-            for k in comp:
-                placed[k] = placed[k] + shift
+        placed: dict[tuple, np.ndarray] = {}
+        for seed in relax:
+            if seed in placed:
+                continue
+            # BFS this component, unwrapping to whole.
+            comp = [seed]
+            placed[seed] = relax[seed]["backbone_position"].copy()
+            stack = [seed]
+            while stack:
+                u = stack.pop()
+                for v in adj[u]:
+                    if v in placed:
+                        continue
+                    p = relax[v]["backbone_position"].copy()
+                    placed[v] = p - box * np.round((p - placed[u]) / box)
+                    comp.append(v)
+                    stack.append(v)
+            # Box-shift the whole component toward its reference image.
+            ref_keys = [k for k in comp if k in ref]
+            if ref_keys:
+                rc = np.mean([placed[k] for k in comp], axis=0)
+                oc = np.mean([ref[k]["backbone_position"] for k in ref_keys], axis=0)
+                shift = box * np.round((oc - rc) / box)
+                for k in comp:
+                    placed[k] = placed[k] + shift
 
     # Protein beads (extra_points): unwrap the protein as one rigid component and
     # box-shift it toward the DNA assembly (it is tethered/near the DNA), so it
@@ -1300,14 +1415,17 @@ def unwrap_align_to_reference(
         U, _, Vt = np.linalg.svd(H)
         d = np.sign(np.linalg.det(Vt.T @ U.T))
         R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T                  # rotation: relaxed → reference
-        out: dict[tuple, dict] = {}
-        for k in keys:
-            v = relax[k]
-            out[k] = {
-                "backbone_position": R @ (placed[k] - Pc) + Qc,
-                "a1": R @ v["a1"],
-                "a3": R @ v["a3"],
-            }
+        # Apply the rotation to EVERY nucleotide's position + a1 + a3 in three batched
+        # matmuls (``R @ v ≡ v @ R.T``) instead of one 3×3 matvec per nucleotide — the
+        # dominant cost of the composite build on large structures.
+        pos = np.array([placed[k] for k in keys])
+        a1 = np.array([relax[k]["a1"] for k in keys])
+        a3 = np.array([relax[k]["a3"] for k in keys])
+        posR = (pos - Pc) @ R.T + Qc
+        a1R = a1 @ R.T
+        a3R = a3 @ R.T
+        out = {k: {"backbone_position": posR[i], "a1": a1R[i], "a3": a3R[i]}
+               for i, k in enumerate(keys)}
         return _ret(out, xform=lambda p: R @ (p - Pc) + Qc)
 
     return _ret({k: {**relax[k], "backbone_position": placed[k]} for k in keys})
@@ -1326,6 +1444,32 @@ def _parse_trajectory_frame_lines(
     to the nucleotide order length.
     """
     offset = _protein_lead_offset(data, order)   # skip leading protein beads (hybrid)
+    rows = data[offset:offset + len(order)]
+
+    # FAST PATH: a complete, well-formed frame parses in one vectorized shot — split
+    # every row into a single (N, 9+) float array, then normalize a1/a3 for the whole
+    # frame at once (one np.linalg.norm instead of one per nucleotide).  This is the
+    # common case (any finished stage) and the dominant cost of the composite build.
+    if len(rows) == len(order) and rows:
+        try:
+            ncol = len(rows[0].split())
+            # One C-level parse of the whole frame block (each oxDNA conf row is a fixed
+            # column count) beats 14k Python str.split()+float() calls.
+            flat = np.fromstring(" ".join(rows), sep=" ", dtype=float)
+            if ncol >= 9 and flat.size == len(rows) * ncol:
+                arr = flat.reshape(len(rows), ncol)
+                pos = arr[:, 0:3] * OXDNA_LENGTH_UNIT
+                a1 = arr[:, 3:6]; a3 = arr[:, 6:9]
+                a1n = a1 / (np.linalg.norm(a1, axis=1, keepdims=True) + 1e-14)
+                a3n = a3 / (np.linalg.norm(a3, axis=1, keepdims=True) + 1e-14)
+                return {(key if copies else key[:3]):
+                        {"backbone_position": pos[i], "a1": a1n[i], "a3": a3n[i]}
+                        for i, key in enumerate(order)}
+        except (ValueError, TypeError):
+            pass   # ragged / half-written row → fall through to the tolerant per-row path
+
+    # SLOW PATH (tolerant): a frame still being written by a live oxDNA run can leave a
+    # half-flushed numeric token on the final line; parse row by row and skip any bad one.
     m: dict[tuple, dict] = {}
     for i, key in enumerate(order):
         if offset + i >= len(data):
@@ -1336,9 +1480,6 @@ def _parse_trajectory_frame_lines(
         try:
             vals = [float(x) for x in parts[:9]]
         except ValueError:
-            # A frame still being written by a live oxDNA run can leave a
-            # half-flushed numeric token on the final line; skip it rather than
-            # crash a mid-run progress/trajectory read.
             continue
         a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
         m[key if copies else key[:3]] = {
@@ -1370,6 +1511,53 @@ def read_trajectory_frames_full(
         if m:
             frames.append(m)
     return frames
+
+
+def read_trajectory_frames_at(
+    traj_path: str | Path,
+    design:    Design,
+    indices,
+    *,
+    copies:    bool = False,
+) -> dict[int, dict[tuple, dict]]:
+    """Parse ONLY the frames at ``indices`` (0-based positions in the sequence of
+    ``t = …`` headers), streaming the file so unwanted frames are never held in memory
+    or coordinate-parsed.  Returns ``{header_index: per-nucleotide map}`` (same map shape
+    as :func:`read_trajectory_frames_full`); a malformed / half-written frame is omitted
+    from the result (as the full reader drops empty frames).
+
+    This is the downsample-FIRST fast path for the composite trajectory: the scrub player
+    keeps ≤ ~200 frames, so parsing + Kabsch-aligning ALL of a multi-thousand-frame run
+    just to discard 95 % of it is the dominant load cost.  Cheaply counting headers
+    (:func:`~backend.core.oxdna_health.count_trajectory_frames`), deciding the stride, then
+    parsing only the survivors turns that into O(kept) instead of O(total)."""
+    order = _strand_nucleotide_order(design)
+    want = {int(i) for i in indices}
+    out: dict[int, dict] = {}
+    if not want:
+        return out
+    header_idx = -1
+    cur_idx = -1
+    buf: Optional[list[str]] = None      # accumulating a wanted frame's lines, else None
+    with Path(traj_path).open("r", encoding="utf-8") as fh:
+        for line in fh:
+            if line.startswith("t "):
+                if buf is not None:
+                    m = _parse_trajectory_frame_lines(buf, order, copies=copies)
+                    if m:
+                        out[cur_idx] = m
+                    buf = None
+                header_idx += 1
+                if header_idx in want:
+                    buf, cur_idx = [], header_idx
+                continue
+            if buf is not None and line.strip() and not line.startswith(("b ", "E ")):
+                buf.append(line)
+        if buf is not None:              # flush the final wanted frame (no trailing header)
+            m = _parse_trajectory_frame_lines(buf, order, copies=copies)
+            if m:
+                out[cur_idx] = m
+    return out
 
 
 def read_latest_trajectory_frame_full(

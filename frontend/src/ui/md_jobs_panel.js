@@ -751,6 +751,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (_fetchFails > 0) { _fetchFails = 0; _checkEngines() }  // reconnected → restore status line
       _renderList()
       _selectBestJob()
+      _notifyIfJobsChanged()
       if (displayToggle?.checked) _refreshMdDisplay()
       else _refreshMdPrewarm()
     } catch (err) {
@@ -764,6 +765,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         namdStatusEl.style.color = _C.err
       }
     }
+  }
+
+  // Wake the master job list + progress bar (simulate_jobs.js, the VISIBLE list) whenever
+  // THIS panel's job set/statuses change — a relax/production launch, resume, stop, Alpine
+  // submit, or completion. The master self-polls only while it already holds an active
+  // node, so a run launched while it's idle would otherwise not surface until a manual
+  // page refresh.
+  let _prevJobsSig = null
+  function _notifyIfJobsChanged() {
+    const sig = _jobs.map(j => `${j.job_id}:${j.status}`).sort().join('|')
+    if (_prevJobsSig !== null && sig !== _prevJobsSig) {
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    }
+    _prevJobsSig = sig
   }
 
   function _selectBestJob() {

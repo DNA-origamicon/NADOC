@@ -21,12 +21,13 @@
  * sync with the panels until U2–U4 delete them; the test fails loudly otherwise.
  */
 
-// Engine keys in sidebar-panel order (oxDNA, mrDNA, CanDo, NAMD). "namd" is the
-// backend/engine key; its DOM ids use the historical "md-" prefix.
-// LAMMPS is deliberately NOT a selectable engine: it's the auto-policy's CPU fallback
-// (GPU busy → same oxDNA2 FF on multi-core), so its runs appear in the unified Simulate
-// job list with an [L] badge instead of behind a tab (Phase C).
-export const ENGINE_KEYS = ['oxdna', 'mrdna', 'cando', 'namd']
+// Engine keys in sidebar-tab order — fast→accurate: CanDo (FEM) · mrDNA · oxDNA · NAMD
+// (all-atom). "namd" is the backend/engine key; its DOM ids use the historical "md-"
+// prefix. The Simulate default engine stays oxDNA (passed as `initial` in main.js), not
+// ENGINE_KEYS[0]. LAMMPS is deliberately NOT a selectable engine: it's the auto-policy's
+// CPU fallback (GPU busy → same oxDNA2 FF on multi-core), so its runs appear in the
+// unified Simulate job list with an [L] badge instead of behind a tab (Phase C).
+export const ENGINE_KEYS = ['cando', 'mrdna', 'oxdna', 'namd']
 
 export const ENGINE_LABELS = {
   oxdna: 'oxDNA',

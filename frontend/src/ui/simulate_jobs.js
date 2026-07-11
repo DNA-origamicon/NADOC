@@ -94,6 +94,13 @@ export function masterProgressPct(node) {
     if (!seg.length) return 0
     return Math.round((seg.filter((s) => s.status === 'done').length / seg.length) * 100)
   }
+  // oxDNA: prefer the live within-stage fraction the backend stamps on a running job
+  // (so a SINGLE-stage run — e-field / surface / production child — advances smoothly
+  // instead of sitting at 0 % until its one stage flips to done). Fall back to the
+  // completed-stage count for jobs without it (queued / older list payloads).
+  if (node.progress_fraction != null) {
+    return Math.max(0, Math.min(100, Math.round(Number(node.progress_fraction) * 100)))
+  }
   const st = node.stages || []
   if (!st.length) return 0
   return Math.round((st.filter((s) => s.status === 'done').length / st.length) * 100)
@@ -521,6 +528,11 @@ export function initSimulateJobs({
     _sel = { engine: null, id: null }
     _fetch()
   })
+  // A job launched / stopped / resumed from an engine panel (each polls its OWN hidden
+  // list) must WAKE the master: its poll re-arms only while it already has an active
+  // node, so a launch made while the master is idle would otherwise not surface until a
+  // manual refresh. _fetch() picks up the new job AND re-arms the poll from there.
+  window.addEventListener('nadoc:sim-jobs-changed', () => _fetch())
 
   // ── engine scope: filter to the active tab + "Show all job types" toggle ───
   function _engineTabName() {

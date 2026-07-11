@@ -15,7 +15,6 @@
  * via dynamic import of api/client.js (mirrors md_jobs_panel usage).
  */
 
-import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { showToast } from './toast.js'
@@ -968,12 +967,27 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
           }
         }
       }
+      _notifyIfJobsChanged()
     }
     _base.schedulePoll()
   }
 
   function _hasActiveJob() {
     return _visibleJobs().some(j => ['queued', 'preparing', 'running'].includes(j.status))
+  }
+
+  // Wake the master job list + progress bar (simulate_jobs.js, the VISIBLE list) whenever
+  // THIS panel's job set/statuses change — a launch, stop, resume, autorefine, or
+  // completion. The master self-polls only while it already holds an active node, so a run
+  // launched while it's idle (e.g. a production run off a completed parent) would otherwise
+  // not surface until a manual page refresh. Fires from _fetchJobs so every path is covered.
+  let _prevJobsSig = null
+  function _notifyIfJobsChanged() {
+    const sig = _jobs.map(j => `${j.job_id}:${j.status}`).sort().join('|')
+    if (_prevJobsSig !== null && sig !== _prevJobsSig) {
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    }
+    _prevJobsSig = sig
   }
 
   function _onOpen() {
@@ -1758,7 +1772,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (!_selectedId || !oxdnaDisplay) return
     _trajBusy = true
     _setTrajStatus('Loading trajectory…', _C.accent)
-    const r = await oxdnaDisplay.loadTrajectory(_selectedId)
+    // Poll the backend build for accurate frames-processed progress (the align pass
+    // over a large structure runs for seconds) and render it into the status line.
+    const jobId = _selectedId
+    const poll = setInterval(async () => {
+      if (!_trajBusy) return
+      const p = await api.getOxdnaTrajectoryProgress(jobId).catch(() => null)
+      if (_trajBusy && p?.active && p.total > 0) {
+        const pct = Math.round((100 * p.done) / p.total)
+        _setTrajStatus(`Loading trajectory… ${pct}% (${p.done}/${p.total} frames)`, _C.accent)
+      }
+    }, 250)
+    let r
+    try {
+      r = await oxdnaDisplay.loadTrajectory(_selectedId)
+    } finally {
+      clearInterval(poll)
+    }
     _trajBusy = false
     if (r.ok) {
       if (trajControls) trajControls.style.display = ''
@@ -1812,31 +1842,21 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     })
     _seeding = false
     if (job?.job_id && job.status !== 'failed') {
-      _setSeedStatus('NAMD seed job created — see Molecular Dynamics below.', _C.ok)
+      _setSeedStatus('NAMD seed job created — see the NAMD tab.', _C.ok)
       showToast('NAMD seed job created from relaxed oxDNA structure', 'ok')
-      _revealMdPanel()
-      // Refresh the MD panel even if it was already open (reveal only refreshes
-      // on a collapse→expand), so the new preparing job appears + is selected.
+      // Surface the new NAMD job. The engine panels are tab-fronted now, so main.js
+      // switches the Simulate selector to the NAMD tab on this event. (The old
+      // `_revealMdPanel` collapsed THIS panel — hiding every oxDNA card — and clicked
+      // an `md-jobs-panel-heading` that no longer exists.) The MD panel also listens
+      // and fetches+selects the new job; sim-jobs-changed wakes the master list.
       window.dispatchEvent(new CustomEvent('nadoc:md-job-created', { detail: { jobId: job.job_id } }))
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
     } else {
       const detail = job?.error || api.lastErrorMessage?.()
       _setSeedStatus(detail || 'Failed to create NAMD seed (see console)', _C.err)
     }
     _updateButtons(_selectedJob())
   })
-
-  // Collapse this oxDNA panel and open the Molecular Dynamics panel so the new
-  // seeded job is visible right away.  Expanding MD via its own heading click
-  // keeps its collapse state consistent and refreshes its job list.
-  function _revealMdPanel() {
-    if (_base.isOpen()) {
-      setSectionCollapsed('dynamics', 'oxdna-jobs-panel', true)
-      _base.applyCollapsed(true)
-    }
-    if (getSectionCollapsed('dynamics', 'md-jobs-panel', true)) {
-      document.getElementById('md-jobs-panel-heading')?.click()
-    }
-  }
 
   // ── Detail actions ───────────────────────────────────────────────────────
   // Production-phase Stop takes a beat to register on the backend — busy-guard it so a

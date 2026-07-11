@@ -601,6 +601,26 @@ describe('initOxdnaJobsPanel — per-design job filtering', () => {
     await panel.refresh()
     expect(listText().toLowerCase()).toContain('no oxdna jobs')   // never leaks other designs' jobs
   })
+
+  it('fires nadoc:sim-jobs-changed when the job set changes, so the master list wakes', async () => {
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => currentPath })
+    let fired = 0
+    const onChange = () => { fired++ }
+    window.addEventListener('nadoc:sim-jobs-changed', onChange)
+    try {
+      await panel.refresh()          // baseline fetch (2 completed jobs)
+      fired = 0
+      // A production run now exists in the backend list for this design.
+      api.listOxdnaJobs.mockResolvedValue([
+        { job_id: 'a1', design_name: 'A', design_source_path: 'AlphaJob.nadoc', status: 'completed', created_at: 2, stages: [] },
+        { job_id: 'a2', design_name: 'A', design_source_path: 'AlphaJob.nadoc', status: 'running', created_at: 3, stages: [], parent_job_id: 'a1' },
+      ])
+      await panel.refresh()
+      expect(fired).toBeGreaterThanOrEqual(1)   // the master gets woken on the new running job
+    } finally {
+      window.removeEventListener('nadoc:sim-jobs-changed', onChange)
+    }
+  })
 })
 
 describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
@@ -999,27 +1019,25 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-seed-status').textContent.toLowerCase()).toContain('namd seed job created')
   })
 
-  it('on seed success → collapses the oxDNA panel and clicks the MD panel heading open', async () => {
-    // oxDNA panel open, MD panel collapsed (so seed should collapse oxDNA + open MD).
-    localStorage.setItem('nadoc.leftSidebar.sections.v1', JSON.stringify({
-      dynamics: { 'oxdna-jobs-panel': false, 'md-jobs-panel': true },
-    }))
-    const mdHeading = document.createElement('div'); mdHeading.id = 'md-jobs-panel-heading'
-    document.body.appendChild(mdHeading)
-    let mdClicked = 0; mdHeading.addEventListener('click', () => { mdClicked++ })
-
+  it('on seed success → keeps the oxDNA panel OPEN (cards stay) + fires nadoc:md-job-created for the tab switch', async () => {
+    // Regression: the old reveal collapsed THIS panel (hiding every oxDNA card) and
+    // clicked a removed `md-jobs-panel-heading`. The panels are tab-fronted now — main.js
+    // switches to the NAMD tab on the event; the panel must NOT collapse itself.
     api.createMdJob.mockResolvedValue({ job_id: 'md9', status: 'queued' })
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jSeed2', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
 
+    let seeded = null
+    window.addEventListener('nadoc:md-job-created', (e) => { seeded = e.detail?.jobId }, { once: true })
+
     expect($('oxdna-jobs-body').style.display).not.toBe('none')   // open before
     $('oxdna-jobs-seed-btn').click()
     await flush()
 
-    expect($('oxdna-jobs-body').style.display).toBe('none')        // oxDNA collapsed
-    expect(mdClicked).toBe(1)                                      // MD opened (was collapsed by default)
+    expect($('oxdna-jobs-body').style.display).not.toBe('none')   // STILL open — cards preserved
+    expect(seeded).toBe('md9')                                    // event drives the NAMD-tab switch
   })
 
   it('a still-running job → "Use as NAMD seed" stays disabled', async () => {

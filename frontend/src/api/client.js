@@ -2085,6 +2085,8 @@ export const getOxdnaRmsf         = (id)          => _oxdnaJSON('GET',  `/oxdna/
 export const getOxdnaTrajectory  = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory`)
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast. */
 export const getOxdnaTrajectoryMeta = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-meta`)
+/** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
+export const getOxdnaTrajectoryProgress = (id)   => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-progress`)
 /** Per-frame ATOMISTIC coords for trajectory frame indices (atomistic-batch wire
  *  format). Heavy — pass a downsampled index set. */
 export const getOxdnaFramesAtomistic = (id, frameIndices) =>

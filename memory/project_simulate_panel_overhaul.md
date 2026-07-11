@@ -9,6 +9,68 @@ metadata:
 
 # Simulate panel UX overhaul (2026-07-08, in progress)
 
+## ⚡ Tabs reordered fast→accurate + "Use as NAMD seed" wiped oxDNA cards — FIXED 2026-07-11
+Two user asks. (1) Engine tabs reordered to **CanDo · mrDNA · oxDNA · NAMD** (fast→accurate):
+`ENGINE_KEYS = ['cando','mrdna','oxdna','namd']` in `engine_capabilities.js` drives tab order;
+default selected engine stays **oxDNA** (main.js passes `initial:'oxdna'` — not ENGINE_KEYS[0]). A
+small **fast→accurate axis** (`#engine-speed-axis`: "Fast" → green→blue→purple gradient bar w/
+arrowhead → "Accurate") sits above the tabs in `#simulate-body`. Card *definitions* untouched — pure
+reorder. (2) **BUG:** clicking oxDNA's "Use as NAMD seed" made **every oxDNA card disappear** until
+reload. Root cause: the seed handler's obsolete `_revealMdPanel()` called `_base.applyCollapsed(true)`
+→ set `#oxdna-jobs-body` to `display:none`. Under the tab model (panels are `collapsible:false`, no
+header), re-selecting the oxDNA tab only re-shows the panel *wrapper* (`#oxdna-jobs-panel`), NOT the
+collapsed *body* — so cards stayed hidden; it also clicked a removed `md-jobs-panel-heading` (no-op).
+**Fix:** deleted `_revealMdPanel` (+ its now-unused `section_collapse_state` import); the seed handler
+just dispatches `nadoc:md-job-created` (+ `sim-jobs-changed`), and **main.js listens → `engineSelector
+.select('namd')`** to surface the new job. This also fixes mrDNA's seed (same event; it never switched
+tabs before). Live-verified: oxDNA cards survive the seed, NAMD tab activates, cards intact on return.
+Test `oxdna_jobs_panel.test.js` "on seed success" rewritten (was pinning the collapse bug) → asserts
+body stays open + event fires with jobId. `just test-frontend` **2617 pass**.
+
+
+## ⚡ Launch made while master list is IDLE didn't surface until refresh — FIXED 2026-07-11
+User: a production run launched off a completed parent "fails to properly initiate an update to the job
+list / progress bar unless I refresh" (hard to reproduce). **Root cause:** the master list+bar
+(`simulate_jobs.js`) self-polls ONLY while it already holds an active node (`_schedulePoll`:
+`_dynamicsActive && bodyVisible && _nodes.some(nodeIsActive)`). Launching off a *completed* parent means
+nothing is active at launch → master poll NOT armed. The oxDNA panel's launch handlers refresh their OWN
+(hidden) list via `_fetchJobs()` but never tell the master, and the master listened to no launch event →
+the new running job never appeared until a manual refresh / tab-switch / design-changed re-fired `_fetch()`.
+Intermittent because if ANY other job was active the master was already polling and caught it within
+`POLL_MS` (1500 ms). Backend was fine (job `running` on disk, `/simulate/jobs` listed it) — purely a missing
+frontend refresh trigger. **Fix:** `simulate_jobs.js` listens for `window` event `nadoc:sim-jobs-changed` →
+`_fetch()` (picks up the job AND re-arms its poll from there). **ALL FOUR engine panels** dispatch it: a
+`_notifyIfJobsChanged()` helper at the END of each panel's `_fetchJobs()` compares a signature of
+`${job_id}:${status}` across the panel's jobs and fires the event only when the set/statuses CHANGE (first
+fetch just seeds the baseline). This one choke-point covers every path — relax/production/coarse/fine launch,
+stop, resume, autorefine, Alpine submit, VRAM-retry/refit, and completion — with no per-poll spam and no
+chance of missing a launch site. mrDNA's "Use as NAMD seed" also dispatches directly (the new NAMD job isn't
+in mrDNA's own list). No feedback loop: only the master listens, and its `_fetch` doesn't re-dispatch.
+(oxDNA was first fixed with explicit per-site dispatches, then refactored to the same signature detector for
+uniformity + autorefine coverage.) Regressions: `simulate_jobs.test.js` "a nadoc:sim-jobs-changed event wakes
+the idle master list"; `oxdna_jobs_panel.test.js` "fires nadoc:sim-jobs-changed when the job set changes".
+`just test-frontend` **2617 pass**. **NOT verified in the running app** (won't launch a real sim in the
+user's live session; doc-context per-design-selection limit).
+
+## ⚡ Master progress bar sat at 0 % for single-stage runs — FIXED 2026-07-10
+**Regression from the "ONE master progress bar" slice.** `simulate_jobs.masterProgressPct`
+computed an oxDNA job's progress as **completed-stage count / total stages**. An e-field /
+surface / production *child* run is a SINGLE `1_production` stage, so while running it read
+`0/1 = 0 %` and only jumped to 100 % on completion — the user reported it as "hung" (it wasn't;
+the backend `/progress` correctly showed 77 %). The old per-panel bar (`oxdna_jobs_panel._renderProgress`)
+used the live within-stage `stage_fraction` from `/progress`; the master bar dropped it.
+- **Fix.** `oxdna_runner.job_overall_fraction(job, ws, specs)` — a lean `(done + running-stage
+  energy-line fraction) / n` (mirrors `job_progress()['overall']`, no ETA/health work). The
+  `/simulate/jobs` route stamps `progress_fraction` on every RUNNING oxDNA node; `masterProgressPct`
+  prefers it and falls back to the stage-count for queued/older payloads. Verified against the
+  LIVE server: the GT_corner_v2 e-field+surface run's node now carries `progress_fraction` (0.77→0.98
+  as it ran) so the bar advances. Tests: backend `test_job_overall_fraction_{single_stage_run_advances,
+  counts_done_stages}` (single-stage advances off 0, ==job_progress overall); frontend
+  `simulate_jobs.test.js` masterProgressPct-uses-live-fraction.
+- **NAMD note:** `masterProgressPct` still uses done-segment count for NAMD — coarse but non-zero for
+  multi-segment relaxes; a single-segment NAMD production would show the same 0-until-done coarseness
+  (not yet stamped with a live fraction). Left for when NAMD single-stage runs surface it.
+
 ## ⚡ Consolidated Archive/Delete above the jobs card · oxDNA autorefine button removed · dead-button audit — SHIPPED 2026-07-10
 Three user asks:
 - **ONE Archive + Delete pair** now sits in `#simulate-job-actions` (section-level, ABOVE the

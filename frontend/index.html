@@ -888,6 +888,35 @@
       padding-right: 0;
       border-bottom: none;
     }
+    /* Fast→accurate axis above the engine tabs (CanDo → NAMD). */
+    #engine-speed-axis {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 5px;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #8b949e;
+    }
+    .engine-speed-axis__label { flex: none; }
+    .engine-speed-axis__bar {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(to right, #3fb950, #58a6ff, #bc8cff);
+      position: relative;
+    }
+    .engine-speed-axis__bar::after {
+      content: '';
+      position: absolute;
+      right: -1px;
+      top: 50%;
+      transform: translateY(-50%);
+      border-left: 6px solid #bc8cff;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+    }
     .engine-capability-strip {
       display: flex;
       flex-wrap: wrap;
@@ -3563,6 +3592,13 @@
               <span id="simulate-arrow" class="icon icon--xs icon--rotates" style="color:var(--color-text-dim)" data-icon="chevron-down"></span>
             </h2>
             <div id="simulate-body">
+              <!-- Fast→accurate axis: the engine tabs below run left→right from the
+                   fastest (CanDo FEM) to the most accurate (NAMD all-atom). -->
+              <div id="engine-speed-axis" aria-hidden="true">
+                <span class="engine-speed-axis__label">Fast</span>
+                <span class="engine-speed-axis__bar"></span>
+                <span class="engine-speed-axis__label">Accurate</span>
+              </div>
               <div id="engine-selector-mount"></div>
               <div id="engine-capability-strip"></div>
               <!-- Auto engine-policy resource line: GPU state · free CPU cores · recommended engine -->

@@ -522,7 +522,21 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       }
       _renderDetail()
     }
+    _notifyIfJobsChanged()
     _base.schedulePoll()
+  }
+
+  // Wake the master job list + progress bar (simulate_jobs.js, the VISIBLE list) whenever
+  // THIS panel's job set/statuses change — a launch, autorefine, stop, or completion. The
+  // master self-polls only while it already holds an active node, so a run launched while
+  // it's idle would otherwise not surface until a manual page refresh.
+  let _prevJobsSig = null
+  function _notifyIfJobsChanged() {
+    const sig = _jobs.map(j => `${j.job_id}:${j.status}`).sort().join('|')
+    if (_prevJobsSig !== null && sig !== _prevJobsSig) {
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    }
+    _prevJobsSig = sig
   }
 
   function _hasActiveJob() {

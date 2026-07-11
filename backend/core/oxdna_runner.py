@@ -689,6 +689,24 @@ def _default_stage_rate(spec: OxdnaStageSpec, backend: str) -> float:
     return 1000.0 if (backend or "").upper() == "CUDA" else 400.0   # MD steps/s
 
 
+def job_overall_fraction(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> float:
+    """Lightweight overall progress fraction (0..1) for the unified job list: completed
+    stages plus the running stage's live energy-line fraction, WITHOUT the ETA / health
+    work :func:`job_progress` does.  Mirrors ``job_progress()['overall']`` so the master
+    progress bar reads the same as the per-stage bar — a SINGLE-stage run (e-field /
+    surface / production child) advances smoothly instead of sitting at 0 % until done."""
+    n = len(job.stages)
+    if not n:
+        return 0.0
+    done = sum(1 for s in job.stages if s.status == "done")
+    idx = job.current_stage_idx
+    stage_frac = 0.0
+    if 0 <= idx < n and idx < len(specs) and job.stages[idx].status == "running":
+        lines = _stage_energy_lines(job.stage_dir(workspace_dir, job.stages[idx].name))
+        stage_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
+    return (done + stage_frac) / n
+
+
 def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> dict:
     """Return overall + current-stage progress fractions + an ETA + a live health
     snapshot for the panel."""

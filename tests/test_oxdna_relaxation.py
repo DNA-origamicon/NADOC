@@ -873,6 +873,45 @@ def test_job_progress_eta(tmp_path):
     assert 20 < prog["eta_seconds"] < 80
 
 
+def test_job_overall_fraction_single_stage_run_advances(tmp_path):
+    """A SINGLE-stage run (e-field / surface / production child) must advance smoothly
+    from its within-stage energy fraction — NOT sit at 0 until the one stage flips to
+    done (the master-progress-bar regression).  Mirrors job_progress['overall']."""
+    from backend.core.oxdna_runner import job_overall_fraction, job_progress
+    from backend.core.oxdna_protocol import build_field_stage
+
+    spec = build_field_stage(name="1_field", field_oxdna=0.04, field_dir=[1, 0, 0],
+                             forces_file="f.txt", steps=5_000_000)
+    job = new_oxdna_job("d", [spec.to_status()])
+    job.current_stage_idx = 0
+    job.stages[0].status = "running"
+    job.save(tmp_path)
+    sd = job.stage_dir(tmp_path, job.stages[0].name)
+    sd.mkdir(parents=True, exist_ok=True)
+    (sd / "energy.dat").write_text("\n".join("0 -1 0.5 -0.5" for _ in range(73)) + "\n")
+
+    frac = job_overall_fraction(job, tmp_path, [spec])
+    assert frac == pytest.approx(0.73, abs=0.02)                       # 73/100 lines, NOT 0
+    assert frac == pytest.approx(job_progress(job, tmp_path, [spec])["overall"], abs=1e-6)
+
+
+def test_job_overall_fraction_counts_done_stages(tmp_path):
+    """Multi-stage: completed stages + the running stage's live fraction."""
+    from backend.core.oxdna_runner import job_overall_fraction
+
+    specs = build_relaxation_stages(mc_steps=1000, md_relax_steps=100_000, equil_steps=50_000)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    job.current_stage_idx = 1
+    job.stages[0].status = "done"
+    job.stages[1].status = "running"
+    job.save(tmp_path)
+    sd = job.stage_dir(tmp_path, job.stages[1].name)
+    sd.mkdir(parents=True, exist_ok=True)
+    (sd / "energy.dat").write_text("\n".join("0 -1 0.5 -0.5" for _ in range(50)) + "\n")
+    # 3 stages: 1 done + 0.5 of the running one → (1 + 0.5)/3 = 0.5.
+    assert job_overall_fraction(job, tmp_path, specs) == pytest.approx(0.5, abs=0.02)
+
+
 def test_print_conf_interval():
     """The display-frame cadence is ~100 frames per stage (mirrors render_stage_input)."""
     from backend.core.oxdna_protocol import print_conf_interval
@@ -4206,3 +4245,237 @@ def test_subprocess_env_none_off_wsl(monkeypatch):
 
     monkeypatch.setattr(oxdna_runner, "_wsl_gpu_driver_dir", lambda: None)
     assert oxdna_runner.oxdna_subprocess_env() is None
+
+
+# ── Composite-trajectory downsample-FIRST fast path ───────────────────────────
+# The View-trajectory player keeps ≤ max_frames (~200). The builder must decide the
+# per-stage stride from a cheap header count and parse + align ONLY the survivors —
+# not read + Kabsch-align every frame of a multi-thousand-frame run. These pin (1) the
+# selective reader against the full reader and (2) the downsample bookkeeping.
+
+def _write_trajectory(path, design, geometry, n_frames, box_nm=80.0):
+    """Write a synthetic oxDNA .dat with ``n_frames`` frames; each frame nudges the
+    first bead's x by the frame index so frames are distinguishable by content."""
+    one = path.parent / f"_one_{path.stem}.dat"
+    write_configuration(design, geometry, one, box_nm=box_nm)
+    lines = one.read_text().splitlines()
+    box_line, e_line, body = lines[1], lines[2], lines[3:]
+    out: list[str] = []
+    for k in range(n_frames):
+        first = body[0].split()
+        first[0] = f"{float(first[0]) + k * 0.01:.6f}"
+        out += [f"t = {k}", box_line, e_line, " ".join(first), *body[1:]]
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def test_read_trajectory_frames_at_matches_full_reader(tmp_path, design, geometry):
+    """The selective streaming reader returns byte-equivalent frames to the full parse
+    at exactly the requested header indices — the equivalence pin for downsample-first."""
+    from backend.physics.oxdna_interface import (
+        read_trajectory_frames_at,
+        read_trajectory_frames_full,
+    )
+
+    traj = tmp_path / "trajectory.dat"
+    _write_trajectory(traj, design, geometry, n_frames=12)
+
+    full = read_trajectory_frames_full(traj, design)
+    assert len(full) == 12
+    # frames are genuinely distinct (the per-frame x nudge landed)
+    k0 = next(iter(full[0]))
+    assert not np.isclose(full[0][k0]["backbone_position"][0],
+                          full[11][k0]["backbone_position"][0])
+
+    want = [0, 4, 11]
+    at = read_trajectory_frames_at(traj, design, want)
+    assert set(at.keys()) == set(want)
+    for i in want:
+        assert set(at[i]) == set(full[i])
+        for key in full[i]:
+            assert np.allclose(at[i][key]["backbone_position"],
+                               full[i][key]["backbone_position"])
+            assert np.allclose(at[i][key]["a1"], full[i][key]["a1"])
+            assert np.allclose(at[i][key]["a3"], full[i][key]["a3"])
+
+
+def test_read_trajectory_frames_at_empty_request(tmp_path, design, geometry):
+    """No requested indices → no parse, empty result (cheap early-out)."""
+    from backend.physics.oxdna_interface import read_trajectory_frames_at
+    traj = tmp_path / "trajectory.dat"
+    _write_trajectory(traj, design, geometry, n_frames=3)
+    assert read_trajectory_frames_at(traj, design, []) == {}
+
+
+def test_composite_trajectory_downsamples_across_stages(tmp_path, design, geometry):
+    """Two 8-frame stages + a prepended seed, budget 10 → the player gets a bounded,
+    per-stage-strided set with one transition marker, not all 16 frames."""
+    from backend.core.oxdna_health import composite_trajectory
+
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    s0 = tmp_path / "s0.dat"
+    s1 = tmp_path / "s1.dat"
+    _write_trajectory(s0, design, geometry, n_frames=8)
+    _write_trajectory(s1, design, geometry, n_frames=8)
+
+    out = composite_trajectory(
+        design,
+        [("relax", "mc", str(s0)), ("prod", "production", str(s1))],
+        str(ref),
+        max_frames=10,
+    )
+    # eff lengths = [8+seed, 8] = [9, 8]; total 17 > 10 → keep round(9*10/17)=5 + round(8*10/17)=5
+    assert out["n_frames"] == 10
+    assert [s["n_frames"] for s in out["stages"]] == [5, 5]
+    assert len(out["frames"]) == 10
+    assert all(len(f) == out["n_nucleotides"] * 6 for f in out["frames"])
+    # one boundary marker, at the first frame of stage 2
+    assert len(out["markers"]) == 1
+    assert out["markers"][0]["frame"] == 5
+    assert out["markers"][0]["stage_name"] == "prod"
+
+
+def test_composite_trajectory_keeps_all_when_under_budget(tmp_path, design, geometry):
+    """Fewer frames than the budget → every frame kept (seed + all stage frames)."""
+    from backend.core.oxdna_health import composite_trajectory
+
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    s0 = tmp_path / "s0.dat"
+    _write_trajectory(s0, design, geometry, n_frames=4)
+
+    out = composite_trajectory(design, [("relax", "mc", str(s0))], str(ref), max_frames=200)
+    assert out["n_frames"] == 5          # 4 stage frames + prepended seed
+    assert out["stages"][0]["n_frames"] == 5
+    assert out["markers"] == []
+
+
+# ── Composite-trajectory LOAD performance: vectorized parse/align/flatten ──────
+# These pin the fast-path rewrites (batched backbone site, bulk parse, vectorized
+# unwrap via a cached plan) against the original per-nucleotide implementations, so a
+# future edit can't silently change the displayed trajectory while chasing speed.
+
+def test_oxdna_backbone_sites_batched_matches_scalar():
+    """The batched backbone-site helper equals the per-nucleotide scalar one."""
+    from backend.physics.oxdna_interface import oxdna_backbone_site, oxdna_backbone_sites
+    rng = np.random.default_rng(0)
+    cm = rng.normal(size=(50, 3)); a1 = rng.normal(size=(50, 3)); a3 = rng.normal(size=(50, 3))
+    batched = oxdna_backbone_sites(cm, a1, a3)
+    for i in range(50):
+        assert np.allclose(batched[i], oxdna_backbone_site(cm[i], a1[i], a3[i]))
+
+
+def test_unwrap_plan_matches_bfs(design, geometry, tmp_path):
+    """The vectorized plan-based unwrap reproduces the per-nucleotide BFS unwrap
+    byte-for-byte (to float precision) on a rotated + translated + wrapped structure."""
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import (
+        write_configuration, read_configuration_full, _parse_box_nm,
+        _build_unwrap_plan, unwrap_align_to_reference,
+    )
+    box_nm = 50.0
+    orig = tmp_path / "conf.dat"
+    write_configuration(design, geometry, orig, box_nm=box_nm)
+    ref = read_configuration_full(orig, design)
+
+    # Build a wrapped "relaxed" frame: rotate + translate + wrap into [0, box).
+    box_ox = box_nm * NM_TO_OXDNA
+    th = 0.6
+    rot = np.array([[np.cos(th), -np.sin(th), 0.0],
+                    [np.sin(th), np.cos(th), 0.0], [0.0, 0.0, 1.0]])
+    trans = np.array([box_ox - 2.0, 5.0, -3.0])
+    out = ["t = 0", f"b = {box_ox:.6f} {box_ox:.6f} {box_ox:.6f}", "E = 0 0 0"]
+    for ln in orig.read_text().splitlines():
+        if ln.startswith(("t ", "b ", "E ")) or not ln.strip():
+            continue
+        p = ln.split()
+        pos = rot @ np.array([float(p[0]), float(p[1]), float(p[2])]) + trans
+        for i in range(3):
+            p[i] = f"{pos[i] % box_ox:.6f}"
+        out.append(" ".join(p))
+    wrapped = tmp_path / "wrapped.dat"
+    wrapped.write_text("\n".join(out) + "\n")
+    fm = read_configuration_full(wrapped, design)
+    box = _parse_box_nm(wrapped)
+
+    bfs = unwrap_align_to_reference(fm, ref, design, box)                       # per-nt graph walk
+    plan = _build_unwrap_plan(fm, design)
+    vec = unwrap_align_to_reference(fm, ref, design, box, plan=plan)            # vectorized
+    assert set(vec) == set(bfs)
+    for k in bfs:
+        assert np.allclose(vec[k]["backbone_position"], bfs[k]["backbone_position"], atol=1e-9)
+        assert np.allclose(vec[k]["a1"], bfs[k]["a1"], atol=1e-9)
+        assert np.allclose(vec[k]["a3"], bfs[k]["a3"], atol=1e-9)
+
+
+def test_composite_trajectory_reports_progress(tmp_path, design, geometry):
+    """composite_trajectory drives the progress callback from 0 to 100% of the
+    downsampled frame budget, monotonically, with a constant total."""
+    from backend.core.oxdna_health import composite_trajectory
+
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    s0 = tmp_path / "s0.dat"; s1 = tmp_path / "s1.dat"
+    _write_traj(design, geometry, s0, n_frames=8)
+    _write_traj(design, geometry, s1, n_frames=8)
+
+    calls: list[tuple] = []
+    out = composite_trajectory(
+        design, [("relax", "mc", str(s0)), ("prod", "production", str(s1))],
+        str(ref), max_frames=10, progress=lambda d, t: calls.append((d, t)))
+    total = out["n_frames"]
+    assert calls[0] == (0, total)
+    assert calls[-1] == (total, total)              # snaps to 100%
+    dones = [d for d, _ in calls]
+    assert dones == sorted(dones)                   # monotonic non-decreasing
+    assert all(t == total for _, t in calls)        # constant denominator
+
+
+def test_oxdna_trajectory_progress_endpoint_idle(monkeypatch, tmp_path):
+    """The progress endpoint reports inactive when no build is running for a job."""
+    from fastapi.testclient import TestClient
+    from backend.api.main import app
+    import backend.api.routes_oxdna as routes_oxdna
+
+    monkeypatch.setattr(routes_oxdna, "_WORKSPACE_DIR", tmp_path)
+    r = TestClient(app).get("/api/oxdna/jobs/nope/trajectory-progress")
+    assert r.status_code == 200
+    assert r.json() == {"active": False}
+
+
+def test_composite_trajectory_reuses_sibling_ancestor_frames(tmp_path, design, geometry, monkeypatch):
+    """Selecting a job with a COMMON PARENT reuses the shared ancestor stages' aligned
+    frames from the frame cache — only the frames unique to the sibling get parsed."""
+    import backend.core.oxdna_health as H
+    from backend.core.oxdna_health import composite_trajectory
+    import backend.physics.oxdna_interface as OI
+
+    # Shared root trajectory + two sibling leaf trajectories; byte-identical reference
+    # files at DIFFERENT paths (as real sibling jobs write their own design_ref.dat).
+    root = tmp_path / "root.dat"; _write_traj(design, geometry, root, n_frames=6)
+    leafA = tmp_path / "A.dat";   _write_traj(design, geometry, leafA, n_frames=4)
+    leafB = tmp_path / "B.dat";   _write_traj(design, geometry, leafB, n_frames=4)
+    refA = tmp_path / "refA.dat"; write_configuration(design, geometry, refA, box_nm=80.0)
+    refB = tmp_path / "refB.dat"; write_configuration(design, geometry, refB, box_nm=80.0)
+    assert refA.read_bytes() == refB.read_bytes()          # siblings share design → same ref
+
+    # Spy on how many frames get parsed (the reuse shows up as fewer parses for the sibling).
+    calls: list[tuple] = []
+    real = OI.read_trajectory_frames_at
+    monkeypatch.setattr(OI, "read_trajectory_frames_at",
+                        lambda p, d, idx, **kw: (calls.append((str(p), len(list(idx)) if not isinstance(idx, list) else len(idx))), real(p, d, idx, **kw))[1])
+
+    H._FRAME_CACHE = None; H._FRAME_CACHE_NT = 0; H._ALIGNED_CACHE = None; H._COUNT_CACHE.clear()
+
+    outA = composite_trajectory(design, [("root", "mc", str(root)), ("leafA", "production", str(leafA))], str(refA))
+    a_parsed = sum(n for _, n in calls)
+    calls.clear()
+    H._ALIGNED_CACHE = None    # force a whole-composite miss so the FRAME cache is what saves B
+
+    outB = composite_trajectory(design, [("root", "mc", str(root)), ("leafB", "production", str(leafB))], str(refB))
+    b_parsed = sum(n for _, n in calls)
+
+    assert outA["n_frames"] == outB["n_frames"]            # same structure → same frame budget
+    assert b_parsed < a_parsed                             # the sibling parsed fewer frames
+    assert sum(n for p, n in calls if p.endswith("root.dat")) == 0   # root NOT re-parsed (reused)
+    assert sum(n for p, n in calls if p.endswith("B.dat")) > 0       # its own leaf WAS parsed

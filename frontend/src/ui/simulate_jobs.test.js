@@ -61,6 +61,17 @@ describe('pure helpers', () => {
     expect(masterProgressPct(lmNode({ status: 'completed' }))).toBe(100)   // completed → full
     expect(masterProgressPct(null)).toBe(0)
   })
+  it('masterProgressPct: a running oxDNA job uses the backend live fraction (single-stage run)', () => {
+    // A single-stage e-field/surface run: stage-count alone reads 0 (0 of 1 done) — the
+    // backend-stamped progress_fraction must win so the bar advances.
+    expect(masterProgressPct(oxNode({
+      status: 'running', progress_fraction: 0.73, stages: [{ status: 'running' }],
+    }))).toBe(73)
+    // Falls back to completed-stage count when the backend didn't stamp a fraction.
+    expect(masterProgressPct(oxNode({
+      status: 'running', stages: [{ status: 'done' }, { status: 'running' }],
+    }))).toBe(50)
+  })
   it('masterProgressColor: green done · red failed · orange stale · grey stopped · blue active', () => {
     expect(masterProgressColor(oxNode({ status: 'completed' }))).toBe('#5cb85c')
     expect(masterProgressColor(oxNode({ status: 'failed' }))).toBe('#d9534f')
@@ -156,6 +167,29 @@ describe('unified list + master card', () => {
     const list = document.getElementById('simulate-jobs-list')
     expect(list.childElementCount).toBe(2)
     expect(list.textContent).toContain('[L]')       // LAMMPS badge
+  })
+
+  it('a nadoc:sim-jobs-changed event wakes the idle master list (launch-not-showing bug)', async () => {
+    mount()
+    // Master starts with nothing active → its poll is NOT armed (it only self-polls
+    // while it already has a running node). This is the state when a production run is
+    // launched off a completed parent.
+    const { sim, api } = make([oxNode({ status: 'completed' })])
+    await sim.refresh()
+    const before = api.listSimJobs.mock.calls.length
+    // A production child now exists in the backend; the engine panel fires the wake event.
+    api.listSimJobs.mockResolvedValue([
+      oxNode({ status: 'completed' }),
+      oxNode({ job_id: 'ox2', parent_job_id: 'ox1', kind: 'run', status: 'running',
+               production_state: 'running', stages: [{ status: 'running' }] }),
+    ])
+    window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    for (let i = 0; i < 5; i++) await Promise.resolve()   // let the async _fetch settle
+    // The idle master re-fetched on the event (the bug: it did nothing → the running
+    // job never surfaced until a manual page refresh).
+    expect(api.listSimJobs.mock.calls.length).toBeGreaterThan(before)
+    // and the newly-running child is now in the list (2 oxDNA rows on the oxDNA tab).
+    expect(document.querySelectorAll('#simulate-jobs-list [data-job-id]').length).toBe(2)
   })
 
   it('selecting a LAMMPS node routes viz to the oxDNA panel (same card) + reflects status', async () => {

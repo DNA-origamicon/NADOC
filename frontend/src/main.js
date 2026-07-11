@@ -2118,10 +2118,18 @@ async function main() {
       namd:   document.getElementById('md-jobs-panel'),
     },
     runControlEls,
+    // Tabs read fast→accurate (CanDo·mrDNA·oxDNA·NAMD), but oxDNA stays the default
+    // selected engine (the auto-policy's recommended GPU engine) — not the first tab.
+    initial: 'oxdna',
     // The unified Simulate job list re-scopes to the newly-active engine tab (bound
     // lazily — simulateJobs is constructed just below, after the panels).
     onSelect: (engine) => simulateJobs?.setActiveEngine?.(engine),
   })
+
+  // "Use as NAMD seed" (oxDNA / mrDNA panels) creates a NAMD job — surface it by
+  // switching the Simulate selector to the NAMD tab. The panels are tab-fronted now,
+  // so the old in-panel reveal (collapse oxDNA + click the removed MD heading) is gone.
+  window.addEventListener('nadoc:md-job-created', () => engineSelector?.select?.('namd'))
 
   // Spinner on each engine's TAB while that engine has a running/preparing job (one
   // shared /api/jobs/active poll). Runs AFTER the selector so the tab buttons exist.

@@ -82,10 +82,11 @@ const CENSUS = {
 }
 
 describe('engine capability descriptor — shape + completeness', () => {
-  it('covers exactly the four selectable simulation engines, panel order', () => {
+  it('covers exactly the four selectable simulation engines, fast→accurate tab order', () => {
+    // Tab order runs fast→accurate: CanDo (FEM) · mrDNA · oxDNA · NAMD (all-atom).
     // LAMMPS is deliberately NOT a selectable engine — it's the auto-policy CPU fallback
     // and its runs appear in the unified Simulate job list with an [L] badge (Phase C).
-    expect(ENGINE_KEYS).toEqual(['oxdna', 'mrdna', 'cando', 'namd'])
+    expect(ENGINE_KEYS).toEqual(['cando', 'mrdna', 'oxdna', 'namd'])
   })
 
   it('every engine has an entry for EVERY card in the universe (never absent)', () => {

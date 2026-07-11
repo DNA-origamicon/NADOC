@@ -78,6 +78,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["oxdna"])
 
+# Live frames-processed progress for the composite-trajectory build, keyed by job id.
+# The build runs in a threadpool (off the event loop) so a concurrent poll of
+# /trajectory-progress is served while it computes.  A plain dict assignment is
+# GIL-atomic; the entry is created when the build starts and removed when it ends.
+_TRAJ_PROGRESS: dict[str, dict] = {}
+
 # Minimum fraction of designed Watson-Crick pairs that must be sequence-complementary
 # for an oxDNA relaxation to be worth starting.  A correctly-sequenced design reads
 # ~0.99 (a few frayed ends aside); a stale-after-skip design reads ~0.27 (≈ random).
@@ -1341,8 +1347,29 @@ async def get_oxdna_trajectory(job_id: str) -> dict:
     design, stages, ref = _composite_inputs(job)
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
-    result = await run_in_threadpool(composite_trajectory, design, stages, ref)
+
+    def _prog(done: int, total: int) -> None:
+        _TRAJ_PROGRESS[job_id] = {"done": done, "total": total}
+
+    _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
+    try:
+        result = await run_in_threadpool(
+            composite_trajectory, design, stages, ref, 200, _prog)
+    finally:
+        _TRAJ_PROGRESS.pop(job_id, None)
     return {"ready": result["n_frames"] > 0, **result}
+
+
+@router.get("/oxdna/jobs/{job_id}/trajectory-progress")
+async def get_oxdna_trajectory_progress(job_id: str) -> dict:
+    """Live frames-processed progress for an in-flight composite-trajectory build.
+    The View-trajectory UI polls this while the (threadpool) build runs so a large
+    structure's multi-second load shows an accurate bar instead of a dead spinner.
+    ``{active:false}`` once the build has finished (or never started)."""
+    p = _TRAJ_PROGRESS.get(job_id)
+    if not p:
+        return {"active": False}
+    return {"active": True, **p}
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory-meta")

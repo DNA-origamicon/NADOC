@@ -120,7 +120,11 @@ async def list_simulate_jobs(design_source_path: str | None = None,
     from backend.core.lammps_job import LammpsJob
     from backend.core.lammps_runner import reconcile_lammps_status
     from backend.core.oxdna_job import OxdnaJob
-    from backend.core.oxdna_runner import reconcile_oxdna_status
+    from backend.core.oxdna_runner import (
+        job_overall_fraction,
+        load_stage_specs,
+        reconcile_oxdna_status,
+    )
 
     ws = _WORKSPACE_DIR  # noqa: F821 — imported lazily just above
     nodes: list[dict] = []
@@ -131,6 +135,15 @@ async def list_simulate_jobs(design_source_path: str | None = None,
             d = j.to_dict()
             d["out_of_date"] = _job_is_out_of_date(j, current_fp)
             d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+            # A RUNNING job carries its live within-stage fraction so the master
+            # progress bar advances during a single-stage run (e-field / surface /
+            # production child) instead of sitting at 0 % until the stage completes.
+            if d.get("status") == "running":
+                try:
+                    specs = load_stage_specs(j.job_dir(ws))
+                    d["progress_fraction"] = round(job_overall_fraction(j, ws, specs), 4)
+                except Exception:  # noqa: BLE001 — progress is advisory, never sink the list
+                    pass
             nodes.append(sim_jobs.normalize_oxdna_job(d))
     except Exception:  # noqa: BLE001 — a broken oxDNA list must not sink the LAMMPS one
         pass

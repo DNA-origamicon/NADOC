@@ -458,21 +458,42 @@ def production_twist_series(
             "equilibrated": detect_equilibration(per_frame)}
 
 
+_COUNT_CACHE: dict = {}          # (path, size, mtime_ns) -> frame count (bounded below)
+_COUNT_CACHE_MAX = 512
+
+
 def count_trajectory_frames(traj_path) -> int:
     """Fast, memory-light frame count of an oxDNA ``.dat`` trajectory — the number of
     ``t = …`` header lines (frames are split on those, see
     ``read_trajectory_frames_full``).  Streams the file line by line so a multi-GB
     trajectory isn't materialised; used to size the metric-compute progress bar/ETA
-    without paying the full per-nucleotide parse twice."""
+    without paying the full per-nucleotide parse twice.
+
+    Memoized by file signature: the composite-trajectory build counts every ancestor
+    stage's frames on EVERY load (to size the per-stage stride), so re-streaming a
+    multi-hundred-MB ancestor file each time a sibling is viewed was a real slice of the
+    load.  A still-writing file's signature changes as it grows → it is recounted."""
     from pathlib import Path
+    p = Path(traj_path)
+    try:
+        st = p.stat()
+        key = (str(p), st.st_size, st.st_mtime_ns)
+    except OSError:
+        return 0
+    hit = _COUNT_CACHE.get(key)
+    if hit is not None:
+        return hit
     n = 0
     try:
-        with Path(traj_path).open("r", encoding="utf-8") as fh:
+        with p.open("r", encoding="utf-8") as fh:
             for line in fh:
                 if line.startswith("t "):
                     n += 1
     except OSError:
         return 0
+    _COUNT_CACHE[key] = n
+    if len(_COUNT_CACHE) > _COUNT_CACHE_MAX:
+        _COUNT_CACHE.pop(next(iter(_COUNT_CACHE)), None)   # drop oldest (insertion order)
     return n
 
 
@@ -2099,6 +2120,20 @@ def check_relaxed_constraint(constraint, relaxed_output, reference_positions=Non
 _ALIGNED_CACHE = None   # lazily-created collections.OrderedDict[cache_key -> result]
 _ALIGNED_CACHE_MAX = 6
 
+# Per-FRAME aligned cache: an individual trajectory frame, PBC-unwrapped + Kabsch-aligned
+# to the design reference, keyed by (trajectory-file signature, reference CONTENT hash,
+# copies, raw frame index).  The whole-composite ``_ALIGNED_CACHE`` above misses when you
+# switch to a SIBLING job (different stages tuple), even though the two lineages share
+# every ancestor stage (root relaxation + shared production runs).  Keying a frame by its
+# file + reference-content lets a sibling REUSE those shared aligned frames — so selecting
+# a job with a common parent while a trajectory is on screen re-does only the frames that
+# differ (its own leaf run), not the whole lineage.  Keyed by reference *content* (not
+# path) because sibling jobs write byte-identical ``design_ref.dat`` files at different
+# paths.  Bounded by cumulative nucleotide-frames (memory-proportional for big structures).
+_FRAME_CACHE = None     # lazily-created OrderedDict[frame_key -> aligned frame dict]
+_FRAME_CACHE_NT = 0     # running Σ len(frame) across the cache (for memory-bounded evict)
+_FRAME_CACHE_MAX_NT = 3_000_000   # ~a couple of large lineages' shared ancestors
+
 
 def _aligned_cache_key(stages, reference_conf_path, max_frames, copies):
     import os
@@ -2113,11 +2148,68 @@ def _aligned_cache_key(stages, reference_conf_path, max_frames, copies):
     return (tuple(sig), int(max_frames), bool(copies))
 
 
+def _traj_file_sig(path):
+    """(path, size, mtime_ns) — changes when a still-writing trajectory grows, so a live
+    run naturally invalidates its cached frames instead of serving stale ones."""
+    import os
+    try:
+        st = os.stat(path)
+        return (str(path), st.st_size, st.st_mtime_ns)
+    except OSError:
+        return (str(path), -1, -1)
+
+
+def _ref_content_sig(reference_conf_path):
+    """Hash of the reference conf's bytes (one small frame).  Sibling jobs of the same
+    design write byte-identical ``design_ref.dat`` at DIFFERENT paths, so keying the frame
+    cache by content — not path — lets them share the aligned ancestor frames."""
+    import hashlib
+    try:
+        with open(reference_conf_path, "rb") as fh:
+            return hashlib.blake2b(fh.read(), digest_size=16).digest()
+    except OSError:
+        return None
+
+
+def _frame_cache_get(key):
+    """Return a cached aligned frame (LRU-touched) or None."""
+    global _FRAME_CACHE
+    if _FRAME_CACHE is None:
+        return None
+    v = _FRAME_CACHE.get(key)
+    if v is not None:
+        try:
+            _FRAME_CACHE.move_to_end(key)      # LRU touch (tolerate a concurrent evict)
+        except KeyError:
+            pass
+    return v
+
+
+def _frame_cache_put(key, frame):
+    """Insert an aligned frame, evicting oldest until under the nucleotide-frame budget."""
+    global _FRAME_CACHE, _FRAME_CACHE_NT
+    from collections import OrderedDict
+    if _FRAME_CACHE is None:
+        _FRAME_CACHE = OrderedDict(); _FRAME_CACHE_NT = 0
+    if key in _FRAME_CACHE:
+        return
+    _FRAME_CACHE[key] = frame
+    _FRAME_CACHE_NT += len(frame)
+    while _FRAME_CACHE_NT > _FRAME_CACHE_MAX_NT and len(_FRAME_CACHE) > 1:
+        try:
+            _, ev = _FRAME_CACHE.popitem(last=False)
+            _FRAME_CACHE_NT -= len(ev)
+        except KeyError:
+            break
+
+
 def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200,
-                                *, copies: bool = False):
-    """Shared core for the composite trajectory: read every stage's frames,
-    PBC-unwrap + Kabsch-align each to the design reference, prepend the seed frame,
-    and downsample per stage (≥1 each) to ≤ ``max_frames``.
+                                *, copies: bool = False, progress=None):
+    """Shared core for the composite trajectory: per stage, downsample to a ≤
+    ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
+    Kabsch-align only the surviving frames to the design reference.  The seed
+    configuration is prepended (position 0 of the first non-empty stage) as a stride
+    candidate so the player still starts on the true starting structure.
 
     Returns ``(key_list, ordered_frames, out_stages, markers)`` where
     ``ordered_frames`` is the list of FULL per-nucleotide dicts (key →
@@ -2143,45 +2235,19 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         return hit
 
     from backend.physics.oxdna_interface import (
+        _build_unwrap_plan,
         _parse_box_nm,
         _strand_nucleotide_order,
         read_configuration_full,
-        read_trajectory_frames_full,
+        read_trajectory_frames_at,
         unwrap_align_to_reference,
     )
     ref = read_configuration_full(reference_conf_path, design, copies=copies)
+    ref_sig = _ref_content_sig(reference_conf_path)   # content hash → siblings share frames
     # copies=True keeps loop-insertion copies distinct (full 4-tuple key); else collapse
     # to the 3-tuple so the CG trajectory key list is one entry per (helix,bp,dir).
     key_list = list(dict.fromkeys(
         (k if copies else k[:3]) for k in _strand_nucleotide_order(design)))
-
-    # A stage tuple is ``(name, kind, path)``, ``(…, marker_label)`` or
-    # ``(…, marker_label, field)`` (field = the run's E-field descriptor or None).
-    per_stage: list[dict] = []
-    for item in stages:
-        name, kind, path = item[0], item[1], item[2]
-        marker_label = item[3] if len(item) > 3 else None
-        field = item[4] if len(item) > 4 else None
-        frames = read_trajectory_frames_full(path, design, copies=copies)
-        box = _parse_box_nm(path)
-        aligned = [
-            (unwrap_align_to_reference(fr, ref, design, box)
-             if box is not None and np.all(box > 0) else fr)
-            for fr in frames
-        ]
-        per_stage.append({"name": name, "kind": kind, "frames": aligned,
-                          "marker_label": marker_label, "field": field})
-
-    # oxDNA's first trajectory write lands at print_conf_interval (not t=0); prepend
-    # the seed configuration so the player starts on the true starting structure.
-    for s in per_stage:
-        if s["frames"]:
-            s["frames"].insert(0, ref)
-            break
-
-    total = sum(len(s["frames"]) for s in per_stage)
-    if total == 0:
-        return key_list, [], [], []
 
     def _store(result):
         _ALIGNED_CACHE[cache_key] = result
@@ -2198,41 +2264,141 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         return [items[round(i * (len(items) - 1) / (keep - 1))] for i in range(keep)] \
             if keep > 1 else [items[0]]
 
+    # A stage tuple is ``(name, kind, path)``, ``(…, marker_label)`` or
+    # ``(…, marker_label, field)`` (field = the run's E-field descriptor or None).
+    #
+    # DOWNSAMPLE FIRST.  The scrub player keeps ≤ ``max_frames`` (~200), so reading and
+    # Kabsch-aligning EVERY frame of a multi-thousand-frame run only to discard 95 % of it
+    # is the dominant load cost.  Instead: cheaply count each stage's frames (header scan,
+    # no coordinate parse), decide the per-stage stride, then parse + align ONLY the frames
+    # that survive it.  The seed configuration is still prepended at position 0 of the first
+    # non-empty stage so it remains a stride candidate exactly as before.
+    raw_counts = [count_trajectory_frames(item[2]) for item in stages]
+    first_nonempty = next((i for i, c in enumerate(raw_counts) if c > 0), None)
+    if first_nonempty is None:
+        return key_list, [], [], []
+    # effective length includes the prepended seed on the first non-empty stage
+    eff_lens = [c + (1 if i == first_nonempty else 0) for i, c in enumerate(raw_counts)]
+    total = sum(eff_lens)
+
+    # The unwrap traversal structure (bond graph → DFS order, parents, components)
+    # depends only on topology + the frame's key SET (constant across a stage's complete
+    # frames), not the coordinates — so build it ONCE per distinct key set and reuse it,
+    # letting every frame unwrap via vectorized numpy instead of a per-nucleotide graph
+    # walk rebuilt ~200 times.
+    _plan_cache: dict = {}
+
+    def _plan_for(fr):
+        ks = frozenset(fr)
+        p = _plan_cache.get(ks)
+        if p is None:
+            p = _build_unwrap_plan(fr, design)
+            _plan_cache[ks] = p
+        return p
+
+    def _keep_for(e):
+        return max(1, round(e * max_frames / total)) if total > max_frames else e
+    total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)   # progress denominator
+    done = 0
+    if progress:
+        progress(0, total_kept)
+
     ordered_frames: list[dict] = []
     out_stages: list[dict] = []
     markers: list[dict] = []
-    for s in per_stage:
-        f = s["frames"]
-        if not f:
+    for i, item in enumerate(stages):
+        name, kind, path = item[0], item[1], item[2]
+        marker_label = item[3] if len(item) > 3 else None
+        field = item[4] if len(item) > 4 else None
+        eff = eff_lens[i]
+        if eff == 0:
             continue
-        keep = max(1, round(len(f) * max_frames / total)) if total > max_frames else len(f)
-        picked = _stride_pick(f, keep)
+        keep = _keep_for(eff)
+        picked = _stride_pick(list(range(eff)), keep)   # positions into this stage's eff list
+
+        # Map each kept eff-position to a raw trajectory-header index (position 0 of the
+        # first non-empty stage is the prepended seed ref, which needs no parse), then parse
+        # + align only those raw frames.
+        seed_here = (i == first_nonempty)
+        needed = sorted({(p - 1 if seed_here else p) for p in picked
+                         if not (seed_here and p == 0)})
+
+        # Reuse any aligned frame already cached from a previously-viewed lineage that
+        # shares this ancestor stage (a common-parent sibling), so only the frames unique
+        # to THIS job get parsed + aligned — the load's heavy work.
+        tsig = _traj_file_sig(path)
+        aligned = {}
+        missing = []
+        for idx in needed:
+            hit = _frame_cache_get((tsig, ref_sig, copies, idx)) if ref_sig is not None else None
+            if hit is not None:
+                aligned[idx] = hit
+                done += 1
+                if progress:
+                    progress(done, total_kept)
+            else:
+                missing.append(idx)
+        if missing:
+            parsed = read_trajectory_frames_at(path, design, missing, copies=copies)
+            box = _parse_box_nm(path)
+            do_align = box is not None and np.all(box > 0)
+            for idx, fr in parsed.items():   # the per-frame align is the load's heavy work
+                af = (unwrap_align_to_reference(fr, ref, design, box, plan=_plan_for(fr))
+                      if do_align else fr)
+                aligned[idx] = af
+                if ref_sig is not None:
+                    _frame_cache_put((tsig, ref_sig, copies, idx), af)
+                done += 1
+                if progress:
+                    progress(done, total_kept)
+
+        stage_frames: list[dict] = []
+        for p in picked:
+            if seed_here and p == 0:
+                stage_frames.append(ref)
+                continue
+            fr = aligned.get((p - 1) if seed_here else p)
+            if fr is not None:          # a malformed / half-written frame drops out (as before)
+                stage_frames.append(fr)
+        if not stage_frames:
+            continue
+
         if ordered_frames:  # a transition into this stage (skip the very first frame)
             markers.append({"frame": len(ordered_frames),
-                            "label": s.get("marker_label") or f"→ {s['kind']}",
-                            "kind": s["kind"], "stage_name": s["name"]})
-        out_stages.append({"name": s["name"], "kind": s["kind"], "n_frames": len(picked),
-                           "field": s.get("field")})
-        ordered_frames.extend(picked)
+                            "label": marker_label or f"→ {kind}",
+                            "kind": kind, "stage_name": name})
+        out_stages.append({"name": name, "kind": kind, "n_frames": len(stage_frames),
+                           "field": field})
+        ordered_frames.extend(stage_frames)
 
+    if progress:
+        progress(total_kept, total_kept)   # snap to 100% (the seed frame needs no align)
+    if not ordered_frames:
+        return key_list, [], [], []
     return _store((key_list, ordered_frames, out_stages, markers))
 
 
 def _flatten_cg_frame(frame: dict, key_list) -> list:
     """Flatten one full per-nucleotide frame dict to the compact CG float list
-    (backbone site x,y,z + a1 nx,ny,nz per key)."""
-    from backend.physics.oxdna_interface import oxdna_backbone_site
-    flat: list[float] = []
-    for key in key_list:
+    (backbone site x,y,z + a1 nx,ny,nz per key).
+
+    Vectorized: gather every key's cm/a1/a3 into ``(N, 3)`` arrays and compute the
+    backbone sites in one batched call, instead of a per-nucleotide ``np.cross`` (whose
+    numpy dispatch overhead was the single biggest cost of the composite build).  A
+    missing key stays all-zeros — cm/a1/a3 default to 0 → backbone site 0 → six zeros,
+    identical to the old per-key fallback."""
+    from backend.physics.oxdna_interface import oxdna_backbone_sites
+    n = len(key_list)
+    cm = np.zeros((n, 3)); a1 = np.zeros((n, 3)); a3 = np.zeros((n, 3))
+    for i, key in enumerate(key_list):
         v = frame.get(key)
         if v is None:
-            flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
             continue
-        bb = oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
-        a1 = v["a1"]
-        flat.extend((float(bb[0]), float(bb[1]), float(bb[2]),
-                     float(a1[0]), float(a1[1]), float(a1[2])))
-    return flat
+        cm[i] = v["backbone_position"]; a1[i] = v["a1"]; a3[i] = v["a3"]
+    out = np.zeros((n, 6))
+    out[:, 0:3] = oxdna_backbone_sites(cm, a1, a3)
+    out[:, 3:6] = a1
+    return out.reshape(-1).tolist()
 
 
 def composite_trajectory(
@@ -2240,8 +2406,13 @@ def composite_trajectory(
     stages,
     reference_conf_path,
     max_frames: int = 200,
+    progress=None,
 ) -> dict:
     """Build the composite scrub-able trajectory for the View-trajectory player.
+
+    ``progress`` is an optional ``callback(done, total)`` invoked as frames are
+    aligned (``total`` = the downsampled frame budget), so the route can surface an
+    accurate frames-processed loading bar for a large structure's multi-second build.
 
     ``stages`` is an ordered list of ``(stage_name, kind, trajectory_path)`` —
     every stage that has written a ``trajectory.dat`` (relaxation stages + all
@@ -2262,7 +2433,7 @@ def composite_trajectory(
     """
     # copies=True → loop-insertion copies stay distinct so every loop bead scrubs.
     key_list, ordered, out_stages, markers = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True)
+        design, stages, reference_conf_path, max_frames, copies=True, progress=progress)
     if not ordered:
         return {"n_frames": 0, "n_nucleotides": len(key_list),
                 "keys": [list(k) for k in key_list], "frames": [],

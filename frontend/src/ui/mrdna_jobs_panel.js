@@ -266,7 +266,21 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       }
       _renderDetail()
     }
+    _notifyIfJobsChanged()
     _base.schedulePoll()
+  }
+
+  // Wake the master job list + progress bar (simulate_jobs.js, the VISIBLE list) whenever
+  // THIS panel's job set/statuses change — a launch, stop, or completion. The master
+  // self-polls only while it already holds an active node, so a run launched while it's
+  // idle would otherwise not surface until a manual page refresh.
+  let _prevJobsSig = null
+  function _notifyIfJobsChanged() {
+    const sig = _jobs.map(j => `${j.job_id}:${j.status}`).sort().join('|')
+    if (_prevJobsSig !== null && sig !== _prevJobsSig) {
+      window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))
+    }
+    _prevJobsSig = sig
   }
 
   function _hasActiveJob() {
@@ -373,6 +387,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
         _setSeedStatus('NAMD seed job created — see Molecular Dynamics below.', _C.ok)
         showToast('NAMD seed job created from relaxed mrDNA structure', { severity: 'ok' })
         window.dispatchEvent(new CustomEvent('nadoc:md-job-created'))
+        window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))   // wake master (new NAMD job)
       } else {
         _setSeedStatus(api.lastErrorMessage() || 'Failed to create NAMD seed (see console)', _C.err)
       }
