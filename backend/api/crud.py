@@ -446,6 +446,67 @@ def _design_response_with_geometry(
     return out
 
 
+def _strand_occupancy(design: Design) -> dict:
+    """Mutation-proof snapshot of what each strand occupies, plus the synthetic-
+    geometry inputs (extensions, ds-linker connections). Captures plain values,
+    so it stays valid even if *design* is later mutated in place. Cheap —
+    topology only, no geometry compute. Pair with :func:`_local_changed_helices`
+    to drive the partial-geometry fast path for position-preserving edits.
+    """
+    return {
+        "sig": {
+            s.id: (
+                s.strand_type,
+                tuple((d.helix_id, d.start_bp, d.end_bp, d.direction, d.overhang_id)
+                      for d in s.domains),
+            )
+            for s in design.strands
+        },
+        "helices": {
+            s.id: frozenset(d.helix_id for d in s.domains) for s in design.strands
+        },
+        "ext":   {e.id: e.model_dump(mode="json") for e in design.extensions},
+        "conns": {c.id: c.model_dump(mode="json") for c in design.overhang_connections},
+    }
+
+
+def _local_changed_helices(before: dict, after: dict) -> list[str] | None:
+    """Helix IDs to reship via the partial-geometry fast path for a
+    POSITION-PRESERVING topology edit (add / remove / relabel of strands — never
+    a move). Both args are :func:`_strand_occupancy` snapshots, pre- and post-edit.
+
+    Returns ``None`` — fall back to full geometry — when the edit can't be
+    expressed partially: it touched synthetic geometry (extensions or ds-linker
+    bridges, both emitted only in full mode), OR nothing occupancy-changed (an
+    empty changed-list would trip the frontend's full-replacement branch and
+    wipe the scene).
+
+    A helix's nucleotides change only if some strand's occupancy on it changes,
+    so we diff strand signatures and union the domain helices of every differing
+    strand across BOTH snapshots (a split fragment keeps helices that leave the
+    original strand id; a merge's absorbed id contributes its old helices).
+    """
+    b_sig, a_sig = before["sig"], after["sig"]
+    changed = {sid for sid in b_sig.keys() | a_sig.keys()
+               if b_sig.get(sid) != a_sig.get(sid)}
+    if not changed:
+        return None
+    # Extensions / ds-linker bridges are synthetic — the partial path never
+    # re-emits them, so any change to them (or any changed strand that carries
+    # an extension) forces a full recompute.
+    if before["ext"] != after["ext"] or before["conns"] != after["conns"]:
+        return None
+    ext_strand_ids = ({e["strand_id"] for e in before["ext"].values()}
+                      | {e["strand_id"] for e in after["ext"].values()})
+    if changed & ext_strand_ids:
+        return None
+    helices: set[str] = set()
+    for sid in changed:
+        helices |= before["helices"].get(sid, frozenset())
+        helices |= after["helices"].get(sid, frozenset())
+    return list(helices)
+
+
 def _find_helix(design: Design, helix_id: str) -> Helix:
     h = design.find_helix(helix_id)
     if h is None:
@@ -2432,6 +2493,8 @@ def convert_strand_to_binder_endpoint(strand_id: str) -> dict:
     """
     from backend.core.lattice import convert_strand_to_binder
 
+    before_occ = _strand_occupancy(design_state.get_or_404())
+
     def _build(d: Design) -> Design:
         return convert_strand_to_binder(d, strand_id)
 
@@ -2447,7 +2510,10 @@ def convert_strand_to_binder_endpoint(strand_id: str) -> dict:
         status = 404 if "not found" in msg else 422
         raise HTTPException(status, detail=msg) from exc
 
-    return _design_response_with_geometry(design, report)
+    # Position-preserving retype (+ possible overhang re-tag) — reship only the
+    # affected strands' helices instead of the whole design.
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 @router.post("/design/overhang/{overhang_id}/generate-binder", status_code=201)
@@ -2483,6 +2549,8 @@ def convert_binder_to_scaffold_endpoint(strand_id: str) -> dict:
     """
     from backend.core.lattice import convert_binder_to_scaffold
 
+    before_occ = _strand_occupancy(design_state.get_or_404())
+
     def _build(d: Design) -> Design:
         return convert_binder_to_scaffold(d, strand_id)
 
@@ -2496,7 +2564,8 @@ def convert_binder_to_scaffold_endpoint(strand_id: str) -> dict:
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc)) from exc
 
-    return _design_response_with_geometry(design, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 def _build_strand_end_resize(d: Design, body: 'StrandEndResizeRequest') -> Design:
@@ -2614,6 +2683,7 @@ def _build_delete_strands_batch(d: Design, body: 'StrandBatchDeleteRequest') -> 
 @router.delete("/design/strands/batch", status_code=200)
 def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
     """Delete multiple strands by ID in one operation."""
+    before_occ = _strand_occupancy(design_state.get_or_404())
     n = len(body.strand_ids)
     label = f"Delete {n} strand{'s' if n != 1 else ''}"
     design, report, _entry = design_state.mutate_with_minor_log(
@@ -2622,7 +2692,11 @@ def delete_strands_batch(body: StrandBatchDeleteRequest) -> dict:
         params=body.model_dump(mode='json'),
         fn=lambda d: _build_delete_strands_batch(d, body),
     )
-    return _design_response_with_geometry(design, report)
+    # Deletion moves no nucleotide — reship only the deleted strands' helices
+    # (+ any helix where autodetect re-tagged a now-orphaned end as an overhang,
+    # caught by the occupancy diff) instead of recomputing the whole design.
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 def _build_delete_strand(d: Design, strand_id: str) -> Design:
@@ -2648,6 +2722,7 @@ def _build_delete_strand(d: Design, strand_id: str) -> Design:
 
 @router.delete("/design/strands/{strand_id}")
 def delete_strand(strand_id: str) -> dict:
+    before_occ = _strand_occupancy(design_state.get_or_404())
     label = f"Delete strand {strand_id}"
     design, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='strand-delete',
@@ -2655,7 +2730,8 @@ def delete_strand(strand_id: str) -> dict:
         params={'strand_id': strand_id},
         fn=lambda d: _build_delete_strand(d, strand_id),
     )
-    return _design_response_with_geometry(design, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 # ── Domain sub-resource ───────────────────────────────────────────────────────
@@ -3879,6 +3955,7 @@ def delete_crossover(crossover_id: str) -> dict:
     strand is split back into two single-helix fragments (desplice).
     """
     design = design_state.get_or_404()
+    before_occ = _strand_occupancy(design)
     xover = next((x for x in design.crossovers if x.id == crossover_id), None)
     if xover is None:
         raise HTTPException(404, detail=f"Crossover {crossover_id!r} not found.")
@@ -3899,7 +3976,10 @@ def delete_crossover(crossover_id: str) -> dict:
         params={'crossover_id': crossover_id},
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report)
+    # Desplice moves no nucleotide — it only splits a strand at the junction and
+    # retags the fragment. Reship just the affected strands' helices.
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 @router.post("/design/crossovers/batch-delete", status_code=200)
@@ -3910,6 +3990,7 @@ def batch_delete_crossovers(body: BatchDeleteCrossoversRequest) -> dict:
     snapshot, then validated and geometry-recomputed once at the end.
     """
     design = design_state.get_or_404()
+    before_occ = _strand_occupancy(design)
     ids_to_delete = set(body.crossover_ids)
     if not ids_to_delete:
         report = validate_design(design)
@@ -3935,7 +4016,8 @@ def batch_delete_crossovers(body: BatchDeleteCrossoversRequest) -> dict:
         params=body.model_dump(mode='json'),
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 _EXTRA_BASES_RE = __import__("re").compile(r"^[ACGTNacgtn]*$")
@@ -4354,7 +4436,19 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
         params={**body.model_dump(mode='json'), '_fl_id': fl.id},
         fn=lambda _d: current,
     )
-    return _design_response_with_geometry(current, report)
+    # A ligation moves NO nucleotide — it only re-tags strand_b's nucs onto
+    # strand_a and clears the two junction end-flags. So ship geometry for just
+    # the two strands' helices (partial fast path) instead of recomputing the
+    # whole design (~560 ms → a few ms on a 26-helix design). Extensions are
+    # only emitted in full-geometry mode, and _ligate can drop a 5' extension /
+    # remap a 3' one, so fall back to full when either strand carries one.
+    touches_extension = any(
+        ext.strand_id in (strand_a.id, strand_b.id) for ext in design.extensions
+    )
+    changed_helix_ids = None if touches_extension else list(
+        {d.helix_id for d in (*strand_a.domains, *strand_b.domains)}
+    )
+    return _design_response_with_geometry(current, report, changed_helix_ids=changed_helix_ids)
 
 
 @router.delete("/design/forced-ligations/{fl_id}", status_code=200)
@@ -4366,6 +4460,7 @@ def delete_forced_ligation(fl_id: str) -> dict:
     """
 
     design = design_state.get_or_404()
+    before_occ = _strand_occupancy(design)
     fl = next((f for f in design.forced_ligations if f.id == fl_id), None)
     if fl is None:
         raise HTTPException(404, detail=f"Forced ligation {fl_id!r} not found.")
@@ -4411,7 +4506,8 @@ def delete_forced_ligation(fl_id: str) -> dict:
         params={'fl_id': fl_id},
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 class BatchDeleteForcedLigationsRequest(BaseModel):
@@ -4424,6 +4520,7 @@ def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> di
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
+    before_occ = _strand_occupancy(design)
     ids_to_delete = set(body.forced_ligation_ids)
     if not ids_to_delete:
         report = validate_design(design)
@@ -4475,7 +4572,8 @@ def batch_delete_forced_ligations(body: BatchDeleteForcedLigationsRequest) -> di
         params=body.model_dump(mode='json'),
         fn=_apply,
     )
-    return _design_response_with_geometry(design, report)
+    changed = _local_changed_helices(before_occ, _strand_occupancy(design))
+    return _design_response_with_geometry(design, report, changed_helix_ids=changed, partial_axes=True)
 
 
 def _build_nick_batch(d: Design, body: 'NickBatchRequest') -> Design:
