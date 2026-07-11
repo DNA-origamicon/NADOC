@@ -18,6 +18,8 @@
  */
 
 import { initJobsPanelBase } from './jobs_panel_base.js'
+import { initForcesCard } from './forces_card.js'
+import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -57,6 +59,41 @@ export function jobDisplayName(job) {
 /** Is the job in an in-progress state (spinner / keep-polling)? */
 export function mrdnaJobIsActive(job) {
   return ['queued', 'preparing', 'running'].includes(job?.status)
+}
+
+/**
+ * Does an enabled E-field lack the ≥1 anchor it needs?  A uniform field with no
+ * anchor just streams the whole structure down-field (COM drift), so the launch is
+ * blocked client-side.  Mirrors the oxDNA/CanDo/NAMD guard; the mrDNA backend
+ * enforces the same rule server-side (routes_mrdna → 400).
+ */
+export function fieldNeedsAnchor(fieldOn, anchors) {
+  return !!fieldOn && !(anchors && anchors.length)
+}
+
+/**
+ * Build the POST /mrdna/jobs create body (M6).  Pure: threads the shared Forces-card
+ * field spec + shared Anchors-card list into the mrDNA payload under the SAME keys the
+ * oxDNA/CanDo/NAMD pickers use — field: {field_pN, dir}, anchors: [scope dicts] — so
+ * the mrDNA launch is byte-parity with the other engines' field/anchor requests.
+ * The mrDNA field/anchors backends (M1/M2) are already implemented + tested; this
+ * makes them reachable.  Three-Layer Law: these are job-request annotations, never
+ * Design edits.
+ */
+export function buildMrdnaLaunchBody({
+  coarseSteps, fineSteps, outputPeriod, device, sourcePath = null,
+  anchors = [], fieldSpec = null, fieldOn = false,
+} = {}) {
+  return {
+    coarse_steps:  Math.max(1000, parseInt(coarseSteps, 10) || 100000),
+    fine_steps:    fineSteps,
+    output_period: Math.max(100, parseInt(outputPeriod, 10) || 10000),
+    device:        (String(device ?? '0').trim() || '0'),
+    autostart:     true,
+    design_source_path: sourcePath || null,
+    anchors: (anchors && anchors.length) ? anchors : null,
+    field:   (fieldOn && fieldSpec) ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
+  }
 }
 
 /** Human status line for the detail block. */
@@ -134,7 +171,7 @@ export function formatCurvature(report) {
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
-export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = null } = {}) {
+export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = null, getSelection = null } = {}) {
   const $ = (id) => document.getElementById(id)
   const panel = $('mrdna-jobs-panel')
   const heading = $('mrdna-jobs-heading')
@@ -203,6 +240,20 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     onOpen: () => _onOpen(),
   })
 
+  // ── Anchors + Electric-field cards (M6) ──────────────────────────────────────
+  // Mount the SHARED cards (same as CanDo/NAMD) so mrDNA's already-implemented M1/M2
+  // field/anchor backends are reachable.  Numeric field card (no gizmo — oxDNA owns the
+  // one in-scene arrow); the anchors card shares the exact scope resolver via ids.
+  const _anchorsCard = initOxdnaAnchorsSetup({
+    getSelection: () => (getSelection ? getSelection() : null),
+    ids: {
+      toggle: 'mrdna-anchors-toggle', arrow: 'mrdna-anchors-arrow', body: 'mrdna-anchors-body',
+      add: 'mrdna-anchors-add', clear: 'mrdna-anchors-clear', list: 'mrdna-anchors-list',
+      status: 'mrdna-anchors-status',
+    },
+  })
+  const _efieldCard = initForcesCard({ engine: 'mrdna' })
+
   // ── Availability ──────────────────────────────────────────────────────────────
   async function _checkAvailable() {
     _available = await api.mrdnaAvailable()
@@ -227,14 +278,19 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   async function _launch(fineSteps) {
     if (!(await confirmNoConcurrentJob())) return
     if (!(await confirmGpuNotBusy())) return
-    const body_ = {
-      coarse_steps:  Math.max(1000, parseInt(stepsInput?.value, 10) || 100000),
-      fine_steps:    fineSteps,
-      output_period: Math.max(100, parseInt(outputInput?.value, 10) || 10000),
-      device:        (deviceInput?.value || '0').trim(),
-      autostart:     true,
-      design_source_path: getWorkspacePath?.() || null,
+    const anchors = _anchorsCard.getAnchors()
+    const fieldSpec = _efieldCard.getFieldSpec()
+    const fieldOn = _efieldCard.isEnabled()
+    if (fieldNeedsAnchor(fieldOn, anchors)) {
+      showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card.',
+        { severity: 'warn' })
+      return
     }
+    const body_ = buildMrdnaLaunchBody({
+      coarseSteps: stepsInput?.value, fineSteps, outputPeriod: outputInput?.value,
+      device: deviceInput?.value, sourcePath: getWorkspacePath?.() || null,
+      anchors, fieldSpec, fieldOn,
+    })
     if (coarseBtn) coarseBtn.disabled = true
     if (fineBtn) fineBtn.disabled = true
     const job = await api.createMrdnaJob(body_)

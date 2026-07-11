@@ -92,8 +92,8 @@ export const ENGINE_CAPABILITIES = {
     label: ENGINE_LABELS.mrdna,
     cards: {
       run: on('mrdna-jobs-coarse-btn'),
-      efield: off('mrDNA E-field runs at the ARBD model level (headless); no per-run card yet.'),
-      anchors: off('mrDNA anchors run as ARBD restraints (headless); no per-run card yet.'),
+      efield: on('mrdna-efield-toggle'),
+      anchors: on('mrdna-anchors-toggle'),
       surface: off('mrDNA has no hard-surface boundary condition.'),
       advanced: on('mrdna-jobs-adv-toggle'),
       viz: on('mrdna-jobs-display-toggle'),

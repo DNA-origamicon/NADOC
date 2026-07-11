@@ -51,8 +51,8 @@ const CENSUS = {
   },
   mrdna: {
     run:        { on: 'mrdna-jobs-coarse-btn' },
-    efield:     { off: 'mrdna-efield-toggle' },
-    anchors:    { off: 'mrdna-anchors-toggle' },
+    efield:     { on: 'mrdna-efield-toggle' },
+    anchors:    { on: 'mrdna-anchors-toggle' },
     surface:    { off: 'mrdna-surface-toggle' },
     advanced:   { on: 'mrdna-jobs-adv-toggle' },
     viz:        { on: 'mrdna-jobs-display-toggle' },
@@ -169,7 +169,8 @@ describe('engine capability descriptor — helper API', () => {
   it('supportsCard agrees with the descriptor', () => {
     expect(supportsCard('oxdna', 'surface')).toBe(true)
     expect(supportsCard('cando', 'surface')).toBe(false)
-    expect(supportsCard('mrdna', 'efield')).toBe(false)
+    expect(supportsCard('mrdna', 'efield')).toBe(true)    // M6: field/anchors now reachable
+    expect(supportsCard('mrdna', 'surface')).toBe(false)  // still no mrDNA hard-surface (M7/M8)
     expect(supportsCard('namd', 'surface')).toBe(false)
     expect(supportsCard('lammps', 'metrics')).toBe(false)   // no longer a selectable engine → false
     expect(supportsCard('bogus', 'efield')).toBe(false)
@@ -178,7 +179,8 @@ describe('engine capability descriptor — helper API', () => {
 
   it('cardReason is null for supported, a string for unsupported', () => {
     expect(cardReason('oxdna', 'efield')).toBeNull()
-    expect(typeof cardReason('mrdna', 'efield')).toBe('string')
+    expect(cardReason('mrdna', 'efield')).toBeNull()          // M6: now supported
+    expect(typeof cardReason('mrdna', 'surface')).toBe('string')
   })
 
   it('engineCards returns the full ordered stack with resolved fields', () => {

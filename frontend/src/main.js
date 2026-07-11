@@ -1979,7 +1979,7 @@ async function main() {
     connectionOverlay: mrdnaConnOverlay,
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
   })
-  const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath })
+  const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
   // solver. The "Predicted shape (deform model)" toggle deforms the NADOC model to
   // the FEM-predicted positions via applyFemPositions (display-only, Three-Layer).

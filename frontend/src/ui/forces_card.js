@@ -49,6 +49,13 @@ export const FORCES_FIELD_IDS = {
     vpm: 'cando-efield-vpm', qeff: 'cando-efield-qeff', vpmApply: 'cando-efield-vpm-apply',
     dirX: 'cando-efield-dir-x', dirY: 'cando-efield-dir-y', dirZ: 'cando-efield-dir-z', ready: 'cando-efield-ready',
   },
+  mrdna: {
+    toggle: 'mrdna-efield-toggle', arrow: 'mrdna-efield-arrow', body: 'mrdna-efield-body',
+    enable: 'mrdna-efield-enable', mag: 'mrdna-efield-mag',
+    vpmToggle: 'mrdna-efield-vpm-toggle', vpmArrow: 'mrdna-efield-vpm-arrow', vpmBody: 'mrdna-efield-vpm-body',
+    vpm: 'mrdna-efield-vpm', qeff: 'mrdna-efield-qeff', vpmApply: 'mrdna-efield-vpm-apply',
+    dirX: 'mrdna-efield-dir-x', dirY: 'mrdna-efield-dir-y', dirZ: 'mrdna-efield-dir-z', ready: 'mrdna-efield-ready',
+  },
   namd: {
     toggle: 'md-efield-toggle', arrow: 'md-efield-arrow', body: 'md-efield-body',
     enable: 'md-efield-enable', mag: 'md-efield-mag',
@@ -69,6 +76,7 @@ export const FORCES_FIELD_IDS = {
 const FORCES_FIELD_VARIANTS = {
   oxdna:  { defaultDir: [0, 1, 0], readyStyle: 'apply', verb: 'run',   gizmoGate: 'open-or-job',      jobArrow: true,  closeOnLeaveTab: true },
   cando:  { defaultDir: [0, 1, 0], readyStyle: 'apply', verb: 'solve', gizmoGate: 'open-or-job',      jobArrow: true,  closeOnLeaveTab: true },
+  mrdna:  { defaultDir: [0, 1, 0], readyStyle: 'apply', verb: 'run',   gizmoGate: 'open-or-job',      jobArrow: true,  closeOnLeaveTab: true },
   namd:   { defaultDir: [0, 1, 0], readyStyle: 'apply', verb: 'solve', gizmoGate: 'open-or-job',      jobArrow: true,  closeOnLeaveTab: true },
   lammps: { defaultDir: [1, 0, 0], readyStyle: 'lammps', verb: 'run',  gizmoGate: 'open-and-enabled', jobArrow: false, closeOnLeaveTab: false },
 }
