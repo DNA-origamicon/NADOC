@@ -45,6 +45,7 @@ function makeDeps(overrides = {}) {
       deleteOverhangs: vi.fn(async () => ({})), addNick: vi.fn(async () => ({})),
       addNickBatch: vi.fn(async () => ({})),
       deleteForcedLigation: vi.fn(async () => ({})), batchDeleteForcedLigations: vi.fn(async () => ({})),
+      deleteCrossover: vi.fn(async () => ({})), batchDeleteCrossovers: vi.fn(async () => ({})),
       forcedLigation: vi.fn(async () => ({})),
     },
     slicePlane: { isVisible: vi.fn(() => false), hide: vi.fn() },
@@ -492,17 +493,50 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     expect(d.api.deleteStrand).not.toHaveBeenCalled()
   })
 
-  it('Delete: single selected crossover → nick at its arc origin (unplace)', async () => {
+  it('Delete: record-backed crossover → deleteCrossover(id) (removes record, not just a nick)', async () => {
     const d = makeDeps()
     d.store.setState({ selectedObject: { type: 'crossover', id: 'xo3', data: {} } })
     d.selectionManager.getSelectedCrossoverArc.mockReturnValue({
+      crossover_id: 'xo3',
+      fromNuc: { helix_id: 'h2', bp_index: 14, direction: 'FORWARD' },
+    })
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.deleteCrossover).toHaveBeenCalledWith('xo3')
+    expect(d.api.addNick).not.toHaveBeenCalled()
+    expect(d.selectionManager.clearSelection).toHaveBeenCalled()
+  })
+
+  it('Delete: record-less crossover (no crossover_id) → falls back to a nick at the arc origin', async () => {
+    const d = makeDeps()
+    d.store.setState({ selectedObject: { type: 'crossover', id: 'xo3', data: {} } })
+    d.selectionManager.getSelectedCrossoverArc.mockReturnValue({
+      crossover_id: null,
       fromNuc: { helix_id: 'h2', bp_index: 14, direction: 'FORWARD' },
     })
     initKeyboardShortcuts(d)
     await press('Delete')
     expect(d.api.addNick).toHaveBeenCalledWith({ helixId: 'h2', bpIndex: 14, direction: 'FORWARD' })
-    expect(d.selectionManager.clearSelection).toHaveBeenCalled()
-    expect(d.api.deleteForcedLigation).not.toHaveBeenCalled()
+    expect(d.api.deleteCrossover).not.toHaveBeenCalled()
+  })
+
+  it('Delete: multi-arc splits into FL-delete, record-delete, and nick by arc kind', async () => {
+    const d = makeDeps()
+    d.store.setState({
+      currentDesign: { forced_ligations: [{ id: 'fl1' }] },
+    })
+    d.selectionManager.getMultiCrossoverArcs.mockReturnValue([
+      { crossover_id: 'fl1', fromNuc: { helix_id: 'h1', bp_index: 5, direction: 'FORWARD' } },
+      { crossover_id: 'xoA', fromNuc: { helix_id: 'h2', bp_index: 6, direction: 'REVERSE' } },
+      { crossover_id: 'xoB', fromNuc: { helix_id: 'h3', bp_index: 7, direction: 'FORWARD' } },
+      { crossover_id: null,  fromNuc: { helix_id: 'h4', bp_index: 8, direction: 'REVERSE' } },
+    ])
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.api.deleteForcedLigation).toHaveBeenCalledWith('fl1')
+    expect(d.api.batchDeleteCrossovers).toHaveBeenCalledWith(['xoA', 'xoB'])
+    expect(d.api.addNick).toHaveBeenCalledWith({ helixId: 'h4', bpIndex: 8, direction: 'REVERSE' })
+    expect(d.selectionManager.clearMultiCrossoverArcs).toHaveBeenCalled()
   })
 
   it('Delete with no selection is a no-op (no api calls)', async () => {

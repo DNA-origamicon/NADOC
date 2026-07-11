@@ -15,6 +15,11 @@ import {
 // Always-positive modulo (matches Python's % for negative operands)
 export function _mod(n, m) { return ((n % m) + m) % m }
 
+// caDNAno2 parity rule (matches backend/core/lattice.py cell_direction and the
+// cadnano-editor sliceview): even (row+col) parity → FORWARD (scaffold 5′→3′
+// along +axis), odd → REVERSE. Identical for honeycomb and square lattices.
+export function isForwardCell(row, col) { return _mod(row + col, 2) === 0 }
+
 // ── Honeycomb (cadnano2 system: all cells valid, (row+col)%2 parity) ──
 // x = col × COL_PITCH + ox, y = row × ROW_PITCH + stagger + oy.
 // ox/oy are the lattice origin offset derived from actual helix physical positions.

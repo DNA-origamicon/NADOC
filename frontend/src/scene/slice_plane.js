@@ -26,6 +26,7 @@ import { store } from '../state/store.js'
 import { showToast } from '../ui/toast.js'
 import {
   _mod,
+  isForwardCell,
   isValidHoneycombCell,
   honeycombCellWorldPos,
   isValidSquareCell,
@@ -117,11 +118,18 @@ let cellWorldPos  = honeycombCellWorldPos
 
 // ── Colours ───────────────────────────────────────────────────────────────────
 
-const C_CELL        = new THREE.Color(0xfcba03)  // gold   — selectable (free)
+// Free selectable cells are coloured by their lattice polarity so the user can
+// read forward vs reverse before extruding — same convention + colours as the
+// cadnano-editor sliceview (CLR_FORWARD_STROKE / CLR_REVERSE_STROKE).
+const C_FWD         = new THREE.Color(0x29b6f6)  // blue   — FORWARD position (even parity)
+const C_REV         = new THREE.Color(0xef5350)  // red    — REVERSE position (odd parity)
 const C_CONTINUABLE = new THREE.Color(0xff9900)  // amber  — selectable (continuation)
 const C_SELECTED    = new THREE.Color(0x58a6ff)  // blue   — selected
 const C_OCCUPIED    = new THREE.Color(0x444444)  // grey   — occupied (non-selectable)
 const C_HOVER       = new THREE.Color(0xffffff)  // white  — hover
+
+// Free-cell base colour keyed on caDNAno2 parity (forward=blue, reverse=red).
+function _freeColor(row, col) { return isForwardCell(row, col) ? C_FWD : C_REV }
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
@@ -909,7 +917,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     const baseColor = state === 'occupied'    ? C_OCCUPIED
                     : state === 'continuable' ? C_CONTINUABLE
-                    :                           C_CELL
+                    :                           _freeColor(row, col)
 
     const fillMat = new THREE.MeshBasicMaterial({
       color: baseColor.clone(), transparent: true,
@@ -1108,7 +1116,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         continue
       }
 
-      const baseColor = state === 'continuable' ? C_CONTINUABLE : C_CELL
+      const baseColor = state === 'continuable' ? C_CONTINUABLE : _freeColor(row, col)
 
       if (isHover) {
         fill.material.color.copy(C_HOVER)
@@ -1661,6 +1669,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   const _sliceUnitSelect  = _ctxEl?.querySelector('#slice-unit')
   const _sliceDirFwd      = _ctxEl?.querySelector('#slice-dir-fwd')
   const _sliceDirBwd      = _ctxEl?.querySelector('#slice-dir-bwd')
+  // Forward/reverse polarity legend — shown only while the extrude lattice grid is up.
+  const _legendEl         = document.getElementById('extrude-legend')
+  function _setLegendVisible(v) { if (_legendEl) _legendEl.style.display = v ? 'flex' : 'none' }
   let _sliceDirSign = 1   // default +axis
   // True while the sidebar Extrude panel (which now hosts these controls) is open.
   // Gates the live count refresh; set via setExtrudeUiOpen() by the extrude_panel
@@ -1874,8 +1885,10 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
         _buildLattice()
         _applyLengthStep()   // lattice now known → step arrows/spinner by 7 (HC) / 8 (SQ)
         _setDirSign(1)   // new bundle / segment defaults to +axis
+        _setLegendVisible(true)   // forward/reverse polarity key for cell picking
       } else {
         _hidePreview()
+        _setLegendVisible(false)
       }
     },
 
@@ -1922,6 +1935,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _borderMesh.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(40, 40, RISE))
       _clearLattice()
       _hidePreview()
+      _setLegendVisible(false)
       _placementMode    = false
       _placementSpec    = null
       _placementArmed   = false
@@ -2096,6 +2110,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _updatePosition()
       _buildLattice()
       _setDirSign(defaultDirSign)
+      _setLegendVisible(true)   // forward/reverse polarity key for cell picking
     },
 
     /** Replace the camera used for raycasting (called by cadnano_view when switching to ortho). */

@@ -1025,6 +1025,26 @@ export async function placeCrossoverBatch(placements) {
   return _syncFromDesignResponse(json)
 }
 
+/**
+ * Remove a crossover RECORD by id (DELETE /design/crossovers/{id}).
+ *
+ * This is the correct way to delete a placed crossover: the backend both
+ * desplices the strand (splits it back into single-helix fragments) AND drops
+ * the record.  Nicking alone leaves the record behind, so the arc is redrawn
+ * from it — use this whenever a selected crossover carries a real crossover_id.
+ */
+export async function deleteCrossover(crossoverId) {
+  const json = await _request('DELETE', `/design/crossovers/${crossoverId}`)
+  return _syncFromDesignResponse(json)
+}
+
+/** Remove multiple crossover records atomically (POST /design/crossovers/batch-delete). */
+export async function batchDeleteCrossovers(crossoverIds) {
+  if (!crossoverIds.length) return null
+  const json = await _request('POST', '/design/crossovers/batch-delete', { crossover_ids: crossoverIds })
+  return _syncFromDesignResponse(json)
+}
+
 export async function patchCrossoverExtraBases(crossoverId, sequence) {
   const json = await _request('PATCH', `/design/crossovers/${crossoverId}/extra-bases`, { sequence })
   return _syncFromDesignResponse(json)

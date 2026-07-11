@@ -248,6 +248,12 @@ An MD solvated package ships BOTH `{stem}.psf` and the fast-mode `{stem}_hmr.psf
 
 ---
 
+<a id="c10"></a>
+### C10. Deleting a placed crossover in the 3D editor by NICKING only leaves the record behind → the arc is redrawn from the record ("colors change but the connection stays") (2026-07-10)
+A crossover here is **nick + ligate + record** (`place_crossover`): a single strand routed across both helices PLUS a `Crossover` entry in `design.crossovers`. The 3D arc is drawn from *whichever exists* — [helix_renderer.js](frontend/src/scene/helix_renderer.js) `getCrossHelixConnections()` first emits an arc for each real strand-topology cross-helix cone, then **adds an arc for every crossover RECORD whose site isn't already covered by a cone**. So a record with no ligated strand across it still draws an arc. The 3D-editor Delete handler ([keyboard_shortcuts.js](frontend/src/ui/keyboard_shortcuts.js), `type==='crossover'`/`'cone'` + the multi-arc path) called `api.addNick` only. Nicking splits the strand (and `_build_nick` palette-colors the new fragment → **"strand colors change"**) but never touches the record → the record's arc is redrawn → **"the connection isn't deleted."** After that first click the crossover is left *unligated* (record present, strand split); a second Delete nicks at what is now a 3′ terminus → 400, nothing happens → "stuck." User symptom was on a copy/pasted cluster, but the paste was a red herring: the design had exactly ONE unligated record — the one they'd already tried to delete. Fix: when the selected arc carries a real `crossover_id`, route Delete through `DELETE /design/crossovers/{id}` (`deleteCrossover`, which desplices the strand AND drops the record) instead of a nick; keep the nick only as the fallback for record-less crossovers (pure strand topology, e.g. imported scaffold routing). Required adding `deleteCrossover`/`batchDeleteCrossovers` to the **main** `api/client.js` — they existed only in the separate cadnano-editor `api.js` (cf. [[C6]] — the editor has its own client). **Lesson:** when one concept has two representations (strand routing + a record) and rendering falls back to the record, a delete must clear BOTH; a mutation that only touches one representation looks half-done. Grep for other "unplace by nick" spots that assume nicking removes a recorded relationship.
+
+---
+
 ## D. Rendering / scene state
 
 <a id="d1"></a>

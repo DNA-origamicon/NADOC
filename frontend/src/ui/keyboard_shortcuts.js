@@ -561,14 +561,22 @@ export function initKeyboardShortcuts(deps) {
         const design = store.getState().currentDesign
         const flIds = new Set((design?.forced_ligations ?? []).map(fl => fl.id))
 
-        // Separate forced-ligation arcs from regular crossover arcs
+        // Split arcs three ways:
+        //  • forced ligations       → deleteForcedLigation (splits strand + drops FL record)
+        //  • record-backed crossovers → deleteCrossover     (desplices strand + drops record)
+        //  • record-less crossovers  → addNick              (pure strand-topology, no record)
+        // Nicking a record-backed crossover only splits the strand; the record
+        // survives and the arc is redrawn from it, so those MUST go through the
+        // record-delete route instead.
         const flArcIds = []
+        const xoRecIds = []
         const nicks = []
         for (const a of multiArcs) {
-          if (!a.fromNuc) continue
           if (flIds.has(a.crossover_id)) {
             flArcIds.push(a.crossover_id)
-          } else {
+          } else if (a.crossover_id) {
+            xoRecIds.push(a.crossover_id)
+          } else if (a.fromNuc) {
             nicks.push({
               helixId:   a.fromNuc.helix_id,
               bpIndex:   a.fromNuc.bp_index,
@@ -581,7 +589,11 @@ export function initKeyboardShortcuts(deps) {
         if (flArcIds.length === 1) await api.deleteForcedLigation(flArcIds[0])
         else if (flArcIds.length > 1) await api.batchDeleteForcedLigations(flArcIds)
 
-        // Nick regular crossovers
+        // Delete record-backed crossovers (desplices + removes record)
+        if (xoRecIds.length === 1) await api.deleteCrossover(xoRecIds[0])
+        else if (xoRecIds.length > 1) await api.batchDeleteCrossovers(xoRecIds)
+
+        // Nick record-less crossovers
         if (nicks.length === 1) await api.addNick(nicks[0])
         else if (nicks.length > 1) await api.addNickBatch(nicks)
         return
@@ -597,12 +609,17 @@ export function initKeyboardShortcuts(deps) {
         return
       }
 
-      // Single plain-clicked crossover → unplace it by nicking at its arc
-      // origin (mirrors the multi path's per-arc nick).
+      // Single plain-clicked crossover → remove it.  A record-backed crossover
+      // must go through deleteCrossover (desplices the strand AND drops the
+      // record); nicking alone leaves the record, which is redrawn as the arc.
+      // Only record-less crossovers (pure strand topology, e.g. imported
+      // scaffold routing) fall back to a nick at the arc origin.
       if (selectedObject.type === 'crossover') {
         const arc = selectionManager.getSelectedCrossoverArc?.()
         selectionManager.clearSelection?.()
-        if (arc?.fromNuc) {
+        if (arc?.crossover_id) {
+          await api.deleteCrossover(arc.crossover_id)
+        } else if (arc?.fromNuc) {
           await api.addNick({
             helixId:   arc.fromNuc.helix_id,
             bpIndex:   arc.fromNuc.bp_index,

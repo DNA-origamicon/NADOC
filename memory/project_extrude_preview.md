@@ -7,6 +7,24 @@ metadata:
   originSessionId: 9242672e-6640-4491-bdd3-c5b7f01e77e6
 ---
 
+## Lattice cells colour-coded FORWARD/REVERSE + polarity legend (2026-07-10)
+
+The extrude grid now colours **free selectable cells by caDNAno2 parity** so the user can read a
+cell's polarity before picking: even `(row+col)%2==0` = **FORWARD → blue `#29b6f6`**, odd =
+**REVERSE → red `#ef5350`** — the exact convention + colours as the cadnano-editor sliceview
+(`frontend/src/cadnano-editor/sliceview.js` `hcIsForward`/`CLR_FORWARD_STROKE`/`CLR_REVERSE_STROKE`)
+and backend `core/lattice.py cell_direction`. Continuable=amber, occupied=grey, selected=blue,
+hover=white are unchanged (only the old gold "free" `C_CELL` was replaced).
+- Pure helper `isForwardCell(row,col)` added to `slice_plane/lattice_math.js` (+`lattice_math.test.js`,
+  6 cases incl. negative coords). `slice_plane.js` gained `C_FWD`/`C_REV` + `_freeColor(row,col)`,
+  used in `_addCell` and `_updateCircleColors` (both replaced `C_CELL`).
+- **Legend** `#extrude-legend` (index.html, in `#canvas-area`, top-center pill, `display:none`) shows
+  "Lattice position ▪Forward ▪Reverse". Toggled by `slice_plane.js _setLegendVisible()` — ON in
+  `show()` (non-readOnly) and `showDeformed()`, OFF in `show()` readOnly + `hide()`.
+- Verified live (throwaway Playwright, `?open=2hb.nadoc` → Tools→Extrude): legend visible, all
+  even-parity free cells `#29b6f6` / odd `#ef5350` (65/65), 0 console errors. Frontend suite 2563 green.
+  main.js untouched (HTML + slice_plane + lattice_math only).
+
 ## Extrude-entry rework — sidebar panel + plane dropdown + origin axes (2026-06-11)
 
 The extrude **entry UX** was reworked (the preview machinery below is unchanged). What moved:

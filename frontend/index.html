@@ -5604,6 +5604,22 @@
         <div id="canvas-area">
           <canvas id="canvas"></canvas>
           <div id="mode-indicator">NADOC · WORKSPACE</div>
+          <!-- Extrude lattice polarity legend (shown by slice_plane.js while the extrude grid is up) -->
+          <div id="extrude-legend" style="
+            position:absolute; top:12px; left:50%; transform:translateX(-50%);
+            display:none; align-items:center; gap:14px;
+            padding:5px 12px; border-radius:var(--radius-pill);
+            background:rgba(13,17,23,0.82); border:1px solid #2d3f50;
+            color:#c9d1d9; font-size:var(--text-xs); letter-spacing:0.02em;
+            pointer-events:none; z-index:5; backdrop-filter:blur(2px)">
+            <span style="color:#8b949e">Lattice position</span>
+            <span style="display:flex;align-items:center;gap:5px">
+              <span style="width:12px;height:12px;border-radius:3px;background:rgba(41,182,246,0.35);border:2px solid #29b6f6"></span>Forward
+            </span>
+            <span style="display:flex;align-items:center;gap:5px">
+              <span style="width:12px;height:12px;border-radius:3px;background:rgba(239,83,80,0.35);border:2px solid #ef5350"></span>Reverse
+            </span>
+          </div>
           <!-- Selection-count HUD pill (auto-shown by main.js when selection ≥ 1) -->
           <div id="selection-count-hud" style="
             position:absolute; bottom:12px; left:50%; transform:translateX(-50%);

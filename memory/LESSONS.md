@@ -62,6 +62,7 @@ FIX (both layers): (A) write side — `build_replica_package` now copies `parent
 - **C7** — Autosave→SSE→sibling-tab reload clobbers edits — only the last edit of each type survives; reverts ~1s later. [detail](LESSONS_archive.md#c7-2)
 - **C8** — Fingerprint write skipping the feature log breaks seek/staleness — oxDNA out-of-date ⚠ won't clear after seeking back. [detail](LESSONS_archive.md#c8)
 - **C9** — `glob("*.psf")[0]` picks the derived `_hmr.psf` sibling — prep intermittently fails on a phantom `{stem}_hmr.pdb`. [detail](LESSONS_archive.md#c9)
+- **C10** — Deleting a 3D crossover via NICK only leaves the record behind → arc redrawn from it ("colors change but connection stays"). [detail](LESSONS_archive.md#c10)
 
 ## D. Rendering / scene state
 - **D1** — Beads flash to 3D after a cadnano/unfold mutation — a late subscriber overwrites cadnano positions for one frame. [detail](LESSONS_archive.md#d1)
