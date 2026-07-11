@@ -58,7 +58,10 @@ function _unit(v) {
   const n = Math.hypot(v[0], v[1], v[2])
   return n > 1e-12 ? [v[0] / n, v[1] / n, v[2] / n] : null
 }
-function _surfaceOpposesField(field, surface) {
+/** True when a hard surface (`{dir}`) holds a field (`{dir}`) pressing into it — the
+ * deposition case that needs no strand anchor. Exported so every field/anchor guard
+ * (chain stages, the mrDNA panel M8) shares this one mirror of the backend rule. */
+export function surfaceOpposesField(field, surface) {
   const f = _unit(field?.dir)
   const s = _unit(surface?.dir)
   if (!f || !s) return false
@@ -67,7 +70,7 @@ function _surfaceOpposesField(field, surface) {
 /** A field with no strand anchor still needs holding unless a surface opposes it. */
 function _fieldNeedsAnchor(st) {
   if (!_hasField(st) || _hasAnchors(st)) return false
-  return !_surfaceOpposesField(st.field, st.surface)
+  return !surfaceOpposesField(st.field, st.surface)
 }
 
 /**

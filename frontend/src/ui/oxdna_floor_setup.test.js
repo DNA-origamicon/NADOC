@@ -94,3 +94,53 @@ describe('initOxdnaFloorSetup', () => {
     expect(api.getSurfaceSpec().enabled).toBe(false)
   })
 })
+
+// M8: the card mounts on a sibling engine's DOM ids (mrDNA) with identical behaviour.
+describe('initOxdnaFloorSetup — custom ids bag (mrDNA mount)', () => {
+  const MR_IDS = {
+    toggle: 'mrdna-surface-toggle', arrow: 'mrdna-surface-arrow', body: 'mrdna-surface-body',
+    enable: 'mrdna-surface-enable', controls: 'mrdna-surface-controls', axis: 'mrdna-surface-axis',
+    offset: 'mrdna-surface-offset', offsetLabel: 'mrdna-surface-offset-label',
+    stiff: 'mrdna-surface-stiff', ready: 'mrdna-surface-ready',
+  }
+  afterEach(() => clearDom())
+
+  it('reads/writes the mrDNA ids and emits the same {dir,offsetNm,stiff} spec', () => {
+    const els = mountIds({
+      'mrdna-surface-toggle': 'div', 'mrdna-surface-arrow': 'span', 'mrdna-surface-body': 'div',
+      'mrdna-surface-enable': 'input', 'mrdna-surface-controls': 'div',
+      'mrdna-surface-axis': 'select', 'mrdna-surface-offset': 'input',
+      'mrdna-surface-offset-label': 'span', 'mrdna-surface-stiff': 'input',
+      'mrdna-surface-ready': 'div',
+    })
+    for (const [v, label] of [['-y', '−Y'], ['+y', '+Y'], ['-x', '−X']]) {
+      const o = document.createElement('option'); o.value = v; o.textContent = label
+      els['mrdna-surface-axis'].appendChild(o)
+    }
+    els['mrdna-surface-stiff'].value = '5'; els['mrdna-surface-offset'].value = '0'
+    const api = initOxdnaFloorSetup({ ids: MR_IDS })
+    els['mrdna-surface-enable'].checked = true
+    els['mrdna-surface-enable'].dispatchEvent(new Event('change'))
+    els['mrdna-surface-axis'].value = '+y'
+    els['mrdna-surface-axis'].dispatchEvent(new Event('change'))
+    els['mrdna-surface-offset'].value = '3'
+    els['mrdna-surface-offset'].dispatchEvent(new Event('input'))
+    const spec = api.getSurfaceSpec()
+    expect(spec.enabled).toBe(true)
+    expect(spec.dir).toEqual([0, -1, 0])
+    expect(spec.offsetNm).toBe(3)
+    expect(els['mrdna-surface-offset-label'].textContent).toBe('3.0 nm')
+  })
+
+  it('does not touch the oxDNA ids when mounted with a custom bag', () => {
+    mountIds({
+      'mrdna-surface-toggle': 'div', 'mrdna-surface-body': 'div', 'mrdna-surface-enable': 'input',
+      'oxdna-floor-toggle': 'div', 'oxdna-floor-body': 'div', 'oxdna-floor-enable': 'input',
+    })
+    const api = initOxdnaFloorSetup({ ids: MR_IDS })
+    // The oxDNA enable checkbox must be untouched by the mrDNA-mounted card.
+    document.getElementById('mrdna-surface-toggle').click()
+    expect(document.getElementById('oxdna-floor-body').style.display).toBe('')  // default (never set to none)
+    expect(api.isEnabled()).toBe(false)
+  })
+})

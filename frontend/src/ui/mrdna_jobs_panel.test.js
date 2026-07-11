@@ -13,6 +13,7 @@ import {
 } from './mrdna_jobs_panel.js'
 import { initForcesCard, FORCES_FIELD_IDS } from './forces_card.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
+import { initOxdnaFloorSetup } from './oxdna_floor_setup.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
@@ -104,6 +105,17 @@ describe('fieldNeedsAnchor (field-drift guard)', () => {
   it('a disabled field never needs an anchor', () => {
     expect(fieldNeedsAnchor(false, [])).toBe(false)
     expect(fieldNeedsAnchor(false, [{ kind: 'strand', id: 's1' }])).toBe(false)
+  })
+  // M8 deposition exception: a surface the field presses INTO holds it (no anchor).
+  it('a field opposed by a hard surface needs no anchor (deposition)', () => {
+    const field = { field_pN: 2, dir: [0, -1, 0] }         // field points down (−Y)
+    const surfBelow = { dir: [0, 1, 0], offsetNm: 0, stiff: 5 }  // floor below, normal +Y → opposes
+    expect(fieldNeedsAnchor(true, [], field, surfBelow)).toBe(false)
+    // A surface NOT opposing the field (same side) still needs an anchor.
+    const surfAbove = { dir: [0, -1, 0], offsetNm: 0, stiff: 5 } // normal −Y, parallel to field
+    expect(fieldNeedsAnchor(true, [], field, surfAbove)).toBe(true)
+    // No surface passed → the plain guard (anchor required).
+    expect(fieldNeedsAnchor(true, [], field, null)).toBe(true)
   })
 })
 
@@ -198,6 +210,87 @@ describe('mrDNA launch payload — card → body PARITY', () => {
     })
     expect(body.anchors).toEqual(anchors)
     expect(body.anchors.map(a => a.id).sort()).toEqual(['o1', 'o2'])
+  })
+})
+
+// ── M8: hard-surface reachability (PARITY oracle) ─────────────────────────────
+// The mrDNA hard-surface BACKEND (M7 ARBD repulsion plane) is already implemented +
+// GPU-validated; M8 makes it reachable by mounting the SHARED oxDNA floor card onto
+// mrDNA's own DOM ids and threading its {dir, offsetNm, stiff} spec into the create
+// body under the cross-engine snake_case key {dir, offset_nm, stiff} — byte-parity with
+// the oxDNA production surface request.
+
+describe('buildMrdnaLaunchBody — hard-surface threading', () => {
+  it('threads an enabled surface under the snake_case cross-engine key', () => {
+    const body = buildMrdnaLaunchBody({
+      coarseSteps: 100000, fineSteps: 0, outputPeriod: 10000, device: '0',
+      surfaceSpec: { dir: [0, 1, 0], offsetNm: 2.5, stiff: 8 }, surfaceOn: true,
+    })
+    expect(body.surface).toEqual({ dir: [0, 1, 0], offset_nm: 2.5, stiff: 8 })
+  })
+  it('omits the surface when disabled or zero-stiff (null, not {})', () => {
+    const off = buildMrdnaLaunchBody({
+      coarseSteps: 100000, fineSteps: 0, outputPeriod: 10000, device: '0',
+      surfaceSpec: { dir: [0, 1, 0], offsetNm: 2, stiff: 8 }, surfaceOn: false,
+    })
+    expect(off.surface).toBeNull()
+    const zero = buildMrdnaLaunchBody({
+      coarseSteps: 100000, fineSteps: 0, outputPeriod: 10000, device: '0',
+      surfaceSpec: { dir: [0, 1, 0], offsetNm: 2, stiff: 0 }, surfaceOn: true,
+    })
+    expect(zero.surface).toBeNull()
+  })
+})
+
+describe('mrDNA launch payload — surface card → body PARITY', () => {
+  afterEach(() => clearDom())
+
+  const SURFACE_IDS = {
+    'mrdna-surface-toggle': 'div', 'mrdna-surface-arrow': 'span', 'mrdna-surface-body': 'div',
+    'mrdna-surface-enable': 'input', 'mrdna-surface-controls': 'div',
+    'mrdna-surface-axis': 'select', 'mrdna-surface-offset': 'input',
+    'mrdna-surface-offset-label': 'span', 'mrdna-surface-stiff': 'input',
+    'mrdna-surface-ready': 'div',
+  }
+  function mountSurfaceCard() {
+    const els = mountIds(SURFACE_IDS)
+    for (const [v, label] of [['-y', '−Y (below)'], ['+y', '+Y (above)'], ['-x', '−X']]) {
+      const o = document.createElement('option'); o.value = v; o.textContent = label
+      els['mrdna-surface-axis'].appendChild(o)
+    }
+    els['mrdna-surface-stiff'].value = '5'
+    els['mrdna-surface-offset'].value = '0'
+    return els
+  }
+  function setInput(el, v) { el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })) }
+
+  it('the surface the shared mrDNA card emits is the surface in the launch body', () => {
+    const els = mountSurfaceCard()
+    const card = initOxdnaFloorSetup({
+      ids: {
+        toggle: 'mrdna-surface-toggle', arrow: 'mrdna-surface-arrow', body: 'mrdna-surface-body',
+        enable: 'mrdna-surface-enable', controls: 'mrdna-surface-controls', axis: 'mrdna-surface-axis',
+        offset: 'mrdna-surface-offset', offsetLabel: 'mrdna-surface-offset-label',
+        stiff: 'mrdna-surface-stiff', ready: 'mrdna-surface-ready',
+      },
+    })
+    els['mrdna-surface-enable'].checked = true
+    els['mrdna-surface-enable'].dispatchEvent(new Event('change', { bubbles: true }))
+    els['mrdna-surface-axis'].value = '+y'
+    els['mrdna-surface-axis'].dispatchEvent(new Event('change', { bubbles: true }))
+    setInput(els['mrdna-surface-offset'], 2.5)
+    setInput(els['mrdna-surface-stiff'], 8)
+
+    const spec = card.getSurfaceSpec()
+    const body = buildMrdnaLaunchBody({
+      coarseSteps: 100000, fineSteps: 0, outputPeriod: 10000, device: '0',
+      surfaceSpec: spec, surfaceOn: card.isEnabled(),
+    })
+    expect(card.isEnabled()).toBe(true)
+    expect(body.surface).toEqual({ dir: spec.dir, offset_nm: spec.offsetNm, stiff: spec.stiff })
+    expect(body.surface.dir).toEqual([0, -1, 0])   // +y side → normal points down
+    expect(body.surface.offset_nm).toBe(2.5)
+    expect(body.surface.stiff).toBe(8)
   })
 })
 

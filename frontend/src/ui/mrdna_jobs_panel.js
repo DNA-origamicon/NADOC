@@ -20,6 +20,8 @@
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
+import { initOxdnaFloorSetup } from './oxdna_floor_setup.js'
+import { surfaceOpposesField } from './chain_sim_model.js'
 import { showToast } from './toast.js'
 import { filterJobsForPart } from './md_jobs_panel.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -66,9 +68,16 @@ export function mrdnaJobIsActive(job) {
  * anchor just streams the whole structure down-field (COM drift), so the launch is
  * blocked client-side.  Mirrors the oxDNA/CanDo/NAMD guard; the mrDNA backend
  * enforces the same rule server-side (routes_mrdna → 400).
+ *
+ * Deposition exception (M8, matches the backend `field_needs_strand_anchor` rule): a
+ * hard surface the field presses straight INTO holds it too (the plane's reaction
+ * balances the COM drift), so a field + opposing surface needs no strand anchor.  The
+ * opposition test reuses the shared `surfaceOpposesField` mirror — no geometry re-derived.
  */
-export function fieldNeedsAnchor(fieldOn, anchors) {
-  return !!fieldOn && !(anchors && anchors.length)
+export function fieldNeedsAnchor(fieldOn, anchors, fieldSpec = null, surfaceSpec = null) {
+  if (!fieldOn) return false
+  if (anchors && anchors.length) return false
+  return !surfaceOpposesField(fieldSpec, surfaceSpec)
 }
 
 /**
@@ -83,7 +92,15 @@ export function fieldNeedsAnchor(fieldOn, anchors) {
 export function buildMrdnaLaunchBody({
   coarseSteps, fineSteps, outputPeriod, device, sourcePath = null,
   anchors = [], fieldSpec = null, fieldOn = false,
+  surfaceSpec = null, surfaceOn = false,
 } = {}) {
+  // Hard surface (M8): the shared floor card emits camelCase {dir, offsetNm, stiff};
+  // the backend takes the cross-engine snake_case {dir, offset_nm, stiff} form (same as
+  // oxDNA production).  Only threaded when enabled AND stiff — a bare/zero-stiff surface
+  // is a no-op.
+  const surface = (surfaceOn && surfaceSpec && surfaceSpec.stiff > 0)
+    ? { dir: surfaceSpec.dir, offset_nm: surfaceSpec.offsetNm, stiff: surfaceSpec.stiff }
+    : null
   return {
     coarse_steps:  Math.max(1000, parseInt(coarseSteps, 10) || 100000),
     fine_steps:    fineSteps,
@@ -93,6 +110,7 @@ export function buildMrdnaLaunchBody({
     design_source_path: sourcePath || null,
     anchors: (anchors && anchors.length) ? anchors : null,
     field:   (fieldOn && fieldSpec) ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
+    surface,
   }
 }
 
@@ -254,6 +272,19 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   })
   const _efieldCard = initForcesCard({ engine: 'mrdna' })
 
+  // ── Hard surface card (M8) ────────────────────────────────────────────────────
+  // Mount the SHARED oxDNA floor card onto mrDNA's own DOM ids so the M7 ARBD
+  // repulsion-plane backend is reachable.  Same {dir, offset_nm, stiff} descriptor;
+  // no in-scene grid (that's oxDNA's floor render — omit setSurfaceGrid).
+  const _surfaceCard = initOxdnaFloorSetup({
+    ids: {
+      toggle: 'mrdna-surface-toggle', arrow: 'mrdna-surface-arrow', body: 'mrdna-surface-body',
+      enable: 'mrdna-surface-enable', controls: 'mrdna-surface-controls', axis: 'mrdna-surface-axis',
+      offset: 'mrdna-surface-offset', offsetLabel: 'mrdna-surface-offset-label',
+      stiff: 'mrdna-surface-stiff', ready: 'mrdna-surface-ready',
+    },
+  })
+
   // ── Availability ──────────────────────────────────────────────────────────────
   async function _checkAvailable() {
     _available = await api.mrdnaAvailable()
@@ -281,15 +312,17 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     const anchors = _anchorsCard.getAnchors()
     const fieldSpec = _efieldCard.getFieldSpec()
     const fieldOn = _efieldCard.isEnabled()
-    if (fieldNeedsAnchor(fieldOn, anchors)) {
-      showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card.',
-        { severity: 'warn' })
+    const surfaceSpec = _surfaceCard.getSurfaceSpec()
+    const surfaceOn = _surfaceCard.isEnabled()
+    if (fieldNeedsAnchor(fieldOn, anchors, fieldSpec, surfaceOn ? surfaceSpec : null)) {
+      showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card, '
+        + 'or a hard surface it presses into (deposition).', { severity: 'warn' })
       return
     }
     const body_ = buildMrdnaLaunchBody({
       coarseSteps: stepsInput?.value, fineSteps, outputPeriod: outputInput?.value,
       device: deviceInput?.value, sourcePath: getWorkspacePath?.() || null,
-      anchors, fieldSpec, fieldOn,
+      anchors, fieldSpec, fieldOn, surfaceSpec, surfaceOn,
     })
     if (coarseBtn) coarseBtn.disabled = true
     if (fineBtn) fineBtn.disabled = true

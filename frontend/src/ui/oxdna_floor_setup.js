@@ -12,26 +12,39 @@
  * Display-layer only.  Geometry/spec math lives in scene/oxdna_floor_math.js
  * (pure, unit-tested); this module is DOM wiring.
  *
- * Factory: initOxdnaFloorSetup({ onChange }) → { getSurfaceSpec, isEnabled,
- *   refresh }.  getSurfaceSpec() → { dir, offsetNm, stiff, enabled }.
+ * Factory: initOxdnaFloorSetup({ onChange, ids }) → { getSurfaceSpec, isEnabled,
+ *   refresh }.  getSurfaceSpec() → { dir, offsetNm, stiff, enabled }.  The `ids`
+ *   bag lets a sibling engine (mrDNA, M8) mount the SAME card onto its own DOM ids
+ *   with zero behaviour change — default ids are the oxDNA panel's.
  */
 
 import { floorSurfaceSpec, formatOffsetNm, axisForNormal } from '../scene/oxdna_floor_math.js'
 
-export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null } = {}) {
-  const toggle = document.getElementById('oxdna-floor-toggle')
-  const arrow  = document.getElementById('oxdna-floor-arrow')
-  const bodyEl = document.getElementById('oxdna-floor-body')
+// Default DOM ids (the oxDNA "Hard surface" card). A sibling panel passes its own
+// `ids` bag (e.g. mrdna-surface-*) to mount an identical card — same math, same
+// {dir, offset_nm, stiff} descriptor.
+const DEFAULT_IDS = {
+  toggle: 'oxdna-floor-toggle', arrow: 'oxdna-floor-arrow', body: 'oxdna-floor-body',
+  enable: 'oxdna-floor-enable', controls: 'oxdna-floor-controls', axis: 'oxdna-floor-axis',
+  offset: 'oxdna-floor-offset', offsetLabel: 'oxdna-floor-offset-label',
+  stiff: 'oxdna-floor-stiff', ready: 'oxdna-floor-ready',
+}
+
+export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, ids = null } = {}) {
+  const id = { ...DEFAULT_IDS, ...(ids || {}) }
+  const toggle = document.getElementById(id.toggle)
+  const arrow  = document.getElementById(id.arrow)
+  const bodyEl = document.getElementById(id.body)
   const noop = { getSurfaceSpec: () => null, isEnabled: () => false, refresh: () => {} }
   if (!toggle || !bodyEl) return noop
 
-  const enableChk = document.getElementById('oxdna-floor-enable')
-  const controls  = document.getElementById('oxdna-floor-controls')
-  const axisSel   = document.getElementById('oxdna-floor-axis')
-  const offsetIn  = document.getElementById('oxdna-floor-offset')
-  const offsetLbl = document.getElementById('oxdna-floor-offset-label')
-  const stiffIn   = document.getElementById('oxdna-floor-stiff')
-  const statusEl  = document.getElementById('oxdna-floor-ready')
+  const enableChk = document.getElementById(id.enable)
+  const controls  = document.getElementById(id.controls)
+  const axisSel   = document.getElementById(id.axis)
+  const offsetIn  = document.getElementById(id.offset)
+  const offsetLbl = document.getElementById(id.offsetLabel)
+  const stiffIn   = document.getElementById(id.stiff)
+  const statusEl  = document.getElementById(id.ready)
 
   let _open    = false
   let _enabled = false

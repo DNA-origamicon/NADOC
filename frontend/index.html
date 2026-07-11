@@ -4139,6 +4139,42 @@
                 </div>
               </div>
 
+              <!-- ── Hard surface (M8: ARBD repulsion plane; shares the oxDNA floor card + {dir,offset_nm,stiff} descriptor) ── -->
+              <div class="ox-card">
+                <div id="mrdna-surface-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="mrdna-surface-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Hard surface</span>
+                </div>
+                <div id="mrdna-surface-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">A repulsion plane the coarse structure can't pass through (ARBD wall). A field aimed straight into it (deposition) needs no anchor — the plane holds it.</div>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
+                    <input type="checkbox" id="mrdna-surface-enable"> Apply a hard surface to the run
+                  </label>
+                  <div id="mrdna-surface-controls" style="display:none;flex-direction:column;gap:5px">
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                      <span style="min-width:46px" title="Which side the surface sits on. −Y = below.">Side</span>
+                      <select id="mrdna-surface-axis" style="flex:1;background:#161b22;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                        <option value="-y" selected>−Y (below)</option>
+                        <option value="+y">+Y (above)</option>
+                        <option value="-x">−X (left)</option>
+                        <option value="+x">+X (right)</option>
+                        <option value="-z">−Z (front)</option>
+                        <option value="+z">+Z (back)</option>
+                      </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                      <span style="min-width:46px" title="nm of clearance the surface sits beyond the structure's lowest point">Offset</span>
+                      <input id="mrdna-surface-offset" type="range" min="-20" max="20" step="0.1" value="0" style="flex:1;accent-color:#58a6ff">
+                      <span id="mrdna-surface-offset-label" style="color:#c9d1d9;min-width:42px;text-align:right">0.0 nm</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                      <span style="min-width:46px" title="Repulsion-plane stiffness (kcal/mol/Å²)">Stiffness</span>
+                      <input id="mrdna-surface-stiff" type="number" value="5" min="0.1" step="0.5" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    </div>
+                  </div>
+                  <div id="mrdna-surface-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
+                </div>
+              </div>
+
               <!-- ── Detail (selected job) ─────────────────────────────────── -->
               <div id="mrdna-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
                 <div id="mrdna-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>

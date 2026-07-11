@@ -134,7 +134,7 @@
         "M7",
         "M8"
       ],
-      "status": "in_progress",
+      "status": "done",
       "notes": "Added 2026-07-10 (user-authorized, see meta.mrdna_forces_ui_scope). M6 = wire the DONE M1/M2 field+anchors backend into the mrDNA panel (parity). M7 = ARBD repulsion-plane hard-surface backend (headless, property oracle, mirrors M1/M2). M8 = surface UI card (parity). M7 before M8; M6 independent."
     }
   ],
@@ -658,8 +658,8 @@
       "fast_slow": "fast+MV",
       "oracle": "PARITY (frontend): the mrDNA launch payload carries the SAME {dir, offset_nm, stiff} surface spec the mounted surface card emits (pure vitest helper); engine_capabilities census flips mrdna surface to enabled with a real domAnchorId present in index.html (census test stays green). One-off display-vs-oracle Playwright (card -> POST body) + MV row. main.js LOC flat-or-thin-wiring.",
       "milestone": "M-MRDNA-FORCES-UI",
-      "status": "pending",
-      "notes": ""
+      "status": "done",
+      "notes": "Mounted the shared oxDNA floor card on mrdna-surface-* ids; buildMrdnaLaunchBody threads {dir,offset_nm,stiff}; fieldNeedsAnchor relaxes for a field opposed by a surface (reuses exported surfaceOpposesField mirror); capability surface off->on. PARITY oracle green."
     }
   ]
 }

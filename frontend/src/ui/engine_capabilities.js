@@ -94,7 +94,7 @@ export const ENGINE_CAPABILITIES = {
       run: on('mrdna-jobs-coarse-btn'),
       efield: on('mrdna-efield-toggle'),
       anchors: on('mrdna-anchors-toggle'),
-      surface: off('mrDNA has no hard-surface boundary condition.'),
+      surface: on('mrdna-surface-toggle'),   // M8: ARBD repulsion plane (backend M7)
       advanced: on('mrdna-jobs-adv-toggle'),
       viz: on('mrdna-jobs-display-toggle'),
       metrics: off('mrDNA shows a curvature readout and feeds the comparison card; no metrics card yet.'),
