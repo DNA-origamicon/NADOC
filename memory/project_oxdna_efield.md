@@ -29,9 +29,15 @@ are **Physical-layer display only**, never written back to topology.
   physically required, not a convenience.** Pin part of the structure; the anchored beads
   absorb the net force and the rest deflects against them (the Kopperger 2018 tethered-arm
   regime — *A self-assembled nanoscale robotic arm controlled by electric fields*, Science 359:296).
-  **Rule (UPDATED 2026-07-10): anchors are RECOMMENDED, no longer REQUIRED.** A field with no
-  anchor is allowed on every engine; the UI shows a non-blocking warning notice instead of
-  blocking the run. See "Anchor requirement relaxed to a warning" below.
+  **POLICY — WARN-ONLY, ALL ENGINES, STANDING (ratified 2026-07-11; supersedes any "requires an
+  anchor / →400" language anywhere below or in the ledgers).** A missing anchor NEVER blocks a run
+  on ANY engine (mrDNA / oxDNA / NAMD / LAMMPS), in ANY layer (REST, runner, live session,
+  chain-stage, AND every UI launch button). An unanchored field runs; the user gets a non-blocking
+  COM-drift *warning* only. The shared predicate is `field_anchor.field_needs_strand_anchor`
+  (advisory — decides whether to SHOW the warning, it does NOT gate a 400). Currently ACTIVE in
+  code: verified no backend path 400s/raises on missing-anchor, and the last UI hold (the mrDNA
+  panel launch) was changed to warn-and-proceed on 2026-07-11. Any future field/anchor work MUST
+  stay warn-only. See "Anchor requirement relaxed to a warning" below.
 - **GOTCHA 2 — quasi-static only.** oxDNA models no explicit ions/screening and no
   hydrodynamics, and its timestep can't reach kHz AC fields. This captures the **mechanical
   deflection of a tethered structure under a steady field**, NOT free-solution electrophoretic
@@ -154,14 +160,16 @@ consumes `getFieldSpec()`) waits for the backend stage (was Phase 1).
     unknown→drop); `read_cm_positions_oxdna` (raw CM in oxDNA units for trap pos0);
     `field_string_block` (`particle=-1` uniform force), `anchor_trap_block` (static `trap`, rate=0),
     `write_field_forces(...)` (composes the field forces file from the conf the stage starts from;
-    **raises if no anchor resolves** — GOTCHA 1).
+    ~~raises if no anchor resolves~~ **warn-only since 2026-07-10 — an unanchored field composes
+    fine (0 traps) and just warns; see the WARN-ONLY policy in §1**).
   - `oxdna_protocol.py`: `OxdnaStageSpec` += `forces_file` (per-stage external-forces filename) +
     `efield` record; `build_field_stage(...)` (kind=`field`, MD, standard FENE, external_forces, no bp gate).
   - `oxdna_runner.py`: `run_job` now uses `spec.forces_file or "forces.txt"` (relax stages keep the
     mutual-trap file; the field stage uses its own `field_forces_N.txt`).
   - `routes_oxdna.py`: `POST /oxdna/jobs/{id}/field` (AnchorRef/FieldRequest; mirrors append-production:
     unique `N_field` stage, continues from latest relaxed `last_conf`, resolves anchors + writes the
-    field forces file server-side, requires ≥1 anchor → 400).
+    field forces file server-side; ~~requires ≥1 anchor → 400~~ **warn-only since 2026-07-10 — no
+    anchor is accepted, the UI warns of COM drift; see the WARN-ONLY policy in §1**).
   - `oxdna_health.py`: `measure_field_response(field_pos, ref_pos, field_dir, anchor_keys)` — the
     anti-shovel oracle: `passed` iff anchored beads held (≤tol) AND free beads displaced ALONG the
     field (≥min proj). Returns drift/displacement/projection metrics.

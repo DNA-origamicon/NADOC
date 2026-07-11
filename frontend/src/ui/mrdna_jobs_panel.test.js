@@ -96,8 +96,8 @@ describe('coarseStageChip', () => {
 // carries the SAME {field_pN, dir} the shared card emits + the SAME anchor list the
 // shared Anchors card emits (byte-parity with CanDo/oxDNA/NAMD).
 
-describe('fieldNeedsAnchor (field-drift guard)', () => {
-  it('an enabled field with no anchor is blocked; with ≥1 it is allowed', () => {
+describe('fieldNeedsAnchor (field-drift warning predicate)', () => {
+  it('an enabled field with no anchor triggers the drift warning; with ≥1 it is clear', () => {
     expect(fieldNeedsAnchor(true, [])).toBe(true)
     expect(fieldNeedsAnchor(true, null)).toBe(true)
     expect(fieldNeedsAnchor(true, [{ kind: 'strand', id: 's1' }])).toBe(false)
@@ -111,10 +111,10 @@ describe('fieldNeedsAnchor (field-drift guard)', () => {
     const field = { field_pN: 2, dir: [0, -1, 0] }         // field points down (−Y)
     const surfBelow = { dir: [0, 1, 0], offsetNm: 0, stiff: 5 }  // floor below, normal +Y → opposes
     expect(fieldNeedsAnchor(true, [], field, surfBelow)).toBe(false)
-    // A surface NOT opposing the field (same side) still needs an anchor.
+    // A surface NOT opposing the field (same side) still drifts → warn.
     const surfAbove = { dir: [0, -1, 0], offsetNm: 0, stiff: 5 } // normal −Y, parallel to field
     expect(fieldNeedsAnchor(true, [], field, surfAbove)).toBe(true)
-    // No surface passed → the plain guard (anchor required).
+    // No surface passed → the plain drift condition (warn).
     expect(fieldNeedsAnchor(true, [], field, null)).toBe(true)
   })
 })

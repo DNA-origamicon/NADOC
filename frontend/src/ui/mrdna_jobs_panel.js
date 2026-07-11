@@ -64,15 +64,16 @@ export function mrdnaJobIsActive(job) {
 }
 
 /**
- * Does an enabled E-field lack the ≥1 anchor it needs?  A uniform field with no
- * anchor just streams the whole structure down-field (COM drift), so the launch is
- * blocked client-side.  Mirrors the oxDNA/CanDo/NAMD guard; the mrDNA backend
- * enforces the same rule server-side (routes_mrdna → 400).
+ * Does an enabled E-field lack the ≥1 anchor it needs to avoid COM drift?  A uniform
+ * field with no anchor streams the whole structure down-field.  Warn-only (policy
+ * 2026-07-11, all engines): true here surfaces a caution — it NO LONGER blocks the
+ * launch.  Mirrors oxDNA/NAMD/LAMMPS/chain-sim; the mrDNA backend also warns (never
+ * 400s) server-side (routes_mrdna / mrdna_runner log a drift warning).
  *
- * Deposition exception (M8, matches the backend `field_needs_strand_anchor` rule): a
- * hard surface the field presses straight INTO holds it too (the plane's reaction
- * balances the COM drift), so a field + opposing surface needs no strand anchor.  The
- * opposition test reuses the shared `surfaceOpposesField` mirror — no geometry re-derived.
+ * Deposition case (M8): a hard surface the field presses straight INTO holds it too
+ * (the plane's reaction balances the COM drift), so a field + opposing surface has no
+ * drift to warn about.  The opposition test reuses the shared `surfaceOpposesField`
+ * mirror — no geometry re-derived.
  */
 export function fieldNeedsAnchor(fieldOn, anchors, fieldSpec = null, surfaceSpec = null) {
   if (!fieldOn) return false
@@ -315,9 +316,13 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     const surfaceSpec = _surfaceCard.getSurfaceSpec()
     const surfaceOn = _surfaceCard.isEnabled()
     if (fieldNeedsAnchor(fieldOn, anchors, fieldSpec, surfaceOn ? surfaceSpec : null)) {
-      showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card, '
-        + 'or a hard surface it presses into (deposition).', { severity: 'warn' })
-      return
+      // Warn-only (policy 2026-07-11, all engines): an unanchored field streams the
+      // whole structure down-field (COM drift), but the run is NO LONGER blocked —
+      // the user may want the drift (or will add an anchor / opposing surface). We
+      // surface the caution and proceed, matching oxDNA / NAMD / LAMMPS / chain-sim.
+      showToast('Heads up: this electric field has no anchor and no opposing surface, so the whole '
+        + 'structure will drift down-field (COM drift). Add a fixed strand in the Anchors card, '
+        + 'or a hard surface it presses into (deposition), if you want it held.', { severity: 'warn' })
     }
     const body_ = buildMrdnaLaunchBody({
       coarseSteps: stepsInput?.value, fineSteps, outputPeriod: outputInput?.value,

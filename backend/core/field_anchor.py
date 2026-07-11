@@ -9,8 +9,12 @@ anchor trap).  BUT a hard surface (a repulsion plane) that the field pushes INTO
 holds it: the plane's normal reaction balances the field, so a *deposition* setup — a
 field aimed straight into the floor — is stable with no strand anchor.
 
-Rule (user decision, 2026-07-09): a field opposed by a surface no longer requires a strand
-anchor.  All the geometry lives here; the frontend mirrors ``surface_opposes_field`` in
+Policy (user decision, 2026-07-11 — WARN-ONLY, ALL ENGINES): a missing anchor NEVER blocks
+a run.  Every field path (mrDNA / oxDNA / NAMD / LAMMPS, persisted + live + chain-stage)
+treats an unanchored field as an advisory COM-drift *warning*, not a launch error.  The
+predicates below are used to decide whether to SHOW that warning — no path 400s / raises on
+them anymore.  A field opposed by a surface (2026-07-09) has no drift to warn about at all.
+All the geometry lives here; the frontend mirrors ``surface_opposes_field`` in
 ``chain_sim_model.js``.  Callers pass the field / surface *direction* vectors (the shared
 ``{dir: [x,y,z]}`` descriptor) — engine-agnostic, no oxDNA imports.
 """
@@ -68,9 +72,14 @@ def field_needs_strand_anchor(
     field_dir: Optional[Sequence[float]] = None,
     surface_dir: Optional[Sequence[float]] = None,
 ) -> bool:
-    """Whether a run/stage carrying a uniform field still needs ≥1 strand anchor to avoid
-    centre-of-mass drift.  False when it already has anchors, or a surface opposes the field
-    (a deposition setup).  This is the exact predicate the field paths gate their 400 on.
+    """Whether a run/stage carrying a uniform field would drift (COM) for lack of a hold.
+    True when it has a field but no anchors and no opposing surface.
+
+    WARN-ONLY (policy 2026-07-11, all engines): this is advisory — the field paths use it
+    to decide whether to surface a COM-drift *warning*, NOT to block/400 a launch.  A
+    missing anchor never rejects a run; the user may want the drift, or add an anchor /
+    opposing surface later.  False when it already has anchors, or a surface opposes the
+    field (a deposition setup — the plane's reaction holds the COM).
     """
     if not has_field or has_anchors:
         return False
