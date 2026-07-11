@@ -57,7 +57,10 @@ from backend.core.atomistic_to_nadoc import (
     extract_from_gro,
     extract_from_pdb,
     load_segid_chain_map,
+    md_rigid_reference,
+    md_snap_mask,
 )
+from backend.core.atomistic_to_nadoc import _XB_SENTINEL
 
 from tests.conftest import make_minimal_design
 
@@ -1026,3 +1029,86 @@ class TestBuildReferenceMapAndCompute:
 def test_extract_from_xtc_requires_binary_fixture():
     """Marker test — body intentionally empty."""
     pytest.fail("Should be skipped by marker.")
+
+
+# ── md_snap_mask — PBC-snap membership (crossover-extra-base wrap fix) ─────────
+#
+# Regression pin for the live Display-MD bug where a few crossover extra bases
+# were rendered a full box away.  The design-eq nearest-image snap that removes
+# whole-box wraps had reused rigid_mask, which deliberately EXCLUDES extra bases
+# (they must not bias the Kabsch fit) — so nothing corrected a wrapped insert.
+# md_snap_mask separates the two: rigid_mask still drives Kabsch/centroid, but the
+# snap covers rigid dsDNA + extra bases (both have a constrained design eq), while
+# genuinely free ssDNA (bp<0 int) stays out.
+
+
+class TestMdSnapMask:
+    def _atom(self, serial, chain, seq, xyz, helix, bp, direction,
+              crossover_id=None, extra_base_k=None):
+        x, y, z = xyz
+        return Atom(
+            serial=serial, name="P", element="P", residue="DA",
+            chain_id=chain, seq_num=seq, x=x, y=y, z=z, strand_id="s",
+            helix_id=helix, bp_index=bp, direction=direction,
+            crossover_id=crossover_id, extra_base_k=extra_base_k,
+        )
+
+    def test_includes_extra_bases_excludes_free_ssdna(self):
+        """rigid dsDNA + extra base snapped; free ssDNA and invalid entries not."""
+        p_order = [
+            ("hA", 0, "FORWARD"),                 # rigid dsDNA
+            ("hA", 1, "FORWARD"),                 # rigid dsDNA
+            ("hA", -3, "FORWARD"),                # free ssDNA (bp<0)
+            (_XB_SENTINEL, "xoverA", 0),          # crossover extra base
+            ("hB", 5, "REVERSE"),                 # rigid but no eq (invalid)
+        ]
+        eq_valid   = np.array([True, True, True, True, False])
+        rigid_mask = np.array([True, True, False, False, False])
+
+        mask = md_snap_mask(p_order, eq_valid, rigid_mask)
+
+        # rigid dsDNA and the extra base are snapped …
+        assert list(mask) == [True, True, False, True, False]
+        # … the extra base is NOT rigid (would bias Kabsch) but IS snapped.
+        assert not rigid_mask[3] and mask[3]
+        # free ssDNA (valid but bp<0) stays out of the snap.
+        assert eq_valid[2] and not mask[2]
+
+    def test_snap_mask_is_superset_of_rigid(self):
+        p_order = [("hA", 0, "FORWARD"), (_XB_SENTINEL, "x", 0), ("hA", -1, "F")]
+        eq_valid   = np.array([True, True, True])
+        rigid_mask = np.array([True, False, False])
+        mask = md_snap_mask(p_order, eq_valid, rigid_mask)
+        assert bool((mask | rigid_mask == mask).all()), "snap must cover all rigid"
+
+    def test_invalid_extra_base_not_snapped(self):
+        """An extra base with no design-eq (eq_valid False) must not be snapped."""
+        p_order = [(_XB_SENTINEL, "x", 0)]
+        mask = md_snap_mask(p_order, np.array([False]), np.array([False]))
+        assert list(mask) == [False]
+
+    def test_end_to_end_from_model_rigid_excludes_but_snap_includes(self):
+        """md_rigid_reference drops the extra base from rigid; md_snap_mask re-adds it."""
+        atoms = [
+            self._atom(1, "A", 1, (0.0, 0.0, 0.0), "hA", 0, "FORWARD"),
+            self._atom(2, "A", 2, (7.0, 0.0, 0.0), "hA", 1, "FORWARD"),
+            # crossover extra base — md_pkey → (_XB_SENTINEL, "xoverA", 0)
+            self._atom(3, "A", 3, (3.5, 1.0, 0.0), "hA", 0, "FORWARD",
+                       crossover_id="xoverA", extra_base_k=0),
+        ]
+        model = AtomisticModel(atoms=atoms, bonds=[])
+        p_order = [
+            ("hA", 0, "FORWARD"),
+            ("hA", 1, "FORWARD"),
+            (_XB_SENTINEL, "xoverA", 0),
+        ]
+        eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
+        assert eq_valid.all(), "all three P atoms have a design-eq position"
+        assert list(rigid_mask) == [True, True, False], "extra base excluded from rigid"
+
+        snap = md_snap_mask(p_order, eq_valid, rigid_mask)
+        assert list(snap) == [True, True, True], "extra base restored to the PBC snap"
+        # the extra base's eq is the real atom position (verbatim, no unit
+        # rescale), so a whole-box snap against it can only remove periodic-image
+        # errors, not real displacement.
+        np.testing.assert_allclose(eq_positions[2], [3.5, 1.0, 0.0])

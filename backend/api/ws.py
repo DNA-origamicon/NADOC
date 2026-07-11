@@ -164,6 +164,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             centroid_offset,
             load_segid_chain_map,
             md_rigid_reference,
+            md_snap_mask,
         )
         from backend.core.md_metrics import derive_total_ns, parse_log_metrics
         from backend.core.md_import import resolve_md_config
@@ -274,6 +275,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
         logs.append(f"Eq-pos    : {n_valid}/{len(p_order)} valid design P-atoms")
         n_rigid = int(rigid_mask.sum())
         logs.append(f"Rigid P   : {n_rigid}/{len(p_order)} (bp≥0 for Kabsch)")
+
+        # PBC snap membership (rigid dsDNA + crossover extra bases).  Centroid and
+        # Kabsch keep using rigid_mask only — extra bases must not perturb the
+        # rigid-body fit — but the whole-box design-eq snap DOES cover them, else a
+        # sequential-unwrap reset can strand one a full box away (see md_snap_mask).
+        snap_mask = md_snap_mask(p_order, eq_valid, rigid_mask)
+        logs.append(f"Snap P    : {int(snap_mask.sum())}/{len(p_order)} (rigid+extra-base for PBC snap)")
 
         if n_rigid < 3:
             eq_centroid = np.zeros(3)
@@ -397,6 +405,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "eq_positions":  eq_positions,
             "eq_valid":      eq_valid,
             "rigid_mask":    rigid_mask,
+            "snap_mask":     snap_mask,
             "eq_centroid":   eq_centroid,
             "eq_centered":   eq_centered,
             "centroid_T":    T,
@@ -489,8 +498,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
             eq_pos      = _ctx.get("eq_positions")
             eq_valid    = _ctx.get("eq_valid")
             rigid_mask  = _ctx.get("rigid_mask")
+            snap_mask   = _ctx.get("snap_mask")
             eq_centered = _ctx.get("eq_centered")
             eq_centroid = _ctx.get("eq_centroid")
+            # Atoms snapped to design-eq: rigid dsDNA + crossover extra bases.
+            # Fall back to rigid_mask if an older ctx has no snap_mask.
+            if snap_mask is None:
+                snap_mask = rigid_mask
 
             # All PBC corrections must happen in box coordinates (before adding T).
             if dims is not None and dims[0] > 0:
@@ -509,16 +523,18 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     _c_box = p_box.mean(axis=0)
 
                 # Step 2 — hybrid PBC correction:
-                #   Rigid dsDNA atoms (rigid_mask = bp≥0): per-atom nearest-image to
-                #     design eq (in dynamic-T box frame).  Their MD positions are always
-                #     within ~5 nm of design (thermal + FF), safely < half-box.
-                #   ssDNA atoms (bp<0): raw sequential-unwrap + T_dyn.  ssDNA can be
-                #     anywhere in the box; comparing to ideal B-DNA design positions
-                #     gives unreliable DC that the nearest-image step may snap to the
-                #     wrong periodic image.
+                #   Snapped atoms (snap_mask = rigid dsDNA bp≥0 + crossover extra
+                #     bases): per-atom nearest-image to design eq (in dynamic-T box
+                #     frame).  Their MD positions stay within ~5 nm of design
+                #     (thermal + FF), safely < half-box, so the whole-box snap only
+                #     removes periodic-image errors.
+                #   Free ssDNA tails (bp<0 integer): raw sequential-unwrap + T_dyn.
+                #     ssDNA can be anywhere in the box; comparing to ideal B-DNA
+                #     design positions gives unreliable DC that the nearest-image
+                #     step may snap to the wrong periodic image.
                 _T_dyn = eq_centroid - _c_box   # current box → NADOC frame (dynamic)
                 if (eq_pos is not None and eq_centroid is not None
-                        and rigid_mask is not None and len(eq_pos) == len(p_box)):
+                        and snap_mask is not None and len(eq_pos) == len(p_box)):
                     _eq_box = eq_pos - _T_dyn          # design eq in current box frame
                     _dc     = p_box - _eq_box
                     for _d in range(3):
@@ -526,8 +542,8 @@ async def md_run_ws(websocket: WebSocket) -> None:
                             _dc[:, _d] -= _np.round(_dc[:, _d] / box_nm[_d]) * box_nm[_d]
                     # Start from design position + nearest-imaged displacement
                     p_box_corr = _eq_box + _dc          # corrected box-frame positions
-                    # Overwrite ssDNA atoms: keep sequential-unwrap position (no design-eq snap)
-                    p_box_corr[~rigid_mask] = p_box[~rigid_mask]
+                    # Overwrite free-ssDNA atoms: keep sequential-unwrap position (no snap)
+                    p_box_corr[~snap_mask] = p_box[~snap_mask]
                     p_nm = p_box_corr + _T_dyn          # NADOC frame
                 else:
                     _T_dyn = eq_centroid - _c_box if (eq_centroid is not None) else T
@@ -686,6 +702,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 dims = u.dimensions
                 eq_pos = _ctx.get("eq_positions")
                 rigid_mask = _ctx.get("rigid_mask")
+                snap_mask = _ctx.get("snap_mask")
+                if snap_mask is None:
+                    snap_mask = rigid_mask
                 eq_centroid = _ctx.get("eq_centroid")
                 eq_centered = _ctx.get("eq_centered")
                 if dims is not None and dims[0] > 0 and len(p_raw) == len(p_order):
@@ -698,14 +717,14 @@ async def md_run_ws(websocket: WebSocket) -> None:
 
                     T_dyn = eq_centroid - c_box if eq_centroid is not None else T
                     if (eq_pos is not None and eq_centroid is not None
-                            and rigid_mask is not None and len(eq_pos) == len(p_box)):
+                            and snap_mask is not None and len(eq_pos) == len(p_box)):
                         eq_box = eq_pos - T_dyn
                         dc = p_box - eq_box
                         for d in range(3):
                             if box_nm[d] > 0:
                                 dc[:, d] -= _np.round(dc[:, d] / box_nm[d]) * box_nm[d]
                         p_box_corr = eq_box + dc
-                        p_box_corr[~rigid_mask] = p_box[~rigid_mask]
+                        p_box_corr[~snap_mask] = p_box[~snap_mask]
                         p_pre = p_box_corr + T_dyn
                     else:
                         p_pre = p_box + T_dyn

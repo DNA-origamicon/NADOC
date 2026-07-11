@@ -77,6 +77,7 @@ FIX (both layers): (A) write side — `build_replica_package` now copies `parent
 - **D9** — Selection box from mid-LOD chords collapses for bent parts — box is too THIN, doesn't bound a bent/curved part. [detail](LESSONS_archive.md#d9)
 - **D10** — Blunt-end rings float past a bent-helix tip — far-end ring extrapolates ~26nm past the real bent tip. [detail](LESSONS_archive.md#d10)
 - **D11** — Cluster move: axis follows but beads/slabs snap back — an inactive display overlay's `stopAndRestore` reverts on design-changed. [detail](LESSONS_archive.md#d11-2)
+- **D12** — Live Display-MD: a few crossover extra bases render a full box away — the design-eq PBC snap reused `rigid_mask`, which excludes extra bases (correct for Kabsch, wrong for the wrap-snap). [detail](LESSONS_archive.md#d12)
 
 ## E. Cluster / deformation edge cases
 - **E1** — Restricting arm-helices to a cluster broke deformation — tests pass, visuals break; deformation planes at wrong bp. [detail](LESSONS_archive.md#e1)

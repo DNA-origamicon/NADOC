@@ -437,6 +437,39 @@ cluster/commit code. Same family as the "late subscriber calls `revertToGeometry
 
 ---
 
+<a id="d12"></a>
+### D12. Live Display-MD: a few crossover extra bases render a full box away — the design-eq PBC snap reused `rigid_mask`, which correctly excludes extra bases from Kabsch but wrongly excluded them from the wrap-snap (2026-07-11)
+Symptom: toggle **Display MD** on a live NAMD run (small transverse box — e.g. 6hb, box x≈8 nm) and a
+handful of nucleotides (4 on the 6hbx100_2xT job) sit ~41 nm (one full box in z) away from the structure,
+every frame. The whole bundle is aligned correctly; only these few float off. They are all `__xb__` —
+crossover **extra-base** inserts.
+
+Root cause is in `_seek_sync`'s PBC pipeline (`backend/api/ws.py`). Step 1 sequential-unwrap
+(`_unwrap_min_image`) makes strands whole but **resets to raw wrapped coords at each strand boundary**, so
+the first atom of a segment can land in the wrong periodic image. Step 2 fixes that by snapping each atom
+to the nearest periodic image of its **design-eq** position — but it applied this only to `rigid_mask`
+atoms (`bp≥0`). `md_rigid_reference` deliberately keeps extra bases OUT of `rigid_mask` because they're
+flexible and would bias the **Kabsch/centroid** rigid-body fit. That exclusion is right for Kabsch but was
+silently reused as the **snap** membership, so extra bases (which DO have a valid, spatially-constrained
+design eq) got no wrap correction and stayed wherever the unwrap reset dropped them.
+
+**Fix**: split the two roles. New pure helper `md_snap_mask(p_order, eq_valid, rigid_mask) = (rigid | is_xb)
+& eq_valid` in `atomistic_to_nadoc.py`; `_seek_sync` (both the bead and ballstick paths) uses `snap_mask`
+for the design-eq snap membership while `rigid_mask` still drives the centroid median + Kabsch. Genuinely
+free ssDNA tails (`bp<0` integer) stay OUT of the snap — their transverse swing can exceed the ~4 nm
+half-box, so a whole-box snap would over-correct them onto the wrong image (the original reason ssDNA was
+excluded — still valid, just doesn't apply to constrained extra bases). Verified on the live job through
+the shipped helper: wraps>5 nm 4→0 every frame, max deviation 412 Å→22 Å (real thermal). Pinned by
+`tests/test_atomistic_to_nadoc.py::TestMdSnapMask`.
+
+**How to avoid**: a mask named for one purpose (here "rigid, for the rotation fit") is not automatically
+the right filter for a different physical operation (here "has a trustworthy reference to snap wraps
+against"). When a PBC/alignment step reuses an existing boolean mask, check that BOTH its inclusions and
+exclusions are correct for the new use — extra bases and dsDNA share "constrained near design eq" (snap
+both) but differ on "should drive the rigid fit" (Kabsch only dsDNA).
+
+---
+
 ## E. Cluster / deformation edge cases
 
 <a id="e1"></a>

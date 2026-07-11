@@ -108,6 +108,26 @@ def md_rigid_reference(model, p_order):
     return eq_positions, eq_valid, rigid_mask
 
 
+def md_snap_mask(p_order, eq_valid, rigid_mask):
+    """Atoms that receive the design-eq nearest-image PBC snap in the live display.
+
+    Superset of ``rigid_mask``: rigid dsDNA (bp≥0) PLUS crossover extra-base
+    inserts (keyed ``_XB_SENTINEL``).  Extra bases are kept OUT of ``rigid_mask``
+    (the Kabsch/centroid fit) because they are flexible and would bias the
+    rigid-body rotation — but they still have a valid, spatially-constrained
+    design-eq position, so they must be snapped to their nearest periodic image.
+    Without this, a strand-boundary reset in the sequential unwrap can leave an
+    extra base a full box away from the structure (the "few bases wrapped" bug).
+    Genuinely free ssDNA tails (``bp_index < 0`` integer) stay OUT: their
+    transverse swing can exceed the ~half-box, so a whole-box snap would
+    over-correct them onto the wrong image.
+    """
+    import numpy as np
+    is_xb = np.array(
+        [hid == _XB_SENTINEL for hid, _bpi, _d in p_order], dtype=bool)
+    return (rigid_mask | is_xb) & eq_valid
+
+
 def build_chain_map(model: "AtomisticModel") -> ChainMap:
     """
     Build (chain_letter, seq_num) → (helix_id, bp_index, direction) from P atoms.
