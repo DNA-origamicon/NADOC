@@ -276,33 +276,36 @@ def test_malformed_surface_rejected(monkeypatch, tmp_path):
         assert "surface" in r.json()["detail"].lower()
 
 
-def test_field_into_surface_needs_no_strand_anchor(monkeypatch, tmp_path):
-    """The deposition rule: a uniform field pressing straight INTO a hard surface is held
-    by the plane's reaction, so it no longer requires a strand anchor (the same
-    field_anchor.surface_opposes_field predicate every engine shares).  A field with NO
-    opposing surface still needs one (RED baseline)."""
+def test_field_into_surface_prepares_without_a_strand_anchor(monkeypatch, tmp_path):
+    """A uniform field pressing INTO a hard surface prepares with no strand anchor.
+
+    NOTE (policy): the original M7 form of this test asserted that an unanchored
+    field WITHOUT an opposing surface was *rejected* (400), and only a field held by
+    the surface's reaction could skip the anchor.  Commit 19d2be8 relaxed
+    "field needs an anchor" to a non-blocking warning across all engines, so the REST
+    layer no longer rejects any of these — an unanchored field prepares and the runner
+    logs a COM-drift warning instead.  The surface *physics* (the plane actually holds
+    the bundle) is still verified by the SLOW real-ARBD deposition test below; this
+    test now just pins that a field+surface deposition run is accepted anchor-free."""
     client = _mrdna_client(monkeypatch, tmp_path)
     field = {"field_pN": 1.0, "dir": [0, 0, -1]}           # points into the plane
     surface = {"dir": [0, 0, 1], "offset_nm": 1.0, "stiff": 3.0}
 
-    # Field into the opposing surface, no anchor → accepted (job prepares).
+    # Field into the opposing surface, no anchor → accepted (deposition run prepares).
     r = client.post("/api/mrdna/jobs",
                     json={"coarse_steps": 1000, "field": field, "surface": surface})
     assert r.status_code == 200, r.text
 
-    # Same field, NO surface, no anchor → still rejected (COM drift).
+    # Same field, NO surface, no anchor → accepted under warn-only (was 400 pre-19d2be8).
     r = client.post("/api/mrdna/jobs", json={"coarse_steps": 1000, "field": field})
-    assert r.status_code == 400, r.text
-    assert "anchor" in r.json()["detail"].lower()
+    assert r.status_code == 200, r.text
 
-    # Field NOT opposed by the surface (points along +dir̂, away from the plane) → the
-    # surface can't hold it, so an anchor is still required.
+    # Field NOT opposed by the surface (points along +dir̂) → also accepted (warn-only).
     r = client.post("/api/mrdna/jobs",
                     json={"coarse_steps": 1000,
                           "field": {"field_pN": 1.0, "dir": [0, 0, 1]},
                           "surface": surface})
-    assert r.status_code == 400, r.text
-    assert "anchor" in r.json()["detail"].lower()
+    assert r.status_code == 200, r.text
 
 
 # ── SLOW: a real ARBD run deposits the bundle on the surface (no strand anchor) ──
