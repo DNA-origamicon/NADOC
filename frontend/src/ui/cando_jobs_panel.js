@@ -262,7 +262,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   const panel = $('cando-jobs-panel')
   const heading = $('cando-jobs-heading')
   const body = $('cando-jobs-body')
-  if (!panel || !heading || !body) return { refresh: () => {}, getSelectedJob: () => null }
+  if (!panel || !body) return { refresh: () => {}, getSelectedJob: () => null }   // heading optional (removed; tab names the engine)
 
   const arrow = $('cando-jobs-arrow')
   const coarseBtn = $('cando-jobs-coarse-btn')
@@ -284,7 +284,6 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   const summaryEl = $('cando-jobs-summary')
   const detailError = $('cando-jobs-detail-error')
   const stopBtn = $('cando-jobs-stop-btn')
-  const deleteBtn = $('cando-jobs-delete-btn')
   const displayStatus = $('cando-jobs-display-status')
   const modeRadios = () => Array.from(panel.querySelectorAll('.cando-display-mode'))
   const checkedMode = () => modeRadios().find((r) => r.checked)?.value || 'off'
@@ -598,7 +597,6 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       detailError.textContent = job.status === 'failed' ? (job.error || 'Solve failed.') : ''
     }
     if (stopBtn) stopBtn.style.display = job.status === 'running' ? '' : 'none'
-    if (deleteBtn) deleteBtn.disabled = job.status === 'running'
     _syncDisplayStatus()
     _metricsCard?.sync()
   }
@@ -642,19 +640,21 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       await _fetchJobs()
     })
   }
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', async () => {
-      if (!_selectedId) return
-      const r = await api.deleteCandoJob(_selectedId)
-      if (r?.ok) {
-        if (candoDisplay?.deformJobId?.() === _selectedId) candoDisplay.stopDeform?.()
-        _selectedId = null
-        detail && (detail.style.display = 'none')
-        await _fetchJobs()
-      } else {
-        showToast(api.lastErrorMessage() || 'Delete failed', { severity: 'error' })
-      }
-    })
+  // Delete the selected CanDo job. Invoked by the consolidated #simulate-job-actions
+  // Delete button (dispatched by the master card on the selected node). Returns true if
+  // the delete went through.
+  async function deleteSelected() {
+    if (!_selectedId) return false
+    const r = await api.deleteCandoJob(_selectedId)
+    if (r?.ok) {
+      if (candoDisplay?.deformJobId?.() === _selectedId) candoDisplay.stopDeform?.()
+      _selectedId = null
+      detail && (detail.style.display = 'none')
+      await _fetchJobs()
+      return true
+    }
+    showToast(api.lastErrorMessage() || 'Delete failed', { severity: 'error' })
+    return false
   }
 
   // ── Display-mode radios (Off / Predicted shape / Flexibility / Deviation) ─────
@@ -696,5 +696,13 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
 
   _base.initCollapsed(true)
 
-  return { refresh: _fetchJobs, getSelectedJob: _selectedJob }
+  // selectJob: highlight + populate this panel's detail as a row click does — used by
+  // the unified Simulate list to route a CanDo node's selection here. Refetches if the
+  // job isn't listed yet.
+  async function selectJob(jobId) {
+    if (!jobId) return
+    if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
+    return _selectJob(jobId)
+  }
+  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected }
 }

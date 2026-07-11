@@ -192,6 +192,7 @@ import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
 import { initClashOverlay } from './scene/clash_overlay.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
+import { initLammpsDisplay } from './ui/lammps_display.js'
 import { mdVizApiAdapter } from './ui/md_viz_adapter.js'
 import { initOxdnaJobsPanel } from './ui/oxdna_jobs_panel.js'
 import { initMrdnaDisplay } from './ui/mrdna_display.js'
@@ -1934,8 +1935,12 @@ async function main() {
   })
   // oxDNA jobs panel — uses the remote's Live wiring (oxdnaLive); the MD viz panel
   // (initMdJobsPanel) is wired to mdViz separately above via getMdViz.
+  // A LAMMPS (CPU-fallback) run uses the SAME oxDNA2 bead model, so it's shown in the
+  // oxDNA panel's own viz card via this controller (same validated renderer + pure
+  // mappers as oxdnaDisplay, pointed at the LAMMPS endpoints).
+  const lammpsDisplay = initLammpsDisplay({ designRenderer })
   oxdnaPanel = initOxdnaJobsPanel({
-    oxdnaDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
+    oxdnaDisplay, lammpsDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
     flexScale,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
@@ -2043,14 +2048,63 @@ async function main() {
   })
   if (import.meta.env.DEV) window.__nadocOxdnaFloor = oxdnaFloorSetup
 
-  // Spinner on each engine's section header while that engine has a running/preparing
-  // job (one shared /api/jobs/active poll drives all the headers).
-  initEngineActivityHeaders()
+  // Relocate each engine's launch/relax/coarse/fine/… button cluster from inside its
+  // panel to the section-level run-controls host, just above the jobs card (the buttons
+  // keep their IDs so all the panel wiring is unchanged — appendChild moves the live
+  // node + its listeners). The engine selector then shows only the active engine's host.
+  const runControlEls = {
+    oxdna: document.getElementById('oxdna-run-controls'),
+    mrdna: document.getElementById('mrdna-run-controls'),
+    cando: document.getElementById('cando-run-controls'),
+    namd:  document.getElementById('namd-run-controls'),
+  }
+  const _moveRunControls = (host, ...ids) => {
+    if (!host) return
+    for (const id of ids) { const el = document.getElementById(id); if (el) host.appendChild(el) }
+  }
+  _moveRunControls(runControlEls.oxdna, 'oxdna-launch-row')
+  _moveRunControls(runControlEls.mrdna, 'mrdna-launch-row')
+  _moveRunControls(runControlEls.cando, 'cando-launch-row', 'cando-autorefine-row')
+  _moveRunControls(runControlEls.namd, 'md-launch-row')
+
+  // NAMD: tuck the launch CONFIG (Alpine-connect chip, Protocol, Run-on, production steps /
+  // total time / note) into the Advanced card — only the Relax/Production buttons (extracted
+  // above) stay out. Runs AFTER the run-control move so md-launch-row is already gone from the
+  // launch form. Prepend in reverse so the order reads cluster → launch-form → threads grid.
+  {
+    const advBody = document.getElementById('md-jobs-adv-body')
+    const launchForm = document.getElementById('md-launch-form')
+    const clusterMount = document.getElementById('md-cluster-connection-mount')
+    if (advBody && launchForm) advBody.prepend(launchForm)
+    if (advBody && clusterMount) advBody.prepend(clusterMount)
+  }
+
+  // oxDNA: tuck the Production-steps field + the auto-policy resource line ("GPU: free ·
+  // N cores · Engine …") into the oxDNA Advanced card. Its body is a 2-col grid, so each
+  // moved block spans the full row. Prepend so they read at the top of Advanced.
+  {
+    const advBody = document.getElementById('oxdna-jobs-adv-body')
+    const prodParams = document.getElementById('oxdna-prod-params')
+    const statusLine = document.getElementById('simulate-status-line')
+    if (advBody && prodParams) { prodParams.style.gridColumn = '1 / -1'; advBody.prepend(prodParams) }
+    if (advBody && statusLine) { statusLine.style.gridColumn = '1 / -1'; advBody.prepend(statusLine) }
+  }
+
+  // Relocate every engine's stage-timeline element to the ONE timeline host at the bottom
+  // of the jobs card (each panel still populates its element by id; the master card shows
+  // only the selected engine's + hides the block otherwise).
+  {
+    const host = document.getElementById('simulate-jobs-timeline-host')
+    if (host) for (const id of ['md-jobs-timeline', 'oxdna-jobs-timeline', 'mrdna-jobs-timeline', 'cando-jobs-timeline']) {
+      const el = document.getElementById(id)
+      if (el) { el.style.display = 'none'; host.appendChild(el) }
+    }
+  }
 
   // Simulate section: one engine selector (segmented tabs) fronts the stacked engine
-  // panels — shows the selected engine's panel, hides the rest — plus a capability
-  // strip (unsupported cards greyed-with-tooltip). (U4)  LAMMPS is NOT a tab: it's the
-  // auto-policy CPU fallback and its runs appear in the unified #simulate-jobs list.
+  // panels — shows the selected engine's panel + run-control cluster, hides the rest —
+  // plus a capability strip (unsupported cards greyed-with-tooltip). (U4)  LAMMPS is NOT
+  // a tab: it's the auto-policy CPU fallback and its runs appear in the unified list.
   const engineSelector = initEngineSelector({
     selectorMount: document.getElementById('engine-selector-mount'),
     stripMount:    document.getElementById('engine-capability-strip'),
@@ -2060,7 +2114,15 @@ async function main() {
       cando:  document.getElementById('cando-jobs-panel'),
       namd:   document.getElementById('md-jobs-panel'),
     },
+    runControlEls,
+    // The unified Simulate job list re-scopes to the newly-active engine tab (bound
+    // lazily — simulateJobs is constructed just below, after the panels).
+    onSelect: (engine) => simulateJobs?.setActiveEngine?.(engine),
   })
+
+  // Spinner on each engine's TAB while that engine has a running/preparing job (one
+  // shared /api/jobs/active poll). Runs AFTER the selector so the tab buttons exist.
+  initEngineActivityHeaders()
 
   // When a design is opened that is already running a simulation, default the
   // Simulate engine selector to that engine (tie-break: the most recent job).
@@ -2071,17 +2133,19 @@ async function main() {
     if (eng) engineSelector?.select?.(eng)
   })
 
-  // Unified simulation job list + master Job status card (Phase C): ONE hierarchical
-  // list of every oxDNA + LAMMPS run for the design, with the master status/progress +
-  // context Run/Stop/Resume. Delegates oxDNA detail/viz to the oxDNA panel; owns the
-  // LAMMPS viz itself. Constructed after the panels so it can hold their handles.
+  // Unified simulation job list + master Job status card (Phase C): ONE collapsible list
+  // of every run for the design across all four engines (oxDNA/LAMMPS, mrDNA, CanDo,
+  // NAMD), scoped to the active engine tab with a "Show all job types" toggle. Selecting
+  // a row routes to that engine's tab + detail/viz; the card owns only the LAMMPS viz.
+  // Constructed after the panels so it can hold their handles.
   simulateJobs = initSimulateJobs({
     api,
     getWorkspacePath: () => _workspacePath,
-    designRenderer,
     oxdnaPanel,
+    mrdnaPanel,
+    candoPanel,
+    mdPanel,
     engineSelector,
-    getFlexScale: () => flexScale,
   })
 
   // Auto engine-policy coordinator: renders the resource status line (GPU state · free

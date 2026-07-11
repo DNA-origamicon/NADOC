@@ -390,12 +390,14 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
   const body    = document.getElementById('oxdna-jobs-body')
-  if (!panel || !heading || !body) return
+  // heading was removed (the tab names the engine); it's optional now — the collapse
+  // base guards a null heading. Only panel + body are required to wire the panel.
+  if (!panel || !body) return
 
   const statusEl      = document.getElementById('oxdna-jobs-status')
   const runBtn        = document.getElementById('oxdna-jobs-run-btn')
@@ -434,11 +436,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   const listEl     = document.getElementById('oxdna-jobs-list')
   const detailEl   = document.getElementById('oxdna-jobs-detail')
   const detailStatus = document.getElementById('oxdna-jobs-detail-status')
-  const startBtn   = document.getElementById('oxdna-jobs-start-btn')
+  // Relax start/stop/resume is owned by the master run control; the detail Stop is kept
+  // only for the PRODUCTION phase. Archive/Delete are consolidated into the section-level
+  // #simulate-job-actions and dispatched here via archiveSelected/deleteSelected.
   const stopBtn    = document.getElementById('oxdna-jobs-stop-btn')
-  const deleteBtn  = document.getElementById('oxdna-jobs-delete-btn')
-  const archiveBtn = document.getElementById('oxdna-jobs-archive-btn')
-  const archiveProgressEl = document.getElementById('oxdna-jobs-archive-progress')
   const _archive   = initJobArchive({ api, kind: 'oxdna' })
   const errorEl    = document.getElementById('oxdna-jobs-detail-error')
   const errorLogBtn = document.getElementById('oxdna-jobs-errorlog-btn')
@@ -488,6 +489,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // ── State ──────────────────────────────────────────────────────────────────
   let _jobs       = []
   let _selectedId = null
+  // LAMMPS-viz mode: a CPU-fallback (LAMMPS) run selected from the unified list is shown
+  // in THIS same viz card, driven by the LAMMPS display controller. The oxDNA viz handlers
+  // early-return in this mode; a parallel, self-contained set of LAMMPS handlers (bound to
+  // the same radios) drive `lammpsDisplay`. Same oxDNA2 bead model → same viz applies.
+  let _lammpsMode = false
+  let _lammpsNode = null
   let _progress   = null
   let _listSig    = null   // last-rendered list signature (avoids spinner-restart churn)
   const _legend   = { el: null }   // status-symbol legend, inserted once after the list
@@ -775,6 +782,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _updateButtons(_selectedJob())
   }
   autorefineDevToggle?.addEventListener('change', async () => {
+    if (_lammpsMode) { _lammpsViz('deviation'); return }
     if (autorefineDevToggle.checked) {
       if (!_selectedId) { autorefineDevToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       oxdnaLive?.stop()                 // mutually exclusive with relaxed / flex / trajectory / live
@@ -808,8 +816,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // every coarse playback frame (spinner + "building k/N"), then runs the loop smoothly.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
-    onSeek: (i) => { oxdnaDisplay?.showFrame(i); _applyTrajField(i) },
+    onSeek: (i) => {
+      if (_lammpsMode) { lammpsDisplay?.showFrame(i); return }   // CG only — no field arrow
+      oxdnaDisplay?.showFrame(i); _applyTrajField(i)
+    },
     onBeforePlay: async () => {
+      if (_lammpsMode) return true   // LAMMPS is CG — no heavy-rep prebuild
       if (!oxdnaDisplay) return true
       oxdnaDisplay.setPlaying(true)
       const r = await oxdnaDisplay.prebuildHeavy((done, total) => {
@@ -885,6 +897,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (!statusEl) return
     const d = await api.oxdnaAvailable().catch(() => null)
     _available = !!d?.available
+    // Broadcast to the engine tab (the ⚠ not-installed marker lives there now).
+    window.dispatchEvent(new CustomEvent('nadoc:engine-availability', { detail: {
+      engine: 'oxdna', ok: _available,
+      reason: 'oxDNA binary not found — set $OXDNA_BIN or build ~/oxDNA.' } }))
     if (_available) {
       _setStatus(`oxDNA ready · ${d.oxdna_bin}`, _C.ok)
       if (deviceInput && d.recommended_device && !deviceInput.dataset.userSet) {
@@ -1142,6 +1158,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   async function _selectJob(jobId, { confirmTrajUnload = false } = {}) {
     const job = _jobs.find(j => j.job_id === jobId)
     if (!job) return
+    if (_lammpsMode) {   // leaving LAMMPS-viz mode → tear down its overlay, re-enable oxDNA gating
+      lammpsDisplay?.stopAndRestore()
+      _lammpsMode = false; _lammpsNode = null
+      if (detailEl) detailEl.style.display = ''
+    }
     // A loaded trajectory belongs to the job it was loaded from, so it stays on
     // screen until the user closes the session (leaves the tab / switches design)
     // or picks a DIFFERENT job here.  Switching jobs unloads it; on an explicit
@@ -1238,16 +1259,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     }
 
     // The primary run control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) covers relaxation start/
-    // stop + resume for the selected job, so the detail Start is redundant; the detail
-    // Stop is kept only for the PRODUCTION phase (which the Relax control doesn't own).
-    if (startBtn) startBtn.style.display = 'none'
+    // stop + resume for the selected job; the detail Stop is kept only for the PRODUCTION
+    // phase (which the Relax control doesn't own). Archive/Delete live in the section-level
+    // #simulate-job-actions (visibility/label handled there).
     if (stopBtn)  stopBtn.style.display  = isProductionRunning(job) ? '' : 'none'
-    if (deleteBtn) deleteBtn.style.display = job.status === 'running' ? 'none' : ''
-    if (archiveBtn) {
-      // Archive/unarchive only for non-running jobs; label tracks archived state.
-      archiveBtn.style.display = job.status === 'running' ? 'none' : ''
-      archiveBtn.textContent = job.archived ? 'Unarchive' : 'Archive'
-    }
 
     _updateButtons(job)
 
@@ -1438,8 +1453,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     else if (ps === 'failed') _setProdStatus('Production failed.', _C.err)
     else if (prodReady && hasRun)
       _setProdStatus(`Production complete (${productionRunCount(job)} run${productionRunCount(job) > 1 ? 's' : ''}). Start again to continue from the last frame.`, _C.ok)
-    else _setProdStatus(prodReady ? 'Ready to run production from the relaxed structure.'
-                                  : 'Production unlocks after relaxation completes.', _C.dim)
+    else _setProdStatus(prodReady ? 'Ready to run production from the relaxed structure.' : '', _C.dim)
+
+    // In LAMMPS-viz mode the viz radios are owned by selectLammpsJob (gated on the LAMMPS
+    // run's own viewability) — skip the oxDNA sampling/trajectory gates below so a poll
+    // can't re-disable them.
+    if (_lammpsMode) return
 
     // Flexibility map (RMSF) — unlocks as soon as a production run has STARTED
     // (done OR running).  A mid-run map is preliminary; the confidence readout
@@ -1676,6 +1695,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _updateButtons(_selectedJob())
   }
   flexToggle?.addEventListener('change', async () => {
+    if (_lammpsMode) { _lammpsViz('flex'); return }
     if (flexToggle.checked) {
       if (!_selectedId) { flexToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       const ss = samplingState(_selectedJob())
@@ -1761,6 +1781,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _updateButtons(_selectedJob())
   }
   trajToggle?.addEventListener('change', async () => {
+    if (_lammpsMode) { _lammpsViz('traj'); return }
     if (trajToggle.checked) {
       if (!_selectedId) { trajToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       if (!hasTrajectory(_selectedJob())) {
@@ -1821,32 +1842,25 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   }
 
   // ── Detail actions ───────────────────────────────────────────────────────
-  // Start/Stop take a beat to register on the backend — busy-guard them so a
+  // Production-phase Stop takes a beat to register on the backend — busy-guard it so a
   // spam of clicks fires the request once, with an immediate spinner + gray-out.
-  startBtn?.addEventListener('click', () => runExclusive(startBtn, async () => {
-    if (!_selectedId) return
-    if (!(await confirmNoConcurrentJob({
-      excludeJobId: _selectedId,
-      usesGpu: (_selectedJob()?.backend || 'CUDA') === 'CUDA',   // resume runs on the job's backend
-    }))) return
-    await api.startOxdnaJob(_selectedId)
-    await _fetchJobs()
-  }, { label: 'Starting…' }))
   stopBtn?.addEventListener('click', () => runExclusive(stopBtn, async () => {
     if (!_selectedId) return
     await api.stopOxdnaJob(_selectedId)
     await _fetchJobs()
   }, { label: 'Stopping…' }))
   errorLogBtn?.addEventListener('click', () => { _showErrorLog(_selectedId) })
-  deleteBtn?.addEventListener('click', async () => {
-    if (!_selectedId) return
+
+  // Delete the selected oxDNA job (cascades to its descendant subtree — warn with the
+  // count). Invoked by the consolidated #simulate-job-actions Delete button (the master
+  // card dispatches here on the selected node). Returns true if the delete went through.
+  async function deleteSelected() {
+    if (!_selectedId) return false
     const job = _selectedJob()
-    // Deleting a job cascades to its full descendant subtree (chained runs) — warn
-    // with the count.
     const nChildren = job ? descendantIds(_jobs, _selectedId).size : 0
     const { title, message, confirmLabel } = deleteConfirmMessage(job, nChildren)
     const ok = await showConfirm({ title, message, danger: true, confirmLabel })
-    if (!ok) return
+    if (!ok) return false
     const r = await api.deleteOxdnaJob(_selectedId)
     const deletedIds = Array.isArray(r?.deleted) ? r.deleted : [_selectedId]
     const active = oxdnaDisplay?.activeJobId()
@@ -1857,31 +1871,22 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     _clearRunCards()   // drop the E-field arrow / anchor glow of the deleted job
     _emitJobSelected()
     _fetchJobs()
-  })
-
-  function _setArchiveProgress(st) {
-    if (!archiveProgressEl) return
-    if (!st) { archiveProgressEl.style.display = 'none'; archiveProgressEl.textContent = ''; return }
-    const pct = st.total_bytes ? Math.round((st.moved_bytes / st.total_bytes) * 100) : 0
-    archiveProgressEl.style.display = ''
-    archiveProgressEl.textContent =
-      `${formatBytes(st.moved_bytes || 0)} / ${formatBytes(st.total_bytes || 0)} (${pct}%)`
+    return true
   }
 
-  archiveBtn?.addEventListener('click', async () => {
+  // Archive / unarchive the selected job. `onProgress` receives the byte-move progress
+  // (the master card renders it); dispatched from #simulate-job-actions.
+  async function archiveSelected({ onProgress = () => {} } = {}) {
     if (!_selectedId) return
     const job = _selectedJob()
     if (!job) return
-    archiveBtn.disabled = true; deleteBtn && (deleteBtn.disabled = true)
     const action = job.archived ? _archive.unarchive : _archive.archive
     try {
-      await action(job, { onProgress: _setArchiveProgress })
+      await action(job, { onProgress })
     } finally {
-      archiveBtn.disabled = false; deleteBtn && (deleteBtn.disabled = false)
-      _setArchiveProgress(null)
       await _fetchJobs()
     }
-  })
+  }
 
   // ── OxDNA display toggle ───────────────────────────────────────────────────
   async function _refreshDisplay() {
@@ -1914,6 +1919,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // Re-fetch with the new alignment whenever the Align toggle flips (only while the
   // relaxed display is on).
   alignToggle?.addEventListener('change', () => {
+    if (_lammpsMode) { if (displayToggle?.checked) _lammpsViz('display'); return }
     if (displayToggle?.checked && oxdnaDisplay?.mode() === 'relaxed') _refreshDisplay()
   })
   function _setDisplayOff() {
@@ -1945,6 +1951,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
     if (trajControls) trajControls.style.display = 'none'
   }
   displayToggle?.addEventListener('change', async () => {
+    if (_lammpsMode) { _lammpsViz('display'); return }
     if (displayToggle.checked) {
       if (!_selectedId) { displayToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
@@ -1962,9 +1969,71 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
   // down and restores the renderer (idempotent).
   vizOffRadio?.addEventListener('change', () => {
     if (!vizOffRadio.checked) return
+    if (_lammpsMode) { _lammpsViz('off'); return }
     _allDisplaysOff()
     vizOffRadio.checked = true   // _allDisplaysOff's teardowns leave this set; keep it explicit
   })
+
+  // ── LAMMPS viz (a CPU-fallback run shown in THIS card via the LAMMPS controller) ──
+  // Same 4 mutually-exclusive views as oxDNA (radio group), driven by `lammpsDisplay`.
+  // Only ONE radio fires `change` per switch, so each call clears the prior overlay then
+  // shows the selected view. No field arrows / heavy-rep (LAMMPS is coarse-grained only).
+  async function _lammpsViz(kind) {
+    lammpsDisplay?.stopAndRestore()
+    trajPlayer.stop()
+    if (trajControls) trajControls.style.display = 'none'
+    _flexScale.hide()
+    const id = _selectedId
+    if (kind === 'off' || !id || !lammpsDisplay) { _syncVizOffRadio(); return }
+    if (kind === 'display') {
+      const r = await lammpsDisplay.displayJob(id, alignToggle ? alignToggle.checked : true)
+      _setDisplayStatus(r.ok ? `Showing the final structure (${r.n} beads)` : (r.reason || 'not ready'),
+                        r.ok ? _C.ok : _C.warn)
+    } else if (kind === 'flex') {
+      const r = await lammpsDisplay.displayRmsf(id)
+      if (r.ok) {
+        _setFlexStatus(`Avg structure · RMSF ${_fmtNm(r.min)} → ${_fmtNm(r.max)} · ${r.nFrames ?? '?'} frames`, _C.ok)
+        _flexScale.show({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
+          onRecolor: (lo, hi, cmap) => lammpsDisplay.recolorRmsf(lo, hi, cmap) })
+      } else { _setFlexStatus(r.reason || 'not ready', _C.warn); if (flexToggle) flexToggle.checked = false; _syncVizOffRadio() }
+    } else if (kind === 'deviation') {
+      const r = await lammpsDisplay.displayDeviation(id)
+      if (r.ok) {
+        _setDevStatus(`Mean vs design — ${_fmtNm(r.min)} (green) → ${_fmtNm(r.max)} (red), mean ${_fmtNm(r.mean)}`, '#3fb950')
+        _flexScale.show({ title: 'Deviation (nm)', min: r.min, max: r.max, mapType: 'deviation',
+          onRecolor: (lo, hi, cmap) => lammpsDisplay.recolorDeviation(lo, hi, cmap) })
+      } else { _setDevStatus(r.reason || 'not ready', _C.warn); if (autorefineDevToggle) autorefineDevToggle.checked = false; _syncVizOffRadio() }
+    } else if (kind === 'traj') {
+      const r = await lammpsDisplay.loadTrajectory(id)
+      if (r.ok) { if (trajControls) trajControls.style.display = ''; trajPlayer.setTrajectory(r.n_frames, r.markers)
+        _setTrajStatus(`${r.n_frames} frames — play or scrub`, _C.ok) }
+      else { _setTrajStatus(r.reason || 'no trajectory', _C.warn); if (trajToggle) trajToggle.checked = false; _syncVizOffRadio() }
+    }
+  }
+
+  // Entry point (called by the unified list when a LAMMPS [L] run is selected): switch this
+  // card into LAMMPS-viz mode. Reuses the oxDNA viz card DOM; the oxDNA handlers stand down.
+  function selectLammpsJob(node) {
+    if (!node) return
+    if (!_lammpsMode && oxdnaDisplay?.isActive?.()) _allDisplaysOff()   // clear any oxDNA overlay
+    _lammpsMode = true
+    _lammpsNode = node
+    _selectedId = node.job_id
+    lammpsDisplay?.stopAndRestore()
+    trajPlayer.stop()
+    if (trajControls) trajControls.style.display = 'none'
+    if (detailEl) detailEl.style.display = 'none'   // oxDNA stage detail doesn't apply to a LAMMPS run
+    const viewable = !!node.viewable
+    for (const t of [displayToggle, flexToggle, autorefineDevToggle, trajToggle]) {
+      if (!t) continue
+      t.checked = false
+      t.disabled = !viewable
+      const lab = t.closest('label')
+      if (lab) { lab.style.opacity = viewable ? '1' : '0.5'; lab.style.cursor = viewable ? 'pointer' : 'not-allowed' }
+    }
+    if (vizOffRadio) vizOffRadio.checked = true
+    _setDisplayStatus(viewable ? '' : 'Run still in progress — viz unlocks when it finishes.', _C.dim)
+  }
 
   // ── Live mode took over the bead overlay → drop our relaxed/flex/traj overlay ─
   // The live controller dispatches this before applying its first frame, so the
@@ -2089,5 +2158,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, getWorkspacePath = nul
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
       return _selectJob(jobId, { confirmTrajUnload: true })
     },
+    // Show a LAMMPS (CPU-fallback) run in this same viz card — same oxDNA2 bead model, so the
+    // same display/RMSF/deviation/trajectory tools apply (driven by the LAMMPS controller).
+    selectLammpsJob,
+    // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
+    // selected node's engine panel; both operate on this panel's currently-selected job).
+    deleteSelected, archiveSelected,
   }
 }

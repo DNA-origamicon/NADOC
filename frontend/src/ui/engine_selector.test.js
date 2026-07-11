@@ -156,4 +156,41 @@ describe('U4 factory — wires the pure state to the DOM', () => {
     expect(sel.getSelected()).toBe('cando')
     expect(panelEls.cando.style.display).not.toBe('none')
   })
+
+  it('each tab has a hidden ⚠ marker; setEngineStatus shows it with a Help-menu tooltip', () => {
+    const { selectorMount, panelEls } = harness()
+    const sel = initEngineSelector({ selectorMount, panelEls })
+    const warn = () => selectorMount.querySelector('.engine-selector-btn[data-engine="oxdna"] .engine-warn')
+    expect(warn()).toBeTruthy()
+    expect(warn().hidden).toBe(true)                       // installed by default
+    sel.setEngineStatus('oxdna', { ok: false, reason: 'oxDNA binary not found.' })
+    expect(warn().hidden).toBe(false)
+    expect(warn().title).toMatch(/oxDNA binary not found/)
+    expect(warn().title).toMatch(/Help ▸ MD Engines/)
+    expect(selectorMount.querySelector('.engine-selector-btn[data-engine="oxdna"]').classList.contains('is-uninstalled')).toBe(true)
+    sel.setEngineStatus('oxdna', { ok: true })
+    expect(warn().hidden).toBe(true)
+  })
+
+  it('a nadoc:engine-availability event updates the matching tab', () => {
+    const { selectorMount, panelEls } = harness()
+    initEngineSelector({ selectorMount, panelEls })
+    const warn = selectorMount.querySelector('.engine-selector-btn[data-engine="namd"] .engine-warn')
+    window.dispatchEvent(new CustomEvent('nadoc:engine-availability',
+      { detail: { engine: 'namd', ok: false, reason: 'Missing: NAMD3.' } }))
+    expect(warn.hidden).toBe(false)
+    expect(warn.title).toMatch(/Missing: NAMD3/)
+  })
+
+  it('runControlEls track the active tab (shown for the selected engine, hidden otherwise)', () => {
+    const { selectorMount, panelEls } = harness()
+    const runControlEls = {}
+    for (const k of ENGINE_KEYS) { runControlEls[k] = document.createElement('div'); document.body.appendChild(runControlEls[k]) }
+    const sel = initEngineSelector({ selectorMount, panelEls, runControlEls, initial: 'oxdna' })
+    expect(runControlEls.oxdna.style.display).not.toBe('none')
+    expect(runControlEls.namd.style.display).toBe('none')
+    sel.select('namd')
+    expect(runControlEls.namd.style.display).not.toBe('none')
+    expect(runControlEls.oxdna.style.display).toBe('none')
+  })
 })

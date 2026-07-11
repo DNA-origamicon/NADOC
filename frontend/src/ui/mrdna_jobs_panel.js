@@ -139,7 +139,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   const panel = $('mrdna-jobs-panel')
   const heading = $('mrdna-jobs-heading')
   const body = $('mrdna-jobs-body')
-  if (!panel || !heading || !body) return { refresh: () => {}, getSelectedJob: () => null }
+  if (!panel || !body) return { refresh: () => {}, getSelectedJob: () => null }   // heading optional (removed; tab names the engine)
 
   const arrow = $('mrdna-jobs-arrow')
   const statusEl = $('mrdna-jobs-status')
@@ -160,7 +160,6 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   const curvatureEl = $('mrdna-jobs-curvature')
   const detailError = $('mrdna-jobs-detail-error')
   const stopBtn = $('mrdna-jobs-stop-btn')
-  const deleteBtn = $('mrdna-jobs-delete-btn')
   const seedBtn = $('mrdna-jobs-seed-btn')
   const seedStatus = $('mrdna-jobs-seed-status')
   let _seeding = false
@@ -207,18 +206,20 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   // ── Availability ──────────────────────────────────────────────────────────────
   async function _checkAvailable() {
     _available = await api.mrdnaAvailable()
-    if (!statusEl) return
     const ok = !!_available?.available
+    const missing = !_available?.mrdna ? 'mrDNA' : 'ARBD'
+    window.dispatchEvent(new CustomEvent('nadoc:engine-availability', { detail: {
+      engine: 'mrdna', ok, reason: `${missing} not installed.` } }))
+    if (coarseBtn) coarseBtn.disabled = !ok
+    if (fineBtn) fineBtn.disabled = !ok
+    if (!statusEl) return
     if (ok) {
       statusEl.textContent = 'mrDNA + ARBD ready (GPU).'
       statusEl.style.color = _C.ok
     } else {
-      const missing = !_available?.mrdna ? 'mrDNA' : 'ARBD'
       statusEl.textContent = `${missing} not installed — open Help ▸ MD Engines to set up.`
       statusEl.style.color = _C.warn
     }
-    if (coarseBtn) coarseBtn.disabled = !ok
-    if (fineBtn) fineBtn.disabled = !ok
   }
 
   // ── Run (Coarse = fast/global shape; Fine = curvature via twist) ───────────────
@@ -313,7 +314,6 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       detailError.textContent = job.status === 'failed' ? (job.error || 'Run failed.') : ''
     }
     if (stopBtn) stopBtn.style.display = job.status === 'running' ? '' : 'none'
-    if (deleteBtn) deleteBtn.disabled = job.status === 'running'
     const ready = job.status === 'completed'
     if (displayToggle) displayToggle.disabled = !ready
     if (beadsToggle) beadsToggle.disabled = !ready
@@ -379,21 +379,23 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       _renderDetail()
     })
   }
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', async () => {
-      if (!_selectedId) return
-      const r = await api.deleteMrdnaJob(_selectedId)
-      if (r?.ok) {
-        // Drop any display tied to this job.
-        if (mrdnaDisplay?.deformJobId?.() === _selectedId) mrdnaDisplay.stopDeform()
-        if (mrdnaDisplay?.beadsJobId?.() === _selectedId) mrdnaDisplay.hideBeads()
-        _selectedId = null
-        detail && (detail.style.display = 'none')
-        await _fetchJobs()
-      } else {
-        showToast(api.lastErrorMessage() || 'Delete failed', { severity: 'error' })
-      }
-    })
+  // Delete the selected mrDNA job. Invoked by the consolidated #simulate-job-actions
+  // Delete button (dispatched by the master card on the selected node). Returns true if
+  // the delete went through.
+  async function deleteSelected() {
+    if (!_selectedId) return false
+    const r = await api.deleteMrdnaJob(_selectedId)
+    if (r?.ok) {
+      // Drop any display tied to this job.
+      if (mrdnaDisplay?.deformJobId?.() === _selectedId) mrdnaDisplay.stopDeform()
+      if (mrdnaDisplay?.beadsJobId?.() === _selectedId) mrdnaDisplay.hideBeads()
+      _selectedId = null
+      detail && (detail.style.display = 'none')
+      await _fetchJobs()
+      return true
+    }
+    showToast(api.lastErrorMessage() || 'Delete failed', { severity: 'error' })
+    return false
   }
 
   // ── Display toggles ───────────────────────────────────────────────────────────
@@ -444,5 +446,13 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
 
   _base.initCollapsed(true)
 
-  return { refresh: _fetchJobs, getSelectedJob: _selectedJob }
+  // selectJob: highlight + populate this panel's detail as a row click does — used by
+  // the unified Simulate list to route an mrDNA node's selection here. Refetches if the
+  // job isn't listed yet.
+  async function selectJob(jobId) {
+    if (!jobId) return
+    if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
+    return _selectJob(jobId)
+  }
+  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected }
 }

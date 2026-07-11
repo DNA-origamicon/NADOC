@@ -9,6 +9,235 @@ metadata:
 
 # Simulate panel UX overhaul (2026-07-08, in progress)
 
+## ⚡ Consolidated Archive/Delete above the jobs card · oxDNA autorefine button removed · dead-button audit — SHIPPED 2026-07-10
+Three user asks:
+- **ONE Archive + Delete pair** now sits in `#simulate-job-actions` (section-level, ABOVE the
+  `#simulate-jobs` card) instead of a set buried in each engine's detail block. `simulate_jobs.js`
+  owns it: `_renderActions(node)` shows the host only when a **deletable** run is selected (any
+  engine except LAMMPS, `status !== 'running'`); Archive shows only for engines that support it
+  (**oxDNA / NAMD**), label tracks `node.archived`. Click dispatches to the selected node's engine
+  panel via `_panelFor(node)`. Each panel exposes `deleteSelected()` (→ bool) + oxDNA/NAMD also
+  `archiveSelected({onProgress})`; these are the OLD inline listeners refactored into named fns that
+  operate on the panel's already-synced `_selectedId` (the master's `_dispatchDetail`→`selectJob`
+  keeps it in step). Archive byte-progress renders into the master `#simulate-jobs-archive-progress`
+  (panels no longer own a progress el). Per-panel Archive/Delete buttons + their DOM removed.
+- **oxDNA Autorefine button removed** (button + `#oxdna-autorefine-row` only, per user). The JS
+  machinery (`_updateAutorefineButton`/`_startAutorefine`/deviation-map viz/`[AR]` tag/backend) is
+  KEPT but now unreachable from the UI — all element reads are `?.`/`if (el) return` guarded, so
+  removing the row throws nothing (verified: smoke 0 console errors). main.js dropped
+  `'oxdna-autorefine-row'` from the run-control relocation.
+- **Dead-button audit → removed 3 Phase-C-RETIRED buttons** that were permanently `display:none`
+  with unreachable handlers: `oxdna-jobs-start-btn`, `md-jobs-start-btn`, `md-jobs-stop-btn` (the
+  master run control owns relax start/stop/resume; oxDNA's `oxdna-jobs-stop-btn` was KEPT — it still
+  serves the PRODUCTION phase). Everything else audited resolves to ACTIVE or a legitimately-reachable
+  CONDITIONAL (per-run Stop-when-running, Resume, seed, Alpine submit/resume/ensemble, revert-prod,
+  error-log). **Two flagged, NOT changed:** `simulate-jobs-run-btn` is LAMMPS-only (dormant unless the
+  CPU fallback runs); `oxdna-jobs-deviation-toggle` label says "(autorefine)" but its enable gate is
+  general sampling, not autorefine — a misleading label, left as-is.
+- **Tests:** `simulate_jobs.test.js` +6 (host hidden w/o selection; oxDNA=Archive+Delete;
+  mrDNA/CanDo=Delete-only; archived→Unarchive; LAMMPS/running→hidden; Delete+Archive dispatch to the
+  panel). `oxdna_jobs_panel.test.js` delete-regression test rewired to `panel.deleteSelected()`; start-btn
+  scaffold/assert dropped. `just test-frontend` **2595 pass**; smoke 23/23, 0 console errors. Served DOM
+  verified (action host present + above jobs card; all removed ids absent). **Frontend-only → no Python.**
+  **NOT live-gesture-exercised** (doc-context per-design selection limit, MV-28 family): an actual
+  archive/delete on a real selected job in-app — covered by the unit dispatch tests + real panel APIs.
+
+## ⚡ Uniform card widths + oxDNA Advanced expand fix — SHIPPED 2026-07-10
+Follow-up to the header-removal below. **CRITICAL regression the header removal introduced:**
+all 4 panel factories guard `if (!panel || !heading || !body) return` — removing the `<h2>`
+headers made `heading` null → **every engine panel factory early-returned and wired NOTHING**
+(dead buttons, no availability dispatch, no card toggles — the symptom the user hit was "the
+oxDNA Advanced card won't expand", but the whole panel was inert). Fix: dropped `heading` from
+the guard in all four (`oxdna/mrdna/cando/md_jobs_panel.js` → `if (!panel || !body) return`);
+heading stays optional (the collapse base already guards a null heading). **Lesson: removing a
+DOM element that a factory reads-then-guards-on silently kills the factory — exercise an actual
+in-panel toggle, not just DOM presence.**
+- **Uniform widths:** the 4 engine panels are nested `.panel-section` inside `#simulate-panel`
+  (also `.panel-section`, padding `10px 14px`), so their own 14px H-padding made their cards
+  narrower than the section-level jobs/shape/run-control cards. CSS `#simulate-body > .panel-section
+  { padding-left/right:0; border-bottom:none }` zeroes it → every card shares the same edges
+  (verified live: jobs/shape/run-controls/oxDNA-adv/viz/anchors/metrics all `left:14, right:16`).
+- **Verified live:** oxDNA Advanced body expands to 243px (was stuck — panel was dead); all cards
+  aligned; vitest 2583, smoke 23/23, 0 console errors.
+
+## ⚡ ONE progress bar (below list) + status colour + tooltip + timeline at card bottom — SHIPPED 2026-07-10
+User request. Consolidated every engine's progress bar into the single master bar
+`#simulate-jobs-progress` (already below the list); the four panel bars (`#oxdna/mrdna/cando/
+md-jobs-progress`) are `display:none` (still rendered into, harmless). Node-driven, self-contained
+in `simulate_jobs.js` (no panel routing):
+- `masterProgressPct(node)` extended: completed→100; NAMD from `segments` done/total; +existing
+  LAMMPS steps / oxDNA stages. `masterProgressColor(node)` (NEW): green done · red failed · **orange
+  = warning (out_of_date/stale)** · grey stopped/queued · blue active. `masterProgressTooltip(node)`
+  (NEW): the detail that used to sit inline in `#md-jobs-progress` (NAMD stage/segments/%/current,
+  oxDNA stages, +⚠ stale) → set as the bar's hover `title`. `_renderMaster` paints width+bg+title.
+- **Stage timeline → LAST in the jobs card:** new `#simulate-jobs-timeline` (+ `-host`) block appended
+  to `#simulate-jobs-body`; main.js relocates all four engine `#*-jobs-timeline` elements into the host
+  (each panel still populates its element by id). Master `_renderTimeline(node)` shows the selected
+  engine's timeline + hides the block when none. Removed the now-duplicate "Stage timeline" label from
+  the NAMD detail.
+- Tests: `masterProgressPct`(namd/completed), `masterProgressColor`, `masterProgressTooltip` + factory
+  drive (bar width/colour/title on select; timeline show/hide). vitest 2587, smoke 23/23. Live: 4 engine
+  bars hidden, timelines in host, timeline block is the card's last child, master bar below list, 0
+  console errors. **mrDNA/CanDo have no granular % → bar sits at 0 while running (colour conveys state);
+  fine (quick jobs).** Bar/tooltip live-render on real job selection covered by unit tests (doc-context
+  limit blocks live per-design selection).
+
+## ⚡ LAMMPS viz UNIFIED into the oxDNA viz card (reversed the removal) — SHIPPED 2026-07-10
+User (correct on the physics): LAMMPS here runs the oxDNA2 FF → SAME CG bead model → same viz
+applies. User chose "same card, dispatch loader" (route a LAMMPS run through the oxDNA panel's OWN
+viz card). Implemented (invasive — the oxDNA viz handlers are deeply coupled to oxDNA job state):
+- `oxdna_jobs_panel.js`: new `lammpsDisplay` dep + `_lammpsMode`/`_lammpsNode` state + exported
+  `selectLammpsJob(node)`. The 4 viz radio listeners (display/flex/deviation/traj) + off + align
+  early-return `if (_lammpsMode) { _lammpsViz(kind); return }`; `_lammpsViz` is a self-contained
+  parallel path driving `lammpsDisplay` (which shares oxDNA's pure mappers via `initLammpsDisplay`).
+  trajPlayer onSeek/onBeforePlay dispatch by mode (LAMMPS = CG, no field arrow/heavy-rep prebuild).
+  `_updateButtons` early-returns before the viz gates in `_lammpsMode` (so a poll can't re-disable
+  the LAMMPS-enabled radios); `selectLammpsJob` enables the radios by `node.viewable` + hides the
+  oxDNA stage detail. `_selectJob` (oxDNA) clears `_lammpsMode` + stops the LAMMPS overlay.
+- `simulate_jobs.js` `_dispatchDetail`: a lammps node → `engineSelector.select('oxdna');
+  oxdnaPanel.selectLammpsJob(node)` (was: no-op after the prior removal). main.js: `initLammpsDisplay
+  ({designRenderer})` → passed to the oxDNA panel. Backend `/lammps/jobs/{id}/{display,rmsf,deviation,
+  trajectory}` already exist → works end-to-end.
+- **No physics exclusions:** all 4 modes apply (deviation = trajectory-mean-vs-design, not autorefine-
+  gated). Tests: oxdna_jobs_panel +2 (LAMMPS radios → loader; unviewable → radios disabled), simulate
+  dispatch test updated. vitest 2589, smoke 23/23, live 0 console errors. **NOT live-driven:** an actual
+  LAMMPS job's viz in-app (doc-context blocks per-design selection) — covered by unit tests + real
+  backend endpoints. `lammps_display.js` un-orphaned; `oxdna_trajectory_player.js` still orphaned.
+
+## ⚡ Removed the LAMMPS viz card + trimmed anchor text — SHIPPED 2026-07-10
+- Removed the oxDNA Anchors sentence "Used by the field and surface, or on their own. A field
+  needs at least one." (kept "Fixed strands held in place during the run (tethers / clamps).").
+- **Removed the "Visualizations (LAMMPS run)" card** from the unified jobs card entirely — markup
+  `#simulate-jobs-viz` + ALL its now-dead JS in `simulate_jobs.js` (the viz refs, `_display`/`_player`
+  controllers, `_updateVizToggles`/`_viewsOff`/`_showView`, the radio listeners, `_VIEW_RADIOS`, the
+  `designRenderer`/`getFlexScale` factory params, and the `initLammpsDisplay`/`initOxdnaTrajectoryPlayer`/
+  `jobIsViewable`/`flexStatusText` imports). `_dispatchDetail` simplified: a node with no panel (LAMMPS)
+  just returns — its Stop / re-Run still live on the master run button. Tests updated (viz DOM + 3
+  assertions removed; the 2 LAMMPS/oxDNA-select tests kept sans-viz). main.js drops the 2 removed deps.
+  **CONSEQUENCE:** a LAMMPS run (GPU-busy CPU fallback) now has NO visualization surface — acceptable
+  since LAMMPS is the transparent fallback the user "shouldn't know about." `lammps_display.js` +
+  `oxdna_trajectory_player.js` are now orphaned (like the other LAMMPS-fold leftovers). vitest 2587,
+  smoke 23/23, live: viz card absent + 0 console errors.
+
+## ⚡ Anchor scroll boxes + black scrollable boxes — SHIPPED 2026-07-10
+- Removed the NAMD Anchors description ("Strands / bases held immobile…"). (oxDNA/CanDo anchor
+  cards keep their own separate descriptions — only the NAMD one was asked for.)
+- All 3 anchor lists (`#oxdna/cando/md-anchors-list`) are now scrollable boxes (max-height 110px,
+  overflow-y auto, border, black bg).
+- Every scrollable box in the Dynamics tab now has a **black** (`#010409`) bg to contrast the
+  gradient-tinted cards: the job lists (`#simulate-jobs-list` + the 4 hidden engine lists),
+  `#chain-sim-queue`, `#md-jobs-list`, `#md-jobs-timeline`, `#md-jobs-resume-history`, `#md-output-log`,
+  the anchor lists. HTML/CSS only. Verified live: boxes = rgb(1,4,9), anchor list overflow-y auto,
+  screenshot shows black boxes popping against the cards; smoke 23/23, 0 console errors.
+
+## ⚡ Compact cards + gradient outline — SHIPPED 2026-07-10
+`.ox-card` (components.css): `margin-bottom` 2px→1px (nearly flush); flat border replaced by a
+subtle top→bottom **gradient outline** via the double-background trick (`border:1px solid
+transparent` + `linear-gradient(fill,fill) padding-box, linear-gradient(to bottom,#3f464f,#20252b)
+border-box`) — keeps the 6px rounded corners that `border-image` would square off, so cards still
+pop while packed tight. Section-level inline gaps tightened too: `#simulate-run-controls` 6→2px,
+`#simulate-jobs` 8→2px, shape-compare card 8→2px, all four `#*-jobs-body` margin-top 8→2px.
+Verified: adjacent card gaps = 1px, two gradients in computed `background-image`, screenshot shows
+compact stack with visible per-card outline; smoke 23/23, 0 console errors. **Known residual gap**
+(not addressed — not a "card"): the empty progress/live-status/prod-status min-height spacers at the
+oxDNA panel top leave ~35px before the Benchmark card; left as-is so a running job doesn't jump the
+layout.
+
+## ⚡ oxDNA: Production-steps + resource line → Advanced; "unlocks" line removed — SHIPPED 2026-07-10
+- `oxdna-jobs-prod-steps` (wrapped `#oxdna-prod-params`) + the section-level auto-policy resource
+  line `#simulate-status-line` ("GPU: free · N cores · Engine …") moved into `#oxdna-jobs-adv-body`
+  at init (main.js), prepended in reverse (status line first, then prod-params). The oxDNA advanced
+  body is itself a 2-col grid, so each moved block gets `gridColumn:'1 / -1'` to span a full row.
+  `simulate_launch.js` still renders the status line by id (getElementById finds it post-move).
+  **Consequence:** the resource line now shows only on the oxDNA tab with Advanced expanded (was a
+  persistent section-level line) — per user request.
+- Removed the "Production unlocks after relaxation completes." message (oxdna_jobs_panel.js
+  `_updateProdControls` — the locked-state else branch now sets `''`). The "Ready to run production…"
+  message when unlocked is unchanged. (The NAMD "Production unlocks after minimization…" text is a
+  different message, untouched.)
+- Verified live: prod-steps + status line inside `#oxdna-jobs-adv-body` (spanning rows), no "unlocks"
+  text, Advanced expands; oxdna tests 91, smoke 23/23, 0 console errors (one assembly-exit smoke flake
+  passed on isolated re-run).
+
+## ⚡ NAMD launch CONFIG tucked into the Advanced card — SHIPPED 2026-07-10
+User request: the NAMD Alpine-connect chip, Protocol select, Run-on radios, and the production
+box (steps / total time / the child-job note) belong in the Advanced card, not loose at the panel
+top. Gave the launch-form wrapper `id="md-launch-form"`; main.js (right after the run-control
+extraction, so `md-launch-row` is already gone) `advBody.prepend(md-launch-form)` then
+`prepend(md-cluster-connection-mount)` → order in `#md-jobs-adv-body` reads cluster → protocol →
+run-on → production box → existing threads grid. Only the Relax/Production buttons stay in the
+run-controls host above the jobs card. All by-ID wiring intact (init-time DOM move). Verified live:
+all six items inside `#md-jobs-adv-body`, Relax NOT in advanced, Advanced still expands; md panel
+tests 87, smoke 23/23, 0 console errors.
+
+## ⚡ Headers removed · install-status → tab ⚠ · run buttons above the jobs card — SHIPPED 2026-07-10
+Direct user request, three parts:
+- **Per-engine `<h2>` headers removed** (oxdna/mrdna/cando/md). Panels pass their (now-null)
+  heading to `initJobsPanelBase` — safe because all pass `collapsible:false` (guarded
+  `collapsible && heading && body`). The old `md-jobs-panel-heading?.click()` in oxdna panel
+  was already inert under the static-header model. `engine_activity_headers.js` **retargeted**:
+  the busy spinner now hangs on the engine TAB (`.engine-selector-btn[data-engine]`, md→namd,
+  no LAMMPS tab) instead of the removed header; its init moved AFTER `initEngineSelector` in
+  main.js so the tabs exist. Test rewritten (builds tabs).
+- **Install-status badges → ⚠ on the tab.** The 3 availability badges (`#oxdna-jobs-status`,
+  `#mrdna-jobs-status`, `#md-jobs-namd-status`) are HIDDEN (`display:none`, kept so panel
+  availability logic — incl. mrDNA's button-gating — is untouched). Each panel's
+  `_checkAvailable`/`_checkEngines` now dispatches `window` event `nadoc:engine-availability
+  {engine, ok, reason}`. `engine_selector.js`: each tab is `[label][⚠ warn]`; the factory
+  listens for the event + `setEngineStatus(engine,{ok,reason})` shows the ⚠ with a tooltip
+  `${reason}\nOpen Help ▸ MD Engines to install.` + `.is-uninstalled` class. CanDo has no
+  availability gate → never warns. CSS `.engine-warn` (amber) added near `.engine-selector-btn`.
+- **Run-control buttons moved above the jobs card.** New `#simulate-run-controls` host (4
+  per-engine sub-divs) sits just above `#simulate-jobs`. main.js relocates each engine's launch
+  cluster into it via `appendChild` (moves live nodes + listeners → IDs unchanged, zero rewiring):
+  oxDNA `oxdna-launch-row`(Relax/Live/Full)+`oxdna-autorefine-row`; mrDNA `mrdna-launch-row`
+  (Coarse/Fine); CanDo `cando-launch-row`+`cando-autorefine-row`; NAMD `md-launch-row`
+  (Relax/Production). Selector gained `runControlEls` param → shows only the active engine's
+  cluster (like panels). oxDNA/NAMD launch buttons already double as Stop/Resume (Phase C). **Left
+  in the panels (not moved):** per-job Stop/Delete/Archive in the detail blocks; NAMD
+  protocol/run-target/production-steps config; oxDNA prod-steps/live-status.
+- **Tests:** `engine_selector.test.js` +4 (⚠ marker, availability event, runControlEls toggle),
+  `engine_activity_headers.test.js` rewritten. vitest **2583** pass; smoke 23/23. **Live:** headers
+  gone, badges display:none, all launch buttons inside `#*-run-controls` above the jobs card, active
+  cluster shown / others hidden, ⚠ present-but-hidden on all tabs (all engines installed here),
+  0 console errors. **NOT live-exercised:** the ⚠ SHOWING for an uninstalled engine (all installed
+  on this box) — covered by the unit test.
+
+
+## ⚡ ONE cross-engine job list per tab + engine filter + "Show all job types" — SHIPPED 2026-07-10
+Direct user request: the unified `#simulate-jobs` list showed oxDNA+LAMMPS on every tab
+(irrelevant on mrDNA/CanDo/NAMD, which also carried their OWN list → two lists per tab).
+Now it is the ONE list for ALL FOUR engines, scoped to the active tab, in a collapsible card.
+- **Backend:** `sim_jobs.py` gained `normalize_mrdna_job`/`normalize_cando_job`/`normalize_md_job`
+  (mrDNA/CanDo flat roots; NAMD has parent/child like oxDNA, `engine:'namd'`). `GET /simulate/jobs`
+  now also calls `routes_mrdna.list_mrdna_jobs`/`routes_cando.list_cando_jobs`/`routes_md.list_md_jobs`
+  (each in its own try → one broken engine can't sink the others) and normalizes+merges. Design
+  filter unchanged. Tests: `test_sim_jobs.py` +6 (16 total). **Live:** endpoint serves 66 nodes
+  (30 ox/6 L/5 mr/2 cando/23 namd).
+- **Frontend `simulate_jobs.js`:** engine dispatch in `_rowCtx` — each engine's own exported
+  label fns render its rows (oxDNA `jobDisplayName`/`runRowLabel`; mrDNA/CanDo `jobDisplayName`;
+  NAMD reuses `mdJobRowCtx` for its production/replica labels + seeded/remote badges + hourglass).
+  `jobs_panel_model.js` gained `engineOf(job)` so `statusKeyFor` resolves per-row in a mixed list
+  (back-compat: single-engine panels omit it). Client-side filter: `_visibleNodes()` = active
+  engine (LAMMPS grouped under oxDNA via `engineGroup`) unless `_showAllTypes`. New "Show all job
+  types" checkbox + engine badges ([ox]/[mr]/[CD]/[MD]) shown only in all-types mode. Collapsible
+  "Jobs" ox-card (`getSectionCollapsed('dynamics','simulate-jobs')`). `setActiveEngine(key)` wired
+  from `engineSelector.onSelect` (main.js). Selection routes to that engine's tab + `panel.selectJob`
+  (added `selectJob` to mrDNA + CanDo panels; oxDNA/NAMD already had it). LAMMPS viz still owned here.
+- **Per-engine lists HIDDEN not deleted** (mrDNA/CanDo/NAMD `#*-jobs-list` ox-cards → `display:none`,
+  matching oxDNA's already-hidden list): each panel still renders into its hidden node + `selectJob`
+  populates its (visible) detail/health/viz cards, so NO panel internals changed. One VISIBLE list/tab.
+- **UI reorg (partial):** Shape-comparison card MOVED from the oxDNA panel to section level (below
+  the Jobs card) — it's cross-engine. NAMD cards reordered Anchors→E-field→Advanced→Viz→Metrics
+  (configure→results, matching oxDNA/CanDo; was Viz/Metrics-first). **DEFERRED (reported as recs):**
+  chevron standardization (bespoke `▸` per toggle → `icon--rotates`), mrDNA display-toggles → a
+  Visualizations ox-card, NAMD detail-block internal restructure.
+- **Tests:** frontend `simulate_jobs.test.js` +6 (engine filter/switch, show-all toggle+badges,
+  mrDNA/NAMD selection routing, collapse). vitest 2580 pass. Backend `test_sim_jobs` 16 pass.
+- **Dropped:** the old per-engine "Show jobs for all designs" checkboxes are now in hidden cards
+  (the unified list is design-scoped; "all designs" is no longer surfaced — re-add if wanted).
+
+
 ## ⚡ AUTO ENGINE-POLICY + resource status line + GPU-busy dialog — SHIPPED 2026-07-10
 Novice-proof engine selection ("press one button → optimal speed"). Driven by a
 benchmark: **oxDNA-GPU is 13× (small) to 47× (large) faster than LAMMPS-CPU at matched

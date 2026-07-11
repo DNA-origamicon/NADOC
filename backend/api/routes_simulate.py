@@ -142,4 +142,25 @@ async def list_simulate_jobs(design_source_path: str | None = None,
             nodes.append(sim_jobs.normalize_lammps_job(d))
     except Exception:  # noqa: BLE001
         pass
+    # mrDNA / CanDo / NAMD reuse each engine's own list endpoint (identical reconcile +
+    # out_of_date + on-disk-size enrichment) so a run reads the same here as on its tab.
+    # Each is isolated in its own try so one broken engine list can't sink the others.
+    try:
+        from backend.api.routes_mrdna import list_mrdna_jobs
+        for d in await list_mrdna_jobs():
+            nodes.append(sim_jobs.normalize_mrdna_job(d))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from backend.api.routes_cando import list_cando_jobs
+        for d in await list_cando_jobs():
+            nodes.append(sim_jobs.normalize_cando_job(d))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from backend.api.routes_md import list_md_jobs
+        for d in await list_md_jobs():
+            nodes.append(sim_jobs.normalize_md_job(d))
+    except Exception:  # noqa: BLE001
+        pass
     return sim_jobs.filter_nodes(nodes, design_source_path, show_all)

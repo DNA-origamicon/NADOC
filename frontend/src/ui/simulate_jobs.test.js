@@ -1,27 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Keep the heavy oxDNA panel + display/player graphs out of the unit test — the master
-// card only uses a few pure label fns from the oxDNA panel and dispatches to controllers.
+// Keep the heavy oxDNA panel out of the unit test — the master card only uses a few pure
+// label fns from it + dispatches to the panels.
 vi.mock('./oxdna_jobs_panel.js', () => ({
   jobDisplayName: (j) => j.design_name || 'design',
   runRowLabel: (j, i) => `Run ${i}`,
   runChildTitle: () => 'child run',
 }))
-vi.mock('./lammps_display.js', () => ({
-  initLammpsDisplay: () => ({
-    displayJob: vi.fn(), displayRmsf: vi.fn(), displayDeviation: vi.fn(),
-    loadTrajectory: vi.fn(), showFrame: vi.fn(), stopAndRestore: vi.fn(),
-    recolorRmsf: vi.fn(), recolorDeviation: vi.fn(), mode: () => null,
+vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
+// Light stand-ins for the other engines' label fns / row ctx (the unified list only uses
+// these to render their rows; the real panels are heavy).
+vi.mock('./mrdna_jobs_panel.js', () => ({ jobDisplayName: (j) => j.design_name || 'mr' }))
+vi.mock('./cando_jobs_panel.js', () => ({ jobDisplayName: (j) => j.design_name || 'cd' }))
+vi.mock('./md_jobs_panel.js', () => ({
+  mdJobRowCtx: () => ({
+    displayName: (j) => j.design_name || 'md',
+    childLabel: (j, i) => `Refit ${i}`,
+    childTitle: () => 'md child',
+    postLabelMarkers: () => [],
+    symbolOverride: () => null,
   }),
 }))
-vi.mock('./oxdna_trajectory_player.js', () => ({
-  initOxdnaTrajectoryPlayer: () => ({ stop: vi.fn(), pause: vi.fn(), setTrajectory: vi.fn() }),
-}))
-vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 
 import {
   initSimulateJobs, nodeIsActive, nodeIsResumable, verbForNode,
-  masterProgressPct, masterStatusText, nodeDetailText,
+  masterProgressPct, masterProgressColor, masterProgressTooltip, masterStatusText, nodeDetailText,
 } from './simulate_jobs.js'
 
 // ── pure helpers ──────────────────────────────────────────────────────────────
@@ -51,10 +54,27 @@ describe('pure helpers', () => {
     expect(verbForNode(oxNode({ kind: 'run' }))).toBe('Run')
     expect(verbForNode(lmNode())).toBe('Run')
   })
-  it('masterProgressPct: LAMMPS from steps, oxDNA from stages', () => {
-    expect(masterProgressPct(lmNode({ current_step: 500, steps: 1000 }))).toBe(50)
-    expect(masterProgressPct(oxNode({ stages: [{ status: 'done' }, { status: 'running' }] }))).toBe(50)
+  it('masterProgressPct: completed→100; LAMMPS steps / oxDNA stages / NAMD segments while running', () => {
+    expect(masterProgressPct(lmNode({ status: 'running', current_step: 500, steps: 1000 }))).toBe(50)
+    expect(masterProgressPct(oxNode({ status: 'running', stages: [{ status: 'done' }, { status: 'running' }] }))).toBe(50)
+    expect(masterProgressPct({ engine: 'namd', status: 'running', segments: [{ status: 'done' }, { status: 'done' }, { status: 'running' }, { status: 'pending' }] })).toBe(50)
+    expect(masterProgressPct(lmNode({ status: 'completed' }))).toBe(100)   // completed → full
     expect(masterProgressPct(null)).toBe(0)
+  })
+  it('masterProgressColor: green done · red failed · orange stale · grey stopped · blue active', () => {
+    expect(masterProgressColor(oxNode({ status: 'completed' }))).toBe('#5cb85c')
+    expect(masterProgressColor(oxNode({ status: 'failed' }))).toBe('#d9534f')
+    expect(masterProgressColor(oxNode({ status: 'running', out_of_date: true }))).toBe('#e0a800')  // warning
+    expect(masterProgressColor(oxNode({ status: 'stopped' }))).toBe('#8a8a8a')
+    expect(masterProgressColor(oxNode({ status: 'running' }))).toBe('#4a9eff')
+  })
+  it('masterProgressTooltip: NAMD lists segments + current stage; stale adds a ⚠', () => {
+    const t = masterProgressTooltip({ engine: 'namd', status: 'running',
+      segments: [{ status: 'done' }, { status: 'running', name: 'heat', percent: 40 }], out_of_date: true })
+    expect(t).toMatch(/NAMD · running/)
+    expect(t).toMatch(/1\/2 segments · 50% overall/)
+    expect(t).toMatch(/Current: heat · 40%/)
+    expect(t).toMatch(/⚠ design changed/)
   })
   it('masterStatusText labels the engine + state', () => {
     expect(masterStatusText(lmNode({ status: 'running', current_step: 500, steps: 1000 }))).toMatch(/LAMMPS \(CPU\) · running · 50%/)
@@ -72,29 +92,28 @@ describe('pure helpers', () => {
 function mount() {
   document.body.innerHTML = `
     <div id="simulate-body">
+      <div id="simulate-job-actions" style="display:none">
+        <button id="simulate-jobs-archive-btn"></button>
+        <button id="simulate-jobs-delete-btn"></button>
+        <div id="simulate-jobs-archive-progress" style="display:none"></div>
+      </div>
       <div id="simulate-jobs">
+        <div id="simulate-jobs-toggle"><span id="simulate-jobs-arrow"></span><span id="simulate-jobs-engine-label"></span></div>
+        <div id="simulate-jobs-body">
+        <label><input id="simulate-jobs-show-all-types" type="checkbox"></label>
         <div id="simulate-jobs-list"></div>
         <div id="simulate-jobs-progress"><div class="bar"></div></div>
         <div id="simulate-jobs-status"></div>
         <button id="simulate-jobs-run-btn"></button>
         <div id="simulate-jobs-detail"></div>
-        <div id="simulate-jobs-viz" style="display:none">
-          <label><input id="simulate-jobs-viz-off" name="simulate-viz" type="radio" checked></label>
-          <label><input id="simulate-jobs-display-toggle" name="simulate-viz" type="radio" disabled></label>
-          <input id="simulate-jobs-align-toggle" type="checkbox" checked>
-          <div id="simulate-jobs-display-status"></div>
-          <label><input id="simulate-jobs-flex-toggle" name="simulate-viz" type="radio" disabled></label>
-          <div id="simulate-jobs-flex-status"></div>
-          <label><input id="simulate-jobs-deviation-toggle" name="simulate-viz" type="radio" disabled></label>
-          <div id="simulate-jobs-deviation-status"></div>
-          <label><input id="simulate-jobs-traj-toggle" name="simulate-viz" type="radio" disabled></label>
-          <div id="simulate-jobs-traj-status"></div>
-          <div id="simulate-jobs-traj-controls" style="display:none">
-            <button id="simulate-jobs-traj-play"></button>
-            <input id="simulate-jobs-traj-slider" type="range">
-            <div id="simulate-jobs-traj-markers"></div>
-            <div id="simulate-jobs-traj-label"></div>
+        <div id="simulate-jobs-timeline" style="display:none">
+          <div id="simulate-jobs-timeline-host">
+            <div id="oxdna-jobs-timeline"></div>
+            <div id="md-jobs-timeline"></div>
+            <div id="mrdna-jobs-timeline"></div>
+            <div id="cando-jobs-timeline"></div>
           </div>
+        </div>
         </div>
       </div>
     </div>`
@@ -107,11 +126,25 @@ function make(nodes, apiOverrides = {}) {
     stopLammpsJob: vi.fn().mockResolvedValue({}), createLammpsJob: vi.fn().mockResolvedValue({ n_atoms: 200 }),
     lastErrorMessage: () => '', ...apiOverrides,
   }
-  const oxdnaPanel = { selectJob: vi.fn(), launchRelax: vi.fn(), autorefineJobIds: () => new Set() }
-  const engineSelector = { select: vi.fn() }
-  const sim = initSimulateJobs({ api, getWorkspacePath: () => '/w/D.nadoc', oxdnaPanel, engineSelector })
-  return { sim, api, oxdnaPanel, engineSelector }
+  const oxdnaPanel = { selectJob: vi.fn(), selectLammpsJob: vi.fn(), launchRelax: vi.fn(),
+    autorefineJobIds: () => new Set(),
+    deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
+  const mrdnaPanel = { selectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
+  const candoPanel = { selectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
+  const mdPanel = { selectJob: vi.fn(),
+    deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
+  const engineSelector = { select: vi.fn(), getSelected: () => 'oxdna' }
+  const sim = initSimulateJobs({ api, getWorkspacePath: () => '/w/D.nadoc',
+    oxdnaPanel, mrdnaPanel, candoPanel, mdPanel, engineSelector })
+  return { sim, api, oxdnaPanel, mrdnaPanel, candoPanel, mdPanel, engineSelector }
 }
+
+const mrNode = (o = {}) => ({ engine: 'mrdna', job_id: 'mr1', parent_job_id: null,
+  created_at: 3, status: 'completed', production_state: null, kind: 'relax',
+  n_units: 64, design_name: 'D', ...o })
+const mdNode = (o = {}) => ({ engine: 'namd', job_id: 'md1', parent_job_id: null,
+  created_at: 4, status: 'completed', production_state: null, kind: 'relax',
+  n_units: 100, design_name: 'D', ...o })
 
 beforeEach(() => { document.body.innerHTML = ''; vi.clearAllMocks() })
 
@@ -125,26 +158,26 @@ describe('unified list + master card', () => {
     expect(list.textContent).toContain('[L]')       // LAMMPS badge
   })
 
-  it('selecting a LAMMPS node shows the master viz card + reflects its status', async () => {
+  it('selecting a LAMMPS node routes viz to the oxDNA panel (same card) + reflects status', async () => {
     mount()
-    const { sim } = make([oxNode(), lmNode()])
+    const { sim, oxdnaPanel, engineSelector } = make([oxNode(), lmNode()])
     await sim.refresh()
     sim.selectJob('lm1')
-    expect(document.getElementById('simulate-jobs-viz').style.display).toBe('')
+    expect(engineSelector.select).toHaveBeenCalledWith('oxdna')
+    expect(oxdnaPanel.selectLammpsJob).toHaveBeenCalledWith(expect.objectContaining({ engine: 'lammps', job_id: 'lm1' }))
     expect(document.getElementById('simulate-jobs-status').textContent).toMatch(/LAMMPS \(CPU\)/)
     expect(document.getElementById('simulate-jobs-detail').textContent).toMatch(/CPU \(LAMMPS/)
     expect(sim.getSelected()).toEqual({ engine: 'lammps', id: 'lm1' })
   })
 
-  it('selecting an oxDNA node delegates detail/viz to the oxDNA panel + hides the LAMMPS viz', async () => {
+  it('selecting an oxDNA node delegates detail/viz to the oxDNA panel', async () => {
     mount()
     const { sim, oxdnaPanel, engineSelector } = make([oxNode(), lmNode()])
     await sim.refresh()
-    sim.selectJob('lm1')                       // show viz first…
-    sim.selectJob('ox1')                        // …then switch to oxDNA
+    sim.selectJob('lm1')
+    sim.selectJob('ox1')
     expect(oxdnaPanel.selectJob).toHaveBeenCalledWith('ox1')
     expect(engineSelector.select).toHaveBeenCalledWith('oxdna')
-    expect(document.getElementById('simulate-jobs-viz').style.display).toBe('none')
   })
 
   it('run button is LAMMPS-only: hidden for oxDNA / no selection, shown to Stop an [L] run', async () => {
@@ -161,5 +194,164 @@ describe('unified list + master card', () => {
     btn.click()
     await Promise.resolve()
     expect(api.stopLammpsJob).toHaveBeenCalledWith('lm1')
+  })
+})
+
+describe('consolidated Archive / Delete (above the jobs card)', () => {
+  const host = () => document.getElementById('simulate-job-actions')
+  const archiveBtn = () => document.getElementById('simulate-jobs-archive-btn')
+  const deleteBtn = () => document.getElementById('simulate-jobs-delete-btn')
+
+  it('hidden with no selection; shown for a selected oxDNA run with both buttons', async () => {
+    mount()
+    const { sim } = make([oxNode()])
+    await sim.refresh()
+    expect(host().style.display).toBe('none')
+    sim.selectJob('ox1')
+    expect(host().style.display).toBe('')
+    expect(deleteBtn().style.display).toBe('')
+    expect(archiveBtn().style.display).toBe('')            // oxDNA supports archive
+    expect(archiveBtn().textContent).toBe('Archive')
+  })
+
+  it('mrDNA / CanDo offer Delete only (no Archive)', async () => {
+    mount()
+    const { sim } = make([mrNode()])
+    await sim.refresh()
+    sim.selectJob('mr1')
+    expect(deleteBtn().style.display).toBe('')
+    expect(archiveBtn().style.display).toBe('none')
+  })
+
+  it('an archived run shows Unarchive', async () => {
+    mount()
+    const { sim } = make([mdNode({ archived: true })])
+    await sim.refresh()
+    sim.selectJob('md1')
+    expect(archiveBtn().textContent).toBe('Unarchive')
+  })
+
+  it('hidden for a LAMMPS run (no per-job delete UI) and while a run is running', async () => {
+    mount()
+    const { sim } = make([oxNode({ status: 'running' }), lmNode()])
+    await sim.refresh()
+    sim.selectJob('lm1')
+    expect(host().style.display).toBe('none')
+    sim.selectJob('ox1')
+    expect(host().style.display).toBe('none')              // running → not deletable
+  })
+
+  it('Delete dispatches to the selected run’s engine panel', async () => {
+    mount()
+    const { sim, mdPanel } = make([mdNode()])
+    await sim.refresh()
+    sim.selectJob('md1')
+    deleteBtn().click()
+    await Promise.resolve(); await Promise.resolve()
+    expect(mdPanel.deleteSelected).toHaveBeenCalled()
+  })
+
+  it('Archive dispatches to the selected run’s engine panel with a progress callback', async () => {
+    mount()
+    const { sim, oxdnaPanel } = make([oxNode()])
+    await sim.refresh()
+    sim.selectJob('ox1')
+    archiveBtn().click()
+    await Promise.resolve(); await Promise.resolve()
+    expect(oxdnaPanel.archiveSelected).toHaveBeenCalledWith(
+      expect.objectContaining({ onProgress: expect.any(Function) }))
+  })
+})
+
+describe('engine-scoped list + Show-all-job-types toggle', () => {
+  it('scopes to the active engine tab by default (LAMMPS grouped under oxDNA)', async () => {
+    mount()
+    const { sim } = make([oxNode(), lmNode(), mrNode(), mdNode()])
+    await sim.refresh()
+    const list = document.getElementById('simulate-jobs-list')
+    // active engine = oxdna → only oxDNA + LAMMPS rows show
+    expect(list.childElementCount).toBe(2)
+    expect(list.textContent).toContain('[L]')
+  })
+
+  it('switching the active engine re-filters the list', async () => {
+    mount()
+    const { sim } = make([oxNode(), mrNode(), mdNode()])
+    await sim.refresh()
+    const list = document.getElementById('simulate-jobs-list')
+    expect(list.childElementCount).toBe(1)          // oxDNA only
+    sim.setActiveEngine('namd')
+    expect(list.childElementCount).toBe(1)          // now the NAMD row
+    sim.setActiveEngine('mrdna')
+    expect(list.childElementCount).toBe(1)          // now the mrDNA row
+  })
+
+  it('Show all job types reveals every engine, each tagged, and labels the header', async () => {
+    mount()
+    const { sim } = make([oxNode(), lmNode(), mrNode(), mdNode()])
+    await sim.refresh()
+    const toggle = document.getElementById('simulate-jobs-show-all-types')
+    toggle.checked = true
+    toggle.dispatchEvent(new Event('change'))
+    const list = document.getElementById('simulate-jobs-list')
+    expect(list.childElementCount).toBe(4)          // all four engines
+    expect(list.textContent).toContain('[mr]')      // engine badges in mixed mode
+    expect(list.textContent).toContain('[MD]')
+    expect(document.getElementById('simulate-jobs-engine-label').textContent).toMatch(/all engines/)
+  })
+
+  it('selecting a mrDNA / NAMD row routes to that engine tab + panel', async () => {
+    mount()
+    const { sim, mrdnaPanel, mdPanel, engineSelector } = make([oxNode(), mrNode(), mdNode()])
+    await sim.refresh()
+    document.getElementById('simulate-jobs-show-all-types').checked = true
+    document.getElementById('simulate-jobs-show-all-types').dispatchEvent(new Event('change'))
+    sim.selectJob('mr1')
+    expect(engineSelector.select).toHaveBeenCalledWith('mrdna')
+    expect(mrdnaPanel.selectJob).toHaveBeenCalledWith('mr1')
+    sim.selectJob('md1')
+    expect(engineSelector.select).toHaveBeenCalledWith('namd')
+    expect(mdPanel.selectJob).toHaveBeenCalledWith('md1')
+  })
+
+  it('collapsible card: clicking the header toggles the body + chevron', async () => {
+    mount()
+    const { sim } = make([oxNode()])
+    await sim.refresh()
+    const header = document.getElementById('simulate-jobs-toggle')
+    const body = document.getElementById('simulate-jobs-body')
+    const arrow = document.getElementById('simulate-jobs-arrow')
+    expect(body.style.display).toBe('')             // open by default
+    header.click()
+    expect(body.style.display).toBe('none')
+    expect(arrow.classList.contains('is-collapsed')).toBe(true)
+    header.click()
+    expect(body.style.display).toBe('')
+  })
+})
+
+describe('one consolidated progress bar + relocated timeline', () => {
+  it('the single bar paints width + status colour + a detail tooltip for the selected job', async () => {
+    mount()
+    const { sim } = make([mdNode({ status: 'running',
+      segments: [{ status: 'done' }, { status: 'running', name: 'heat', percent: 40 }] })])
+    await sim.refresh()
+    sim.selectJob('md1')
+    const bar = document.querySelector('#simulate-jobs-progress .bar')
+    expect(bar.style.width).toBe('50%')
+    expect(bar.style.background).toBe('rgb(74, 158, 255)')        // blue = active
+    expect(document.getElementById('simulate-jobs-progress').title).toMatch(/1\/2 segments · 50% overall/)
+  })
+
+  it('shows the selected engine’s timeline at the card bottom, hides the others', async () => {
+    mount()
+    const { sim } = make([mdNode(), oxNode({ job_id: 'ox9' })])
+    await sim.refresh()
+    document.getElementById('simulate-jobs-show-all-types').checked = true
+    document.getElementById('simulate-jobs-show-all-types').dispatchEvent(new Event('change'))
+    sim.selectJob('md1')
+    expect(document.getElementById('simulate-jobs-timeline').style.display).toBe('')
+    expect(document.getElementById('md-jobs-timeline').style.display).toBe('')
+    expect(document.getElementById('oxdna-jobs-timeline').style.display).toBe('none')
   })
 })

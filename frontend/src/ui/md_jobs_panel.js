@@ -490,7 +490,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
   const body    = document.getElementById('md-jobs-panel-body')
-  if (!panel || !heading || !body) return
+  if (!panel || !body) return   // heading optional (removed; tab names the engine)
 
   // Form elements
   const namdStatusEl  = document.getElementById('md-jobs-namd-status')
@@ -547,8 +547,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const listEl      = document.getElementById('md-jobs-list')
   const detailEl    = document.getElementById('md-jobs-detail')
   const statusEl    = document.getElementById('md-jobs-detail-status')
-  const startBtn    = document.getElementById('md-jobs-start-btn')
-  const stopBtn     = document.getElementById('md-jobs-stop-btn')
+  // Relax start/stop/resume is owned by the master run control (the retired detail
+  // Start/Stop were removed); Archive/Delete are consolidated into #simulate-job-actions.
   const earlyStopLiveWrap = document.getElementById('md-jobs-early-stop-live-wrap')
   const earlyStopLiveChk  = document.getElementById('md-jobs-early-stop-live')
   const earlyStopLivePending = document.getElementById('md-jobs-early-stop-live-pending')
@@ -561,9 +561,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const healthArrow   = document.getElementById('md-jobs-health-arrow')
   const healthSpinner = document.getElementById('md-jobs-health-spinner')
   const loadFramesBtn = document.getElementById('md-jobs-load-frames-btn')
-  const deleteBtn     = document.getElementById('md-jobs-delete-btn')
-  const archiveBtn    = document.getElementById('md-jobs-archive-btn')
-  const archiveProgressEl = document.getElementById('md-jobs-archive-progress')
   const _archive      = initJobArchive({ api, kind: 'md' })
   const prodBox       = document.getElementById('md-jobs-production')
   const prodStepsInput = document.getElementById('md-jobs-prod-steps')
@@ -721,13 +718,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         _threadsInit = true
       }
 
+      const missing = []
+      if (!d.namd_available) missing.push('NAMD3 (install to ~/Applications/NAMD_3.0.2/)')
+      if (!d.gmx_available)  missing.push('GROMACS (install + add gmx to PATH)')
+      // Broadcast to the NAMD engine tab (the ⚠ not-installed marker lives there now).
+      window.dispatchEvent(new CustomEvent('nadoc:engine-availability', { detail: {
+        engine: 'namd', ok: !!(d.namd_available && d.gmx_available),
+        reason: missing.length ? `Missing: ${missing.join(', ')}.` : '' } }))
       if (d.namd_available && d.gmx_available) {
         namdStatusEl.textContent = `NAMD3 + GROMACS found`
         namdStatusEl.style.color = _C.ok
       } else {
-        const missing = []
-        if (!d.namd_available) missing.push('NAMD3 (install to ~/Applications/NAMD_3.0.2/)')
-        if (!d.gmx_available)  missing.push('GROMACS (install + add gmx to PATH)')
         namdStatusEl.textContent = `Missing: ${missing.join(', ')}`
         namdStatusEl.style.color = _C.err
       }
@@ -1443,11 +1444,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _syncVizOffRadio()
   }
 
-  deleteBtn?.addEventListener('click', async () => {
-    if (!_selectedId) return
+  // Delete the selected NAMD job + its files. Invoked by the consolidated
+  // #simulate-job-actions Delete button (dispatched by the master card on the selected
+  // node). Returns true if the delete went through.
+  async function deleteSelected() {
+    if (!_selectedId) return false
     const job = _jobs.find(j => j.job_id === _selectedId)
     const label = job ? `${job.design_name} (${job.job_id})` : _selectedId
-    if (!window.confirm(`Delete MD job ${label} and all generated files?`)) return
+    if (!window.confirm(`Delete MD job ${label} and all generated files?`)) return false
     try {
       const d = await api.deleteMdJob(_selectedId)
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
@@ -1456,10 +1460,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       _selectedId = null
       await _fetchJobs()
       if (!_jobs.length && detailEl) detailEl.style.display = 'none'
+      return true
     } catch (err) {
       showToast(`Delete failed: ${err.message}`, 'error')
+      return false
     }
-  })
+  }
 
   revertProdBtn?.addEventListener('click', async () => {
     if (!_selectedId) return
@@ -1482,29 +1488,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   })
 
-  function _setArchiveProgress(st) {
-    if (!archiveProgressEl) return
-    if (!st) { archiveProgressEl.style.display = 'none'; archiveProgressEl.textContent = ''; return }
-    const pct = st.total_bytes ? Math.round((st.moved_bytes / st.total_bytes) * 100) : 0
-    archiveProgressEl.style.display = ''
-    archiveProgressEl.textContent =
-      `${formatBytes(st.moved_bytes || 0)} / ${formatBytes(st.total_bytes || 0)} (${pct}%)`
-  }
-
-  archiveBtn?.addEventListener('click', async () => {
+  // Archive / unarchive the selected job. `onProgress` receives the byte-move progress
+  // (the master card renders it); dispatched from #simulate-job-actions.
+  async function archiveSelected({ onProgress = () => {} } = {}) {
     if (!_selectedId) return
     const job = _jobs.find(j => j.job_id === _selectedId)
     if (!job) return
-    archiveBtn.disabled = true; deleteBtn && (deleteBtn.disabled = true)
     const action = job.archived ? _archive.unarchive : _archive.archive
     try {
-      await action(job, { onProgress: _setArchiveProgress })
+      await action(job, { onProgress })
     } finally {
-      archiveBtn.disabled = false; deleteBtn && (deleteBtn.disabled = false)
-      _setArchiveProgress(null)
       await _fetchJobs()
     }
-  })
+  }
 
   prodBtn?.addEventListener('click', async () => {
     if (getChainMode?.()) return enqueueChainStage?.('production')
@@ -1831,29 +1827,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   }
 
-  // ── Stop button ────────────────────────────────────────────────────────────
-  // Busy-guard Start: an immediate spinner + gray-out, and the request fires once
-  // even if the user mashes the button while it registers on the backend.
-  startBtn?.addEventListener('click', () => runExclusive(startBtn, async () => {
-    if (!_selectedId) return
-    if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
-    // oxDNA-seeded jobs run the SAME restrained relaxation ladder, starting from
-    // the seeded (oxDNA-relaxed) structure — they no longer skip it (jumping
-    // straight to unrestrained production blew the structure up).
-    console.log(`[${_ts()}] md-jobs: start ${_selectedId}`)
-    try {
-      const d = await api.startMdJob(_selectedId)
-      console.log(`[${_ts()}] md-jobs: start response`, d)
-      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
-      showToast('Start requested', 'ok')
-      await _fetchJobs()
-      _reselectJob(_selectedId)   // force WS re-subscribe (same id → _selectJob would no-op)
-    } catch (err) {
-      console.warn(`[${_ts()}] md-jobs: start failed`, err)
-      showToast(`Start failed: ${err.message}`, 'error')
-    }
-  }, { label: 'Starting…' }))
-
   // Once a queued-for-Alpine job finishes preparing, open the submit-review card.
   // Clears the pending flag on prep failure too so it can't fire on a later run.
   function _maybeOpenAlpineReview(job) {
@@ -1914,18 +1887,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   resumeBtn?.addEventListener('click', () => {
     if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
   })
-
-  stopBtn?.addEventListener('click', () => runExclusive(stopBtn, async () => {
-    if (!_selectedId) return
-    console.log(`[${_ts()}] md-jobs: stop ${_selectedId}`)
-    try {
-      const d = await api.stopMdJob(_selectedId)
-      console.log(`[${_ts()}] md-jobs: stop response`, d)
-      showToast('Stop requested', 'warn')
-    } catch (err) {
-      console.warn(`[${_ts()}] md-jobs: stop failed`, err)
-    }
-  }, { label: 'Stopping…' }))
 
   earlyStopLiveChk?.addEventListener('change', async () => {
     if (!_selectedId || _earlyStopBusy) return
@@ -2173,12 +2134,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
 
     const isAlpine = job.execution_target === 'alpine'
-    // Local "Start" only applies to local jobs; an Alpine job is launched via Submit-to-Alpine.
-    // The primary Relax control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) now covers local
-    // start/stop/resume for the selected job, so the detail Start/Stop are retired.
+    // The primary Relax control (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) covers local start/stop/
+    // resume for the selected job (the old detail Start/Stop were retired + removed).
     // (Alpine submit/resume/ensemble keep their dedicated cluster-gated buttons below.)
-    if (startBtn) startBtn.style.display = 'none'
-    if (stopBtn) stopBtn.style.display = 'none'
     _paintRunControl()
     // Mid-run early-stop toggle: shown for a running LOCAL relaxation job.  The
     // requested value can lag the persisted flag until the runner consumes it at a
@@ -2225,11 +2183,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
     _renderResumeHistory(job)
     _maybeOpenAlpineReview(job)
-    if (archiveBtn) {
-      // Archive/unarchive only for non-running jobs; label tracks archived state.
-      archiveBtn.style.display = job.status === 'running' ? 'none' : ''
-      archiveBtn.textContent = job.archived ? 'Unarchive' : 'Archive'
-    }
+    // Archive/Delete live in the section-level #simulate-job-actions (visibility/label
+    // handled there on the selected node).
 
     // Show the error box for terminal failures AND for a failed Alpine submit
     // (queued-but-errored) so the rejection reason is visible with the retry button.
@@ -2925,6 +2880,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
       return _selectJob(jobId)
     },
+    // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
+    // selected node's engine panel; both operate on this panel's currently-selected job).
+    deleteSelected, archiveSelected,
     // Chain Simulations wiring: read/write this engine's field + anchor cards, and its
     // advanced run knobs, so a queued stage captures — and a queue click restores — the
     // exact conditions (the NAMD panel owns these cards internally).

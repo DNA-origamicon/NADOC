@@ -74,6 +74,38 @@ def test_normalize_lammps_not_viewable_while_active_or_frameless():
     assert sim_jobs.normalize_lammps_job(_lm(frames=0))["viewable"] is False
 
 
+# ── mrDNA / CanDo / NAMD normalization (full-consolidation: one cross-engine list) ──
+
+def test_normalize_mrdna_is_flat_root():
+    n = sim_jobs.normalize_mrdna_job(_ox(job_id="mr1", n_nucleotides=64))
+    assert n["engine"] == "mrdna"
+    assert n["kind"] == "relax" and n["is_child"] is False
+    assert n["production_state"] is None
+    assert n["n_units"] == 64
+    assert n["design_source_path"] == "/w/d.nadoc"   # passthrough kept
+
+
+def test_normalize_cando_is_flat_root():
+    n = sim_jobs.normalize_cando_job(_ox(job_id="cd1"))
+    assert n["engine"] == "cando"
+    assert n["kind"] == "relax" and n["is_child"] is False
+    assert n["production_state"] is None
+
+
+def test_normalize_md_root_and_child():
+    root = sim_jobs.normalize_md_job(_ox(job_id="md1", parent_job_id=None))
+    child = sim_jobs.normalize_md_job(_ox(job_id="md2", parent_job_id="md1"))
+    assert root["engine"] == "namd"
+    assert root["kind"] == "relax" and root["is_child"] is False
+    assert child["kind"] == "run" and child["is_child"] is True
+
+
+def test_normalize_viewable_only_when_completed():
+    assert sim_jobs.normalize_mrdna_job(_ox(status="completed"))["viewable"] is True
+    assert sim_jobs.normalize_cando_job(_ox(status="running"))["viewable"] is False
+    assert sim_jobs.normalize_md_job(_ox(status="failed"))["viewable"] is False
+
+
 # ── path filter (mirrors frontend filterJobsForPart / normalizeWorkspacePath) ──
 
 def test_filter_matches_normalized_path():
@@ -123,3 +155,59 @@ def test_simulate_jobs_route_merges_and_filters(monkeypatch):
     lm_node = next(n for n in nodes if n["engine"] == "lammps")
     assert "out_of_date" in ox_node and "size_bytes" in ox_node
     assert lm_node["viewable"] is True and lm_node["kind"] == "lammps"
+
+
+def test_simulate_jobs_route_includes_all_four_engines(monkeypatch):
+    """The unified list folds in mrDNA + CanDo + NAMD too, each design-filtered, each
+    isolated so one failing engine list doesn't drop the others."""
+    import backend.api.routes_cando as rc
+    import backend.api.routes_md as rmd
+    import backend.api.routes_mrdna as rmr
+    import backend.core.lammps_job as lmj
+    import backend.core.oxdna_job as oxj
+
+    monkeypatch.setattr(oxj.OxdnaJob, "list_jobs", classmethod(lambda cls, ws: []))
+    monkeypatch.setattr(lmj.LammpsJob, "list_jobs", classmethod(lambda cls, ws: []))
+
+    async def _mr():
+        return [_ox(job_id="mr1", n_nucleotides=64)]
+
+    async def _cd():
+        return [_ox(job_id="cd1")]
+
+    async def _md():
+        return [_ox(job_id="md1"), _ox(job_id="md2", parent_job_id="md1")]
+
+    monkeypatch.setattr(rmr, "list_mrdna_jobs", _mr)
+    monkeypatch.setattr(rc, "list_cando_jobs", _cd)
+    monkeypatch.setattr(rmd, "list_md_jobs", _md)
+
+    r = client.get("/api/simulate/jobs", params={"design_source_path": "/w/d.nadoc"})
+    assert r.status_code == 200
+    nodes = r.json()
+    assert {n["engine"] for n in nodes} == {"mrdna", "cando", "namd"}
+    md_child = next(n for n in nodes if n["job_id"] == "md2")
+    assert md_child["is_child"] is True and md_child["kind"] == "run"
+
+
+def test_simulate_jobs_route_one_engine_failing_keeps_others(monkeypatch):
+    import backend.api.routes_md as rmd
+    import backend.core.lammps_job as lmj
+    import backend.core.oxdna_job as oxj
+
+    monkeypatch.setattr(oxj.OxdnaJob, "list_jobs", classmethod(lambda cls, ws: []))
+    monkeypatch.setattr(lmj.LammpsJob, "list_jobs", classmethod(lambda cls, ws: []))
+
+    async def _boom():
+        raise RuntimeError("mrdna list broke")
+
+    async def _md():
+        return [_ox(job_id="md1")]
+
+    import backend.api.routes_mrdna as rmr
+    monkeypatch.setattr(rmr, "list_mrdna_jobs", _boom)
+    monkeypatch.setattr(rmd, "list_md_jobs", _md)
+
+    r = client.get("/api/simulate/jobs", params={"design_source_path": "/w/d.nadoc"})
+    assert r.status_code == 200
+    assert {n["engine"] for n in r.json()} == {"namd"}

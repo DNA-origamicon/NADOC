@@ -64,7 +64,10 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
   const colors = ctx.colors || _DEFAULT_COLORS
   const collapsed = !!(ctx.collapsedIds && ctx.collapsedIds.has(job.job_id))
   const prodState = ctx.productionState ? ctx.productionState(job) : null
-  const statusKey = statusKeyFor(ctx.engine, job.status, prodState)
+  // engineOf lets a MIXED list (the unified Simulate list) resolve each row's engine
+  // per-node; single-engine panels omit it and fall back to the ctx-wide engine.
+  const engine = ctx.engineOf ? ctx.engineOf(job) : ctx.engine
+  const statusKey = statusKeyFor(engine, job.status, prodState)
   const isActive = ctx.isActive ? !!ctx.isActive(job) : _DEFAULT_ACTIVE(job)
   const archived = ctx.archived ? !!ctx.archived(job) : !!job?.archived
   const sizeBytes = ctx.sizeBytes ? ctx.sizeBytes(job) : (job?.size_bytes ?? null)

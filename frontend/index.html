@@ -872,6 +872,22 @@
       background: #1f6feb;
       color: #fff;
     }
+    /* ⚠ not-installed marker on an engine tab (tooltip → Help ▸ MD Engines) */
+    .engine-warn {
+      margin-left: 4px;
+      color: #e0a800;
+      font-size: 11px;
+      cursor: help;
+    }
+    .engine-selector-btn.is-uninstalled:not(.is-active) { color: #b0892e; }
+    /* The four engine panels are nested .panel-section inside #simulate-panel, so
+       their own 14px horizontal padding made their cards narrower than the section-
+       level jobs/shape/run-control cards. Zero it so every card is the same width. */
+    #simulate-body > .panel-section {
+      padding-left: 0;
+      padding-right: 0;
+      border-bottom: none;
+    }
     .engine-capability-strip {
       display: flex;
       flex-wrap: wrap;
@@ -3531,7 +3547,7 @@
                 <button id="chain-sim-del-btn" class="panel-action-btn" style="width:auto;padding:2px 7px;font-size:13px;line-height:1;color:#c93c3c" title="Delete this project">×</button>
               </div>
               <!-- Scrollable queue of stages (rendered by chain_sim_panel.js) -->
-              <div id="chain-sim-queue" style="max-height:240px;overflow-y:auto;border:1px solid #21262d;border-radius:4px;padding:4px;margin-bottom:6px"></div>
+              <div id="chain-sim-queue" style="max-height:240px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:4px;padding:4px;margin-bottom:6px"></div>
               <!-- Total ETA -->
               <div id="chain-sim-total" style="font-size:11px;color:#8b949e;margin-bottom:6px"></div>
               <!-- Launch + live chain status -->
@@ -3552,14 +3568,47 @@
               <!-- Auto engine-policy resource line: GPU state · free CPU cores · recommended engine -->
               <div id="simulate-status-line" style="font-size:var(--text-xs);color:#8b949e;padding:2px 2px 4px"></div>
 
+              <!-- ── Run controls (per active engine) — the launch/relax/coarse/fine/…
+                   buttons, relocated here (just above the jobs card) from each engine panel
+                   at init (main.js). Only the active engine's cluster is shown (the engine
+                   selector toggles them, like the panels). Buttons keep their IDs so all the
+                   panel wiring is unchanged. -->
+              <div id="simulate-run-controls" style="margin-bottom:2px">
+                <div id="oxdna-run-controls"></div>
+                <div id="mrdna-run-controls" style="display:none"></div>
+                <div id="cando-run-controls" style="display:none"></div>
+                <div id="namd-run-controls" style="display:none"></div>
+              </div>
+
+              <!-- ── Consolidated job actions (Archive / Delete) — one pair for ALL engines,
+                   above the jobs card. Acts on the selected run; dispatches to that run's
+                   engine panel (simulate_jobs.js). Hidden until a deletable run is selected;
+                   Archive shows only for engines that support it (oxDNA / NAMD). -->
+              <div id="simulate-job-actions" style="display:none;margin-bottom:2px">
+                <div style="display:flex;gap:5px">
+                  <button id="simulate-jobs-archive-btn"
+                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Archive</button>
+                  <button id="simulate-jobs-delete-btn"
+                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer">Delete</button>
+                </div>
+                <div id="simulate-jobs-archive-progress" style="display:none;font-size:var(--text-xs);color:#d29922;margin-top:4px"></div>
+              </div>
+
               <!-- ── Unified simulation jobs + master Job status card (Phase C) ──────────
-                   ONE hierarchical list of every oxDNA + LAMMPS run for the design (a LAMMPS
-                   run carries a subtle [L] badge), plus the master status/progress + context
-                   Run/Stop/Resume that reflects the selected job regardless of engine. An
-                   [L] node's viz uses the LAMMPS controller below; an oxDNA node drives the
-                   oxDNA panel's own viz. -->
-              <div id="simulate-jobs" style="margin-bottom:8px">
-                <div id="simulate-jobs-list" style="max-height:150px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                   ONE collapsible list of every run for the design across all four engines
+                   (oxDNA/LAMMPS, mrDNA, CanDo, NAMD). It scopes to the ACTIVE engine tab by
+                   default; "Show all job types" reveals every engine's runs (each tagged).
+                   Selecting a row routes to that engine's tab + detail/viz (an [L] node's
+                   viz uses the LAMMPS controller this card owns). -->
+              <div id="simulate-jobs" class="ox-card" style="margin-bottom:2px">
+                <div id="simulate-jobs-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="simulate-jobs-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Jobs</span><span id="simulate-jobs-engine-label" style="margin-left:6px;font-size:10px;color:#6e7681"></span>
+                </div>
+                <div id="simulate-jobs-body" class="ox-card__body">
+                <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:5px;cursor:pointer">
+                  <input id="simulate-jobs-show-all-types" type="checkbox"> Show all job types
+                </label>
+                <div id="simulate-jobs-list" style="max-height:150px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 <div id="simulate-jobs-progress" style="margin-top:6px">
                   <div style="height:5px;background:#161b22;border-radius:2px;overflow:hidden">
                     <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
@@ -3575,67 +3624,48 @@
                 </button>
                 <div id="simulate-jobs-detail" style="font-size:11px;color:#6e7681;margin-top:5px;min-height:0"></div>
 
-                <!-- LAMMPS visualizations (shown only when an [L] node is selected) — the
-                     master card owns the LAMMPS display controller; oxDNA viz stays in the
-                     oxDNA panel. Radios are mutually-exclusive views on the selected run. -->
-                <div id="simulate-jobs-viz" class="ox-card" style="display:none;margin-top:6px">
-                  <div class="ox-card__header" style="color:#c9d1d9"><span class="ox-card__title">Visualizations (LAMMPS run)</span></div>
-                  <div class="ox-card__body">
-                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
-                      <input id="simulate-jobs-viz-off" name="simulate-viz" type="radio" value="off" checked> Off (native positions)
-                    </label>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:pointer">
-                      <input id="simulate-jobs-display-toggle" name="simulate-viz" type="radio" value="display" disabled> LAMMPS display
-                    </label>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
-                           title="On: superpose the final structure onto the design pose. Off: show it in its own simulation frame.">
-                      <input id="simulate-jobs-align-toggle" type="checkbox" checked> Align to design pose
-                    </label>
-                    <div id="simulate-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer"
-                           title="Average structure over the run, recoloured rigid→flexible by per-base RMSF">
-                      <input id="simulate-jobs-flex-toggle" name="simulate-viz" type="radio" value="flex" disabled> Flexibility map (RMSF)
-                    </label>
-                    <div id="simulate-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer"
-                           title="Average structure, each base recoloured green (matches design) → red (far from design).">
-                      <input id="simulate-jobs-deviation-toggle" name="simulate-viz" type="radio" value="deviation" disabled> Deviation map
-                    </label>
-                    <div id="simulate-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:pointer"
-                           title="Play/scrub the run's trajectory">
-                      <input id="simulate-jobs-traj-toggle" name="simulate-viz" type="radio" value="traj" disabled> View trajectory
-                    </label>
-                    <div id="simulate-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                    <div id="simulate-jobs-traj-controls" style="display:none;margin-top:4px">
-                      <div style="display:flex;align-items:center;gap:6px">
-                        <button id="simulate-jobs-traj-play" title="Play / pause"
-                                style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
-                        <div style="position:relative;flex:1;min-width:0">
-                          <input id="simulate-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
-                                 style="width:100%;display:block;margin:0">
-                          <div id="simulate-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
-                        </div>
-                      </div>
-                      <div id="simulate-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
-                    </div>
+                <!-- Stage timeline (LAST in the jobs card) — the selected engine's timeline
+                     element is relocated into the host below at init (main.js); the master
+                     card shows the active engine's + hides the block when none applies. -->
+                <div id="simulate-jobs-timeline" style="display:none;margin-top:6px">
+                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Stage timeline</div>
+                  <div id="simulate-jobs-timeline-host"></div>
+                </div>
+                </div><!-- /#simulate-jobs-body -->
+              </div>
+
+              <!-- ── Cross-engine shape comparison (S5) — section-level: it compares ALL
+                   engines' predictions for the design, so it lives under the unified Jobs
+                   card rather than inside the oxDNA tab. -->
+              <div class="ox-card" style="margin-bottom:2px">
+                <div id="shape-compare-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="shape-compare-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Shape comparison (cross-engine)</span>
+                </div>
+                <div id="shape-compare-card" class="ox-card__body" style="display:none">
+                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Compare each engine's predicted shape, flexibility (RMSF) &amp; E-field deflection for this design. Per-observable reference: oxDNA=shape/field, CanDo=RMSF, NAMD overrides when present.</div>
+                  <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+                    <button id="shape-compare-gen"    title="Gather every engine's prediction for this design and compare" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
+                    <button id="shape-compare-view" title="Open the comparison results (tables + RMSF overlay) in a popup" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">View Results…</button>
                   </div>
+                  <div id="shape-compare-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-bottom:4px;overflow:hidden"><div id="shape-compare-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                  <div id="shape-compare-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:12px"></div>
                 </div>
               </div>
 
           <!-- ── oxDNA (single consolidated panel: relaxation + production + display) ──── -->
           <div class="panel-section" id="oxdna-jobs-panel">
-            <h2 id="oxdna-jobs-heading" style="margin-bottom:0"><span>oxDNA</span></h2>
-            <div id="oxdna-jobs-body" style="margin-top:8px">
+            <div id="oxdna-jobs-body" style="margin-top:2px">
 
-              <!-- availability badge -->
-              <div id="oxdna-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+              <!-- availability badge — HIDDEN: install state now shows as a ⚠ on the
+                   engine tab (kept in the DOM so the panel's availability logic is intact). -->
+              <div id="oxdna-jobs-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
               <!-- loading bar: the running job's progress, above the launch buttons -->
-              <div id="oxdna-jobs-progress" style="margin-bottom:6px"></div>
+              <div id="oxdna-jobs-progress" style="display:none;margin-bottom:6px"></div>
 
-              <!-- launch (current design): Relax + Production side by side (mirrors MD) -->
-              <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+              <!-- launch (current design): Relax + Production side by side (mirrors MD).
+                   Relocated above the jobs card at init (see main.js run-control move). -->
+              <div id="oxdna-launch-row" style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
                 <button id="oxdna-jobs-run-btn" disabled
                         style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
                   ▶ Relax
@@ -3651,27 +3681,10 @@
                   Full Sim
                 </button>
               </div>
-              <!-- autorefine skips/loops (self-consistency tuning loop) -->
-              <div style="margin-bottom:6px">
-                <div style="display:flex;gap:5px;align-items:center">
-                  <button id="oxdna-jobs-autorefine-btn" disabled
-                          title="Autorefine skips/loops: iteratively tune the design's skip/loop placement, relaxing in oxDNA each round, until the simulated time-averaged structure matches the geometry your design depicts. Square-lattice only for now (curved/twisted designs planned). Reports a before-vs-after deviation score."
-                          style="flex:1;font-size:var(--text-xs);padding:5px;background:#2a1f12;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">
-                    ✦ Autorefine skips/loops
-                  </button>
-                  <button id="oxdna-jobs-autorefine-stop-btn"
-                          title="Stop the running autorefine — cancels the in-flight simulation and ends the loop, keeping the best result so far."
-                          style="display:none;font-size:var(--text-xs);padding:5px 8px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer;font-weight:600">
-                    ■ Stop
-                  </button>
-                </div>
-                <div id="oxdna-jobs-autorefine-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
-                <div id="oxdna-jobs-autorefine-result" style="margin-top:4px"></div>
-              </div>
               <!-- live (ephemeral, in-process oxpy) session status -->
               <div id="oxdna-jobs-live-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
-              <!-- production parameters (enabled once a relaxation completes) -->
-              <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin-bottom:6px">
+              <!-- production parameters (relocated into the Advanced card at init — see main.js) -->
+              <div id="oxdna-prod-params" style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;margin-bottom:6px">
                 <label for="oxdna-jobs-prod-steps" style="font-size:var(--text-xs);color:#8b949e">Production steps</label>
                 <input id="oxdna-jobs-prod-steps" type="number" value="5000000" min="1000" max="200000000" step="1000000"
                        style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
@@ -3693,7 +3706,7 @@
                   <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
                     <input id="oxdna-jobs-show-all" type="checkbox"> Show jobs for all designs
                   </label>
-                  <div id="oxdna-jobs-list" style="max-height:140px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                  <div id="oxdna-jobs-list" style="max-height:140px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
               </div>
 
@@ -3729,12 +3742,12 @@
                   <span id="oxdna-anchors-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Anchors</span>
                 </div>
                 <div id="oxdna-anchors-body" class="ox-card__body" style="display:none">
-                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Fixed strands held in place during the run (tethers / clamps). Used by the field and surface, or on their own. A field needs at least one.</div>
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Fixed strands held in place during the run (tethers / clamps).</div>
                   <div style="display:flex;align-items:center;gap:5px">
                     <button id="oxdna-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
                     <button id="oxdna-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
                   </div>
-                  <div id="oxdna-anchors-list" style="margin-top:5px"></div>
+                  <div id="oxdna-anchors-list" style="max-height:110px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#010409;padding:3px;margin-top:5px"></div>
                   <div id="oxdna-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
                 </div>
               </div>
@@ -3902,13 +3915,11 @@
                 <div id="oxdna-jobs-timeline" style="margin-bottom:4px"></div>
                 <div id="oxdna-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#d9534f;margin-top:5px"></div>
                 <button id="oxdna-jobs-errorlog-btn" style="display:none;font-size:var(--text-xs);padding:3px 8px;margin-top:5px;background:#3a1a1a;border:1px solid #d9534f;color:#d9534f;border-radius:3px;cursor:pointer">View error log</button>
+                <!-- Production-phase Stop (the master run control owns relax start/stop/resume;
+                     Archive/Delete are consolidated into #simulate-job-actions above). -->
                 <div style="display:flex;gap:5px;margin-top:6px">
-                  <button id="oxdna-jobs-start-btn" style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Start</button>
                   <button id="oxdna-jobs-stop-btn"  style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1a1a;border:1px solid #d9534f;color:#d9534f;border-radius:3px;cursor:pointer">Stop</button>
-                  <button id="oxdna-jobs-archive-btn" style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Archive</button>
-                  <button id="oxdna-jobs-delete-btn" style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Delete</button>
                 </div>
-                <div id="oxdna-jobs-archive-progress" style="display:none;font-size:var(--text-xs);color:#d29922;margin-top:4px"></div>
                 <!-- NAMD seed handoff (enabled once relaxation completes) -->
                 <button id="oxdna-jobs-seed-btn" disabled
                         title="Start a NAMD all-atom run from this relaxed structure instead of ideal B-DNA"
@@ -3965,22 +3976,6 @@
                 </div>
               </div>
 
-              <!-- ── Cross-engine shape comparison (S5, collapsible) ──────────── -->
-              <div class="ox-card">
-                <div id="shape-compare-toggle" class="ox-card__header" style="color:#c9d1d9">
-                  <span id="shape-compare-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Shape comparison (cross-engine)</span>
-                </div>
-                <div id="shape-compare-card" class="ox-card__body" style="display:none">
-                  <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Compare each engine's predicted shape, flexibility (RMSF) &amp; E-field deflection for this design. Per-observable reference: oxDNA=shape/field, CanDo=RMSF, NAMD overrides when present.</div>
-                  <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
-                    <button id="shape-compare-gen"    title="Gather every engine's prediction for this design and compare" style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Generate</button>
-                    <button id="shape-compare-view" title="Open the comparison results (tables + RMSF overlay) in a popup" disabled style="font-size:var(--text-xs);padding:3px 7px;background:#21262d;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed">View Results…</button>
-                  </div>
-                  <div id="shape-compare-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-bottom:4px;overflow:hidden"><div id="shape-compare-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
-                  <div id="shape-compare-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:12px"></div>
-                </div>
-              </div>
-
               <!-- manual export (run oxDNA yourself from the ZIP) — last in the section -->
               <button id="oxdna-jobs-export-btn"
                       style="width:100%;font-size:var(--text-xs);padding:4px 6px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer;margin-top:8px">
@@ -3992,21 +3987,21 @@
 
           <!-- ── mrDNA (coarse ARBD relaxation: single Run + CG display) ──── -->
           <div class="panel-section" id="mrdna-jobs-panel">
-            <h2 id="mrdna-jobs-heading" style="margin-bottom:0"><span>mrDNA</span></h2>
-            <div id="mrdna-jobs-body" style="margin-top:8px">
+            <div id="mrdna-jobs-body" style="margin-top:2px">
 
-              <!-- availability badge (mrDNA + ARBD + GPU) -->
-              <div id="mrdna-jobs-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+              <!-- availability badge — HIDDEN: install state shows as a ⚠ on the mrDNA tab. -->
+              <div id="mrdna-jobs-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
               <!-- running job's progress bar -->
-              <div id="mrdna-jobs-progress" style="margin-bottom:6px">
+              <div id="mrdna-jobs-progress" style="display:none;margin-bottom:6px">
                 <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
                   <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
                 </div>
               </div>
 
-              <!-- two run buttons: Coarse (fast, global shape) + Fine (curvature) -->
-              <div style="display:flex;gap:5px;margin-bottom:6px">
+              <!-- two run buttons: Coarse (fast, global shape) + Fine (curvature).
+                   Relocated above the jobs card at init (see main.js run-control move). -->
+              <div id="mrdna-launch-row" style="display:flex;gap:5px;margin-bottom:6px">
                 <button id="mrdna-jobs-coarse-btn" disabled
                         title="COARSE relaxation (5 bp/bead, no twist). Fast — settles the global shape and relaxes strained geometry. Does NOT reproduce loop/skip curvature or twist (the coarse model has no twist), so a curved design still reads ~straight. Use Fine to check curvature."
                         style="flex:1;font-size:var(--text-xs);padding:6px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
@@ -4019,8 +4014,10 @@
                 </button>
               </div>
 
-              <!-- ── Jobs (list of runs, filtered to this design) ──────────── -->
-              <div class="ox-card">
+              <!-- ── Jobs — HIDDEN: the unified #simulate-jobs list above is the one
+                   visible job list (filtered to the mrDNA tab). The panel still renders
+                   into this hidden node + selectJob() works, so no mrDNA internals changed. -->
+              <div class="ox-card" style="display:none">
                 <div id="mrdna-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span class="ox-card__title">Jobs</span>
                 </div>
@@ -4028,7 +4025,7 @@
                   <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
                     <input id="mrdna-jobs-show-all" type="checkbox"> Show jobs for all designs
                   </label>
-                  <div id="mrdna-jobs-list" style="max-height:120px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                  <div id="mrdna-jobs-list" style="max-height:120px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
               </div>
 
@@ -4062,8 +4059,6 @@
                 <div style="display:flex;gap:5px;margin-bottom:6px">
                   <button id="mrdna-jobs-stop-btn"
                           style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer">■ Stop</button>
-                  <button id="mrdna-jobs-delete-btn"
-                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">🗑 Delete</button>
                 </div>
                 <!-- NAMD seed handoff (enabled once a FINE-stage relaxation completes) -->
                 <button id="mrdna-jobs-seed-btn" disabled
@@ -4088,18 +4083,18 @@
 
           <!-- ── CanDo FEM (native shape predictor: linear/nonlinear solve) ──── -->
           <div class="panel-section" id="cando-jobs-panel">
-            <h2 id="cando-jobs-heading" style="margin-bottom:0"><span>CanDo FEM</span></h2>
-            <div id="cando-jobs-body" style="margin-top:8px">
+            <div id="cando-jobs-body" style="margin-top:2px">
 
               <!-- running job's progress bar -->
-              <div id="cando-jobs-progress" style="margin-bottom:6px">
+              <div id="cando-jobs-progress" style="display:none;margin-bottom:6px">
                 <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
                   <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>
                 </div>
               </div>
 
-              <!-- two run buttons: Coarse (linear preview) + Fine (nonlinear) -->
-              <div style="display:flex;gap:5px;margin-bottom:6px">
+              <!-- two run buttons: Coarse (linear preview) + Fine (nonlinear).
+                   Relocated above the jobs card at init (see main.js run-control move). -->
+              <div id="cando-launch-row" style="display:flex;gap:5px;margin-bottom:6px">
                 <button id="cando-jobs-coarse-btn"
                         title="COARSE prediction (linear FEM solve). Fast (seconds) — reproduces ~0.92 of the CanDo-predicted bend. Use for an interactive preview of the loop/skip shape + flexibility."
                         style="flex:1;font-size:var(--text-xs);padding:6px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer;font-weight:600">
@@ -4114,7 +4109,7 @@
 
               <!-- Autorefine (Phase-5 Item 4): tune loop/skip placement so the FEM-predicted
                    shape matches the design's intended bend/twist (minimise the deviation RMSD). -->
-              <div style="margin-bottom:6px">
+              <div id="cando-autorefine-row" style="margin-bottom:6px">
                 <div style="display:flex;gap:5px;align-items:center">
                   <button id="cando-jobs-autorefine-btn"
                           title="Autorefine loop/skips (CanDo-FEM): iteratively add/remove loop/skip marks — using the fast FEM shape solve each round — until the predicted shape matches the bend/twist your design depicts. Square lattice tunes with skips only; curved/twisted designs also use loops. Reports current vs target twist/curvature/deviation per iteration; the result lands as a reversible Feature-Log entry."
@@ -4131,8 +4126,10 @@
                 <div id="cando-jobs-autorefine-result" style="margin-top:4px"></div>
               </div>
 
-              <!-- ── Jobs (list of runs, filtered to this design) ──────────── -->
-              <div class="ox-card">
+              <!-- ── Jobs — HIDDEN: the unified #simulate-jobs list above is the one
+                   visible job list (filtered to the CanDo tab). The panel still renders
+                   into this hidden node + selectJob() works, so no CanDo internals changed. -->
+              <div class="ox-card" style="display:none">
                 <div id="cando-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span class="ox-card__title">Jobs</span>
                 </div>
@@ -4140,7 +4137,7 @@
                   <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
                     <input id="cando-jobs-show-all" type="checkbox"> Show jobs for all designs
                   </label>
-                  <div id="cando-jobs-list" style="max-height:120px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                  <div id="cando-jobs-list" style="max-height:120px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                 </div>
               </div>
 
@@ -4172,7 +4169,7 @@
                     <button id="cando-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
                     <button id="cando-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
                   </div>
-                  <div id="cando-anchors-list" style="margin-top:5px"></div>
+                  <div id="cando-anchors-list" style="max-height:110px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#010409;padding:3px;margin-top:5px"></div>
                   <div id="cando-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
                 </div>
               </div>
@@ -4225,8 +4222,6 @@
                 <div style="display:flex;gap:5px;margin-bottom:6px">
                   <button id="cando-jobs-stop-btn"
                           style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer">■ Stop</button>
-                  <button id="cando-jobs-delete-btn"
-                          style="flex:1;font-size:var(--text-xs);padding:4px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">🗑 Delete</button>
                 </div>
               </div>
 
@@ -4292,17 +4287,18 @@
 
           <!-- ── MD relaxation panel (job launcher + live progress) ───────── -->
           <div class="panel-section" id="md-jobs-panel">
-            <h2 id="md-jobs-panel-heading" style="margin-bottom:0"><span>Molecular Dynamics</span></h2>
-            <div id="md-jobs-panel-body" style="margin-top:8px">
+            <div id="md-jobs-panel-body" style="margin-top:2px">
 
-              <!-- NAMD availability badge -->
-              <div id="md-jobs-namd-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
+              <!-- NAMD availability badge — HIDDEN: install state shows as a ⚠ on the NAMD tab. -->
+              <div id="md-jobs-namd-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
               <!-- Compute-cluster (Alpine) connection chip + connect modal mount -->
               <div id="md-cluster-connection-mount" style="margin-bottom:6px"></div>
 
-              <!-- Launch form -->
-              <div style="margin-bottom:8px">
+              <!-- Launch form (Protocol / Run-on / production steps) — relocated INTO the
+                   Advanced card at init (see main.js); the Relax/Production buttons inside it
+                   are first extracted to the run-controls host above the jobs card. -->
+              <div id="md-launch-form" style="margin-bottom:8px">
                 <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Protocol</div>
                 <select id="md-jobs-preset"
                         style="width:100%;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px 5px;margin-bottom:6px">
@@ -4320,7 +4316,9 @@
                   </label>
                   <span id="md-run-target-hint" style="font-size:10px;color:#484f58"></span>
                 </div>
-                <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+                <!-- Relax / Production buttons — relocated above the jobs card at init
+                     (see main.js run-control move); the run-target radios above stay here. -->
+                <div id="md-launch-row" style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
                   <button id="md-jobs-run-btn"
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a4a1a;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
                     ▶ Relax
@@ -4357,8 +4355,10 @@
               <!-- ── Benchmark (self-rendered collapsible card — auto-tune threads/devices) ── -->
               <div id="md-benchmark-mount" style="margin-bottom:8px"></div>
 
-              <!-- ── Jobs (collapsible card — list of runs) ─────────────────── -->
-              <div class="ox-card">
+              <!-- ── Jobs — HIDDEN: the unified #simulate-jobs list above is the one
+                   visible job list (filtered to the NAMD tab). The panel still renders
+                   into this hidden node + selectJob() works, so no NAMD internals changed. -->
+              <div class="ox-card" style="display:none">
                 <div id="md-jobs-list-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="md-jobs-list-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Jobs</span>
                 </div>
@@ -4367,12 +4367,122 @@
                     <input id="md-jobs-show-all" type="checkbox" style="accent-color:#58a6ff">
                     Show jobs for all designs
                   </label>
-                  <div id="md-jobs-list" style="max-height:160px;overflow-y:auto;scrollbar-width:thin"></div>
+                  <div id="md-jobs-list" style="max-height:160px;overflow-y:auto;scrollbar-width:thin;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                </div>
+              </div>
+
+              <!-- ── Anchors (collapsible card — NAMD fixedAtoms; mirrors the oxDNA/CanDo picker) ── -->
+              <div class="ox-card">
+                <div id="md-anchors-toggle" class="ox-card__header" style="color:#8b949e">
+                  <span id="md-anchors-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Anchors</span>
+                </div>
+                <div id="md-anchors-body" class="ox-card__body" style="display:none">
+                  <div style="display:flex;align-items:center;gap:5px">
+                    <button id="md-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
+                    <button id="md-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                  </div>
+                  <div id="md-anchors-list" style="max-height:110px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#010409;padding:3px;margin-top:5px"></div>
+                  <div id="md-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Electric field (collapsible card — native NAMD eFieldOn/eField) ── -->
+              <!-- Same numeric factory as the CanDo card (ui/cando_efield_setup.js, ids  -->
+              <!-- parameterised); the oxDNA card owns the one in-scene arrow gizmo.      -->
+              <div class="ox-card">
+                <div id="md-efield-toggle" class="ox-card__header" style="color:#8b949e">
+                  <span id="md-efield-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Electric field</span>
+                </div>
+                <div id="md-efield-body" class="ox-card__body" style="display:none">
+                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">A uniform force on every nucleotide (same per-nt force convention as oxDNA), applied as NAMD's native <code>eField</code> (q·E). Needs ≥1 anchor (Anchors card) or it drifts the whole structure. Single-GPU only.</div>
+                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
+                    <input type="checkbox" id="md-efield-enable"> Apply an electric field to the run
+                  </label>
+                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                    <label for="md-efield-mag" style="font-size:var(--text-xs);color:#8b949e">Force / nt (pN)</label>
+                    <input id="md-efield-mag" type="number" value="0" min="0" step="0.01"
+                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <div style="display:flex;align-items:center;gap:4px;margin-top:5px">
+                    <span style="font-size:var(--text-xs);color:#8b949e">Direction</span>
+                    <input id="md-efield-dir-x" type="number" step="0.1" title="x" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <input id="md-efield-dir-y" type="number" step="0.1" title="y" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <input id="md-efield-dir-z" type="number" step="0.1" title="z" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <div style="margin-top:5px">
+                    <div id="md-efield-vpm-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#8b949e;display:flex;align-items:center;gap:4px">
+                      <span id="md-efield-vpm-arrow" style="display:inline-block;transition:transform .15s">▸</span><span>from field (V/m)</span>
+                    </div>
+                    <div id="md-efield-vpm-body" style="display:none;margin-top:4px;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
+                      <label for="md-efield-vpm" style="font-size:var(--text-xs);color:#8b949e">E (V/m)</label>
+                      <input id="md-efield-vpm" type="number" step="1000" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <label for="md-efield-qeff" style="font-size:var(--text-xs);color:#8b949e" title="Effective backbone charge (e/phosphate); ~0.25 after Manning condensation. Used ONLY for this V/m→pN helper — the NAMD run itself applies the full CHARMM charges (-1 e per phosphate) in explicit solvent.">q_eff (e)</label>
+                      <input id="md-efield-qeff" type="number" step="0.05" min="0" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <span></span>
+                      <button id="md-efield-vpm-apply" style="font-size:var(--text-xs);padding:3px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Compute pN</button>
+                    </div>
+                  </div>
+                  <div id="md-efield-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:7px;min-height:14px"></div>
+                </div>
+              </div>
+
+              <!-- ── Advanced (collapsible card) ──────────────────────────── -->
+              <div class="ox-card">
+                <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
+                  <span id="md-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
+                </div>
+                <div id="md-jobs-adv-body" class="ox-card__body" style="display:none">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Threads</label>
+                    <input id="md-jobs-threads" type="number" value="16" min="1"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">CUDA device</label>
+                    <input id="md-jobs-devices" type="text" value="0"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Salt</label>
+                    <select id="md-jobs-salt-mode"
+                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <option value="screening">Auto screening</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <label style="color:#8b949e;align-self:center">Mg (mM)</label>
+                    <input id="md-jobs-mg" type="number" value="12.5" min="0" step="0.5"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">NaCl (mM)</label>
+                    <input id="md-jobs-nacl" type="number" value="0" min="0" step="10"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Padding (nm)</label>
+                    <input id="md-jobs-padding" type="number" value="1.2" min="0.5" step="0.1"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center">Min. steps</label>
+                    <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center" title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended.">Water shell (Å)</label>
+                    <input id="md-jobs-watershell" type="number" value="0" min="0" step="1"
+                           title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended."
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                  </div>
+                  <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
+                    <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
+                    Start immediately
+                  </label>
+                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                         title="Hydrogen-mass repartitioning + 4 fs timestep + NAMD GPU-resident on the hard ladder. ~4x faster NPT on a capped box, same simulated ns per stage. Auto-disabled for declash/soft ladders. Uncheck if a very large design fails the first hard segment with a GPU out-of-memory error.">
+                    <input id="md-jobs-fast" type="checkbox" checked style="accent-color:#3fb950">
+                    Fast relaxation (HMR + GPU-resident, 4&nbsp;fs)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                         title="Experimental relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. Off by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages.">
+                    <input id="md-jobs-early-stop" type="checkbox" style="accent-color:#3fb950">
+                    Early-stop settled stages (experimental)
+                  </label>
                 </div>
               </div>
 
               <!-- ── Visualizations & processing (collapsible; mutually-exclusive views;
-                   the view radios enable only once a job is selected) ── -->
+                   the view radios enable only once a job is selected). Moved below the
+                   run-config cards (Anchors/E-field/Advanced) so NAMD reads configure →
+                   results, matching the oxDNA & CanDo tabs. ── -->
               <div class="ox-card">
                 <div id="md-jobs-viz-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="md-jobs-viz-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Visualizations</span>
@@ -4471,115 +4581,6 @@
                 </div>
               </div>
 
-              <!-- ── Anchors (collapsible card — NAMD fixedAtoms; mirrors the oxDNA/CanDo picker) ── -->
-              <div class="ox-card">
-                <div id="md-anchors-toggle" class="ox-card__header" style="color:#8b949e">
-                  <span id="md-anchors-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Anchors</span>
-                </div>
-                <div id="md-anchors-body" class="ox-card__body" style="display:none">
-                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">Strands / bases held immobile for the whole run (NAMD <code>fixedAtoms</code>). Pin an end so an electric field bows the structure instead of drifting it. A selection that resolves to nothing leaves the run unanchored.</div>
-                  <div style="display:flex;align-items:center;gap:5px">
-                    <button id="md-anchors-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#1a3a4a;border:1px solid #4a9eff;color:#4a9eff;border-radius:3px;cursor:pointer">Add selection as anchor</button>
-                    <button id="md-anchors-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
-                  </div>
-                  <div id="md-anchors-list" style="margin-top:5px"></div>
-                  <div id="md-anchors-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
-                </div>
-              </div>
-
-              <!-- ── Electric field (collapsible card — native NAMD eFieldOn/eField) ── -->
-              <!-- Same numeric factory as the CanDo card (ui/cando_efield_setup.js, ids  -->
-              <!-- parameterised); the oxDNA card owns the one in-scene arrow gizmo.      -->
-              <div class="ox-card">
-                <div id="md-efield-toggle" class="ox-card__header" style="color:#8b949e">
-                  <span id="md-efield-arrow" class="ox-card__chevron icon icon--xs icon--rotates is-collapsed" data-icon="chevron-down"></span><span class="ox-card__title">Electric field</span>
-                </div>
-                <div id="md-efield-body" class="ox-card__body" style="display:none">
-                  <div style="font-size:11px;color:#6a737d;margin-bottom:7px;line-height:1.35">A uniform force on every nucleotide (same per-nt force convention as oxDNA), applied as NAMD's native <code>eField</code> (q·E). Needs ≥1 anchor (Anchors card) or it drifts the whole structure. Single-GPU only.</div>
-                  <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
-                    <input type="checkbox" id="md-efield-enable"> Apply an electric field to the run
-                  </label>
-                  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
-                    <label for="md-efield-mag" style="font-size:var(--text-xs);color:#8b949e">Force / nt (pN)</label>
-                    <input id="md-efield-mag" type="number" value="0" min="0" step="0.01"
-                           style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  </div>
-                  <div style="display:flex;align-items:center;gap:4px;margin-top:5px">
-                    <span style="font-size:var(--text-xs);color:#8b949e">Direction</span>
-                    <input id="md-efield-dir-x" type="number" step="0.1" title="x" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <input id="md-efield-dir-y" type="number" step="0.1" title="y" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <input id="md-efield-dir-z" type="number" step="0.1" title="z" style="width:46px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  </div>
-                  <div style="margin-top:5px">
-                    <div id="md-efield-vpm-toggle" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#8b949e;display:flex;align-items:center;gap:4px">
-                      <span id="md-efield-vpm-arrow" style="display:inline-block;transition:transform .15s">▸</span><span>from field (V/m)</span>
-                    </div>
-                    <div id="md-efield-vpm-body" style="display:none;margin-top:4px;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center">
-                      <label for="md-efield-vpm" style="font-size:var(--text-xs);color:#8b949e">E (V/m)</label>
-                      <input id="md-efield-vpm" type="number" step="1000" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <label for="md-efield-qeff" style="font-size:var(--text-xs);color:#8b949e" title="Effective backbone charge (e/phosphate); ~0.25 after Manning condensation. Used ONLY for this V/m→pN helper — the NAMD run itself applies the full CHARMM charges (-1 e per phosphate) in explicit solvent.">q_eff (e)</label>
-                      <input id="md-efield-qeff" type="number" step="0.05" min="0" style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <span></span>
-                      <button id="md-efield-vpm-apply" style="font-size:var(--text-xs);padding:3px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">Compute pN</button>
-                    </div>
-                  </div>
-                  <div id="md-efield-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:7px;min-height:14px"></div>
-                </div>
-              </div>
-
-              <!-- ── Advanced (collapsible card) ──────────────────────────── -->
-              <div class="ox-card">
-                <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
-                  <span id="md-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
-                </div>
-                <div id="md-jobs-adv-body" class="ox-card__body" style="display:none">
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Threads</label>
-                    <input id="md-jobs-threads" type="number" value="16" min="1"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">CUDA device</label>
-                    <input id="md-jobs-devices" type="text" value="0"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Salt</label>
-                    <select id="md-jobs-salt-mode"
-                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                      <option value="screening">Auto screening</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    <label style="color:#8b949e;align-self:center">Mg (mM)</label>
-                    <input id="md-jobs-mg" type="number" value="12.5" min="0" step="0.5"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">NaCl (mM)</label>
-                    <input id="md-jobs-nacl" type="number" value="0" min="0" step="10"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Padding (nm)</label>
-                    <input id="md-jobs-padding" type="number" value="1.2" min="0.5" step="0.1"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center">Min. steps</label>
-                    <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center" title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended.">Water shell (Å)</label>
-                    <input id="md-jobs-watershell" type="number" value="0" min="0" step="1"
-                           title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended."
-                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  </div>
-                  <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
-                    <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
-                    Start immediately
-                  </label>
-                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="Hydrogen-mass repartitioning + 4 fs timestep + NAMD GPU-resident on the hard ladder. ~4x faster NPT on a capped box, same simulated ns per stage. Auto-disabled for declash/soft ladders. Uncheck if a very large design fails the first hard segment with a GPU out-of-memory error.">
-                    <input id="md-jobs-fast" type="checkbox" checked style="accent-color:#3fb950">
-                    Fast relaxation (HMR + GPU-resident, 4&nbsp;fs)
-                  </label>
-                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="Experimental relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. Off by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages.">
-                    <input id="md-jobs-early-stop" type="checkbox" style="accent-color:#3fb950">
-                    Early-stop settled stages (experimental)
-                  </label>
-                </div>
-              </div>
-
               <!-- Active job detail -->
               <div id="md-jobs-detail" style="display:none">
                 <!-- ── Health (collapsible card — selected run's metrics; sits right
@@ -4598,10 +4599,6 @@
                 <!-- Status + run controls -->
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
                   <div id="md-jobs-detail-status" style="flex:1;font-size:var(--text-xs);color:#8b949e"></div>
-                  <button id="md-jobs-start-btn"
-                          style="font-size:var(--text-xs);padding:3px 8px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;display:none">
-                    ▶ Start
-                  </button>
                   <button id="md-jobs-submit-alpine-btn"
                           title="Review resources and submit this prepared job to the Alpine cluster"
                           style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
@@ -4611,10 +4608,6 @@
                           title="Resume this timed-out job from its last checkpoint (new SLURM submission)"
                           style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
                     ⟳ Resume
-                  </button>
-                  <button id="md-jobs-stop-btn"
-                          style="font-size:var(--text-xs);padding:3px 8px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer;display:none">
-                    ■ Stop
                   </button>
                 </div>
 
@@ -4660,17 +4653,17 @@
                     <span id="md-jobs-resume-history-arrow">▸</span> Resumptions (<span id="md-jobs-resume-history-count">0</span>)
                   </div>
                   <div id="md-jobs-resume-history"
-                       style="display:none;font-size:10px;font-family:var(--font-mono);background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-top:3px;max-height:120px;overflow-y:auto"></div>
+                       style="display:none;font-size:10px;font-family:var(--font-mono);background:#010409;border:1px solid #21262d;border-radius:3px;padding:5px;margin-top:3px;max-height:120px;overflow-y:auto"></div>
                 </div>
 
                 <!-- Progress -->
                 <div id="md-jobs-progress"
-                     style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
+                     style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
 
-                <!-- Stage timeline -->
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Stage timeline</div>
+                <!-- Stage timeline element — relocated to the bottom of the jobs card at
+                     init (main.js); still populated here by id. -->
                 <div id="md-jobs-timeline"
-                     style="font-size:10px;font-family:var(--font-mono);background:#0d1117;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px;max-height:160px;overflow-y:auto"></div>
+                     style="font-size:10px;font-family:var(--font-mono);background:#010409;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px;max-height:160px;overflow-y:auto"></div>
 
                 <div id="md-jobs-frame-controls"
                      style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
@@ -4678,16 +4671,7 @@
                           style="flex:1;font-size:var(--text-xs);padding:4px 6px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">
                     Load Frames
                   </button>
-                  <button id="md-jobs-archive-btn"
-                          style="font-size:var(--text-xs);padding:4px 7px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">
-                    Archive
-                  </button>
-                  <button id="md-jobs-delete-btn"
-                          style="font-size:var(--text-xs);padding:4px 7px;background:#2d1515;border:1px solid #c93c3c;color:#c93c3c;border-radius:3px;cursor:pointer">
-                    Delete
-                  </button>
                 </div>
-                <div id="md-jobs-archive-progress" style="display:none;font-size:var(--text-xs);color:#d29922;margin-top:4px"></div>
 
               </div>
 
@@ -4750,7 +4734,7 @@
                 </div>
                 <div id="md-output-body" style="display:none;margin-top:3px">
                   <div id="md-output-log"
-                       style="max-height:130px;overflow-y:auto;font-size:var(--text-xs);font-family:monospace;line-height:1.5;background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:4px 6px"></div>
+                       style="max-height:130px;overflow-y:auto;font-size:var(--text-xs);font-family:monospace;line-height:1.5;background:#010409;border:1px solid #30363d;border-radius:3px;padding:4px 6px"></div>
                 </div>
               </div>
 

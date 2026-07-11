@@ -612,7 +612,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-progress': 'div', 'oxdna-jobs-timeline': 'div',
     'oxdna-jobs-health': 'div', 'oxdna-jobs-show-all': 'input',
     'oxdna-jobs-run-btn': 'button', 'oxdna-jobs-prod-btn': 'button', 'oxdna-jobs-prod-steps': 'input',
-    'oxdna-jobs-start-btn': 'button', 'oxdna-jobs-stop-btn': 'button', 'oxdna-jobs-delete-btn': 'button',
+    'oxdna-jobs-stop-btn': 'button',   // production-phase Stop (Archive/Delete consolidated into the master card)
     'oxdna-jobs-display-toggle': 'input', 'oxdna-jobs-display-status': 'div',
     'oxdna-jobs-flex-toggle': 'input', 'oxdna-jobs-flex-status': 'div',
     'oxdna-jobs-flex-bar': 'div', 'oxdna-jobs-flex-legend': 'div',
@@ -645,6 +645,14 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
       activeJobId: () => null,
     }
   }
+  const fakeLammpsDisplay = () => ({
+    displayJob: vi.fn(async () => ({ ok: true, n: 7 })),
+    displayRmsf: vi.fn(async () => ({ ok: true, min: 0.1, max: 1, mean: 0.5, nFrames: 100 })),
+    displayDeviation: vi.fn(async () => ({ ok: true, min: 0, max: 2, mean: 1, nFrames: 100 })),
+    loadTrajectory: vi.fn(async () => ({ ok: true, n_frames: 5, markers: [] })),
+    recolorRmsf: vi.fn(), recolorDeviation: vi.fn(), showFrame: vi.fn(), stopAndRestore: vi.fn(),
+    mode: () => null, isActive: () => false,
+  })
   const $ = (id) => document.getElementById(id)
   const relaxStages = (...extra) => [
     { kind: 'mc', status: 'done' }, { kind: 'md_relax', status: 'done' }, { kind: 'equil', status: 'done' }, ...extra,
@@ -678,21 +686,20 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect(document.querySelector('.modal__overlay').textContent).toContain('everything went OK')
   })
 
-  it('deleting a job opens the confirm modal and calls deleteOxdnaJob (regression: descendantIds was re-exported but not imported → the click threw ReferenceError so delete silently did nothing)', async () => {
+  it('deleteSelected() opens the confirm modal and calls deleteOxdnaJob (Archive/Delete are consolidated into the master card, which dispatches here; regression: descendantIds was re-exported but not imported → the call threw ReferenceError so delete silently did nothing)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])
     api.deleteOxdnaJob.mockClear()
     const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc' })
     await selectFirstJob(panel)
-    const del = $('oxdna-jobs-delete-btn')
-    expect(del.style.display).not.toBe('none')          // shown for a completed job
-    del.click()                                          // must NOT throw ReferenceError
+    const delPromise = panel.deleteSelected()             // must NOT throw ReferenceError
     await flush()
     // The handler ran past descendantIds() → the confirm modal actually opened.
     const overlay = document.querySelector('.modal__overlay')
     expect(overlay).toBeTruthy()
     const confirmBtn = [...overlay.querySelectorAll('button')].find(b => /^Delete/.test(b.textContent.trim()))
     confirmBtn.click()
+    await delPromise
     await flush()
     expect(api.deleteOxdnaJob).toHaveBeenCalledWith('j1')
   })
@@ -823,6 +830,34 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-traj-slider').max).toBe('5')                           // 6 frames → max idx 5
   })
 
+  it('a LAMMPS run shows in the SAME viz card — the radios drive the LAMMPS loader', async () => {
+    const oxdnaDisplay = fakeDisplay()
+    const lammps = fakeLammpsDisplay()
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay, lammpsDisplay: lammps })
+    panel.selectLammpsJob({ engine: 'lammps', job_id: 'lm7', viewable: true })
+    expect($('oxdna-jobs-display-toggle').disabled).toBe(false)          // enabled by viewability
+    expect($('oxdna-jobs-detail').style.display).toBe('none')            // oxDNA stage detail hidden
+    // Display radio → LAMMPS loader (not the oxDNA one)
+    $('oxdna-jobs-display-toggle').checked = true
+    $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve()
+    expect(lammps.displayJob).toHaveBeenCalledWith('lm7', expect.anything())
+    expect(oxdnaDisplay.displayJob).not.toHaveBeenCalled()
+    // Trajectory radio → LAMMPS trajectory + reveals the shared player
+    $('oxdna-jobs-traj-toggle').checked = true
+    $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(lammps.loadTrajectory).toHaveBeenCalledWith('lm7')
+    expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
+  })
+
+  it('a LAMMPS run whose sim is unfinished (not viewable) leaves the viz radios disabled', () => {
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: fakeDisplay(), lammpsDisplay: fakeLammpsDisplay() })
+    panel.selectLammpsJob({ engine: 'lammps', job_id: 'lm8', viewable: false })
+    expect($('oxdna-jobs-display-toggle').disabled).toBe(true)
+    expect($('oxdna-jobs-traj-toggle').disabled).toBe(true)
+  })
+
   it('enabling View trajectory turns off the OxDNA display (shared overlay)', async () => {
     const disp = fakeDisplay()
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jx', design_source_path: 'A.nadoc', status: 'completed',
@@ -872,7 +907,6 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const run = $('oxdna-jobs-run-btn')
     expect(run.textContent).toContain('Resume')
     expect(run.dataset.runAction).toBe('resume')
-    expect($('oxdna-jobs-start-btn').style.display).toBe('none')   // detail Start is retired
   })
 
   it('flexibility map unlocks mid-run + flags the map preliminary while production runs', async () => {

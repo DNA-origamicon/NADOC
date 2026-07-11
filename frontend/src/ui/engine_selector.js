@@ -76,14 +76,18 @@ export function initEngineSelector({
   selectorMount,
   stripMount = null,
   panelEls,
+  runControlEls = null,
   initial = ENGINE_KEYS[0],
   labels = ENGINE_LABELS,
   onSelect = null,
 }) {
   let _selected = null
   const buttons = {}
+  const warns = {}   // engineKey → the ⚠ not-installed span in its tab
 
-  // Build the segmented control once.
+  // Build the segmented control once. Each tab is [label][⚠ warn], where the warn
+  // span is shown when the engine isn't installed (setEngineStatus), tooltip guiding
+  // the user to Help ▸ MD Engines.
   selectorMount.classList.add('engine-selector')
   selectorMount.setAttribute('role', 'tablist')
   for (const key of ENGINE_KEYS) {
@@ -91,12 +95,38 @@ export function initEngineSelector({
     btn.type = 'button'
     btn.className = 'engine-selector-btn'
     btn.dataset.engine = key
-    btn.textContent = labels[key] ?? key
     btn.setAttribute('role', 'tab')
+    const lbl = document.createElement('span')
+    lbl.className = 'engine-selector-label'
+    lbl.textContent = labels[key] ?? key
+    const warn = document.createElement('span')
+    warn.className = 'engine-warn'
+    warn.textContent = '⚠'
+    warn.hidden = true
+    warn.setAttribute('aria-hidden', 'true')
+    btn.append(lbl, warn)
     btn.addEventListener('click', () => select(key))
     selectorMount.appendChild(btn)
     buttons[key] = btn
+    warns[key] = warn
   }
+
+  /** Reflect an engine's install status on its tab: show a ⚠ (with a tooltip pointing
+   *  at Help ▸ MD Engines) when it isn't installed, hide it when it is. */
+  function setEngineStatus(engineKey, { ok = true, reason = '' } = {}) {
+    const warn = warns[engineKey]
+    const btn = buttons[engineKey]
+    if (!warn) return
+    warn.hidden = !!ok
+    warn.title = ok ? '' : `${reason || 'This engine is not installed.'}\nOpen Help ▸ MD Engines to install.`
+    if (btn) btn.classList.toggle('is-uninstalled', !ok)
+  }
+
+  // A panel probes its engine's binaries and broadcasts the result; the tab reflects it.
+  window.addEventListener('nadoc:engine-availability', (e) => {
+    const d = e.detail || {}
+    if (d.engine) setEngineStatus(d.engine, d)
+  })
 
   function renderStrip(engineKey) {
     if (!stripMount) return
@@ -125,6 +155,9 @@ export function initEngineSelector({
       const el = panelEls?.[key]
       if (el) el.style.display = vis[key] ? '' : 'none'
       else console.warn(`[engine-selector] no panel element for "${key}" — its panel won't hide/show`)
+      // The run-control cluster (Relax/Coarse/Fine/… above the jobs card) tracks the tab.
+      const rc = runControlEls?.[key]
+      if (rc) rc.style.display = vis[key] ? '' : 'none'
       const btn = buttons[key]
       if (btn) {
         const active = key === engineKey
@@ -141,6 +174,7 @@ export function initEngineSelector({
   return {
     select,
     getSelected: () => _selected,
+    setEngineStatus,
     el: selectorMount,
   }
 }

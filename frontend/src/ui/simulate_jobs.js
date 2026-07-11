@@ -9,25 +9,29 @@
  * `job_tree` + `jobs_panel_model`). A LAMMPS run carries only a subtle **[L]** badge and
  * an expandable "ran on CPU because the GPU was busy" note.
  *
- * Selecting any node drives the master card: a status/progress line + one context
- * Run/Stop/Resume button (via the pure `job_run_control.runControlState`, dispatched by
- * the node's engine). Viz dispatches by engine too — an [L] node's display/RMSF/
- * deviation/trajectory come from the LAMMPS controller this card OWNS (`initLammpsDisplay`);
- * an oxDNA node delegates to the oxDNA panel's rich viz via its existing `selectJob(id)`.
+ * Selecting any node drives the master card: a status line + one status-coloured progress
+ * bar (with the full stage/segment detail as its hover tooltip) + the selected engine's
+ * stage timeline at the card bottom + one context Run/Stop/Resume button (via the pure
+ * `job_run_control.runControlState`). Detail dispatches by engine — oxDNA/mrDNA/CanDo/NAMD
+ * each light up their own panel via `selectJob(id)`; a LAMMPS run (oxDNA's CPU fallback,
+ * same oxDNA2 bead model) shows in the oxDNA panel's OWN viz card via `selectLammpsJob(node)`,
+ * with its Stop / re-Run on the master button.
  *
- * Factory: initSimulateJobs({ api, getWorkspacePath, designRenderer, oxdnaPanel,
- * engineSelector, getFlexScale }) → { refresh, selectJob, getSelected }. Module-first:
- * cohesive logic lives here / in the pure helpers below; main.js only imports + inits.
+ * Factory: initSimulateJobs({ api, getWorkspacePath, oxdnaPanel, mrdnaPanel, candoPanel,
+ * mdPanel, engineSelector }) → { refresh, selectJob, setActiveEngine, getSelected }.
+ * Module-first: cohesive logic lives here / in the pure helpers below; main.js only inits.
  * Physical-layer / display-state only (topology is never touched).
  */
 
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
-import { jobDisplayName, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
-import { jobIsViewable, flexStatusText, buildCreatePayload } from './lammps_jobs_logic.js'
-import { initLammpsDisplay } from './lammps_display.js'
-import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
+import { jobDisplayName as oxDisplayName, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
+import { jobDisplayName as mrdnaDisplayName } from './mrdna_jobs_panel.js'
+import { jobDisplayName as candoDisplayName } from './cando_jobs_panel.js'
+import { mdJobRowCtx } from './md_jobs_panel.js'
+import { buildCreatePayload } from './lammps_jobs_logic.js'
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { showToast } from './toast.js'
@@ -35,7 +39,22 @@ import { showToast } from './toast.js'
 const POLL_MS = 1500
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', dim: '#8a8a8a' }
 const _ACTIVE = ['queued', 'preparing', 'running']
-const _VIEW_RADIOS = ['display', 'flex', 'deviation', 'traj']
+
+// Per-engine badge shown on rows only in "Show all job types" mode, so a mixed list
+// stays legible about which engine each run came from. LAMMPS keeps its own [L] badge
+// (it's oxDNA's CPU fallback, grouped under the oxDNA tab) and is omitted here.
+const _ENGINE_BADGE = {
+  oxdna: { text: '[ox]', color: '#4a9eff', title: 'oxDNA' },
+  mrdna: { text: '[mr]', color: '#9e6bff', title: 'mrDNA' },
+  cando: { text: '[CD]', color: '#39c5cf', title: 'CanDo FEM' },
+  namd:  { text: '[MD]', color: '#3fb950', title: 'NAMD (Molecular Dynamics)' },
+}
+
+/** The engine TAB a node belongs to. LAMMPS is oxDNA's transparent CPU fallback, so its
+ *  runs live under the oxDNA tab (the auto-policy picks GPU-oxDNA ⇄ CPU-LAMMPS). */
+function engineGroup(node) {
+  return node?.engine === 'lammps' ? 'oxdna' : node?.engine
+}
 
 // ── Pure decisions (unit-tested) ──────────────────────────────────────────────
 
@@ -59,19 +78,63 @@ export function verbForNode(node) {
   return node.kind === 'run' ? 'Run' : 'Relax'
 }
 
-/** Coarse progress % for the master bar (no extra fetch): LAMMPS from current_step/steps,
- *  oxDNA from stages done/total. */
+/** Coarse progress % for the ONE master bar (no extra fetch): completed → 100; LAMMPS
+ *  from current_step/steps; NAMD from segments done/total; oxDNA from stages done/total;
+ *  mrDNA/CanDo have no granular signal → 0 while running (the bar COLOR conveys state). */
 export function masterProgressPct(node) {
   if (!node) return 0
+  if (node.status === 'completed' || node.production_state === 'done') return 100
   if (node.engine === 'lammps') {
     const total = Number(node.steps) || 0
     const cur = Number(node.current_step) || 0
     return total > 0 ? Math.max(0, Math.min(100, Math.round((cur / total) * 100))) : 0
   }
+  if (node.engine === 'namd') {
+    const seg = node.segments || []
+    if (!seg.length) return 0
+    return Math.round((seg.filter((s) => s.status === 'done').length / seg.length) * 100)
+  }
   const st = node.stages || []
   if (!st.length) return 0
-  const done = st.filter((s) => s.status === 'done').length
-  return Math.round((done / st.length) * 100)
+  return Math.round((st.filter((s) => s.status === 'done').length / st.length) * 100)
+}
+
+/** Fill colour of the master bar, by status: green done · red failed · orange WARNING
+ *  (design changed since the run — stale/out-of-date) · grey stopped/queued · blue active. */
+export function masterProgressColor(node) {
+  if (!node) return _C.accent
+  if (node.out_of_date) return _C.warn                                   // orange — stale
+  if (node.status === 'failed' || node.production_state === 'failed') return _C.err
+  if (node.status === 'completed' || node.production_state === 'done') return _C.ok
+  if (node.status === 'stopped' || node.status === 'queued') return _C.dim
+  return _C.accent                                                        // running / preparing
+}
+
+/** The full progress detail (stage / segments / % / status) — shown as the master bar's
+ *  hover TOOLTIP (what used to sit inline in each engine's #*-jobs-progress). */
+export function masterProgressTooltip(node) {
+  if (!node) return ''
+  const pct = masterProgressPct(node)
+  const stale = node.out_of_date ? '\n⚠ design changed since this run' : ''
+  if (node.engine === 'lammps') {
+    return `LAMMPS (CPU) · ${node.status}${node.status === 'running' ? ` · ${pct}%` : ''}${stale}`
+  }
+  if (node.engine === 'namd') {
+    const seg = node.segments || []
+    const done = seg.filter((s) => s.status === 'done').length
+    const run = seg.find((s) => s.status === 'running')
+    const lines = [`NAMD · ${node.status}`]
+    if (seg.length) lines.push(`${done}/${seg.length} segments · ${pct}% overall`)
+    if (run) lines.push(`Current: ${run.name || run.stage || 'running'}${run.percent != null ? ` · ${run.percent}%` : ''}`)
+    return lines.join('\n') + stale
+  }
+  const eng = node.engine === 'oxdna' ? 'oxDNA' : node.engine === 'mrdna' ? 'mrDNA' : node.engine === 'cando' ? 'CanDo' : node.engine
+  const state = node.production_state && node.production_state !== 'none'
+    ? `production ${node.production_state}` : node.status
+  const st = node.stages || []
+  const parts = [`${eng} · ${state}`]
+  if (st.length) parts.push(`${st.filter((s) => s.status === 'done').length}/${st.length} stages · ${pct}%`)
+  return parts.join('\n') + stale
 }
 
 /** One-line master status text for the selected node (engine-symmetric). */
@@ -106,34 +169,44 @@ export function nodeDetailText(node) {
 export function initSimulateJobs({
   api,
   getWorkspacePath = null,
-  designRenderer = null,
   oxdnaPanel = null,
+  mrdnaPanel = null,
+  candoPanel = null,
+  mdPanel = null,
   engineSelector = null,
-  getFlexScale = null,
 } = {}) {
   const $ = (id) => document.getElementById(id)
   const root = $('simulate-jobs')
   const listEl = $('simulate-jobs-list')
   const statusEl = $('simulate-jobs-status')
   const progressBar = root?.querySelector('#simulate-jobs-progress .bar')
+  const progressWrap = $('simulate-jobs-progress')
   const runBtn = $('simulate-jobs-run-btn')
   const detailEl = $('simulate-jobs-detail')
-  if (!root || !listEl) return { refresh: () => {}, selectJob: () => {}, getSelected: () => null }
-
-  // viz card (LAMMPS runs only — oxDNA viz stays in the oxDNA panel)
-  const vizCard = $('simulate-jobs-viz')
-  const rOff = $('simulate-jobs-viz-off')
-  const rDisplay = $('simulate-jobs-display-toggle')
-  const rFlex = $('simulate-jobs-flex-toggle')
-  const rDeviation = $('simulate-jobs-deviation-toggle')
-  const rTraj = $('simulate-jobs-traj-toggle')
-  const alignToggle = $('simulate-jobs-align-toggle')
-  const trajControls = $('simulate-jobs-traj-controls')
-  const _radio = { display: rDisplay, flex: rFlex, deviation: rDeviation, traj: rTraj }
-  const _status = {
-    display: $('simulate-jobs-display-status'), flex: $('simulate-jobs-flex-status'),
-    deviation: $('simulate-jobs-deviation-status'), traj: $('simulate-jobs-traj-status'),
+  // The one stage-timeline block at the bottom of the jobs card + each engine's timeline
+  // element (relocated here from its panel by main.js); the selected engine's is shown.
+  const timelineBlock = $('simulate-jobs-timeline')
+  const _timelineEls = {
+    oxdna: $('oxdna-jobs-timeline'), namd: $('md-jobs-timeline'),
+    mrdna: $('mrdna-jobs-timeline'), cando: $('cando-jobs-timeline'),
   }
+  if (!root || !listEl) return { refresh: () => {}, selectJob: () => {}, getSelected: () => null, setActiveEngine: () => {} }
+
+  // collapsible "Jobs" card (header/body/chevron) + "Show all job types" toggle + the
+  // engine-scope label in the header.
+  const cardHeader = $('simulate-jobs-toggle')
+  const cardBody = $('simulate-jobs-body')
+  const cardArrow = $('simulate-jobs-arrow')
+  const engineLabel = $('simulate-jobs-engine-label')
+  const showAllToggle = $('simulate-jobs-show-all-types')
+
+  // Consolidated Archive/Delete (one pair for all engines, above the jobs card). Acts on
+  // the selected run by dispatching to that run's engine panel; hidden until a deletable
+  // run is selected. Archive shows only for engines that support it (oxDNA / NAMD).
+  const actionsHost = $('simulate-job-actions')
+  const archiveActionBtn = $('simulate-jobs-archive-btn')
+  const deleteActionBtn = $('simulate-jobs-delete-btn')
+  const archiveProgress = $('simulate-jobs-archive-progress')
 
   let _nodes = []
   let _sel = { engine: null, id: null }
@@ -141,39 +214,83 @@ export function initSimulateJobs({
   let _busy = false
   let _dynamicsActive = true
   let _pollTimer = null
+  let _activeEngine = engineSelector?.getSelected?.() || 'oxdna'
+  let _showAllTypes = false
   const _legend = { el: null }
 
-  const _display = initLammpsDisplay({ designRenderer })
-  const _player = initOxdnaTrajectoryPlayer({
-    playBtn: $('simulate-jobs-traj-play'),
-    slider: $('simulate-jobs-traj-slider'),
-    markersEl: $('simulate-jobs-traj-markers'),
-    label: $('simulate-jobs-traj-label'),
-    onSeek: (i) => _display.showFrame(i),
-  })
+  // Nodes shown for the current view: the active engine tab's runs (LAMMPS grouped under
+  // oxDNA), or every engine's when "Show all job types" is on.
+  const _visibleNodes = () =>
+    _showAllTypes ? _nodes : _nodes.filter((n) => engineGroup(n) === _activeEngine)
 
   const _currentPath = () => (getWorkspacePath ? getWorkspacePath() : null) || null
   const _selectedNode = () => _nodes.find((n) => n.engine === _sel.engine && n.job_id === _sel.id) || null
   const _setStatus = (el, text, color = _C.dim) => { if (el) { el.textContent = text; el.style.color = color } }
+  // The engine panel owning a node's Archive/Delete (LAMMPS has no panel — its runs are
+  // oxDNA's CPU fallback and carry no per-job delete UI).
+  const _panelFor = (node) =>
+    ({ oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, namd: mdPanel }[node?.engine]) || null
 
   // ── list ─────────────────────────────────────────────────────────────────
-  function _rowCtx() {
+  // Per-engine row labels: each engine's own display/child-label fns render its rows
+  // in the shared list. NAMD reuses its canonical row ctx (mdJobRowCtx) so its
+  // production/replica labels, seeded/remote badges + hourglass override stay identical
+  // to the NAMD tab; oxDNA/mrDNA/CanDo use their exported label fns.
+  function _mdCtx(nodes) {
+    return mdJobRowCtx({ jobs: nodes.filter((n) => n.engine === 'namd'),
+                         selectedId: _sel.id, formatTime: formatJobTime })
+  }
+  function _displayName(n, md) {
+    switch (n.engine) {
+      case 'oxdna': case 'lammps': return oxDisplayName(n)
+      case 'mrdna': return mrdnaDisplayName(n)
+      case 'cando': return candoDisplayName(n)
+      case 'namd':  return md.displayName(n)
+      default:      return n.job_id
+    }
+  }
+  function _childLabel(n, i, md) {
+    if (n.engine === 'oxdna') return runRowLabel(n, i)
+    if (n.engine === 'namd') return md.childLabel(n, i)
+    return ''
+  }
+  function _childTitle(n, md) {
+    if (n.engine === 'oxdna') return runChildTitle(n)
+    if (n.engine === 'namd') return md.childTitle(n)
+    return null
+  }
+  function _tags(n) {
+    const out = []
+    if (_showAllTypes && n.engine !== 'lammps' && _ENGINE_BADGE[n.engine]) {
+      const b = _ENGINE_BADGE[n.engine]
+      out.push({ text: b.text, color: b.color, title: b.title })
+    }
+    if (n.engine === 'lammps') {
+      out.push({ text: '[L]', color: '#9e6bff', title: 'Ran on CPU (LAMMPS) — the GPU was busy' })
+    } else if (n.engine === 'oxdna' && (oxdnaPanel?.autorefineJobIds?.() || new Set()).has(n.job_id)) {
+      out.push({ text: '[AR]', color: '#e3b341', title: 'Created by Autorefine skips/loops' })
+    }
+    return out
+  }
+
+  function _rowCtx(nodes) {
+    const md = _mdCtx(nodes)
     return {
-      engine: 'oxdna',   // both engines share the status vocab; production_state comes per-row
+      engine: 'oxdna',                       // fallback; engineOf resolves per row
+      engineOf: (n) => (n.engine === 'lammps' ? 'lammps' : n.engine),
       selectedId: _sel.id,
       hierarchical: true,
-      displayName: jobDisplayName,
-      childLabel: runRowLabel,
-      childTitle: runChildTitle,
-      productionState: (n) => n.production_state,
+      displayName: (n) => _displayName(n, md),
+      childLabel: (n, i) => _childLabel(n, i, md),
+      childTitle: (n) => _childTitle(n, md),
+      productionState: (n) => (n.engine === 'oxdna' ? n.production_state : null),
       isActive: nodeIsActive,
       isStale: (n) => !!n.out_of_date,
       staleClass: 'oxdna-job-stale-warn',
       staleTitle: 'Design changed since this job was relaxed — run a new Relax, or roll the feature log back, before live/production.',
-      tags: (n) => n.engine === 'lammps'
-        ? [{ text: '[L]', color: '#9e6bff', title: 'Ran on CPU (LAMMPS) — the GPU was busy' }]
-        : ((oxdnaPanel?.autorefineJobIds?.() || new Set()).has(n.job_id)
-          ? [{ text: '[AR]', color: '#e3b341', title: 'Created by Autorefine skips/loops' }] : []),
+      tags: _tags,
+      postLabelMarkers: (n, meta) => (n.engine === 'namd' ? md.postLabelMarkers(n, meta) : []),
+      symbolOverride: (n) => (n.engine === 'namd' ? md.symbolOverride(n) : null),
       archived: (n) => !!n.archived,
       archivePath: (n) => n.archive_path || '',
       sizeBytes: (n) => n.size_bytes ?? null,
@@ -185,13 +302,16 @@ export function initSimulateJobs({
   }
 
   function _renderList() {
-    const ctx = _rowCtx()
-    const sig = jobListSignature(_nodes, ctx)
+    const nodes = _visibleNodes()
+    const ctx = _rowCtx(nodes)
+    const sig = `${_activeEngine}:${_showAllTypes ? 1 : 0}|` + jobListSignature(nodes, ctx)
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
-    renderJobList(listEl, buildJobListModel(_nodes, ctx), {
+    renderJobList(listEl, buildJobListModel(nodes, ctx), {
       onClick: (jobId) => _select(jobId),
-      emptyText: 'No simulation runs for this design yet — press ▶ Relax to start one.',
+      emptyText: _showAllTypes
+        ? 'No simulation runs for this design yet — press ▶ Relax to start one.'
+        : `No ${_activeEngine === 'namd' ? 'NAMD' : _activeEngine} runs for this design yet. Toggle “Show all job types” to see every engine’s runs.`,
       dimColor: _C.dim,
       legendState: _legend,
     })
@@ -201,9 +321,82 @@ export function initSimulateJobs({
     const node = _selectedNode()
     _setStatus(statusEl, masterStatusText(node),
       node?.status === 'failed' ? _C.err : node && nodeIsActive(node) ? _C.warn : _C.dim)
-    if (progressBar) progressBar.style.width = node && nodeIsActive(node) ? `${masterProgressPct(node)}%` : '0%'
+    // ONE progress bar (below the list): width from the node, colour by status, and the
+    // detailed stage/segment text as a hover tooltip.
+    if (progressBar) {
+      progressBar.style.width = `${node ? masterProgressPct(node) : 0}%`
+      progressBar.style.background = node ? masterProgressColor(node) : _C.accent
+    }
+    if (progressWrap) progressWrap.title = node ? masterProgressTooltip(node) : ''
     if (detailEl) detailEl.textContent = nodeDetailText(node)
+    _renderTimeline(node)
     _renderRunButton()
+    _renderActions(node)
+  }
+
+  // ── consolidated Archive / Delete (above the jobs card) ────────────────────
+  // Show the pair only when a deletable run is selected (any engine except LAMMPS, and
+  // not while it is running). Archive is offered only for engines that support it
+  // (oxDNA / NAMD); its label tracks the selected run's archived state.
+  function _renderActions(node = _selectedNode()) {
+    const eng = node?.engine
+    const canDelete = !!node && eng !== 'lammps' && node.status !== 'running'
+    const canArchive = canDelete && (eng === 'oxdna' || eng === 'namd')
+    if (actionsHost) actionsHost.style.display = canDelete ? '' : 'none'
+    if (deleteActionBtn) deleteActionBtn.style.display = canDelete ? '' : 'none'
+    if (archiveActionBtn) {
+      archiveActionBtn.style.display = canArchive ? '' : 'none'
+      archiveActionBtn.textContent = node?.archived ? 'Unarchive' : 'Archive'
+    }
+  }
+
+  // Byte-move progress for an archive/unarchive (rendered here, driven by the engine panel).
+  function _setArchiveProgress(st) {
+    if (!archiveProgress) return
+    if (!st) { archiveProgress.style.display = 'none'; archiveProgress.textContent = ''; return }
+    const pct = st.total_bytes ? Math.round((st.moved_bytes / st.total_bytes) * 100) : 0
+    archiveProgress.style.display = ''
+    archiveProgress.textContent =
+      `${formatBytes(st.moved_bytes || 0)} / ${formatBytes(st.total_bytes || 0)} (${pct}%)`
+  }
+
+  async function _onArchive() {
+    const node = _selectedNode()
+    const panel = _panelFor(node)
+    if (!panel?.archiveSelected) return
+    if (archiveActionBtn) archiveActionBtn.disabled = true
+    if (deleteActionBtn) deleteActionBtn.disabled = true
+    try {
+      await panel.archiveSelected({ onProgress: _setArchiveProgress })
+    } finally {
+      if (archiveActionBtn) archiveActionBtn.disabled = false
+      if (deleteActionBtn) deleteActionBtn.disabled = false
+      _setArchiveProgress(null)
+      await _fetch()
+    }
+  }
+  async function _onDelete() {
+    const node = _selectedNode()
+    const panel = _panelFor(node)
+    if (!panel?.deleteSelected) return
+    const ok = await panel.deleteSelected()
+    if (ok) { _sel = { engine: null, id: null }; await _fetch() }
+  }
+  archiveActionBtn?.addEventListener('click', _onArchive)
+  deleteActionBtn?.addEventListener('click', _onDelete)
+
+  // Show the selected engine's stage timeline (relocated to the bottom of the jobs card);
+  // hide the others. LAMMPS has no stage timeline.
+  function _renderTimeline(node) {
+    const eng = node && node.engine !== 'lammps' ? node.engine : null
+    let anyShown = false
+    for (const [k, el] of Object.entries(_timelineEls)) {
+      if (!el) continue
+      const show = k === eng
+      el.style.display = show ? '' : 'none'
+      if (show) anyShown = true
+    }
+    if (timelineBlock) timelineBlock.style.display = anyShown ? '' : 'none'
   }
 
   function _runControl() {
@@ -234,88 +427,27 @@ export function initSimulateJobs({
     if (!node) return
     if (_sel.engine === node.engine && _sel.id === jobId) return
     _sel = { engine: node.engine, id: jobId }
-    _viewsOff()
     _renderList()
     _renderMaster()
     _dispatchDetail(node)
   }
 
-  // Rich detail + viz dispatch by engine: an oxDNA node lights up the oxDNA panel's own
-  // detail/viz (via its selectJob); a LAMMPS node shows this card's viz sub-surface.
+  // Rich detail dispatch by engine: reveal the selected job's engine tab and light up
+  // that panel's own detail/viz via selectJob (identical to a row click on that tab).
+  // A LAMMPS run is the CPU fallback for oxDNA (same oxDNA2 bead model), so it shows in
+  // the oxDNA panel's OWN viz card via selectLammpsJob — same display/RMSF/deviation/
+  // trajectory tools, just a different loader.
   function _dispatchDetail(node) {
-    if (node.engine === 'oxdna') {
-      if (vizCard) vizCard.style.display = 'none'
-      engineSelector?.select?.('oxdna')       // reveal the oxDNA detail host
-      oxdnaPanel?.selectJob?.(node.job_id)
-    } else {
-      if (vizCard) vizCard.style.display = ''
-      _updateVizToggles()
-    }
-  }
-
-  // ── LAMMPS viz (this card owns the LAMMPS display controller) ──────────────
-  function _updateVizToggles() {
-    const node = _selectedNode()
-    const viewable = node?.engine === 'lammps' && jobIsViewable(node)
-    for (const key of _VIEW_RADIOS) {
-      const r = _radio[key]
-      if (!r) continue
-      r.disabled = !viewable
-      const lbl = r.closest('label')
-      if (lbl) { lbl.style.opacity = viewable ? '1' : '0.5'; lbl.style.cursor = viewable ? 'pointer' : 'not-allowed' }
-    }
-    if (!viewable && !rOff?.checked) _viewsOff()
-  }
-
-  function _viewsOff() {
-    _player.pause?.(); _player.stop()
-    if (trajControls) trajControls.style.display = 'none'
-    _display.stopAndRestore()
-    getFlexScale?.()?.hide?.()
-    for (const k of _VIEW_RADIOS) _setStatus(_status[k], '')
-    if (rOff) rOff.checked = true
-  }
-
-  async function _showView(kind) {
-    _player.stop()
-    if (trajControls) trajControls.style.display = kind === 'traj' ? '' : 'none'
-    const node = _selectedNode()
-    if (!node || node.engine !== 'lammps') { _viewsOff(); return }
-    const sel = node.job_id
-    const st = _status[kind]
-    _setStatus(st, 'Loading…')
-    if (kind !== 'flex' && kind !== 'deviation') getFlexScale?.()?.hide?.()
-    let r
-    if (kind === 'display') r = await _display.displayJob(sel, !!alignToggle?.checked)
-    else if (kind === 'flex') r = await _display.displayRmsf(sel)
-    else if (kind === 'deviation') r = await _display.displayDeviation(sel)
-    else if (kind === 'traj') r = await _display.loadTrajectory(sel)
-    if (_radio[kind] && !_radio[kind].checked) return   // a newer toggle superseded us
-    if (!r || !r.ok) {
-      _setStatus(st, (r && r.reason) || 'not ready', _C.warn)
-      if (rOff) rOff.checked = true
-      _display.stopAndRestore()
-      if (trajControls) trajControls.style.display = 'none'
+    if (node.engine === 'lammps') {
+      engineSelector?.select?.('oxdna')
+      oxdnaPanel?.selectLammpsJob?.(node)
       return
     }
-    if (kind === 'display') _setStatus(st, `Showing the final structure (${r.n} beads).`)
-    else if (kind === 'flex') {
-      _setStatus(st, flexStatusText(r), _C.dim)
-      getFlexScale?.()?.show?.({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
-        onRecolor: (lo, hi, cmap) => _display.recolorRmsf(lo, hi, cmap) })
-    } else if (kind === 'deviation') {
-      _setStatus(st, `Deviation from design: mean ${(r.mean ?? 0).toFixed(2)} nm over ${r.nFrames} frames.`)
-      getFlexScale?.()?.show?.({ title: 'Deviation (nm)', min: r.min, max: r.max, mapType: 'deviation',
-        onRecolor: (lo, hi, cmap) => _display.recolorDeviation(lo, hi, cmap) })
-    } else if (kind === 'traj') { _player.setTrajectory(r.n_frames, r.markers); _setStatus(st, `${r.n_frames} frames — play or scrub.`) }
+    const panel = { oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, namd: mdPanel }[node.engine]
+    if (!panel) return
+    engineSelector?.select?.(node.engine)     // reveal that engine's detail host
+    panel?.selectJob?.(node.job_id)
   }
-
-  rOff?.addEventListener('change', () => { if (rOff.checked) _viewsOff() })
-  rDisplay?.addEventListener('change', () => { if (rDisplay.checked) _showView('display') })
-  rFlex?.addEventListener('change', () => { if (rFlex.checked) _showView('flex') })
-  rDeviation?.addEventListener('change', () => { if (rDeviation.checked) _showView('deviation') })
-  rTraj?.addEventListener('change', () => { if (rTraj.checked) _showView('traj') })
-  alignToggle?.addEventListener('change', () => { if (rDisplay?.checked) _showView('display') })
 
   // ── run / stop / resume (dispatch by node engine) ──────────────────────────
   async function _onRun() {
@@ -366,7 +498,6 @@ export function initSimulateJobs({
     if (_sel.id && !_selectedNode()) _sel = { engine: null, id: null }   // selection vanished
     _renderList()
     _renderMaster()
-    if (_selectedNode()?.engine === 'lammps') _updateVizToggles()
     _schedulePoll()
   }
   function _schedulePoll() {
@@ -388,8 +519,42 @@ export function initSimulateJobs({
   // A design switch re-filters the list + drops any selection/overlay (keyed to the old design).
   window.addEventListener('nadoc:workspace-path-change', () => {
     _sel = { engine: null, id: null }
-    _viewsOff()
     _fetch()
+  })
+
+  // ── engine scope: filter to the active tab + "Show all job types" toggle ───
+  function _engineTabName() {
+    return { oxdna: 'oxDNA', mrdna: 'mrDNA', cando: 'CanDo', namd: 'NAMD' }[_activeEngine] || _activeEngine
+  }
+  function _updateEngineLabel() {
+    if (engineLabel) engineLabel.textContent = _showAllTypes ? '· all engines' : `· ${_engineTabName()}`
+  }
+  /** Called by the engine selector's onSelect (main.js): the list re-scopes to the
+   *  newly-active tab. No-op refetch — the same design's nodes are re-filtered client-side. */
+  function setActiveEngine(engine) {
+    if (!engine || engine === _activeEngine) return
+    _activeEngine = engine
+    _updateEngineLabel()
+    _renderList()
+  }
+  showAllToggle?.addEventListener('change', () => {
+    _showAllTypes = !!showAllToggle.checked
+    _updateEngineLabel()
+    _renderList()
+  })
+
+  // ── collapsible "Jobs" card (persisted per Dynamics tab) ───────────────────
+  function _applyCollapsed(collapsed) {
+    if (cardBody) cardBody.style.display = collapsed ? 'none' : ''
+    if (cardArrow) cardArrow.classList.toggle('is-collapsed', collapsed)
+  }
+  let _collapsed = getSectionCollapsed('dynamics', 'simulate-jobs', false)
+  _applyCollapsed(_collapsed)
+  _updateEngineLabel()
+  cardHeader?.addEventListener('click', () => {
+    _collapsed = !_collapsed
+    setSectionCollapsed('dynamics', 'simulate-jobs', _collapsed)
+    _applyCollapsed(_collapsed)
   })
 
   function refresh() { return _fetch() }
@@ -398,5 +563,5 @@ export function initSimulateJobs({
   // Initial populate deferred a tick so late-declared main.js deps (workspace path) exist.
   queueMicrotask(_fetch)
 
-  return { refresh, selectJob, getSelected: () => ({ ..._sel }) }
+  return { refresh, selectJob, setActiveEngine, getSelected: () => ({ ..._sel }) }
 }

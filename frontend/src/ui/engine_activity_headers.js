@@ -12,13 +12,15 @@
 
 import { fetchActiveJobs as defaultFetch, runningEngines } from './job_activity.js'
 
-/** engine key → { headingId, label } for the section header it annotates. */
+/** activity engine key → { tab, label } for the engine-selector TAB it annotates.
+ *  The per-engine section headers were removed, so the busy spinner now hangs on the
+ *  tab (next to its label). Note the tab key is 'namd' where the job key is 'md';
+ *  LAMMPS has no tab (folded into oxDNA's CPU fallback) → no spinner. */
 const ENGINE_HEADERS = [
-  { engine: 'oxdna',  headingId: 'oxdna-jobs-heading',    label: 'An oxDNA' },
-  { engine: 'lammps', headingId: 'lammps-jobs-heading',   label: 'A LAMMPS' },
-  { engine: 'mrdna',  headingId: 'mrdna-jobs-heading',    label: 'An mrDNA' },
-  { engine: 'cando',  headingId: 'cando-jobs-heading',    label: 'A CanDo FEM' },
-  { engine: 'md',     headingId: 'md-jobs-panel-heading', label: 'A molecular-dynamics' },
+  { engine: 'oxdna',  tab: 'oxdna', label: 'An oxDNA' },
+  { engine: 'mrdna',  tab: 'mrdna', label: 'An mrDNA' },
+  { engine: 'cando',  tab: 'cando', label: 'A CanDo FEM' },
+  { engine: 'md',     tab: 'namd',  label: 'A molecular-dynamics' },
 ]
 
 /**
@@ -35,19 +37,18 @@ export function initEngineActivityHeaders({
   intervalMs = 4000,
   doc = document,
 } = {}) {
-  // Insert one hidden spinner into each engine's header title, once.
-  const spinners = new Map()   // engine → spinner span (or null if header absent)
-  for (const { engine, headingId, label } of ENGINE_HEADERS) {
-    const heading = doc.getElementById(headingId)
-    const title = heading?.querySelector('span')   // the title span (arrow is a later sibling)
-    if (!title) { spinners.set(engine, null); continue }
+  // Insert one hidden spinner into each engine's TAB, once.
+  const spinners = new Map()   // engine → spinner span (or null if tab absent)
+  for (const { engine, tab, label } of ENGINE_HEADERS) {
+    const btn = doc.querySelector(`.engine-selector-btn[data-engine="${tab}"]`)
+    if (!btn) { spinners.set(engine, null); continue }
     const sp = doc.createElement('span')
     sp.className = 'nadoc-spinner'
-    sp.style.marginLeft = '8px'
+    sp.style.marginLeft = '4px'
     sp.hidden = true
     sp.title = `${label} simulation is running`
     sp.setAttribute('data-engine-spinner', engine)
-    title.appendChild(sp)
+    btn.appendChild(sp)
     spinners.set(engine, sp)
   }
 

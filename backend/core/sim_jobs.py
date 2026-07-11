@@ -89,6 +89,53 @@ def normalize_lammps_job(d: dict) -> dict:
     }
 
 
+def normalize_mrdna_job(d: dict) -> dict:
+    """An mrDNA job dict → a unified node.  mrDNA runs are FLAT roots (coarse/fine
+    relaxations, no parent/child branches), so ``kind='relax'`` and ``is_child`` is
+    always False.  ``production_state`` is null (only oxDNA has one)."""
+    return {
+        **d,
+        "engine": "mrdna",
+        "kind": "relax",
+        "is_child": False,
+        "production_state": None,
+        "n_units": d.get("n_nucleotides", 0),
+        "viewable": d.get("status") == "completed",
+    }
+
+
+def normalize_cando_job(d: dict) -> dict:
+    """A CanDo FEM job dict → a unified node.  Flat roots like mrDNA (a single
+    linear/nonlinear solve per run)."""
+    return {
+        **d,
+        "engine": "cando",
+        "kind": "relax",
+        "is_child": False,
+        "production_state": None,
+        "n_units": d.get("n_nucleotides", 0),
+        "viewable": d.get("status") == "completed",
+    }
+
+
+def normalize_md_job(d: dict) -> dict:
+    """A NAMD (MD) job dict → a unified node.  Like oxDNA, a relaxation is a root and a
+    production/refit child (``parent_job_id``) renders indented under it.  ``engine`` is
+    ``'namd'`` to match the frontend selector key + its label functions.  Production
+    sub-state is left null — the frontend only reads ``production_state`` for oxDNA;
+    NAMD's own child labels distinguish production rows."""
+    parent = d.get("parent_job_id")
+    return {
+        **d,
+        "engine": "namd",
+        "kind": "run" if parent else "relax",
+        "is_child": bool(parent),
+        "production_state": None,
+        "n_units": d.get("n_nucleotides", 0),
+        "viewable": d.get("status") == "completed",
+    }
+
+
 def _norm_path(p) -> str:
     """Normalize a design_source_path for comparison — forward slashes, no trailing
     ``/`` (mirrors the frontend ``normalizeWorkspacePath`` so the server-side filter
