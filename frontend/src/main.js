@@ -2025,6 +2025,9 @@ async function main() {
     // Total base count → scales the arrow's force range so big origami get finer
     // per-nt control (the arrow encodes total push; per-nt ∝ 1/N).
     getBaseCount: () => store.getState().currentGeometry?.length || 0,
+    // Anchor count → the ready line warns (non-blocking) when a field has no anchor
+    // to hold it. Lazy: oxdnaAnchorsSetup is declared below; only read on interaction.
+    getAnchorCount: () => oxdnaAnchorsSetup?.getAnchors?.()?.length || 0,
   })
   if (import.meta.env.DEV) window.__nadocEfield = { setup: efieldSetup, gizmo: efieldGizmo }
 

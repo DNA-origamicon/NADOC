@@ -488,8 +488,9 @@ def _prepare_field_rundir(design, seed_conf, rundir, *, field_pN, dir, anchors,
     write_topology(design, rundir / "topology.top")
     shutil.copy(seed_conf, rundir / "conf.dat")
     field_oxdna = pn_to_oxdna_force(field_pN)
-    # Anchors are mandatory (a uniform field on a free body just streams the COM
-    # across the box) — write_field_forces raises if the selection is empty.
+    # Anchors are recommended but not required — a uniform field on a free body just
+    # streams the COM across the box (the UI warns); write_field_forces still writes
+    # the field-only forces file when the selection is empty.
     write_field_forces(rundir / "field_forces.txt", design, rundir / "conf.dat",
                        field_oxdna=field_oxdna, field_dir=list(dir), anchors=anchors,
                        anchor_stiff=anchor_stiff)

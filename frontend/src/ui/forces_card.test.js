@@ -220,14 +220,21 @@ describe('initForcesCard — durable behavioural pins', () => {
     }
   })
 
-  it('apply-style ready line: "needs ≥1 anchor"; verb "run" (oxDNA) vs "solve" (CanDo)', () => {
+  it('apply-style ready line: warns (non-blocking) on no anchor; verb "run" (oxDNA) vs "solve" (CanDo)', () => {
     const oxBag = FORCES_FIELD_IDS.oxdna
     mountIds(idTags('oxdna'))
-    initForcesCard({ engine: 'oxdna', gizmo: makeGizmo() })
+    let anchors = 0
+    const api = initForcesCard({ engine: 'oxdna', gizmo: makeGizmo(), getAnchorCount: () => anchors })
     document.getElementById(oxBag.toggle).click()
     expect(document.getElementById(oxBag.ready).textContent).toMatch(/add a field to the run/i)
     drive(oxBag, { mag: 2 })
-    expect(document.getElementById(oxBag.ready).textContent).toMatch(/needs ≥1 anchor/i)
+    // No anchor → a WARNING notice (not a block): the structure will drift.
+    expect(document.getElementById(oxBag.ready).textContent).toMatch(/no anchor/i)
+    expect(document.getElementById(oxBag.ready).textContent).toMatch(/drift/i)
+    // Add an anchor → the no-anchor warning clears.
+    anchors = 1
+    api.refresh()
+    expect(document.getElementById(oxBag.ready).textContent).not.toMatch(/no anchor/i)
     clearDom()
     const cdBag = FORCES_FIELD_IDS.cando
     mountIds(idTags('cando'))

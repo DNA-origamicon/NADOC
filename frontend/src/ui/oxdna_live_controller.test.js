@@ -187,14 +187,18 @@ describe('initOxdnaLive factory', () => {
     ctl.stop()
   })
 
-  it('refuses to start a FIELD without an anchor (COM-drift gotcha)', async () => {
+  it('starts a FIELD without an anchor (COM-drift is warned, not blocked)', async () => {
     anchors = []                               // field enabled, no anchor
     const ctl = make()
     await flush()
     ctl.toggle()
     await flush()
-    expect(api.startOxdnaLive).not.toHaveBeenCalled()
-    expect(ctl.isOn()).toBe(false)
+    expect(api.startOxdnaLive).toHaveBeenCalled()
+    const body = api.startOxdnaLive.mock.calls[0][0]
+    expect(body.field).toEqual({ field_pN: 4, dir: [0, 1, 0] })
+    expect(body.anchors).toBeUndefined()       // empty → omitted
+    expect(ctl.isOn()).toBe(true)
+    ctl.stop()
   })
 
   it('allows NO field + NO anchor (free dynamics)', async () => {
@@ -310,7 +314,7 @@ describe('initOxdnaLive factory', () => {
     ctl.stop()
   })
 
-  it('refuses to recompose into a field with no anchor (warns, no POST)', async () => {
+  it('recomposes into a field with no anchor (COM-drift is warned, not blocked)', async () => {
     field = { enabled: false, field_pN: 0, dir: [0, 1, 0] }
     anchors = []
     const ctl = make()
@@ -320,7 +324,8 @@ describe('initOxdnaLive factory', () => {
     field = { enabled: true, field_pN: 5, dir: [1, 0, 0] }    // enabling field, still no anchor
     ctl.onElementsChanged()
     await wait(420)
-    expect(api.reconfigureOxdnaLive).not.toHaveBeenCalled()
+    expect(api.reconfigureOxdnaLive).toHaveBeenCalledWith('s1',
+      expect.objectContaining({ field: { field_pN: 5, dir: [1, 0, 0] } }))
     ctl.stop()
   })
 

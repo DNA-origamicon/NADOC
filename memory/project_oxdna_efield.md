@@ -29,7 +29,9 @@ are **Physical-layer display only**, never written back to topology.
   physically required, not a convenience.** Pin part of the structure; the anchored beads
   absorb the net force and the rest deflects against them (the Kopperger 2018 tethered-arm
   regime — *A self-assembled nanoscale robotic arm controlled by electric fields*, Science 359:296).
-  **Rule: a field run must declare ≥1 anchor; UI enforces it.**
+  **Rule (UPDATED 2026-07-10): anchors are RECOMMENDED, no longer REQUIRED.** A field with no
+  anchor is allowed on every engine; the UI shows a non-blocking warning notice instead of
+  blocking the run. See "Anchor requirement relaxed to a warning" below.
 - **GOTCHA 2 — quasi-static only.** oxDNA models no explicit ions/screening and no
   hydrodynamics, and its timestep can't reach kHz AC fields. This captures the **mechanical
   deflection of a tethered structure under a steady field**, NOT free-solution electrophoretic
@@ -563,6 +565,32 @@ relaxation stages (no field).
   Backend 4067 / frontend 2207 green; vite build clean. **NOT app-exercised** — needs a real
   chained-field-run lineage with a completed trajectory (GPU runs) to eyeball the arrow
   flipping direction mid-scrub → owes an MV row.
+
+## Anchor requirement relaxed to a warning (2026-07-10, SHIPPED)
+The hard "a uniform field needs ≥1 anchor" restriction is GONE on every engine — a field
+with no anchor (and no opposing surface) is now allowed, with the UI showing a non-blocking
+warning notice about the resulting centre-of-mass drift. User decision; scope = all engines,
+warning surfaced frontend-only.
+- **Backend (all 400/raise guards removed → allow + warn/log):** oxDNA `/field` + `/run`
+  (`routes_oxdna.py`), oxDNA live `/start` + `/reconfigure` + the `n_anchored==0` start guard
+  (`routes_oxdna_live.py`), NAMD single-job create + chain create (`routes_md.py`), NAMD prep
+  (`md_protocols.py` → `logger.warning`), mrDNA create (`routes_mrdna.py`) + runner
+  (`mrdna_runner.py` → `logger.warning`, the `n_held==0` raise softened), LAMMPS
+  (`lammps_runner.py` → `logger.warning`). `oxdna_interface.write_field_forces` no longer raises
+  on empty anchors — it writes the field `string` block with no traps. CanDo/FEM already fell
+  back to a centroid pin (unchanged). The shared predicate `field_anchor.field_needs_strand_anchor`
+  + its tests are KEPT (still a valid physics helper) but no backend caller blocks on it anymore.
+- **Frontend (warning notice, no block):** `forces_card.js` apply-style ready line now reads
+  "⚠ no anchor — the whole structure will drift down-field…" (conditioned on a new `getAnchorCount`
+  dep wired for oxDNA/CanDo/NAMD; clears once an anchor is added). The launch/POST blocks were
+  removed from `oxdna_jobs_panel.js`, `md_jobs_panel.js`, `cando_jobs_panel.js`, and
+  `oxdna_live_controller.js` (start + reconfigure). `chain_sim_model.stagePreflight` ALREADY
+  treated this as a `warn` (unchanged) — now aligned with the backend that no longer 400s the chain.
+- **Tests flipped** (were asserting the block): backend — `test_oxdna_relaxation` (write_field_forces
+  writes field-only), `test_oxdna_surface`, `test_headless_oxdna_build`, `test_namd_efield` (×2),
+  `test_mrdna_field`, `test_lammps_routes` + `test_lammps_runner`, `test_oxdna_live_session` (×2),
+  `test_chain_completion_e2e`; frontend — `forces_card.test`, `oxdna_live_controller.test` (×2).
+  Full backend suite 4665 pass (2 flipped after the FULL run); frontend 2614 pass.
 
 ## 7. Open questions to resolve before/within Phase 1
 

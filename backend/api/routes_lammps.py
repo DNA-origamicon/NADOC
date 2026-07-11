@@ -134,7 +134,7 @@ async def create_lammps_job(body: CreateLammpsJobRequest) -> dict:
     try:
         info = lammps_runner.prepare_lammps_job(
             design, geometry, job.job_dir(ws), params, **prep_kwargs)
-    except lammps_runner.LammpsError as e:   # e.g. a field with no resolvable anchor
+    except lammps_runner.LammpsError as e:   # e.g. LAMMPS not found / not CG-DNA-capable
         job.status = LammpsStatus.failed
         job.error = str(e)
         job.save(ws)

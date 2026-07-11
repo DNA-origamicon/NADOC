@@ -1717,12 +1717,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const fieldSpec = _efieldCard?.getFieldSpec?.()
     const fieldOn = !!_efieldCard?.isEnabled?.() && (fieldSpec?.field_pN ?? 0) > 0
     // A uniform field with no anchor just streams the whole structure (COM drift) —
-    // mirror the oxDNA/CanDo panels' guard rather than launch a meaningless run.
-    if (fieldOn && !anchors.length) {
-      showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card.',
-        { severity: 'warning' })
-      return
-    }
+    // the E-field card shows a warning notice, but the run is allowed (not blocked).
     // NAMD 3: "EField is not compatible with multi-GPU GPUresident".
     if (fieldOn && (devicesInput?.value?.trim() || '0').includes(',')) {
       showToast('NAMD cannot combine an electric field with a multi-GPU run — use a single device.',
@@ -2856,7 +2851,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // Electric-field card — the shared numeric field factory (same one the CanDo panel
   // binds), feeding NAMD's native eFieldOn/eField.  `field_pN` is the cross-engine
   // per-nucleotide force descriptor; the oxDNA card owns the one in-scene arrow gizmo.
-  const _efieldCard = initForcesCard({ engine: 'namd' })
+  const _efieldCard = initForcesCard({
+    engine: 'namd',
+    getAnchorCount: () => _anchorsCard?.getAnchors?.()?.length || 0,
+  })
 
   // ── Init ───────────────────────────────────────────────────────────────────
   _setDisplayStatus('Off', _C.dim)

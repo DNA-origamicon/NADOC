@@ -825,18 +825,15 @@ async def append_oxdna_field(job_id: str, body: FieldRequest) -> dict:
     links to its parent via ``parent_job_id`` and records the field params in
     ``efield`` (for the list sub-item hover).
 
-    Anchors are required: an unanchored uniform force nets a centre-of-mass drift
-    that streams the whole structure across the periodic box."""
+    Anchors are recommended but no longer required: an unanchored uniform force
+    nets a centre-of-mass drift that streams the whole structure across the
+    periodic box, so the UI shows a warning notice — but the run is allowed."""
     parent = _load_job(job_id)
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(400, "An electric-field run requires a completed job to seed from.")
     _assert_job_current(parent)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
-    if not body.anchors:
-        raise HTTPException(
-            400, "An electric-field run needs ≥1 anchor (without one the field "
-            "just drifts the whole structure across the box).")
 
     ws = _workspace()
     pjd = parent.job_dir(ws)
@@ -911,24 +908,15 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     completed child seeds from that child's final structure for a continuous
     multi-run lineage.
 
-    A field with no anchors is rejected: an unanchored uniform force nets a
-    centre-of-mass drift that streams the whole structure across the periodic box."""
+    A field with no anchors is allowed: an unanchored uniform force nets a
+    centre-of-mass drift that streams the whole structure across the periodic
+    box, so the UI shows a warning notice — but the run is not blocked."""
     parent = _load_job(job_id)
     if is_running(job_id) or parent.status != OxdnaStatus.completed:
         raise HTTPException(400, "A production run requires a completed relaxation job.")
     _assert_job_current(parent)
     if find_oxdna() is None:
         raise HTTPException(400, "oxDNA binary not found.")
-    from backend.core.field_anchor import field_needs_strand_anchor
-    if field_needs_strand_anchor(
-            has_field=bool(body.field), has_anchors=bool(body.anchors),
-            field_dir=body.field.dir if body.field else None,
-            surface_dir=body.surface.dir if body.surface else None):
-        raise HTTPException(
-            400, "An electric field needs ≥1 anchor OR a hard surface it pushes into "
-            "(without either, the field just drifts the whole structure across the box). "
-            "Add a fixed strand in the Anchors card, orient a surface for the field to "
-            "press into, or disable the field.")
 
     ws = _workspace()
     pjd = parent.job_dir(ws)

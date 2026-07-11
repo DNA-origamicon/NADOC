@@ -493,8 +493,9 @@ AF-24 real-engine stragglers, since it's an active regression, not a caveat-reti
   WITHOUT it makes `force.F0`/`force.dir` `AttributeError` and `run_live_field`'s real path dies; the two
   `def_readwrite` lines + `make` must be reapplied (it's `git`-untracked in their tree). (2) the field force is found by
   `f.type == "string"` (NOT an `id`), so don't rely on a forces-file `id`. (3) a uniform field on a FREE (unanchored) body
-  streams the COM ballistically — `write_field_forces` REQUIRES anchors; a re-aim test on a free body shows residual
-  momentum from the prior direction, so anchor the body (the field deflects the free part against the anchor to a pose).
+  streams the COM ballistically — so a re-aim test on a free body shows residual momentum from the prior direction;
+  anchor the body (the field deflects the free part against the anchor to a pose).  (NOTE 2026-07-10: `write_field_forces`
+  no longer *raises* without an anchor — an unanchored field is now allowed with a UI warning; see [[project_oxdna_efield]].)
   (4) F0 in oxDNA units is large: `pn_to_oxdna_force(4 pN)≈0.082`; F0≈0.4 (≈19 pN) blows the integrator up on a tiny system
   — use the realistic `pn_to_oxdna_force(field_pN)` regime. (5) the GPU-free parity test makes live & batch end on the SAME
   final field (re-aim live `+z→+x`, run batch directly at `+x`) so the equilibria are comparable; alignment is along the

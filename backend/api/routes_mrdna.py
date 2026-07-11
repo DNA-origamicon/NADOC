@@ -150,13 +150,8 @@ async def create_mrdna_job(body: CreateMrdnaJobRequest) -> dict:
                 "Malformed E-field: expected {\"field_pN\": <non-zero pN>, "
                 "\"dir\": [x,y,z]} with a non-zero direction.",
             )
-        if not body.anchors:
-            raise HTTPException(
-                400,
-                "A uniform E-field needs at least one anchor to hold against — "
-                "otherwise the whole structure just streams down-field (COM drift). "
-                "Add an anchor scope before launching a field run.",
-            )
+        # An unanchored uniform field streams the whole structure down-field (COM
+        # drift); anchors are recommended but no longer required — the UI warns.
 
     name = None
     if body.design_source_path:

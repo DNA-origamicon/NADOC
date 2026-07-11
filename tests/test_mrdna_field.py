@@ -184,12 +184,13 @@ def _mrdna_client(monkeypatch, tmp_path):
     return TestClient(app)
 
 
-def test_field_without_anchor_rejected(monkeypatch, tmp_path):
+def test_field_without_anchor_allowed(monkeypatch, tmp_path):
+    """An unanchored uniform field just streams the structure down-field (COM drift)
+    — the UI warns, but the job is no longer rejected."""
     client = _mrdna_client(monkeypatch, tmp_path)
     r = client.post("/api/mrdna/jobs",
                     json={"coarse_steps": 1000, "field": {"field_pN": 1.0, "dir": [1, 0, 0]}})
-    assert r.status_code == 400, r.text
-    assert "anchor" in r.json()["detail"].lower()
+    assert r.status_code == 200, r.text
 
 
 def test_malformed_field_rejected(monkeypatch, tmp_path):

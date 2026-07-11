@@ -258,8 +258,9 @@ fills in as milestones complete.
   whose negative gradient is the uniform force (the `forceXGrid` tabulated-force path CRASHES ARBD on a constant
   grid; the ramp-potential idiom is the fix). Total applied force = `field_pN × total_nt` exactly. `install_field_force`
   wraps `generate_bead_model` so the grids re-attach to fresh `ParticleType`s after mrDNA's bead regeneration
-  (idempotent). `MrdnaJob.e_field` + route `field` + guards (malformed/zero→400 incl non-numeric; field-needs-anchor→400)
-  + runner install after anchors (RAISES if the field's anchors held 0 beads → COM-drift) · feature: E-field
+  (idempotent). `MrdnaJob.e_field` + route `field` + guards (malformed/zero→400 incl non-numeric; field-needs-anchor
+  guard REMOVED 2026-07-10 — unanchored field allowed + UI-warned, runner logs a drift warning instead of raising on 0
+  held beads, see [[project_oxdna_efield]]) + runner install after anchors · feature: E-field
   (mrDNA's field coverage; needs M1's anchors to hold against drift) · engines now comparable: mrDNA now runs an
   anchored uniform-field job producing an along-field deflection descriptor the same way CanDo (C2 nodal q·E) +
   NAMD (N1 eField) do, off the SAME per-nt force descriptor · oracle: `tests/test_mrdna_field.py` 9 fast + 1 slow

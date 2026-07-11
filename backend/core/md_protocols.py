@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import math
 import re
 import zipfile
@@ -28,6 +29,8 @@ from typing import Optional
 
 import numpy as np
 from scipy.spatial import cKDTree
+
+logger = logging.getLogger(__name__)
 
 from backend.core.models import Design
 
@@ -1399,15 +1402,11 @@ def prepare_mgh_slow_release(
     # annotation.  A field with no anchor just streams the whole box (COM drift).
     efield_vec = namd_efield_vector(field)
     if efield_vec is not None and anchors_file is None:
-        # The API/UI reject a field with an EMPTY anchor list, but a NON-empty list that
-        # RESOLVES to nothing (stale selection, ssDNA-only scope) slips past them and
-        # would silently launch the unanchored field run those guards exist to prevent.
-        # Fail loudly at prep rather than burn GPU hours streaming the box.
-        raise ValueError(
-            "An electric field needs at least one anchor, but the requested anchor scopes "
-            f"resolved to no DNA residues: {anchors!r}. Re-pick the anchors — a stale "
-            "selection or a single-stranded-only scope resolves to nothing."
-        )
+        # An unanchored uniform q·E body force just streams the whole box (COM drift).
+        # Anchors are recommended but no longer required — the UI warns; the run proceeds.
+        logger.warning(
+            "NAMD E-field prepared with no anchor (requested scopes %r resolved to no DNA "
+            "residues) — the structure will drift down-field (COM drift).", anchors)
 
     # Declash: minimise against an ss-excluded ENM so inserted single-stranded
     # bases relax out of clash.  References are rebuilt from the declashed coords

@@ -121,17 +121,30 @@ def test_create_runs_to_completion_and_lists(monkeypatch, tmp_path):
     assert dev["ready"] is True and dev["mean_deviation"] is not None
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not _HAS_CGDNA, reason="no CG-DNA-capable LAMMPS installed")
-def test_create_field_without_anchor_is_400(monkeypatch, tmp_path):
-    """An E-field with no resolvable anchor is rejected (an unanchored uniform force
-    just drifts the whole structure — oxDNA GOTCHA 1).  Fast: prepare raises before
-    any lmp run is launched."""
+def test_create_field_without_anchor_allowed(monkeypatch, tmp_path):
+    """An E-field with no resolvable anchor is no longer rejected (an unanchored
+    uniform force just drifts the whole structure — oxDNA GOTCHA 1; the UI warns).
+    The job prepares with the efield fix but no anchor spring."""
     monkeypatch.setattr(routes_lammps, "_WORKSPACE_DIR", tmp_path)
     design_state.set_design(_sequenced_design())
     r = client.post("/api/lammps/jobs", json={
         "steps": 500, "field": {"field_pN": 20.0, "dir": [1, 0, 0]}})
-    assert r.status_code == 400
-    assert "anchor" in r.json()["detail"].lower()
+    assert r.status_code == 200, r.text
+    job = r.json()
+    assert job["forces"]["field"]["field_pN"] == 20.0
+    assert job["forces"]["n_anchored"] == 0
+    inp = (tmp_path / "lammps_jobs" / job["job_id"] / "in.lammps").read_text()
+    assert "fix efield all addforce" in inp
+    assert "fix anchors anchors spring/self" not in inp   # no anchor fix
+
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        if client.get(f"/api/lammps/jobs/{job['job_id']}").json()["status"] in (
+                "completed", "failed", "stopped"):
+            break
+        time.sleep(0.5)
 
 
 @pytest.mark.skipif(not _HAS_CGDNA, reason="no CG-DNA-capable LAMMPS installed")

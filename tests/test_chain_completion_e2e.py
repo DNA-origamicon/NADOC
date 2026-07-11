@@ -225,22 +225,20 @@ def test_authored_chain_runs_all_stages_to_completed(spawns):
     assert all(c["unattended"] for c in spawns.calls)
 
 
-# ── up-front launch validation: a doomed chain is refused at Launch ──────────────────
-# The automation that would have caught "the second job failed": a production stage with a
-# field but nothing to hold it (no anchor, no opposing surface) is rejected by
-# create_md_chain BEFORE any stage spawns — not left to run the relax then die at stage 1.
+# ── launch: a field stage with nothing to hold it is ALLOWED (warned, not blocked) ───
+# An unanchored uniform field just drifts the whole structure (COM drift).  That used to
+# be a hard 400 at create_md_chain; it is now a per-stage WARNING surfaced in the UI
+# preflight (chain_sim_model.stagePreflight → level 'warn'), and the launch proceeds.
 
-def test_launch_rejects_a_field_stage_with_nothing_to_hold_it(spawns):
+def test_launch_allows_a_field_stage_with_nothing_to_hold_it(spawns):
     design, _, request = _load_authored_chain_request()
     design_state.set_design(design)
     request["stages"][1]["surface"] = None      # strip the opposing surface
     request["stages"][1]["anchors"] = None       # and it has no strand anchor
     r = client.post("/api/md/chains", json=request)
-    assert r.status_code == 400
-    detail = r.json()["detail"].lower()
-    assert "field" in detail and "stage 1" in detail
-    # Nothing was spawned — the chain never started.
-    assert not spawns.calls
+    assert r.status_code == 200, r.text
+    # The chain launched — stage 0 was spawned.
+    assert spawns.calls
 
 
 def test_launch_accepts_the_real_deposition_chain(spawns):

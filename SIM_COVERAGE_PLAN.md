@@ -62,9 +62,10 @@ veto.
    - The **shared-metric track (S1–S5) leads.** No cross-validation *claim* is possible until the comparison
      card exists — `M-METRIC-CORE` is the first milestone. (A feature can be *built* before S-track, but its
      cross-validation result can't be *reported*, so prefer landing S first.)
-   - Within an engine, feature deps hold: **anchors before E-field** (a uniform field needs ≥1 anchor or the
-     structure just streams — the oxDNA COM-drift gotcha applies to every engine), **connector element (C3)
-     before linkers (C4)**.
+   - Within an engine, feature deps hold: **anchors before E-field** (a uniform field wants ≥1 anchor or the
+     structure just streams — the oxDNA COM-drift gotcha applies to every engine; as of 2026-07-10 the anchor is
+     RECOMMENDED, no longer a hard requirement — an unanchored field runs with a UI warning), **connector element
+     (C3) before linkers (C4)**.
    - **The U/P tracks are the current priority** (2026-07-08) over the parked feature tail (M4/N3/O2). Their
      deps: **U1 (descriptor) before U2/U3**, **U2+U3 before U4 (the consolidation)**; **P1 (MdPipeline) before
      P2/P3**, **P4 (planner UI) needs P2+P3+U2** (it reuses the unified Forces card). Prefer landing **U1 and

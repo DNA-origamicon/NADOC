@@ -279,9 +279,10 @@ def test_live_reconfigure_unknown_session_404():
     assert ei.value.status_code == 404
 
 
-def test_live_reconfigure_field_requires_anchor():
-    """Recomposing to a field with no anchor is rejected (COM-drift gotcha) — the
-    same gate as start, checked before the worker is touched."""
+def test_live_reconfigure_field_without_anchor_allowed():
+    """Recomposing to a field with no anchor is no longer rejected (the UI warns about
+    the COM drift instead).  It must get PAST the anchor gate — this fake session has no
+    design, so it stops at the 'does not support reconfigure' 400, NOT an anchor 400."""
     from backend.api import routes_oxdna_live as rl
     stop_all()
     sess = LiveSession("rcf", _FakeEngine(), frame_builder=lambda e: [],
@@ -293,7 +294,8 @@ def test_live_reconfigure_field_requires_anchor():
         with pytest.raises(HTTPException) as ei:
             asyncio.run(rl.reconfigure_oxdna_live("rcf", body))
         assert ei.value.status_code == 400
-        assert "anchor" in ei.value.detail.lower()
+        assert "reconfigure" in ei.value.detail.lower()   # reached past the anchor gate
+        assert "anchor" not in ei.value.detail.lower()
     finally:
         stop_session("rcf")
 
@@ -305,10 +307,11 @@ def test_live_available_probe_shape():
     assert isinstance(d["available"], bool)
 
 
-def test_live_start_field_requires_anchor_when_oxpy_present():
-    """When oxpy is available, /start rejects a field with no anchor (the COM-drift
-    gotcha) before touching any job.  Skipped where oxpy isn't built (the
-    availability check fires first there, a different 400)."""
+def test_live_start_field_without_anchor_allowed_when_oxpy_present():
+    """When oxpy is available, /start no longer rejects a field with no anchor (the UI
+    warns about the COM drift instead).  It must get PAST the anchor gate and fail only
+    at job lookup (the fake job is not found → 404), like the free-dynamics case.
+    Skipped where oxpy isn't built (the availability check fires first there)."""
     from backend.api import routes_oxdna_live as rl
     if not rl.oxpy_live_available()["available"]:
         pytest.skip("oxpy not available on this host")
@@ -316,8 +319,7 @@ def test_live_start_field_requires_anchor_when_oxpy_present():
         job_id="whatever", field={"field_pN": 4.0, "dir": [0, 1, 0]}, anchors=[])
     with pytest.raises(HTTPException) as ei:
         asyncio.run(rl.start_oxdna_live(body))
-    assert ei.value.status_code == 400
-    assert "anchor" in ei.value.detail.lower()
+    assert ei.value.status_code == 404   # reached _load_job → not an anchor 400
 
 
 def test_live_start_no_field_no_anchor_passes_validation():

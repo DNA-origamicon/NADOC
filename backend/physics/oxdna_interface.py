@@ -1769,18 +1769,14 @@ def write_field_forces(
     nucleotide to its position in ``conf_path`` (the configuration the field stage
     starts from).
 
-    Anchors are required — an unanchored uniform force nets a centre-of-mass drift
-    that streams the whole structure across the periodic box (see
-    ``memory/project_oxdna_efield.md`` GOTCHA 1).  Raises ``ValueError`` if the
-    anchor selection resolves to zero nucleotides.
+    Anchors are recommended but no longer required — an unanchored uniform force
+    nets a centre-of-mass drift that streams the whole structure across the
+    periodic box (see ``memory/project_oxdna_efield.md`` GOTCHA 1), so the UI
+    warns; when the anchor selection resolves to zero nucleotides the field is
+    still written (just the ``string`` block, no traps).
 
     Returns ``{n_anchored, n_total, field_oxdna, dir, anchor_particles}``."""
-    particles, anchor_keys = resolve_anchor_particles(design, anchors)
-    if not particles:
-        raise ValueError(
-            "an electric-field stage needs ≥1 anchor; the selection resolved to "
-            "no nucleotides (without an anchor the field just drifts the whole "
-            "structure across the box)")
+    particles, anchor_keys = resolve_anchor_particles(design, anchors) if anchors else ([], [])
     cm = read_cm_positions_oxdna(conf_path)
     n_total = len(cm)
     blocks: list[str] = [field_string_block(field_oxdna, field_dir)]

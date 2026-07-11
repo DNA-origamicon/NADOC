@@ -793,15 +793,13 @@ def _run_job(job: MrdnaJob, workspace_dir: Path) -> None:
         # against COM drift.  Survives the fine-run bead regeneration.  See
         # backend/core/mrdna_field.py.
         if job.e_field:
-            # The API guard only counts anchor CHIPS; a scope that resolves to no beads
-            # (stale selection / ssDNA-only) would launch the exact COM-drift run the
-            # anchor exists to prevent — fail loudly instead (mirrors N1's prep guard).
+            # An unanchored field (no anchor chips, or a scope resolving to no beads)
+            # just streams the structure down-field (COM drift).  Anchors are
+            # recommended but no longer required — the UI warns; the run proceeds.
             if n_held == 0:
-                raise RuntimeError(
-                    "E-field job has no held beads: its anchor selection resolved to "
-                    "nothing, so a uniform field would just stream the structure "
-                    "down-field (COM drift). Pick an anchor scope that covers real "
-                    "duplex nucleotides.")
+                logger.warning(
+                    "mrdna job %s: E-field with no held beads — the structure will "
+                    "drift down-field (COM drift).", job.job_id)
             from backend.core.mrdna_field import install_field_force
             n_types = install_field_force(design, model, job.e_field, out_dir=jd)
             logger.info("mrdna job %s: installed E-field on %d bead type(s)",

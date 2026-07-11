@@ -108,11 +108,16 @@ def _conf_for(design, tmp_path):
     return tmp_path / "conf.dat"
 
 
-def test_resolve_forces_field_requires_an_anchor(tmp_path):
+def test_resolve_forces_field_without_anchor_allowed(tmp_path):
+    """A field with no anchor is no longer rejected — it resolves to a force spec with
+    no anchor ids (the UI warns about the resulting COM drift)."""
     design = _sequenced_design()
     conf = _conf_for(design, tmp_path)
-    with pytest.raises(R.LammpsError, match="needs ≥1 anchor"):
-        R.resolve_lammps_forces(design, conf, field={"field_pN": 20.0, "dir": [1, 0, 0]})
+    spec, meta = R.resolve_lammps_forces(
+        design, conf, field={"field_pN": 20.0, "dir": [1, 0, 0]})
+    assert spec.force is not None          # the uniform field is present
+    assert spec.anchor_ids == []           # but no anchor tethers
+    assert meta["n_anchored"] == 0
 
 
 def test_resolve_forces_field_and_anchor(tmp_path):

@@ -4006,13 +4006,18 @@ def test_field_display_aligns_to_design_not_drifted_seed(design, geometry, monke
     assert abs(disp_ac[0] - design_ac[0]) < (SHIFT_OX / NM_TO_OXDNA) / 2
 
 
-def test_write_field_forces_requires_anchor(design, geometry, tmp_path):
+def test_write_field_forces_allows_no_anchor(design, geometry, tmp_path):
+    """A field with no anchor is no longer rejected — it writes the uniform ``string``
+    block with no traps (the UI warns about the resulting COM drift)."""
     from backend.physics.oxdna_interface import write_field_forces, write_configuration
     conf = tmp_path / "conf.dat"
     write_configuration(design, geometry, conf)
-    with pytest.raises(ValueError, match="needs ≥1 anchor"):
-        write_field_forces(tmp_path / "f.txt", design, conf, field_oxdna=0.04,
-                           field_dir=[1, 0, 0], anchors=[])
+    info = write_field_forces(tmp_path / "f.txt", design, conf, field_oxdna=0.04,
+                              field_dir=[1, 0, 0], anchors=[])
+    assert info["n_anchored"] == 0
+    text = (tmp_path / "f.txt").read_text()
+    assert "type = string" in text          # the uniform field is present
+    assert "type = trap" not in text         # but no anchor traps
 
 
 def test_build_field_stage_and_render():

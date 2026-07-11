@@ -159,16 +159,13 @@ export function initOxdnaLive({
     if (ensureJobCurrent && !(await ensureJobCurrent('a live session'))) return
 
     // Compose whatever the run cards have enabled (like the "Full Sim" run); any
-    // combination is allowed — only a field requires ≥1 anchor.
+    // combination is allowed. A field with no anchor drifts the whole structure (COM
+    // drift) — the E-field card warns, but the live session is not blocked.
     const el = getRunElements?.() || {}
     const field = el.field
     const surface = el.surface
     const anchors = el.anchors || []
     const hasField = !!(field?.enabled && field.field_pN > 0)
-    if (hasField && !anchors.length) {
-      _setStatus('A field needs ≥1 anchor — add a fixed strand in the Anchors card, or disable the field.', _C.warn)
-      showToast('Field needs ≥1 anchor', 'warn'); return
-    }
 
     const body = { job_id: job.job_id }
     if (hasField) body.field = { field_pN: field.field_pN, dir: field.dir }
@@ -274,17 +271,11 @@ export function initOxdnaLive({
 
   // The element set changed → recompose the running engine (seamless: it continues
   // from the current live pose).  Debounced — a slider drag fires many changes and an
-  // engine rebuild is heavy.  A field still needs ≥1 anchor; warn + skip otherwise
-  // (leave _sig stale so adding an anchor later still triggers the recompose).
+  // engine rebuild is heavy.  A field with no anchor drifts the whole structure (the
+  // E-field card warns), but the recompose is not blocked.
   function _onCompositionChanged(el, sig) {
     const field = el.field
     const hasField = !!(field?.enabled && field.field_pN > 0)
-    const anchors = el.anchors || []
-    if (hasField && !anchors.length) {
-      _setStatus('A field needs ≥1 anchor — add one, or disable the field.', _C.warn)
-      showToast('Field needs ≥1 anchor', 'warn')
-      return
-    }
     _sig = sig
     _hasField = hasField
     if (_reconfigTimer) clearTimeout(_reconfigTimer)

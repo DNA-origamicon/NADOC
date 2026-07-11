@@ -283,20 +283,11 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     writers the consolidated "Full Sim" run uses, opens a persistent oxpy engine
     over it, and burst-steps it on a background thread.  Nothing is persisted — no
     ``OxdnaJob``, no stored frames — only the temp rundir (removed on stop).  A
-    field needs ≥1 anchor (an unanchored uniform force drifts the COM across the
-    box); every other combination is allowed."""
+    field with no anchor is allowed (the UI warns that an unanchored uniform force
+    drifts the COM across the box, but the run is not blocked)."""
     avail = oxpy_live_available()
     if not avail["available"]:
         raise HTTPException(400, f"Live oxDNA not available: {avail['reason']}")
-    from backend.core.field_anchor import field_needs_strand_anchor
-    if field_needs_strand_anchor(
-            has_field=bool(body.field), has_anchors=bool(body.anchors),
-            field_dir=body.field.dir if body.field else None,
-            surface_dir=body.surface.dir if body.surface else None):
-        raise HTTPException(
-            400, "A live field needs ≥1 anchor OR a hard surface it pushes into (without "
-            "either the field just drifts the whole structure across the box). Add a fixed "
-            "strand in the Anchors card, orient a surface to press into, or disable the field.")
 
     parent = _load_job(body.job_id)
     if is_running(body.job_id) or parent.status != OxdnaStatus.completed:
@@ -329,14 +320,8 @@ async def start_oxdna_live(body: LiveStartRequest) -> dict:
     engine, builder, info, backend = _build_live_engine(
         design, seed_conf, rundir, design_ref, field_in=field_in, wall_in=wall_in,
         anchors=anchors, anchor_stiff=body.anchor_stiff, steps=body.burst_steps)
-    # A field with a stale/unresolvable anchor selection (resolves to 0) would still
-    # drift the COM — guard like /run does (and clean up the temp rundir).
-    if field_in and info["n_anchored"] == 0:
-        from shutil import rmtree
-        rmtree(rundir, ignore_errors=True)
-        raise HTTPException(
-            400, "The anchor selection resolved to no nucleotides — a live field "
-            "needs ≥1 anchor to hold the structure against the field.")
+    # A field with no (or an unresolvable) anchor selection is allowed — the COM
+    # drift is surfaced as a UI warning, not blocked.
 
     live = LiveSession(
         sid, engine, frame_builder=builder,
@@ -370,19 +355,11 @@ async def reconfigure_oxdna_live(session_id: str, body: LiveReconfigureRequest) 
 
     The engine is rebuilt over the session's CURRENT pose with the new forces — the
     structure responds from where it is (no reset to the relaxed seed).  A live field
-    still needs ≥1 anchor.  Applied before the next burst on the worker thread."""
+    with no anchor is allowed (the UI warns of COM drift).  Applied before the next
+    burst on the worker thread."""
     live = get_session(session_id)
     if live is None:
         raise HTTPException(404, f"live session {session_id!r} not found")
-    from backend.core.field_anchor import field_needs_strand_anchor
-    if field_needs_strand_anchor(
-            has_field=bool(body.field), has_anchors=bool(body.anchors),
-            field_dir=body.field.dir if body.field else None,
-            surface_dir=body.surface.dir if body.surface else None):
-        raise HTTPException(
-            400, "A live field needs ≥1 anchor OR a hard surface it pushes into (without "
-            "either the field just drifts the whole structure across the box). Add a fixed "
-            "strand in the Anchors card, orient a surface to press into, or disable the field.")
 
     design = live.design
     rundir = live.rundir

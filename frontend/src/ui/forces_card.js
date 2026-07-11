@@ -167,14 +167,21 @@ export function initForcesCard({
     if (gizmo) _syncGizmo()
     onChange?.()
     if (V.readyStyle === 'lammps') { _renderReadyLammps(); return }
-    // 'apply' style (oxDNA / CanDo / NAMD) — a field always needs ≥1 anchor.
+    // 'apply' style (oxDNA / CanDo / NAMD).  An anchor is recommended but no longer
+    // required — a field with no anchor drifts the whole structure (COM drift), which
+    // we surface as a WARNING notice here; the run is not blocked.
     if (!_enabled) { _setReady(`Off — tick "Apply" to add a field to the ${V.verb}.`, _C.dim); return }
     if (!(_pN > 0)) { _setReady('Set a force per nucleotide (pN).', _C.dim); return }
     if (!(vecLen(_dirFromInputs()) > 0.5)) { _setReady('Set a field direction.', _C.dim); return }
     const zone = fieldZone(_pN)
-    const warn = zone === 'disrupt' ? '⚠ strong enough to disrupt the DNA — ' : (zone === 'strong' ? '⚠ strong field — ' : '')
-    const tail = `${_fmtPn(_pN)} pN/nt — needs ≥1 anchor (add a fixed strand in the Anchors card).`
-    _setReady(warn + tail, zone === 'disrupt' ? _C.err : (warn ? _C.warn : _C.dim))
+    const strengthWarn = zone === 'disrupt' ? '⚠ strong enough to disrupt the DNA — ' : (zone === 'strong' ? '⚠ strong field — ' : '')
+    if ((getAnchorCount?.() ?? 0) === 0) {
+      _setReady(`${strengthWarn}⚠ no anchor — the whole structure will drift down-field; `
+        + `add a fixed strand in the Anchors card to hold it (or run as-is). ${_fmtPn(_pN)} pN/nt.`,
+        zone === 'disrupt' ? _C.err : _C.warn)
+      return
+    }
+    _setReady(`${strengthWarn}${_fmtPn(_pN)} pN/nt.`, zone === 'disrupt' ? _C.err : (strengthWarn ? _C.warn : _C.dim))
   }
   function _renderReadyLammps() {
     if (!_enabled) { _setReady('Off — tick to add a uniform E-field to the run.', _C.dim); return }

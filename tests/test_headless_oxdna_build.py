@@ -324,15 +324,15 @@ def test_run_config_persisted_for_panel_cards(sequenced_6hb, tmp_path, mock_oxdn
     assert crc["anchors"] == [{"kind": "domain", "strandId": d.strands[0].id, "domainIndex": 0}]
 
 
-def test_run_field_rejects_no_anchor(sequenced_6hb, tmp_path, mock_oxdna):
-    """An electric-field stage with no anchor is refused (HTTP 400) — without an
-    anchor the field just drifts the whole structure."""
-    from fastapi import HTTPException
+def test_run_field_allows_no_anchor(sequenced_6hb, tmp_path, mock_oxdna):
+    """An electric-field stage with no anchor is no longer refused — it branches a
+    child field job with no anchor traps (the UI warns about the resulting COM
+    drift), so the field still applies to a free structure."""
     job = hox.run_relaxation(sequenced_6hb, tmp_path, min_bp_retained=0.0)
     assert job.status is OxdnaStatus.completed
-    with pytest.raises(HTTPException) as exc:
-        hox.append_field(job.job_id, tmp_path, field_pN=2.0, dir=[1, 0, 0], anchors=[])
-    assert exc.value.status_code == 400
+    child = hox.append_field(job.job_id, tmp_path, field_pN=2.0, dir=[1, 0, 0], anchors=[])
+    assert child["parent_job_id"] == job.job_id
+    assert child["efield"]["n_anchored"] == 0
 
 
 # ── E-field VALIDATION (deflecting mock → oracle) ─────────────────────────────

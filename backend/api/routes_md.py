@@ -1028,14 +1028,9 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         raise HTTPException(
             400, f"Malformed field spec (expected {{'field_pN': <pN>, 'dir': [x,y,z]}}): {exc}")
     if _has_field:
-        if not body.anchors:
-            # A uniform force on every nucleotide is a net force on the centre of mass:
-            # an unanchored structure just streams across the box instead of deflecting
-            # (the tethered-arm regime needs something to push against).  Same rule the
-            # oxDNA/CanDo panels enforce.
-            raise HTTPException(
-                400, "An electric field needs at least one anchor — otherwise the uniform "
-                     "force just drifts the whole structure across the box.")
+        # A uniform force on every nucleotide is a net force on the centre of mass: an
+        # unanchored structure just streams across the box instead of deflecting.  Anchors
+        # are recommended but no longer required — the UI warns; the run is not blocked.
         if "," in (body.devices or ""):
             # NAMD 3: "EField is not compatible with multi-GPU GPUresident".
             raise HTTPException(
@@ -2762,26 +2757,8 @@ async def create_md_chain(body: CreateChainRequest) -> dict:
     (the frame exists on disk), not by loading it as an ``MdJob``."""
     if not body.stages:
         raise HTTPException(400, "A chain needs at least one stage.")
-    # Validate the WHOLE plan up front against the same spawn preconditions each stage
-    # would hit mid-run — so a doomed chain fails at Launch with a clear per-stage reason
-    # instead of running the relax for minutes then dying when stage N spawns.  A uniform
-    # field on a production stage needs a strand anchor OR a surface it presses into (an
-    # oxDNA relax drops the field, so the rule only applies to productions).
-    from backend.core.field_anchor import field_needs_strand_anchor
-    for i, st in enumerate(body.stages):
-        if _is_relax_protocol(st.protocol):
-            continue
-        if field_needs_strand_anchor(
-                has_field=bool(st.field), has_anchors=bool(st.anchors),
-                field_dir=(st.field or {}).get("dir"),
-                surface_dir=(st.surface or {}).get("dir")):
-            raise HTTPException(
-                400, f"Stage {i}"
-                + (f" ({st.label})" if st.label else "")
-                + " has an electric field but nothing to hold the structure: add ≥1 "
-                "strand anchor, orient a hard surface for the field to press into, or "
-                "disable the field (an unanchored uniform field drifts the whole "
-                "structure across the box).")
+    # An unanchored uniform field on a production stage just drifts the whole structure
+    # (COM drift); that's surfaced as a per-stage UI warning, not a launch block.
     if body.root_job_id is None:
         # Fresh-relax root: stage 0 CREATES the initial structure from the active design.
         # It must therefore be a relaxation — a production has nothing to seed from.

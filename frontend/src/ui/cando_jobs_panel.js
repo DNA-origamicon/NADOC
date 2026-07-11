@@ -333,7 +333,10 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       status: 'cando-anchors-status',
     },
   })
-  const _efieldCard = initForcesCard({ engine: 'cando' })
+  const _efieldCard = initForcesCard({
+    engine: 'cando',
+    getAnchorCount: () => _anchorsCard?.getAnchors?.()?.length || 0,
+  })
 
   // ── Shared scaffold: collapse + advanced drawer + poll loop (U3 base) ─────────
   const _base = initJobsPanelBase({
@@ -379,13 +382,8 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
       const anchors = _anchorsCard.getAnchors()
       const fieldSpec = _efieldCard.getFieldSpec()
       const fieldOn = _efieldCard.isEnabled()
-      // A uniform field with no anchor just streams the whole structure (COM drift) — mirror
-      // the oxDNA panel's guard rather than launch a physically-meaningless solve.
-      if (fieldOn && !anchors.length) {
-        showToast('An electric field needs at least one anchor — add a fixed strand in the Anchors card.',
-          { severity: 'warn' })
-        return
-      }
+      // A uniform field with no anchor just streams the whole structure (COM drift) —
+      // the E-field card shows a warning notice, but the solve is allowed (not blocked).
       const body_ = {
         nonlinear,
         n_steps:   Math.max(1, parseInt(stepsInput?.value, 10) || 20),

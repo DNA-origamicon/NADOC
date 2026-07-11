@@ -247,11 +247,19 @@ def _post_create(**kw):
     return TestClient(app).post("/api/md/jobs", json=body)
 
 
-def test_field_without_anchor_is_rejected():
-    """An unanchored uniform force just streams the structure across the box."""
+def test_field_without_anchor_is_allowed(monkeypatch):
+    """An unanchored uniform force just streams the structure across the box (COM
+    drift) — the UI warns, but the anchor guard no longer fires.  We stub the engine
+    probe (the next check after the removed guard) so the request stops there
+    deterministically, proving it reached PAST where the anchor 400 used to be."""
+    import backend.api.routes_md as rm
+
+    monkeypatch.setattr(rm, "find_namd", lambda: (_ for _ in ()).throw(RuntimeError("no namd here")))
     r = _post_create(anchors=None)
     assert r.status_code == 400
-    assert "anchor" in r.json()["detail"].lower()
+    detail = r.json()["detail"].lower()
+    assert "no namd here" in detail   # reached the engine probe ⇒ anchor guard did not fire
+    assert "anchor" not in detail
 
 
 def test_field_with_multi_gpu_is_rejected():
@@ -299,9 +307,9 @@ def test_no_field_skips_both_guards(monkeypatch):
 # ── prep-time guard: anchors that RESOLVE to nothing must not run an unanchored field ──
 
 
-def test_field_with_unresolvable_anchors_raises_at_prep(tmp_path, monkeypatch):
-    """The API guard counts anchor CHIPS; a stale/ssDNA-only scope resolves to zero
-    residues and would otherwise launch the exact COM-drift run the guard prevents."""
+def test_field_with_unresolvable_anchors_is_allowed_at_prep(tmp_path, monkeypatch, caplog):
+    """A stale/ssDNA-only anchor scope resolves to zero residues.  That's no longer a
+    hard error — the field is prepared anchorless (the UI warns about the COM drift)."""
     import backend.core.namd_solvate as ns
 
     monkeypatch.setattr(ns, "_gmx_solvate", _fake_solvate)
@@ -313,11 +321,13 @@ def test_field_with_unresolvable_anchors_raises_at_prep(tmp_path, monkeypatch):
     job_dir = tmp_path / "job"
     job_dir.mkdir()
 
-    with pytest.raises(ValueError, match="resolved to no DNA residues"):
+    with caplog.at_level("WARNING"):
         prepare_mgh_slow_release(
             design, job_dir, ion_conc_mM=0.0, mg_conc_mM=0.0, salt_mode="custom",
             fast=False, anchors=stale, field={"field_pN": 2.0, "dir": [0, 1, 0]},
         )
+    assert any("drift" in r.message.lower() for r in caplog.records), \
+        "expected a COM-drift warning when the field's anchors resolve to nothing"
 
 
 def test_local_resume_conf_preserves_field_and_anchors(tmp_path):

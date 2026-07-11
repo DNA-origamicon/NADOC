@@ -16,6 +16,7 @@ state — never written back into Design topology.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import signal
 import threading
@@ -33,6 +34,9 @@ from backend.physics.oxdna_interface import (
     write_configuration,
     write_topology,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class LammpsError(RuntimeError):
@@ -84,9 +88,11 @@ def resolve_lammps_forces(
             field_meta = {"field_pN": f_pn, "field_oxdna": f_ox, "dir": d.tolist()}
 
     if force_vec is not None and not anchor_ids:
-        raise LammpsError(
-            "an electric-field run needs ≥1 anchor; without one the uniform force "
-            "just streams the whole structure across the periodic box.")
+        # An unanchored uniform force just streams the whole structure across the box
+        # (COM drift).  Anchors are recommended but no longer required — the UI warns;
+        # the run proceeds.
+        logger.warning("LAMMPS E-field run has no anchor — the structure will drift "
+                       "down-field (COM drift).")
 
     wall_dict = None
     wall_meta = None

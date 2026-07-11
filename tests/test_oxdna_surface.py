@@ -203,13 +203,21 @@ def _run_client(monkeypatch, tmp_path):
     return TestClient(app), routes_oxdna
 
 
-def test_run_field_without_anchor_rejected(design, monkeypatch, tmp_path):
+def test_run_field_without_anchor_allowed(design, monkeypatch, tmp_path):
+    """A field with no anchor is no longer rejected — it branches a child job with a
+    field-only forces file (the UI warns about the resulting COM drift)."""
     client, _ = _run_client(monkeypatch, tmp_path)
     parent = _completed_parent(tmp_path, design)
     r = client.post(f"/api/oxdna/jobs/{parent.job_id}/run",
                     json={"steps": 1000, "field": {"field_pN": 2.0, "dir": [0, 0, 1]}})
-    assert r.status_code == 400
-    assert "anchor" in r.text.lower()
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["parent_job_id"] == parent.job_id
+    from backend.core.oxdna_job import OxdnaJob
+    child = OxdnaJob.load(body["job_id"], tmp_path)
+    forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
+    assert "type = string" in forces         # the uniform field is present
+    assert "type = trap" not in forces        # but no anchor traps
 
 
 def test_run_surface_only_branches_child(design, monkeypatch, tmp_path):

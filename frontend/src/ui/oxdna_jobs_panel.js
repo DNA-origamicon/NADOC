@@ -1574,11 +1574,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       body.surface = { dir: el.surface.dir, offset_nm: el.surface.offsetNm, stiff: el.surface.stiff }
     }
     if (el.anchors?.length) body.anchors = el.anchors
-    // A field with no anchors drifts the whole structure — block before the POST.
-    if (body.field && !body.anchors) {
-      _setProdStatus('Field needs ≥1 anchor — add a fixed strand in the Anchors card, or disable the field.', _C.err)
-      return
-    }
+    // A field with no anchors drifts the whole structure (COM drift) — the E-field
+    // card shows a warning notice, but the run is allowed (no longer blocked here).
 
     try {
       const fc = await api.estimateOxdnaRunDisk(_selectedId, { steps })
