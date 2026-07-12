@@ -912,6 +912,29 @@ def test_job_overall_fraction_counts_done_stages(tmp_path):
     assert job_overall_fraction(job, tmp_path, specs) == pytest.approx(0.5, abs=0.02)
 
 
+def test_stage_energy_lines_fast_matches_exact_on_large_file(tmp_path):
+    """The hot-poll estimator reads only the file's size + a head sample; on a large,
+    fixed-width energy.dat it must agree with the exact full-file counter to within a
+    line or two (advisory progress — never re-reads the whole growing file each poll)."""
+    from backend.core.oxdna_runner import _stage_energy_lines, _stage_energy_lines_fast
+
+    sd = tmp_path / "stage"
+    sd.mkdir()
+    # oxDNA writes fixed-width numeric columns; emulate 5000 such lines (~150 KB).
+    lines = [f"{step*1000:>12d}  -1.234567  0.500000 -0.500000" for step in range(5000)]
+    (sd / "energy.dat").write_text("\n".join(lines) + "\n")
+
+    exact = _stage_energy_lines(sd)
+    fast = _stage_energy_lines_fast(sd)
+    assert exact == 5000
+    assert abs(fast - exact) <= 2                                      # size/line-width estimate
+
+    # Empty + missing files: both agree at 0 (no fallback surprises).
+    (sd / "energy.dat").write_text("")
+    assert _stage_energy_lines_fast(sd) == 0
+    assert _stage_energy_lines_fast(tmp_path / "nope") == 0
+
+
 def test_print_conf_interval():
     """The display-frame cadence is ~100 frames per stage (mirrors render_stage_input)."""
     from backend.core.oxdna_protocol import print_conf_interval

@@ -69,6 +69,16 @@ const CENSUS = {
     metrics:    { on: 'cando-metrics-toggle' },
     joblist:    { on: 'cando-jobs-list-toggle' },
   },
+  snupi: {
+    run:        { on: 'snupi-jobs-coarse-btn' },
+    efield:     { on: 'snupi-efield-toggle' },
+    anchors:    { on: 'snupi-anchors-toggle' },
+    surface:    { off: 'snupi-surface-toggle' },
+    advanced:   { on: 'snupi-jobs-adv-toggle' },
+    viz:        { on: 'snupi-display-toggle' },
+    metrics:    { on: 'snupi-metrics-toggle' },
+    joblist:    { on: 'snupi-jobs-list-toggle' },
+  },
   namd: {
     run:        { on: 'md-jobs-run-btn' },
     efield:     { on: 'md-efield-toggle' },
@@ -82,11 +92,12 @@ const CENSUS = {
 }
 
 describe('engine capability descriptor — shape + completeness', () => {
-  it('covers exactly the four selectable simulation engines, fast→accurate tab order', () => {
-    // Tab order runs fast→accurate: CanDo (FEM) · mrDNA · oxDNA · NAMD (all-atom).
+  it('covers exactly the five selectable simulation engines, fast→accurate tab order', () => {
+    // Tab order runs fast→accurate: CanDo (FEM) · SNUPI (FEM) · mrDNA · oxDNA · NAMD.
+    // SNUPI is the same in-process FEM as CanDo, run with the anisotropic SNUPI material.
     // LAMMPS is deliberately NOT a selectable engine — it's the auto-policy CPU fallback
     // and its runs appear in the unified Simulate job list with an [L] badge (Phase C).
-    expect(ENGINE_KEYS).toEqual(['cando', 'mrdna', 'oxdna', 'namd'])
+    expect(ENGINE_KEYS).toEqual(['cando', 'snupi', 'mrdna', 'oxdna', 'namd'])
   })
 
   it('every engine has an entry for EVERY card in the universe (never absent)', () => {

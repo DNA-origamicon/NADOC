@@ -118,6 +118,21 @@ def normalize_cando_job(d: dict) -> dict:
     }
 
 
+def normalize_snupi_job(d: dict) -> dict:
+    """A SNUPI FEM job dict → a unified node.  Flat roots like CanDo/mrDNA (a single
+    linear/nonlinear solve per run); SNUPI is the same in-process FEM with the SNUPI
+    material law."""
+    return {
+        **d,
+        "engine": "snupi",
+        "kind": "relax",
+        "is_child": False,
+        "production_state": None,
+        "n_units": d.get("n_nucleotides", 0),
+        "viewable": d.get("status") == "completed",
+    }
+
+
 def normalize_md_job(d: dict) -> dict:
     """A NAMD (MD) job dict → a unified node.  Like oxDNA, a relaxation is a root and a
     production/refit child (``parent_job_id``) renders indented under it.  ``engine`` is

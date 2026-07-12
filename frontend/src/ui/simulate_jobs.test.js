@@ -401,4 +401,33 @@ describe('one consolidated progress bar + relocated timeline', () => {
     expect(document.getElementById('md-jobs-timeline').style.display).toBe('')
     expect(document.getElementById('oxdna-jobs-timeline').style.display).toBe('none')
   })
+
+  it('switching to a different engine tab clears the previous engine’s stages + status', async () => {
+    // Select a NAMD run (its stage timeline + status paint into the shared master card),
+    // then switch to a DIFFERENT engine tab — the NAMD stages must not linger.
+    mount()
+    const { sim } = make([mdNode({ status: 'running', segments: [{ status: 'running', name: 'heat' }] }),
+      oxNode({ job_id: 'ox9' })])
+    await sim.refresh()
+    sim.selectJob('md1')
+    expect(document.getElementById('md-jobs-timeline').style.display).toBe('')
+    sim.setActiveEngine('cando')                       // user clicks another engine tab
+    expect(sim.getSelected().id).toBe(null)            // selection dropped
+    expect(document.getElementById('simulate-jobs-timeline').style.display).toBe('none')
+    expect(document.getElementById('md-jobs-timeline').style.display).toBe('none')
+    expect(document.getElementById('simulate-jobs-status').textContent).toMatch(/Select a run/)
+    expect(document.querySelector('#simulate-jobs-progress .bar').style.width).toBe('0%')
+  })
+
+  it('“show all job types” keeps the selection when the engine tab changes (still visible)', async () => {
+    mount()
+    const { sim } = make([mdNode(), oxNode({ job_id: 'ox9' })])
+    await sim.refresh()
+    document.getElementById('simulate-jobs-show-all-types').checked = true
+    document.getElementById('simulate-jobs-show-all-types').dispatchEvent(new Event('change'))
+    sim.selectJob('md1')
+    sim.setActiveEngine('cando')
+    expect(sim.getSelected().id).toBe('md1')           // every run stays visible → preserved
+    expect(document.getElementById('md-jobs-timeline').style.display).toBe('')
+  })
 })

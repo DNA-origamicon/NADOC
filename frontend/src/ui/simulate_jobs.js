@@ -29,6 +29,7 @@ import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { jobDisplayName as oxDisplayName, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
 import { jobDisplayName as mrdnaDisplayName } from './mrdna_jobs_panel.js'
 import { jobDisplayName as candoDisplayName } from './cando_jobs_panel.js'
+import { jobDisplayName as snupiDisplayName } from './snupi_jobs_panel.js'
 import { mdJobRowCtx } from './md_jobs_panel.js'
 import { buildCreatePayload } from './lammps_jobs_logic.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
@@ -47,6 +48,7 @@ const _ENGINE_BADGE = {
   oxdna: { text: '[ox]', color: '#4a9eff', title: 'oxDNA' },
   mrdna: { text: '[mr]', color: '#9e6bff', title: 'mrDNA' },
   cando: { text: '[CD]', color: '#39c5cf', title: 'CanDo FEM' },
+  snupi: { text: '[SN]', color: '#d29bff', title: 'SNUPI FEM' },
   namd:  { text: '[MD]', color: '#3fb950', title: 'NAMD (Molecular Dynamics)' },
 }
 
@@ -158,6 +160,7 @@ export function engineLabel(node) {
     case 'namd':   return 'NAMD'
     case 'mrdna':  return 'mrDNA'
     case 'cando':  return 'CanDo'
+    case 'snupi':  return 'SNUPI'
     case 'oxdna':  return 'oxDNA'
     default:       return node?.engine || 'run'
   }
@@ -201,6 +204,7 @@ export function initSimulateJobs({
   oxdnaPanel = null,
   mrdnaPanel = null,
   candoPanel = null,
+  snupiPanel = null,
   mdPanel = null,
   engineSelector = null,
 } = {}) {
@@ -218,6 +222,7 @@ export function initSimulateJobs({
   const _timelineEls = {
     oxdna: $('oxdna-jobs-timeline'), namd: $('md-jobs-timeline'),
     mrdna: $('mrdna-jobs-timeline'), cando: $('cando-jobs-timeline'),
+    snupi: $('snupi-jobs-timeline'),
   }
   if (!root || !listEl) return { refresh: () => {}, selectJob: () => {}, getSelected: () => null, setActiveEngine: () => {} }
 
@@ -258,7 +263,7 @@ export function initSimulateJobs({
   // The engine panel owning a node's Archive/Delete (LAMMPS has no panel — its runs are
   // oxDNA's CPU fallback and carry no per-job delete UI).
   const _panelFor = (node) =>
-    ({ oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, namd: mdPanel }[node?.engine]) || null
+    ({ oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel, namd: mdPanel }[node?.engine]) || null
 
   // ── list ─────────────────────────────────────────────────────────────────
   // Per-engine row labels: each engine's own display/child-label fns render its rows
@@ -274,6 +279,7 @@ export function initSimulateJobs({
       case 'oxdna': case 'lammps': return oxDisplayName(n)
       case 'mrdna': return mrdnaDisplayName(n)
       case 'cando': return candoDisplayName(n)
+      case 'snupi': return snupiDisplayName(n)
       case 'namd':  return md.displayName(n)
       default:      return n.job_id
     }
@@ -472,7 +478,7 @@ export function initSimulateJobs({
       oxdnaPanel?.selectLammpsJob?.(node)
       return
     }
-    const panel = { oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, namd: mdPanel }[node.engine]
+    const panel = { oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel, namd: mdPanel }[node.engine]
     if (!panel) return
     engineSelector?.select?.(node.engine)     // reveal that engine's detail host
     panel?.selectJob?.(node.job_id)
@@ -558,17 +564,27 @@ export function initSimulateJobs({
 
   // ── engine scope: filter to the active tab + "Show all job types" toggle ───
   function _engineTabName() {
-    return { oxdna: 'oxDNA', mrdna: 'mrDNA', cando: 'CanDo', namd: 'NAMD' }[_activeEngine] || _activeEngine
+    return { oxdna: 'oxDNA', mrdna: 'mrDNA', cando: 'CanDo', snupi: 'SNUPI', namd: 'NAMD' }[_activeEngine] || _activeEngine
   }
   function _updateEngineLabel() {
     if (engineLabel) engineLabel.textContent = _showAllTypes ? '· all engines' : `· ${_engineTabName()}`
   }
   /** Called by the engine selector's onSelect (main.js): the list re-scopes to the
-   *  newly-active tab. No-op refetch — the same design's nodes are re-filtered client-side. */
+   *  newly-active tab. No-op refetch — the same design's nodes are re-filtered client-side.
+   *  Switching to a different engine tab also drops a selection that belongs to the OLD
+   *  engine (a NAMD job selected, then the SNUPI tab clicked): the master card — status,
+   *  progress bar, stage timeline, detail, run/archive buttons — is shared across engines,
+   *  so clearing the selection + re-rendering it prevents the previous engine's stages from
+   *  lingering under the new tab. In "show all job types" mode every run stays visible, so
+   *  the selection (still highlighted in the list) is preserved. */
   function setActiveEngine(engine) {
     if (!engine || engine === _activeEngine) return
     _activeEngine = engine
     _updateEngineLabel()
+    if (_sel.id && !_visibleNodes().some((n) => n.engine === _sel.engine && n.job_id === _sel.id)) {
+      _sel = { engine: null, id: null }
+      _renderMaster()
+    }
     _renderList()
   }
   showAllToggle?.addEventListener('change', () => {

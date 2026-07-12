@@ -161,6 +161,7 @@ def _collect_active() -> list[dict]:
         ("lammps", "lammps_job", "lammps_runner", "LammpsJob", "reconcile_lammps_status", "cpu"),
         ("mrdna",  "mrdna_job",  "mrdna_runner",  "MrdnaJob",  "reconcile_mrdna_status",  "gpu"),
         ("cando",  "cando_job",  "cando_runner",  "CandoJob",  "reconcile_cando_status",  "cpu"),
+        ("snupi",  "snupi_job",  "snupi_runner",  "SnupiJob",  "reconcile_snupi_status",  "cpu"),
     ):
         try:
             JobCls = getattr(importlib.import_module(f"backend.core.{mod_job}"), cls_name)

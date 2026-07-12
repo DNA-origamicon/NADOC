@@ -5,7 +5,7 @@
       "design": "6hbx100_noT",
       "lattice": "HC",
       "nadoc": "6hbx100_noT.nadoc",
-      "solve_seconds": 2.3,
+      "solve_seconds": 2.5,
       "n_bp_nodes": 630,
       "rmsf_mean_nm": {
         "cando": 0.4109,
@@ -67,7 +67,7 @@
       "design": "3x4SQ",
       "lattice": "SQ",
       "nadoc": "3x4SQ.nadoc",
-      "solve_seconds": 2.3,
+      "solve_seconds": 2.2,
       "n_bp_nodes": 488,
       "rmsf_mean_nm": {
         "cando": 0.4628,

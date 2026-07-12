@@ -1541,7 +1541,7 @@ def _namd_running_fraction(job: MdJob, ws) -> float | None:
     total = len(segs)
     if not total:
         return None
-    from backend.core.namd_metrics import overall_fraction, parse_namd_log  # noqa: PLC0415
+    from backend.core.namd_metrics import last_namd_timestep_fast, overall_fraction  # noqa: PLC0415
     done = sum(1 for s in segs if s.status == "done")
     ts = None
     steps = None
@@ -1551,8 +1551,10 @@ def _namd_running_fraction(job: MdJob, ws) -> float | None:
         steps = seg.steps
         log_path = job.package_dir(ws) / f"{seg.name}.log"
         if log_path.exists():
+            # Tail-read only — this is a ~1.5 s poll; reading the whole growing log each
+            # time contended with NAMD's own writes and tripped the slow-request popup.
             try:
-                ts = parse_namd_log(log_path).timestep
+                ts = last_namd_timestep_fast(log_path)
             except Exception:
                 ts = None
     return overall_fraction(done, total, ts, steps)

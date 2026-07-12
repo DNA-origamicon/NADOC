@@ -8,6 +8,63 @@ metadata:
 
 # SNUPI frontend engine tab — fresh-session build brief (P5)
 
+## ✅ SHIPPED 2026-07-11 — first-class SNUPI engine tab (separate-tab path)
+
+Chose the **separate tab** (clone cando_* → snupi_*), not the material-selector-on-CanDo fallback —
+matches `ENGINE_KEYS` conventions + is a true engine tab. SNUPI is a thin wrapper on the SAME FEM:
+the runner calls `predict_shape(design, material=job.material, anchors=, field=)` (material default
+"snupi"; "cando" isotropic baseline is an in-tab A/B option surfaced as the Advanced "Material" selector).
+
+**Files (clones, autorefine dropped — SNUPI is predict-only):**
+- Backend: `backend/core/snupi_job.py` (SnupiJob, lean — no refine_* fields; +`material`),
+  `backend/core/snupi_runner.py` (`_run_job` threads `material`; predict-only, no autorefine),
+  `backend/api/routes_snupi.py` (`/snupi/*` — create/list/status/progress/start/stop/delete/display/rmsf/
+  deviation/cylinders/shape-source/available/error-log; reuses cando_deviation/cando_cylinders/
+  cando_shape_source display processors — they're material-agnostic). Registered: `main.py` include,
+  `routes_jobs.py` active scan tuple, `sim_jobs.normalize_snupi_job`, `routes_simulate` list merge.
+- Frontend: `snupi_jobs_panel.js` (exports `jobDisplayName`+`selectJob`+`deleteSelected`; dispatches
+  `nadoc:sim-jobs-changed`; poll via `jobs_panel_base`), `snupi_display.js` (reuses cando's pure colour
+  mappers, clones only the stateful controller pointed at `/snupi/*`), `snupi_metrics_card.js` (reuses
+  `cando_metrics.js` pure fns). Registry: `engine_capabilities` ENGINE_KEYS `['cando,snupi,mrdna,oxdna,namd]`
+  + label + `snupi` CAPABILITIES block (surface `off`), `simulate_jobs._ENGINE_BADGE` `[SN]` + all engine
+  maps, `forces_card` snupi id/variant entry. Cylinder overlay: `initCandoCylinders(scene)` reused (2nd
+  independent instance).
+- `main.js` **Δ +19 net LOC, pure wiring** (imports + factory init + panelEls/runControlEls/timeline/
+  initSimulateJobs entries). index.html: `#snupi-run-controls` + full `#snupi-jobs-panel` block.
+
+**Verify:** backend `just test-smart` escalated to **FULL** (new modules = foundational) → 4718 passed,
+111 skipped, watermark bumped; new `tests/test_snupi_job.py` (10, incl. a real linear solve completing +
+caching + the material→predict_shape wiring). Frontend `just test-frontend` **2683 pass** (+66; new
+`snupi_jobs_panel.test.js` 9 pure-fn cases + engine_capabilities parity census updated for the 5th engine).
+App-exercised via `e2e/snupi_tab.spec.js` (passing): tab renders as a sibling, panel + run controls show,
+capability strip greys Hard surface, Advanced material selector (2 opts)+n_steps+with_rmsf, Anchors +
+E-field cards toggle (field-no-anchor warns), viz radios locked until a completed job, **0 console errors**.
+Full in-app job SUBMISSION not driven via E2E (doc-scoped multi-step bundle build hits the MV-28 multi-doc
+friction that clobbers the design mid-build; same limit the CanDo/oxDNA panels are documented against) —
+covered instead by the real-solve backend job tests.
+
+### Anchors + E-fields + surfaces — the investigation deliverable
+- **Anchors: ON.** Reuses the shared `initOxdnaAnchorsSetup` (parameterised `snupi-anchors-*` ids) →
+  `predict_shape(anchors=)` (Dirichlet BC, already in fem_solver). Capability `on`.
+- **E-fields: ON.** `forces_card` gained a `snupi` FORCES_FIELD_IDS + VARIANT entry (numeric, no gizmo —
+  like CanDo); `predict_shape(field=)`. A field needs ≥1 anchor for COM drift (warn-only, non-blocking).
+  Capability `on`.
+- **Surfaces: OFF (greyed, exactly like CanDo).** RECOMMENDATION: ship surface off. The FEM has NO
+  hard-wall boundary condition — `predict_shape` solves a free/anchored corotational beam network with
+  loop/skip prestress + optional uniform field; there is no floor/penalty-plane term. Adding one would
+  take a NEW `predict_shape` arg (`surface={dir, offset_nm, stiff}`) → per-node one-sided penalty springs
+  (`k·max(0, offset − n·x)` on nodes below the plane) assembled into K each corotational load step, i.e.
+  a contact nonlinearity (active-set / penalty) the current single-material solve doesn't have — a real
+  solver change, NOT UI wiring. oxDNA/mrDNA get surfaces because their engines integrate external forces
+  (`oxdna_floor_setup.js` / ARBD repulsion plane); the FEM has no such hook. Verdict: not worth it for a
+  first-class tab — a wall BC is a fem_solver feature to scope separately (would apply to CanDo too, since
+  same solver). Greyed with the reason tooltip "The SNUPI FEM has no hard-surface boundary condition."
+
+Three-Layer Law respected: FEM output is Physical-layer / display-only; no topology writes.
+
+---
+
+
 Backend is DONE and committed (`128bd06`): the SNUPI mimic is a validated FEM material
 (`predict_shape(design, material="snupi", anchors=, field=)` in `backend/physics/fem_solver.py`;
 verdict snupi ≥ cando vs MD at $0 — see [[snupi-mimic]]). **This phase is UI/route wiring only — no

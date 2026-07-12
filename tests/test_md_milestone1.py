@@ -211,6 +211,45 @@ class TestNamdMetrics:
         assert m.temperature_k == pytest.approx(0.0)
 
 
+class TestLastNamdTimestepFast:
+    """Tail-read fast path used on the hot job-list poll. Must agree with the full
+    parser's ``timestep`` (last ENERGY frame's TS) without reading the whole log."""
+
+    def test_matches_full_parser(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import last_namd_timestep_fast, parse_namd_log
+
+        log = tmp_path / "test.log"
+        log.write_text(_SAMPLE_LOG)
+        assert last_namd_timestep_fast(log) == parse_namd_log(log).timestep == 200
+
+    def test_reads_last_of_many_frames(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import last_namd_timestep_fast
+
+        # Build a log large enough that the tail window can't contain all frames — the
+        # answer must still be the LAST frame, since tail-reading starts from the end.
+        lines = ["ETITLE:       TS   BOND\n"]
+        for step in range(0, 100_000, 500):
+            lines.append(f"ENERGY:  {step}   1200.0\n")
+        log = tmp_path / "big.log"
+        log.write_text("".join(lines))
+        assert last_namd_timestep_fast(log) == 99_500
+
+    def test_missing_and_empty(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import last_namd_timestep_fast
+
+        assert last_namd_timestep_fast(tmp_path / "nope.log") is None
+        empty = tmp_path / "empty.log"
+        empty.write_text("")
+        assert last_namd_timestep_fast(empty) is None
+
+    def test_no_energy_line_in_tail(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import last_namd_timestep_fast
+
+        log = tmp_path / "noenergy.log"
+        log.write_text("Info: startup\nInfo: reading structure\n")
+        assert last_namd_timestep_fast(log) is None
+
+
 class TestOverallFraction:
     """Master-bar progress fraction for a NAMD job (done segments + running within-fraction)."""
 

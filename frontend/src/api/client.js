@@ -2180,6 +2180,31 @@ export const getMrdnaShapeSource = (id)          => _oxdnaJSON('GET',  `/mrdna/j
 /** NAMD source bundle for the cross-engine comparison card (S5/N4): shared descriptors + trajectory RMSF (gold-override reference). */
 export const getMdShapeSource    = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/shape-source`)
 
+// ── SNUPI FEM shape-prediction jobs (routes_snupi.py) ───────────────────────
+// The SAME in-process FEM as CanDo, run with the anisotropic SNUPI material law
+// (material="snupi"): validated ≥ CanDo vs MD at $0.  Coarse = linear, Fine = nonlinear.
+// Output is Physical-layer / display-only; never mutates topology.
+export const snupiAvailable      = ()            => _oxdnaJSON('GET',  '/snupi/available')
+export const createSnupiJob      = (body)        => _oxdnaJSON('POST', '/snupi/jobs', body)
+export const listSnupiJobs       = ()            => _oxdnaJSON('GET',  '/snupi/jobs')
+export const getSnupiJob         = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}`)
+export const getSnupiProgress    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/progress`)
+export const getSnupiErrorLog    = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/error-log`)
+export const startSnupiJob       = (id)          => _oxdnaJSON('POST', `/snupi/jobs/${id}/start`)
+export const stopSnupiJob        = (id)          => _oxdnaJSON('POST', `/snupi/jobs/${id}/stop`)
+export const deleteSnupiJob      = (id)          => _oxdnaJSON('DELETE', `/snupi/jobs/${id}`)
+export const getSnupiDisplay     = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/display`)
+/** Full geometry of the job's OWN design snapshot (topology at solve time). */
+export const getSnupiSnapshotGeometry = (id)     => _oxdnaJSON('GET',  `/snupi/jobs/${id}/snapshot-geometry`)
+/** Per-bp RMSF (nm) for the flexibility map. */
+export const getSnupiRmsf        = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/rmsf`)
+/** Per-bp deviation from the intended (displayed) geometry + global RMSD. */
+export const getSnupiDeviation   = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/deviation`)
+/** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
+export const getSnupiCylinders   = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/cylinders`)
+/** SNUPI source bundle for the cross-engine comparison card: shared descriptors + RMSF. */
+export const getSnupiShapeSource = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/shape-source`)
+
 // ── CanDo-FEM autorefine (Phase-5 Item 4): greedy loop/skip tuning driven by the FEM shape oracle.
 /** Start a CanDo-FEM autorefine run on the active design → {autorefine_id, state}. */
 export const startCandoAutorefine = (body)        => _oxdnaJSON('POST', '/design/cando/autorefine/start', body)
@@ -3405,7 +3430,11 @@ export async function listSimJobs(designSourcePath = null, showAll = false) {
   if (designSourcePath) q.set('design_source_path', designSourcePath)
   if (showAll) q.set('show_all', 'true')
   const s = q.toString()
-  return _request('GET', `/simulate/jobs${s ? `?${s}` : ''}`)
+  // Background status poll (every ~1.5 s while the Simulate tab watches an active
+  // job). Suppress the generic 5 s "Working…" auto-popup: while a NAMD/oxDNA run
+  // saturates the machine this endpoint routinely exceeds the threshold, and a
+  // repeating poll would otherwise flash the modal on a loop.
+  return _request('GET', `/simulate/jobs${s ? `?${s}` : ''}`, undefined, { suppressBusy: true })
 }
 
 export async function getLibraryFileContent(path) {

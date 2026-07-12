@@ -1,0 +1,202 @@
+/**
+ * SNUPI FEM display controller.
+ *
+ * Sibling of cando_display.js — SNUPI is the SAME FEM display path (deform / flex-RMSF /
+ * deviation / CanDo-style cylinders), just pointed at the /snupi/* endpoints.  The pure
+ * response→colour mappers are byte-identical to CanDo's, so they're imported from
+ * cando_display.js (one tested copy) rather than duplicated; only the stateful controller
+ * — which reads the SNUPI job's cached FEM frame — is cloned here.
+ *
+ * All modes are Physical-layer / display-state only (topology is never touched —
+ * Three-Layer Law).  They share the one bead-position overlay + scalar-colour channel, so
+ * turning one on supersedes the others.  Each renders the job's OWN design snapshot (its
+ * topology at solve time) in place of the live model, then overlays the FEM shape on it.
+ *
+ * Factory: initSnupiDisplay({ designRenderer, api, cylinderOverlay, setDesignVisible,
+ * flexScale }) → controller (showDeform / showFlex / showDeviation / showCandoStyle /
+ * refresh / stopDeform / stopAndRestore + deformActive / deformJobId / mode / lastStats).
+ */
+
+import { toFemUpdates, flexColorMap, deviationColorMap } from './cando_display.js'
+
+export function initSnupiDisplay({
+  designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
+}) {
+  let _epoch = 0            // bumps on every request → stale responses ignored
+  let _jobId = null         // job whose overlay is applied (or null)
+  let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
+  let _stats = null         // last flex/deviation/cando summary for the panel readout
+  let _flexResp = null      // { disp, rmsf } for the flex map
+  let _devResp = null       // deviation response
+  let _candoResp = null     // cylinder response
+  let _flexCmap = 'viridis'
+  let _devCmap = 'devramp'
+  let _candoCmap = 'jet'
+
+  function _nativeVisible(v) {
+    if (setDesignVisible) setDesignVisible(v)
+    else designRenderer?.setDesignVisible?.(v)
+  }
+
+  function _clearAll() {
+    flexScale?.hide()
+    cylinderOverlay?.clear()
+    designRenderer.clearScalarColors?.()
+    designRenderer.clearExternalGeometry?.()
+    _nativeVisible(true)
+  }
+
+  function _prepareForExternal() {
+    flexScale?.hide()
+    cylinderOverlay?.clear()
+    designRenderer.clearScalarColors?.()
+    _nativeVisible(true)
+  }
+
+  function _snapshotReady(snap) {
+    return !!(snap?.ready && snap.design && Array.isArray(snap.nucleotides) && snap.nucleotides.length)
+  }
+
+  /** Render a job's OWN design snapshot (its topology at solve time), hiding the live model. */
+  function _renderExternal(snap) {
+    const axes = {}
+    for (const ax of snap.helix_axes ?? []) {
+      axes[ax.helix_id] = {
+        start: ax.start, end: ax.end,
+        samples: ax.samples ?? null, ovhgAxes: ax.ovhg_axes ?? null, segments: ax.segments ?? null,
+      }
+    }
+    designRenderer.renderExternalGeometry(snap.design, snap.nucleotides, axes)
+  }
+
+  /** Deform the model to the predicted shape (no recolour). */
+  async function showDeform(jobId) {
+    const epoch = ++_epoch
+    const [resp, snap] = await Promise.all([
+      api.getSnupiDisplay(jobId), api.getSnupiSnapshotGeometry(jobId)])
+    if (epoch !== _epoch) return { ok: false }
+    const updates = toFemUpdates(resp)
+    if (!updates.length || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
+    _prepareForExternal()
+    _renderExternal(snap)
+    designRenderer.applyFemPositions(updates)
+    designRenderer.clearScalarColors?.()
+    _jobId = jobId; _mode = 'deform'; _stats = null
+    return { ok: true, n: updates.length }
+  }
+
+  // ── Live recolour hooks driven by the shared workspace scale widget ──────────
+  function _recolorFlex(lo, hi, cmap) {
+    if (_mode !== 'flex' || !_flexResp) return
+    if (cmap) _flexCmap = cmap
+    const map = flexColorMap(_flexResp.disp, _flexResp.rmsf, lo, hi, _flexCmap)
+    if (map) designRenderer.applyScalarColors(map.colorByKey)
+  }
+  function _recolorDeviation(lo, hi, cmap) {
+    if (_mode !== 'deviation' || !_devResp) return
+    if (cmap) _devCmap = cmap
+    const map = deviationColorMap(_devResp, lo, hi, _devCmap)
+    if (map) designRenderer.applyScalarColors(map.colorByKey)
+  }
+  function _recolorCando(lo, hi, cmap) {
+    if (_mode !== 'cando' || !_candoResp) return
+    if (cmap) _candoCmap = cmap
+    cylinderOverlay?.recolor(lo, hi, _candoCmap)
+  }
+
+  /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
+  async function showFlex(jobId) {
+    const epoch = ++_epoch
+    const [disp, rmsf, snap] = await Promise.all([
+      api.getSnupiDisplay(jobId), api.getSnupiRmsf(jobId), api.getSnupiSnapshotGeometry(jobId)])
+    if (epoch !== _epoch) return { ok: false }
+    const map = flexColorMap(disp, rmsf, undefined, undefined, _flexCmap)
+    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
+    _prepareForExternal()
+    _renderExternal(snap)
+    designRenderer.applyFemPositions(map.updates)
+    designRenderer.applyScalarColors(map.colorByKey)
+    _flexResp = { disp, rmsf }
+    _jobId = jobId; _mode = 'flex'
+    _stats = { kind: 'flex', min: map.min, max: map.max }
+    flexScale?.show({ title: 'RMSF (nm)', min: map.min, max: map.max, mapType: 'flex', onRecolor: _recolorFlex })
+    return { ok: true, n: map.updates.length, min: map.min, max: map.max }
+  }
+
+  /** Deform to the predicted shape + recolour beads green→red by deviation from the
+   *  design's intended geometry (deviation map).  Reports the global RMSD. */
+  async function showDeviation(jobId) {
+    const epoch = ++_epoch
+    const [resp, snap] = await Promise.all([
+      api.getSnupiDeviation(jobId), api.getSnupiSnapshotGeometry(jobId)])
+    if (epoch !== _epoch) return { ok: false }
+    const map = deviationColorMap(resp, undefined, undefined, _devCmap)
+    if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
+    _prepareForExternal()
+    _renderExternal(snap)
+    designRenderer.applyFemPositions(map.updates)
+    designRenderer.applyScalarColors(map.colorByKey)
+    _devResp = resp
+    _jobId = jobId; _mode = 'deviation'
+    _stats = { kind: 'deviation', min: map.min, max: map.max, rmsd: map.rmsd }
+    flexScale?.show({ title: 'Deviation (nm)', min: map.min, max: map.max, mapType: 'deviation', onRecolor: _recolorDeviation })
+    return { ok: true, n: map.updates.length, min: map.min, max: map.max, rmsd: map.rmsd }
+  }
+
+  /** CanDo-style output: draw the predicted shape as jointed-cylinder tubes (native model hidden). */
+  async function showCandoStyle(jobId) {
+    const epoch = ++_epoch
+    const resp = await api.getSnupiCylinders(jobId)
+    if (epoch !== _epoch) return { ok: false }
+    if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
+      return { ok: false, reason: 'not-ready' }
+    }
+    _clearAll()   // restore the live model first, then hide it under the tubes
+    cylinderOverlay.update(resp, {
+      lo: resp.rmsf_min, hi: resp.rmsf_p95, colormap: _candoCmap,
+    })
+    _nativeVisible(false)
+    _candoResp = resp
+    _jobId = jobId; _mode = 'cando'
+    _stats = { kind: 'cando', helices: resp.n_helices || 0, joints: resp.n_joints || 0 }
+    if (resp.has_rmsf) {
+      flexScale?.show({ title: 'RMSF (nm)', min: resp.rmsf_min, max: resp.rmsf_p95, mapType: 'cando', onRecolor: _recolorCando })
+    }
+    return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
+  }
+
+  /** Re-apply the active mode for the current job (e.g. after a running job completes). */
+  async function refresh() {
+    if (_mode === null || _jobId === null) return { ok: false, reason: 'inactive' }
+    if (_mode === 'flex') return showFlex(_jobId)
+    if (_mode === 'deviation') return showDeviation(_jobId)
+    if (_mode === 'cando') return showCandoStyle(_jobId)
+    return showDeform(_jobId)
+  }
+
+  function stopDeform() {
+    if (_mode === null) return
+    _clearAll()
+    _jobId = null; _mode = null; _stats = null
+  }
+
+  /** Restore the native model — used when leaving the tab / deleting the job. */
+  function stopAndRestore() {
+    stopDeform()
+    _epoch++   // invalidate any in-flight fetch
+  }
+
+  return {
+    showDeform,
+    showFlex,
+    showDeviation,
+    showCandoStyle,
+    refresh,
+    stopDeform,
+    stopAndRestore,
+    deformActive: () => _mode !== null,
+    deformJobId:  () => _jobId,
+    mode:         () => _mode,
+    lastStats:    () => _stats,
+  }
+}

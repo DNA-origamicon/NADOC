@@ -116,6 +116,40 @@ def parse_namd_log(log_path: Path) -> NamdLogMetrics:
     return m
 
 
+def last_namd_timestep_fast(log_path: Path, tail_bytes: int = 131072) -> int | None:
+    """Last ENERGY-frame timestep by reading only the TAIL of the log — the cheap path
+    for the master progress bar, which needs just this one number.  :func:`parse_namd_log`
+    reads and parses the WHOLE log; on the hot job-list poll (~every 1.5 s while a run is
+    live) that re-reads a growing, actively-written log each time and was a cause of the
+    frontend's slow-request popup during NAMD runs.  ``TS`` is always the first ENERGY
+    column in NAMD output, so no ETITLE column map is needed.  Returns ``None`` if no
+    complete ENERGY line sits in the tail window (caller falls back to segment fractions)."""
+    try:
+        size = log_path.stat().st_size
+    except OSError:
+        return None
+    if size <= 0:
+        return None
+    try:
+        with log_path.open("rb") as fh:
+            if size > tail_bytes:
+                fh.seek(size - tail_bytes)
+                fh.readline()  # drop the partial first line after the seek
+            chunk = fh.read()
+    except OSError:
+        return None
+    last_ts: int | None = None
+    for line in chunk.split(b"\n"):
+        if line.startswith(b"ENERGY:"):
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    last_ts = int(parts[1])
+                except ValueError:
+                    continue
+    return last_ts
+
+
 def overall_fraction(
     done: int,
     total: int,

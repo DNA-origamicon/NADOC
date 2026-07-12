@@ -97,7 +97,7 @@ oxdna_relaxation · benchmark_tuning · md_engines_panel
 **oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · skip_twist_selfconsistency · regional_autorefine ·
 skip_twist_curvature_sweep · md_twist_validation
 
-**Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE: base SNUPI recreated for $0 — snupi≥cando vs MD; `material="snupi"` in fem_solver) · snupi_frontend_tab (P5 build brief for the frontend SNUPI engine tab)
+**Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE: base SNUPI recreated for $0 — snupi≥cando vs MD; `material="snupi"` in fem_solver; +electrostatics) · snupi_frontend_tab (frontend SNUPI engine tab, SHIPPED) · **snupi_gaps** (gap analysis vs full published SNUPI + phased build plan + kickoff prompt)
 
 **Multi-resolution / CG bridge:** multiresolution_roadmap · crossover_parameterization · bundle_stiffness_params ·
 pipeline_validation_log · session_handoff

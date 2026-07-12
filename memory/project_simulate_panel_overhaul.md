@@ -31,6 +31,20 @@ job id. Only the starting positions differ from a normal relax.
   surfaced in `/simulate/jobs` + app boots). NOTE: the button RELABEL click-through isn't e2e-asserted —
   the overhauled master list scopes to the browser workspace path the harness can't set; the relabel is
   the unit-tested pure `mdDraftRunLabel` wired through the same `_paintRunControl` as Relax→Resume.
+## ⚡ Switching engine tabs left the previous engine's stages/status in the master card — FIXED 2026-07-11
+User: select a NAMD relax job, then click the SNUPI tab → the NAMD stage timeline (and status
+line/progress bar/detail/action buttons) kept showing. **Root cause:** the master card at the bottom
+of the shared jobs list (`simulate_jobs.js`) reads everything from `_selectedNode()`, but selecting a
+job auto-switches the tab (`_dispatchDetail → engineSelector.select(node.engine)`), so the only way to
+mismatch is a *manual* tab click. `setActiveEngine(engine)` (fired by the selector's onSelect) only
+re-rendered the LIST, never the master card — so a cross-engine selection lingered. **Fix:**
+`setActiveEngine` now drops the selection when the selected run isn't in the newly-active tab's
+`_visibleNodes()` and calls `_renderMaster()` (one call clears status + progress + stage timeline +
+detail + run/archive buttons). In "show all job types" mode every run stays visible → selection
+preserved (still highlighted in the list). Regressions in `simulate_jobs.test.js`: "switching to a
+different engine tab clears the previous engine's stages + status" + the show-all preserve case.
+`just test-frontend` **2685 pass**. NOT visually driven in the live app with two real coexisting jobs
+(factory-drive jsdom test covers the exact `setActiveEngine` path the live selector calls).
 
 ## ⚡ Tabs reordered fast→accurate + "Use as NAMD seed" wiped oxDNA cards — FIXED 2026-07-11
 Two user asks. (1) Engine tabs reordered to **CanDo · mrDNA · oxDNA · NAMD** (fast→accurate):

@@ -27,12 +27,15 @@
 // ENGINE_KEYS[0]. LAMMPS is deliberately NOT a selectable engine: it's the auto-policy's
 // CPU fallback (GPU busy → same oxDNA2 FF on multi-core), so its runs appear in the
 // unified Simulate job list with an [L] badge instead of behind a tab (Phase C).
-export const ENGINE_KEYS = ['cando', 'mrdna', 'oxdna', 'namd']
+// SNUPI is the SAME in-process FEM as CanDo, run with the anisotropic SNUPI material law
+// (validated ≥ CanDo vs MD at $0), so it sits next to CanDo on the fast→accurate axis.
+export const ENGINE_KEYS = ['cando', 'snupi', 'mrdna', 'oxdna', 'namd']
 
 export const ENGINE_LABELS = {
   oxdna: 'oxDNA',
   mrdna: 'mrDNA',
   cando: 'CanDo',
+  snupi: 'SNUPI',
   namd: 'NAMD',
 }
 
@@ -119,6 +122,22 @@ export const ENGINE_CAPABILITIES = {
     },
     protocols: ['coarse', 'fine', 'autorefine'],
     advancedParams: ['cando-jobs-n-steps', 'cando-jobs-with-rmsf'],
+  },
+  snupi: {
+    label: ENGINE_LABELS.snupi,
+    cards: {
+      run: on('snupi-jobs-coarse-btn'),
+      efield: on('snupi-efield-toggle'),
+      anchors: on('snupi-anchors-toggle'),
+      surface: off('The SNUPI FEM has no hard-surface boundary condition (no wall BC in predict_shape).'),
+      advanced: on('snupi-jobs-adv-toggle'),
+      viz: on('snupi-display-toggle'),
+      metrics: on('snupi-metrics-toggle'),
+      joblist: on('snupi-jobs-list-toggle'),
+    },
+    protocols: ['coarse', 'fine'],
+    // Same n_steps + with_rmsf knobs as CanDo, plus the SNUPI material-variant selector.
+    advancedParams: ['snupi-jobs-n-steps', 'snupi-jobs-with-rmsf', 'snupi-jobs-material'],
   },
   namd: {
     label: ENGINE_LABELS.namd,

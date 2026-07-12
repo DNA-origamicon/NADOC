@@ -632,6 +632,39 @@ def _stage_energy_lines(stage_dir: Path) -> int:
         return 0
 
 
+def _stage_energy_lines_fast(stage_dir: Path) -> int:
+    """Cheap ESTIMATE of ``energy.dat``'s line count from the file size and a small
+    head sample — O(1) stat + a ~4 KB read, vs :func:`_stage_energy_lines` which reads
+    the WHOLE file.  oxDNA writes ``energy.dat`` as fixed-width numeric columns, so
+    ``size / mean-bytes-per-line`` is accurate to a line or two.  Used ONLY on the hot
+    poll path (:func:`job_overall_fraction`, called ~every 1.5 s while a run is live):
+    re-reading a growing energy file each poll contends with oxDNA's own writes and was
+    what tripped the frontend's slow-request popup during a run.  The exact counter stays
+    for the authoritative reconcile / end-of-stage paths."""
+    p = stage_dir / "energy.dat"
+    try:
+        size = p.stat().st_size
+    except OSError:
+        return 0
+    if size <= 0:
+        return 0
+    try:
+        with p.open("rb") as fh:
+            sample = fh.read(4096)
+    except OSError:
+        return 0
+    # Mean bytes/line from the complete lines in the head sample (drop the last,
+    # possibly-truncated, fragment). Fall back to the exact count for a file whose
+    # first line is longer than the sample (shouldn't happen for energy.dat).
+    lines = sample.split(b"\n")
+    complete = lines[:-1] if len(lines) > 1 else lines
+    counted = sum(1 for ln in complete if ln.strip())
+    consumed = sum(len(ln) + 1 for ln in complete)  # +1 for each stripped "\n"
+    if counted == 0 or consumed == 0:
+        return _stage_energy_lines(stage_dir)
+    return max(counted, round(size / (consumed / counted)))
+
+
 def _live_health_snapshot(design, stage_dir: Path, steps_per_s: float | None) -> dict:
     """Health readout for a stage *while it is still running* — computed on demand
     from the partial stage outputs (oxDNA writes ``energy.dat`` ~100×/stage and
@@ -703,7 +736,9 @@ def job_overall_fraction(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaSt
     idx = job.current_stage_idx
     stage_frac = 0.0
     if 0 <= idx < n and idx < len(specs) and job.stages[idx].status == "running":
-        lines = _stage_energy_lines(job.stage_dir(workspace_dir, job.stages[idx].name))
+        # Advisory master-bar fraction on the hot poll path — a size-based estimate
+        # avoids re-reading the whole growing energy.dat each poll (see helper docstring).
+        lines = _stage_energy_lines_fast(job.stage_dir(workspace_dir, job.stages[idx].name))
         stage_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
     return (done + stage_frac) / n
 
