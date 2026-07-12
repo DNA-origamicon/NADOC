@@ -78,6 +78,13 @@ def enumerate_cuda_devices() -> list[dict]:
 # → "namd"; the oxDNA binary → "oxDNA"; mrDNA runs via the ARBD engine → "arbd";
 # GROMACS → "gmx".  Matched against process NAMES (not full cmdlines), so a test
 # file path merely containing "oxdna" never trips it.
+#
+# CASE-INSENSITIVELY (`pgrep -i`) — this is load-bearing, do not drop the -i.  A running
+# NAMD renames its comm to "NAMD masterPe" (capitals, with a space), so the case-sensitive
+# match silently NEVER fired for NAMD: heavy tests happily ran alongside a live production
+# job and then failed on GPU/pinned-host contention (cudaHostAlloc in reallocate_host_T),
+# which reads like a code bug but is just the guard not working.  Match comm, not cmdline:
+# `pgrep -f` would match the pytest process itself (its argv contains "namd").
 _SIM_PROC_PATTERN = "namd|oxDNA|arbd|gmx"
 _RE_PGREP_L = re.compile(r"^\s*\d+\s+(\S+)")  # "1234 namd3" → name
 
@@ -141,7 +148,7 @@ def heavy_sim_running(gpu_threshold: int = 85) -> tuple[bool, str]:
     ``(False, "")`` so a probe glitch never spuriously reports a sim and masks
     test results.  ``pgrep`` exit 1 (no match) yields empty output → not running.
     """
-    pgrep_out = _capture(["pgrep", "-l", _SIM_PROC_PATTERN])
+    pgrep_out = _capture(["pgrep", "-il", _SIM_PROC_PATTERN])
     sim_procs = parse_pgrep_l(pgrep_out) if pgrep_out else []
     gpu_out = _capture(
         ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]

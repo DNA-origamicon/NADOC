@@ -57,6 +57,34 @@ def test_parse_pgrep_l_empty_is_no_processes():
     assert hardware.parse_pgrep_l("") == []
 
 
+def test_parse_pgrep_l_handles_namds_real_comm():
+    """A LIVE NAMD renames its comm to "NAMD masterPe" — capitals, and a SPACE.
+
+    Regression: the guard matched process names case-SENSITIVELY, so it never fired for a
+    running NAMD.  Heavy tests then ran alongside a live production job and failed on
+    GPU/pinned-host contention (cudaHostAlloc), which looks like a code bug but isn't.
+    """
+    assert hardware.parse_pgrep_l("327400 NAMD masterPe\n") == ["NAMD"]
+
+
+def test_sim_guard_pgrep_is_case_insensitive_and_matches_comm_not_cmdline(monkeypatch):
+    """`pgrep -i` is load-bearing (NAMD's comm is capitalised); `-f` must NOT be used
+    (the pytest process's own argv contains "namd" and would self-trip the guard)."""
+    seen: list[list[str]] = []
+
+    def fake_capture(cmd):
+        seen.append(cmd)
+        return "327400 NAMD masterPe\n" if cmd[0] == "pgrep" else ""
+
+    monkeypatch.setattr(hardware, "_capture", fake_capture)
+    running, reason = hardware.heavy_sim_running()
+
+    pgrep_cmd = next(c for c in seen if c[0] == "pgrep")
+    assert "-il" in pgrep_cmd or ("-i" in pgrep_cmd and "-l" in pgrep_cmd), pgrep_cmd
+    assert not any("f" in flag for flag in pgrep_cmd if flag.startswith("-")), pgrep_cmd
+    assert running and "NAMD" in reason
+
+
 def test_parse_gpu_utilization_reads_percentages():
     assert hardware.parse_gpu_utilization("0\n97\n") == [0, 97]
     assert hardware.parse_gpu_utilization("5 %\n") == [5]
