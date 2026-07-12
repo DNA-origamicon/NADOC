@@ -19,6 +19,7 @@ from backend.physics.fem_solver import (
     assemble_mass_matrix,
     build_fem_mesh,
     compute_correlation_matrix,
+    compute_generalized_correlation_matrix,
     compute_rmsf_nma,
     persistence_length_from_nma,
     predict_shape,
@@ -376,6 +377,21 @@ def test_g7_dccm_works_k_only_too(routed_6hb):
     K, _ = assemble_global_stiffness(mesh, material="cando")
     C = compute_correlation_matrix(K, len(mesh.nodes))
     assert np.all(np.isfinite(C)) and np.allclose(np.diag(C), 1.0)
+
+
+def test_g7_generalized_correlation_matrix_valid(routed_6hb):
+    """The MI-based generalized correlation matrix (Lange–Grubmüller) must be symmetric, unit
+    diagonal, in [0,1] (a magnitude, never negative), with a strong nearest-neighbor value."""
+    mesh = build_fem_mesh(routed_6hb)
+    n = len(mesh.nodes)
+    K, _ = assemble_global_stiffness(mesh, material="snupi", bp_registered_frame=True)
+    M = assemble_mass_matrix(mesh, routed_6hb)
+    GC = compute_generalized_correlation_matrix(K, n, M=M)
+    assert GC.shape == (n, n)
+    assert np.allclose(GC, GC.T)
+    assert np.allclose(np.diag(GC), 1.0)
+    assert GC.min() >= -1e-9 and GC.max() <= 1.0 + 1e-9        # a [0,1] magnitude
+    assert GC[0, 1] > 0.5                                       # adjacent bp strongly correlated
 
 
 # ── G8: persistence length from NMA frequencies (S12) ────────────────────────────

@@ -29,11 +29,14 @@ metadata:
   untouched. **6HB/84 (1260 nodes) converges in ~47 s** (≈ the fixed-point's 52 s), finite + physically
   bounded (span 37.6 vs 44.9 nm — the geometric foreshortening). Pin
   `test_corotational_integration_on_real_design_converges` (small 2HB, ~4 s).
-- **Scope/caveats (documented):** the local element uses the SNUPI DIAGONAL rigidities (EA,GJ,EIy,EIz); the
-  15 couplings (incl. twist–stretch) are NOT yet in the corotational local element — a refinement. Eigenstrain
-  + field are dead loads (not co-rotated). **Verdict unchanged: Phase D improves only the Fine SHAPE, not the
-  validated RMSF/DCCM metrics (separate NMA).** ALL gaps G1–G12 now closed except the couplings-in-corotational
-  refinement + G9/G10 (situational) + G7's MI-based generalized correlation.
+- **Refinements DONE (2026-07-12):** (a) the corotational local element now uses the FULL SNUPI anisotropic +
+  coupled 6×6 material (twist–stretch + EIy≠EIz, via `_snupi_element_stiffness`), not just the diagonal
+  rigidities — the couplings are live in the Fine shape solve (still converges, 6HB finite). (b) G7's **MI-based
+  generalized correlation** added: `compute_generalized_correlation_matrix` (Lange–Grubmüller closed form for
+  the Gaussian NMA, [0,1], captures off-axis coupling the Pearson DCCM misses). Pin `test_g7_generalized_*`.
+- **Remaining caveat:** eigenstrain + field are dead loads in the corotational solve (not co-rotated).
+  **Verdict unchanged: Phase D improves only the Fine SHAPE, not the validated RMSF/DCCM metrics (separate NMA).**
+  ALL gaps G1–G12 now closed; only G9/G10 remain (situational — ssDNA gaps / canonical 2.25 nm CO init config).
 
 ## ✅ Phase C DONE (2026-07-12) — G7 + G8 (new observables, no impact on the RMSF verdict)
 - **G7 BP–BP cross-correlation matrix (DCCM, S11).** `compute_correlation_matrix(K, n, M)` — the

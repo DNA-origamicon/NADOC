@@ -1223,9 +1223,9 @@ def _solve_snupi_corotational(
     """Phase D (G4/G5/G11): the FULL corotational Newton shape solve for material="snupi".
 
     Builds a corotational beam network (:mod:`snupi_corotational`) from the mesh — intra-helix beams
-    with the SNUPI diagonal rigidities (EA,GJ,EIy,EIz from the per-element motif/family D) and
-    crossovers as CO-step corotational beams (co_type D) — driven by a global Newton with a
-    consistent internal force + geometric tangent. The loop/skip eigenstrain + E-field are applied as
+    with the FULL SNUPI anisotropic + coupled 6×6 material (twist–stretch + EIy≠EIz, via
+    :func:`_snupi_element_stiffness`) and crossovers as CO-step corotational beams (co_type D) —
+    driven by a global Newton with a consistent internal force + geometric tangent. The loop/skip eigenstrain + E-field are applied as
     load-stepped dead loads; the inter-helix Debye–Hückel electrostatics enter each iteration with the
     FULL consistent tangent (G11 — a real Newton tolerates its indefinite perpendicular term). This is
     the genuine large-deflection SHAPE solver the fixed-point predictor approximates; it does NOT touch
@@ -1238,22 +1238,23 @@ def _solve_snupi_corotational(
     X0 = np.array([n.position for n in mesh.nodes], dtype=float)
 
     # ── Corotational beam list ──────────────────────────────────────────────────
-    def _K12_from_D(D, L):
-        return cr.local_beam_stiffness_12(L, float(D[0, 0]), float(D[3, 3]),
-                                          float(D[4, 4]), float(D[5, 5]))
+    # Local element = the FULL SNUPI anisotropic Timoshenko 12×12 (:func:`_snupi_element_stiffness`)
+    # from the per-element 6×6 D — so the 15 couplings (esp. the load-bearing twist–stretch g(Δx,Θx))
+    # AND the EIy≠EIz anisotropy enter the corotational shape solve, not just the diagonal rigidities.
+    # The EICR corotational filter still removes rigid-body motion (rigid ⇒ d_local=0 ⇒ f=0 for ANY K).
     elements = []
     for el in mesh.elements:
         L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
         D = _sm.motif_D(el.motif_family, el.motif) if el.motif else _sm.family_mean_D(el.motif_family)
         ref = cr.element_reference(X0[el.node_i], X0[el.node_j], np.eye(3), np.eye(3))
-        elements.append((el.node_i, el.node_j, ref, _K12_from_D(D, L)))
+        elements.append((el.node_i, el.node_j, ref, _snupi_element_stiffness(L, D)))
     _co_D = {ct: _sm.family_mean_D(ct) for ct in ("double_co", "single_co")}
     for lk in mesh.rigid_links:
         L = float(np.linalg.norm(lk.offset))
         if L < 1e-6:
             continue
         ref = cr.element_reference(X0[lk.node_i], X0[lk.node_j], np.eye(3), np.eye(3))
-        elements.append((lk.node_i, lk.node_j, ref, _K12_from_D(_co_D[lk.co_type], L)))
+        elements.append((lk.node_i, lk.node_j, ref, _snupi_element_stiffness(L, _co_D[lk.co_type])))
 
     # ── Dead loads (eigenstrain + field), applied over the load steps ───────────
     f_ext = assemble_prestress_force(mesh, design) + assemble_field_force(mesh, field)
@@ -1493,6 +1494,47 @@ def compute_correlation_matrix(K, n_nodes: int, n_modes: int = N_RMSF_MODES,
     d = np.sqrt(np.clip(np.diag(cov), 1e-30, None))
     C = cov / np.outer(d, d)
     return np.clip(C, -1.0, 1.0)
+
+
+def compute_generalized_correlation_matrix(K, n_nodes: int, n_modes: int = N_RMSF_MODES,
+                                           n_rigid: int = 6, M=None) -> np.ndarray:
+    """BP–BP GENERALIZED correlation matrix (Lange–Grubmüller, SNUPI S11) — the MI-based companion
+    to the Pearson DCCM (:func:`compute_correlation_matrix`).
+
+    Unlike the Pearson coefficient (a scalar projection), the generalized coefficient captures the
+    FULL 3-D correlation of the two bp displacement vectors via their mutual information, which for
+    the Gaussian NMA has a closed form from the 3×3 covariance blocks::
+
+        I_ij = ½ ln( det Σ_ii · det Σ_jj / det Σ_joint ),   Σ_joint = [[Σ_ii, Σ_ij],[Σ_jiᵀ, Σ_jj]]
+        GC_ij = sqrt(1 − exp(−2 I_ij / 3))                   (d = 3 dimensions)
+
+    with Σ_ab = Σ_m (φ_a φ_bᵀ)/λ_m (k_BT cancels in the ratio). Returns an ``(n_nodes,n_nodes)``
+    matrix in [0,1], unit diagonal; GC ≥ |Pearson| always (it also sees off-axis coupling). O(N²)
+    small dets — an offline observable. Zeros if the NMA fails."""
+    lam, phi = _nma_modes(K, n_modes, n_rigid, M)
+    if lam is None:
+        return np.eye(n_nodes, dtype=float)
+    tr = np.empty(3 * n_nodes, dtype=int)
+    tr[0::3] = 6 * np.arange(n_nodes)
+    tr[1::3] = 6 * np.arange(n_nodes) + 1
+    tr[2::3] = 6 * np.arange(n_nodes) + 2
+    W = (phi[tr] / np.sqrt(lam)[None, :]).reshape(n_nodes, 3, -1)     # per-node 3×M weighted modes
+    eps = 1e-12
+    Sii = np.einsum("idm,iem->ide", W, W) + eps * np.eye(3)[None]     # (N,3,3) node self-covariances
+    logdet_ii = np.log(np.clip(np.linalg.det(Sii), 1e-300, None))
+    GC = np.eye(n_nodes, dtype=float)
+    for i in range(n_nodes):
+        Wi = W[i]
+        for j in range(i + 1, n_nodes):
+            Sij = Wi @ W[j].T
+            joint = np.empty((6, 6))
+            joint[:3, :3] = Sii[i]; joint[3:, 3:] = Sii[j]
+            joint[:3, 3:] = Sij; joint[3:, :3] = Sij.T
+            dj = np.linalg.det(joint)
+            mi = 0.5 * (logdet_ii[i] + logdet_ii[j] - np.log(max(dj, 1e-300)))
+            g = np.sqrt(max(0.0, 1.0 - np.exp(-2.0 * max(mi, 0.0) / 3.0)))
+            GC[i, j] = GC[j, i] = g
+    return GC
 
 
 # Free-free Euler-Bernoulli beam fundamental bending wavenumber: cosh(βL)cos(βL)=1 → β₁L.
