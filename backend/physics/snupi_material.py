@@ -82,6 +82,58 @@ def motif_D(family: str, motif: str) -> np.ndarray:
     return _assemble_D(m["rigidity"], m["coupling"])
 
 
+_COMPLEMENT = {"A": "T", "T": "A", "G": "C", "C": "G"}
+
+
+def _revcomp(step: str) -> str:
+    """Reverse-complement of a dinucleotide step (5'→3')."""
+    return "".join(_COMPLEMENT.get(b, "N") for b in reversed(step))
+
+
+@lru_cache(maxsize=len(MOTIF_FAMILIES))
+def _step_to_key(family: str) -> Dict[str, str]:
+    """Map every dinucleotide step 'XY' (read 5'→3' on ONE strand) to the family's
+    canonical motif key.
+
+    The SNUPI tables list each bp step ONCE under a canonical representative (e.g.
+    'AA/TT' — the left token 'AA' is the step read 5'→3' on the forward strand, the
+    right token 'TT' is the SAME physical step read 5'→3' on the reverse strand =
+    ``revcomp('AA')``).  So a physical step maps to the same key whether it is read
+    from either strand, and this lookup accepts BOTH tokens → the one key.  For the
+    ``regular_bp`` family the 16 dinucleotides collapse onto its 10 keys; the crossover /
+    nicked families use their own token grammar (separators '||','|','-', or the nick
+    marker 'n') and are NOT sequence-addressable — for them this returns an EMPTY map, so
+    every step falls back to the family mean (see :func:`family_mean_D`).  Requiring EVERY
+    token to be a pure 2-letter ATGC step is what rejects them (a nicked key like 'AnA/TT'
+    has a clean-looking sibling token 'AA', which must not be resolved to a specific nick).
+    """
+    keys = list(_load()["motifs"][family])
+
+    def _clean(tok: str) -> bool:
+        return len(tok) == 2 and set(tok) <= set("ATGC")
+
+    if not all("/" in k and all(_clean(t) for t in k.split("/", 1)) for k in keys):
+        return {}
+    out: Dict[str, str] = {}
+    for key in keys:
+        left = key.split("/", 1)[0]
+        out.setdefault(left, key)
+        out.setdefault(_revcomp(left), key)
+    return out
+
+
+def motif_key_for_step(family: str, step: str) -> str | None:
+    """Canonical motif key for a dinucleotide ``step`` (e.g. 'AG') in ``family``, or None
+    if the step is unresolvable (contains an N / not a sequence-addressable family).
+
+    ``step`` is the two bases of the bp step read 5'→3' on the forward strand
+    (increasing bp index, per the NADOC FORWARD convention).  Direction-agnostic for the
+    KEY (a step and its reverse-complement share the key), but the base ORDER within the
+    step matters (AG ≠ GA), so callers must pass the true 5'→3' order.
+    """
+    return _step_to_key(family).get(step.upper())
+
+
 @lru_cache(maxsize=len(MOTIF_FAMILIES))
 def family_mean_D(family: str) -> np.ndarray:
     """Sequence-averaged 6x6 sectional constitutive matrix for a motif family.

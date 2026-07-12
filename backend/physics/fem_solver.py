@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from scipy.sparse import lil_matrix
+from scipy.sparse import coo_matrix, lil_matrix
 from scipy.sparse.linalg import eigsh, spsolve
 
 from backend.core.constants import BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
@@ -136,6 +136,7 @@ NICK_FACTOR = 0.01 # nicked backbone: bending + torsional stiffness ×0.01, axia
 L_P_SS  = 1.5      # nm — ssDNA persistence length
 RISE_SS = 0.63     # nm — ssDNA rise per base (single-stranded)
 KBT     = 4.11     # pN·nm — thermal energy at ~298 K (CanDo RMSF reference temperature)
+SNUPI_DEFAULT_MGCL2_M = 0.02  # SNUPI's 20 mM MgCl₂ buffer — default salt for the ES Debye length (G12)
 
 K_PENALTY = 1.0e6  # pN/nm — effective spring constant for "rigid" crossovers
 # E-field body load: the shared field descriptor stores force-per-NUCLEOTIDE in pN
@@ -179,6 +180,15 @@ class FEMElement:
     # SNUPI motif family for material="snupi" (see snupi_material). Intra-helix duplex steps
     # only: "regular_bp" or "nicked_bp". Ignored by the cando (isotropic ea/ei/gj) path.
     motif_family: str = "regular_bp"
+    # G1: the element's specific bp-step motif key (e.g. "AG/CT") resolved from the design
+    # sequence, for the SEQUENCE-specific 6×6 (material="snupi"). None → the assembler uses
+    # the family sequence-mean (unassigned sequence, an N base, or a non-addressable family).
+    motif: Optional[str] = None
+    # G2: bp-frame-registered element frame (cols [x̂,ŷ,ẑ], ẑ=axis) with the transverse axes tied
+    # to the base-pair orientation (local y = C1'–C1' cross-strand dir → Roll/EIy), so the
+    # anisotropic bending EIy≠EIz is oriented per-bp instead of in an arbitrary phase. Used ONLY
+    # by the RMSF NMA under material="snupi" (bp_registered_frame=True); None → fall back to el.R.
+    R_bp: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -206,6 +216,10 @@ class FEMRigidLink:
     node_i: int
     node_j: int
     offset: np.ndarray      # r_ij = pos_j − pos_i (nm)
+    # G3: SNUPI crossover class for material="snupi" — "double_co" (both backbones tether the
+    # helix pair — a reciprocal DX) or "single_co" (a lone backbone crossing, ~much softer).
+    # ds linker bridges + the cando path ignore this (they use double_co / rigid penalty).
+    co_type: str = "double_co"
 
 
 @dataclass
@@ -217,6 +231,101 @@ class FEMMesh:
 
 
 # ── Mesh builder ──────────────────────────────────────────────────────────────
+
+def _forward_base_map(design: Design) -> Dict[Tuple[str, int], str]:
+    """``{(helix_id, global_bp): base}`` giving the FORWARD-strand base (5'→3' in
+    increasing bp — the NADOC convention, models.py) at each scaffold position.
+
+    Sourced from the scaffold sequence (``build_scaffold_base_map``): where the scaffold
+    runs FORWARD the base is taken directly; where it runs REVERSE the forward-strand base
+    is its Watson-Crick complement.  The FEM duplex core is scaffold ∩ staple, so the
+    scaffold covers every duplex node.  Loop positions (2 bases at one bp) contribute their
+    first base.  Empty when the scaffold is unsequenced → G1 falls back to the family mean.
+    """
+    from backend.core.sequences import build_scaffold_base_map, complement_base
+    scaf = build_scaffold_base_map(design)
+    out: Dict[Tuple[str, int], str] = {}
+    for (h, bp, dval), bases in scaf.items():
+        if not bases:
+            continue
+        b = bases[0].upper()
+        out[(h, bp)] = b if dval == Direction.FORWARD.value else complement_base(b)
+    return out
+
+
+def _bp_cross_strand_map(design: Design) -> Dict[Tuple[str, int], np.ndarray]:
+    """``{(helix_id, global_bp): C1'–C1' cross-strand unit vector}`` (G2).
+
+    The base-pair long axis (3DNA y / Slide direction) at each bp, from NADOC's own locked
+    groove geometry (``nucleotide_positions_arrays`` FORWARD ``base_normals`` =
+    ``normalize(rev_backbone − fwd_backbone)``). It rotates with the helical twist (~34°/bp), so
+    registering the element's transverse frame to it (local y ∥ this) orients the anisotropic
+    bending EIy (Roll, about the long axis) vs EIz (Tilt) per-bp instead of in an arbitrary phase.
+    """
+    from backend.core.geometry import nucleotide_positions_arrays
+    out: Dict[Tuple[str, int], np.ndarray] = {}
+    for helix in design.helices:
+        try:
+            arr = nucleotide_positions_arrays(helix)
+        except Exception:  # noqa: BLE001 — degenerate helix (zero axis) → skip
+            continue
+        dirs = arr["directions"]
+        bps = arr["bp_indices"]
+        bn = arr["base_normals"]
+        fwd = dirs == 0
+        for gbp, v in zip(bps[fwd], bn[fwd]):
+            out[(helix.id, int(gbp))] = np.asarray(v, dtype=float)
+    return out
+
+
+def _register_bp_frame(axis_hat: np.ndarray, cross_strand: np.ndarray) -> np.ndarray:
+    """Element frame (cols [x̂,ŷ,ẑ]) with ẑ=axis and ŷ = the bp cross-strand direction projected
+    ⊥ to the axis (the Roll/EIy bending axis, SI eq 3.18); x̂ = ŷ×ẑ. Falls back to an arbitrary
+    perpendicular frame if the cross-strand vector is (near-)parallel to the axis (degenerate)."""
+    z = axis_hat / (np.linalg.norm(axis_hat) or 1.0)
+    y = cross_strand - float(cross_strand @ z) * z          # project ⊥ axis
+    ny = float(np.linalg.norm(y))
+    if ny < 1e-6:
+        return _frame_from_helix_axis(z)
+    y = y / ny
+    x = np.cross(y, z)
+    return np.column_stack([x, y, z])
+
+
+def _classify_crossovers(design: Design) -> Dict[str, str]:
+    """``{crossover.id: "double_co" | "single_co"}`` (G3, SNUPI S4).
+
+    A **double crossover** (reciprocal DX) is two backbone crossings tethering the SAME helix
+    pair at adjacent bp; a **single crossover** is a lone crossing (one backbone connects the two
+    helices — typically at a helix end / seam). Classify structurally: group crossovers by helix
+    pair, sort by bp index, and cluster runs whose consecutive indices differ by ≤1. A crossover
+    in a cluster of ≥2 → ``double_co``; a solitary crossing → ``single_co``. (Confirmed with the
+    user 2026-07-12; validated against real designs + exp42. Both family means are PD, so using
+    the family mean sidesteps the single_co per-motif indefiniteness — see snupi_material.)
+    """
+    from collections import defaultdict
+    groups: Dict[frozenset, List[Tuple[int, str]]] = defaultdict(list)
+    for xo in design.crossovers:
+        pair = frozenset((xo.half_a.helix_id, xo.half_b.helix_id))
+        groups[pair].append((xo.half_a.index, xo.id))
+    out: Dict[str, str] = {}
+    for members in groups.values():
+        members.sort()
+        run: List[str] = []
+        prev = None
+        for idx, xid in members:
+            if prev is not None and idx - prev > 1:
+                co = "double_co" if len(run) >= 2 else "single_co"
+                for r in run:
+                    out[r] = co
+                run = []
+            run.append(xid)
+            prev = idx
+        co = "double_co" if len(run) >= 2 else "single_co"
+        for r in run:
+            out[r] = co
+    return out
+
 
 def build_fem_mesh(design: Design) -> FEMMesh:
     """
@@ -245,6 +354,9 @@ def build_fem_mesh(design: Design) -> FEMMesh:
     # restrict FEM nodes to the duplex core.
     duplex_bp = _duplex_bp_per_helix(design)
     nick_bp = _nick_bps_per_helix(design)   # strand 5'/3' termini → softened beams
+    fwd_base = _forward_base_map(design)     # G1: per-bp forward base for sequence-specific D
+    co_class = _classify_crossovers(design)  # G3: crossover.id → "double_co" | "single_co"
+    bp_cross = _bp_cross_strand_map(design)  # G2: per-bp C1'–C1' cross-strand direction
 
     # ── Nodes & beam elements ──────────────────────────────────────────────────
     for helix in design.helices:
@@ -276,6 +388,25 @@ def build_fem_mesh(design: Design) -> FEMMesh:
         for k in range(len(bps) - 1):
             gap = bps[k + 1] - bps[k]
             nicked = bps[k] in nicks or bps[k + 1] in nicks
+            family = "nicked_bp" if nicked else "regular_bp"
+            # G1: resolve the element's bp-step motif from the forward-strand sequence.
+            # Step read 5'→3' = (base at the lower bp, base at the higher bp). Only the
+            # sequence-addressable duplex families (regular_bp) resolve to a key; nicked_bp
+            # (its own 'n' token grammar) and any N/unsequenced position return None → the
+            # assembler uses the family sequence-mean.
+            b0 = fwd_base.get((helix.id, bps[k]))
+            b1 = fwd_base.get((helix.id, bps[k + 1]))
+            motif = None
+            if b0 and b1 and "N" not in (b0, b1):
+                from backend.physics.snupi_material import motif_key_for_step
+                motif = motif_key_for_step(family, b0 + b1)
+            # G2: bp-registered transverse frame at the element midpoint (mean of the two nodes'
+            # cross-strand directions), for the anisotropic-bending RMSF NMA.
+            c0 = bp_cross.get((helix.id, bps[k]))
+            c1 = bp_cross.get((helix.id, bps[k + 1]))
+            R_bp = None
+            if c0 is not None and c1 is not None:
+                R_bp = _register_bp_frame(axis_hat, c0 + c1)
             mesh.elements.append(FEMElement(
                 node_i=first_node_idx + k,
                 node_j=first_node_idx + k + 1,
@@ -283,7 +414,9 @@ def build_fem_mesh(design: Design) -> FEMMesh:
                 R=R.copy(),
                 ei=EI_DS * (NICK_FACTOR if nicked else 1.0),
                 gj=GJ_DS * (NICK_FACTOR if nicked else 1.0),
-                motif_family="nicked_bp" if nicked else "regular_bp",
+                motif_family=family,
+                motif=motif,
+                R_bp=R_bp,
             ))
 
     # ── Crossover springs ─────────────────────────────────────────────────────
@@ -320,7 +453,9 @@ def build_fem_mesh(design: Design) -> FEMMesh:
 
         # Standard DX crossover — rigid zero-length link (exact constraint, no compliance).
         offset = mesh.nodes[nj].position - mesh.nodes[ni].position
-        mesh.rigid_links.append(FEMRigidLink(node_i=ni, node_j=nj, offset=offset))
+        mesh.rigid_links.append(FEMRigidLink(
+            node_i=ni, node_j=nj, offset=offset,
+            co_type=co_class.get(xo.id, "double_co")))   # G3: single vs double CO
 
     # ── Linker (overhang-connection) hops ───────────────────────────────────────
     # A LINKER strand (materialized by connect_overhangs) crosses helices at its
@@ -483,6 +618,7 @@ def _transform_to_global(K_local: np.ndarray, R: np.ndarray) -> np.ndarray:
 def assemble_global_stiffness(
     mesh: FEMMesh,
     material: str = "cando",
+    bp_registered_frame: bool = False,
 ) -> Tuple[lil_matrix, np.ndarray]:
     """
     Assemble global stiffness matrix K.
@@ -514,11 +650,16 @@ def assemble_global_stiffness(
     for el in mesh.elements:
         L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
         if material == "snupi":
-            key = ("snupi", round(L, 6), el.motif_family)
+            # G1: use the element's SEQUENCE-specific 6×6 when its bp-step motif is resolved
+            # (motif_D), else the family sequence-mean (family_mean_D). motif is None for
+            # nicked/crossover/unsequenced steps → identical to the pre-G1 mean behaviour.
+            key = ("snupi", round(L, 6), el.motif_family, el.motif)
             K_local = _kloc_cache.get(key)
             if K_local is None:
                 from backend.physics import snupi_material as _sm
-                K_local = _snupi_element_stiffness(L, _sm.family_mean_D(el.motif_family))
+                D = (_sm.motif_D(el.motif_family, el.motif) if el.motif
+                     else _sm.family_mean_D(el.motif_family))
+                K_local = _snupi_element_stiffness(L, D)
                 _kloc_cache[key] = K_local
         else:
             key = (L, el.ea, el.ei, el.gj)
@@ -526,7 +667,13 @@ def assemble_global_stiffness(
             if K_local is None:
                 K_local = _beam_stiffness_local(L, el.ea, el.ei, el.gj)
                 _kloc_cache[key] = K_local
-        K_g = _transform_to_global(K_local, el.R)
+        # G2: for the snupi RMSF NMA, orient the element by its bp-registered frame so the
+        # anisotropic bending EIy≠EIz is tied to the base-pair long axis (else the arbitrary
+        # perpendicular frame lets the anisotropy average out over a helical turn). cando is
+        # isotropic → R vs R_bp is numerically identical for it, but we only opt in for snupi.
+        R_use = (el.R_bp if (bp_registered_frame and material == "snupi"
+                             and el.R_bp is not None) else el.R)
+        K_g = _transform_to_global(K_local, R_use)
         di = 6 * el.node_i
         dj = 6 * el.node_j
         # Assemble 4 quadrants of the 12×12 global element matrix.
@@ -560,25 +707,26 @@ def assemble_global_stiffness(
 
     # ── Crossover links ─────────────────────────────────────────────────────────
     if material == "snupi":
-        # P2b: model each DX crossover as a COMPLIANT SNUPI CO-step beam (Table S4
-        # `double_co` mean D) spanning the inter-helix offset, instead of a rigid link.
-        # SNUPI's CO step is a bridging beam (its Δx≈0.95 nm half-length ⇒ ~1.9 nm axial =
-        # the inter-helix span), so the element axial (local z) points along the offset.
-        # This is the key SNUPI/CanDo difference: crossovers are finite-stiffness, not rigid.
-        # (single-vs-double-CO classification is simplified to double_co — the well-conditioned,
-        # all-PD family + the standard reciprocal junction; see project_snupi_mimic P2b note.)
+        # P2b/G3: model each crossover as a COMPLIANT SNUPI CO-step beam (Table S4/S5 mean D)
+        # spanning the inter-helix offset, instead of a rigid link. SNUPI's CO step is a bridging
+        # beam (its Δx≈0.95 nm half-length ⇒ ~1.9 nm axial = the inter-helix span), so the element
+        # axial (local z) points along the offset. This is the key SNUPI/CanDo difference:
+        # crossovers are finite-stiffness, not rigid.
+        # G3: each link carries its `co_type` (`double_co` for reciprocal DX, `single_co` for a lone
+        # crossing — ~much softer, EA ~8% / bending ~40% of double). Both family MEANS are PD, so we
+        # use the family mean (sidesteps the single_co per-motif indefiniteness). ds linker bridges
+        # default to double_co.
         from backend.physics import snupi_material as _sm
-        D_co = _sm.family_mean_D("double_co")
-        _co_cache: Dict[float, np.ndarray] = {}
+        _co_cache: Dict[Tuple[float, str], np.ndarray] = {}
         for lk in mesh.rigid_links:
             L = float(np.linalg.norm(lk.offset))
             if L < 1e-6:
                 continue
-            rL = round(L, 6)
-            K_local = _co_cache.get(rL)
+            ckey = (round(L, 6), lk.co_type)
+            K_local = _co_cache.get(ckey)
             if K_local is None:
-                K_local = _snupi_element_stiffness(L, D_co)
-                _co_cache[rL] = K_local
+                K_local = _snupi_element_stiffness(L, _sm.family_mean_D(lk.co_type))
+                _co_cache[ckey] = K_local
             R_co = _frame_from_helix_axis(lk.offset / L)     # local z = offset direction
             K_g = _transform_to_global(K_local, R_co)
             di, dj = 6 * lk.node_i, 6 * lk.node_j
@@ -613,6 +761,57 @@ def assemble_global_stiffness(
                         K[ia, idx[b]] += v
 
     return K, f
+
+
+# ── SNUPI nodal mass matrix (SI S10 — generalized eigenproblem) ─────────────────
+
+# Deoxyribonucleotide-monophosphate molar masses (g/mol) — the per-base nodal mass source
+# for SNUPI's generalized eigenproblem K·Φ = M·Φ·Λ (S10). Every bp mass ≈ 654 g/mol
+# (A:T 653.4, G:C 654.4), so the sequence-dependence of M is negligible — the substantive
+# change vs the K-only (stiffness-ordered) NMA is the mass metric itself (rotational vs
+# translational weighting), which re-selects WHICH 200 modes dominate the RMSF by FREQUENCY.
+_BASE_MOLAR_MASS = {"A": 331.2, "T": 322.2, "G": 347.2, "C": 307.2}
+_MEAN_BP_MASS_G = 0.5 * ((331.2 + 322.2) + (347.2 + 307.2))   # A:T & G:C mean ≈ 654 g/mol
+_N_AVOGADRO = 6.02214076e23
+# Rotational inertia of a bp node = m·r_g² (nm²), giving the 3 rotational DOFs a positive, SPD
+# inertia (the S10 pin — no massless DOF → no infinite-frequency mode) AND dimensionally matching
+# K's pN·nm rotational block to its pN/nm translational block. Physical value: a bp ≈ a flat disk
+# of radius R≈1 nm (the helix cross-section) → radius of gyration r_g² = R²/2 ≈ 0.5 nm² (isotropic
+# approximation over torsion/bending). This is a modeling choice; r_g² ≠ 1 is what makes M NOT ∝ I,
+# so the mass metric actually re-weights modes vs the K-only (stiffness-ordered) NMA.
+_BP_GYRATION_NM2 = 0.5
+
+
+def assemble_mass_matrix(mesh: FEMMesh, design: Design) -> lil_matrix:
+    """Diagonal nodal MASS matrix M (6N×6N, SPD) for the SNUPI generalized eigenproblem (S10).
+
+    Each duplex node (a base pair) gets a lumped mass = (forward base + reverse base) molar
+    mass / N_A (kg); the reverse base is the Watson-Crick complement of the forward base, so a
+    bp mass is ~654 g/mol regardless of sequence. The 3 translational DOFs carry that mass; the
+    3 rotational DOFs carry the rotational inertia m·r_g² (:data:`_BP_GYRATION_NM`) so M is SPD
+    (no massless rotational DOF → no infinite-frequency mode). Unsequenced positions use the
+    mean bp mass. A global scale on M only rescales all frequencies (RMSF magnitude), not the
+    mode ORDERING or the fluctuation PATTERN.
+    """
+    fwd_base = _forward_base_map(design)
+    n = len(mesh.nodes)
+    M = lil_matrix((6 * n, 6 * n), dtype=float)
+    for i, node in enumerate(mesh.nodes):
+        b = fwd_base.get((node.helix_id, node.global_bp))
+        if b and b in _BASE_MOLAR_MASS:
+            bp_g = _BASE_MOLAR_MASS[b] + _BASE_MOLAR_MASS[_COMPLEMENT_MASS[b]]
+        else:
+            bp_g = _MEAN_BP_MASS_G
+        m = bp_g * 1e-3 / _N_AVOGADRO          # g/mol → kg per bp
+        j = 6 * i
+        for d in range(3):
+            M[j + d, j + d] = m                 # translational
+        for d in range(3, 6):
+            M[j + d, j + d] = m * _BP_GYRATION_NM2       # rotational inertia (m·r_g²)
+    return M
+
+
+_COMPLEMENT_MASS = {"A": "T", "T": "A", "G": "C", "C": "G"}
 
 
 # ── Loop/skip pre-stress (eigenstrain → equivalent nodal forces) ─────────────────
@@ -821,6 +1020,7 @@ def solve_prestress_shape(
     fixed_nodes: Optional[List[int]] = None,
     field: Optional[dict] = None,
     material: str = "cando",
+    mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
 ) -> np.ndarray:
     """Geometrically-nonlinear equilibrium shape under the loop/skip eigenstrain.
 
@@ -842,6 +1042,12 @@ def solve_prestress_shape(
     pointing along the lab-frame direction (unlike the co-rotating eigenstrain). A field
     load needs an anchor to hold against (COM drift); with none, the centroid pin absorbs it.
     """
+    # SNUPI adds inter-helix Debye–Hückel electrostatics + an iterative/adaptive procedure
+    # (SI S9) — a separate solve path. CanDo keeps the incremental corotational loop below,
+    # BYTE-IDENTICAL (this branch is the only change to the cando shape solve).
+    if material == "snupi":
+        return _solve_snupi_nonlinear(design, mesh, n_steps=n_steps,
+                                      fixed_nodes=fixed_nodes, field=field, mgcl2_M=mgcl2_M)
     positions = [n.position.copy() for n in mesh.nodes]
     f_field = assemble_field_force(mesh, field)      # dead load: global, not reframed
     for _ in range(n_steps):
@@ -854,6 +1060,149 @@ def solve_prestress_shape(
             positions[i] = positions[i] + du[6 * i: 6 * i + 3]
     # restore the mesh frames to the pristine (undeformed) geometry for callers.
     _reframe_elements(mesh, [n.position for n in mesh.nodes])
+    return np.array(positions)
+
+
+# ── SNUPI inter-helix electrostatics (SI S6/S7) + S9 iterative solve ─────────────
+
+# Default Debye–Hückel conditions for the mimic: SNUPI's own T = 300 K, q = 0.7 e,
+# r_cut = 2.5 nm (SI Note S7). The MgCl₂ molarity sets the Debye screening length λ_D and is
+# a per-run job parameter (G12); the default (``SNUPI_DEFAULT_MGCL2_M``, 20 mM) lives in the
+# constants block above. Cached per molarity — the params are condition-only, not geometry-dependent.
+_SNUPI_ES_PARAMS: Dict[float, object] = {}
+
+
+def _snupi_es_params(mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M):
+    """Debye–Hückel ``ESParams`` at ``mgcl2_M`` mol/L MgCl₂ (SNUPI's q=0.7 e, T=300 K, cutoff
+    2.5 nm). Higher salt → shorter λ_D → weaker/shorter-range inter-helix repulsion."""
+    prm = _SNUPI_ES_PARAMS.get(mgcl2_M)
+    if prm is None:
+        from backend.physics.snupi_electrostatics import ESParams
+        prm = ESParams.for_conditions(mgcl2_M=mgcl2_M, q_eff=0.7, T_K=300.0)
+        _SNUPI_ES_PARAMS[mgcl2_M] = prm
+    return prm
+
+
+def _snupi_electro_sparse(mesh: "FEMMesh", positions, prm, *, scale: float = 1.0,
+                          axial_only: bool = False):
+    """Debye–Hückel repulsion as a sparse 6N stiffness (lil) + 6N force, at ``positions``.
+
+    ``positions`` is a list/array of per-node 3-vectors (the current translational config).
+    ``axial_only`` keeps only the PD axial tangent (for the free-free NMA); the shape solve
+    uses the full consistent tangent. Returns ``(K_es lil_matrix, f_es ndarray)``."""
+    from backend.physics import snupi_electrostatics as _es
+    pos = np.asarray([np.asarray(positions[i])[:3] for i in range(len(mesh.nodes))], float)
+    hid = [n.helix_id for n in mesh.nodes]
+    rows, cols, vals, f = _es.assemble_electrostatics(
+        hid, pos, prm, scale=scale, axial_only=axial_only)
+    n_dof = 6 * len(mesh.nodes)
+    if rows:
+        K_es = coo_matrix((vals, (rows, cols)), shape=(n_dof, n_dof)).tolil()
+    else:
+        K_es = lil_matrix((n_dof, n_dof))
+    return K_es, f
+
+
+def _solve_snupi_nonlinear(
+    design: Design,
+    mesh: "FEMMesh",
+    n_steps: int = 30,
+    fixed_nodes: Optional[List[int]] = None,
+    field: Optional[dict] = None,
+    mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
+) -> np.ndarray:
+    """SNUPI nonlinear equilibrium shape (SI Note S9) — the corotational beam solve PLUS
+    inter-helix Debye–Hückel electrostatics, over an ITERATIVE + ADAPTIVE load-step continuation.
+
+    Per load level α (α: 0→1 in ~``n_steps``, ramping the eigenstrain + field load and the
+    electrostatic elements):
+      • the beam response is LINEAR with the element frames frozen at that level (the corotational
+        assumption), so ONE solve of the reframed system applies the eigenstrain + field increment
+        exactly — this IS the per-level equilibrium of the beam (no inner Newton needed);
+      • the ELECTROSTATIC force f_es(x) is position-dependent → ITERATE it to self-consistency:
+        each corrector re-evaluates f_es at the moved config and applies the residual until |Δx|<tol;
+      • the geometric nonlinearity is captured by RE-FRAMING between levels (`_reframe_elements`);
+      • a level that diverges HALVES Δα and retries from the last good config (SI S9's automatic Δt
+        subdivision), growing Δα back on success.
+
+    Why not an outer 6-DOF Newton over K_beam·u? Because our element carries the eigenstrain as an
+    equivalent nodal load and tracks translations only (rotations via reframing): the internal force
+    ``K_beam(x)·(x−x₀)`` is NOT a consistent corotational internal force for finite displacement
+    (u is measured from x₀ while the reframed K assumes small strain from the CURRENT frame), so an
+    outer Newton on it has no descent direction and oscillates. Freezing the frames per level makes
+    the beam exactly linear → the single per-level solve already is that level's exact equilibrium;
+    the only within-level nonlinearity left to iterate is the electrostatics, which is what we do.
+    A textbook per-level Newton with in-iteration reframing needs a proper corotational element
+    (nodal-rotation tracking + consistent geometric tangent) — a separate, larger addition.
+
+    Electrostatics uses the PD axial-only tangent (the perpendicular Π'/r<0 term is indefinite and
+    blows the solve up); the FORCE is the exact full repulsion, so the converged equilibrium is
+    exact. CanDo is untouched — the incremental loop above still serves material='cando'.
+
+    Returns the final Nx3 node positions (nm)."""
+    prm = _snupi_es_params(mgcl2_M)
+    positions = [n.position.copy() for n in mesh.nodes]
+    f_field = assemble_field_force(mesh, field)          # dead load, global
+    n_dof = 6 * len(mesh.nodes)
+
+    # A displacement-increment scale for the convergence + divergence checks.
+    _span = float(np.linalg.norm(
+        np.ptp(np.array([n.position for n in mesh.nodes]), axis=0))) or 1.0
+    tol = 1e-4 * _span                                    # self-consistency tolerance (nm)
+    diverge = 5.0 * _span                                 # a single corrector step this big = diverged
+    max_inner = 8
+
+    def _apply_du(du: np.ndarray) -> float:
+        m = 0.0
+        for i in range(len(positions)):
+            d = du[6 * i: 6 * i + 3]
+            positions[i] = positions[i] + d
+            m = max(m, float(np.linalg.norm(d)))
+        return m
+
+    def _solve_increment(alpha: float, beam_frac: float, prev_f_es: np.ndarray):
+        """One load level: beam+field increment (×beam_frac) + electrostatic self-consistency
+        to scale=alpha. Returns (ok, f_es_now); ok=False on divergence."""
+        beam_applied = False
+        cur_prev = prev_f_es
+        for _ in range(max_inner):
+            _reframe_elements(mesh, positions)
+            K, _ = assemble_global_stiffness(mesh, material="snupi")
+            K_es, f_es = _snupi_electro_sparse(mesh, positions, prm, scale=alpha, axial_only=True)
+            f = f_es - cur_prev
+            if not beam_applied:
+                f = f + (assemble_prestress_force(mesh, design) + f_field) * beam_frac
+                beam_applied = True
+            K_tot = (K + K_es).tolil()
+            K_free, f_free, free = apply_boundary_conditions(K_tot, f, mesh, fixed_nodes)
+            du = solve_equilibrium(K_free, f_free, n_dof, free)
+            if not np.all(np.isfinite(du)) or np.abs(du).max() > diverge:
+                return False, cur_prev                    # non-finite / runaway → subdivide
+            step = _apply_du(du)
+            cur_prev = f_es
+            if step > diverge:
+                return False, cur_prev
+            if step < tol and beam_applied:
+                break
+        return True, cur_prev
+
+    alpha, dalpha = 0.0, 1.0 / max(1, n_steps)
+    prev_f_es = np.zeros(n_dof)
+    min_dalpha = 1e-3
+    guard = 0
+    while alpha < 1.0 - 1e-9 and guard < 200:
+        guard += 1
+        target = min(1.0, alpha + dalpha)
+        saved = [p.copy() for p in positions]
+        ok, f_es_now = _solve_increment(target, dalpha, prev_f_es)
+        if not ok and dalpha > min_dalpha:
+            positions[:] = [p.copy() for p in saved]      # revert + subdivide (SI S9)
+            dalpha *= 0.5
+            continue
+        alpha, prev_f_es = target, f_es_now
+        dalpha = min(1.0 / max(1, n_steps), dalpha * 1.5)  # grow back on success
+
+    _reframe_elements(mesh, [n.position for n in mesh.nodes])   # restore pristine frames
     return np.array(positions)
 
 
@@ -957,6 +1306,7 @@ def compute_rmsf_nma(
     n_nodes: int,
     n_modes: int = N_RMSF_MODES,
     n_rigid: int = 6,
+    M=None,
 ) -> np.ndarray:
     """Per-node RMSF (nm) via FREE-FREE normal-mode analysis — CanDo's method.
 
@@ -968,9 +1318,15 @@ def compute_rmsf_nma(
         <u_i²> = k_BT · Σ_m  φ²_{m,i} / λ_m        (m over elastic modes)
         RMSF_i = sqrt(<u_x²> + <u_y²> + <u_z²>)
 
-    This is the mass-independent static-fluctuation covariance kBT·K⁻¹ restricted to
-    the low-frequency modes, matching CanDo's 200-mode equipartition RMSF at 298 K.
-    Takes the FULL (un-pinned) global stiffness ``K``.
+    ``M=None`` (default, CanDo) solves the standard eigenproblem K·Φ = Λ·Φ → the 200
+    lowest-STIFFNESS modes; the covariance is the mass-independent kBT·K⁻¹ truncated to
+    those modes, matching CanDo's 200-mode equipartition RMSF at 298 K.
+
+    ``M`` given (SNUPI, S10 — :func:`assemble_mass_matrix`) solves the GENERALIZED
+    eigenproblem K·Φ = M·Φ·Λ → the 200 lowest-FREQUENCY (mass-weighted) modes, with
+    M-orthonormal Φ (Φᵀ M Φ = I). The equipartition form is unchanged (Λ = ω²), but the
+    mass metric re-selects which modes dominate — SNUPI's mass-weighted NMA. Takes the
+    FULL (un-pinned) global stiffness ``K``.
     """
     Kc = K.tocsr()
     n_dof = Kc.shape[0]
@@ -979,7 +1335,12 @@ def compute_rmsf_nma(
         return np.zeros(n_nodes, dtype=float)
 
     try:
-        vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM")
+        if M is not None:
+            # Generalized: shift-invert about ~0 → lowest generalized frequencies. eigsh
+            # returns M-orthonormal eigenvectors, so the equipartition sum below is exact.
+            vals, vecs = eigsh(Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM")
+        else:
+            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM")
     except Exception:
         return np.zeros(n_nodes, dtype=float)
 
@@ -1341,6 +1702,7 @@ def predict_shape(
     anchors: Optional[List[dict]] = None,
     field: Optional[dict] = None,
     material: str = "cando",
+    mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
 
@@ -1366,6 +1728,11 @@ def predict_shape(
     field-response descriptor is measured by ``shape_metrics.field_response_profile`` on the
     returned frame vs the same design's field-off frame (the C2 oracle). Also a job-request
     annotation, never a topology edit.
+
+    ``mgcl2_M`` (SNUPI only, default 0.02 = SNUPI's 20 mM buffer) sets the MgCl₂ molarity →
+    the Debye screening length λ_D of the inter-helix electrostatics (G12); raising it shortens
+    λ_D and weakens the repulsion, so a run can match its MD/experimental buffer. Ignored by
+    ``material="cando"`` (no electrostatics).
 
     Three-Layer Law: the returned positions are DISPLAY-ONLY (Physical layer); this never
     mutates the topological or geometric layers. Returns::
@@ -1397,7 +1764,7 @@ def predict_shape(
     if nonlinear:
         positions = solve_prestress_shape(
             design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes, field=field,
-            material=material)
+            material=material, mgcl2_M=mgcl2_M)
         u = np.zeros(6 * len(mesh.nodes), dtype=float)
         for i in range(len(mesh.nodes)):
             u[6 * i: 6 * i + 3] = positions[i] - mesh.nodes[i].position
@@ -1415,8 +1782,24 @@ def predict_shape(
         "anchor_keys": [[hid, bp] for (hid, bp) in anchor_keys],
     }
     if with_rmsf:
-        K, _ = assemble_global_stiffness(mesh, material=material)
-        rmsf = compute_rmsf_nma(K, len(mesh.nodes))
+        # G2: the RMSF NMA uses the bp-registered element frame (snupi only) — orients EIy≠EIz
+        # per bp. The shape solve above keeps its co-rotational (reframed) frames.
+        K, _ = assemble_global_stiffness(mesh, material=material, bp_registered_frame=True)
+        M = None
+        if material == "snupi":
+            # SNUPI does the NMA at the equilibrated config WITH the electrostatic elements
+            # (SI S10/S11): add the PD axial Debye–Hückel tangent, evaluated at the deformed
+            # positions (the shape solve's equilibrated config), so inter-helix breathing modes
+            # are stiffened. axial_only keeps the NMA operator PD (no spurious soft modes).
+            defpos = [mesh.nodes[i].position + u[6 * i: 6 * i + 3]
+                      for i in range(len(mesh.nodes))]
+            K_es, _ = _snupi_electro_sparse(mesh, defpos, _snupi_es_params(mgcl2_M),
+                                            scale=1.0, axial_only=True)
+            K = K.tolil() + K_es
+            # G6/S10: solve the GENERALIZED eigenproblem K·Φ = M·Φ·Λ → the 200 lowest-FREQUENCY
+            # (mass-weighted) modes. cando keeps the K-only stiffness-ordered NMA (M=None).
+            M = assemble_mass_matrix(mesh, design)
+        rmsf = compute_rmsf_nma(K, len(mesh.nodes), M=M)
         out["rmsf"] = [
             {"helix_id": node.helix_id, "bp_index": node.global_bp,
              "rmsf_nm": float(rmsf[i])}
