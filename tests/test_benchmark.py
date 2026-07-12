@@ -82,6 +82,10 @@ def test_sim_guard_pgrep_is_case_insensitive_and_matches_comm_not_cmdline(monkey
     pgrep_cmd = next(c for c in seen if c[0] == "pgrep")
     assert "-il" in pgrep_cmd or ("-i" in pgrep_cmd and "-l" in pgrep_cmd), pgrep_cmd
     assert not any("f" in flag for flag in pgrep_cmd if flag.startswith("-")), pgrep_cmd
+    # -r DRST: live run-states only.  Without it, the `[arbd] <defunct>` zombies the test
+    # suite leaves behind match forever and the guard skips every heavy test on an idle box.
+    assert "-r" in pgrep_cmd and "DRST" in pgrep_cmd, pgrep_cmd
+    assert "Z" not in pgrep_cmd[pgrep_cmd.index("-r") + 1], pgrep_cmd
     assert running and "NAMD" in reason
 
 

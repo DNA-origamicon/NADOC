@@ -148,7 +148,11 @@ def heavy_sim_running(gpu_threshold: int = 85) -> tuple[bool, str]:
     ``(False, "")`` so a probe glitch never spuriously reports a sim and masks
     test results.  ``pgrep`` exit 1 (no match) yields empty output → not running.
     """
-    pgrep_out = _capture(["pgrep", "-il", _SIM_PROC_PATTERN])
+    # -r DRST: only LIVE run-states (running/sleeping/stopped) — never Z (zombie).  The
+    # test suite leaves `[arbd] <defunct>` children behind; a plain pgrep matches those
+    # and the guard then reports a "running sim" forever, silently skipping every heavy
+    # test on an idle machine.  A defunct process is not a running simulation.
+    pgrep_out = _capture(["pgrep", "-r", "DRST", "-il", _SIM_PROC_PATTERN])
     sim_procs = parse_pgrep_l(pgrep_out) if pgrep_out else []
     gpu_out = _capture(
         ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"]

@@ -195,12 +195,58 @@ def strip_gpu_resident(conf_text: str) -> str:
     """Remove any ``GPUresident`` directive from a NAMD conf, for a CPU/multicore run.
 
     GPUresident (NAMD 3 CUDASOAintegrate) is valid only on a GPU-resident build; a
-    regular multicore build aborts at startup.  Stripping it makes a GPU-prepared
-    conf CPU-safe — HMR + 4 fs + ``rigidBonds all`` still run on CPU (just slower),
-    only the GPU-resident integrator is unavailable.  Idempotent; a no-op when the
-    directive is absent (e.g. the gentle ``_p10`` warmup confs never had it).
+    regular multicore build aborts at startup.  Idempotent; a no-op when the directive
+    is absent (e.g. the gentle ``_p10`` warmup confs never had it).
+
+    ⚠️ Stripping GPUresident ALONE is not enough to keep a fast conf stable: the 4 fs
+    timestep survives only under GPUresident's GPU constraint solver.  Without it, the
+    CPU RATTLE path blows up on the first step ("Constraint failure in RATTLE algorithm
+    for atom N") — measured on a 1.44M-atom GT_corner_v2 run.  Use
+    ``downgrade_gpu_resident()`` when you need a RUNNABLE non-GPU-resident fast conf.
     """
     return _GPU_RESIDENT_LINE_RE.sub("", conf_text)
+
+
+# Step-count / output-cadence keys that must be rescaled when the timestep changes, so
+# the segment covers the SAME simulated time and writes the same frames-per-ns.
+_STEP_SCALED_KEYS = ("run", "outputEnergies", "xstFreq", "restartfreq", "dcdFreq")
+_TIMESTEP_RE = re.compile(r"^([ \t]*timestep[ \t]+)([0-9.]+)", re.IGNORECASE | re.MULTILINE)
+
+
+def downgrade_gpu_resident(conf_text: str, factor: int = 2) -> str:
+    """Make a fast (HMR + 4 fs + GPUresident) conf runnable WITHOUT GPU-resident mode.
+
+    GPU-resident pins a large host buffer; on a host with a small pinned-memory pool
+    (WSL2 caps it at ~1 GB) ``cudaMallocHost`` fails at startup for big systems —
+    measured: fine at 756k atoms, fails at 971k, and GT_corner_v2's 1.44M-atom relax
+    package fails outright.  See [[LESSONS]] K6.
+
+    Dropping GPUresident alone leaves a 4 fs timestep the CPU RATTLE solver cannot hold
+    (verified: instant "Constraint failure in RATTLE"), so this ALSO divides the timestep
+    by *factor* and MULTIPLIES every step-count/output-frequency key by it — the segment
+    therefore covers the SAME simulated time and writes the same number of frames, just
+    in twice as many (cheaper) steps.  HMR, ``rigidBonds all``, the PSF, PME, cutoffs and
+    the barostat are untouched, so the physics is unchanged; only integrator throughput
+    moves.  Verified to run from a real p10 checkpoint at 2 fs where 4 fs blew up.
+
+    Pure + idempotent-safe: returns *conf_text* unchanged if it has no GPUresident line.
+    """
+    if not _GPU_RESIDENT_LINE_RE.search(conf_text):
+        return conf_text
+
+    text = strip_gpu_resident(conf_text)
+
+    def _scale_ts(m: re.Match[str]) -> str:
+        ts = float(m.group(2)) / factor
+        # keep an integer-looking value integer ("4" -> "2", not "2.0")
+        return f"{m.group(1)}{int(ts) if ts == int(ts) else ts}"
+
+    text = _TIMESTEP_RE.sub(_scale_ts, text, count=1)
+
+    for key in _STEP_SCALED_KEYS:
+        pat = re.compile(rf"^([ \t]*{key}[ \t]+)(\d+)\b", re.IGNORECASE | re.MULTILINE)
+        text = pat.sub(lambda m: f"{m.group(1)}{int(m.group(2)) * factor}", text)
+    return text
 
 
 # Directives a resume conf must re-specify (dropped from the original, re-emitted to

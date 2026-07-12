@@ -612,6 +612,27 @@ pre-flight probe section below and K2. The crash is not a function of the patch 
     unsupported). Explicit-CPU gives Mg but is ~4× heavier than GBIS-CPU; the full MD ladder is impractical
     at 1.7M atoms on CPU — use CPU for minimize/declash + short relax. See [[LESSONS]] K2, K4.
 
+## 🧠 GPU-resident needs PINNED host RAM — probe it, and downgrade 4 fs → 2 fs (2026-07-12)
+The fast segments (HMR + `rigidBonds all` + 4 fs + **`GPUresident on`**) pin a large host buffer.
+**A host's pinned pool is NOT its free RAM**: this WSL box pins only **1.0 GB** with 15 GB free
+(`ulimit -l` is 64 MB yet CUDA pins 1 GB → RLIMIT_MEMLOCK is not the constraint; it's the WSL2
+driver's pool, unraisable). Above ~800k atoms NAMD dies at segment **start**:
+`FATAL ERROR: CUDA error cudaMallocHost(...) in CudaUtils.C, allocate_host_T, line 88`.
+Measured ceiling: 380k/541k/756k RUN · **971k FAILS**; GT_corner_v2's 1.44M-atom relax package fails.
+
+- **INVARIANT — `GPUresident off` alone is NOT a valid fallback.** The 4 fs timestep survives only
+  under GPU-resident's GPU constraint solver; the CPU RATTLE path dies instantly with
+  "Constraint failure in RATTLE algorithm for atom N". Verified from a real checkpoint: 4 fs fails,
+  **2 fs runs**. (`strip_gpu_resident`'s docstring used to claim otherwise — it was wrong.)
+- **What ships:** `namd_runner.gpu_resident_probe()` (one cycle of the first fast conf, ~60 s, cached
+  as `.gpu_resident_probe.json`) → on failure `downgrade_gpu_resident_confs()` rewrites every fast conf
+  via `md_protocols.downgrade_gpu_resident()`: drop GPUresident, **4→2 fs, and ×2 on `run` +
+  `dcdFreq`/`restartfreq`/`xstFreq`/`outputEnergies`** so the segment covers the SAME simulated time and
+  writes the SAME frame count. HMR/rigidBonds/PSF/PME/barostat untouched → physics unchanged. Originals
+  kept as `<name>.conf.gpuresident`.
+- **Probe, don't threshold:** the ceiling is a property of the HOST, so an atom-count cutoff fitted here
+  would be wrong on the 3080 Ti box. Tests: `tests/test_md_gpu_resident.py`. See [[LESSONS]] K6.
+
 ## 🔬 GPU pre-flight probe — the Compute decision is now PRINCIPLED, not manual (2026-07-11)
 Root-caused the CUDA `buildTileLists` crash with `compute-sanitizer` and replaced the blunt manual toggle
 with an empirical pre-flight. **Read this before touching GPU/CPU routing.**

@@ -712,6 +712,116 @@ def gpu_tilelist_probe(
     return safe
 
 
+# ── GPU-resident pinned-host pre-flight ──────────────────────────────────────
+#
+# NADOC's "fast" segments bake in `GPUresident on` (+ HMR + rigidBonds all + 4 fs).
+# GPU-resident mode pins a big host buffer via cudaMallocHost, and a host's pinned pool
+# can be far smaller than its free RAM — this WSL box caps it at 1.0 GB with 15 GB free.
+# Above ~800k atoms NAMD then dies at segment START:
+#   FATAL ERROR: CUDA error cudaMallocHost(...) in CudaUtils.C, allocate_host_T, line 88
+# (measured: 756k atoms OK, 971k fails; GT_corner_v2's 1.44M-atom relax package fails).
+#
+# The ceiling is a property of the HOST, not of NAMD or the design, so it is not
+# predictable from atom count alone across machines (the other computer has a different
+# pinned pool).  Settle it empirically, exactly like the tile-list probe: run one cycle
+# of the fast conf and look at the log.  See LESSONS K6.
+
+GPU_RESIDENT_PROBE_CACHE = ".gpu_resident_probe.json"
+_PINNED_OOM_PAT = re.compile(r"cudaMallocHost|cudaHostAlloc", re.IGNORECASE)
+
+
+def _has_gpu_resident(conf: Path) -> bool:
+    try:
+        return bool(re.search(r"^[ \t]*GPUresident\b[ \t]+on", conf.read_text(),
+                              re.IGNORECASE | re.MULTILINE))
+    except OSError:
+        return False
+
+
+def gpu_resident_probe(
+    package_dir: Path,
+    conf_name: str,
+    namd_bin: str,
+    devices: str,
+    threads: Optional[int] = None,
+) -> bool:
+    """True if this package can actually run GPU-resident on THIS host.
+
+    Runs one pairlist cycle of the fast conf and reports whether NAMD got its pinned
+    host buffers.  Verdict cached in the package.  Fails OPEN (a probe that can't run
+    never blocks a job).
+    """
+    cache = package_dir / GPU_RESIDENT_PROBE_CACHE
+    if cache.exists():
+        try:
+            return bool(json.loads(cache.read_text())["gpu_resident_ok"])
+        except (ValueError, KeyError, OSError):
+            pass
+
+    conf = package_dir / f"{conf_name}.conf"
+    if not conf.exists():
+        return True
+
+    probe_conf = package_dir / "_gpures_probe.conf"
+    probe_stem = "_gpures_probe_out"
+    try:
+        text = conf.read_text()
+        m = re.search(r"^\s*stepspercycle\s+(\d+)", text, re.IGNORECASE | re.MULTILINE)
+        cycle = int(m.group(1)) if m else 20
+        text = re.sub(r"^(\s*run\s+)\d+", rf"\g<1>{cycle}", text,
+                      flags=re.IGNORECASE | re.MULTILINE)
+        text = re.sub(r"^(\s*(?:outputName|dcdFile|xstFile)\s+)\S+",
+                      lambda mm: f"{mm.group(1)}{probe_stem}", text,
+                      flags=re.IGNORECASE | re.MULTILINE)
+        probe_conf.write_text(text)
+
+        cmd = [namd_bin, f"+p{threads or default_threads()}", "+setcpuaffinity"]
+        if devices:
+            cmd += ["+devices", devices]
+        cmd.append(probe_conf.name)
+        out = subprocess.run(cmd, cwd=package_dir, capture_output=True, text=True,
+                             timeout=GPU_PROBE_TIMEOUT_S)
+        log = out.stdout + out.stderr
+        (package_dir / "_gpures_probe.log").write_text(log)
+        ok = not _PINNED_OOM_PAT.search(log)
+    except (OSError, subprocess.SubprocessError):
+        return True
+    finally:
+        for junk in (probe_conf, *package_dir.glob(f"{probe_stem}*")):
+            junk.unlink(missing_ok=True)
+
+    try:
+        cache.write_text(json.dumps({"gpu_resident_ok": ok}))
+    except OSError:
+        pass
+    return ok
+
+
+def downgrade_gpu_resident_confs(package_dir: Path, job_id: str = "") -> list[str]:
+    """Rewrite every GPU-resident conf in *package_dir* to a runnable non-GPU-resident
+    form (GPUresident dropped, timestep halved, step counts + output cadence doubled so
+    the simulated time and frame count are preserved).  The original is kept as
+    ``<name>.conf.gpuresident``.  Returns the segment names rewritten.
+    """
+    from backend.core.md_protocols import downgrade_gpu_resident  # noqa: PLC0415
+
+    rewritten: list[str] = []
+    for conf in sorted(package_dir.glob("*.conf")):
+        if conf.name.startswith("_") or not _has_gpu_resident(conf):
+            continue
+        original = conf.read_text()
+        conf.with_suffix(".conf.gpuresident").write_text(original)
+        conf.write_text(downgrade_gpu_resident(original))
+        rewritten.append(conf.stem)
+    if rewritten:
+        logger.warning(
+            "[%s] GPU-resident unavailable on this host (pinned-host limit) — rewrote "
+            "%d segment(s) to GPUresident off + half timestep (same simulated time): %s",
+            job_id, len(rewritten), ", ".join(rewritten),
+        )
+    return rewritten
+
+
 def find_gmx() -> str:
     """Return the first usable GROMACS binary path."""
     for candidate in _GMX_CANDIDATES:
@@ -971,6 +1081,22 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     "[%s] No CPU NAMD build installed — staying on the GPU build, which "
                     "will crash on this geometry.  Install the -multicore build.", job.job_id,
                 )
+
+    # GPU-resident pre-flight.  The "fast" segments (HMR + rigidBonds all + 4 fs +
+    # GPUresident) need a large PINNED host buffer; a host whose pinned pool is small
+    # (WSL2 caps it ~1 GB) makes NAMD die at segment START on cudaMallocHost, hours into
+    # a job.  Settle it up front on the first fast segment and, if it can't run, rewrite
+    # the fast confs to GPUresident off + half timestep (same simulated time — dropping
+    # GPUresident alone leaves a 4 fs step the CPU RATTLE solver cannot hold).  K6.
+    if not want_cpu and namd_is_cuda_build(namd_bin):
+        fast = next((s.name for s in segments
+                     if _has_gpu_resident(package_dir / f"{s.name}.conf")), None)
+        if fast is not None:
+            ok = await asyncio.to_thread(
+                gpu_resident_probe, package_dir, fast, namd_bin, run_devices, job.threads,
+            )
+            if not ok:
+                await asyncio.to_thread(downgrade_gpu_resident_confs, package_dir, job.job_id)
 
     # Persist the live NAMD PID to job.json on every spawn, so a server restart can
     # still signal the orphaned process (see stop_job's restart fallback).
