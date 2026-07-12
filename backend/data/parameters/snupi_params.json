@@ -1,0 +1,3157 @@
+{
+  "schema_version": "1",
+  "description": "SNUPI per-motif intrinsic beam properties transcribed from Lee, Kim et al., 'Predicting the free-form shape of structured DNA assemblies from their static single-strand sequence design', ACS Nano 2021 (SNUPI), Supporting Information Tables S1-S5. Local co-rotational CR-triad beam coordinate (Notes S3-S4), 3DNA-derived then axis-converted to the beam frame. NOT Euler-ZYZ. See memory/project_snupi_mimic.md.",
+  "source": {
+    "paper": "SNUPI (Lee, Kim et al.), ACS Nano 2021",
+    "si_tables": "S1 regular BP, S2 nicked BP, S3 CO-nick, S4 double CO, S5 single CO",
+    "notes": "S3 (BP step characterization), S4 (CO step + angle correction)"
+  },
+  "temperature_K": 300,
+  "convention": "Quasi-harmonic Boltzmann inversion k = kB*T*F^-1 of 3DNA BP-step params, converted to beam local frame (Eq 3.17-3.22 BP, Eq 4.1-4.6 CO). Geometry split into two nodal half-values (node1,node2); for CO steps the two nodes differ by the angle correction c (Eq 4.6), so both are stored. Beam DOF order q=[dx,dy,dz,theta_x,theta_y,theta_z]; axial=dx (rise), EA is stretch along dx.",
+  "units": {
+    "dx1..dz2": "nm",
+    "theta_*": "deg",
+    "EA": "pN",
+    "GAy": "pN",
+    "GAz": "pN",
+    "GJ": "pN*nm^2",
+    "EIy": "pN*nm^2",
+    "EIz": "pN*nm^2",
+    "g_T*_T*": "pN*nm^2 (rotation-rotation)",
+    "g_D*_D*": "pN (translation-translation)",
+    "g_D*_T*": "pN*nm (translation-rotation)"
+  },
+  "dof_order": [
+    "dx",
+    "dy",
+    "dz",
+    "theta_x",
+    "theta_y",
+    "theta_z"
+  ],
+  "rigidity_diag_map": {
+    "dx": "EA",
+    "dy": "GAy",
+    "dz": "GAz",
+    "theta_x": "GJ",
+    "theta_y": "EIy",
+    "theta_z": "EIz"
+  },
+  "coupling_index_map": {
+    "g_Tx_Ty": [
+      "theta_x",
+      "theta_y"
+    ],
+    "g_Tx_Tz": [
+      "theta_x",
+      "theta_z"
+    ],
+    "g_Ty_Tz": [
+      "theta_y",
+      "theta_z"
+    ],
+    "g_Dx_Dy": [
+      "dx",
+      "dy"
+    ],
+    "g_Dx_Dz": [
+      "dx",
+      "dz"
+    ],
+    "g_Dy_Dz": [
+      "dy",
+      "dz"
+    ],
+    "g_Dx_Tx": [
+      "dx",
+      "theta_x"
+    ],
+    "g_Dx_Ty": [
+      "dx",
+      "theta_y"
+    ],
+    "g_Dx_Tz": [
+      "dx",
+      "theta_z"
+    ],
+    "g_Dy_Tx": [
+      "dy",
+      "theta_x"
+    ],
+    "g_Dy_Ty": [
+      "dy",
+      "theta_y"
+    ],
+    "g_Dy_Tz": [
+      "dy",
+      "theta_z"
+    ],
+    "g_Dz_Tx": [
+      "dz",
+      "theta_x"
+    ],
+    "g_Dz_Ty": [
+      "dz",
+      "theta_y"
+    ],
+    "g_Dz_Tz": [
+      "dz",
+      "theta_z"
+    ]
+  },
+  "lattice_dependence": {
+    "note": "The 74 motif intrinsic properties are LATTICE-INDEPENDENT in SNUPI (characterized from motif MD trajectories, reused Bathe-2012 honeycomb bundles for CO motifs). Lattice type (honeycomb vs square) enters ONLY through the initial configuration, not the per-motif rigidity. Hence a single motif set, not separate HC/SQ tables. (Plan expected 'HC+SQ where they differ' \u2014 they do not differ at the motif level.)",
+    "initial_config_SI_Note_S8": {
+      "CO_distance_nm": 2.25,
+      "omega_honeycomb_deg": 34.29,
+      "omega_square_deg": 33.75,
+      "rule": "honeycomb = two turns per 21 bp; square = per SI Note S8"
+    }
+  },
+  "motifs": {
+    "regular_bp": {
+      "AA/TT": {
+        "geometry": {
+          "dx1": -0.171,
+          "dx2": 0.171,
+          "dy1": 0.0058,
+          "dy2": -0.0058,
+          "dz1": -0.0148,
+          "dz2": 0.0148,
+          "theta_x1": -18.2,
+          "theta_x2": 18.2,
+          "theta_y1": -3.0868,
+          "theta_y2": 3.0868,
+          "theta_z1": -1.812,
+          "theta_z2": 1.812
+        },
+        "rigidity": {
+          "EA": 1920.9,
+          "GAy": 872.97,
+          "GAz": 560.96,
+          "GJ": 400.39,
+          "EIy": 172.67,
+          "EIz": 301.53
+        },
+        "coupling": {
+          "g_Tx_Ty": 81.604,
+          "g_Tx_Tz": -56.952,
+          "g_Ty_Tz": -34.64,
+          "g_Dx_Dy": 373.7,
+          "g_Dx_Dz": -209.9,
+          "g_Dy_Dz": -106.75,
+          "g_Dx_Tx": -300.81,
+          "g_Dx_Ty": -90.127,
+          "g_Dx_Tz": 319.84,
+          "g_Dy_Tx": -206.97,
+          "g_Dy_Ty": -70.049,
+          "g_Dy_Tz": 43.762,
+          "g_Dz_Tx": -37.99,
+          "g_Dz_Ty": 30.331,
+          "g_Dz_Tz": -30.908
+        }
+      },
+      "AG/CT": {
+        "geometry": {
+          "dx1": -0.1697,
+          "dx2": 0.1697,
+          "dy1": 0.0131,
+          "dy2": -0.0131,
+          "dz1": -0.0147,
+          "dz2": 0.0147,
+          "theta_x1": -16.138,
+          "theta_x2": 16.138,
+          "theta_y1": -5.0915,
+          "theta_y2": 5.0915,
+          "theta_z1": -1.4955,
+          "theta_z2": 1.4955
+        },
+        "rigidity": {
+          "EA": 2087.3,
+          "GAy": 789.85,
+          "GAz": 452.93,
+          "GJ": 347.47,
+          "EIy": 171.36,
+          "EIz": 317.62
+        },
+        "coupling": {
+          "g_Tx_Ty": 48.352,
+          "g_Tx_Tz": -53.353,
+          "g_Ty_Tz": -49.66,
+          "g_Dx_Dy": 369.88,
+          "g_Dx_Dz": -190.45,
+          "g_Dy_Dz": 18.849,
+          "g_Dx_Tx": -310.71,
+          "g_Dx_Ty": -102.98,
+          "g_Dx_Tz": 344.1,
+          "g_Dy_Tx": -114.53,
+          "g_Dy_Ty": 9.0814,
+          "g_Dy_Tz": 77.921,
+          "g_Dz_Tx": -108.65,
+          "g_Dz_Ty": -15.82,
+          "g_Dz_Tz": -83.178
+        }
+      },
+      "GA/TC": {
+        "geometry": {
+          "dx1": -0.1693,
+          "dx2": 0.1693,
+          "dy1": -0.0073,
+          "dy2": 0.0073,
+          "dz1": -0.0072,
+          "dz2": 0.0072,
+          "theta_x1": -19.509,
+          "theta_x2": 19.509,
+          "theta_y1": -1.8521,
+          "theta_y2": 1.8521,
+          "theta_z1": -0.554,
+          "theta_z2": 0.554
+        },
+        "rigidity": {
+          "EA": 2361.2,
+          "GAy": 835.18,
+          "GAz": 557.64,
+          "GJ": 344.19,
+          "EIy": 170.73,
+          "EIz": 277.69
+        },
+        "coupling": {
+          "g_Tx_Ty": 95.431,
+          "g_Tx_Tz": 29.643,
+          "g_Ty_Tz": 5.9555,
+          "g_Dx_Dy": 509.49,
+          "g_Dx_Dz": -102.12,
+          "g_Dy_Dz": -74.008,
+          "g_Dx_Tx": -211.56,
+          "g_Dx_Ty": -61.43,
+          "g_Dx_Tz": 401.74,
+          "g_Dy_Tx": -167.93,
+          "g_Dy_Ty": -45.222,
+          "g_Dy_Tz": -37.966,
+          "g_Dz_Tx": -13.205,
+          "g_Dz_Ty": 9.6913,
+          "g_Dz_Tz": -84.867
+        }
+      },
+      "GG/CC": {
+        "geometry": {
+          "dx1": -0.1786,
+          "dx2": 0.1786,
+          "dy1": 0.0256,
+          "dy2": -0.0256,
+          "dz1": -0.0061,
+          "dz2": 0.0061,
+          "theta_x1": -17.131,
+          "theta_x2": 17.131,
+          "theta_y1": -3.4265,
+          "theta_y2": 3.4265,
+          "theta_z1": 0.3858,
+          "theta_z2": -0.3858
+        },
+        "rigidity": {
+          "EA": 2145.3,
+          "GAy": 560.77,
+          "GAz": 391.3,
+          "GJ": 288.76,
+          "EIy": 164.48,
+          "EIz": 309.91
+        },
+        "coupling": {
+          "g_Tx_Ty": 42.381,
+          "g_Tx_Tz": -3.0857,
+          "g_Ty_Tz": -5.6173,
+          "g_Dx_Dy": 454.48,
+          "g_Dx_Dz": -46.047,
+          "g_Dy_Dz": 7.3865,
+          "g_Dx_Tx": -310.65,
+          "g_Dx_Ty": -10.539,
+          "g_Dx_Tz": 392.32,
+          "g_Dy_Tx": -227.37,
+          "g_Dy_Ty": 14.627,
+          "g_Dy_Tz": 54.145,
+          "g_Dz_Tx": -78.298,
+          "g_Dz_Ty": -26.714,
+          "g_Dz_Tz": -135.35
+        }
+      },
+      "AC/GT": {
+        "geometry": {
+          "dx1": -0.1617,
+          "dx2": 0.1617,
+          "dy1": 0.02,
+          "dy2": -0.02,
+          "dz1": 0.0182,
+          "dz2": -0.0182,
+          "theta_x1": -16.052,
+          "theta_x2": 16.052,
+          "theta_y1": -2.5133,
+          "theta_y2": 2.5133,
+          "theta_z1": -0.2504,
+          "theta_z2": 0.2504
+        },
+        "rigidity": {
+          "EA": 1711.1,
+          "GAy": 753.74,
+          "GAz": 341.17,
+          "GJ": 255.39,
+          "EIy": 157.4,
+          "EIz": 218.91
+        },
+        "coupling": {
+          "g_Tx_Ty": 61.239,
+          "g_Tx_Tz": -30.881,
+          "g_Ty_Tz": -20.259,
+          "g_Dx_Dy": 522.58,
+          "g_Dx_Dz": -45.336,
+          "g_Dy_Dz": -16.899,
+          "g_Dx_Tx": -266.32,
+          "g_Dx_Ty": 73.026,
+          "g_Dx_Tz": -40.849,
+          "g_Dy_Tx": -127.09,
+          "g_Dy_Ty": 36.298,
+          "g_Dy_Tz": 89.541,
+          "g_Dz_Tx": -26.975,
+          "g_Dz_Ty": 1.4632,
+          "g_Dz_Tz": -34.434
+        }
+      },
+      "AT/AT": {
+        "geometry": {
+          "dx1": -0.1662,
+          "dx2": 0.1662,
+          "dy1": 0.024,
+          "dy2": -0.024,
+          "dz1": 0.0096,
+          "dz2": -0.0096,
+          "theta_x1": -15.987,
+          "theta_x2": 15.987,
+          "theta_y1": -1.6639,
+          "theta_y2": 1.6639,
+          "theta_z1": -0.0642,
+          "theta_z2": 0.0642
+        },
+        "rigidity": {
+          "EA": 1475.6,
+          "GAy": 773.42,
+          "GAz": 266.11,
+          "GJ": 332.8,
+          "EIy": 161.0,
+          "EIz": 263.28
+        },
+        "coupling": {
+          "g_Tx_Ty": 69.685,
+          "g_Tx_Tz": -1.8624,
+          "g_Ty_Tz": -6.8634,
+          "g_Dx_Dy": 281.05,
+          "g_Dx_Dz": 15.493,
+          "g_Dy_Dz": -4.8049,
+          "g_Dx_Tx": -164.19,
+          "g_Dx_Ty": 83.95,
+          "g_Dx_Tz": -4.5106,
+          "g_Dy_Tx": -118.97,
+          "g_Dy_Ty": 26.747,
+          "g_Dy_Tz": -3.1108,
+          "g_Dz_Tx": 6.5738,
+          "g_Dz_Ty": -11.116,
+          "g_Dz_Tz": -10.368
+        }
+      },
+      "GC/GC": {
+        "geometry": {
+          "dx1": -0.17,
+          "dx2": 0.17,
+          "dy1": 0.0198,
+          "dy2": -0.0198,
+          "dz1": 0.0068,
+          "dz2": -0.0068,
+          "theta_x1": -19.162,
+          "theta_x2": 19.162,
+          "theta_y1": -1.0449,
+          "theta_y2": 1.0449,
+          "theta_z1": 0.0043,
+          "theta_z2": -0.0043
+        },
+        "rigidity": {
+          "EA": 2270.2,
+          "GAy": 1340.78,
+          "GAz": 417.69,
+          "GJ": 301.64,
+          "EIy": 200.35,
+          "EIz": 230.96
+        },
+        "coupling": {
+          "g_Tx_Ty": 51.714,
+          "g_Tx_Tz": -2.5463,
+          "g_Ty_Tz": -1.6993,
+          "g_Dx_Dy": 939.72,
+          "g_Dx_Dz": -20.407,
+          "g_Dy_Dz": -8.8281,
+          "g_Dx_Tx": -363.29,
+          "g_Dx_Ty": 211.84,
+          "g_Dx_Tz": 13.072,
+          "g_Dy_Tx": -236.09,
+          "g_Dy_Ty": 91.816,
+          "g_Dy_Tz": 16.626,
+          "g_Dz_Tx": -8.6395,
+          "g_Dz_Ty": -1.3872,
+          "g_Dz_Tz": -123.64
+        }
+      },
+      "TG/CA": {
+        "geometry": {
+          "dx1": -0.176,
+          "dx2": 0.176,
+          "dy1": 0.0076,
+          "dy2": -0.0076,
+          "dz1": -0.0007,
+          "dz2": 0.0007,
+          "theta_x1": -16.135,
+          "theta_x2": 16.135,
+          "theta_y1": -6.7855,
+          "theta_y2": 6.7855,
+          "theta_z1": 0.5195,
+          "theta_z2": -0.5195
+        },
+        "rigidity": {
+          "EA": 1396.0,
+          "GAy": 478.38,
+          "GAz": 353.84,
+          "GJ": 281.44,
+          "EIy": 132.03,
+          "EIz": 189.65
+        },
+        "coupling": {
+          "g_Tx_Ty": 80.546,
+          "g_Tx_Tz": 28.645,
+          "g_Ty_Tz": 3.6606,
+          "g_Dx_Dy": 174.33,
+          "g_Dx_Dz": 48.676,
+          "g_Dy_Dz": 46.566,
+          "g_Dx_Tx": -274.23,
+          "g_Dx_Ty": -141.52,
+          "g_Dx_Tz": 55.915,
+          "g_Dy_Tx": -90.49,
+          "g_Dy_Ty": 23.679,
+          "g_Dy_Tz": 20.369,
+          "g_Dz_Tx": -36.086,
+          "g_Dz_Ty": 18.189,
+          "g_Dz_Tz": -41.356
+        }
+      },
+      "TA/TA": {
+        "geometry": {
+          "dx1": -0.1751,
+          "dx2": 0.1751,
+          "dy1": -0.0026,
+          "dy2": 0.0026,
+          "dz1": -0.0099,
+          "dz2": 0.0099,
+          "theta_x1": -17.853,
+          "theta_x2": 17.853,
+          "theta_y1": -4.4648,
+          "theta_y2": 4.4648,
+          "theta_z1": 0.9575,
+          "theta_z2": -0.9575
+        },
+        "rigidity": {
+          "EA": 1483.4,
+          "GAy": 380.62,
+          "GAz": 333.37,
+          "GJ": 309.72,
+          "EIy": 123.8,
+          "EIz": 174.92
+        },
+        "coupling": {
+          "g_Tx_Ty": 106.7,
+          "g_Tx_Tz": 5.2257,
+          "g_Ty_Tz": -5.5714,
+          "g_Dx_Dy": 262.03,
+          "g_Dx_Dz": 5.5529,
+          "g_Dy_Dz": 0.78589,
+          "g_Dx_Tx": -237.07,
+          "g_Dx_Ty": -128.83,
+          "g_Dx_Tz": 15.791,
+          "g_Dy_Tx": -124.01,
+          "g_Dy_Ty": 13.858,
+          "g_Dy_Tz": -7.5702,
+          "g_Dz_Tx": -8.6162,
+          "g_Dz_Ty": -16.485,
+          "g_Dz_Tz": -21.113
+        }
+      },
+      "CG/CG": {
+        "geometry": {
+          "dx1": -0.1763,
+          "dx2": 0.1763,
+          "dy1": -0.009,
+          "dy2": 0.009,
+          "dz1": -0.0157,
+          "dz2": 0.0157,
+          "theta_x1": -16.392,
+          "theta_x2": 16.392,
+          "theta_y1": -7.2335,
+          "theta_y2": 7.2335,
+          "theta_z1": -0.2401,
+          "theta_z2": 0.2401
+        },
+        "rigidity": {
+          "EA": 1401.2,
+          "GAy": 595.34,
+          "GAz": 502.78,
+          "GJ": 276.46,
+          "EIy": 129.45,
+          "EIz": 173.43
+        },
+        "coupling": {
+          "g_Tx_Ty": 72.684,
+          "g_Tx_Tz": -0.51747,
+          "g_Ty_Tz": -2.3106,
+          "g_Dx_Dy": 100.67,
+          "g_Dx_Dz": -14.868,
+          "g_Dy_Dz": 21.696,
+          "g_Dx_Tx": -335.03,
+          "g_Dx_Ty": -180.78,
+          "g_Dx_Tz": 0.56556,
+          "g_Dy_Tx": -73.78,
+          "g_Dy_Ty": 71.972,
+          "g_Dy_Tz": -24.409,
+          "g_Dz_Tx": -25.405,
+          "g_Dz_Ty": -11.896,
+          "g_Dz_Tz": -138.13
+        }
+      }
+    },
+    "nicked_bp": {
+      "AA/TnT": {
+        "geometry": {
+          "dx1": -0.1687,
+          "dx2": 0.1687,
+          "dy1": 0.0029,
+          "dy2": -0.0029,
+          "dz1": -0.0162,
+          "dz2": 0.0162,
+          "theta_x1": -17.753,
+          "theta_x2": 17.753,
+          "theta_y1": -2.6582,
+          "theta_y2": 2.6582,
+          "theta_z1": -1.503,
+          "theta_z2": 1.503
+        },
+        "rigidity": {
+          "EA": 2090.2,
+          "GAy": 675.11,
+          "GAz": 484.78,
+          "GJ": 286.61,
+          "EIy": 151.36,
+          "EIz": 290.14
+        },
+        "coupling": {
+          "g_Tx_Ty": 49.329,
+          "g_Tx_Tz": -67.62,
+          "g_Ty_Tz": -31.258,
+          "g_Dx_Dy": 341.34,
+          "g_Dx_Dz": -186.54,
+          "g_Dy_Dz": -66.564,
+          "g_Dx_Tx": -274.44,
+          "g_Dx_Ty": -59.668,
+          "g_Dx_Tz": 310.03,
+          "g_Dy_Tx": -143.15,
+          "g_Dy_Ty": -7.0325,
+          "g_Dy_Tz": 66.301,
+          "g_Dz_Tx": 2.9982,
+          "g_Dz_Ty": 32.847,
+          "g_Dz_Tz": -27.827
+        }
+      },
+      "AnA/TT": {
+        "geometry": {
+          "dx1": -0.1742,
+          "dx2": 0.1742,
+          "dy1": 0.0205,
+          "dy2": -0.0205,
+          "dz1": -0.0025,
+          "dz2": 0.0025,
+          "theta_x1": -16.977,
+          "theta_x2": 16.977,
+          "theta_y1": -2.5391,
+          "theta_y2": 2.5391,
+          "theta_z1": -1.8085,
+          "theta_z2": 1.8085
+        },
+        "rigidity": {
+          "EA": 1554.1,
+          "GAy": 375.11,
+          "GAz": 417.72,
+          "GJ": 70.31,
+          "EIy": 125.85,
+          "EIz": 266.41
+        },
+        "coupling": {
+          "g_Tx_Ty": 8.6665,
+          "g_Tx_Tz": -13.953,
+          "g_Ty_Tz": -22.053,
+          "g_Dx_Dy": 130.68,
+          "g_Dx_Dz": -74.07,
+          "g_Dy_Dz": -113.27,
+          "g_Dx_Tx": -93.278,
+          "g_Dx_Ty": -43.745,
+          "g_Dx_Tz": 237.65,
+          "g_Dy_Tx": -51.191,
+          "g_Dy_Ty": -0.75123,
+          "g_Dy_Tz": -38.304,
+          "g_Dz_Tx": -80.932,
+          "g_Dz_Ty": 33.307,
+          "g_Dz_Tz": -27.255
+        }
+      },
+      "AG/CnT": {
+        "geometry": {
+          "dx1": -0.1663,
+          "dx2": 0.1663,
+          "dy1": -0.0022,
+          "dy2": 0.0022,
+          "dz1": -0.0097,
+          "dz2": 0.0097,
+          "theta_x1": -18.274,
+          "theta_x2": 18.274,
+          "theta_y1": -3.0229,
+          "theta_y2": 3.0229,
+          "theta_z1": -0.784,
+          "theta_z2": 0.784
+        },
+        "rigidity": {
+          "EA": 1869.1,
+          "GAy": 707.18,
+          "GAz": 445.44,
+          "GJ": 233.34,
+          "EIy": 171.05,
+          "EIz": 201.45
+        },
+        "coupling": {
+          "g_Tx_Ty": 80.219,
+          "g_Tx_Tz": 11.181,
+          "g_Ty_Tz": -6.6714,
+          "g_Dx_Dy": 350.56,
+          "g_Dx_Dz": -134.43,
+          "g_Dy_Dz": -94.541,
+          "g_Dx_Tx": -181.1,
+          "g_Dx_Ty": -107.53,
+          "g_Dx_Tz": 147.1,
+          "g_Dy_Tx": -147.34,
+          "g_Dy_Ty": -4.3438,
+          "g_Dy_Tz": -23.518,
+          "g_Dz_Tx": -3.5418,
+          "g_Dz_Ty": 21.854,
+          "g_Dz_Tz": -71.083
+        }
+      },
+      "AnG/CT": {
+        "geometry": {
+          "dx1": -0.1728,
+          "dx2": 0.1728,
+          "dy1": 0.0306,
+          "dy2": -0.0306,
+          "dz1": 0.0123,
+          "dz2": -0.0123,
+          "theta_x1": -15.644,
+          "theta_x2": 15.644,
+          "theta_y1": -3.3497,
+          "theta_y2": 3.3497,
+          "theta_z1": -1.437,
+          "theta_z2": 1.437
+        },
+        "rigidity": {
+          "EA": 1715.6,
+          "GAy": 604.48,
+          "GAz": 358.6,
+          "GJ": 181.74,
+          "EIy": 151.99,
+          "EIz": 298.2
+        },
+        "coupling": {
+          "g_Tx_Ty": 42.157,
+          "g_Tx_Tz": -32.729,
+          "g_Ty_Tz": -39.988,
+          "g_Dx_Dy": 226.87,
+          "g_Dx_Dz": -116.62,
+          "g_Dy_Dz": -81.753,
+          "g_Dx_Tx": -182.0,
+          "g_Dx_Ty": -125.54,
+          "g_Dx_Tz": 286.55,
+          "g_Dy_Tx": -126.19,
+          "g_Dy_Ty": -5.5168,
+          "g_Dy_Tz": -12.906,
+          "g_Dz_Tx": -119.35,
+          "g_Dz_Ty": -1.332,
+          "g_Dz_Tz": -59.023
+        }
+      },
+      "GA/TnC": {
+        "geometry": {
+          "dx1": -0.1681,
+          "dx2": 0.1681,
+          "dy1": -0.0135,
+          "dy2": 0.0135,
+          "dz1": -0.0293,
+          "dz2": 0.0293,
+          "theta_x1": -18.864,
+          "theta_x2": 18.864,
+          "theta_y1": -0.6141,
+          "theta_y2": 0.6141,
+          "theta_z1": -0.055,
+          "theta_z2": 0.055
+        },
+        "rigidity": {
+          "EA": 2687.1,
+          "GAy": 637.1,
+          "GAz": 447.93,
+          "GJ": 181.0,
+          "EIy": 179.17,
+          "EIz": 325.46
+        },
+        "coupling": {
+          "g_Tx_Ty": 46.989,
+          "g_Tx_Tz": -22.901,
+          "g_Ty_Tz": 27.461,
+          "g_Dx_Dy": 417.24,
+          "g_Dx_Dz": -204.61,
+          "g_Dy_Dz": -54.012,
+          "g_Dx_Tx": -257.2,
+          "g_Dx_Ty": -5.8098,
+          "g_Dx_Tz": 452.28,
+          "g_Dy_Tx": -124.4,
+          "g_Dy_Ty": 28.291,
+          "g_Dy_Tz": -12.567,
+          "g_Dz_Tx": 92.723,
+          "g_Dz_Ty": 7.4277,
+          "g_Dz_Tz": -120.75
+        }
+      },
+      "GnA/TC": {
+        "geometry": {
+          "dx1": -0.1774,
+          "dx2": 0.1774,
+          "dy1": -0.0025,
+          "dy2": 0.0025,
+          "dz1": -0.0089,
+          "dz2": 0.0089,
+          "theta_x1": -21.025,
+          "theta_x2": 21.025,
+          "theta_y1": -1.0901,
+          "theta_y2": 1.0901,
+          "theta_z1": -0.503,
+          "theta_z2": 0.503
+        },
+        "rigidity": {
+          "EA": 2019.5,
+          "GAy": 559.23,
+          "GAz": 387.43,
+          "GJ": 155.48,
+          "EIy": 152.94,
+          "EIz": 264.98
+        },
+        "coupling": {
+          "g_Tx_Ty": 37.697,
+          "g_Tx_Tz": 13.492,
+          "g_Ty_Tz": -0.7365,
+          "g_Dx_Dy": 347.2,
+          "g_Dx_Dz": -95.376,
+          "g_Dy_Dz": -55.182,
+          "g_Dx_Tx": -171.31,
+          "g_Dx_Ty": -3.3071,
+          "g_Dx_Tz": 328.75,
+          "g_Dy_Tx": -139.39,
+          "g_Dy_Ty": 39.885,
+          "g_Dy_Tz": -79.288,
+          "g_Dz_Tx": -88.154,
+          "g_Dz_Ty": -10.572,
+          "g_Dz_Tz": -89.548
+        }
+      },
+      "GG/CnC": {
+        "geometry": {
+          "dx1": -0.1743,
+          "dx2": 0.1743,
+          "dy1": 0.0328,
+          "dy2": -0.0328,
+          "dz1": -0.0342,
+          "dz2": 0.0342,
+          "theta_x1": -15.344,
+          "theta_x2": 15.344,
+          "theta_y1": -2.8118,
+          "theta_y2": 2.8118,
+          "theta_z1": -0.3294,
+          "theta_z2": 0.3294
+        },
+        "rigidity": {
+          "EA": 2119.1,
+          "GAy": 312.47,
+          "GAz": 298.3,
+          "GJ": 93.54,
+          "EIy": 177.56,
+          "EIz": 305.26
+        },
+        "coupling": {
+          "g_Tx_Ty": 20.345,
+          "g_Tx_Tz": -30.511,
+          "g_Ty_Tz": 21.694,
+          "g_Dx_Dy": 274.96,
+          "g_Dx_Dz": -6.6755,
+          "g_Dy_Dz": -40.452,
+          "g_Dx_Tx": -176.98,
+          "g_Dx_Ty": -59.601,
+          "g_Dx_Tz": 353.33,
+          "g_Dy_Tx": -84.933,
+          "g_Dy_Ty": 39.97,
+          "g_Dy_Tz": 97.199,
+          "g_Dz_Tx": 56.453,
+          "g_Dz_Ty": -25.319,
+          "g_Dz_Tz": -122.11
+        }
+      },
+      "GnG/CC": {
+        "geometry": {
+          "dx1": -0.1806,
+          "dx2": 0.1806,
+          "dy1": 0.0585,
+          "dy2": -0.0585,
+          "dz1": 0.027,
+          "dz2": -0.027,
+          "theta_x1": -15.593,
+          "theta_x2": 15.593,
+          "theta_y1": -3.821,
+          "theta_y2": 3.821,
+          "theta_z1": 0.6405,
+          "theta_z2": -0.6405
+        },
+        "rigidity": {
+          "EA": 1779.8,
+          "GAy": 516.7,
+          "GAz": 383.0,
+          "GJ": 159.88,
+          "EIy": 152.0,
+          "EIz": 274.88
+        },
+        "coupling": {
+          "g_Tx_Ty": 24.92,
+          "g_Tx_Tz": 42.536,
+          "g_Ty_Tz": -1.4057,
+          "g_Dx_Dy": 79.198,
+          "g_Dx_Dz": -222.78,
+          "g_Dy_Dz": 103.97,
+          "g_Dx_Tx": -141.33,
+          "g_Dx_Ty": -41.632,
+          "g_Dx_Tz": 339.5,
+          "g_Dy_Tx": -142.39,
+          "g_Dy_Ty": 54.208,
+          "g_Dy_Tz": -93.379,
+          "g_Dz_Tx": -138.65,
+          "g_Dz_Ty": 17.224,
+          "g_Dz_Tz": -147.25
+        }
+      },
+      "AC/GnT": {
+        "geometry": {
+          "dx1": -0.1685,
+          "dx2": 0.1685,
+          "dy1": 0.0185,
+          "dy2": -0.0185,
+          "dz1": 0.0124,
+          "dz2": -0.0124,
+          "theta_x1": -18.087,
+          "theta_x2": 18.087,
+          "theta_y1": -1.1073,
+          "theta_y2": 1.1073,
+          "theta_z1": -0.259,
+          "theta_z2": 0.259
+        },
+        "rigidity": {
+          "EA": 1604.9,
+          "GAy": 386.34,
+          "GAz": 245.79,
+          "GJ": 109.01,
+          "EIy": 155.95,
+          "EIz": 218.39
+        },
+        "coupling": {
+          "g_Tx_Ty": 24.749,
+          "g_Tx_Tz": -23.987,
+          "g_Ty_Tz": -9.0882,
+          "g_Dx_Dy": 353.19,
+          "g_Dx_Dz": -71.925,
+          "g_Dy_Dz": -3.9904,
+          "g_Dx_Tx": -155.16,
+          "g_Dx_Ty": 78.515,
+          "g_Dx_Tz": -48.438,
+          "g_Dy_Tx": -63.982,
+          "g_Dy_Ty": 82.572,
+          "g_Dy_Tz": 73.252,
+          "g_Dz_Tx": 53.179,
+          "g_Dz_Ty": 15.202,
+          "g_Dz_Tz": -60.261
+        }
+      },
+      "AnC/GT": {
+        "geometry": {
+          "dx1": -0.163,
+          "dx2": 0.163,
+          "dy1": 0.0314,
+          "dy2": -0.0314,
+          "dz1": 0.0444,
+          "dz2": -0.0444,
+          "theta_x1": -13.11,
+          "theta_x2": 13.11,
+          "theta_y1": -2.0118,
+          "theta_y2": 2.0118,
+          "theta_z1": -0.5255,
+          "theta_z2": 0.5255
+        },
+        "rigidity": {
+          "EA": 1858.7,
+          "GAy": 525.5,
+          "GAz": 278.56,
+          "GJ": 107.29,
+          "EIy": 152.75,
+          "EIz": 244.64
+        },
+        "coupling": {
+          "g_Tx_Ty": 40.286,
+          "g_Tx_Tz": -4.8941,
+          "g_Ty_Tz": -43.41,
+          "g_Dx_Dy": 444.22,
+          "g_Dx_Dz": -88.655,
+          "g_Dy_Dz": -75.205,
+          "g_Dx_Tx": -170.8,
+          "g_Dx_Ty": 0.11174,
+          "g_Dx_Tz": -5.8161,
+          "g_Dy_Tx": -56.471,
+          "g_Dy_Ty": 28.136,
+          "g_Dy_Tz": 6.7088,
+          "g_Dz_Tx": -74.829,
+          "g_Dz_Ty": 14.705,
+          "g_Dz_Tz": -31.397
+        }
+      },
+      "AT/AnT": {
+        "geometry": {
+          "dx1": -0.1664,
+          "dx2": 0.1664,
+          "dy1": 0.0265,
+          "dy2": -0.0265,
+          "dz1": -0.0154,
+          "dz2": 0.0154,
+          "theta_x1": -14.859,
+          "theta_x2": 14.859,
+          "theta_y1": -1.9482,
+          "theta_y2": 1.9482,
+          "theta_z1": 0.1217,
+          "theta_z2": -0.1217
+        },
+        "rigidity": {
+          "EA": 1204.6,
+          "GAy": 275.6,
+          "GAz": 226.68,
+          "GJ": 113.6,
+          "EIy": 133.8,
+          "EIz": 238.99
+        },
+        "coupling": {
+          "g_Tx_Ty": 43.675,
+          "g_Tx_Tz": 5.2401,
+          "g_Ty_Tz": 17.289,
+          "g_Dx_Dy": 21.039,
+          "g_Dx_Dz": 18.122,
+          "g_Dy_Dz": 22.22,
+          "g_Dx_Tx": -70.625,
+          "g_Dx_Ty": -26.422,
+          "g_Dx_Tz": -70.881,
+          "g_Dy_Tx": -18.298,
+          "g_Dy_Ty": 8.3861,
+          "g_Dy_Tz": -14.36,
+          "g_Dz_Tx": 65.708,
+          "g_Dz_Ty": -20.769,
+          "g_Dz_Tz": -18.474
+        }
+      },
+      "GC/GnC": {
+        "geometry": {
+          "dx1": -0.1726,
+          "dx2": 0.1726,
+          "dy1": 0.0175,
+          "dy2": -0.0175,
+          "dz1": -0.0046,
+          "dz2": 0.0046,
+          "theta_x1": -19.647,
+          "theta_x2": 19.647,
+          "theta_y1": -0.094,
+          "theta_y2": 0.094,
+          "theta_z1": -0.1138,
+          "theta_z2": 0.1138
+        },
+        "rigidity": {
+          "EA": 2399.4,
+          "GAy": 1179.81,
+          "GAz": 338.34,
+          "GJ": 181.73,
+          "EIy": 225.72,
+          "EIz": 236.59
+        },
+        "coupling": {
+          "g_Tx_Ty": 6.804,
+          "g_Tx_Tz": -11.823,
+          "g_Ty_Tz": 16.504,
+          "g_Dx_Dy": 816.8,
+          "g_Dx_Dz": 10.066,
+          "g_Dy_Dz": -19.325,
+          "g_Dx_Tx": -291.72,
+          "g_Dx_Ty": 214.44,
+          "g_Dx_Tz": -41.639,
+          "g_Dy_Tx": -200.21,
+          "g_Dy_Ty": 168.19,
+          "g_Dy_Tz": 19.001,
+          "g_Dz_Tx": 82.349,
+          "g_Dz_Ty": 11.145,
+          "g_Dz_Tz": -138.14
+        }
+      },
+      "TG/CnA": {
+        "geometry": {
+          "dx1": -0.1796,
+          "dx2": 0.1796,
+          "dy1": 0.003,
+          "dy2": -0.003,
+          "dz1": 0.0022,
+          "dz2": -0.0022,
+          "theta_x1": -17.85,
+          "theta_x2": 17.85,
+          "theta_y1": -5.452,
+          "theta_y2": 5.452,
+          "theta_z1": 1.3415,
+          "theta_z2": -1.3415
+        },
+        "rigidity": {
+          "EA": 1520.0,
+          "GAy": 465.77,
+          "GAz": 280.91,
+          "GJ": 154.61,
+          "EIy": 131.42,
+          "EIz": 200.61
+        },
+        "coupling": {
+          "g_Tx_Ty": 33.386,
+          "g_Tx_Tz": 12.138,
+          "g_Ty_Tz": 16.621,
+          "g_Dx_Dy": 116.63,
+          "g_Dx_Dz": 35.51,
+          "g_Dy_Dz": 65.326,
+          "g_Dx_Tx": -178.02,
+          "g_Dx_Ty": -157.29,
+          "g_Dx_Tz": 11.776,
+          "g_Dy_Tx": -103.1,
+          "g_Dy_Ty": 51.819,
+          "g_Dy_Tz": 51.488,
+          "g_Dz_Tx": 50.579,
+          "g_Dz_Ty": 27.779,
+          "g_Dz_Tz": -68.885
+        }
+      },
+      "TnG/CA": {
+        "geometry": {
+          "dx1": -0.1812,
+          "dx2": 0.1812,
+          "dy1": 0.0136,
+          "dy2": -0.0136,
+          "dz1": 0.0347,
+          "dz2": -0.0347,
+          "theta_x1": -16.415,
+          "theta_x2": 16.415,
+          "theta_y1": -5.8255,
+          "theta_y2": 5.8255,
+          "theta_z1": -0.7665,
+          "theta_z2": 0.7665
+        },
+        "rigidity": {
+          "EA": 1377.3,
+          "GAy": 443.81,
+          "GAz": 379.03,
+          "GJ": 155.75,
+          "EIy": 124.14,
+          "EIz": 195.5
+        },
+        "coupling": {
+          "g_Tx_Ty": 43.165,
+          "g_Tx_Tz": 25.801,
+          "g_Ty_Tz": 6.4589,
+          "g_Dx_Dy": 69.811,
+          "g_Dx_Dz": -80.498,
+          "g_Dy_Dz": 31.101,
+          "g_Dx_Tx": -165.23,
+          "g_Dx_Ty": -135.67,
+          "g_Dx_Tz": 105.7,
+          "g_Dy_Tx": -93.778,
+          "g_Dy_Ty": 36.076,
+          "g_Dy_Tz": 4.9759,
+          "g_Dz_Tx": -76.655,
+          "g_Dz_Ty": 16.727,
+          "g_Dz_Tz": -98.712
+        }
+      },
+      "TA/TnA": {
+        "geometry": {
+          "dx1": -0.1719,
+          "dx2": 0.1719,
+          "dy1": 0.0146,
+          "dy2": -0.0146,
+          "dz1": -0.0174,
+          "dz2": 0.0174,
+          "theta_x1": -15.9,
+          "theta_x2": 15.9,
+          "theta_y1": -3.978,
+          "theta_y2": 3.978,
+          "theta_z1": 0.1578,
+          "theta_z2": -0.1578
+        },
+        "rigidity": {
+          "EA": 1093.2,
+          "GAy": 245.38,
+          "GAz": 201.02,
+          "GJ": 78.61,
+          "EIy": 95.4,
+          "EIz": 143.69
+        },
+        "coupling": {
+          "g_Tx_Ty": 21.355,
+          "g_Tx_Tz": -2.7793,
+          "g_Ty_Tz": 11.069,
+          "g_Dx_Dy": 175.45,
+          "g_Dx_Dz": -61.409,
+          "g_Dy_Dz": -26.379,
+          "g_Dx_Tx": -112.3,
+          "g_Dx_Ty": -78.577,
+          "g_Dx_Tz": 78.892,
+          "g_Dy_Tx": -27.517,
+          "g_Dy_Ty": 22.013,
+          "g_Dy_Tz": 48.421,
+          "g_Dz_Tx": 67.528,
+          "g_Dz_Ty": -4.2901,
+          "g_Dz_Tz": -16.639
+        }
+      },
+      "CG/CnG": {
+        "geometry": {
+          "dx1": -0.1841,
+          "dx2": 0.1841,
+          "dy1": -0.0005,
+          "dy2": 0.0005,
+          "dz1": -0.0306,
+          "dz2": 0.0306,
+          "theta_x1": -16.805,
+          "theta_x2": 16.805,
+          "theta_y1": -6.354,
+          "theta_y2": 6.354,
+          "theta_z1": -0.2233,
+          "theta_z2": 0.2233
+        },
+        "rigidity": {
+          "EA": 1550.8,
+          "GAy": 513.39,
+          "GAz": 427.12,
+          "GJ": 178.67,
+          "EIy": 132.67,
+          "EIz": 203.66
+        },
+        "coupling": {
+          "g_Tx_Ty": 35.909,
+          "g_Tx_Tz": -26.968,
+          "g_Ty_Tz": 4.9053,
+          "g_Dx_Dy": 95.112,
+          "g_Dx_Dz": -8.662,
+          "g_Dy_Dz": 59.11,
+          "g_Dx_Tx": -224.17,
+          "g_Dx_Ty": -200.43,
+          "g_Dx_Tz": -93.836,
+          "g_Dy_Tx": -86.661,
+          "g_Dy_Ty": 66.902,
+          "g_Dy_Tz": -9.406,
+          "g_Dz_Tx": 94.973,
+          "g_Dz_Ty": 18.381,
+          "g_Dz_Tz": -175.43
+        }
+      }
+    },
+    "co_nick": {
+      "AA-TnT": {
+        "geometry": {
+          "dx1": -0.1635,
+          "dx2": 0.1635,
+          "dy1": 0.0333,
+          "dy2": -0.0333,
+          "dz1": 0.0325,
+          "dz2": -0.0325,
+          "theta_x1": -15.038,
+          "theta_x2": 15.038,
+          "theta_y1": -1.5789,
+          "theta_y2": 1.5789,
+          "theta_z1": 1.908,
+          "theta_z2": -1.908
+        },
+        "rigidity": {
+          "EA": 2019.6,
+          "GAy": 738.36,
+          "GAz": 511.83,
+          "GJ": 232.43,
+          "EIy": 163.12,
+          "EIz": 270.74
+        },
+        "coupling": {
+          "g_Tx_Ty": 25.038,
+          "g_Tx_Tz": 22.843,
+          "g_Ty_Tz": 13.533,
+          "g_Dx_Dy": 306.27,
+          "g_Dx_Dz": 97.947,
+          "g_Dy_Dz": 67.616,
+          "g_Dx_Tx": -186.07,
+          "g_Dx_Ty": -74.639,
+          "g_Dx_Tz": -117.46,
+          "g_Dy_Tx": -122.26,
+          "g_Dy_Ty": -4.6231,
+          "g_Dy_Tz": -43.987,
+          "g_Dz_Tx": -62.866,
+          "g_Dz_Ty": -23.078,
+          "g_Dz_Tz": -50.268
+        }
+      },
+      "AnA-TT": {
+        "geometry": {
+          "dx1": -0.1691,
+          "dx2": 0.1691,
+          "dy1": 0.032,
+          "dy2": -0.032,
+          "dz1": 0.0049,
+          "dz2": -0.0049,
+          "theta_x1": -16.139,
+          "theta_x2": 16.139,
+          "theta_y1": -2.716,
+          "theta_y2": 2.716,
+          "theta_z1": -1.168,
+          "theta_z2": 1.168
+        },
+        "rigidity": {
+          "EA": 2005.4,
+          "GAy": 783.33,
+          "GAz": 545.85,
+          "GJ": 265.06,
+          "EIy": 173.73,
+          "EIz": 296.31
+        },
+        "coupling": {
+          "g_Tx_Ty": 25.39,
+          "g_Tx_Tz": -18.234,
+          "g_Ty_Tz": -29.953,
+          "g_Dx_Dy": 161.4,
+          "g_Dx_Dz": -145.56,
+          "g_Dy_Dz": -39.5,
+          "g_Dx_Tx": -152.11,
+          "g_Dx_Ty": -86.432,
+          "g_Dx_Tz": 314.11,
+          "g_Dy_Tx": -150.11,
+          "g_Dy_Ty": 5.9892,
+          "g_Dy_Tz": -53.13,
+          "g_Dz_Tx": -97.014,
+          "g_Dz_Ty": 25.456,
+          "g_Dz_Tz": -69.483
+        }
+      },
+      "AG-CnT": {
+        "geometry": {
+          "dx1": -0.1701,
+          "dx2": 0.1701,
+          "dy1": 0.0442,
+          "dy2": -0.0442,
+          "dz1": 0.0448,
+          "dz2": -0.0448,
+          "theta_x1": -14.314,
+          "theta_x2": 14.314,
+          "theta_y1": -5.314,
+          "theta_y2": 5.314,
+          "theta_z1": -0.2626,
+          "theta_z2": 0.2626
+        },
+        "rigidity": {
+          "EA": 1410.0,
+          "GAy": 865.01,
+          "GAz": 495.27,
+          "GJ": 190.36,
+          "EIy": 137.31,
+          "EIz": 188.52
+        },
+        "coupling": {
+          "g_Tx_Ty": 34.503,
+          "g_Tx_Tz": 20.317,
+          "g_Ty_Tz": 0.62148,
+          "g_Dx_Dy": 53.481,
+          "g_Dx_Dz": -112.1,
+          "g_Dy_Dz": 157.83,
+          "g_Dx_Tx": -153.63,
+          "g_Dx_Ty": -97.354,
+          "g_Dx_Tz": 111.23,
+          "g_Dy_Tx": -96.733,
+          "g_Dy_Ty": 8.6924,
+          "g_Dy_Tz": -38.363,
+          "g_Dz_Tx": -83.746,
+          "g_Dz_Ty": 27.361,
+          "g_Dz_Tz": -75.714
+        }
+      },
+      "AnG-CT": {
+        "geometry": {
+          "dx1": -0.1674,
+          "dx2": 0.1674,
+          "dy1": 0.0379,
+          "dy2": -0.0379,
+          "dz1": 0.0438,
+          "dz2": -0.0438,
+          "theta_x1": -15.671,
+          "theta_x2": 15.671,
+          "theta_y1": -4.818,
+          "theta_y2": 4.818,
+          "theta_z1": 0.3259,
+          "theta_z2": -0.3259
+        },
+        "rigidity": {
+          "EA": 2048.1,
+          "GAy": 838.95,
+          "GAz": 487.84,
+          "GJ": 225.74,
+          "EIy": 164.39,
+          "EIz": 302.34
+        },
+        "coupling": {
+          "g_Tx_Ty": 15.441,
+          "g_Tx_Tz": 2.5212,
+          "g_Ty_Tz": -5.3474,
+          "g_Dx_Dy": 254.84,
+          "g_Dx_Dz": -34.74,
+          "g_Dy_Dz": 35.363,
+          "g_Dx_Tx": -173.1,
+          "g_Dx_Ty": -57.265,
+          "g_Dx_Tz": 209.76,
+          "g_Dy_Tx": -139.11,
+          "g_Dy_Ty": 4.0103,
+          "g_Dy_Tz": -56.683,
+          "g_Dz_Tx": -123.26,
+          "g_Dz_Ty": -25.928,
+          "g_Dz_Tz": -73.567
+        }
+      },
+      "GA-TnC": {
+        "geometry": {
+          "dx1": -0.1577,
+          "dx2": 0.1577,
+          "dy1": -0.0187,
+          "dy2": 0.0187,
+          "dz1": 0.0358,
+          "dz2": -0.0358,
+          "theta_x1": -17.241,
+          "theta_x2": 17.241,
+          "theta_y1": -0.5125,
+          "theta_y2": 0.5125,
+          "theta_z1": 1.4,
+          "theta_z2": -1.4
+        },
+        "rigidity": {
+          "EA": 2047.0,
+          "GAy": 599.83,
+          "GAz": 402.74,
+          "GJ": 168.98,
+          "EIy": 173.84,
+          "EIz": 235.47
+        },
+        "coupling": {
+          "g_Tx_Ty": 28.742,
+          "g_Tx_Tz": 13.727,
+          "g_Ty_Tz": -17.229,
+          "g_Dx_Dy": 379.29,
+          "g_Dx_Dz": 32.464,
+          "g_Dy_Dz": -3.0285,
+          "g_Dx_Tx": -173.9,
+          "g_Dx_Ty": 10.14,
+          "g_Dx_Tz": -51.399,
+          "g_Dy_Tx": -91.493,
+          "g_Dy_Ty": -8.7543,
+          "g_Dy_Tz": 4.0596,
+          "g_Dz_Tx": -55.159,
+          "g_Dz_Ty": -1.3847,
+          "g_Dz_Tz": -89.123
+        }
+      },
+      "GnA-TC": {
+        "geometry": {
+          "dx1": -0.1753,
+          "dx2": 0.1753,
+          "dy1": 0.017,
+          "dy2": -0.017,
+          "dz1": 0.0079,
+          "dz2": -0.0079,
+          "theta_x1": -17.238,
+          "theta_x2": 17.238,
+          "theta_y1": -1.4183,
+          "theta_y2": 1.4183,
+          "theta_z1": 0.6225,
+          "theta_z2": -0.6225
+        },
+        "rigidity": {
+          "EA": 2088.8,
+          "GAy": 730.49,
+          "GAz": 443.64,
+          "GJ": 225.95,
+          "EIy": 159.72,
+          "EIz": 285.03
+        },
+        "coupling": {
+          "g_Tx_Ty": 30.29,
+          "g_Tx_Tz": -1.85,
+          "g_Ty_Tz": -3.0957,
+          "g_Dx_Dy": 237.52,
+          "g_Dx_Dz": -125.68,
+          "g_Dy_Dz": 11.757,
+          "g_Dx_Tx": -189.59,
+          "g_Dx_Ty": -24.624,
+          "g_Dx_Tz": 340.2,
+          "g_Dy_Tx": -163.19,
+          "g_Dy_Ty": 43.442,
+          "g_Dy_Tz": -63.675,
+          "g_Dz_Tx": -89.108,
+          "g_Dz_Ty": -33.946,
+          "g_Dz_Tz": -105.52
+        }
+      },
+      "GG-CnC": {
+        "geometry": {
+          "dx1": -0.1689,
+          "dx2": 0.1689,
+          "dy1": 0.066,
+          "dy2": -0.066,
+          "dz1": 0.035,
+          "dz2": -0.035,
+          "theta_x1": -13.684,
+          "theta_x2": 13.684,
+          "theta_y1": -3.5647,
+          "theta_y2": 3.5647,
+          "theta_z1": 0.0065,
+          "theta_z2": -0.0065
+        },
+        "rigidity": {
+          "EA": 2163.2,
+          "GAy": 979.15,
+          "GAz": 562.94,
+          "GJ": 231.62,
+          "EIy": 207.67,
+          "EIz": 351.57
+        },
+        "coupling": {
+          "g_Tx_Ty": 5.1797,
+          "g_Tx_Tz": 13.239,
+          "g_Ty_Tz": -26.059,
+          "g_Dx_Dy": 119.94,
+          "g_Dx_Dz": -64.871,
+          "g_Dy_Dz": 58.348,
+          "g_Dx_Tx": -139.87,
+          "g_Dx_Ty": -105.55,
+          "g_Dx_Tz": 249.73,
+          "g_Dy_Tx": -146.63,
+          "g_Dy_Ty": -4.4382,
+          "g_Dy_Tz": -84.097,
+          "g_Dz_Tx": -187.34,
+          "g_Dz_Ty": -5.5154,
+          "g_Dz_Tz": -88.343
+        }
+      },
+      "GnG-CC": {
+        "geometry": {
+          "dx1": -0.1691,
+          "dx2": 0.1691,
+          "dy1": 0.052,
+          "dy2": -0.052,
+          "dz1": 0.0319,
+          "dz2": -0.0319,
+          "theta_x1": -14.361,
+          "theta_x2": 14.361,
+          "theta_y1": -3.4281,
+          "theta_y2": 3.4281,
+          "theta_z1": 0.952,
+          "theta_z2": -0.952
+        },
+        "rigidity": {
+          "EA": 1846.6,
+          "GAy": 735.94,
+          "GAz": 509.48,
+          "GJ": 192.77,
+          "EIy": 168.26,
+          "EIz": 258.79
+        },
+        "coupling": {
+          "g_Tx_Ty": 21.05,
+          "g_Tx_Tz": 47.297,
+          "g_Ty_Tz": 6.4228,
+          "g_Dx_Dy": 50.352,
+          "g_Dx_Dz": -61.295,
+          "g_Dy_Dz": 131.32,
+          "g_Dx_Tx": -123.77,
+          "g_Dx_Ty": -69.331,
+          "g_Dx_Tz": 153.8,
+          "g_Dy_Tx": -126.07,
+          "g_Dy_Ty": 26.337,
+          "g_Dy_Tz": -75.419,
+          "g_Dz_Tx": -121.44,
+          "g_Dz_Ty": -18.478,
+          "g_Dz_Tz": -97.079
+        }
+      },
+      "AC-GnT": {
+        "geometry": {
+          "dx1": -0.1671,
+          "dx2": 0.1671,
+          "dy1": 0.0298,
+          "dy2": -0.0298,
+          "dz1": 0.0209,
+          "dz2": -0.0209,
+          "theta_x1": -15.969,
+          "theta_x2": 15.969,
+          "theta_y1": -1.8935,
+          "theta_y2": 1.8935,
+          "theta_z1": 1.0985,
+          "theta_z2": -1.0985
+        },
+        "rigidity": {
+          "EA": 1954.6,
+          "GAy": 673.64,
+          "GAz": 336.32,
+          "GJ": 169.38,
+          "EIy": 155.98,
+          "EIz": 228.74
+        },
+        "coupling": {
+          "g_Tx_Ty": 26.005,
+          "g_Tx_Tz": 26.38,
+          "g_Ty_Tz": 7.5137,
+          "g_Dx_Dy": 290.64,
+          "g_Dx_Dz": 15.861,
+          "g_Dy_Dz": 67.653,
+          "g_Dx_Tx": -162.16,
+          "g_Dx_Ty": 10.477,
+          "g_Dx_Tz": 93.152,
+          "g_Dy_Tx": -99.413,
+          "g_Dy_Ty": 37.445,
+          "g_Dy_Tz": -62.086,
+          "g_Dz_Tx": -95.424,
+          "g_Dz_Ty": -35.193,
+          "g_Dz_Tz": -74.276
+        }
+      },
+      "AnC-GT": {
+        "geometry": {
+          "dx1": -0.161,
+          "dx2": 0.161,
+          "dy1": 0.0172,
+          "dy2": -0.0172,
+          "dz1": 0.0408,
+          "dz2": -0.0408,
+          "theta_x1": -13.568,
+          "theta_x2": 13.568,
+          "theta_y1": -3.9424,
+          "theta_y2": 3.9424,
+          "theta_z1": 0.743,
+          "theta_z2": -0.743
+        },
+        "rigidity": {
+          "EA": 1940.5,
+          "GAy": 694.21,
+          "GAz": 399.66,
+          "GJ": 167.76,
+          "EIy": 145.48,
+          "EIz": 234.2
+        },
+        "coupling": {
+          "g_Tx_Ty": 30.064,
+          "g_Tx_Tz": 10.705,
+          "g_Ty_Tz": 1.7037,
+          "g_Dx_Dy": 368.1,
+          "g_Dx_Dz": 15.819,
+          "g_Dy_Dz": 67.705,
+          "g_Dx_Tx": -170.12,
+          "g_Dx_Ty": -18.463,
+          "g_Dx_Tz": 1.8445,
+          "g_Dy_Tx": -123.58,
+          "g_Dy_Ty": 10.051,
+          "g_Dy_Tz": -42.849,
+          "g_Dz_Tx": -43.478,
+          "g_Dz_Ty": -17.804,
+          "g_Dz_Tz": -44.626
+        }
+      },
+      "AT-AnT": {
+        "geometry": {
+          "dx1": -0.1557,
+          "dx2": 0.1557,
+          "dy1": 0.0329,
+          "dy2": -0.0329,
+          "dz1": 0.0425,
+          "dz2": -0.0425,
+          "theta_x1": -12.913,
+          "theta_x2": 12.913,
+          "theta_y1": -2.6004,
+          "theta_y2": 2.6004,
+          "theta_z1": 1.151,
+          "theta_z2": -1.151
+        },
+        "rigidity": {
+          "EA": 2122.0,
+          "GAy": 777.99,
+          "GAz": 479.0,
+          "GJ": 235.04,
+          "EIy": 174.17,
+          "EIz": 282.68
+        },
+        "coupling": {
+          "g_Tx_Ty": 31.571,
+          "g_Tx_Tz": 16.253,
+          "g_Ty_Tz": 3.1115,
+          "g_Dx_Dy": 378.85,
+          "g_Dx_Dz": 4.8369,
+          "g_Dy_Dz": 32.018,
+          "g_Dx_Tx": -163.23,
+          "g_Dx_Ty": -77.892,
+          "g_Dx_Tz": 6.9411,
+          "g_Dy_Tx": -115.87,
+          "g_Dy_Ty": -38.097,
+          "g_Dy_Tz": -22.646,
+          "g_Dz_Tx": -62.32,
+          "g_Dz_Ty": 2.8568,
+          "g_Dz_Tz": -40.912
+        }
+      },
+      "GC-GnC": {
+        "geometry": {
+          "dx1": -0.1621,
+          "dx2": 0.1621,
+          "dy1": 0.019,
+          "dy2": -0.019,
+          "dz1": 0.04,
+          "dz2": -0.04,
+          "theta_x1": -17.628,
+          "theta_x2": 17.628,
+          "theta_y1": -1.1297,
+          "theta_y2": 1.1297,
+          "theta_z1": 1.774,
+          "theta_z2": -1.774
+        },
+        "rigidity": {
+          "EA": 2259.2,
+          "GAy": 1033.71,
+          "GAz": 457.91,
+          "GJ": 160.49,
+          "EIy": 203.09,
+          "EIz": 189.46
+        },
+        "coupling": {
+          "g_Tx_Ty": 11.234,
+          "g_Tx_Tz": 37.718,
+          "g_Ty_Tz": -13.568,
+          "g_Dx_Dy": 737.92,
+          "g_Dx_Dz": 104.89,
+          "g_Dy_Dz": 36.327,
+          "g_Dx_Tx": -241.14,
+          "g_Dx_Ty": 122.9,
+          "g_Dx_Tz": 7.432,
+          "g_Dy_Tx": -170.48,
+          "g_Dy_Ty": 72.877,
+          "g_Dy_Tz": 12.405,
+          "g_Dz_Tx": -79.421,
+          "g_Dz_Ty": -31.847,
+          "g_Dz_Tz": -84.504
+        }
+      },
+      "TG-CnA": {
+        "geometry": {
+          "dx1": -0.1749,
+          "dx2": 0.1749,
+          "dy1": 0.0387,
+          "dy2": -0.0387,
+          "dz1": 0.016,
+          "dz2": -0.016,
+          "theta_x1": -16.055,
+          "theta_x2": 16.055,
+          "theta_y1": -6.3615,
+          "theta_y2": 6.3615,
+          "theta_z1": -0.1022,
+          "theta_z2": 0.1022
+        },
+        "rigidity": {
+          "EA": 1783.1,
+          "GAy": 833.3,
+          "GAz": 428.22,
+          "GJ": 252.62,
+          "EIy": 175.48,
+          "EIz": 243.47
+        },
+        "coupling": {
+          "g_Tx_Ty": 31.345,
+          "g_Tx_Tz": 8.0446,
+          "g_Ty_Tz": -2.8314,
+          "g_Dx_Dy": 104.57,
+          "g_Dx_Dz": -21.561,
+          "g_Dy_Dz": 28.515,
+          "g_Dx_Tx": -155.59,
+          "g_Dx_Ty": -79.409,
+          "g_Dx_Tz": 14.108,
+          "g_Dy_Tx": -157.04,
+          "g_Dy_Ty": 38.866,
+          "g_Dy_Tz": -2.9894,
+          "g_Dz_Tx": -3.9607,
+          "g_Dz_Ty": -13.648,
+          "g_Dz_Tz": -54.289
+        }
+      },
+      "TnG-CA": {
+        "geometry": {
+          "dx1": -0.1666,
+          "dx2": 0.1666,
+          "dy1": 0.0316,
+          "dy2": -0.0316,
+          "dz1": 0.0426,
+          "dz2": -0.0426,
+          "theta_x1": -13.32,
+          "theta_x2": 13.32,
+          "theta_y1": -4.9373,
+          "theta_y2": 4.9373,
+          "theta_z1": 0.3224,
+          "theta_z2": -0.3224
+        },
+        "rigidity": {
+          "EA": 1551.0,
+          "GAy": 750.02,
+          "GAz": 475.63,
+          "GJ": 187.58,
+          "EIy": 142.62,
+          "EIz": 202.89
+        },
+        "coupling": {
+          "g_Tx_Ty": 32.979,
+          "g_Tx_Tz": 26.555,
+          "g_Ty_Tz": -10.172,
+          "g_Dx_Dy": 80.927,
+          "g_Dx_Dz": -16.808,
+          "g_Dy_Dz": 125.17,
+          "g_Dx_Tx": -152.43,
+          "g_Dx_Ty": -75.593,
+          "g_Dx_Tz": 52.216,
+          "g_Dy_Tx": -87.152,
+          "g_Dy_Ty": 30.719,
+          "g_Dy_Tz": -34.609,
+          "g_Dz_Tx": -77.697,
+          "g_Dz_Ty": -10.775,
+          "g_Dz_Tz": -79.754
+        }
+      },
+      "TA-TnA": {
+        "geometry": {
+          "dx1": -0.1699,
+          "dx2": 0.1699,
+          "dy1": 0.0232,
+          "dy2": -0.0232,
+          "dz1": 0.038,
+          "dz2": -0.038,
+          "theta_x1": -14.561,
+          "theta_x2": 14.561,
+          "theta_y1": -5.3415,
+          "theta_y2": 5.3415,
+          "theta_z1": 0.3467,
+          "theta_z2": -0.3467
+        },
+        "rigidity": {
+          "EA": 1713.9,
+          "GAy": 638.15,
+          "GAz": 470.63,
+          "GJ": 210.41,
+          "EIy": 135.87,
+          "EIz": 218.23
+        },
+        "coupling": {
+          "g_Tx_Ty": 29.162,
+          "g_Tx_Tz": 7.8035,
+          "g_Ty_Tz": -5.1662,
+          "g_Dx_Dy": 192.58,
+          "g_Dx_Dz": -29.084,
+          "g_Dy_Dz": 71.294,
+          "g_Dx_Tx": -146.82,
+          "g_Dx_Ty": -77.162,
+          "g_Dx_Tz": 81.724,
+          "g_Dy_Tx": -89.611,
+          "g_Dy_Ty": 23.129,
+          "g_Dy_Tz": -34.478,
+          "g_Dz_Tx": -87.699,
+          "g_Dz_Ty": -19.385,
+          "g_Dz_Tz": -55.223
+        }
+      },
+      "CG-CnG": {
+        "geometry": {
+          "dx1": -0.1768,
+          "dx2": 0.1768,
+          "dy1": 0.0235,
+          "dy2": -0.0235,
+          "dz1": 0.0505,
+          "dz2": -0.0505,
+          "theta_x1": -12.004,
+          "theta_x2": 12.004,
+          "theta_y1": -5.792,
+          "theta_y2": 5.792,
+          "theta_z1": 0.863,
+          "theta_z2": -0.863
+        },
+        "rigidity": {
+          "EA": 1971.7,
+          "GAy": 808.34,
+          "GAz": 425.01,
+          "GJ": 183.73,
+          "EIy": 171.25,
+          "EIz": 241.32
+        },
+        "coupling": {
+          "g_Tx_Ty": 17.677,
+          "g_Tx_Tz": 21.211,
+          "g_Ty_Tz": -6.0236,
+          "g_Dx_Dy": 395.56,
+          "g_Dx_Dz": 44.208,
+          "g_Dy_Dz": 71.624,
+          "g_Dx_Tx": -188.91,
+          "g_Dx_Ty": 23.141,
+          "g_Dx_Tz": 46.737,
+          "g_Dy_Tx": -131.63,
+          "g_Dy_Ty": 35.624,
+          "g_Dy_Tz": -30.666,
+          "g_Dz_Tx": -116.47,
+          "g_Dz_Ty": -44.227,
+          "g_Dz_Tz": -72.509
+        }
+      }
+    },
+    "double_co": {
+      "AA||TT": {
+        "geometry": {
+          "dx1": -0.9424,
+          "dx2": 0.9424,
+          "dy1": -0.175,
+          "dy2": 0.175,
+          "dz1": -0.0755,
+          "dz2": 0.0755,
+          "theta_x1": -2.2523,
+          "theta_x2": 1.0789,
+          "theta_y1": 4.9737,
+          "theta_y2": 4.2971,
+          "theta_z1": -30.523,
+          "theta_z2": 8.847
+        },
+        "rigidity": {
+          "EA": 3605.5,
+          "GAy": 1040.4,
+          "GAz": 564.97,
+          "GJ": 318.62,
+          "EIy": 416.21,
+          "EIz": 325.13
+        },
+        "coupling": {
+          "g_Tx_Ty": -6.0132,
+          "g_Tx_Tz": 12.504,
+          "g_Ty_Tz": 1.6077,
+          "g_Dx_Dy": 716.44,
+          "g_Dx_Dz": 604.34,
+          "g_Dy_Dz": 191.08,
+          "g_Dx_Tx": 53.258,
+          "g_Dx_Ty": 12.196,
+          "g_Dx_Tz": -230.92,
+          "g_Dy_Tx": 55.862,
+          "g_Dy_Ty": -75.233,
+          "g_Dy_Tz": -17.765,
+          "g_Dz_Tx": 129.28,
+          "g_Dz_Ty": 3.7375,
+          "g_Dz_Tz": -67.042
+        }
+      },
+      "TT||AA": {
+        "geometry": {
+          "dx1": -0.9555,
+          "dx2": 0.9555,
+          "dy1": -0.2415,
+          "dy2": 0.2415,
+          "dz1": -0.0454,
+          "dz2": 0.0454,
+          "theta_x1": -7.7279,
+          "theta_x2": 5.9061,
+          "theta_y1": 2.367,
+          "theta_y2": 2.9595,
+          "theta_z1": -36.711,
+          "theta_z2": 7.279
+        },
+        "rigidity": {
+          "EA": 4189.5,
+          "GAy": 1210.6,
+          "GAz": 639.0,
+          "GJ": 314.28,
+          "EIy": 413.22,
+          "EIz": 313.45
+        },
+        "coupling": {
+          "g_Tx_Ty": -16.795,
+          "g_Tx_Tz": -5.0436,
+          "g_Ty_Tz": -7.9889,
+          "g_Dx_Dy": 1304.76,
+          "g_Dx_Dz": 499.08,
+          "g_Dy_Dz": 267.88,
+          "g_Dx_Tx": 79.315,
+          "g_Dx_Ty": 65.3,
+          "g_Dx_Tz": -84.189,
+          "g_Dy_Tx": 75.912,
+          "g_Dy_Ty": -28.947,
+          "g_Dy_Tz": -2.9668,
+          "g_Dz_Tx": 154.69,
+          "g_Dz_Ty": 19.689,
+          "g_Dz_Tz": -37.158
+        }
+      },
+      "AG||CT": {
+        "geometry": {
+          "dx1": -0.9445,
+          "dx2": 0.9445,
+          "dy1": -0.1615,
+          "dy2": 0.1615,
+          "dz1": -0.099,
+          "dz2": 0.099,
+          "theta_x1": -0.533,
+          "theta_x2": -1.9572,
+          "theta_y1": 9.9218,
+          "theta_y2": 2.0172,
+          "theta_z1": -32.148,
+          "theta_z2": 11.902
+        },
+        "rigidity": {
+          "EA": 2324.1,
+          "GAy": 699.85,
+          "GAz": 489.84,
+          "GJ": 293.69,
+          "EIy": 359.51,
+          "EIz": 264.76
+        },
+        "coupling": {
+          "g_Tx_Ty": 1.9683,
+          "g_Tx_Tz": -11.134,
+          "g_Ty_Tz": 0.28967,
+          "g_Dx_Dy": 437.74,
+          "g_Dx_Dz": 523.59,
+          "g_Dy_Dz": 146.51,
+          "g_Dx_Tx": 88.467,
+          "g_Dx_Ty": 58.164,
+          "g_Dx_Tz": -216.36,
+          "g_Dy_Tx": 46.734,
+          "g_Dy_Ty": -109.08,
+          "g_Dy_Tz": 9.1735,
+          "g_Dz_Tx": 164.17,
+          "g_Dz_Ty": 11.027,
+          "g_Dz_Tz": -83.956
+        }
+      },
+      "CT||AG": {
+        "geometry": {
+          "dx1": -0.9414,
+          "dx2": 0.9414,
+          "dy1": -0.077,
+          "dy2": 0.077,
+          "dz1": -0.065,
+          "dz2": 0.065,
+          "theta_x1": 2.8158,
+          "theta_x2": -3.8129,
+          "theta_y1": 5.7582,
+          "theta_y2": 2.1102,
+          "theta_z1": -14.94,
+          "theta_z2": 6.0502
+        },
+        "rigidity": {
+          "EA": 4729.4,
+          "GAy": 1089.3,
+          "GAz": 696.81,
+          "GJ": 325.46,
+          "EIy": 482.83,
+          "EIz": 479.84
+        },
+        "coupling": {
+          "g_Tx_Ty": -26.227,
+          "g_Tx_Tz": 38.93,
+          "g_Ty_Tz": -21.005,
+          "g_Dx_Dy": 452.54,
+          "g_Dx_Dz": 770.95,
+          "g_Dy_Dz": 141.52,
+          "g_Dx_Tx": 45.277,
+          "g_Dx_Ty": -148.37,
+          "g_Dx_Tz": -281.51,
+          "g_Dy_Tx": 31.177,
+          "g_Dy_Ty": -174.76,
+          "g_Dy_Tz": 105.77,
+          "g_Dz_Tx": 43.16,
+          "g_Dz_Ty": -37.661,
+          "g_Dz_Tz": -31.782
+        }
+      },
+      "GA||TC": {
+        "geometry": {
+          "dx1": -0.923,
+          "dx2": 0.923,
+          "dy1": -0.2635,
+          "dy2": 0.2635,
+          "dz1": -0.0705,
+          "dz2": 0.0705,
+          "theta_x1": -6.4552,
+          "theta_x2": 4.4998,
+          "theta_y1": 4.3086,
+          "theta_y2": 4.2612,
+          "theta_z1": -31.162,
+          "theta_z2": -2.052
+        },
+        "rigidity": {
+          "EA": 3419.2,
+          "GAy": 977.08,
+          "GAz": 538.81,
+          "GJ": 289.4,
+          "EIy": 406.26,
+          "EIz": 369.71
+        },
+        "coupling": {
+          "g_Tx_Ty": 15.236,
+          "g_Tx_Tz": 19.588,
+          "g_Ty_Tz": -0.96359,
+          "g_Dx_Dy": 979.48,
+          "g_Dx_Dz": 548.57,
+          "g_Dy_Dz": 273.36,
+          "g_Dx_Tx": 29.617,
+          "g_Dx_Ty": 39.921,
+          "g_Dx_Tz": -294.65,
+          "g_Dy_Tx": 74.667,
+          "g_Dy_Ty": -34.127,
+          "g_Dy_Tz": -122.18,
+          "g_Dz_Tx": 87.992,
+          "g_Dz_Ty": 63.509,
+          "g_Dz_Tz": -69.193
+        }
+      },
+      "TC||GA": {
+        "geometry": {
+          "dx1": -0.956,
+          "dx2": 0.956,
+          "dy1": -0.1515,
+          "dy2": 0.1515,
+          "dz1": -0.068,
+          "dz2": 0.068,
+          "theta_x1": -7.595,
+          "theta_x2": 6.433,
+          "theta_y1": 3.3459,
+          "theta_y2": 4.7257,
+          "theta_z1": -25.711,
+          "theta_z2": 7.4695
+        },
+        "rigidity": {
+          "EA": 3511.4,
+          "GAy": 1227.7,
+          "GAz": 697.95,
+          "GJ": 313.05,
+          "EIy": 426.95,
+          "EIz": 291.36
+        },
+        "coupling": {
+          "g_Tx_Ty": 5.0508,
+          "g_Tx_Tz": -18.807,
+          "g_Ty_Tz": 18.696,
+          "g_Dx_Dy": 1003.6,
+          "g_Dx_Dz": 567.32,
+          "g_Dy_Dz": 151.01,
+          "g_Dx_Tx": 134.22,
+          "g_Dx_Ty": 68.808,
+          "g_Dx_Tz": -337.23,
+          "g_Dy_Tx": 93.983,
+          "g_Dy_Ty": -118.01,
+          "g_Dy_Tz": -59.656,
+          "g_Dz_Tx": 200.93,
+          "g_Dz_Ty": 73.045,
+          "g_Dz_Tz": -82.526
+        }
+      },
+      "GG||CC": {
+        "geometry": {
+          "dx1": -0.9518,
+          "dx2": 0.9518,
+          "dy1": -0.239,
+          "dy2": 0.239,
+          "dz1": -0.1065,
+          "dz2": 0.1065,
+          "theta_x1": -0.829,
+          "theta_x2": -1.742,
+          "theta_y1": 9.002,
+          "theta_y2": 3.6723,
+          "theta_z1": -38.414,
+          "theta_z2": 9.086
+        },
+        "rigidity": {
+          "EA": 2587.4,
+          "GAy": 908.68,
+          "GAz": 454.04,
+          "GJ": 270.06,
+          "EIy": 355.61,
+          "EIz": 242.78
+        },
+        "coupling": {
+          "g_Tx_Ty": -8.4617,
+          "g_Tx_Tz": 6.3731,
+          "g_Ty_Tz": -12.356,
+          "g_Dx_Dy": 912.19,
+          "g_Dx_Dz": 427.32,
+          "g_Dy_Dz": 251.61,
+          "g_Dx_Tx": 32.12,
+          "g_Dx_Ty": 4.2158,
+          "g_Dx_Tz": -206.6,
+          "g_Dy_Tx": 65.881,
+          "g_Dy_Ty": -101.93,
+          "g_Dy_Tz": -61.21,
+          "g_Dz_Tx": 114.27,
+          "g_Dz_Ty": -17.183,
+          "g_Dz_Tz": -59.929
+        }
+      },
+      "CC||GG": {
+        "geometry": {
+          "dx1": -0.9576,
+          "dx2": 0.9576,
+          "dy1": -0.2115,
+          "dy2": 0.2115,
+          "dz1": -0.089,
+          "dz2": 0.089,
+          "theta_x1": -19.847,
+          "theta_x2": 15.643,
+          "theta_y1": 5.9779,
+          "theta_y2": 4.6235,
+          "theta_z1": -33.211,
+          "theta_z2": 7.279
+        },
+        "rigidity": {
+          "EA": 2020.8,
+          "GAy": 609.18,
+          "GAz": 650.52,
+          "GJ": 230.54,
+          "EIy": 329.88,
+          "EIz": 214.76
+        },
+        "coupling": {
+          "g_Tx_Ty": -26.764,
+          "g_Tx_Tz": -22.431,
+          "g_Ty_Tz": -31.342,
+          "g_Dx_Dy": 583.71,
+          "g_Dx_Dz": 680.38,
+          "g_Dy_Dz": 280.4,
+          "g_Dx_Tx": 217.77,
+          "g_Dx_Ty": -15.264,
+          "g_Dx_Tz": -143.23,
+          "g_Dy_Tx": 122.26,
+          "g_Dy_Ty": -91.701,
+          "g_Dy_Tz": -89.76,
+          "g_Dz_Tx": 188.15,
+          "g_Dz_Ty": 27.734,
+          "g_Dz_Tz": -14.495
+        }
+      },
+      "AC||GT": {
+        "geometry": {
+          "dx1": -0.9696,
+          "dx2": 0.9696,
+          "dy1": -0.1715,
+          "dy2": 0.1715,
+          "dz1": -0.099,
+          "dz2": 0.099,
+          "theta_x1": -6.1881,
+          "theta_x2": 3.0963,
+          "theta_y1": 9.7454,
+          "theta_y2": 1.8917,
+          "theta_z1": -34.37,
+          "theta_z2": 13.361
+        },
+        "rigidity": {
+          "EA": 3083.9,
+          "GAy": 639.82,
+          "GAz": 723.58,
+          "GJ": 348.99,
+          "EIy": 443.67,
+          "EIz": 300.49
+        },
+        "coupling": {
+          "g_Tx_Ty": -16.321,
+          "g_Tx_Tz": -40.595,
+          "g_Ty_Tz": -43.803,
+          "g_Dx_Dy": 668.41,
+          "g_Dx_Dz": 615.33,
+          "g_Dy_Dz": 294.25,
+          "g_Dx_Tx": 175.62,
+          "g_Dx_Ty": -109.54,
+          "g_Dx_Tz": -294.0,
+          "g_Dy_Tx": 107.54,
+          "g_Dy_Ty": -143.3,
+          "g_Dy_Tz": -25.825,
+          "g_Dz_Tx": 238.64,
+          "g_Dz_Ty": 39.003,
+          "g_Dz_Tz": -106.41
+        }
+      },
+      "GT||AC": {
+        "geometry": {
+          "dx1": -0.9513,
+          "dx2": 0.9513,
+          "dy1": -0.2365,
+          "dy2": 0.2365,
+          "dz1": -0.078,
+          "dz2": 0.078,
+          "theta_x1": 0.2107,
+          "theta_x2": -1.7657,
+          "theta_y1": 6.938,
+          "theta_y2": 2.5079,
+          "theta_z1": -30.24,
+          "theta_z2": 1.3
+        },
+        "rigidity": {
+          "EA": 4274.5,
+          "GAy": 1023.5,
+          "GAz": 543.68,
+          "GJ": 341.76,
+          "EIy": 484.42,
+          "EIz": 352.44
+        },
+        "coupling": {
+          "g_Tx_Ty": 24.656,
+          "g_Tx_Tz": -24.706,
+          "g_Ty_Tz": -48.598,
+          "g_Dx_Dy": 941.96,
+          "g_Dx_Dz": 651.21,
+          "g_Dy_Dz": 265.74,
+          "g_Dx_Tx": 33.127,
+          "g_Dx_Ty": -38.103,
+          "g_Dx_Tz": -58.546,
+          "g_Dy_Tx": 80.676,
+          "g_Dy_Ty": 8.9491,
+          "g_Dy_Tz": -221.65,
+          "g_Dz_Tx": 81.496,
+          "g_Dz_Ty": 104.4,
+          "g_Dz_Tz": -77.762
+        }
+      },
+      "AT||AT": {
+        "geometry": {
+          "dx1": -0.9539,
+          "dx2": 0.9539,
+          "dy1": -0.207,
+          "dy2": 0.207,
+          "dz1": -0.0309,
+          "dz2": 0.0309,
+          "theta_x1": -5.6768,
+          "theta_x2": 4.3232,
+          "theta_y1": 3.1161,
+          "theta_y2": 0.5009,
+          "theta_z1": -33.039,
+          "theta_z2": 7.571
+        },
+        "rigidity": {
+          "EA": 4200.9,
+          "GAy": 1018.5,
+          "GAz": 572.57,
+          "GJ": 314.54,
+          "EIy": 415.14,
+          "EIz": 340.87
+        },
+        "coupling": {
+          "g_Tx_Ty": -12.811,
+          "g_Tx_Tz": -1.3762,
+          "g_Ty_Tz": -26.217,
+          "g_Dx_Dy": 781.0,
+          "g_Dx_Dz": 433.38,
+          "g_Dy_Dz": 172.3,
+          "g_Dx_Tx": 122.7,
+          "g_Dx_Ty": -43.782,
+          "g_Dx_Tz": -43.771,
+          "g_Dy_Tx": 84.71,
+          "g_Dy_Ty": -70.125,
+          "g_Dy_Tz": -61.5,
+          "g_Dz_Tx": 129.78,
+          "g_Dz_Ty": 33.025,
+          "g_Dz_Tz": -33.783
+        }
+      },
+      "GC||GC": {
+        "geometry": {
+          "dx1": -0.9649,
+          "dx2": 0.9649,
+          "dy1": -0.1725,
+          "dy2": 0.1725,
+          "dz1": -0.15,
+          "dz2": 0.15,
+          "theta_x1": 4.426,
+          "theta_x2": -5.3116,
+          "theta_y1": 9.0444,
+          "theta_y2": 9.1812,
+          "theta_z1": -33.34,
+          "theta_z2": 12.21
+        },
+        "rigidity": {
+          "EA": 2519.8,
+          "GAy": 653.3,
+          "GAz": 649.85,
+          "GJ": 264.34,
+          "EIy": 453.87,
+          "EIz": 315.43
+        },
+        "coupling": {
+          "g_Tx_Ty": 31.266,
+          "g_Tx_Tz": 53.669,
+          "g_Ty_Tz": -53.348,
+          "g_Dx_Dy": 551.14,
+          "g_Dx_Dz": 576.04,
+          "g_Dy_Dz": 173.97,
+          "g_Dx_Tx": 69.632,
+          "g_Dx_Ty": 48.189,
+          "g_Dx_Tz": -165.0,
+          "g_Dy_Tx": 14.556,
+          "g_Dy_Ty": -111.79,
+          "g_Dy_Tz": 8.7235,
+          "g_Dz_Tx": 124.45,
+          "g_Dz_Ty": 73.286,
+          "g_Dz_Tz": -31.208
+        }
+      },
+      "TG||CA": {
+        "geometry": {
+          "dx1": -0.9639,
+          "dx2": 0.9639,
+          "dy1": -0.2095,
+          "dy2": 0.2095,
+          "dz1": -0.0775,
+          "dz2": 0.0775,
+          "theta_x1": -3.6533,
+          "theta_x2": 1.4365,
+          "theta_y1": 5.9402,
+          "theta_y2": 3.2753,
+          "theta_z1": -37.739,
+          "theta_z2": 11.891
+        },
+        "rigidity": {
+          "EA": 2796.6,
+          "GAy": 1002.3,
+          "GAz": 512.09,
+          "GJ": 305.15,
+          "EIy": 371.32,
+          "EIz": 274.16
+        },
+        "coupling": {
+          "g_Tx_Ty": -53.49,
+          "g_Tx_Tz": 1.2921,
+          "g_Ty_Tz": -6.6605,
+          "g_Dx_Dy": 939.55,
+          "g_Dx_Dz": 510.01,
+          "g_Dy_Dz": 281.49,
+          "g_Dx_Tx": 51.807,
+          "g_Dx_Ty": 7.1253,
+          "g_Dx_Tz": -140.94,
+          "g_Dy_Tx": 49.151,
+          "g_Dy_Ty": -103.11,
+          "g_Dy_Tz": 40.186,
+          "g_Dz_Tx": 169.97,
+          "g_Dz_Ty": -87.446,
+          "g_Dz_Tz": -18.766
+        }
+      },
+      "CA||TG": {
+        "geometry": {
+          "dx1": -0.9539,
+          "dx2": 0.9539,
+          "dy1": -0.206,
+          "dy2": 0.206,
+          "dz1": -0.0975,
+          "dz2": 0.0975,
+          "theta_x1": -4.0184,
+          "theta_x2": 2.4816,
+          "theta_y1": 6.8225,
+          "theta_y2": 5.1123,
+          "theta_z1": -29.698,
+          "theta_z2": 4.332
+        },
+        "rigidity": {
+          "EA": 3468.7,
+          "GAy": 1212.0,
+          "GAz": 878.58,
+          "GJ": 432.63,
+          "EIy": 600.03,
+          "EIz": 355.0
+        },
+        "coupling": {
+          "g_Tx_Ty": -9.0702,
+          "g_Tx_Tz": -66.436,
+          "g_Ty_Tz": 21.134,
+          "g_Dx_Dy": 1127.5,
+          "g_Dx_Dz": 829.07,
+          "g_Dy_Dz": 375.36,
+          "g_Dx_Tx": -50.731,
+          "g_Dx_Ty": 32.187,
+          "g_Dx_Tz": -298.85,
+          "g_Dy_Tx": -38.662,
+          "g_Dy_Ty": -105.24,
+          "g_Dy_Tz": -49.714,
+          "g_Dz_Tx": 160.18,
+          "g_Dz_Ty": -76.669,
+          "g_Dz_Tz": -4.602
+        }
+      },
+      "TA||TA": {
+        "geometry": {
+          "dx1": -0.9351,
+          "dx2": 0.9351,
+          "dy1": -0.146,
+          "dy2": 0.146,
+          "dz1": -0.0915,
+          "dz2": 0.0915,
+          "theta_x1": -3.8997,
+          "theta_x2": 2.5209,
+          "theta_y1": 6.2174,
+          "theta_y2": 5.0334,
+          "theta_z1": -28.079,
+          "theta_z2": 10.101
+        },
+        "rigidity": {
+          "EA": 3217.7,
+          "GAy": 957.42,
+          "GAz": 657.24,
+          "GJ": 332.88,
+          "EIy": 437.1,
+          "EIz": 382.94
+        },
+        "coupling": {
+          "g_Tx_Ty": 8.2535,
+          "g_Tx_Tz": -12.608,
+          "g_Ty_Tz": 8.4572,
+          "g_Dx_Dy": 596.48,
+          "g_Dx_Dz": 574.02,
+          "g_Dy_Dz": 178.21,
+          "g_Dx_Tx": 72.23,
+          "g_Dx_Ty": -38.344,
+          "g_Dx_Tz": -259.95,
+          "g_Dy_Tx": 75.922,
+          "g_Dy_Ty": -50.452,
+          "g_Dy_Tz": -9.3146,
+          "g_Dz_Tx": 158.45,
+          "g_Dz_Ty": -15.86,
+          "g_Dz_Tz": -69.283
+        }
+      },
+      "CG||CG": {
+        "geometry": {
+          "dx1": -0.9503,
+          "dx2": 0.9503,
+          "dy1": -0.1835,
+          "dy2": 0.1835,
+          "dz1": -0.12,
+          "dz2": 0.12,
+          "theta_x1": -2.2954,
+          "theta_x2": 0.0058,
+          "theta_y1": 8.0909,
+          "theta_y2": 6.374,
+          "theta_z1": -33.11,
+          "theta_z2": 10.37
+        },
+        "rigidity": {
+          "EA": 3189.0,
+          "GAy": 1161.8,
+          "GAz": 736.63,
+          "GJ": 304.61,
+          "EIy": 436.16,
+          "EIz": 301.09
+        },
+        "coupling": {
+          "g_Tx_Ty": -15.996,
+          "g_Tx_Tz": 18.962,
+          "g_Ty_Tz": -19.728,
+          "g_Dx_Dy": 976.8,
+          "g_Dx_Dz": 700.62,
+          "g_Dy_Dz": 393.68,
+          "g_Dx_Tx": -22.882,
+          "g_Dx_Ty": -21.484,
+          "g_Dx_Tz": -133.82,
+          "g_Dy_Tx": 45.893,
+          "g_Dy_Ty": -185.03,
+          "g_Dy_Tz": -14.546,
+          "g_Dz_Tx": 147.97,
+          "g_Dz_Ty": -66.947,
+          "g_Dz_Tz": -67.004
+        }
+      }
+    },
+    "single_co": {
+      "AA|TT": {
+        "geometry": {
+          "dx1": -0.9339,
+          "dx2": 0.9339,
+          "dy1": -0.0665,
+          "dy2": 0.0665,
+          "dz1": -0.0315,
+          "dz2": 0.0315,
+          "theta_x1": -5.3977,
+          "theta_x2": 3.795,
+          "theta_y1": 2.978,
+          "theta_y2": 0.26005,
+          "theta_z1": -23.387,
+          "theta_z2": 7.4327
+        },
+        "rigidity": {
+          "EA": 146.88,
+          "GAy": 229.52,
+          "GAz": 118.41,
+          "GJ": 66.744,
+          "EIy": 114.96,
+          "EIz": 109.86
+        },
+        "coupling": {
+          "g_Tx_Ty": -4.6667,
+          "g_Tx_Tz": -8.9068,
+          "g_Ty_Tz": 11.275,
+          "g_Dx_Dy": 272.14,
+          "g_Dx_Dz": 118.79,
+          "g_Dy_Dz": 20.6,
+          "g_Dx_Tx": -6.1664,
+          "g_Dx_Ty": -25.428,
+          "g_Dx_Tz": -17.736,
+          "g_Dy_Tx": 4.4645,
+          "g_Dy_Ty": 1.6688,
+          "g_Dy_Tz": -4.3443,
+          "g_Dz_Tx": 30.464,
+          "g_Dz_Ty": -10.267,
+          "g_Dz_Tz": -3.1289
+        }
+      },
+      "TT|AA": {
+        "geometry": {
+          "dx1": -0.9323,
+          "dx2": 0.9323,
+          "dy1": -0.3635,
+          "dy2": 0.3635,
+          "dz1": 0.059,
+          "dz2": -0.059,
+          "theta_x1": -8.7594,
+          "theta_x2": 11.796,
+          "theta_y1": -5.6736,
+          "theta_y2": 0.4792,
+          "theta_z1": -39.061,
+          "theta_z2": 8.799
+        },
+        "rigidity": {
+          "EA": 145.22,
+          "GAy": 401.07,
+          "GAz": 134.78,
+          "GJ": 7.1619,
+          "EIy": 61.202,
+          "EIz": 74.088
+        },
+        "coupling": {
+          "g_Tx_Ty": -14.521,
+          "g_Tx_Tz": 1.6744,
+          "g_Ty_Tz": 6.0194,
+          "g_Dx_Dy": 76.296,
+          "g_Dx_Dz": 50.398,
+          "g_Dy_Dz": 51.034,
+          "g_Dx_Tx": -13.971,
+          "g_Dx_Ty": 44.995,
+          "g_Dx_Tz": -58.913,
+          "g_Dy_Tx": -1.0123,
+          "g_Dy_Ty": 16.713,
+          "g_Dy_Tz": -80.254,
+          "g_Dz_Tx": 3.0271,
+          "g_Dz_Ty": 49.776,
+          "g_Dz_Tz": 5.812
+        }
+      },
+      "AG|CT": {
+        "geometry": {
+          "dx1": -0.937,
+          "dx2": 0.937,
+          "dy1": -0.1135,
+          "dy2": 0.1135,
+          "dz1": 0.126,
+          "dz2": -0.126,
+          "theta_x1": -15.603,
+          "theta_x2": 13.622,
+          "theta_y1": 8.9421,
+          "theta_y2": -8.5399,
+          "theta_z1": -31.586,
+          "theta_z2": 11.334
+        },
+        "rigidity": {
+          "EA": 128.75,
+          "GAy": 181.29,
+          "GAz": 198.58,
+          "GJ": 140.31,
+          "EIy": 264.77,
+          "EIz": 133.97
+        },
+        "coupling": {
+          "g_Tx_Ty": -24.606,
+          "g_Tx_Tz": -64.867,
+          "g_Ty_Tz": 43.469,
+          "g_Dx_Dy": 222.47,
+          "g_Dx_Dz": 19.632,
+          "g_Dy_Dz": -42.146,
+          "g_Dx_Tx": 183.5,
+          "g_Dx_Ty": -229.03,
+          "g_Dx_Tz": -34.755,
+          "g_Dy_Tx": -11.245,
+          "g_Dy_Ty": -33.735,
+          "g_Dy_Tz": 73.769,
+          "g_Dz_Tx": 63.612,
+          "g_Dz_Ty": -134.01,
+          "g_Dz_Tz": -92.943
+        }
+      },
+      "CT|AG": {
+        "geometry": {
+          "dx1": -0.9719,
+          "dx2": 0.9719,
+          "dy1": -0.0325,
+          "dy2": 0.0325,
+          "dz1": 0.0695,
+          "dz2": -0.0695,
+          "theta_x1": -14.779,
+          "theta_x2": 12.219,
+          "theta_y1": 1.6503,
+          "theta_y2": -9.8587,
+          "theta_z1": -23.017,
+          "theta_z2": 12.093
+        },
+        "rigidity": {
+          "EA": 959.61,
+          "GAy": 283.53,
+          "GAz": 120.47,
+          "GJ": 133.2,
+          "EIy": 147.79,
+          "EIz": 186.02
+        },
+        "coupling": {
+          "g_Tx_Ty": 4.2933,
+          "g_Tx_Tz": -7.0643,
+          "g_Ty_Tz": -12.396,
+          "g_Dx_Dy": -32.93,
+          "g_Dx_Dz": -21.793,
+          "g_Dy_Dz": -22.058,
+          "g_Dx_Tx": -3.441,
+          "g_Dx_Ty": 125.11,
+          "g_Dx_Tz": -33.898,
+          "g_Dy_Tx": -85.19,
+          "g_Dy_Ty": 9.9344,
+          "g_Dy_Tz": -11.387,
+          "g_Dz_Tx": 55.29,
+          "g_Dz_Ty": 57.92,
+          "g_Dz_Tz": -55.974
+        }
+      },
+      "GA|TC": {
+        "geometry": {
+          "dx1": -1.0271,
+          "dx2": 1.0271,
+          "dy1": 0.0865,
+          "dy2": -0.0865,
+          "dz1": 0.0395,
+          "dz2": -0.0395,
+          "theta_x1": 0.7857,
+          "theta_x2": -5.4883,
+          "theta_y1": 8.7939,
+          "theta_y2": -13.061,
+          "theta_z1": -30.385,
+          "theta_z2": 15.555
+        },
+        "rigidity": {
+          "EA": 167.31,
+          "GAy": 520.16,
+          "GAz": 309.44,
+          "GJ": 265.94,
+          "EIy": 187.77,
+          "EIz": 96.329
+        },
+        "coupling": {
+          "g_Tx_Ty": 49.863,
+          "g_Tx_Tz": -78.287,
+          "g_Ty_Tz": 27.577,
+          "g_Dx_Dy": -329.49,
+          "g_Dx_Dz": 1.3042,
+          "g_Dy_Dz": -52.748,
+          "g_Dx_Tx": -129.15,
+          "g_Dx_Ty": 44.701,
+          "g_Dx_Tz": 53.295,
+          "g_Dy_Tx": -18.277,
+          "g_Dy_Ty": -61.822,
+          "g_Dy_Tz": 8.726,
+          "g_Dz_Tx": 158.17,
+          "g_Dz_Ty": 50.998,
+          "g_Dz_Tz": -0.4385
+        }
+      },
+      "TC|GA": {
+        "geometry": {
+          "dx1": -0.9104,
+          "dx2": 0.9104,
+          "dy1": 0.1665,
+          "dy2": -0.1665,
+          "dz1": -0.1845,
+          "dz2": 0.1845,
+          "theta_x1": -5.1047,
+          "theta_x2": -2.2393,
+          "theta_y1": 4.7405,
+          "theta_y2": -9.3945,
+          "theta_z1": -27.401,
+          "theta_z2": 5.6888
+        },
+        "rigidity": {
+          "EA": 135.64,
+          "GAy": 725.94,
+          "GAz": 689.49,
+          "GJ": 157.49,
+          "EIy": 268.18,
+          "EIz": 254.79
+        },
+        "coupling": {
+          "g_Tx_Ty": 42.074,
+          "g_Tx_Tz": 20.166,
+          "g_Ty_Tz": 0.2669,
+          "g_Dx_Dy": -34.194,
+          "g_Dx_Dz": 7.6287,
+          "g_Dy_Dz": 2.7672,
+          "g_Dx_Tx": -0.00354,
+          "g_Dx_Ty": 0.84116,
+          "g_Dx_Tz": -6.4471,
+          "g_Dy_Tx": -0.0937,
+          "g_Dy_Ty": -0.0478,
+          "g_Dy_Tz": 3.8202,
+          "g_Dz_Tx": 0.88136,
+          "g_Dz_Ty": 23.647,
+          "g_Dz_Tz": 1.1772
+        }
+      },
+      "GG|CC": {
+        "geometry": {
+          "dx1": -0.9693,
+          "dx2": 0.9693,
+          "dy1": 0.0229,
+          "dy2": -0.0229,
+          "dz1": 0.0188,
+          "dz2": -0.0188,
+          "theta_x1": -13.147,
+          "theta_x2": 8.6328,
+          "theta_y1": 9.6009,
+          "theta_y2": -11.793,
+          "theta_z1": -23.889,
+          "theta_z2": 14.631
+        },
+        "rigidity": {
+          "EA": 209.75,
+          "GAy": 578.27,
+          "GAz": 261.19,
+          "GJ": 198.96,
+          "EIy": 201.07,
+          "EIz": 327.5
+        },
+        "coupling": {
+          "g_Tx_Ty": 2.9046,
+          "g_Tx_Tz": 28.213,
+          "g_Ty_Tz": 85.611,
+          "g_Dx_Dy": 300.33,
+          "g_Dx_Dz": 104.86,
+          "g_Dy_Dz": -58.555,
+          "g_Dx_Tx": 94.74,
+          "g_Dx_Ty": -212.35,
+          "g_Dx_Tz": 11.905,
+          "g_Dy_Tx": -122.1,
+          "g_Dy_Ty": -47.011,
+          "g_Dy_Tz": 29.501,
+          "g_Dz_Tx": 121.79,
+          "g_Dz_Ty": 10.916,
+          "g_Dz_Tz": 29.499
+        }
+      },
+      "CC|GG": {
+        "geometry": {
+          "dx1": -0.8906,
+          "dx2": 0.8906,
+          "dy1": -0.0725,
+          "dy2": 0.0725,
+          "dz1": -0.0935,
+          "dz2": 0.0935,
+          "theta_x1": -10.601,
+          "theta_x2": 10.002,
+          "theta_y1": -1.3412,
+          "theta_y2": 13.974,
+          "theta_z1": -30.32,
+          "theta_z2": 5.5195
+        },
+        "rigidity": {
+          "EA": 207.54,
+          "GAy": 1012.6,
+          "GAz": 395.59,
+          "GJ": 230.36,
+          "EIy": 321.07,
+          "EIz": 209.22
+        },
+        "coupling": {
+          "g_Tx_Ty": -41.906,
+          "g_Tx_Tz": -37.829,
+          "g_Ty_Tz": -31.002,
+          "g_Dx_Dy": 647.99,
+          "g_Dx_Dz": 530.5,
+          "g_Dy_Dz": 68.202,
+          "g_Dx_Tx": 171.43,
+          "g_Dx_Ty": 179.44,
+          "g_Dx_Tz": -356.0,
+          "g_Dy_Tx": -107.59,
+          "g_Dy_Ty": 80.949,
+          "g_Dy_Tz": -54.315,
+          "g_Dz_Tx": 70.594,
+          "g_Dz_Ty": 55.794,
+          "g_Dz_Tz": -100.6
+        }
+      },
+      "AC|GT": {
+        "geometry": {
+          "dx1": -0.8203,
+          "dx2": 0.8203,
+          "dy1": 0.15,
+          "dy2": -0.15,
+          "dz1": -0.388,
+          "dz2": 0.388,
+          "theta_x1": -8.6304,
+          "theta_x2": 2.7126,
+          "theta_y1": 5.116,
+          "theta_y2": -5.04,
+          "theta_z1": -27.808,
+          "theta_z2": 12.753
+        },
+        "rigidity": {
+          "EA": 562.07,
+          "GAy": 226.09,
+          "GAz": 269.59,
+          "GJ": 36.1,
+          "EIy": 201.46,
+          "EIz": 205.98
+        },
+        "coupling": {
+          "g_Tx_Ty": 38.149,
+          "g_Tx_Tz": 7.9831,
+          "g_Ty_Tz": -11.893,
+          "g_Dx_Dy": -97.53,
+          "g_Dx_Dz": 88.39,
+          "g_Dy_Dz": 23.584,
+          "g_Dx_Tx": -18.034,
+          "g_Dx_Ty": 54.283,
+          "g_Dx_Tz": 23.291,
+          "g_Dy_Tx": 7.173,
+          "g_Dy_Ty": -23.684,
+          "g_Dy_Tz": -147.95,
+          "g_Dz_Tx": 47.417,
+          "g_Dz_Ty": 203.87,
+          "g_Dz_Tz": 2.2321
+        }
+      },
+      "GT|AC": {
+        "geometry": {
+          "dx1": -0.9823,
+          "dx2": 0.9823,
+          "dy1": 0.4465,
+          "dy2": -0.4465,
+          "dz1": 0.06,
+          "dz2": -0.06,
+          "theta_x1": -3.0756,
+          "theta_x2": -3.4328,
+          "theta_y1": 6.6081,
+          "theta_y2": -11.726,
+          "theta_z1": -24.457,
+          "theta_z2": 8.957
+        },
+        "rigidity": {
+          "EA": 102.36,
+          "GAy": 836.35,
+          "GAz": 334.48,
+          "GJ": 282.06,
+          "EIy": 164.19,
+          "EIz": 193.67
+        },
+        "coupling": {
+          "g_Tx_Ty": 66.599,
+          "g_Tx_Tz": 52.423,
+          "g_Ty_Tz": 52.604,
+          "g_Dx_Dy": -490.17,
+          "g_Dx_Dz": -9.4864,
+          "g_Dy_Dz": -53.123,
+          "g_Dx_Tx": 48.351,
+          "g_Dx_Ty": -124.97,
+          "g_Dx_Tz": -204.29,
+          "g_Dy_Tx": -192.18,
+          "g_Dy_Ty": -63.442,
+          "g_Dy_Tz": 36.161,
+          "g_Dz_Tx": 246.19,
+          "g_Dz_Ty": 71.648,
+          "g_Dz_Tz": 73.233
+        }
+      },
+      "AT|AT": {
+        "geometry": {
+          "dx1": -0.9036,
+          "dx2": 0.9036,
+          "dy1": 0.2065,
+          "dy2": -0.2065,
+          "dz1": 0.0183,
+          "dz2": -0.0183,
+          "theta_x1": -2.5704,
+          "theta_x2": 1.6,
+          "theta_y1": -3.3972,
+          "theta_y2": 1.318,
+          "theta_z1": -29.11,
+          "theta_z2": 7.6374
+        },
+        "rigidity": {
+          "EA": 211.44,
+          "GAy": 482.58,
+          "GAz": 179.06,
+          "GJ": 143.11,
+          "EIy": 135.05,
+          "EIz": 128.94
+        },
+        "coupling": {
+          "g_Tx_Ty": -3.4921,
+          "g_Tx_Tz": -20.516,
+          "g_Ty_Tz": 26.973,
+          "g_Dx_Dy": 636.5,
+          "g_Dx_Dz": 149.8,
+          "g_Dy_Dz": 69.029,
+          "g_Dx_Tx": -6.844,
+          "g_Dx_Ty": 28.43,
+          "g_Dx_Tz": 146.5,
+          "g_Dy_Tx": 43.781,
+          "g_Dy_Ty": 8.8922,
+          "g_Dy_Tz": 18.575,
+          "g_Dz_Tx": 47.43,
+          "g_Dz_Ty": -3.6154,
+          "g_Dz_Tz": -11.0
+        }
+      },
+      "GC|GC": {
+        "geometry": {
+          "dx1": -0.9479,
+          "dx2": 0.9479,
+          "dy1": 0.105,
+          "dy2": -0.105,
+          "dz1": -0.052,
+          "dz2": 0.052,
+          "theta_x1": -8.5292,
+          "theta_x2": 9.2759,
+          "theta_y1": -1.5615,
+          "theta_y2": -7.7779,
+          "theta_z1": -27.519,
+          "theta_z2": 8.219
+        },
+        "rigidity": {
+          "EA": 329.69,
+          "GAy": 214.37,
+          "GAz": 116.12,
+          "GJ": 142.26,
+          "EIy": 243.08,
+          "EIz": 120.68
+        },
+        "coupling": {
+          "g_Tx_Ty": 24.008,
+          "g_Tx_Tz": -10.003,
+          "g_Ty_Tz": 0.019933,
+          "g_Dx_Dy": 126.93,
+          "g_Dx_Dz": 154.75,
+          "g_Dy_Dz": 3.788,
+          "g_Dx_Tx": 0.53405,
+          "g_Dx_Ty": -67.079,
+          "g_Dx_Tz": 1.6111,
+          "g_Dy_Tx": -50.446,
+          "g_Dy_Ty": 0.040855,
+          "g_Dy_Tz": 0.72388,
+          "g_Dz_Tx": -1.3452,
+          "g_Dz_Ty": 0.10553,
+          "g_Dz_Tz": 0.29189
+        }
+      },
+      "TG|CA": {
+        "geometry": {
+          "dx1": -1.1375,
+          "dx2": 1.1375,
+          "dy1": 0.3185,
+          "dy2": -0.3185,
+          "dz1": -0.0955,
+          "dz2": 0.0955,
+          "theta_x1": -3.6691,
+          "theta_x2": 4.7885,
+          "theta_y1": 3.6404,
+          "theta_y2": 5.1469,
+          "theta_z1": -34.028,
+          "theta_z2": 14.898
+        },
+        "rigidity": {
+          "EA": 143.92,
+          "GAy": 50.275,
+          "GAz": 75.002,
+          "GJ": 42.409,
+          "EIy": 119.84,
+          "EIz": 73.292
+        },
+        "coupling": {
+          "g_Tx_Ty": -12.103,
+          "g_Tx_Tz": -19.46,
+          "g_Ty_Tz": 22.919,
+          "g_Dx_Dy": -23.847,
+          "g_Dx_Dz": -29.002,
+          "g_Dy_Dz": -2.7363,
+          "g_Dx_Tx": 14.349,
+          "g_Dx_Ty": 36.434,
+          "g_Dx_Tz": -16.086,
+          "g_Dy_Tx": -17.645,
+          "g_Dy_Ty": 10.926,
+          "g_Dy_Tz": 27.971,
+          "g_Dz_Tx": -16.402,
+          "g_Dz_Ty": -48.325,
+          "g_Dz_Tz": -7.405
+        }
+      },
+      "CA|TG": {
+        "geometry": {
+          "dx1": -0.9271,
+          "dx2": 0.9271,
+          "dy1": -0.0245,
+          "dy2": 0.0245,
+          "dz1": 0.0127,
+          "dz2": -0.0127,
+          "theta_x1": -7.4163,
+          "theta_x2": 11.4837,
+          "theta_y1": 2.3213,
+          "theta_y2": -4.9033,
+          "theta_z1": -22.92,
+          "theta_z2": 12.1
+        },
+        "rigidity": {
+          "EA": 554.87,
+          "GAy": 473.6,
+          "GAz": 200.91,
+          "GJ": 141.4,
+          "EIy": 268.04,
+          "EIz": 136.91
+        },
+        "coupling": {
+          "g_Tx_Ty": 14.259,
+          "g_Tx_Tz": -8.3286,
+          "g_Ty_Tz": -9.9858,
+          "g_Dx_Dy": 410.11,
+          "g_Dx_Dz": -12.035,
+          "g_Dy_Dz": 1.5141,
+          "g_Dx_Tx": 43.588,
+          "g_Dx_Ty": -85.773,
+          "g_Dx_Tz": -2.4967,
+          "g_Dy_Tx": 13.737,
+          "g_Dy_Ty": -33.184,
+          "g_Dy_Tz": 40.376,
+          "g_Dz_Tx": 38.523,
+          "g_Dz_Ty": 27.444,
+          "g_Dz_Tz": -1.2581
+        }
+      },
+      "TA|TA": {
+        "geometry": {
+          "dx1": -0.8635,
+          "dx2": 0.8635,
+          "dy1": 0.4885,
+          "dy2": -0.4885,
+          "dz1": -0.155,
+          "dz2": 0.155,
+          "theta_x1": -5.8557,
+          "theta_x2": 4.8443,
+          "theta_y1": 13.813,
+          "theta_y2": 2.4309,
+          "theta_z1": -32.108,
+          "theta_z2": 12.782
+        },
+        "rigidity": {
+          "EA": 82.104,
+          "GAy": 27.862,
+          "GAz": 34.63,
+          "GJ": 21.209,
+          "EIy": 48.269,
+          "EIz": 38.856
+        },
+        "coupling": {
+          "g_Tx_Ty": 18.25,
+          "g_Tx_Tz": -11.497,
+          "g_Ty_Tz": 1.8324,
+          "g_Dx_Dy": -24.018,
+          "g_Dx_Dz": 7.1967,
+          "g_Dy_Dz": -3.671,
+          "g_Dx_Tx": -6.6265,
+          "g_Dx_Ty": -19.378,
+          "g_Dx_Tz": -0.56284,
+          "g_Dy_Tx": 0.90783,
+          "g_Dy_Ty": -1.9327,
+          "g_Dy_Tz": -8.9827,
+          "g_Dz_Tx": -0.67308,
+          "g_Dz_Ty": 15.602,
+          "g_Dz_Tz": 8.9749
+        }
+      },
+      "CG|CG": {
+        "geometry": {
+          "dx1": -0.8875,
+          "dx2": 0.8875,
+          "dy1": -0.0441,
+          "dy2": 0.0441,
+          "dz1": 0.0915,
+          "dz2": -0.0915,
+          "theta_x1": -1.2125,
+          "theta_x2": 0.4091,
+          "theta_y1": -4.2141,
+          "theta_y2": -7.3224,
+          "theta_z1": -33.004,
+          "theta_z2": 7.3859
+        },
+        "rigidity": {
+          "EA": 197.15,
+          "GAy": 77.663,
+          "GAz": 94.433,
+          "GJ": 25.52,
+          "EIy": 82.438,
+          "EIz": 56.958
+        },
+        "coupling": {
+          "g_Tx_Ty": 2.0674,
+          "g_Tx_Tz": 4.7851,
+          "g_Ty_Tz": 5.9619,
+          "g_Dx_Dy": -71.146,
+          "g_Dx_Dz": 9.7432,
+          "g_Dy_Dz": 23.944,
+          "g_Dx_Tx": 6.7458,
+          "g_Dx_Ty": 5.8574,
+          "g_Dx_Tz": -28.534,
+          "g_Dy_Tx": -3.2262,
+          "g_Dy_Ty": -4.1972,
+          "g_Dy_Tz": 27.789,
+          "g_Dz_Tx": 25.772,
+          "g_Dz_Ty": -28.534,
+          "g_Dz_Tz": 11.212
+        }
+      }
+    }
+  }
+}

@@ -176,6 +176,9 @@ class FEMElement:
     ea: float = EA_DS       # per-element stiffness (crossover links override with rigid values)
     ei: float = EI_DS
     gj: float = GJ_DS
+    # SNUPI motif family for material="snupi" (see snupi_material). Intra-helix duplex steps
+    # only: "regular_bp" or "nicked_bp". Ignored by the cando (isotropic ea/ei/gj) path.
+    motif_family: str = "regular_bp"
 
 
 @dataclass
@@ -280,6 +283,7 @@ def build_fem_mesh(design: Design) -> FEMMesh:
                 R=R.copy(),
                 ei=EI_DS * (NICK_FACTOR if nicked else 1.0),
                 gj=GJ_DS * (NICK_FACTOR if nicked else 1.0),
+                motif_family="nicked_bp" if nicked else "regular_bp",
             ))
 
     # ── Crossover springs ─────────────────────────────────────────────────────
@@ -415,6 +419,48 @@ def _beam_stiffness_local(L: float, EA: float = EA_DS, EI: float = EI_DS,
     return K
 
 
+def _snupi_element_stiffness(L: float, D: np.ndarray) -> np.ndarray:
+    """12×12 LOCAL stiffness of a 2-node **anisotropic Timoshenko** beam whose sectional
+    constitutive law is SNUPI's 6×6 matrix ``D`` (snupi_material, DOF order
+    ``[dx,dy,dz,θx,θy,θz]`` with dx=axial, θx=torsion).
+
+    DOF ordering matches NADOC's element: ``[u,v,w,θx,θy,θz]`` per node with **local
+    z = axial** (same frame as :func:`_beam_stiffness_local`, so the existing
+    :func:`_transform_to_global` applies unchanged). The six constant element strains are
+
+        s0 axial      = (w_j−w_i)/L                       ← D dx  (EA)
+        s1 shear-x    = (u_j−u_i)/L − (θy_i+θy_j)/2       ← D dy  (GAy)
+        s2 shear-y    = (v_j−v_i)/L + (θx_i+θx_j)/2       ← D dz  (GAz)
+        s3 torsion    = (θz_j−θz_i)/L                     ← D θx  (GJ)
+        s4 bend-y     = (θy_j−θy_i)/L                     ← D θy  (EIy)
+        s5 bend-x     = (θx_j−θx_i)/L                     ← D θz  (EIz)
+
+    ``K = L · Bᵀ D B`` (one-point/constant-strain integration — the standard cure for
+    shear locking; the shear term is under-integrated so the stubby per-bp element stays
+    compliant). Because the strains are ordered by *role* (axial, shear, shear, torsion,
+    bend, bend) to match ``D``'s columns, no permutation of ``D`` is needed: the
+    twist-stretch coupling ``D[0,3]`` couples axial (w) ↔ torsion (θz) directly, and it is
+    frame-independent (both are helix-axis DOFs). The transverse/bending anisotropy
+    couplings are in the (arbitrary) element perpendicular frame — see the bp-frame caveat
+    in project_snupi_mimic.md; they largely average out over a helical turn.
+    """
+    B = np.zeros((6, 12), dtype=float)
+    invL = 1.0 / L
+    # s0 axial: w_i(2), w_j(8)
+    B[0, 2] = -invL; B[0, 8] = invL
+    # s1 shear-x: u_i(0),u_j(6) minus mean θy (4,10)
+    B[1, 0] = -invL; B[1, 6] = invL; B[1, 4] = -0.5; B[1, 10] = -0.5
+    # s2 shear-y: v_i(1),v_j(7) plus mean θx (3,9)
+    B[2, 1] = -invL; B[2, 7] = invL; B[2, 3] = 0.5; B[2, 9] = 0.5
+    # s3 torsion: θz_i(5), θz_j(11)
+    B[3, 5] = -invL; B[3, 11] = invL
+    # s4 bend-y: θy_i(4), θy_j(10)
+    B[4, 4] = -invL; B[4, 10] = invL
+    # s5 bend-x: θx_i(3), θx_j(9)
+    B[5, 3] = -invL; B[5, 9] = invL
+    return L * (B.T @ D @ B)
+
+
 def _transform_to_global(K_local: np.ndarray, R: np.ndarray) -> np.ndarray:
     """
     Transform a 12×12 element stiffness matrix from local to global coordinates.
@@ -436,6 +482,7 @@ def _transform_to_global(K_local: np.ndarray, R: np.ndarray) -> np.ndarray:
 
 def assemble_global_stiffness(
     mesh: FEMMesh,
+    material: str = "cando",
 ) -> Tuple[lil_matrix, np.ndarray]:
     """
     Assemble global stiffness matrix K.
@@ -444,7 +491,18 @@ def assemble_global_stiffness(
     where n_dof = 6 × len(mesh.nodes).  f is always zero — no pre-stress
     forces are applied.  Crossover springs contribute only to K (they enforce
     zero relative displacement, not collapse to zero absolute distance).
+
+    ``material`` selects the intra-helix beam constitutive law:
+      * ``"cando"`` (default) — isotropic Euler-Bernoulli with scalar EA/EI/GJ
+        (:func:`_beam_stiffness_local`). The validated CanDo baseline, unchanged.
+      * ``"snupi"`` — anisotropic Timoshenko element (:func:`_snupi_element_stiffness`)
+        fed the per-element motif family's sequence-mean 6×6 SNUPI matrix (rigidities +
+        15 couplings, incl. twist-stretch) for intra-helix steps, AND (P2b) each rigid
+        crossover link replaced by a COMPLIANT ``double_co`` CO-step beam along the offset.
+        ssDNA (extra-base) springs are identical in both paths. See project_snupi_mimic.
     """
+    if material not in ("cando", "snupi"):
+        raise ValueError(f"unknown FEM material {material!r} (expected 'cando' or 'snupi')")
     n = len(mesh.nodes)
     n_dof = 6 * n
     K = lil_matrix((n_dof, n_dof), dtype=float)
@@ -452,14 +510,22 @@ def assemble_global_stiffness(
 
     # ── Beam elements ─────────────────────────────────────────────────────────
     # Elements may have variable length (bp gaps) and stiffness (DNA vs crossover link).
-    _kloc_cache: Dict[Tuple[float, float, float, float], np.ndarray] = {}
+    _kloc_cache: Dict[Tuple, np.ndarray] = {}
     for el in mesh.elements:
         L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
-        key = (L, el.ea, el.ei, el.gj)
-        K_local = _kloc_cache.get(key)
-        if K_local is None:
-            K_local = _beam_stiffness_local(L, el.ea, el.ei, el.gj)
-            _kloc_cache[key] = K_local
+        if material == "snupi":
+            key = ("snupi", round(L, 6), el.motif_family)
+            K_local = _kloc_cache.get(key)
+            if K_local is None:
+                from backend.physics import snupi_material as _sm
+                K_local = _snupi_element_stiffness(L, _sm.family_mean_D(el.motif_family))
+                _kloc_cache[key] = K_local
+        else:
+            key = (L, el.ea, el.ei, el.gj)
+            K_local = _kloc_cache.get(key)
+            if K_local is None:
+                K_local = _beam_stiffness_local(L, el.ea, el.ei, el.gj)
+                _kloc_cache[key] = K_local
         K_g = _transform_to_global(K_local, el.R)
         di = 6 * el.node_i
         dj = 6 * el.node_j
@@ -492,30 +558,59 @@ def assemble_global_stiffness(
                 K[di+3+dim, dj+3+dim] -= kr
                 K[dj+3+dim, di+3+dim] -= kr
 
-    # ── Crossover rigid links (penalty on the exact constraint C·d = 0) ─────────
-    # d = [u_i, θ_i, u_j, θ_j] (12). Constraint rows:
-    #   translational: u_j − u_i + skew(r)·θ_i = 0
-    #   rotational:    θ_j − θ_i = 0
-    # K += K_PENALTY · Cᵀ C on the (i,j) DOF block.
-    for lk in mesh.rigid_links:
-        rx, ry, rz = lk.offset
-        skew = np.array([[0.0, -rz, ry], [rz, 0.0, -rx], [-ry, rx, 0.0]])
-        I3 = np.eye(3)
-        C = np.zeros((6, 12))
-        C[0:3, 0:3] = -I3          # −u_i
-        C[0:3, 3:6] = skew         # +skew(r)·θ_i
-        C[0:3, 6:9] = I3           # +u_j
-        C[3:6, 3:6] = -I3          # −θ_i
-        C[3:6, 9:12] = I3          # +θ_j
-        Kc = K_PENALTY * (C.T @ C)
-        di, dj = 6 * lk.node_i, 6 * lk.node_j
-        idx = list(range(di, di + 6)) + list(range(dj, dj + 6))
-        for a in range(12):
-            ia = idx[a]
-            for b in range(12):
-                v = Kc[a, b]
-                if v != 0.0:
-                    K[ia, idx[b]] += v
+    # ── Crossover links ─────────────────────────────────────────────────────────
+    if material == "snupi":
+        # P2b: model each DX crossover as a COMPLIANT SNUPI CO-step beam (Table S4
+        # `double_co` mean D) spanning the inter-helix offset, instead of a rigid link.
+        # SNUPI's CO step is a bridging beam (its Δx≈0.95 nm half-length ⇒ ~1.9 nm axial =
+        # the inter-helix span), so the element axial (local z) points along the offset.
+        # This is the key SNUPI/CanDo difference: crossovers are finite-stiffness, not rigid.
+        # (single-vs-double-CO classification is simplified to double_co — the well-conditioned,
+        # all-PD family + the standard reciprocal junction; see project_snupi_mimic P2b note.)
+        from backend.physics import snupi_material as _sm
+        D_co = _sm.family_mean_D("double_co")
+        _co_cache: Dict[float, np.ndarray] = {}
+        for lk in mesh.rigid_links:
+            L = float(np.linalg.norm(lk.offset))
+            if L < 1e-6:
+                continue
+            rL = round(L, 6)
+            K_local = _co_cache.get(rL)
+            if K_local is None:
+                K_local = _snupi_element_stiffness(L, D_co)
+                _co_cache[rL] = K_local
+            R_co = _frame_from_helix_axis(lk.offset / L)     # local z = offset direction
+            K_g = _transform_to_global(K_local, R_co)
+            di, dj = 6 * lk.node_i, 6 * lk.node_j
+            K[di:di+6, di:di+6] += K_g[0:6,  0:6]
+            K[di:di+6, dj:dj+6] += K_g[0:6,  6:12]
+            K[dj:dj+6, di:di+6] += K_g[6:12, 0:6]
+            K[dj:dj+6, dj:dj+6] += K_g[6:12, 6:12]
+    else:
+        # cando: rigid links = penalty on the exact constraint C·d = 0.
+        # d = [u_i, θ_i, u_j, θ_j] (12). Constraint rows:
+        #   translational: u_j − u_i + skew(r)·θ_i = 0
+        #   rotational:    θ_j − θ_i = 0
+        # K += K_PENALTY · Cᵀ C on the (i,j) DOF block.
+        for lk in mesh.rigid_links:
+            rx, ry, rz = lk.offset
+            skew = np.array([[0.0, -rz, ry], [rz, 0.0, -rx], [-ry, rx, 0.0]])
+            I3 = np.eye(3)
+            C = np.zeros((6, 12))
+            C[0:3, 0:3] = -I3          # −u_i
+            C[0:3, 3:6] = skew         # +skew(r)·θ_i
+            C[0:3, 6:9] = I3           # +u_j
+            C[3:6, 3:6] = -I3          # −θ_i
+            C[3:6, 9:12] = I3          # +θ_j
+            Kc = K_PENALTY * (C.T @ C)
+            di, dj = 6 * lk.node_i, 6 * lk.node_j
+            idx = list(range(di, di + 6)) + list(range(dj, dj + 6))
+            for a in range(12):
+                ia = idx[a]
+                for b in range(12):
+                    v = Kc[a, b]
+                    if v != 0.0:
+                        K[ia, idx[b]] += v
 
     return K, f
 
@@ -725,6 +820,7 @@ def solve_prestress_shape(
     n_steps: int = 30,
     fixed_nodes: Optional[List[int]] = None,
     field: Optional[dict] = None,
+    material: str = "cando",
 ) -> np.ndarray:
     """Geometrically-nonlinear equilibrium shape under the loop/skip eigenstrain.
 
@@ -750,7 +846,7 @@ def solve_prestress_shape(
     f_field = assemble_field_force(mesh, field)      # dead load: global, not reframed
     for _ in range(n_steps):
         _reframe_elements(mesh, positions)
-        K, _ = assemble_global_stiffness(mesh)
+        K, _ = assemble_global_stiffness(mesh, material=material)
         f = (assemble_prestress_force(mesh, design) + f_field) / n_steps
         K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         du = solve_equilibrium(K_free, f_free, K.shape[0], free)
@@ -1244,6 +1340,7 @@ def predict_shape(
     with_rmsf: bool = True,
     anchors: Optional[List[dict]] = None,
     field: Optional[dict] = None,
+    material: str = "cando",
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
 
@@ -1299,12 +1396,13 @@ def predict_shape(
 
     if nonlinear:
         positions = solve_prestress_shape(
-            design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes, field=field)
+            design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes, field=field,
+            material=material)
         u = np.zeros(6 * len(mesh.nodes), dtype=float)
         for i in range(len(mesh.nodes)):
             u[6 * i: 6 * i + 3] = positions[i] - mesh.nodes[i].position
     else:
-        K, _ = assemble_global_stiffness(mesh)
+        K, _ = assemble_global_stiffness(mesh, material=material)
         f = assemble_prestress_force(mesh, design) + assemble_field_force(mesh, field)
         K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         u = solve_equilibrium(K_free, f_free, K.shape[0], free)
@@ -1317,7 +1415,7 @@ def predict_shape(
         "anchor_keys": [[hid, bp] for (hid, bp) in anchor_keys],
     }
     if with_rmsf:
-        K, _ = assemble_global_stiffness(mesh)
+        K, _ = assemble_global_stiffness(mesh, material=material)
         rmsf = compute_rmsf_nma(K, len(mesh.nodes))
         out["rmsf"] = [
             {"helix_id": node.helix_id, "bp_index": node.global_bp,
