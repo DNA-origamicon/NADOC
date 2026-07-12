@@ -159,17 +159,23 @@ def test_electrostatics_stiffens_rmsf_and_cando_unchanged(routed_6hb):
     assert rmsf_es.mean() <= rmsf_no_es.mean() + 1e-9   # electrostatics can only stiffen
 
 
-def test_snupi_nonlinear_solve_runs_and_is_finite(routed_6hb):
-    """The S9 iterative/adaptive electrostatic solve (material='snupi', nonlinear) produces a
-    finite, sane shape — and materially differs from the cando nonlinear solve."""
+def test_snupi_nonlinear_shape_is_finite_and_not_stretched(routed_6hb):
+    """The default snupi nonlinear shape solve produces a finite, physically-bounded shape whose
+    axial span is COMPARABLE to cando — it must NOT balloon. (Regression pin: including the
+    inter-helix electrostatics in the fixed-point shape solve ran away and stretched the bundle
+    ~2×; the electrostatics now lives in the RMSF/NMA + the opt-in corotational solve, not here.)"""
     snupi = predict_shape(routed_6hb, nonlinear=True, with_rmsf=False, material="snupi")
     cando = predict_shape(routed_6hb, nonlinear=True, with_rmsf=False, material="cando")
     ps = np.array([p["backbone_position"] for p in snupi["positions"]])
     pc = np.array([p["backbone_position"] for p in cando["positions"]])
     assert np.all(np.isfinite(ps))
     assert ps.shape == pc.shape
-    # the two solves land in different places (electrostatics + anisotropic material)
-    assert not np.allclose(ps, pc, atol=1e-6)
+
+    def _span(P):
+        c = P - P.mean(0)
+        return float(np.ptp(c @ np.linalg.svd(c, full_matrices=False)[2][0]))
+    # snupi span must stay within ~30% of cando (no runaway electrostatic stretch)
+    assert _span(ps) < 1.3 * _span(pc)
     # positions stay physically bounded (no blow-up from the repulsive springs)
     span = np.ptp(pc, axis=0).max()
     assert np.ptp(ps, axis=0).max() < 5.0 * span

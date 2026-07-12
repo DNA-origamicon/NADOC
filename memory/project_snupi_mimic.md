@@ -236,6 +236,21 @@ plugging into the same param DB. ✅ Verdict reached (snupi ≥ cando both latti
 - Don't touch `_PHASE_*`. Concurrent sessions share this tree — never git stash/reset/restore/checkout;
   forbid git in subagent prompts.
 
+## ⚠ Shape-solve fix (2026-07-12) — snupi Fine no longer stretches ~2×
+The default (fixed-point S9) snupi nonlinear SHAPE solve included the inter-helix electrostatics,
+which **ran away** (no consistent tangent → the lateral-soft repulsion mode blows up → every helix
+stretched ~2×: 6hbx100_noT 35→85 nm vs cando 42 nm). **Fix:** the default snupi shape solve now drops
+through the same corotational-PREDICTOR loop as cando with the SNUPI material, WITHOUT electrostatics
+(`solve_prestress_shape`). Electrostatics stays where it's (a) validated — the free-free NMA/RMSF (PD
+axial-only tangent, exp42 numbers unchanged) — and (b) stable — the opt-in corotational Newton
+(`corotational=True`, its consistent G11 tangent handles the repulsion; 6hbx100_noT span 40.9 nm).
+Verified end-to-end through the real job→display path: span 41.7 nm. Regression pin
+`test_snupi_nonlinear_shape_is_finite_and_not_stretched` (snupi span < 1.3× cando). `_solve_snupi_nonlinear`
+is now unused by the default path (kept for reference / the corotational path supersedes it).
+**Frontend note:** the deform-display toggle works for SAVED designs (design-scoped unified job list);
+a job run on a NEW *unsaved* design is filtered out of that list (path mismatch) — a known edge case,
+not a feature bug (the display itself works — user-confirmed + backend serves all payloads).
+
 ## Handoff
 **Gap-closure Phase A + B + C DONE (2026-07-11/12) — see [[project_snupi_gaps]] head for full detail.**
 Phase A: G1 (sequence-specific `motif_D`), G6 (SPD mass matrix + generalized eigsh), G12 (`mgcl2_M` salt).

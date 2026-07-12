@@ -1043,17 +1043,18 @@ def solve_prestress_shape(
     pointing along the lab-frame direction (unlike the co-rotating eigenstrain). A field
     load needs an anchor to hold against (COM drift); with none, the centroid pin absorbs it.
     """
-    # SNUPI adds inter-helix Debye–Hückel electrostatics + an iterative/adaptive procedure
-    # (SI S9) — a separate solve path. CanDo keeps the incremental corotational loop below,
-    # BYTE-IDENTICAL (this branch is the only change to the cando shape solve).
-    if material == "snupi":
-        # Phase D opt-in: the full corotational Newton (G4/G5/G11) — genuine large-deflection shape.
-        # Default = the validated fixed-point predictor + electrostatic self-consistency (S9).
-        if corotational:
-            return _solve_snupi_corotational(design, mesh, n_steps=n_steps,
-                                             fixed_nodes=fixed_nodes, field=field, mgcl2_M=mgcl2_M)
-        return _solve_snupi_nonlinear(design, mesh, n_steps=n_steps,
-                                      fixed_nodes=fixed_nodes, field=field, mgcl2_M=mgcl2_M)
+    # Phase D opt-in: the full corotational Newton (G4/G5/G11) — the genuine SI-S9 large-deflection
+    # shape that CORRECTLY includes the inter-helix electrostatics (its consistent tangent stabilises
+    # the repulsion). The default snupi shape below is the same corotational-PREDICTOR loop as cando
+    # but with the SNUPI material, and DELIBERATELY WITHOUT electrostatics: the fixed-point S9
+    # (`_solve_snupi_nonlinear`) is numerically unstable under the repulsion — with no consistent
+    # tangent the lateral-soft repulsive mode runs away and the bundle stretches ~2× (a real bug).
+    # The electrostatics' shape role (inter-helix spacing) is minor for display and NADOC's geometry
+    # already sets it; its VALIDATED role is the flexibility/RMSF (the free-free NMA, which keeps the
+    # PD axial-only electrostatic tangent) — that path is unchanged.
+    if material == "snupi" and corotational:
+        return _solve_snupi_corotational(design, mesh, n_steps=n_steps,
+                                         fixed_nodes=fixed_nodes, field=field, mgcl2_M=mgcl2_M)
     positions = [n.position.copy() for n in mesh.nodes]
     f_field = assemble_field_force(mesh, field)      # dead load: global, not reframed
     for _ in range(n_steps):
