@@ -54,6 +54,9 @@ const _MD_PREWARM_INTERVAL_MS = 30000
 // SLURM, but the panel otherwise only re-fetches on user actions.  So while a
 // submitted remote job is in flight we poll the list ourselves on this cadence.
 const _MD_REMOTE_POLL_MS = 20000
+const _WS_WATCHDOG_MS = 5000     // safety-net tick: reconnect a dropped detail WS / probe a wedged one
+const _WS_STALE_MS    = 12000    // no WS state push for this long ⇒ treat the socket as wedged (pushes are 1–3 s)
+const _MD_WARMING_TIMEOUT_MS = 30000   // a Display-MD load stuck 'warming…' this long ⇒ flip the dot to 'error'
 
 // Debug timestamp — kept to <12 chars so console entries don't collapse
 const _ts = () => new Date().toISOString().slice(11, 23)
@@ -131,15 +134,73 @@ export function mdJobIsActive(job) {
  *  NAMD job. `isActive` = mdJobIsActive (queued/preparing/running, minus awaiting-submit).
  *  A LOCAL stopped/failed job resumes via this control; an Alpine job's cluster-gated
  *  resume stays on its dedicated resume button, so Alpine jobs are never "Resume" here
- *  (but an active Alpine job still shows Stop). */
-export function mdRunControl(selectedJob, { busy = false } = {}) {
+ *  (but an active Alpine job still shows Stop).
+ *
+ *  This control governs the RELAXATION lifecycle only.  A PRODUCTION child is driven by
+ *  the separate Production button (Start/Stop/Resume Production), so when one is selected
+ *  the Relax button is inert — "▶ Relax" but DISABLED — rather than mislabeling a running
+ *  production as "■ Stop Relax". */
+export function mdRunControl(selectedJob, { busy = false, runTarget = 'local' } = {}) {
+  if (mdIsProductionChild(selectedJob)) {
+    return { action: RUN_ACTION.RUN, label: '▶ Relax', disabled: true }
+  }
   const isAlpine = selectedJob?.execution_target === 'alpine'
-  return runControlState(selectedJob, {
+  const rc = runControlState(selectedJob, {
     verb: 'Relax',
     isActive: mdJobIsActive,
     isResumable: (j) => !isAlpine && ['stopped', 'failed'].includes(j?.status),
     busy,
   })
+  // A fresh launch (RUN) targeting Alpine does NOT run remotely — it PREPARES + queues
+  // the job locally, then a separate Submit-to-Alpine step follows.  Relabel so "Relax"
+  // doesn't imply it started a cluster run.
+  if (rc.action === RUN_ACTION.RUN && runTarget === 'alpine') {
+    return { ...rc, label: '▶ Prepare for Alpine' }
+  }
+  return rc
+}
+
+/** Pure: what the Production button does for the selected job.
+ *  A running/preparing production child → 'stop'; a stopped/failed production child →
+ *  'resume' (from its last checkpoint); anything else (a relaxation root, or a completed
+ *  job) → 'start' — spawn a new production child (or chain one off a completed production). */
+export function mdProductionAction(job) {
+  if (mdIsProductionChild(job) && job?.status !== 'completed') {
+    return mdJobIsActive(job) ? 'stop' : 'resume'
+  }
+  return 'start'
+}
+
+/** Pure: what should the detail-WebSocket watchdog do for the selected job?
+ *  The status WS only drives a LOCAL, non-terminal job — so:
+ *    'disarm'    → nothing to watch (no selection / terminal / remote-SLURM/Alpine job)
+ *    'reconnect' → local live job but the socket is gone (dropped/never opened)
+ *    'refresh'   → socket open but silent past `staleMs` (wedged) → probe + reopen
+ *    'idle'      → socket open and pushing recently, do nothing
+ *  Keeps the local job live behind a dropped/wedged socket, where there is otherwise
+ *  no poll fallback (the old `_pollTimer` was never armed). */
+export function mdWatchdogDecision({ job = null, wsOpen = false, msSinceMsg = 0, staleMs = _WS_STALE_MS } = {}) {
+  if (!job) return 'disarm'
+  if (_TERMINAL_STATUSES.has(job.status)) return 'disarm'
+  if (job.slurm_job_id || job.execution_target === 'alpine') return 'disarm'
+  if (!wsOpen) return 'reconnect'
+  if (msSinceMsg > staleMs) return 'refresh'
+  return 'idle'
+}
+
+/** Pure: a nudge to reconnect when Alpine runs are in flight but the session isn't
+ *  connected.  Such jobs can't be monitored and — critically — a run that FINISHES while
+ *  disconnected can't have its results fetched until the user reconnects (poll_remote_jobs
+ *  no-ops when down).  Returns a message, or '' when connected/connecting or nothing is in
+ *  flight.  In-flight = a submitted (slurm_job_id) Alpine job still queued/running/preparing. */
+export function mdRemoteReconnectPrompt(jobs, clusterState) {
+  if (clusterState === 'connected' || clusterState === 'connecting') return ''
+  const inFlight = (jobs ?? []).filter(j =>
+    j?.execution_target === 'alpine' && j?.slurm_job_id &&
+    ['queued', 'running', 'preparing'].includes(j?.status))
+  if (!inFlight.length) return ''
+  const n = inFlight.length
+  return `⚠ ${n} Alpine run${n === 1 ? '' : 's'} in flight — reconnect to monitor and fetch results.`
 }
 
 /** Pure: is any Alpine job submitted-and-in-flight (so the panel should keep polling
@@ -546,21 +607,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // List + detail
   const listEl      = document.getElementById('md-jobs-list')
   const detailEl    = document.getElementById('md-jobs-detail')
-  const statusEl    = document.getElementById('md-jobs-detail-status')
   // Relax start/stop/resume is owned by the master run control (the retired detail
   // Start/Stop were removed); Archive/Delete are consolidated into #simulate-job-actions.
-  const earlyStopLiveWrap = document.getElementById('md-jobs-early-stop-live-wrap')
-  const earlyStopLiveChk  = document.getElementById('md-jobs-early-stop-live')
-  const earlyStopLivePending = document.getElementById('md-jobs-early-stop-live-pending')
+  // The single early-stop toggle lives in Advanced (#md-jobs-early-stop) and is also the
+  // live mid-relax control — its pending badge is #md-jobs-early-stop-pending.
+  const earlyStopPending = document.getElementById('md-jobs-early-stop-pending')
   const errorEl     = document.getElementById('md-jobs-detail-error')
-  const progressEl  = document.getElementById('md-jobs-progress')
   const timelineEl  = document.getElementById('md-jobs-timeline')
   const metricsEl   = document.getElementById('md-jobs-metrics')
   const healthToggle  = document.getElementById('md-jobs-health-toggle')
   const healthBody    = document.getElementById('md-jobs-health-body')
   const healthArrow   = document.getElementById('md-jobs-health-arrow')
   const healthSpinner = document.getElementById('md-jobs-health-spinner')
-  const loadFramesBtn = document.getElementById('md-jobs-load-frames-btn')
+  // Cluster (Alpine) card — always-visible top-level card hosting the connect chip +
+  // the per-job submit/resume/ensemble/status/resume-history controls.
+  const clusterStatusEl  = document.getElementById('md-jobs-cluster-status')
+  const clusterReconnectEl = document.getElementById('md-jobs-cluster-reconnect-note')
   const _archive      = initJobArchive({ api, kind: 'md' })
   const prodBox       = document.getElementById('md-jobs-production')
   const prodStepsInput = document.getElementById('md-jobs-prod-steps')
@@ -587,13 +649,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _jobs         = []     // cached list from API
   let _selectedId   = null   // currently displayed job_id
   let _ws           = null   // active WebSocket
-  let _pollTimer    = null   // REST fallback poll interval
+  let _wsWatchdog   = null   // safety-net interval: reconnect a dropped detail WS / unwedge a silent one
+  let _lastWsMsgAt  = 0      // ms timestamp of the last WS push (staleness detector)
+  let _wsProbing    = false  // a watchdog REST probe is in flight (avoid overlap)
   let _launching    = false
   let _enginesOk    = false  // both NAMD + GROMACS found
   let _threadsInit  = false  // seeded the threads input from server recommendation once
   let _displayTimer = null
   let _prewarmTimer = null
   let _remotePollTimer = null   // periodic SLURM-status poll for in-flight Alpine jobs
+  let _hadActiveRemote = false  // did the last remote poll see an active Alpine job? (edge-trigger a final refresh)
   let _displayJobId = null
   let _displayKey   = null
   let _displayMeta  = null
@@ -622,6 +687,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return runTargetAlpine?.checked ? 'alpine' : 'local'
   }
 
+  // Show/hide the "reconnect to monitor & fetch results" nudge from the live cluster state
+  // + the current job set.  Called on cluster-state changes and after every list refresh.
+  function _renderReconnectPrompt() {
+    if (!clusterReconnectEl) return
+    const msg = mdRemoteReconnectPrompt(_jobs, getClusterState?.() ?? 'disconnected')
+    clusterReconnectEl.textContent = msg
+    clusterReconnectEl.style.display = msg ? '' : 'none'
+  }
+
   // Enable/disable the Alpine radio from the live cluster-connection state; fall
   // back to Local if the session drops while Alpine was selected.
   function _updateRunTargetGate(state = getClusterState?.() ?? 'disconnected') {
@@ -634,10 +708,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       runTargetAlpineLabel.title = reason || 'Submit this relaxation to the CU Alpine cluster'
     }
     if (runTargetHint) runTargetHint.textContent = disabled ? '(connect cluster)' : ''
-    if (disabled && runTargetAlpine?.checked && runTargetLocal) runTargetLocal.checked = true
+    if (disabled && runTargetAlpine?.checked && runTargetLocal) {
+      runTargetLocal.checked = true
+      _paintRunControl()   // the Relax button reverts from "Prepare for Alpine" → "Relax"
+    }
   }
-  window.addEventListener('nadoc:cluster-state-change', (e) => _updateRunTargetGate(e.detail?.state))
+  window.addEventListener('nadoc:cluster-state-change', (e) => {
+    _updateRunTargetGate(e.detail?.state)
+    _renderReconnectPrompt()
+  })
   _updateRunTargetGate()
+  // Switching Local↔Alpine repaints the primary control ("▶ Relax" ⇄ "▶ Prepare for Alpine").
+  runTargetLocal?.addEventListener('change', () => _paintRunControl())
+  runTargetAlpine?.addEventListener('change', () => _paintRunControl())
 
   // Health card: simple collapse (starts open).
   healthToggle?.addEventListener('click', () => {
@@ -665,13 +748,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     advArrowStyle: 'rotate',
     collapsible: false,   // engine header is a static label; Simulate owns the collapse
     onOpen: () => _onOpen(),
-    onClose: () => { _stopMdPrewarm(); _stopRemotePoll() },   // retained for teardown symmetry (no per-panel collapse fires it now)
+    onClose: () => { _stopMdPrewarm(); _stopRemotePoll(); _stopWsWatchdog() },   // retained for teardown symmetry (no per-panel collapse fires it now)
   })
 
   // ── Jobs + Visualizations cards: simple collapse (start open), mirror oxDNA ──
   for (const [tid, bid, aid] of [
     ['md-jobs-list-toggle', 'md-jobs-list-body', 'md-jobs-list-arrow'],
     ['md-jobs-viz-toggle',  'md-jobs-viz-body',  'md-jobs-viz-arrow'],
+    ['md-jobs-cluster-toggle', 'md-jobs-cluster-body', 'md-jobs-cluster-arrow'],
   ]) {
     const t = document.getElementById(tid)
     const bd = document.getElementById(bid)
@@ -740,6 +824,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   }
 
+  /** Surface (or clear) the "backend not responding" banner.  `#md-jobs-namd-status`
+   *  is `display:none` by default (engine-availability moved to the tab ⚠), so an
+   *  active job would otherwise keep looking "ongoing" with the backend dead and no
+   *  visible hint — un-hide the element only while the warning is live. */
+  function _setBackendStale(stale) {
+    if (!namdStatusEl) return
+    if (stale) {
+      namdStatusEl.textContent = '⚠ Backend not responding — job status may be stale (is the server running?)'
+      namdStatusEl.style.color = _C.err
+      namdStatusEl.style.display = ''
+    } else {
+      namdStatusEl.style.display = 'none'
+    }
+  }
+
   // ── Job list fetch ─────────────────────────────────────────────────────────
   async function _fetchJobs() {
     try {
@@ -748,10 +847,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       _jobs = jobs
       _jobs.sort((a, b) => b.created_at - a.created_at)
       console.log(`[${_ts()}] md-jobs: fetched ${_jobs.length} jobs`)
-      if (_fetchFails > 0) { _fetchFails = 0; _checkEngines() }  // reconnected → restore status line
+      if (_fetchFails > 0) { _fetchFails = 0; _setBackendStale(false); _checkEngines() }  // reconnected → restore status line
       _renderList()
       _selectBestJob()
       _notifyIfJobsChanged()
+      _renderReconnectPrompt()   // in-flight Alpine runs + a down session → nudge to reconnect
       if (displayToggle?.checked) _refreshMdDisplay()
       else _refreshMdPrewarm()
     } catch (err) {
@@ -760,10 +860,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // Surface a non-responding backend so an active job doesn't silently keep
       // looking "ongoing" — the poll can't confirm it's still alive.  Two strikes
       // avoids flapping on a single dropped request.
-      if (_fetchFails >= 2 && namdStatusEl) {
-        namdStatusEl.textContent = '⚠ Backend not responding — job status may be stale (is the server running?)'
-        namdStatusEl.style.color = _C.err
-      }
+      if (_fetchFails >= 2) _setBackendStale(true)
     }
   }
 
@@ -814,8 +911,19 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // Reflects the background prewarm (socket load) as well as the live display, so the
   // user can see when toggling will paint instantly vs pay the ~5 s load.
   let _displayIndicatorState = 'off'
+  let _warmTimer = null
   function _setDisplayIndicator(state) {
     _displayIndicatorState = state
+    // A background load that hangs (huge PSF, wedged WS) fires no follow-up event, so a
+    // 'warming' dot could sit amber forever.  Time it out to 'error' so it stops implying
+    // progress; the next prewarm cycle re-warms and flips it back to 'ready' on success.
+    if (_warmTimer) { clearTimeout(_warmTimer); _warmTimer = null }
+    if (state === 'warming') {
+      _warmTimer = setTimeout(() => {
+        _warmTimer = null
+        if (_displayIndicatorState === 'warming') _setDisplayIndicator('error')
+      }, _MD_WARMING_TIMEOUT_MS)
+    }
     if (!displayIndicator) return
     const spec = mdReadinessIndicator(state)
     displayIndicator.style.display = spec.show ? 'inline-flex' : 'none'
@@ -848,12 +956,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _displayMeta = null
     _closeWs()
     if (detailEl) detailEl.style.display = 'none'
-    if (statusEl) statusEl.textContent = ''
+    // The Cluster card stays visible (it hosts the connect chip); just reset its per-job
+    // parts so no stale submit/resume/ensemble/status lingers with nothing selected.
+    if (clusterStatusEl) { clusterStatusEl.style.display = 'none'; clusterStatusEl.textContent = '' }
+    if (submitAlpineBtn) submitAlpineBtn.style.display = 'none'
+    if (resumeBtn) resumeBtn.style.display = 'none'
+    const _ensWrap = document.getElementById('md-jobs-ensemble-wrap')
+    if (_ensWrap) _ensWrap.style.display = 'none'
+    if (resumeHistWrap) resumeHistWrap.style.display = 'none'
     if (errorEl) {
       errorEl.style.display = 'none'
       errorEl.textContent = ''
     }
-    if (progressEl) progressEl.textContent = ''
     if (timelineEl) timelineEl.textContent = ''
     if (metricsEl) metricsEl.textContent = ''
     if (ensembleRollupEl) { ensembleRollupEl.style.display = 'none'; ensembleRollupEl.innerHTML = '' }
@@ -930,13 +1044,34 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       _setProductionStatus('Queues a production stage into the active chain.', _C.dim)
       return
     }
-    if (prodBtn) prodBtn.textContent = 'Start Production'
+    if (prodBtn) { prodBtn.textContent = 'Start Production'; prodBtn.dataset.prodAction = 'start'; prodBtn.title = '' }
     // Legacy-migration button: only for a root job whose production was appended
     // onto the relaxation (old same-job layout).  Peels it back to a clean relaxation.
     if (revertProdBtn) revertProdBtn.style.display = mdHasAppendedProduction(job) ? '' : 'none'
     if (!job) {
       _setProductionEnabled(false)
       _setProductionStatus('Select a relaxed job to enable production', _C.dim)
+      return
+    }
+    // A selected PRODUCTION child that is still running or was stopped: the Production
+    // button becomes its Stop / Resume control (the primary Relax button is inert for it).
+    const prodAction = mdProductionAction(job)
+    if (prodAction !== 'start') {
+      if (revertProdBtn) revertProdBtn.style.display = 'none'
+      if (prodBox) prodBox.style.display = ''
+      if (prodAction === 'stop') {
+        if (prodBtn) { prodBtn.textContent = '■ Stop Production'; prodBtn.dataset.prodAction = 'stop'; prodBtn.title = '' }
+        _setProductionEnabled(true)
+        _setProductionStatus('Production running — stop to halt this run.', _C.muted)
+      } else {   // resume (stopped / failed production child)
+        if (prodBtn) {
+          prodBtn.textContent = '↻ Resume Production'
+          prodBtn.dataset.prodAction = 'resume'
+          prodBtn.title = 'Stopped jobs can be resumed from their last checkpoint.'
+        }
+        _setProductionEnabled(true)
+        _setProductionStatus('Production stopped — resume to continue from the last checkpoint.', _C.warn)
+      }
       return
     }
     // Production spawns a CHILD job seeded from the selected job's equilibrated coords.
@@ -1068,6 +1203,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       return
     }
 
+    // The live trajectory is mapped onto whatever design is currently OPEN.  If the chosen
+    // display job belongs to a DIFFERENT design (possible in "show all job types" mode, or
+    // briefly while switching designs), streaming would paint one structure's coordinates
+    // onto another — refuse rather than render wrong data.
+    const curPath = _currentPartPath()
+    if (job.design_source_path && curPath &&
+        normalizeWorkspacePath(job.design_source_path) !== curPath) {
+      _stopMdDisplay('This MD job is from a different design — open it to view its trajectory')
+      return
+    }
+
     // Display job changed → reset frame tracking + drop any stale seed overlay.
     if (job.job_id !== _displayJobId) {
       _mdFrameShown = false
@@ -1086,6 +1232,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     try {
       const d = await _fetchDisplayMeta(job.job_id)
       if (!d) throw new Error('Could not load MD display metadata')
+      // The user may have toggled Display MD OFF (or left the tab) while the metadata
+      // fetch was in flight — bail rather than re-activating the stream behind their back.
+      if (!displayToggle?.checked || !_isDynamicsTabVisible()) return
       _renderProductionControls(job, d)
       if (!d.ready || !d.config_path) {
         _displayJobId = job.job_id
@@ -1194,7 +1343,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
    *  when nothing is submitted-and-active; mdListSignature keeps the list from
    *  needlessly rebuilding when the SLURM state hasn't changed. */
   async function _maybePollRemote() {
-    if (!hasActiveRemoteJob(_jobs)) return
+    if (!hasActiveRemoteJob(_jobs)) {
+      // Active→idle edge: the poll that saw the last replica finish may have run before
+      // the backend fetched its cluster health_samples, so the ensemble grid/metrics can
+      // stay on the "remote — appears after the run" note forever.  Do ONE more refresh
+      // on the transition to pull the now-arrived samples before going quiet.
+      if (_hadActiveRemote) {
+        _hadActiveRemote = false
+        await _fetchJobs()
+        const sel = _jobs.find(j => j.job_id === _selectedId)
+        if (sel) { _applyJobState(sel); _fetchJobMetrics(sel.job_id) }
+      }
+      return
+    }
+    _hadActiveRemote = true
     await _fetchJobs()
     // _selectJob early-returns for an unchanged selection, so the selected remote
     // job's DETAIL (status / cleared error / SLURM state) wouldn't refresh on its
@@ -1285,11 +1447,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _renderList()
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
-  })
-
-  loadFramesBtn?.addEventListener('click', () => {
-    if (!_selectedId) return
-    _startMdDisplay()
   })
 
   // ── Visualization tools: flexibility map (RMSF) + trajectory scrub ────────────
@@ -1521,6 +1678,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (getChainMode?.()) return enqueueChainStage?.('production')
     if (!_selectedId) return
     if (prodBtn.disabled) return
+    // A running/stopped production child: the Production button is its Stop / Resume control.
+    const prodAct = mdProductionAction(_jobs.find(j => j.job_id === _selectedId))
+    if (prodAct === 'stop') return _stopSelected(prodBtn)
+    if (prodAct === 'resume') return _resumeSelected(prodBtn)
     // Stale-design guard: if the design changed since this job was prepared, offer to
     // roll back to the job's run-state (or cancel) before extending it.
     const proceed = await ensureJobCurrent({
@@ -1667,30 +1828,37 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // Queuing authors a plan — always enabled (engines need only be present at Launch).
       return { action: RUN_ACTION.RUN, label: '＋ Queue Relax', disabled: false }
     }
-    return mdRunControl(_selectedJob(), { busy: _launching })
+    return mdRunControl(_selectedJob(), { busy: _launching, runTarget: _currentRunTarget() })
   }
   function _paintRunControl() {
     if (!runBtn) return
     const rc = _runControl()
     runBtn.textContent = rc.label
     runBtn.dataset.runAction = rc.action
+    // A stopped/failed job resumes from its last checkpoint — say so on hover.
+    runBtn.title = rc.action === RUN_ACTION.RESUME
+      ? 'Stopped jobs can be resumed from their last checkpoint.' : ''
     // RUN needs the engines present; STOP/RESUME act on an already-created job. Chain mode
     // only queues a plan, so it's always enabled (engines need only be present at Launch).
-    runBtn.disabled = getChainMode?.() ? false : (_launching || (rc.action === RUN_ACTION.RUN && !_enginesOk))
+    // `rc.disabled` covers the inert Relax button while a production child is selected.
+    runBtn.disabled = getChainMode?.() ? false : (rc.disabled || _launching || (rc.action === RUN_ACTION.RUN && !_enginesOk))
   }
-  function _stopSelected() {
-    return runExclusive(runBtn, async () => {
+  function _stopSelected(btn = runBtn) {
+    return runExclusive(btn, async () => {
       if (!_selectedId) return
       try {
-        await api.stopMdJob(_selectedId)
-        showToast('Stop requested', 'warn')
+        const d = await api.stopMdJob(_selectedId)
+        // Surface the deferred-scancel case (stopped locally while the cluster session is
+        // down → SLURM cancel happens on reconnect) so the user knows it's not orphaned.
+        showToast(d?.pending_scancel ? (d.message || 'Stopped — will cancel on reconnect')
+                                     : 'Stop requested', 'warn')
       } catch (err) {
         console.warn(`[${_ts()}] md-jobs: stop failed`, err)
       }
     }, { label: 'Stopping…' })
   }
-  function _resumeSelected() {
-    return runExclusive(runBtn, async () => {
+  function _resumeSelected(btn = runBtn) {
+    return runExclusive(btn, async () => {
       if (!_selectedId) return
       if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
       try {
@@ -1781,10 +1949,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
     console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
     if (detailEl) detailEl.style.display = ''
-    _showPreparingProgress(payload)
-    // The POST now returns immediately (job enters 'preparing'); the live
-    // solvation bar + ETA is driven by the websocket into the job detail, so the
-    // modal only covers the brief create round-trip.
     showOpProgress('Relax', 'Creating job…', { indeterminate: true })
 
     try {
@@ -1898,15 +2062,27 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (_selectedId) _submitReview.open(_selectedId, { mode: 'resume' })
   })
 
-  earlyStopLiveChk?.addEventListener('change', async () => {
-    if (!_selectedId || _earlyStopBusy) return
-    const enabled = earlyStopLiveChk.checked
+  // Is the selected job a job the early-stop toggle can control LIVE (a running LOCAL
+  // relaxation — not Alpine, not a production child)?  The single Advanced toggle is a
+  // launch default for everything else and a live control for this.
+  function _isLiveRelax(job) {
+    return !!job && job.status === 'running' && job.execution_target !== 'alpine' && !mdIsProductionChild(job)
+  }
+
+  // The ONE early-stop toggle (Advanced): a launch default when configuring a run, and a
+  // LIVE control when a running local relaxation is selected — a change then POSTs the
+  // override (applied at the next stage checkpoint).  Merged from the old separate
+  // mid-run "live" toggle so there's a single option that can be changed mid-relax.
+  earlyStopChk?.addEventListener('change', async () => {
+    const job = _selectedJob()
+    if (!_isLiveRelax(job) || _earlyStopBusy) return   // not live → just the launch default
+    const enabled = earlyStopChk.checked
     // Optimistically lock the toggle in the requested position so it can't be
     // spam-flipped while the POST is in flight; the server-side override then keeps
     // it "pending" (via mdEarlyStopToggleState) until the runner applies it.
     _earlyStopBusy = true
-    earlyStopLiveChk.disabled = true
-    if (earlyStopLivePending) earlyStopLivePending.style.display = ''
+    earlyStopChk.disabled = true
+    if (earlyStopPending) earlyStopPending.style.display = ''
     try {
       const d = await api.setMdEarlyStop(_selectedId, enabled)
       console.log(`[${_ts()}] md-jobs: early-stop toggle`, d)
@@ -1918,9 +2094,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       showToast(enabled ? 'Early-stop enabled (applies at next checkpoint)'
                         : 'Early-stop disabled', 'info')
     } catch (err) {
-      earlyStopLiveChk.checked = !enabled   // revert on failure
-      if (earlyStopLivePending) earlyStopLivePending.style.display = 'none'
-      earlyStopLiveChk.disabled = false
+      earlyStopChk.checked = !enabled   // revert on failure
+      if (earlyStopPending) earlyStopPending.style.display = 'none'
+      earlyStopChk.disabled = false
       console.warn(`[${_ts()}] md-jobs: early-stop toggle failed`, err)
       showToast('Early-stop toggle failed', 'warn')
     } finally {
@@ -2046,7 +2222,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const onCluster = !!job?.slurm_job_id
     if (!onCluster && (!job || !_TERMINAL_STATUSES.has(job.status))) {
       _openWs(jobId)
+      _startWsWatchdog()   // safety net: reconnect/unwedge the socket if it drops
     } else {
+      _stopWsWatchdog()    // terminal/remote jobs have no local WS to watch
       api.getMdJob(jobId)
         .then(j => {
           if (!j) return
@@ -2064,10 +2242,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     console.log(`[${_ts()}] md-jobs: opening WS ${url}`)
     const ws = new WebSocket(url)
     _ws = ws
+    _lastWsMsgAt = Date.now()   // start the staleness window fresh so the watchdog waits for onopen
 
-    ws.onopen = () => console.log(`[${_ts()}] md-jobs: WS open`)
+    ws.onopen = () => { _lastWsMsgAt = Date.now(); console.log(`[${_ts()}] md-jobs: WS open`) }
 
     ws.onmessage = (evt) => {
+      _lastWsMsgAt = Date.now()
       let msg
       try { msg = JSON.parse(evt.data) } catch { return }
 
@@ -2077,6 +2257,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         const idx = _jobs.findIndex(j => j.job_id === msg.job.job_id)
         if (idx >= 0) _jobs[idx] = msg.job; else _jobs.unshift(msg.job)
         _renderList()
+        // Wake the (possibly idle) master job card + progress bar on a status transition
+        // pushed over the WS — the master self-polls only while it holds an active node,
+        // so a selected job completing (and spawning children) would otherwise not surface
+        // there until a manual refresh.  Fires the event only when the set/status changed.
+        _notifyIfJobsChanged()
         if (msg.job.job_id === _selectedId) _applyJobState(msg.job, msg.job.live_metrics)
         if (!displayToggle?.checked) _refreshMdPrewarm()
       } else if (msg.type === 'error') {
@@ -2110,9 +2295,55 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       try { _ws.close() } catch { /* ok */ }
       _ws = null
     }
-    if (_pollTimer) {
-      clearInterval(_pollTimer)
-      _pollTimer = null
+  }
+
+  // ── Detail-WS watchdog ────────────────────────────────────────────────────
+  // The status WS has no built-in reconnect, and there is no REST poll fallback for
+  // a LOCAL running job — a dropped/wedged socket used to freeze the detail card
+  // permanently (spinner kept spinning, no data behind it).  This interval reconnects
+  // a dropped socket, force-reopens a silent one, and surfaces a backend-down banner.
+  function _startWsWatchdog() {
+    if (_wsWatchdog) return
+    _wsWatchdog = setInterval(_wsWatchdogTick, _WS_WATCHDOG_MS)
+  }
+
+  function _stopWsWatchdog() {
+    if (_wsWatchdog) { clearInterval(_wsWatchdog); _wsWatchdog = null }
+    _wsProbing = false
+  }
+
+  async function _wsWatchdogTick() {
+    if (_wsProbing) return
+    const job = _jobs.find(j => j.job_id === _selectedId)
+    const action = mdWatchdogDecision({
+      job,
+      wsOpen: !!_ws && _ws.readyState === WebSocket.OPEN,
+      msSinceMsg: Date.now() - _lastWsMsgAt,
+    })
+    if (action === 'idle') return
+    if (action === 'disarm') { _stopWsWatchdog(); return }
+
+    // 'reconnect' (socket gone) or 'refresh' (socket wedged): probe the backend, heal
+    // from the fresh status, then re-open (or stand down if it went terminal/remote).
+    _wsProbing = true
+    try {
+      const fresh = await api.getMdJob(_selectedId)
+      if (!fresh) throw new Error(api.lastErrorMessage() ?? 'no job')
+      _fetchFails = 0
+      _setBackendStale(false)
+      const idx = _jobs.findIndex(j => j.job_id === fresh.job_id)
+      if (idx >= 0) _jobs[idx] = fresh; else _jobs.unshift(fresh)
+      _renderList()
+      if (fresh.job_id === _selectedId) _applyJobState(fresh)
+      const next = mdWatchdogDecision({ job: fresh, wsOpen: false, msSinceMsg: Infinity })
+      if (next === 'disarm') { _closeWs(); _stopWsWatchdog() }
+      else _openWs(_selectedId)   // _openWs closes any wedged socket first
+    } catch (err) {
+      _fetchFails++
+      console.warn(`[${_ts()}] md-jobs: watchdog probe failed (${_fetchFails})`, err)
+      if (_fetchFails >= 2) _setBackendStale(true)
+    } finally {
+      _wsProbing = false
     }
   }
 
@@ -2121,25 +2352,24 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (!job) return
 
     const awaitingSubmit = mdRemoteAwaitingSubmit(job)
-    if (statusEl) {
-      const seg = job.segments?.[job.current_segment_idx]
-      const stageLabel = seg ? `${_timelineStage(seg)} · ${seg.percent}%` : ''
-      const segsTotal  = job.segments?.length ?? 0
-      const segsDone   = job.segments?.filter(s => s.status === 'done').length ?? 0
+    // Cluster-specific status only (the generic run status lives in the master job card
+    // above — the old duplicate detail status line was removed).  Shown inside the
+    // Cluster (Alpine) card for a prepared-but-unsubmitted or SLURM-queued job.
+    if (clusterStatusEl) {
       if (awaitingSubmit) {
-        // Prepared for Alpine but not on SLURM yet — show "ready to submit" (or the
-        // last submit error), NOT the misleading local "Queued — ready to start".
-        statusEl.textContent = job.error
+        clusterStatusEl.textContent = job.error
           ? 'Submit to Alpine failed — retry below'
           : 'Prepared — submit to Alpine below'
-        statusEl.style.color = job.error ? _C.err : _C.accent
+        clusterStatusEl.style.color = job.error ? _C.err : _C.accent
+        clusterStatusEl.style.display = ''
       } else if (mdIsRemoteQueued(job)) {
         // Waiting in the SLURM queue — show how long, not a generic "Queued".
-        statusEl.textContent = `⧗ ${mdQueueWaitLabel(job)}${job.slurm_job_id ? ` (SLURM ${job.slurm_job_id})` : ''}`
-        statusEl.style.color = _C.warn
+        clusterStatusEl.textContent = `⧗ ${mdQueueWaitLabel(job)}${job.slurm_job_id ? ` (SLURM ${job.slurm_job_id})` : ''}`
+        clusterStatusEl.style.color = _C.warn
+        clusterStatusEl.style.display = ''
       } else {
-        statusEl.textContent = _statusLabel(job.status, segsDone, segsTotal, stageLabel)
-        statusEl.style.color = _statusColor(job.status)
+        clusterStatusEl.style.display = 'none'
+        clusterStatusEl.textContent = ''
       }
     }
 
@@ -2148,19 +2378,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // resume for the selected job (the old detail Start/Stop were retired + removed).
     // (Alpine submit/resume/ensemble keep their dedicated cluster-gated buttons below.)
     _paintRunControl()
-    // Mid-run early-stop toggle: shown for a running LOCAL relaxation job.  The
-    // requested value can lag the persisted flag until the runner consumes it at a
-    // chunk boundary, so drive checked/disabled from mdEarlyStopToggleState (which
-    // honours the queued override + the in-flight POST) instead of the raw flag —
-    // otherwise every 3 s state push would snap the toggle back off.
-    if (earlyStopLiveWrap) {
-      const showLive = job.status === 'running' && job.execution_target !== 'alpine'
-      earlyStopLiveWrap.style.display = showLive ? 'flex' : 'none'
-      if (showLive && earlyStopLiveChk) {
+    // The single early-stop toggle (Advanced) doubles as the LIVE mid-relax control: for
+    // a running LOCAL relaxation, reflect the job's queued/persisted value + pending badge
+    // (mdEarlyStopToggleState honours the in-flight override so a 3 s state push can't snap
+    // it back off).  For anything else it's the launch default — re-enable it + clear the
+    // badge (don't overwrite the user's chosen default).
+    if (earlyStopChk) {
+      if (_isLiveRelax(job)) {
         const { checked, pending } = mdEarlyStopToggleState(job, _earlyStopBusy)
-        earlyStopLiveChk.checked = checked
-        earlyStopLiveChk.disabled = pending
-        if (earlyStopLivePending) earlyStopLivePending.style.display = pending ? '' : 'none'
+        earlyStopChk.checked = checked
+        earlyStopChk.disabled = pending
+        if (earlyStopPending) earlyStopPending.style.display = pending ? '' : 'none'
+      } else {
+        earlyStopChk.disabled = false
+        if (earlyStopPending) earlyStopPending.style.display = 'none'
       }
     }
     // Submit-to-Alpine: a prepared remote job not yet handed to SLURM.
@@ -2200,7 +2431,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // (queued-but-errored) so the rejection reason is visible with the retry button.
     _showDetailError(mdDetailErrorText(job))
     _renderEnsembleRollup(job)
-    _renderProgress(job, liveMetrics)
+    // The Cluster (Alpine) card is ALWAYS visible now (it hosts the connect chip, reachable
+    // before any Alpine job exists); its per-job controls above show/hide with the selection.
     _renderTimeline(job)
     _renderMetrics(job, liveMetrics)
     _renderProductionControls(job)
@@ -2268,156 +2500,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
   }
 
-  function _showPreparingProgress(payload) {
-    if (!progressEl) return
-    const salt = payload.salt_mode === 'screening' ? 'auto screening' : 'custom salt'
-    progressEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:3px">
-        <span>Preparing equilibrium-aware package</span>
-        <span style="font-family:var(--font-mono);color:${_C.text};flex-shrink:0">${salt}</span>
-      </div>
-      <div style="height:7px;background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:18%;background:${_C.accent};transition:width 0.2s"></div>
-      </div>
-    `
-  }
-
-  // Human-friendly "time left" from a seconds estimate.
-  function _fmtEta(secs) {
-    if (secs == null || !isFinite(secs) || secs < 0) return ''
-    const s = Math.round(secs)
-    if (s < 60) return `~${s}s left`
-    const m = Math.floor(s / 60)
-    const r = s % 60
-    return r ? `~${m}m ${r}s left` : `~${m}m left`
-  }
-
-  // Live solvation/ENM progress while a job is preparing — driven by the
-  // `prep_progress` snapshot the backend streams (phase, fraction, ETA, stall
-  // warning).  Replaces the old indeterminate "Preparing package" spinner so the
-  // user can tell a slow run from a hung one.
-  function _renderPrepProgress(job) {
-    const p = job.prep_progress
-    if (!p) {
-      progressEl.innerHTML = `
-        <div style="margin-bottom:3px">Preparing package…</div>
-        <div style="height:7px;background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:8%;background:${_C.accent};transition:width 0.3s"></div>
-        </div>`
-      return
-    }
-    const pct = Math.max(0, Math.min(100, (p.fraction ?? 0) * 100))
-    const phaseNo = (p.phase_index ?? 0) + 1
-    const eta = _fmtEta(p.eta_seconds)
-    const right = [`${pct.toFixed(0)}%`, eta].filter(Boolean).join(' · ')
-    const warn = p.warning
-      ? `<div style="margin-top:4px;font-size:10px;color:${_C.warn}">⚠ ${p.warning}</div>`
-      : ''
-    progressEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;gap:6px;margin-bottom:3px">
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.message || p.label || 'Preparing…'}</span>
-        <span style="font-family:var(--font-mono);color:${_C.text};flex-shrink:0">${right}</span>
-      </div>
-      <div style="height:7px;background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:${p.warning ? _C.warn : _C.accent};transition:width 0.3s"></div>
-      </div>
-      <div style="margin-top:3px;font-size:10px;color:${_C.muted}">
-        Step ${phaseNo} of ${p.n_phases ?? '?'} · ${p.label ?? ''}
-      </div>
-      ${warn}
-    `
-  }
-
-  function _renderProgress(job, live) {
-    if (!progressEl) return
-    if (job.status === 'preparing') {
-      _renderPrepProgress(job)
-      return
-    }
-    const segments = job.segments ?? []
-    const total = segments.length
-    const done = segments.filter(s => s.status === 'done').length
-    const runningIdx = segments.findIndex(s => s.status === 'running')
-    const activeIdx = runningIdx >= 0 ? runningIdx : Math.min(job.current_segment_idx ?? 0, Math.max(total - 1, 0))
-    const active = total ? segments[activeIdx] : null
-    const segFrac = active?.status === 'running' ? (live?.segment_progress ?? 0) : 0
-    const overall = total ? Math.min(1, Math.max(0, (done + segFrac) / total)) : 0
-    const pct = (overall * 100).toFixed(1)
-    const segPct = active?.status === 'running' && live?.segment_progress != null
-      ? ` · ${Math.round(live.segment_progress * 100)}% segment`
-      : ''
-    const label = total
-      ? `${pct}% overall · ${done}/${total} segments${segPct}`
-      : job.status === 'preparing' ? 'Preparing package' : 'No staged run yet'
-    const stage = active ? `${_timelineStage(active)} · ${active.percent}%` : job.status
-    // A spinner on the progress line while active — most useful during "Preparing
-    // package", when the bar can't move yet.  (.nadoc-spinner CSS drives the spin.)
-    const spin = mdJobIsActive(job)
-      ? `<span class="nadoc-spinner" aria-hidden="true" style="width:9px;height:9px;color:${_C.warn};flex-shrink:0"></span>`
-      : ''
-    progressEl.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:3px">
-        <span style="display:flex;align-items:center;gap:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${spin}<span style="overflow:hidden;text-overflow:ellipsis">${stage}</span></span>
-        <span style="font-family:var(--font-mono);color:${_C.text};flex-shrink:0">${label}</span>
-      </div>
-      <div style="height:7px;background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:${job.status === 'failed' ? _C.err : job.status === 'completed' ? _C.ok : _C.accent};transition:width 0.2s"></div>
-      </div>
-      ${_productionRunSummary(job, live)}
-    `
-  }
-
-  function _productionRunSummary(job, live) {
-    const prod = _productionSegments(job)
-    if (!prod.length) return ''
-
-    const metrics = _metricsByJob.get(job.job_id) ?? []
-    const metricBySegment = new Map(metrics.map(m => [m.segment, m]))
-    const healthBySegment = new Map((job.health_samples ?? []).map(h => [h.segment, h]))
-    const active = job.segments?.[job.current_segment_idx]
-    const totalSteps = prod.reduce((sum, seg) => sum + (seg.steps ?? 0), 0)
-    let completedSteps = 0
-    for (const seg of prod) {
-      const metric = metricBySegment.get(seg.name)
-      const health = healthBySegment.get(seg.name)
-      if (seg.status === 'done' || health || (metric?.timestep ?? 0) >= (seg.steps ?? 0) * 0.98) {
-        completedSteps += seg.steps ?? 0
-      } else if (seg.status === 'failed') {
-        completedSteps += Math.min(seg.steps ?? 0, metric?.timestep ?? 0)
-      } else if (seg.status === 'running' && active?.name === seg.name) {
-        completedSteps += Math.min(seg.steps ?? 0, live?.timestep ?? 0)
-      }
-    }
-
-    const pct = totalSteps ? (completedSteps / totalSteps) * 100 : 0
-    const lastMetric = _latestRecord(metrics, prod.map(s => s.name))
-    const latestHealth = _latestHealthForSegments(job, prod.map(s => s.name))
-    const failed = prod.find(s => s.status === 'failed')
-    const advisory = _productionAdvisory(latestHealth)
-    const failureText = failed ? _productionFailureText(job, failed, latestHealth, lastMetric) : ''
-    const advisoryText = !failed && advisory ? _productionAdvisoryText(advisory) : ''
-    const speed = lastMetric?.ns_per_day != null ? ` · ${_fmt(lastMetric.ns_per_day, 1, ' ns/day')}` : ''
-    const temp = lastMetric?.temperature_k != null ? ` · ${_fmt(lastMetric.temperature_k, 1, 'K')}` : ''
-    const stepsText = `${completedSteps.toLocaleString()}/${totalSteps.toLocaleString()} steps`
-    const nsText = `${_productionNs(completedSteps).toFixed(3)}/${_productionNs(totalSteps).toFixed(3)} ns`
-    const border = failed ? _C.err : advisory ? _C.warn : _C.border
-    const labelColor = failed ? _C.err : advisory ? _C.warn : _C.muted
-
-    return `
-      <div style="margin-top:6px;border:1px solid ${border};background:${_C.bg2};border-radius:3px;padding:6px">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-          <span style="font-size:10px;color:${labelColor};font-weight:600">${advisory ? '⚠ ' : ''}Production</span>
-          <span style="font-size:10px;color:${_C.text};font-family:var(--font-mono);white-space:nowrap">${pct.toFixed(1)}%</span>
-        </div>
-        <div style="margin-top:3px;font-size:10px;color:${_C.muted};font-family:var(--font-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-          ${stepsText} · ${nsText}${speed}${temp}
-        </div>
-        ${advisoryText}
-        ${failureText}
-      </div>
-    `
-  }
-
   function _productionAdvisory(health) {
     if (!health || !/production/i.test(health.stage ?? '')) return null
     const wc = health.wc_ref_relative_fraction
@@ -2426,42 +2508,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const hard = _wcHardThresholdForStage(health.stage)
     if (wc < advisory && wc >= hard) return { wc, advisory, hard }
     return null
-  }
-
-  function _productionAdvisoryText(advisory) {
-    const margin = advisory.wc - advisory.advisory
-    return `
-      <div style="margin-top:5px;font-size:10px;color:${_C.warn};line-height:1.35">
-        ⚠ WC below advisory threshold. Consider stopping this production run.
-      </div>
-      <div style="margin-top:2px;font-size:10px;color:${_C.muted};font-family:var(--font-mono)">
-        WC ${_fmtPct(advisory.wc)} / advisory ${_fmtPct(advisory.advisory)} (${margin >= 0 ? '+' : ''}${(margin * 100).toFixed(2)} pts); hard stop ${_fmtPct(advisory.hard)}
-      </div>
-    `
-  }
-
-  function _productionFailureText(job, failedSeg, latestHealth, lastMetric) {
-    const reason = job.error || latestHealth?.reason || 'Production failed'
-    const healthBits = []
-    if (latestHealth?.c1_paired_fraction != null) healthBits.push(`C1 ${_fmtPct(latestHealth.c1_paired_fraction)}`)
-    if (latestHealth?.wc_ref_relative_fraction != null) {
-      const threshold = failedSeg && /production/i.test(latestHealth.stage ?? '')
-        ? _wcHardThresholdForStage(latestHealth.stage)
-        : _wcThresholdForStage(latestHealth.stage)
-      const margin = latestHealth.wc_ref_relative_fraction - threshold
-      healthBits.push(`WC ${_fmtPct(latestHealth.wc_ref_relative_fraction)} (${margin >= 0 ? '+' : ''}${(margin * 100).toFixed(2)} pts)`)
-    }
-    const completed = lastMetric?.segment === failedSeg.name && (lastMetric?.timestep ?? 0) >= (failedSeg.steps ?? 0) * 0.98
-    const mode = completed ? 'NAMD completed this split; post-run health gate stopped the job.' : 'NAMD stopped before this split completed.'
-    return `
-      <div style="margin-top:5px;font-size:10px;color:${_C.err};line-height:1.35">
-        ${_escapeHtml(mode)}
-      </div>
-      <div style="margin-top:2px;font-size:10px;color:${_C.muted};line-height:1.35;word-break:break-word">
-        ${_escapeHtml(reason)}
-      </div>
-      ${healthBits.length ? `<div style="margin-top:2px;font-size:10px;color:${_C.text};font-family:var(--font-mono)">${healthBits.map(_escapeHtml).join(' · ')}</div>` : ''}
-    `
   }
 
   // ── Stage timeline ─────────────────────────────────────────────────────────
@@ -2772,14 +2818,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return null
   }
 
-  function _latestHealthForSegments(job, segmentNames) {
-    const allowed = new Set(segmentNames)
-    const samples = job.health_samples ?? []
-    for (let i = samples.length - 1; i >= 0; i--) {
-      if (allowed.has(samples[i].segment)) return samples[i]
-    }
-    return null
-  }
 
   function _shortStage(stage) {
     return String(stage ?? '—')
@@ -2833,17 +2871,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return map[status] ?? _C.muted
   }
 
-  function _statusLabel(status, done, total, stageLabel) {
-    switch (status) {
-      case 'preparing':  return 'Preparing (solvating…)'
-      case 'queued':     return 'Queued — ready to start'
-      case 'running':    return `Running · ${done}/${total} · ${stageLabel}`
-      case 'completed':  return `Completed · ${done}/${total} segments`
-      case 'failed':     return `Failed after ${done}/${total} segments`
-      case 'stopped':    return `Stopped at segment ${done}`
-      default:           return status
-    }
-  }
 
   // Graphs & Metrics card — a child module reading this panel's job selection.
   const _metricsCard = initMdMetricsCard({

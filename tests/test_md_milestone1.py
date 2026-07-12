@@ -211,6 +211,37 @@ class TestNamdMetrics:
         assert m.temperature_k == pytest.approx(0.0)
 
 
+class TestOverallFraction:
+    """Master-bar progress fraction for a NAMD job (done segments + running within-fraction)."""
+
+    def test_single_segment_running_advances_off_zero(self) -> None:
+        from backend.core.namd_metrics import overall_fraction
+
+        # A single-segment production child, 60% through its one segment: must read 0.6,
+        # NOT 0 (done/total = 0/1) — the "sits at 0% until done" bug.
+        assert overall_fraction(0, 1, running_timestep=600, running_steps=1000) == pytest.approx(0.6)
+
+    def test_counts_done_plus_running(self) -> None:
+        from backend.core.namd_metrics import overall_fraction
+
+        # 2 of 4 done, running segment half-through → (2 + 0.5) / 4 = 0.625.
+        assert overall_fraction(2, 4, running_timestep=500, running_steps=1000) == pytest.approx(0.625)
+
+    def test_no_live_step_falls_back_to_done_count(self) -> None:
+        from backend.core.namd_metrics import overall_fraction
+
+        assert overall_fraction(1, 4) == pytest.approx(0.25)          # no running info
+        assert overall_fraction(1, 4, running_timestep=0, running_steps=1000) == pytest.approx(0.25)
+
+    def test_clamps_and_guards(self) -> None:
+        from backend.core.namd_metrics import overall_fraction
+
+        assert overall_fraction(0, 0) == 0.0                          # no segments
+        assert overall_fraction(4, 4) == pytest.approx(1.0)           # all done
+        # An overshot timestep (log past the planned steps) can't push past 1.0.
+        assert overall_fraction(0, 1, running_timestep=1500, running_steps=1000) == pytest.approx(1.0)
+
+
 # ── md_protocols (pure functions) ─────────────────────────────────────────────
 
 class TestParseBoxFromNamdConf:

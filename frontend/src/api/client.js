@@ -1050,6 +1050,14 @@ export async function patchCrossoverExtraBases(crossoverId, sequence) {
   return _syncFromDesignResponse(json)
 }
 
+/** Set extra bases on multiple crossovers atomically (PATCH /design/crossovers/extra-bases/batch).
+ *  `entries` = [{ crossover_id, sequence }, …]. */
+export async function batchCrossoverExtraBases(entries) {
+  if (!entries.length) return null
+  const json = await _request('PATCH', '/design/crossovers/extra-bases/batch', { entries })
+  return _syncFromDesignResponse(json)
+}
+
 export async function patchForcedLigationExtraBases(flId, sequence) {
   const json = await _request('PATCH', `/design/forced-ligations/${flId}/extra-bases`, { sequence })
   return _syncFromDesignResponse(json)
@@ -2966,6 +2974,48 @@ export async function getAssemblyOverhangConnectionRelaxStatus(id) {
 // duplex. Returns the assembly response (+ relax_info) and syncs the store.
 export async function relaxAssemblyOverhangConnection(id) {
   const json = await _request('POST', `/assembly/overhang-connections/${encodeURIComponent(id)}/relax`)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+// ── Cross-part AssemblyDuplex (Proposal-B convergence) ──────────────────────────
+// Assembly-level analog of the per-design duplex client fns in
+// overhang_endpoints.js. See memory/project_assembly_overhang_bindings.md (Phase C).
+
+export async function listAssemblyDuplexes() {
+  // Read-only — no store side effect. Returns { duplexes: [...] }.
+  return _request('GET', '/assembly/duplexes')
+}
+
+export async function connectAssemblyDuplex(body) {
+  // body: { instance_a_id, overhang_a_id, overhang_a_attach?, instance_b_id,
+  //         overhang_b_id, overhang_b_attach?, driver?, allow_n_wildcard? }
+  // Producer: min-length register at the attach ends, longest-drives default.
+  // Returns null on a 409 (pair already connected) so callers can ignore dupes.
+  const json = await _request('POST', '/assembly/duplexes/connect', body)
+  if (!json) return null
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function patchAssemblyDuplex(id, patch) {
+  // patch: subset of { left, right, driver, bound, name }. The driver just persists
+  // (read by flatten_assembly at materialization) — NO live geometry is moved.
+  const json = await _request('PATCH', `/assembly/duplexes/${encodeURIComponent(id)}`, patch)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function deleteAssemblyDuplex(id) {
+  const json = await _request('DELETE', `/assembly/duplexes/${encodeURIComponent(id)}`)
+  _syncFromAssemblyResponse(json)
+  return json
+}
+
+export async function syncAssemblyDuplexesFromBindings() {
+  // Idempotently ensure every legacy AssemblyOverhangBinding pair also has a
+  // display duplex. A no-op returns the assembly unchanged (no feature-log entry).
+  const json = await _request('POST', '/assembly/duplexes/sync-from-bindings')
   _syncFromAssemblyResponse(json)
   return json
 }

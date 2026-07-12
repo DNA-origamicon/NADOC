@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead, assembleOverhangSequence, overhangHasSequenceOverride, overhangDomainLength, pairingSegments, isComplement, classifyDuplex, overhangDuplexCoverage, overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner, duplexClusterForOverhang } from './design_queries.js'
+import { surfaceSegments, isExtrudeOverhang, ovhgDomainIds, ovhgBinderDomainIds, flexAnchorKey, connIdForBead, flexibleRunForBead, assembleOverhangSequence, overhangHasSequenceOverride, overhangDomainLength, pairingSegments, isComplement, classifyDuplex, classifyAntiparallel, classifyAssemblyDuplex, assemblyOverhangDuplexCoverage, overhangDuplexCoverage, overhangHasDuplex, overhangDuplexSegments, capSequenceToLength, overhangRcOfPartner, duplexClusterForOverhang } from './design_queries.js'
 
 describe('assembleOverhangSequence', () => {
   it('uses the top-level sequence when there are no overrides', () => {
@@ -209,6 +209,70 @@ describe('duplex graph (JS mirror of core/duplex.py)', () => {
 
   it('overhangRcOfPartner: null when the overhang has no backing domain', () => {
     expect(overhangRcOfPartner({ strands: [], overhangs: [], duplexes: [] }, 'ohA', 'ohB')).toBe(null)
+  })
+})
+
+describe('cross-part assembly duplex (JS mirror of core/assembly_duplex.py)', () => {
+  // Split the per-design fixture across TWO instance designs: ohA on iA (forward
+  // domain [0,5] "AAACGG"), ohB on iB (reverse domain [5,0] "GTTTCC").
+  const designA = {
+    strands: [{ id: 'sa', domains: [{ helix_id: 'hA', start_bp: 0, end_bp: 5, overhang_id: 'ohA' }] }],
+    overhangs: [{ id: 'ohA', sequence: 'AAACGG' }],
+  }
+  const designB = {
+    strands: [{ id: 'sb', domains: [{ helix_id: 'hB', start_bp: 5, end_bp: 0, overhang_id: 'ohB' }] }],
+    overhangs: [{ id: 'ohB', sequence: 'GTTTCC' }],
+  }
+  const designFor = (iid) => ({ iA: designA, iB: designB }[iid])
+  const adx = (aLo, aHi, bLo, bHi, extra = {}) => ({
+    id: 'ad1',
+    left: { instance_id: 'iA', overhang_id: 'ohA', start_bp: aLo, end_bp: aHi },
+    right: { instance_id: 'iB', overhang_id: 'ohB', start_bp: bLo, end_bp: bHi },
+    ...extra,
+  })
+
+  it('classifyAntiparallel: shared kernel — length + WC counts + antiparallel register', () => {
+    const cls = classifyAntiparallel(
+      { start_bp: 0, end_bp: 5 }, { start_bp: 5, end_bp: 0 },
+      { start_bp: 0, end_bp: 3 }, { start_bp: 5, end_bp: 2 },
+      'AAACGG', 'GTTTCC', true,
+    )
+    expect(cls.length).toBe(4)
+    expect(cls.n_complementary).toBe(4)
+    expect(cls.n_mismatch).toBe(0)
+    expect(cls.positions[0].left_bp).toBe(0)   // left 5' base
+    expect(cls.positions[0].right_bp).toBe(2)  // pairs right 3' base
+  })
+
+  it('classifyAntiparallel: no domain → empty positions', () => {
+    const cls = classifyAntiparallel(null, { start_bp: 5, end_bp: 0 }, { start_bp: 0, end_bp: 3 }, { start_bp: 5, end_bp: 2 }, 'AAAC', 'GTTT', true)
+    expect(cls.positions).toEqual([])
+    expect(cls.length).toBe(4)
+  })
+
+  it('classifyAssemblyDuplex: sources bases from each instance design, all complementary', () => {
+    const cls = classifyAssemblyDuplex(designA, designB, adx(0, 3, 5, 2))
+    expect(cls.length).toBe(4)
+    expect(cls.positions.every(p => p.complementary)).toBe(true)
+    expect(cls.positions[0].left_bp).toBe(0)
+    expect(cls.positions[0].right_bp).toBe(2)
+  })
+
+  it('classifyAssemblyDuplex: mismatch when a side design has a non-complementary base', () => {
+    const badB = { ...designB, overhangs: [{ id: 'ohB', sequence: 'AAACCC' }] }
+    const cls = classifyAssemblyDuplex(designA, badB, adx(0, 3, 5, 2))
+    expect(cls.n_mismatch).toBeGreaterThan(0)
+  })
+
+  it('assemblyOverhangDuplexCoverage: 4 bp duplex on 6 bp overhang → 2 bp toehold', () => {
+    const assembly = { duplexes: [adx(0, 3, 5, 2)] }
+    const cov = assemblyOverhangDuplexCoverage(assembly, 'iA', 'ohA', designFor)
+    expect([0, 1, 2, 3].map(bp => cov[bp])).toEqual(['paired', 'paired', 'paired', 'paired'])
+    expect([4, 5].map(bp => cov[bp])).toEqual(['unpaired', 'unpaired'])
+  })
+
+  it('assemblyOverhangDuplexCoverage: {} when the overhang has no backing domain on its instance', () => {
+    expect(assemblyOverhangDuplexCoverage({ duplexes: [] }, 'iA', 'nope', designFor)).toEqual({})
   })
 })
 

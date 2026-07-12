@@ -132,35 +132,28 @@ def overhang_offset_bases(design: Design, overhang_id: str) -> List[str]:
     return list(_assemble_overhang_5to3(spec, domain_len))
 
 
-def classify_duplex_pairing(design: Design, duplex: Duplex) -> dict:
-    """Per-base classification of one duplex, walked 5'→3' along ``left`` against
-    ``right`` walked 3'→5' (antiparallel). Returns::
-
-        { "length": L,
-          "positions": [ {offset, left_bp, right_bp, left_base, right_base,
-                          complementary} ... ],   # 5'→3' along left
-          "n_complementary": int, "n_mismatch": int }
-
-    Every position is either complementary (paired) or a mismatch — bases OUTSIDE
-    any duplex are the toehold/unpaired remainder, reported by
-    :func:`overhang_pairing_map`. Bulges are out of scope (equal-length ends).
-    """
-    L = duplex.left.length
-    _, left_dom = _overhang_backing_domain(design, duplex.left.overhang_id)
-    _, right_dom = _overhang_backing_domain(design, duplex.right.overhang_id)
-    left_bases = overhang_offset_bases(design, duplex.left.overhang_id)
-    right_bases = overhang_offset_bases(design, duplex.right.overhang_id)
+def classify_antiparallel(left_dom, right_dom, left_end, right_end,
+                          left_bases: List[str], right_bases: List[str],
+                          allow_n: bool) -> dict:
+    """Per-base antiparallel WC walk: ``left_end`` walked 5'→3' against
+    ``right_end`` walked 3'→5'. The shared kernel for BOTH the per-design
+    (:func:`classify_duplex_pairing`) and the cross-part assembly classifiers —
+    the two differ ONLY in that the cross-part case sources ``right_dom`` /
+    ``right_bases`` from a different :class:`Design`. ``left_end`` / ``right_end``
+    are any duck-typed ``.start_bp`` / ``.length``-bearing end (``DuplexEnd`` or
+    ``AssemblyDuplexEnd``). Do NOT reimplement this walk elsewhere."""
+    L = left_end.length
     positions: List[dict] = []
     n_comp = 0
     if left_dom is not None and right_dom is not None:
-        left_off0 = bp_to_offset(left_dom, duplex.left.start_bp)     # 5' base of left
-        right_off0 = bp_to_offset(right_dom, duplex.right.start_bp)  # 5' base of right
+        left_off0 = bp_to_offset(left_dom, left_end.start_bp)     # 5' base of left
+        right_off0 = bp_to_offset(right_dom, right_end.start_bp)  # 5' base of right
         for i in range(L):
             l_off = left_off0 + i
             r_off = right_off0 + (L - 1 - i)   # antiparallel: left 5' ↔ right 3'
             l_base = left_bases[l_off] if 0 <= l_off < len(left_bases) else 'N'
             r_base = right_bases[r_off] if 0 <= r_off < len(right_bases) else 'N'
-            comp = _wc_base(l_base, r_base, duplex.allow_n_wildcard)
+            comp = _wc_base(l_base, r_base, allow_n)
             n_comp += 1 if comp else 0
             positions.append({
                 "offset": i,
@@ -176,6 +169,29 @@ def classify_duplex_pairing(design: Design, duplex: Duplex) -> dict:
         "n_complementary": n_comp,
         "n_mismatch": len(positions) - n_comp,
     }
+
+
+def classify_duplex_pairing(design: Design, duplex: Duplex) -> dict:
+    """Per-base classification of one duplex, walked 5'→3' along ``left`` against
+    ``right`` walked 3'→5' (antiparallel). Returns::
+
+        { "length": L,
+          "positions": [ {offset, left_bp, right_bp, left_base, right_base,
+                          complementary} ... ],   # 5'→3' along left
+          "n_complementary": int, "n_mismatch": int }
+
+    Every position is either complementary (paired) or a mismatch — bases OUTSIDE
+    any duplex are the toehold/unpaired remainder, reported by
+    :func:`overhang_pairing_map`. Bulges are out of scope (equal-length ends).
+    """
+    _, left_dom = _overhang_backing_domain(design, duplex.left.overhang_id)
+    _, right_dom = _overhang_backing_domain(design, duplex.right.overhang_id)
+    left_bases = overhang_offset_bases(design, duplex.left.overhang_id)
+    right_bases = overhang_offset_bases(design, duplex.right.overhang_id)
+    return classify_antiparallel(
+        left_dom, right_dom, duplex.left, duplex.right,
+        left_bases, right_bases, duplex.allow_n_wildcard,
+    )
 
 
 def overhang_pairing_map(design: Design, overhang_id: str) -> Dict[int, str]:

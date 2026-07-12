@@ -87,9 +87,22 @@ describe('pure helpers', () => {
     expect(t).toMatch(/Current: heat · 40%/)
     expect(t).toMatch(/⚠ design changed/)
   })
-  it('masterStatusText labels the engine + state', () => {
+  it('masterProgressPct: a running NAMD job uses the backend live fraction (single-segment production)', () => {
+    // A single-segment production child: done/total reads 0 (0 of 1 done) — the
+    // backend-stamped progress_fraction must win so the bar advances instead of "hung".
+    expect(masterProgressPct({ engine: 'namd', status: 'running', progress_fraction: 0.42, segments: [{ status: 'running' }] })).toBe(42)
+    // Falls back to done/total segment count when no fraction was stamped.
+    expect(masterProgressPct({ engine: 'namd', status: 'running', segments: [{ status: 'done' }, { status: 'running' }] })).toBe(50)
+  })
+  it('masterStatusText labels the engine + state (NAMD/mrDNA/CanDo are NOT mislabeled oxDNA)', () => {
     expect(masterStatusText(lmNode({ status: 'running', current_step: 500, steps: 1000 }))).toMatch(/LAMMPS \(CPU\) · running · 50%/)
     expect(masterStatusText(oxNode({ production_state: 'done' }))).toMatch(/oxDNA · production done/)
+    // Regression: these used to all read "oxDNA · …".
+    expect(masterStatusText({ engine: 'namd', status: 'running', segments: [{ status: 'done' }, { status: 'running' }] })).toMatch(/^NAMD · running · 50%/)
+    expect(masterStatusText({ engine: 'namd', status: 'running', progress_fraction: 0.42, segments: [{ status: 'running' }] })).toMatch(/^NAMD · running · 42%/)
+    expect(masterStatusText({ engine: 'namd', status: 'completed' })).toMatch(/^NAMD · completed/)
+    expect(masterStatusText({ engine: 'mrdna', status: 'running' })).toMatch(/^mrDNA · running/)
+    expect(masterStatusText({ engine: 'cando', status: 'queued' })).toMatch(/^CanDo · queued/)
     expect(masterStatusText(null)).toMatch(/Select a run/)
   })
   it('nodeDetailText explains the LAMMPS CPU fallback', () => {

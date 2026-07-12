@@ -485,6 +485,18 @@ def _maybe_auto_downgrade_for_memory(assembly: Assembly) -> tuple[Assembly, Opti
     return assembly.model_copy(update={"instances": new_instances}), notice
 
 
+def _derive_assembly_duplexes_if_empty(assembly: Assembly) -> Assembly:
+    """Populate ``assembly.duplexes`` from legacy ``overhang_bindings`` on load
+    when the graph is empty (mirrors the per-design ``_derive_duplexes_if_empty``).
+    Guarded: only runs when duplexes are empty AND bindings exist, so files that
+    already carry duplexes are untouched. Bindings are KEPT (legacy-migrated, not
+    retired here)."""
+    if assembly.duplexes or not assembly.overhang_bindings:
+        return assembly
+    from backend.core.assembly_duplex import sync_assembly_duplexes_from_bindings
+    return sync_assembly_duplexes_from_bindings(assembly)
+
+
 @router.post("/assembly/load", status_code=200)
 def load_assembly(body: AssemblyLoadRequest) -> dict:
     """Load a .nadoc-assembly file from the given server-side path."""
@@ -497,6 +509,7 @@ def load_assembly(body: AssemblyLoadRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load assembly: {exc}") from exc
     assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
+    assembly = _derive_assembly_duplexes_if_empty(assembly)
     assembly_state.clear_history()
     assembly_state.set_assembly(assembly)
     resp = _assembly_response(assembly)
@@ -513,6 +526,7 @@ def import_assembly(body: AssemblyImportRequest) -> dict:
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse assembly: {exc}") from exc
     assembly, notice = _maybe_auto_downgrade_for_memory(assembly)
+    assembly = _derive_assembly_duplexes_if_empty(assembly)
     assembly_state.clear_history()
     assembly_state.set_assembly(assembly)
     resp = _assembly_response(assembly)

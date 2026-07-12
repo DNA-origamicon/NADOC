@@ -23,9 +23,9 @@ import { showToast } from './toast.js'
 const COLUMNS = [
   { key: 'start',    label: 'Start',       toggleable: false, editable: false },
   { key: 'end',      label: 'End',         toggleable: false, editable: false },
-  { key: 'ovhg_5p',  label: "5' Overhang", toggleable: true,  editable: true  },
-  { key: 'sequence',  label: 'Sequence',    toggleable: true,  editable: false },
-  { key: 'ovhg_3p',  label: "3' Overhang", toggleable: true,  editable: true  },
+  { key: 'ovhg_5p',  label: "5' Overhang", toggleable: true,  editable: true,  resizable: true },
+  { key: 'sequence',  label: 'Sequence',    toggleable: true,  editable: false, resizable: true },
+  { key: 'ovhg_3p',  label: "3' Overhang", toggleable: true,  editable: true,  resizable: true },
   { key: 'group',     label: 'Group',       toggleable: true,  editable: false },
   { key: 'color',     label: 'Color',       toggleable: true,  editable: false },
   { key: 'length',    label: 'Length',      toggleable: true,  editable: false },
@@ -36,6 +36,11 @@ const LS_HEIGHT_KEY  = 'spreadsheet_height'
 const LS_COLS_KEY    = 'spreadsheet_cols'
 const LS_OPEN_KEY    = 'spreadsheet_open'
 const LS_SORT_KEY    = 'spreadsheet_sort_order'
+const LS_WIDTHS_KEY  = 'spreadsheet_col_widths'
+
+// Resizable-column bounds (px). Widths persist per-column in localStorage.
+const MIN_COL_WIDTH = 60
+const MAX_COL_WIDTH = 1400
 
 // Strand sort: three priority slots, each picks one of these keys.
 const SORT_KEYS = ['group', 'color', 'length']
@@ -453,6 +458,37 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     localStorage.setItem(LS_COLS_KEY, JSON.stringify([...hiddenCols]))
   }
 
+  // ── Persistent per-column widths (resizable columns only) ─────────
+  let colWidths = {}
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_WIDTHS_KEY) ?? '{}')
+    if (saved && typeof saved === 'object') colWidths = saved
+  } catch (_) { /* ignore */ }
+
+  function saveColWidths() {
+    localStorage.setItem(LS_WIDTHS_KEY, JSON.stringify(colWidths))
+  }
+
+  const _clampW = (w) => Math.max(MIN_COL_WIDTH, Math.min(MAX_COL_WIDTH, Math.round(w)))
+
+  // Apply a stored width to a cell (inline max-width overrides the CSS 200px cap).
+  function _applyCellWidth(cell, key) {
+    const w = colWidths[key]
+    if (w) {
+      cell.style.width    = w + 'px'
+      cell.style.maxWidth = w + 'px'
+    }
+  }
+
+  // Live-apply a width to the header th + every body td in that column.
+  function _setColWidth(key, w) {
+    colWidths[key] = _clampW(w)
+    for (const cell of body.querySelectorAll(`[data-col="${key}"]`)) {
+      cell.style.width    = colWidths[key] + 'px'
+      cell.style.maxWidth = colWidths[key] + 'px'
+    }
+  }
+
   // ── Build column toggle checkboxes in tab ─────────────────────────
   for (const col of COLUMNS) {
     if (!col.toggleable) continue
@@ -551,9 +587,48 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       if (col.toggleable && hiddenCols.has(col.key)) continue
       const th = document.createElement('th')
       th.textContent = col.label
+      th.dataset.col = col.key
       if (col.key === 'start' || col.key === 'end') th.className = 'sheet-col-endpoint'
+      if (col.resizable) {
+        _applyCellWidth(th, col.key)
+        th.appendChild(_makeColGrip(col.key))
+      }
       theadRow.appendChild(th)
     }
+  }
+
+  // Drag handle at a header cell's right edge → resize the column.
+  function _makeColGrip(key) {
+    const grip = document.createElement('span')
+    grip.className = 'sheet-col-grip'
+    grip.title = 'Drag to resize'
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const th = grip.parentElement
+      const startX = e.clientX
+      const startW = colWidths[key] || th.offsetWidth
+      grip.setPointerCapture(e.pointerId)
+      document.body.style.cursor = 'col-resize'
+      const onMove = (ev) => _setColWidth(key, startW + (ev.clientX - startX))
+      const onUp = () => {
+        grip.removeEventListener('pointermove', onMove)
+        grip.removeEventListener('pointerup', onUp)
+        document.body.style.cursor = ''
+        saveColWidths()
+      }
+      grip.addEventListener('pointermove', onMove)
+      grip.addEventListener('pointerup', onUp)
+    })
+    // Double-click clears the manual width → back to auto-fit.
+    grip.addEventListener('dblclick', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      delete colWidths[key]
+      saveColWidths()
+      _rebuildTable(store.getState())
+    })
+    return grip
   }
 
   // ── Build table body ──────────────────────────────────────────────
@@ -611,6 +686,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       for (const col of COLUMNS) {
         if (col.toggleable && hiddenCols.has(col.key)) continue
         const td = document.createElement('td')
+        td.dataset.col = col.key
+        if (col.resizable) _applyCellWidth(td, col.key)
 
         switch (col.key) {
           case 'start': {
@@ -646,7 +723,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             if (displaySeq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq'
-              span.textContent = displaySeq.length > 40 ? displaySeq.slice(0, 38) + '…' : displaySeq
+              span.textContent = displaySeq
               span.title = displaySeq
               td.appendChild(span)
             } else {
@@ -761,12 +838,14 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       for (const col of COLUMNS) {
         if (col.toggleable && hiddenCols.has(col.key)) continue
         const td = document.createElement('td')
+        td.dataset.col = col.key
+        if (col.resizable) _applyCellWidth(td, col.key)
         switch (col.key) {
           case 'start': td.className = 'sheet-col-endpoint'; td.textContent = _label(v.overhang_a_id); break
           case 'end':   td.className = 'sheet-col-endpoint'; td.textContent = _label(v.overhang_b_id); break
           case 'sequence': {
             const span = document.createElement('span')
-            if (seq) { span.className = 'sheet-seq'; span.textContent = seq.length > 40 ? seq.slice(0, 38) + '…' : seq; span.title = seq }
+            if (seq) { span.className = 'sheet-seq'; span.textContent = seq; span.title = seq }
             else     { span.className = 'sheet-seq-none'; span.textContent = '(no sequence)' }
             td.appendChild(span)
             break
@@ -849,6 +928,8 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       for (const col of COLUMNS) {
         if (col.toggleable && hiddenCols.has(col.key)) continue
         const td = document.createElement('td')
+        td.dataset.col = col.key
+        if (col.resizable) _applyCellWidth(td, col.key)
 
         switch (col.key) {
           case 'start': {
@@ -867,7 +948,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             if (seq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq'
-              span.textContent = seq.length > 40 ? seq.slice(0, 38) + '…' : seq
+              span.textContent = seq
               span.title = seq
               td.appendChild(span)
             } else {

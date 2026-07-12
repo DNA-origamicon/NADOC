@@ -24,6 +24,14 @@ Routes
   DELETE /assembly/overhang-connections/{connection_id}           — remove a linker
   GET    /assembly/overhang-connections/{connection_id}/relax-status — gate the Relax button
   POST   /assembly/overhang-connections/{connection_id}/relax        — rigid-place relax
+  GET    /assembly/duplexes                                        — list cross-part duplexes
+  POST   /assembly/duplexes                                        — create (explicit register)
+  POST   /assembly/duplexes/connect                                — producer (min-length register)
+  POST   /assembly/duplexes/sync-from-bindings                     — derive from legacy bindings
+  PATCH  /assembly/duplexes/{duplex_id}                            — edit register / driver / name
+  DELETE /assembly/duplexes/{duplex_id}                            — remove a duplex
+  GET    /assembly/duplexes/{duplex_id}/pairing                    — per-base classification
+  GET    /assembly/overhangs/pairing-map                           — bp → paired/mismatch/toehold
 
 Back-imports (B=7 — all shared kernel/infrastructure, zero bespoke): ``_assembly_response``
 (shared kernel, the assembly-side twin of crud.py's ``_design_response``),
@@ -624,3 +632,328 @@ def relax_assembly_overhang_connection(
     payload = _assembly_response(updated)
     payload["relax_info"] = info
     return payload
+
+
+# ── Cross-part AssemblyDuplex CRUD (Proposal-B convergence, Phase B) ─────────────
+#
+# The assembly-level analog of ``backend.api.routes_duplex`` — register-bearing
+# hybridization edges between two overhangs on DIFFERENT PartInstances. Bindings are
+# migrated to duplexes on load (``_derive_assembly_duplexes_if_empty`` in assembly.py);
+# these routes let the UI create NEW cross-part duplexes, flip the driver, and delete
+# them. Materialization into flattened topology is ``flatten_assembly``'s job
+# (Phase D) — nothing here mutates a part's source design. See
+# ``memory/project_assembly_overhang_bindings.md``.
+
+class AssemblyDuplexEndBody(BaseModel):
+    instance_id: str
+    overhang_id: str
+    start_bp: int
+    end_bp: int
+
+
+class CreateAssemblyDuplexBody(BaseModel):
+    left: AssemblyDuplexEndBody
+    right: AssemblyDuplexEndBody
+    driver: str = 'left'                       # 'left' | 'right'
+    bound: bool = False
+    binding_mode: str = 'duplex'               # 'duplex' | 'toehold'
+    allow_n_wildcard: bool = True
+    connection_type: Optional[str] = None
+
+
+class ConnectAssemblyDuplexBody(BaseModel):
+    instance_a_id: str
+    overhang_a_id: str
+    overhang_a_attach: str = 'free_end'        # 'root' | 'free_end'
+    instance_b_id: str
+    overhang_b_id: str
+    overhang_b_attach: str = 'root'
+    driver: Optional[str] = None               # None → longest-drives default
+    allow_n_wildcard: bool = True
+
+
+class PatchAssemblyDuplexBody(BaseModel):
+    left: Optional[AssemblyDuplexEndBody] = None
+    right: Optional[AssemblyDuplexEndBody] = None
+    driver: Optional[str] = None
+    bound: Optional[bool] = None
+    name: Optional[str] = None
+
+
+def _asm_duplex_end(body: AssemblyDuplexEndBody):
+    from backend.core.models import AssemblyDuplexEnd
+    return AssemblyDuplexEnd(
+        instance_id=body.instance_id, overhang_id=body.overhang_id,
+        start_bp=body.start_bp, end_bp=body.end_bp,
+    )
+
+
+def _find_assembly_duplex(assembly: Assembly, duplex_id: str):
+    dx = next((d for d in assembly.duplexes if d.id == duplex_id), None)
+    if dx is None:
+        raise HTTPException(404, detail=f"AssemblyDuplex {duplex_id!r} not found.")
+    return dx
+
+
+def _validate_assembly_duplex_placement(assembly: Assembly, dx, *, ignore_id: Optional[str] = None) -> None:
+    """Pre-flight the HTTP-meaningful failures (404/422/409) so clients get typed
+    codes instead of a 500 from the model validator. Cross-part mirror of
+    ``routes_duplex._validate_placement``: resolves each end's backing domain from
+    its OWN instance design, keeps the double-pairing 409 keyed on
+    ``(instance_id, overhang_id)``, and the Watson-Crick gate."""
+    from backend.core.assembly_duplex import (
+        _instance_map, _resolve_end_context, assembly_duplex_wc_ok,
+    )
+    inst_map = _instance_map(assembly)
+
+    # Claimed bp per (instance, overhang) from OTHER duplexes (double-pairing 409).
+    claimed: dict = {}
+    for other in assembly.duplexes:
+        if other.id == ignore_id:
+            continue
+        for e in (other.left, other.right):
+            claimed.setdefault((e.instance_id, e.overhang_id), set()).update(e.covered_bp())
+
+    for side, end in (('left', dx.left), ('right', dx.right)):
+        _, dom = _resolve_end_context(assembly, inst_map, end.instance_id, end.overhang_id)
+        if dom is None:
+            raise HTTPException(404, detail=(
+                f"{side} overhang {end.overhang_id!r} on instance {end.instance_id!r} "
+                f"has no resolvable backing domain."))
+        lo, hi = sorted((dom.start_bp, dom.end_bp))
+        e_lo, e_hi = sorted((end.start_bp, end.end_bp))
+        if e_lo < lo or e_hi > hi:
+            raise HTTPException(422, detail=(
+                f"{side} bp interval [{end.start_bp}, {end.end_bp}] is outside "
+                f"overhang {end.overhang_id}'s backing domain [{lo}, {hi}]."))
+        overlap = claimed.get((end.instance_id, end.overhang_id), set()) & end.covered_bp()
+        if overlap:
+            raise HTTPException(409, detail=(
+                f"bp {sorted(overlap)} on {end.instance_id}::{end.overhang_id} are already "
+                f"paired by another duplex (a base has at most one partner)."))
+
+    ok, reason = assembly_duplex_wc_ok(assembly, dx)
+    if not ok:
+        raise HTTPException(422, detail=f"duplex register is not complementary: {reason}.")
+
+
+@router.get("/assembly/duplexes", status_code=200)
+def list_assembly_duplexes() -> dict:
+    assembly = assembly_state.get_or_404()
+    return {"duplexes": [d.model_dump() for d in assembly.duplexes]}
+
+
+@router.post("/assembly/duplexes", status_code=200)
+def create_assembly_duplex(body: CreateAssemblyDuplexBody) -> dict:
+    """Create a cross-part duplex from an explicit register."""
+    from backend.core.models import AssemblyDuplex
+    from backend.core.assembly_duplex import smallest_unused_assembly_duplex_name
+    from pydantic import ValidationError
+
+    assembly = assembly_state.get_or_404()
+    # Both instances must exist (typed 404 before touching the model).
+    _find_instance(assembly, body.left.instance_id)
+    _find_instance(assembly, body.right.instance_id)
+    try:
+        dx = AssemblyDuplex(
+            name=smallest_unused_assembly_duplex_name(assembly),
+            left=_asm_duplex_end(body.left), right=_asm_duplex_end(body.right),
+            driver=body.driver, bound=body.bound, binding_mode=body.binding_mode,
+            allow_n_wildcard=body.allow_n_wildcard, connection_type=body.connection_type,
+        )
+    except ValidationError as e:
+        raise HTTPException(422, detail=str(e))
+    _validate_assembly_duplex_placement(assembly, dx)
+
+    mutated = assembly.model_copy(update={"duplexes": [*assembly.duplexes, dx]})
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-duplex-add",
+        label=f"{dx.name}: bind {dx.left.overhang_id} ↔ {dx.right.overhang_id}",
+        params={**body.model_dump(mode="json"), "duplex_id": dx.id, "name": dx.name},
+    )
+    resp = _assembly_response(updated)
+    resp["duplex_id"] = dx.id
+    return resp
+
+
+@router.post("/assembly/duplexes/connect", status_code=200)
+def connect_assembly_duplex(body: ConnectAssemblyDuplexBody) -> dict:
+    """Producer: create a cross-part duplex CONNECTING two overhangs at their attach
+    ends. Register is computed mechanically (length = min, no resize — the longer
+    overhang keeps its toehold; polarity inherited from the migration primitive).
+    Idempotent per (instance, overhang) pair (409 if already connected)."""
+    from backend.core.models import AssemblyDuplex
+    from backend.core.assembly_duplex import (
+        _instance_map, assembly_connect_register, assembly_longest_driver,
+        smallest_unused_assembly_duplex_name,
+    )
+    from pydantic import ValidationError
+
+    for attr in ('overhang_a_attach', 'overhang_b_attach'):
+        val = getattr(body, attr)
+        if val not in ('root', 'free_end'):
+            raise HTTPException(400, detail=f"{attr} must be 'root' or 'free_end' (got {val!r}).")
+    if body.driver is not None and body.driver not in ('left', 'right'):
+        raise HTTPException(400, detail="driver must be 'left' or 'right'.")
+
+    assembly = assembly_state.get_or_404()
+    _find_instance(assembly, body.instance_a_id)
+    _find_instance(assembly, body.instance_b_id)
+
+    pair_new = frozenset({
+        (body.instance_a_id, body.overhang_a_id),
+        (body.instance_b_id, body.overhang_b_id),
+    })
+    if len(pair_new) < 2:
+        raise HTTPException(400, detail="Cannot connect an overhang to itself.")
+    for dx in assembly.duplexes:
+        pair_ex = frozenset({
+            (dx.left.instance_id, dx.left.overhang_id),
+            (dx.right.instance_id, dx.right.overhang_id),
+        })
+        if pair_ex == pair_new:
+            raise HTTPException(409, detail="these overhangs are already connected by a duplex.")
+
+    inst_map = _instance_map(assembly)
+    try:
+        left, right = assembly_connect_register(
+            assembly, inst_map,
+            body.instance_a_id, body.overhang_a_id, body.overhang_a_attach,
+            body.instance_b_id, body.overhang_b_id, body.overhang_b_attach,
+        )
+    except ValueError as e:
+        raise HTTPException(422, detail=str(e))
+    driver = body.driver or assembly_longest_driver(assembly, inst_map, left, right)
+    try:
+        dx = AssemblyDuplex(
+            name=smallest_unused_assembly_duplex_name(assembly),
+            left=left, right=right, driver=driver, allow_n_wildcard=body.allow_n_wildcard,
+        )
+    except ValidationError as e:
+        raise HTTPException(422, detail=str(e))
+    _validate_assembly_duplex_placement(assembly, dx)
+
+    mutated = assembly.model_copy(update={"duplexes": [*assembly.duplexes, dx]})
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-duplex-connect",
+        label=f"{dx.name}: connect {dx.left.overhang_id} ↔ {dx.right.overhang_id}",
+        params={**body.model_dump(mode="json"), "duplex_id": dx.id, "name": dx.name},
+    )
+    resp = _assembly_response(updated)
+    resp["duplex_id"] = dx.id
+    return resp
+
+
+@router.post("/assembly/duplexes/sync-from-bindings", status_code=200)
+def sync_assembly_duplexes() -> dict:
+    """Ensure every legacy AssemblyOverhangBinding pair also has a display duplex
+    (live equivalent of derive-on-load). Idempotent; a no-op returns the assembly
+    unchanged without a feature-log entry."""
+    from backend.core.assembly_duplex import sync_assembly_duplexes_from_bindings
+
+    assembly = assembly_state.get_or_404()
+    mutated = sync_assembly_duplexes_from_bindings(assembly)
+    if len(mutated.duplexes) == len(assembly.duplexes):
+        return _assembly_response(assembly)   # nothing new — no undo entry
+    added = len(mutated.duplexes) - len(assembly.duplexes)
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-duplex-sync",
+        label=f"Sync duplexes from bindings (+{added})",
+        params={"added": added},
+    )
+    return _assembly_response(updated)
+
+
+@router.patch("/assembly/duplexes/{duplex_id}", status_code=200)
+def patch_assembly_duplex(duplex_id: str, body: PatchAssemblyDuplexBody) -> dict:
+    """Edit a cross-part duplex's register / driver / bound flag / name. The driver
+    persists on the duplex and is read by ``flatten_assembly`` at materialization —
+    no live geometry is moved here (parts stay pristine until flatten)."""
+    from pydantic import ValidationError
+
+    assembly = assembly_state.get_or_404()
+    current = _find_assembly_duplex(assembly, duplex_id)
+    patch = body.model_dump(exclude_unset=True)
+
+    update: dict = {}
+    if 'left' in patch and patch['left'] is not None:
+        update['left'] = _asm_duplex_end(body.left)
+    if 'right' in patch and patch['right'] is not None:
+        update['right'] = _asm_duplex_end(body.right)
+    if 'driver' in patch:
+        if body.driver not in ('left', 'right'):
+            raise HTTPException(422, detail="driver must be 'left' or 'right'.")
+        update['driver'] = body.driver
+    if 'bound' in patch:
+        update['bound'] = body.bound
+    if 'name' in patch:
+        new_name = (body.name or '').strip()
+        if not new_name:
+            raise HTTPException(422, detail="name must be non-empty.")
+        update['name'] = new_name
+    if not update:
+        raise HTTPException(400, detail="No fields to patch.")
+
+    try:
+        candidate = current.model_copy(update=update, deep=True)
+    except ValidationError as e:
+        raise HTTPException(422, detail=str(e))
+    if 'left' in update or 'right' in update:
+        _validate_assembly_duplex_placement(assembly, candidate, ignore_id=duplex_id)
+
+    new_list = [candidate if d.id == duplex_id else d for d in assembly.duplexes]
+    mutated = assembly.model_copy(update={"duplexes": new_list})
+    changes = ", ".join(update.keys())
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-duplex-patch",
+        label=f"{candidate.name}: patch ({changes})",
+        params={**patch, "duplex_id": duplex_id},
+    )
+    return _assembly_response(updated)
+
+
+@router.delete("/assembly/duplexes/{duplex_id}", status_code=200)
+def delete_assembly_duplex(duplex_id: str) -> dict:
+    """Remove a cross-part duplex."""
+    assembly = assembly_state.get_or_404()
+    target = _find_assembly_duplex(assembly, duplex_id)
+    new_list = [d for d in assembly.duplexes if d.id != duplex_id]
+    mutated = assembly.model_copy(update={"duplexes": new_list})
+    updated = _apply_assembly_mutation_with_feature_log(
+        mutated,
+        op_kind="assembly-duplex-delete",
+        label=f"{target.name}: delete duplex",
+        params={"duplex_id": duplex_id, "name": target.name},
+    )
+    return _assembly_response(updated)
+
+
+@router.get("/assembly/duplexes/{duplex_id}/pairing", status_code=200)
+def get_assembly_duplex_pairing(duplex_id: str) -> dict:
+    from backend.core.assembly_duplex import classify_assembly_duplex
+    assembly = assembly_state.get_or_404()
+    dx = _find_assembly_duplex(assembly, duplex_id)
+    return classify_assembly_duplex(assembly, dx)
+
+
+@router.get("/assembly/overhangs/pairing-map", status_code=200)
+def get_assembly_overhang_pairing_map(instance_id: str, overhang_id: str) -> dict:
+    """bp → paired/mismatch/unpaired (toehold) coverage for one overhang on one
+    instance, aggregating every AssemblyDuplex that touches it (multivalency)."""
+    from backend.core.assembly_duplex import (
+        _instance_map, _resolve_end_context, assembly_overhang_pairing_map,
+    )
+    assembly = assembly_state.get_or_404()
+    _find_instance(assembly, instance_id)
+    _, dom = _resolve_end_context(assembly, _instance_map(assembly), instance_id, overhang_id)
+    if dom is None:
+        raise HTTPException(404, detail=(
+            f"Overhang {overhang_id!r} on instance {instance_id!r} has no resolvable "
+            f"backing domain."))
+    cov = assembly_overhang_pairing_map(assembly, instance_id, overhang_id)
+    return {"instance_id": instance_id, "overhang_id": overhang_id,
+            "pairing_map": {str(bp): st for bp, st in cov.items()}}

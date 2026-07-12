@@ -116,6 +116,28 @@ def parse_namd_log(log_path: Path) -> NamdLogMetrics:
     return m
 
 
+def overall_fraction(
+    done: int,
+    total: int,
+    running_timestep: int | None = None,
+    running_steps: int | None = None,
+) -> float:
+    """Fraction 0..1 of a NAMD job's total work done, for the master progress bar.
+
+    ``done`` completed segments plus the running segment's within-fraction
+    (``running_timestep / running_steps``, when a live log gives the step count).
+    Mirrors oxDNA's ``job_overall_fraction`` so a SINGLE-segment production child
+    advances smoothly instead of reading 0 % until its one segment flips to done.
+    Pure — the caller supplies the running step count from the live log.
+    """
+    if total <= 0:
+        return 0.0
+    frac = float(done)
+    if running_timestep and running_steps:
+        frac += min(1.0, max(0.0, float(running_timestep) / float(running_steps)))
+    return min(1.0, frac / total)
+
+
 def parse_namd_log_series(log_paths: list[Path]) -> list[NamdLogMetrics]:
     """Parse multiple segment logs in order (for stage timeline display)."""
     return [parse_namd_log(p) for p in log_paths if p.exists()]

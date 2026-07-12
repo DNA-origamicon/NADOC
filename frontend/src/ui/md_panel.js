@@ -451,6 +451,10 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       _setPlaying(false)
       _setLive(false)
       _restoreDesign()
+      // Unexpected drop (a deliberate close nulls onclose first) — tell the readiness
+      // indicator so its dot doesn't stay green over a dead socket until the next
+      // prewarm cycle re-warms and re-emits 'ready'.
+      _emitMdDisplayEvent({ state: 'error', message: 'MD display disconnected' })
     }
   }
 

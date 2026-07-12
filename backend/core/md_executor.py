@@ -738,9 +738,26 @@ async def poll_remote_jobs(workspace_dir: Path, *, conn=None) -> list[str]:
         return []
     touched: list[str] = []
     for job in MdJob.list_jobs(workspace_dir):
-        if job.execution_target != "alpine" or not is_remote_active(job.status):
+        if job.execution_target != "alpine":
             continue
-        if not job.slurm_job_id:
+        # Drain a DEFERRED cancel first: a Stop issued while the session was down set
+        # pending_scancel (the job is already stopped locally).  Now that we're connected,
+        # scancel it so it doesn't keep running on the cluster, then clear the flag.  This
+        # runs even though the job is no longer "active" (it was marked stopped).
+        if getattr(job, "pending_scancel", False):
+            if job.slurm_job_id:
+                try:
+                    await cancel_job(job, conn=conn)
+                    logger.info("[%s] drained deferred scancel (SLURM %s)",
+                                job.job_id, job.slurm_job_id)
+                except Exception:  # noqa: BLE001 — one job must not kill the pass
+                    logger.exception("[%s] deferred scancel failed", job.job_id)
+                    continue  # keep the flag; retry next pass
+            job.pending_scancel = False
+            job.save(workspace_dir)
+            touched.append(job.job_id)
+            continue  # already stopped locally — nothing else to reconcile
+        if not is_remote_active(job.status) or not job.slurm_job_id:
             continue
         try:
             await reconcile_remote_job(job, workspace_dir, conn=conn)

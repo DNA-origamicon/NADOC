@@ -21,6 +21,7 @@
 
 import * as api from '../api/client.js'
 import { ctTileSvg } from './ct_icons.js'
+import { classifyAssemblyDuplex } from '../scene/design_queries.js'
 
 // 12 connection-type variants (matches per-part _CT_VARIANTS).
 const _VARIANTS = [
@@ -692,7 +693,10 @@ function _bindingRowHtml(assembly, b) {
   const pair  = `${instA?.name ?? '?'}.${_displayName(ohA) || b.overhang_a_id} ↔ ${instB?.name ?? '?'}.${_displayName(ohB) || b.overhang_b_id}`
   const seqA  = ohA?.sequence ?? ''
   const seqB  = ohB?.sequence ?? ''
-  const status = _pairStatus(seqA, seqB)
+  // Prefer the STORED cross-part duplex register (multivalency / toeholds / sub-domain
+  // windows) over the naive whole-sequence complement; fall back when no duplex exists.
+  const dx = _duplexForPair(assembly, b)
+  const status = dx ? _duplexStatus(assembly, dx) : _pairStatus(seqA, seqB)
   return `<tr>
     <td>${_escape(b.name)}</td>
     <td>Binding</td>
@@ -1006,6 +1010,26 @@ function _revcomp(s) {
   let out = ''
   for (let i = s.length - 1; i >= 0; i--) out += _COMP[s[i].toUpperCase()] ?? 'N'
   return out
+}
+
+// The AssemblyDuplex covering the same (unordered) overhang pair as a binding, or null.
+function _duplexForPair(assembly, e) {
+  const key = (iid, oid) => `${iid}::${oid}`
+  const want = new Set([key(e.instance_a_id, e.overhang_a_id), key(e.instance_b_id, e.overhang_b_id)])
+  return (assembly?.duplexes ?? []).find((dx) => {
+    const have = new Set([key(dx.left.instance_id, dx.left.overhang_id), key(dx.right.instance_id, dx.right.overhang_id)])
+    return have.size === want.size && [...have].every(k => want.has(k))
+  }) ?? null
+}
+
+// Status derived from the STORED cross-part duplex register — paired/mismatch bp per
+// classifyAssemblyDuplex (sourcing each side's bases from its own instance design), NOT
+// the naive whole-sequence RC of _pairStatus. Handles toeholds / partial windows.
+function _duplexStatus(assembly, dx) {
+  const cls = classifyAssemblyDuplex(_designFor(dx.left.instance_id), _designFor(dx.right.instance_id), dx)
+  if (!cls.length) return { html: '<span style="color:#6e7681">—</span>' }
+  if (cls.n_mismatch === 0) return { html: `<span style="color:#3fb950">paired ${cls.n_complementary}bp</span>` }
+  return { html: `<span style="color:#d29922">${cls.n_mismatch} mismatch / ${cls.n_complementary} paired</span>` }
 }
 
 function _pairStatus(a, b) {

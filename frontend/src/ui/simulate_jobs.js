@@ -90,6 +90,12 @@ export function masterProgressPct(node) {
     return total > 0 ? Math.max(0, Math.min(100, Math.round((cur / total) * 100))) : 0
   }
   if (node.engine === 'namd') {
+    // Prefer the live within-segment fraction the backend stamps on a RUNNING NAMD job
+    // (so a single-segment production child advances instead of sitting at 0 % until its
+    // one segment flips to done). Fall back to the done/total segment count otherwise.
+    if (node.progress_fraction != null) {
+      return Math.max(0, Math.min(100, Math.round(Number(node.progress_fraction) * 100)))
+    }
     const seg = node.segments || []
     if (!seg.length) return 0
     return Math.round((seg.filter((s) => s.status === 'done').length / seg.length) * 100)
@@ -135,7 +141,7 @@ export function masterProgressTooltip(node) {
     if (run) lines.push(`Current: ${run.name || run.stage || 'running'}${run.percent != null ? ` · ${run.percent}%` : ''}`)
     return lines.join('\n') + stale
   }
-  const eng = node.engine === 'oxdna' ? 'oxDNA' : node.engine === 'mrdna' ? 'mrDNA' : node.engine === 'cando' ? 'CanDo' : node.engine
+  const eng = engineLabel(node)
   const state = node.production_state && node.production_state !== 'none'
     ? `production ${node.production_state}` : node.status
   const st = node.stages || []
@@ -144,10 +150,23 @@ export function masterProgressTooltip(node) {
   return parts.join('\n') + stale
 }
 
+/** Human engine label for a node — used by the status line + tooltip so a NAMD/mrDNA/
+ *  CanDo run isn't mislabeled "oxDNA". */
+export function engineLabel(node) {
+  switch (node?.engine) {
+    case 'lammps': return 'LAMMPS (CPU)'
+    case 'namd':   return 'NAMD'
+    case 'mrdna':  return 'mrDNA'
+    case 'cando':  return 'CanDo'
+    case 'oxdna':  return 'oxDNA'
+    default:       return node?.engine || 'run'
+  }
+}
+
 /** One-line master status text for the selected node (engine-symmetric). */
 export function masterStatusText(node) {
   if (!node) return 'Select a run above, or press ▶ Relax to start one.'
-  const eng = node.engine === 'lammps' ? 'LAMMPS (CPU)' : 'oxDNA'
+  const eng = engineLabel(node)
   if (node.engine === 'lammps') {
     if (node.status === 'running') return `${eng} · running · ${masterProgressPct(node)}%`
     return `${eng} · ${node.status}`
@@ -155,6 +174,9 @@ export function masterStatusText(node) {
   if (node.production_state === 'running') return `${eng} · production running`
   if (node.production_state === 'done') return `${eng} · production done`
   if (node.production_state === 'failed') return `${eng} · production failed`
+  // NAMD (and any engine with a live/segment fraction) shows overall % while running so a
+  // single-segment production reads as progress, not a bare "running".
+  if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterProgressPct(node)}%`
   return `${eng} · ${node.status}`
 }
 

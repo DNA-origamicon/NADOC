@@ -382,7 +382,7 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
             if (displaySeq) {
               const span = document.createElement('span')
               span.className = 'sheet-seq'
-              span.textContent = displaySeq.length > 40 ? displaySeq.slice(0, 38) + '…' : displaySeq
+              span.textContent = displaySeq
               span.title = displaySeq
               td.appendChild(span)
             } else {

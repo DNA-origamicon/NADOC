@@ -2102,6 +2102,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     let best = null, bestD = _NEAR_HOVER_PX
     for (const a of (getUnfoldView?.()?.getArcEntries() ?? [])) {
       if (!a.crossover_id) continue
+      if (_arcCrossoverBlocked(a)) continue         // scaffold/staple filter gates crossover arcs
       const mid = a.getMidWorld?.()                 // midpoint proxy — cheap (1 alloc/arc)
       if (!mid) continue
       const sp = _toScreen(mid)
@@ -3160,6 +3161,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const newArcs = []
       for (const arc of arcEntries) {
         if (!arc.crossover_id) continue
+        if (_arcCrossoverBlocked(arc)) continue   // scaffold/staple filter gates crossover arcs
         if (existingIds.has(arc.crossover_id)) continue
         const sp = _toScreen(arc.getMidWorld())
         if (sp.x >= cx1 && sp.x <= cx2 && sp.y >= cy1 && sp.y <= cy2) {
@@ -3238,6 +3240,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
+  // Scaffold/staple selection-filter gate for a crossover arc. A crossover lives on
+  // exactly ONE strand type (its two endpoints share it), so we read the arc's
+  // fromNuc/toNuc strand_type and honor the #select-filter scaffold/staples toggles —
+  // the same gate the bead (`selBackbone`) and cone (`selCones`) picks already apply.
+  // Non-crossover arcs (crossover_id null — e.g. intra-strand / OH-linker arcs) carry
+  // no crossover, so they are never blocked here.
+  function _arcCrossoverBlocked(arc) {
+    if (!arc?.crossover_id) return false
+    const { selectableTypes } = store.getState()
+    const isScaffold = (arc.fromNuc?.strand_type ?? arc.toNuc?.strand_type) === 'scaffold'
+    return !(isScaffold ? selectableTypes.scaffold : selectableTypes.staples)
+  }
+
   /**
    * Find the arc entry whose midpoint is closest to (sx, sy) in screen space,
    * within _arcHitPx pixels.  Returns null if nothing is close enough.
@@ -3247,6 +3262,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (!arcEntries.length) return null
     let best = null, bestDist = _arcHitPx
     for (const e of arcEntries) {
+      if (_arcCrossoverBlocked(e)) continue   // scaffold/staple filter gates crossover arcs
       const pts = e.getPositions?.() ?? [e.getMidWorld()]
       for (const pt of pts) {
         const sp = _toScreen(pt)

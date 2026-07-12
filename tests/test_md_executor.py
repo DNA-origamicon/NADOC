@@ -724,6 +724,78 @@ def test_poll_remote_jobs_reconciles_active(tmp_path):
     assert MdJob.load(job.job_id, tmp_path).status == MdStatus.running
 
 
+def test_poll_remote_jobs_drains_pending_scancel(tmp_path):
+    """A Stop issued while disconnected sets pending_scancel; the next CONNECTED poll
+    scancels the SLURM job and clears the flag — even though the job is already stopped
+    (not "active"), so it doesn't keep running on the cluster."""
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "77"
+    job.status = MdStatus.stopped
+    job.pending_scancel = True
+    job.save(tmp_path)
+    conn = FakeConn()
+    touched = _run(ex.poll_remote_jobs(tmp_path, conn=conn))
+    assert job.job_id in touched
+    assert any("scancel 77" in c for c in conn.runs)
+    assert MdJob.load(job.job_id, tmp_path).pending_scancel is False
+
+
+def test_cluster_connect_kicks_remote_poll(tmp_path, monkeypatch):
+    """A successful connect immediately reconciles remote jobs — so a run that FINISHED
+    while the session was down gets its results fetched now (not only on the ~30 s
+    supervisor pass) and any deferred scancel is drained."""
+    import types
+    from backend.api import routes_cluster
+    from backend.core import cluster_ssh, cluster_config
+
+    monkeypatch.setattr(routes_cluster, "_WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(cluster_config, "load_profiles",
+                        lambda ws: {"alpine": types.SimpleNamespace(host="login.example")})
+
+    class _Mgr:
+        async def connect(self, *a, **k):
+            return None
+        def is_connected(self):
+            return True
+        def status(self):
+            return {"state": "connected"}
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: _Mgr())
+
+    called = {}
+    async def _spy(ws, conn=None):
+        called["ws"] = ws
+        return []
+    monkeypatch.setattr(ex, "poll_remote_jobs", _spy)
+
+    req = routes_cluster.ConnectRequest(cluster_name="alpine", user="u", password="p")
+    out = _run(routes_cluster.cluster_connect(req))
+    assert out == {"state": "connected"}
+    assert called.get("ws") == tmp_path   # the post-connect poll ran
+
+
+def test_stop_disconnected_defers_scancel(tmp_path, monkeypatch):
+    """POST /stop on a remote job while the session is DOWN marks it stopped locally AND
+    sets pending_scancel (so the SLURM job is cancelled on reconnect, not orphaned)."""
+    from backend.api import routes_md
+    from backend.core import cluster_ssh
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = _make_prepared_job(tmp_path)
+    job.slurm_job_id = "88"
+    job.status = MdStatus.running
+    job.save(tmp_path)
+
+    class _DisconnectedMgr:
+        def is_connected(self):
+            return False
+    monkeypatch.setattr(cluster_ssh, "get_manager", lambda: _DisconnectedMgr())
+
+    out = _run(routes_md.stop_md_job(job.job_id))
+    assert out["pending_scancel"] is True
+    reloaded = MdJob.load(job.job_id, tmp_path)
+    assert reloaded.pending_scancel is True
+    assert reloaded.user_stopped is True
+
+
 # ── GET /md/jobs/{id}/remote-recommendation (Phase 4 review-card preview) ──────
 
 def test_remote_recommendation_prepared(tmp_path, monkeypatch):

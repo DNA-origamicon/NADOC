@@ -270,39 +270,81 @@ function _wcBase(a, b, allowN) {
 }
 
 /**
- * Pure: per-base classification of ONE duplex, `left` walked 5'→3' against
- * `right` walked 3'→5' (antiparallel). Mirror of backend `classify_duplex_pairing`.
- * @returns {{length:number, positions:{offset:number,left_bp:number,right_bp:number,left_base:string,right_base:string,complementary:boolean}[]}}
+ * Pure antiparallel WC walk — `leftEnd` walked 5'→3' against `rightEnd` walked
+ * 3'→5'. The SHARED kernel for both the per-design (`classifyDuplex`) and the
+ * cross-part (`classifyAssemblyDuplex`) classifiers — they differ ONLY in that
+ * the cross-part case sources `rightDom` / `rightBases` from a different design.
+ * `leftEnd` / `rightEnd` are any `{start_bp, end_bp}` end (DuplexEnd or
+ * AssemblyDuplexEnd); `leftBases` / `rightBases` are each side's assembled 5'→3'
+ * bases. Mirror of backend `duplex.classify_antiparallel`. Do NOT reimplement the
+ * walk elsewhere.
+ * @returns {{length:number, positions:{offset:number,left_bp:number,right_bp:number,left_base:string,right_base:string,complementary:boolean}[], n_complementary:number, n_mismatch:number}}
  */
-export function classifyDuplex(design, duplex) {
-  const leftDom = overhangBackingDomain(design, duplex.left.overhang_id)
-  const rightDom = overhangBackingDomain(design, duplex.right.overhang_id)
-  const L = Math.abs(duplex.left.end_bp - duplex.left.start_bp) + 1
+export function classifyAntiparallel(leftDom, rightDom, leftEnd, rightEnd, leftBases, rightBases, allowN) {
+  const L = Math.abs(leftEnd.end_bp - leftEnd.start_bp) + 1
   const positions = []
+  let nComp = 0
   if (leftDom && rightDom) {
-    const leftOv = (design.overhangs ?? []).find(o => o.id === duplex.left.overhang_id)
-    const rightOv = (design.overhangs ?? []).find(o => o.id === duplex.right.overhang_id)
-    const leftBases = assembleOverhangSequence(leftOv, overhangDomainLength(design, duplex.left.overhang_id) ?? undefined)
-    const rightBases = assembleOverhangSequence(rightOv, overhangDomainLength(design, duplex.right.overhang_id) ?? undefined)
-    const allowN = duplex.allow_n_wildcard !== false
-    const lOff0 = _bpToOffset(leftDom, duplex.left.start_bp)
-    const rOff0 = _bpToOffset(rightDom, duplex.right.start_bp)
+    const lOff0 = _bpToOffset(leftDom, leftEnd.start_bp)
+    const rOff0 = _bpToOffset(rightDom, rightEnd.start_bp)
     for (let i = 0; i < L; i++) {
       const lOff = lOff0 + i
       const rOff = rOff0 + (L - 1 - i)   // antiparallel: left 5' ↔ right 3'
       const lBase = (lOff >= 0 && lOff < leftBases.length) ? leftBases[lOff] : 'N'
       const rBase = (rOff >= 0 && rOff < rightBases.length) ? rightBases[rOff] : 'N'
+      const comp = _wcBase(lBase, rBase, allowN)
+      if (comp) nComp++
       positions.push({
         offset: i,
         left_bp: _offsetToBp(leftDom, lOff),
         right_bp: _offsetToBp(rightDom, rOff),
         left_base: lBase,
         right_base: rBase,
-        complementary: _wcBase(lBase, rBase, allowN),
+        complementary: comp,
       })
     }
   }
-  return { length: L, positions }
+  return { length: L, positions, n_complementary: nComp, n_mismatch: positions.length - nComp }
+}
+
+/**
+ * Pure: per-base classification of ONE per-design duplex, `left` walked 5'→3'
+ * against `right` walked 3'→5' (antiparallel). Both ends' bases come from the SAME
+ * `design`. Mirror of backend `classify_duplex_pairing`; delegates the walk to
+ * `classifyAntiparallel`.
+ * @returns {{length:number, positions:object[], n_complementary:number, n_mismatch:number}}
+ */
+export function classifyDuplex(design, duplex) {
+  const leftDom = overhangBackingDomain(design, duplex.left.overhang_id)
+  const rightDom = overhangBackingDomain(design, duplex.right.overhang_id)
+  const leftOv = (design?.overhangs ?? []).find(o => o.id === duplex.left.overhang_id)
+  const rightOv = (design?.overhangs ?? []).find(o => o.id === duplex.right.overhang_id)
+  const leftBases = assembleOverhangSequence(leftOv, overhangDomainLength(design, duplex.left.overhang_id) ?? undefined)
+  const rightBases = assembleOverhangSequence(rightOv, overhangDomainLength(design, duplex.right.overhang_id) ?? undefined)
+  const allowN = duplex.allow_n_wildcard !== false
+  return classifyAntiparallel(leftDom, rightDom, duplex.left, duplex.right, leftBases, rightBases, allowN)
+}
+
+/**
+ * Pure: per-base classification of ONE cross-part `AssemblyDuplex`. Sources each
+ * side's backing domain + assembled 5'→3' bases from its OWN instance design
+ * (`designA` for `duplex.left`, `designB` for `duplex.right`), then delegates to
+ * `classifyAntiparallel` — the SAME kernel as the per-design `classifyDuplex`, so
+ * the cross-part polarity/register can't fork. Mirror of backend
+ * `assembly_duplex.classify_assembly_duplex`.
+ * @param {object} designA — the left end's instance design (`inst.source.design`)
+ * @param {object} designB — the right end's instance design
+ * @param {object} duplex  — AssemblyDuplex { left:{overhang_id,start_bp,end_bp}, right:{…}, allow_n_wildcard }
+ */
+export function classifyAssemblyDuplex(designA, designB, duplex) {
+  const leftDom = overhangBackingDomain(designA, duplex.left.overhang_id)
+  const rightDom = overhangBackingDomain(designB, duplex.right.overhang_id)
+  const leftOv = (designA?.overhangs ?? []).find(o => o.id === duplex.left.overhang_id)
+  const rightOv = (designB?.overhangs ?? []).find(o => o.id === duplex.right.overhang_id)
+  const leftBases = leftDom ? assembleOverhangSequence(leftOv, overhangDomainLength(designA, duplex.left.overhang_id) ?? undefined) : ''
+  const rightBases = rightDom ? assembleOverhangSequence(rightOv, overhangDomainLength(designB, duplex.right.overhang_id) ?? undefined) : ''
+  const allowN = duplex.allow_n_wildcard !== false
+  return classifyAntiparallel(leftDom, rightDom, duplex.left, duplex.right, leftBases, rightBases, allowN)
 }
 
 /**
@@ -390,6 +432,41 @@ export function overhangHasDuplex(design, overhangId) {
   return (design?.duplexes ?? []).some(
     dx => dx.left.overhang_id === overhangId || dx.right.overhang_id === overhangId,
   )
+}
+
+/**
+ * Pure: bp → 'paired' | 'mismatch' | 'unpaired' for every bp of a CROSS-PART
+ * overhang's backing domain on one instance, aggregating ALL `assembly.duplexes`
+ * that touch `(instanceId, overhangId)` (multivalency). `designFor(instanceId)`
+ * resolves each instance's design (e.g. `inst.source.design`); each duplex side is
+ * classified against its OWN instance design. A maximal 'unpaired' run is a toehold.
+ * Mirror of backend `assembly_duplex.assembly_overhang_pairing_map`. Returns {} when
+ * the overhang has no backing domain on its instance design.
+ */
+export function assemblyOverhangDuplexCoverage(assembly, instanceId, overhangId, designFor) {
+  const dom = overhangBackingDomain(designFor?.(instanceId), overhangId)
+  if (!dom) return {}
+  const lo = Math.min(dom.start_bp, dom.end_bp)
+  const hi = Math.max(dom.start_bp, dom.end_bp)
+  const out = {}
+  for (let bp = lo; bp <= hi; bp++) out[bp] = 'unpaired'
+  for (const dx of assembly?.duplexes ?? []) {
+    const ends = [
+      [dx.left.instance_id, dx.left.overhang_id],
+      [dx.right.instance_id, dx.right.overhang_id],
+    ]
+    if (!ends.some(([iid, oid]) => iid === instanceId && oid === overhangId)) continue
+    const cls = classifyAssemblyDuplex(designFor?.(dx.left.instance_id), designFor?.(dx.right.instance_id), dx)
+    for (const p of cls.positions) {
+      for (const [iid, oid, bp] of [
+        [dx.left.instance_id, dx.left.overhang_id, p.left_bp],
+        [dx.right.instance_id, dx.right.overhang_id, p.right_bp],
+      ]) {
+        if (iid === instanceId && oid === overhangId && bp in out) out[bp] = p.complementary ? 'paired' : 'mismatch'
+      }
+    }
+  }
+  return out
 }
 
 /** The duplex CLUSTER this overhang participates in (as driver OR driven), or null. A duplex

@@ -122,6 +122,8 @@ import { initSpreadsheet } from './ui/spreadsheet.js'
 import { initExportMenu }          from './ui/export_menu.js'
 import { initImportMenu }          from './ui/import_menu.js'
 import { initAssemblyPanel }        from './ui/assembly_panel.js'
+import { initAssemblyOverhangListPanel } from './ui/assembly_overhang_list_panel.js'
+import { initAssemblyOverhangConnectionsPanel } from './ui/assembly_overhang_connections_panel.js'
 import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
@@ -839,8 +841,23 @@ async function main() {
         ? (id, seq) => api.patchForcedLigationExtraBases(id, seq)
         : (id, seq) => api.patchCrossoverExtraBases(id, seq)
 
+      // If the right-clicked crossover is part of a multi-selection, apply to ALL
+      // selected crossovers (forced ligations are single-only, like the cadnano editor).
+      const design = store.getState().currentDesign
+      const multiIds = isForcedLigation ? [] : (selectionManager.getMultiCrossoverArcs?.() ?? [])
+        .map(a => a.crossover_id)
+        .filter(id => id && design?.crossovers?.some(x => x.id === id))
+      const applyToAll = multiIds.length > 1 && multiIds.includes(xo.id)
+      const applySeq = async (seq) => {
+        if (applyToAll) {
+          await api.batchCrossoverExtraBases(multiIds.map(id => ({ crossover_id: id, sequence: seq })))
+        } else {
+          await patchExtraBases(xo.id, seq)
+        }
+      }
+
       if (action === 'remove_extra_bases') {
-        await patchExtraBases(xo.id, '')
+        await applySeq('')
         return
       }
       // action === 'extra_bases' — prompt for sequence
@@ -850,7 +867,7 @@ async function main() {
         current,
       )
       if (seq === null) return  // cancelled
-      await patchExtraBases(xo.id, seq)
+      await applySeq(seq)
     },
     onSetOverhangName: (overhangId) => {
       const design = store.getState().currentDesign
@@ -2070,16 +2087,18 @@ async function main() {
   _moveRunControls(runControlEls.cando, 'cando-launch-row', 'cando-autorefine-row')
   _moveRunControls(runControlEls.namd, 'md-launch-row')
 
-  // NAMD: tuck the launch CONFIG (Alpine-connect chip, Protocol, Run-on, production steps /
-  // total time / note) into the Advanced card — only the Relax/Production buttons (extracted
-  // above) stay out. Runs AFTER the run-control move so md-launch-row is already gone from the
-  // launch form. Prepend in reverse so the order reads cluster → launch-form → threads grid.
+  // NAMD: tuck the launch CONFIG (Protocol, Run-on, production steps / total time / note)
+  // into the Advanced card — only the Relax/Production buttons (extracted above) stay out.
+  // Runs AFTER the run-control move so md-launch-row is already gone from the launch form.
+  // The Alpine connect chip goes into the (always-visible) Cluster card instead, so it's
+  // reachable before any Alpine job exists — prepend so it sits at the top of that card.
   {
     const advBody = document.getElementById('md-jobs-adv-body')
     const launchForm = document.getElementById('md-launch-form')
-    const clusterMount = document.getElementById('md-cluster-connection-mount')
     if (advBody && launchForm) advBody.prepend(launchForm)
-    if (advBody && clusterMount) advBody.prepend(clusterMount)
+    const clusterBody = document.getElementById('md-jobs-cluster-body')
+    const clusterMount = document.getElementById('md-cluster-connection-mount')
+    if (clusterBody && clusterMount) clusterBody.prepend(clusterMount)
   }
 
   // oxDNA: tuck the Production-steps field + the auto-policy resource line ("GPU: free ·
@@ -3442,6 +3461,12 @@ async function main() {
     // tab — no DOM relocation needed).
     const asmEl = document.getElementById('assembly-panel')
     if (asmEl) asmEl.style.display = ''
+    const asmOhEl = document.getElementById('assembly-overhang-panel')
+    if (asmOhEl) asmOhEl.style.display = ''
+    const asmOconnEl = document.getElementById('assembly-oconn-panel')
+    if (asmOconnEl) asmOconnEl.style.display = ''
+    assemblyOverhangListPanel?.rebuild()
+    assemblyOverhangConnectionsPanel?.rebuild()
   }
 
   function _exitAssemblyMode() {
@@ -3473,6 +3498,10 @@ async function main() {
     // time an assembly file is opened.
     const asmEl = document.getElementById('assembly-panel')
     if (asmEl) asmEl.style.display = 'none'
+    const asmOhEl = document.getElementById('assembly-overhang-panel')
+    if (asmOhEl) asmOhEl.style.display = 'none'
+    const asmOconnEl = document.getElementById('assembly-oconn-panel')
+    if (asmOconnEl) asmOconnEl.style.display = 'none'
   }
 
   // ── Fit-to-view ───────────────────────────────────────────────────────────────
@@ -5131,6 +5160,21 @@ async function main() {
         if (!store.getState().assemblyActive) _partFeatureLogPanel?.clearPartContext()
       }
     },
+  })
+
+  // Sidebar "Overhangs" list — grouped per part, two-way synced with the 3D
+  // overhang-selection tool via the shared assemblyOverhangSelection store slice.
+  const assemblyOverhangListPanel = initAssemblyOverhangListPanel({
+    store,
+    getInstanceDesign: (id) => assemblyRenderer.getInstanceDesign?.(id) ?? null,
+    fetchInstanceDesign: (id) => api.getInstanceDesign(id),
+  })
+  // Cross-part "Overhang Connections" panel (A/B dropdowns + type picker + create),
+  // mirroring the per-part panel; A/B two-way synced with the 3D overhang tool.
+  const assemblyOverhangConnectionsPanel = initAssemblyOverhangConnectionsPanel({
+    store,
+    getInstanceDesign: (id) => assemblyRenderer.getInstanceDesign?.(id) ?? null,
+    fetchInstanceDesign: (id) => api.getInstanceDesign(id),
   })
 
   // ── Library panel (welcome screen) ───────────────────────────────────────────

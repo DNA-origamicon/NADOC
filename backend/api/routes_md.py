@@ -1390,6 +1390,35 @@ def _backfill_failure_kind(job: MdJob) -> None:
     job.save(_workspace())
 
 
+def _namd_running_fraction(job: MdJob, ws) -> float | None:
+    """Live overall progress fraction (0..1) for a RUNNING NAMD job, for the master
+    progress bar.  ``None`` for non-running jobs (the bar falls back to done/total
+    segments).  Reads only the currently-running segment's log (cheap: ≤1 per running
+    job), mirroring the WS ``segment_progress`` so a single-segment production advances
+    instead of sitting at 0 %."""
+    if job.status != MdStatus.running:
+        return None
+    segs = job.segments or []
+    total = len(segs)
+    if not total:
+        return None
+    from backend.core.namd_metrics import overall_fraction, parse_namd_log  # noqa: PLC0415
+    done = sum(1 for s in segs if s.status == "done")
+    ts = None
+    steps = None
+    idx = job.current_segment_idx
+    if 0 <= idx < total and segs[idx].status == "running":
+        seg = segs[idx]
+        steps = seg.steps
+        log_path = job.package_dir(ws) / f"{seg.name}.log"
+        if log_path.exists():
+            try:
+                ts = parse_namd_log(log_path).timestep
+            except Exception:
+                ts = None
+    return overall_fraction(done, total, ts, steps)
+
+
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
@@ -1405,6 +1434,9 @@ async def list_md_jobs() -> list[dict]:
         d["out_of_date"] = _md_job_out_of_date(j, current_fp)
         d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
         d["early_stop_pending"] = pending_early_stop(j.job_id)
+        frac = _namd_running_fraction(j, ws)
+        if frac is not None:
+            d["progress_fraction"] = frac
         out.append(d)
     return out
 
@@ -2331,13 +2363,24 @@ async def stop_md_job(job_id: str) -> dict:
         from backend.core import cluster_ssh, md_executor
         mgr = cluster_ssh.get_manager()
         if not mgr.is_connected():
+            # Can't scancel a disconnected session — but DON'T silently leave the SLURM
+            # job running (it would keep burning SUs while the UI reads "stopped").  Defer
+            # the cancel: mark stopped locally + set pending_scancel so the next reconnect
+            # (poll_remote_jobs) issues the scancel.  Only meaningful once submitted.
+            if job.slurm_job_id:
+                job.pending_scancel = True
             apply_user_stop(job)
             job.save(_workspace())
-            return {"ok": True, "message": "Cluster not connected — marked stopped locally; scancel skipped."}
+            msg = ("Cluster not connected — marked stopped locally; the SLURM job will be "
+                   "cancelled automatically when you reconnect."
+                   if job.slurm_job_id else
+                   "Cluster not connected — marked stopped locally (job was not submitted yet).")
+            return {"ok": True, "message": msg, "pending_scancel": bool(job.slurm_job_id)}
         try:
             issued = await md_executor.cancel_job(job, conn=mgr)
         except cluster_ssh.ClusterSSHError as exc:
             raise HTTPException(502, f"Cluster transport error: {exc}") from exc
+        job.pending_scancel = False
         apply_user_stop(job)
         job.save(_workspace())
         return {"ok": True, "job_id": job_id,

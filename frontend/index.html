@@ -705,6 +705,21 @@
       border-bottom: 1px solid #30363d;
       border-right: 1px solid #21262d;
       white-space: nowrap;
+      position: relative;
+    }
+    .sheet-col-grip {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      right: 0;
+      width: 7px;
+      cursor: col-resize;
+      user-select: none;
+      touch-action: none;
+    }
+    .sheet-col-grip:hover,
+    .sheet-col-grip:active {
+      background: #58a6ff;
     }
     #spreadsheet-table td {
       padding: 3px 8px;
@@ -4431,19 +4446,9 @@
                   <option value="equilibrium_aware_namd">Equilibrium-Aware NAMD</option>
                   <option value="mgh_slow_release">Legacy Explicit Mg/MGH Slow Release</option>
                 </select>
-                <!-- Run target: local subprocess vs. Alpine cluster (Phase 4). -->
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e">
-                  <span>Run on:</span>
-                  <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
-                    <input id="md-run-target-local" type="radio" name="md-run-target" value="local" checked style="accent-color:#3fb950">Local
-                  </label>
-                  <label id="md-run-target-alpine-label" style="display:flex;align-items:center;gap:3px;cursor:pointer">
-                    <input id="md-run-target-alpine" type="radio" name="md-run-target" value="alpine" style="accent-color:#58a6ff">Alpine
-                  </label>
-                  <span id="md-run-target-hint" style="font-size:10px;color:#484f58"></span>
-                </div>
                 <!-- Relax / Production buttons — relocated above the jobs card at init
-                     (see main.js run-control move); the run-target radios above stay here. -->
+                     (see main.js run-control move). Run-on (Local/Alpine) radios live in the
+                     Cluster card now. -->
                 <div id="md-launch-row" style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
                   <button id="md-jobs-run-btn"
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a4a1a;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
@@ -4598,9 +4603,12 @@
                     Fast relaxation (HMR + GPU-resident, 4&nbsp;fs)
                   </label>
                   <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="Experimental relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. Off by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages.">
+                         title="Relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. Off by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages. Also editable mid-relax: changing it while a running local relaxation is selected applies at the next stage checkpoint (no relaunch).">
                     <input id="md-jobs-early-stop" type="checkbox" style="accent-color:#3fb950">
-                    Early-stop settled stages (experimental)
+                    Early-stop settled stages
+                    <span id="md-jobs-early-stop-pending"
+                          style="display:none;color:#d29922"
+                          title="Change queued — it applies at the next stage checkpoint. Toggle is locked until then.">⧗ pending</span>
                   </label>
                 </div>
               </div>
@@ -4707,6 +4715,87 @@
                 </div>
               </div>
 
+              <!-- ── Cluster (Alpine): the Alpine home — connection chip (prepended here
+                   from the panel top at init, see main.js) + every cluster-only control
+                   for the selected job (submit / resume / ensemble / SLURM status /
+                   resumption history).  Always present (not gated on a selected job) so the
+                   connect chip is reachable before any Alpine job exists; collapsible. The
+                   per-job controls inside still show/hide with the selection. ── -->
+              <div class="ox-card" id="md-jobs-cluster-card" style="margin-bottom:6px">
+                <div id="md-jobs-cluster-toggle" class="ox-card__header" style="color:#c9d1d9">
+                  <span id="md-jobs-cluster-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Cluster (Alpine)</span>
+                </div>
+                <div id="md-jobs-cluster-body" class="ox-card__body">
+                  <!-- #md-cluster-connection-mount (the connect chip) is prepended here at init. -->
+
+                  <!-- Run target: local subprocess vs. Alpine cluster (moved here from Advanced
+                       so all run-location controls sit together; Alpine is gated on a live
+                       connection above). -->
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e">
+                    <span>Run on:</span>
+                    <label style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                      <input id="md-run-target-local" type="radio" name="md-run-target" value="local" checked style="accent-color:#3fb950">Local
+                    </label>
+                    <label id="md-run-target-alpine-label" style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                      <input id="md-run-target-alpine" type="radio" name="md-run-target" value="alpine" style="accent-color:#58a6ff">Alpine
+                    </label>
+                    <span id="md-run-target-hint" style="font-size:10px;color:#484f58"></span>
+                  </div>
+
+                  <!-- Reconnect nudge: shown when Alpine runs are in flight but the session
+                       is down (they can't be monitored / their results fetched until you
+                       reconnect).  Populated by mdRemoteReconnectPrompt. -->
+                  <div id="md-jobs-cluster-reconnect-note"
+                       style="display:none;font-size:var(--text-xs);color:#d29922;background:#1c1400;border:1px solid #6b4e00;border-radius:3px;padding:5px;margin-bottom:6px"></div>
+
+                  <!-- Alpine-specific status (prepared→submit / SLURM-queued wait). -->
+                  <div id="md-jobs-cluster-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
+
+                  <!-- Submit a prepared job to Alpine; resume a timed-out SLURM job. -->
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+                    <button id="md-jobs-submit-alpine-btn"
+                            title="Review resources and submit this prepared job to the Alpine cluster"
+                            style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
+                      ☁ Submit to Alpine
+                    </button>
+                    <button id="md-jobs-resume-btn"
+                            title="Resume this timed-out job from its last checkpoint (new SLURM submission)"
+                            style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
+                      ⟳ Resume
+                    </button>
+                  </div>
+
+                  <!-- Ensemble roll-up: the replicas nested under this parent (or, when a
+                       replica is selected, its siblings) with their SLURM states, so the
+                       parent selection reads as the ensemble at a glance. -->
+                  <div id="md-jobs-ensemble-rollup" style="display:none;margin-bottom:6px"></div>
+
+                  <!-- Ensemble production on Alpine: stage N production replicas (distinct
+                       seeds) from THIS completed relaxation, fanned out across free CPU
+                       cores.  Shown only for a completed, non-replica job. -->
+                  <div id="md-jobs-ensemble-wrap"
+                       style="display:none;align-items:center;gap:6px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e;flex-wrap:wrap">
+                    <span title="Run several independent NAMD production copies with different random seeds to sample an ensemble, using Alpine's free CPU cores.">Ensemble replicas:</span>
+                    <input id="md-jobs-ensemble-count" type="number" min="1" max="64" value="4"
+                           style="width:48px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <button id="md-jobs-ensemble-btn"
+                            title="Stage N independent production replicas (distinct seeds) on the Alpine cluster"
+                            style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">
+                      ☁ Ensemble on Alpine
+                    </button>
+                  </div>
+
+                  <!-- Remote resumption history (timed-out → resumed chain) -->
+                  <div id="md-jobs-resume-history-wrap" style="display:none">
+                    <div id="md-jobs-resume-history-toggle" style="cursor:pointer;font-size:var(--text-xs);color:#8b949e;user-select:none">
+                      <span id="md-jobs-resume-history-arrow">▸</span> Resumptions (<span id="md-jobs-resume-history-count">0</span>)
+                    </div>
+                    <div id="md-jobs-resume-history"
+                         style="display:none;font-size:10px;font-family:var(--font-mono);background:#010409;border:1px solid #21262d;border-radius:3px;padding:5px;margin-top:3px;max-height:120px;overflow-y:auto"></div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Active job detail -->
               <div id="md-jobs-detail" style="display:none">
                 <!-- ── Health (collapsible card — selected run's metrics; sits right
@@ -4719,85 +4808,16 @@
                   <div id="md-jobs-health-body" class="ox-card__body">
                     <div id="md-jobs-metrics"
                          style="display:grid;grid-template-columns:1fr 1fr;gap:4px"></div>
+                    <!-- Error message (part of the Health card) -->
+                    <div id="md-jobs-detail-error"
+                         style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border:1px solid #5e1a1a;border-radius:3px;padding:5px;margin-top:6px;white-space:pre-wrap;word-break:break-word"></div>
                   </div>
                 </div>
-
-                <!-- Status + run controls -->
-                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                  <div id="md-jobs-detail-status" style="flex:1;font-size:var(--text-xs);color:#8b949e"></div>
-                  <button id="md-jobs-submit-alpine-btn"
-                          title="Review resources and submit this prepared job to the Alpine cluster"
-                          style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
-                    ☁ Submit to Alpine
-                  </button>
-                  <button id="md-jobs-resume-btn"
-                          title="Resume this timed-out job from its last checkpoint (new SLURM submission)"
-                          style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer;display:none">
-                    ⟳ Resume
-                  </button>
-                </div>
-
-                <!-- Ensemble roll-up: the replicas nested under this parent (or, when a
-                     replica is selected, its siblings) with their SLURM states, so the
-                     parent selection reads as the ensemble at a glance instead of only the
-                     underlying relaxation. Populated by _renderEnsembleRollup. -->
-                <div id="md-jobs-ensemble-rollup" style="display:none;margin-bottom:6px"></div>
-
-                <!-- Ensemble production on Alpine: stage N production replicas (distinct
-                     seeds) from THIS completed relaxation, fanned out across free CPU cores.
-                     Shown only for a completed, non-replica job. -->
-                <div id="md-jobs-ensemble-wrap"
-                     style="display:none;align-items:center;gap:6px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e;flex-wrap:wrap">
-                  <span title="Run several independent NAMD production copies with different random seeds to sample an ensemble, using Alpine's free CPU cores.">Ensemble replicas:</span>
-                  <input id="md-jobs-ensemble-count" type="number" min="1" max="64" value="4"
-                         style="width:48px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                  <button id="md-jobs-ensemble-btn"
-                          title="Stage N independent production replicas (distinct seeds) on the Alpine cluster"
-                          style="font-size:var(--text-xs);padding:3px 8px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">
-                    ☁ Ensemble on Alpine
-                  </button>
-                </div>
-
-                <!-- Mid-run early-stop toggle (running relaxation jobs) -->
-                <label id="md-jobs-early-stop-live-wrap"
-                       style="display:none;align-items:center;gap:4px;margin-bottom:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                       title="Toggle the relaxation early-stop accelerator on THIS running job. Takes effect at the next stage checkpoint — no relaunch.">
-                  <input id="md-jobs-early-stop-live" type="checkbox" style="accent-color:#3fb950">
-                  Early-stop settled stages (live)
-                  <span id="md-jobs-early-stop-live-pending"
-                        style="display:none;color:#d29922"
-                        title="Change queued — it applies at the next stage checkpoint. Toggle is locked until then.">⧗ pending</span>
-                </label>
-
-                <!-- Error message -->
-                <div id="md-jobs-detail-error"
-                     style="display:none;font-size:var(--text-xs);color:#f85149;background:#1a0a0a;border:1px solid #5e1a1a;border-radius:3px;padding:5px;margin-bottom:6px;white-space:pre-wrap;word-break:break-word"></div>
-
-                <!-- Remote resumption history (timed-out → resumed chain) -->
-                <div id="md-jobs-resume-history-wrap" style="display:none;margin-bottom:6px">
-                  <div id="md-jobs-resume-history-toggle" style="cursor:pointer;font-size:var(--text-xs);color:#8b949e;user-select:none">
-                    <span id="md-jobs-resume-history-arrow">▸</span> Resumptions (<span id="md-jobs-resume-history-count">0</span>)
-                  </div>
-                  <div id="md-jobs-resume-history"
-                       style="display:none;font-size:10px;font-family:var(--font-mono);background:#010409;border:1px solid #21262d;border-radius:3px;padding:5px;margin-top:3px;max-height:120px;overflow-y:auto"></div>
-                </div>
-
-                <!-- Progress -->
-                <div id="md-jobs-progress"
-                     style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>
 
                 <!-- Stage timeline element — relocated to the bottom of the jobs card at
                      init (main.js); still populated here by id. -->
                 <div id="md-jobs-timeline"
                      style="font-size:10px;font-family:var(--font-mono);background:#010409;border:1px solid #21262d;border-radius:3px;padding:5px;margin-bottom:6px;max-height:160px;overflow-y:auto"></div>
-
-                <div id="md-jobs-frame-controls"
-                     style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
-                  <button id="md-jobs-load-frames-btn"
-                          style="flex:1;font-size:var(--text-xs);padding:4px 6px;background:#10243a;border:1px solid #58a6ff;color:#58a6ff;border-radius:3px;cursor:pointer">
-                    Load Frames
-                  </button>
-                </div>
 
               </div>
 
@@ -5825,6 +5845,89 @@
             </div>
             <div id="assembly-instance-list" style="max-height:320px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#0d1117;padding:3px"></div>
           </div>
+        </div>
+
+        <!-- Assembly overhangs list (shown only in assembly mode; two-way synced
+             with the 3D overhang-selection tool via assemblyOverhangSelection) -->
+        <div class="panel-section" id="assembly-overhang-panel" style="display:none">
+          <style>
+            /* Grouped-by-part overhang list, styled like the Overhangs Manager
+               popup's Side A/B lists (base .ohc-list-row / .aohc-part-header are
+               global; only the selection colors + header are scoped here). */
+            #asm-oh-list { max-height:280px; overflow-y:auto; border:1px solid #21262d; border-radius:3px; background:#0d1117 }
+            #asm-oh-list .asm-oh-empty { padding:12px; font-size:11px; color:#6e7681; text-align:center }
+            #asm-oh-list .aohc-part-header {
+              width:100%; display:flex; align-items:center; gap:6px; background:transparent;
+              border:none; border-bottom:1px solid #21262d; color:#8b949e; cursor:pointer;
+              font-size:11px; padding:6px 8px; text-align:left;
+            }
+            #asm-oh-list .aohc-part-header:hover { background:#161b22; color:#c9d1d9 }
+            #asm-oh-list .aohc-part-header > * { pointer-events:none }
+            #asm-oh-list .aohc-chevron { font-size:9px; color:#6e7681; transition:transform .12s; display:inline-block }
+            #asm-oh-list .aohc-part-header[aria-expanded="true"] .aohc-chevron { transform:rotate(90deg) }
+            #asm-oh-list .aohc-part-count { margin-left:auto; color:#6e7681; font-size:10px }
+            #asm-oh-list .ohc-list-row.ct-selected-a {
+              background:rgba(0,225,255,0.18); color:#00e1ff; box-shadow:inset 3px 0 0 #00e1ff;
+            }
+            #asm-oh-list .ohc-list-row.ct-selected-b {
+              background:rgba(255,54,198,0.18); color:#ff36c6; box-shadow:inset 3px 0 0 #ff36c6;
+            }
+            #asm-oh-list .ohc-list-row.ct-selected-a .ohc-end-tag,
+            #asm-oh-list .ohc-list-row.ct-selected-b .ohc-end-tag { color:inherit }
+          </style>
+          <h2 style="margin-bottom:0">Overhangs</h2>
+          <div id="asm-oh-hint" style="font-size:var(--text-xs);color:#6e7681;margin:4px 0 6px">
+            Arm the “Overhang locations” tool to pick in 3D, or click a row (Side A · Side B).
+          </div>
+          <div id="asm-oh-list"></div>
+        </div>
+
+        <!-- Assembly Overhang Connections (shown only in assembly mode) — the
+             cross-part twin of the per-part #overhang-connections-section: two
+             overhang dropdowns (Side A / B, grouped by part), the shared
+             connection-type icon picker, length, and Generate. A/B are two-way
+             synced with the 3D overhang-selection tool via assemblyOverhangSelection. -->
+        <div class="panel-section" id="assembly-oconn-panel" style="display:none">
+          <style>
+            #asm-oconn-select-a, #asm-oconn-select-b {
+              width:100%; box-sizing:border-box; background:#0d1117; border:1px solid #30363d;
+              border-radius:4px; color:#c9d1d9; font-family:var(--font-ui); font-size:12px;
+              padding:4px 6px; outline:none;
+            }
+            #asm-oconn-select-a { border-color:#00e1ff66 }
+            #asm-oconn-select-b { border-color:#ff36c666 }
+            #asm-oconn-generate:disabled { background:#21262d; border-color:#30363d; color:#6e7681; cursor:not-allowed }
+            .asm-oconn-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border:1px solid #21262d; border-radius:4px; margin-bottom:4px; font-size:11px }
+            .asm-oconn-row .asm-oconn-row-main { flex:1; min-width:0 }
+            .asm-oconn-row-name { color:#c9d1d9; font-weight:600 }
+            .asm-oconn-row-sub { color:#8b949e }
+            .asm-oconn-row-del { flex:0 0 auto; background:transparent; border:none; color:#8b949e; font-size:14px; line-height:1; cursor:pointer; padding:0 2px }
+            .asm-oconn-row-del:hover { color:#f85149 }
+          </style>
+          <h2 style="margin-bottom:6px">Overhang Connections</h2>
+          <div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+            <div style="display:flex;flex-direction:column;gap:3px;width:100%">
+              <label for="asm-oconn-select-a" style="font-size:11px;color:#00e1ff">Overhang A</label>
+              <select id="asm-oconn-select-a"></select>
+            </div>
+            <button id="asm-oconn-button-box" class="ct-button-box" type="button" aria-haspopup="true" aria-expanded="false"></button>
+            <div style="display:flex;flex-direction:column;gap:3px;width:100%">
+              <label for="asm-oconn-select-b" style="font-size:11px;color:#ff36c6">Overhang B</label>
+              <select id="asm-oconn-select-b"></select>
+            </div>
+            <div id="asm-oconn-length-row" style="display:flex;flex-direction:column;gap:3px;width:100%">
+              <label for="asm-oconn-length" style="font-size:11px;color:#8b949e">Linker length (bp)</label>
+              <input id="asm-oconn-length" type="number" min="1" step="1" value="12"
+                style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#c9d1d9;font-family:var(--font-ui);font-size:12px;padding:4px 6px;outline:none">
+            </div>
+            <div id="asm-oconn-warning" hidden style="width:100%;box-sizing:border-box;color:#f0883e;font-size:11px;line-height:1.3"></div>
+            <button id="asm-oconn-generate" type="button" disabled
+              style="width:100%;box-sizing:border-box;padding:6px 4px;background:#1f6feb;border:1px solid #1f6feb;border-radius:4px;color:#fff;font-family:var(--font-ui);font-size:12px;cursor:pointer">Connect</button>
+            <div id="asm-oconn-status" style="width:100%;font-size:11px;color:#8b949e;min-height:14px"></div>
+          </div>
+          <div style="font-size:11px;color:#8b949e;margin-top:8px;margin-bottom:3px">Linkers &amp; bindings</div>
+          <div id="asm-oconn-list" style="max-height:160px;overflow-y:auto;border:1px solid #30363d;border-radius:4px;background:#0d1117;padding:4px"></div>
+          <div id="asm-oconn-popover" class="ct-popover" hidden role="listbox"></div>
         </div>
 
         <!-- Selection properties -->

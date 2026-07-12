@@ -114,7 +114,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob } from './md_jobs_panel.js'
+import { mdJobIsActive, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdProductionAction, mdRemoteReconnectPrompt } from './md_jobs_panel.js'
 
 describe('mdChildRowLabel', () => {
   it('labels a derived child by its global run number', () => {
@@ -181,6 +181,58 @@ describe('mdRunControl (primary ▶ Relax ⇄ ■ Stop ⇄ ↻ Resume)', () => {
   it('busy → disabled', () => {
     expect(mdRunControl({ status: 'running' }, { busy: true }).disabled).toBe(true)
   })
+  it('run-target Alpine relabels a fresh launch → "▶ Prepare for Alpine" (it only preps+queues)', () => {
+    expect(mdRunControl(null, { runTarget: 'alpine' }).label).toBe('▶ Prepare for Alpine')
+    expect(mdRunControl({ status: 'completed' }, { runTarget: 'alpine' }).label).toBe('▶ Prepare for Alpine')
+    // Local is unchanged; and the relabel is ONLY for the RUN action, not stop/resume.
+    expect(mdRunControl(null, { runTarget: 'local' }).label).toBe('▶ Relax')
+    expect(mdRunControl({ status: 'running', execution_target: 'alpine', slurm_job_id: '9' }, { runTarget: 'alpine' }).label).toBe('■ Stop Relax')
+  })
+  it('a PRODUCTION child selected → ▶ Relax but DISABLED (relax button is inert; the Production button drives it)', () => {
+    // Regression: a running production child used to read "■ Stop Relax" (mislabeled).
+    const running = mdRunControl({ status: 'running', run_kind: 'production', execution_target: 'local' })
+    expect(running.action).toBe('run')
+    expect(running.label).toBe('▶ Relax')
+    expect(running.disabled).toBe(true)
+    // Same for a stopped/completed production child — never "Resume Relax"/"Stop Relax".
+    expect(mdRunControl({ status: 'stopped', run_kind: 'production' }).disabled).toBe(true)
+    expect(mdRunControl({ status: 'completed', run_kind: 'production' }).disabled).toBe(true)
+  })
+})
+
+describe('mdRemoteReconnectPrompt (reconnect nudge for in-flight Alpine runs)', () => {
+  const running = { execution_target: 'alpine', slurm_job_id: '9', status: 'running' }
+  it('prompts when a submitted Alpine run is in flight AND the session is down', () => {
+    expect(mdRemoteReconnectPrompt([running], 'disconnected')).toMatch(/1 Alpine run in flight/)
+    expect(mdRemoteReconnectPrompt([running], 'expired')).toMatch(/reconnect to monitor/)
+    expect(mdRemoteReconnectPrompt([running, { ...running, slurm_job_id: '10', status: 'queued' }], 'disconnected')).toMatch(/2 Alpine runs/)
+  })
+  it('stays silent when connected/connecting, or nothing is in flight', () => {
+    expect(mdRemoteReconnectPrompt([running], 'connected')).toBe('')
+    expect(mdRemoteReconnectPrompt([running], 'connecting')).toBe('')
+    expect(mdRemoteReconnectPrompt([{ ...running, status: 'completed' }], 'disconnected')).toBe('')
+    expect(mdRemoteReconnectPrompt([{ execution_target: 'alpine', status: 'running' }], 'disconnected')).toBe('')  // never submitted (no slurm id)
+    expect(mdRemoteReconnectPrompt([{ execution_target: 'local', status: 'running' }], 'disconnected')).toBe('')
+    expect(mdRemoteReconnectPrompt([], 'disconnected')).toBe('')
+    expect(mdRemoteReconnectPrompt(null, 'disconnected')).toBe('')
+  })
+})
+
+describe('mdProductionAction (what the Production button does)', () => {
+  it('running/preparing production child → stop', () => {
+    expect(mdProductionAction({ status: 'running', run_kind: 'production', execution_target: 'local' })).toBe('stop')
+    expect(mdProductionAction({ status: 'preparing', run_kind: 'production', execution_target: 'local' })).toBe('stop')
+  })
+  it('stopped/failed production child → resume', () => {
+    expect(mdProductionAction({ status: 'stopped', run_kind: 'production' })).toBe('resume')
+    expect(mdProductionAction({ status: 'failed', run_kind: 'production' })).toBe('resume')
+  })
+  it('a relaxation root, or a completed production child → start (spawn/chain a new production)', () => {
+    expect(mdProductionAction({ status: 'completed' })).toBe('start')                       // relaxation
+    expect(mdProductionAction({ status: 'running', execution_target: 'local' })).toBe('start')  // relaxation running
+    expect(mdProductionAction({ status: 'completed', run_kind: 'production' })).toBe('start')  // chain off a finished production
+    expect(mdProductionAction(null)).toBe('start')
+  })
 })
 
 describe('hasActiveRemoteJob (gates the remote-poll timer)', () => {
@@ -194,6 +246,30 @@ describe('hasActiveRemoteJob (gates the remote-poll timer)', () => {
     expect(hasActiveRemoteJob([{ status: 'queued', execution_target: 'alpine' }])).toBe(false)  // awaiting submit
     expect(hasActiveRemoteJob([])).toBe(false)
     expect(hasActiveRemoteJob(null)).toBe(false)
+  })
+})
+
+describe('mdWatchdogDecision (detail-WS safety net for local jobs)', () => {
+  const live = { status: 'running', execution_target: 'local' }
+  it('idle when a local live job has a fresh open socket', () => {
+    expect(mdWatchdogDecision({ job: live, wsOpen: true, msSinceMsg: 3000 })).toBe('idle')
+  })
+  it('reconnect when a local live job has no socket', () => {
+    expect(mdWatchdogDecision({ job: live, wsOpen: false, msSinceMsg: 0 })).toBe('reconnect')
+    expect(mdWatchdogDecision({ job: { status: 'preparing', execution_target: 'local' }, wsOpen: false })).toBe('reconnect')
+    expect(mdWatchdogDecision({ job: { status: 'queued', execution_target: 'local' }, wsOpen: false })).toBe('reconnect')
+  })
+  it('refresh when the socket is open but silent past the stale window', () => {
+    expect(mdWatchdogDecision({ job: live, wsOpen: true, msSinceMsg: 99999 })).toBe('refresh')
+    expect(mdWatchdogDecision({ job: live, wsOpen: true, msSinceMsg: 6000, staleMs: 5000 })).toBe('refresh')
+  })
+  it('disarm for no selection, terminal, or remote/Alpine jobs (no local WS to watch)', () => {
+    expect(mdWatchdogDecision({ job: null, wsOpen: false })).toBe('disarm')
+    expect(mdWatchdogDecision({ job: { status: 'completed', execution_target: 'local' }, wsOpen: false })).toBe('disarm')
+    expect(mdWatchdogDecision({ job: { status: 'failed', execution_target: 'local' }, wsOpen: false })).toBe('disarm')
+    expect(mdWatchdogDecision({ job: { status: 'stopped', execution_target: 'local' }, wsOpen: false })).toBe('disarm')
+    expect(mdWatchdogDecision({ job: { status: 'running', execution_target: 'alpine', slurm_job_id: '9' }, wsOpen: false })).toBe('disarm')
+    expect(mdWatchdogDecision({ job: { status: 'running', execution_target: 'local', slurm_job_id: '9' }, wsOpen: false })).toBe('disarm')
   })
 })
 

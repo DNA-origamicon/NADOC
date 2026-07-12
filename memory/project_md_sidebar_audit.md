@@ -1,5 +1,147 @@
 # MD Sidebar UX Audit (2026-06-11)
 
+## Cluster card promoted + connect chip moved + early-stop de-experimentalized — SHIPPED 2026-07-11
+- Dropped the "(experimental)" tag from the early-stop toggle label + tooltip (well-tested now).
+- **Cluster (Alpine) card pulled OUT of `#md-jobs-detail` to a top-level, always-visible card**
+  (parity with the Viz card; verified in-app). It now leads with the **connect chip**
+  (`#md-cluster-connection-mount` relocated from the Advanced card into `#md-jobs-cluster-body`
+  at init, `main.js`) so connecting is reachable BEFORE any Alpine job exists (fixed audit
+  friction #1/#12). The per-job controls (submit/resume/ensemble/rollup/status/resume-history)
+  still show/hide with the selection; `_clearSelectedJob` resets those parts but keeps the card.
+  `_applyJobState` no longer toggles the card's own visibility. vitest 2659; smoke 21 pass.
+- **Alpine vs local protocol AUDIT (2026-07-11):**
+  - **#2 FIXED** — run-target radios (Local/Alpine) moved from the collapsed Advanced card into
+    the Cluster card (after the connect chip), so run-location controls sit together + are
+    visible. HTML move; ids unchanged; verified in-app.
+  - **#3 FIXED** — `mdRunControl` now takes `runTarget`; a fresh launch with target=Alpine
+    relabels the primary button **"▶ Prepare for Alpine"** (it only preps+queues; a separate
+    Submit follows). Run-target radio `change` repaints it; stop/resume labels unchanged. Test
+    added.
+  - **#8 FIXED** — `MdJob.pending_scancel` (load-setdefault). Stop on a disconnected remote job
+    marks it stopped locally AND sets `pending_scancel` (`routes_md.stop_md_job`); the next
+    connected `poll_remote_jobs` pass drains it (issues scancel, clears flag) even though the job
+    is no longer "active" — so the SLURM job doesn't keep burning SU. Frontend toasts the deferred
+    message. Tests: `test_poll_remote_jobs_drains_pending_scancel`,
+    `test_stop_disconnected_defers_scancel`.
+  - **#6 FIXED** — two parts. (a) A successful `POST /cluster/connect` now kicks
+    `poll_remote_jobs` immediately (`routes_cluster.py`), so a run that FINISHED while the
+    session was down gets its results fetched on reconnect (not up to ~30 s later) — this also
+    drains #8's deferred scancels. (b) Frontend nudge: pure `mdRemoteReconnectPrompt(jobs,
+    clusterState)` → an amber `#md-jobs-cluster-reconnect-note` in the Cluster card ("N Alpine
+    runs in flight — reconnect to monitor and fetch results") shown when submitted Alpine jobs
+    are queued/running/preparing AND the session isn't connected. Wired to
+    `nadoc:cluster-state-change` + every `_fetchJobs`. Tests: `test_cluster_connect_kicks_remote_poll`
+    (backend), `mdRemoteReconnectPrompt` (frontend).
+  - #5 by design — no live metrics/health for remote runs (SLURM has no local WS).
+  - #11 minor — ensemble button gated on connection though `ensemble-production` staging works
+    offline (only submit needs the session).
+
+## NAMD detail declutter — SHIPPED 2026-07-11 (the loose stack below Health)
+Audited the loose items under the Health card; user directed the cleanup. Done in
+`index.html` + `md_jobs_panel.js`:
+- **Removed (derelict/redundant):** the duplicate detail status line (`#md-jobs-detail-status`,
+  redundant with the master job card); the invisible progress bar (`#md-jobs-progress`,
+  `display:none`, superseded by the master bar) + its ~150 lines of dead render code
+  (`_showPreparingProgress`/`_renderPrepProgress`/`_fmtEta`/`_renderProgress`/
+  `_productionRunSummary`/`_productionAdvisoryText`/`_productionFailureText`, + orphaned
+  `_statusLabel`/`_latestHealthForSegments`); the "Load Frames" button (`#md-jobs-frame-controls`,
+  duplicated the Display-MD radio → `_startMdDisplay`); the separate mid-run early-stop toggle.
+- **New "Cluster (Alpine)" card** (`#md-jobs-cluster-card`, collapsible, shown only when the
+  selected job has cluster content): Submit-to-Alpine + Resume buttons, Ensemble replicas,
+  ensemble roll-up, resume history, and an Alpine-only status line (`#md-jobs-cluster-status`,
+  the awaiting-submit / SLURM-queued states rescued from the deleted status line). Visibility =
+  OR of its parts, computed in `_applyJobState`.
+- **Early-stop unified:** the ONE Advanced toggle (`#md-jobs-early-stop`) is now BOTH the launch
+  default AND the live mid-relax control — for a running local relaxation a change POSTs the
+  override (`setMdEarlyStop`) with the `#md-jobs-early-stop-pending` badge; otherwise it's the
+  create default. Gated by `_isLiveRelax(job)`. The old `#md-jobs-early-stop-live*` removed.
+- **Error box moved into the Health card body** (`#md-jobs-detail-error`).
+- Timeline unchanged (already relocated to the master jobs card by main.js).
+- vitest **2659**; smoke 21 pass (2 pre-existing unrelated); **DOM restructure verified in the
+  running app** (throwaway Playwright: cluster card present, error in Health body, all removed
+  ids absent, submit/resume/ensemble/rollup/resume-history inside the cluster card).
+
+## Production-job button mislabeling — FIXED 2026-07-11 (follow-up to Phase 2)
+User: selecting a RUNNING production job showed the primary control as "■ Stop Relax" +
+grayed "Start Production". Backend was CORRECT (job `7456d0130168` `run_kind='production'`,
+seeded from parent) — purely a frontend labeling bug: `mdRunControl` hardcoded verb 'Relax'
++ keyed off `mdJobIsActive` regardless of `run_kind`, and `_renderProductionControls` only
+enabled its button for a `completed` job. **Fix (`md_jobs_panel.js`):** the primary control
+governs the RELAXATION lifecycle only — `mdRunControl` returns "▶ Relax" DISABLED when a
+production child is selected (`mdIsProductionChild`). The Production button becomes that
+child's Stop/Resume control via pure `mdProductionAction(job)` → stop (running) / resume
+(stopped-failed) / start (relax root or completed→chain); its click branches to
+`_stopSelected(prodBtn)`/`_resumeSelected(prodBtn)` (both now take a btn arg). Resume states
+get a tooltip "Stopped jobs can be resumed from their last checkpoint." (both the Production
+button AND the primary Relax control's Resume). `_paintRunControl` now honours `rc.disabled`.
+Tests: `mdRunControl` production-child (disabled) + `mdProductionAction` (4). vitest 2659;
+smoke 21 pass (2 pre-existing unrelated). **NOT auto-verified in-app** (per-design job select
+is the MV-28 doc-context limit) — user has the live repro to confirm by re-clicking.
+
+## Re-audit 2026-07-11 (post Simulate-panel overhaul) — phased fix in progress
+The sidebar is now three pieces: master job card (`simulate_jobs.js`), NAMD panel
+detail (`md_jobs_panel.js`), Display-MD overlay (`md_panel.js`). Fresh audit found the
+biggest live-update hole is a **local running job freezing permanently on a dropped
+detail WebSocket** (no reconnect; the documented `_pollTimer` REST fallback was DEAD
+CODE, never armed; the one "backend not responding" warning wrote to a `display:none`
+element `#md-jobs-namd-status`). The timeline spinner kept animating → card *looked*
+live while frozen.
+
+**Phase 1 — SHIPPED 2026-07-11 (`md_jobs_panel.js`).** Added a detail-WS **watchdog**
+(`_startWsWatchdog`/`_wsWatchdogTick`, 5 s tick, `_WS_STALE_MS`=12 s): reconnects a
+dropped socket, force-reopens a silent-but-open (wedged) one, and on a failed backend
+probe surfaces a now-VISIBLE "backend not responding" banner (`_setBackendStale`
+un-hides `#md-jobs-namd-status`). Decision is pure+unit-tested (`mdWatchdogDecision`:
+disarm/reconnect/refresh/idle — local live job only; terminal/remote → disarm). Armed
+in `_openDetailForJob`'s local branch, torn down on terminal/remote select + panel
+`onClose`. Dead `_pollTimer` removed. Tests: `md_jobs_panel.test.js` mdWatchdogDecision
+(4). Full vitest **2654** green. **NOT exercised with a real dropped WS on a live NAMD
+job** (can't force it); pure logic pinned, smoke gate passed except two PRE-EXISTING
+`helices`-teardown console errors from concurrent uncommitted work (unrelated).
+
+**Phase 2 — SHIPPED 2026-07-11 (`simulate_jobs.js` + backend `namd_metrics.py`/`routes_md.py`).**
+Master-card correctness: (a) `engineLabel(node)` — `masterStatusText`/tooltip no longer
+mislabel NAMD/mrDNA/CanDo as "oxDNA · running" (regression-tested). (b) Backend stamps a
+live within-segment `progress_fraction` on RUNNING NAMD nodes (`namd_metrics.overall_fraction`
+pure + `_namd_running_fraction` reads the running segment's log in `list_md_jobs`; flows to
+`/simulate/jobs` via `normalize_md_job`'s `**d`); `masterProgressPct` NAMD branch prefers it
+so a single-segment production advances instead of sitting at 0 %. (c) The NAMD panel's WS
+state handler now calls `_notifyIfJobsChanged()` so a selected job's status transition (e.g.
+completing + spawning children) wakes the idle master. Tests: `overall_fraction` (4, backend),
+`masterStatusText`/`masterProgressPct` NAMD (frontend). `just test-smart` → **FULL 4682 pass**
+(foundational MD change); vitest 2655.
+
+**Phase 3 — SHIPPED 2026-07-11 (`md_jobs_panel.js` + `md_panel.js`).** Display-MD robustness:
+(a) design↔job guard in `_refreshMdDisplay` — refuses to stream a job whose
+`design_source_path` ≠ the open design (was: paint one structure's trajectory onto another,
+possible in show-all / mid-switch). (b) re-check `displayToggle.checked` + tab visibility
+AFTER the `_fetchDisplayMeta` await (toggle-off no longer clobbered back on). (c) `md_panel.js`
+unexpected-close emits `md-display-state:error` so the readiness dot doesn't stay green over a
+dead socket. (d) `_setDisplayIndicator` warming→error timeout (`_MD_WARMING_TIMEOUT_MS`=30 s)
+so a hung load can't sit amber forever. The **early-stop toggle stuck-disabled** finding is
+resolved transitively by Phase 1 (watchdog reconnects → next push clears pending). The **amp
+slider inert in beads/ballstick** finding is MOOT — `#md-amp` lives in the hidden `#md-panel`,
+unreachable (derelict, see P5). vitest 2655; smoke 21 pass (2 pre-existing unrelated
+`helices`-teardown failures from concurrent work).
+
+**Phase 4 — SHIPPED 2026-07-11 (`md_jobs_panel.js`).** (4b) `_maybePollRemote` edge-triggers
+one final `_fetchJobs`+`_fetchJobMetrics` on the active→idle transition (`_hadActiveRemote`),
+so a just-completed Alpine replica's cluster health_samples fill the ensemble grid instead of
+staying on the remote note. (4a) The ≤30 s supervisor auto-resume window is ACCEPTED as-is:
+it self-heals, and Phase 1's watchdog keeps the local status fresh; a distinct backend
+"awaiting-auto-resume" flag would need another full-suite cycle for marginal value — deferred.
+
+**Phase 5 — DOCUMENTED (no risky deletions).** The derelict/hidden inventory is INTENTIONAL,
+not accidental cruft: `appendMdProduction` client method + `/md/jobs/{id}/production` are
+retained-but-app-dead legacy (kept + doc-header-tested on purpose); `/md/jobs/{id}/health` +
+`/md/browse` are orphaned-by-design; the whole `#md-panel` manual UI (scrubber/play/live/load/
+amp) is `display:none` with its controller reused programmatically — **do NOT delete the markup:
+`md_panel.js:136,160` read `body`/`heading` UNGUARDED, so removing `#md-panel` throws at factory
+init.** The `#md-jobs-panel-heading`/`-arrow` reads (`md_jobs_panel.js:510-511`) are harmless
+guarded null-reads. Left in place; recorded here so they're not re-investigated as bugs.
+
+
+
 Audit of every MD sidebar feature: failure modes, whether the error reaches the
 user, whether it can leave the UI stale/frozen, and test coverage. Ranked
 highest-risk first. Items marked **[FIXED 2026-06-11]** were addressed in the

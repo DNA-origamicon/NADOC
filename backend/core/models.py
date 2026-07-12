@@ -732,9 +732,18 @@ class AssemblyOverhangBinding(BaseModel):
     Cross-part Watson-Crick pairing between two overhangs on different
     PartInstances within an Assembly.
 
+    LEGACY — superseded by :class:`AssemblyDuplex` (the Proposal-B register-bearing
+    edge). Kept for backward-compatible load of existing ``.nass`` files: on
+    ``/assembly/load`` + ``/assembly/import`` these are migrated into
+    ``Assembly.duplexes`` (``_derive_assembly_duplexes_if_empty`` →
+    ``backend.core.assembly_duplex.sync_assembly_duplexes_from_bindings``) and the
+    binding records are retained but no longer the source of truth. Unlike an
+    AssemblyDuplex, this record emits NO topology — a direct WC pair only becomes
+    real paired strands via ``flatten_assembly`` (through the derived duplex). New
+    code should create AssemblyDuplex, not AssemblyOverhangBinding.
+
     Mirrors :class:`OverhangBinding` but with PartInstance qualification on each
-    side. v1: pure topology metadata — no geometry application, no joint coupling.
-    Lives on Assembly.overhang_bindings.
+    side. Lives on Assembly.overhang_bindings.
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str                           # auto AB1, AB2, ...
@@ -755,6 +764,82 @@ class AssemblyOverhangBinding(BaseModel):
             raise ValueError(
                 f"AssemblyOverhangBinding {self.id}: cannot bind a sub-domain "
                 f"to itself within the same PartInstance.")
+        return self
+
+
+class AssemblyDuplexEnd(BaseModel):
+    """One side of an :class:`AssemblyDuplex` — a bp interval on an overhang's
+    backing-domain helix, qualified by the owning :class:`PartInstance`.
+
+    The cross-part analog of :class:`DuplexEnd`: identical bp-interval semantics
+    (``start_bp`` = 5' base, ``end_bp`` = 3' base; order encodes polarity; length =
+    ``abs(end_bp - start_bp) + 1``) plus an ``instance_id`` so the overhang is
+    resolvable across two designs. The bp coordinate is the SOURCE part-design helix
+    coordinate (not the flattened namespaced one) — materialization applies the
+    instance transform.
+    """
+    instance_id: str
+    overhang_id: str
+    start_bp: int
+    end_bp: int
+
+    @property
+    def length(self) -> int:
+        return abs(self.end_bp - self.start_bp) + 1
+
+    def covered_bp(self) -> set:
+        lo, hi = sorted((self.start_bp, self.end_bp))
+        return set(range(lo, hi + 1))
+
+
+class AssemblyDuplex(BaseModel):
+    """Cross-part hybridization edge — the assembly-level analog of :class:`Duplex`.
+
+    Converges the assembly overhang/linker layer onto the Proposal-B Duplex graph
+    (see ``memory/project_overhang_duplex_foundation.md`` and
+    ``memory/project_assembly_overhang_bindings.md``). Supersedes the metadata-only
+    :class:`AssemblyOverhangBinding` (sub-domain refs, emits no topology): an
+    ``AssemblyDuplex`` is a register-bearing edge between two PartInstances'
+    overhangs. ``left`` walked 5'→3' pairs antiparallel against ``right`` walked
+    3'→5'. Both ends EQUAL length (mismatches allowed + coloured; bulges deferred,
+    matching :class:`Duplex`).
+
+    ``driver`` names which side's (flattened) helix HOSTS the duplex when
+    materialized by ``flatten_assembly`` — the other side's overhang domain is
+    relocated onto it at the register range. Materialization happens ONLY in the
+    flattened output (a derived artifact); neither part's source topology is
+    mutated. ``prior_driven_topology`` carries the flatten-time relocation snapshot
+    for symmetry with :class:`Duplex`.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""                       # auto AD1, AD2, …
+    created_at: float = Field(default_factory=time.time)
+    left: AssemblyDuplexEnd
+    right: AssemblyDuplexEnd
+    driver: Literal['left', 'right'] = 'left'
+    bound: bool = False
+    binding_mode: Literal['duplex', 'toehold'] = 'duplex'
+    allow_n_wildcard: bool = True
+    connection_type: Optional[str] = None
+    # Set when a ds/ss linker's complement register is expressed as a duplex, so a
+    # single graph describes both direct pairs and linker complements.
+    connection_id: Optional[str] = None
+    prior_driven_topology: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode='after')
+    def _check_equal_length_and_distinct(self) -> 'AssemblyDuplex':
+        if self.left.length != self.right.length:
+            raise ValueError(
+                f"AssemblyDuplex {self.id}: left ({self.left.length} bp) and right "
+                f"({self.right.length} bp) must be equal length (bulges deferred)."
+            )
+        if (self.left.instance_id == self.right.instance_id and
+                self.left.overhang_id == self.right.overhang_id and
+                self.left.covered_bp() & self.right.covered_bp()):
+            raise ValueError(
+                f"AssemblyDuplex {self.id}: the two ends overlap on the same "
+                f"overhang — a base cannot pair itself."
+            )
         return self
 
 
@@ -1398,6 +1483,11 @@ SnapshotOpKind = Literal[
     'assembly-overhang-connection-patch',
     'assembly-overhang-connection-delete',
     'assembly-overhang-connection-relax',
+    'assembly-duplex-add',
+    'assembly-duplex-connect',
+    'assembly-duplex-patch',
+    'assembly-duplex-delete',
+    'assembly-duplex-sync',
     'assembly-polymerize',
     'assembly-polymerize-periodic',
     'assembly-add-instance',
@@ -3024,6 +3114,10 @@ class Assembly(BaseModel):
     feature_log_cursor: int = -1
     overhang_bindings: List[AssemblyOverhangBinding] = Field(default_factory=list)
     overhang_connections: List[AssemblyOverhangConnection] = Field(default_factory=list)
+    # Proposal-B convergence: register-bearing cross-part hybridization edges.
+    # Supersedes overhang_bindings (sub-domain refs); direct WC pairs materialize
+    # from these in flatten_assembly. Empty on legacy files (migration on demand).
+    duplexes: List[AssemblyDuplex] = Field(default_factory=list)
     protein_assets: List[ProteinAsset] = Field(default_factory=list)
     protein_attachments: List[ProteinAttachment] = Field(default_factory=list)
     # Representation applied to ALL instances ONLY when exporting a photo-mode

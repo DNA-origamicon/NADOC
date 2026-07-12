@@ -169,6 +169,11 @@ class MdJob:
     # its latest NAMD checkpoint.  Set with ``status = paused`` (not failed — a
     # timeout is expected for the short-walltime strategy).  Cleared on resume.
     resumable: bool = False
+    # A Stop was requested on a remote job while the cluster session was DOWN, so the
+    # scancel couldn't be issued.  The job is marked stopped locally and this defers the
+    # scancel to the next reconnect (poll_remote_jobs drains it) — otherwise the SLURM
+    # job keeps running and burning SUs while the UI reads "stopped".  Cleared once sent.
+    pending_scancel: bool = False
     # One entry per finished remote SLURM submission (the original + each resume),
     # so the panel's expand chevron can show the full resumption chain.  Shape:
     # {slurm_job_id, state, segment_reached, segments_total, walltime, at}.
@@ -233,6 +238,7 @@ class MdJob:
         data.setdefault("execution_target", "local")
         data.setdefault("cluster_name", None)
         data.setdefault("slurm_job_id", None)
+        data.setdefault("pending_scancel", False)
         data.setdefault("slurm_state", None)
         data.setdefault("remote_project_dir", None)
         data.setdefault("remote_scratch_dir", None)
