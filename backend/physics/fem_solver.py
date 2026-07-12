@@ -1021,6 +1021,7 @@ def solve_prestress_shape(
     field: Optional[dict] = None,
     material: str = "cando",
     mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
+    corotational: bool = False,
 ) -> np.ndarray:
     """Geometrically-nonlinear equilibrium shape under the loop/skip eigenstrain.
 
@@ -1046,6 +1047,11 @@ def solve_prestress_shape(
     # (SI S9) — a separate solve path. CanDo keeps the incremental corotational loop below,
     # BYTE-IDENTICAL (this branch is the only change to the cando shape solve).
     if material == "snupi":
+        # Phase D opt-in: the full corotational Newton (G4/G5/G11) — genuine large-deflection shape.
+        # Default = the validated fixed-point predictor + electrostatic self-consistency (S9).
+        if corotational:
+            return _solve_snupi_corotational(design, mesh, n_steps=n_steps,
+                                             fixed_nodes=fixed_nodes, field=field, mgcl2_M=mgcl2_M)
         return _solve_snupi_nonlinear(design, mesh, n_steps=n_steps,
                                       fixed_nodes=fixed_nodes, field=field, mgcl2_M=mgcl2_M)
     positions = [n.position.copy() for n in mesh.nodes]
@@ -1206,6 +1212,84 @@ def _solve_snupi_nonlinear(
     return np.array(positions)
 
 
+def _solve_snupi_corotational(
+    design: Design,
+    mesh: "FEMMesh",
+    n_steps: int = 20,
+    fixed_nodes: Optional[List[int]] = None,
+    field: Optional[dict] = None,
+    mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
+) -> np.ndarray:
+    """Phase D (G4/G5/G11): the FULL corotational Newton shape solve for material="snupi".
+
+    Builds a corotational beam network (:mod:`snupi_corotational`) from the mesh — intra-helix beams
+    with the SNUPI diagonal rigidities (EA,GJ,EIy,EIz from the per-element motif/family D) and
+    crossovers as CO-step corotational beams (co_type D) — driven by a global Newton with a
+    consistent internal force + geometric tangent. The loop/skip eigenstrain + E-field are applied as
+    load-stepped dead loads; the inter-helix Debye–Hückel electrostatics enter each iteration with the
+    FULL consistent tangent (G11 — a real Newton tolerates its indefinite perpendicular term). This is
+    the genuine large-deflection SHAPE solver the fixed-point predictor approximates; it does NOT touch
+    the validated RMSF/DCCM NMA. Anchors (``fixed_nodes``) are clamped; with none, the node nearest the
+    centroid is pinned (6 DOF) to remove the rigid-body modes. Returns the final Nx3 positions (nm)."""
+    from backend.physics import snupi_corotational as cr
+    from backend.physics import snupi_material as _sm
+
+    N = len(mesh.nodes)
+    X0 = np.array([n.position for n in mesh.nodes], dtype=float)
+
+    # ── Corotational beam list ──────────────────────────────────────────────────
+    def _K12_from_D(D, L):
+        return cr.local_beam_stiffness_12(L, float(D[0, 0]), float(D[3, 3]),
+                                          float(D[4, 4]), float(D[5, 5]))
+    elements = []
+    for el in mesh.elements:
+        L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
+        D = _sm.motif_D(el.motif_family, el.motif) if el.motif else _sm.family_mean_D(el.motif_family)
+        ref = cr.element_reference(X0[el.node_i], X0[el.node_j], np.eye(3), np.eye(3))
+        elements.append((el.node_i, el.node_j, ref, _K12_from_D(D, L)))
+    _co_D = {ct: _sm.family_mean_D(ct) for ct in ("double_co", "single_co")}
+    for lk in mesh.rigid_links:
+        L = float(np.linalg.norm(lk.offset))
+        if L < 1e-6:
+            continue
+        ref = cr.element_reference(X0[lk.node_i], X0[lk.node_j], np.eye(3), np.eye(3))
+        elements.append((lk.node_i, lk.node_j, ref, _K12_from_D(_co_D[lk.co_type], L)))
+
+    # ── Dead loads (eigenstrain + field), applied over the load steps ───────────
+    f_ext = assemble_prestress_force(mesh, design) + assemble_field_force(mesh, field)
+
+    # ── Electrostatics (+ ssDNA springs) as the per-iteration extra force/tangent (G11) ──
+    prm = _snupi_es_params(mgcl2_M)
+    spr = [(sp.node_i, sp.node_j, sp.k_trans) for sp in mesh.springs if sp.k_trans]
+
+    def _extra(Xcur, scale):
+        K_es, f_es = _snupi_electro_sparse(mesh, Xcur, prm, scale=scale, axial_only=False)
+        K = K_es.tolil()
+        f = f_es.copy()
+        for (i, j, kt) in spr:                               # linear ssDNA relative-disp springs
+            rel = (Xcur[j] - X0[j]) - (Xcur[i] - X0[i])
+            fij = kt * rel
+            f[6 * j:6 * j + 3] -= fij; f[6 * i:6 * i + 3] += fij
+            for dpos in range(3):
+                K[6 * i + dpos, 6 * i + dpos] += kt; K[6 * j + dpos, 6 * j + dpos] += kt
+                K[6 * i + dpos, 6 * j + dpos] -= kt; K[6 * j + dpos, 6 * i + dpos] -= kt
+        return f, K
+
+    # ── Boundary conditions ─────────────────────────────────────────────────────
+    if fixed_nodes:
+        fixed = [6 * nd + d for nd in fixed_nodes for d in range(6)]
+    else:
+        pin = int(np.argmin(np.linalg.norm(X0 - X0.mean(axis=0), axis=1)))
+        fixed = [6 * pin + d for d in range(6)]
+
+    # Analytic material tangent (T·K₁₂·Tᵀ) — a modified Newton that, with load-stepping + step
+    # capping, converges robustly WITHOUT the O(12·n_el) finite-difference geometric tangent (which
+    # is far too slow at bundle scale). The consistent internal force is what guarantees convergence.
+    X, _R, _conv = cr.solve_corotational(X0, elements, f_ext, fixed, n_steps=max(6, n_steps // 3),
+                                         max_iter=40, extra_ft=_extra, geometric=False)
+    return X
+
+
 # ── Equilibrium solve ──────────────────────────────────────────────────────────
 
 def solve_equilibrium(
@@ -1358,6 +1442,135 @@ def compute_rmsf_nma(
             var += float(KBT * np.sum(row**2 / lam))
         rmsf[node_idx] = math.sqrt(max(var, 0.0))
     return rmsf
+
+
+def _nma_modes(K, n_modes: int = N_RMSF_MODES, n_rigid: int = 6, M=None):
+    """The ``n_modes`` lowest ELASTIC free-free modes → ``(lam, phi)`` (λ ascending, the
+    ``n_rigid`` rigid-body modes dropped), or ``(None, None)`` on failure. ``M`` given → the
+    generalized (mass-weighted, S10) problem, M-orthonormal φ; else the K-only problem. Shared
+    NMA core for the RMSF, the cross-correlation matrix (G7), and the persistence length (G8)."""
+    Kc = K.tocsr()
+    n_dof = Kc.shape[0]
+    k = min(n_modes + n_rigid, n_dof - 2)
+    if k <= n_rigid:
+        return None, None
+    try:
+        if M is not None:
+            vals, vecs = eigsh(Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM")
+        else:
+            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM")
+    except Exception:  # noqa: BLE001
+        return None, None
+    order = np.argsort(vals)
+    lam = np.maximum(vals[order][n_rigid:], 1e-12)
+    phi = vecs[:, order][:, n_rigid:]
+    return lam, phi
+
+
+def compute_correlation_matrix(K, n_nodes: int, n_modes: int = N_RMSF_MODES,
+                               n_rigid: int = 6, M=None) -> np.ndarray:
+    """BP–BP dynamic cross-correlation map (DCCM) — SNUPI's SECOND validation observable (S11).
+
+    The Pearson correlation of per-bp displacement fluctuations from the free-free NMA::
+
+        C_ij = <Δr_i · Δr_j> / sqrt(<|Δr_i|²> <|Δr_j|²>),
+        <Δr_i · Δr_j> = k_BT · Σ_m (φ_{m,i} · φ_{m,j}) / λ_m      (translational DOFs)
+
+    Returns an ``(n_nodes, n_nodes)`` matrix in [−1, 1] with unit diagonal (k_BT cancels in the
+    normalization). Positive = bp move together, negative = anti-correlated. Comparable directly
+    to the MD DCCM (exp42) — a shape-of-motion check the scalar RMSF magnitude can't provide.
+    """
+    lam, phi = _nma_modes(K, n_modes, n_rigid, M)
+    if lam is None:
+        return np.eye(n_nodes, dtype=float)
+    # translational DOF rows (x,y,z per node), weighted by 1/sqrt(λ): ψ_{i,d,m} = φ/sqrt(λ)
+    tr = np.empty(3 * n_nodes, dtype=int)
+    tr[0::3] = 6 * np.arange(n_nodes)
+    tr[1::3] = 6 * np.arange(n_nodes) + 1
+    tr[2::3] = 6 * np.arange(n_nodes) + 2
+    psi = (phi[tr] / np.sqrt(lam)[None, :]).reshape(n_nodes, 3, -1)
+    cov = np.einsum("idm,jdm->ij", psi, psi)         # <Δr_i·Δr_j>/k_BT (k_BT cancels below)
+    d = np.sqrt(np.clip(np.diag(cov), 1e-30, None))
+    C = cov / np.outer(d, d)
+    return np.clip(C, -1.0, 1.0)
+
+
+# Free-free Euler-Bernoulli beam fundamental bending wavenumber: cosh(βL)cos(βL)=1 → β₁L.
+_EB_BETA1_L = 4.730040744862704
+
+
+def persistence_length_from_nma(K, mesh: FEMMesh, design: Design, M=None,
+                                n_modes: int = N_RMSF_MODES) -> dict:
+    """Bundle BENDING persistence length L_p from the NMA fundamental bending FREQUENCY (SI S12).
+
+    Treats the whole bundle as an effective free-free Euler-Bernoulli beam. Its fundamental
+    bending pair (the two lowest elastic modes — orthogonal bending in two planes, near-degenerate)
+    has ω₁ = (β₁L)²/L² · √(EI_eff/μ), β₁L = 4.7300 (:data:`_EB_BETA1_L`). Inverting with the
+    bundle length L and mass-per-length μ gives the effective bending rigidity EI_eff → the
+    bending persistence length L_p = EI_eff / k_BT.
+
+    Self-consistency (S12/S13): the degenerate bending pair must give the SAME frequency
+    (``degenerate_consistency`` ≈ 1), and L_p must be ≫ a single dsDNA's ~50 nm (a bundle is far
+    stiffer). Returns nm-scale floats::
+
+        {"L_p_bend_nm", "EI_eff_pN_nm2", "bundle_length_nm", "omega1_rad_s",
+         "degenerate_consistency", "L_p_twist_nm": None}
+
+    TORSION is intentionally None: in these short/thick DNA bundles there is no separable
+    low-frequency pure-twist mode (twist is far stiffer than bending, so twist modes sit high and
+    mix with bending overtones — verified empirically); a torsional L_p would need targeted
+    twist-mode isolation, deferred. Also note the full Euler-Bernoulli overtone series
+    (β₂L=7.853…) does NOT cleanly appear for these aspect ratios, so only the fundamental is used.
+    Requires ``M`` (the generalized/mass-weighted problem); returns ``{}`` without it or on failure.
+    """
+    if M is None:
+        return {}
+    lam, phi = _nma_modes(K, n_modes, M=M)
+    if lam is None or len(lam) < 2:
+        return {}
+
+    pos = np.array([n.position for n in mesh.nodes], dtype=float)
+    ctr = pos - pos.mean(axis=0)
+    axis = np.linalg.svd(ctr, full_matrices=False)[2][0]     # bundle long axis (PCA)
+    ax = ctr @ axis
+    L_nm = float(ax.max() - ax.min())
+    if L_nm < 1e-6:
+        return {}
+
+    # Fundamental bending = the two lowest elastic modes; confirm they are transverse-dominated.
+    n = len(mesh.nodes)
+    tr = np.empty(3 * n, dtype=int)
+    tr[0::3] = 6 * np.arange(n); tr[1::3] = 6 * np.arange(n) + 1; tr[2::3] = 6 * np.arange(n) + 2
+    u0 = phi[tr, 0].reshape(n, 3)
+    up = u0 - (u0 @ axis)[:, None] * axis
+    if np.sum(u0 ** 2) <= 0 or np.sum(up ** 2) / np.sum(u0 ** 2) < 0.5:
+        return {}                                            # lowest mode isn't bending → bail
+
+    # ω₁ in SI (rad/s): the generalized eigenvalue scales uniformly by 1e-3 (K pN/nm = 1e-3 N/m,
+    # and the rotational block matches — so ω²_SI = λ_raw·1e-3).
+    omega1 = math.sqrt(float(np.mean(lam[:2])) * 1e-3)
+
+    # mass-per-length μ (kg/m): total bp mass / bundle length.
+    fb = _forward_base_map(design)
+    mass_g = 0.0
+    for node in mesh.nodes:
+        b = fb.get((node.helix_id, node.global_bp))
+        mass_g += (_BASE_MOLAR_MASS[b] + _BASE_MOLAR_MASS[_COMPLEMENT_MASS[b]]
+                   if b in _BASE_MOLAR_MASS else _MEAN_BP_MASS_G)
+    mass_kg = mass_g * 1e-3 / _N_AVOGADRO
+    L_m = L_nm * 1e-9
+    mu = mass_kg / L_m
+
+    EI_SI = mu * omega1 ** 2 * L_m ** 4 / _EB_BETA1_L ** 4    # N·m²
+    kT_J = KBT * 1e-21                                        # 4.11 pN·nm → J
+    return {
+        "L_p_bend_nm": EI_SI / kT_J * 1e9,
+        "EI_eff_pN_nm2": EI_SI * 1e30,                        # N·m² → pN·nm²
+        "bundle_length_nm": L_nm,
+        "omega1_rad_s": omega1,
+        "degenerate_consistency": float(lam[1] / lam[0]),
+        "L_p_twist_nm": None,                                # no separable low twist mode (see docstring)
+    }
 
 
 # ── Deformed position output ───────────────────────────────────────────────────
@@ -1703,6 +1916,7 @@ def predict_shape(
     field: Optional[dict] = None,
     material: str = "cando",
     mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
+    corotational: bool = False,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
 
@@ -1764,7 +1978,7 @@ def predict_shape(
     if nonlinear:
         positions = solve_prestress_shape(
             design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes, field=field,
-            material=material, mgcl2_M=mgcl2_M)
+            material=material, mgcl2_M=mgcl2_M, corotational=corotational)
         u = np.zeros(6 * len(mesh.nodes), dtype=float)
         for i in range(len(mesh.nodes)):
             u[6 * i: 6 * i + 3] = positions[i] - mesh.nodes[i].position

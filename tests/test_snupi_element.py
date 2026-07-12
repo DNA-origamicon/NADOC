@@ -16,8 +16,11 @@ from backend.physics.fem_solver import (
     _snupi_element_stiffness,
     _beam_stiffness_local,
     assemble_global_stiffness,
+    assemble_mass_matrix,
     build_fem_mesh,
+    compute_correlation_matrix,
     compute_rmsf_nma,
+    persistence_length_from_nma,
     predict_shape,
 )
 
@@ -346,3 +349,54 @@ def test_g2_registered_frame_changes_snupi_rmsf_only(routed_6hb):
     Kc_reg, _ = assemble_global_stiffness(mesh, material="cando", bp_registered_frame=True)
     Kc_arb, _ = assemble_global_stiffness(mesh, material="cando", bp_registered_frame=False)
     assert np.allclose(Kc_reg.toarray(), Kc_arb.toarray())       # cando ignores the flag
+
+
+# ── G7: BP–BP cross-correlation matrix (DCCM, S11) ───────────────────────────────
+
+def test_g7_dccm_is_valid_correlation_matrix(routed_6hb):
+    """The BP–BP dynamic cross-correlation map must be a valid correlation matrix: symmetric,
+    unit diagonal, entries in [−1,1], with strong POSITIVE nearest-neighbor correlation (adjacent
+    bp move together) decaying with separation."""
+    mesh = build_fem_mesh(routed_6hb)
+    n = len(mesh.nodes)
+    K, _ = assemble_global_stiffness(mesh, material="snupi", bp_registered_frame=True)
+    M = assemble_mass_matrix(mesh, routed_6hb)
+    C = compute_correlation_matrix(K, n, M=M)
+    assert C.shape == (n, n)
+    assert np.allclose(C, C.T)                         # symmetric
+    assert np.allclose(np.diag(C), 1.0)                # unit diagonal
+    assert C.min() >= -1.0 - 1e-9 and C.max() <= 1.0 + 1e-9
+    assert C[0, 1] > 0.5                               # adjacent bp strongly positively correlated
+    assert C[0, 1] > C[0, n // 2]                      # decays with separation
+
+
+def test_g7_dccm_works_k_only_too(routed_6hb):
+    """The DCCM is defined for the cando (K-only, M=None) NMA as well — a finite valid matrix."""
+    mesh = build_fem_mesh(routed_6hb)
+    K, _ = assemble_global_stiffness(mesh, material="cando")
+    C = compute_correlation_matrix(K, len(mesh.nodes))
+    assert np.all(np.isfinite(C)) and np.allclose(np.diag(C), 1.0)
+
+
+# ── G8: persistence length from NMA frequencies (S12) ────────────────────────────
+
+def test_g8_bending_persistence_length_physical_and_self_consistent(routed_6hb):
+    """L_p from the NMA fundamental bending frequency must be physical (μm-scale — a 6HB bundle is
+    far stiffer than a single dsDNA's ~50 nm) and self-consistent (the degenerate bending pair
+    gives the same frequency). Torsion is intentionally None (no separable low twist mode)."""
+    mesh = build_fem_mesh(routed_6hb)
+    K, _ = assemble_global_stiffness(mesh, material="snupi", bp_registered_frame=True)
+    M = assemble_mass_matrix(mesh, routed_6hb)
+    r = persistence_length_from_nma(K, mesh, routed_6hb, M=M)
+    assert r and r["L_p_bend_nm"] > 200.0                    # ≫ single-dsDNA 50 nm (bundle)
+    assert np.isfinite(r["EI_eff_pN_nm2"]) and r["EI_eff_pN_nm2"] > 0
+    assert abs(r["degenerate_consistency"] - 1.0) < 0.15     # the two bending planes agree
+    assert r["L_p_twist_nm"] is None                         # torsion deferred (documented)
+
+
+def test_g8_requires_mass_matrix(routed_6hb):
+    """L_p is a mass-weighted (frequency) observable — without M (the cando K-only NMA) it returns
+    an empty dict rather than a meaningless number."""
+    mesh = build_fem_mesh(routed_6hb)
+    K, _ = assemble_global_stiffness(mesh, material="snupi", bp_registered_frame=True)
+    assert persistence_length_from_nma(K, mesh, routed_6hb, M=None) == {}

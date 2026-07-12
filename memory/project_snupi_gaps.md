@@ -8,6 +8,56 @@ metadata:
 
 # SNUPI mimic — gap analysis vs the full publication + build plan
 
+## ✅ Phase D DONE (2026-07-12) — G4 + G5 + G11 (full corotational Newton; opt-in, shape-only)
+- **G4 corotational 3D beam** — `backend/physics/snupi_corotational.py`. Element-independent corotational
+  (EICR): wraps the STANDARD 12×12 linear beam (`local_beam_stiffness_12`) as the local core and adds the
+  corotational filter (CR frame `_cr_frame` z=chord + Battini mean-rotation aux vector; reference offsets
+  so rest/rigid motion → zero deformation; SO(3) `exp_so3`/`log_so3`). `element_force_tangent` returns the
+  CONSISTENT internal force `f_g=T·K₁₂·d_local` — the piece the earlier naive Newton lacked. Pins
+  `tests/test_snupi_corotational.py`: rigid-body ⇒ zero force; small load ⇒ EXACT linear-EB `δ=FL³/3EI`
+  (ratio 1.000); large load ⇒ converges with elastica foreshortening.
+- **G5 Newton–Raphson** — `solve_corotational`: load-stepped global Newton, tracks node positions + triads
+  (triads via exp-map), step-capped. **Uses the analytic MATERIAL tangent `T·K₁₂·Tᵀ` (`geometric=False`)**
+  in the integration — a modified Newton that converges robustly WITHOUT the O(12·n_el) finite-difference
+  geometric tangent (which is far too slow at bundle scale; the exact numerical tangent is kept for the
+  benchmark tests). Convergence comes from the consistent internal force, not the exact tangent.
+- **G11 electrostatic consistent tangent** — the inter-helix Debye–Hückel force + **FULL** tangent
+  (`axial_only=False`, the indefinite perpendicular term a real Newton tolerates) enters each iteration via
+  the `extra_ft` hook, ramped with the load; ssDNA springs too.
+- **Wired opt-in**: `predict_shape(material="snupi", corotational=True)` → `_solve_snupi_corotational`
+  (fem_solver). Default (`corotational=False`) = the validated fixed-point predictor, unchanged; cando
+  untouched. **6HB/84 (1260 nodes) converges in ~47 s** (≈ the fixed-point's 52 s), finite + physically
+  bounded (span 37.6 vs 44.9 nm — the geometric foreshortening). Pin
+  `test_corotational_integration_on_real_design_converges` (small 2HB, ~4 s).
+- **Scope/caveats (documented):** the local element uses the SNUPI DIAGONAL rigidities (EA,GJ,EIy,EIz); the
+  15 couplings (incl. twist–stretch) are NOT yet in the corotational local element — a refinement. Eigenstrain
+  + field are dead loads (not co-rotated). **Verdict unchanged: Phase D improves only the Fine SHAPE, not the
+  validated RMSF/DCCM metrics (separate NMA).** ALL gaps G1–G12 now closed except the couplings-in-corotational
+  refinement + G9/G10 (situational) + G7's MI-based generalized correlation.
+
+## ✅ Phase C DONE (2026-07-12) — G7 + G8 (new observables, no impact on the RMSF verdict)
+- **G7 BP–BP cross-correlation matrix (DCCM, S11).** `compute_correlation_matrix(K, n, M)` — the
+  Pearson correlation of per-bp displacement fluctuations from the free-free NMA modes
+  (`C_ij = <Δr_i·Δr_j>/√(<|Δr_i|²><|Δr_j|²>)`, k_BT cancels). Valid corr matrix (symmetric, unit diag,
+  [−1,1]); nearest-neighbor ~1, decays with separation. Shared modes helper `_nma_modes`. Pins `test_g7_*`.
+  - **MD comparator** `scripts/snupi_dccm_compare.py` (→ `experiments/exp42.../dccm.json`): builds the MD
+    DCCM from per-frame bp-center C1' (reusing the md_trajectory ctx), compares FE-vs-MD off-diagonal
+    entries. **HC 6hbx100_noT: snupi→MD 0.491 vs cando 0.454 — SNUPI captures the motion TOPOLOGY better**
+    (a second, independent validation channel confirming the RMSF verdict). SQ 3x4SQ: tie (0.387/0.393).
+- **G8 bending persistence length from NMA frequencies (S12).** `persistence_length_from_nma(K,mesh,design,M)`
+  — treats the bundle as a free-free Euler-Bernoulli beam, inverts the fundamental bending frequency ω₁
+  (β₁L=4.730) with the bundle length + mass/length → EI_eff → L_p = EI_eff/k_BT. **6HB: L_p_bend ≈ 2.6 µm
+  (105bp) / 4.5 µm (210bp), EI_eff ~46–80× a single helix — physical (≫ dsDNA 50 nm).** Self-consistency:
+  the degenerate bending pair agrees (ratio ≈ 1.00). Pins `test_g8_*`.
+  - **Caveats (documented in the docstring):** (1) TORSION L_p = None — these short/thick bundles have NO
+    separable low-frequency pure-twist mode (twist ≫ bending stiffness, so twist modes sit high + mix;
+    verified). (2) The full E-B OVERTONE series (β₂L=7.853…) does NOT cleanly appear at these aspect ratios
+    (observed ω-ratios 1,1,1.72,1.97… ≠ E-B 1,2.76,5.40…), so only the fundamental is used. (3) L_p shows
+    some length sensitivity (2.6→4.5 µm) — end effects on short beams; longer bundles give cleaner L_p.
+- **Verdict unchanged (G7/G8 are [+] observables):** SNUPI ≥ CanDo, now confirmed on TWO channels (RMSF
+  magnitude + DCCM motion topology). Remaining: Phase D (full corotational Newton) — deferred, high-risk,
+  shape-only; **needs an explicit go.**
+
 ## ✅ Phase B DONE (2026-07-12) — G3 + G2, gated behind `material="snupi"`
 - **G3 single/double crossover classification (S4).** `_classify_crossovers` (adjacency rule,
   confirmed w/ user): crossovers between the same helix pair in an adjacent-bp cluster (≥2) →
@@ -93,14 +143,14 @@ Impact key: **[R]** changes the NMA operator/modes → moves the validated RMSF-
 | G1 ✅ | Sequence-specific stiffness (S3.2) | per-BP-step 6×6 from the actual dinucleotide sequence (k = kBT·F⁻¹ of the step-parameter covariance) | ~~`family_mean_D`~~ → **DONE: per-element `motif_D` for regular_bp; nicked/CO keep mean** | **[R]** | **Low** — DONE 2026-07-11. Drove the HC exp42 gain (+0.006). |
 | G2 ✅ | bp-frame registration (S3.3) | 3DNA BP triad MODIFIED to the beam nodal triad (minor-groove dir); middle triad = CR triad → anisotropic bending axes EIy≠EIz correctly oriented per bp | **DONE: `R_bp` = local-y ∥ C1'–C1' cross-strand (eq 3.18), RMSF-NMA-scoped; KEPT ON** | **[R]** | **DONE 2026-07-12.** Wash on RMSF (self-cancels over a turn, as predicted); kept for fidelity. |
 | G3 ✅ | Crossover single/double (S4.1–4.3) | each DX classified single_co vs double_co + an ANGLE correction; single-CO drops one rotational rigidity | **DONE: adjacency classifier → `co_type`; family-mean single/double D. Angle corr = no-op (rest geometry, we use NADOC geom)** | **[R]** | **DONE 2026-07-12. Biggest single win** (+0.015–0.019 pearson both lattices). |
-| G4 | Full corotational element (S1.4/S2.5) | Crisfield CR beam: 7×7 local Kl + geometric tangent **Kh** + a consistent internal-force vector | 12×12 Timoshenko + `_reframe_elements`, NO consistent tangent/internal force | **[S]** | **High** — ~300–500 LOC; validate vs analytic cantilever/large-defl. High risk (rewrites the beam). Enables G5. |
-| G5 | Full Newton–Raphson solve (S9.6) | global Newton with tangent tKG + internal-force residual tFG at each Δt | fixed-point (electrostatic self-consistency) + reframing predictor | **[S]** | **Med** but DEPENDS on G4 (needs the consistent internal force). Attempted naively → diverges (see [[snupi-mimic]] S9 note). |
+| G4 ✅ | Full corotational element (S1.4/S2.5) | Crisfield CR beam: 7×7 local Kl + geometric tangent **Kh** + a consistent internal-force vector | **DONE: EICR (wraps the 12×12 linear beam) + consistent internal force; `snupi_corotational.py`** | **[S]** | **DONE 2026-07-12.** Benchmarks: rigid⇒0, small=linear-EB, large-defl converges. |
+| G5 ✅ | Full Newton–Raphson solve (S9.6) | global Newton with tangent tKG + internal-force residual tFG at each Δt | **DONE: `solve_corotational` load-stepped Newton (material tangent); opt-in `corotational=True`** | **[S]** | **DONE 2026-07-12.** Converges (the consistent internal force fixed the old divergence). |
 | G6 ✅ | Generalized eigenproblem + mass matrix (S10) | K·Φ = M·Φ·Λ with a sequence-dependent nodal MASS matrix M (Σ of the two base masses / N_A) | **DONE: `assemble_mass_matrix` (SPD) + generalized `eigsh(K,M=M,σ)` for snupi; cando K-only** | **[R]** | **DONE 2026-07-11.** Near-no-op on RMSF (bp mass ~seq-independent); kept for **G8**. |
-| G7 | BP–BP cross-correlation matrix (S11) | Pearson PC_ij + generalized (MI-based) GC_ij correlation MATRIX, MD vs FE | per-bp RMSF only + Pearson/Spearman of the RMSF pattern | **[+]** | **Med** — build kBT·Σφφᵀ/λ covariance → correlation matrix; add an MD-matrix comparator to exp42. New validation observable. |
-| G8 | Persistence length from NMA (S12) | bend + torsion L_p from NMA natural FREQUENCIES (Euler-Bernoulli fit βₖLc=4.733,7.853…) | none (we cross-checked L_p from the raw params only) | **[+]** | **Low-Med** — needs G6 (frequencies); fit bending/torsion modes. New observable + a self-consistency check vs the S13 analytic scaling. |
+| G7 ✅ | BP–BP cross-correlation matrix (S11) | Pearson PC_ij + generalized (MI-based) GC_ij correlation MATRIX, MD vs FE | **DONE: `compute_correlation_matrix` (Pearson DCCM) + MD comparator (`snupi_dccm_compare.py`)** | **[+]** | **DONE 2026-07-12.** snupi→MD 0.491 > cando 0.454 (HC) — 2nd validation channel. (MI-based GC deferred.) |
+| G8 ✅ | Persistence length from NMA (S12) | bend + torsion L_p from NMA natural FREQUENCIES (Euler-Bernoulli fit βₖLc=4.733,7.853…) | **DONE (bending): `persistence_length_from_nma` fundamental ω₁ → EI_eff → L_p ≈ 2.6–4.5 µm** | **[+]** | **DONE 2026-07-12.** Torsion=None + no clean overtone series (short/thick bundles) — documented. |
 | G9 | Short-ssDNA model (S5) | equilibrated end-to-end distance for SHORT ssDNA (gaps) + nonlinear FJC/WLC, Pb=0.74 nm | translational Marko–Siggia WLC spring for extra-base crossovers only | **[S]**/**[R]** for gapped designs | **Med** — matters only for designs with ssDNA gaps/linkers; add the finite-Ree short-chain stiffness. |
 | G10 | Canonical initial config (S8) | build from caDNAno: straight helices, 0.34 nm rise, **2.25 nm initial CO distance**, gradual ω=34.29°/33.75° twist, major-groove angle | NADOC's own helix-axis geometry (`deformed_helix_axes`) | **[R]** (sets ES engagement + initial strain) | **Med-High** — a parallel initial-config path; risks diverging from NADOC's geometric layer (Three-Layer). Prefer to keep NADOC geometry; only adopt SNUPI's 2.25 nm CO spacing if exp42 shows it matters. |
-| G11 | Electrostatic consistent tangent (S6.2/S9) | full nonlinear-spring tangent inside the Newton solve | PD **axial-only** tangent (perpendicular Π'/r<0 term dropped for stability) | **[R]** minor | **Low** but needs G4/G5 (a real Newton tolerates the indefinite tangent with line search). Standalone: keep axial-only. |
+| G11 ✅ | Electrostatic consistent tangent (S6.2/S9) | full nonlinear-spring tangent inside the Newton solve | **DONE (in the corotational Newton): FULL tangent `axial_only=False` via the `extra_ft` hook** | **[R]** minor | **DONE 2026-07-12.** The fixed-point NMA path still uses PD axial-only (correct there). |
 | G12 ✅ | Salt as a parameter (S7) | q=0.7 e @ 20 mM, 1.5 e @ 100 mM MgCl₂ (λ_D from ionic strength) | **DONE: `mgcl2_M` job param (default 0.02) → `ESParams.for_conditions`, cached per molarity** | **[R]** minor | **DONE 2026-07-11.** |
 
 ## Prioritization (by expected effect on the VALIDATED RMSF-vs-MD metric, low risk first)
@@ -115,15 +165,13 @@ Impact key: **[R]** changes the NMA operator/modes → moves the validated RMSF-
 - **G3** crossover single/double — DONE, biggest win. Angle correction = no-op (rest geometry, we use NADOC geom).
 - **G2** bp-frame registration — DONE, kept ON per user; a wash on RMSF (self-cancels over a turn, as predicted).
 
-**Phase C — new observables (validation depth, no risk to existing numbers):**
-- **G7** BP–BP cross-correlation matrix (Pearson + generalized) — SNUPI's SECOND validation observable;
-  compare the FE and MD correlation matrices directly, not just the RMSF magnitude.
-- **G8** persistence length from NMA (needs G6) — self-consistency vs the S13 analytic scaling.
+**Phase C — new observables (validation depth, no risk to existing numbers). ✅ DONE 2026-07-12 (see top):**
+- **G7** BP–BP cross-correlation matrix — DONE (Pearson DCCM + MD comparator); snupi→MD > cando→MD on HC.
+- **G8** persistence length from NMA — DONE (bending L_p ≈ 2.6–4.5 µm); torsion + overtone-series deferred.
 
-**Phase D — the big shape solver (high effort/risk, shape-display only — do LAST or on demand):**
-- **G4** full corotational Crisfield element (7×7 Kl + Kh + internal-force vector) → **G5** full Newton–Raphson
-  (+ **G11** full electrostatic tangent). Validate vs analytic cantilever/large-deflection benchmarks.
-  Note: does NOT move the validated RMSF metric — only the Fine-mode shape. Justify before starting.
+**Phase D — the big shape solver (high effort/risk, shape-display only). ✅ DONE 2026-07-12 (see top):**
+- **G4** corotational element (EICR) → **G5** Newton (+ **G11** full ES tangent). DONE — benchmark-validated,
+  opt-in `corotational=True`, 6HB converges ~47 s. Does NOT move the validated RMSF/DCCM (Fine SHAPE only).
 
 **Phase E — situational:**
 - **G9** short-ssDNA (only for gapped/linker designs); **G10** canonical initial config (only if exp42 shows

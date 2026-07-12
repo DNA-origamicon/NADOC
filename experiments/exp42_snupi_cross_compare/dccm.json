@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "design": "6hbx100_noT",
+      "lattice": "HC",
+      "n_fe_nodes": 630,
+      "dccm_vs_md": {
+        "snupi": {
+          "n": 609,
+          "pearson": 0.4911
+        },
+        "cando": {
+          "n": 609,
+          "pearson": 0.4543
+        }
+      }
+    },
+    {
+      "design": "3x4SQ",
+      "lattice": "SQ",
+      "n_fe_nodes": 488,
+      "dccm_vs_md": {
+        "snupi": {
+          "n": 474,
+          "pearson": 0.3874
+        },
+        "cando": {
+          "n": 474,
+          "pearson": 0.3925
+        }
+      }
+    }
+  ]
+}

@@ -237,14 +237,20 @@ plugging into the same param DB. ✅ Verdict reached (snupi ≥ cando both latti
   forbid git in subagent prompts.
 
 ## Handoff
-**Gap-closure Phase A + B DONE (2026-07-11/12) — see [[project_snupi_gaps]] head for full detail.**
-Phase A: G1 (sequence-specific `motif_D` per regular_bp element), G6 (SPD nodal mass matrix + generalized
-`eigsh(K,M=M)` for snupi; cando K-only), G12 (`mgcl2_M` job param → Debye length). Phase B: G3 (single/double
-crossover classification → `co_type`; **biggest single win**), G2 (bp-frame registration eq 3.18, C1'–C1'
-convention, kept ON per user despite a wash on RMSF). cando byte-identical throughout. **Cumulative snupi-vs-MD:
-HC pearson 0.598→0.623, SQ 0.742→0.763.** Pins `test_snupi_element.py::test_g{1,2,3,6,12}_*` (23 total).
-Next: **Phase C** (G7 BP–BP correlation matrix; G8 persistence length from NMA frequencies — new observables,
-no topology risk). Phase D (full corotational Newton) still deferred pending explicit go.
+**Gap-closure Phase A + B + C DONE (2026-07-11/12) — see [[project_snupi_gaps]] head for full detail.**
+Phase A: G1 (sequence-specific `motif_D`), G6 (SPD mass matrix + generalized eigsh), G12 (`mgcl2_M` salt).
+Phase B: G3 (single/double crossover classification; **biggest win**), G2 (bp-frame registration eq 3.18,
+kept ON). Phase C: G7 (`compute_correlation_matrix` BP–BP DCCM + `scripts/snupi_dccm_compare.py` MD comparator),
+G8 (`persistence_length_from_nma` bending L_p ≈ 2.6–4.5 µm). cando byte-identical throughout.
+**Verdict, now on TWO channels: SNUPI ≥ CanDo.** RMSF: HC pearson 0.598→0.623, SQ 0.742→0.763. DCCM motion
+topology (HC): snupi→MD 0.491 > cando 0.454. Pins `test_snupi_element.py::test_g{1,2,3,6,7,8,12}_*` (27 total).
+**Phase D DONE too (2026-07-12): G4/G5/G11 — the full corotational Newton shape solver** (opt-in
+`predict_shape(material="snupi", corotational=True)`; `backend/physics/snupi_corotational.py` EICR +
+consistent internal force fixed the old divergence; benchmark-validated rigid/linear-EB/large-defl; 6HB
+converges ~47 s; electrostatics with the FULL tangent in-Newton). Shape-only — verdict metrics unchanged.
+Pins `tests/test_snupi_corotational.py` (5). **ALL gap phases A–D now DONE.** Remaining refinements only:
+the 15 couplings inside the corotational local element, G9/G10 (situational), G7's MI-based correlation.
+Phase A+B committed as `7d3c216`; **Phase C (G7/G8) + Phase D (G4/G5/G11) uncommitted.**
 
 **P1 + P2 + P2b + P4 DONE (2026-07-11). FINAL VERDICT: "SNUPI for free" = YES** — snupi ≥ cando on
 both lattices at $0 (robustly better on the well-sampled 20ns honeycomb; a tie/slight snupi rank-edge
