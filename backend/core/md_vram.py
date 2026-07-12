@@ -579,15 +579,25 @@ def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
     ``shell_nm`` comes with a human ``note`` explaining the automatic choice.
     """
     none = {"shell_nm": 0.0, "note": None, "fits": None, "vram_mb": None}
-    vram_mb = detect_vram_mb(devices)
-    if vram_mb is None:
-        return none
-    # The run must fit BOTH the GPU and host RAM; size the carve to the tighter cap.
     host_mb = detect_host_ram_mb()
-    vram_cap = max_atoms_for_vram(vram_mb)
-    host_cap = max_atoms_for_host_ram(host_mb) if host_mb else None
-    effective_cap = min(vram_cap, host_cap) if host_cap is not None else vram_cap
-    bound = "host RAM" if host_cap is not None and host_cap < vram_cap else "GPU"
+    cpu = (devices or "").strip().lower() in ("cpu", "none")
+    if cpu:
+        # CPU (multicore) build has no VRAM ceiling — size the carve to host RAM
+        # only.  The carve still helps: fewer atoms = faster CPU minimisation.
+        if not host_mb:
+            return none
+        vram_mb = None
+        effective_cap = max_atoms_for_host_ram(host_mb)
+        bound = "host RAM"
+    else:
+        vram_mb = detect_vram_mb(devices)
+        if vram_mb is None:
+            return none
+        # The run must fit BOTH the GPU and host RAM; size to the tighter cap.
+        vram_cap = max_atoms_for_vram(vram_mb)
+        host_cap = max_atoms_for_host_ram(host_mb) if host_mb else None
+        effective_cap = min(vram_cap, host_cap) if host_cap is not None else vram_cap
+        bound = "host RAM" if host_cap is not None and host_cap < vram_cap else "GPU"
     # Best-effort: a preflight estimate must never fail the job — on any error,
     # fall back to the full box (the prior behaviour).
     try:
@@ -598,12 +608,15 @@ def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
         rec = recommend_downsize(
             dna_xyz_nm=profile["dna_xyz_nm"], box_nm=profile["box_nm"],
             full_water=profile["full_water"], dna_atoms=profile["dna_atoms"],
-            ion_atoms=profile["ion_atoms"], vram_mb=vram_mb, max_atoms=effective_cap,
+            ion_atoms=profile["ion_atoms"],
+            # No VRAM bound on CPU — pass a huge sentinel so only max_atoms (host) binds.
+            vram_mb=vram_mb if vram_mb is not None else 10**9,
+            max_atoms=effective_cap,
         )
     except Exception:
         return {**none, "vram_mb": vram_mb}
-    gb = round(vram_mb / 1024)
-    limit = f"{gb} GB GPU" if bound == "GPU" else f"{round(host_mb / 1024)} GB free host RAM"
+    limit = (f"{round(host_mb / 1024)} GB free host RAM" if bound == "host RAM"
+             else f"{round(vram_mb / 1024)} GB GPU")
     if rec["current_atoms"] <= rec["max_atoms"]:
         return {"shell_nm": 0.0, "note": None, "fits": True, "vram_mb": vram_mb}
     if rec.get("feasible"):

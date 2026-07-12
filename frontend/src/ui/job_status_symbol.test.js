@@ -14,6 +14,10 @@ describe('statusKeyFor', () => {
     expect(statusKeyFor('namd', 'queued')).toBe('queued')
     expect(statusKeyFor('namd', 'failed')).toBe('failed')
     expect(statusKeyFor('namd', 'stopped')).toBe('stopped')
+    expect(statusKeyFor('namd', 'draft')).toBe('draft')
+  })
+  it('draft has a badge', () => {
+    expect(statusBadge('draft')).toMatchObject({ symbol: '✎', label: 'Draft (not started)' })
   })
   it('MD never gets oxDNA production keys', () => {
     expect(statusKeyFor('namd', 'completed', 'none')).toBe('completed')

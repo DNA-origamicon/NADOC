@@ -1087,6 +1087,7 @@ def build_atomistic_model(
     xb_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
     close_backbone: bool = False,
     relaxed_oxdna_phase: bool = False,
+    apply_design_geometry: bool = True,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1575,8 +1576,17 @@ def build_atomistic_model(
     # ── Apply deformations (bend/twist) and cluster rigid transforms ──────────
     # All atom positions above are placed in straight (undeformed) geometry.
     # This final pass rotates/translates every atom to match the deformed 3-D view.
-    from backend.core.deformation import apply_deformations_to_atoms
-    apply_deformations_to_atoms(atoms, design)
+    #
+    # SKIPPED for an oxDNA/mrDNA SEED (apply_design_geometry=False): a CG-relaxed
+    # override already supplies each nucleotide's FINAL world position (the deformed +
+    # cluster-transformed, then simulated geometry).  Re-applying the design's
+    # deformations/cluster transforms on top would double them — the source of the
+    # ~N× "explosion" when seeding a design built from copy-pasted, rotated clusters.
+    # The seed is purely a function of the oxDNA positions; pre-oxDNA transforms have
+    # no place here.
+    if apply_design_geometry:
+        from backend.core.deformation import apply_deformations_to_atoms
+        apply_deformations_to_atoms(atoms, design)
 
     model = AtomisticModel(atoms=atoms, bonds=bonds)
     if include_proteins:

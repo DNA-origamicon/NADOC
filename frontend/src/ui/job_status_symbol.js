@@ -15,6 +15,7 @@ const C = {
 // status key → { symbol, color, label }. Active states (running/preparing) render
 // as an animated spinner in the row; their badge here is the legend fallback glyph.
 export const STATUS_BADGE = {
+  'draft':             { symbol: '✎', color: C.grey,  label: 'Draft (not started)' },
   'running':           { symbol: '⟳', color: C.amber, label: 'Running' },
   'preparing':         { symbol: '⟳', color: C.amber, label: 'Preparing' },
   'queued':            { symbol: '○', color: C.grey,  label: 'Queued' },
@@ -56,6 +57,7 @@ export function statusKeyFor(engine, status, prodState = null) {
     if (prodState === 'failed') return 'production-failed'
   }
   switch (status) {
+    case 'draft':     return 'draft'
     case 'completed': return 'completed'
     case 'running':   return 'running'
     case 'preparing': return 'preparing'

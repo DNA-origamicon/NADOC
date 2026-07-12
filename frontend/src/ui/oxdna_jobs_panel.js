@@ -1834,16 +1834,20 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     const src = _selectedJob()
     _seeding = true
     seedBtn.disabled = true
-    _setSeedStatus('Building NAMD seed + solvating (this can take 1–2 min)…', _C.accent)
+    _setSeedStatus('Creating NAMD draft…', _C.accent)
+    // Create a DRAFT (deferred solvation): the job appears in the NAMD list unstarted
+    // so the user can set advanced options, then press "Relax from oxDNA" to solvate
+    // from these relaxed coordinates + run.
     const job = await api.createMdJob({
       oxdna_job_id: _selectedId,
       design_source_path: src?.design_source_path || _currentPartPath(),
-      autostart: false,
+      draft: true,
+      autostart: true,   // remembered on the draft → "Relax from oxDNA" runs it (standard relax)
     })
     _seeding = false
     if (job?.job_id && job.status !== 'failed') {
-      _setSeedStatus('NAMD seed job created — see the NAMD tab.', _C.ok)
-      showToast('NAMD seed job created from relaxed oxDNA structure', 'ok')
+      _setSeedStatus('NAMD draft created — set options + "Relax from oxDNA" in the NAMD tab.', _C.ok)
+      showToast('NAMD draft created — configure it, then Relax from oxDNA', 'ok')
       // Surface the new NAMD job. The engine panels are tab-fronted now, so main.js
       // switches the Simulate selector to the NAMD tab on this event. (The old
       // `_revealMdPanel` collapsed THIS panel — hiding every oxDNA card — and clicked

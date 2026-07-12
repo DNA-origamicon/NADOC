@@ -258,7 +258,7 @@ def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *, water_shell
     from backend.core.namd_solvate import _Water
     ns._emit(progress, "solvate", None, "fake solvate")
     waters = [_Water(i * 0.31, 0, 0, i * 0.31, 0.1, 0, i * 0.31, -0.1, 0) for i in range(2000)]
-    return waters, (12.0, 12.0, 12.0)
+    return waters, (12.0, 12.0, 12.0), _pdb_text
 
 
 def test_prepare_writes_anchor_restraints_end_to_end(tmp_path, monkeypatch):

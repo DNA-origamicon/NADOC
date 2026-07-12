@@ -266,6 +266,28 @@ def test_auto_water_shell_no_vram_reading(monkeypatch):
     assert out["shell_nm"] == 0.0 and out["note"] is None  # leave user's choice alone
 
 
+def test_auto_water_shell_cpu_sizes_to_host_ram_not_vram(monkeypatch):
+    """Compute=CPU ('cpu') ignores VRAM entirely and sizes the carve to host RAM."""
+    from tests.conftest import make_6hb_design
+
+    # A GPU reading, if consulted, would be huge (no carve).  A tiny host RAM must
+    # still force a carve → proves the CPU path uses host RAM, not VRAM.
+    monkeypatch.setattr(V, "detect_vram_mb", lambda devices="0": 1_000_000)
+    monkeypatch.setattr(V, "detect_host_ram_mb", lambda: 500)  # tiny host
+    out = V.auto_water_shell(make_6hb_design(42), devices="cpu")
+    assert out["vram_mb"] is None                     # VRAM never consulted
+    assert out["shell_nm"] > 0.0 and out["note"]      # carved to fit host RAM
+    assert "host RAM" in out["note"]
+
+
+def test_auto_water_shell_cpu_no_host_reading(monkeypatch):
+    from tests.conftest import make_6hb_design
+
+    monkeypatch.setattr(V, "detect_host_ram_mb", lambda: None)
+    out = V.auto_water_shell(make_6hb_design(42), devices="cpu")
+    assert out["shell_nm"] == 0.0 and out["note"] is None  # can't size → full box
+
+
 def test_detect_host_ram_mb_reads_or_degrades():
     # On Linux this reads /proc/meminfo; anywhere else it returns None gracefully.
     mb = V.detect_host_ram_mb()

@@ -40,6 +40,7 @@ from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.md_pipeline import MdPipeline, PipelineStage, cross_engine_seed
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
+    IMPLICIT_GBIS_PROTOCOL,
     SUPPORTED_PROTOCOLS,
     SegmentSpec,
     build_production_conf,
@@ -171,6 +172,14 @@ class CreateJobRequest(BaseModel):
                     "via an on-node MDAnalysis health step (numpy/scipy/MDAnalysis must "
                     "be on the node python; fails safe to no-skip otherwise). Ignored "
                     "for local runs.",
+    )
+    draft: bool = Field(
+        False,
+        description="Create the job as an unprepared DRAFT (status='draft') instead of "
+                    "solvating immediately. Only valid for a seeded job (oxdna/mrdna). "
+                    "The 'Use as NAMD seed' button uses this so the user can set advanced "
+                    "options first; the deferred solvation runs on POST /md/jobs/{id}/prepare "
+                    "(the 'Relax from oxDNA' button).",
     )
 
 
@@ -1048,6 +1057,8 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     if body.oxdna_job_id and body.mrdna_job_id:
         raise HTTPException(400, "Seed from oxDNA OR mrDNA, not both.")
     seeded = bool(body.oxdna_job_id or body.mrdna_job_id)
+    if body.draft and not seeded:
+        raise HTTPException(400, "A draft job must be seeded from an oxDNA or mrDNA job.")
     if seeded:
         # The seed's design lives on disk (the CG job's snapshot); it is resolved in
         # the background worker so its (slow) reconstruction shows on the progress
@@ -1063,7 +1074,7 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
         design = None
-        name = "design"               # provisional; replaced once the seed builds
+        name = _seed_design_name(body)   # nice list label; provisional otherwise
         size_factor = 1.0
     else:
         # The active design is request-scoped (doc session contextvar), so it must
@@ -1074,8 +1085,62 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
 
+    # Draft: record the seed + provenance now, DEFER solvation.  The job appears in
+    # the list as 'draft' and is prepared+started later via POST /md/jobs/{id}/prepare
+    # ("Relax from oxDNA"), so the user can set advanced options first.
+    if body.draft:
+        job = _spawn_draft_job(body, name=name)
+        return job.to_dict()
+
     job = _spawn_prep_job(body, design=design, seeded=seeded, name=name, size_factor=size_factor)
     return job.to_dict()
+
+
+@router.post("/md/jobs/{job_id}/prepare")
+async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
+    """Prepare (solvate) a DRAFT job with the given advanced settings, then start it.
+
+    Backs the "Relax from oxDNA" button: a draft created by "Use as NAMD seed"
+    deferred its solvation so the user could set options.  This runs the STANDARD
+    prep pipeline into the SAME job id, seeding from the draft's recorded oxDNA/mrDNA
+    source (the body's seed ids are ignored — the draft owns the seed).  ``autostart``
+    (in the body) launches the run once prep finishes, exactly like a normal relax.
+    """
+    job = _load_job(job_id)
+    if job.status != MdStatus.draft:
+        raise HTTPException(400, "Job is not a draft (already prepared).")
+
+    try:
+        find_namd(); find_gmx()
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+
+    # The draft owns the seed; the body only carries user-adjusted advanced settings.
+    params = body.model_dump()
+    params["oxdna_job_id"] = job.seed_oxdna_job_id
+    params["mrdna_job_id"] = job.seed_mrdna_job_id
+    params["draft"] = False
+    params.setdefault("design_source_path", job.design_source_path)
+    new_body = CreateJobRequest(**params)
+
+    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id)
+    if not seeded:
+        raise HTTPException(400, "Draft has no seed source; cannot prepare.")
+    try:
+        if new_body.oxdna_job_id:
+            from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
+            await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
+        else:
+            from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
+            await run_in_threadpool(assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace())
+    except FileNotFoundError as exc:
+        raise HTTPException(400, str(exc))
+
+    _spawn_prep_job(new_body, design=None, seeded=True, name=job.design_name or "design",
+                    size_factor=1.0, existing_job=job)
+    logger.info("prepare draft %s (seed_oxdna=%s seed_mrdna=%s autostart=%s)",
+                job_id, job.seed_oxdna_job_id, job.seed_mrdna_job_id, new_body.autostart)
+    return MdJob.load(job_id, _workspace()).to_dict()
 
 
 @router.post("/md/jobs/estimate-disk")
@@ -1146,12 +1211,64 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
     return forecast(package_dir if package_dir.exists() else _workspace(), predicted)
 
 
+def _seed_design_name(body: CreateJobRequest) -> str:
+    """Best-effort design name for a seeded job's list label (falls back to 'design').
+
+    Reads the seed CG job's stored ``design_name`` so a draft/seeded job shows the
+    real structure name in the list instead of the provisional 'design'.
+    """
+    ws = _workspace()
+    try:
+        if body.oxdna_job_id:
+            from backend.core.oxdna_job import OxdnaJob  # noqa: PLC0415
+            return OxdnaJob.load(body.oxdna_job_id, ws).design_name or "design"
+        if body.mrdna_job_id:
+            from backend.core.mrdna_job import MrdnaJob  # noqa: PLC0415
+            return MrdnaJob.load(body.mrdna_job_id, ws).design_name or "design"
+    except Exception:  # noqa: BLE001 — a label lookup must never block job creation
+        pass
+    return "design"
+
+
+def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
+    """Create a seeded job in the DRAFT state (no solvation yet).
+
+    Records the seed source + provenance + the default advanced params so the panel
+    can pre-fill them; the expensive prep runs later in :func:`prepare_draft_job`.
+    """
+    job_threads = min(body.threads, 4) if body.fast else body.threads
+    job = new_job(
+        design_name    = name,
+        protocol       = body.protocol,
+        name_stem      = "",
+        package_subdir = "",
+        threads        = job_threads,
+        devices        = body.devices,
+        design_source_path = body.design_source_path,
+        seed_oxdna_job_id  = body.oxdna_job_id,
+        seed_mrdna_job_id  = body.mrdna_job_id,
+    )
+    job.execution_target = body.execution_target
+    job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
+    job.early_stop_relax = body.early_stop_relax
+    job.early_stop_tier = (body.early_stop_tier or "B").upper()
+    job.prep_params = body.model_dump()
+    job.status = MdStatus.draft
+    job.save(_workspace())
+    logger.info("create_md_job: DRAFT job_id=%s design=%s seed_oxdna=%s seed_mrdna=%s",
+                job.job_id, name, body.oxdna_job_id, body.mrdna_job_id)
+    return job
+
+
 def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
-                    size_factor: float, parent_job_id: Optional[str] = None) -> MdJob:
+                    size_factor: float, parent_job_id: Optional[str] = None,
+                    existing_job: Optional[MdJob] = None) -> MdJob:
     """Create the MdJob, persist its prep params, and launch background prep.
 
     Shared by :func:`create_md_job` and :func:`refit_md_job` so a refit reuses the
-    exact same solvation → ENM → config pipeline with one setting changed.
+    exact same solvation → ENM → config pipeline with one setting changed.  Pass
+    ``existing_job`` to prepare a DRAFT in place (reusing its id + seed) instead of
+    creating a fresh record — the "Relax from oxDNA" path.
     """
     ion_conc_mM = body.ion_conc_mM
     mg_conc_mM = body.mg_conc_mM
@@ -1166,18 +1283,29 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     # throughput while freeing ~12 cores, so cap threads when fast is on.
     job_threads = min(body.threads, 4) if body.fast else body.threads
 
-    job = new_job(
-        design_name    = name,
-        protocol       = body.protocol,
-        name_stem      = "",       # filled in after prep
-        package_subdir = "",       # filled in after prep
-        threads        = job_threads,
-        devices        = body.devices,
-        design_source_path = body.design_source_path,
-        seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
-        seed_mrdna_job_id  = body.mrdna_job_id if seeded else None,
-        parent_job_id      = parent_job_id,
-    )
+    if existing_job is not None:
+        # Prepare a draft in place: keep its id + seed, refresh the run knobs from
+        # the (now user-adjusted) request.
+        job = existing_job
+        job.design_name = name or job.design_name
+        job.protocol = body.protocol
+        job.threads = job_threads
+        job.devices = body.devices
+        if body.design_source_path:
+            job.design_source_path = body.design_source_path
+    else:
+        job = new_job(
+            design_name    = name,
+            protocol       = body.protocol,
+            name_stem      = "",       # filled in after prep
+            package_subdir = "",       # filled in after prep
+            threads        = job_threads,
+            devices        = body.devices,
+            design_source_path = body.design_source_path,
+            seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
+            seed_mrdna_job_id  = body.mrdna_job_id if seeded else None,
+            parent_job_id      = parent_job_id,
+        )
     # Remote-execution tag (default "local"): submission itself happens later via
     # /md/jobs/{id}/submit-remote once the package is prepared and a cluster session
     # is connected.  Tagging here lets the UI show the intended target from creation.
@@ -1193,7 +1321,10 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
                 job.job_id, name, body.protocol, seeded)
 
     tracker = PrepTracker(
-        build_prep_phases(seeded=seeded, size_factor=size_factor),
+        build_prep_phases(
+            seeded=seeded, size_factor=size_factor,
+            implicit=(body.protocol == IMPLICIT_GBIS_PROTOCOL),
+        ),
         clock=time.monotonic,
     )
     write_prep_progress(job.job_dir(_workspace()), tracker.snapshot())
@@ -1272,10 +1403,16 @@ async def _prepare_job_bg(
         # the system won't fit the detected GPU, enable a carve that does — so a
         # large origami runs first time instead of OOM-ing.  Records the choice on
         # the job so the user can see what was auto-adjusted.
+        # Auto water-shell carve caps the atom count to fit the compute target's
+        # memory.  Implicit solvent (GBIS) has no water box → skip entirely.  For an
+        # explicit CPU run there is no VRAM limit, so auto_water_shell sizes to host
+        # RAM instead (see its `devices="cpu"` branch).
         water_shell_nm = body.water_shell_nm
-        if not water_shell_nm:
+        if not water_shell_nm and body.protocol != IMPLICIT_GBIS_PROTOCOL:
             from backend.core.md_vram import auto_water_shell  # noqa: PLC0415
-            tracker.report("topology", None, "Checking GPU memory headroom…")
+            tracker.report("topology", None,
+                           "Checking CPU memory headroom…" if body.devices.strip().lower() in ("cpu", "none")
+                           else "Checking GPU memory headroom…")
             auto = await run_in_threadpool(
                 auto_water_shell, local_design,
                 padding_nm=body.padding_nm, devices=body.devices,
@@ -1303,11 +1440,13 @@ async def _prepare_job_bg(
         job.feature_log_position = effective_feature_log_position(local_design)
         job.save(ws)
 
-        prepare = (
-            prepare_equilibrium_aware_namd
-            if body.protocol == EQUILIBRIUM_AWARE_PROTOCOL
-            else prepare_mgh_slow_release
-        )
+        if body.protocol == IMPLICIT_GBIS_PROTOCOL:
+            from backend.core.namd_gbis import prepare_implicit_gbis_namd  # noqa: PLC0415
+            prepare = prepare_implicit_gbis_namd
+        elif body.protocol == EQUILIBRIUM_AWARE_PROTOCOL:
+            prepare = prepare_equilibrium_aware_namd
+        else:
+            prepare = prepare_mgh_slow_release
         package_subdir, name_stem, segments = await run_in_threadpool(
             prepare,
             local_design,

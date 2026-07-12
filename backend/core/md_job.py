@@ -19,6 +19,10 @@ from typing import Optional
 
 
 class MdStatus(str, Enum):
+    # A seeded job created by "Use as NAMD seed" whose expensive solvation is
+    # DEFERRED — it sits in the list unprepared until the user sets advanced options
+    # and clicks "Relax from oxDNA" (POST /md/jobs/{id}/prepare).
+    draft      = "draft"
     queued     = "queued"
     preparing  = "preparing"
     running    = "running"

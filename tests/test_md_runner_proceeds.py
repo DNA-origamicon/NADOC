@@ -428,3 +428,100 @@ def test_rerun_on_completed_job_is_idempotent(
     assert final.status == MdStatus.completed
     # segments already complete → skipped, nothing re-executed
     assert confs == []
+
+
+# ── GPU tile-list pre-flight → CPU auto-routing ───────────────────────────────
+#
+# NAMD 3.0.2's CUDA buildTileLists kernel dies on the first step for certain
+# (patch-grid x atom-density) geometries.  run_job probes for it and reroutes a
+# genuinely-unsafe package to the CPU build instead of crashing.  See LESSONS K2.
+
+def _install_gpu_fakes(monkeypatch, gpu_safe: bool, launched: list[tuple[str, str]]):
+    """CUDA build resolved for the job; probe returns *gpu_safe*; record what ran."""
+    _install_fakes(monkeypatch)
+    monkeypatch.setattr(nr, "resolve_namd_launch", lambda *a, **k: ("/fake/cuda-namd3", "0"))
+    monkeypatch.setattr(nr, "namd_is_cuda_build", lambda b: "cuda" in b)
+    monkeypatch.setattr(nr, "find_namd", lambda **k: "/fake/cpu-namd3")
+    monkeypatch.setattr(nr, "gpu_tilelist_probe", lambda *a, **k: gpu_safe)
+
+    async def fake_namd(namd_bin, conf_name, package_dir, log_path, threads, devices,
+                        job_id=None, on_spawn=None):
+        launched.append((namd_bin, devices))
+        if on_spawn is not None:
+            on_spawn(4242)
+        out = package_dir / "output"
+        out.mkdir(exist_ok=True)
+        base = conf_name.split(".resume")[0]
+        for ext in ("coor", "vel", "xsc"):
+            (out / f"{base}.{ext}").write_text("x")
+        log_path.write_text(
+            "ETITLE: TS TEMP TEMPAVG PRESSURE GPRESSURE VOLUME PRESSAVG GPRESSAVG\n"
+            "ENERGY: 1000 300 300 1 1 100 1 1\n"
+            "WallClock: 1.0  CPUTime: 1.0  Memory: 1.0 MB\nEnd of program\n"
+        )
+        return 0, 4242
+
+    monkeypatch.setattr(nr, "_run_namd_async", fake_namd)
+
+
+def test_gpu_unsafe_geometry_reroutes_to_cpu_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Probe says the geometry trips the tile-list bug → run on the CPU build, no +devices."""
+    job = _setup_package(tmp_path)
+    launched: list[tuple[str, str]] = []
+    _install_gpu_fakes(monkeypatch, gpu_safe=False, launched=launched)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    assert launched, "nothing was launched"
+    assert all(b == "/fake/cpu-namd3" for b, _ in launched), launched
+    assert all(d == "" for _, d in launched), launched
+    assert MdJob.load(job.job_id, tmp_path).status == MdStatus.completed
+
+
+def test_gpu_safe_geometry_stays_on_cuda_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Control: a safe geometry must NOT be demoted to the CPU build."""
+    job = _setup_package(tmp_path)
+    launched: list[tuple[str, str]] = []
+    _install_gpu_fakes(monkeypatch, gpu_safe=True, launched=launched)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    assert launched
+    assert all(b == "/fake/cuda-namd3" for b, _ in launched), launched
+    assert all(d == "0" for _, d in launched), launched
+
+
+def test_cpu_job_never_pays_for_the_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compute=CPU already routes to the CPU build — probing it would just waste 15 s."""
+    job = _setup_package(tmp_path)
+    job.devices = "cpu"
+    job.save(tmp_path)
+    launched: list[tuple[str, str]] = []
+    _install_fakes(monkeypatch)
+    monkeypatch.setattr(nr, "resolve_namd_launch", lambda *a, **k: ("/fake/cpu-namd3", ""))
+
+    probed: list[int] = []
+    monkeypatch.setattr(nr, "gpu_tilelist_probe",
+                        lambda *a, **k: probed.append(1) or True)
+
+    async def fake_namd(namd_bin, conf_name, package_dir, log_path, threads, devices,
+                        job_id=None, on_spawn=None):
+        launched.append((namd_bin, devices))
+        out = package_dir / "output"
+        out.mkdir(exist_ok=True)
+        base = conf_name.split(".resume")[0]
+        for ext in ("coor", "vel", "xsc"):
+            (out / f"{base}.{ext}").write_text("x")
+        log_path.write_text("WallClock: 1.0\nEnd of program\n")
+        return 0, 4242
+
+    monkeypatch.setattr(nr, "_run_namd_async", fake_namd)
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    assert probed == [], "a Compute=CPU job must not run the GPU pre-flight probe"

@@ -518,7 +518,7 @@ def _resolve_namd(candidate: str) -> Optional[str]:
     )
 
 
-def find_namd() -> str:
+def find_namd(prefer_cpu: bool = False) -> str:
     """Return the first usable NAMD3 binary path.
 
     Resolution order:
@@ -526,19 +526,75 @@ def find_namd() -> str:
       2. ``namd3`` on ``$PATH``.
       3. Conventional ``~/Applications`` installs (CUDA/GPU build preferred over CPU).
 
+    ``prefer_cpu=True`` returns the first NON-CUDA (multicore CPU) build instead —
+    required for GBIS implicit solvent, which is unsupported on the NAMD 3 CUDA
+    nonbonded kernel (it crashes in ``buildTileLists``).  Raises if no CPU build is
+    installed, since silently using the CUDA build would just crash again.
+
     See ``docs/namd_setup.md`` for install guidance (WSL + GPU notes included).
     """
     override = os.environ.get("NADOC_NAMD_BIN", "").strip()
     candidates = ([override] if override else []) + _namd_candidates()
-    for candidate in candidates:
-        found = _resolve_namd(candidate)
-        if found:
-            return found
-    raise RuntimeError(
-        "NAMD3 not found.  Set $NADOC_NAMD_BIN to the namd3 binary, install to "
-        "~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3, or add namd3 to "
-        "PATH.  See docs/namd_setup.md."
-    )
+    resolved = [f for f in (_resolve_namd(c) for c in candidates) if f]
+    if not resolved:
+        raise RuntimeError(
+            "NAMD3 not found.  Set $NADOC_NAMD_BIN to the namd3 binary, install to "
+            "~/Applications/NAMD_3.0.2_Linux-x86_64-multicore-CUDA/namd3, or add namd3 to "
+            "PATH.  See docs/namd_setup.md."
+        )
+    if prefer_cpu:
+        for found in resolved:
+            if not namd_is_cuda_build(found):
+                return found
+        raise RuntimeError(
+            "Implicit-solvent (GBIS) needs a CPU (non-CUDA) NAMD build — GBIS is "
+            "unsupported on the NAMD 3 CUDA kernel (crashes in buildTileLists).  "
+            "Install the multicore build, e.g. "
+            "~/Applications/NAMD_3.0.2_Linux-x86_64-multicore/namd3."
+        )
+    return resolved[0]
+
+
+def job_wants_cpu(protocol: Optional[str], devices: Optional[str]) -> bool:
+    """True if a job must/should run on the CPU (non-CUDA) NAMD build.
+
+    - GBIS implicit solvent is CPU-only on NAMD 3 CUDA (crashes buildTileLists), so
+      it ALWAYS forces CPU regardless of the device string.
+    - Otherwise the user's Compute choice drives it: ``devices`` of ``"cpu"``/``"none"``
+      means CPU; GPU indices (``"0"``, ``"0,1"``, or empty = auto) mean the CUDA build.
+    """
+    from backend.core.md_protocols import IMPLICIT_GBIS_PROTOCOL  # noqa: PLC0415
+    if protocol == IMPLICIT_GBIS_PROTOCOL:
+        return True
+    return (devices or "").strip().lower() in ("cpu", "none")
+
+
+def resolve_namd_launch(protocol: Optional[str], devices: Optional[str]) -> tuple[str, str]:
+    """Pick the NAMD binary + ``+devices`` string for a job's compute target.
+
+    Robust across every install combo ("works on all versions"):
+      • CPU wanted (GBIS or Compute=CPU) → the ``-multicore`` build, no ``+devices``.
+        If only a CUDA build exists: GBIS raises (it truly cannot use CUDA); an
+        explicit-solvent CPU request degrades to the CUDA build (best effort).
+      • GPU wanted → the CUDA build + the requested devices.  On a CPU-only machine
+        (no CUDA build) it degrades to the multicore build with no ``+devices``.
+
+    Returns ``(namd_bin, run_devices)``.
+    """
+    want_cpu = job_wants_cpu(protocol, devices)
+    if want_cpu:
+        try:
+            return find_namd(prefer_cpu=True), ""
+        except RuntimeError:
+            # GBIS truly cannot use CUDA → surface the install guidance.
+            if job_wants_cpu(protocol, None):
+                raise
+            # Explicit-solvent CPU request but no CPU build installed: best-effort GPU.
+            return find_namd(), "0"
+    namd_bin = find_namd()  # CUDA-first ordering
+    if not namd_is_cuda_build(namd_bin):
+        return namd_bin, ""   # CPU-only machine: a GPU request degrades cleanly
+    return namd_bin, devices or ""
 
 
 @functools.lru_cache(maxsize=8)
@@ -559,6 +615,101 @@ def namd_is_cuda_build(namd_bin: str) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return "CUDA" in (out.stdout + out.stderr)
+
+
+# ── NAMD CUDA tile-list bug: pre-flight probe ────────────────────────────────
+#
+# NAMD 3.0.2's CUDA `buildTileLists` kernel sizes its loop from a CPU-side count
+# of tile lists but fills the array from a GPU-side count.  When the CPU count is
+# larger the tail of `tileLists` is never written; the kernel reads those zeroed
+# entries, derives patch index 0 / offset 0 from them, and indexes `boundingBoxes`
+# far past its end -> cudaErrorIllegalAddress on the very FIRST step (minimize or
+# dynamics).  `boundingBoxes` has no bounds check in that kernel.
+#
+# The failure is deterministic per package but is NOT a function of the patch grid:
+# the identical grid (26x3x34) crashes at 380k atoms and runs at 611k, because what
+# the kernel actually indexes is the TILE-LIST count, which depends on atom density
+# too.  A closed-form predictor is therefore unsound (verified: it mispredicts
+# non-uniform-density carved-shell systems).  So we settle it empirically — run one
+# minimization cycle on the GPU and look at the log.  ~5-15 s against a multi-hour
+# production run.  NAMD 3.1 does NOT fix this upstream.  See LESSONS K2.
+
+GPU_PROBE_CACHE = ".gpu_tilelist_probe.json"
+_TILELIST_CRASH_PAT = re.compile(r"buildTileLists", re.IGNORECASE)
+GPU_PROBE_TIMEOUT_S = 600.0
+
+
+def _write_probe_conf(min_conf: Path, probe_conf: Path, out_stem: str) -> None:
+    """Copy *min_conf* into *probe_conf*, shortened to one minimization cycle and
+    writing its output to *out_stem* so the real ``output/`` is never touched.
+
+    NAMD requires the step count to be a multiple of ``stepspercycle``, so the probe
+    runs exactly one cycle (the crash fires on the first step regardless).
+    """
+    text = min_conf.read_text()
+    m = re.search(r"^\s*stepspercycle\s+(\d+)", text, re.IGNORECASE | re.MULTILINE)
+    cycle = int(m.group(1)) if m else 20
+    text = re.sub(r"^(\s*minimize\s+)\d+", rf"\g<1>{cycle}", text,
+                  flags=re.IGNORECASE | re.MULTILINE)
+    text = re.sub(r"^(\s*outputName\s+)\S+", rf"\g<1>{out_stem}", text,
+                  flags=re.IGNORECASE | re.MULTILINE)
+    probe_conf.write_text(text)
+
+
+def gpu_tilelist_probe(
+    package_dir: Path,
+    min_name: str,
+    namd_bin: str,
+    devices: str,
+    threads: Optional[int] = None,
+) -> bool:
+    """True if this package is SAFE to run on the CUDA build.
+
+    Runs one minimization cycle on the GPU and reports whether NAMD survived the
+    tile-list build.  The verdict is cached in the package (the geometry can't
+    change under a prepared package), so a resume never re-pays for it.
+
+    Returns True (assume safe) if the probe itself can't run — a probe failure must
+    never be what stops a job from launching.
+    """
+    cache = package_dir / GPU_PROBE_CACHE
+    if cache.exists():
+        try:
+            return bool(json.loads(cache.read_text())["gpu_safe"])
+        except (ValueError, KeyError, OSError):
+            pass  # unreadable cache → just re-probe
+
+    min_conf = package_dir / f"{min_name}.conf"
+    if not min_conf.exists():
+        return True
+
+    probe_conf = package_dir / "_gpu_probe.conf"
+    probe_stem = "_gpu_probe_out"
+    probe_log  = package_dir / "_gpu_probe.log"
+    try:
+        _write_probe_conf(min_conf, probe_conf, probe_stem)
+        cmd = [namd_bin, f"+p{threads or default_threads()}", "+setcpuaffinity"]
+        if devices:
+            cmd += ["+devices", devices]
+        cmd.append(probe_conf.name)
+        out = subprocess.run(
+            cmd, cwd=package_dir, capture_output=True, text=True,
+            timeout=GPU_PROBE_TIMEOUT_S,
+        )
+        log = out.stdout + out.stderr
+        probe_log.write_text(log)
+        safe = not _TILELIST_CRASH_PAT.search(log)
+    except (OSError, subprocess.SubprocessError):
+        return True  # can't probe → don't block the job
+    finally:
+        for junk in (probe_conf, *package_dir.glob(f"{probe_stem}*")):
+            junk.unlink(missing_ok=True)
+
+    try:
+        cache.write_text(json.dumps({"gpu_safe": safe}))
+    except OSError:
+        pass
+    return safe
 
 
 def find_gmx() -> str:
@@ -768,9 +919,14 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
     logger.info("[%s] run_job starting; package_dir=%s", job.job_id, package_dir)
 
+    # Pick the NAMD binary + devices for the job's Compute target.  GBIS forces the
+    # CPU build (unsupported on the NAMD 3 CUDA kernel — buildTileLists crash);
+    # otherwise Compute=CPU (devices "cpu") uses it too, and GPU uses the CUDA build.
+    want_cpu = job_wants_cpu(job.protocol, job.devices)
     try:
-        namd_bin = find_namd()
-        logger.info("[%s] NAMD binary: %s", job.job_id, namd_bin)
+        namd_bin, run_devices = resolve_namd_launch(job.protocol, job.devices)
+        logger.info("[%s] NAMD binary: %s%s", job.job_id, namd_bin,
+                    " (CPU build)" if want_cpu else "")
     except RuntimeError as exc:
         logger.error("[%s] NAMD not found: %s", job.job_id, exc)
         job.status = MdStatus.failed
@@ -791,6 +947,30 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     min_name = manifest["minimization"]["name"]
     _, segments = segments_from_manifest(manifest_path)
     logger.info("[%s] Loaded manifest: %d segments, min=%s", job.job_id, len(segments), min_name)
+
+    # GPU pre-flight.  NAMD 3.0.2's CUDA buildTileLists kernel dies with an illegal
+    # memory access on the first step for certain (patch-grid × atom-density)
+    # geometries — deterministic, but not predictable from the patch grid alone.
+    # Settle it empirically (~5-15 s, cached in the package) and route a genuinely
+    # unsafe geometry to the CPU build instead of letting it crash.  See LESSONS K2.
+    if not want_cpu and namd_is_cuda_build(namd_bin):
+        # blocking subprocess → off the event loop, or the whole API stalls on it
+        gpu_safe = await asyncio.to_thread(
+            gpu_tilelist_probe, package_dir, min_name, namd_bin, run_devices, job.threads,
+        )
+        if not gpu_safe:
+            logger.warning(
+                "[%s] GPU pre-flight FAILED (NAMD CUDA tile-list bug on this geometry) "
+                "— routing this job to the CPU build.", job.job_id,
+            )
+            try:
+                namd_bin, run_devices = find_namd(prefer_cpu=True), ""
+                logger.info("[%s] NAMD binary (rerouted): %s (CPU build)", job.job_id, namd_bin)
+            except RuntimeError:
+                logger.error(
+                    "[%s] No CPU NAMD build installed — staying on the GPU build, which "
+                    "will crash on this geometry.  Install the -multicore build.", job.job_id,
+                )
 
     # Persist the live NAMD PID to job.json on every spawn, so a server restart can
     # still signal the orphaned process (see stop_job's restart fallback).
@@ -830,7 +1010,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         min_log = package_dir / f"{min_name}.log"
         _free_host_ram_for_namd(job.job_id, "minimization")
         rc, pid = await _run_namd_async(
-            namd_bin, min_name, package_dir, min_log, job.threads, job.devices, job.job_id,
+            namd_bin, min_name, package_dir, min_log, job.threads, run_devices, job.job_id,
             on_spawn=_persist_pid,
         )
         if rc != 0:
@@ -950,7 +1130,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 package_dir,
                 seg_log,
                 job.threads,
-                job.devices,
+                run_devices,
                 job.job_id,
                 on_spawn=_persist_pid,
             )

@@ -20,6 +20,26 @@ oxygen is > `water_shell_nm` from any DNA atom (`_carve_water_shell`, cKDTree).
 Box dims / PME grid unchanged; only particle count drops. Real result on
 VoltronCore (ideal B-DNA build, shell 1.5 nm): **5.52M → 1.15M atoms (4.8×)**.
 
+## ⚡ SUPERSEDED 2026-07-11: native `gmx solvate -shell` (the carve OOM-crashed WSL)
+The fill-then-carve above still **fills the whole box first** — for a 121 nm plate
+(GT_corner_v2) that's ~6M waters generated just to keep the shell. Two multi-GB peaks
+result: gmx tiling the box, then **Python `_parse_gro` loading the entire full-box
+`.gro` → the backend hit 22 GB RSS and OOM-**crashed WSL** twice** (`_carve_water_shell`
+runs only after the whole box is already in memory, so it can't prevent the peak).
+**Fix:** `_gmx_solvate` now passes `gmx solvate -shell {water_shell_nm}` when a shell is
+requested, so GROMACS places ONLY the hydration layer around the DNA — the empty box is
+never materialised. The Python carve is skipped on that path (`_carve_water_shell` kept
+only for its unit tests + the no-shell fallback). Box/PME/cellOrigin unchanged; the DNA
+frame is still the recentred `[0,L]` from `_recenter_pdb_in_padded_box`. Verified: 1hbx300
+60,447→15,856 waters (3.8×, `.gro` 8.7→2.7 MB); 2x3x100_Sq 72,797→28,814 (2.2×). The
+`.gro` (→ the Python parse) shrinks by the shell/box emptiness ratio — that's the spike
+that was killing WSL. NOTE: gmx's OWN peak is dominated by tiling the box and is roughly
+UNCHANGED by `-shell` (moderate-box test: 42 MB either way); on a 121 nm box gmx alone
+peaked ~15 GB, which SURVIVED before — the crash was the *compounding* Python parse on
+top. So `-shell` removes the compound peak; the residual gmx tiling peak on a huge box is
+inherent to GROMACS and would need chunked solvation to cut further (not done). Min-image
+constraint unchanged (2·shell ≥ 12 Å cutoff → shell ≥ 6 Å). See [[namd-solvate]].
+
 Key knobs:
 - `water_shell_nm` (nm) threads: routes_md `CreateJobRequest` → `prepare_mgh_slow_release`
   → `build_namd_solvated_package` / `get_solvation_stats`. Default 0 = off. Use 1.5

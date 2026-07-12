@@ -18,9 +18,13 @@ get_solvation_stats(design, *, padding_nm=1.2, ion_conc_mM=150.0) -> dict
 
 1. `export_pdb(design)` → DNA heavy-atom PDB (Angstroms, CHARMM36 naming)
 2. `complete_psf(design)` → full PSF with angles/dihedrals (from namd_package)
-3. `gmx editconf -bt triclinic -d {padding_nm}` → rectangular box GRO
-4. `gmx solvate -cs spc216.gro` → TIP3P water placed around DNA
-5. Parse solvated GRO → list of `_Water(ox,oy,oz,h1x,h1y,h1z,h2x,h2y,h2z)` in nm
+3. `_recenter_pdb_in_padded_box` → translate DNA so its bbox is centred in a
+   rectangular `[0, span+2·pad]` cell (shared frame for DNA + water; see bug #5)
+4. `gmx editconf -noc -box {bx by bz}` → set box, do NOT re-centre → GRO
+5. `gmx solvate -cs spc216.gro` → TIP3P water (same frame). **`-shell {water_shell_nm}`
+   when a shell is requested** → only the hydration layer, NOT the full box (else the
+   parse OOM-crashes WSL on a large plate — see [[water-shell-carve]] ⚡SUPERSEDED)
+6. Parse solvated GRO → list of `_Water(ox,oy,oz,h1x,h1y,h1z,h2x,h2y,h2z)` in nm
 6. Count DNA charge from P atoms in PDB (not PSF partial charges — those don't sum right without H)
 7. Python ion placement: replace random water molecules with Na+/Cl-
 8. `_extend_psf` → append TIP3/SOD/CLA atoms to NATOM section; add bonds/angles to NBOND/NTHETA
@@ -56,6 +60,27 @@ get_solvation_stats(design, *, padding_nm=1.2, ion_conc_mM=150.0) -> dict
 2. **GRO residue number wraparound**: GROMACS wraps residue/atom numbers at 100,000. Parsing by `resnum` dict gives only 100,000 waters. Fix: sequential parsing — buffer atoms in `sol_buf`, emit when len==3.
 3. **Unit conversion error in ion count**: `1 nm³ = 1e-24 L` (not `1e-21 L`). `vol_L = bx*by*bz * 1e-24`.
 4. **DNA charge from heavy-atom PSF is wrong**: partial charges without H don't sum to physical -1/nt. Fix: count P atoms in PDB → `-n_P` = real DNA net charge.
+5. **DNA/water coordinate-frame mismatch → NAMD GPU crash (2026-07-11).** Symptom:
+   `FATAL ERROR: CUDA error cudaStreamSynchronize in CudaTileListKernel.cu
+   buildTileLists` at the *first* minimise step (seen on **GT_corner_v2**, a big
+   floppy plate; also broke every oxDNA/mrDNA **seed** because `build_namd_seed`
+   centres the model on its centroid → symmetric about origin). Root cause:
+   `export_pdb` writes atoms in the model's *native* frame (arbitrary; can span
+   hundreds of Å negative — a plate is symmetric about Y=0). The old
+   `gmx editconf -c` re-centred only the *water-placement copy* into `[0,L]`,
+   but `_build_solvated_pdb` wrote the DNA from the **un-centred** original while
+   water came back in the centred frame → DNA sat up to ~200 Å (≈13 patch widths)
+   outside the periodic cell (`cellOrigin = box/2` assumes `[0,L]`) → the GPU
+   tile-list kernel indexed a patch out of bounds. The DNA's out-of-cell arm was
+   also **unsolvated** (gmx only placed water at x≥0). Fix: `_recenter_pdb_in_padded_box`
+   centres the DNA ourselves, `editconf -noc -box` keeps that frame, and
+   `_gmx_solvate` **returns the re-centred PDB** which the caller writes → DNA +
+   water share ONE frame, all atoms inside the cell. Restraints PDB (copied from
+   the solvated PDB) and ENM (atom-index + rest-length, translation-invariant)
+   follow automatically. NOTE: this is a **different** buildTileLists cause than the
+   `margin`-keyword one in [[water-shell-carve]] — both crash the same kernel.
+   `_gmx_solvate_periodic` (crossover-period benchmark path) still has the latent
+   verbatim-DNA-write pattern; unfixed (not exercised by the standard prep).
 
 ## Validated results (y4HB, 4 helices, 6816 DNA atoms)
 

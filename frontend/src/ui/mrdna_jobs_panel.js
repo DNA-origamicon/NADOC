@@ -471,15 +471,19 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
       if (!_selectedId || seedBtn.disabled || _seeding) return
       _seeding = true
       seedBtn.disabled = true
-      _setSeedStatus('Building NAMD seed + solvating (this can take 1–2 min)…', _C.accent)
+      _setSeedStatus('Creating NAMD draft…', _C.accent)
+      // Draft (deferred solvation): appears in the NAMD list unstarted so the user can
+      // set advanced options, then press "Relax from mrDNA" to solvate + run.
       const job = await api.createMdJob({
         mrdna_job_id: _selectedId,
         design_source_path: getWorkspacePath?.() || null,
+        draft: true,
+        autostart: true,   // remembered on the draft → "Relax from mrDNA" runs it (standard relax)
       })
       _seeding = false
       if (job && job.job_id) {
-        _setSeedStatus('NAMD seed job created — see Molecular Dynamics below.', _C.ok)
-        showToast('NAMD seed job created from relaxed mrDNA structure', { severity: 'ok' })
+        _setSeedStatus('NAMD draft created — set options + "Relax from mrDNA" in the NAMD tab.', _C.ok)
+        showToast('NAMD draft created — configure it, then Relax from mrDNA', { severity: 'ok' })
         window.dispatchEvent(new CustomEvent('nadoc:md-job-created'))
         window.dispatchEvent(new CustomEvent('nadoc:sim-jobs-changed'))   // wake master (new NAMD job)
       } else {

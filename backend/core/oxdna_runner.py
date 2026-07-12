@@ -582,12 +582,13 @@ def build_namd_seed(job_id: str, workspace_dir: Path) -> NamdSeed:
     # ENM base-ring scan finds no atoms.  Translate every atom by the model centroid.
     if model.atoms:
         import numpy as _np
-        cx, cy, cz = _np.mean(
-            [[a.x, a.y, a.z] for a in model.atoms], axis=0).tolist()
-        for a in model.atoms:
-            a.x -= cx
-            a.y -= cy
-            a.z -= cz
+        coords = _np.asarray([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
+        coords -= coords.mean(axis=0)
+        for a, (x, y, z) in zip(model.atoms, coords):
+            a.x, a.y, a.z = float(x), float(y), float(z)
+        # (Geometry sanity — the reconstruction must preserve the CG extent — is
+        # enforced inside build_atomistic_model_from_cg_spline, which raises before
+        # we get here if the all-atom placer exploded a heavily-deformed seed.)
 
     return NamdSeed(
         design          = design,

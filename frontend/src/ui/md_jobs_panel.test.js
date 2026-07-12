@@ -114,7 +114,58 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdProductionAction, mdRemoteReconnectPrompt } from './md_jobs_panel.js'
+import { mdJobIsActive, mdRunControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdProductionAction, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel } from './md_jobs_panel.js'
+
+describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
+  it('mdJobIsDraft is true only for status "draft"', () => {
+    expect(mdJobIsDraft({ status: 'draft' })).toBe(true)
+    for (const s of ['queued', 'preparing', 'running', 'completed', 'failed', 'stopped']) {
+      expect(mdJobIsDraft({ status: s })).toBe(false)
+    }
+    expect(mdJobIsDraft(null)).toBe(false)
+  })
+  it('a draft is NOT counted as active (no spinner / not resumable)', () => {
+    expect(mdJobIsActive({ status: 'draft' })).toBe(false)
+  })
+  it('mdDraftRunLabel names the seed engine', () => {
+    expect(mdDraftRunLabel({ status: 'draft', seed_oxdna_job_id: 'ox1' })).toBe('▶ Relax from oxDNA')
+    expect(mdDraftRunLabel({ status: 'draft', seed_mrdna_job_id: 'mr1' })).toBe('▶ Relax from mrDNA')
+    expect(mdDraftRunLabel({ status: 'draft' })).toBe('▶ Relax from oxDNA')  // default
+  })
+})
+
+import { isImplicitSolventProtocol, IMPLICIT_GBIS_PROTOCOL, deviceStringForCompute, computeFromDeviceString } from './md_jobs_panel.js'
+
+describe('isImplicitSolventProtocol (GBIS grays explicit-solvent knobs)', () => {
+  it('is true only for the GBIS protocol', () => {
+    expect(isImplicitSolventProtocol(IMPLICIT_GBIS_PROTOCOL)).toBe(true)
+    expect(isImplicitSolventProtocol('implicit_gbis_namd')).toBe(true)
+    for (const p of ['equilibrium_aware_namd', 'mgh_slow_release', '', null, undefined]) {
+      expect(isImplicitSolventProtocol(p)).toBe(false)
+    }
+  })
+})
+
+describe('deviceStringForCompute / computeFromDeviceString (Compute GPU/CPU selector)', () => {
+  it('GPU compute passes the CUDA device ids through', () => {
+    expect(deviceStringForCompute('gpu', '0', 'equilibrium_aware_namd')).toBe('0')
+    expect(deviceStringForCompute('gpu', '0,1', 'equilibrium_aware_namd')).toBe('0,1')
+    expect(deviceStringForCompute('gpu', '', 'equilibrium_aware_namd')).toBe('0')  // default
+  })
+  it('CPU compute → "cpu" regardless of device field', () => {
+    expect(deviceStringForCompute('cpu', '0', 'equilibrium_aware_namd')).toBe('cpu')
+  })
+  it('GBIS forces "cpu" even when GPU is selected', () => {
+    expect(deviceStringForCompute('gpu', '0', IMPLICIT_GBIS_PROTOCOL)).toBe('cpu')
+  })
+  it('computeFromDeviceString inverts the encoding', () => {
+    expect(computeFromDeviceString('cpu')).toBe('cpu')
+    expect(computeFromDeviceString('CPU')).toBe('cpu')
+    expect(computeFromDeviceString('0')).toBe('gpu')
+    expect(computeFromDeviceString('0,1')).toBe('gpu')
+    expect(computeFromDeviceString(null)).toBe('gpu')
+  })
+})
 
 describe('mdChildRowLabel', () => {
   it('labels a derived child by its global run number', () => {

@@ -203,6 +203,19 @@ export function mdRemoteReconnectPrompt(jobs, clusterState) {
   return `⚠ ${n} Alpine run${n === 1 ? '' : 's'} in flight — reconnect to monitor and fetch results.`
 }
 
+/** Pure: is this a deferred-prep DRAFT job — created by "Use as NAMD seed" but not
+ *  yet solvated?  Its run control reads "Relax from oxDNA/mrDNA" and clicking it runs
+ *  the standard prep+relax (POST /md/jobs/{id}/prepare) from the seed's coordinates. */
+export function mdJobIsDraft(job) {
+  return job?.status === 'draft'
+}
+
+/** Pure: the run-button label for a selected draft — names the seed engine so the
+ *  user knows the run starts from those relaxed coordinates. */
+export function mdDraftRunLabel(job) {
+  return job?.seed_mrdna_job_id ? '▶ Relax from mrDNA' : '▶ Relax from oxDNA'
+}
+
 /** Pure: is any Alpine job submitted-and-in-flight (so the panel should keep polling
  *  SLURM status)?  Gates the remote-poll timer — false when nothing remote is active,
  *  so idle panels don't hit the network. */
@@ -396,6 +409,26 @@ export function mdResumeHistoryRows(job) {
   })
 }
 
+// The implicit-solvent (GBIS) protocol has no explicit water box, so the salt /
+// padding / water-shell / fast-mode knobs don't apply — GBIS is DNA-only, NVT,
+// standard CUDA.  Pure predicate so the UI (and a test) can gray those fields.
+export const IMPLICIT_GBIS_PROTOCOL = 'implicit_gbis_namd'
+export function isImplicitSolventProtocol(protocol) {
+  return protocol === IMPLICIT_GBIS_PROTOCOL
+}
+
+// The backend `devices` string encodes the Compute choice: "cpu" → the multicore
+// build (no VRAM limit); otherwise the CUDA device ids for the GPU build.  GBIS
+// implicit solvent can ONLY run on CPU, so it always resolves to "cpu".
+export function deviceStringForCompute(compute, cudaDevices, protocol) {
+  if (isImplicitSolventProtocol(protocol) || compute === 'cpu') return 'cpu'
+  return (cudaDevices && String(cudaDevices).trim()) || '0'
+}
+// Inverse: which Compute option a stored `devices` string represents.
+export function computeFromDeviceString(devices) {
+  return String(devices ?? '').trim().toLowerCase() === 'cpu' ? 'cpu' : 'gpu'
+}
+
 // Production segments of a fast job (HMR + GPU-resident, 4 fs) run ~9x the speed
 // of its strain-relief first segment (1 fs, standard CUDA): 4x from the larger
 // timestep and ~2.4x per step from GPU-resident acceleration (benchmarked
@@ -575,6 +608,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const advBody       = document.getElementById('md-jobs-adv-body')
   const threadsInput  = document.getElementById('md-jobs-threads')
   const devicesInput  = document.getElementById('md-jobs-devices')
+  const computeSel    = document.getElementById('md-jobs-compute')
   const saltModeSel   = document.getElementById('md-jobs-salt-mode')
   const mgInput       = document.getElementById('md-jobs-mg')
   const naclInput     = document.getElementById('md-jobs-nacl')
@@ -603,6 +637,37 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const anyOn = [displayToggle, flexToggle, trajToggle].some(t => t?.checked)
     if (!anyOn) vizOffRadio.checked = true
   }
+
+  // GBIS implicit solvent uses no water box → the explicit-solvent knobs (salt,
+  // padding, water shell, fast/HMR) don't apply.  Gray them out when GBIS is the
+  // selected protocol so the user isn't misled into tuning inert fields.
+  function _syncSolventFields() {
+    const implicit = isImplicitSolventProtocol(presetSel?.value)
+    for (const el of [saltModeSel, mgInput, naclInput, paddingInput, watershellInput, fastChk]) {
+      if (!el) continue
+      el.disabled = implicit
+      const host = el.closest('label') || el
+      host.style.opacity = implicit ? '0.4' : ''
+    }
+    // GBIS cannot run on CUDA → force Compute=CPU and block the GPU option (auto-
+    // reverting a prior GPU selection).  The CUDA-device field is inert on CPU.
+    if (computeSel) {
+      const gpuOpt = computeSel.querySelector('option[value="gpu"]')
+      if (gpuOpt) gpuOpt.disabled = implicit
+      if (implicit) computeSel.value = 'cpu'
+      computeSel.title = implicit
+        ? 'Implicit solvent (GBIS) is CPU-only on NAMD 3 — GPU is unavailable for this protocol.'
+        : ''
+    }
+    const cpu = implicit || computeSel?.value === 'cpu'
+    if (devicesInput) {
+      devicesInput.disabled = cpu
+      const host = devicesInput.closest('label') || devicesInput
+      host.style.opacity = cpu ? '0.4' : ''
+    }
+  }
+  presetSel?.addEventListener('change', _syncSolventFields)
+  computeSel?.addEventListener('change', _syncSolventFields)
 
   // List + detail
   const listEl      = document.getElementById('md-jobs-list')
@@ -1828,7 +1893,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // Queuing authors a plan — always enabled (engines need only be present at Launch).
       return { action: RUN_ACTION.RUN, label: '＋ Queue Relax', disabled: false }
     }
-    return mdRunControl(_selectedJob(), { busy: _launching, runTarget: _currentRunTarget() })
+    // A selected DRAFT (deferred-prep seed) relabels the launcher "Relax from oxDNA"
+    // and, when clicked, solvates-from-seed + starts THIS job (POST …/prepare).
+    const sel = _selectedJob()
+    if (mdJobIsDraft(sel)) {
+      return { action: RUN_ACTION.RUN, label: mdDraftRunLabel(sel), disabled: _launching }
+    }
+    return mdRunControl(sel, { busy: _launching, runTarget: _currentRunTarget() })
   }
   function _paintRunControl() {
     if (!runBtn) return
@@ -1874,9 +1945,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }
   runBtn?.addEventListener('click', () => {
     if (getChainMode?.()) return enqueueChainStage?.('relax')
+    const sel = _selectedJob()
     const action = _runControl().action
     if (action === RUN_ACTION.STOP) return _stopSelected()
     if (action === RUN_ACTION.RESUME) return _resumeSelected()
+    // Draft → prepare-from-seed + start THIS job; else launch a fresh relax.
+    if (mdJobIsDraft(sel)) return _launchRelax(sel.job_id)
     return _launchRelax()
   })
   // Repaint the Relax/Production controls when chain mode is toggled.
@@ -1885,7 +1959,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _renderProductionControls(_jobs.find(j => j.job_id === _selectedId) || null)
   })
 
-  async function _launchRelax() {
+  async function _launchRelax(draftId = null) {
     if (_launching) {
       console.log(`[${_ts()}] md-jobs: Relax clicked but already launching`)
       return
@@ -1909,14 +1983,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
 
     if (isLocalRun && !(await confirmNoConcurrentJob())) return
-    if (isLocalRun && !(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
+    // Only warn about a busy GPU when this run actually targets the GPU.
+    const runsOnGpu = deviceStringForCompute(computeSel?.value, devicesInput?.value, presetSel?.value) !== 'cpu'
+    if (isLocalRun && runsOnGpu && !(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
     _launching = true
     runBtn.disabled = true
 
     const payload = {
       protocol:       presetSel?.value ?? 'mgh_slow_release',
       threads:        parseInt(threadsInput?.value  ?? '16', 10),
-      devices:        devicesInput?.value?.trim()   ?? '0',
+      devices:        deviceStringForCompute(computeSel?.value, devicesInput?.value, presetSel?.value),
       salt_mode:      saltModeSel?.value ?? 'screening',
       mg_conc_mM:     parseFloat(mgInput?.value     ?? '12.5'),
       ion_conc_mM:    parseFloat(naclInput?.value   ?? '0'),
@@ -1935,8 +2011,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
 
     // Local-disk forecast only applies to a local run; an Alpine run writes its
-    // trajectory on the cluster's scratch, not this machine's disk.
-    if (isLocalRun) {
+    // trajectory on the cluster's scratch, not this machine's disk.  A seeded draft's
+    // size isn't known until it solvates, so skip the forecast (parity with the old
+    // seed flow, which never forecast either).
+    if (isLocalRun && !draftId) {
       try {
         const fc = await estimateMdDisk(payload)
         if (!(await confirmDiskSpaceOk(fc))) {
@@ -1956,7 +2034,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // createMdJob stamps the X-NADOC-Doc header so the backend reads the ACTIVE
       // design from THIS tab's document (without it the default/empty doc is used
       // and prep 404s with "No active design"). Returns null on any HTTP error.
-      const job = await api.createMdJob(payload)
+      // A draft prepares in place (seed comes from the draft record, not the payload).
+      const job = draftId
+        ? await api.prepareMdDraft(draftId, payload)
+        : await api.createMdJob(payload)
       console.log(`[${_ts()}] md-jobs: response body`, job)
 
       if (!job) {
@@ -1990,7 +2071,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         showToast(`Preparing: ${job.job_id}`, 'ok')
       }
       await _fetchJobs()
-      _selectJob(job.job_id)
+      // A draft keeps its id through prepare — _reselectJob forces the WS to
+      // re-subscribe for the now-preparing job (plain _selectJob would early-return).
+      _reselectJob(job.job_id)
     } catch (err) {
       hideOpProgress()
       console.error(`[${_ts()}] md-jobs: Run fetch threw`, err)
@@ -2194,8 +2277,36 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _closeWs()
     _renderList()
     _openDetailForJob(jobId)
+    _maybePrefillDraft(jobId)
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
+  }
+
+  /** When a DRAFT is selected, pre-fill the Advanced inputs from its stored prep
+   *  params (the defaults captured when "Use as NAMD seed" created it) and reveal the
+   *  Advanced drawer — so the user configures the standard relaxation, then presses
+   *  "Relax from oxDNA".  Runs once per selection; edits are read back on launch. */
+  function _maybePrefillDraft(jobId) {
+    const job = _jobs.find(j => j.job_id === jobId)
+    if (!mdJobIsDraft(job)) return
+    const p = job.prep_params || {}
+    const set = (el, v) => { if (el && v != null) el.value = String(v) }
+    set(presetSel, p.protocol)
+    set(threadsInput, p.threads)
+    // "cpu" belongs to the Compute selector, not the CUDA-device text field.
+    if (computeSel) computeSel.value = computeFromDeviceString(p.devices)
+    if (computeFromDeviceString(p.devices) === 'gpu') set(devicesInput, p.devices)
+    set(saltModeSel, p.salt_mode)
+    set(mgInput, p.mg_conc_mM)
+    set(naclInput, p.ion_conc_mM)
+    set(paddingInput, p.padding_nm)
+    if (watershellInput && p.water_shell_nm != null) watershellInput.value = String((p.water_shell_nm || 0) * 10)  // nm→Å
+    set(minstepsInput, p.minimize_steps)
+    if (autostartChk) autostartChk.checked = p.autostart ?? true
+    if (fastChk) fastChk.checked = p.fast ?? true
+    if (earlyStopChk) earlyStopChk.checked = p.early_stop_relax ?? false
+    _syncSolventFields()   // gray explicit-solvent knobs if the draft is GBIS
+    if (advBody && advBody.style.display === 'none') advToggle?.click()   // reveal the drawer
   }
 
   /** Re-open a job's detail after a (re)start.  `_selectJob` early-returns when the
@@ -2220,7 +2331,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // (_maybePollRemote → _applyJobState).  Only open the WS for a job running/prepping
     // LOCALLY.  Otherwise do a single REST refresh.
     const onCluster = !!job?.slurm_job_id
-    if (!onCluster && (!job || !_TERMINAL_STATUSES.has(job.status))) {
+    // A draft streams nothing (no prep running yet) — skip the WS; the REST refresh
+    // below keeps its state current until "Relax from oxDNA" flips it to preparing.
+    if (!onCluster && job?.status !== 'draft' && (!job || !_TERMINAL_STATUSES.has(job.status))) {
       _openWs(jobId)
       _startWsWatchdog()   // safety net: reconnect/unwedge the socket if it drops
     } else {

@@ -373,6 +373,68 @@ def _carve_water_shell(
     return kept
 
 
+def _recenter_pdb_in_padded_box(
+    pdb_text: str, padding_nm: float
+) -> tuple[str, tuple[float, float, float]]:
+    """Translate every ATOM/HETATM so the structure's bounding box is centred in a
+    rectangular ``[0, L]`` cell of size ``span + 2·padding`` per axis.
+
+    Returns ``(recentred_pdb_text, (bx, by, bz) in nm)``.
+
+    WHY: the DNA model's native coordinate frame is arbitrary (its centroid can sit
+    hundreds of Å off the box centre — e.g. a plate symmetric about Y=0).  We must
+    write the DNA to the final solvated PDB in the SAME frame as the water gmx
+    places, and with a ``cellOrigin`` (= box/2) that actually encloses it.  Centring
+    here — then telling ``gmx editconf`` NOT to re-centre (``-noc``) — guarantees one
+    shared frame for DNA + water; otherwise editconf's own ``-c`` shift is applied to
+    the water only, leaving the DNA far outside the periodic cell → NAMD's GPU
+    tile-list kernel hits an illegal memory access at startup (buildTileLists).
+    """
+    pad_a = padding_nm * 10.0  # nm → Å
+
+    xs: list[float] = []
+    ys: list[float] = []
+    zs: list[float] = []
+    for ln in pdb_text.splitlines():
+        if ln.startswith(("ATOM", "HETATM")):
+            try:
+                xs.append(float(ln[30:38]))
+                ys.append(float(ln[38:46]))
+                zs.append(float(ln[46:54]))
+            except ValueError:
+                pass
+    if not xs:
+        raise RuntimeError("No ATOM/HETATM records found in PDB for solvation.")
+
+    xmin, xmax = min(xs), max(xs)
+    ymin, ymax = min(ys), max(ys)
+    zmin, zmax = min(zs), max(zs)
+
+    # Translation that maps each axis' minimum to +padding (bbox → [pad, span+pad]).
+    tx = pad_a - xmin
+    ty = pad_a - ymin
+    tz = pad_a - zmin
+
+    out: list[str] = []
+    for ln in pdb_text.splitlines():
+        if ln.startswith(("ATOM", "HETATM")):
+            try:
+                x = float(ln[30:38]) + tx
+                y = float(ln[38:46]) + ty
+                z = float(ln[46:54]) + tz
+            except ValueError:
+                out.append(ln)
+                continue
+            out.append(f"{ln[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{ln[54:]}")
+        else:
+            out.append(ln)
+
+    bx = ((xmax - xmin) + 2 * pad_a) / 10.0  # Å → nm
+    by = ((ymax - ymin) + 2 * pad_a) / 10.0
+    bz = ((zmax - zmin) + 2 * pad_a) / 10.0
+    return "\n".join(out) + "\n", (bx, by, bz)
+
+
 def _gmx_solvate(
     pdb_text: str,
     padding_nm: float,
@@ -380,48 +442,69 @@ def _gmx_solvate(
     progress: Optional[ProgressCb] = None,
     *,
     water_shell_nm: Optional[float] = None,
-) -> tuple[list[_Water], tuple[float, float, float]]:
+) -> tuple[list[_Water], tuple[float, float, float], str]:
     """Place TIP3P water around the DNA using GROMACS.
 
-    Returns (waters, (bx, by, bz)) where positions are in nm.
+    Returns ``(waters, (bx, by, bz) in nm, recentred_pdb_text)``.  The returned PDB
+    is the DNA translated into the SAME ``[0, L]`` frame as the water (see
+    :func:`_recenter_pdb_in_padded_box`); callers MUST write *this* text (not the
+    original ``pdb_text``) so DNA and water co-register and every atom sits inside
+    the periodic cell.
 
-    If ``water_shell_nm`` is set, water molecules farther than that distance from
-    any DNA atom are removed (see :func:`_carve_water_shell`) — the box stays the
-    same size but bulk water in the empty corners is dropped to fit large designs
-    on a memory-limited GPU.
+    If ``water_shell_nm`` is set, GROMACS places ONLY a hydration layer of that
+    thickness around the DNA (``gmx solvate -shell``) instead of filling the whole
+    box.  For a large sparse origami (e.g. a 121 nm plate) filling the box then
+    trimming generated ~6 M waters just to keep the shell — a multi-GB peak in gmx
+    AND again when Python parses the full ``.gro`` (the parse hit 22 GB and OOM-crashed
+    WSL on GT_corner_v2).  ``-shell`` writes only the shell waters, so the box stays
+    the same size (unchanged PME/cellOrigin) but the intermediate never materialises.
     """
     gmx = _find_gmx()
     hard_timeout = _gmx_hard_timeout_s(pdb_text)
 
+    # Centre the DNA ourselves in a rectangular box, then tell editconf NOT to move
+    # it (-noc) — so the DNA we hand back and the water gmx places share one frame.
+    pdb_text, box_nm = _recenter_pdb_in_padded_box(pdb_text, padding_nm)
+    bx, by, bz = box_nm
+
     (tmpdir / "dry.pdb").write_text(pdb_text)
 
-    # editconf: centre structure in a rectangular box with given padding
+    # editconf: set the explicit box; do NOT centre (coords are already centred).
     _emit(progress, "solvate", None, "Building solvation box (gmx editconf)…")
     _run_watched([
         gmx, "editconf",
         "-f", "dry.pdb",
         "-o", "dry.gro",
-        "-c",
-        "-d", str(padding_nm),
+        "-noc",
+        "-box", f"{bx:.4f}", f"{by:.4f}", f"{bz:.4f}",
         "-bt", "triclinic",
         "-nobackup",
     ], cwd=tmpdir, hard_timeout_s=hard_timeout)
 
-    # solvate: fill box with pre-equilibrated TIP3P water (spc216.gro geometry)
-    _emit(progress, "solvate", None, "Adding TIP3P water (gmx solvate)…")
-    _run_watched([
+    # solvate.  With a shell request, pass -shell so gmx places ONLY a hydration
+    # layer around the DNA (no full-box fill → no multi-GB memory spike); otherwise
+    # fill the box (small designs that fit).  TIP3P geometry comes from spc216.gro.
+    shell_native = bool(water_shell_nm and water_shell_nm > 0)
+    msg = (f"Adding TIP3P hydration shell ({water_shell_nm:.2f} nm, gmx solvate -shell)…"
+           if shell_native else "Adding TIP3P water (gmx solvate)…")
+    _emit(progress, "solvate", None, msg)
+    solvate_cmd = [
         gmx, "solvate",
         "-cp", "dry.gro",
         "-cs", "spc216.gro",
         "-o", "solvated.gro",
         "-nobackup",
-    ], cwd=tmpdir, hard_timeout_s=hard_timeout)
+    ]
+    if shell_native:
+        solvate_cmd += ["-shell", f"{water_shell_nm:.4f}"]
+    _run_watched(solvate_cmd, cwd=tmpdir, hard_timeout_s=hard_timeout)
 
     gro_text = (tmpdir / "solvated.gro").read_text()
-    waters, box_nm = _parse_gro(gro_text, progress=progress)
-    if water_shell_nm and water_shell_nm > 0:
-        waters = _carve_water_shell(waters, pdb_text, water_shell_nm, progress=progress)
-    return waters, box_nm
+    waters, _box_from_gro = _parse_gro(gro_text, progress=progress)
+    # gmx -shell already restricted the water to the hydration shell — no Python carve
+    # (a KD-tree over every water) needed.  The non-shell path keeps the full box.
+    # Use OUR explicit box (matches the centred DNA + cellOrigin=box/2), not gmx's.
+    return waters, box_nm, pdb_text
 
 
 def _gmx_solvate_periodic(
@@ -2040,8 +2123,11 @@ def build_namd_solvated_package(
     with tempfile.TemporaryDirectory(prefix="nadoc_solvate_") as _tmpdir:
         tmpdir = Path(_tmpdir)
 
-        # 2. GROMACS solvation → water positions + solvated box dimensions
-        waters, box_nm = _gmx_solvate(
+        # 2. GROMACS solvation → water positions + solvated box dimensions.
+        #    _gmx_solvate returns the DNA re-centred into the SAME [0,L] frame as the
+        #    water; use THAT text below so DNA + water co-register and every atom
+        #    lands inside the periodic cell (else NAMD's GPU kernel crashes).
+        waters, box_nm, dna_pdb = _gmx_solvate(
             dna_pdb, padding_nm, tmpdir, progress=progress,
             water_shell_nm=water_shell_nm,
         )
@@ -2233,7 +2319,7 @@ def get_solvation_stats(
 
     with tempfile.TemporaryDirectory(prefix="nadoc_solvate_stats_") as _tmp:
         tmpdir = Path(_tmp)
-        waters, box_nm = _gmx_solvate(dna_pdb, padding_nm, tmpdir, water_shell_nm=water_shell_nm)
+        waters, box_nm, _ = _gmx_solvate(dna_pdb, padding_nm, tmpdir, water_shell_nm=water_shell_nm)
 
     ion_volume_nm3 = (
         len(waters) / _WATER_NUMBER_DENSITY_NM3

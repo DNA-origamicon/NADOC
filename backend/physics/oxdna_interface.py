@@ -1156,6 +1156,37 @@ def read_configuration_unwrapped(
                                      align_keys=align_keys, rotate=rotate, align=align)
 
 
+def read_configuration_full_unwrapped(
+    conf_path: str | Path,
+    design:    Design,
+    *,
+    copies: bool = False,
+    include_extra_bases: bool = False,
+) -> dict[tuple, dict]:
+    """``read_configuration_full`` + PBC make-whole, WITHOUT any reference alignment.
+
+    oxDNA writes coordinates wrapped into the box ``[0, L)``, so a structure that
+    streamed to a box face (e.g. an E-field + surface deposition run — the COM drifts
+    under an unanchored field) straddles the periodic boundary.  Read raw, the
+    backbone then has ~L-sized jumps at each wrap, and the seed spline reconstruction
+    overshoots — flinging atoms thousands of Å out (PDB-field overflow → corrupt
+    downstream files).  This BFS-unwraps each bonded component to one continuous
+    molecule (same graph the display uses: backbone bonds + designed base pairs), but
+    with ``align=False`` — it does NOT superpose onto a reference, so the *deformed*
+    (surface-flattened) conformation is preserved in its own frame.  A structure that
+    is already whole passes through unchanged (min-image no-op).  Returns the same
+    shape as :func:`read_configuration_full`.  Used by the NAMD-seed reconstruction.
+    """
+    relax = read_configuration_full(conf_path, design, copies=copies,
+                                    include_extra_bases=include_extra_bases)
+    box = _parse_box_nm(conf_path)
+    if box is None or not np.all(box > 0):
+        return relax
+    # ref = the wrapped read itself → the per-component box-shift keeps each whole
+    # component near its original image; align=False skips the Kabsch superpose.
+    return unwrap_align_to_reference(relax, relax, design, box, align=False)
+
+
 def _backbone_adjacency_pairs(design: Design):
     """Consecutive backbone-bonded key pairs for the unwrap graph, threading loop
     copies as 4-tuples (``prev_real → copy0 → … → next_real``).

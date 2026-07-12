@@ -207,6 +207,15 @@ Relaxed `last_conf.dat` → `cg_to_atomistic.build_atomistic_model_from_cg_splin
 *starting structure* instead of ideal B-DNA. UI: a "Use as NAMD seed" action on a completed oxDNA job that
 pre-fills a new MD job. This closes the melt-prevention loop end-to-end.
 
+### 10.1 The seed is a PURE function of the oxDNA positions (fixed 2026-07-11)
+A NAMD seed reconstructs each nucleotide from its oxDNA CG frame (CM, a1, a3) and must NOT re-apply any
+design-level geometry. `build_atomistic_model` normally ends with `apply_deformations_to_atoms(atoms, design)`
+(deformations + `cluster_transforms`); for a seed that would DOUBLE transforms the oxDNA frame already carries
+→ the GT_corner_v2 "explosion" (K3). The seed path now calls `build_atomistic_model(..., apply_design_geometry=
+False)` so the reconstruction depends ONLY on the oxDNA conf. Pinned by `tests/test_cg_seed_cluster_transform.py`
+(cluster rotation/translation/multi-cluster all reconstruct ~1× with WC intact). Guard in
+`build_atomistic_model_from_cg_spline` still raises on any >2× span blow-up as a safety net. See [[LESSONS]] K3.
+
 ---
 
 ## 25. Hard surface + anchors + consolidated run + relax-on-surface (SHIPPED 2026-06-18, commit 0dcb838)

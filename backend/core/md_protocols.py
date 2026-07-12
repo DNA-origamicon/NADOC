@@ -37,7 +37,10 @@ from backend.core.models import Design
 
 LEGACY_PROTOCOL = "mgh_slow_release"
 EQUILIBRIUM_AWARE_PROTOCOL = "equilibrium_aware_namd"
-SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL}
+# Implicit-solvent (Generalised Born) relaxation — no water box, fits small GPUs.
+# Builder lives in backend.core.namd_gbis (kept out of this god-file).
+IMPLICIT_GBIS_PROTOCOL = "implicit_gbis_namd"
+SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBIS_PROTOCOL}
 AKSIMENTIEV_STEPS_PER_CYCLE = 12
 
 
@@ -463,6 +466,8 @@ def _common_header(
     timestep: float = 2.0,
     gpu_resident: bool = False,
     structure_psf: Optional[str] = None,
+    gbis: bool = False,
+    gbis_ion_conc_M: float = 0.15,
 ) -> str:
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
@@ -472,6 +477,50 @@ def _common_header(
     # would silently drop the long-range wrap bonds of a periodic cell.  This
     # md_protocols path only ever produces capped boxes, so it is sound here.
     gpu_line = "GPUresident        on\n" if gpu_resident else ""
+
+    # Electrostatics/solvent block.  Two mutually exclusive modes:
+    #   • Explicit water (default): a periodic capped box + PME long-range sum.
+    #   • Implicit solvent (gbis=True): Generalised Born, NO water box and NO PME
+    #     — the solvent is a dielectric continuum, so there are no cell vectors,
+    #     no wrapping, and salt enters as a Debye ionConcentration.  This drops
+    #     the atom count ~6-7x (DNA only) so a large origami fits a small GPU's
+    #     VRAM at buildTileLists (the explicit box overflows an 8 GB card).  The
+    #     longer 16 Å cutoff is standard for GBIS (Born-radius accuracy).
+    if gbis:
+        solvent_block = (
+            f"# Implicit solvent (Generalised Born) — no water box, no PME\n"
+            f"gbis               on\n"
+            f"alphaCutoff        14.0\n"
+            f"ionConcentration   {gbis_ion_conc_M:g}\n"
+            f"solventDielectric  78.5\n"
+            f"\n"
+            f"cutoff             16.0\n"
+            f"switching          on\n"
+            f"switchdist         14.0\n"
+            f"pairlistdist       18.0\n"
+            f"exclude            scaled1-4\n"
+            f"oneFourScaling     1.0\n"
+        )
+    else:
+        solvent_block = (
+            f"cellBasisVector1   {bx:.3f}  0.000    0.000\n"
+            f"cellBasisVector2   0.000    {by:.3f}  0.000\n"
+            f"cellBasisVector3   0.000    0.000    {bz:.3f}\n"
+            f"cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}\n"
+            f"\n"
+            f"wrapAll            off\n"
+            f"wrapWater          off\n"
+            f"\n"
+            f"PME                yes\n"
+            f"PMEGridSpacing     1.5\n"
+            f"\n"
+            f"cutoff             10.0\n"
+            f"switching          on\n"
+            f"switchdist         8.0\n"
+            f"pairlistdist       12.0\n"
+            f"exclude            scaled1-4\n"
+            f"oneFourScaling     1.0\n"
+        )
     return f"""\
 structure          {structure_psf or f"{name_stem}.psf"}
 coordinates        {name_stem}.pdb
@@ -480,24 +529,7 @@ paraTypeCharmm     on
 parameters         forcefield/par_all36_na.prm
 parameters         forcefield/toppar_water_ions_cufix.str
 parameters         forcefield/par_stub_ions_nbfix.str
-cellBasisVector1   {bx:.3f}  0.000    0.000
-cellBasisVector2   0.000    {by:.3f}  0.000
-cellBasisVector3   0.000    0.000    {bz:.3f}
-cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}
-
-wrapAll            off
-wrapWater          off
-
-PME                yes
-PMEGridSpacing     1.5
-
-cutoff             10.0
-switching          on
-switchdist         8.0
-pairlistdist       12.0
-exclude            scaled1-4
-oneFourScaling     1.0
-
+{solvent_block}
 rigidBonds         {rigid_bonds}
 rigidTolerance     1.0e-8
 
@@ -528,12 +560,15 @@ def _segment_conf(
     colvars_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
+    gbis: bool = False,
 ) -> str:
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
     # Fast mode (HMR + GPU-resident + 4 fs) applies only to hard segments — it is
-    # incompatible with the soft integrator's flexible bonds.
-    fast = fast and not spec.soft
+    # incompatible with the soft integrator's flexible bonds.  GBIS runs the
+    # standard CUDA path (GPUresident does not support implicit solvent), so fast
+    # is forced off for an implicit ladder.
+    fast = fast and not spec.soft and not gbis
     rigid_bonds = "none" if spec.soft else "all"
     timestep = 1.0 if spec.soft else (4.0 if fast else 2.0)
     # The HMR PSF (heavy hydrogens) is valid ONLY with rigid bonds, so soft
@@ -543,7 +578,7 @@ def _segment_conf(
     lines = [
         _common_header(
             name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
-            gpu_resident=fast, structure_psf=eff_psf,
+            gpu_resident=fast, structure_psf=eff_psf, gbis=gbis,
         )
     ]
     lines.append(f"outputName         output/{spec.name}\n")
@@ -556,7 +591,7 @@ def _segment_conf(
     lines.append(f"langevinTemp       {spec.temp:g}\n")
     lines.append(f"langevinDamping    {spec.damping:g}\n")
 
-    if spec.npt:
+    if spec.npt and not gbis:
         lines.append("useGroupPressure   yes\n")
         lines.append("useFlexibleCell    no\n")
         lines.append("useConstantArea    no\n")
@@ -623,13 +658,14 @@ def _min_conf(
     enm_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
+    gbis: bool = False,
 ) -> str:
     # enm_file overrides the default {name_stem}_k{scale}.enm.extra — used by the
     # declash protocol to minimise against an ss-excluded network.  Minimisation
     # (and the soft first segment it feeds) stays on the unmodified PSF + standard
     # CUDA; the HMR PSF only enters at the first hard, rigid-bond fast segment.
     enm = enm_file or f"{name_stem}_k{scale:g}.enm.extra"
-    lines = [_common_header(name_stem, box, mgh_extrabonds, rigid_bonds="none")]
+    lines = [_common_header(name_stem, box, mgh_extrabonds, rigid_bonds="none", gbis=gbis)]
     lines.append(f"outputName         output/{min_name}\n")
     lines.append(f"dcdFile            output/{min_name}.dcd\n")
     lines.append("dcdFreq            0\n")

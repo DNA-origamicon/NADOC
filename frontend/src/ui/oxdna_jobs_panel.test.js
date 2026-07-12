@@ -1016,7 +1016,11 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     const body = api.createMdJob.mock.calls[0][0]
     expect(body.oxdna_job_id).toBe('jSeed')
     expect(body.design_source_path).toBe('A.nadoc')
-    expect($('oxdna-jobs-seed-status').textContent.toLowerCase()).toContain('namd seed job created')
+    // Deferred-prep: the seed button creates a DRAFT (no solvation) that autostarts
+    // when the user later presses "Relax from oxDNA".
+    expect(body.draft).toBe(true)
+    expect(body.autostart).toBe(true)
+    expect($('oxdna-jobs-seed-status').textContent.toLowerCase()).toContain('draft')
   })
 
   it('on seed success → keeps the oxDNA panel OPEN (cards stay) + fires nadoc:md-job-created for the tab switch', async () => {

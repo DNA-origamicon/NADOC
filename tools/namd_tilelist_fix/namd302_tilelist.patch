@@ -1,0 +1,23 @@
+--- /dev/fd/63	2026-07-12 02:07:45.964089989 -0600
++++ src/CudaComputeNonbonded.C	2026-07-12 02:07:45.780504341 -0600
+@@ -1590,10 +1590,18 @@
+   for (int i=0;i < computes.size();i++) {
+     int pi1 = computes[i].patchInd[0];
+     int numAtoms1 = patches[pi1].numAtoms;
++    // NADOC FIX (2026-07-12): (n-1)/T+1 returns 1 for an EMPTY patch (n==0), because C
++    // truncates -1/T toward zero.  The device counts the same quantity with
++    // computeNumTiles() == (n+T-1)/T, which returns 0.  Every compute whose i-patch is
++    // empty therefore made the host over-count numTileLists by one, leaving an
++    // UNINITIALISED tail in tileLists[]; buildTileListsBBKernel reads it and indexes
++    // boundingBoxes[] far out of bounds -> cudaErrorIllegalAddress at the first step.
++    // Empty patches are ubiquitous in solvent-carved DNA-origami boxes (vacuum corners).
++    // Use the identical helper the device uses.  Matches upstream's dev branch.
+ #ifdef NAMD_HIP
+-    int numTiles1 = (numAtoms1-1)/BOUNDINGBOXSIZE+1;
++    int numTiles1 = CudaComputeNonbondedKernel::computeNumTiles(numAtoms1, BOUNDINGBOXSIZE);
+ #else
+-    int numTiles1 = (numAtoms1-1)/WARPSIZE+1;
++    int numTiles1 = CudaComputeNonbondedKernel::computeNumTiles(numAtoms1, WARPSIZE);
+ #endif
+     numTileLists += numTiles1;
+   }

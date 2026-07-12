@@ -532,3 +532,131 @@ its own run" button in the production box (`_renderProductionControls`), `client
 idempotent-and-guards-children); vitest `mdHasAppendedProduction` (+4). VERIFIED LIVE on
 `a0e54cdbf20f` (6hbx100_1xT): 15→12 segs, 80 MB partial production moved to backup, then a
 fresh production child spawned off the cleaned relaxation.
+
+## ⚡ Implicit-solvent (GBIS) protocol — no-water relaxation for small GPUs (2026-07-11)
+Third protocol `implicit_gbis_namd` (`IMPLICIT_GBIS_PROTOCOL`, in `md_protocols.SUPPORTED_PROTOCOLS`).
+**Why:** a large single-layer origami (e.g. GT_corner_v2, ~287k DNA atoms) in explicit water balloons to
+~1.9M atoms and NAMD dies at `buildTileLists` on an 8 GB GPU (VRAM). GBIS (Generalised Born) drops the
+system to DNA-only, so it fits. Trade-off (stated in UI/manifest): **no explicit Mg²⁺** → relaxation/
+minimise engine, not a Mg-stability model.
+- **Builder:** `backend/core/namd_gbis.py` (NEW module — kept out of the md_protocols god-file).
+  `build_namd_gbis_package` reuses `build_charmm_psfgen_topology` (the SAME H-complete dry PSF/PDB the
+  explicit strict path builds *before* solvation) → copies forcefield → ENM (`write_aksimentiev_enm_files`)
+  → **NVT-only** ladder (`mgh_slow_release_segments(nvt_only=True)`, no barostat in implicit) → GBIS confs.
+  `prepare_implicit_gbis_namd` is the protocol entry (accepts+ignores the explicit-solvent kwargs so
+  routes_md passes one uniform kwarg set). Salt: `ion_conc_mM`→GBIS Debye `ionConcentration` (M), else 0.15.
+- **Conf change:** `md_protocols._common_header(gbis=…)` swaps the periodic-box+PME block for the GBIS block
+  (`gbis on / alphaCutoff 14 / ionConcentration / solventDielectric 78.5`, cutoff 16/switch 14/pairlist 18,
+  NO cellBasisVector, NO PME, NO wrapWater). Threaded through `_min_conf`/`_segment_conf`; NPT + fast/HMR
+  (GPUresident) forced OFF under GBIS.
+- **Prep phases:** `build_prep_phases(implicit=True)` drops `solvate`+`assemble` (→ topology·enm·finalize,
+  n_phases=3). routes_md also **skips the `auto_water_shell` VRAM preflight** for GBIS (no water box; that
+  preflight is SLOW on large designs — builds the full atom model to count).
+- **Dispatch:** routes_md `_prepare_job_bg` maps protocol→prepare fn (gbis branch lazy-imports namd_gbis).
+- **⚠️ Runs on the CPU NAMD build, NOT CUDA.** GBIS is unsupported on the NAMD 3 CUDA nonbonded kernel
+  ("Warning: Always using force tables … unsupported config parameters" → `buildTileLists` illegal-memory
+  crash on the FIRST step) EVEN at 445k atoms (so it was never a VRAM problem — atom count is irrelevant
+  to that crash). `namd_runner.find_namd(prefer_cpu=True)` returns the first non-CUDA (`…-multicore`) build
+  and `run_job` passes `run_devices=""` (no `+devices`) for `implicit_gbis_namd`; raises a clear error if
+  only a CUDA build is installed. VERIFIED: same GT_corner_v2 GBIS package → CUDA build crashes at
+  buildTileLists; `…Linux-x86_64-multicore` build minimizes fine (clash count falls, GBIS energy finite).
+  **Caveat:** CPU GBIS is slow — minimize (4800 steps) is minutes, but the full 12-segment ×2.4M-step
+  ladder is impractical on CPU; use it to minimize/declash a seed + short relax (early-stop), not full
+  production. See [[LESSONS]] K4.
+- **Frontend:** third `<option value="implicit_gbis_namd">` in the Protocol `<select>` (`#md-jobs-preset`,
+  index.html) — flows straight into the payload `protocol` + restores via `_maybePrefillDraft`. Pure
+  `isImplicitSolventProtocol()` grays the explicit-only knobs (salt/mg/nacl/padding/watershell/fast) via
+  `_syncSolventFields()` on preset change.
+- **Tests:** `tests/test_md_gbis.py` (7: registered, phases drop solvation, dry PSF has no water/Mg, every
+  conf is GBIS-not-PME, NVT-only ladder, ENM present+referenced, salt maps mM→M); vitest
+  `isImplicitSolventProtocol` (+1). Backend prep VERIFIED headless (no GROMACS) + live via the API on
+  GT_corner_v2 (n_phases=3 confirmed). **App click-through of the dropdown NOT yet exercised live** (option
+  is served + payload wiring is unit-tested).
+- **Known cosmetic:** GBIS segments inherit the explicit ladder's names (`…_300K_NPT_ENM_…`, `…MGHH_only`)
+  from the shared `mgh_slow_release_segments`; the confs are correctly NVT/GBIS but the stage LABELS still
+  say NPT/MGHH. Left as-is to avoid touching the shared segment naming (resume/manifest key on it).
+
+## ⚡ Compute: GPU/CPU selector (any protocol can run on the CPU build) — 2026-07-11
+Generalised the GBIS CPU routing into a first-class **Compute** choice, because the CUDA `buildTileLists`
+crash is NOT memory (K2). PROVEN: the SAME 1.72M-atom explicit shell-solvated GT_corner_v2 that crashes on
+the CUDA build **minimizes fine on the `-multicore` build** (real water + Mg²⁺ intact, energy dropping).
+So CPU is a valid escape hatch for ANY protocol on a system the GPU can't take.
+⚠️ The old "large lateral footprint / too many patches" explanation is **superseded** — see the GPU
+pre-flight probe section below and K2. The crash is not a function of the patch grid at all.
+- **Encoding:** the job's `devices` string carries the choice — `"cpu"`/`"none"` → CPU build; GPU ids
+  (`"0"`, `"0,1"`, empty=auto) → CUDA build. `namd_runner.job_wants_cpu(protocol, devices)` (GBIS always
+  True) + `resolve_namd_launch(protocol, devices) → (namd_bin, run_devices)` pick the binary robustly across
+  ALL install combos: both builds present (honour choice); CPU-only machine (GPU request degrades to
+  multicore, no `+devices`); CUDA-only machine (explicit CPU request best-efforts to GPU; GBIS raises).
+  `run_job` calls the resolver.
+- **auto_water_shell is now CPU-aware** (`md_vram.py`): `devices="cpu"` → skip VRAM, size the carve to
+  **host RAM** (`max_atoms_for_host_ram`) — the carve still helps (fewer atoms = faster CPU). routes_md's
+  preflight runs for CPU too (only GBIS skips it entirely — no water box).
+- **Frontend:** `#md-jobs-compute` `<select>` (GPU (CUDA) / CPU (multicore)) in the Advanced drawer. Pure
+  `deviceStringForCompute(compute, cudaDevices, protocol)` builds the payload `devices`; `computeFromDeviceString`
+  restores it for drafts. GBIS forces Compute=CPU + **disables the GPU option** (auto-reverts a prior GPU
+  pick) and grays the CUDA-device field, via `_syncSolventFields()` (bound to preset+compute change). The
+  GPU-busy confirm is skipped for CPU runs.
+- **Tests:** `test_namd_discovery.py` (job_wants_cpu param table + resolve_namd_launch across every build
+  combo, incl. degrade/raise); `test_md_vram.py` (CPU sizes to host RAM not VRAM; no-host → full box);
+  vitest `deviceStringForCompute`/`computeFromDeviceString`. **Managed CPU explicit run VERIFIED live** end
+  to end (job 598… → prep w/ CPU host-RAM shell → `Linux-x86_64-multicore` binary → minimizing, 0 FATAL).
+  Compute dropdown served in-app; **the GBIS→force-CPU dropdown INTERACTION not click-verified live** (pure
+  logic is unit-tested + served).
+- **Benchmarks (RTX 2080 SUPER 8 GB / 8-thread CPU, NAMD 3.0.2):**
+  - Small explicit 4hb, **103,745 atoms**, 1200-step min: **GPU 12.0 s vs CPU 115.8 s → GPU ~9.7× faster**.
+    → Use GPU whenever the system fits; CPU is the fallback, not the default.
+  - GT_corner_v2 explicit shell, **1,716,606 atoms**: GPU **crashes** (footprint); CPU **1.43 s/step**
+    (2400-step min ≈ 57 min). GBIS variant (445k atoms) is ~4× lighter on CPU.
+  - Takeaway: on this 8 GB card GT_corner is CPU-only either way (explicit=tile-list crash, GBIS=CUDA-
+    unsupported). Explicit-CPU gives Mg but is ~4× heavier than GBIS-CPU; the full MD ladder is impractical
+    at 1.7M atoms on CPU — use CPU for minimize/declash + short relax. See [[LESSONS]] K2, K4.
+
+## 🔬 GPU pre-flight probe — the Compute decision is now PRINCIPLED, not manual (2026-07-11)
+Root-caused the CUDA `buildTileLists` crash with `compute-sanitizer` and replaced the blunt manual toggle
+with an empirical pre-flight. **Read this before touching GPU/CPU routing.**
+
+**The crash.** NAMD counts tile lists on the CPU (to size the kernel's loop) but fills them on the GPU.
+When the CPU count is larger, the tail of `tileLists[]` is never written; the kernel reads those **zeroed**
+entries and dereferences them into `boundingBoxes` far out of bounds (measured: index 184,320 into a
+13,166-entry array) → `cudaErrorIllegalAddress` on the first step. `boundingBoxes` is unguarded in that kernel.
+
+**INVARIANT — do not re-derive this.** The crash is **NOT a function of the patch grid**, so any
+`patch_grid_is_gpu_safe(Px,Py,Pz)` API is unsound. Decisive test: box held byte-identical (grid 26×3×34,
+P=2652), only the water shell varied → 0.5 nm/380k atoms **CRASH**, 1.0 nm/611k **RUN**, 1.5 nm/782k **RUN**.
+Same geometry, opposite verdicts; *adding* atoms can fix it. The real variable is the tile-list count
+≈ `14·P·⌈atoms/(32·P)⌉`, and it fails in **BANDS** (safe <~183k · CRASH ~186k–250k · safe ~251k–333k ·
+CRASH ~360k+), not above a threshold. That estimate separates 34/35 measured configs but mispredicts
+carved-shell systems (uneven per-patch density) — it can **flag risk but never certify safety**, which is
+exactly why routing on a formula was rejected. NAMD 3.1 does **not** fix the bug upstream.
+
+**What ships.** `namd_runner.gpu_tilelist_probe(package_dir, min_name, namd_bin, devices, threads)` runs ONE
+minimization cycle on the GPU (NAMD rejects step counts that aren't a multiple of `stepspercycle`, hence one
+cycle) with `outputName` diverted to a scratch stem so the real `output/` is never touched. ~5–15 s; verdict
+cached in the package as `.gpu_tilelist_probe.json` so a resume never re-pays. `run_job` calls it via
+`asyncio.to_thread` (it's a blocking subprocess — calling it directly would stall the API event loop) and,
+when unsafe, re-resolves to `find_namd(prefer_cpu=True)` with no `+devices`. Verified 4/4 exact against real
+crashing/running packages. **Fails open** (probe error → assume safe; a broken probe must never block a job)
+and is skipped entirely for Compute=CPU / GBIS jobs. Diagnostic `_gpu_probe.log` is left in the package.
+
+**Tests:** `tests/test_namd_gpu_probe.py` (conf rewrite, verdict, caching, cleanup, fail-open, devices
+wiring); `test_md_runner_proceeds.py::test_gpu_unsafe_geometry_reroutes_to_cpu_build` / `..._safe_geometry_
+stays_on_cuda_build` / `..._cpu_job_never_pays_for_the_probe`. See [[LESSONS]] K2.
+
+## ✅ SOLVED — the crash is a ONE-LINE NAMD BUG; patched build now ships (2026-07-12)
+Got the real 3.0.2 source. NAMD counts tile-lists twice: host `(n-1)/32+1` vs device `(n+31)/32`. They
+differ **only for an EMPTY patch** (host 1, GPU 0), so every compute with an empty i-patch leaves an
+uninitialised tile-list entry → the kernel reads it → wild `boundingBoxes[]` index → illegal address.
+Empty patches = **vacuum at the box corners** of a solvent-carved origami, which is why this hits us.
+
+- **Fix:** `tools/namd_tilelist_fix/` (1-line patch + `build_patched_namd.sh`) →
+  `~/Applications/NAMD_3.0.2p1_Linux-x86_64-multicore-CUDA/`. `find_namd()` prefers it **automatically**
+  (reverse-sorts `~/Applications/NAMD_*`; `3.0.2p1` > `3.0.2_`) — **no NADOC code change**.
+- **Proof it's causal:** an UNPATCHED rebuild from the same tree + same CUDA 12.6 toolchain still crashes
+  13/13; the patched one runs 13/13. Patched GPU matches the CPU build to ~0.02% total energy.
+- **⚠️ The other computer still runs stock NAMD** until `build_patched_namd.sh` is run there (needs
+  `sudo apt install cuda-toolkit-12-6` and the source tarball; use `sm_86` for the 3080 Ti). Until then its
+  GPU jobs are covered by the pre-flight probe above — that's why the probe stays.
+- Corrects two earlier claims in this file's history: the crash is **not** a "large lateral footprint"
+  (that was correlation), and NAMD 3.1 **does** fix it upstream (dev routes the host count through
+  `computeNumTiles()`).

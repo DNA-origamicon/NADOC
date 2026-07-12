@@ -9,6 +9,29 @@ metadata:
 
 # Simulate panel UX overhaul (2026-07-08, in progress)
 
+## ⚡ "Use as NAMD seed" now creates a deferred-prep DRAFT (configure-then-Relax) — 2026-07-11
+User ask: the seed button should NOT immediately solvate with defaults. Now it creates an **unstarted
+NAMD `draft`** (new `MdStatus.draft`) that records the seed source + default advanced params but DEFERS
+the expensive solvation. The user sets Advanced options, then presses **"Relax from oxDNA"** (the primary
+launcher relabels for a selected draft) which solvates-from-seed + runs the STANDARD relax into the SAME
+job id. Only the starting positions differ from a normal relax.
+- **Backend** (`routes_md.py`): `CreateJobRequest.draft` → `_spawn_draft_job` (status=draft, no prep,
+  `_seed_design_name` pulls a nice list label from the oxDNA/mrDNA job). New `POST /md/jobs/{id}/prepare`
+  (`prepare_draft_job`) runs the standard pipeline into the existing draft via `_spawn_prep_job(existing_job=…)`
+  (refactored to prep-in-place); the body carries the advanced settings, the draft owns the seed (body seed
+  ids ignored). `reconcile_job_status` leaves a draft untouched (only repairs stale `running`).
+- **Frontend**: oxDNA/mrDNA seed buttons post `{oxdna|mrdna_job_id, draft:true}` (was a full seed job).
+  `md_jobs_panel.js`: pure `mdJobIsDraft` / `mdDraftRunLabel` ("▶ Relax from oxDNA/mrDNA"); `_runControl`
+  draft branch; the run click routes a draft to `_launchRelax(draftId)` → `api.prepareMdDraft`; selecting a
+  draft pre-fills the Advanced inputs from its `prep_params` + reveals the drawer (`_maybePrefillDraft`); a
+  draft opens no status WS. `job_status_symbol.js`: `draft` badge = ✎ grey. Draft appears in the master
+  list once scoped to its design.
+- **Tests**: `test_md_draft.py` (draft persists, reconcile-inert, `_spawn_draft_job` defers prep);
+  vitest for the pure fns; `e2e/md_draft_seed.spec.js` (running-app smoke: draft created unsolvated +
+  surfaced in `/simulate/jobs` + app boots). NOTE: the button RELABEL click-through isn't e2e-asserted —
+  the overhauled master list scopes to the browser workspace path the harness can't set; the relabel is
+  the unit-tested pure `mdDraftRunLabel` wired through the same `_paintRunControl` as Relax→Resume.
+
 ## ⚡ Tabs reordered fast→accurate + "Use as NAMD seed" wiped oxDNA cards — FIXED 2026-07-11
 Two user asks. (1) Engine tabs reordered to **CanDo · mrDNA · oxDNA · NAMD** (fast→accurate):
 `ENGINE_KEYS = ['cando','mrdna','oxdna','namd']` in `engine_capabilities.js` drives tab order;

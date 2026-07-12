@@ -79,15 +79,21 @@ _CORE_PHASES = [
 ]
 
 
-def build_prep_phases(*, seeded: bool, size_factor: float = 1.0) -> list[PrepPhase]:
+def build_prep_phases(
+    *, seeded: bool, size_factor: float = 1.0, implicit: bool = False
+) -> list[PrepPhase]:
     """Return the ordered phase list for a prep run, scaled to design size.
 
     ``size_factor`` ≈ design_nt / 7000 (floored at ~0.15 so tiny designs still
     get a sane minimum estimate).  ``seeded`` prepends the seed-reconstruction
-    phase that only oxDNA-seeded jobs run.
+    phase that only oxDNA-seeded jobs run.  ``implicit`` (GBIS) drops the two
+    solvation phases — there is no water box to build or ions to place.
     """
     sf = max(0.15, float(size_factor))
-    src = ([_SEED_PHASE] if seeded else []) + _CORE_PHASES
+    core = _CORE_PHASES
+    if implicit:
+        core = [p for p in _CORE_PHASES if p.key not in ("solvate", "assemble")]
+    src = ([_SEED_PHASE] if seeded else []) + core
     return [
         dataclasses.replace(p, nominal_s=max(1.0, p.nominal_s * sf))
         for p in src

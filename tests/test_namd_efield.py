@@ -365,7 +365,7 @@ def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *, water_shell
 
     ns._emit(progress, "solvate", None, "fake solvate")
     waters = [_Water(i * 0.31, 0, 0, i * 0.31, 0.1, 0, i * 0.31, -0.1, 0) for i in range(2000)]
-    return waters, (12.0, 12.0, 12.0)
+    return waters, (12.0, 12.0, 12.0), _pdb_text
 
 
 @pytest.mark.slow

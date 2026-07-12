@@ -2191,8 +2191,14 @@ export const stopCandoAutorefine  = (id)          => _oxdnaJSON('POST', `/design
 export const applyCandoAutorefine = (id)          => _oxdnaJSON('POST', `/design/cando/autorefine/${id}/apply`)
 
 /** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
- *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA. */
+ *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA.
+ *  Pass {draft:true} (seeded only) to create an unprepared draft — solvation is
+ *  deferred to prepareMdDraft ("Relax from oxDNA"). */
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
+/** Prepare (solvate) + start a DRAFT NAMD job with the given advanced settings
+ *  (same body shape as createMdJob). Seeds from the draft's recorded oxDNA/mrDNA
+ *  source; backs the "Relax from oxDNA" button. */
+export const prepareMdDraft      = (id, body)    => _oxdnaJSON('POST', `/md/jobs/${id}/prepare`, body)
 /** Forecast free-disk-after for a NAMD relaxation run (same body as createMdJob). */
 export const estimateMdDisk      = (body)        => _oxdnaJSON('POST', '/md/jobs/estimate-disk', body)
 /** Forecast free-disk-after for a NAMD production stage (same body as appendMdProduction). */

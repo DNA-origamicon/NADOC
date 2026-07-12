@@ -4444,6 +4444,7 @@
                 <select id="md-jobs-preset"
                         style="width:100%;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px 5px;margin-bottom:6px">
                   <option value="equilibrium_aware_namd">Equilibrium-Aware NAMD</option>
+                  <option value="implicit_gbis_namd">Implicit Solvent (GBIS) — no water, fits small GPUs</option>
                   <option value="mgh_slow_release">Legacy Explicit Mg/MGH Slow Release</option>
                 </select>
                 <!-- Relax / Production buttons — relocated above the jobs card at init
@@ -4567,6 +4568,12 @@
                     <label style="color:#8b949e;align-self:center">Threads</label>
                     <input id="md-jobs-threads" type="number" value="16" min="1"
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center" title="GPU (CUDA) is fastest. CPU (multicore) has no VRAM limit and is REQUIRED for implicit solvent (GBIS) — and lets a large origami that overflows the GPU tile-list kernel still run.">Compute</label>
+                    <select id="md-jobs-compute"
+                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <option value="gpu">GPU (CUDA)</option>
+                      <option value="cpu">CPU (multicore)</option>
+                    </select>
                     <label style="color:#8b949e;align-self:center">CUDA device</label>
                     <input id="md-jobs-devices" type="text" value="0"
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">

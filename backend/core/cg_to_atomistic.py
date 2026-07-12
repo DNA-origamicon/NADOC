@@ -46,6 +46,7 @@ from backend.core.atomistic import AtomisticModel, build_atomistic_model
 from backend.physics.oxdna_interface import (
     read_configuration,
     read_configuration_full,
+    read_configuration_full_unwrapped,
     oxdna_backbone_site,
 )
 from backend.core.sequences import domain_bp_range
@@ -232,7 +233,10 @@ def build_atomistic_model_from_cg_spline(
     -------
     AtomisticModel with CG-informed backbone positions.
     """
-    full_map = read_configuration_full(conf_path, design)
+    # PBC make-whole: DEFENSIVE — an E-field/surface run can stream the structure
+    # across a box face; a wrapped strand would make the backbone spline overshoot.
+    # No-op for a structure already whole in [0,L) (the common case).
+    full_map = read_configuration_full_unwrapped(conf_path, design)
     # RAW backbone sites (no per-nucleotide smoothing): the override supplies each
     # nucleotide's radial DIRECTION (its helical phase) relative to the deformed
     # axis below; Gaussian-smoothing the per-nucleotide positions flattens the
@@ -246,8 +250,32 @@ def build_atomistic_model_from_cg_spline(
     # phase) against the BENT axis, not the ideal straight one — without this a
     # displaced helix collapses the twist and piles atoms together (seed clashes).
     axis_override = deformed_helix_axes(design, full_map, sigma=sigma)
-    return build_atomistic_model(
-        design, nuc_pos_override=pos_override, axis_override=axis_override)
+    # apply_design_geometry=False: the CG override already gives each nucleotide's FINAL
+    # world position (deformed + cluster-transformed, then oxDNA-relaxed).  Letting
+    # build_atomistic_model re-apply the design's deformations/cluster transforms on top
+    # would DOUBLE them — the ~N× explosion when seeding copy-pasted, rotated clusters.
+    # The seed is a pure function of the oxDNA positions; pre-oxDNA transforms don't apply.
+    model = build_atomistic_model(
+        design, nuc_pos_override=pos_override, axis_override=axis_override,
+        apply_design_geometry=False)
+
+    # Safety net: the reconstruction must preserve the CG structure's extent.  If a
+    # future seed still blows up (e.g. an unwrapped/torn conf), fail with an actionable
+    # message rather than writing a corrupt PDB whose overflowing coordinates crash NAMD
+    # downstream with a cryptic error.  (A correct reconstruction reconstructs at ~1×.)
+    if model.atoms and full_map:
+        cg = np.asarray([r["backbone_position"] for r in full_map.values()])
+        at = np.asarray([[a.x, a.y, a.z] for a in model.atoms])
+        cg_span = float(np.ptp(cg, axis=0).max())
+        at_span = float(np.ptp(at, axis=0).max())
+        if cg_span > 1.0 and at_span > 2.0 * cg_span:
+            raise ValueError(
+                f"oxDNA→atomistic reconstruction exploded the structure "
+                f"({cg_span:.0f} nm CG → {at_span:.0f} nm all-atom, {at_span/cg_span:.1f}×). "
+                f"The relaxed conf could not be reconstructed cleanly — re-run the oxDNA "
+                f"relaxation, or seed from a conformation that fits within one box."
+            )
+    return model
 
 
 def read_backbone_positions(
@@ -268,7 +296,7 @@ def read_backbone_positions(
     -------
     dict mapping (helix_id, bp_index, direction_str) → backbone position (nm).
     """
-    full = read_configuration_full(conf_path, design)
+    full = read_configuration_full_unwrapped(conf_path, design)
     return {
         key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
         for key, rec in full.items()

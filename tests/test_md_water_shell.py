@@ -10,11 +10,14 @@ collapse it onto the DNA's periodic image).
 
 from __future__ import annotations
 
+import pytest
+
 import backend.core.namd_solvate as ns
 from backend.core.namd_solvate import (
     _Water,
     _carve_water_shell,
     _ion_counts_mixed,
+    _recenter_pdb_in_padded_box,
     _WATER_NUMBER_DENSITY_NM3,
 )
 
@@ -40,6 +43,61 @@ def test_carve_keeps_near_drops_far():
     assert kept_ox == [0.5, 1.4]
 
 
+def _pdb_atom(serial: int, x: float, y: float, z: float) -> str:
+    return (
+        f"ATOM  {serial:>5d}  P   DA  A{serial:>4d}    "
+        f"{x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00      DNAA"
+    )
+
+
+def test_recenter_places_bbox_inside_padded_cell():
+    """A DNA model in an off-centre native frame (e.g. min X far negative, plate
+    symmetric about Y=0) must be translated so its whole bounding box sits inside
+    the [0, span+2*pad] cell — otherwise NAMD's GPU tile-list kernel indexes a
+    patch outside the grid and dies with an illegal memory access (buildTileLists).
+    """
+    pad_nm = 1.2
+    pad_a = pad_nm * 10.0
+    # Native frame: X far negative, Y symmetric about 0, Z offset — like GT_corner_v2.
+    pdb = "\n".join([
+        _pdb_atom(1, -188.9, -10.1, -3.4),   # bbox min corner
+        _pdb_atom(2, 1002.8, 10.1, 1182.2),  # bbox max corner
+    ]) + "\n"
+
+    out_text, (bx, by, bz) = _recenter_pdb_in_padded_box(pdb, pad_nm)
+
+    # Box = span + 2*pad on each axis (nm).
+    assert bx == pytest.approx((1002.8 - (-188.9) + 2 * pad_a) / 10.0)
+    assert by * 10 == pytest.approx((10.1 - (-10.1)) + 2 * pad_a)
+
+    xs, ys, zs = [], [], []
+    for ln in out_text.splitlines():
+        if ln.startswith("ATOM"):
+            xs.append(float(ln[30:38])); ys.append(float(ln[38:46])); zs.append(float(ln[46:54]))
+    # Every atom is strictly inside [0, L] with the padding preserved at the low face.
+    assert min(xs) == pad_a and min(ys) == pad_a and min(zs) == pad_a
+    assert max(xs) <= bx * 10 and max(ys) <= by * 10 and max(zs) <= bz * 10
+    # Centroid sits at the cell centre (cellOrigin = box/2 will enclose it).
+    assert abs((min(xs) + max(xs)) / 2 - bx * 10 / 2) < 1e-6
+    assert abs((min(ys) + max(ys)) / 2 - by * 10 / 2) < 1e-6
+
+
+def test_recenter_preserves_internal_geometry():
+    """Re-centring is a pure translation — all pairwise distances are unchanged."""
+    pdb = "\n".join([
+        _pdb_atom(1, 500.0, 0.0, 500.0),
+        _pdb_atom(2, 503.4, 4.0, 500.0),
+    ]) + "\n"
+    out_text, _ = _recenter_pdb_in_padded_box(pdb, 1.2)
+    coords = [
+        (float(ln[30:38]), float(ln[38:46]), float(ln[46:54]))
+        for ln in out_text.splitlines() if ln.startswith("ATOM")
+    ]
+    import math
+    d = math.dist(coords[0], coords[1])
+    assert abs(d - math.dist((500, 0, 500), (503.4, 4.0, 500.0))) < 1e-6
+
+
 def test_carve_distance_is_to_nearest_dna_atom():
     """Distance is measured to the *nearest* DNA atom, not the first."""
     # Two DNA atoms: origin and (10 nm, 0, 0).  A water at 9.5 nm is far from the
@@ -57,6 +115,48 @@ def test_carve_no_dna_reference_keeps_all():
     """With no ATOM records to carve against, all water is preserved (fail-safe)."""
     waters = [_Water(50.0, 0, 0, 50.0, 0.1, 0, 50.0, -0.1, 0)]
     assert _carve_water_shell(waters, "REMARK no atoms here\n", 1.5) == waters
+
+
+def _capture_solvate_cmd(monkeypatch, tmp_path, *, water_shell_nm):
+    """Drive _gmx_solvate with gmx stubbed out; return the `gmx solvate` argv it built.
+
+    Asserts the Python carve is NOT invoked (it would raise) — a shell request must be
+    satisfied by gmx's native ``-shell``, never by the full-box fill + KD-tree carve
+    that OOM-crashed WSL on a large design.
+    """
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd, cwd=None, hard_timeout_s=None):
+        calls.append(cmd)
+        (tmp_path / "solvated.gro").write_text("title\n0\n   1.0   1.0   1.0\n")
+
+    monkeypatch.setattr(ns, "_run_watched", _fake_run)
+    monkeypatch.setattr(ns, "_parse_gro", lambda text, progress=None: ([], (1.0, 1.0, 1.0)))
+    monkeypatch.setattr(ns, "_find_gmx", lambda: "gmx")
+    monkeypatch.setattr(ns, "_carve_water_shell",
+                        lambda *a, **k: pytest.fail("carve must not run when gmx -shell is used"))
+
+    pdb = (
+        "ATOM      1  P   DA  A   1     500.000 500.000 500.000  1.00  0.00      DNAA\n"
+        "ATOM      2  P   DA  A   2     503.400 504.000 500.000  1.00  0.00      DNAA\n"
+    )
+    ns._gmx_solvate(pdb, 1.2, tmp_path, water_shell_nm=water_shell_nm)
+    solvate = next(c for c in calls if "solvate" in c)
+    return solvate
+
+
+def test_shell_request_uses_native_gmx_shell(monkeypatch, tmp_path):
+    """A hydration-shell request adds `gmx solvate -shell <nm>` (no full-box fill)."""
+    cmd = _capture_solvate_cmd(monkeypatch, tmp_path, water_shell_nm=0.6)
+    assert "-shell" in cmd
+    assert cmd[cmd.index("-shell") + 1] == "0.6000"
+
+
+def test_no_shell_fills_box_without_shell_flag(monkeypatch, tmp_path):
+    """No shell requested → plain fill (no -shell); the small system fits as-is."""
+    # carve must not run here either — the no-shell path never carves.
+    cmd = _capture_solvate_cmd(monkeypatch, tmp_path, water_shell_nm=None)
+    assert "-shell" not in cmd
 
 
 def test_ion_count_volume_override_matches_water_volume():
