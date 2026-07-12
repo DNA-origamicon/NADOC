@@ -52,4 +52,30 @@ picked colormap — candidate to remove or sync.
 
 Pins (tests/test_oxdna_relaxation.py): `test_read_trajectory_frames_at_matches_full_reader` (selective==full), `_empty_request`, `_composite_trajectory_downsamples_across_stages` (9+8, budget 10→5+5+one marker), `_keeps_all_when_under_budget`, `test_oxdna_backbone_sites_batched_matches_scalar`, `test_unwrap_plan_matches_bfs` (vectorized==BFS on a rotated+translated+wrapped structure — the equivalence pin), `test_composite_trajectory_reports_progress` (0→100% monotonic), `test_oxdna_trajectory_progress_endpoint_idle`. `_ALIGNED_CACHE` still memoizes the 2nd load; a still-growing trajectory re-strides each poll (bounded now). Remaining floor for the 14774-nt/1.5 GB extreme (~31 s): text parse (~6 s) + file streaming + array (re)builds — would need frame byte-offset indexing / threading arrays instead of dicts to push further.
 
+**LOOP-INSERTION BASES NOW MOVE IN THE NAMD/MD PATH (2026-07-12).** Reported on `6hbx100_90deg`
+(16 loop `+1` + 16 skip `−1` marks realising a 90° bend): loop bases stayed at their geometric start
+after a NAMD relaxation in Display-MD + flex maps. Root cause = a **key collision**, not iteration:
+a `+1` loop emits a SECOND nucleotide sharing `(helix_id, bp_index, direction)` with its base, and
+the NAMD readback keyed by that bare 3-tuple (`md_pkey`) → the two collapsed. Crossover extra-bases
+had a disambiguator (`crossover_id`→`__xb__`); loop copies never did, and the **oxDNA path already
+carried a `copy` key** but the MD path was never brought to parity. Fix mirrors oxDNA: new
+`Atom.copy_k` (set at loop-copy emission in `atomistic.py`) → `md_pkey` emits a 4-tuple
+`(helix,bp,dir,copy)` for `copy≥1` (copy 0 stays a 3-tuple = byte-identical for every existing
+consumer) → propagated through `build_chain_map`/`p_order`/`md_rigid_reference` (its dedup dict no
+longer collapses the copies, so each gets its OWN Kabsch eq position) and the `md_rmsf` + `ws.py`
+live-MD payloads now carry a `copy` field. Frontend: `applyFemPositions`/`rmsfColorMap`/`framesToUpdates`
+were ALREADY copy-aware (`_copyKeyToEntry` in `helix_renderer.js`), so the flex map is fixed
+backend-only; `md_panel.js`'s live-frame map gained `copy: p.copy ?? 0`. Verified on the real design:
+1244 P atoms → 1244 distinct keys (was 1212 — 32 loop bases colliding). Tests:
+`tests/test_md_loop_base_coverage.py` (6, in-memory: distinct keys, distinct eq positions, every base
+moves after a fake relax, `md_rmsf` payload carries `copy`) + a loop-copy case in
+`frontend/src/ui/oxdna_display.test.js` `rmsfColorMap`. Other 3-tuple `p_order` consumers hardened to
+slice `key[:3]` (`_map_positions`, `_extract_universe`, `extract_from_pdb`, parameterization
+`bundle_extract`/`local_crossover_extract`). `openmm_checker` builds its own 3-tuple map (unaffected;
+its own loop collapse is pre-existing + out of the display path). **REAL end-to-end verified**: wrote a
+PDB+PSF+DCD from the 90deg design (MDAnalysis DCD, frame 1 = a per-atom relax) and ran the actual
+`md_rmsf` → `ready`, 1244 positions all carrying `copy`, 32 loop-copy entries, each loop key's base+copy
+at DISTINCT positions (was 1212 distinct = 32 colliding). The specific `fc6a91577151` NAMD job dir was
+cleaned up before this session, so the synthesized-but-real DCD stands in for the live job.
+
 **Verification gotchas (cost real time).** The dev backend uses uvicorn `--reload`; editing backend files under load WEDGES it on WSL2 (the smoke config runs WITHOUT --reload for this reason). The single-worker dev backend SERIALIZES requests, so concurrent heavy trajectory/RMSF reads + a Playwright run starve each other. Headless Playwright boot can CLEAR the active design (the trajectory/RMSF routes need it via get_or_404 → 404 "no trajectory yet" is really "no design"). The stable e2e (e2e/md_viz_tools.spec.js) asserts the toggle FIRES the right endpoint (page.waitForRequest) rather than waiting for the multi-minute compute — proves DOM→handler→mdViz→adapter→endpoint without the flaky slow path. See also [[md-job-system]] and [[md-panel-implementation-status-and-algorithm-details]].

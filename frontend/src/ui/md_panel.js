@@ -590,6 +590,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
           helix_id:          p.helix_id,
           bp_index:          p.bp_index,
           direction:         p.direction,
+          copy:              p.copy ?? 0,   // loop-insertion copy → right bead
           backbone_position: [p.x, p.y, p.z],
           nx: p.nx, ny: p.ny, nz: p.nz,
         })),

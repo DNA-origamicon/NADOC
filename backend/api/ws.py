@@ -638,11 +638,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 normals = dn / norms                               # unit vectors
 
             positions = []
-            for i, (hid, bpi, d) in enumerate(p_order):
+            for i, key in enumerate(p_order):
+                hid, bpi, d = key[0], key[1], key[2]
                 entry: dict = {
                     "helix_id":  hid,
                     "bp_index":  bpi,
                     "direction": d,
+                    "copy": key[3] if len(key) > 3 else 0,   # loop-copy index (0 = base)
                     "x": float(p_nm[i, 0]),
                     "y": float(p_nm[i, 1]),
                     "z": float(p_nm[i, 2]),

@@ -54,6 +54,7 @@ class BeadPosition:
     bp_index: int
     direction: str  # "FORWARD" | "REVERSE"
     pos: np.ndarray  # nm, shape (3,)
+    copy: int = 0    # loop-insertion copy index (0 = base / plain nucleotide)
 
 
 @dataclass
@@ -79,12 +80,22 @@ def md_pkey(atom) -> tuple:
     """The MD/trajectory nucleotide key for a P atom.
 
     ``("__xb__", crossover_id, extra_base_k)`` for a crossover extra-base insert
-    (whose stored helix/bp/direction is the SOURCE nucleotide's and would collide),
-    else ``(helix_id, bp_index, direction)``.  Single source of truth shared by
-    ``build_chain_map`` and the MD alignment-reference builder so they can never
-    drift (a missed copy crashed the live MD display on the str-vs-int compare)."""
+    (whose stored helix/bp/direction is the SOURCE nucleotide's and would collide);
+    ``(helix_id, bp_index, direction, copy_k)`` for a ``+1`` loop-insertion copy
+    (``copy_k >= 1``), whose stored helix/bp/direction ALSO collides with the base it
+    bulges off; else the plain ``(helix_id, bp_index, direction)``.  Single source of
+    truth shared by ``build_chain_map`` and the MD alignment-reference builder so they
+    can never drift (a missed copy crashed the live MD display on the str-vs-int
+    compare; a missed loop copy left loop bases un-moved after relaxation).
+
+    The 4-tuple is emitted ONLY for ``copy_k >= 1`` so plain nucleotides and each
+    loop's base (copy 0) keep the byte-identical 3-tuple every existing consumer
+    expects — mirrors the oxDNA ``copy`` convention (``copy ?? 0``)."""
     if getattr(atom, "crossover_id", None) is not None:
         return (_XB_SENTINEL, atom.crossover_id, atom.extra_base_k)
+    ck = getattr(atom, "copy_k", None)
+    if ck:
+        return (atom.helix_id, atom.bp_index, atom.direction, int(ck))
     return (atom.helix_id, atom.bp_index, atom.direction)
 
 
@@ -104,7 +115,7 @@ def md_rigid_reference(model, p_order):
     eq_valid = np.array([v is not None for v in eq_list], dtype=bool)
     eq_positions = np.array([v if v is not None else np.zeros(3) for v in eq_list])
     rigid_mask = eq_valid & np.array(
-        [isinstance(bpi, int) and bpi >= 0 for _, bpi, _ in p_order], dtype=bool)
+        [isinstance(k[1], int) and k[1] >= 0 for k in p_order], dtype=bool)
     return eq_positions, eq_valid, rigid_mask
 
 
@@ -124,7 +135,7 @@ def md_snap_mask(p_order, eq_valid, rigid_mask):
     """
     import numpy as np
     is_xb = np.array(
-        [hid == _XB_SENTINEL for hid, _bpi, _d in p_order], dtype=bool)
+        [k[0] == _XB_SENTINEL for k in p_order], dtype=bool)
     return (rigid_mask | is_xb) & eq_valid
 
 
@@ -172,13 +183,14 @@ def extract_from_pdb(pdb_text: str, chain_map: ChainMap) -> list[BeadPosition]:
         entry    = chain_map.get((chain_id, seq_num))
         if entry is None:
             continue
-        helix_id, bp_index, direction = entry
+        helix_id, bp_index, direction = entry[0], entry[1], entry[2]
+        copy = entry[3] if len(entry) > 3 else 0
         pos = np.array([
             float(line[30:38]) / 10.0,
             float(line[38:46]) / 10.0,
             float(line[46:54]) / 10.0,
         ])
-        beads.append(BeadPosition(helix_id, bp_index, direction, pos))
+        beads.append(BeadPosition(helix_id, bp_index, direction, pos, copy))
     return beads
 
 
@@ -534,8 +546,8 @@ def _extract_universe(
         positions_nm = _unwrap_min_image(positions_nm, box_nm)
 
     return [
-        BeadPosition(hid, bpi, d, positions_nm[i])
-        for i, (hid, bpi, d) in enumerate(p_order)
+        BeadPosition(k[0], k[1], k[2], positions_nm[i], k[3] if len(k) > 3 else 0)
+        for i, k in enumerate(p_order)
     ]
 
 
@@ -568,8 +580,8 @@ def _map_positions(
             f"{len(p_positions)} DNA P atoms found but p_order has {len(p_order)} entries."
         )
     return [
-        BeadPosition(hid, bpi, d, pos)
-        for (hid, bpi, d), pos in zip(p_order, p_positions)
+        BeadPosition(k[0], k[1], k[2], pos, k[3] if len(k) > 3 else 0)
+        for k, pos in zip(p_order, p_positions)
     ]
 
 

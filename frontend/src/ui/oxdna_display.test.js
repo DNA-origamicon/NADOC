@@ -150,6 +150,23 @@ describe('rmsfColorMap', () => {
     expect(map.min).toBe(0)                                       // data range, not bounds
     expect(map.max).toBe(2)
   })
+  it('keeps loop-insertion copies distinct (MD flex map): same helix/bp/dir, different copy', () => {
+    // A curved design's loop base + its insertion copy share (helix,bp,dir); the
+    // backend now tags them with `copy` so each addresses its OWN bead/colour.
+    const resp = { ready: true, min_rmsf: 0, max_rmsf: 1, positions: [
+      { helix_id: 'h0', bp_index: 5, direction: 'FORWARD', copy: 0, backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, rmsf: 0 },
+      { helix_id: 'h0', bp_index: 5, direction: 'FORWARD', copy: 1, backbone_position: [1, 1, 1], nx: 1, ny: 0, nz: 0, rmsf: 1 },
+    ] }
+    const map = rmsfColorMap(resp)
+    expect(map.updates).toHaveLength(2)                           // neither copy dropped
+    expect(map.updates[0].copy).toBe(0)
+    expect(map.updates[1].copy).toBe(1)
+    // 4-part keys differ so applyFemPositions routes each to its own bead...
+    expect(map.colorByKey['h0:5:FORWARD:0']).toBe(viridisHex(0))
+    expect(map.colorByKey['h0:5:FORWARD:1']).toBe(viridisHex(1))
+    // ...and the 3-part alias is the copy-0 base (unchanged for legacy consumers).
+    expect(map.colorByKey['h0:5:FORWARD']).toBe(viridisHex(0))
+  })
 })
 
 describe('rmsfToVertexColors', () => {

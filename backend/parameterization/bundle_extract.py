@@ -126,7 +126,8 @@ def _assign_residues_to_helices(
              len(p_atoms), len({e[0] for e in p_order}))
 
     result: dict[str, list] = {h.id: [] for h in design.helices}
-    for pa, (helix_id, bp_index, _direction) in zip(p_atoms, p_order):
+    for pa, key in zip(p_atoms, p_order):
+        helix_id, bp_index = key[0], key[1]
         result[helix_id].append((pa.residue.ix, bp_index))
 
     for h_id in result:

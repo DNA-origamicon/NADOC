@@ -87,7 +87,8 @@ def _build_c1p_map(
         )
 
     c1p_map: dict[tuple[str, int, str], int] = {}
-    for pa, (helix_id, bp_index, direction) in zip(p_atoms, p_order):
+    for pa, key in zip(p_atoms, p_order):
+        helix_id, bp_index, direction = key[0], key[1], key[2]
         rix = pa.residue.ix
         if pa.residue.atoms.select_atoms("name C1'").n_atoms > 0:
             c1p_map[(helix_id, bp_index, direction)] = rix

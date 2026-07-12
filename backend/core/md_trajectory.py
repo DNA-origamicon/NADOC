@@ -551,11 +551,14 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
         mean_norm = np.tile([0.0, 0.0, 1.0], (n_keys, 1))
 
     positions = []
-    for i, (hid, bp, direction) in enumerate(p_order):
+    for i, key in enumerate(p_order):
+        hid, bp, direction = key[0], key[1], key[2]
+        copy = key[3] if len(key) > 3 else 0   # loop-insertion copy index (0 = base)
         positions.append({
             "helix_id": hid,
             "bp_index": bp,
             "direction": direction,
+            "copy": copy,
             "backbone_position": [float(mean_pos[i, 0]), float(mean_pos[i, 1]),
                                   float(mean_pos[i, 2])],
             "nx": float(mean_norm[i, 0]),
@@ -576,6 +579,7 @@ def md_rmsf(topology_path, segments, coordinate_path, design,
                 "helix_id": key[0],
                 "bp_index": key[1],
                 "direction": key[2],
+                "copy": key[3] if len(key) > 3 else 0,   # 5'-termini are base copies (0)
                 "backbone_position": [float(mean_t[j, 0]), float(mean_t[j, 1]),
                                       float(mean_t[j, 2])],
                 "nx": float(mean_tnorm[j, 0]),

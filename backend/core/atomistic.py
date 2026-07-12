@@ -384,6 +384,12 @@ class Atom:
     # P-atom mapping address each insert as ``("__xb__", crossover_id, extra_base_k)``.
     crossover_id: Optional[str] = None
     extra_base_k: Optional[int] = None
+    # Intra-helix loop-insertion identity (None/0 for regular nucleotides).  A ``+1``
+    # loop emits a SECOND nucleotide sharing this atom's (helix_id, bp_index, direction);
+    # ``copy_k`` (geometry emission order, 0 = base) disambiguates the copies so the MD
+    # P-atom mapping can address each via ``(helix_id, bp_index, direction, copy_k)``
+    # instead of collapsing them (the analogue of ``extra_base_k`` for crossover inserts).
+    copy_k:       Optional[int] = None
 
 
 @dataclass
@@ -413,6 +419,7 @@ def merge_models(*models: AtomisticModel) -> AtomisticModel:
                 aux_t=a.aux_t,
                 crossover_id=a.crossover_id,
                 extra_base_k=a.extra_base_k,
+                copy_k=getattr(a, "copy_k", None),
             ))
         for i, j in model.bonds:
             bonds.append((i + offset, j + offset))
@@ -482,6 +489,7 @@ def atomistic_model_from_reference(
             aux_t=ref_atom.aux_t,
             crossover_id=getattr(ref_atom, "crossover_id", None),
             extra_base_k=getattr(ref_atom, "extra_base_k", None),
+            copy_k=getattr(ref_atom, "copy_k", None),
         ))
 
     bonds: list[tuple[int, int]] = []
@@ -1362,6 +1370,7 @@ def build_atomistic_model(
                             helix_id  = h_id,
                             bp_index  = bp,
                             direction = dir_str,
+                            copy_k    = copy_k or None,   # 0 → None (plain 3-tuple key)
                         ))
                         sugar_name_to_serial[atom_name] = serial
                         serial += 1
@@ -1387,6 +1396,7 @@ def build_atomistic_model(
                             helix_id  = h_id,
                             bp_index  = bp,
                             direction = dir_str,
+                            copy_k    = copy_k or None,   # 0 → None (plain 3-tuple key)
                         ))
                         base_name_to_serial[atom_name] = serial
                         serial += 1
