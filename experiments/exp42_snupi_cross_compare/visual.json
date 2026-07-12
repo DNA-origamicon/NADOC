@@ -1,0 +1,70 @@
+{
+  "results": [
+    {
+      "design": "3x4SQ",
+      "lattice": "SQ",
+      "engines": {
+        "cando": {
+          "shape_rmsd_vs_md_nm": 0.572,
+          "twist_deg": {
+            "md": 0.32,
+            "cando": 5.69
+          },
+          "bend_deg": {
+            "md": 13.21,
+            "cando": 14.15
+          },
+          "span_nm": {
+            "md": 14.88,
+            "cando": 14.13
+          },
+          "rmsf_vs_md": {
+            "pearson": 0.7031,
+            "spearman": 0.5326
+          },
+          "dccm_vs_md_pearson": 0.3925
+        },
+        "snupi": {
+          "shape_rmsd_vs_md_nm": 0.645,
+          "twist_deg": {
+            "md": 0.32,
+            "snupi": 13.02
+          },
+          "bend_deg": {
+            "md": 13.21,
+            "snupi": 14.63
+          },
+          "span_nm": {
+            "md": 14.88,
+            "snupi": 14.13
+          },
+          "rmsf_vs_md": {
+            "pearson": 0.7623,
+            "spearman": 0.6419
+          },
+          "dccm_vs_md_pearson": 0.3874
+        },
+        "snupi_corot": {
+          "shape_rmsd_vs_md_nm": 2.654,
+          "twist_deg": {
+            "md": 0.32,
+            "snupi": 4.03
+          },
+          "bend_deg": {
+            "md": 13.21,
+            "snupi": 66.76
+          },
+          "span_nm": {
+            "md": 14.88,
+            "snupi": 14.19
+          },
+          "rmsf_vs_md": {
+            "pearson": 0.385,
+            "spearman": 0.4643
+          },
+          "dccm_vs_md_pearson": 0.3874
+        }
+      }
+    }
+  ]
+}

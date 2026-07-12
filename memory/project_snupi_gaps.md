@@ -8,6 +8,22 @@ metadata:
 
 # SNUPI mimic — gap analysis vs the full publication + build plan
 
+## Visual-vs-NAMD automation + the shape gap (2026-07-12)
+`scripts/snupi_visual_compare.py` quantifies EVERY SNUPI display mode against the free-k0 NAMD DCD
+(shape RMSD to the MD mean + twist/bend/span; RMSF pattern; DCCM), across cando / snupi-default /
+snupi-corotational. CI-safe building-block pins in `tests/test_snupi_visual_compare.py`. Findings
+(`experiments/.../visual.json`):
+- **The default (ES-free) shape is the CLOSEST to the NAMD mean structure** — RMSD 0.57–0.65 nm
+  (~2% of the bundle). The deform/deviation/cylinder visuals "look like the design" because a
+  well-formed bundle genuinely IS mostly straight (NAMD confirms; SQ bend 14.6° FE vs 13.2° MD — match).
+- **The corotational+electrostatics path OVER-deforms** (bend 55–67° vs MD 7–13°, RMSD 1.7–2.7 nm) —
+  the ES force is too strong when it drives the shape. Confirms the shape-fix (ES-free default) was
+  right; the corotational-for-shape path needs ES-magnitude calibration before it's usable.
+- **Genuine shape gap = intrinsic TWIST** (HC 23.6° the straight-start FEM misses; snupi-default 0°).
+  This is **G10** (SNUPI's canonical initial config: ω≈34.3°/bp HC / 33.75° SQ, 2.25 nm CO). Closing it
+  = the shape twist matches MD. Touches the GEOMETRIC layer (Three-Layer) → confirm before implementing.
+- **RMSF + DCCM (flexibility) match NAMD** — the validated channels, unaffected.
+
 ## ✅ Phase D DONE (2026-07-12) — G4 + G5 + G11 (full corotational Newton; opt-in, shape-only)
 - **G4 corotational 3D beam** — `backend/physics/snupi_corotational.py`. Element-independent corotational
   (EICR): wraps the STANDARD 12×12 linear beam (`local_beam_stiffness_12`) as the local core and adds the
