@@ -51,6 +51,10 @@ instead of the full design. The main implementation is:
   on the tested RTX 2080 SUPER. Both modes log low global CUDA exclusion counts
   during minimization, which NAMD labels as not unusual during minimization; both
   completed 5,000-step MD benchmark phases without fatal exclusion errors.
+  - CAVEAT (2026-07-12): a *fatal* "Low global CUDA exclusion count" / `buildTileLists`
+    illegal-access under `GPUresident on` (vacuum-cornered / bent boxes) is the one-line
+    empty-patch NAMD bug — see [[LESSONS]] K2. Fix = patched `NAMD_3.0.2p1_*` build (NOT
+    the CUDA toolkit version). This box uses a CUDA-12.0-git-build symlink as a stopgap.
 
 ## Pressure And Box-State Notes
 

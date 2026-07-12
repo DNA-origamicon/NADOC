@@ -69,6 +69,20 @@ GOTCHA — do NOT add a large `margin`: I tried `margin 3.0` as insurance for th
 Removed it — default margin 0 + soft start is the working combo. The margin
 warning is benign once the soft start removes the instability that caused it.
 
+ROOT CAUSE — see [[LESSONS]] K2 (authoritative): this `buildTileLists` illegal access
+/ "Low global CUDA exclusion count" under `GPUresident on` on vacuum-cornered / bent
+boxes is a **one-line NAMD source bug** (host tile-count `(n-1)/32+1`=1 vs device
+`(n+31)/32`=0 for an EMPTY patch → uninitialised tile read → wild `boundingBoxes[]`
+index). Empty patches = the vacuum corners a carve leaves. NOT hardware, NOT structure,
+NOT the CUDA toolkit version (an unpatched CUDA-12.6 rebuild still crashes 13/13).
+Offload path is immune. Canonical fix = the patched `NAMD_3.0.2p1_*` build
+(`tools/namd_tilelist_fix/`), which `find_namd()` auto-prefers; the runner's
+`gpu_tilelist_probe` also auto-routes unsafe packages to the CPU build. On the 3080 Ti
+box the patched build isn't compiled yet, so `~/.local/bin/namd3` symlinks to the
+CUDA-12.0 git build as a stopgap (remove once `NAMD_3.0.2p1` is built there). The 90°
+bent 6hbx100 that re-surfaced this had a healthy structure (bonds ≤1.73 Å, exclusions
+≤4.24 Å, mgh restraints correct).
+
 To reuse a completed minimisation after a mid-ladder fix: regenerate the package
 `.conf` files (mgh_slow_release_segments + _segment_conf/_min_conf, **nvt_only=True
 for carved jobs**) in place, then POST /api/md/jobs/{id}/start — the runner skips
