@@ -152,7 +152,19 @@ extra-crossover-base extension (the only part needing GPU MD) plugs into the sam
 **Verdict test:** "SNUPI for free" = YES if transcribed params + the existing FEM reproduce MD
 (and SNUPI's published) shape/RMSF within a stated tolerance. Then the extra-base extension is the
 only GPU spend (~$3–8k — [[project_bundle_stiffness_params]] / [[project_crossover_parameterization]]),
-plugging into the same param DB.
+plugging into the same param DB. ✅ Verdict reached (snupi ≥ cando both lattices, at $0).
+
+- **P5 — Frontend SNUPI engine tab (NEXT, fresh session, 2026-07-11).** Surface the mimic in the app as
+  a first-class structure-prediction engine tab (sibling to CanDo FEM / mrDNA / oxDNA / NAMD). Backend
+  is READY: `predict_shape(design, material="snupi", anchors=, field=)` — no new solver work; this is a
+  UI/route wiring task. Scope: unified jobs card + live progress bar + advanced-params card + visualization
+  card with the standard rep toggles (RMSF coloring, axis/cylinder, backbone), and an INVESTIGATION into
+  wiring anchors + E-fields + surfaces (predict_shape already accepts `anchors=`/`field=`; how does CanDo
+  FEM surface them today, and can SNUPI reuse that path + a "surface" scope). Since SNUPI == a material flag
+  on the SAME FEM as CanDo, strongly prefer EXTENDING the existing CanDo-FEM job/route/panel with a
+  material selector over a parallel stack — decide in the fresh session after reading the panel architecture.
+  Module-first law applies (no main.js growth). Detailed build prompt handed to the fresh session (see
+  session handoff / the prompt generated 2026-07-11).
 
 ## Risks / rules
 - **Convention conversions** (3DNA vs beam element; SNUPI's own co-rotated local triad). The
