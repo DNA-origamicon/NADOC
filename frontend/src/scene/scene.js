@@ -9,6 +9,7 @@
 import * as THREE from 'three'
 import { OrbitControls }    from 'three/addons/controls/OrbitControls.js'
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
+import { makeMultiscaleControls } from './multiscale_controls.js'
 
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
@@ -73,13 +74,23 @@ export function initScene(canvas) {
   // initial state until the user explicitly switched modes.
   let _currentOrbitMode = 'orbit'
 
+  // Helix-axis segments for the Multiscale mode's nav-scale field. main.js
+  // installs the real provider (it needs the store); until then the mode simply
+  // falls back to the orbit-target distance.
+  let _navSegments = () => new Float64Array(0)
+  function setNavScaleProvider(fn) { _navSegments = fn }
+
   function switchOrbitMode(mode) {
     _currentOrbitMode = mode
     const savedTarget = _inner.target.clone()
     _inner.dispose()
-    _inner = mode === 'trackball'
-      ? _makeTrackballControls(camera, canvas, savedTarget)
-      : _makeOrbitControls(camera, canvas, savedTarget)
+    if (mode === 'trackball') {
+      _inner = _makeTrackballControls(camera, canvas, savedTarget)
+    } else if (mode === 'multiscale') {
+      _inner = makeMultiscaleControls(camera, canvas, savedTarget, () => _navSegments())
+    } else {
+      _inner = _makeOrbitControls(camera, canvas, savedTarget)
+    }
   }
 
   // ── Camera capture / animation helpers ─────────────────────────────────────
@@ -254,7 +265,7 @@ export function initScene(canvas) {
 
   return {
     scene, camera, renderer, controls,
-    switchOrbitMode, captureCurrentCamera, animateCameraTo,
+    switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
     setRenderCamera, restoreRenderCamera, getRenderCamera,
     getActiveControls,
     setResizeCallback, clearResizeCallback,

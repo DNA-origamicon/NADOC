@@ -45,6 +45,7 @@ import { selectionBBox } from './scene/selection_bbox.js'
 import { initAssemblyMultiBox } from './scene/assembly_multi_box.js'
 import { initAssemblyConfigAnimator } from './scene/assembly_config_animator.js'
 import { clientToNdc } from './scene/ndc.js'
+import { makeSegmentCache } from './scene/multiscale_nav.js'
 import { initFlexRelax } from './scene/flex_relax.js'
 import { initResponseDelta } from './scene/response_delta.js'
 import { initJointPick } from './scene/joint_pick.js'
@@ -242,7 +243,7 @@ async function main() {
   const canvas = document.getElementById('canvas')
   const {
     scene, camera, renderer, controls,
-    switchOrbitMode, captureCurrentCamera, animateCameraTo,
+    switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
     setRenderCamera, restoreRenderCamera, getRenderCamera,
     getActiveControls,
     setResizeCallback, clearResizeCallback,
@@ -510,6 +511,18 @@ async function main() {
         await api.batchPatchInstances(insts.map(i => ({ id: i.id, representation: repr })))
         console.log(`[dbg] set ${insts.length} instances → '${repr}'`)
         return insts.length
+      },
+
+      /**
+       * Multiscale-nav tuning handle (View → Orbit mode → Multiscale).
+       *   __NADOC_DBG__.msNav.probe()                  → nearest helix, local scale, nm per notch
+       *   __NADOC_DBG__.msNav.set({ zoomFrac, boost }) → live-tune the feel
+       * No-ops (returns null) unless Multiscale is the active orbit mode.
+       */
+      msNav: {
+        probe: () => getActiveControls().probeNavScale?.() ?? null,
+        set:   p  => getActiveControls().setNavParams?.(p) ?? null,
+        get:   () => getActiveControls().getNavParams?.() ?? null,
       },
 
       /**
@@ -3988,17 +4001,21 @@ async function main() {
     _setMenuToggle('menu-view-axes', originAxes.visible)
   })
 
-  // ── Orbit mode submenu (Turntable / Trackball) ──────────────────────────────
-  let _orbitMode = 'trackball'
+  // ── Orbit mode submenu (Multiscale / Turntable / Trackball) ─────────────────
+  let _orbitMode = 'multiscale'
   function _setOrbitMode(mode) {
     _orbitMode = mode
     switchOrbitMode(mode)
-    document.getElementById('menu-view-orbit-turntable')?.classList.toggle('is-checked', mode === 'turntable')
-    document.getElementById('menu-view-orbit-trackball')?.classList.toggle('is-checked', mode === 'trackball')
+    for (const m of ['multiscale', 'turntable', 'trackball']) {
+      document.getElementById(`menu-view-orbit-${m}`)?.classList.toggle('is-checked', mode === m)
+    }
   }
-  document.getElementById('menu-view-orbit-turntable')?.addEventListener('click', () => _setOrbitMode('turntable'))
-  document.getElementById('menu-view-orbit-trackball')?.addEventListener('click', () => _setOrbitMode('trackball'))
-  _setOrbitMode('trackball')  // apply default at startup
+  for (const m of ['multiscale', 'turntable', 'trackball']) {
+    document.getElementById(`menu-view-orbit-${m}`)?.addEventListener('click', () => _setOrbitMode(m))
+  }
+  // Must precede _setOrbitMode — Multiscale reads the helix-axis field on construction.
+  setNavScaleProvider(makeSegmentCache(() => store.getState().currentDesign))
+  _setOrbitMode('multiscale')  // default: zoom-to-cursor, scale-aware, no stall
 
   // ── Coloring submenu (Strand / Base / Cluster / Overhang / CPK) ─────────────
   function _setColoringMode(mode) {
