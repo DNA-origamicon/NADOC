@@ -113,6 +113,7 @@ also still said "→ NEXT: ISSUE-1", written before those issues existed. Ranked
 |-------|-------|------|------|--------------------|
 | done | ~~**ISSUE-9**~~ ✅ FIXED 2026-07-13. **Not teeth-specific** — a plain 4HB bundle ratcheted `168→189→199→210` bp and `6→9→12` crossovers over three routes, on both routers. Cause: the router derived the face it extends from its OWN previous output (`_scaffold_coverage`), and the extenders are monotone. Fixed by normalising the INPUT, not the algorithm: `scaffold_reset.py` retracts each helix + re-seeds the scaffold to the **staple**-defined extent (staples are the structure; autoscaffold never touches them) so `reset(route(fresh)) == fresh`. Also fixed a second bug: `create_near_ends`/`create_far_ends` crossovers survived every "clear" (only the `auto_scaffold_` prefix was matched). | routing correctness / **data loss** | medium | no (algorithmic) |
 | done | ~~**ISSUE-14**~~ ✅ FIXED 2026-07-13. NOT a console error and NOT an app bug — the spec died in the **test harness** during setup (a `waitForTimeout(500)` racing File→New's backend POST → 404 "No active design", plus a dead `/design/auto-scaffold` route 405-ing since `e9d6750`). Both fixed in `e2e/helpers/scene_harness.js` (shared by 9 specs). `just smoke` also now refuses to run under a live production sim, which was separately starving the heavy specs into timeouts. | test harness | — | — |
+| **→ 2** | **ISSUE-16** `predict_shape(with_rmsf=True)` is **nondeterministic** — every `eigsh` in `fem_solver.py` omits `v0=`, so ARPACK picks a random start vector and identical inputs give RMSF differing by up to **3.7e-3 nm**. Surfaces as an intermittent `test_g12_salt_ignored_by_cando` failure, but the flaky test is only the messenger: the FEM RMSF output isn't reproducible, which undermines every SNUPI-vs-CanDo/MD comparator that diffs RMSF floats. Fix: seed `v0`. **Coordinate — the other machine is actively working in SNUPI/FEM.** | correctness / reproducibility | small | no |
 | 3 | **ISSUE-11** Deformed-continuation helices carry `grid_pos=None` (`make_bundle_deformed_continuation` is the only builder not setting it). Any design with a deformed continuation **crashes** `canonical_topology`/`assert_roundtrip_stable`. Blast radius: `grid_pos` also drives cluster reconciliation, overhang-neighbor lookup and `loop_skip_calculator`. **ASK-FIRST** — the obvious one-line fix is suspected of being a Three-Layer trap (a non-None `grid_pos` may make `_helix_lattice_params` recompute lattice x/y and clobber the baked deformed world coords). | data model / three-layer | small IF approved | no (topology decision) |
 | 4 | **ISSUE-8** Autoscaffold multi-section single-strand routing. Section router codified in `backend/core/section_router.py` behind default-OFF `NADOC_SECTION_ROUTER`. **BLOCKED on a user decision**, not on code: window end-turn lands *just-inside* (≤6 bp tooth-tip coverage gap) or *just-outside* (few-bp extension into the physical gap, full coverage). Not silently wrong today (default-off + warn-only). Parent of ISSUE-9; can't close without it. | routing correctness | medium | **needs user call** |
 | 5 | **ISSUE-13** `resize_strand_ends` axis re-trim uses a different endpoint convention than `create_bundle` (`(max_bp − min_bp)·rise` vs `length_bp·rise` — one rise, ~0.334 nm, shorter). First resize of any end on a fresh bundle silently shifts `axis_end` and never reverts. Nucleotide count unaffected, but it breaks `canonical_topology` identity for a `+δ/−δ` inverse pair → a correctness hazard for any oracle that fingerprints axis floats. Same three-layer family as ISSUE-11. | geometry off-by-one | small | no (ask-first) |
@@ -263,6 +264,33 @@ gated on a decision only the user can make — don't burn a session trying to in
 All four are the single-strand TARGET (`scaffold_strands == 1`). The "yields 5/11 pieces" claim was measured
 on a CORRUPT fixture (see below); on the clean fixture the standard routers route teeth to 1 strand. Clean
 pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 with `workspace/preroute_teeth.nadoc`).
+
+## ISSUE-16 — `predict_shape(with_rmsf=True)` is NONDETERMINISTIC (unseeded ARPACK start vector)
+
+- **Status:** `[ ]` OPEN — found 2026-07-13 while chasing a "flaky" test in the full suite. Repro'd, not fixed
+  (it lives in the SNUPI/FEM area under active development on the other machine — coordinate before touching).
+- **Symptom (the messenger):** `tests/test_snupi_element.py::test_g12_salt_ignored_by_cando` fails
+  intermittently in the full parallel suite (`assert cando_drift < 1e-2`) and passes in isolation and as a
+  whole file. It only *runs* on an idle box — under a live NAMD job the sim guard skips it, which is why the
+  earlier runs in that session looked clean.
+- **The actual bug (worse than the test):** `predict_shape(design, with_rmsf=True)` **does not return the same
+  answer twice for identical inputs.** Measured on the suite's own `routed_6hb` fixture, three consecutive
+  calls: `max|run0 − run1| = 3.7e-3 nm`, `max|run0 − run2| = 2.6e-3 nm`. The FEM RMSF output is simply not
+  reproducible.
+- **Root cause:** every `eigsh(...)` call in `backend/physics/fem_solver.py` (lines ~1376, 1441, 1443, 1475,
+  1477) omits `v0=`. SciPy/ARPACK then draws a **random start vector** from numpy's global RNG, so the
+  shift-invert eigenvectors — and hence the RMSF built from them — differ run to run.
+- **Why the test is a trap:** it asserts the cando cross-salt drift is `< 1e-2`, where the true value should be
+  **~0** (cando has no electrostatics ⇒ `mgcl2_M` is inert). So the quantity under test is *pure eigensolver
+  noise*, and the assertion is really "is today's noise small enough". Its docstring claims that noise is
+  ~1e-4 nm; it is actually ~3.7e-3 nm, **~37× larger** than documented.
+- **Fix shape:** pass a deterministic start vector (e.g. `v0=np.ones(n)/sqrt(n)`, or a seeded RNG draw) to every
+  `eigsh` call, so the eigenproblem is reproducible. Then re-tighten the test's tolerance to something that
+  actually discriminates (with a deterministic solver the cando drift should be ~0, not ~1e-3), and correct the
+  docstring's noise figure.
+- **Blast radius:** anything that fingerprints or diffs FEM RMSF — the SNUPI-vs-CanDo comparators, the
+  shape-gap diagnosis, and any oracle asserting on RMSF floats. A cross-engine comparison whose own solver has
+  ~4e-3 nm of run-to-run jitter cannot resolve differences below that.
 
 ## ISSUE-9 — Autoscaffold is not idempotent — ✅ FIXED 2026-07-13
 
