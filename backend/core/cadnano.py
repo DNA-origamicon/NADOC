@@ -743,27 +743,21 @@ def _assign_grid_coords(
     return rows, cols, export_dirs
 
 
-def export_cadnano(design: Design) -> dict:
-    """Convert a NADOC Design to a caDNAno v2 JSON dict.
+def _export_layout(design: Design) -> dict:
+    """Compute the caDNAno grid layout + bp offset shared by every exporter.
 
-    Supports HC and SQ designs (native or imported).  Raises ValueError if
-    helix positions cannot be mapped to valid caDNAno grid coordinates.
+    Returns a dict with the pieces both ``export_cadnano`` (array building) and
+    ``export_cadnano_with_labels`` (node-identity map for the SNUPI comparator)
+    need, so the two never drift:
 
-    Algorithm
-    ---------
-    1. Recover caDNAno (row, col) via _assign_grid_coords():
-       HC  — col = round(|x|/COL_PITCH); FORWARD row via 3R step+stagger.
-       SQ  — col = round(|x|/2.25nm);    row via uniform 2.25 nm step.
-       Both: centre result in the caDNAno default grid.
-    2. Assign unique num: even for FORWARD, odd for REVERSE.
-    3. Build scaf/stap linked-list arrays from Domain objects.
-    4. Write loop/skip from Helix.loop_skips; stap_colors from Strand.color.
+        helices          — design.helices
+        rows, cols       — {helix_id: int} caDNAno grid cell
+        export_dirs      — {helix_id: Direction}
+        sorted_helices   — helices in (row, col) order == the vstrands array order
+        helix_num_map    — {helix_id: caDNAno num}  (even=FORWARD, odd=REVERSE)
+        offset           — uniform non-negative bp shift applied on export
+        array_len        — canonical fixed array width (lattice-period multiple)
     """
-    if design.lattice_type not in (LatticeType.HONEYCOMB, LatticeType.SQUARE):
-        raise NotImplementedError(
-            "caDNAno export only supports HC and SQ lattices."
-        )
-
     helices = design.helices
     if not helices:
         raise ValueError("Design has no helices.")
@@ -782,9 +776,7 @@ def export_cadnano(design: Design) -> dict:
     )
 
     # ── Assign caDNAno num (even=FORWARD, odd=REVERSE) ─────────────────────────
-    sorted_helices = sorted(
-        helices, key=lambda h: (rows[h.id], cols[h.id])
-    )
+    sorted_helices = sorted(helices, key=lambda h: (rows[h.id], cols[h.id]))
     helix_num_map: Dict[str, int] = {}
     fwd_i = rev_i = 0
     for h in sorted_helices:
@@ -796,13 +788,6 @@ def export_cadnano(design: Design) -> dict:
             rev_i += 1
 
     # ── Determine bp offset + canonical array width ─────────────────────────────
-    # NADOC domains carry GLOBAL bp indices that can be negative (e.g. a scaffold
-    # overhang extruded before bp 0) or exceed the helix length_bp (extra bases,
-    # resize-through-boundary).  caDNAno arrays are 0-based and fixed-width, so we
-    # shift every bp by one uniform non-negative offset — uniform across all
-    # helices to keep crossover / loop-skip columns aligned — and size the array
-    # to the true span rounded up to the lattice period so the caDNAno app renders
-    # it.  Scan every domain bp AND every loop/skip position for the true envelope.
     min_bp = 0
     max_bp = 0
     seen_any = False
@@ -828,6 +813,58 @@ def export_cadnano(design: Design) -> dict:
         offset = math.ceil((-min_bp) / period) * period
     needed = max_bp + offset + 1
     array_len = max(math.ceil(needed / period), 1) * period
+
+    return {
+        "helices": helices,
+        "rows": rows,
+        "cols": cols,
+        "export_dirs": export_dirs,
+        "sorted_helices": sorted_helices,
+        "helix_num_map": helix_num_map,
+        "offset": offset,
+        "array_len": array_len,
+    }
+
+
+def export_cadnano(design: Design) -> dict:
+    """Convert a NADOC Design to a caDNAno v2 JSON dict.
+
+    Supports HC and SQ designs (native or imported).  Raises ValueError if
+    helix positions cannot be mapped to valid caDNAno grid coordinates.
+
+    Algorithm
+    ---------
+    1. Recover caDNAno (row, col) via _assign_grid_coords():
+       HC  — col = round(|x|/COL_PITCH); FORWARD row via 3R step+stagger.
+       SQ  — col = round(|x|/2.25nm);    row via uniform 2.25 nm step.
+       Both: centre result in the caDNAno default grid.
+    2. Assign unique num: even for FORWARD, odd for REVERSE.
+    3. Build scaf/stap linked-list arrays from Domain objects.
+    4. Write loop/skip from Helix.loop_skips; stap_colors from Strand.color.
+    """
+    if design.lattice_type not in (LatticeType.HONEYCOMB, LatticeType.SQUARE):
+        raise NotImplementedError(
+            "caDNAno export only supports HC and SQ lattices."
+        )
+
+    helices = design.helices
+    if not helices:
+        raise ValueError("Design has no helices.")
+
+    # Grid layout + bp offset (shared with export_cadnano_with_labels).
+    #
+    # NADOC domains carry GLOBAL bp indices that can be negative (e.g. a scaffold
+    # overhang extruded before bp 0) or exceed the helix length_bp (extra bases,
+    # resize-through-boundary).  caDNAno arrays are 0-based and fixed-width, so the
+    # layout shifts every bp by one uniform non-negative offset — uniform across all
+    # helices to keep crossover / loop-skip columns aligned — and sizes the array to
+    # the true span rounded up to the lattice period so the caDNAno app renders it.
+    layout = _export_layout(design)
+    rows, cols = layout["rows"], layout["cols"]
+    sorted_helices = layout["sorted_helices"]
+    helix_num_map = layout["helix_num_map"]
+    offset = layout["offset"]
+    array_len = layout["array_len"]
 
     # ── Build linked-list arrays ────────────────────────────────────────────────
     scaf_arrs: Dict[str, List[List[int]]] = {
@@ -918,3 +955,62 @@ def export_cadnano(design: Design) -> dict:
         "name": design.metadata.name or "NADOC Export",
         "vstrands": vstrands,
     }
+
+
+def export_cadnano_with_labels(design: Design) -> Tuple[dict, List[dict]]:
+    """Export caDNAno JSON *and* a per-node identity map for the SNUPI comparator.
+
+    Returns ``(cadnano_dict, labels)``.  ``labels`` is ordered exactly like the
+    exported ``vstrands`` array — which is the order SNUPI assigns its ``H1``,
+    ``H2``, … chains — so ``labels[k]`` describes SNUPI chain ``f"H{k+1}"``:
+
+        {
+          "snupi_chain_index": k,        # 0-based; SNUPI chain id == f"H{k+1}"
+          "num": int,                    # caDNAno vstrand num
+          "helix_id": str,               # NADOC Helix.id
+          "direction": "FORWARD"|"REVERSE",
+          "bases": [
+            {"cadnano_base": b, "global_bp": b - offset, "duplex": bool}, ...
+          ],                             # ascending caDNAno base order
+        }
+
+    ``duplex`` is True where both a scaffold and a staple occupy the column — the
+    base-pair nodes SNUPI's FE (and NADOC's mimic mesh) place one node on.  This
+    is the topological anchor for node correspondence: it maps SNUPI's opaque
+    (chain, resSeq) node labels back to NADOC ``(helix_id, global_bp)`` keys
+    without relying on geometry (so it survives symmetric bundles).  The caller
+    validates it spatially before trusting any RMSD/RMSF/MAC number.
+    """
+    cad = export_cadnano(design)
+    layout = _export_layout(design)
+    offset = layout["offset"]
+    export_dirs = layout["export_dirs"]
+    helix_num_map = layout["helix_num_map"]
+    num_to_hid = {num: hid for hid, num in helix_num_map.items()}
+    _inactive = [-1, -1, -1, -1]
+
+    labels: List[dict] = []
+    for k, vs in enumerate(cad["vstrands"]):
+        num = vs["num"]
+        hid = num_to_hid.get(num)
+        scaf, stap = vs["scaf"], vs["stap"]
+        bases: List[dict] = []
+        for b in range(len(scaf)):
+            has_scaf = scaf[b] != _inactive
+            has_stap = stap[b] != _inactive
+            if not (has_scaf or has_stap):
+                continue
+            bases.append({
+                "cadnano_base": b,
+                "global_bp": b - offset,
+                "duplex": bool(has_scaf and has_stap),
+            })
+        direction = export_dirs.get(hid)
+        labels.append({
+            "snupi_chain_index": k,
+            "num": num,
+            "helix_id": hid,
+            "direction": direction.value if direction is not None else None,
+            "bases": bases,
+        })
+    return cad, labels
