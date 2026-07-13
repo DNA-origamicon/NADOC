@@ -1136,7 +1136,7 @@ def measure_bundle_twist(positions, *, n_slices: int = 0) -> float:
             slab_t[k] = float(np.mean(acc_t[k]))
 
     total = 0.0
-    prev = None
+    prev = prev_t = None
     first_t = last_t = None
     for k in range(n_slices):
         cur = slab_centres[k]
@@ -1213,7 +1213,7 @@ def measure_bundle_twist_profile(positions, *, n_slices: int = 0) -> list[tuple[
 
     profile: list[tuple[float, float]] = []
     total = 0.0
-    prev = None
+    prev = prev_t = None
     first_t = last_t = None
     for k in range(n_slices):
         cur = slab_centres[k]

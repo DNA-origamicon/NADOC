@@ -24,9 +24,7 @@ implicit solvent, the ladder is NVT-only.
 
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 from pathlib import Path
 from typing import Optional
 

@@ -1,7 +1,6 @@
 """Phase 5 (re-scoped) — greedy 1–5 discrete skip fine-tuner: pure candidate logic."""
 from __future__ import annotations
 
-import pytest
 
 from backend.api.skip_twist_tuning import build_sq_skip_design, square_cells
 from backend.core.regional_skip_placer import core_candidates

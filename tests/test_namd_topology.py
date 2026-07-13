@@ -192,7 +192,6 @@ def test_extra_bases_thread_inline_in_seq_num() -> None:
     chain's seq_num order (insert.seq_num == flank.seq_num + k + 1), NOT clustered
     at the chain tail.  Can-go-red: without _thread_extra_bases_inline the inserts
     keep their end-appended seq_num far past every real residue."""
-    from collections import defaultdict
 
     from backend.core.atomistic import build_atomistic_model
 

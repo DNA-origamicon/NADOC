@@ -12,7 +12,6 @@ drawn (bent) geometry.  Realising the loop/skips brings the prediction into agre
 """
 from __future__ import annotations
 
-import pytest
 
 from backend.api import headless_build as hb
 from backend.api import state as design_state

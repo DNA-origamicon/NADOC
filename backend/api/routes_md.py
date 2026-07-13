@@ -37,7 +37,7 @@ from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
 from backend.core import md_chain_executor as _chain
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
-from backend.core.md_pipeline import MdPipeline, PipelineStage, cross_engine_seed
+from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross_engine_seed
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,

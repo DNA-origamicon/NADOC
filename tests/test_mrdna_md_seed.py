@@ -171,7 +171,6 @@ def _load_oh_design():
 def test_ssdna_runs_finds_unpaired_runs_with_paired_roots():
     """_ssdna_runs must surface every contiguous unpaired run, and each run's root
     must be a genuinely PAIRED nucleotide (the anchor the seed re-attaches to)."""
-    import numpy as np
     from backend.core.mrdna_bridge import _ssdna_runs, _build_nt_arrays
 
     design = _load_oh_design()

@@ -35,6 +35,7 @@ Three-Layer Law: topology only (plus the seamed router's helix-axis extension).
 from __future__ import annotations
 
 from collections import Counter
+from typing import TYPE_CHECKING
 
 from backend.core.constants import HC_CROSSOVER_PERIOD, SQ_CROSSOVER_PERIOD
 from backend.core.hinge_ladder import weave_hinge_full
@@ -56,6 +57,9 @@ from backend.core.seamed_router import (
     _scaffold_coverage,
 )
 from backend.core.validator import validate_design
+
+if TYPE_CHECKING:  # lazy at runtime (line ~350) to avoid an import cycle
+    from backend.core.seamless_router import SeamlessResult
 
 
 def _scaffold_strands(design: Design):

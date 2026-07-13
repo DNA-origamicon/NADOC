@@ -310,7 +310,6 @@ def test_g3_single_co_softens_K_vs_all_double(routed_6hb, monkeypatch):
     """Classifying the lone crossovers as (much softer) single_co produces a DIFFERENT — and net
     softer at those junctions — global K than forcing every crossover to double_co (the pre-G3
     P2b behavior). cando is unaffected (rigid penalty, no co_type)."""
-    import backend.physics.fem_solver as fs
     mesh = build_fem_mesh(routed_6hb)
     K_g3, _ = assemble_global_stiffness(mesh, material="snupi")
     # Force all-double (pre-G3) by overriding co_type on the mesh copy.

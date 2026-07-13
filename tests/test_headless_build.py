@@ -22,8 +22,8 @@ from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.flexible_segments import apply_marks
 from backend.core.lattice import overhang_candidate_error
 from backend.core.models import (
-    ClusterJoint, ClusterRigidTransform, ConnectionVersion, Direction, Domain,
-    FlexibleSegmentMark, Helix, LatticeType, OverhangBinding, OverhangConnection,
+    ClusterJoint, ClusterRigidTransform, Direction, Domain,
+    FlexibleSegmentMark, Helix, LatticeType, OverhangConnection,
     OverhangSpec, Strand, StrandType, Vec3,
 )
 from backend.core.validator import validate_design

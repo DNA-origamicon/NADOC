@@ -45,7 +45,6 @@ from backend.core.models import Design, Helix, Vec3
 from backend.core.atomistic import AtomisticModel, build_atomistic_model
 from backend.physics.oxdna_interface import (
     read_configuration,
-    read_configuration_full,
     read_configuration_full_unwrapped,
     oxdna_backbone_site,
 )

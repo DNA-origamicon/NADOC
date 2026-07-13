@@ -1,6 +1,5 @@
 """CPU/CUDA backend selection + GPU→CPU fallback for live oxpy sessions."""
 
-import contextlib
 
 import pytest
 

@@ -22,7 +22,7 @@ Display/pose layer only — never mutates topology.
 """
 from __future__ import annotations
 
-from backend.core.constants import BDNA_RISE_PER_BP, SSDNA_RISE_PER_BASE_NM
+from backend.core.constants import SSDNA_RISE_PER_BASE_NM
 from backend.core.models import Design
 
 

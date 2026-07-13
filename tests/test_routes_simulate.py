@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-import backend.api.routes_simulate as rs
 from backend.api.main import app
 
 client = TestClient(app)

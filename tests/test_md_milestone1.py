@@ -548,7 +548,6 @@ class TestProductionAppend:
         # restore the real one.  Snapshot sys.modules and revert it EXACTLY in a
         # finally — independent of monkeypatch's undo ordering.  The returned local
         # `routes_md` still references the stub module, which is all the test needs.
-        import backend.api.routes_md  # ensure the real module is the baseline
         _modules_before = dict(sys.modules)
         try:
             sys.modules["fastapi"] = fastapi

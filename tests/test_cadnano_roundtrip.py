@@ -28,7 +28,6 @@ round-trip to "no color". Colors are checked only on a colored native fixture.
 from __future__ import annotations
 
 import json
-import math
 import pathlib
 from collections import Counter
 

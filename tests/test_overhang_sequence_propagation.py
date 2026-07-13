@@ -15,7 +15,7 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    ConnectionVersion, Direction, Domain, Helix, OverhangSpec, Strand,
+    Direction, Domain, Helix, OverhangSpec, Strand,
     StrandType, Vec3,
 )
 

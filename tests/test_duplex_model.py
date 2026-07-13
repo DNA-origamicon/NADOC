@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.core.duplex import (
-    offset_to_bp, subdomain_end, synthesize_duplexes_from_bindings,
+    offset_to_bp, synthesize_duplexes_from_bindings,
     shift_duplex_ends, drop_invalid_duplexes,
 )
 from backend.core.models import (

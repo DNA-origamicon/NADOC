@@ -63,7 +63,6 @@ def test_new_request_supersedes_previous_for_same_view():
 def test_subprocess_self_timeout_via_alarm():
     """The worker self-terminates on its SIGALRM deadline even if the parent never
     gets to kill it (parent event loop starved) — the robust backstop."""
-    import multiprocessing
     import os
     import tempfile
     import time

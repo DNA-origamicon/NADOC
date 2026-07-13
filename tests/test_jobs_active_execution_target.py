@@ -36,8 +36,7 @@ def test_collect_active_tags_execution_target(tmp_path, monkeypatch):
     _make_md_job(ws, execution_target="alpine")
 
     active = routes_jobs._collect_active()
-    md = {j["design_name"]: j for j in active if j["engine"] == "md"}
-    targets = sorted(j["execution_target"] for j in active if j["engine"] == "md")
+    targets =sorted(j["execution_target"] for j in active if j["engine"] == "md")
     # Both jobs are listed (welcome-screen spinner still shows remote runs) but each
     # carries its target so the guard can distinguish them.
     assert targets == ["alpine", "local"]

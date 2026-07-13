@@ -27,7 +27,6 @@ positions, so the FEM bend is identical to the exp36 battery even if mark placem
 """
 from __future__ import annotations
 
-import pytest
 
 from backend.api import headless_build as hb
 from backend.api import state as design_state

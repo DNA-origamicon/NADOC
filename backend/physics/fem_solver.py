@@ -1340,7 +1340,6 @@ def _solve_snupi_corotational(
     centroid is pinned (6 DOF) to remove the rigid-body modes. Returns the final Nx3 positions (nm)."""
     from backend.physics import snupi_corotational as cr
 
-    N = len(mesh.nodes)
     # ── Corotational beam list ──────────────────────────────────────────────────
     # Local element = the FULL SNUPI anisotropic Timoshenko 12×12 (:func:`_snupi_element_stiffness`)
     # from the per-element 6×6 D — so the 15 couplings (esp. the load-bearing twist–stretch g(Δx,Θx))

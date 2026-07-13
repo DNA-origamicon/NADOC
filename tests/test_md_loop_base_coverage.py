@@ -21,7 +21,6 @@ receives its OWN relaxed position.  No MDAnalysis / on-disk trajectory required.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (

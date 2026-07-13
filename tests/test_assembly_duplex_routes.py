@@ -90,7 +90,7 @@ def _seed(seq_a="ACGTACGT", seq_b="ACGTACGT") -> Assembly:
     return a
 
 
-def _connect(**over) -> "requests.Response":  # type: ignore[name-defined]
+def _connect(**over):
     body = {
         "instance_a_id": "inst-A", "overhang_a_id": "oh-A_5p", "overhang_a_attach": "free_end",
         "instance_b_id": "inst-B", "overhang_b_id": "oh-B_3p", "overhang_b_attach": "root",

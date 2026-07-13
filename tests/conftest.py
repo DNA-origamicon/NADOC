@@ -616,6 +616,29 @@ _SLOW_TESTS = {
     "test_subprocess_self_timeout_via_alarm",
     # test_exp28_hierarchical_tube_cg.py (window-expansion CG design + atomistic model build)
     "test_window_expansion_produces_unique_design_and_atomistic_model",
+
+    # ---------------------------------------------------------------------------
+    # Refreshed 2026-07-13: the three tests that blew the per-test budget (>5 s) in a
+    # `-n auto` fast run.  Each is only ~0.5-4 s in isolation but 7-24 s under a fully
+    # loaded 12-worker box — they are the classic "heavy" shapes (real detached
+    # subprocess, real FEM solve, full routed-18hb build) and their cost scales with
+    # machine load, so they belong in the heavy suite where they run uncontended.
+    # ---------------------------------------------------------------------------
+    # test_snupi_job.py: spawns a REAL detached worker process that runs a SNUPI FEM
+    # solve to completion and polls it (23.6 s under load; the file's other 15 job
+    # tests are sub-second, so this is marked per-test, like its sibling
+    # `test_linear_snupi_job_completes_and_caches`).
+    "test_start_job_spawns_detached_worker_and_completes",
+    # test_snupi_visual_compare.py: a real in-process `predict_shape` FEM solve + NMA
+    # RMSF (7.0 s under load).  The Kabsch/axis-extraction unit tests in the same file
+    # stay fast.
+    "test_predict_shape_carries_every_visual_field",
+    # test_cluster_autodetect_core.py: builds a full routed 18hb
+    # (`make_18hb_routed_design` = auto-scaffold + auto-crossover + auto-break on 18x388
+    # bp) before autodetecting clusters — 9.7 s under load.  Same builder as the already
+    # relegated `test_make_18hb_routed_design_is_deterministic`.  The file's three other
+    # cluster tests (6hb / no-op paths) stay fast.
+    "test_autodetect_produces_scaffold_and_geometry_clusters",
 }
 
 
@@ -653,6 +676,11 @@ def _slow_area_for(module: str) -> str:
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"
     if "headless" in module or "spec_build" in module:
+        return "headless"
+    # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb
+    # through the headless build API — so a headless/routing change is what should
+    # re-run it.
+    if "cluster_autodetect" in module:
         return "headless"
     # Unclassified slow test: park in "md" (a broad sim area). It still always
     # runs under a FULL selection; this only affects narrow leaf selections.

@@ -6,7 +6,6 @@ no solver, no topology.
 """
 from __future__ import annotations
 
-import math
 
 import numpy as np
 

@@ -20,7 +20,6 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from backend.core.duplex import (
-    _wc_base,
     classify_antiparallel,
     offset_to_bp,
     overhang_offset_bases,
