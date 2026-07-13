@@ -1213,6 +1213,35 @@ def _solve_snupi_nonlinear(
     return np.array(positions)
 
 
+def build_corotational_elements(mesh: "FEMMesh", X0: Optional[np.ndarray] = None):
+    """The corotational beam list ``[(node_i, node_j, ref, K12), ...]`` for the SNUPI anisotropic model
+    — intra-helix duplex beams + crossover CO-step beams, each with the FULL SNUPI 12×12 element
+    stiffness (twist–stretch + EIy≠EIz). ``ref`` from :func:`snupi_corotational.element_reference` at
+    the rest config ``X0`` (defaults to the mesh node positions).
+
+    Shared by the static corotational shape solve (:func:`_solve_snupi_corotational`) and the nonlinear
+    corotational force of the Langevin loop (:func:`snupi_dynamics.corotational_internal_force`), so both
+    use byte-identical elements. Returns ``(X0, elements)``."""
+    from backend.physics import snupi_corotational as cr
+    from backend.physics import snupi_material as _sm
+    if X0 is None:
+        X0 = np.array([n.position for n in mesh.nodes], dtype=float)
+    elements = []
+    for el in mesh.elements:
+        L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
+        D = _sm.motif_D(el.motif_family, el.motif) if el.motif else _sm.family_mean_D(el.motif_family)
+        ref = cr.element_reference(X0[el.node_i], X0[el.node_j], np.eye(3), np.eye(3))
+        elements.append((el.node_i, el.node_j, ref, _snupi_element_stiffness(L, D)))
+    _co_D = {ct: _sm.family_mean_D(ct) for ct in ("double_co", "single_co")}
+    for lk in mesh.rigid_links:
+        L = float(np.linalg.norm(lk.offset))
+        if L < 1e-6:
+            continue
+        ref = cr.element_reference(X0[lk.node_i], X0[lk.node_j], np.eye(3), np.eye(3))
+        elements.append((lk.node_i, lk.node_j, ref, _snupi_element_stiffness(L, _co_D[lk.co_type])))
+    return X0, elements
+
+
 def _solve_snupi_corotational(
     design: Design,
     mesh: "FEMMesh",
@@ -1233,29 +1262,14 @@ def _solve_snupi_corotational(
     the validated RMSF/DCCM NMA. Anchors (``fixed_nodes``) are clamped; with none, the node nearest the
     centroid is pinned (6 DOF) to remove the rigid-body modes. Returns the final Nx3 positions (nm)."""
     from backend.physics import snupi_corotational as cr
-    from backend.physics import snupi_material as _sm
 
     N = len(mesh.nodes)
-    X0 = np.array([n.position for n in mesh.nodes], dtype=float)
-
     # ── Corotational beam list ──────────────────────────────────────────────────
     # Local element = the FULL SNUPI anisotropic Timoshenko 12×12 (:func:`_snupi_element_stiffness`)
     # from the per-element 6×6 D — so the 15 couplings (esp. the load-bearing twist–stretch g(Δx,Θx))
     # AND the EIy≠EIz anisotropy enter the corotational shape solve, not just the diagonal rigidities.
     # The EICR corotational filter still removes rigid-body motion (rigid ⇒ d_local=0 ⇒ f=0 for ANY K).
-    elements = []
-    for el in mesh.elements:
-        L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
-        D = _sm.motif_D(el.motif_family, el.motif) if el.motif else _sm.family_mean_D(el.motif_family)
-        ref = cr.element_reference(X0[el.node_i], X0[el.node_j], np.eye(3), np.eye(3))
-        elements.append((el.node_i, el.node_j, ref, _snupi_element_stiffness(L, D)))
-    _co_D = {ct: _sm.family_mean_D(ct) for ct in ("double_co", "single_co")}
-    for lk in mesh.rigid_links:
-        L = float(np.linalg.norm(lk.offset))
-        if L < 1e-6:
-            continue
-        ref = cr.element_reference(X0[lk.node_i], X0[lk.node_j], np.eye(3), np.eye(3))
-        elements.append((lk.node_i, lk.node_j, ref, _snupi_element_stiffness(L, _co_D[lk.co_type])))
+    X0, elements = build_corotational_elements(mesh)
 
     # ── Dead loads (eigenstrain + field), applied over the load steps ───────────
     f_ext = assemble_prestress_force(mesh, design) + assemble_field_force(mesh, field)

@@ -109,9 +109,30 @@ def _estimate_seconds(job: SnupiJob) -> float:
 
     Only drives the progress bar (capped < 1.0 until the thread ends); the true
     completion signal is the runner thread finishing.  Reference: a 6HB/210
-    (~1260 duplex nodes) nonlinear solve ≈ 60 s; the linear preview ≈ a few s.
+    (~1260 duplex nodes) nonlinear static solve ≈ 60 s; the linear preview ≈ a few s.
+
+    **Langevin dynamics** (``job.dynamics``) is a different beast: a fixed 60 000-step GJF
+    trajectory, NOT the ~20-step static solve — so the static estimate under-shoots by ~10×
+    and pins the bar at its 0.97 cap in seconds.  Full **RPY hydrodynamics** adds a dense
+    O((6N)³) friction factorisation plus a dense (6N)² basis transform every step, which
+    DOMINATES at scale (an ~880-node / 60k-step run ≈ 650 s here).  RPY wall-clock is also
+    very CPU-contention-sensitive, so this is an order-of-magnitude figure — deliberately on
+    the generous side so ``overall = elapsed/est`` keeps climbing rather than pinning early.
     """
     nodes = max(1.0, job.n_nucleotides / 2.0)          # ≈ base pairs ≈ FEM nodes
+
+    if getattr(job, "dynamics", False):
+        # predict_shape runs a fixed dynamics_steps=60000 GJF trajectory (see fem_solver).
+        step_scale = 60000.0 / 60000.0
+        # Langevin base (diagonal Stokes): a sparse K·q per step (O(nodes)) + one generalised
+        # eigsh for dt auto-sizing.  ~10 s at 630 nodes / 60k steps.
+        est = 5.0 + (nodes / 630.0) * step_scale * 10.0
+        if getattr(job, "hydrodynamics", False):
+            # RPY dense friction inverse+eigendecomposition + a dense (6N)² transform per step.
+            # Calibrated to an 882-node / 60k-step run ≈ 650 s (grows ∝ nodes²).
+            est += (nodes / 882.0) ** 2 * step_scale * 650.0
+        return max(2.0, est)
+
     if job.nonlinear:
         est = 3.0 + (nodes / 1260.0) * (job.n_steps / 20.0) * 55.0
     else:

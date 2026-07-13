@@ -119,7 +119,45 @@ def _agree(keys_a, A, keys_b, B) -> dict:
     return {"n": len(common), "pearson": round(float(np.corrcoef(a, b)[0, 1]), 4)}
 
 
-def run(entry: dict, max_frames: int) -> dict:
+def _dynamics_channel(design: Design, md_keys, C_md, dyn_steps: int) -> dict:
+    """The Langevin-dynamics channel (project_snupi_dynamics Phase 3): (1) the dynamics-trajectory
+    equal-time DCCM vs MD — should match the snupi-NMA→MD agreement, since the equilibrium DCCM is
+    friction-independent (it re-derives the same k_BT·K⁻¹ from an actual trajectory); (2) the breathing
+    mode (PCA of the trajectory) and its relaxation TIME under diagonal-Stokes vs full-RPY friction —
+    the KINETIC quantity static NMA cannot provide at all, and the concrete thing hydrodynamics buys.
+    """
+    from backend.physics import snupi_dynamics as sd
+
+    mesh = build_fem_mesh(design)
+    keys = [(n.helix_id, int(n.global_bp)) for n in mesh.nodes]
+    kw = dict(material="snupi", n_steps=dyn_steps, n_equil=dyn_steps // 6,
+              sample_every=20, seed=7)
+    stk = sd.simulate_equilibrium(design, hydrodynamics=False, **kw)
+    C_dyn = sd.dynamics_dccm(stk["frames"], stk["positions0"])
+    out = {"dyn_dccm_vs_md": _agree(keys, C_dyn, md_keys, C_md)}
+
+    # breathing mode (from the Stokes run) + its relaxation time under both frictions
+    N = stk["frames"].shape[1]
+    node_mass = stk["mass_diag"].reshape(N, 6)[:, 0]
+    pca0 = sd.breathing_mode_pca(stk["frames"], stk["positions0"], node_mass, n_modes=1)["modes"][0]
+    mode = pca0["shape"]
+    tau_s = sd.mode_autocorr_time_ns(
+        sd.mode_coordinate(stk["frames"], stk["positions0"], mode), stk["dt_ns"] * kw["sample_every"])
+    rpy = sd.simulate_equilibrium(design, hydrodynamics=True, **kw)
+    tau_r = sd.mode_autocorr_time_ns(
+        sd.mode_coordinate(rpy["frames"], rpy["positions0"], mode), rpy["dt_ns"] * kw["sample_every"])
+    out["breathing"] = {
+        "amplitude_nm": round(pca0["amplitude_nm"], 4),
+        "freq_GHz": round(pca0["freq_GHz"], 4),
+        "k_eff_pN_per_nm": round(pca0["k_eff_pN_per_nm"], 4),
+        "tau_stokes_ns": round(tau_s, 5),
+        "tau_rpy_ns": round(tau_r, 5),
+        "tau_ratio_stokes_over_rpy": round(tau_s / tau_r, 3) if tau_r > 0 else None,
+    }
+    return out
+
+
+def run(entry: dict, max_frames: int, dynamics: bool = False, dyn_steps: int = 80000) -> dict:
     name = entry["name"]
     print(f"[{name}] FE DCCM (snupi/cando) + MD DCCM …")
     design = Design.model_validate_json((WS / entry["nadoc"]).read_text())
@@ -136,6 +174,14 @@ def run(entry: dict, max_frames: int) -> dict:
         "cando": _agree(ks_c, C_c, md_keys, C_md),
     }
     print(f"    snupi→MD {out['dccm_vs_md']['snupi']}  cando→MD {out['dccm_vs_md']['cando']}")
+    if dynamics:
+        print(f"    dynamics channel (Langevin {dyn_steps} steps, Stokes + RPY) …")
+        dc = _dynamics_channel(design, md_keys, C_md, dyn_steps)
+        out["dynamics"] = dc
+        br = dc["breathing"]
+        print(f"    dyn-DCCM→MD {dc['dyn_dccm_vs_md']}  breathing f={br['freq_GHz']} GHz  "
+              f"τ_stokes={br['tau_stokes_ns']} ns  τ_rpy={br['tau_rpy_ns']} ns  "
+              f"(RPY speedup ×{br['tau_ratio_stokes_over_rpy']})")
     return out
 
 
@@ -143,11 +189,16 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="6hbx100_noT,3x4SQ")
     ap.add_argument("--max-frames", type=int, default=150)
+    ap.add_argument("--dynamics", action="store_true",
+                    help="add the Langevin-dynamics channel: dynamics-DCCM vs MD + breathing-mode "
+                         "relaxation time under Stokes vs RPY friction (the hydrodynamics payoff)")
+    ap.add_argument("--dyn-steps", type=int, default=80000)
     args = ap.parse_args()
     want = {s.strip() for s in args.only.split(",")}
     battery = [e for e in BATTERY if e["name"] in want and e.get("md")]
 
-    results = [run(e, args.max_frames) for e in battery]
+    results = [run(e, args.max_frames, dynamics=args.dynamics, dyn_steps=args.dyn_steps)
+               for e in battery]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "dccm.json").write_text(json.dumps({"results": results}, indent=2))
 

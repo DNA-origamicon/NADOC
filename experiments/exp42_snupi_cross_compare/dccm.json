@@ -13,20 +13,19 @@
           "n": 609,
           "pearson": 0.4543
         }
-      }
-    },
-    {
-      "design": "3x4SQ",
-      "lattice": "SQ",
-      "n_fe_nodes": 488,
-      "dccm_vs_md": {
-        "snupi": {
-          "n": 474,
-          "pearson": 0.3874
+      },
+      "dynamics": {
+        "dyn_dccm_vs_md": {
+          "n": 609,
+          "pearson": 0.2347
         },
-        "cando": {
-          "n": 474,
-          "pearson": 0.3925
+        "breathing": {
+          "amplitude_nm": 3.4507,
+          "freq_GHz": 2.8486,
+          "k_eff_pN_per_nm": 0.3479,
+          "tau_stokes_ns": 4.4037,
+          "tau_rpy_ns": 1.71493,
+          "tau_ratio_stokes_over_rpy": 2.568
         }
       }
     }

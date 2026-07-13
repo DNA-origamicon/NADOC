@@ -196,7 +196,12 @@ def new_snupi_job(
     feature_log_position: Optional[int] = None,
     doc_id: Optional[str] = None,
 ) -> SnupiJob:
-    stage_name = "nonlinear" if nonlinear else "linear"
+    # Dynamics jobs run a Langevin trajectory (± full-RPY hydrodynamics), not the static solve —
+    # give the panel an honest stage label so the ~minutes-long run doesn't read as a "nonlinear" solve.
+    if dynamics:
+        stage_name = "dynamics-rpy" if hydrodynamics else "dynamics"
+    else:
+        stage_name = "nonlinear" if nonlinear else "linear"
     return SnupiJob(
         job_id             = uuid.uuid4().hex[:12],
         design_name        = design_name,

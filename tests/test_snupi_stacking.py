@@ -57,3 +57,61 @@ def test_stacking_tangent_matches_finite_difference():
 def test_is_stacked_distinguishes_states():
     assert stk.is_stacked(np.zeros(3), np.array([stk.R0_STACK, 0, 0]))
     assert not stk.is_stacked(np.zeros(3), np.array([3.0, 0, 0]))
+
+
+# ── Phase 2: blunt-end stacking-site auto-detection ─────────────────────────────
+
+def _mesh(helices, springs=None):
+    """Build a synthetic FEMMesh. ``helices`` = {helix_id: [(global_bp, (x,y,z)), ...]}; node index =
+    order of insertion. ``springs`` = list of (i, j) inter-node links."""
+    from backend.physics.fem_solver import FEMNode, FEMMesh, FEMSpring
+    nodes = []
+    for hid, pts in helices.items():
+        for bp, pos in pts:
+            nodes.append(FEMNode(helix_id=hid, global_bp=bp, position=np.array(pos, float)))
+    sp = [FEMSpring(node_i=i, node_j=j, k_trans=1.0, k_rot=0.0) for (i, j) in (springs or [])]
+    return FEMMesh(nodes=nodes, elements=[], springs=sp, rigid_links=[])
+
+
+def _line(hid, x0, n=5, step=0.34, y=0.0, z=0.0):
+    return (hid, [(k, (x0 + k * step, y, z)) for k in range(n)])
+
+
+def test_detect_blunt_stack_coaxial_abutment():
+    """Two collinear helices end-to-end with a ~0.34 nm gap → the facing terminal nodes are detected
+    as a stacking pair (helix A's high end, helix B's low end)."""
+    a = dict([_line("A", 0.0)]); b = dict([_line("B", 1.70)])   # gap 1.70−1.36 = 0.34 nm
+    mesh = _mesh({**a, **b})
+    pairs = stk.detect_blunt_end_stacks(mesh=mesh)
+    assert pairs == [(4, 5)]                                     # A_hi (idx4) ↔ B_lo (idx5)
+
+
+def test_detect_blunt_stack_rejects_side_by_side():
+    """Parallel helices pointing the SAME way (a bundle face) do NOT stack — their end tangents are
+    parallel, not facing — even though the ends are close."""
+    mesh = _mesh(dict([_line("A", 0.0, y=0.0), _line("B", 0.0, y=0.6)]))
+    assert stk.detect_blunt_end_stacks(mesh=mesh) == []
+
+
+def test_detect_blunt_stack_rejects_large_gap():
+    """Collinear but too far apart → no stack."""
+    mesh = _mesh(dict([_line("A", 0.0), _line("B", 3.5)]))       # gap 3.5−1.36 ≫ 0.85 nm
+    assert stk.detect_blunt_end_stacks(mesh=mesh) == []
+
+
+def test_detect_blunt_stack_excludes_joined_ends():
+    """An end wired to another helix (crossover / continuation / linker → an inter-helix spring) is NOT
+    a free blunt end, so an otherwise-abutting pair is rejected."""
+    mesh = _mesh(dict([_line("A", 0.0), _line("B", 1.70)]), springs=[(4, 5)])
+    assert stk.detect_blunt_end_stacks(mesh=mesh) == []
+
+
+def test_detect_blunt_stack_excludes_ligated_ends():
+    """A covalent ForcedLigation at the abutting ends is a permanent join, not a reversible stack →
+    excluded (the switch stacks reversibly)."""
+    from types import SimpleNamespace
+    mesh = _mesh(dict([_line("A", 0.0), _line("B", 1.70)]))
+    design = SimpleNamespace(forced_ligations=[
+        SimpleNamespace(three_prime_helix_id="A", three_prime_bp=4,
+                        five_prime_helix_id="B", five_prime_bp=0)])
+    assert stk.detect_blunt_end_stacks(design=design, mesh=mesh) == []

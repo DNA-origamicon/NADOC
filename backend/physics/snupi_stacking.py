@@ -93,3 +93,104 @@ def is_stacked(xi: np.ndarray, xj: np.ndarray, prm: MorseParams = MorseParams(),
     is narrow (~0.4 nm); beyond ~1 nm the energy is within a few % of the unstacked plateau."""
     r = float(np.linalg.norm(np.asarray(xj, float) - np.asarray(xi, float)))
     return r < prm.r0 + cutoff_nm
+
+
+# ── Blunt-end stacking-site detection (Phase 2 — design → Morse node pairs) ──────
+
+def _unit(v: np.ndarray) -> np.ndarray:
+    n = float(np.linalg.norm(v))
+    return v / n if n > 1e-12 else v
+
+
+def detect_blunt_end_stacks(
+    design=None,
+    mesh=None,
+    *,
+    gap_max_nm: float = 0.85,
+    facing_cos: float = -0.7,
+    collinear_cos: float = 0.7,
+):
+    """Auto-detect coaxial **blunt-end** stacking sites → the ``[(node_i, node_j), ...]`` mesh-node
+    index pairs the Morse element / :func:`snupi_dynamics.simulate_reconfiguration` consume.
+
+    A **blunt end** is a FREE duplex terminus: a helix-end base pair that is not joined to any other
+    helix — no crossover, strand continuation, or ds/ss linker wires it, i.e. the end node carries no
+    INTER-helix element / spring / rigid link — and is not covalently ligated (``ForcedLigation``). Two
+    blunt ends **stack** when they ABUT coaxially: their terminal bp centres sit within ``gap_max_nm``,
+    their outward end-tangents point at each other (``t_i·t_j ≤ facing_cos`` — antiparallel), and the
+    gap direction is collinear with those tangents (``|d̂·t_i| ≥ collinear_cos``) — a coaxial end-to-end
+    junction, NOT a side-by-side bundle face (where abutting ends are parallel, not facing).
+
+    Read-only (Three-Layer Law): derives Layer-2 geometry (node positions) + Layer-1 topology from the
+    design; never writes. The outward end tangent is taken from the terminal FE segment (robust for
+    curved/deformed helices). The gap window (0.34–0.85 nm) brackets the stacked rise r₀ ≈ 0.37 nm.
+
+    Args:
+        design: the ``Design`` — used to build ``mesh`` if not supplied and to read ``forced_ligations``
+            (covalent joins are excluded: a switch stacks reversibly, a ligation does not). May be
+            ``None`` when ``mesh`` is given and ligation exclusion isn't needed.
+        mesh: a prebuilt ``FEMMesh``; built from ``design`` when ``None``.
+
+    Returns sorted, de-duplicated ``(i, j)`` node-index pairs (``i < j``).
+    """
+    if mesh is None:
+        if design is None:
+            raise ValueError("detect_blunt_end_stacks needs a design or a prebuilt mesh")
+        from backend.physics.fem_solver import build_fem_mesh
+        mesh = build_fem_mesh(design)
+    nodes = mesh.nodes
+    if len(nodes) < 2:
+        return []
+
+    # Nodes joined ACROSS helices (crossover / strand continuation / ds-ss linker) are not free ends.
+    joined: set[int] = set()
+    for coll in (mesh.elements, mesh.springs, mesh.rigid_links):
+        for e in coll:
+            if nodes[e.node_i].helix_id != nodes[e.node_j].helix_id:
+                joined.add(e.node_i)
+                joined.add(e.node_j)
+
+    # Covalently ligated ends → not a reversible stack; exclude by (helix, bp).
+    lig_bp: set[tuple] = set()
+    for lg in ((getattr(design, "forced_ligations", None) or []) if design is not None else []):
+        for pre in ("three_prime", "five_prime"):
+            h = getattr(lg, f"{pre}_helix_id", None)
+            b = getattr(lg, f"{pre}_bp", None)
+            if h is not None and b is not None:
+                lig_bp.add((h, int(b)))
+
+    from collections import defaultdict
+    by_helix: dict[str, list[int]] = defaultdict(list)
+    for idx, nd in enumerate(nodes):
+        by_helix[nd.helix_id].append(idx)
+
+    # Each helix contributes up to two free blunt ends: (node_idx, position, outward end-tangent).
+    ends = []
+    for hid, idxs in by_helix.items():
+        if len(idxs) < 2:
+            continue
+        idxs.sort(key=lambda i: nodes[i].global_bp)
+        for node_idx, inward_idx in ((idxs[0], idxs[1]), (idxs[-1], idxs[-2])):
+            if node_idx in joined:
+                continue
+            if (hid, int(nodes[node_idx].global_bp)) in lig_bp:
+                continue
+            outward = _unit(np.asarray(nodes[node_idx].position, float)
+                            - np.asarray(nodes[inward_idx].position, float))
+            ends.append((node_idx, np.asarray(nodes[node_idx].position, float), outward))
+
+    pairs: set[tuple] = set()
+    for a in range(len(ends)):
+        ia, pa, ta = ends[a]
+        for b in range(a + 1, len(ends)):
+            ib, pb, tb = ends[b]
+            d = pb - pa
+            dist = float(np.linalg.norm(d))
+            if dist < 1e-6 or dist > gap_max_nm:
+                continue
+            if float(ta @ tb) > facing_cos:                       # ends must face each other
+                continue
+            if abs(float((d / dist) @ ta)) < collinear_cos:       # gap coaxial, not lateral
+                continue
+            pairs.add((ia, ib) if ia < ib else (ib, ia))
+    return sorted(pairs)

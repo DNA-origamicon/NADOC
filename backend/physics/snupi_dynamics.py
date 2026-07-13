@@ -119,6 +119,81 @@ def gjf_integrate(
     return np.array(samples), v
 
 
+def gjf_modified_integrate(
+    force_fn: Callable[[np.ndarray], np.ndarray],
+    q0: np.ndarray,
+    m: np.ndarray,
+    gamma: np.ndarray,
+    *,
+    kT: float = KBT_300,
+    dt: float = DT_DEFAULT,
+    n_steps: int = 20000,
+    n_equil: int = 4000,
+    sample_every: int = 20,
+    rng: Optional[np.random.Generator] = None,
+    v0: Optional[np.ndarray] = None,
+):
+    """The paper's MODIFIED GJF integrator (Lee/Koh/Kim 2023, Supplementary Note 4) — half-time
+    stepping + Simpson's rule on the internal force, which WIDENS the stable step region (empirically
+    ~6× here: plain :func:`gjf_integrate` caps ~0.17 ps on a stiff 2HB, this reaches ~1 ps at correct
+    sampling). Reproduces the paper's harmonic validation (SI §4.4 conditions i–iv, ΩΔt/2 ≤ 1.5) exactly.
+    Reaching the paper's flat **5 ps** on an arbitrary design additionally requires the stiffest
+    generalized modes to be soft enough (γ/2Ω large, ΩΔt/2 < ~2 — the overdamped DNA regime the paper
+    targets); designs with ultra-stiff CanDo crossover rigid-links need those constrained/softened first
+    (the paper's future 'constrained Langevin'). Diagonal (Stokes) friction: ``m``, ``gamma``(=ζ) per-DOF.
+
+    Per step (SI §4.3), carrying the internal force ``f^t = F(U^t)/m`` from the previous step:
+      1. half-time coordinate  U^{t+½} = U^t + Δt·j·(½V + ⅛f^t + ¼θ^{½})          (4.31)
+      2. evaluate f^{t+½} = F(U^{t+½})/m                                          (the Simpson midpoint)
+      3. full-step coordinate  U^{t+1} = U^t + Δt·b·(V + ½f^{t+½} + ½θ^{1})        (4.32)
+      4. evaluate f^{t+1} = F(U^{t+1})/m
+      5. velocity  V^{t+1} = a·V + (Δt/6)(f^{t+1} + 2(a+b)f^{t+½} + f^t) + b·θ^{1}  (4.34)
+    with ``j=(I+Δtγ̄/4)⁻¹``, ``b=(I+Δtγ̄/2)⁻¹``, ``a=2b−1`` (γ̄=γ/m), and independent random impulses
+    ``θ^{½}=β^{½}/m`` (var ⟨ββ⟩=2kTζ·Δt/2) and ``θ^{1}=β^{1}/m`` (var 2kTζ·Δt). The full-step force uses
+    the Simpson quadrature ``∫_t^{t+Δt}F ≈ Δt·F^{t+½}`` (4.28) — the midpoint evaluation is what buys
+    the stability. Costs 2 force evals/step vs 1 for plain GJF, but the ~10× larger dt is a net win.
+
+    Reduces to the original GJF (samples the exact Boltzmann distribution) — the paper proves the
+    flat-potential and harmonic cases (SI §4.4). Returns ``(samples, v_final)`` like :func:`gjf_integrate`.
+    """
+    rng = np.random.default_rng() if rng is None else rng
+    q = np.array(q0, dtype=float)
+    v = np.zeros_like(q) if v0 is None else np.array(v0, dtype=float)
+    m = np.asarray(m, dtype=float)
+    gamma = np.asarray(gamma, dtype=float)
+
+    gbar = gamma / m                                   # mass-normalized friction γ̄
+    j = 1.0 / (1.0 + gbar * dt / 4.0)
+    b = 1.0 / (1.0 + gbar * dt / 2.0)
+    a = 2.0 * b - 1.0
+    # Each HALF-step random impulse has variance ⟨ββ⟩ = k_BT·ζ·Δt (SI eq 4.7); the full-step impulse is
+    # the SUM of the two half impulses (β^{Δt} = β^{[t,t+Δt/2]} + β^{[t+Δt/2,t+Δt]}, eq 4.5) → they SHARE
+    # the first half (fluctuation–dissipation consistency), NOT independent draws.
+    s_half = np.sqrt(gamma * kT * dt)                  # std of one half-step impulse β
+
+    acc = force_fn(q) / m                              # a^t = M⁻¹F^t (accel); carried across steps
+    samples = []
+    for step in range(n_steps):
+        b1 = s_half * rng.standard_normal(q.shape)     # first half impulse  β^{[t, t+Δt/2]}
+        b2 = s_half * rng.standard_normal(q.shape)     # second half impulse β^{[t+Δt/2, t+Δt]}
+        th_half = b1 / m                               # θ^{½} = M⁻¹β^{Δt/2}
+        th_full = (b1 + b2) / m                        # θ^{1} = M⁻¹β^{Δt} = M⁻¹(β^{Δt/2}+·)
+        # coordinate: the force enters via ∫F dt ≈ (Δt/2)F^t (4.27) → (Δt/8)·acc; θ is a velocity impulse
+        q_half = q + dt * j * (0.5 * v + (dt / 8.0) * acc + 0.25 * th_half)
+        acc_half = force_fn(q_half) / m                # the Simpson MIDPOINT accel — buys the stability
+        # full-step force via Simpson ∫F dt ≈ Δt·F^{t+½} (4.28) → (Δt/2)·acc_half
+        q_new = q + dt * b * (v + (dt / 2.0) * acc_half + 0.5 * th_full)
+        acc_new = force_fn(q_new) / m
+        v = a * v + (dt / 6.0) * (acc_new + 2.0 * (a + b) * acc_half + acc) + b * th_full
+        q = q_new
+        acc = acc_new
+        if step >= n_equil and (step - n_equil) % sample_every == 0:
+            samples.append(q.copy())
+        if step % 500 == 0 and not np.isfinite(q).all():
+            raise _GJFDiverged(f"modified GJF diverged at step {step} (dt={dt})")
+    return np.array(samples), v
+
+
 class _GJFDiverged(RuntimeError):
     """Raised when the explicit GJF step exceeds the stiff-mode stability limit."""
 
@@ -193,6 +268,155 @@ def trajectory_rmsf(frames: np.ndarray, ref: np.ndarray) -> np.ndarray:
     mean = aligned.mean(axis=0)
     var = ((aligned - mean) ** 2).sum(axis=2).mean(axis=0)   # <|Δr_i|²> per node
     return np.sqrt(var)
+
+
+def corotational_internal_force(q: np.ndarray, X0: np.ndarray, elements) -> np.ndarray:
+    """Nonlinear corotational INTERNAL elastic force ``f_int(q)`` (6N) — the Phase-2 drop-in for the
+    linear ``K·q`` in the Langevin loop (exact under LARGE rotations, the point of a reconfiguration
+    switch).
+
+    ``q`` = 6N generalized displacement ``[Δu; θ]`` per node from the rest config ``X0`` (N,3): node
+    positions ``X = X0 + Δu`` and orientations ``R = exp(θ)``. ``elements`` = the corotational beam list
+    ``[(i, j, ref, K12), ...]`` from :func:`fem_solver.build_corotational_elements`. The consistent
+    internal force is assembled per element by :func:`snupi_corotational._internal_force`, whose EICR
+    corotational filter removes rigid-body motion (rigid ``q`` ⇒ ``d_local = 0`` ⇒ zero force for ANY
+    stiffness). For small ``q`` it reduces to the linear tangent ``K·q``. The driver's total force is
+    ``f_ext − corotational_internal_force(q, X0, elements)`` — matching the linear ``f_ext − K·q``.
+    """
+    from backend.physics.snupi_corotational import _internal_force, exp_so3
+    X0 = np.asarray(X0, dtype=float)
+    N = len(X0)
+    qn = np.asarray(q, dtype=float).reshape(N, 6)
+    X = X0 + qn[:, :3]
+    R = [exp_so3(qn[n, 3:6]) for n in range(N)]
+    f_int = np.zeros(6 * N)
+    for (i, j, ref, K12) in elements:
+        fg = _internal_force(X[i], X[j], R[i], R[j], ref, K12)
+        f_int[6 * i:6 * i + 6] += fg[:6]
+        f_int[6 * j:6 * j + 6] += fg[6:]
+    return f_int
+
+
+def _align_to_ref(frames: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Kabsch-align each frame (N,3) onto ``ref`` (N,3), removing rigid-body translation+rotation.
+    Returns the centred, rotation-aligned frame stack (F,N,3) — the internal-deformation part."""
+    ref_c = ref - ref.mean(axis=0)
+    aligned = np.empty_like(frames)
+    for k, fr in enumerate(frames):
+        fc = fr - fr.mean(axis=0)
+        aligned[k] = fc @ _kabsch(fc, ref_c).T
+    return aligned
+
+
+def breathing_mode_pca(
+    frames: np.ndarray,
+    ref: np.ndarray,
+    node_mass_trans: np.ndarray,
+    *,
+    kT: float = KBT_300,
+    n_modes: int = 3,
+) -> dict:
+    """Principal-component (quasi-harmonic) analysis of an equilibrium trajectory → the dominant
+    collective **breathing / bending modes**: shape, thermal amplitude, and natural frequency
+    (the paper's Fig 3c/d low-frequency mode).
+
+    PCA of equilibrium thermal fluctuations recovers the softest normal modes: the highest-variance
+    fluctuation direction is the lowest-stiffness (lowest-frequency) collective motion — the breathing
+    mode. Rigid-body translation+rotation are removed per frame (Kabsch to ``ref``) so only internal
+    deformation is analysed.
+
+    Args:
+        frames: ``(F,N,3)`` absolute node positions from :func:`simulate_equilibrium`.
+        ref: ``(N,3)`` reference config (``positions0`` / X0, or the mean shape).
+        node_mass_trans: ``(N,)`` per-node translational mass in the module's dyn units
+            (``pN·ns²/nm``) — e.g. ``mass_diag.reshape(N,6)[:,0]`` from the sim output.
+        kT: thermal energy in pN·nm (default 300 K).
+        n_modes: how many leading modes to return.
+
+    For each mode i (variance-ranked): unit shape ``vᵢ`` (N,3), thermal variance ``σᵢ² = ⟨ξᵢ²⟩`` (nm²),
+    equipartition effective stiffness ``kᵢ = k_BT/σᵢ²`` (pN/nm, from ``½kᵢ⟨ξᵢ²⟩ = ½k_BT``), mode
+    effective mass ``mᵢ = vᵢᵀ diag(m_trans) vᵢ``, angular frequency ``ωᵢ = √(kᵢ/mᵢ)`` (1/ns) and
+    natural frequency ``fᵢ = ωᵢ/2π`` (GHz).
+    """
+    frames = np.asarray(frames, dtype=float)
+    ref = np.asarray(ref, dtype=float)
+    F, N, _ = frames.shape
+    aligned = _align_to_ref(frames, ref)
+    disp = (aligned - aligned.mean(axis=0)).reshape(F, 3 * N)   # mean-centred fluctuations (F,3N)
+    # Thin SVD of the F×3N fluctuation matrix — at most F−1 nonzero modes; avoids the 3N×3N covariance.
+    _U, S, Vt = np.linalg.svd(disp, full_matrices=False)
+    var_all = (S ** 2) / max(F - 1, 1)                          # per-mode fluctuation variance (nm²)
+    m3 = np.repeat(np.asarray(node_mass_trans, dtype=float), 3)  # per-DOF translational mass (3N,)
+    modes = []
+    for i in range(min(n_modes, len(S))):
+        sig2 = float(var_all[i])
+        if sig2 <= 0.0:
+            break
+        v = Vt[i]                                               # unit 3N shape
+        k_eff = kT / sig2                                       # pN/nm
+        m_eff = float(v @ (m3 * v))                             # pN·ns²/nm
+        omega = math.sqrt(max(k_eff / m_eff, 0.0))             # 1/ns
+        modes.append({
+            "shape": v.reshape(N, 3),                          # unit per-node displacement direction
+            "variance_nm2": sig2,
+            "amplitude_nm": math.sqrt(sig2),                   # RMS thermal amplitude of the mode
+            "k_eff_pN_per_nm": float(k_eff),
+            "m_eff": m_eff,
+            "omega_per_ns": float(omega),
+            "freq_GHz": float(omega / (2.0 * math.pi)),
+        })
+    return {"modes": modes, "variance_all": var_all}
+
+
+def dynamics_dccm(frames: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Equal-time bp–bp displacement cross-correlation matrix (DCCM, N×N) from a trajectory frame
+    stack ``(F,N,3)`` Kabsch-aligned to ``ref`` (rigid body removed). Entry (i,j) is the Pearson of
+    the per-node displacement dot-products ``⟨Δrᵢ·Δrⱼ⟩/(σᵢσⱼ)`` — the same 'shape of motion' observable
+    as the MD and free-free NMA DCCM (:func:`fem_solver.compute_correlation_matrix`), so the three are
+    directly comparable on matched (helix, bp) keys.
+
+    NOTE: this equal-time correlation is the normalized ``k_BT·K⁻¹`` covariance and is therefore
+    **friction-independent** — Stokes and RPY give the same DCCM. It validates that the dynamics engine
+    reproduces the NMA/MD motion topology, but the quantity hydrodynamics actually changes is kinetic:
+    use :func:`mode_autocorr_time_ns` for the mode relaxation time.
+    """
+    frames = np.asarray(frames, dtype=float)
+    aligned = _align_to_ref(frames, np.asarray(ref, dtype=float))
+    disp = aligned - aligned.mean(axis=0)                    # (F,N,3) mean-centred fluctuations
+    F = disp.shape[0]
+    cov = np.einsum("fik,fjk->ij", disp, disp) / F           # ⟨Δrᵢ·Δrⱼ⟩ (dot over xyz)
+    d = np.sqrt(np.clip(np.diag(cov), 1e-30, None))
+    return np.clip(cov / np.outer(d, d), -1.0, 1.0)
+
+
+def mode_coordinate(frames: np.ndarray, ref: np.ndarray, mode_shape: np.ndarray) -> np.ndarray:
+    """Scalar mode coordinate ``ξ(t) = Σᵢ shapeᵢ · Δrᵢ(t)`` per frame — the projection of the
+    rigid-body-aligned displacement onto a unit mode shape ``(N,3)`` (e.g. a PCA breathing mode).
+    Returns a ``(F,)`` time series (nm)."""
+    aligned = _align_to_ref(np.asarray(frames, dtype=float), np.asarray(ref, dtype=float))
+    disp = aligned - np.asarray(ref, dtype=float)
+    return np.einsum("fik,ik->f", disp, np.asarray(mode_shape, dtype=float))
+
+
+def mode_autocorr_time_ns(coord: np.ndarray, dt_ns: float) -> float:
+    """Integrated autocorrelation time (ns) of a scalar mode-coordinate time series ``coord`` sampled
+    at spacing ``dt_ns``. ``τ = dt·(1 + 2·Σ_{k≥1} ρ_k)`` truncated at the first non-positive ρ_k (the
+    standard initial-positive-sequence estimator). This is the mode's relaxation time — the KINETIC
+    quantity that hydrodynamic coupling (RPY vs diagonal Stokes) changes, unlike the equal-time
+    variance which is friction-independent."""
+    x = np.asarray(coord, dtype=float)
+    x = x - x.mean()
+    n = len(x)
+    var = float(x @ x / n)
+    if var <= 0.0 or n < 4:
+        return 0.0
+    tau = 1.0
+    for k in range(1, n):
+        rho = float((x[: n - k] @ x[k:]) / (n - k)) / var
+        if rho <= 0.0:
+            break
+        tau += 2.0 * rho
+    return float(dt_ns * tau)
 
 
 # ── Phase 2: base-stacking force composer + salt-driven reconfiguration driver ──
@@ -298,6 +522,8 @@ def simulate_equilibrium(
     n_equil: int = 4000,
     sample_every: int = 20,
     seed: int = 0,
+    nonlinear_force: bool = False,
+    modified_gjf: bool = False,
 ) -> dict:
     """Run an equilibrium Langevin trajectory of ``design`` and return frames + trajectory RMSF.
 
@@ -358,17 +584,35 @@ def simulate_equilibrium(
     kT = KBT_300 * (temperature_K / 300.0)
 
     if dt is None:
-        # Plain GJF inherits Verlet's step limit dt < 2/ω_max; ω_max is the largest GENERALIZED
-        # frequency √λ of (K, M). 0.8/ω_max ≈ 0.4·(2/ω_max) leaves a stability margin.
-        from scipy.sparse import diags
-        from scipy.sparse.linalg import eigsh
-        Md = diags(m_diag).tocsr()
-        lam_g = float(eigsh(Kcsr, k=1, M=Md, which="LM", return_eigenvectors=False)[0])
-        omega_max = math.sqrt(max(lam_g, 1e-30))
-        dt = min(DT_DEFAULT, 0.8 / omega_max)
+        if modified_gjf:
+            # The modified GJF (Simpson midpoint force) has a much wider stable region than plain GJF,
+            # so start from the paper's flat 5 ps; the divergence-guarded retry below halves it only if
+            # the design's stiffest generalized mode still overshoots even the widened region.
+            dt = DT_DEFAULT
+        else:
+            # Plain GJF inherits Verlet's step limit dt < 2/ω_max; ω_max is the largest GENERALIZED
+            # frequency √λ of (K, M). 0.8/ω_max ≈ 0.4·(2/ω_max) leaves a stability margin.
+            from scipy.sparse import diags
+            from scipy.sparse.linalg import eigsh
+            Md = diags(m_diag).tocsr()
+            lam_g = float(eigsh(Kcsr, k=1, M=Md, which="LM", return_eigenvectors=False)[0])
+            omega_max = math.sqrt(max(lam_g, 1e-30))
+            dt = min(DT_DEFAULT, 0.8 / omega_max)
 
-    def force_fn(q):
-        return f_ext - (Kcsr @ q)
+    if nonlinear_force:
+        # Phase 2: the FULL nonlinear corotational internal force per step (exact under large rotations),
+        # in place of the linear F=−K·q. Needed for large-amplitude reconfiguration/switching; for
+        # small thermal fluctuations it reduces to the linear force (so the equilibrium RMSF is
+        # unchanged). SLOW at origami scale — the per-step Python element loop is the target of the
+        # Phase-2(d) F(x) perf rewrite. dt auto-sizing still uses the linear K tangent (same stiff modes).
+        from backend.physics.fem_solver import build_corotational_elements
+        _X0cr, _cr_elements = build_corotational_elements(mesh, X0)
+
+        def force_fn(q):
+            return f_ext - corotational_internal_force(q, X0, _cr_elements)
+    else:
+        def force_fn(q):
+            return f_ext - (Kcsr @ q)
 
     Z = None
     if hydrodynamics:
@@ -384,6 +628,12 @@ def simulate_equilibrium(
             if hydrodynamics:
                 samples, _v = gjf_integrate_matrix_friction(
                     force_fn, np.zeros(6 * n), m_diag, Z,
+                    kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
+                    sample_every=sample_every, rng=rng,
+                )
+            elif modified_gjf:
+                samples, _v = gjf_modified_integrate(
+                    force_fn, np.zeros(6 * n), m_diag, gamma,
                     kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
                     sample_every=sample_every, rng=rng,
                 )

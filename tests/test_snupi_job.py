@@ -73,6 +73,28 @@ def test_new_job_stage_name_tracks_solver(tmp_path):
 
     assert new_snupi_job("d", nonlinear=True).stages[0].name == "nonlinear"
     assert new_snupi_job("d", nonlinear=False).stages[0].name == "linear"
+    # Dynamics jobs run a Langevin trajectory, not the static solve → honest stage label.
+    assert new_snupi_job("d", dynamics=True).stages[0].name == "dynamics"
+    assert new_snupi_job("d", dynamics=True, hydrodynamics=True).stages[0].name == "dynamics-rpy"
+
+
+def test_estimate_seconds_accounts_for_dynamics_and_rpy():
+    """The progress-bar ETA must reflect the dynamics/RPY workload: a Langevin run (fixed 60k GJF
+    steps) is far slower than the ~20-step static solve, and full-RPY hydrodynamics slower still —
+    otherwise ``overall = elapsed/est`` pins at its 0.97 cap in seconds while minutes of work run."""
+    from backend.core.snupi_runner import _estimate_seconds
+    from backend.core.snupi_job import new_snupi_job
+
+    nuc = 1764  # ≈ 882 FEM nodes, the demo design
+    static = _estimate_seconds(new_snupi_job("d", nonlinear=True, n_nucleotides=nuc))
+    dyn = _estimate_seconds(new_snupi_job("d", dynamics=True, n_nucleotides=nuc))
+    rpy = _estimate_seconds(new_snupi_job("d", dynamics=True, hydrodynamics=True, n_nucleotides=nuc))
+
+    # The pin bug was RPY-only: the old static model estimated ~47 s for a run that took 658 s.
+    assert rpy > static                      # RPY estimate now exceeds the old static figure
+    assert rpy > 5.0 * dyn                   # dense RPY friction dominates the Langevin base cost
+    assert 300.0 < rpy < 1500.0              # order-of-magnitude sane for ~880 nodes (observed ≈ 650 s)
+    assert dyn > 2.0                         # Stokes dynamics still gets a real (non-trivial) estimate
 
 
 def test_material_defaults_snupi_and_is_validated(tmp_path):

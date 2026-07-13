@@ -306,3 +306,393 @@ def test_predict_shape_dynamics_matches_static_contract():
         fN = np.array(traj["frames"][-1]).reshape(-1, 6)[:, :3]
         assert np.abs(f0 - fN).max() > 1e-3                        # frames actually differ (motion)
 
+
+
+# ── Phase 3: PCA breathing-mode extraction (paper Fig 3c/d) ─────────────────────
+
+def test_breathing_pca_recovers_injected_mode():
+    """Deterministic pin: frames = a single radial 'breathing' oscillation of a ring of nodes → PCA
+    must recover that mode's shape, its thermal variance ⟨ξ²⟩, and the equipartition wiring
+    (k_eff·⟨ξ²⟩ = k_BT, m_eff = vᵀ·diag(m)·v). A pure dilation is orthogonal to all 6 rigid modes, so
+    Kabsch alignment leaves it untouched — the recovered shape/variance are exact up to sampling."""
+    N, F, A = 12, 40, 0.1
+    phi = 2.0 * np.pi * np.arange(N) / N
+    X0 = np.stack([np.cos(phi), np.sin(phi), np.zeros(N)], axis=1)        # unit ring in xy
+    radial = np.stack([np.cos(phi), np.sin(phi), np.zeros(N)], axis=1)   # outward radial per node
+    mode = (radial / np.linalg.norm(radial)).reshape(N, 3)              # unit 3N shape
+    amp = A * np.cos(2.0 * np.pi * np.arange(F) / F)                     # one full period, ⟨amp²⟩ = A²/2
+    frames = X0[None] + amp[:, None, None] * mode[None]                  # (F,N,3)
+
+    node_mass = np.ones(N)
+    kT = dyn.KBT_300
+    out = dyn.breathing_mode_pca(frames, X0, node_mass, kT=kT, n_modes=3)
+    m0 = out["modes"][0]
+
+    overlap = abs(float(m0["shape"].reshape(-1) @ mode.reshape(-1)))     # both unit vectors
+    assert overlap > 0.999                                               # recovered the injected shape
+    exp_var = 0.5 * A * A * F / (F - 1)                                  # SVD variance uses /(F-1)
+    assert abs(m0["variance_nm2"] - exp_var) / exp_var < 0.02
+    assert abs(m0["amplitude_nm"] - np.sqrt(m0["variance_nm2"])) < 1e-12
+    # equipartition + effective-mass wiring
+    assert abs(m0["k_eff_pN_per_nm"] * m0["variance_nm2"] - kT) < 1e-9
+    assert abs(m0["m_eff"] - 1.0) < 1e-9                                 # unit shape, unit masses
+    assert abs(m0["freq_GHz"] - m0["omega_per_ns"] / (2 * np.pi)) < 1e-12
+    assert m0["variance_nm2"] >= out["modes"][1]["variance_nm2"]         # variance-ranked
+
+
+@pytest.mark.slow
+def test_breathing_pca_mode_tracks_rmsf_on_real_bundle():
+    """On a real 2HB the dominant PCA mode is the softest collective motion, so where it moves most
+    (per-node |shape|) must be where the structure is floppiest (per-node RMSF). Positive, finite
+    natural frequency; the leading mode carries a real share of the total fluctuation variance."""
+    from backend.core.models import LatticeType
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    cells = [(0, 1), (1, 1)]
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(cells, 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        design = design_state.get_or_404().model_copy(deep=True)
+
+    sim = dyn.simulate_equilibrium(
+        design, material="snupi", n_steps=120000, n_equil=20000, sample_every=30, seed=1,
+    )
+    N = sim["frames"].shape[1]
+    node_mass = sim["mass_diag"].reshape(N, 6)[:, 0]
+    pca = dyn.breathing_mode_pca(sim["frames"], sim["positions0"], node_mass, n_modes=5)
+    m0 = pca["modes"][0]
+
+    amp_per_node = np.linalg.norm(m0["shape"], axis=1)                   # (N,)
+    rmsf = np.asarray(sim["rmsf"])
+    a, b = amp_per_node - amp_per_node.mean(), rmsf - rmsf.mean()
+    corr = float((a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
+    assert corr > 0.5                                                    # mode motion ↔ floppiness
+    assert m0["freq_GHz"] > 0 and np.isfinite(m0["freq_GHz"])
+    frac = m0["variance_nm2"] / pca["variance_all"].sum()
+    assert frac > 1.0 / N                                                # leading mode is collective
+
+
+# ── Phase 3: DCCM + mode-kinetics primitives (RPY-payoff analysis) ──────────────
+
+def _ring_breathing_frames(N=12, F=40, A=0.1):
+    """A ring of N nodes undergoing one full period of pure radial 'breathing' (dilation) — a mode
+    orthogonal to all rigid modes, so Kabsch alignment leaves it exact. Returns (X0, mode, amp, frames)."""
+    phi = 2.0 * np.pi * np.arange(N) / N
+    X0 = np.stack([np.cos(phi), np.sin(phi), np.zeros(N)], axis=1)
+    radial = np.stack([np.cos(phi), np.sin(phi), np.zeros(N)], axis=1)
+    mode = (radial / np.linalg.norm(radial)).reshape(N, 3)
+    amp = A * np.cos(2.0 * np.pi * np.arange(F) / F)
+    frames = X0[None] + amp[:, None, None] * mode[None]
+    return X0, mode, amp, frames
+
+
+def test_dynamics_dccm_signs_match_breathing_geometry():
+    """Equal-time DCCM of a radial-breathing ring: opposite nodes move in opposite directions but in
+    lock-step in time → correlation −1; the diagonal is +1; a node vs its neighbour ≈ cos(2π/N) > 0."""
+    N = 12
+    X0, mode, amp, frames = _ring_breathing_frames(N=N)
+    C = dyn.dynamics_dccm(frames, X0)
+    assert C.shape == (N, N)
+    assert np.allclose(np.diag(C), 1.0, atol=1e-6)
+    assert C[0, N // 2] < -0.99                                   # diametrically opposite node
+    assert C[0, 1] > 0.5                                          # neighbour, ê·ê = cos(2π/12) ≈ 0.87
+    assert abs(C[0, 1] - np.cos(2 * np.pi / N)) < 1e-3
+
+
+def test_mode_coordinate_recovers_projection():
+    """Projecting the breathing frames onto their unit mode returns the injected amplitude series."""
+    X0, mode, amp, frames = _ring_breathing_frames()
+    xi = dyn.mode_coordinate(frames, X0, mode)
+    assert np.allclose(xi, amp, atol=1e-9)
+
+
+def test_autocorr_time_recovers_ar1_timescale():
+    """Integrated autocorrelation time of an AR(1) series x_t = φ x_{t-1} + √(1−φ²)ε recovers the
+    analytic τ_int = dt·(1+φ)/(1−φ)."""
+    rng = np.random.default_rng(0)
+    phi, dt, n = np.exp(-1.0), 0.01, 60000
+    x = np.empty(n)
+    x[0] = rng.standard_normal()
+    s = np.sqrt(1.0 - phi * phi)
+    for t in range(1, n):
+        x[t] = phi * x[t - 1] + s * rng.standard_normal()
+    tau = dyn.mode_autocorr_time_ns(x, dt)
+    tau_true = dt * (1.0 + phi) / (1.0 - phi)
+    assert abs(tau - tau_true) / tau_true < 0.25
+
+
+@pytest.mark.slow
+def test_dccm_and_mode_kinetics_primitives_on_real_bundle():
+    """End-to-end integration of the RPY-payoff analysis primitives on a real 2HB: (a) a dynamics
+    trajectory's equal-time DCCM (:func:`dynamics_dccm`) tracks the analytic free-free NMA DCCM — i.e.
+    the engine reproduces the NMA 'shape of motion'; (b) the breathing-mode relaxation time
+    (:func:`mode_autocorr_time_ns` on :func:`mode_coordinate`) is a finite, positive kinetic quantity
+    for BOTH diagonal-Stokes and full-RPY friction (the quantity hydrodynamics changes). The
+    quantitative RPY-vs-MD comparison itself lives in ``scripts/snupi_dccm_compare.py`` (logged
+    numbers, needs a local MD DCD), not a pinned assertion — the equal-time DCCM's friction-
+    independence is already proven analytically by the Phase-1b ``cov = k_BT·K⁻¹`` test."""
+    from backend.core.models import LatticeType
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.physics.fem_solver import (
+        build_fem_mesh, assemble_global_stiffness, assemble_mass_matrix, compute_correlation_matrix,
+    )
+
+    cells = [(0, 1), (1, 1)]
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(cells, 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        design = design_state.get_or_404().model_copy(deep=True)
+
+    kw = dict(material="snupi", n_steps=120000, n_equil=20000, sample_every=20, seed=3)
+    stk = dyn.simulate_equilibrium(design, hydrodynamics=False, **kw)
+    rpy = dyn.simulate_equilibrium(design, hydrodynamics=True, **kw)
+
+    # (a) dynamics DCCM tracks the analytic NMA DCCM (same node order as the frames).
+    mesh = build_fem_mesh(design)
+    K, _ = assemble_global_stiffness(mesh, material="snupi", bp_registered_frame=True)
+    M = assemble_mass_matrix(mesh, design)
+    C_nma = compute_correlation_matrix(K, len(mesh.nodes), M=M)
+    C_s = dyn.dynamics_dccm(stk["frames"], stk["positions0"])
+    iu = np.triu_indices(C_s.shape[0], k=1)
+    agree_s = float(np.corrcoef(C_s[iu], C_nma[iu])[0, 1])
+    assert C_s.shape == C_nma.shape and np.allclose(np.diag(C_s), 1.0, atol=1e-6)
+    assert agree_s > 0.4                                            # engine reproduces NMA motion topology
+
+    # (b) breathing-mode relaxation time — finite, positive kinetic quantity for both frictions.
+    N = stk["frames"].shape[1]
+    nm = stk["mass_diag"].reshape(N, 6)[:, 0]
+    mode = dyn.breathing_mode_pca(stk["frames"], stk["positions0"], nm, n_modes=1)["modes"][0]["shape"]
+    for sim in (stk, rpy):
+        xi = dyn.mode_coordinate(sim["frames"], sim["positions0"], mode)
+        tau = dyn.mode_autocorr_time_ns(xi, sim["dt_ns"] * kw["sample_every"])
+        assert tau > 0 and np.isfinite(tau)
+
+
+# ── Phase 1b-ii: full generalized RPY (rotation–translation + rotation–rotation) ──
+
+def _two_nodes(r):
+    return np.array([[0.0, 0.0, 0.0], [r, 0.0, 0.0]])
+
+
+def test_generalized_rpy_spd_for_separated_beads():
+    """The full generalized mobility is symmetric + positive-definite in its valid (well-separated)
+    regime — a ladder at ≥ 2a spacing. Both Ξ and its inverse Z are SPD."""
+    a = dyn.HYDRO_RADIUS_NM
+    xs = np.arange(5) * 2.5 * a                        # non-overlapping (r ≥ 2a)
+    pos = np.array([[x, 0.0, 0.0] for x in xs] + [[x, 3.0 * a, 0.0] for x in xs])
+    Xi = hd.rpy_mobility_generalized(pos, a)
+    assert np.allclose(Xi, Xi.T)
+    assert np.linalg.eigvalsh(Xi).min() > 0
+    Z = hd.friction_matrix(pos, a, generalized=True)
+    assert np.allclose(Z, Z.T)
+    assert np.linalg.eigvalsh(Z).min() > 0
+
+
+def test_generalized_rpy_pair_is_spd_at_all_overlaps():
+    """A single pair's generalized mobility is SPD at every separation, including deep overlap
+    (r/a ≈ 0.3) — so the r<2a rt/rr regularizations are individually well-formed."""
+    a = dyn.HYDRO_RADIUS_NM
+    for frac in (0.31, 0.5, 1.0, 2.0, 3.0):
+        Xi = hd.rpy_mobility_generalized(_two_nodes(frac * a), a)
+        assert np.linalg.eigvalsh(Xi).min() > 0, f"non-PD pair at r/a={frac}"
+
+
+def test_generalized_rpy_not_pd_at_origami_overlap_raises():
+    """The finding: many-body superposition RPY with rotational coupling loses positive-definiteness
+    at DNA-origami bead density (σ=1.1 nm beads 0.34 nm apart, ~10 near-concentric neighbours). So
+    friction_matrix(generalized=True) REFUSES (raises) rather than return a non-PD friction, while the
+    translational-only production friction stays SPD on the very same configuration."""
+    a = dyn.HYDRO_RADIUS_NM
+    xs = np.arange(8) * 0.34                            # a dense helix-like run at the real bp spacing
+    pos = np.array([[x, 0.0, 0.0] for x in xs] + [[x, 1.0, 0.0] for x in xs])
+    assert np.linalg.eigvalsh(hd.rpy_mobility_generalized(pos, a)).min() < 0   # not PD
+    with pytest.raises(ValueError, match="positive-definite"):
+        hd.friction_matrix(pos, a, generalized=True)
+    Zt = hd.friction_matrix(pos, a, generalized=False)                         # production path
+    assert np.linalg.eigvalsh(Zt).min() > 0
+
+
+def test_generalized_rpy_rr_traceless_far_and_coupling_antisymmetric():
+    """Structure of the far-field (r>2a) coupling blocks: μ^rr ∝ (3r̂r̂ − I) is traceless with
+    along-axis = −2× transverse; μ^rt ∝ ε·r̂ is antisymmetric and non-zero."""
+    a = dyn.HYDRO_RADIUS_NM
+    rvec = np.array([-3.0 * a, 0.0, 0.0])
+    rr = hd._rpy_pair_rr(rvec, a)
+    rt = hd._rpy_pair_rt(rvec, a)
+    assert abs(np.trace(rr)) < 1e-12
+    assert rr[0, 0] == pytest.approx(-2.0 * rr[1, 1], rel=1e-9)
+    assert np.allclose(rt, -rt.T)
+    assert np.abs(rt).max() > 0
+
+
+def test_generalized_rpy_continuous_at_2a():
+    """The overlap regularizations join the far-field tensors continuously at r = 2a (the property
+    that keeps Ξ SPD across the transition)."""
+    a = dyn.HYDRO_RADIUS_NM
+    eps = 1e-6
+    below = np.array([-(2 * a - eps), 0.0, 0.0])
+    above = np.array([-(2 * a + eps), 0.0, 0.0])
+    assert np.allclose(hd._rpy_pair_rr(below, a), hd._rpy_pair_rr(above, a), atol=1e-5)
+    assert np.allclose(hd._rpy_pair_rt(below, a), hd._rpy_pair_rt(above, a), atol=1e-5)
+
+
+def test_generalized_rpy_self_blocks_and_far_decay():
+    """Self blocks are the Stokes translational/rotational mobilities; pair coupling → 0 at large r."""
+    a = dyn.HYDRO_RADIUS_NM
+    Xi = hd.rpy_mobility_generalized(_two_nodes(50.0 * a), a)
+    assert Xi[0, 0] == pytest.approx(1.0 / dyn.STOKES_TRANS, rel=1e-9)   # tt self
+    assert Xi[3, 3] == pytest.approx(1.0 / dyn.STOKES_ROT, rel=1e-9)     # rr self
+    # tt coupling decays only as 1/r, so judge it relative to the self mobility (not an absolute floor).
+    assert np.abs(Xi[0:6, 6:12]).max() < 0.05 * (1.0 / dyn.STOKES_TRANS)
+
+
+def test_generalized_friction_adds_rotational_coupling():
+    """The 1b-ii payoff: the generalized friction carries real rotation–rotation AND rotation–
+    translation pair coupling, which the translational-only pass (diagonal rotational drag) zeros."""
+    a = dyn.HYDRO_RADIUS_NM
+    pos = _two_nodes(2.5 * a)
+    Zg = hd.friction_matrix(pos, a, generalized=True)
+    Zt = hd.friction_matrix(pos, a, generalized=False)
+    assert np.abs(Zt[3:6, 9:12]).max() < 1e-9        # old pass: no rot–rot pair coupling
+    assert np.abs(Zg[3:6, 9:12]).max() > 1e-6        # generalized: rot–rot coupling present
+    assert np.abs(Zg[3:6, 6:9]).max() > 1e-6         # ...and rot–trans coupling
+
+
+# ── Phase 2: nonlinear corotational force in the Langevin loop ───────────────────
+
+def _routed_2hb():
+    from backend.core.models import LatticeType
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle([(0, 1), (1, 1)], 42, lattice=LatticeType.HONEYCOMB, name="2hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        return design_state.get_or_404().model_copy(deep=True)
+
+
+def test_corotational_force_zero_under_rigid_body():
+    """The defining corotational property: a rigid-body displacement (uniform translation) produces
+    ZERO internal force — the EICR filter removes rigid motion (d_local = 0) for ANY stiffness."""
+    from backend.physics.fem_solver import build_fem_mesh, build_corotational_elements
+    mesh = build_fem_mesh(_routed_2hb())
+    N = len(mesh.nodes)
+    X0, elements = build_corotational_elements(mesh)
+    q = np.zeros(6 * N)
+    q.reshape(N, 6)[:, 0] = 1.7                            # uniform +x translation
+    f = dyn.corotational_internal_force(q, X0, elements)
+    assert np.abs(f).max() < 1e-9
+
+
+def test_corotational_force_reduces_to_element_tangent_for_small_q():
+    """For small q the nonlinear corotational force → the linear tangent assembled from the SAME
+    corotational elements (T·K₁₂·Tᵀ, geometry frame) — proving the force assembly is consistent with
+    its own stiffness (NOT the bp-registered NMA K, which differs by the anisotropic-bending frame)."""
+    from backend.physics.fem_solver import build_fem_mesh, build_corotational_elements
+    from backend.physics.snupi_corotational import element_force_tangent
+    mesh = build_fem_mesh(_routed_2hb())
+    N = len(mesh.nodes)
+    X0, elements = build_corotational_elements(mesh)
+    Kc = np.zeros((6 * N, 6 * N))
+    for (i, j, ref, K12) in elements:
+        _f, Kg = element_force_tangent(X0[i], X0[j], np.eye(3), np.eye(3), ref, K12, geometric=False)
+        dofs = list(range(6 * i, 6 * i + 6)) + list(range(6 * j, 6 * j + 6))
+        Kc[np.ix_(dofs, dofs)] += Kg
+    rng = np.random.default_rng(1)
+    q = rng.standard_normal(6 * N) * 1e-5
+    fc = dyn.corotational_internal_force(q, X0, elements)
+    assert np.linalg.norm(fc - Kc @ q) / np.linalg.norm(Kc @ q) < 0.02
+
+
+@pytest.mark.slow
+def test_simulate_equilibrium_nonlinear_force_runs_and_tracks_flexibility():
+    """simulate_equilibrium(nonlinear_force=True) drives the Langevin loop with the full corotational
+    F(x): it produces a finite trajectory RMSF whose per-node flexibility pattern correlates with the
+    linear run (same structure; the geometry-frame linearization shifts magnitude, not the topology of
+    where it's floppy)."""
+    design = _routed_2hb()
+    kw = dict(n_steps=20000, n_equil=4000, sample_every=20, seed=0)
+    lin = dyn.simulate_equilibrium(design, **kw)
+    nl = dyn.simulate_equilibrium(design, nonlinear_force=True, **kw)
+    assert nl["rmsf"].shape == lin["rmsf"].shape
+    assert np.isfinite(nl["rmsf"]).all() and nl["rmsf"].mean() > 0
+    a, b = nl["rmsf"] - nl["rmsf"].mean(), lin["rmsf"] - lin["rmsf"].mean()
+    corr = float((a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
+    assert corr > 0.4
+
+
+# ── Phase 2: modified GJF (half-time + Simpson) for the paper's 5 ps step ─────────
+
+@pytest.mark.parametrize("m,k,g,dt", [(1.0, 1.0, 1.0, 1.0), (1.0, 1.0, 3.0, 0.5), (1.0, 1.0, 3.0, 3.0)])
+def test_modified_gjf_samples_boltzmann_harmonic(m, k, g, dt):
+    """The paper's harmonic validation (SI §4.4, conditions i/ii/iv): the modified GJF samples the exact
+    configurational variance ⟨U²⟩ = k_BT/k — INCLUDING condition iv (dt=3, ΩΔt/2=1.5) where plain GJF is
+    numerically unstable. Correct sampling relies on the fluctuation-dissipation-consistent shared-half
+    random impulse (β^{Δt} contains β^{Δt/2})."""
+    s, _ = dyn.gjf_modified_integrate(
+        lambda q: -k * q, np.zeros(1), np.array([m]), np.array([g]),
+        kT=1.0, dt=dt, n_steps=400000, n_equil=40000, sample_every=4, rng=np.random.default_rng(0),
+    )
+    assert float((s[:, 0] ** 2).mean()) == pytest.approx(1.0 / k, rel=0.1)
+
+
+def test_modified_gjf_stable_where_plain_diverges():
+    """At ΩΔt/2 = 1.5 (dt=3, k=m=1) plain GJF hits its Verlet stability wall and diverges, while the
+    Simpson-midpoint modified GJF stays stable AND samples ⟨U²⟩ = k_BT/k."""
+    with pytest.raises(dyn._GJFDiverged), np.errstate(over="ignore", invalid="ignore"):
+        dyn.gjf_integrate(lambda q: -q, np.zeros(1), np.array([1.0]), np.array([3.0]),
+                          kT=1.0, dt=3.0, n_steps=20000, n_equil=2000, sample_every=1,
+                          rng=np.random.default_rng(0))
+    s, _ = dyn.gjf_modified_integrate(lambda q: -q, np.zeros(1), np.array([1.0]), np.array([3.0]),
+                                      kT=1.0, dt=3.0, n_steps=400000, n_equil=40000, sample_every=4,
+                                      rng=np.random.default_rng(0))
+    assert np.isfinite(s).all()
+    assert float((s[:, 0] ** 2).mean()) == pytest.approx(1.0, rel=0.1)
+
+
+@pytest.mark.slow
+def test_modified_gjf_extends_stable_step_on_real_bundle():
+    """Phase-2(c) payoff on a real 2HB: at 1 ps (ΩΔt/2 ≈ 2.4 for the stiffest generalized mode) plain GJF
+    DIVERGES but the modified GJF stays stable AND its trajectory RMSF matches the free-free NMA RMSF — a
+    ~6× larger stable step (plain caps ~0.17 ps here). Reaching the paper's flat 5 ps additionally needs
+    the stiff crossover modes softened/constrained (their future 'constrained Langevin'); the integrator
+    itself is validated by the harmonic conditions i–iv above. Integrators are called directly so the
+    simulate_equilibrium retry-guard doesn't mask the plain divergence."""
+    from backend.physics.fem_solver import (
+        build_fem_mesh, assemble_global_stiffness, assemble_mass_matrix, compute_rmsf_nma,
+        assemble_prestress_force,
+    )
+    design = _routed_2hb()
+    mesh = build_fem_mesh(design)
+    n = len(mesh.nodes)
+    Kc = assemble_global_stiffness(mesh, material="snupi", bp_registered_frame=True)[0].tocsr()
+    M = assemble_mass_matrix(mesh, design)
+    nma = compute_rmsf_nma(Kc, n, M=M)
+    X0 = np.array([nd.position for nd in mesh.nodes])
+    f_ext = np.asarray(assemble_prestress_force(mesh, design))
+    m_diag = np.asarray(M.tocsr().diagonal()) * dyn.MASS_G6_TO_DYN
+    gamma = dyn.stokes_friction_diag(n)
+
+    def force_fn(q):
+        return f_ext - (Kc @ q)
+
+    kw = dict(kT=dyn.KBT_300, dt=0.001, n_steps=120000, n_equil=20000, sample_every=20)
+    with pytest.raises(dyn._GJFDiverged), np.errstate(over="ignore", invalid="ignore"):
+        dyn.gjf_integrate(force_fn, np.zeros(6 * n), m_diag, gamma, rng=np.random.default_rng(0), **kw)
+
+    s, _ = dyn.gjf_modified_integrate(force_fn, np.zeros(6 * n), m_diag, gamma,
+                                      rng=np.random.default_rng(0), **kw)
+    disp = s.reshape(len(s), n, 6)[:, :, :3]
+    r = dyn.trajectory_rmsf(X0[None] + disp, X0)
+    a, b = r - r.mean(), nma - nma.mean()
+    pearson = float((a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-12))
+    assert np.isfinite(r).all()
+    assert pearson > 0.9
+    assert 0.6 <= r.mean() / nma.mean() <= 1.2

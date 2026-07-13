@@ -113,12 +113,52 @@ Implemented exactly this way in `snupi_dynamics.py`; validated by the 1-DOF `⟨
     reversible close→open→close switch** on a minimal bistable model: bond 0.46 nm (stacked/closed) →
     2.5 nm (unstacked/open at low salt) → 0.46 nm (re-stacked when salt restored). Matches the paper's
     ion-responsive switch mechanism (Fig 6).
-  - **Scope honesty:** stacking topology (which node pairs stack) is an EXPLICIT input — auto-detecting
-    coaxial/blunt-end stacks from a design is a topology step to define WITH the user (Three-Layer Law,
-    "ask first"). Applying the switch to a full origami design + reaching the paper's µs/50° opening
-    needs (a) that stacking-site topology, (b) the nonlinear corotational force per step, (c) the
-    modified GJF (half-time+Simpson) + an `F(x)` perf rewrite for millions of steps. The MECHANISM +
-    element are built and validated; the full-scale origami switch is the remaining perf/topology lift.
+  - **Phase-2 step (a) — blunt-end stacking-site AUTO-DETECTION. ✅ DONE 2026-07-13.** User chose
+    "auto-detect blunt-end abutments" (the DNA-topology ask-first). `snupi_stacking.detect_blunt_end_stacks
+    (design|mesh) → [(node_i,node_j),...]` (the format `simulate_reconfiguration`/`stacking_force_all`
+    consume). A **blunt end** = a FREE duplex terminus: a helix-end node with NO inter-helix element/
+    spring/rigid-link (crossover/continuation/linker all wire there) and no `ForcedLigation` (covalent
+    joins excluded — a switch stacks reversibly). Two blunt ends **stack** when they abut coaxially:
+    gap ≤ 0.85 nm, outward terminal-segment tangents antiparallel (facing, `t·t≤−0.7`), gap collinear
+    with them (`|d̂·t|≥0.7`). Read-only (Layer-2 geom from Layer-1 topo, no writes). 5 tests
+    (`test_snupi_stacking.py`: coaxial hit, side-by-side reject, gap reject, joined reject, ligation
+    reject). **Real-design verified:** bundles → 0 (parallel faces); hingeV4 free ends parallel
+    (`t·t=+1`); y4HB has facing collinear ends but 13.9 nm apart (arms OPEN) → 0. Correctly fires only
+    on CLOSED facing ends <0.85 nm.
+  - **Phase-2 step (b) — NONLINEAR corotational force in the Langevin loop. ✅ DONE 2026-07-13.**
+    `fem_solver.build_corotational_elements(mesh, X0)` (extracted from `_solve_snupi_corotational`, which
+    now reuses it — 22 corotational/shape tests still green) returns the shared `[(i,j,ref,K12)]` beam
+    list. `snupi_dynamics.corotational_internal_force(q, X0, elements)` assembles the consistent internal
+    force (via `snupi_corotational._internal_force`) at `X=X0+Δu, R=exp(θ)`. `simulate_equilibrium(...,
+    nonlinear_force=True)` (opt-in; default False keeps the validated linear path) swaps `F=−Kq` for
+    `f_ext − corotational_internal_force`. **Verified:** rigid-body q → exactly 0 force (EICR filter);
+    small q → the corotational element tangent `T·K₁₂·Tᵀ` (1.6% @ 1e-4). **NB the corot tangent differs
+    ~45% from the bp-registered NMA `K`** (geometry frame vs bp-registered anisotropic-bending frame) —
+    so `nonlinear_force=True` uses the SHAPE-solver linearization, NOT the RMSF/NMA one; its equilibrium
+    RMSF pattern still correlates with the linear run (>0.4) but the magnitude shifts. dt auto-sizing
+    still uses the linear K. SLOW at scale (per-step Python element loop = the step-(d) perf target).
+    3 tests (`test_snupi_dynamics.py`: rigid-zero, small-q tangent, slow nonlinear-vs-linear correlation).
+  - **Phase-2 step (c) — MODIFIED GJF (half-time + Simpson). ✅ DONE 2026-07-13.** From the dynamics SI
+    (`Literature/SnupidyanamicsSI.pdf`, Supp Note 4 — user supplied it). `snupi_dynamics.gjf_modified_integrate`
+    (diagonal/Stokes) + `simulate_equilibrium(..., modified_gjf=True)`. Per step: half-time coordinate
+    `U^{t+½}=U^t+Δt·j(½V+⅛·acc+¼θ^{½})`, evaluate the SIMPSON MIDPOINT force `acc^{t+½}`, full step
+    `U^{t+1}=U^t+Δt·b(V+½·acc^{t+½}+½θ^{1})`, velocity `V^{t+1}=a·V+(Δt/6)(acc^{t+1}+2(a+b)acc^{t+½}+acc^t)+b·θ^{1}`;
+    `j=(I+Δtγ̄/4)⁻¹, b=(I+Δtγ̄/2)⁻¹, a=2b−1`. **Two subtle bugs found+fixed:** (1) the coordinate-update
+    force terms carry an extra Δt (from `∫F dt≈(Δt/2)F^t` / `≈Δt·F^{t+½}`, eqs 4.27/4.28), the velocity
+    uses bare accel; (2) the noise must be fluctuation-dissipation-consistent — `β^{Δt}` CONTAINS
+    `β^{Δt/2}` (share the first half-impulse), not independent draws (else it over-heats, ⟨U²⟩ up to 2×).
+    **Validated:** reproduces the paper's harmonic conditions i–iv (⟨U²⟩=k_BT/k, 0.95–1.0) INCLUDING (iv)
+    where plain GJF diverges; on a real 2HB it's stable + matches NMA at **1 ps where plain DIVERGES**
+    (~6× step gain, pearson 0.97). **Honest scope:** does NOT auto-reach 5 ps on this 2HB — its stiffest
+    generalized mode (ΩΔt/2≈12, the ultra-stiff CanDo crossover rigid-links) is beyond even the widened
+    region (both diverge ≥2 ps). The paper's flat 5 ps assumes the overdamped DNA regime (γ/2Ω>30,
+    ΩΔt/2<0.8); ultra-stiff crossover modes need constraining first (paper's future constrained-Langevin).
+    5 tests (`test_snupi_dynamics.py`: 3 harmonic conditions, stable-where-plain-diverges, slow real-2HB).
+  - **Scope honesty — remaining Phase-2 lift.** Still needed for the full µs origami switch: (d) an `F(x)`
+    perf rewrite (the per-step corot loop is pure-Python — µs runs need vectorization/Numba/C), (e) a
+    CLOSED-stack demo design (examples are bundles/open hinges → detector correctly finds no closed stacks
+    to switch), and optionally softening the crossover rigid-links so the modified GJF reaches 5 ps.
+    Stacking detection (a) + nonlinear force (b) + modified GJF (c) + Morse element + mechanism are built/tested.
 - **Phase 3 — trajectory surfacing (animation toggle). ✅ DONE 2026-07-12 (trajectory animation).**
   A NEW visualizable feature (the actual motion, not just the mean shape) with its OWN frontend toggle:
   - **Backend:** `_predict_shape_dynamics` also emits a downsampled `trajectory` = `{keys, frames, n_frames}`
@@ -130,8 +170,40 @@ Implemented exactly this way in `snupi_dynamics.py`; validated by the 1-DOF `⟨
     reuse oxDNA's `framesToUpdates` + `designRenderer.applyFemPositions` (rAF loop at 12 fps). Radio
     gated to dynamics jobs (`job.dynamics`); `client.getSnupiTrajectory`; `_MODE_FNS.trajectory`.
     `just test-frontend` 2696 pass. `main.js` LOC Δ = 0.
-  - Remaining Phase-3 ideas (not done): PCA breathing-mode extraction + its own toggle; reconfiguration
-    (switch) playback surfaced as a job type.
+  - **Phase-3 extra — PCA breathing-mode + kinetics primitives. ✅ DONE 2026-07-13 (backend + tests).**
+    `snupi_dynamics.breathing_mode_pca(frames, ref, node_mass_trans, kT, n_modes)` — thin-SVD PCA of the
+    Kabsch-aligned equilibrium trajectory → the dominant collective **breathing/bending modes** (paper
+    Fig 3c/d): per mode a unit shape `(N,3)`, thermal variance σ²=⟨ξ²⟩, equipartition `k_eff=k_BT/σ²`,
+    effective mass `m_eff=vᵀ diag(m_trans) v`, ω=√(k_eff/m_eff), natural freq `f=ω/2π` (GHz). On the
+    demo design (`workspace/snupi_dyn_demo.nadoc`) mode 0 = 3.6 nm RMS, 32% of variance, ~2.75 GHz.
+    Plus the RPY-payoff primitives: `dynamics_dccm(frames, ref)` (equal-time N×N bp–bp DCCM, same
+    observable as `fem_solver.compute_correlation_matrix` / MD — but **friction-independent**, so it
+    validates the engine's motion topology, NOT what RPY buys); `mode_coordinate` (project traj onto a
+    mode) + `mode_autocorr_time_ns` (integrated autocorr time = the mode RELAXATION TIME, the KINETIC
+    quantity RPY actually changes and static NMA lacks entirely). Tests: 6 new in
+    `test_snupi_dynamics.py` (2 PCA + 3 fast primitive pins + 1 slow real-2HB integration) — synthetic
+    ring-breathing pins recover injected shape/variance/DCCM signs exactly; AR(1) pins the τ estimator.
+    `backend just test-smart` FULL: 4869 passed (1 unrelated `test_real_arbd_field` ARBD-hardware flake).
+    `main.js` untouched (backend-only). **Frontend toggle for the breathing mode still TODO** (needs the
+    live-app exercise — deferred with the reconfiguration playback below).
+  - **Validation depth — dynamics channel in `scripts/snupi_dccm_compare.py`. ✅ DONE 2026-07-13.**
+    New `--dynamics` flag adds, per design with a local MD DCD (6hbx100_noT, 3x4SQ): the dynamics-
+    trajectory DCCM→MD agreement (≈ the snupi-NMA→MD number, confirming friction-independence on the
+    real design), the breathing mode + freq, and **τ_stokes vs τ_rpy** (breathing-mode relaxation time,
+    the hydrodynamics speedup ratio). Writes `experiments/exp42_snupi_cross_compare/dccm.json`. Analysis
+    script (logged numbers), not a CI pin — DCDs are gitignored/local-only.
+    - **Results on 6hbx100_noT (2026-07-13, `--dyn-steps 80000`):** snupi-NMA DCCM→MD **0.491** > cando→MD
+      **0.454** (SNUPI captures the motion topology better on the real design). dyn-trajectory DCCM→MD
+      **0.235** — LOWER because a finite (~10 ns) trajectory is a noisier estimator of the same `k_BT·K⁻¹`
+      NMA computes exactly ⇒ *for equilibrium statics NMA is cheaper AND more accurate than a trajectory*.
+      Breathing mode ~2.85 GHz; **τ_stokes 4.40 ns → τ_rpy 1.71 ns = ×2.6 hydrodynamic speedup** — the
+      concrete kinetic thing RPY buys that static NMA lacks entirely. Caveat: absolute τ is rough
+      (trajectory only ~2× τ), the ratio more robust (bias ~cancels). A fully-converged τ needs a smaller
+      design or the Phase-2 RPY perf rewrite: a 240k-step full-RPY run at 630 nodes exceeds ~10 min
+      (dense O((6N)²) basis transform per step = the documented RPY perf wall).
+  - Remaining Phase-3 ideas (not done): PCA breathing-mode **frontend toggle/animation**; reconfiguration
+    (switch) playback surfaced as a job type (needs the design→stacking-site mapping — DNA-topology
+    "ask first").
 
 ## Visualization bridge (2026-07-12) — dynamics output is toggle-able like every structure prediction
 The dynamics engine now feeds the SAME display contract as the static solve, so ALL existing SNUPI
@@ -148,8 +220,15 @@ toggles (deform / flex-RMSF / deviation / cylinders) visualize it with **zero ne
   hydrodynamics`. Frontend: two checkboxes in the SNUPI Advanced card (`snupi-jobs-dynamics`,
   `snupi-jobs-hydrodynamics`) → the create body; `solverLabel` names "Dynamics (Langevin/RPY)".
   `just test-frontend` 2696 pass (+solverLabel case). Toggles served by the live vite server.
-  ⚠ Full in-app click-through job SUBMISSION not driven (no design loaded in the shared server;
-  loading one risks clobbering a concurrent session — same caveat the SNUPI tab shipped under).
+  ✅ **VERIFIED IN APP 2026-07-13.** User loaded `workspace/snupi_dyn_demo.nadoc` (the 6HB/147 bp/882-node
+  beam built for this) and ran a **dynamics + RPY** job through the SNUPI Advanced panel; the
+  **Trajectory (animate dynamics)** radio lit up and the player animates the thermal motion (user: "works…
+  looks pretty good"). Job took ~11 min (658 s) — RPY dense linalg at 882 nodes pins CPU ~100% (expected).
+  - **Progress-bar fix (2026-07-13):** the `_estimate_seconds` model (snupi_runner) only knew the static
+    solve (~47 s), so a 658 s dynamics-RPY run pinned the bar at its 0.97 cap in ~45 s. Made it dynamics-
+    aware (fixed 60k-step trajectory) and RPY-aware (dense friction ∝ nodes², calibrated to the 882-node
+    /658 s run) → the bar now climbs from 0 with a real ETA. Dynamics jobs also get an honest stage label
+    (`dynamics` / `dynamics-rpy`, not `nonlinear`). Tests in `test_snupi_job.py` (stage-name + estimate).
 
 ## Decisions / open
 - Frame value proposition honestly: for **static shape + equilibrium flexibility** our NMA already
@@ -159,23 +238,73 @@ toggles (deform / flex-RMSF / deviation / cylinders) visualize it with **zero ne
 - Perf is the elephant for Phase 2 (µs runs). Phase 1 (ns equilibrium, small designs) is fine in Python.
 - Three-Layer Law: trajectories are PHYSICAL/display-only, never write topology.
 
-## Handoff (2026-07-12)
-**Plan written + Phase 1a + Phase 1b DONE + validated.** Files: `backend/physics/snupi_dynamics.py`
-(GJF integrator, Stokes + matrix-friction integrators, `simulate_equilibrium`),
-`backend/physics/snupi_hydrodynamics.py` (RPY mobility → Z), `tests/test_snupi_dynamics.py` (11 tests).
-Backend-only; no frontend/main.js touched. Uncommitted.
+## Handoff (2026-07-13, session 2 — "final phases")
+**Phases 1a/1b/2/3 + viz bridge + trajectory toggle previously committed (8b5661a).** This session
+completed the plan's "final phases" (full-suite `just test` 4896 passed). All backend; `main.js` LOC Δ = 0;
+Three-Layer Law + `_PHASE_*` untouched. Shipped (details in the Phase sub-sections above):
+- **Live-UI ✅ VERIFIED IN APP** — user ran a Langevin+RPY job on `workspace/snupi_dyn_demo.nadoc`
+  (gitignored 6HB/147 bp/882-node beam built this session); Trajectory toggle animates ("looks pretty good").
+- **Progress-bar fix** (dynamics/RPY-aware ETA + stage labels; `snupi_runner`/`snupi_job`).
+- **Phase-3 PCA breathing mode** + kinetics primitives (`breathing_mode_pca`, `dynamics_dccm`,
+  `mode_coordinate`, `mode_autocorr_time_ns`).
+- **Validation depth** — `--dynamics` channel in `scripts/snupi_dccm_compare.py`; on 6hbx100_noT:
+  snupi-NMA→MD 0.491 > cando 0.454; **×2.6 RPY breathing-relaxation speedup**.
+- **1b-ii generalized RPY** — full rt+rr coupling; opt-in + PD guard (NOT production; see sub-section).
+- **Phase-2 (a) blunt-end stacking detection · (b) nonlinear corotational F(x) · (c) modified GJF**
+  (half-time+Simpson, ~6× stable-step; from `Literature/SnupidyanamicsSI.pdf` Supp Note 4).
 
-**Next options (pick with the user):**
-- **1b-ii (refinement):** full generalized RPY — add the rotation–translation (∝1/r²) + rotation–
-  rotation (∝1/r³) mobility coupling blocks (Wajnryb 2013) for torsional hydrodynamics. Low-risk,
-  additive; the module is structured for it (`friction_matrix` currently zeros those blocks).
-- **Dynamic-correlation validation:** show RPY changes the cross-correlation/timescale vs Stokes and
-  compare the DCCM/breathing frequency to MD (reuse `scripts/snupi_dccm_compare.py`), quantifying HD's
-  actual payoff.
-- **Phase 2 (the real prize):** base-stacking Morse element + salt-schedule driver → the ion switch
-  (anharmonic reconfiguration NMA is blind to). Needs the modified GJF (half-time+Simpson) for 5 ps
-  AND a perf rewrite of `F(x)` for µs runs (millions of steps). Confirm scope first — biggest effort.
-- **Frontend (Phase 3):** surface an equilibrium-dynamics run + trajectory/RMSF in the SNUPI tab.
+**Remaining Phase-2 lift (each session-sized — pick with user):**
+- **(d) `F(x)` perf rewrite** — the per-step corotational force loop (`corotational_internal_force`) is
+  pure-Python; µs / origami-scale switching needs vectorization / Numba / C. Biggest lever.
+- **(e) closed-stack demo design** — every example is a bundle or open hinge, so `detect_blunt_end_stacks`
+  correctly finds nothing to switch; need a reconfigurable device with two facing blunt ends <0.85 nm
+  apart to exercise `simulate_reconfiguration` end-to-end.
+- **Modified GJF → 5 ps** — soften/constrain the ultra-stiff CanDo crossover rigid-links (ΩΔt/2≈12) so
+  the widened stable region reaches the paper's flat 5 ps (paper's future "constrained Langevin").
+- **PCA breathing-mode / reconfiguration FRONTEND toggles** — surface `breathing_mode_pca` as its own
+  animation, and reconfiguration playback as a job type (both need the live-app exercise).
+
+## Kickoff prompt for a fresh session (continue + drive the live UI)
+
+> **Continue the SNUPI structural-dynamics plan.** Read `memory/project_snupi_dynamics.md` (this file
+> — the plan + what's built) and skim `memory/project_snupi_mimic.md` / `memory/project_snupi_gaps.md`
+> for the static-mimic context. Phases 1a/1b/2/3 + the visualization bridge + the trajectory-animation
+> toggle are DONE and committed (`8b5661a`): GJF Langevin integrator, RPY hydrodynamic friction, the
+> base-stacking Morse element + reversible ion-switch driver, `predict_shape(material="snupi",
+> dynamics=, hydrodynamics=)` returning the standard display contract, and a "Trajectory (animate
+> dynamics)" toggle with a play/scrubber player. Backend `just test-smart` FULL green (bar the
+> pre-existing `test_g12_salt_ignored_by_cando` ARPACK flake — verify it passes in isolation, ignore);
+> frontend `just test-frontend` green.
+>
+> **FIRST — the one thing that's NOT verified: drive the live UI.** You ARE authorized to submit SNUPI
+> jobs and flip display toggles in the running app to verify the dynamics + trajectory animation
+> actually render. But FIRST read `memory/feedback_no_live_server_mutation_for_verify.md` and follow it:
+> the dev server holds ONE shared active design + jobs across the user and concurrent sessions. So (1)
+> ASK the user which design is loaded / safe to run a job against (or to load `Examples/26hb_platform_v3.nadoc`
+> or `workspace/6hbx100_noT.nadoc`); (2) NEVER `POST /design` (resets the active design) or delete jobs
+> you didn't create; (3) read-only GETs are always fine. With `just dev` + `just frontend` running and a
+> user-approved design: open Simulate ▸ SNUPI ▸ Advanced, tick **Langevin dynamics** (and optionally
+> **Hydrodynamics (RPY)**), run a job, then in Visualizations flip **Predicted shape**, **Flexibility
+> map**, and **Trajectory (animate dynamics)** — confirm the player plays/scrubs and there are 0 console
+> errors. This is the sanctioned live-UI exercise; report what you saw.
+>
+> **THEN pick up the remaining work (in the plan):**
+> - **Phase-3 extras:** PCA on the trajectory → the low-frequency breathing mode + its natural frequency
+>   (paper Fig 3c/d), surfaced as its own toggle/animation; and the salt-schedule RECONFIGURATION (the
+>   ion switch) surfaced as a job type with trajectory playback (the driver `simulate_reconfiguration`
+>   exists; it needs a design→stacking-site mapping — ASK the user how coaxial/blunt-end stacks are
+>   defined for their designs, per the DNA-topology "ask first" rule).
+> - **1b-ii:** full generalized RPY — add the rotation–translation (∝1/r²) + rotation–rotation (∝1/r³)
+>   mobility coupling blocks (Wajnryb 2013); `snupi_hydrodynamics.friction_matrix` currently zeros them.
+> - **Phase-2 full origami switch:** apply stacking + the NONLINEAR corotational force per step at origami
+>   scale — needs the modified GJF (half-time + Simpson, Supp Note 4) for the paper's 5 ps step AND an
+>   `F(x)` perf rewrite for µs runs (millions of steps; current Python force eval is the bottleneck).
+> - **Validation depth:** compare the dynamics DCCM / breathing frequency to MD (reuse
+>   `scripts/snupi_dccm_compare.py`) to quantify what RPY hydrodynamics buys over the static NMA.
+>
+> Guardrails: module-first (no `main.js` growth — cite its LOC Δ), Three-Layer Law (dynamics output is
+> Physical/display-only, never writes topology), `_PHASE_*` locked, a mechanical/unit test per new piece,
+> and `just test-smart` + `just test-frontend` before claiming done. Commit only when asked.
 
 ## References
 - Integrator M V̇=F−ZV+R, GJF: Grønbech-Jensen & Farago 2013 (paper ref 22); modified w/ half-time +
