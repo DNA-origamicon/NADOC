@@ -11,6 +11,7 @@ prompt prefix, so every change to it invalidates the prompt cache for all sessio
 
 - **[LESSONS](LESSONS.md)** — anti-patterns by failure mode. Now an index: scan it, open only the matching entry.
 - **[REFERENCE_DNA_TOPOLOGY](REFERENCE_DNA_TOPOLOGY.md)** — strand/scaffold/polarity rules. Always.
+- **[architecture_decisions](architecture_decisions.md)** — binding cross-cutting laws (DTP-PMD-1/2: periodic MD is physical-layer-only; axial period is a hard constraint). Don't drift without sign-off.
 - **`FEATURE_DEVELOPMENT.md`** (root) — module-first guardrails. READ BEFORE ADDING ANY FEATURE.
 - **[tech_debt](project_tech_debt.md)** — code flagged for review/removal.
 - **[reference_assembly_test_fixture](reference_assembly_test_fixture.md)** — `workspace/Belt_test1.nass`, any assembly test.
@@ -102,8 +103,9 @@ skip_twist_curvature_sweep · md_twist_validation
 **Multi-resolution / CG bridge:** multiresolution_roadmap · crossover_parameterization · bundle_stiffness_params ·
 pipeline_validation_log · session_handoff
 
-**NAMD production / solvation:** btube_benchmark · periodic_cell · namd_solvate · water_shell_carve ·
-3x4sq_md_run · exp30_18hb_production
+**NAMD production / solvation:** **periodic_md** (the durable "why" behind periodic-cell MD — governed by
+[architecture_decisions](architecture_decisions.md)) · btube_benchmark · periodic_cell · namd_solvate ·
+water_shell_carve · 3x4sq_md_run · exp30_18hb_production
 
 **Atomistic skip-site / GROMACS:** atomistic_skip_backbone · skip_site_gromacs_fix · langevin_heating ·
 gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export · sequence_clear_fix

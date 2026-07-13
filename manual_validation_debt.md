@@ -63,17 +63,41 @@ pass over GENERATED → VALIDATED happens as the user actually executes them.
 
 ## Register state
 
-- Total unique MV ids: **102** (PENDING 92 + GENERATED 2 + VALIDATED 8).
-- PENDING rows: **93** across **92** unique ids (`MV-32` is reused upstream for two different items).
-- Counts derived from the archive's tables 2026-07-09; the previous hand-maintained totals had drifted (upstream said 47/56) and are preserved verbatim in the archive.
-- GENERATED (ready to run): **1** — MV-5
-- VALIDATED: **9** — MV-1 (cluster Move/Rotate, 2026-06-07), MV-2 (overhang orientation, 2026-06-07), MV-3 (selection-rules UX, 2026-06-07), MV-4 (parts/groups multi-select box, 2026-06-07), MV-LNK (assembly linker completion, 2026-06-07), MV-6 (belt polymerize, 2026-06-07), MV-7 (coalesced part-refresh, 2026-06-07), MV-OXDNA (oxDNA relax/production/display/RMSD, 2026-06-14), MV-OXREPS (atomistic display 2026-06-21 + trajectory scrub/play 2026-06-22; surface+flex-map lightly-owed)
-- REGRESSION FOUND: **0** (MV-1 + MV-2 + MV-3 + MV-LNK enhancements/bugs found during validation were shipped same session)
-- **Cluster multi-select gestures — browser-driven 2026-07-09** (discharges the additive-click part of MV-MRSEL): on `workspace/2x4_Hinge_autoscaff_test1.nadoc`, all four paths driven with real synthetic gestures, 0 console errors — sidebar plain-then-Ctrl+click, sidebar Ctrl+click-only, 3D plain-then-Ctrl+click at cluster level (aimed via `getEndBeadScreenPositions` helix ids), and the cluster-level Ctrl+drag lasso at **both** bead LOD and cylinder LOD. Still human-eye only: the green multi-cluster glow's appearance.
+**Reconciled 2026-07-13 (docs-cleanup audit).** The block previously carried **three mutually contradictory
+counts** (102 = 92+2+8, then GENERATED 1 / VALIDATED 9, then "90 pending rows" — against 95 actual index rows),
+and 9 already-VALIDATED rows plus 1 FAILING row were still sitting in the PENDING index, so the queue
+over-reported the work left. Counts below are derived from the actual index, not hand-maintained.
+
+- **PENDING (genuinely open): 84.** The index now holds 85 rows: 84 pending + MV-5 (generated, see below).
+- **GENERATED (block written, not yet run): 1** — MV-5.
+- **VALIDATED: 10** — MV-1, MV-2, MV-3, MV-4, MV-6, MV-7 (all 2026-06-07), MV-LNK (2026-06-07),
+  MV-OXDNA (2026-06-14), MV-OXNATIVE (2026-06-20), MV-OXREPS (atomistic 2026-06-21 + trajectory scrub/play
+  2026-06-22; surface + flex-map lightly owed). **Struck from the PENDING index 2026-07-13** — they were
+  double-counted there for a month.
+- **REGRESSION FOUND: 1** — **MV-OXSTALE** (❌ failing 2026-06-24, persists across multiple fix rounds).
+  This is an open **bug**, not debt; it was previously miscounted as 0 while the row sat in PENDING.
+  See the REGRESSION FOUND section — it belongs in `issues_ledger.md`.
+- **Known ID collision:** `MV-32` is used for two different items (Chain Simulations sidebar; Plan Run
+  overlay P4). Renumber one before the counts can be fully trusted.
+- **Blocked, not pending** (can't be run on either dev machine as-is — don't queue them):
+  **MV-ENGINES** (needs a machine with engines *missing*; both dev boxes have every engine installed),
+  **MV-34** / **MV-35** (Run button is gated on a real mrDNA/ARBD install).
+- **Likely obsolete:** MV-22…MV-27 validate intermediate U2/U3 job-list slices in a stacked-panel UI that
+  the Simulate-panel overhaul is actively replacing; MV-28 + MV-30 describe the *replacement*. Collapse
+  MV-22…MV-27 into MV-28/MV-30 rather than hand-driving a UI that's being deleted (≈78 open if you do).
+- **Cluster multi-select gestures — browser-driven 2026-07-09** (discharges the additive-click part of MV-MRSEL):
+  on `workspace/2x4_Hinge_autoscaff_test1.nadoc`, all four paths driven with real synthetic gestures, 0 console
+  errors. Still human-eye only: the green multi-cluster glow's appearance. Rewrite MV-MRSEL down to that one check.
 
 ---
 
 ## REGRESSION FOUND (user-confirmed fail → fix opened)
+
+### MV-OXSTALE — ❌ STILL FAILING (2026-06-24), promoted out of the PENDING index 2026-07-13
+Snapshot-restore staleness in the oxDNA display. The bug has **persisted across multiple fix rounds**.
+This is **not validation debt — it is an open bug**, and it was sitting in the PENDING queue where it
+read as "not yet checked" rather than "checked and broken". It should be filed in `issues_ledger.md`
+and worked as a real issue; leaving it here hides it.
 
 ### MV-3 (2026-06-07) — two issues found running the block → **FIXED + re-validated same session** (see VALIDATED)
 1. **Fixed levels still let a single click select a strand.** In domain / end / xover
@@ -97,21 +121,31 @@ _(none — MV-3 re-validated 2026-06-07; see VALIDATED)_
 
 ## Next loop
 
-**▶ Process MV-8 — Assembly config animation** (discharges #68).
+**⚠ THIS LOOP HAS STOPPED SHIFTING.** Last validation: ~2026-06-24. Intake has continued (new MV rows keep
+arriving from the sim/coverage loops), so the register is accreting debt faster than it discharges. The
+`## Next loop` pointer below sat on MV-8 for a month while the index head moved to MV-29.
+
+**▶ Process MV-8 — Assembly config animation** (discharges #68). **Confirmed to have a REAL BUG behind it
+(2026-07-13 audit) — this is no longer speculative debt, so run it first.** `scene/animation_player.js` never
+references `configuration_id`; only `ui/animation_panel.js` does. So configurations can be pinned to
+keyframes, they display in the panel, and they round-trip through the API — but **pressing Play ignores them
+entirely**. A working reference (`_animateAssemblyConfiguration`) already exists in `main.js`. This is a
+silently-broken user-visible feature, not a deferral. Validating this block = confirming the bug + fixing it.
+
 Dig: the "animate to configuration" entry point (feature-log configuration → tween),
 the saved-configuration data model, and how the instance tween is driven. **Fixture:**
 an assembly that has ≥1 saved configuration — none is known offhand, so the SETUP may
 need to *create* a configuration first (save a pose as a config) before animating to it.
-This is an **assembly-mode** block. The live "tween instances between configurations"
-gesture + the visual smoothness of the interpolation is the never-driven part.
+This is an **assembly-mode** block.
 
 (MV-6 + MV-7 were validated directly by the user 2026-06-07 without generated blocks;
 MV-RSZ, the 3D overhang-resize-through-boundary fix, was pushed PENDING this session.)
 
 ## PENDING queue — index (ordered; first row = next loop processes this)
 
-90 pending rows. Full rows (fixture hint, why-deferred, discharges) are in the archive's
-`## PENDING queue` section — open only the one you're working.
+**84 pending rows** + MV-5 (generated). Recounted 2026-07-13 from the actual index after striking 9 rows that
+were already VALIDATED and 1 (MV-OXSTALE) that was already FAILING. Full rows (fixture hint, why-deferred,
+discharges) are in the archive's `## PENDING queue` section — open only the one you're working.
 
 - **MV-29** — Cross-engine chain: oxDNA relax → NAMD (P3) real handoff — with a completed oxDNA relaxation j…
 - **MV-30** — Simulate section: one collapsible header + static engine headers + Periodic MD gone — open the…
@@ -147,25 +181,15 @@ MV-RSZ, the 3D overhang-resize-through-boundary fix, was pushed PENDING this ses
 - **MV-OXEQUIL** — oxDNA equil-readiness: auto-escalate instead of crashing at equil — load a large strained sequ…
 - **MV-MDSPIN** — MD-job running indicators (spinners + Health card) — load a sequenced design, start an MD (NAM…
 - **MV-OXSEED-NAMD** — oxDNA→NAMD seed runs the restrained ladder without blowing up — load workspace/6hb_sim_tests.n…
-- **MV-OXSTALE** — ❌ FAILING hand-check (2026-06-24) — bug persists across multiple fix rounds (snapshot-restore …
 - **MV-OXLIVE-CUDA** — Live oxDNA field session is snappy on a real design (now CUDA + in-memory readout) — load a se…
-- **MV-OXNATIVE** — ✅ VALIDATED 2026-06-20 (user ran a real GPU relax — bp starts high, no startup collapse) — oxD…
-- **MV-1** — ✅ VALIDATED 2026-06-07 (see VALIDATED) — design-mode cluster Move / Rotate tool: right-click c…
-- **MV-2** — ✅ VALIDATED 2026-06-07 (see VALIDATED) — Overhang Orientation panel: right-click a rendered ov…
-- **MV-3** — ✅ VALIDATED 2026-06-07 (see VALIDATED) — selection-rules UX (drill levels, crossover tube, yel…
-- **MV-4** — ✅ VALIDATED 2026-06-07 (see VALIDATED) — Assembly multi-select purple union BoxHelper (parts +…
 - **MV-5** — (generated — see GENERATED) Assembly right-click context menu: right-click a part → linker-rel…
-- **MV-6** — ✅ VALIDATED 2026-06-07 (see VALIDATED) — Belt polymerize: built belt assembly → Polymerize alo…
-- **MV-7** — ✅ VALIDATED 2026-06-07 (see VALIDATED) — Coalesced assembly part-refresh: edit a part in part-…
 - **MV-RSZ** — 3D overhang-resize through the scaffold boundary: select a staple end whose tail extends past …
 - **MV-SCAF** — Section-router scaffold routing of irregular multi-section designs (teeth / dumbbell), seamed …
 - **MV-8** — Assembly config animation: assembly with a saved feature-log configuration → "animate to confi…
 - **MV-OXDNA-CONFIG** — Clicking an oxDNA job repopulates every card with that run's conditions: load a sequenced desi…
 - **MV-BTNBUSY** — oxDNA / MD Start + Stop buttons are spam-proof (immediate spinner + gray-out) — load a sequenc…
 - **MV-TRAJ-KF** — Trajectory keyframe plays an oxDNA trajectory in an animation — load a sequenced crossover-rou…
-- **MV-OXREPS** — ✅ VALIDATED MANUALLY 2026-06-21 (atomistic ball-and-stick reads good — proper duplexes, correc…
 - **MV-OXLIVE** — OxDNA display follows a RUNNING job + next-frame countdown: load a sequenced crossover-routed …
-- **MV-OXDNA** — ✅ VALIDATED 2026-06-14 (user-confirmed all gestures: relax + production status flow, step-coun…
 - **MV-BENCH** — Dynamics-panel Benchmark cards (oxDNA + NAMD subsections): load any design → Dynamics tab → ex…
 - **MV-ANCHGLOW** — E-field + anchor setup viz: load a sequenced design → Dynamics → oxDNA → open Electric field c…
 - **MV-CONJ** — Conjugate Manager — design an azide-oligo conjugate: with a design that has overhangs AND an i…

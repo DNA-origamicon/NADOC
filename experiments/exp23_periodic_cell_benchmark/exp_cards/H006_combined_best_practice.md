@@ -51,4 +51,4 @@ is responsible; may need to accept one change only.
 ## Conclusion
 
 *(If confirmed: update `namd_solvate.py` defaults. Record the accepted protocol in
-`periodic_md.md`.)*
+`memory/project_periodic_md.md`.)*

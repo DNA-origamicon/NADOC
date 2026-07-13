@@ -44,7 +44,7 @@ geometry, but they are at different maturity levels.
 
 ### Existing Evidence
 
-- `memory/periodic_md.md` records that MD-derived atomistic references improve
+- `memory/project_periodic_md.md` records that MD-derived atomistic references improve
   starting poses relative to the raw analytic template.
 - Full B-tube minimized reference `F001` was the cleanest early reference:
   lower strain than raw CAD, but not production-equilibrated.

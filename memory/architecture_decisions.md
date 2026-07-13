@@ -1,5 +1,9 @@
 # Architecture Decisions
 
+Cross-cutting decisions that must not drift without explicit sign-off. These are **laws**, not notes —
+they bind every downstream periodic-MD workflow. See also
+[project_periodic_md.md](project_periodic_md.md) for the subsystem they govern.
+
 ## DTP-PMD-1: Periodic MD Is Physical-Layer Only
 
 Periodic MD trajectories may be previewed and tiled back onto the 3D display,
@@ -8,7 +12,8 @@ the user explicitly asks for a new physical-state import workflow.
 
 Rationale: the periodic cell represents a bulk-equilibrated repeat unit, not the
 literal full design topology. Applying it directly to topology would violate the
-topological/geometric/physical separation in `DEVELOPMENT_PLAN.md`.
+topological/geometric/physical separation — the Three-Layer Law in `CLAUDE.md`.
+(This previously cited `DEVELOPMENT_PLAN.md`, which no longer exists.)
 
 ## DTP-PMD-2: Axial Period Is a Hard Constraint
 

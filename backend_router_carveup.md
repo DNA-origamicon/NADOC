@@ -164,13 +164,17 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-07-08
-(`/carve-router assembly`, no extraction — TERMINAL DECISION). The prior row was Refactor #49
+_Living pointer — each session overwrites this (step 9). Last updated 2026-07-13
+(docs-cleanup audit — no extraction). The prior row was Refactor #49
 (**assembly.py: geometry-cache + override-merge kernel → NEW `backend/core/assembly_geometry.py`**, service
-push B=0, +15 unit tests, assembly.py **29 routes**, still NOT committed — stacks on uncommitted #43–#49)._
+push B=0, +15 unit tests, assembly.py **29 routes**). **#43–#49 ARE COMMITTED** (`f1c2f29`, "push pure
+geometry/render kernels from crud.py + assembly.py into backend/core") — the old "still NOT committed"
+warning here was stale and is retracted; working tree is clean._
 
 **▶ BOTH GOD-FILES AT TERMINAL STATE — the backend router carve-up is COMPLETE (2026-07-08).** crud.py =
-**113 routes** (pure-compute kernel fully drained; residual = L4-blocked api-bound response kernel
+**113 routes at the terminal decision; 118 as of 2026-07-13** (+5 added since by ordinary feature work —
+scattered additions, NOT a cohesive cluster, so this does NOT meet the reopen bar. Do not read the delta as
+drift.) Pure-compute kernel fully drained; residual = L4-blocked api-bound response kernel
 `_design_response*`/`_design_replace_response`/`_inject_joint_world_axes`/`_strip_feature_log_payloads`).
 assembly.py = **29 routes** (geometry-cache + override-merge in core via #49; residual = kernel CRUD + replay
 dispatcher + L4-blocked file-IO load infra). Every cohesive sub-resource is in its own `routes_<area>.py`

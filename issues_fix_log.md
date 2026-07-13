@@ -73,9 +73,10 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 A reopened "fixed" bug is the direct signal that step-1 (repro-first) or the root-cause depth above was
 insufficient. Track it: when a closed issue comes back, add a line here and bump the counter.
 
-- Fully-closed issues to date: **6** (ISSUE-2/3/4/5/6/7; ISSUE-1 is multi-phase, still partial → not counted yet)
+- Fully-closed issues to date: **8** (ISSUE-2/3/4/5/6/7/10/15; ISSUE-1 is multi-phase, still partial → not counted yet)
+  _(Corrected 2026-07-13: this said **6** and omitted ISSUE-10 (closed 2026-06-16) and ISSUE-15 (closed 2026-07-08), both of which have fix-log rows. The loop was under-reporting its own effectiveness.)_
 - Reopened: **1** (ISSUE-7, within the same session — the `_fitToContent` visibility fix shipped first didn't address the actual no-op; caught + corrected before closing, not a cross-session reopen)
-- **Reopen rate: 1 / 6 = 17%** _(target < ~10%; the ISSUE-7 reopen is the lesson — a plausible single-factor fix (visibility) was shipped before reproducing the EXACT gesture (select→Delete, not the dead erase tool). Reproduce the real gesture end-to-end before claiming a fix on a "nothing happens" bug.)_
+- **Reopen rate: 1 / 8 = 12.5%** _(target < ~10%; the ISSUE-7 reopen is the lesson — a plausible single-factor fix (visibility) was shipped before reproducing the EXACT gesture (select→Delete, not the dead erase tool). Reproduce the real gesture end-to-end before claiming a fix on a "nothing happens" bug.)_
 
 _Reopen log (id · what came back · why the first fix was incomplete):_
 - **ISSUE-7 · "still can't delete after reloading" · the first fix (`_fitToContent` panX offset, making the off-screen negative-bp cells visible) was a real but SECONDARY factor.** The primary defeater was `onDeleteElements`'s `(\d+)` key parsers dropping negative-bp keys → Delete silently collected nothing. Root cause of the incomplete first pass: fixed a plausible factor (off-screen) without reproducing the user's EXACT gesture end-to-end — and chased the `erase` tool (dead UI) instead of the real select→Delete path. The reopen forced the faithful repro that found the parse bug.

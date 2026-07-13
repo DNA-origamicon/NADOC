@@ -5,9 +5,34 @@ unconventional design features (**extra crossover bases · linkers/overhang conn
 AND emit a **shared, comparable set of prediction descriptors** so the engines cross-validate one another
 across the quick→rigorous continuum.
 
-**Two UX/architecture tracks now ride the same loop** (user-authorized scope expansion 2026-07-08; see the
-JSON `meta.ux_overhaul_tracks`). The feature-coverage tail (M4, N3, O2) is *parked, not dropped* — these two
-tracks are the priority until their milestones land:
+> # ✅ THIS LOOP IS EFFECTIVELY COMPLETE (audited 2026-07-13)
+>
+> **31 of 32 tasks `done`. 0 in-progress. 0 blocked. Difficulties ledger empty. 8 of 9 milestones closed.**
+> Every engine × feature cell in the matrix below is DONE; the shared-descriptor track (S1–S5) is DONE; the
+> U and P tracks are DONE; the "parked feature tail" (M4, N3) is DONE.
+>
+> **The one remaining task, `O2`, is a deliberately-gated no-op** — its own oracle says "per-gap; only pull
+> when a concrete gap is logged", and the handoff says *don't open it blind*. No concrete gap is logged
+> anywhere. `M-FULL-COVERAGE` is `pending` **solely** because `O2` is. So the loop is idle because it **ran
+> out of eligible work**, not because it is stuck. Running `/continue-coverage` today would pick `O2` and
+> then be told not to do it.
+>
+> **To close this loop out:** either name a concrete `O2` gap, or mark `O2` done and flip `M-FULL-COVERAGE`
+> to `done`. Anything beyond that is new scope and needs your authorization (the loop invariant forbids the
+> agent adding its own tasks).
+>
+> **The one real engineering follow-up** (deliberately NOT a JSON task): P2's forces are not threaded into
+> the production **RESEED** conf end-to-end (`ProductionRunRequest.field/anchors` + reseed emission).
+>
+> **Stale semantics warning:** the JSON task notes for M2/M6/M7/M8/N1 still describe the field-needs-anchor
+> guard as *blocking* (400/raise). It was **SUPERSEDED 2026-07-11 → WARN-ONLY on all engines** (from
+> `project_oxdna_efield`, outside this loop): `fieldNeedsAnchor` now only decides whether to *show* a COM-drift
+> warning. `meta.updated` in the JSON still reads 2026-07-10 and has not caught up.
+
+**Two UX/architecture tracks rode the same loop** (user-authorized scope expansion 2026-07-08; see the
+JSON `meta.ux_overhaul_tracks`). ~~The feature-coverage tail (M4, N3, O2) is *parked, not dropped* — these two
+tracks are the priority until their milestones land~~ — **all superseded: both tracks landed and M4/N3 are
+done. Only the gated `O2` remains.**
 - **Track U — Unified panel (proposal A):** collapse the **6 bespoke per-engine panels + triplicated
   E-field/Anchors/Surface cards** into ONE *Simulate* section with an engine selector, driven by a capability
   descriptor. Precedent: CHARMM-GUI (one interface, many MD backends). = **M-UNIFIED-PANEL**.
@@ -66,7 +91,9 @@ veto.
      structure just streams — the oxDNA COM-drift gotcha applies to every engine; as of 2026-07-10 the anchor is
      RECOMMENDED, no longer a hard requirement — an unanchored field runs with a UI warning), **connector element
      (C3) before linkers (C4)**.
-   - **The U/P tracks are the current priority** (2026-07-08) over the parked feature tail (M4/N3/O2). Their
+   - ~~**The U/P tracks are the current priority** (2026-07-08) over the parked feature tail (M4/N3/O2).~~
+     **STALE — both U and P tracks are DONE, and M4/N3 are DONE (2026-07-13 audit). Kept only for the dep
+     graph, which is now history.** Their
      deps: **U1 (descriptor) before U2/U3**, **U2+U3 before U4 (the consolidation)**; **P1 (MdPipeline) before
      P2/P3**, **P4 (planner UI) needs P2+P3+U2** (it reuses the unified Forces card). Prefer landing **U1 and
      P1 first** — each is the foundation its track builds on, and they're independent so either is a valid

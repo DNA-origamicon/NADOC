@@ -22,7 +22,7 @@ near-term goal is a reliable local-repeat validation workflow:
 
 Primary memory file:
 
-- `memory/periodic_md.md`
+- `memory/project_periodic_md.md`
 
 Primary implementation files:
 
@@ -318,7 +318,7 @@ Optional matrix:
 
 Use this prompt for an independent continuation:
 
-> Read `memory/periodic_md.md` and
+> Read `memory/project_periodic_md.md` and
 > `docs/periodic_md_restraint_ramp_plan.md`. Implement the B_tube Periodic MD
 > restraint-ramp milestone. Start by adding generated ramp configs and a smoke
 > runner under `experiments/exp23_periodic_cell_benchmark/`. Preserve exact

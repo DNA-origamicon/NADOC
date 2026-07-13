@@ -1,10 +1,29 @@
 # main.js carve-up map — stateful-subsystem extraction backlog
 
-**Purpose.** main.js is one large `async function main()` closure (~8.0k lines as of 2026-06-05, down
-from ~16.5k). The pure-helper well is drained (see `main_js_extraction_log.md`) and — as of #61 — every
-Tier 1–5 *stateful subsystem* (panels, dialogs, menus, event-handler clusters) is extracted too. The loop
-is **near-complete**: the remaining mass is the lifecycle spine + thin per-action wiring that's correctly
-inline, plus a couple of deliberately-deferred coupled regions. See the handoff for the STOP rationale.
+**Purpose.** main.js is one large `async function main()` closure. The pure-helper well is drained (see
+`main_js_extraction_log.md`) and — as of #61 — every Tier 1–5 *stateful subsystem* (panels, dialogs, menus,
+event-handler clusters) is extracted too. The loop is **near-complete**: the remaining mass is the lifecycle
+spine + thin per-action wiring that's correctly inline, plus a couple of deliberately-deferred coupled
+regions. See the handoff for the STOP rationale.
+
+> **LOC — measured 2026-07-13 (the numbers scattered through this doc contradicted each other and are now
+> superseded).** main.js is **7,814 LOC**, down from ~16.5k at the start of the carve-up. But it is **UP +849
+> (+12%) from the 6,965 the last carve session (#88, 2026-06-06) left it at.** Feature work since June (MD /
+> SNUPI / jobs — the tail banners are MD overlay, compute-cluster chip, benchmark controls, oxDNA relaxation
+> panel, MrDNA round-trip debug) has been re-growing the closure. That violates the module-first law in
+> `CLAUDE.md` ("a feature commit leaves main.js LOC flat or lower"). **The law is leaking — this is the
+> finding, not the carve-up backlog.**
+>
+> **The loop has been IDLE ~5 weeks** (last session 2026-06-06) and was left **mid-gate**: all four
+> TERMINAL-STATE GATE boxes below are still unchecked, and both named residuals are verifiably still inline
+> (`// ── Editor tab registry` / `// ── Interim multi-document guard` at ~7594/7640; `_translateRotateActive`
+> still a closure `let`). So the CLAUDE.md terminal state ("residual closure is composition-root glue") is
+> **NOT** reached and must not be asserted.
+>
+> **main.js is also no longer uniquely large.** These now rival it and have no carve-up plan at all:
+> `scene/assembly_renderer.js` **6,733** · `scene/helix_renderer.js` **5,195** · `cadnano-editor/pathview.js`
+> **4,977** · `scene/selection_manager.js` **4,168** · `api/client.js` **3,558**. If the goal is "no god-files",
+> the next target is arguably not main.js.
 
 > **⚠ THIS MAP IS SEQUENCING-ONLY. Its LOC counts, line numbers, and "what it is" descriptions are NOT
 > authoritative.** They are a one-time snapshot that has drifted under continuous refactoring and has been
@@ -54,9 +73,9 @@ inline, plus a couple of deliberately-deferred coupled regions. See the handoff 
    build first, the split plan, and any gotcha this batch uncovered. It's a *living pointer* — replace it,
    don't append. A cold next session reads it first and starts there without re-deriving the priority.
 
-**Line numbers are decorative** — they were a 2026-06-03 snapshot (main.js was 15,614 LOC then; it's
-~10.9k now) and every extraction shifts them. **Always locate a region by its `// ──` banner text**
-(`grep -n "// ──" main.js`), never by the line number printed here.
+**Line numbers are decorative** — they were a 2026-06-03 snapshot (main.js was 15,614 LOC then; it is
+**7,814** as of 2026-07-13) and every extraction shifts them. **Always locate a region by its `// ──` banner
+text** (`grep -n "// ──" main.js`), never by the line number printed here.
 
 **Dependency surface + LOC + "what it is"** below are rough pre-read guesses — RE-DERIVE by reading the
 region when you claim it (see the ⚠ callout above). The map's only reliable jobs are sequencing, module

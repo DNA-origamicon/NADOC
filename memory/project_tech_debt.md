@@ -61,31 +61,38 @@ new items; strike through (and date) when resolved.
   (b) rebuild the assertion synthetically (no workspace file), or (c) delete the
   test as redundant. Until then it silently skips when the local fixture has drifted.
 
-### Advanced/seamless scaffold routing is hash-seed non-deterministic (TODO: fix)
-- **Where:** [seamed_router.py](backend/core/seamed_router.py) `_ham_path_ending`
-  (~line 291) + the neighbor key it hands to `_ham_path_search`. Both sort by
-  `len(adj[n])` with **no secondary `n` tiebreaker**, so equal-degree nodes keep
-  their set-derived (hash-seed-dependent) order. In-code `FIXME(advanced-routing-
-  nondeterminism)` marks the exact spot.
-- **Why it's debt:** the Hamiltonian path → scaffold routing comes out differently
-  run-to-run. `auto_scaffold_seamless` / `auto_scaffold_advanced_seamed` emit a
+### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
+- **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
+  **both** the starter sort and the neighbor key handed to `_ham_path_search`
+  ([seamed_router.py:296](backend/core/seamed_router.py#L296)); the in-code
+  `FIXME(advanced-routing-nondeterminism)` is gone. `test_seamless_router.py::
+  test_teeth_closing_zig` passes **8/8 fresh `PYTHONHASHSEED` values** (was ~4/8).
+  Routing is deterministic run-to-run again. **Invariant: keep the tiebreaker on BOTH keys** —
+  dropping either silently reintroduces run-to-run scaffold-strand-count drift (this
+  regressed once already, via the 2026-06-01 budgeted-DFS refactor).
+- **Historical detail (why it happened)** — kept because it regressed once and could again:
+- **Where it was:** [seamed_router.py](backend/core/seamed_router.py) `_ham_path_ending`
+  (~line 291) + the neighbor key it hands to `_ham_path_search`. Both sorted by
+  `len(adj[n])` with **no secondary `n` tiebreaker**, so equal-degree nodes kept
+  their set-derived (hash-seed-dependent) order.
+- **Why it was debt:** the Hamiltonian path → scaffold routing came out differently
+  run-to-run. `auto_scaffold_seamless` / `auto_scaffold_advanced_seamed` emitted a
   **different scaffold-strand count** depending on `PYTHONHASHSEED`. Real-app impact:
-  the same design routes differently on different backend runs (not just tests).
-- **Repro (2026-06-04):** `tests/test_seamless_router.py::test_teeth_closing_zig`
-  (asserts exact `bridge_xovers==6`, `scaf_strands==4`) is **flaky ~50%** — 4 pass /
-  4 fail across 8 fresh processes. Also varies `advanced_seamed` on teeth between 1
+  the same design routed differently on different backend runs (not just tests).
+- **Repro (2026-06-04, now stale):** `tests/test_seamless_router.py::test_teeth_closing_zig`
+  (asserts exact `bridge_xovers==6`, `scaf_strands==4`) was **flaky ~50%** — 4 pass /
+  4 fail across 8 fresh processes. Also varied `advanced_seamed` on teeth between 1
   and 4 scaffolds (originally misattributed to the live app rewriting the fixture).
-- **History:** `seamless_router._ham_path_ending` (its OWN copy) deliberately uses
+- **History:** `seamless_router._ham_path_ending` (its OWN copy) deliberately used
   `(len(adj[n]), n)` WITH the `n` tiebreaker to avoid exactly this (documented in
-  [[seamless-scaffold-router-architecture-and-hard-won-lessons]] lines 29–32). The
+  [[seamless-scaffold-router-architecture-and-hard-won-lessons]]). The
   2026-06-01 budgeted-DFS refactor that delegated the search to the shared
-  `seamed_router._ham_path_search` dropped the tiebreaker → regression.
-- **Action (TODO, NOT done):** add a secondary `n` key to BOTH the starter sort
-  (line 291) and the neighbor key passed to `_ham_path_search`, then verify teeth
-  routing topology is unchanged (`bridge_xovers==6`, `scaf==4`) and de-flake the
-  test. **TOPOLOGY-SENSITIVE — get user review before/after.** Marked by the user as
-  work-to-be-done 2026-06-04; surfaced while committing CI fixtures for the router
-  tests ([[seamless-scaffold-router-architecture-and-hard-won-lessons]]).
+  `seamed_router._ham_path_search` dropped the tiebreaker → regression. The fix
+  restored it on both keys.
+- **Topology check on the fix:** teeth routing topology is unchanged
+  (`bridge_xovers==6`, `scaf_strands==4`) — that is exactly what the now-deterministic
+  test asserts, so the tiebreaker picked the same path the good seeds always picked.
+  It de-flaked the test without moving the route.
 
 ### ~~Overhang Bind/Unbind button (legacy OverhangBinding pair model)~~ — REMOVED 2026-06-30
 - **Where:** [overhang_sequences_panel.js](frontend/src/ui/overhang_sequences_panel.js).

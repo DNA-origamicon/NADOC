@@ -104,18 +104,25 @@ A bug pushed in already-fixed still earns a dossier + fix-log row — the record
 Ordered for the loop. Functional bugs with a bounded surface come before big UX overhauls that need
 design decisions + research (so early sessions build the loop's muscle on tractable wins).
 
+**Rebuilt 2026-07-13 (docs-cleanup audit).** The previous table was frozen at 2026-06-08 and listed only
+ISSUE-1/2/3/4/8/9 — it had never been updated with ISSUE-11/12/13/14/15, four of which are still open. It
+also still said "→ NEXT: ISSUE-1", written before those issues existed. Ranked below by *severity*
+(silent corruption first), not by intake order.
+
 | Order | Issue | Type | Size | Needs UX research? |
 |-------|-------|------|------|--------------------|
-| 1 | ~~**ISSUE-3** Assembly Ctrl-click multi-select~~ ✅ DONE 2026-06-05 | functional bug | small, bounded | no |
-| 2 | ~~**ISSUE-2** Cross-tab sync delay + console clutter~~ ✅ DONE 2026-06-05 (propagation fix + silent-logging C + badge co-editing B all shipped) | functional bug (data-integrity) | medium | no |
-| done | **ISSUE-4** Drill-selection overhaul — Phases 1/2/3-preview/3-xover/3-filter-audit-lasso ✅ + v2-eyeball feedback batch ✅ + **2026-06-06 legacy-deletion ✅**: the 87 dead legacy sites (auto-drill ladder / manual filter pins / Tab drill-lock) + the `NADOC_DRILL_V2` flag plumbing PHYSICALLY DELETED — selection-level is now the only model, no opt-out (`?drillv2=0` gone). **Remaining (optional, low-priority): assembly unification (decision G), optional text level-breadcrumb (decision E).** | UX redesign | large, multi-phase | spec done |
-| **→ NEXT** | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + Phase 2a-binding ✅ + Phase 2a-orientation ✅ DONE 2026-06-05; Phase 2a-blunt / 2b–2e + Phase 3+ open (was deferred behind ISSUE-4, now unblocked) | UX + tech-debt | large, multi-phase | yes (done) |
-| ~~mostly done~~ | **ISSUE-8** Autoscaffold single-strand consolidation — 2026-06-08 root cause = the `teeth.nadoc` fixture was already seamless-routed (corrupt baseline). On the CLEAN fixture (`preroute_teeth.nadoc`) the standard seamed/seamless routers route teeth to 1 strand; the section router (now **default-on** for multi-section via `auto_scaffold_seamed`) keeps gaps clear (1 strand, ~9bp worst dip, ~32bp clearance). In-app seamed Auto-scaffold fixed. Owe: user eyeball + clean dumbbell fixture. | routing correctness + tech debt | mostly resolved | no (algorithmic) |
-| open | **ISSUE-9** Autoscaffold is not idempotent — running it on an ALREADY-routed design extends scaffold into gaps / corrupts faces (re-routes the extended geometry). Each re-run compounds. Auto-scaffold must first clear any prior auto-route (reset to clean per-domain seed) so N calls == 1 call. | routing correctness | medium | no (algorithmic) |
+| **→ 1** | **ISSUE-9** Autoscaffold is not idempotent — re-running on an already-routed design re-routes the *extended* geometry, pushing domain ends into inter-tooth gaps. N calls ≠ 1 call, corruption compounds, and it is **persisted to `.nadoc`**. Already produced the corrupt `tests/fixtures/teeth.nadoc` baseline that burned a full session chasing a phantom "gap-stagger" bug. `tests/fixtures/10-6-10hb_seamed.nadoc` is flagged as carrying the same latent corruption (its tests pass by accident). Fix: clear any prior auto-route to a clean per-domain seed before routing. | routing correctness / **data loss** | medium | no (algorithmic) |
+| **→ 2** | **ISSUE-14** `assembly_exit_cleanup` smoke spec fails (console error on assembly-mode teardown; 1 failed / 22 passed). **This currently red-gates `just smoke` for every frontend/stateful change** — i.e. it is blocking other work. A prior partial fix (`d5be41c`, multi-select box disposal) didn't cover this path; suspected stale-subscription / dispose-order. Observed 2026-07-06, not yet pinned beyond the smoke run. | functional bug / **blocks the commit gate** | small–medium | no |
+| 3 | **ISSUE-11** Deformed-continuation helices carry `grid_pos=None` (`make_bundle_deformed_continuation` is the only builder not setting it). Any design with a deformed continuation **crashes** `canonical_topology`/`assert_roundtrip_stable`. Blast radius: `grid_pos` also drives cluster reconciliation, overhang-neighbor lookup and `loop_skip_calculator`. **ASK-FIRST** — the obvious one-line fix is suspected of being a Three-Layer trap (a non-None `grid_pos` may make `_helix_lattice_params` recompute lattice x/y and clobber the baked deformed world coords). | data model / three-layer | small IF approved | no (topology decision) |
+| 4 | **ISSUE-8** Autoscaffold multi-section single-strand routing. Section router codified in `backend/core/section_router.py` behind default-OFF `NADOC_SECTION_ROUTER`. **BLOCKED on a user decision**, not on code: window end-turn lands *just-inside* (≤6 bp tooth-tip coverage gap) or *just-outside* (few-bp extension into the physical gap, full coverage). Not silently wrong today (default-off + warn-only). Parent of ISSUE-9; can't close without it. | routing correctness | medium | **needs user call** |
+| 5 | **ISSUE-13** `resize_strand_ends` axis re-trim uses a different endpoint convention than `create_bundle` (`(max_bp − min_bp)·rise` vs `length_bp·rise` — one rise, ~0.334 nm, shorter). First resize of any end on a fresh bundle silently shifts `axis_end` and never reverts. Nucleotide count unaffected, but it breaks `canonical_topology` identity for a `+δ/−δ` inverse pair → a correctness hazard for any oracle that fingerprints axis floats. Same three-layer family as ISSUE-11. | geometry off-by-one | small | no (ask-first) |
+| 6 | **ISSUE-12** Feature-log panel catch-all `else` mislabels `cluster_create` entries as "move/rotate" and wires the edit button to the *transform* editor (wrong tool, may error). Low impact today, but the catch-all will silently swallow any future new `feature_type` — a latent class bug. | functional bug | small | no |
+| 7 | **ISSUE-1** Context-menu proliferation — Phase 1 ✅ + 2a-binding ✅ + 2a-orientation ✅ (2026-06-05). Phase 2a-blunt / 2b–2e / Phase 3+ open. 18 builders, 3 dismissal mechanisms, z-index sprawl 1000→9999→10000. Tech debt / UX, not correctness. | UX + tech-debt | large, multi-phase | yes (done) |
+| done | ~~**ISSUE-15**~~ ✅ FIXED 2026-07-08 (surfaced-by-review; see fix log). Dossier belongs in the archive. | — | — | — |
+| done | ~~**ISSUE-2/3/4/5/6/7/10**~~ ✅ closed and archived. | — | — | — |
 
-This order is a recommendation; the user may name a different issue. **2026-06-05: user diverted the loop to
-ISSUE-4 next** — the drill-selection UX is actively in the way, so it jumps ahead of the remaining ISSUE-1
-context-menu migration phases (which stay queued and resume after ISSUE-4's first phase or two).
+This order is a recommendation; the user may name a different issue. Note ISSUE-8 and ISSUE-11 are both
+gated on a decision only the user can make — don't burn a session trying to infer either.
 
 ---
 
@@ -413,13 +420,30 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. Last updated 2026-06-08 (ISSUE-7 shipped: negative-bp element
-keys are now parsed with `-?\d+` via the new tested `cadnano-editor/element_keys.js`; the negative-bp scaffold
-stubs on teeth helices 0–7 are deletable again. Note the reopen — the `_fitToContent` visibility fix shipped
-first was the wrong layer; see the fix-log reopen log + difficulties entry. ISSUE-1 context-menu migration
-remains the recommended pick)._
+_Living pointer — each session overwrites this. **Last updated 2026-07-13 (docs-cleanup audit — no issue
+worked).**_
 
-**NEXT PICK: ISSUE-1 — context-menu migration, Phase 2a-blunt.** ISSUE-4's drill overhaul is functionally
+**⚠ THIS LOOP IS DORMANT.** The last work done by the loop's own protocol was **2026-06-08** (ISSUE-7).
+Everything filed since is drive-by intake from sibling loops (`/automate-feature`, `/continue-coverage`) plus
+one opportunistic fix (ISSUE-15). Net flow over the last month: **+4 open, −0 worked.** The intake channel is
+alive; the fix channel is not.
+
+**NEXT PICK: ISSUE-9 — autoscaffold is not idempotent.** It is the only open issue that silently corrupts
+data *and persists the corruption to `.nadoc`*; it has already cost one full session via a poisoned test
+fixture, and a second fixture (`10-6-10hb_seamed.nadoc`) is flagged as latently corrupt with tests passing by
+accident. Fix shape: clear any prior auto-route to a clean per-domain seed before routing, so N calls == 1
+call. **Second pick: ISSUE-14** — it red-gates `just smoke` for every frontend change, so it is actively
+taxing all other work.
+
+**Two issues are blocked on YOU, not on code** — don't let a session try to infer either:
+- **ISSUE-8** — window end-turns just-inside (≤6 bp tooth-tip coverage gap) vs just-outside (few-bp extension
+  into the physical gap, full coverage)?
+- **ISSUE-11** — is setting `grid_pos` on deformed continuations safe, or does it clobber baked deformed
+  world coords via `_helix_lattice_params`? (Three-Layer question.)
+
+<details><summary>Superseded 2026-06-08 handoff (ISSUE-1 Phase 2a-blunt) — kept for its banked detail</summary>
+
+**OLD NEXT PICK: ISSUE-1 — context-menu migration, Phase 2a-blunt.** ISSUE-4's drill overhaul is functionally
 complete and its legacy is deleted, so ISSUE-1 (deferred behind it) resumes. Phase 2a-blunt is the
 biggest/riskiest of the 2a sub-phases: the blunt-end menu is NOT a builder — it's a **static HTML element**
 `#blunt-end-ctx-menu` (index.html) with three heavy pre-wired handlers (`blunt-extrude/bend/twist-btn-ctx` in
@@ -459,7 +483,9 @@ assume `dot.className` is `sync-dot <state>` anymore (it can be `sync-dot coedit
 gate (sub-phase C) is untouched and must stay panel-tied. The pure `countCoeditingSiblings` deliberately
 EXCLUDES same-docId siblings (cadnano child windows share our backend doc = genuinely in-sync).
 
-**Gotchas banked:**
+</details>
+
+**Gotchas banked** (still live — these outlive the issues that produced them):
 - **Two-context Playwright canNOT reproduce ISSUE-2.** `BroadcastChannel` does NOT cross Playwright
   browser contexts, so tab B never receives tab A's `file-saved` echo → `selfSavedPaths` never gets the
   path → the SSE reload fires even on the OLD code. The bug only manifests between two REAL same-browser

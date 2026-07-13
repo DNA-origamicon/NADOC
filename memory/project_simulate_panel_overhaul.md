@@ -410,7 +410,7 @@ oxDNA Advanced-card chevron fix from A2 was in a different file and is unaffecte
 
 ## Phase A — structural (SHIPPED + verified, committed `73db970`)
 - **Periodic MD panel removed**: DOM block + `periodic_md_panel.js` + `periodic_md_overlay.js`
-  + `main.js` wiring + stale e2e spec. Client-only, no backend (see [[periodic_md]]).
+  + `main.js` wiring + stale e2e spec. Client-only, no backend (see [[project_periodic_md]]).
 - **Per-engine headers no longer collapse** — static labels. New `collapsible:false` option on
   `jobs_panel_base.js::initJobsPanelBase`: forces the section open (ignores persisted state,
   no heading listener), keeps the advanced-drawer + poll, and **defers `onOpen` to a

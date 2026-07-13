@@ -6,6 +6,26 @@ originSessionId: 96f9c7f1-a2dc-42fd-ade8-1e21c39596f9
 ---
 # mrdna Fine-Stage Bead Model
 
+## NEGATIVE RESULT — mrDNA coarse preconditioning does NOT fix the atomistic start (2026-05-21)
+
+Read this before attempting "use mrDNA to clean up the NAMD starting geometry." It was tried on
+B_tube and it **did not move the needle at all**:
+
+| metric | raw | mrDNA-preconditioned |
+|---|---|---|
+| max covalent bond | 0.3634 nm | **0.3634 nm** (unchanged) |
+| bonds > 0.30 nm | 104 | **104** (unchanged) |
+
+Coarse override coverage was complete (24/24 helices), so this was not a coverage failure — the
+coarse path simply does not touch the thing that is broken. All 809 checked direct crossovers were
+still geometrically strained afterward, and a NAMD GBIS start still began with 3,412 bad contacts
+and ~3.5e9 kcal/mol VDW energy.
+
+**Why:** mrDNA relaxes *coarse helix paths*. The B-tube blocker is **local atomistic crossover-endpoint
+and sugar-phosphate strain** — a different length scale entirely. Longer coarse mrDNA runs cannot
+reach it. Useful work targets crossover-endpoint geometry / restraint handoff or an all-atom
+local-fragment relaxation stage instead. Full run log: [mrdna_namd_inventory.md](mrdna_namd_inventory.md).
+
 ## The Core Fact (read this first)
 
 **mrdna ARBD fine stage has exactly 1 DNA bead per BASE PAIR — NOT 1 per nucleotide.**

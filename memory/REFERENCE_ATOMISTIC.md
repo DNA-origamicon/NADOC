@@ -22,6 +22,24 @@ _FRAME_SHIFT_Z  = 0
 ```
 These are exposed as query params on `GET /design/atomistic` for override.
 
+### The P atom is DELIBERATELY 0.65 Å off its 1ZEW crystallographic position — do NOT "fix" it
+`P_tmpl` is shifted by **t = 0.65 Å along the C3'→P unit direction** in template space. This is
+intentional and load-bearing, and it will look like a bug to anyone comparing against 1ZEW.
+
+Why: in the single-template model `P(N+1) = origin_{N+1} + R_{N+1} @ P_tmpl`, the frame-to-frame
+transform lands P only **2.05 Å** from C3'(N), whereas the target C3'–P distance for a 119.35°
+C3'–O3'–P angle at canonical bond lengths (1.52 + 1.61 Å) is **2.70 Å**. Moving O3' alone cannot
+bridge that gap — the maximum achievable angle is 82°. The shift closes exactly the 0.65 Å deficit.
+Result: all 10 Watson–Crick H-bonds land within 0.007 nm of target.
+
+Reverting P to its raw 1ZEW position silently re-breaks the inter-residue backbone geometry.
+Full derivation: [log_atomistic_o3prime.md](log_atomistic_o3prime.md).
+
+**Separately still open:** the *residual* inter-residue angles (C3'–O3'–P = 93.6° vs a 119.35° target)
+are known-wrong and are NOT fixed by the above. That needs a template re-extraction; the recipe is
+specified but has never been executed. See [project_o3prime_investigation.md](project_o3prime_investigation.md)
+— every PDB/PSF export and every GROMACS/NAMD run in this repo currently starts from this geometry.
+
 ### Domain Transition Bond Generation
 Inter-residue O3'→P bonds span helix boundaries via domain traversal (`prev_o3_serial` not reset at domain transitions). This enables correct PDB connectivity across domain boundaries.
 
