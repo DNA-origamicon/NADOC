@@ -8,6 +8,68 @@ metadata:
 
 # SNUPI mimic — gap analysis vs the full publication + build plan
 
+## ⚙ 2026-07-13 — SHAPE fix: diagonal material for the equilibrium solve (VoltronCore)
+Symptom: SNUPI "Fine" on a large SQUARE-lattice design (VoltronCore, 59 helices) over-deformed massively
+vs mrDNA/oxDNA (which sit ~1.7 nm from the design). Root cause, isolated by experiment (results below):
+the **twist–stretch (off-diagonal) couplings** of the SNUPI 6×6 material. The loop/skip + square register
+over-twist eigenstrain is imposed as a nodal FORCE computed from the ISOTROPIC stiffness (`el.gj`), then
+applied to the cross-coupled SNUPI constitutive law → the couplings over-rotate large twisted bundles.
+Measured (VoltronCore, real deformation vs the undeformed reconstruction, self-consistent):
+- **COUPLED (old default): 33.5 nm** real deformation; crossovers blown to 65 nm.
+- **DIAGONAL (couplings zeroed): 3.3 nm**; crossovers == the undeformed baseline (NO solve over-stretch).
+- Isolation: zeroing couplings alone took axis-RMSD 11.9→1.4 nm; cando (isotropic) = 1.4 nm; torsion/axial
+  eigenstrain individually don't drive it — it's the coupling. 6HB diagonal-vs-coupled shape delta = **0.000 nm**
+  (no regression on well-formed bundles — their eigenstrain is small so the couplings barely act).
+**Fix** (`fem_solver.py`): `assemble_global_stiffness(..., diagonal_material=)` + `solve_prestress_shape(..., diagonal_material=)`;
+`predict_shape` runs the SNUPI **shape** solve with `diagonal_material=(material=="snupi")` (drops the off-diagonal
+couplings — anisotropic rigidities kept). The **RMSF/DCCM NMA keeps the FULL coupled 6×6** (SNUPI's validated
+flexibility channel — untouched). cando is diagonal already (no-op). This composes with the disconnected-body
+fix ([[project_cando_fem]]) already in place.
+## ⚙ 2026-07-13 — DISPLAY fix: overhang beads no longer snap in the FEM overlay
+Symptom (user, VoltronCore, 55 overhangs): the deform/flex overlay looked "massively overstretched" even after
+the shape fix. Root cause (confirmed): `deformed_positions_with_axis` (the FEM display path, cando+snupi) winds
+EVERY bead onto the duplex axis, but OVERHANG beads carry no FEM node — winding them DROPS the overhang ball-joint
+rotation that the RENDER applies (`apply_overhang_rotation_if_needed` in `_geometry_for_helices`, line ~349). So on
+`applyFemPositions` the overhangs snapped off their rotated pose (~16 nm), AND those misplaced beads skewed the
+whole-structure Kabsch fit → a global ~7.6 nm DUPLEX offset too. Proof: clean 6HB (no overhangs) FEM-vs-render =
+**0.14 nm**; VoltronCore duplex 7.6 / overhang 16 nm. **Fix** (`fem_solver.deformed_positions_with_axis`): omit every
+overhang-domain bead (built from `domain.overhang_id` over `domain_bp_range`) + every fully-unmeshed helix from the
+emitted positions AND the Kabsch — `applyFemPositions` then leaves them at their correct RENDERED pose (the snapshot
+the overlay draws on). After: **0 overhang beads emitted**, duplex offset 7.6→4.4 nm (the residual is the real ~3.3 nm
+FEM deformation, not an artifact). Clean bundles unaffected (every helix meshed). Tests: cando_field/cando_linkers/
+snupi_job green (32). The block (2×3) also benefits.
+## ⚙ 2026-07-13 — DISPLAY fix #2: winding rise-scale bug (the "still-open" residual — was NOT minor)
+Symptom (user, VoltronCore): SNUPI overlay STILL had stretched bonds between overhangs and their embedded staples
+even after DISPLAY fix #1. Root cause (confirmed, isolated at u=0 → no solve, no deformation involved):
+`_wound_backbones_for_helix` computed the per-bp rise as `rise_geom = |axis_end - axis_start| / helix.length_bp`.
+On a helix carrying a long IN-LINE ssDNA overhang tail, `axis_end` stops at the paired-duplex end (the last FEM node)
+while `length_bp` counts the unpaired tail too → the ratio is ~½ the true rise (VoltronCore worst helix 0.179 vs
+0.334). That wrong scale corrupts the bead's `s→bp→axial` mapping, misplacing EVERY duplex bead axially by an amount
+growing LINEARLY along the helix (0.5 nm near the duplex start → **~25 nm at the tip**). Since overhang beads are held
+at their rendered pose (fix #1), the moved staple beads pull away → stretched junction bonds. Measured at u=0 on
+VoltronCore: duplex bead |FEM_display − rendered| mean **5.4 / max 19.4 nm**; the 55 overhang↔staple JUNCTION beads
+mean **9.0 / max 19.1 nm**, 52/55 > 2 nm. (Not the FEM deformation — this is u=0; not cluster transforms — VoltronCore
+render == straight, single Kabsch residual 0.00.) The earlier "~21 nm for a FEW beads" note undersold it: pervasive,
+~20 nm mean across every overhang-bearing helix.
+**Fix** (`fem_solver._wound_backbones_for_helix`, ~line 1799): `rise_geom = BDNA_RISE_PER_BP` (0.334) — the constant
+`nucleotide_positions` always spaces beads at, independent of `axis_end`. So `x = bp_start + s/rise_geom` = the bead's
+TRUE bp and `_at_bp` anchors each bead onto its own bp's deformed node. After: VoltronCore u=0 junction stretch **9.0 →
+0.40 nm mean (0.67 max), 0 junctions > 2 nm** (down from 52/55); curved-bundle winding still ⊥ the deformed tangent.
+- **⚠ do NOT use the FEM node spacing (FEM_RISE_PER_BP 0.34) or a node-span rise for this** — an attempt to zero the u=0
+  error that way BROKE the curved case: warping the bp coordinate is invisible on a straight helix but on a bent axis it
+  anchors beads to the WRONG node, so they stop winding perpendicular to the deformed tangent
+  (`test_fem_solver.test_deform_backbones_wind_around_the_curved_axis` fails, perp 0.39 vs <0.15). The bead↔bp
+  registration MUST use the bead rise; the residual is only the node-grid difference.
+- **Residual (~0.4 nm mean / 0.67 max, sub-bond-length):** pre-existing FEM-node-grid (0.34) vs geometry-grid (0.334)
+  drift — `_at_bp` interpolates FEM node abs positions (0.34) while beads live on the 0.334 grid. It's uniform across the
+  WHOLE overlay (not overhang-specific; duplex↔duplex bonds share it, so it was never noticed). Killing it needs the
+  display to unify on the geometry grid (rebuild both the winding anchor AND the `res["axis"]` output as
+  geometry-straight + FEM displacement) — a bigger, riskier change touching the cylinder rep; deferred unless bonds still
+  read long. cando+snupi share this path.
+Pin: `tests/test_cando_linkers.py::test_wound_backbones_no_rise_collapse_with_ssdna_overhang_tail` (helix whose
+`axis_end` stops short of `length_bp`; asserts u=0 recon err < 1 nm; proven to FAIL 4.93 nm on the old formula).
+
+
 ## Visual-vs-NAMD automation + the shape gap (2026-07-12)
 `scripts/snupi_visual_compare.py` quantifies EVERY SNUPI display mode against the free-k0 NAMD DCD
 (shape RMSD to the MD mean + twist/bend/span; RMSF pattern; DCCM), across cando / snupi-default /

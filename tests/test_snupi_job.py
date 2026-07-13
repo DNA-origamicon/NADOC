@@ -41,9 +41,9 @@ def _run_to_completion(design, ws: Path, *, nonlinear: bool, material: str = "sn
     sr.prepare_snupi_job(design, job, ws)
     job.status = SnupiStatus.running
     job.save(ws)
-    sr.start_job(job, ws)
+    sr.start_job(job, ws)                       # detached worker subprocess
     for _ in range(240):                       # ≤120 s guard
-        if not sr.is_running(job.job_id):
+        if not sr.is_running(job.job_id, ws):
             break
         time.sleep(0.5)
     return SnupiJob.load(job.job_id, ws)
@@ -142,7 +142,11 @@ def test_create_request_model_defaults_and_material():
 
 
 def test_runner_forwards_material_anchors_field_to_predict_shape(routed_6hb, tmp_path, monkeypatch):
-    """The load-bearing wiring: a SNUPI job's material + anchors + field reach predict_shape."""
+    """The load-bearing wiring: a SNUPI job's material + anchors + field reach predict_shape.
+
+    Exercises ``solve_and_cache`` in-process (the exact body the detached worker runs), so the
+    monkeypatched spy is visible — a real subprocess worker would import the true predict_shape.
+    """
     import backend.physics.fem_solver as fs
     from backend.core import snupi_runner as sr
     from backend.core.snupi_job import SnupiStatus, new_snupi_job
@@ -163,14 +167,13 @@ def test_runner_forwards_material_anchors_field_to_predict_shape(routed_6hb, tmp
     job.status = SnupiStatus.preparing
     job.save(tmp_path)
     sr.prepare_snupi_job(routed_6hb, job, tmp_path)
-    sr.start_job(job, tmp_path)
-    for _ in range(120):
-        if not sr.is_running(job.job_id):
-            break
-        time.sleep(0.5)
+    sr.solve_and_cache(job, tmp_path)          # in-process → the spy applies
     assert captured.get("material") == "snupi"
     assert captured.get("anchors") == anchors
     assert captured.get("field") == field
+    # The spy raised → solve_and_cache surfaces it as a failed job (never re-raises).
+    assert job.status == SnupiStatus.failed
+    assert "stop-after-capture" in (job.error or "")
 
 
 def test_linear_snupi_job_completes_and_caches(routed_6hb, tmp_path):
@@ -199,7 +202,11 @@ def test_progress_and_reconcile(routed_6hb, tmp_path):
     prog = sr.job_progress(job, tmp_path)
     assert prog["overall"] == 1.0 and prog["status"] == "completed"
 
+    # Simulate an orphaned running job whose detached worker died (dead pid) AFTER caching:
+    # reconcile must recover it to completed. (Use a guaranteed-dead pid, not the finished
+    # worker's real pid — under parallel test load that pid can be recycled by a live process.)
     job.status = SnupiStatus.running
+    job.pid = 2_000_000_000
     job.save(tmp_path)
     reconciled = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
     assert reconciled.status == SnupiStatus.completed
@@ -214,6 +221,116 @@ def test_stop_marks_stray_running_stopped(tmp_path):
     job.save(tmp_path)
     assert sr.stop_job(job.job_id, tmp_path) is False
     assert SnupiJob.load(job.job_id, tmp_path).status == SnupiStatus.stopped
+
+
+def test_pid_alive_helper():
+    import os
+
+    from backend.core import snupi_runner as sr
+
+    assert sr._pid_alive(os.getpid()) is True
+    assert sr._pid_alive(None) is False
+    assert sr._pid_alive(0) is False
+    # A pid that (almost certainly) names no live process.
+    assert sr._pid_alive(2_000_000_000) is False
+
+
+def test_pid_field_persists(tmp_path):
+    from backend.core.snupi_job import SnupiJob, new_snupi_job
+
+    job = new_snupi_job("d")
+    job.pid = 4242
+    job.save(tmp_path)
+    assert SnupiJob.load(job.job_id, tmp_path).pid == 4242
+    # A legacy job.json without the pid key loads as None.
+    import json
+    p = job.job_dir(tmp_path) / "job.json"
+    data = json.loads(p.read_text())
+    data.pop("pid", None)
+    p.write_text(json.dumps(data))
+    assert SnupiJob.load(job.job_id, tmp_path).pid is None
+
+
+def test_kill_pid_terminates_detached_process():
+    """_kill_pid group-kills a detached (own-session) child — the mechanism stop_job uses."""
+    import subprocess
+
+    from backend.core import snupi_runner as sr
+
+    proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    try:
+        assert sr._pid_alive(proc.pid) is True
+        sr._kill_pid(proc.pid)
+        proc.wait(timeout=5)
+        assert sr._pid_alive(proc.pid) is False
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
+def test_reconcile_completed_when_pid_dead_and_display_cached(tmp_path):
+    """A worker that finished (display.json exists) but whose pid is gone → completed."""
+    import json
+
+    from backend.core import snupi_runner as sr
+    from backend.core.snupi_job import SnupiJob, SnupiStatus, new_snupi_job
+
+    job = new_snupi_job("d", nonlinear=True)
+    job.status = SnupiStatus.running
+    job.pid = 2_000_000_000                      # dead pid
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "display.json").write_text(json.dumps({"positions": []}))
+    out = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == SnupiStatus.completed
+
+
+def test_reconcile_stopped_when_pid_dead_and_no_cache(tmp_path):
+    """A worker killed mid-solve (dead pid, no display.json) → stopped, not left running."""
+    from backend.core import snupi_runner as sr
+    from backend.core.snupi_job import SnupiJob, SnupiStatus, new_snupi_job
+
+    job = new_snupi_job("d", nonlinear=True)
+    job.status = SnupiStatus.running
+    job.pid = 2_000_000_000                      # dead pid, no display.json written
+    job.save(tmp_path)
+    out = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == SnupiStatus.stopped
+
+
+def test_reconcile_leaves_running_while_worker_alive(tmp_path):
+    """The whole point of the subprocess: a live worker (e.g. surviving a --reload) stays running."""
+    import os
+
+    from backend.core import snupi_runner as sr
+    from backend.core.snupi_job import SnupiJob, SnupiStatus, new_snupi_job
+
+    job = new_snupi_job("d", nonlinear=True)
+    job.status = SnupiStatus.running
+    job.pid = os.getpid()                        # a live pid stands in for the worker
+    job.save(tmp_path)
+    out = sr.reconcile_snupi_status(SnupiJob.load(job.job_id, tmp_path), tmp_path)
+    assert out.status == SnupiStatus.running
+
+
+def test_start_job_spawns_detached_worker_and_completes(routed_6hb, tmp_path):
+    """End-to-end: start_job launches a real detached subprocess that solves + caches + completes,
+    and records the worker pid on the job (proving the solve ran out-of-process)."""
+    from backend.core import snupi_runner as sr
+    from backend.core.snupi_job import SnupiJob, SnupiStatus, new_snupi_job
+
+    job = new_snupi_job("6hb", nonlinear=False, with_rmsf=True, n_steps=5,
+                        material="snupi", n_nucleotides=1000)
+    job.save(tmp_path)
+    sr.prepare_snupi_job(routed_6hb, job, tmp_path)
+    sr.start_job(job, tmp_path)
+    assert job.pid is not None                   # a subprocess was spawned
+    for _ in range(240):                         # ≤120 s guard
+        if not sr.is_running(job.job_id, tmp_path):
+            break
+        time.sleep(0.5)
+    done = SnupiJob.load(job.job_id, tmp_path)
+    assert done.status == SnupiStatus.completed
+    assert sr.load_display(done.job_dir(tmp_path)) is not None
 
 
 def test_normalize_snupi_job_shape():

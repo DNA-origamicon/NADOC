@@ -236,7 +236,7 @@ async def get_snupi_error_log(job_id: str) -> dict:
 @router.post("/snupi/jobs/{job_id}/start")
 async def start_snupi_job(job_id: str) -> dict:
     job = _load_job(job_id)
-    if is_running(job_id):
+    if is_running(job_id, _workspace()):
         return {"ok": True, "message": "Job already running"}
     if job.status in (SnupiStatus.running, SnupiStatus.completed):
         raise HTTPException(400, f"Job is {job.status.value} — cannot start")
@@ -266,7 +266,7 @@ async def stop_snupi_job(job_id: str) -> dict:
 async def delete_snupi_job(job_id: str) -> dict:
     ws = _workspace()
     job = _load_job(job_id)
-    if is_running(job_id) or job.status == SnupiStatus.running:
+    if is_running(job_id, ws) or job.status == SnupiStatus.running:
         raise HTTPException(400, "Stop the SNUPI job before deleting it")
     from backend.core.job_archive import purge_index_entry
     jd = job.job_dir(ws)

@@ -15,9 +15,22 @@ matches `ENGINE_KEYS` conventions + is a true engine tab. SNUPI is a thin wrappe
 the runner calls `predict_shape(design, material=job.material, anchors=, field=)` (material default
 "snupi"; "cando" isotropic baseline is an in-tab A/B option surfaced as the Advanced "Material" selector).
 
+### ⚙ 2026-07-13 — solve now runs in a DETACHED subprocess (survives `uvicorn --reload`)
+The runner used to solve in an in-process daemon THREAD. On a large design (VoltronCore, ~7 000 FEM
+nodes) the "Fine" solve legitimately takes 5–7 min, and any `uvicorn --reload` (a save under
+`backend/`/`scripts/` — incl. a concurrent editor — or a manual restart) during that window killed the
+thread → the job was stranded as **stopped** ("stops on its own"). Fix: `start_job` now spawns
+`python -m backend.core.snupi_worker <ws> <job_id>` with `start_new_session=True`, so the solve is its
+own session and the reloader (which signals only the server's group) no longer reaches it. Liveness =
+persisted `job.pid` (`os.kill(pid,0)`), not a thread handle; `reconcile_snupi_status` promotes the
+survivor to `completed` after a restart. Bonus: `stop_job` is now immediate (SIGTERM→SIGKILL the worker)
+instead of waiting for the monolithic solve to finish. New: `snupi_worker.py` (thin process shell) +
+`solve_and_cache()` (the callable solve body, tested in-process); `SnupiJob.pid` field.
+
 **Files (clones, autorefine dropped — SNUPI is predict-only):**
-- Backend: `backend/core/snupi_job.py` (SnupiJob, lean — no refine_* fields; +`material`),
-  `backend/core/snupi_runner.py` (`_run_job` threads `material`; predict-only, no autorefine),
+- Backend: `backend/core/snupi_job.py` (SnupiJob, lean — no refine_* fields; +`material`, +`pid`),
+  `backend/core/snupi_runner.py` (`solve_and_cache` = solve body; `start_job` spawns the detached
+  `snupi_worker`; predict-only, no autorefine) + `backend/core/snupi_worker.py` (detached entry point),
   `backend/api/routes_snupi.py` (`/snupi/*` — create/list/status/progress/start/stop/delete/display/rmsf/
   deviation/cylinders/shape-source/available/error-log; reuses cando_deviation/cando_cylinders/
   cando_shape_source display processors — they're material-agnostic). Registered: `main.py` include,

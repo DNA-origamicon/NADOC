@@ -1,23 +1,33 @@
 """
 SNUPI FEM Runner — background execution of a single SNUPI shape prediction.
 
-Sibling of ``cando_runner.py``, predict-only: a SNUPI job is a PURE in-process
-Python solve (``backend.physics.fem_solver.predict_shape`` with ``material="snupi"``),
-not an external simulator.  There is no subprocess, no GPU, and no availability probe —
-only the two solver modes (linear "Coarse" preview vs nonlinear "Fine" solve).
+Sibling of ``cando_runner.py``, predict-only: a SNUPI job is a pure Python FEM solve
+(``backend.physics.fem_solver.predict_shape`` with ``material="snupi"``), not an external
+simulator — the two "engines" are the solver modes (linear "Coarse" preview vs nonlinear
+"Fine" solve).  There is no GPU and no availability probe.
+
+The solve runs in a DETACHED worker subprocess (:mod:`backend.core.snupi_worker`), NOT an
+in-process daemon thread.  The reason is operational: a "Fine" solve on a large design (e.g.
+VoltronCore, ~7 000 FEM nodes) legitimately takes 5–7 min, and the dev server runs under
+``uvicorn --reload``.  A daemon thread lives *inside* that server process, so any reload
+(a save under ``backend/`` or ``scripts/`` — including a concurrent editor — or a manual
+restart) during the multi-minute solve killed the thread and left the job stranded as
+``stopped`` ("stops on its own").  The worker is launched with ``start_new_session=True``,
+giving it its own process group/session, so the reloader (which signals only the server's
+group) no longer reaches it; it finishes and writes its result, which the restarted server
+picks up via :func:`reconcile_snupi_status`.
 
 The runner:
 
   1. prepare: write a self-contained ``design.json`` snapshot into the job dir, so
      the solve (and every display read) is decoupled from live editor state.
-  2. run ``predict_shape(..., material=job.material)`` on the snapshot in a background
-     daemon thread (the fine solve is ~1 min; the thread keeps the sidebar polling).
+  2. ``start_job``: spawn the detached worker, which runs ``predict_shape(..., material=
+     job.material)`` on the snapshot (see :func:`solve_and_cache`).
   3. cache the deformed positions as ``display.json`` and the per-bp RMSF as ``rmsf.json``.
-  4. mark the job completed.
+  4. the worker marks the job completed (or failed); ``reconcile`` recovers an orphan.
 
-Stopping is best-effort: ``predict_shape`` is a monolithic scipy solve that can't be
-interrupted mid-way, so stop sets a cancel flag; a running solve finishes, then the
-thread discards the result and marks the job stopped instead of caching.
+Stopping is now immediate: ``stop_job`` sends SIGTERM→SIGKILL to the detached worker, so a
+running solve dies at once instead of running to completion first.
 
 FEM output is Physical-layer only — never written back into Design topology.
 """
@@ -26,9 +36,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import signal
+import subprocess
+import sys
 import threading
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -37,21 +50,70 @@ from backend.core.snupi_job import SnupiJob, SnupiStatus
 
 logger = logging.getLogger(__name__)
 
-
-# ── Global task registry ──────────────────────────────────────────────────────
-
-@dataclass
-class _RunningHandle:
-    thread:    threading.Thread
-    cancelled: bool = False
+# Repo root — the cwd the detached solve worker is launched from, so ``python -m
+# backend.core.snupi_worker`` resolves the ``backend`` package.  This file is
+# backend/core/snupi_runner.py, so parents[2] is the repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-_RUNNING: dict[str, _RunningHandle] = {}
+# ── Detached-worker registry ──────────────────────────────────────────────────
+# The solve runs in a DETACHED subprocess (its own session via ``start_new_session``),
+# NOT an in-process daemon thread — so a ``uvicorn --reload`` restart mid-solve no longer
+# kills it (the reloader signals only the server's own process group).  Liveness is the
+# worker PID persisted on the job (``job.pid``), which survives the restart; this
+# in-process map is only a fast path + a zombie reaper for children started HERE.
+
+_STARTED: dict[str, int] = {}
 
 
-def is_running(job_id: str) -> bool:
-    handle = _RUNNING.get(job_id)
-    return handle is not None and handle.thread.is_alive()
+def _pid_alive(pid: Optional[int]) -> bool:
+    """True if ``pid`` names a live process we could signal (``os.kill(pid, 0)``)."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True   # exists but owned by another user — shouldn't happen here
+    return True
+
+
+def is_running(job_id: str, workspace_dir: Optional[Path] = None) -> bool:
+    """True while the detached solve worker for ``job_id`` is alive.
+
+    Authoritative source is the job's persisted status + pid (survives a server reload);
+    without a workspace the in-process ``_STARTED`` map is the fallback (legacy callers).
+    """
+    if workspace_dir is not None:
+        try:
+            job = SnupiJob.load(job_id, workspace_dir)
+        except Exception:  # noqa: BLE001
+            job = None
+        if job is not None:
+            if job.status != SnupiStatus.running:
+                return False
+            return _pid_alive(job.pid)
+    return _pid_alive(_STARTED.get(job_id))
+
+
+def _kill_pid(pid: int) -> None:
+    """SIGTERM→SIGKILL the worker.  A ``start_new_session`` child is its own group leader
+    (pgid == pid), so we group-kill it (and anything it spawned); otherwise signal just it."""
+    try:
+        pgid = os.getpgid(pid)
+    except OSError:
+        return
+    group = pgid == pid
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(pgid, sig) if group else os.kill(pid, sig)
+        except OSError:
+            return
+        for _ in range(20):            # ≤1 s grace before escalating to SIGKILL
+            if not _pid_alive(pid):
+                return
+            time.sleep(0.05)
 
 
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
@@ -167,10 +229,6 @@ def job_progress(job: SnupiJob, workspace_dir: Path) -> dict:
 
 # ── Execution ─────────────────────────────────────────────────────────────────
 
-class _Cancelled(Exception):
-    pass
-
-
 def _cache_fem_analysis(job: SnupiJob, jd: Path, result: dict) -> None:
     """Write a ``predict_shape`` result to the job's ``display.json`` + ``rmsf.json`` and record the
     node/RMSF summary on the job — the display cache every SNUPI display mode reads (deform / flex /
@@ -199,30 +257,21 @@ def _cache_fem_analysis(job: SnupiJob, jd: Path, result: dict) -> None:
     job.rmsf_max_nm = round(rmsf_max, 3) if rmsf_max is not None else None
 
 
-def _run_job(job: SnupiJob, workspace_dir: Path) -> None:
-    """Thread body: load the snapshot, run predict_shape (SNUPI material), extract + cache."""
+def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
+    """Run ``predict_shape`` on the job's design snapshot and cache the result.
+
+    This is the body the detached worker process executes (see :mod:`backend.core.snupi_worker`),
+    and it is directly callable in-process (tests / debugging).  It writes the job's TERMINAL
+    status (``completed`` / ``failed``) itself and never raises — the worker's only job is to
+    call this.  FEM output is Physical-layer only; never written back into topology.
+    """
     jd = job.job_dir(workspace_dir)
-    handle = _RUNNING.get(job.job_id)
-
-    def _cancelled() -> bool:
-        return handle is not None and handle.cancelled
-
     try:
         design = _load_snapshot_design(jd)
         if design is None:
             raise RuntimeError("job design snapshot (design.json) missing")
 
         from backend.physics.fem_solver import predict_shape
-
-        if _cancelled():
-            raise _Cancelled()
-
-        # Flip the JOB status to running (not just the stage) so the panel's progress bar +
-        # ETA — both gated on status==running — light up during the solve.
-        job.status = SnupiStatus.running
-        job.stages[0].status = "running"
-        job.stages[0].started_at = time.time()
-        job.save(workspace_dir)
 
         t0 = time.monotonic()
         result = predict_shape(
@@ -250,9 +299,6 @@ def _run_job(job: SnupiJob, workspace_dir: Path) -> None:
         )
         sim_seconds = time.monotonic() - t0
 
-        if _cancelled():
-            raise _Cancelled()
-
         _cache_fem_analysis(job, jd, result)
         job.sim_seconds = round(sim_seconds, 2)
         for st in job.stages:
@@ -264,69 +310,96 @@ def _run_job(job: SnupiJob, workspace_dir: Path) -> None:
                     job.job_id, sim_seconds, result.get("solver"),
                     getattr(job, "material", "snupi"), job.n_nodes)
 
-    except _Cancelled:
+    except Exception as exc:  # noqa: BLE001
+        logger.error("snupi job %s failed: %s", job.job_id, exc, exc_info=True)
+        job.status = SnupiStatus.failed
+        job.error = str(exc)
+        for st in job.stages:
+            if st.status != "done":
+                st.status = "failed"
+        job.save(workspace_dir)
+
+
+def start_job(job: SnupiJob, workspace_dir: Path) -> None:
+    """Launch the solve in a DETACHED worker subprocess (its own session) so it survives a
+    ``uvicorn --reload`` restart of the dev server.  Idempotent while a live worker exists.
+
+    The worker (``python -m backend.core.snupi_worker <ws> <job_id>``) reads the snapshot and
+    writes the result + terminal status back through the job dir; a lightweight daemon reaper
+    only ``wait()``s to avoid a zombie and drops the fast-path registry entry — killing it (on
+    reload) does NOT kill the detached solve.
+    """
+    if is_running(job.job_id, workspace_dir):
+        return
+    jd = job.job_dir(workspace_dir)
+    jd.mkdir(parents=True, exist_ok=True)
+    log_fh = open(jd / "worker.log", "w")   # noqa: SIM115 — closed by the reaper thread
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "backend.core.snupi_worker", str(workspace_dir), job.job_id],
+        cwd=str(_REPO_ROOT),
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,   # own session → outlives a uvicorn --reload of the parent
+    )
+    job.pid = proc.pid
+    # Flip the JOB status to running (not just the stage) so the panel's progress bar + ETA —
+    # both gated on status==running — light up while the detached worker solves.
+    job.status = SnupiStatus.running
+    if job.stages:
+        job.stages[0].status = "running"
+        job.stages[0].started_at = time.time()
+    job.save(workspace_dir)
+    _STARTED[job.job_id] = proc.pid
+
+    def _reap() -> None:
+        try:
+            proc.wait()   # reap the child so a finished worker isn't left a zombie
+        except Exception:  # noqa: BLE001
+            pass
+        finally:
+            try:
+                log_fh.close()
+            except Exception:  # noqa: BLE001
+                pass
+            _STARTED.pop(job.job_id, None)
+
+    threading.Thread(target=_reap, name=f"snupi-reap-{job.job_id}", daemon=True).start()
+
+
+def stop_job(job_id: str, workspace_dir: Path) -> bool:
+    """Stop a running SNUPI job.  Kills the detached worker (SIGTERM→SIGKILL) if it is alive —
+    unlike the old in-thread solve, the subprocess IS interruptible, so a running solve dies at
+    once.  Marks a still-``running`` job ``stopped``.  Returns True if a live worker was found."""
+    try:
+        job = SnupiJob.load(job_id, workspace_dir)
+    except Exception:  # noqa: BLE001
+        return False
+    live = _pid_alive(job.pid)
+    if live:
+        _kill_pid(job.pid)
+        _STARTED.pop(job_id, None)
+    # Re-load: the worker may have written a terminal status between our load and the kill.
+    try:
+        job = SnupiJob.load(job_id, workspace_dir)
+    except Exception:  # noqa: BLE001
+        return live
+    if job.status == SnupiStatus.running:
         job.status = SnupiStatus.stopped
         for st in job.stages:
             if st.status != "done":
                 st.status = "failed"
         job.save(workspace_dir)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("snupi job %s failed: %s", job.job_id, exc, exc_info=True)
-        if _cancelled():
-            job.status = SnupiStatus.stopped
-        else:
-            job.status = SnupiStatus.failed
-            job.error = str(exc)
-        for st in job.stages:
-            if st.status != "done":
-                st.status = "failed"
-        job.save(workspace_dir)
-    finally:
-        _RUNNING.pop(job.job_id, None)
-
-
-def start_job(job: SnupiJob, workspace_dir: Path) -> None:
-    """Launch the job's runner in a background daemon thread. Idempotent if running."""
-    if is_running(job.job_id):
-        return
-    handle = _RunningHandle(thread=threading.Thread(
-        target=_run_job, args=(job, workspace_dir),
-        name=f"snupi-runner-{job.job_id}", daemon=True))
-    _RUNNING[job.job_id] = handle
-    handle.thread.start()
-
-
-def stop_job(job_id: str, workspace_dir: Path) -> bool:
-    """Stop a running SNUPI job.  Sets the cancel flag; a running scipy solve can't be
-    interrupted mid-way, so the flagged thread finishes the current solve, then discards
-    the result and marks the job stopped.  If no thread is alive, marks a stray
-    ``running`` job stopped directly.  Returns True if a live job was found."""
-    handle = _RUNNING.get(job_id)
-    live = handle is not None and handle.thread.is_alive()
-    if handle is not None:
-        handle.cancelled = True
-    if not live:
-        try:
-            job = SnupiJob.load(job_id, workspace_dir)
-        except Exception:  # noqa: BLE001
-            return False
-        if job.status == SnupiStatus.running:
-            job.status = SnupiStatus.stopped
-            for st in job.stages:
-                if st.status != "done":
-                    st.status = "failed"
-            job.save(workspace_dir)
     return live
 
 
 def reconcile_snupi_status(job: SnupiJob, workspace_dir: Path) -> SnupiJob:
-    """Recover a detached job's status after the runner thread died (e.g. a
-    ``uvicorn --reload`` restart mid-solve).  If the cached ``display.json`` exists the
-    solve finished → ``completed``; otherwise the thread died without caching → ``stopped``.
-    No-op unless the job is an orphaned ``running`` one."""
+    """Recover an orphaned ``running`` job whose worker died without writing a terminal status
+    (SIGKILLed, or the machine rebooted).  A live worker → unchanged.  Dead worker + cached
+    ``display.json`` → ``completed``; dead worker + no cache → ``stopped``.  A worker that
+    survives a ``uvicorn --reload`` stays alive (pid still valid) → left ``running`` correctly."""
     if job.status != SnupiStatus.running:
         return job
-    if is_running(job.job_id):
+    if _pid_alive(job.pid):
         return job
     jd = job.job_dir(workspace_dir)
     if (jd / "display.json").exists():

@@ -88,6 +88,10 @@ class SnupiJob:
     field:               Optional[dict] = None
     stages:              list[SnupiStageStatus] = dc_field(default_factory=list)
     error:               Optional[str] = None
+    # PID of the detached solve worker (backend.core.snupi_worker).  The solve runs in its
+    # OWN session subprocess so it survives a ``uvicorn --reload`` restart; liveness is this
+    # persisted pid (``os.kill(pid, 0)``), not an in-process thread handle.
+    pid:                 Optional[int] = None
     design_source_path:  Optional[str] = None
     doc_id:              Optional[str] = None
     # Populated on completion — surfaced in the panel detail block.
@@ -128,6 +132,7 @@ class SnupiJob:
         data = json.loads(path.read_text())
         data["status"] = SnupiStatus(data["status"])
         data["stages"] = [SnupiStageStatus(**s) for s in data.get("stages", [])]
+        data.setdefault("pid", None)
         data.setdefault("nonlinear", True)
         data.setdefault("n_steps", 20)
         data.setdefault("with_rmsf", True)

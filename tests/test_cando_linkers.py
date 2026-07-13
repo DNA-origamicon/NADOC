@@ -43,12 +43,16 @@ from backend.physics.fem_solver import (
     L_P_SS,
     RISE_SS,
     EA_DS,
+    FEM_RISE_PER_BP,
     FEMElement,
     FEMMesh,
     FEMNode,
     FEMRigidLink,
     FEMSpring,
     _duplex_bp_per_helix,
+    _ensure_components_pinned,
+    _mesh_component_labels,
+    _wound_backbones_for_helix,
     assemble_global_stiffness,
     build_fem_mesh,
 )
@@ -252,3 +256,124 @@ def test_rigid_linker_couples_more_stiffly_than_a_soft_one():
     u_rigid, u_soft = _part_b_moves(rigid), _part_b_moves(soft)
     assert u_rigid > 1e-9 and u_soft > 1e-9
     assert u_rigid > u_soft * 10                        # ds bridge ≫ ss tether coupling
+
+
+# ── Disconnected-body robustness (ssDNA-connected blocks, general) ─────────────
+
+def test_mesh_component_labels_counts_disconnected_bodies():
+    """Two beam parts with NO connector are two components; adding a spring (an ssDNA
+    tether) merges them into one — a spring counts as CONNECTED (finite restoring force)."""
+    n_disjoint, _ = _mesh_component_labels(_two_parts(None))
+    n_tethered, _ = _mesh_component_labels(
+        _two_parts(FEMSpring(node_i=1, node_j=2, k_trans=_wlc_k_trans(6), k_rot=0.0)))
+    assert n_disjoint == 2
+    assert n_tethered == 1
+
+
+def test_ensure_components_pinned_covers_every_body():
+    """Every connected component gets ≥1 pinned node: a disjoint 2-body mesh anchored only
+    in body A gains a pin in body B (else B is a free rigid body that explodes); a single-
+    component mesh keeps exactly its one pin (legacy behaviour, validated designs unchanged)."""
+    disjoint = _two_parts(None)
+    _, labels = _mesh_component_labels(disjoint)
+    pinned = _ensure_components_pinned(disjoint, [0], labels)          # anchor only in body A
+    comps = {int(labels[i]) for i in pinned}
+    assert comps == {0, 1}                                             # both bodies now covered
+    assert len(pinned) == 2
+
+    tethered = _two_parts(FEMSpring(node_i=1, node_j=2, k_trans=_wlc_k_trans(6), k_rot=0.0))
+    _, l1 = _mesh_component_labels(tethered)
+    assert _ensure_components_pinned(tethered, [0], l1) == [0]         # one body → unchanged
+
+
+def test_clean_bundle_gains_no_ssdna_hop_springs():
+    """The generalized ssDNA-hop coupling must NOT perturb a clean, fully-duplex bundle:
+    a routed 6HB with no ssDNA stubs meshes as ONE component with ZERO springs, exactly as
+    before — so the exp36/validated numerics cannot shift."""
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+
+    cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(cells, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=False)
+        hb.auto_crossover()
+        hb.auto_break()
+        design = design_state.get_or_404().model_copy(deep=True)
+
+    m = build_fem_mesh(design)
+    n_comp, _ = _mesh_component_labels(m)
+    assert n_comp == 1
+    assert len(m.springs) == 0
+
+
+@pytest.mark.slow
+def test_voltroncore_ssdna_block_couples_and_solves_bounded():
+    """Regression on the real ssDNA-connected-block design: a 6-helix sub-block joined to
+    the body only by the scaffold threading through single-stranded stub helices. The
+    generalized coupling must merge it into ONE component and the nonlinear SNUPI solve must
+    stay origami-scale (before the fix it drifted to mm scale → nothing rendered). Skipped
+    where the workspace file is absent (machine-local design)."""
+    from pathlib import Path
+
+    import numpy as np
+
+    from backend.core.models import Design
+    from backend.physics.fem_solver import build_fem_mesh, predict_shape
+
+    p = Path("workspace/VoltronCore.nadoc")
+    if not p.exists():
+        pytest.skip("VoltronCore.nadoc not present on this machine")
+    d = Design.model_validate_json(p.read_text())
+
+    m = build_fem_mesh(d)
+    n_comp, _ = _mesh_component_labels(m)
+    assert n_comp == 1                                    # ssDNA hops merged the block in
+    assert len(m.springs) >= 1                            # the scaffold-stub hop(s)
+
+    r = predict_shape(d, nonlinear=True, n_steps=20, with_rmsf=True, material="snupi")
+    pos = np.array([bp["backbone_position"] for bp in r["positions"]])
+    span = float((pos.max(0) - pos.min(0)).max())
+    assert span < 1000.0                                  # origami-scale, not mm-scale
+    assert max(x["rmsf_nm"] for x in r["rmsf"]) < 100.0   # no runaway rigid-mode RMSF
+
+
+def test_wound_backbones_no_rise_collapse_with_ssdna_overhang_tail():
+    """Regression: the FEM display winding (:func:`_wound_backbones_for_helix`) must reproduce the
+    rendered backbone geometry at zero deformation (deformed axis == straight axis), even on a helix
+    whose paired-duplex ``axis_end`` stops SHORT of its full ``length_bp`` because of a long in-line
+    ssDNA OVERHANG tail (the VoltronCore case).
+
+    The old rise ``|axis_end-axis_start| / length_bp`` divided the duplex-only axis length by the full
+    nucleotide count (incl. the unpaired tail) → a rise ~½ the true bead rise → every bead misplaced
+    axially by an amount growing along the helix (~25 nm at the tip → stretched overhang↔staple junction
+    bonds). The fix pins the s→bp rise to the true bead rise ``BDNA_RISE_PER_BP``, so beads land on their
+    own bp — leaving only the sub-nm FEM-node-grid (0.34) vs geometry-grid (0.334) drift.  Threshold 1 nm
+    cleanly separates the fixed reconstruction (~0.2 nm) from the old rise-collapse (~5 nm)."""
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.geometry import nucleotide_positions
+    from backend.core.models import Helix, Vec3
+
+    # 60-bp helix; only the first 30 bp are paired (FEM-meshed) — the rest is an ssDNA tail.
+    # axis_end marks the paired end (30 bp), NOT the full 60-bp nucleotide extent.
+    paired_bp = 30
+    helix = Helix(
+        axis_start=Vec3(x=0.0, y=0.0, z=0.0),
+        axis_end=Vec3(x=0.0, y=0.0, z=paired_bp * FEM_RISE_PER_BP),
+        length_bp=60, bp_start=0,
+    )
+    straight = list(nucleotide_positions(helix))
+    # FEM nodes for the paired region only (build_fem_mesh spacing, line 380), u = 0 → straight.
+    node_anchors = []
+    for gbp in range(paired_bp):
+        p = np.array([0.0, 0.0, (gbp - helix.bp_start) * FEM_RISE_PER_BP])
+        node_anchors.append((gbp, p, p))                 # (global_bp, straight, deformed==straight)
+
+    # Sanity: the buggy ratio really collapses to ~½ the true bead rise (so a revert is caught).
+    axlen = float(np.linalg.norm(helix.axis_end.to_array() - helix.axis_start.to_array()))
+    assert abs(axlen / helix.length_bp - BDNA_RISE_PER_BP) > 0.1
+
+    wound, _, _ = _wound_backbones_for_helix(helix, straight, node_anchors)
+    err = max(float(np.linalg.norm(np.array(w) - np.array(n.position)))
+              for w, n in zip(wound, straight))
+    assert err < 1.0, f"winding rise collapsed with an ssDNA tail: max err {err:.3f} nm at u=0"

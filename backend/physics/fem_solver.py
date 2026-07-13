@@ -40,9 +40,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from scipy.sparse import coo_matrix, lil_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.sparse.linalg import eigsh, spsolve
 
-from backend.core.constants import BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
+from backend.core.constants import BDNA_RISE_PER_BP, BDNA_TWIST_PER_BP_RAD, SQUARE_TWIST_PER_BP_RAD
 from backend.core.geometry import _frame_from_helix_axis
 from backend.core.models import Design, Direction, LatticeType, StrandType
 from backend.core.sequences import domain_bp_range
@@ -457,27 +458,40 @@ def build_fem_mesh(design: Design) -> FEMMesh:
             node_i=ni, node_j=nj, offset=offset,
             co_type=co_class.get(xo.id, "double_co")))   # G3: single vs double CO
 
-    # ── Linker (overhang-connection) hops ───────────────────────────────────────
-    # A LINKER strand (materialized by connect_overhangs) crosses helices at its
-    # inter-domain junctions — these are NOT Design.crossovers, so they must be
-    # coupled explicitly or the two joined parts stay mechanically disconnected.
-    # Walk each linker's meshed (duplex) domains in 5'→3' order (start_bp = 5',
-    # end_bp = 3'); couple consecutive meshed domains on different helices:
-    #   • directly adjacent (a ds bridge) → RIGID LINK (a stiff duplex bridge);
-    #   • flanking one or more UNMESHED ssDNA domains (a ss linker) → WLC SPRING
-    #     (compliant tether, contour = the skipped ssDNA run length).
-    _add_linker_hops(design, mesh, helix_bp_range, _resolve_node)
+    # ── ssDNA helix hops (the general ssDNA-connected-block coupling) ────────────
+    # The duplex-core mesh only nodes PAIRED regions, so a strand that leaves a duplex,
+    # threads through UNMESHED single-stranded domains (a ssDNA stub / overhang / linker),
+    # and re-enters a duplex on a DIFFERENT helix leaves the two meshed endpoints
+    # mechanically UNCOUPLED. Whole sub-bundles joined to the body only by the scaffold or a
+    # staple crossing through such stubs then float free (→ they explode in the nonlinear
+    # solve, and add spurious rigid modes to the RMSF NMA). Couple every such hop explicitly.
+    _add_ssdna_hops(design, mesh, helix_bp_range, _resolve_node)
 
     return mesh
 
 
-def _add_linker_hops(design, mesh, helix_bp_range, resolve_node) -> None:
-    """Close the FEM load path across every LINKER strand's helix hops (see
-    ``build_fem_mesh``). Duplex-meshed linker domains couple; the ssDNA runs
-    between them become the WLC compliance."""
+def _add_ssdna_hops(design, mesh, helix_bp_range, resolve_node) -> None:
+    """Close the FEM load path across every strand's ssDNA HELIX HOPS — the general
+    mechanism for ssDNA-connected blocks (any strand type, not just LINKER).
+
+    Walk each strand's domains in 5'→3' order. Wherever it leaves a duplex-meshed domain,
+    runs through one or more UNMESHED single-stranded domains, and re-enters a meshed duplex
+    on a DIFFERENT helix, couple the two meshed endpoints:
+
+      • flanked by ≥1 UNMESHED ssDNA base → a compliant WLC spring (contour = the ssDNA run) —
+        this is what tethers an otherwise-free ssDNA-connected block to the body;
+      • directly adjacent duplex on another helix (a ds bridge) → RIGID link, but ONLY for
+        LINKER strands: scaffold/staple ds helix-crossings are already ``Design.crossovers``,
+        so a rigid link here too would double-count them.
+
+    Endpoint polarity follows the strand path (prev domain's 3' exit → next domain's 5'
+    entry), reusing the proven traversal — no independent geometry reasoning. Strand-END
+    overhangs never couple (``prev`` is None until the first meshed domain), and same-helix
+    ssDNA gaps are skipped (only cross-helix hops are real mechanical couplings)."""
     for s in design.strands:
-        if s.is_reference or s.strand_type != StrandType.LINKER or len(s.domains) < 2:
+        if s.is_reference or len(s.domains) < 2:
             continue
+        is_linker = s.strand_type == StrandType.LINKER
         # Ordered (domain, meshed?, ss-base-count) view of the strand's path.
         steps = [(dm, dm.helix_id in helix_bp_range, len(set(domain_bp_range(dm))))
                  for dm in s.domains]
@@ -493,18 +507,69 @@ def _add_linker_hops(design, mesh, helix_bp_range, resolve_node) -> None:
                 nj = resolve_node(dm.helix_id, dm.start_bp)       # 5' entry of dm
                 if ni is not None and nj is not None and ni != nj:
                     if ss_between > 0:
-                        # ss linker: compliant WLC tether across the ssDNA run.
+                        # ss hop: compliant WLC tether across the ssDNA run.
                         L_c = ss_between * RISE_SS
                         k_trans = 3.0 * KBT / (2.0 * L_c * L_P_SS)
                         mesh.springs.append(
                             FEMSpring(node_i=ni, node_j=nj, k_trans=k_trans, k_rot=0.0))
-                    else:
-                        # ds bridge: rigid duplex link (like a crossover).
+                    elif is_linker:
+                        # ds bridge: rigid duplex link (LINKER only — scaffold/staple ds
+                        # crossings are Design.crossovers already; don't double-count).
                         offset = mesh.nodes[nj].position - mesh.nodes[ni].position
                         mesh.rigid_links.append(
                             FEMRigidLink(node_i=ni, node_j=nj, offset=offset))
             prev = dm
             ss_between = 0
+
+
+def _mesh_component_labels(mesh: FEMMesh) -> Tuple[int, np.ndarray]:
+    """Connected components of the mesh over ALL couplings — beam elements + rigid links +
+    WLC springs.  A spring-coupled (ssDNA-tethered) block counts as CONNECTED: the spring
+    gives a finite restoring force (a soft elastic mode, not a zero rigid mode), so its
+    fluctuation is bounded.  Only genuinely edge-less bodies are separate components.
+    Returns ``(n_components, labels)`` with ``labels`` shape (len(nodes),)."""
+    n = len(mesh.nodes)
+    if n == 0:
+        return 0, np.zeros(0, dtype=int)
+    rows: List[int] = []
+    cols: List[int] = []
+    for el in mesh.elements:
+        rows.append(el.node_i); cols.append(el.node_j)
+    for lk in mesh.rigid_links:
+        rows.append(lk.node_i); cols.append(lk.node_j)
+    for sp in mesh.springs:
+        rows.append(sp.node_i); cols.append(sp.node_j)
+    if rows:
+        adj = coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
+    else:
+        adj = coo_matrix((n, n))
+    return connected_components(adj, directed=False)
+
+
+def _ensure_components_pinned(mesh: FEMMesh, fixed_nodes, labels: np.ndarray) -> List[int]:
+    """Guarantee ≥1 fully-pinned node in EVERY connected component, so no disconnected body
+    is left as a free rigid body (which drifts/explodes under the nonlinear ES solve).
+
+    Components already covered by an anchor keep only that anchor; any uncovered component
+    gets the node nearest its OWN centroid.  A SINGLE-component design reduces exactly to the
+    legacy behaviour — the one pin nearest the global centroid — so validated results are
+    unchanged.  This is the robustness backstop; :func:`_add_ssdna_hops` should already have
+    merged ssDNA-connected blocks into one component."""
+    fixed = list(fixed_nodes or [])
+    if len(labels) == 0:
+        return fixed
+    covered = {int(labels[i]) for i in fixed}
+    positions = np.array([nd.position for nd in mesh.nodes])
+    for c in range(int(labels.max()) + 1):
+        if c in covered:
+            continue
+        idx = np.where(labels == c)[0]
+        if len(idx) == 0:
+            continue
+        centroid = positions[idx].mean(axis=0)
+        pick = int(idx[np.argmin(np.linalg.norm(positions[idx] - centroid, axis=1))])
+        fixed.append(pick)
+    return fixed
 
 
 # ── Element stiffness matrices ────────────────────────────────────────────────
@@ -619,6 +684,7 @@ def assemble_global_stiffness(
     mesh: FEMMesh,
     material: str = "cando",
     bp_registered_frame: bool = False,
+    diagonal_material: bool = False,
 ) -> Tuple[lil_matrix, np.ndarray]:
     """
     Assemble global stiffness matrix K.
@@ -653,12 +719,18 @@ def assemble_global_stiffness(
             # G1: use the element's SEQUENCE-specific 6×6 when its bp-step motif is resolved
             # (motif_D), else the family sequence-mean (family_mean_D). motif is None for
             # nicked/crossover/unsequenced steps → identical to the pre-G1 mean behaviour.
-            key = ("snupi", round(L, 6), el.motif_family, el.motif)
+            key = ("snupi", round(L, 6), el.motif_family, el.motif, diagonal_material)
             K_local = _kloc_cache.get(key)
             if K_local is None:
                 from backend.physics import snupi_material as _sm
                 D = (_sm.motif_D(el.motif_family, el.motif) if el.motif
                      else _sm.family_mean_D(el.motif_family))
+                if diagonal_material:
+                    # SHAPE solve: drop the twist–stretch (and other off-diagonal) couplings. They
+                    # are a FLEXIBILITY feature (kept in the RMSF/DCCM NMA); applied to the equilibrium
+                    # shape via the isotropic-stiffness eigenstrain FORCE they over-rotate large twisted
+                    # bundles (VoltronCore 11.9→1.4 nm; MD refs ~1.7). Anisotropic rigidities kept.
+                    D = np.diag(np.diag(np.asarray(D, dtype=float)))
                 K_local = _snupi_element_stiffness(L, D)
                 _kloc_cache[key] = K_local
         else:
@@ -717,15 +789,18 @@ def assemble_global_stiffness(
         # use the family mean (sidesteps the single_co per-motif indefiniteness). ds linker bridges
         # default to double_co.
         from backend.physics import snupi_material as _sm
-        _co_cache: Dict[Tuple[float, str], np.ndarray] = {}
+        _co_cache: Dict[Tuple, np.ndarray] = {}
         for lk in mesh.rigid_links:
             L = float(np.linalg.norm(lk.offset))
             if L < 1e-6:
                 continue
-            ckey = (round(L, 6), lk.co_type)
+            ckey = (round(L, 6), lk.co_type, diagonal_material)
             K_local = _co_cache.get(ckey)
             if K_local is None:
-                K_local = _snupi_element_stiffness(L, _sm.family_mean_D(lk.co_type))
+                D_co = _sm.family_mean_D(lk.co_type)
+                if diagonal_material:
+                    D_co = np.diag(np.diag(np.asarray(D_co, dtype=float)))
+                K_local = _snupi_element_stiffness(L, D_co)
                 _co_cache[ckey] = K_local
             R_co = _frame_from_helix_axis(lk.offset / L)     # local z = offset direction
             K_g = _transform_to_global(K_local, R_co)
@@ -1022,6 +1097,7 @@ def solve_prestress_shape(
     material: str = "cando",
     mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
     corotational: bool = False,
+    diagonal_material: bool = False,
 ) -> np.ndarray:
     """Geometrically-nonlinear equilibrium shape under the loop/skip eigenstrain.
 
@@ -1059,7 +1135,8 @@ def solve_prestress_shape(
     f_field = assemble_field_force(mesh, field)      # dead load: global, not reframed
     for _ in range(n_steps):
         _reframe_elements(mesh, positions)
-        K, _ = assemble_global_stiffness(mesh, material=material)
+        K, _ = assemble_global_stiffness(mesh, material=material,
+                                         diagonal_material=diagonal_material)
         f = (assemble_prestress_force(mesh, design) + f_field) / n_steps
         K_free, f_free, free = apply_boundary_conditions(K, f, mesh, fixed_nodes)
         du = solve_equilibrium(K_free, f_free, K.shape[0], free)
@@ -1717,12 +1794,20 @@ def _wound_backbones_for_helix(helix, straight_nucs, node_anchors):
             [n.axis_tangent for n in straight_nucs],
         )
     bps = np.array([float(a[0]) for a in anchors])
-    def_pts = np.array([a[2] for a in anchors])
+    def_pts = np.array([a[2] for a in anchors])              # DEFORMED node axis positions
     tans, E1, E2 = _rmf_frames(def_pts, e1s)
-    # bp coordinate is drift-free: the FEM mesh spaces nodes at FEM_RISE_PER_BP (0.34) while the
-    # display geometry uses the helix's own rise, so parametrise by bp (not absolute axial) — both
-    # sides are then in the SAME units and a normal bead maps exactly onto its own bp's node.
-    rise_geom = float(np.linalg.norm(end - start)) / max(1, helix.length_bp)
+    # ``rise_geom`` converts a bead's STRAIGHT axial coordinate ``s`` into a bp coordinate
+    # (``x = bp_start + s/rise_geom``) so ``_at_bp`` anchors each bead onto its OWN bp's deformed node.
+    # It MUST be the per-bp rise of the RENDERED backbone geometry — a constant BDNA_RISE_PER_BP, since
+    # ``nucleotide_positions`` always spaces beads at that rise from ``axis_start`` (independent of
+    # ``axis_end``). Do NOT use ``|axis_end-axis_start| / helix.length_bp``: on a helix carrying a long
+    # in-line ssDNA OVERHANG tail, ``axis_end`` stops at the paired-duplex end (the last FEM node) while
+    # ``length_bp`` counts the unpaired tail too, so that ratio collapses to ~½ the true rise (VoltronCore
+    # 0.179 vs 0.334) → every bead misplaced axially by an amount growing linearly along the helix (~25 nm
+    # at the tip → stretched overhang↔staple junction bonds). The bead↔bp registration must use the bead
+    # rise, NOT the FEM node spacing (FEM_RISE_PER_BP 0.34): warping bp is invisible on a straight helix
+    # but on a CURVED axis it anchors beads to the wrong node → they stop winding ⊥ the deformed tangent.
+    rise_geom = BDNA_RISE_PER_BP
 
     def _at_bp(x: float):
         """Deformed axis position + RMF frame (e1, e2, tangent) at bp coordinate ``x`` (linear
@@ -1838,6 +1923,21 @@ def deformed_positions_with_axis(
     # deviation overlays).  Plain (non-loop) nucleotides are the sole copy 0.
     from collections import Counter
 
+    # OVERHANG beads carry no duplex FEM node, so there is no FEM displacement to apply. Winding
+    # them onto the straight helix axis DROPS the overhang's ball-joint rotation (applied only in
+    # the render path, apply_overhang_rotation_if_needed) → the beads snap off their rotated pose
+    # (stretched bonds) AND, being far from where they belong, skew the whole-structure Kabsch fit
+    # (a global duplex offset). Omit every overhang-domain bead (an overhang lives on its own
+    # unmeshed helix OR is an extension domain on a meshed duplex helix) plus any fully-unmeshed
+    # helix (reference geometry) — applyFemPositions then keeps them at their correct RENDERED pose
+    # (the snapshot geometry the overlay draws on). Clean bundles with no overhangs are unaffected.
+    overhang_keys: set = set()
+    for s in design.strands:
+        for dm in s.domains:
+            if getattr(dm, "overhang_id", None):
+                for _bp in domain_bp_range(dm):
+                    overhang_keys.add((dm.helix_id, _bp, dm.direction.value))
+
     seen: Counter = Counter()
     meta: List[Tuple[str, int, str, int]] = []
     fem_pts:  List[np.ndarray] = []   # FEM-predicted (straight base + eigenstrain) position
@@ -1845,6 +1945,8 @@ def deformed_positions_with_axis(
     fem_nrm:  List[np.ndarray] = []   # wound base-normal (slab bnDir) per bead
     fem_tan:  List[np.ndarray] = []   # wound axis-tangent (slab tanDir) per bead
     for helix in design.helices:
+        if helix.id not in node_anchors:      # fully-unmeshed helix (dedicated overhang / reference)
+            continue
         straight = list(nucleotide_positions(helix))
         shown    = list(deformed_nucleotide_positions(helix, design))
         # deformed_nucleotide_positions transforms the same list → same order/length.
@@ -1857,11 +1959,13 @@ def deformed_positions_with_axis(
         # normals/tangents ride the SAME rotation so the base slabs follow the wound backbones.
         wound, wnrm, wtan = _wound_backbones_for_helix(helix, straight, node_anchors.get(helix.id, []))
         for nuc, dn, w, wn, wt in zip(straight, shown, wound, wnrm, wtan):
+            k = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
+            if k in overhang_keys:            # overhang extension bead on a meshed duplex helix
+                continue                       # (no FEM basis; keep it at its rendered pose)
             fem_pts.append(w)
             disp_pts.append(dn.position)
             fem_nrm.append(np.asarray(wn, dtype=float))
             fem_tan.append(np.asarray(wt, dtype=float))
-            k = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
             meta.append((*k, seen[k]))
             seen[k] += 1
 
@@ -2119,10 +2223,23 @@ def predict_shape(
 
     fixed_nodes, anchor_keys = resolve_anchor_nodes(design, mesh, anchors)
 
+    # Robustness for disconnected / ssDNA-connected designs: pin one node in EVERY connected
+    # component so no free-floating body drifts and explodes under the nonlinear ES solve, and
+    # count the components so the free-free NMA drops the right number of rigid modes (6 per
+    # body). Single-component designs are unchanged (one centroid pin, n_rigid=6).
+    n_components, comp_labels = _mesh_component_labels(mesh)
+    fixed_nodes = _ensure_components_pinned(mesh, fixed_nodes, comp_labels)
+
     if nonlinear:
+        # SHAPE solve uses the DIAGONAL SNUPI material (anisotropic rigidities, twist–stretch and other
+        # off-diagonal couplings dropped). The couplings drive the equilibrium shape unphysically when
+        # fed by the isotropic-stiffness eigenstrain FORCE — they over-rotate large twisted bundles
+        # (VoltronCore 11.9→1.4 nm, matching mrDNA/oxDNA ~1.7). The FULL coupled 6×6 is retained below
+        # for the RMSF/DCCM NMA — SNUPI's validated flexibility channel. cando is diagonal already (no-op).
         positions = solve_prestress_shape(
             design, mesh, n_steps=n_steps, fixed_nodes=fixed_nodes, field=field,
-            material=material, mgcl2_M=mgcl2_M, corotational=corotational)
+            material=material, mgcl2_M=mgcl2_M, corotational=corotational,
+            diagonal_material=(material == "snupi"))
         u = np.zeros(6 * len(mesh.nodes), dtype=float)
         for i in range(len(mesh.nodes)):
             u[6 * i: 6 * i + 3] = positions[i] - mesh.nodes[i].position
@@ -2157,7 +2274,9 @@ def predict_shape(
             # G6/S10: solve the GENERALIZED eigenproblem K·Φ = M·Φ·Λ → the 200 lowest-FREQUENCY
             # (mass-weighted) modes. cando keeps the K-only stiffness-ordered NMA (M=None).
             M = assemble_mass_matrix(mesh, design)
-        rmsf = compute_rmsf_nma(K, len(mesh.nodes), M=M)
+        # Drop 6 rigid-body modes PER connected component (a 2-body mesh has 12, not 6) —
+        # otherwise a disconnected body's residual rigid modes blow its RMSF up to µm scale.
+        rmsf = compute_rmsf_nma(K, len(mesh.nodes), M=M, n_rigid=6 * max(1, n_components))
         out["rmsf"] = [
             {"helix_id": node.helix_id, "bp_index": node.global_bp,
              "rmsf_nm": float(rmsf[i])}

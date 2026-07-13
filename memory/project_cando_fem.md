@@ -13,6 +13,28 @@ metadata:
 bend-gap diagnosis, PRIORITY CanDo designs to run, next-session plan). This file is the running
 log; the HANDOFF is the entry point for a fresh session.
 
+## ⚙ 2026-07-13 — disconnected / ssDNA-connected blocks no longer explode (general)
+Symptom: SNUPI "Fine" on VoltronCore "completed" but rendered NOTHING (just axis lines) — the
+nonlinear solve had diverged to **mm-scale** coords (rmsf_max ~1384 nm). Root cause: the duplex-core
+mesh split into 2 disconnected bodies. A 6-helix sub-block joined to the body ONLY by the SCAFFOLD
+threading through single-stranded STUB helices (`h_XY_4_10` scaf-only 4nt, `h_XY_3_10`) — the duplex
+FEM can't bridge a connection running through unpaired ssDNA, so the block floated free; the single
+centroid pin left it a free rigid body that ran away under the ES repulsion, and the free-free NMA had
+6 EXTRA rigid modes → µm RMSF. Two general fixes in `fem_solver.py` (`[[snupi-mimic]]`, shared cando+snupi):
+1. **`_add_linker_hops` → `_add_ssdna_hops`** — generalized from LINKER-only to ALL strands: any
+   strand (scaffold/staple/linker) that hops meshed-duplex → unmeshed ssDNA → meshed-duplex on a
+   DIFFERENT helix now gets a compliant WLC spring (contour = ssDNA run). This TETHERS ssDNA-connected
+   blocks (the physical fix). ds-bridge rigid-link case stays LINKER-only (scaffold/staple ds crossings
+   are already `Design.crossovers`). Clean fully-duplex bundles gain ZERO springs → validated numerics
+   byte-identical (6HB: 0 springs, 1 component — asserted).
+2. **Per-component robustness backstop** (`_mesh_component_labels` + `_ensure_components_pinned` in
+   `predict_shape`): pin ≥1 node in EVERY connected component (over elements+rigid_links+springs) so no
+   free body drifts, and pass `n_rigid = 6·n_components` to the RMSF NMA. Single-component → identical
+   to legacy (one centroid pin, n_rigid=6). A spring-tethered block counts as CONNECTED (soft mode, not
+   a zero mode) → bounded RMSF. Result: VoltronCore now 1 component, span 51×152×148 nm, rmsf 0.5–4.3 nm.
+Tests: `tests/test_cando_linkers.py` (+4: component labels, per-component pin, clean-bundle-unchanged,
+slow VoltronCore end-to-end). See [[LESSONS]] (disconnected-block explosion).
+
 Goal: in-app FEM that reproduces CanDo's NONLINEAR predictions (global twist +
 curvature + RMSF flexibility) to within a stated tolerance on the loaded design,
 ZERO export. Multi-session. Three-Layer Law: FEM output is PHYSICAL/display only.
