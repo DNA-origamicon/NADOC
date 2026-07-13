@@ -17,6 +17,13 @@ start:
 dev:
     uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 0.0.0.0 --port 8000
 
+# GUARD: every pytest recipe below is wrapped by scripts/test_guard.sh, which
+# (1) holds an exclusive lock so overlapping runs can't saturate the CPU/GPU, and
+# (2) on the full-suite variants (gate=1: test, test-fast, test-smart, test-all)
+# asks "is this really necessary?" — non-interactive callers (agents/CI) must set
+# NADOC_TEST_CONFIRM=1 to proceed. Tight loops (gate=0: test-affected, test-file)
+# are lock-only. Escape hatch: NADOC_TEST_FORCE=1 bypasses both.
+
 # Run all tests, parallel across cores (~2.5x faster than serial).
 # --dist loadfile keeps each file's tests on one worker: tests share a
 # module-level TestClient(app) over global per-doc backend state, so a file's
@@ -26,7 +33,7 @@ dev:
 # test-smart` day-to-day. A green run bumps .nadoc-test-watermark (machine-local
 # last-full-pass SHA) so test-smart scopes against it afterwards.
 test:
-    uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark
+    scripts/test_guard.sh "test" 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark'
 
 # Fast dev loop: skip the heavy real-binary sims AND the CanDo-FEM/autorefine
 # numeric solves (all carry the `slow` marker via tests/conftest.py). Parallel.
@@ -35,7 +42,7 @@ test:
 # and fold any new >=~2s "call"/"setup" entries into conftest's _SLOW_* sets.
 # Run plain `just test` before pushing.
 test-fast:
-    uv run pytest tests/ -n auto --dist loadfile -m "not slow"
+    scripts/test_guard.sh "test-fast" 1 -- uv run pytest tests/ -n auto --dist loadfile -m "not slow"
 
 # DEFAULT per-change test loop. Runs the fast suite (always) + only the HEAVY test
 # groups affected by what changed since the last full-suite pass on this machine
@@ -45,7 +52,7 @@ test-fast:
 # `just test-smart --dry-run` shows the decision without running. `--base origin/master`
 # overrides the watermark; forward pytest args after `--`.
 test-smart *ARGS:
-    uv run python scripts/select_tests.py --since-last-full {{ARGS}}
+    scripts/test_guard.sh "test-smart" 1 -- uv run python scripts/select_tests.py --since-last-full {{ARGS}}
 
 # Tightest inner loop: point pytest at the area you're editing. Pass file paths
 # and/or `-k pattern`; heavy solves are dropped (`-m 'not slow'`) so it stays
@@ -56,7 +63,7 @@ test-smart *ARGS:
 # (True change-based impact analysis — pytest-testmon — is currently broken
 #  against pytest 9.x; see memory/project_test_parallelization.md.)
 test-affected *ARGS:
-    uv run pytest -m "not slow" {{ARGS}}
+    scripts/test_guard.sh "test-affected" 0 -- uv run pytest -m "not slow" {{ARGS}}
 
 # Run frontend unit tests (Vitest), single pass
 test-frontend:
@@ -68,7 +75,7 @@ test-frontend-watch:
 
 # Run backend + frontend unit tests together ("is everything green?")
 test-all:
-    uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark
+    scripts/test_guard.sh "test-all" 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark'
     cd frontend && npm test
 
 # Commit gate for main.js refactor work: the full smoke suite — app boot, the
@@ -117,7 +124,7 @@ build-primitives:
 
 # Run a specific test file
 test-file FILE:
-    uv run pytest {{FILE}} -v
+    scripts/test_guard.sh "test-file" 0 -- uv run pytest {{FILE}} -v
 
 # Format code
 fmt:

@@ -40,6 +40,15 @@ Heavy (`slow`-marked) tests auto-skip while a production NAMD/oxDNA/mrDNA job is
 running on the machine (avoids resource-contention timeouts); override with
 `NADOC_IGNORE_SIM_GUARD=1`. See `memory/project_test_parallelization.md`.
 
+**Overload guard (`scripts/test_guard.sh`, wraps every pytest recipe).** Repeated/
+overlapping `just test*` runs saturate the CPU/GPU, so: (1) an exclusive lock refuses
+a second run while one is live; (2) the full-suite variants (`test`, `test-fast`,
+`test-smart`, `test-all`) ask "is this really necessary?" — **as a non-interactive
+agent you must prefix them with `NADOC_TEST_CONFIRM=1`** (e.g. `NADOC_TEST_CONFIRM=1
+just test-smart`) or the run refuses. Before doing so, genuinely ask whether a tighter
+loop (`just test-affected <file>` / `just test-file <file>` — lock-only, no confirm)
+covers your change. `NADOC_TEST_FORCE=1` bypasses both (last resort).
+
 App URL when both servers run: `http://localhost:5173` (or WSL eth0 IP if `mirrored` networking is off — see `START.md`).
 
 ## Memory layout

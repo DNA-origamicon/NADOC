@@ -179,5 +179,8 @@ experiments/*/results/longrun_result.json
 # `just test-smart` can scope against it. Per-machine baseline; never synced.
 .nadoc-test-watermark
 
+# scripts/test_guard.sh exclusive-run lock (mkdir dir holding pid+label). Machine-local.
+.nadoc-test.lock/
+
 # LAMMPS default runtime log (dropped in cwd on a run)
 log.lammps
