@@ -17,6 +17,12 @@ import { trackConsoleErrors, loadAssemblyWithParts } from './helpers/scene_harne
 
 const DOC = 'e2e-asm-exit'
 
+// Heavier than the default 30 s allows: the harness builds a 200-bp design through
+// the real File→New UI, saves it to a workspace file, adds two assembly instances and
+// enters assembly mode before this spec's own enter→exit even starts. It runs ~20 s
+// alone and tips past 30 s behind the other 22 smoke specs — a timeout, not a hang.
+test.setTimeout(60_000)
+
 test('exiting assembly mode tears down cleanly (no console error)', async ({ page }) => {
   const errors = trackConsoleErrors(page)
 

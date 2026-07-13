@@ -59,16 +59,26 @@ export async function loadScaffoldedPart(page, { doc, name = 'harness', extraQue
   await page.fill('#new-design-name', `__e2e__${name}`)
   await page.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(page.locator('#welcome-screen')).not.toBeVisible({ timeout: 10_000 })
-  await page.waitForTimeout(500)
+
+  // The welcome screen hides as soon as the PAGE has a design — but File→New's
+  // POST may still be in flight, and on a cold smoke backend it can take >500 ms.
+  // A fixed sleep here raced it: page.request then hit the backend before the doc
+  // had a design and got 404 "No active design", so every downstream call fell
+  // apart. Poll the backend's own view of THIS doc instead of guessing a duration.
+  await expect.poll(
+    async () => (await page.request.get(`${API}/design`, { headers: H })).status(),
+    { timeout: 15_000, message: `backend never got a design for doc ${doc}` },
+  ).toBe(200)
 
   await page.request.post(`${API}/design/helix-at-cell`, { data: { row: 0, col: 0, length_bp: 200 }, headers: H })
-  const scf = await page.request.post(`${API}/design/auto-scaffold`, { data: {}, headers: H })
-  if (!scf.ok()) {
-    const { design } = await (await page.request.get(`${API}/design`, { headers: H })).json()
-    await page.request.post(`${API}/design/scaffold-domain-paint`, {
-      data: { helix_id: design.helices[0].id, lo_bp: 0, hi_bp: 199 }, headers: H,
-    })
-  }
+  // Scaffold the helix by painting a domain over its full length. (There is no
+  // POST /design/auto-scaffold — e9d6750 consolidated it into the -seamed/-seamless
+  // variants and never updated this helper, so that call had been 405-ing into this
+  // path for weeks. Painting directly is what has actually been running; keep it.)
+  const { design } = await (await page.request.get(`${API}/design`, { headers: H })).json()
+  await page.request.post(`${API}/design/scaffold-domain-paint`, {
+    data: { helix_id: design.helices[0].id, lo_bp: 0, hi_bp: 199 }, headers: H,
+  })
   await page.evaluate((d) => {
     const bc = new BroadcastChannel('nadoc-design')
     bc.postMessage({ type: 'design-changed', source: 'e2e-' + Math.random(), docId: d })

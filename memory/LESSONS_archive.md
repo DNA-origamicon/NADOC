@@ -560,6 +560,49 @@ Helices start as low as `bp_start = -17`, so a domain/end/crossover/loop-skip ca
 
 ---
 
+<a id="h13"></a>
+### H13. Believing a failing spec's NAME instead of reading its error (2026-07-13, ISSUE-14)
+
+ISSUE-14 sat open for a week, ranked #2 in the queue and described as *"a console error fires while exiting
+assembly mode; a prior partial fix (`d5be41c`) didn't cover this path; suspected stale-subscription /
+dispose-order."* Every word of that diagnosis was invented, because the spec is *called*
+`exiting assembly mode tears down cleanly (no console error)`. Nobody had read the failure.
+
+**What was actually happening:** the spec died in the shared e2e harness (`scene_harness.js`) during **setup**,
+at `design.helices[0].id` with the design undefined. It never reached assembly mode at all, so the
+console-error assertion it was blamed for never executed. The teardown code — where the dossier explicitly
+told a future session to go looking — was never broken; `d5be41c` had fixed it properly.
+
+Two root causes, both in the harness, both trivial once seen:
+1. **A fixed sleep pretending to be a wait.** `await page.waitForTimeout(500)` after File→New. The welcome
+   screen hides as soon as the *page* has a design, but the creating POST may still be in flight; on a cold
+   smoke backend it lands later than 500 ms. `page.request` then hit the doc before it had a design →
+   **404 "No active design."** → every downstream call collapsed. Fixed with `expect.poll` on
+   `GET /design` == 200. **A fixed duration is never a wait for backend state — poll the backend's own view.**
+2. **A dead route 405-ing into its fallback for a month.** `POST /design/auto-scaffold` was consolidated into
+   `-seamed`/`-seamless`/`-matched` by `e9d6750` (2026-06-08), which never updated the harness. It had been
+   returning **405 Method Not Allowed** ever since, silently falling through to a `scaffold-domain-paint`
+   fallback that happens to work — so nothing looked wrong. Removed; the fallback is now the primary path.
+
+**The two tells that were on the page and got ignored:** (a) it surfaced during a **backend-only** CanDo change
+— a frontend teardown bug *cannot* be caused by a backend-only diff, which alone should have redirected the
+search; (b) a partial fix already existed, which made "incomplete fix" the comfortable, available story. A
+plausible narrative beat the evidence.
+
+**How to avoid:** open `test-results/<spec>/error-context.md`, or just re-run the single spec, **before**
+writing any diagnosis into a dossier. If you haven't, write "not diagnosed" — an invented root cause is worse
+than none, because it aims the next session at the wrong file and lends the wrong file false credibility. The
+whole real diagnosis here took ~5 minutes with an instrumented probe spec that printed each API call's status.
+
+**Second-order finding (same session):** with the harness fixed, the heavy browser specs *still* timed out —
+because a production NAMD job was eating ~5.5 of 12 cores (load ~10). The failure **moved between specs**
+run-to-run, which reads as a flaky app but is pure CPU starvation. `just smoke` now refuses to run under a live
+sim (`scripts/sim_guard.py`, reusing `hardware.heavy_sim_running()` — the same detector as the pytest guard).
+It fails **loud** rather than skipping: smoke is a *commit* gate, and a silent skip is no gate at all.
+Override with `NADOC_IGNORE_SIM_GUARD=1`. **A red gate on a loaded box tells you about the box, not the code.**
+
+---
+
 ## I. Assembly FK propagation in resolve / multi-mate chains
 
 <a id="i1"></a>

@@ -76,7 +76,13 @@ test-all:
 # the teardown gate (design close-session in smoke.spec.js + assembly-mode exit
 # in assembly_exit_cleanup.spec.js — teardown is where #34's const-reassignment
 # bug escaped, so it's now in the gate) (~1.5 min, NOT per-iteration).
+#
+# Guarded: a production NAMD/oxDNA/ARBD job starves the browser specs into timing
+# out, so the gate would go red about the CPU rather than the code. It REFUSES to
+# run rather than skipping — this is a commit gate, and a silent skip is no gate.
+# Override with NADOC_IGNORE_SIM_GUARD=1.
 smoke:
+    @uv run python scripts/sim_guard.py smoke
     cd frontend && npx playwright test --config playwright.smoke.config.js smoke.spec.js assembly_exit_cleanup.spec.js
 
 # Diagnose oxDNA GPU setup (add --fix to auto-build a CUDA-enabled oxDNA)

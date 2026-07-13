@@ -112,7 +112,7 @@ also still said "→ NEXT: ISSUE-1", written before those issues existed. Ranked
 | Order | Issue | Type | Size | Needs UX research? |
 |-------|-------|------|------|--------------------|
 | **→ 1** | **ISSUE-9** Autoscaffold is not idempotent — re-running on an already-routed design re-routes the *extended* geometry, pushing domain ends into inter-tooth gaps. N calls ≠ 1 call, corruption compounds, and it is **persisted to `.nadoc`**. Already produced the corrupt `tests/fixtures/teeth.nadoc` baseline that burned a full session chasing a phantom "gap-stagger" bug. `tests/fixtures/10-6-10hb_seamed.nadoc` is flagged as carrying the same latent corruption (its tests pass by accident). Fix: clear any prior auto-route to a clean per-domain seed before routing. | routing correctness / **data loss** | medium | no (algorithmic) |
-| **→ 2** | **ISSUE-14** `assembly_exit_cleanup` smoke spec fails (console error on assembly-mode teardown; 1 failed / 22 passed). **This currently red-gates `just smoke` for every frontend/stateful change** — i.e. it is blocking other work. A prior partial fix (`d5be41c`, multi-select box disposal) didn't cover this path; suspected stale-subscription / dispose-order. Observed 2026-07-06, not yet pinned beyond the smoke run. | functional bug / **blocks the commit gate** | small–medium | no |
+| done | ~~**ISSUE-14**~~ ✅ FIXED 2026-07-13. NOT a console error and NOT an app bug — the spec died in the **test harness** during setup (a `waitForTimeout(500)` racing File→New's backend POST → 404 "No active design", plus a dead `/design/auto-scaffold` route 405-ing since `e9d6750`). Both fixed in `e2e/helpers/scene_harness.js` (shared by 9 specs). `just smoke` also now refuses to run under a live production sim, which was separately starving the heavy specs into timeouts. | test harness | — | — |
 | 3 | **ISSUE-11** Deformed-continuation helices carry `grid_pos=None` (`make_bundle_deformed_continuation` is the only builder not setting it). Any design with a deformed continuation **crashes** `canonical_topology`/`assert_roundtrip_stable`. Blast radius: `grid_pos` also drives cluster reconciliation, overhang-neighbor lookup and `loop_skip_calculator`. **ASK-FIRST** — the obvious one-line fix is suspected of being a Three-Layer trap (a non-None `grid_pos` may make `_helix_lattice_params` recompute lattice x/y and clobber the baked deformed world coords). | data model / three-layer | small IF approved | no (topology decision) |
 | 4 | **ISSUE-8** Autoscaffold multi-section single-strand routing. Section router codified in `backend/core/section_router.py` behind default-OFF `NADOC_SECTION_ROUTER`. **BLOCKED on a user decision**, not on code: window end-turn lands *just-inside* (≤6 bp tooth-tip coverage gap) or *just-outside* (few-bp extension into the physical gap, full coverage). Not silently wrong today (default-off + warn-only). Parent of ISSUE-9; can't close without it. | routing correctness | medium | **needs user call** |
 | 5 | **ISSUE-13** `resize_strand_ends` axis re-trim uses a different endpoint convention than `create_bundle` (`(max_bp − min_bp)·rise` vs `length_bp·rise` — one rise, ~0.334 nm, shorter). First resize of any end on a fresh bundle silently shifts `axis_end` and never reverts. Nucleotide count unaffected, but it breaks `canonical_topology` identity for a `+δ/−δ` inverse pair → a correctness hazard for any oracle that fingerprints axis floats. Same three-layer family as ISSUE-11. | geometry off-by-one | small | no (ask-first) |
@@ -371,22 +371,36 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
 - **Scope:** a one-line change at one of the two sites IF approved; would let AF-30's inverse pair drop its
   settling step. Low priority (cosmetic axis offset; no nucleotide-count impact).
 
-## ISSUE-14 — `assembly_exit_cleanup` smoke spec fails: console error tearing down assembly mode (functional bug)
+## ISSUE-14 — `assembly_exit_cleanup` smoke spec fails — ✅ FIXED 2026-07-13 (it was the TEST HARNESS, not the app)
 
-- **Status:** `[ ]` OPEN. Observed 2026-07-06 during a sim-coverage session's pre-work `just smoke` (surfaced,
-  not caused by that session — a backend-only CanDo change). NOT reproduced/pinned beyond the smoke run.
-- **Symptom:** `just smoke` → `e2e/assembly_exit_cleanup.spec.js:20 › exiting assembly mode tears down cleanly
-  (no console error)` FAILS (1 failed / 22 passed). A console error fires while exiting assembly mode. There is
-  already a partial fix commit `d5be41c` ("fix(assembly): exit no longer crashes on the multi-select box
-  disposal") — so this is a **reopen / incomplete fix**, a different error path than the multi-select box.
-- **Where (leads, verify):** assembly-mode teardown path (the spec drives enter→exit assembly mode); the earlier
-  fix touched multi-select box disposal, so the surviving error is elsewhere in the same teardown (renderer /
-  gizmo / subscription cleanup). Grab the actual error from `test-results/assembly_exit_cleanup-*/error-context.md`
-  + `trace.zip` before guessing.
-- **Impact:** unknown user-facing severity (the spec is a console-error gate, not a crash assertion per se); but
-  it **blocks the `just smoke` commit gate** for anyone whose change requires smoke (frontend/stateful work).
-- **Repro FIRST + ASK before fixing** (loop discipline): re-run the single spec, read the captured error, then
-  confirm the desired teardown behavior. Likely a stale-subscription / dispose-order bug (a known LESSONS class).
+- **Status:** `[x]` FIXED 2026-07-13. **The recorded diagnosis above was WRONG** and is preserved below as a
+  lesson in what a red gate does NOT tell you.
+- **There was never a console error.** The assembly teardown is clean — `d5be41c` DID fix it. The spec died in
+  `e2e/helpers/scene_harness.js` during **setup**, so the console-error assertion it was blamed for never
+  even ran. The failure the ledger recorded ("a console error fires while exiting assembly mode") was an
+  inference from the spec's *name*, not from its output. Reading the actual error took 5 minutes and pointed
+  somewhere else entirely.
+- **Two real defects, both in the harness** (`loadScaffoldedPart`, shared by **9 specs**):
+  1. **A race.** `await page.waitForTimeout(500)` after File→New assumed the design had reached the backend.
+     The welcome screen hides as soon as the *page* has a design, but the POST may still be in flight — and on
+     a cold smoke backend it takes >500 ms. `page.request` then hit the doc before it had a design and got
+     **404 "No active design."**, collapsing every downstream call (`design.helices[0].id` → undefined). Now an
+     `expect.poll` on `GET /design` == 200 — poll the backend's own view, never guess a duration.
+  2. **A dead route.** `POST /design/auto-scaffold` has returned **405 Method Not Allowed** since `e9d6750`
+     (2026-06-08) consolidated it into the `-seamed`/`-seamless`/`-matched` variants without updating the
+     harness. It had been 405-ing into its `scaffold-domain-paint` fallback for a month. The fallback is what
+     actually works, so it is now the primary path and the dead call is gone.
+- **Why it looked like an app bug:** the race is load-sensitive, so it only bit when the box was busy — which
+  is exactly when someone runs a gate. It surfaced 2026-07-06 under a *backend-only* CanDo change, which is
+  itself the tell: a frontend teardown bug cannot be caused by a backend-only diff.
+- **Second-order finding — smoke was ALSO being starved.** With the harness fixed, the heavy browser specs
+  still time out when a production NAMD job is running (measured: NAMD `+p6` = ~5.5 of 12 cores, load ~10;
+  a spec that passes in 16 s takes >30 s). The failure *moves between specs* run-to-run, which reads as a flaky
+  app but is pure CPU contention. `just smoke` now **refuses to run** under a live sim (`scripts/sim_guard.py`,
+  reusing `hardware.heavy_sim_running()`); it fails LOUD rather than skipping, because a silent skip on a
+  *commit* gate is no gate. Override: `NADOC_IGNORE_SIM_GUARD=1`.
+- **Lesson (banked in [[LESSONS]] H13):** when a gate goes red, read the captured error before believing the
+  spec's name. A spec named "no console error" failing does not mean there was a console error.
 
 ## ISSUE-15 — `fetch_outputs` marks a remote MD job `completed` even when its output download failed (correctness; surfaced-by-review, ask-first)
 
