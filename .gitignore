@@ -182,5 +182,14 @@ experiments/*/results/longrun_result.json
 # scripts/test_guard.sh exclusive-run lock (mkdir dir holding pid+label). Machine-local.
 .nadoc-test.lock/
 
+# Test-dedicated session window (scripts/test_session.sh) — the TTY-only unlock for the
+# slow suites. Machine-local and short-lived; never synced.
+.nadoc-test-session
+
+# Heavy test groups a fast-only session deferred (owed until the next test-dedicated
+# session), and the per-test duration report feeding the slow-test triage subagent.
+.nadoc-slow-pending
+.nadoc-slow-candidates.json
+
 # LAMMPS default runtime log (dropped in cwd on a run)
 log.lammps

@@ -120,7 +120,10 @@ def test_oxdna_native_seed_map_handles_loop_inserts():
     from backend.api.crud import _geometry_for_design
     from tests.conftest import make_18hb_routed_design
 
-    design = make_18hb_routed_design()
+    # 168 bp (not the 388 bp default): the loop-copy keying this guards is
+    # length-independent, and the short bundle keeps the routed build off the
+    # fast suite's per-test budget.
+    design = make_18hb_routed_design(length_bp=168)
     design.helices[1].loop_skips = [LoopSkip(bp_index=50, delta=+2)]
     rmap = resolved_nuc_map(design, _geometry_for_design(design))
     assert any(len(k) == 4 for k in rmap)            # loop copies present
@@ -209,7 +212,9 @@ def test_unwrap_adjacency_keeps_loop_copies_in_one_component():
     from backend.api.crud import _geometry_for_design
     from tests.conftest import make_18hb_routed_design
 
-    design = make_18hb_routed_design()
+    # 168 bp (not the 388 bp default) — the unwrap-adjacency threading this guards
+    # is length-independent; the loops below still land inside the shorter bundle.
+    design = make_18hb_routed_design(length_bp=168)
     # inject loops on several helices so there are 4-tuple copies to thread
     for i, h in enumerate(design.helices):
         if i % 3 == 0:

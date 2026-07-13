@@ -17,42 +17,66 @@ start:
 dev:
     uv run uvicorn backend.api.main:app --reload --timeout-graceful-shutdown 5 --reload-dir backend --reload-dir scripts --reload-exclude 'workspace/**' --reload-exclude 'experiments/**' --reload-exclude 'runs/**' --reload-exclude 'bp_health_runs/**' --reload-exclude 'gromacs_run/**' --reload-exclude 'memory/**' --host 0.0.0.0 --port 8000
 
-# GUARD: every pytest recipe below is wrapped by scripts/test_guard.sh, which
-# (1) holds an exclusive lock so overlapping runs can't saturate the CPU/GPU, and
-# (2) on the full-suite variants (gate=1: test, test-fast, test-smart, test-all)
-# asks "is this really necessary?" — non-interactive callers (agents/CI) must set
-# NADOC_TEST_CONFIRM=1 to proceed. Tight loops (gate=0: test-affected, test-file)
-# are lock-only. Escape hatch: NADOC_TEST_FORCE=1 bypasses both.
+# ── TEST POLICY ───────────────────────────────────────────────────────────────
+# THE LAW: heavy (`slow`) tests — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves,
+# trajectory benchmarks — run ONLY inside a TEST-DEDICATED SESSION, a window the
+# USER opens in THEIR terminal (`just test-session`, TTY-only). Everything an agent
+# runs during ordinary coding is fast-only and must finish in under 60s.
+#
+# Every pytest recipe is wrapped by scripts/test_guard.sh <label> <gate> <slow>:
+#   slow=1  can run slow tests -> REFUSES unless a test-dedicated session is open
+#   slow=0  fast-only          -> free to run, but the 60s wall-clock BUDGET applies;
+#                                 over budget prints a banner demanding a triage
+#                                 subagent (.claude/skills/triage-slow-tests) that
+#                                 relegates the offenders to the slow suite
+#   gate=1  extra "is this really necessary?" confirm (agents: NADOC_TEST_CONFIRM=1)
+# A lock (.nadoc-test.lock/) still blocks overlapping runs in every case.
+# Escape hatch: NADOC_TEST_FORCE=1 bypasses everything — NOT for agents.
+#
+#   just test-session          # user, interactive: open a 4h heavy-test window
+#   just test-session status   # is one open?   `just test-session off` closes it
 
-# Run all tests, parallel across cores (~2.5x faster than serial).
-# --dist loadfile keeps each file's tests on one worker: tests share a
-# module-level TestClient(app) over global per-doc backend state, so a file's
-# tests must stay in-process and in-order. Dropped -v (printed all 3410 names
-# for no signal); failures still print full tracebacks.
-# The FULL suite is the pre-push gate, not the per-change loop — use `just
-# test-smart` day-to-day. A green run bumps .nadoc-test-watermark (machine-local
-# last-full-pass SHA) so test-smart scopes against it afterwards.
+# Open/close/inspect the test-dedicated session window that unlocks the slow suites.
+# TTY-only, by design: an agent can fake an env var, it cannot fake a human.
+test-session *ARGS:
+    @scripts/test_session.sh {{ARGS}}
+
+# What do the tests think the world looks like? Session window + heavy groups owed.
+test-status:
+    @scripts/test_session.sh status || true
+    @echo "watermark: $(cat .nadoc-test-watermark 2>/dev/null | cut -c1-12 || echo 'none — full suite owed')"
+    @echo "slow groups owed (deferred by fast-only sessions): $(cat .nadoc-slow-pending 2>/dev/null | tr '\n' ' ' || echo 'none')"
+
+# FULL suite incl. every heavy sim (minutes). TEST-DEDICATED SESSION ONLY.
+# The pre-push gate — never the per-change loop.
+# --dist loadfile keeps each file's tests on one worker: tests share a module-level
+# TestClient(app) over global per-doc backend state, so a file's tests must stay
+# in-process and in-order. A green run bumps .nadoc-test-watermark (machine-local
+# last-full-pass SHA) and clears the deferred-heavy-group debt.
 test:
-    scripts/test_guard.sh "test" 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark'
+    scripts/test_guard.sh "test" 1 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark && rm -f .nadoc-slow-pending'
 
-# Fast dev loop: skip the heavy real-binary sims AND the CanDo-FEM/autorefine
-# numeric solves (all carry the `slow` marker via tests/conftest.py). Parallel.
-# Keep the slow registry current: if this creeps back up, run
-#   uv run pytest tests/ -n auto --dist loadfile -m "not slow" --durations=25
-# and fold any new >=~2s "call"/"setup" entries into conftest's _SLOW_* sets.
-# Run plain `just test` before pushing.
+# ONLY the heavy tests (`-m slow`). TEST-DEDICATED SESSION ONLY. This is how you pay
+# off the debt `just test-status` shows after a stretch of fast-only coding sessions.
+# Forward pytest args: `just test-slow -k oxdna`.
+test-slow *ARGS:
+    scripts/test_guard.sh "test-slow" 1 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile -m slow {{ARGS}} && rm -f .nadoc-slow-pending'
+
+# The fast suite, nothing else (~20s): skips every `slow`-marked test. Always allowed.
+# If this ever creeps over the 60s budget the guard says so and the slowest unmarked
+# tests land in .nadoc-slow-candidates.json — triage them, don't raise the budget.
 test-fast:
-    scripts/test_guard.sh "test-fast" 1 -- uv run pytest tests/ -n auto --dist loadfile -m "not slow"
+    scripts/test_guard.sh "test-fast" 0 0 -- uv run pytest tests/ -n auto --dist loadfile -m "not slow"
 
-# DEFAULT per-change test loop. Runs the fast suite (always) + only the HEAVY test
-# groups affected by what changed since the last full-suite pass on this machine
-# (.nadoc-test-watermark). Foundational/unknown change -> full suite; a leaf change
-# (oxDNA, CanDo/FEM, NAMD, ...) -> just that group; frontend/docs-only -> fast only
-# (run `just test-frontend` for JS). No watermark yet -> full (establishes it).
-# `just test-smart --dry-run` shows the decision without running. `--base origin/master`
+# DEFAULT per-change test loop. Always allowed, always fast (<60s).
+# Runs the fast suite and works out which HEAVY groups your changes have made stale
+# (vs .nadoc-test-watermark, the last full pass here). Outside a test-dedicated session
+# it does NOT run them — it parks them in .nadoc-slow-pending and tells you. Inside one,
+# it runs the owed groups too and clears the debt.
+# `just test-smart --dry-run` shows the decision without running; `--base origin/master`
 # overrides the watermark; forward pytest args after `--`.
 test-smart *ARGS:
-    scripts/test_guard.sh "test-smart" 1 -- uv run python scripts/select_tests.py --since-last-full {{ARGS}}
+    scripts/test_guard.sh "test-smart" 0 0 -- uv run python scripts/select_tests.py --since-last-full {{ARGS}}
 
 # Tightest inner loop: point pytest at the area you're editing. Pass file paths
 # and/or `-k pattern`; heavy solves are dropped (`-m 'not slow'`) so it stays
@@ -63,7 +87,7 @@ test-smart *ARGS:
 # (True change-based impact analysis — pytest-testmon — is currently broken
 #  against pytest 9.x; see memory/project_test_parallelization.md.)
 test-affected *ARGS:
-    scripts/test_guard.sh "test-affected" 0 -- uv run pytest -m "not slow" {{ARGS}}
+    scripts/test_guard.sh "test-affected" 0 0 -- uv run pytest -m "not slow" {{ARGS}}
 
 # Run frontend unit tests (Vitest), single pass
 test-frontend:
@@ -73,9 +97,11 @@ test-frontend:
 test-frontend-watch:
     cd frontend && npx vitest
 
-# Run backend + frontend unit tests together ("is everything green?")
+# Backend FULL suite + frontend unit tests ("is everything green?").
+# TEST-DEDICATED SESSION ONLY (it runs the heavy sims). Day to day: `just test-smart`
+# for the backend, `just test-frontend` for the JS.
 test-all:
-    scripts/test_guard.sh "test-all" 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark'
+    scripts/test_guard.sh "test-all" 1 1 -- bash -c 'uv run pytest tests/ -n auto --dist loadfile && git rev-parse HEAD > .nadoc-test-watermark && rm -f .nadoc-slow-pending'
     cd frontend && npm test
 
 # Commit gate for main.js refactor work: the full smoke suite — app boot, the
@@ -122,9 +148,11 @@ build-frontend:
 build-primitives:
     cd frontend && node scripts/build-primitives.mjs
 
-# Run a specific test file
+# Run a specific test file (fast tests only — any `slow` test in it is skipped, per
+# the test policy at the top. To run that file's heavy tests, the user opens a
+# test-dedicated session and runs `just test-slow -k <pattern>`).
 test-file FILE:
-    scripts/test_guard.sh "test-file" 0 -- uv run pytest {{FILE}} -v
+    scripts/test_guard.sh "test-file" 0 0 -- uv run pytest -m "not slow" {{FILE}} -v
 
 # Format code
 fmt:

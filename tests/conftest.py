@@ -2,6 +2,9 @@
 Shared pytest fixtures and hooks.
 """
 
+import json
+import os
+
 import pytest
 
 from backend.core.constants import BDNA_RISE_PER_BP
@@ -395,6 +398,14 @@ _SLOW_MODULES = {
     # Setup-dominated: a ~16 s module/class-scoped fixture that EVERY test pays,
     # so per-test marking wouldn't help — the whole file is slow.
     "test_md_pipeline",
+    # SNUPI native FEM shape predictor — numeric eigen/Newton/Langevin solves on real
+    # designs. Each of these files totals 45–130 s of solve time, and `--dist loadfile`
+    # pins a file to ONE worker, so any of them alone would blow the 60 s fast budget.
+    # Relegated whole-file (area "cando"): the fast tests they still contain are a
+    # small minority of the file's cost and marking them individually saves nothing.
+    "test_snupi_element",        # ~127 s: assembles + solves the SNUPI stiffness matrix
+    "test_snupi_dynamics",       # ~85 s: GJF Langevin sampling runs (kT K^-1 covariance)
+    "test_snupi_corotational",   # ~47 s: nonlinear co-rotational Newton iterations
 }
 
 # Whole test CLASSES that share an expensive class-scoped fixture (the build runs
@@ -450,6 +461,10 @@ _SLOW_TESTS = {
     "test_build_and_check_reports_radius_of_gyration",
     "test_build_and_check_resolves_end_to_end_landmarks",
     "test_apply_loop_skips_spec_honors_marks_per_helix",
+    # SNUPI: full linear shape-prediction job on a real design (~20-36 s solve).
+    # Lives in an otherwise-fast file (the other 10 job tests are sub-second), so it
+    # is marked per-test rather than relegating the whole module.
+    "test_linear_snupi_job_completes_and_caches",
     # extra-base heavy reps
     "test_heavy_rep_extra_bases_follow_sim_positions",
     "test_md_chain_map_keys_extra_bases_uniquely",
@@ -625,7 +640,9 @@ def _slow_area_for(module: str) -> str:
     headless-build file lands in oxdna, not headless)."""
     if "oxdna" in module or "skip_twist" in module:
         return "oxdna"
-    if "cando" in module or "fem" in module:
+    # snupi = the native FEM shape predictor; it shares the CanDo/FEM solver stack,
+    # so its heavy tests belong to the same "cando" heavy group.
+    if "cando" in module or "fem" in module or "snupi" in module:
         return "cando"
     if "namd" in module:
         return "namd"
@@ -706,3 +723,93 @@ def pytest_runtest_setup(item):
             f"heavy sim job running ({reason}); skipping slow test to avoid resource "
             f"contention — set NADOC_IGNORE_SIM_GUARD=1 to override"
         )
+
+
+# ---------------------------------------------------------------------------
+# Fast-suite budget: per-test duration watchdog
+# ---------------------------------------------------------------------------
+# The per-change suite (`just test-smart` / `just test-fast`, i.e. `-m "not slow"`)
+# has a hard wall-clock budget (60 s, enforced by scripts/test_guard.sh). It only
+# stays under it if nothing heavy creeps in unmarked.
+#
+# This hook times every test and flags any UNMARKED (not `slow`) test whose total
+# setup+call+teardown exceeds NADOC_PER_TEST_BUDGET_SEC (default 5 s). Violators are
+# written to .nadoc-slow-candidates.json (gitignored) with the whole top-25 for
+# context, and listed in the terminal summary. That file is the input to the triage
+# subagent (.claude/skills/triage-slow-tests), which decides whether a violator gets
+# relegated to the slow suite (`slow` + area marker in _SLOW_* above) or optimised.
+#
+# xdist note: the controller receives every worker's reports through this same hook,
+# so the tallies aggregate there; workers are identified by `config.workerinput` and
+# skip the write.
+_PER_TEST_BUDGET_SEC = float(os.environ.get("NADOC_PER_TEST_BUDGET_SEC", "5"))
+_SLOW_CANDIDATES_FILE = ".nadoc-slow-candidates.json"
+
+# nodeid -> {"seconds": float, "slow": bool}
+_DURATIONS: dict[str, dict] = {}
+
+
+def pytest_runtest_logreport(report):
+    entry = _DURATIONS.setdefault(report.nodeid, {"seconds": 0.0, "slow": False})
+    entry["seconds"] += report.duration
+    if "slow" in getattr(report, "keywords", {}):
+        entry["slow"] = True
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if hasattr(session.config, "workerinput"):
+        return  # xdist worker — the controller owns the aggregate report
+    if not _DURATIONS:
+        return
+
+    ranked = sorted(_DURATIONS.items(), key=lambda kv: -kv[1]["seconds"])
+    violators = [
+        {"nodeid": nid, "seconds": round(d["seconds"], 2)}
+        for nid, d in ranked
+        if not d["slow"] and d["seconds"] > _PER_TEST_BUDGET_SEC
+    ]
+    # Per-FILE totals matter as much as per-test ones: `--dist loadfile` pins a file's
+    # tests to one worker, so the slowest single file is a hard floor on the suite's
+    # wall clock no matter how many cores we throw at it.
+    by_file: dict[str, dict] = {}
+    for nid, d in _DURATIONS.items():
+        f = by_file.setdefault(nid.split("::", 1)[0],
+                               {"seconds": 0.0, "n": 0, "n_slow_marked": 0})
+        f["seconds"] += d["seconds"]
+        f["n"] += 1
+        f["n_slow_marked"] += int(d["slow"])
+
+    payload = {
+        "per_test_budget_sec": _PER_TEST_BUDGET_SEC,
+        "total_test_seconds": round(sum(d["seconds"] for d in _DURATIONS.values()), 1),
+        "n_tests": len(_DURATIONS),
+        "slowest_files_15": [
+            {"file": f, "seconds": round(v["seconds"], 1), "n_tests": v["n"],
+             "n_slow_marked": v["n_slow_marked"]}
+            for f, v in sorted(by_file.items(), key=lambda kv: -kv[1]["seconds"])[:15]
+        ],
+        "violators": violators,
+        "slowest_25": [
+            {"nodeid": nid, "seconds": round(d["seconds"], 2), "slow_marked": d["slow"]}
+            for nid, d in ranked[:25]
+        ],
+    }
+    try:
+        root = str(session.config.rootpath)
+        with open(os.path.join(root, _SLOW_CANDIDATES_FILE), "w") as fh:
+            json.dump(payload, fh, indent=2)
+    except OSError:
+        pass  # never fail a test run over a report file
+
+    if violators:
+        tr = session.config.pluginmanager.get_plugin("terminalreporter")
+        if tr is not None:
+            tr.write_sep("=", "SLOW-TEST BUDGET", yellow=True)
+            tr.write_line(
+                f"{len(violators)} unmarked test(s) over the {_PER_TEST_BUDGET_SEC}s "
+                f"per-test budget — they belong in the slow suite:"
+            )
+            for v in violators[:10]:
+                tr.write_line(f"  {v['seconds']:6.1f}s  {v['nodeid']}")
+            tr.write_line(f"full report: {_SLOW_CANDIDATES_FILE}  "
+                          f"(triage: .claude/skills/triage-slow-tests)")

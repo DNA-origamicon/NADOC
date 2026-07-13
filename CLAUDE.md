@@ -24,30 +24,54 @@ export PATH="$HOME/.local/bin:$PATH"
 
 just dev            # backend (FastAPI on :8000)
 just frontend       # Vite dev server (:5173)
-just test-smart     # DEFAULT per-change loop: fast suite + only the heavy groups
-                    #   your changes affect since the last full pass (watermark).
-                    #   frontend-only -> fast only; foundational -> full; --dry-run
-just test           # FULL backend suite — the PRE-PUSH gate (~2.5-3 min fast tail,
-                    #   up to ~16 min with slow sims). Bumps the watermark on a pass.
-just test-fast      # skip heavy sim/FEM tests (~20s) — quick spot check
+just test-smart     # DEFAULT per-change loop: fast suite, scoped. ALWAYS <60s.
 just test-affected FILE... # tightest inner loop: point pytest at the area you edit
-just test-file FILE # single test file
+just test-file FILE # single test file (fast tests only)
+just test-frontend  # JS unit tests (Vitest)
 just fmt            # format
 just lint           # lint
+
+# TEST-DEDICATED SESSION ONLY (the user opens the window; see below):
+just test-session   # USER runs this in THEIR terminal — 4h window, TTY-only
+just test-slow      # only the heavy sims/solves
+just test           # FULL suite (minutes) — the pre-push gate
+just test-status    # session open? which heavy groups are owed?
 ```
 
-Heavy (`slow`-marked) tests auto-skip while a production NAMD/oxDNA/mrDNA job is
-running on the machine (avoids resource-contention timeouts); override with
-`NADOC_IGNORE_SIM_GUARD=1`. See `memory/project_test_parallelization.md`.
+## Test policy (THE LAW)
 
-**Overload guard (`scripts/test_guard.sh`, wraps every pytest recipe).** Repeated/
-overlapping `just test*` runs saturate the CPU/GPU, so: (1) an exclusive lock refuses
-a second run while one is live; (2) the full-suite variants (`test`, `test-fast`,
-`test-smart`, `test-all`) ask "is this really necessary?" — **as a non-interactive
-agent you must prefix them with `NADOC_TEST_CONFIRM=1`** (e.g. `NADOC_TEST_CONFIRM=1
-just test-smart`) or the run refuses. Before doing so, genuinely ask whether a tighter
-loop (`just test-affected <file>` / `just test-file <file>` — lock-only, no confirm)
-covers your change. `NADOC_TEST_FORCE=1` bypasses both (last resort).
+**Heavy (`slow`) tests — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves, trajectory
+benchmarks — never run in an ordinary coding session.** They take minutes, and the cost
+of Claude reflexively escalating to the full suite after a change that "distantly touches
+simulations" is what killed dev velocity. They now run **only inside a test-dedicated
+session**: a window the *user* opens in *their own* terminal with `just test-session`
+(TTY-only, expiring). `scripts/test_guard.sh` refuses `just test` / `just test-slow` /
+`just test-all` outside one.
+
+As an agent:
+
+- **Your loop is `just test-smart`** (no confirm needed any more; it's fast-only). It runs
+  the fast suite and, if your change made a heavy group stale, *parks* that group in
+  `.nadoc-slow-pending` and tells you — it does not run it. Say so in your done message
+  ("deferred slow[cando] — needs a test-dedicated session"); that is a complete and
+  correct verification for a normal change, not a gap you should try to close.
+- **If you believe the heavy suite really must run, ASK the user to open a
+  test-dedicated session.** Do not work around the guard: never hand-write
+  `.nadoc-test-session`, never set `NADOC_TEST_FORCE=1`, never invoke pytest directly to
+  dodge the wrapper (`uv run pytest tests/` bare, no `-m "not slow"`, is exactly the move
+  this policy forbids).
+- **Budget: 60s.** If a fast-only recipe exceeds it, the guard prints `TEST BUDGET
+  EXCEEDED` and writes the slowest unmarked tests to `.nadoc-slow-candidates.json`. You
+  must then **launch a triage subagent** (Agent tool, `general-purpose`, following
+  `.claude/skills/triage-slow-tests/SKILL.md`) that diagnoses what got slow and relegates
+  it to the slow suite (`slow` + area marker in `tests/conftest.py`). Never raise the
+  budget, and never just move on.
+- A single unmarked test over ~5s is flagged the same way (`NADOC_PER_TEST_BUDGET_SEC`).
+
+The lock still applies: overlapping `just test*` runs saturate the CPU, so a second run
+refuses while one is live. Heavy tests additionally auto-skip while a production
+NAMD/oxDNA/mrDNA job is running (`NADOC_IGNORE_SIM_GUARD=1` overrides). See
+`memory/project_test_parallelization.md`.
 
 App URL when both servers run: `http://localhost:5173` (or WSL eth0 IP if `mirrored` networking is off — see `START.md`).
 
@@ -134,7 +158,8 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 
 ## Verification expectations
 
-- **Every backend code change runs `just test-smart` before claiming done — no exceptions, even for one-line changes that mirror a documented fix.** It always runs the full fast suite and adds only the heavy groups your change affects (foundational/unknown change → it escalates to the full suite itself). Cite the decision it printed (`FAST` / `fast+slow[area]` / `FULL`) **and** the pass count; flag any unexpected drop. Reserve the bare full `just test` for the **pre-push gate** — running it there bumps the watermark so scoped runs stay honest. Frontend-only changes touch no Python → `just test-smart` returns `FAST`; run `just test-frontend` for the JS.
+- **Every backend code change runs `just test-smart` before claiming done — no exceptions, even for one-line changes that mirror a documented fix.** It runs the fast suite (always) and finishes in under a minute. Cite the decision it printed (`FAST` / `fast+slow[area]`) **and** the pass count; flag any unexpected drop. If it says heavy groups were **DEFERRED**, report that verbatim — deferring is the correct outcome, not a gap. Never escalate to `just test` / `just test-slow` yourself: those need a test-dedicated session the *user* opens (see Test policy). Frontend-only changes touch no Python → `just test-smart` returns `FAST`; run `just test-frontend` for the JS.
+- **A fast-only run that exceeds 60s is a process failure.** The guard says `TEST BUDGET EXCEEDED`; you must launch a triage subagent (`.claude/skills/triage-slow-tests/SKILL.md`) to relegate the offenders to the slow suite before claiming done.
 - **Every frontend code change must be exercised in the running app before claiming done.** If `just frontend` isn't running or no representative design has been loaded, your "done" message must lead with `NOT VERIFIED IN APP` and explain why. Type-checking and tests do not validate UI correctness.
 - Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/26hb_platform_v3.nadoc`) and visually confirm.
 - Don't claim "tests pass" without running them.
@@ -146,7 +171,8 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 
 ### Done checklist (acknowledge each before claiming a task done)
 
-- [ ] Tests run: `just test-smart` (cite its decision — `FAST`/`fast+slow[area]`/`FULL` — and the pass count). Frontend-only changes get `FAST` (no Python touched → no backend tests); run `just test-frontend` and say so explicitly. Full `just test` is the pre-push gate, not a per-change step.
+- [ ] Tests run: `just test-smart` (cite its decision — `FAST`/`fast+slow[area]` — the pass count, and any `DEFERRED` heavy groups). Frontend-only changes get `FAST` (no Python touched → no backend tests); run `just test-frontend` and say so explicitly. `just test` / `just test-slow` are test-dedicated-session only — never run them, ask the user
+- [ ] Budget honoured: the run finished inside 60s. If not, a triage subagent (`/triage-slow-tests`) ran and the offenders were relegated to the slow suite
 - [ ] Frontend changes exercised in running app, OR `NOT VERIFIED IN APP` caveat at top of message
 - [ ] If the change alters subsystem behavior: relevant `project_*.md` topic file **head** was read this session (cite which one). If it doesn't alter behavior, say "no topic file needed: [why]" — don't read one to satisfy the checklist
 - [ ] Topic file **head** scanned for stale claims this change addressed; updated if needed (update the head, not the archive)
@@ -162,6 +188,7 @@ Confirm before any of these unless you explicitly pre-authorized:
 - Modifying CI configuration or hooks
 - Pushing to remote, creating PRs, posting on shared services
 - Touching the `_PHASE_*` constants in `lattice.py`
+- Anything that unlocks or weakens the test guard: creating `.nadoc-test-session`, setting `NADOC_TEST_FORCE=1`/`NADOC_TEST_BUDGET_SEC`, calling `pytest` outside the `just` recipes without `-m "not slow"`. Ask the user to open a test-dedicated session instead
 - Bulk migrations of saved `.nadoc` files
 
 ## Audience & communication

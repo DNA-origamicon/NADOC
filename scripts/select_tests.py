@@ -2,9 +2,16 @@
 """Change-based backend test selection (a safe, hand-rolled substitute for the
 broken pytest-testmon on pytest 9.x).
 
+SLOW-LOCK (the headline rule): heavy (``slow``) tests NEVER run outside a
+test-dedicated session (``just test-session``, TTY-only — see scripts/test_session.sh).
+Outside one, a FULL/AREAS verdict is downgraded to the fast suite and the owed heavy
+groups are parked in ``.nadoc-slow-pending``, where they accumulate until the user opens
+a session and runs ``just test-slow`` / ``just test``. So in a normal coding session this
+script's answer is always "the fast suite" — under a minute, every time.
+
 The fast suite (``-m "not slow"``, ~21s) is CHEAP and covers every area's unit
 tests, so it ALWAYS runs. This script only decides which HEAVY (``slow``) groups
-to add on top, based on what source files changed:
+are OWED, based on what source files changed:
 
   * Change a foundational module (geometry, models, lattice, deformation,
     shared API/infra) -> run EVERYTHING. Broad blast radius.
@@ -43,10 +50,21 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 
 # Machine-local marker: git SHA at which the FULL suite last passed here. Gitignored
 # (each computer tracks its own baseline; never synced). Bumped on any FULL pass.
 WATERMARK_FILE = ".nadoc-test-watermark"
+
+# Machine-local: the test-dedicated-session window (scripts/test_session.sh, TTY-only).
+# NO SLOW TEST RUNS WITHOUT IT. Outside such a window this script downgrades any
+# slow-group selection to the fast suite and *defers* the groups instead.
+SESSION_FILE = ".nadoc-test-session"
+
+# Machine-local: heavy groups a change has made stale but that were deferred because
+# no test-dedicated session was open. Accumulates across sessions/commits; drained by
+# the next slow run inside a session. Holds area names, or the single word FULL.
+PENDING_FILE = ".nadoc-slow-pending"
 
 # Area markers that exist on slow tests (must match tests/conftest.py AREA_MARKERS
 # and the markers registered in pyproject.toml).
@@ -105,6 +123,10 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("cando", ("cando",)),
     ("fem_solver", ("cando",)),
     ("physics/fem", ("cando",)),
+    # SNUPI = the native FEM shape predictor (backend/physics/snupi_*.py,
+    # backend/core/snupi_{job,runner}.py). Its heavy solve tests are in the
+    # "cando" heavy group, so its source must select that group too.
+    ("snupi", ("cando",)),
     ("namd", ("namd",)),
     ("mrdna", ("mrdna",)),
     ("arbd", ("mrdna",)),
@@ -159,6 +181,45 @@ def write_watermark() -> str:
     with open(os.path.join(root, WATERMARK_FILE), "w") as fh:
         fh.write(head + "\n")
     return head
+
+
+def session_open() -> bool:
+    """True iff a test-dedicated session window is open (see scripts/test_session.sh).
+    Only inside one may slow tests run."""
+    if os.environ.get("NADOC_TEST_FORCE") == "1":
+        return True
+    path = os.path.join(repo_root(), SESSION_FILE)
+    try:
+        with open(path) as fh:
+            expiry = int(fh.readline().strip())
+    except (OSError, ValueError):
+        return False
+    return expiry > int(time.time())
+
+
+def read_pending() -> set[str]:
+    """Heavy groups deferred by earlier non-dedicated sessions. {'FULL'} means the
+    whole suite is owed (a foundational change landed)."""
+    path = os.path.join(repo_root(), PENDING_FILE)
+    try:
+        with open(path) as fh:
+            return {ln.strip() for ln in fh if ln.strip()}
+    except OSError:
+        return set()
+
+
+def write_pending(groups: set[str]) -> None:
+    path = os.path.join(repo_root(), PENDING_FILE)
+    if not groups:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return
+    if "FULL" in groups:
+        groups = {"FULL"}  # FULL subsumes every area
+    with open(path, "w") as fh:
+        fh.write("\n".join(sorted(groups)) + "\n")
 
 
 def changed_files(base: str | None) -> list[str]:
@@ -301,6 +362,30 @@ def main() -> int:
     for r in reasons:
         print(f"  {r}", file=sys.stderr)
 
+    # --- Slow-lock: heavy groups only run inside a test-dedicated session -------
+    # Outside one, a FULL/AREAS verdict is DOWNGRADED to the fast suite and the owed
+    # heavy groups are parked in .nadoc-slow-pending. They accumulate there until the
+    # user opens a session (`just test-session`) and runs `just test-slow` / `just test`.
+    pending = read_pending()
+    in_session = session_open()
+    deferred_now: set[str] = set()
+
+    if not in_session:
+        if decision == "FULL":
+            deferred_now = {"FULL"}
+        elif decision == "AREAS":
+            deferred_now = set(areas)
+        if deferred_now:
+            decision, areas = "FAST", set()
+    else:
+        # In a session, drain what earlier sessions deferred on top of today's verdict.
+        if "FULL" in pending:
+            decision, areas = "FULL", set()
+        elif pending and decision == "AREAS":
+            areas |= (pending & set(KNOWN_AREAS))
+        elif pending and decision in ("FAST", "NONE"):
+            decision, areas = "AREAS", (pending & set(KNOWN_AREAS))
+
     cmd = build_pytest_cmd(decision, areas, args.pytest_args)
     if cmd is None:
         print("decision: NONE -> nothing to run.", file=sys.stderr)
@@ -308,17 +393,36 @@ def main() -> int:
 
     label = {"FULL": "FULL suite", "AREAS": f"fast + slow[{'+'.join(sorted(areas))}]",
              "FAST": "fast suite only"}[decision]
-    print(f"decision: {decision}  ({label})", file=sys.stderr)
+    print(f"decision: {decision}  ({label})"
+          f"{'  [test-dedicated session OPEN]' if in_session else ''}", file=sys.stderr)
+
+    if deferred_now:
+        owed = "the FULL suite" if "FULL" in deferred_now else \
+            f"slow[{'+'.join(sorted(deferred_now))}]"
+        print(f"\n  DEFERRED: this change would have needed {owed}, but no "
+              f"test-dedicated\n  session is open, so only the fast suite ran. Parked in "
+              f"{PENDING_FILE}.\n  Ask the user to run `just test-session` (their terminal), "
+              f"then `just test-slow`.\n", file=sys.stderr)
+
     print(f"$ {' '.join(cmd)}", file=sys.stderr)
     if args.dry_run:
         return 0
+
+    if deferred_now and not args.dry_run:
+        write_pending(pending | deferred_now)
+
     rc = subprocess.call(cmd, cwd=os.getcwd())
-    # A green FULL run is a fresh baseline: bump the watermark so subsequent scoped
-    # runs only re-test what changes after this point.
-    if rc == 0 and decision == "FULL":
-        sha = write_watermark()
-        print(f"watermark: {WATERMARK_FILE} -> {sha[:12]} (full suite passed)",
-              file=sys.stderr)
+
+    if rc == 0 and in_session:
+        # A green heavy run settles the debt it covered.
+        if decision == "FULL":
+            # Fresh baseline: subsequent scoped runs only re-test what changes after this.
+            sha = write_watermark()
+            write_pending(set())
+            print(f"watermark: {WATERMARK_FILE} -> {sha[:12]} (full suite passed); "
+                  f"{PENDING_FILE} cleared", file=sys.stderr)
+        elif decision == "AREAS":
+            write_pending(pending - areas)
     return rc
 
 

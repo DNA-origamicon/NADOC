@@ -9,6 +9,51 @@ metadata:
 
 The backend suite (3410 tests) was ~6 min serial; now runs parallel via pytest-xdist.
 
+## THE LAW (2026-07-13) — slow tests are locked behind a test-dedicated session
+
+Claude kept escalating to the full suite (~16 min) after changes that only *distantly* touched
+simulations, and that was killing dev velocity. So heavy (`slow`) tests **no longer run at all in
+an ordinary coding session**. Three new pieces, all machine-local + gitignored:
+
+- **`scripts/test_session.sh` + `just test-session`** — the USER opens a 4h window in THEIR OWN
+  terminal; it writes `.nadoc-test-session` (expiry epoch). **TTY-only by design**: an agent can
+  fake an env var, it cannot fake a human. `just test-session status|off`; `just test-status`
+  shows the window + what's owed.
+- **`scripts/test_guard.sh` grew a 3rd arg** → `<label> <gate> <slow>`. `slow=1` recipes
+  (`test`, `test-slow`, `test-all`) **REFUSE to start** unless the session window is open.
+  `slow=0` recipes (`test-smart`, `test-fast`, `test-affected`, `test-file`) are fast-only, need
+  no confirm any more (the gate was pure friction once they couldn't run sims), and are subject to
+  a **60s wall-clock BUDGET** (`NADOC_TEST_BUDGET_SEC`). Over budget → loud banner demanding a
+  triage subagent. Budget is skipped inside a session (test-smart legitimately drains heavy groups there).
+- **`scripts/select_tests.py` never escalates outside a session.** A FULL/AREAS verdict is
+  **downgraded to FAST and the owed groups are parked in `.nadoc-slow-pending`**, accumulating
+  across sessions/commits until the user opens a window and runs `just test-slow` (or `just test`,
+  which also clears it + bumps the watermark). So `just test-smart` is *always* <60s. Reporting
+  "DEFERRED slow[cando]" IS a complete verification for a normal change — not a gap to close.
+- **Budget watchdog in conftest** (`pytest_runtest_logreport` + `pytest_sessionfinish`, aggregated
+  on the xdist controller): times every test, flags any **unmarked** test over 5s
+  (`NADOC_PER_TEST_BUDGET_SEC`), writes `.nadoc-slow-candidates.json` (violators + slowest_25 +
+  **slowest_files_15** — per-FILE totals matter because `--dist loadfile` makes the slowest single
+  file a hard wall-clock floor). That file is the input to **`.claude/skills/triage-slow-tests`**,
+  the mandated subagent when the budget blows. Never raise the budget; relegate the offender.
+
+**First run of the guard immediately caught a 3-minute lie:** the "fast" suite was documented as
+~50s but was actually **176s**. The whole SNUPI FEM family was unregistered — `test_snupi_element`
+(127s), `test_snupi_dynamics` (85s), `test_snupi_corotational` (47s) → `_SLOW_MODULES`, plus
+`test_linear_snupi_job_completes_and_caches` → `_SLOW_TESTS`; `_slow_area_for` now routes
+`snupi` → **cando** (it previously fell through to the `md` fallback), and `select_tests.LEAF_RULES`
+gained `("snupi", ("cando",))` so SNUPI source selects the cando heavy group. Two `test_oxdna_relaxation`
+loop/PBC invariant guards were **shrunk instead of relegated** (388bp → 168bp routed 18hb; assertions
+unchanged; 7.6s+5.3s → 0.67s+1.33s). Result: **176s → 54s pytest / 57s guard-measured, 4744 passed,
+38 skipped, 70 deselected.** Total test-seconds 871 → 366.
+
+**Headroom is thin (~3s).** The floor is now two broad files pinned by `loadfile`:
+`test_oxdna_relaxation.py` (34.1s / 217 tests) and `test_headless_oxdna_build.py` (33.5s / 44).
+Next levers if it creeps: (a) session-scoped cached routed-18hb fixture (deep-copied per test —
+several mutate `helices[].loop_skips`) shared by ~6 call sites incl. `test_cluster_autodetect_core`
+(3.7s isolated, not O(n²) — the 14s reading was CPU contention); (b) split `test_oxdna_relaxation.py`
+so `loadfile` can spread it.
+
 **Setup (shipped 2026-06-28):**
 - `just test` / `just test-all` use `pytest -n auto --dist loadfile` → ~2.5-3 min *when the heavy sims are skipped/guarded*; **real wall-clock with the full slow sim/FEM tail is ~16 min** (`--dist loadfile` pins the slowest heavy FILE to one core — see the scoping protocol below). A green run bumps the machine-local `.nadoc-test-watermark`. This is the PRE-PUSH gate, not the per-change loop.
 - `just test-fast` adds `-m "not slow"` → **~50s** after the 2026-07-10 registry re-refresh (4453 passed, 38 skipped, 12 cores). It had crept back to ~117s as ~50 new heavy sim/FEM/routing tests landed unregistered (one 75 s `test_cando_autorefine` FEM loop alone pinned a worker); the 2026-07-10 pass folded them all in. Use for the tight dev loop; run full `just test` before pushing.
@@ -16,11 +61,16 @@ The backend suite (3410 tests) was ~6 min serial; now runs parallel via pytest-x
 - `--dist loadfile` is REQUIRED (not default `--dist load`): tests share a module-level `TestClient(app)` over global per-doc backend state, so a file's tests must stay in-process and in-order on one worker. **This also sets the wall-clock floor: the single slowest FILE runs entirely on one core** — so heavy tests clustered in few files (cando_autorefine, fem_solver, cando_job, namd_topology) can't spread. Keeping them `slow` is what keeps test-fast fast.
 - `pytest-xdist` is in dev deps + uv.lock.
 
-**Overload guard — `scripts/test_guard.sh` wraps every pytest recipe (added 2026-07-13):** repeated/overlapping `just test*` invocations (each `-n auto` across all cores, plus GPU for sim/FEM) saturate the machine. The guard gives every backend pytest recipe two protections: (1) an **exclusive mkdir lock** (`.nadoc-test.lock/`, gitignored, holds pid+label+start) — a second guarded run REFUSES with the running run's pid while one is alive; a dead-owner lock is auto-reclaimed. (2) a **"is this really necessary?" gate** on the full-suite variants (`test`, `test-fast`, `test-smart`, `test-all` → guard arg `gate=1`): interactive callers answer y/N; **non-interactive callers (agents/CI) must set `NADOC_TEST_CONFIRM=1`** or the run refuses and points at tighter loops. Tight loops (`test-affected`, `test-file` → `gate=0`) are **lock-only, no confirm** (they're the recommended lighter alternative). Escape hatch `NADOC_TEST_FORCE=1` bypasses both (stale-lock last resort). **Consequence for the mandated per-change loop:** `just test-smart` now needs `NADOC_TEST_CONFIRM=1 just test-smart` when run by an agent. Recipe wiring: `scripts/test_guard.sh "<label>" <gate> -- <cmd...>` in the justfile.
+**Overload guard — `scripts/test_guard.sh` wraps every pytest recipe (added 2026-07-13).** *(PARTLY
+SUPERSEDED the same day by THE LAW above: the confirm gate is now OFF for `test-fast`/`test-smart`
+— they are fast-only and free to run — and ON, plus a session requirement, for `test`/`test-slow`/
+`test-all`. The lock below is unchanged.)* repeated/overlapping `just test*` invocations (each `-n auto` across all cores, plus GPU for sim/FEM) saturate the machine. The guard gives every backend pytest recipe two protections: (1) an **exclusive mkdir lock** (`.nadoc-test.lock/`, gitignored, holds pid+label+start) — a second guarded run REFUSES with the running run's pid while one is alive; a dead-owner lock is auto-reclaimed. (2) a **"is this really necessary?" gate** on the full-suite variants (`test`, `test-fast`, `test-smart`, `test-all` → guard arg `gate=1`): interactive callers answer y/N; **non-interactive callers (agents/CI) must set `NADOC_TEST_CONFIRM=1`** or the run refuses and points at tighter loops. Tight loops (`test-affected`, `test-file` → `gate=0`) are **lock-only, no confirm** (they're the recommended lighter alternative). Escape hatch `NADOC_TEST_FORCE=1` bypasses both (stale-lock last resort). **Consequence for the mandated per-change loop:** `just test-smart` now needs `NADOC_TEST_CONFIRM=1 just test-smart` when run by an agent. Recipe wiring: `scripts/test_guard.sh "<label>" <gate> -- <cmd...>` in the justfile.
 
 **Slow-test registry lives in `tests/conftest.py`** (`pytest_collection_modifyitems` hook, `_SLOW_MODULES` + `_SLOW_TESTS`), NOT scattered `@pytest.mark.slow` decorators. Two heavy classes now: (1) real oxDNA/oxpy/GROMACS/protein-fork binaries + MD-trajectory parses (MDAnalysis); (2) **pure-Python CanDo-FEM eigensolves + autorefine density sweeps** (the G1/G3/G4 shape-objective work — test_cando_autorefine/_job/_cylinders/_deviation, test_fem_solver, test_fem_curvature_validation, test_namd_topology, test_oxdna_relaxation, whole module test_md_pipeline). Class (2) was UNREGISTERED until 2026-07-05, silently ballooning test-fast to 3 min. A THIRD bucket was added 2026-07-10: **`_SLOW_CLASSES`** (bare class names) for heavy tests that share an expensive **class-scoped fixture** — marking individual methods is useless there because the fixture just re-fires on a surviving sibling (e.g. `TestSyntheticRoundTrip`/`TestRoutedPrimitiveIntegration` in test_mrdna_pipeline, ~26–32 s each), and it also cleanly covers a class whose methods have generic collision-prone names (`TestMinimize3ExtraBase`'s `test_cache_path`). **To refresh after adding heavy tests:** `just test-fast --durations=25`, fold new ≥~2s "call"/**"setup"** entries into the sets (setup-dominated files → `_SLOW_MODULES`; class-scoped-fixture-dominated classes → `_SLOW_CLASSES`; a heavy test in an otherwise-fast file → `_SLOW_TESTS`). **Non-sim slow-ish tests (assembly/cluster/geometry/browse, ~2–4 s) are deliberately LEFT fast** to keep those subsystems' quick feedback — they don't set the wall-clock floor.
 
-**Test-scoping protocol — decide which slow tests are actually relevant BEFORE running (added 2026-07-10):**
+**Test-scoping protocol — decide which slow tests are actually relevant BEFORE running (added 2026-07-10).**
+*(Largely MOOT under THE LAW: an agent can no longer run the slow tail at all, so the judgement calls below
+now only apply inside a user-opened test-dedicated session.)*
 The full `just test` is ~16 min *by design* (real oxDNA/GROMACS/ARBD binaries + CanDo-FEM eigensolves, and `--dist loadfile` pins the slowest heavy FILE to one core → it sits at "98%" for minutes while one core grinds the last file). Do NOT reflexively run it as a diagnostic loop. First ask: **can my change affect any `slow` test at all?** A slow test is relevant only if the change touches (a) `backend/` source in that test's `area` (oxdna/cando/namd/mrdna/atomistic/md/headless), or (b) a fixture/helper that a slow test *consumes*.
 - **Test-only / conftest / fixture changes** (no `backend/` source touched): the changed tests + fixtures are what to verify. If they are themselves non-slow and no slow test imports them, `just test-fast` (`-m "not slow"`, ~45s) + `just test-affected <the touched files>` is COMPLETE coverage — a full run adds nothing but 15 min. (Grep to confirm: `grep -rl <new_helper> tests/` → if only non-slow files, you're done.)
 - **`test-smart` escalates any `tests/conftest.py` edit to FULL** (foundational/unknown-blast-radius rule). That is blast-radius caution, NOT a relevance signal — a conftest change whose new/edited code is only consumed by fast tests does not need the slow tail. Override the escalation manually with `-m "not slow or <area>"` (or just `test-fast` + the affected files) once you've confirmed by grep which tests consume the change.
@@ -28,7 +78,7 @@ The full `just test` is ~16 min *by design* (real oxDNA/GROMACS/ARBD binaries + 
 Reserve full `just test` for the pre-push gate on a `backend/` source change, or the first run that introduces a global/autouse fixture. Everything else: scope it.
 
 **Change-based selection — `just test-smart` is the DEFAULT per-change loop (added 2026-07-05, the safe testmon substitute; watermark added 2026-07-10):**
-`scripts/select_tests.py` classifies changed source → runs the fast suite (always) PLUS only the heavy `slow` groups affected. Foundational/shared/unknown change → FULL; a leaf change (oxdna/cando/namd/mrdna/atomistic/md/headless) → `-m "not slow or <area>"`; frontend/docs-only → FAST (no backend tests — run `just test-frontend` for JS). Safe because the fast suite always runs — a mis-map can only skip a heavy SIM test whose fast cousins still ran, never basic coverage. Slow tests carry a `slow` + one `area` marker (assigned in conftest `_slow_area_for`; areas registered in pyproject `markers`). Full-trigger list + leaf rules live in the script; `--dry-run` shows the decision. Route files (`backend/api/routes_*.py` except main/ws/state) → FULL by default (unknown blast radius; tune leaf rules if too coarse).
+`scripts/select_tests.py` classifies changed source → runs the fast suite (always) PLUS only the heavy `slow` groups affected — **but since 2026-07-13 it only RUNS those groups inside a test-dedicated session; outside one it defers them to `.nadoc-slow-pending` (see THE LAW).** Foundational/shared/unknown change → FULL; a leaf change (oxdna/cando/namd/mrdna/atomistic/md/headless) → `-m "not slow or <area>"`; frontend/docs-only → FAST (no backend tests — run `just test-frontend` for JS). Safe because the fast suite always runs — a mis-map can only skip a heavy SIM test whose fast cousins still ran, never basic coverage. Slow tests carry a `slow` + one `area` marker (assigned in conftest `_slow_area_for`; areas registered in pyproject `markers`). Full-trigger list + leaf rules live in the script; `--dry-run` shows the decision. Route files (`backend/api/routes_*.py` except main/ws/state) → FULL by default (unknown blast radius; tune leaf rules if too coarse).
 
 **Watermark — what "changed" means, and why full runs got rare (added 2026-07-10):** `just test-smart` now defaults to `--since-last-full`: it diffs against `.nadoc-test-watermark` (a gitignored, machine-local file holding the git SHA at which the FULL suite last passed *here*), not just uncommitted changes. This fixes the gap where committing your work hid it from the scope — affected slow-areas now **accumulate across sessions/commits** until a full run clears them. A green full run (`just test` / `just test-all`, or a `test-smart` run that itself escalated to FULL) bumps the watermark to HEAD. No watermark yet (fresh clone / fresh worktree) → forced FULL, which establishes the baseline. Net effect: a fresh session touching only frontend runs `just test-frontend` and **zero** backend tests; the ~16min full run happens only before a push or on a foundational change. **Guidance:** CLAUDE.md Verification/Done-checklist + the skill Gates now name `just test-smart` (cite its decision) as the per-change command; full `just test` is the pre-push gate. Note: uncommitted-only scope is still available via `just test-smart --base HEAD` or the raw `python scripts/select_tests.py` (no `--since-last-full`); `--base origin/master` overrides the watermark.
 
