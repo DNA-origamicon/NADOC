@@ -3457,8 +3457,8 @@ def _place_auto_crossovers(
 
         # Match the standalone auto-crossover endpoint: only skip a site that
         # would leave a staple arm shorter than the lattice min segment, measured
-        # against the STAPLE STRAND's true coverage boundary (the scaffold caps
-        # the last bp, so the staple ends before the helix does).
+        # against the STAPLE STRAND's own coverage boundary — which is wherever
+        # the user put it, and may end well short of the scaffold (ssDNA loop).
 
         def _staple_arm_too_short(hid: str, stap_dir: str) -> bool:
             for lo, hi in sr.get((hid, stap_dir), []):
@@ -3474,25 +3474,26 @@ def _place_auto_crossovers(
         if _staple_arm_too_short(hid_a, stap_a) or _staple_arm_too_short(hid_b, stap_b):
             continue
 
-        # Require strand coverage on both sides of the nick gap, but only WITHIN
-        # each staple's own coverage span.  A nick position beyond a staple's
-        # boundary is its 5'/3' terminus — the near/far bundle edge — where a cap
-        # crossover (the staple end-turn) is exactly what we want.  Gating on the
-        # helix bp range instead suppresses every edge crossover, because
-        # auto-scaffold extends the helix past the staple at the caps (bp 0 /
-        # bp len-1 land inside the helix but outside the staple's coverage).
-        def _coverage_hole(hid: str, stap_dir: str) -> bool:
-            ivs = sr.get((hid, stap_dir), [])
-            if not ivs:
-                return True  # no staple on this slot at all
-            cov_lo = min(lo for lo, _ in ivs)
-            cov_hi = max(hi for _, hi in ivs)
-            return any(
-                cov_lo <= pos <= cov_hi and not slot_covered(sr, hid, pos, stap_dir)
-                for pos in (lower_bp, lower_bp + 1)
-            )
-
-        if _coverage_hole(hid_a, stap_a) or _coverage_hole(hid_b, stap_b):
+        # A staple's extent is the USER'S INTENT.  Scaffold with no staple opposite
+        # it is a deliberate ssDNA loop (they suppress aggregation by blunt-end
+        # stacking), so EVERY staple-interval boundary is a legitimate 5'/3'
+        # terminus — not only the ones at the bundle caps.  Ask the same question
+        # manual placement asks (`_build_place_crossover`): a crossover connects
+        # material on the side its bow points — bow-right (min(nick) < index)
+        # toward bp index+1, bow-left toward index-1.  That bp must carry staple on
+        # BOTH helices, else the crossover joins nothing but a stub.  A nick landing
+        # in the ssDNA loop itself is a no-op (`_nick_if_needed` finds no strand).
+        #
+        # The old test asked instead whether an unstapled bp fell inside the slot's
+        # global [min, max] staple span, and rejected it as an accidental hole.  That
+        # holds only when every ssDNA loop is at a helix end; designs with interior
+        # loops (a comb/"teeth" cross-section) had their tooth-edge crossovers
+        # silently starved, while the identical site at a bundle cap was allowed.
+        required_bp = bp + 1 if lower_bp < bp else bp - 1
+        if not (
+            slot_covered(sr, hid_a, required_bp, stap_a)
+            and slot_covered(sr, hid_b, required_bp, stap_b)
+        ):
             continue
         if (hid_a, bp, stap_a) in occupied or (hid_b, bp, stap_b) in occupied:
             continue

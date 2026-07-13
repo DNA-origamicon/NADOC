@@ -584,21 +584,16 @@ def test_full_autostaple_records_overhang_attachment_crossover():
     assert checked > 0, "no same-bp overhang attachment present — test is vacuous"
 
 
-def test_locked_detection_flags_strand_through_a_manual_staple_crossover():
-    """A staple traversing a process_id='manual' crossover is locked (and its
-    crossover survives linearization)."""
+def _manual_crossover_design():
+    """Two helices; one staple crosses A→B at bp 20 via a process_id='manual' crossover."""
     from backend.core.models import (
         Crossover, Design, Direction, Domain, HalfCrossover, Helix, Strand, StrandType, Vec3,
-    )
-    from backend.api.routes_assign_sequences import (
-        _locked_and_overhang_staple_ids, _linearize_staple_precursors,
     )
 
     hA = Helix(id="hA", grid_pos=(0, 0), axis_start=Vec3(x=0, y=0, z=0),
                axis_end=Vec3(x=0, y=0, z=10), length_bp=64, bp_start=0)
     hB = Helix(id="hB", grid_pos=(0, 1), axis_start=Vec3(x=0, y=2, z=0),
                axis_end=Vec3(x=0, y=2, z=10), length_bp=64, bp_start=0)
-    # One staple crossing A→B at bp 20, recorded as a manual crossover.
     crosser = Strand(id="crosser", strand_type=StrandType.STAPLE, domains=[
         Domain(helix_id="hA", start_bp=40, end_bp=20, direction=Direction.REVERSE),
         Domain(helix_id="hB", start_bp=20, end_bp=40, direction=Direction.FORWARD),
@@ -611,16 +606,61 @@ def test_locked_detection_flags_strand_through_a_manual_staple_crossover():
         half_b=HalfCrossover(helix_id="hB", index=20, strand=Direction.FORWARD),
         process_id="manual",
     )
-    d = Design(helices=[hA, hB], strands=[crosser, free], crossovers=[xo])
+    return Design(helices=[hA, hB], strands=[crosser, free], crossovers=[xo])
+
+
+def test_manual_crossover_does_not_lock_the_staple_carrying_it():
+    """A manual crossover changes only how staples CONNECT, never where they sit.
+
+    So it must not lock its staple out of the rebuild — that only starves the
+    neighbouring helices of crossovers along the whole strand.  The crossover record
+    itself survives linearization, so autostaple can neither undo nor duplicate it.
+    """
+    from backend.api.routes_assign_sequences import (
+        _locked_and_overhang_staple_ids, _linearize_staple_precursors,
+    )
+
+    d = _manual_crossover_design()
 
     locked, overhang = _locked_and_overhang_staple_ids(d)
-    assert locked == {"crosser"} and not overhang
+    assert locked == set() and overhang == set()
 
     prec, rep = _linearize_staple_precursors(d)
-    # Manual crossover kept; the locked strand preserved whole (still 2 domains).
+    assert rep["locked_strand_count"] == 0
+    # The manual crossover RECORD is kept — the junction can be re-ligated.
     assert any(x.process_id == "manual" for x in prec.crossovers)
+    # The staple is linearized (its connectivity is autostaple's business) but every
+    # bp it covered is still covered — its LOCATION is the user's intent.
+    def coverage(dd):
+        return {
+            (dom.helix_id, dom.direction.value, bp)
+            for s in dd.strands if s.strand_type.value == "staple"
+            for dom in s.domains
+            for bp in range(min(dom.start_bp, dom.end_bp), max(dom.start_bp, dom.end_bp) + 1)
+        }
+    assert coverage(prec) == coverage(d)
+
+
+def test_forced_ligation_still_locks_its_staple():
+    """A forced ligation is a join autostaple CANNOT re-derive — that strand stays whole."""
+    from backend.core.models import Direction, ForcedLigation
+    from backend.api.routes_assign_sequences import (
+        _locked_and_overhang_staple_ids, _linearize_staple_precursors,
+    )
+
+    d = _manual_crossover_design()
+    fl = ForcedLigation(
+        three_prime_helix_id="hA", three_prime_bp=20, three_prime_direction=Direction.REVERSE,
+        five_prime_helix_id="hB", five_prime_bp=20, five_prime_direction=Direction.FORWARD,
+    )
+    d = d.model_copy(update={"forced_ligations": [fl]})
+
+    locked, _overhang = _locked_and_overhang_staple_ids(d)
+    assert locked == {"crosser"}
+
+    prec, rep = _linearize_staple_precursors(d)
     kept = next((s for s in prec.strands if s.id == "crosser"), None)
-    assert kept is not None and len(kept.domains) == 2
+    assert kept is not None and len(kept.domains) == 2   # preserved whole
     assert rep["locked_strand_count"] == 1
 
 

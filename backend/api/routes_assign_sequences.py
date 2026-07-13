@@ -106,16 +106,23 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
 
 
 def _manual_connection_positions(design: Design) -> set[tuple[str, int, Direction]]:
-    """Endpoints of user-issued connections full-autostaple must not disturb.
+    """Endpoints of user-issued connections that LOCK the staple carrying them.
 
-    Every half of a ``process_id == "manual"`` crossover plus both ends of every
-    forced ligation.  A staple touching one of these positions was hand-routed.
+    Both ends of every forced ligation — a join autostaple cannot re-derive, so the
+    strand it fuses must survive the rebuild intact.
+
+    A ``process_id == "manual"`` crossover is deliberately **not** here.  A manual
+    crossover is an ordinary crossover the user happened to place by hand; it changes
+    only how staples are CONNECTED, never where they sit, so it is no reason to
+    exclude that staple's 32 bp of body from being woven.  Autostaple must not *undo*
+    or *duplicate* it — and it doesn't: ``nick_all_major_ticks`` skips every recorded
+    crossover bp, ``_place_auto_crossovers`` seeds ``occupied`` from every existing
+    crossover half, and its closing ``ligate_crossover_chains`` rebuilds the junction
+    from the surviving record.  Locking the whole strand on top of that only starved
+    its neighbours of crossovers (workspace/teeth.nadoc: the hand-routed
+    ``stpl_XY_2_2`` blanked bp 0–31 on two helices).
     """
     positions: set[tuple[str, int, Direction]] = set()
-    for xo in design.crossovers:
-        if xo.process_id == "manual":
-            positions.add((xo.half_a.helix_id, xo.half_a.index, xo.half_a.strand))
-            positions.add((xo.half_b.helix_id, xo.half_b.index, xo.half_b.strand))
     for fl in getattr(design, "forced_ligations", None) or []:
         positions.add((fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction))
         positions.add((fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction))
@@ -126,9 +133,10 @@ def _locked_and_overhang_staple_ids(design: Design) -> tuple[set[str], set[str]]
     """Classify staples full-autostaple must leave intact.
 
     Returns ``(locked_ids, overhang_ids)``:
-      * **locked** — staples touching a manual crossover or forced ligation.  The
-        user hand-routed these, so they are never linearized, nicked, or merged,
-        and auto-crossovers route around them.
+      * **locked** — staples touching a forced ligation.  Autostaple cannot re-derive
+        that join, so these are never linearized, nicked, or merged, and auto-crossovers
+        route around them.  A manual *crossover* does NOT lock its staple — see
+        ``_manual_connection_positions``.
       * **overhang** — staples carrying an overhang domain.  Never split or nicked,
         but may still grow by absorbing a free co-linear neighbour (the merge is
         capped at 48 + overhang nt — see ``_merge_cap`` in lattice.py).
