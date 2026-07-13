@@ -37,9 +37,16 @@ does not move a staple; it only changes how staples are connected. So:
 - **Scaffold routers must NEVER create, extend, trim, split, or delete a staple strand
   or domain — ever.** They may extend helices and scaffold domains only. (`section_router`,
   `seamed_router`, seamless router: all currently clean — keep them that way.)
-- **Never derive a staple footprint from the scaffold.** There is deliberately no code path
-  that fills the staple slot to match scaffold coverage. Do not add one. If autostaple looks
-  like it is "missing" staples somewhere, that region is an ssDNA loop and it is correct.
+- **Never derive a staple footprint from the scaffold *implicitly*.** No routing or auto stage
+  may fill the staple slot to match scaffold coverage. If autostaple looks like it is "missing"
+  staples somewhere, that region is an ssDNA loop and it is correct.
+  - **Sanctioned exception — `polymer_router` (ISSUE-17, closed NOT-A-BUG).** It *does* synthesize
+    staples over bare scaffold at helix caps, and that is correct: those staples are what **link
+    individual structures to each other**, it is a user-invoked shortcut for work the user would
+    otherwise do by hand, and it runs *after* single-structure validation. Despite the name it is a
+    **staple op, not a scaffold router**. Do not "fix" it. The ban is on *scaffold routers* and
+    *auto stages* silently touching staples — not on an explicit user tool whose whole purpose is
+    to create linking staples.
 - **Do not infer terminus-vs-accident from position.** The specific bug this rule was written
   for: `_place_auto_crossovers._coverage_hole` decided whether an unstapled bp was a real
   5'/3' terminus or an accidental hole by asking whether it fell inside the slot's global

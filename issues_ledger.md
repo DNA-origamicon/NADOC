@@ -500,26 +500,21 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
   transfer) and assert it does NOT go `completed` with missing outputs; confirm the desired state (re-pollable vs
   a distinct `fetch_failed`) with the user — it's a UX/semantics call, not purely mechanical.
 
-## ISSUE-17 — `polymer_router` SYNTHESIZES staples over bare scaffold ends (violates "staples are the user's intent"; ask-first)
+## ISSUE-17 — `polymer_router` synthesizes staples over bare scaffold ends — ✅ NOT A BUG (by design, 2026-07-13)
 
-- **Status:** `[ ]` OPEN — surfaced 2026-07-13 by a read-only audit while fixing autostaple (see LESSONS J6 /
-  `feedback_staples_are_user_intent`). Not touched: it is a user-invoked topology op and the desired behaviour
-  is a design call, not a mechanical fix.
-- **The rule it breaks:** scaffold with no staple opposite it is a **deliberate ssDNA loop** — it suppresses
-  aggregation by blunt-end stacking, and essentially every origami wants one at each duplex end. Staple
-  placement is the user's intent; no code may treat missing staple coverage as something to fill.
-- **What it does:** `backend/core/polymer_router.py` reads scaffold coverage, finds each unpaired scaffold run
-  that touches a helix cap, and manufactures a STAPLE exactly complementary to it — `_complement_strand`
-  (~:146-157) builds `Strand(strand_type=STAPLE)`, appended at ~:277. It also raises *"No unpaired scaffold ends
-  found — nothing to route"* (~:270-274) as a hard **error** — i.e. it treats the *absence* of an ssDNA end as
-  the failure mode and its *presence* as a thing to be filled. Net effect: it blunt-caps precisely the loops the
-  rule protects.
-- **Mitigating facts (for the decision, not an excuse):** it only fills cap-adjacent runs (interior runs are
-  explicitly skipped), and it is invoked explicitly ("Route for polymerization"), never from a scaffold
-  auto-route. Blunt ends may even be *wanted* here — polymerization is stacking-driven.
-- **Fix shape (ASK FIRST):** most likely make the cap-end fill **opt-in** and rename/reclassify the module as an
-  explicit *staple* operation (never callable from a scaffold-routing path). But if polymerization deliberately
-  wants blunt ends, the right answer may be "document it and leave it" — confirm with the user before changing.
+- **Status:** `[x]` CLOSED as WORKING AS INTENDED — user ruling 2026-07-13. **Do not "fix" this.**
+- **Raised because:** `backend/core/polymer_router.py` reads scaffold coverage and manufactures a STAPLE
+  complementary to each unpaired scaffold run at a helix cap (`_complement_strand` ~:146-157, appended ~:277),
+  and errors with *"No unpaired scaffold ends found"* (~:270-274). Under `feedback_staples_are_user_intent`
+  that looked like blunt-capping the very ssDNA loops the law protects.
+- **Why it's fine:** those staples are exactly the ones **defining how individual structures link to each
+  other**, and creating them is otherwise manual work — polymer_router is a *shortcut for the user*, not a
+  router inferring intent. It runs **after** individual-structure validation, as an explicit user-invoked op
+  ("Route for polymerization"); it is never reachable from a scaffold auto-route. So it falls under rule (c) of
+  the law: an explicit user-invoked staple operation may create staples. **polymer_router gets a pass.**
+- **Note for the law:** despite the name, it is a STAPLE op, not a scaffold router. The ban in
+  `feedback_staples_are_user_intent` is on *scaffold routers* silently touching staples — not on user-invoked
+  tools whose entire purpose is to create linking staples.
 
 ## ISSUE-18 — A SCAFFOLD router can nick/ligate a STAPLE — two unfiltered helpers in `seamed_router`
 
@@ -538,10 +533,18 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
      strand with no type filter, so any staple/linker/binder whose 5'/3' terminus lands on a scaffold-crossover
      half gets fused into the scaffold. Contrast `ligate_crossover_chains` (lattice.py ~:2002), which filters.
      `_linearize_circular_scaffolds` (~:1074-1095) inherits both.
-- **Fix shape:** gate both on `strand_type == SCAFFOLD and not is_reference` — mechanically the same guard the
-  lattice-level equivalents already carry. Low risk, but it changes scaffold-routing behaviour on designs with
-  linkers/overhangs, so pin it with a repro first (route a design carrying a linker whose complement sits in the
-  scaffold slot; assert no staple/linker strand is nicked or fused).
+- **The designations already exist — this is not a modelling gap.** `StrandType.LINKER` (its own docstring:
+  *"skipped by most pipelines (geometry render, scaffold validators, **auto-routing tools**)"* — i.e. the
+  contract is already written down), `StrandType.OH_BINDER`, `Domain.overhang_id` / `binds_overhang_id`, and
+  `Strand.is_reference`. Peers honour them (`build_strand_ranges` excludes LINKER; `validator.py:161`;
+  `lattice.py:2423`). These two helpers simply never consult them.
+- **Fix shape:** gate both on a **positive allowlist** — `strand_type == SCAFFOLD and not is_reference` — not on
+  a linker/overhang blocklist. The allowlist also excludes OH_BINDERs and plain hand-drawn staples (a blocklist
+  would still let the scaffold router nick those) and stays correct for any strand type added later.
+  Mechanically the same guard the lattice-level equivalents already carry. Low risk, but it changes
+  scaffold-routing behaviour on designs with linkers/overhangs, so pin it with a repro first (route a design
+  carrying a linker whose complement sits in the scaffold-direction slot; assert no non-scaffold strand is
+  nicked or fused).
 
 ## Next-session handoff
 
