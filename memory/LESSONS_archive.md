@@ -76,6 +76,57 @@ Building "quick-check curvature" (loops one side / skips the other → Dietz ben
 
 ---
 
+<a id="a10"></a>
+### A10. The scaffold is route OUTPUT; the STAPLES are the design (2026-07-13, ISSUE-9)
+
+Autoscaffold was not idempotent: re-routing an already-routed design ratcheted it further out every time and
+persisted the result to the `.nadoc`. Measured on a **plain 4HB honeycomb bundle** — no teeth, no sections, no
+section router — helices grew `168 → 189 → 199 → 210` bp and crossovers `6 → 9 → 12` over three routes, on BOTH
+the seamed and the seamless router. The ledger had filed it as a *teeth* bug for a month; it never was. Teeth is
+merely where it was **visible** (the extension intrudes into the inter-tooth gaps). On a plain bundle it silently
+lengthens your helices with no visual tell — which is why it survived so long.
+
+**The general trap (this is the transferable part).** The near/far end-turn legitimately extends a helix a few bp
+past the scaffold's terminal face, so the scaffold has ssDNA to turn around in (`MIN_SSDNA_MARGIN >= 3`; scaffold
+crossovers live in extended ssDNA, never buried in a staple). But the router derived that face from
+`_scaffold_coverage()` — **its own previous output**. On the second call the face is the already-extended
+terminus, the search runs from `face - 3` strictly further out, and it extends again. The extenders are monotone
+(`if new_lo >= helix.bp_start: return design`), so it is a **ratchet, not an oscillation** — it never converges
+back. Worse, the extension rewrites `bp_start` / `length_bp` / `axis_start` / `phase_offset` **in place**,
+destroying the very information needed to undo it.
+
+> **Any mutation whose input is derived from its own prior output is non-idempotent by construction.** Ask, of
+> every re-runnable operation: *what does it measure to decide what to do, and does it also write that thing?*
+> If yes, it will ratchet. The fix is not to make the algorithm smarter — it is to **normalise the input against
+> something the mutation cannot touch.**
+
+**Here that invariant is the staples.** Autoscaffold never touches staple strands, so a helix's TRUE extent is
+the bp span of its staple domains (including staple overhangs running past the scaffold). Verified: across three
+re-routes the staple spans stayed at `[0,167]` while the helices ratcheted to `[-30,179]`. And in the real
+multi-section fixtures the staple intervals ARE the scaffold sections, gaps and all — teeth
+`[(0,41),(84,125),(168,209)]`, dumbbell `[(0,41),(126,167)]`. So the routing algorithm was left **completely
+untouched**; only its input is normalised (`backend/core/scaffold_reset.py`): retract each helix + re-seed the
+scaffold to the staple extent, then route. `reset(route(fresh)) == fresh`, field for field ⇒ N routes ≡ 1 route.
+
+**Deliberately conservative:** the reset CLAMPS INTO the staple intervals and never GROWS a scaffold to fill them
+(a scaffold left short of its staples was never routed there — growing it would silently edit an unrouted design;
+this is what keeps the two-group seamless fixture working). Forced ligations bail out with a warning: a manual
+fixed-edge topology is not derivable from the staples.
+
+**Second bug, same neighbourhood — a "clear" that never cleared.** The seamed router stamps **three** different
+`process_id`s on the crossovers it creates: `auto_scaffold_seamed:seam`, plus the bare `create_near_ends` and
+`create_far_ends`. `_clear_auto_scaffold_route_for_seamed` matched only the `auto_scaffold_` prefix, so the
+end-turn crossovers survived every clear — hence the accumulation, and it means that helper (relied on by
+`auto_scaffold_matched`) had **never actually worked**. If you add a prefix-matched "owned by me" tag, enumerate
+every id the subsystem actually emits; `section_router._is_scaffold_route_xover` had the full list all along.
+
+**Method note:** the whole diagnosis came from a 40-line probe script that routed a bundle three times and printed
+the helix/staple/scaffold extents after each. Reasoning about the router's control flow would not have shown the
+ratchet; *running it twice* did, immediately. When asked "is bug X specific to design shape Y?", build the
+simplest design that is NOT Y and run it.
+
+---
+
 ## B. Three-Layer Law violations
 
 <a id="b1"></a>

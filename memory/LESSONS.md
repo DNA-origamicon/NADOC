@@ -25,6 +25,7 @@ Format per entry: short title → one-paragraph what-went-wrong → "How to avoi
 - **A6** — Steer twist correction on SIGNED local twist — unsigned deviation field can't tell over/under-wound, places skips wrong. [detail](LESSONS_archive.md#a6)
 - **A7** — Don't drive a per-segment skip controller off the twist profile — MIMO secant divides by noise, diverges/oscillates. [detail](LESSONS_archive.md#a7)
 - **A8** — oxDNA long-bundle twist scatter is an equilibration transient — twist "slow mode" is really ~8M-step burn-in drift. [detail](LESSONS_archive.md#a8)
+- **A10** — **The scaffold is route OUTPUT; the STAPLES are the design.** Autoscaffold read its own previous output as the face to extend from → every re-route ratcheted the helices outward (a plain 4HB bundle: 168→189→199→210 bp), persisted to `.nadoc`. Any mutation whose input is derived from its own prior output is non-idempotent by construction — normalise the input against something the mutation *cannot* touch (here: staple spans). [detail](LESSONS_archive.md#a10)
 - **A9** — mrDNA `simulate(coarse_steps=)` silently skips the fine stage — CG curvature comes out ~straight; use `multiresolution_simulation`. [detail](LESSONS_archive.md#a9)
 
 ### A10. NAMD Flexibility-map leaves 21 bases unmoved/uncoloured on an ENSEMBLE-REPLICA job — the replica package was missing `charge_audit.json`, forcing the reference-PDB P-order that can't recover 5'-termini (2026-07-09)
