@@ -73,6 +73,12 @@ class SnupiJob:
     # MgCl₂ molarity (mol/L) setting the Debye length of the inter-helix electrostatics (G12).
     # Default 0.02 = SNUPI's 20 mM buffer; raise to match a run's actual salt.  snupi-only.
     mgcl2_M:             float = 0.02
+    # Langevin structural DYNAMICS (project_snupi_dynamics): instead of the static equilibrium
+    # solve, run a thermal trajectory and report its time-MEAN shape + TRAJECTORY RMSF (same
+    # display payload).  hydrodynamics=True uses the full Rotne–Prager–Yamakawa friction matrix
+    # (coupled) vs the diagonal Stokes drag.  Physical-layer/display-only.
+    dynamics:            bool = False
+    hydrodynamics:       bool = False
     # ── Job-request annotations (C1/C2): anchors + uniform E-field, NEVER a topology edit ──
     # anchors: shared oxDNA scope descriptors (overhang/cluster/domain/strand/base) held fixed
     # (Dirichlet BC) during the FEM solve.  field: {"field_pN": <force/nt, pN>, "dir": [x,y,z]} —
@@ -127,6 +133,8 @@ class SnupiJob:
         data.setdefault("with_rmsf", True)
         data.setdefault("material", "snupi")
         data.setdefault("mgcl2_M", 0.02)
+        data.setdefault("dynamics", False)
+        data.setdefault("hydrodynamics", False)
         data.setdefault("anchors", None)
         data.setdefault("field", None)
         data.setdefault("design_source_path", None)
@@ -178,6 +186,8 @@ def new_snupi_job(
     with_rmsf: bool = True,
     material: str = "snupi",
     mgcl2_M: float = 0.02,
+    dynamics: bool = False,
+    hydrodynamics: bool = False,
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
     n_nucleotides: int = 0,
@@ -198,6 +208,8 @@ def new_snupi_job(
         with_rmsf          = with_rmsf,
         material           = material if material in ("snupi", "cando") else "snupi",
         mgcl2_M            = mgcl2_M,
+        dynamics           = dynamics,
+        hydrodynamics      = hydrodynamics,
         anchors            = anchors,
         field              = field,
         stages             = [SnupiStageStatus(name=stage_name)],

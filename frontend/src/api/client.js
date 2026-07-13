@@ -2198,6 +2198,7 @@ export const getSnupiDisplay     = (id)          => _oxdnaJSON('GET',  `/snupi/j
 export const getSnupiSnapshotGeometry = (id)     => _oxdnaJSON('GET',  `/snupi/jobs/${id}/snapshot-geometry`)
 /** Per-bp RMSF (nm) for the flexibility map. */
 export const getSnupiRmsf        = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/rmsf`)
+export const getSnupiTrajectory  = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/trajectory`)
 /** Per-bp deviation from the intended (displayed) geometry + global RMSD. */
 export const getSnupiDeviation   = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/deviation`)
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */

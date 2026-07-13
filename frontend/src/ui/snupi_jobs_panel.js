@@ -88,6 +88,7 @@ export function materialLabel(job) {
 
 /** Human name for the solver mode of a job. */
 export function solverLabel(job) {
+  if (job?.dynamics) return job?.hydrodynamics ? 'Dynamics (RPY)' : 'Dynamics (Langevin)'
   return job?.nonlinear ? 'Fine (nonlinear)' : 'Coarse (linear)'
 }
 
@@ -158,6 +159,8 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   const stepsInput = $('snupi-jobs-n-steps')
   const rmsfInput = $('snupi-jobs-with-rmsf')
   const materialSelect = $('snupi-jobs-material')
+  const dynamicsInput = $('snupi-jobs-dynamics')
+  const hydroInput = $('snupi-jobs-hydrodynamics')
   const showAll = $('snupi-jobs-show-all')
   const listEl = $('snupi-jobs-list')
   const detail = $('snupi-jobs-detail')
@@ -263,6 +266,8 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
         n_steps:   Math.max(1, parseInt(stepsInput?.value, 10) || 20),
         with_rmsf: rmsfInput ? !!rmsfInput.checked : true,
         material:  mat,
+        dynamics:      dynamicsInput ? !!dynamicsInput.checked : false,
+        hydrodynamics: hydroInput ? !!hydroInput.checked : false,
         autostart: true,
         design_source_path: getWorkspacePath?.() || null,
         anchors: anchors.length ? anchors : null,
@@ -394,7 +399,8 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     const ready = job?.status === 'completed'
     modeRadios().forEach((r) => {
       const needsRmsf = r.value === 'flex'
-      r.disabled = !ready || !snupiDisplay || (needsRmsf && !job?.rmsf_max_nm)
+      const needsTraj = r.value === 'trajectory'   // only dynamics jobs cache a trajectory
+      r.disabled = !ready || !snupiDisplay || (needsRmsf && !job?.rmsf_max_nm) || (needsTraj && !job?.dynamics)
     })
   }
 
@@ -442,16 +448,18 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   }
 
   // ── Display-mode radios (Off / Predicted shape / Flexibility / Deviation / CanDo) ──
-  const _MODE_FNS = { deform: 'showDeform', flex: 'showFlex', deviation: 'showDeviation', cando: 'showCandoStyle' }
+  const _MODE_FNS = { deform: 'showDeform', flex: 'showFlex', deviation: 'showDeviation', cando: 'showCandoStyle', trajectory: 'showTrajectory' }
   async function _onModeChange() {
     if (!snupiDisplay) { setMode('off'); return }
     const mode = checkedMode()
+    if (mode !== 'trajectory') snupiDisplay.stopTrajectory?.()   // leaving the player → halt the loop
     if (mode === 'off') { snupiDisplay.stopDeform?.(); _syncDisplayStatus(); return }
     if (!_selectedId) { setMode('off'); return }
     const r = await snupiDisplay[_MODE_FNS[mode]]?.(_selectedId)
     if (!r?.ok) {
       setMode('off'); snupiDisplay.stopDeform?.()
       showToast(mode === 'flex' ? 'RMSF not available for this job'
+        : mode === 'trajectory' ? 'No trajectory — run a Langevin dynamics job (Advanced ▸ Langevin dynamics)'
         : 'Predicted positions not ready', { severity: 'warn' })
     }
     _syncDisplayStatus()

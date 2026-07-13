@@ -1949,6 +1949,81 @@ def resolve_anchor_nodes(
     return nodes, [selected[i] for i in nodes]
 
 
+_DYNAMICS_TRAJ_FRAMES = 40   # frames retained for the animation scrubber (downsampled from the run)
+
+
+def _dynamics_trajectory_payload(design: "Design", mesh: "FEMMesh", out: dict, X0) -> dict:
+    """Downsample the Langevin trajectory into the {keys, frames, n_frames} wire shape the frontend
+    trajectory player consumes (``framesToUpdates``): ``keys`` = per-nucleotide [helix,bp,dir,copy];
+    each frame = 6 floats/key (backbone x,y,z + normal). Reconstructs each frame's backbone via the
+    same :func:`deformed_positions_with_axis` used for the mean shape (translational motion only)."""
+    frames = out["frames"]                       # (n_frame, n_node, 3) absolute node positions
+    n_node = len(mesh.nodes)
+    if frames is None or len(frames) == 0:
+        return {"keys": [], "frames": [], "n_frames": 0}
+    sel = np.unique(np.linspace(0, len(frames) - 1,
+                                min(_DYNAMICS_TRAJ_FRAMES, len(frames))).astype(int))
+    keys = None
+    out_frames = []
+    for fi in sel:
+        u = np.zeros(6 * n_node, dtype=float)
+        u.reshape(n_node, 6)[:, :3] = frames[fi] - X0
+        pos, _ax = deformed_positions_with_axis(design, mesh, u)
+        if keys is None:
+            keys = [[p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)] for p in pos]
+        flat: list = []
+        for p in pos:
+            bb = p["backbone_position"]
+            flat.extend([bb[0], bb[1], bb[2], p["nx"], p["ny"], p["nz"]])
+        out_frames.append(flat)
+    return {"keys": keys, "frames": out_frames, "n_frames": len(out_frames)}
+
+
+def _predict_shape_dynamics(
+    design: "Design",
+    mesh: "FEMMesh",
+    *,
+    material: str = "snupi",
+    mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
+    hydrodynamics: bool = False,
+    n_steps: int = 60000,
+    with_rmsf: bool = True,
+) -> dict:
+    """Langevin-dynamics shape prediction → the standard predict_shape payload.
+
+    Runs :func:`snupi_dynamics.simulate_equilibrium` (GJF Langevin; diagonal Stokes or full RPY
+    hydrodynamic friction) and packages the time-mean shape as ``positions``/``axis`` and the
+    trajectory RMSF as ``rmsf`` — identical keys to the static solve, so the display layer is
+    unchanged. Physical-layer/display-only (Three-Layer Law)."""
+    from backend.physics import snupi_dynamics as dyn
+
+    out = dyn.simulate_equilibrium(
+        design, material=material, hydrodynamics=hydrodynamics,
+        with_electrostatics=(material == "snupi"), mgcl2_M=mgcl2_M,
+        n_steps=n_steps, n_equil=max(1, n_steps // 5), sample_every=40, seed=0,
+    )
+    positions, axis = deformed_positions_with_axis(design, mesh, out["mean_u"])
+    result: dict = {
+        "solver": "dynamics-rpy" if hydrodynamics else "dynamics",
+        "positions": positions,
+        "axis": axis,
+        "anchor_keys": [],
+        "n_frame": out["n_frame"],
+        "dt_ns": out["dt_ns"],
+        # Downsampled thermal TRAJECTORY for the animation toggle — the new visualizable feature
+        # (the actual motion, not just its time-mean). Same {keys, frames} wire shape as oxDNA's
+        # /trajectory (framesToUpdates), so the frontend scrubber/player is reused.
+        "trajectory": _dynamics_trajectory_payload(design, mesh, out, X0=out["positions0"]),
+    }
+    if with_rmsf:
+        rmsf = out["rmsf"]
+        result["rmsf"] = [
+            {"helix_id": node.helix_id, "bp_index": node.global_bp, "rmsf_nm": float(rmsf[i])}
+            for i, node in enumerate(mesh.nodes)
+        ]
+    return result
+
+
 def predict_shape(
     design: "Design",
     *,
@@ -1960,6 +2035,9 @@ def predict_shape(
     material: str = "cando",
     mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
     corotational: bool = False,
+    dynamics: bool = False,
+    hydrodynamics: bool = False,
+    dynamics_steps: int = 60000,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
 
@@ -2015,6 +2093,15 @@ def predict_shape(
             f"{_MIN_FEM_NODES} base pairs, but this design meshed {len(mesh.nodes)}. "
             "There is no paired region to solve — pair the scaffold with staples first."
         )
+
+    if dynamics:
+        # Langevin structural-dynamics engine (project_snupi_dynamics): run an equilibrium thermal
+        # trajectory and report the time-MEAN shape + the TRAJECTORY RMSF, in the SAME payload
+        # contract as the static solve — so every SNUPI display toggle (deform / flex / deviation /
+        # cylinders) visualizes the dynamics result with no new display code.
+        return _predict_shape_dynamics(
+            design, mesh, material=material, mgcl2_M=mgcl2_M,
+            hydrodynamics=hydrodynamics, n_steps=dynamics_steps, with_rmsf=with_rmsf)
 
     fixed_nodes, anchor_keys = resolve_anchor_nodes(design, mesh, anchors)
 

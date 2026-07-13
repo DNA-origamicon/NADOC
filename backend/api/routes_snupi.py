@@ -113,6 +113,13 @@ class CreateSnupiJobRequest(BaseModel):
                              description="MgCl₂ molarity (mol/L) setting the Debye length of the "
                                          "SNUPI inter-helix electrostatics; default 0.02 = 20 mM. "
                                          "snupi-only (ignored by 'cando').")
+    dynamics:   bool = Field(False,
+                             description="Run Langevin structural DYNAMICS (thermal trajectory → "
+                                         "time-mean shape + trajectory RMSF) instead of the static "
+                                         "equilibrium solve (project_snupi_dynamics).")
+    hydrodynamics: bool = Field(False,
+                             description="Dynamics only: use the full Rotne–Prager–Yamakawa coupled "
+                                         "friction matrix vs diagonal Stokes drag.")
     # Job-request annotations (C1/C2): anchors held fixed (Dirichlet BC) + a uniform E-field body
     # load, both threaded into predict_shape(...).  Never a topology edit (Three-Layer Law).
     anchors:    Optional[list] = Field(None, description="Shared oxDNA anchor-scope descriptors "
@@ -152,6 +159,8 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
         with_rmsf          = body.with_rmsf,
         material           = material,
         mgcl2_M            = body.mgcl2_M,
+        dynamics           = body.dynamics,
+        hydrodynamics      = body.hydrodynamics,
         anchors            = body.anchors,
         field              = body.field,
         n_nucleotides      = len(_strand_nucleotide_order(design)),
@@ -339,6 +348,19 @@ async def get_snupi_rmsf(job_id: str) -> dict:
         "max_nm": max(vals) if vals else None,
         "rmsf": rmsf,
     }
+
+
+@router.get("/snupi/jobs/{job_id}/trajectory")
+async def get_snupi_trajectory(job_id: str) -> dict:
+    """The dynamics thermal/reconfiguration TRAJECTORY for the animation toggle (dynamics jobs only).
+    ``{keys:[[helix,bp,dir,copy],…], frames:[[6 floats/key],…], n_frames}`` — the same wire shape as
+    oxDNA's /trajectory, so the frontend scrubber/player (``framesToUpdates``) is reused."""
+    from backend.core.snupi_runner import load_trajectory
+    job = _load_job(job_id)
+    cached = load_trajectory(job.job_dir(_workspace()))
+    if not cached or not cached.get("n_frames"):
+        return {"job_id": job.job_id, "ready": False, "keys": [], "frames": [], "n_frames": 0}
+    return {"job_id": job.job_id, "ready": True, **cached}
 
 
 @router.get("/snupi/jobs/{job_id}/deviation")

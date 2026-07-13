@@ -80,6 +80,10 @@ describe('solverLabel', () => {
     expect(solverLabel({ nonlinear: true })).toBe('Fine (nonlinear)')
     expect(solverLabel({ nonlinear: false })).toBe('Coarse (linear)')
   })
+  it('names the Langevin dynamics modes when dynamics is set', () => {
+    expect(solverLabel({ dynamics: true })).toBe('Dynamics (Langevin)')
+    expect(solverLabel({ dynamics: true, hydrodynamics: true })).toBe('Dynamics (RPY)')
+  })
 })
 
 describe('detailStatusText', () => {

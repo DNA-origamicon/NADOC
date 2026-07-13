@@ -55,6 +55,7 @@ and shared across both computers (see `CLAUDE.md` → Memory layout).
 Files are `feedback_<name>.md`. Match the name against what you're editing; each is short.
 
 **General:** **concurrent_sessions** (another Claude session may share this worktree — never `git stash`/`reset`/`restore`;
+**no_live_server_mutation_for_verify** (never POST/DELETE/reset the shared running server to verify — clobbers concurrent work; verify via pytest scratch_session) ·
 forbid git in subagent prompts) · aksel_abandoned · crossover_no_reasoning · phase_constants_locked · native_files_preserve_positions ·
 design_renderer_visibility_rule · overhang_definition · interrupt_before_doubting_user · busy_popup_threshold ·
 user_todo_smoke_tests · playwright_fixtures_location · display_toggle_visual_verify · no_bulk_reformat ·
@@ -98,7 +99,7 @@ oxdna_relaxation · benchmark_tuning · md_engines_panel
 **oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · skip_twist_selfconsistency · regional_autorefine ·
 skip_twist_curvature_sweep · md_twist_validation
 
-**Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE: base SNUPI recreated for $0 — snupi≥cando vs MD; `material="snupi"` in fem_solver; +electrostatics) · snupi_frontend_tab (frontend SNUPI engine tab, SHIPPED) · **snupi_gaps** (gap analysis vs full published SNUPI + phased build plan + kickoff prompt)
+**Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE: base SNUPI recreated for $0 — snupi≥cando vs MD; `material="snupi"` in fem_solver; +electrostatics) · snupi_frontend_tab (frontend SNUPI engine tab, SHIPPED) · **snupi_gaps** (gap analysis vs full published SNUPI; A–D DONE + refinements) · **snupi_reference_compare** (REAL SNUPI installed on this machine at `~/SNUPI`; NADOC→caDNAno→SNUPI→mimic comparator loop plan) · **snupi_dynamics** (Langevin time-integration / Nat Commun 2023 — friction+noise+GJF+stacking; Phase 1 = equilibrium-dynamics validator vs NMA)
 
 **Multi-resolution / CG bridge:** multiresolution_roadmap · crossover_parameterization · bundle_stiffness_params ·
 pipeline_validation_log · session_handoff

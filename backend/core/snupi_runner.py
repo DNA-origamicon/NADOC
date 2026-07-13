@@ -97,6 +97,11 @@ def load_rmsf(job_dir: Path) -> Optional[dict]:
     return load_cached(job_dir, "rmsf.json")
 
 
+def load_trajectory(job_dir: Path) -> Optional[dict]:
+    """The cached dynamics trajectory ({keys, frames, n_frames}) for the animation toggle, or None."""
+    return load_cached(job_dir, "trajectory.json")
+
+
 # ── Progress (time-based estimate; the true completion signal is the thread) ──
 
 def _estimate_seconds(job: SnupiJob) -> float:
@@ -155,6 +160,10 @@ def _cache_fem_analysis(job: SnupiJob, jd: Path, result: dict) -> None:
         "positions": positions,
         "axis":      result.get("axis", []),   # per-bp helix-centre nodes (cylinder rep)
     }))
+    traj = result.get("trajectory")
+    if traj and traj.get("n_frames"):
+        # The thermal/reconfiguration trajectory for the animation toggle (dynamics jobs only).
+        (jd / "trajectory.json").write_text(json.dumps(traj))
     rmsf = result.get("rmsf")
     rmsf_min = rmsf_max = None
     if rmsf:
@@ -207,6 +216,10 @@ def _run_job(job: SnupiJob, workspace_dir: Path) -> None:
             # G12: MgCl₂ molarity → Debye length of the SNUPI inter-helix electrostatics
             # (snupi-only; ignored by cando). Default 0.02 = SNUPI's 20 mM buffer.
             mgcl2_M   = getattr(job, "mgcl2_M", 0.02),
+            # Langevin structural dynamics: run a thermal trajectory and report its time-mean shape +
+            # trajectory RMSF (same display payload). hydrodynamics=True → full RPY coupled friction.
+            dynamics      = getattr(job, "dynamics", False),
+            hydrodynamics = getattr(job, "hydrodynamics", False),
             # Anchors (Dirichlet BC) + uniform E-field body load — job-request annotations, never a
             # topology edit (C1/C2).  A field needs ≥1 anchor to hold against (COM drift);
             # predict_shape falls back to the free centroid-pinned solve if a selection resolves

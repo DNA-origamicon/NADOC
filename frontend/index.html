@@ -4489,6 +4489,14 @@
                   <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px">
                     <input id="snupi-jobs-with-rmsf" type="checkbox" checked> Compute RMSF (flexibility, NMA)
                   </label>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px"
+                         title="Run Langevin structural dynamics (thermal trajectory → time-mean shape + trajectory RMSF) instead of the static equilibrium solve">
+                    <input id="snupi-jobs-dynamics" type="checkbox"> Langevin dynamics (thermal trajectory)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px;margin-left:16px"
+                         title="Dynamics only: use the full Rotne–Prager–Yamakawa coupled hydrodynamic friction matrix instead of diagonal Stokes drag">
+                    <input id="snupi-jobs-hydrodynamics" type="checkbox"> ↳ Hydrodynamics (RPY coupled friction)
+                  </label>
                 </div>
               </div>
 
@@ -4580,6 +4588,16 @@
                     <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9" title="Draw the predicted shape as CanDo's familiar jointed-cylinder tubes (native model hidden)">
                       <input class="snupi-display-mode" name="snupi-display-mode" value="cando" type="radio" disabled> CanDo style output (cylinders)
                     </label>
+                    <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9" title="Animate the Langevin thermal trajectory (dynamics jobs only) — play back the actual motion, not just its time-mean shape">
+                      <input class="snupi-display-mode" name="snupi-display-mode" value="trajectory" type="radio" disabled> Trajectory (animate dynamics)
+                    </label>
+                  </div>
+                  <!-- Trajectory player — shown only in the 'trajectory' display mode (dynamics jobs). -->
+                  <div id="snupi-traj-controls" style="display:none;align-items:center;gap:6px;margin:3px 0 5px">
+                    <button id="snupi-traj-play" type="button" title="Play / pause"
+                            style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:1px 7px;font-size:var(--text-xs);cursor:pointer">⏸</button>
+                    <input id="snupi-traj-scrubber" type="range" min="0" max="0" value="0" step="1" style="flex:1;min-width:0">
+                    <span id="snupi-traj-frame" style="font-size:var(--text-xs);color:#8b949e;min-width:48px;text-align:right">0/0</span>
                   </div>
                   <div id="snupi-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px"></div>
                 </div>

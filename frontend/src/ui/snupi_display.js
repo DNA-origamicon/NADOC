@@ -18,6 +18,7 @@
  */
 
 import { toFemUpdates, flexColorMap, deviationColorMap } from './cando_display.js'
+import { framesToUpdates } from './oxdna_display.js'
 
 export function initSnupiDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
@@ -165,17 +166,86 @@ export function initSnupiDisplay({
     return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
   }
 
+  // ── Trajectory player (dynamics jobs) — animate the actual thermal motion ───────
+  let _traj = null           // { keys, frames } payload
+  let _trajIdx = 0
+  let _trajRaf = null
+  let _trajPlaying = false
+  let _trajLast = 0
+  const _TRAJ_FPS = 12       // playback rate (frames are downsampled snapshots, not real-time)
+  const _tel = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null)
+
+  function _trajApplyFrame(idx) {
+    if (!_traj || !_traj.frames?.length) return
+    _trajIdx = ((idx % _traj.frames.length) + _traj.frames.length) % _traj.frames.length
+    designRenderer.applyFemPositions(framesToUpdates(_traj.keys, _traj.frames[_trajIdx]))
+    const sc = _tel('snupi-traj-scrubber'); if (sc) sc.value = String(_trajIdx)
+    const lbl = _tel('snupi-traj-frame'); if (lbl) lbl.textContent = `${_trajIdx + 1}/${_traj.frames.length}`
+  }
+
+  function _trajTick(now) {
+    if (!_trajPlaying) return
+    if (now - _trajLast >= 1000 / _TRAJ_FPS) { _trajLast = now; _trajApplyFrame(_trajIdx + 1) }
+    _trajRaf = requestAnimationFrame(_trajTick)
+  }
+
+  function _trajSetPlaying(on) {
+    _trajPlaying = on
+    const btn = _tel('snupi-traj-play'); if (btn) btn.textContent = on ? '⏸' : '▶'
+    if (on) { _trajLast = 0; _trajRaf = requestAnimationFrame(_trajTick) }
+    else if (_trajRaf) { cancelAnimationFrame(_trajRaf); _trajRaf = null }
+  }
+
+  let _trajWired = false
+  function _wireTrajControls() {
+    if (_trajWired) return
+    _trajWired = true
+    _tel('snupi-traj-play')?.addEventListener('click', () => _trajSetPlaying(!_trajPlaying))
+    _tel('snupi-traj-scrubber')?.addEventListener('input', (e) => {
+      _trajSetPlaying(false); _trajApplyFrame(parseInt(e.target.value, 10) || 0)
+    })
+  }
+
+  /** Animate a dynamics job's thermal trajectory (the actual motion, not just its mean shape). */
+  async function showTrajectory(jobId) {
+    const epoch = ++_epoch
+    const [resp, snap] = await Promise.all([
+      api.getSnupiTrajectory(jobId), api.getSnupiSnapshotGeometry(jobId)])
+    if (epoch !== _epoch) return { ok: false }
+    if (!resp?.ready || !resp.n_frames || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
+    _prepareForExternal()
+    _renderExternal(snap)
+    _traj = { keys: resp.keys, frames: resp.frames }
+    _trajIdx = 0
+    _wireTrajControls()
+    const ctl = _tel('snupi-traj-controls'); if (ctl) ctl.style.display = 'flex'
+    const sc = _tel('snupi-traj-scrubber'); if (sc) { sc.max = String(resp.n_frames - 1); sc.value = '0' }
+    _trajApplyFrame(0)
+    _trajSetPlaying(true)
+    _jobId = jobId; _mode = 'trajectory'
+    _stats = { kind: 'trajectory', frames: resp.n_frames }
+    return { ok: true, frames: resp.n_frames }
+  }
+
+  function stopTrajectory() {
+    _trajSetPlaying(false)
+    _traj = null
+    const ctl = _tel('snupi-traj-controls'); if (ctl) ctl.style.display = 'none'
+  }
+
   /** Re-apply the active mode for the current job (e.g. after a running job completes). */
   async function refresh() {
     if (_mode === null || _jobId === null) return { ok: false, reason: 'inactive' }
     if (_mode === 'flex') return showFlex(_jobId)
     if (_mode === 'deviation') return showDeviation(_jobId)
     if (_mode === 'cando') return showCandoStyle(_jobId)
+    if (_mode === 'trajectory') return showTrajectory(_jobId)
     return showDeform(_jobId)
   }
 
   function stopDeform() {
     if (_mode === null) return
+    stopTrajectory()
     _clearAll()
     _jobId = null; _mode = null; _stats = null
   }
@@ -191,6 +261,8 @@ export function initSnupiDisplay({
     showFlex,
     showDeviation,
     showCandoStyle,
+    showTrajectory,
+    stopTrajectory,
     refresh,
     stopDeform,
     stopAndRestore,
