@@ -1475,12 +1475,24 @@ def _find_strand_at(
     helix_id: str,
     bp: int,
     direction: Direction,
+    *,
+    predicate=None,
 ) -> tuple[Strand, int]:
     """Return (strand, domain_index) for the strand whose domain covers (helix_id, bp, direction).
 
-    Raises ValueError if no strand covers that position.
+    ``predicate`` restricts WHICH strands may be matched — a positive allowlist.  A
+    *scaffold* router must pass one (``strand_type is SCAFFOLD and not is_reference``):
+    without it this scans every strand, so a LINKER / OH_BINDER / hand-drawn staple
+    sitting in the scaffold-direction slot gets picked up and then nicked BY THE
+    SCAFFOLD ROUTER (ISSUE-18 — reproduced: a linker was split in two).  Callers that
+    legitimately edit any strand (the staple-crossover path in ``crud``) pass nothing
+    and keep the old behaviour.
+
+    Raises ValueError if no strand (passing *predicate*) covers that position.
     """
     for strand in design.strands:
+        if predicate is not None and not predicate(strand):
+            continue
         for di, domain in enumerate(strand.domains):
             if domain.helix_id != helix_id or domain.direction != direction:
                 continue
@@ -1498,8 +1510,14 @@ def make_nick(
     helix_id: str,
     bp_index: int,
     direction: Direction,
+    *,
+    predicate=None,
 ) -> Design:
     """Create a nick (strand break) at the 3′ side of the specified nucleotide.
+
+    ``predicate`` is forwarded to :func:`_find_strand_at` — a positive allowlist of
+    the strands this nick is allowed to touch.  A scaffold router MUST pass one (see
+    ISSUE-18); the staple paths pass nothing and are unchanged.
 
     The nucleotide at (helix_id, bp_index, direction) becomes the 3′ terminal of
     the left fragment; the next nucleotide in 5′→3′ order becomes the 5′ terminal
@@ -1514,7 +1532,9 @@ def make_nick(
     • No strand covers (helix_id, bp_index, direction).
     • bp_index is already the 3′ terminus of the strand (no next nucleotide).
     """
-    strand, domain_idx = _find_strand_at(existing_design, helix_id, bp_index, direction)
+    strand, domain_idx = _find_strand_at(
+        existing_design, helix_id, bp_index, direction, predicate=predicate
+    )
     domain = strand.domains[domain_idx]
 
     is_last_domain     = (domain_idx == len(strand.domains) - 1)

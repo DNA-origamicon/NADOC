@@ -300,13 +300,38 @@ def _hamiltonian_path(
     return _ham_path_search(ids, adj, key, starters)
 
 
+def is_routable_scaffold(strand) -> bool:
+    """The scaffold router's positive ALLOWLIST of strands it may edit (ISSUE-18).
+
+    A scaffold router may extend helices and scaffold domains.  It must NEVER create,
+    extend, trim, split or delete a staple/linker/binder.  Both helpers below used to
+    scan every strand, so on any bp where the scaffold does not reach but a LINKER (its
+    docstring literally says it is *"skipped by auto-routing tools"*), an OH_BINDER or a
+    hand-drawn staple occupies the scaffold-DIRECTION slot, the scaffold router would
+    nick or ligate it.  Reproduced: a linker at [86→81] came out of ``auto_scaffold_seamed``
+    split into [86→85] + [84→81], and the scaffold itself degraded from 1 strand to 2.
+
+    An ALLOWLIST, not a linker blocklist: a blocklist would still let the scaffold router
+    chew on OH_BINDERs and plain hand-drawn staples, and would silently miss any strand
+    type added later.  Mechanically the same guard ``nick_all_major_ticks`` and
+    ``ligate_crossover_chains`` already carry at the lattice level.
+    """
+    return strand.strand_type == StrandType.SCAFFOLD and not strand.is_reference
+
+
 def _nick_if_needed(
     design: Design, helix_id: str, bp_index: int, direction: Direction
 ) -> Design:
-    """Nick guard — mirrors crud._nick_if_needed including terminal-stub guards."""
+    """Nick guard — mirrors crud._nick_if_needed including terminal-stub guards.
+
+    SCAFFOLD-ONLY (ISSUE-18): a non-scaffold strand in this slot yields ValueError from
+    the filtered lookup → no nick, which is exactly right (the scaffold isn't there, so
+    there is nothing for the scaffold router to break).
+    """
     from backend.core.lattice import _find_strand_at, make_nick
     try:
-        strand, di = _find_strand_at(design, helix_id, bp_index, direction)
+        strand, di = _find_strand_at(design, helix_id, bp_index, direction,
+                                     predicate=is_routable_scaffold)
     except ValueError:
         return design
     dom = strand.domains[di]
@@ -323,7 +348,8 @@ def _nick_if_needed(
         if stub:
             return design  # 1-nt right stub guard
     try:
-        return make_nick(design, helix_id, bp_index, direction)
+        return make_nick(design, helix_id, bp_index, direction,
+                         predicate=is_routable_scaffold)
     except ValueError as exc:
         if "terminus" in str(exc):
             return design
@@ -331,13 +357,18 @@ def _nick_if_needed(
 
 
 def _ligate_xover(design: Design, xover: Crossover) -> Design:
-    """Find the two strand fragments at the crossover and join them."""
+    """Find the two scaffold fragments at the crossover and join them.
+
+    SCAFFOLD-ONLY (ISSUE-18): the terminal maps used to be built over EVERY strand, so
+    any staple/linker/binder whose 5'/3' terminus happened to land on a scaffold-crossover
+    half got fused into the scaffold.
+    """
     from backend.core.lattice import _ligate
     ha, hb = xover.half_a, xover.half_b
     three_p: dict = {}
     five_p: dict = {}
     for s in design.strands:
-        if not s.domains:
+        if not s.domains or not is_routable_scaffold(s):
             continue
         ld = s.domains[-1]
         three_p[(ld.helix_id, ld.end_bp, ld.direction)] = s
@@ -1085,7 +1116,11 @@ def _linearize_circular_scaffolds(design: Design, result: SeamedResult) -> Desig
             continue
         helix_id, bp_index, direction = pick
         try:
-            design = make_nick(design, helix_id, bp_index, direction)
+            # SCAFFOLD-ONLY (ISSUE-18): the buried nick site is chosen FROM the scaffold
+            # strand, but make_nick re-resolves the target itself — unfiltered it could
+            # land on a linker/binder overlapping that slot.
+            design = make_nick(design, helix_id, bp_index, direction,
+                               predicate=is_routable_scaffold)
         except ValueError:
             result.warnings.append(
                 "Scaffold is circular; automatic mid-structure nick hit a terminus guard "

@@ -265,6 +265,41 @@ All four are the single-strand TARGET (`scaffold_strands == 1`). The "yields 5/1
 on a CORRUPT fixture (see below); on the clean fixture the standard routers route teeth to 1 strand. Clean
 pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 with `workspace/preroute_teeth.nadoc`).
 
+## ISSUE-19 — The scaffold router EXTENDS ITS DOMAIN THROUGH a linker/staple (double occupancy), and the validator doesn't notice
+
+- **Status:** `[ ]` OPEN — found 2026-07-13 while fixing ISSUE-18 (its sibling: same rule, different verb).
+  Repro'd, not fixed — the fix changes *where the scaffold is allowed to extend*, i.e. real routing behaviour
+  on every overhang/linker design, so it wants a decision first (see below).
+- **Symptom.** Plant a LINKER at bp `-9..-4` REVERSE on a helix — i.e. in the region the near-end turn extends
+  INTO, not overlapping the scaffold's original footprint. Route with `auto_scaffold_seamed`. Result:
+
+  ```
+  scaffold dom  81 -> -9  REVERSE      # extended straight through the linker
+  LINKER        -4 .. -9  REVERSE      # still there
+  ```
+
+  Two strands now occupy **the same nucleotides on the same helix in the same direction** — physically
+  impossible. ISSUE-18's allowlist correctly stops the router *nicking/ligating* the linker, and a pre-existing
+  guard correctly refuses the scaffold↔linker crossover with a clear warning ("both halves must be the same
+  strand type") — but nothing stops `_extend_scaf_domain_lo` / `_extend_helix_lo` from **extending over** it.
+- **`validate_design()` returns `passed=True` on that design.** There is **no double-occupancy check at all** —
+  nothing anywhere asserts that a given `(helix, bp, direction)` nucleotide is claimed by at most one strand.
+  That is the more alarming half of this: the invariant isn't merely violated by the router, it is *unowned*.
+- **Where:** `seamed_router._extend_scaf_domain_lo/_hi` (~:421-470) and `_extend_helix_lo/_hi` (~:376-420) —
+  they extend to the turn bp with no occupancy test. The `bounded_ends`/section-router path is likely exposed
+  the same way.
+- **Two things to decide (why this is filed, not fixed):**
+  1. **What should the router DO when the end-turn zone is occupied?** Refuse the turn for that pair and warn
+     (route degrades to >1 scaffold strand — it already warns about that today)? Or search *inward* for the
+     next legal crossover site that clears the obstruction? The second keeps the single-strand route but moves
+     the turn, which changes routing output on existing designs.
+  2. **Should double occupancy become a hard validator error?** It looks like a genuine missing invariant, but
+     turning it on may light up existing saved `.nadoc` files (unknown blast radius until measured).
+- **Test seam already exists:** `tests/test_scaffold_router_strand_isolation.py` has the fixture helper
+  (`_with_strand_at`) and the exact end-turn-zone case
+  (`test_scaffold_router_leaves_a_linker_in_the_end_turn_zone_alone`, which today asserts only that the linker
+  is not *edited* — it deliberately does NOT yet assert non-overlap).
+
 ## ISSUE-16 — `predict_shape(with_rmsf=True)` is NONDETERMINISTIC (unseeded ARPACK start vector)
 
 - **Status:** `[ ]` OPEN — found 2026-07-13 while chasing a "flaky" test in the full suite. Repro'd, not fixed
