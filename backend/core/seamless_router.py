@@ -109,7 +109,7 @@ class SeamlessResult:
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def auto_scaffold_seamless(
-    design: Design, *, close_cycle: bool = False
+    design: Design, *, close_cycle: bool = False, reset: bool = True
 ) -> tuple[Design, SeamlessResult]:
     """Run the seamless scaffold pipeline.
 
@@ -124,9 +124,19 @@ def auto_scaffold_seamless(
     reopened with one buried mid-bundle nick.  This gives a FULLY SEAMLESS backbone with
     a proper nick (no seamed raster needed).
 
+    ``reset`` (ISSUE-9) retracts any prior auto-route back to the staple-defined
+    structural seed first, so re-routing an already-routed design is idempotent.
+    The SECTION ROUTER passes ``reset=False``: it calls this on a seed it has just
+    constructed itself, mid-pipeline, and is itself reached only AFTER the top-level
+    entry point has already reset — a second reset there would retract its work.
+
     Returns (updated_design, result).
     """
     result = SeamlessResult()
+    if reset:
+        from backend.core.scaffold_reset import reset_scaffold_to_structure
+        design, reset_warnings = reset_scaffold_to_structure(design)
+        result.warnings.extend(reset_warnings)
     is_hc = design.lattice_type == LatticeType.HONEYCOMB
     period = HC_CROSSOVER_PERIOD if is_hc else SQ_CROSSOVER_PERIOD
     bow_right = _HC_SCAF_BOW_RIGHT if is_hc else _SQ_SCAF_BOW_RIGHT

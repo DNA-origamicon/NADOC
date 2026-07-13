@@ -160,7 +160,10 @@ def _route_subbundle(
     seed = _sub_seed(design, sections)
     if seamless:
         from backend.core.seamless_router import auto_scaffold_seamless
-        routed, _res = auto_scaffold_seamless(seed, close_cycle=close_cycle)
+        # reset=False: `seed` is a sub-design this router just built, and the
+        # top-level entry point already reset the design (ISSUE-9).  Resetting here
+        # would retract the seed we are mid-way through constructing.
+        routed, _res = auto_scaffold_seamless(seed, close_cycle=close_cycle, reset=False)
     elif matched:
         routed, _res = auto_scaffold_seamed(seed)
     else:

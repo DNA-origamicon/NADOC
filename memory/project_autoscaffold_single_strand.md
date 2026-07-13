@@ -7,6 +7,36 @@ metadata:
   originSessionId: e8eafa48-297e-4c65-8397-7de37a254477
 ---
 
+## ✅ ISSUE-9 FIXED 2026-07-13 — autoscaffold is now idempotent (`backend/core/scaffold_reset.py`)
+
+**Re-routing an already-routed design no longer re-extends anything.** `reset_scaffold_to_structure()` runs at the
+top of `auto_scaffold_seamed` / `auto_scaffold_matched` / `auto_scaffold_seamless` and retracts the design to its
+structural seed first, so N routes ≡ 1 route. The routing algorithm itself is UNCHANGED — only its input is
+normalised. Pinned by `tests/test_scaffold_idempotence.py` (12 tests).
+
+**It was never teeth-specific.** A plain 4HB bundle (no teeth, no sections) ratcheted `168 → 189 → 199 → 210` bp
+and `6 → 9 → 12` crossovers over three routes, on BOTH routers. Teeth is just where it was *visible*.
+
+**The oracle: STAPLES ARE THE STRUCTURE.** Autoscaffold never touches staple strands, so a helix's true extent is
+the bp span of its staple domains (including staple overhangs running past the scaffold). Verified: staple spans
+held at `[0,167]` across three re-routes while the helices ratcheted to `[-30,179]`. And in the real multi-section
+fixtures the staple intervals ARE the scaffold sections, gaps and all — teeth `[(0,41),(84,125),(168,209)]`,
+dumbbell `[(0,41),(126,167)]` — i.e. exactly the "clean per-domain seed" that was wanted. **The scaffold is route
+output; the staples are the design.** Reset clamps INTO the staple intervals and never grows the scaffold to fill
+them; forced ligations bail out (their fixed-edge topology isn't derivable from the staples).
+
+Second bug fixed alongside: the seamed router stamps three `process_id`s on its crossovers
+(`auto_scaffold_seamed:seam`, bare `create_near_ends`, `create_far_ends`) but the old clear matched only the
+`auto_scaffold_` prefix — so the end-turn crossovers survived every "clear" (hence the accumulation), and
+`_clear_auto_scaffold_route_for_seamed` (used by `auto_scaffold_matched`) had never actually worked.
+
+**Retired concern:** `10-6-10hb_seamed.nadoc` being pre-routed is no longer "latent corruption" — a re-route now
+resets to the structural seed first, so a pre-routed fixture can't poison a measurement any more.
+
+**Owed:** user eyeball — run Auto-scaffold twice on a teeth design and confirm the faces don't move.
+
+---
+
 **⚠ CRITICAL CORRECTION (2026-06-08, build session 5) — THE FIXTURE WAS CORRUPT. Read this before anything below.**
 The whole ISSUE-8 saga (fragmentation, ragged faces, "gap stagger", continuous-routing redesign, the 172-bp
 gap-fill) was an artifact of a BAD TEST FIXTURE. The old `tests/fixtures/teeth.nadoc` was ALREADY seamless-
@@ -18,8 +48,9 @@ AND `auto_scaffold_seamless` both route teeth to 1 strand, 0 fragmentation warni
 mostly the fixture too). The **section router** routes clean teeth to 1 strand, full coverage, worst gap dip 9 bp,
 gap clearance 32 bp, 0 violations — it BEATS the hand reference (13 bp). Plain seamed bridges a gap (clearance 0),
 so the section router still adds value. Everything below this line was reasoning against the corrupt baseline —
-treat as historical. The real follow-up is **ISSUE-9: autoscaffold is not idempotent** (re-running on a routed
-design re-extends faces → that's how the fixture got corrupted). `tests/test_section_router.py` now green (8 tests,
+treat as historical. The real follow-up was **ISSUE-9: autoscaffold is not idempotent** (re-running on a routed
+design re-extends faces → that's how the fixture got corrupted) — ✅ **FIXED 2026-07-13**, see below.
+`tests/test_section_router.py` now green (8 tests,
 gap invariants); `test_seamless_router.py::test_teeth_closing_zig` re-pinned to 1 strand. Full suite 1845 pass.
 Dumbbell fixture `10-6-10hb_seamed.nadoc` is ALSO pre-routed (latent same corruption). **GATE FLIPPED DEFAULT-ON
 (2026-06-08):** `auto_scaffold_seamed` now routes any multi-section design through the section router by default

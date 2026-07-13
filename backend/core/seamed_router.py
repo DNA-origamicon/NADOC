@@ -1208,7 +1208,15 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     ``None`` for anything it cannot cleanly route, so this drops through to the
     classic seamed pipeline below; designs with manual forced ligations are never
     overridden.  See backend/core/section_router.py.
+    ISSUE-9: a prior auto-route is RESET to the staple-defined structural seed first,
+    so routing an already-routed design is idempotent (N calls == 1 call).  Without
+    this the router reads its own previous output as the face to extend from and
+    ratchets the helices outward on every call.  See ``scaffold_reset``.  The reset
+    must run BEFORE the multi-section probe below, which reads scaffold coverage.
     """
+    from backend.core.scaffold_reset import reset_scaffold_to_structure
+    design, reset_warnings = reset_scaffold_to_structure(design)
+
     if design.forced_ligations:
         # Forced-ligation hinge designs (cross-gap scaffold bridges): route one
         # SEAMED, compliant strand through the bridges.  route_hinge is self-gated
@@ -1218,6 +1226,7 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
         from backend.core.hinge_router import route_hinge
         hinged = route_hinge(design.model_copy(deep=True))
         if hinged is not None:
+            hinged[1].warnings.extend(reset_warnings)
             return hinged
     else:
         coverage = _scaffold_coverage(design)
@@ -1225,12 +1234,14 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
         if has_multisection_helix(coverage):
             sectioned = route_sections(design.model_copy(deep=True))
             if sectioned is not None:
+                sectioned[1].warnings.extend(reset_warnings)
                 return sectioned
 
     matched_design, matched_result = _auto_scaffold_seamed_impl(
         design.model_copy(deep=True), matched_ends=True
     )
     if _matched_ends_feasible(matched_result):
+        matched_result.warnings.extend(reset_warnings)
         return matched_design, matched_result
 
     classic_design, classic_result = _auto_scaffold_seamed_impl(
@@ -1239,6 +1250,7 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
     classic_result.warnings.insert(
         0, "Matched ends not feasible for this geometry; used classic seamed routing."
     )
+    classic_result.warnings.extend(reset_warnings)
     return classic_design, classic_result
 
 
@@ -1268,7 +1280,14 @@ def auto_scaffold_matched(design: Design) -> tuple[Design, SeamedResult]:
     re-seeded first (so this can be applied to an already-routed design); manual
     forced-ligation routes are preserved (with a warning).
     """
+    from backend.core.scaffold_reset import reset_scaffold_to_structure
+
     result = SeamedResult()
+    # ISSUE-9: retract to the staple-defined seed first.  _clear_auto_scaffold_route_
+    # for_seamed only re-seeds STRANDS and drops crossovers — it never retracts the
+    # helices the previous route extended, so on its own it does not stop the ratchet.
+    design, reset_warnings = reset_scaffold_to_structure(design)
+    result.warnings.extend(reset_warnings)
     seed = _clear_auto_scaffold_route_for_seamed(design, result)
     current, matched = _auto_scaffold_seamed_impl(seed, matched_ends=True)
     result.warnings.extend(matched.warnings)

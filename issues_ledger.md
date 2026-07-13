@@ -111,7 +111,7 @@ also still said "→ NEXT: ISSUE-1", written before those issues existed. Ranked
 
 | Order | Issue | Type | Size | Needs UX research? |
 |-------|-------|------|------|--------------------|
-| **→ 1** | **ISSUE-9** Autoscaffold is not idempotent — re-running on an already-routed design re-routes the *extended* geometry, pushing domain ends into inter-tooth gaps. N calls ≠ 1 call, corruption compounds, and it is **persisted to `.nadoc`**. Already produced the corrupt `tests/fixtures/teeth.nadoc` baseline that burned a full session chasing a phantom "gap-stagger" bug. `tests/fixtures/10-6-10hb_seamed.nadoc` is flagged as carrying the same latent corruption (its tests pass by accident). Fix: clear any prior auto-route to a clean per-domain seed before routing. | routing correctness / **data loss** | medium | no (algorithmic) |
+| done | ~~**ISSUE-9**~~ ✅ FIXED 2026-07-13. **Not teeth-specific** — a plain 4HB bundle ratcheted `168→189→199→210` bp and `6→9→12` crossovers over three routes, on both routers. Cause: the router derived the face it extends from its OWN previous output (`_scaffold_coverage`), and the extenders are monotone. Fixed by normalising the INPUT, not the algorithm: `scaffold_reset.py` retracts each helix + re-seeds the scaffold to the **staple**-defined extent (staples are the structure; autoscaffold never touches them) so `reset(route(fresh)) == fresh`. Also fixed a second bug: `create_near_ends`/`create_far_ends` crossovers survived every "clear" (only the `auto_scaffold_` prefix was matched). | routing correctness / **data loss** | medium | no (algorithmic) |
 | done | ~~**ISSUE-14**~~ ✅ FIXED 2026-07-13. NOT a console error and NOT an app bug — the spec died in the **test harness** during setup (a `waitForTimeout(500)` racing File→New's backend POST → 404 "No active design", plus a dead `/design/auto-scaffold` route 405-ing since `e9d6750`). Both fixed in `e2e/helpers/scene_harness.js` (shared by 9 specs). `just smoke` also now refuses to run under a live production sim, which was separately starving the heavy specs into timeouts. | test harness | — | — |
 | 3 | **ISSUE-11** Deformed-continuation helices carry `grid_pos=None` (`make_bundle_deformed_continuation` is the only builder not setting it). Any design with a deformed continuation **crashes** `canonical_topology`/`assert_roundtrip_stable`. Blast radius: `grid_pos` also drives cluster reconciliation, overhang-neighbor lookup and `loop_skip_calculator`. **ASK-FIRST** — the obvious one-line fix is suspected of being a Three-Layer trap (a non-None `grid_pos` may make `_helix_lattice_params` recompute lattice x/y and clobber the baked deformed world coords). | data model / three-layer | small IF approved | no (topology decision) |
 | 4 | **ISSUE-8** Autoscaffold multi-section single-strand routing. Section router codified in `backend/core/section_router.py` behind default-OFF `NADOC_SECTION_ROUTER`. **BLOCKED on a user decision**, not on code: window end-turn lands *just-inside* (≤6 bp tooth-tip coverage gap) or *just-outside* (few-bp extension into the physical gap, full coverage). Not silently wrong today (default-off + warn-only). Parent of ISSUE-9; can't close without it. | routing correctness | medium | **needs user call** |
@@ -264,7 +264,45 @@ All four are the single-strand TARGET (`scaffold_strands == 1`). The "yields 5/1
 on a CORRUPT fixture (see below); on the clean fixture the standard routers route teeth to 1 strand. Clean
 pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 with `workspace/preroute_teeth.nadoc`).
 
-## ISSUE-9 — Autoscaffold is not idempotent (re-routing an already-routed design corrupts geometry)
+## ISSUE-9 — Autoscaffold is not idempotent — ✅ FIXED 2026-07-13
+
+- **Status:** `[x]` FIXED 2026-07-13. `backend/core/scaffold_reset.py` + wiring in
+  `seamed_router` / `seamless_router` / `section_router`; pinned by `tests/test_scaffold_idempotence.py`
+  (12 tests, 8 verified can-go-red against the pre-fix source).
+- **It was NOT teeth-specific** — the dossier below implies it was, and that framing is wrong. Measured on a
+  plain 4HB honeycomb bundle with no teeth, no sections and no section-router: helices ratcheted
+  `168 → 189 → 199 → 210` bp and crossovers `6 → 9 → 12` over three routes, unbounded, on **both** the seamed
+  and the seamless router. Teeth is only where it was *visible* (the extension intrudes into the inter-tooth
+  gaps); on a plain bundle it silently lengthens your helices with no visual tell, which is worse.
+- **Verified root cause.** The near/far end-turn legitimately extends a helix a few bp past the scaffold's
+  terminal face so the scaffold has ssDNA to turn around in (`MIN_SSDNA_MARGIN`, see `scaffold_invariants`).
+  But the router derives the face it extends FROM `_scaffold_coverage(...)` — i.e. from its own previous
+  output. On a second call `face` is the already-extended terminus, `near_floor = face - 3` searches strictly
+  further out, and it extends again. The extenders are monotone (`if new_lo >= helix.bp_start: return`), so it
+  is a ratchet, not an oscillation. It rewrites `bp_start`/`length_bp`/`axis_start`/`phase_offset` in place —
+  destroying the very information needed to undo it — and persists to the `.nadoc`.
+- **Second, independent bug found in the same code:** the seamed router stamps THREE `process_id`s on the
+  crossovers it creates (`auto_scaffold_seamed:seam`, and the bare `create_near_ends` / `create_far_ends`), but
+  `_clear_auto_scaffold_route_for_seamed` only matched the `auto_scaffold_` prefix. The end-turn crossovers
+  therefore survived every "clear" — which is why crossovers accumulated, and means that clear helper (used by
+  `auto_scaffold_matched`) had never actually worked. `scaffold_reset.is_route_crossover` now owns the full set.
+- **The fix — staples are the structure** (user's rule, then verified against real designs). Autoscaffold never
+  touches staple strands, so a helix's true extent is the bp span of its STAPLE domains. Confirmed: across three
+  re-routes the staple spans stayed at `[0,167]` while the helices ratcheted to `[-30,179]`. And in the real
+  multi-section fixtures the staple intervals are *identical* to the scaffold sections, gaps and all —
+  `teeth`: `[(0,41),(84,125),(168,209)]`; `dumbbell`: `[(0,41),(126,167)]` — i.e. exactly the "clean per-domain
+  seed" this dossier asked for. So the routing algorithm was left untouched; only its INPUT is normalised:
+  retract each helix + re-seed the scaffold to the staple-defined extent, then route. `reset(route(fresh))` now
+  reproduces `fresh` field-for-field, so N calls ≡ 1 call.
+- **Deliberately conservative:** the reset only ever CLAMPS INTO the staple intervals, never grows the scaffold
+  to fill them (a scaffold left short of its staples was never routed there — growing it would silently edit an
+  unrouted design). Forced ligations bail out with a warning: a manual fixed-edge topology is not derivable from
+  the staples.
+- **Consequence — the "latently corrupt" fixture concern is retired.** `10-6-10hb_seamed.nadoc` being pre-routed
+  no longer poisons anything, because a re-route now resets to the structural seed first.
+
+<details><summary>Original dossier (2026-06-08) — kept for the history; its "teeth" framing and its
+"root cause (to verify)" were both only half right</summary>
 
 - **Status:** `[ ]` OPEN — discovered 2026-06-08 while fixing the teeth fixture (ISSUE-8).
 - **Symptom:** running an autoscaffold mode on a design that was ALREADY autoscaffold-routed does NOT reset to
@@ -289,6 +327,8 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
 - **Caution:** `tests/fixtures/10-6-10hb_seamed.nadoc` (the dumbbell) is ALSO a pre-routed file (14 scaffold
   strands, 12 crossovers, `_seamed` in the name) — same latent corruption; its tests happen to pass but it
   should likely be replaced with a clean pre-routing dumbbell when this is fixed.
+
+</details>
 
 ## ISSUE-11 — Deformed-continuation helices carry `grid_pos=None` (data-model inconsistency; ask-first)
 
@@ -442,12 +482,17 @@ Everything filed since is drive-by intake from sibling loops (`/automate-feature
 one opportunistic fix (ISSUE-15). Net flow over the last month: **+4 open, −0 worked.** The intake channel is
 alive; the fix channel is not.
 
-**NEXT PICK: ISSUE-9 — autoscaffold is not idempotent.** It is the only open issue that silently corrupts
-data *and persists the corruption to `.nadoc`*; it has already cost one full session via a poisoned test
-fixture, and a second fixture (`10-6-10hb_seamed.nadoc`) is flagged as latently corrupt with tests passing by
-accident. Fix shape: clear any prior auto-route to a clean per-domain seed before routing, so N calls == 1
-call. **Second pick: ISSUE-14** — it red-gates `just smoke` for every frontend change, so it is actively
-taxing all other work.
+**2026-07-13: ISSUE-14 ✅ and ISSUE-9 ✅ both shipped this session** (the loop is no longer dormant).
+
+**NEXT PICK: ISSUE-13 or ISSUE-12** — both small and unblocked. ISSUE-13 (`resize_strand_ends` axis re-trim
+uses a different endpoint convention than `create_bundle`) is the more valuable: it is the same three-layer
+family as ISSUE-11 and it silently breaks `canonical_topology` identity for a `+δ/−δ` inverse pair, which is a
+correctness hazard for any oracle that fingerprints axis floats. ISSUE-12 (feature-log catch-all `else`
+mislabels `cluster_create`) is smaller and purely cosmetic today, but the catch-all will swallow any future
+`feature_type` — a latent class bug.
+
+**Owed from ISSUE-9:** a user eyeball — run Auto-scaffold **twice** on a teeth design and confirm the tooth
+faces do not move. Backend-only and fully unit-pinned, but it rewrites helix geometry, so it wants one look.
 
 **Two issues are blocked on YOU, not on code** — don't let a session try to infer either:
 - **ISSUE-8** — window end-turns just-inside (≤6 bp tooth-tip coverage gap) vs just-outside (few-bp extension
