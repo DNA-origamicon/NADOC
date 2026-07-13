@@ -106,6 +106,32 @@ strand end (from `workspace/crossover_edge_cases.nadoc`):
    "terminus" branch. (The old stub guards encoded flawed 1-bp-off reasoning and
    were removed — see `feedback_crossover_no_reasoning`.)
 
+## Staple coverage is the user's intent (auto-placement gate)
+
+Scaffold with no staple opposite it is a **deliberate ssDNA loop** (blunt-end-stacking
+suppression), not a hole — at helix ends *and* in the interior (comb/"teeth" designs).
+So `_place_auto_crossovers` must never ask "is this unstapled bp an accident?". It asks the
+same bow-side question as manual placement (rule 3 above): the bp the bow points toward
+(`index+1` if bow-right, `index-1` if bow-left) must carry staple on **both** helices. Every
+staple-interval boundary is a legitimate 5'/3' terminus, wherever it sits in the helix; a
+nick that lands inside a loop is a no-op. The old global-`[min,max]`-span "coverage hole"
+test silently starved every interior-loop crossover — see LESSONS J6 and
+`feedback_staples_are_user_intent`.
+
+## What "locked" means in full-autostaple
+
+`_locked_and_overhang_staple_ids` (routes_assign_sequences.py) locks a staple only when it
+touches a **forced ligation** — a join autostaple cannot re-derive. A **manual crossover does
+NOT lock its staple**: it changes only how staples are *connected*, never where they sit, so
+its body is linearized, nicked and woven like any other. The manual crossover itself is safe by
+three independent mechanisms — `nick_all_major_ticks` skips every recorded crossover bp, the
+placer seeds `occupied` from every existing crossover half (no duplicates), and the closing
+`ligate_crossover_chains` rebuilds the junction from the surviving record. Locking on a manual
+crossover used to blank ~32 bp × 2 helices of crossovers around any hand-routed staple.
+
+Three tiers: **forced-ligation-locked** (whole strand untouchable) · **overhang** (tip/binder
+domains protected, duplex body still woven) · **everything else** (fully re-routable).
+
 ## Crossover avoidance during nicking
 
 Autobreak skips any nick position where the bp or tick boundary matches a crossover record position:

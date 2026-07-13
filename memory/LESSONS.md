@@ -131,6 +131,7 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
 - **J3** — Auto-crossover edge margin was 21nt, should be min SEGMENT — ~14–20bp at each helix end left uncrossed. [detail](LESSONS_archive.md#j3)
 - **J4** — Staple breaks must clear interior scaffold crossovers — nicks land 1–6bp from scaffold seam crossovers. [detail](LESSONS_archive.md#j4)
 - **J5** — Scaffold-router test flap is hash-seed order, not a state leak — a test flaps pass/fail across PYTHONHASHSEED. [detail](LESSONS_archive.md#j5)
+- **J6** — Autostaple starves crossovers at INTERIOR ssDNA loops (comb/"teeth") — unstapled scaffold is the design, not a hole; a staple's global coverage *span* is not a terminus test. Also: a manual crossover must not LOCK its staple (location = user intent, connectivity = autostaple's job). [detail](LESSONS_archive.md#j6)
 
 ## K. Environment / GPU / toolchain
 - **K1** — CUDA jobs segfault after a LAMMPS/CUDA apt install — `rc=-11` at first force step; native driver shadows WSL passthrough. [detail](LESSONS_archive.md#k1)

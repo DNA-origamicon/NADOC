@@ -500,6 +500,49 @@ pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 wit
   transfer) and assert it does NOT go `completed` with missing outputs; confirm the desired state (re-pollable vs
   a distinct `fetch_failed`) with the user — it's a UX/semantics call, not purely mechanical.
 
+## ISSUE-17 — `polymer_router` SYNTHESIZES staples over bare scaffold ends (violates "staples are the user's intent"; ask-first)
+
+- **Status:** `[ ]` OPEN — surfaced 2026-07-13 by a read-only audit while fixing autostaple (see LESSONS J6 /
+  `feedback_staples_are_user_intent`). Not touched: it is a user-invoked topology op and the desired behaviour
+  is a design call, not a mechanical fix.
+- **The rule it breaks:** scaffold with no staple opposite it is a **deliberate ssDNA loop** — it suppresses
+  aggregation by blunt-end stacking, and essentially every origami wants one at each duplex end. Staple
+  placement is the user's intent; no code may treat missing staple coverage as something to fill.
+- **What it does:** `backend/core/polymer_router.py` reads scaffold coverage, finds each unpaired scaffold run
+  that touches a helix cap, and manufactures a STAPLE exactly complementary to it — `_complement_strand`
+  (~:146-157) builds `Strand(strand_type=STAPLE)`, appended at ~:277. It also raises *"No unpaired scaffold ends
+  found — nothing to route"* (~:270-274) as a hard **error** — i.e. it treats the *absence* of an ssDNA end as
+  the failure mode and its *presence* as a thing to be filled. Net effect: it blunt-caps precisely the loops the
+  rule protects.
+- **Mitigating facts (for the decision, not an excuse):** it only fills cap-adjacent runs (interior runs are
+  explicitly skipped), and it is invoked explicitly ("Route for polymerization"), never from a scaffold
+  auto-route. Blunt ends may even be *wanted* here — polymerization is stacking-driven.
+- **Fix shape (ASK FIRST):** most likely make the cap-end fill **opt-in** and rename/reclassify the module as an
+  explicit *staple* operation (never callable from a scaffold-routing path). But if polymerization deliberately
+  wants blunt ends, the right answer may be "document it and leave it" — confirm with the user before changing.
+
+## ISSUE-18 — A SCAFFOLD router can nick/ligate a STAPLE — two unfiltered helpers in `seamed_router`
+
+- **Status:** `[ ]` OPEN — surfaced 2026-07-13 by the same audit. Latent via `section_router` (its sub-design
+  holds scaffold only), but **live** on the direct `auto_scaffold_seamed` / `auto_scaffold_seamless` API path,
+  which runs against the full strand list.
+- **The rule it breaks:** scaffold routers must **never** create, extend, trim, split, or delete a staple. They
+  may extend helices and scaffold domains only. Every other router obeys this; these two shared helpers don't.
+- **Where (leads, verify):**
+  1. `seamed_router.py` ~:307-311 — `_nick_if_needed` calls `lattice._find_strand_at`, which iterates **all**
+     strands with **no `strand_type` and no `is_reference` filter**. On any bp where the scaffold does not reach
+     but a staple/linker occupies the scaffold-direction slot (LINKER complements are documented to do exactly
+     this; so can OH_BINDER domains and hand-drawn staples), the scaffold router will `make_nick` a staple —
+     creating a strand and trimming a domain. Contrast `nick_all_major_ticks`, which *does* filter.
+  2. `seamed_router.py` ~:339-350 — the ligation terminal maps (`three_p` / `five_p`) are built over **every**
+     strand with no type filter, so any staple/linker/binder whose 5'/3' terminus lands on a scaffold-crossover
+     half gets fused into the scaffold. Contrast `ligate_crossover_chains` (lattice.py ~:2002), which filters.
+     `_linearize_circular_scaffolds` (~:1074-1095) inherits both.
+- **Fix shape:** gate both on `strand_type == SCAFFOLD and not is_reference` — mechanically the same guard the
+  lattice-level equivalents already carry. Low risk, but it changes scaffold-routing behaviour on designs with
+  linkers/overhangs, so pin it with a repro first (route a design carrying a linker whose complement sits in the
+  scaffold slot; assert no staple/linker strand is nicked or fused).
+
 ## Next-session handoff
 
 _Living pointer — each session overwrites this. **Last updated 2026-07-13 (docs-cleanup audit — no issue

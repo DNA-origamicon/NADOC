@@ -57,6 +57,7 @@ Files are `feedback_<name>.md`. Match the name against what you're editing; each
 **General:** **concurrent_sessions** (another Claude session may share this worktree — never `git stash`/`reset`/`restore`;
 **no_live_server_mutation_for_verify** (never POST/DELETE/reset the shared running server to verify — clobbers concurrent work; verify via pytest scratch_session) ·
 forbid git in subagent prompts) · aksel_abandoned · crossover_no_reasoning · phase_constants_locked · native_files_preserve_positions ·
+**staples_are_user_intent** (unstapled scaffold = intentional ssDNA loop; routers never touch staples) ·
 design_renderer_visibility_rule · overhang_definition · interrupt_before_doubting_user · busy_popup_threshold ·
 user_todo_smoke_tests · playwright_fixtures_location · display_toggle_visual_verify · no_bulk_reformat ·
 loopskip_no_crossover_ends · browser_console_debugging
