@@ -63,25 +63,158 @@ segment `soft=True` (rigidBonds none + 1 fs) even on the non-declash path; later
 segments stay 2 fs rigid. No RATTLE ⇒ no crash; structure relaxes then speed
 resumes. Confirmed: VoltronCore reached step 9600 at 298.6 K, stable.
 
-GOTCHA — do NOT add a large `margin`: I tried `margin 3.0` as insurance for the
-"Margin is too small" warning; it crashed NAMD's GPU tile-list kernel at startup
-(`CUDA error cudaStreamSynchronize in CudaTileListKernel.cu buildTileLists`).
-Removed it — default margin 0 + soft start is the working combo. The margin
-warning is benign once the soft start removes the instability that caused it.
+GOTCHA — do NOT add an explicit `margin`. `margin 3.0` crashes NAMD's GPU tile-list
+kernel at startup (`buildTileLists`). This is STILL LIVE and is pinned by
+`test_no_explicit_margin_in_configs`. The K2 patch fixes the underlying crash, but the
+**3080 Ti box does not have the patched `NAMD_3.0.2p1` built yet**, so an explicit margin
+would break there. It is also not a measured win: the 18.8 ns/day carved-offload result
+was obtained with NO margin. Tried and reverted 2026-07-12 — don't re-add it without first
+building the patched NAMD on both machines.
 
-ROOT CAUSE — see [[LESSONS]] K2 (authoritative): this `buildTileLists` illegal access
-/ "Low global CUDA exclusion count" under `GPUresident on` on vacuum-cornered / bent
-boxes is a **one-line NAMD source bug** (host tile-count `(n-1)/32+1`=1 vs device
-`(n+31)/32`=0 for an EMPTY patch → uninitialised tile read → wild `boundingBoxes[]`
-index). Empty patches = the vacuum corners a carve leaves. NOT hardware, NOT structure,
-NOT the CUDA toolkit version (an unpatched CUDA-12.6 rebuild still crashes 13/13).
-Offload path is immune. Canonical fix = the patched `NAMD_3.0.2p1_*` build
-(`tools/namd_tilelist_fix/`), which `find_namd()` auto-prefers; the runner's
-`gpu_tilelist_probe` also auto-routes unsafe packages to the CPU build. On the 3080 Ti
-box the patched build isn't compiled yet, so `~/.local/bin/namd3` symlinks to the
-CUDA-12.0 git build as a stopgap (remove once `NAMD_3.0.2p1` is built there). The 90°
-bent 6hbx100 that re-surfaced this had a healthy structure (bonds ≤1.73 Å, exclusions
-≤4.24 Å, mgh restraints correct).
+Defaults raised in `_common_header` 2026-07-12 (margin deliberately NOT among them):
+`stepspercycle` 12 → **20**, `pairlistdist` 12 → **13.5**. Carved/offload 16.7 → 18.8 ns/day.
+⚠️ `stepspercycle` is duplicated as a constant in TWO places that MUST be kept in sync or
+NAMD FATALs at startup on a non-multiple `minimize`/`run` count:
+`md_protocols.AKSIMENTIEV_STEPS_PER_CYCLE` and `benchmark_runner.NAMD_STEPS_PER_CYCLE`
+(+ `NAMD_BENCH_STEPS`, now 2000 = 100 × 20).
+
+## ⚡ Optimize button (Advanced card) — `backend/core/md_optimize.py`
+
+Automates the carve-vs-GPU-resident decision, because getting it wrong costs either ~35 %
+throughput or a crash 40 min into a run. `GET /md/optimize-advanced` → `{recommended,
+rationale, warnings, facts}`; the UI (`frontend/src/ui/md_advanced_optimize.js`) shows a
+diff + caveat gate and applies only on Proceed.
+
+**Flow:** pre-flight popup (opt out BEFORE the wait) → 3 staged calls with a progress bar
+under the Advanced card title → proposal + caveat gate → apply only on Proceed.
+
+**It runs NO simulation and NO benchmark** — say so in any UI copy. It (1) reads GPU/RAM/CPU
+(~0.5 s, `GET /md/optimize-advanced/hardware`), (2) builds the design's heavy-atom model and
+grid-measures its hydration volume (**~26 s** on a 6hb — the whole reason a pre-flight and a
+progress bar exist; scales with design size), (3) scores candidate shells against the STORED
+benchmarks above. The two backend calls are split precisely so the progress bar reports a
+**real** stage boundary rather than a fabricated animation. The progress element lives
+*outside* the collapsible drawer body so it stays visible when the drawer is shut.
+
+⚠️ The busy latch must be set **synchronously, before the first `await`** — the pre-flight is
+itself async, so a guard set after it lets rapid clicks stack up several pre-flight popups
+(caught by a test; `rapid clicks cannot stack up multiple pre-flight popups`).
+
+**The model.** Throughput ≈ K / N_atoms, with K per code path, anchored on two real
+2080-Super runs: GPU-resident 12.8 ns/day @ 747,262 atoms; offload 18.8 ns/day @ 196,606.
+⇒ GPU-resident is **~2.6× faster per atom**, so a carve only pays when it removes
+> `CARVE_BREAKEVEN` (=K_gr/K_off ≈ 2.6×) the atoms. K is machine-specific; the RATIO — all
+the decision depends on — is a property of NAMD, not the card. It reproduces both anchors
+and picks correctly by shape: bent 6hbx100_90deg → 12 Å carve, offload, est 18.1 (measured
+18.8); straight 6hb_sim_v2 → full box, GPU-resident, est 41.3 (measured 42).
+
+**Shell thickness is PHYSICS, not a speed knob.** Throughput rises monotonically as the
+shell thins, so an optimiser told to maximise ns/day will shave the hydration layer to
+nothing. First cut of this module did exactly that (picked 8 Å every time). It now FIXES
+the shell at `DEFAULT_SHELL_NM` = 1.2 nm and thins it *only* when memory forces it, never
+below `MIN_SHELL_NM` = 0.8. Pinned by `test_never_thins_the_shell_for_speed_alone`.
+
+**Audit of the Advanced card (what was missing).** `stepspercycle`/`pairlistdist` are the
+knobs that mattered (+12 %) but are now correct defaults and are deliberately NOT exposed —
+exposing them invites the `margin` footgun. What WAS missing and is now added: a read-only
+**run-path readout** (`#md-jobs-path`, `describeRunPath()`) — GPU-resident on/off was the
+single most consequential derived setting and was completely invisible; and the Threads
+default was a hardcoded 16 on a 12-logical-core box.
+
+**E2E gotcha (cost an hour).** Backend design state is **per-document**, keyed by the
+`X-NADOC-Doc` header that `client.js` stamps on every call. A Playwright `request.post()`
+carries no such header → lands in the `__default__` doc → the design loads fine and the
+panel still sees *"No active design"* (404). Load the design **through the page** (`await
+import('/src/api/client.js'); api.loadDesign(path)`), not via the `request` fixture. Several
+existing e2e specs hardcode `:8000` (the user's server) instead of the throwaway `:8002` —
+latent, works only because they don't need the design.
+
+ROOT CAUSE — see [[LESSONS]] K2 / **K2b**. The `buildTileLists` illegal access IS fixed
+by the patched `NAMD_3.0.2p1_*` build (`tools/namd_tilelist_fix/`, auto-preferred by
+`find_namd()`). **But the patch does NOT make `GPUresident` usable on a carved cell.**
+
+## ⚠️ 2026-07-12: A CARVE AND `GPUresident` ARE MUTUALLY EXCLUSIVE (enforced in code)
+
+The p1 build no longer crashes, but the same empty-patch pathology still corrupts the
+exclusion accounting: NAMD dies at step 0 with **"Low global CUDA exclusion count!"**
+(241926 vs 276956 on the 12 Å-carved 6hbx100_90deg). The structure is *healthy* (all
+377919 implicit exclusions ≤ 4.24 Å, max bond 1.7 Å), so the un-found pairs would have
+been summed **without** their exclusion ⇒ wrong forces. **NAMD is right to abort; never
+force it through** (the check is a `Controller.C` checksum, and `forgiving` mode would
+just silently run bad physics).
+
+Ruled out by experiment (RTX 2080 Super, 6hbx100_90deg): the ENM (no effect), HMR (fails
+with the base PSF too), coordinates (`wrapAll on` → *identical* count; fails from minimised
+coords), the local build (official 3.0.2 binary fails identically), and
+cutoff/pairlistdist/margin/stepspercycle (the deficit only closes asymptotically —
+pairlistdist 20 still short). **Only water fill fraction moves it:**
+
+| shell | atoms | water fill | GPUresident |
+|---|---|---|---|
+| 1.2 nm | 196,606 | 22% | fail |
+| 2.0 nm | 286,498 | 32% | fail |
+| 3.5 nm | 440,965 | 52% | fail |
+| 6.5 nm | 655,453 | 80% | **still fail** |
+| none (full) | 747,262 | 92% | **pass**, 12.8 ns/day |
+
+Control: `6hb_sim_v2` (uncarved, 90% fill, 225k atoms) runs GPU-resident at 42 ns/day on
+the same GPU — so the GPU/driver/build are fine. A carve only ever *saves* atoms on a
+**concave** design (a straight bundle already fills its bounding box), and that is exactly
+when it creates the vacuum that breaks GPU-resident.
+
+**Consequence (implemented):** `_segment_conf(carved=...)` omits `GPUresident` for any
+carved package; it keeps HMR + `rigidBonds all` + 4 fs and runs the standard CUDA-offload
+path (nonbonded + PME still on GPU). Because the carve removes ~3.8× the atoms, offload on
+the carved cell (**18.8 ns/day**) still beats GPU-resident on the fully-solvated cell
+(**12.8 ns/day**). `namd_solvate._render_solvated_fast_namd_conf` does the same for
+`namd_fast.conf`.
+
+**Also corrected:** `downgrade_gpu_resident`'s claim that dropping `GPUresident` from a 4 fs
+conf gives "instant Constraint failure in RATTLE" is **false when the HMR PSF is in play** —
+a 240 ps soak (60k steps, HMR + `rigidBonds all` + 4 fs + offload) ran with T stable at
+298–299 K and zero RATTLE failures. Carved confs are therefore written at 4 fs directly.
+
+### Chasing carve + GPUresident: CLOSED, don't reopen without new information
+
+Two leads chased 2026-07-12, both dead:
+
+1. `CudaComputeNonbonded.C:743-750` (the other un-patched `(n-1)/32+1`) — **not on the
+   GPU-resident path at all.** `updatePatches()` branches on
+   `CUDASOAintegrate && useDeviceMigration`, and that branch already uses the correct
+   `computeNumTiles`/`computeAtomPad`. Line 743 is the offload branch. Dead.
+2. **The empty-patch mechanism itself is REFUTED for the exclusion bug.** `twoAwayX/Y/Z yes`
+   *halves* patch size (⇒ many MORE empty patches) yet the deficit **collapses**:
+
+   | patch grid | patch edge | found / 276956 | deficit |
+   |---|---|---|---|
+   | 15×4×15 (1-away, margin 4) | ~19 Å | 241,926 | 35,030 |
+   | 31×9×31 (twoAway) | ~9.3 Å | 272,177 | 4,779 |
+   | 37×10×37 (twoAway, margin 1) | ~7.8 Å | 274,761 | 2,195 |
+   | 39×11×39 (twoAway, margin 0) | ~7.4 Å | 275,310 | 1,646 |
+
+   So the deficit is a smooth monotonic function of **atoms-per-patch**, asymptotic to but
+   never reaching zero — a capacity/indexing bug in the tile-list build under high patch
+   occupancy, NOT empty patches. (`numCalcFullExclusions` = 276,956 is *correct*: it is
+   exactly the 1-2 + 1-3 pair count, verified independently = 276,954 ±2. Under
+   `exclude scaled1-4` the 1-4 pairs are "modified", not "full".)
+
+**⚠️ Never tune this to "nearly zero" and ship it.** A missed exclusion is NOT a harmless
+skip: under PME the reciprocal sum includes excluded pairs, so their real-space correction
+must be subtracted — a pair that never lands in a tile list never gets cancelled, leaving an
+uncancelled reciprocal-space interaction between bonded atoms. NAMD is right to make it
+fatal. A config that gets the deficit to 1,646 would RUN and be silently wrong. Offload is
+the only safe answer; the remaining fix is upstream in NAMD's CUDA tile-list kernels.
+
+**Shell evaporation is NOT a problem** (measured over a 240 ps soak): the carved shell
+relaxes, it does not evaporate. Waters past 20 Å from DNA stay flat at ~0.03%, past 25 Å at
+~0, and the median hydration distance is dead flat (5.40 → 5.37 Å). Only the 15–20 Å band
+grows, as the sharp 12 Å carve edge softens to a diffuse ~13 Å edge (carved water expanding
+from 1-atm to liquid–vapour coexistence density). Water's 300 K vapour pressure (0.035 atm)
+means the vacuum can hold only a handful of molecules; surface tension holds the rest. **No
+boundary potential needed.**
+
+The 90° bent 6hbx100 that surfaced all this had a healthy structure (bonds ≤1.73 Å,
+exclusions ≤4.24 Å, mgh restraints correct).
 
 To reuse a completed minimisation after a mid-ladder fix: regenerate the package
 `.conf` files (mgh_slow_release_segments + _segment_conf/_min_conf, **nvt_only=True

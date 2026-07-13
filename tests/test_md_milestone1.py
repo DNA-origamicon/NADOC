@@ -410,8 +410,10 @@ class TestMghSlowReleaseSegments:
     def test_minimize_steps_round_up_to_stepspercycle(self) -> None:
         from backend.core.md_protocols import _round_up_to_cycle
 
-        assert _round_up_to_cycle(4_800) == 4_800
-        assert _round_up_to_cycle(10_000) == 10_008
+        # stepspercycle is 20 (AKSIMENTIEV_STEPS_PER_CYCLE, must match _common_header).
+        assert _round_up_to_cycle(4_800) == 4_800    # already aligned → unchanged
+        assert _round_up_to_cycle(10_000) == 10_000  # already aligned → unchanged
+        assert _round_up_to_cycle(10_001) == 10_020  # rounds UP to the next multiple
 
     def test_positive_steps(self) -> None:
         from backend.core.md_protocols import mgh_slow_release_segments

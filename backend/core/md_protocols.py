@@ -41,7 +41,9 @@ EQUILIBRIUM_AWARE_PROTOCOL = "equilibrium_aware_namd"
 # Builder lives in backend.core.namd_gbis (kept out of this god-file).
 IMPLICIT_GBIS_PROTOCOL = "implicit_gbis_namd"
 SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBIS_PROTOCOL}
-AKSIMENTIEV_STEPS_PER_CYCLE = 12
+# MUST match _common_header's "stepspercycle" — NAMD FATALs at startup if a
+# minimize/run count is not a multiple of it.  (benchmark_runner.NAMD_STEPS_PER_CYCLE too.)
+AKSIMENTIEV_STEPS_PER_CYCLE = 20
 
 
 # ── Electric field (NAMD native eFieldOn / eField) ────────────────────────────
@@ -221,13 +223,22 @@ def downgrade_gpu_resident(conf_text: str, factor: int = 2) -> str:
     measured: fine at 756k atoms, fails at 971k, and GT_corner_v2's 1.44M-atom relax
     package fails outright.  See [[LESSONS]] K6.
 
-    Dropping GPUresident alone leaves a 4 fs timestep the CPU RATTLE solver cannot hold
-    (verified: instant "Constraint failure in RATTLE"), so this ALSO divides the timestep
-    by *factor* and MULTIPLIES every step-count/output-frequency key by it — the segment
-    therefore covers the SAME simulated time and writes the same number of frames, just
-    in twice as many (cheaper) steps.  HMR, ``rigidBonds all``, the PSF, PME, cutoffs and
-    the barostat are untouched, so the physics is unchanged; only integrator throughput
-    moves.  Verified to run from a real p10 checkpoint at 2 fs where 4 fs blew up.
+    This ALSO divides the timestep by *factor* and MULTIPLIES every step-count/output-
+    frequency key by it — the segment therefore covers the SAME simulated time and writes
+    the same number of frames, just in twice as many (cheaper) steps.  HMR, ``rigidBonds
+    all``, the PSF, PME, cutoffs and the barostat are untouched, so the physics is
+    unchanged; only integrator throughput moves.
+
+    The timestep halving is a CONSERVATIVE choice, not a hard requirement.  It was added
+    because a 4 fs offload run once died with an instant "Constraint failure in RATTLE".
+    That is NOT a general property of 4 fs on the offload path: with the HMR PSF and a
+    relaxed starting structure, 4 fs + ``rigidBonds all`` + offload is stable — measured
+    2026-07-12 on the carved 6hbx100_90deg, 60k steps (240 ps) from the p10 checkpoint,
+    T flat at 298-299 K, zero RATTLE failures, 18.8 ns/day.  The original blow-up was
+    almost certainly a *strained* start, not the timestep.  Carved packages are therefore
+    written at 4 fs directly (see ``_segment_conf``'s ``carved`` guard) and never come
+    through here.  This path now only serves the pinned-OOM case (K6), where halving is
+    cheap insurance on systems large enough to have hit that limit.
 
     Pure + idempotent-safe: returns *conf_text* unchanged if it has no GPUresident line.
     """
@@ -518,10 +529,12 @@ def _common_header(
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
     # GPU-resident (NAMD 3 "GPUresident on") keeps integration + bonded forces on
-    # the GPU for a ~3x throughput win.  Safe ONLY for capped (non-periodic)
-    # solvated boxes: it builds bonded exclusions from local pair lists and so
-    # would silently drop the long-range wrap bonds of a periodic cell.  This
-    # md_protocols path only ever produces capped boxes, so it is sound here.
+    # the GPU for a large throughput win.  It requires a UNIFORMLY FILLED cell:
+    # NAMD sizes its GPU tile/exclusion buffers from the cell-average density, so a
+    # cell with vacuum in it silently under-counts exclusions and dies at step 0 with
+    # "Low global CUDA exclusion count!".  A water-shell carve (water_shell_nm > 0) on
+    # a concave design is exactly that case — see the ``carved`` guard in
+    # _segment_conf and [[water-shell-carve]].
     gpu_line = "GPUresident        on\n" if gpu_resident else ""
 
     # Electrostatics/solvent block.  Two mutually exclusive modes:
@@ -563,7 +576,13 @@ def _common_header(
             f"cutoff             10.0\n"
             f"switching          on\n"
             f"switchdist         8.0\n"
-            f"pairlistdist       12.0\n"
+            # 3.5 A of pairlist buffer over the cutoff (was 2.0) so the list survives the
+            # longer stepspercycle below.  Deliberately NO explicit ``margin``: an explicit
+            # margin crashes NAMD's GPU tile-list kernel on any build WITHOUT the K2 patch,
+            # and the 3080 Ti box does not have the patched NAMD_3.0.2p1 built yet.  It is
+            # also not a measured win here — the 18.8 ns/day carved-offload result was
+            # obtained with no margin.  See test_no_explicit_margin_in_configs.
+            f"pairlistdist       13.5\n"
             f"exclude            scaled1-4\n"
             f"oneFourScaling     1.0\n"
         )
@@ -585,7 +604,7 @@ langevinHydrogen   off
 timestep           {timestep:g}
 nonbondedFreq      1
 fullElectFrequency 2
-stepspercycle      12
+stepspercycle      20
 {gpu_line}
 outputEnergies     9600
 xstFreq            9600
@@ -602,6 +621,7 @@ def _segment_conf(
     *,
     minimize_steps: int = 0,
     fast: bool = False,
+    carved: bool = False,
     structure_psf: Optional[str] = None,
     colvars_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
@@ -610,21 +630,28 @@ def _segment_conf(
 ) -> str:
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
-    # Fast mode (HMR + GPU-resident + 4 fs) applies only to hard segments — it is
-    # incompatible with the soft integrator's flexible bonds.  GBIS runs the
-    # standard CUDA path (GPUresident does not support implicit solvent), so fast
-    # is forced off for an implicit ladder.
+    # Fast mode (HMR + 4 fs) applies only to hard segments — it is incompatible
+    # with the soft integrator's flexible bonds.  GBIS runs the standard CUDA path
+    # (GPUresident does not support implicit solvent), so fast is off for an
+    # implicit ladder.
     fast = fast and not spec.soft and not gbis
     rigid_bonds = "none" if spec.soft else "all"
     timestep = 1.0 if spec.soft else (4.0 if fast else 2.0)
     # The HMR PSF (heavy hydrogens) is valid ONLY with rigid bonds, so soft
-    # segments fall back to the unmodified PSF; only the hard, fast segments use
-    # it together with GPU-resident + 4 fs.
+    # segments fall back to the unmodified PSF; only the hard, fast segments use it.
     eff_psf = structure_psf if fast else None
+    # GPU-resident is a SEPARATE axis from fast.  A water-shell carve leaves vacuum
+    # in the cell, and NAMD 3 GPU-resident under-counts exclusions in a sparse cell
+    # ("Low global CUDA exclusion count!", fatal at step 0 — measured: it needs
+    # >=~90% water fill; even an 80%-filled cell dies).  A carved package therefore
+    # keeps HMR + rigidBonds all + 4 fs but runs the standard CUDA-offload path
+    # (nonbonded + PME still on the GPU), which is unaffected and, because the carve
+    # removes ~4x the atoms, is still the faster of the two.
+    gpu_resident = fast and not carved
     lines = [
         _common_header(
             name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
-            gpu_resident=fast, structure_psf=eff_psf, gbis=gbis,
+            gpu_resident=gpu_resident, structure_psf=eff_psf, gbis=gbis,
         )
     ]
     lines.append(f"outputName         output/{spec.name}\n")
@@ -1558,7 +1585,7 @@ def prepare_mgh_slow_release(
     for spec in segments:
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
-                          fast=fast, structure_psf=structure_psf,
+                          fast=fast, carved=carve_shell, structure_psf=structure_psf,
                           anchors_file=anchors_file, field=field)
         )
 

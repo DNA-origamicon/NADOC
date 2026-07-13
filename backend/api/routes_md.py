@@ -1236,7 +1236,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     Records the seed source + provenance + the default advanced params so the panel
     can pre-fill them; the expensive prep runs later in :func:`prepare_draft_job`.
     """
-    job_threads = min(body.threads, 4) if body.fast else body.threads
+    job_threads = body.threads
     job = new_job(
         design_name    = name,
         protocol       = body.protocol,
@@ -1279,9 +1279,14 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
         ion_conc_mM = 0.0
         mg_conc_mM = 12.5
 
-    # Fast mode runs the hard ladder GPU-resident (GPU-bound): +p4 matches +p16 in
-    # throughput while freeing ~12 cores, so cap threads when fast is on.
-    job_threads = min(body.threads, 4) if body.fast else body.threads
+    # Honour the requested thread count.  The old `min(threads, 4) if fast` cap
+    # assumed fast always meant GPU-resident (GPU-bound, so +p4 == +p16).  It no
+    # longer does: a water-shell-carved package runs the CUDA-offload path, whose
+    # integrator + bonded forces are on the CPU and DO scale with threads (measured
+    # on the 6hbx100_90deg carve: +p4 7.4 -> +p6 8.6 ns/day).  Even under true
+    # GPU-resident the cap bought nothing (+p4 11.5, +p6 11.9, +p12 11.6 ns/day),
+    # so there is no reason to override the user.
+    job_threads = body.threads
 
     if existing_job is not None:
         # Prepare a draft in place: keep its id + seed, refresh the run knobs from
@@ -2613,6 +2618,40 @@ async def gpu_status(devices: str = "0") -> dict:
 
     activity = await run_in_threadpool(detect_gpu_activity, devices)
     return gpu_contention_summary(activity, own_pids=active_namd_pids())
+
+
+@router.get("/md/optimize-advanced/hardware")
+async def optimize_advanced_hardware(devices: str = "0") -> dict:
+    """GPU / RAM / core facts for this host — the FAST first stage of ⚡ Optimize.
+
+    Split from the main call (which spends ~26 s building the design's heavy-atom
+    model) so the panel's progress bar reports a real stage boundary instead of a
+    fabricated animation.  Needs no design.
+    """
+    from backend.core.md_optimize import probe_hardware  # noqa: PLC0415
+
+    return await run_in_threadpool(probe_hardware, devices)
+
+
+@router.get("/md/optimize-advanced")
+async def optimize_advanced(
+    devices: str = "0",
+    padding_nm: float = 1.2,
+    minimize_steps: int = 10_000,
+) -> dict:
+    """Recommend Advanced-card settings for the active design on THIS machine.
+
+    Backs the Advanced card's ⚡ Optimize button.  Read-only: it returns a proposal
+    plus its rationale and caveats; the panel applies it only after the user confirms.
+    Sizing the system runs a coarse geometric estimate (no GROMACS), so it is fast.
+    """
+    from backend.core.md_optimize import recommend_advanced  # noqa: PLC0415
+
+    design = design_state.get_or_404()
+    return await run_in_threadpool(
+        recommend_advanced, design,
+        devices=devices, padding_nm=padding_nm, minimize_steps=minimize_steps,
+    )
 
 
 # ── Molecular Dynamics load ────────────────────────────────────────────────────

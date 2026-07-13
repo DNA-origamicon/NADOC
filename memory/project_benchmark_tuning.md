@@ -104,9 +104,13 @@ Feature automation can now run a benchmark + relax on its result without the pan
 ## NAMD path never ran end-to-end → two FATALs (FIXED 2026-06-30)
 The NAMD sweep was only ever unit-mocked; the first real-binary run failed entirely. Root causes,
 both in `_write_namd_bench_confs`:
-1. **stepsPerCycle**: `minimize 200` / `run 2000` aren't multiples of `stepspercycle` (12, set in
-   `md_protocols._common_header`) → NAMD FATALs at the TCL `minimize`/`run` command. Fix: constants now
-   `NAMD_MIN_STEPS=204`, `NAMD_BENCH_STEPS=2004`, plus `_round_to_cycle()` guards any caller `steps`.
+1. **stepsPerCycle**: `minimize 200` / `run 2000` aren't multiples of `stepspercycle` → NAMD FATALs at
+   the TCL `minimize`/`run` command. Fix: `NAMD_MIN_STEPS` / `NAMD_BENCH_STEPS` are exact multiples,
+   plus `_round_to_cycle()` guards any caller `steps`.
+   ⚠️ `stepspercycle` is **20** as of 2026-07-12 (was 12) and is duplicated in TWO places that must be
+   kept in sync: `md_protocols.AKSIMENTIEV_STEPS_PER_CYCLE` (which `_common_header` writes) and
+   `benchmark_runner.NAMD_STEPS_PER_CYCLE`. Change one → change both, and re-check every hardcoded
+   step count near it. See [[project_water_shell_carve]].
 2. **`reinitvels` → misleading `langevinTemp` FATAL**: a restart conf (`binCoordinates`) with BOTH
    `temperature` and `reinitvels` makes NAMD 3.0.2 abort with "'langevinTemp' is a required
    configuration option" even though it's present. Bisected: `temperature`-only restart runs clean

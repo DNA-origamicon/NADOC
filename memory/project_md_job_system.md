@@ -620,12 +620,24 @@ driver's pool, unraisable). Above ~800k atoms NAMD dies at segment **start**:
 `FATAL ERROR: CUDA error cudaMallocHost(...) in CudaUtils.C, allocate_host_T, line 88`.
 Measured ceiling: 380k/541k/756k RUN · **971k FAILS**; GT_corner_v2's 1.44M-atom relax package fails.
 
-- **INVARIANT — `GPUresident off` alone is NOT a valid fallback.** The 4 fs timestep survives only
-  under GPU-resident's GPU constraint solver; the CPU RATTLE path dies instantly with
-  "Constraint failure in RATTLE algorithm for atom N". Verified from a real checkpoint: 4 fs fails,
-  **2 fs runs**. (`strip_gpu_resident`'s docstring used to claim otherwise — it was wrong.)
+- ~~**INVARIANT — `GPUresident off` alone is NOT a valid fallback.**~~ **SUPERSEDED 2026-07-12.** The
+  claim that 4 fs survives only under GPU-resident's constraint solver is **false when the HMR PSF is in
+  play**: HMR + `rigidBonds all` + 4 fs on the CUDA-**offload** path ran 60k steps (240 ps) from the p10
+  checkpoint with T flat at 298–299 K and zero RATTLE failures (18.8 ns/day, carved 6hbx100_90deg). The
+  original "instant Constraint failure in RATTLE" was a *strained start*, not the timestep. Carved
+  packages are now written at 4 fs + offload **directly** and never pass through the downgrade.
+  `downgrade_gpu_resident()` still halves the timestep, but only for the pinned-OOM case below, where it
+  is cheap insurance on an already-huge system.
+- **A CARVE AND `GPUresident` ARE MUTUALLY EXCLUSIVE** — a second, unrelated failure mode
+  ("Low global CUDA exclusion count!", fatal at step 0 on any cell containing vacuum; NOT fixed by the
+  K2 patch). `_segment_conf(carved=...)` now refuses to emit `GPUresident` on a carved package.
+  See [[LESSONS]] **K2b** and [[project_water_shell_carve]] — read before touching this.
 - **What ships:** `namd_runner.gpu_resident_probe()` (one cycle of the first fast conf, ~60 s, cached
-  as `.gpu_resident_probe.json`) → on failure `downgrade_gpu_resident_confs()` rewrites every fast conf
+  as `.gpu_resident_probe.json`). It **must run AFTER minimisation** and be seeded from the minimisation's
+  output (`seed_stem`): from raw build coordinates the ideal-B-DNA clashes blow the integrator up at
+  step 1 ("Atoms moving too fast") *before* the GPU-resident checks fire — which is exactly how a
+  GPU-resident-incompatible package reached production once. On failure `downgrade_gpu_resident_confs()`
+  rewrites every fast conf
   via `md_protocols.downgrade_gpu_resident()`: drop GPUresident, **4→2 fs, and ×2 on `run` +
   `dcdFreq`/`restartfreq`/`xstFreq`/`outputEnergies`** so the segment covers the SAME simulated time and
   writes the SAME frame count. HMR/rigidBonds/PSF/PME/barostat untouched → physics unchanged. Originals

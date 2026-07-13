@@ -4748,9 +4748,16 @@
 
               <!-- ── Advanced (collapsible card) ──────────────────────────── -->
               <div class="ox-card">
-                <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e">
+                <div id="md-jobs-adv-toggle" class="ox-card__header" style="color:#8b949e;display:flex;align-items:center">
                   <span id="md-jobs-adv-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Advanced</span>
+                  <button id="md-jobs-optimize" type="button"
+                          title="Optimize: pick the settings that suit this design and this machine (GPU, RAM, cores). Shows what it will change — and the caveats — before applying anything."
+                          style="margin-left:auto;background:#21262d;border:1px solid #30363d;color:#d29922;
+                                 border-radius:3px;cursor:pointer;padding:1px 7px;font-size:var(--text-xs);line-height:1.4">⚡</button>
                 </div>
+                <!-- ⚡ Optimize progress: directly under the card title and OUTSIDE the
+                     collapsible body, so it stays visible even if the drawer is shut. -->
+                <div id="md-jobs-optimize-progress" style="display:none;padding:4px 8px 2px"></div>
                 <div id="md-jobs-adv-body" class="ox-card__body" style="display:none">
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:var(--text-xs)">
                     <label style="color:#8b949e;align-self:center">Threads</label>
@@ -4783,11 +4790,15 @@
                     <label style="color:#8b949e;align-self:center">Min. steps</label>
                     <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
-                    <label style="color:#8b949e;align-self:center" title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended.">Water shell (Å)</label>
+                    <label style="color:#8b949e;align-self:center" title="0 = full box. >0 keeps only water within this distance of the DNA — shrinks large designs to fit a small GPU. Use ≥8 Å; 12 Å is the validated default. TRADE-OFF: a carve leaves vacuum in the cell, which forces NVT (no barostat) AND disables NAMD's GPU-resident mode (it aborts at step 0 on a sparse cell). The run stays CUDA-accelerated on the offload path. Worth it only when the carve removes >~2.6x the atoms — true for bent/concave designs, false for straight bundles. Use ⚡ to decide.">Water shell (Å)</label>
                     <input id="md-jobs-watershell" type="number" value="0" min="0" step="1"
-                           title="0 = full box. >0 keeps only water within this distance of the DNA and runs NVT — shrinks large designs to fit a small GPU. Use ≥6 Å; 15 Å recommended."
+                           title="0 = full box. >0 keeps only water within this distance of the DNA — shrinks large designs to fit a small GPU. Use ≥8 Å; 12 Å is the validated default. TRADE-OFF: a carve leaves vacuum in the cell, which forces NVT (no barostat) AND disables NAMD's GPU-resident mode (it aborts at step 0 on a sparse cell). The run stays CUDA-accelerated on the offload path. Worth it only when the carve removes >~2.6x the atoms — true for bent/concave designs, false for straight bundles. Use ⚡ to decide."
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
                   </div>
+                  <!-- Derived, read-only: which NAMD code path the settings above actually
+                       select.  GPU-resident is ~2.6x faster per atom but is silently
+                       disabled by any water-shell carve, so it must be visible. -->
+                  <div id="md-jobs-path" style="margin-top:6px;font-size:var(--text-xs);color:#8b949e"></div>
                   <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e;cursor:pointer">
                     <input id="md-jobs-autostart" type="checkbox" checked style="accent-color:#3fb950">
                     Start immediately

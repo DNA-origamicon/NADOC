@@ -528,6 +528,31 @@ def package_solvation_profile(package_dir: Path, name_stem: str) -> Optional[dic
 # §5  PRE-FLIGHT AUTO-SIZING  (proactive: pick settings before the run)
 # ══════════════════════════════════════════════════════════════════════════════
 
+# One Relax click used to build the design's whole heavy-atom model THREE times — once
+# for ⚡ Optimize, once for the disk forecast, once for the real prep — at ~26 s each on a
+# 6-helix bundle.  The design cannot change between them (a mutation changes its
+# fingerprint), so memoise on (fingerprint, padding, model identity).  Tiny cache: the
+# profile holds an Nx3 coordinate array, and only the active design is ever asked for.
+_PROFILE_CACHE: "dict[tuple, dict]" = {}
+_PROFILE_CACHE_MAX = 2
+
+
+def _profile_cache_key(design, padding_nm: float, atomistic_model) -> Optional[tuple]:
+    """Cache key, or None when the design won't fingerprint (→ don't cache)."""
+    try:
+        from backend.core.oxdna_staleness import design_build_fingerprint  # noqa: PLC0415
+
+        return (design_build_fingerprint(design), round(float(padding_nm), 4),
+                id(atomistic_model) if atomistic_model is not None else None)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def clear_profile_cache() -> None:
+    """Drop the memoised solvation profiles (tests; and any explicit invalidation)."""
+    _PROFILE_CACHE.clear()
+
+
 def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
                                  atomistic_model=None) -> Optional[dict]:
     """Estimate a solvation profile from the *dry* design — no GROMACS run.
@@ -535,9 +560,17 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
     Builds the heavy-atom PDB, takes the bounding box + padding as the solvation
     box, and estimates the full-box water count from the effective bulk density.
     Good enough to decide, before any solvation, whether the system needs a carve.
+
+    Memoised on the design's build fingerprint — see ``_PROFILE_CACHE``.  The result is
+    treated as read-only by every caller (they only read its keys), so the cached dict
+    is handed back directly.
     """
     import numpy as np  # noqa: PLC0415
     from backend.core.pdb_export import export_pdb  # noqa: PLC0415
+
+    key = _profile_cache_key(design, padding_nm, atomistic_model)
+    if key is not None and key in _PROFILE_CACHE:
+        return _PROFILE_CACHE[key]
 
     pdb = export_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
     dna: list[tuple[float, float, float]] = []
@@ -559,7 +592,7 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
     ext = P.max(0) - P.min(0)
     box_nm = tuple(float(e) + 2 * padding_nm for e in ext)
     box_vol = box_nm[0] * box_nm[1] * box_nm[2]
-    return {
+    profile = {
         "dna_xyz_nm": dna,
         "dna_atoms": len(dna),
         "box_nm": box_nm,
@@ -567,6 +600,11 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
         "ion_atoms": n_p,           # ≈ one neutralising Na⁺ per phosphate
         "current_water_shell_nm": None,
     }
+    if key is not None:
+        if len(_PROFILE_CACHE) >= _PROFILE_CACHE_MAX:
+            _PROFILE_CACHE.pop(next(iter(_PROFILE_CACHE)))   # evict oldest
+        _PROFILE_CACHE[key] = profile
+    return profile
 
 
 def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",

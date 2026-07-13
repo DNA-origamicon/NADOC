@@ -174,11 +174,56 @@ def _segment_process_running(segment_name: str) -> bool:
     return _segment_pid(segment_name) is not None
 
 
-def _external_process_running(job: MdJob) -> bool:
-    """Detect a detached/restarted NAMD process that the in-memory registry lost."""
-    if not (0 <= job.current_segment_idx < len(job.segments)):
+def _package_process_running(package_dir: Path) -> bool:
+    """True if ANY NAMD process is running out of *package_dir* (its cwd).
+
+    Broader than :func:`_segment_process_running`, which matches one segment's conf
+    name — and therefore cannot see a running **minimisation** (``*_00_min_*.conf``),
+    because that is not a segment.  That blind spot silently failed jobs: an
+    interruption during minimisation (a dev-server ``--reload``, or any server
+    restart) left ``reconcile_job_status`` unable to see the live NAMD, so it looked
+    at the not-yet-started first segment, found no checkpoint, and declared the job
+    failed — while NAMD carried on minimising as an orphan.
+
+    Matching on cwd is self-verifying like the conf-name match: a recycled PID whose
+    cwd is this package is, by construction, this job's process.
+    """
+    try:
+        target = package_dir.resolve()
+    except OSError:
         return False
-    return _segment_process_running(job.segments[job.current_segment_idx].name)
+    try:
+        proc_dirs = list(Path("/proc").iterdir())
+    except OSError:
+        return False
+    for proc_dir in proc_dirs:
+        if not proc_dir.name.isdigit():
+            continue
+        try:
+            if b"namd" not in (proc_dir / "cmdline").read_bytes().lower():
+                continue
+            if (proc_dir / "cwd").resolve() == target:
+                return True
+        except OSError:           # process exited, or not ours to inspect
+            continue
+    return False
+
+
+def _external_process_running(job: MdJob, workspace_dir: Optional[Path] = None) -> bool:
+    """Detect a detached/restarted NAMD process that the in-memory registry lost.
+
+    Checks the current segment AND (via cwd) any other NAMD running out of this job's
+    package — notably the minimisation, which owns no segment name.
+    """
+    if 0 <= job.current_segment_idx < len(job.segments) and \
+            _segment_process_running(job.segments[job.current_segment_idx].name):
+        return True
+    if workspace_dir is not None:
+        try:
+            return _package_process_running(job.package_dir(workspace_dir))
+        except Exception:  # noqa: BLE001
+            return False
+    return False
 
 
 async def _wait_for_segment_process(segment_name: str, poll: float = 10.0) -> None:
@@ -383,7 +428,10 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
         return job
     if job.status == MdStatus.preparing:
         return _reconcile_preparing(job, workspace_dir)
-    if job.status != MdStatus.running or is_running(job.job_id) or _external_process_running(job):
+    # workspace_dir lets the check also see a running MINIMISATION (it owns no segment
+    # name).  Without it, a restart during minimisation failed the job under a live NAMD.
+    if job.status != MdStatus.running or is_running(job.job_id) \
+            or _external_process_running(job, workspace_dir):
         return job
     if not (0 <= job.current_segment_idx < len(job.segments)):
         job.status = MdStatus.completed
@@ -727,7 +775,16 @@ def gpu_tilelist_probe(
 # of the fast conf and look at the log.  See LESSONS K6.
 
 GPU_RESIDENT_PROBE_CACHE = ".gpu_resident_probe.json"
-_PINNED_OOM_PAT = re.compile(r"cudaMallocHost|cudaHostAlloc", re.IGNORECASE)
+# Every way a GPU-resident run is known to die on THIS host / THIS package:
+#   • cudaMallocHost / cudaHostAlloc — pinned host pool too small (K6, above).
+#   • "Low global CUDA exclusion count" — NAMD sizes its GPU tile/exclusion buffers
+#     from the cell-AVERAGE density, so a cell containing vacuum (a water-shell carve
+#     on a concave design) under-counts exclusions and dies at step 0.  Measured: a
+#     22%-water-filled cell finds 241926 of 276956 exclusions; even 80% fill fails;
+#     ~90%+ is needed.  md_protocols now refuses to emit GPUresident on a carved
+#     package at all, so this pattern is a backstop for anything that slips through.
+_GPU_RESIDENT_FAIL_PAT = re.compile(
+    r"cudaMallocHost|cudaHostAlloc|Low global CUDA exclusion count", re.IGNORECASE)
 
 
 def _has_gpu_resident(conf: Path) -> bool:
@@ -744,12 +801,26 @@ def gpu_resident_probe(
     namd_bin: str,
     devices: str,
     threads: Optional[int] = None,
+    seed_stem: Optional[str] = None,
 ) -> bool:
     """True if this package can actually run GPU-resident on THIS host.
 
-    Runs one pairlist cycle of the fast conf and reports whether NAMD got its pinned
-    host buffers.  Verdict cached in the package.  Fails OPEN (a probe that can't run
-    never blocks a job).
+    Runs one pairlist cycle of the fast conf and reports whether NAMD's GPU-resident
+    setup actually stands up (pinned host buffers AND the exclusion/tile-list build).
+    Verdict cached in the package.  Fails OPEN (a probe that can't run never blocks a
+    job) — but ONLY when the probe genuinely could not execute, never because NAMD
+    died of something we forgot to look for.
+
+    ``seed_stem`` is the stem whose ``output/<stem>.coor/.vel/.xsc`` the probe restarts
+    from — pass the MINIMISATION stem and call this only after minimisation has run.
+    Both alternatives are traps that silently pass a broken package:
+      • Leaving the fast conf's own ``binCoordinates`` (a *later* segment's output, not
+        yet written) makes NAMD abort at startup — "Unable to open extended system
+        file" — before it ever touches the GPU.
+      • Seeding from the raw PDB makes the ideal-B-DNA build clashes blow the
+        integrator up at step 1 ("Atoms moving too fast") BEFORE the GPU-resident
+        exclusion check fires.
+    Only minimised coordinates actually exercise the thing being probed.
     """
     cache = package_dir / GPU_RESIDENT_PROBE_CACHE
     if cache.exists():
@@ -773,6 +844,13 @@ def gpu_resident_probe(
         text = re.sub(r"^(\s*(?:outputName|dcdFile|xstFile)\s+)\S+",
                       lambda mm: f"{mm.group(1)}{probe_stem}", text,
                       flags=re.IGNORECASE | re.MULTILINE)
+        # Re-seed from the minimised state, which exists and is clash-free.
+        if seed_stem:
+            for key, ext in (("binCoordinates", "coor"),
+                             ("binVelocities", "vel"),
+                             ("extendedSystem", "xsc")):
+                text = re.sub(rf"^(\s*{key}\s+)\S+", rf"\g<1>output/{seed_stem}.{ext}", text,
+                              flags=re.IGNORECASE | re.MULTILINE)
         probe_conf.write_text(text)
 
         cmd = [namd_bin, f"+p{threads or default_threads()}", "+setcpuaffinity"]
@@ -783,7 +861,7 @@ def gpu_resident_probe(
                              timeout=GPU_PROBE_TIMEOUT_S)
         log = out.stdout + out.stderr
         (package_dir / "_gpures_probe.log").write_text(log)
-        ok = not _PINNED_OOM_PAT.search(log)
+        ok = not _GPU_RESIDENT_FAIL_PAT.search(log) and "FATAL ERROR" not in log
     except (OSError, subprocess.SubprocessError):
         return True
     finally:
@@ -1082,22 +1160,6 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                     "will crash on this geometry.  Install the -multicore build.", job.job_id,
                 )
 
-    # GPU-resident pre-flight.  The "fast" segments (HMR + rigidBonds all + 4 fs +
-    # GPUresident) need a large PINNED host buffer; a host whose pinned pool is small
-    # (WSL2 caps it ~1 GB) makes NAMD die at segment START on cudaMallocHost, hours into
-    # a job.  Settle it up front on the first fast segment and, if it can't run, rewrite
-    # the fast confs to GPUresident off + half timestep (same simulated time — dropping
-    # GPUresident alone leaves a 4 fs step the CPU RATTLE solver cannot hold).  K6.
-    if not want_cpu and namd_is_cuda_build(namd_bin):
-        fast = next((s.name for s in segments
-                     if _has_gpu_resident(package_dir / f"{s.name}.conf")), None)
-        if fast is not None:
-            ok = await asyncio.to_thread(
-                gpu_resident_probe, package_dir, fast, namd_bin, run_devices, job.threads,
-            )
-            if not ok:
-                await asyncio.to_thread(downgrade_gpu_resident_confs, package_dir, job.job_id)
-
     # Persist the live NAMD PID to job.json on every spawn, so a server restart can
     # still signal the orphaned process (see stop_job's restart fallback).
     def _persist_pid(p: Optional[int]) -> None:
@@ -1126,6 +1188,22 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     # ── Minimization ─────────────────────────────────────────────────────────
 
     min_coor = output_dir / f"{min_name}.coor"
+
+    # A minimisation can OUTLIVE its orchestrator (a dev-server --reload, a server
+    # restart): the NAMD child keeps going while the runner's task dies.  Adopt the
+    # survivor rather than spawning a second NAMD on the same output files, which would
+    # corrupt them.  Mirrors _wait_for_segment_process for segments; ``min_name`` is a
+    # conf stem, so the same self-verifying conf-name match applies.
+    if not min_coor.exists() and _segment_process_running(min_name):
+        logger.info(
+            "[%s] Minimization %s is already running (orphaned by a restart) — adopting it "
+            "and waiting, rather than starting a second NAMD on the same files.",
+            job.job_id, min_name,
+        )
+        job.status = MdStatus.running
+        job.save(workspace_dir)
+        await _wait_for_segment_process(min_name)
+
     if not min_coor.exists():
         if not _disk_floor_ok("minimization"):
             return
@@ -1151,6 +1229,29 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         logger.info("[%s] Minimization done", job.job_id)
     else:
         logger.info("[%s] Minimization already done (skipping)", job.job_id)
+
+    # ── GPU-resident pre-flight ───────────────────────────────────────────────
+    # The "fast" segments (HMR + rigidBonds all + 4 fs + GPUresident) can fail on
+    # this host for two unrelated reasons: a pinned host pool too small for the
+    # buffers (WSL2 caps it ~1 GB → cudaMallocHost, K6), or a cell containing vacuum
+    # (a water-shell carve → "Low global CUDA exclusion count!" at step 0).  Either
+    # way NAMD dies at segment START, hours into a job.  Settle it up front on the
+    # first fast segment and, if it can't run, rewrite the fast confs.
+    #
+    # MUST run AFTER minimisation: the probe seeds from ``min_name``'s output, and the
+    # ideal-B-DNA build coordinates have clashes that blow the integrator up at step 1
+    # BEFORE the GPU-resident checks fire — which is precisely how a GPU-resident-
+    # incompatible package got all the way into production once already.
+    if not want_cpu and namd_is_cuda_build(namd_bin):
+        fast = next((s.name for s in segments
+                     if _has_gpu_resident(package_dir / f"{s.name}.conf")), None)
+        if fast is not None:
+            ok = await asyncio.to_thread(
+                gpu_resident_probe, package_dir, fast, namd_bin, run_devices, job.threads,
+                min_name,
+            )
+            if not ok:
+                await asyncio.to_thread(downgrade_gpu_resident_confs, package_dir, job.job_id)
 
     # ── Declash reference rebuild ─────────────────────────────────────────────
     # For declash designs, re-anchor the ENM ladder, heavy-atom restraints and

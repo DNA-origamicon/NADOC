@@ -36,19 +36,19 @@ from backend.core.models import Design
 # steps after a tiny minimize is enough for NAMD to emit its "days/ns" Benchmark line.
 OXDNA_BENCH_STEPS = 2_000
 # NAMD requires every ``minimize``/``run`` count to be a multiple of ``stepspercycle``
-# (12, set in ``md_protocols._common_header``) or it FATALs at startup — so both bench
+# (20, set in ``md_protocols._common_header``) or it FATALs at startup — so both bench
 # step counts are exact multiples of it.  Keep ``_round_to_cycle`` as the guard for any
 # caller-supplied ``steps``.
-NAMD_STEPS_PER_CYCLE = 12  # MUST match _common_header's "stepspercycle"
-NAMD_BENCH_STEPS = 2_004  # 167 × 12
+NAMD_STEPS_PER_CYCLE = 20  # MUST match _common_header's "stepspercycle"
+NAMD_BENCH_STEPS = 2_000  # 100 × 20
 # The synthetic proxy is written from raw ideal geometry (helix-junction clashes,
 # ~+1e6 kcal/mol VDW).  Production fast mode (4 fs + GPUresident) crashes on that
 # ("Low global CUDA exclusion count") unless the system is settled first, so the
 # one-time settle does a solid minimize THEN a short soft (rigidBonds-none) MD warmup
-# before any timed trial.  Validated: min 2004 + warmup 1200 → VDW ≈ −4.8e6, fast mode
+# before any timed trial.  Validated: min ~2000 + warmup 1200 → VDW ≈ −4.8e6, fast mode
 # stable.  (Bench trials still measure only the fast-mode ``run`` from that restart.)
-NAMD_MIN_STEPS = 2_004  # 167 × 12
-NAMD_SETTLE_MD_STEPS = 1_200  # 100 × 12
+NAMD_MIN_STEPS = 2_000  # 100 × 20
+NAMD_SETTLE_MD_STEPS = 1_200  # 60 × 20
 
 
 def _round_to_cycle(steps: int) -> int:

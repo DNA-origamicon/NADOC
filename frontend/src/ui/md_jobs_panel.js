@@ -32,6 +32,7 @@ import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from '.
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import { runExclusive } from './primitives/button_busy.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
+import { initAdvancedOptimize, renderRunPath } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -618,6 +619,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const autostartChk  = document.getElementById('md-jobs-autostart')
   const fastChk       = document.getElementById('md-jobs-fast')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
+  const optimizeBtn   = document.getElementById('md-jobs-optimize')
+  const runPathEl     = document.getElementById('md-jobs-path')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
   const displayStatus = document.getElementById('md-jobs-display-status')
   const displayIndicator      = document.getElementById('md-jobs-display-indicator')
@@ -815,6 +818,46 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     onOpen: () => _onOpen(),
     onClose: () => { _stopMdPrewarm(); _stopRemotePoll(); _stopWsWatchdog() },   // retained for teardown symmetry (no per-panel collapse fires it now)
   })
+
+  // ── Advanced: ⚡ Optimize + the derived run-path readout (md_advanced_optimize.js) ──
+  // The module owns the policy UX (diff → caveat gate → apply); the panel only maps
+  // its Advanced inputs to/from the module's field names.
+  const _advValues = () => ({
+    threads:        Number(threadsInput?.value) || undefined,
+    compute:        computeSel?.value ?? 'gpu',
+    water_shell_a:  Number(watershellInput?.value) || 0,
+    padding_nm:     Number(paddingInput?.value) || undefined,
+    minimize_steps: Number(minstepsInput?.value) || undefined,
+    fast:           !!fastChk?.checked,
+  })
+  const _paintRunPath = () => renderRunPath(runPathEl, _advValues())
+
+  const _optDevices = () => (computeSel?.value === 'cpu' ? 'cpu' : (devicesInput?.value || '0'))
+  initAdvancedOptimize({
+    button: optimizeBtn,
+    progressEl: document.getElementById('md-jobs-optimize-progress'),
+    getCurrent: _advValues,
+    fetchHardware: () => api.optimizeMdHardware(_optDevices()),
+    fetchRecommendation: () => api.optimizeMdAdvanced({
+      devices: _optDevices(),
+      padding_nm: Number(paddingInput?.value) || 1.2,
+      minimize_steps: Number(minstepsInput?.value) || 10000,
+    }),
+    apply: (rec) => {
+      if (rec.threads        != null && threadsInput)    threadsInput.value    = rec.threads
+      if (rec.compute        != null && computeSel)      computeSel.value      = rec.compute
+      if (rec.water_shell_a  != null && watershellInput) watershellInput.value = rec.water_shell_a
+      if (rec.padding_nm     != null && paddingInput)    paddingInput.value    = rec.padding_nm
+      if (rec.minimize_steps != null && minstepsInput)   minstepsInput.value   = rec.minimize_steps
+      if (rec.fast           != null && fastChk)         fastChk.checked       = !!rec.fast
+      _paintRunPath()
+    },
+    notify: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'info'),
+  })
+  for (const el of [computeSel, watershellInput, fastChk]) {
+    el?.addEventListener('change', _paintRunPath)
+  }
+  _paintRunPath()
 
   // ── Jobs + Visualizations cards: simple collapse (start open), mirror oxDNA ──
   for (const [tid, bid, aid] of [
@@ -2010,6 +2053,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
     }
 
+    console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
+    if (detailEl) detailEl.style.display = ''
+    // Show the progress popup BEFORE the disk forecast, not after.  The forecast calls
+    // estimate_profile_from_design, which builds the design's whole heavy-atom model —
+    // ~26 s on a 6-helix bundle.  Awaiting that first left the button looking dead for
+    // half a minute ("I click Relax and nothing happens"), because the only feedback
+    // came afterwards.  Feedback first, work second.
+    showOpProgress('Relax', 'Sizing the solvated system…', { indeterminate: true })
+
     // Local-disk forecast only applies to a local run; an Alpine run writes its
     // trajectory on the cluster's scratch, not this machine's disk.  A seeded draft's
     // size isn't known until it solvates, so skip the forecast (parity with the old
@@ -2018,6 +2070,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       try {
         const fc = await estimateMdDisk(payload)
         if (!(await confirmDiskSpaceOk(fc))) {
+          hideOpProgress()
           _launching = false
           runBtn.disabled = false
           return
@@ -2025,9 +2078,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       } catch { /* forecast is best-effort — never block a launch on it */ }
     }
 
-    console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
-    if (detailEl) detailEl.style.display = ''
-    showOpProgress('Relax', 'Creating job…', { indeterminate: true })
+    setOpProgressLabel('Creating job…')
 
     try {
       console.log(`[${_ts()}] md-jobs: POST /api/md/jobs`)

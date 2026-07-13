@@ -3415,6 +3415,24 @@ export async function gpuStatus(devices = '0') {
   return _request('GET', `/md/gpu-status?devices=${encodeURIComponent(devices)}`)
 }
 
+/** Recommended NAMD Advanced settings for the active design on THIS machine
+ *  (backs the Advanced card's ⚡ Optimize button). Read-only — it proposes, the
+ *  panel applies only after the user confirms. Returns
+ *  { recommended, rationale, warnings, facts }. See routes_md.py optimize_advanced. */
+export async function optimizeMdAdvanced({ devices = '0', padding_nm = 1.2, minimize_steps = 10000 } = {}) {
+  const q = new URLSearchParams({
+    devices, padding_nm: String(padding_nm), minimize_steps: String(minimize_steps),
+  })
+  return _request('GET', `/md/optimize-advanced?${q}`)
+}
+
+/** GPU/RAM/core facts for this host — the FAST first stage of ⚡ Optimize (~0.5 s).
+ *  Separate from optimizeMdAdvanced (~30 s: it builds the design's heavy-atom model)
+ *  so the panel's progress bar has a real stage boundary to report. */
+export async function optimizeMdHardware(devices = '0') {
+  return _request('GET', `/md/optimize-advanced/hardware?devices=${encodeURIComponent(devices)}`)
+}
+
 /** Auto engine recommendation for the active design given live GPU/CPU state
  *  → {recommendation, gpu, free_cores, has_proteins, n_nucleotides, gpu_eta_seconds}.
  *  Returns null on error so callers can degrade to "GPU unknown / recommend oxDNA". */
