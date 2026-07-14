@@ -145,4 +145,49 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
 - **K5** — Heavy tests fail on GPU/pinned-host contention (`cudaHostAlloc` in `reallocate_host_T`) *while a production sim runs* = **the sim-guard silently never fired**. A live NAMD renames its comm to `NAMD masterPe` (CAPITALS + a space), and the guard's `pgrep -l` matched process names case-SENSITIVELY. Looks like a code bug; isn't. FIXED: `pgrep -il` (`hardware._SIM_PROC_PATTERN`) — and never `-f`, which self-matches pytest's own argv. [detail](LESSONS_archive.md#k5)
 - **K6** — NAMD dies at segment START with `cudaMallocHost` / `cudaHostAlloc` (`CudaUtils.C`, `allocate_host_T`) = **GPU-resident mode ran out of PINNED host memory**, NOT VRAM and NOT RAM (this WSL box pins only **1.0 GB** with 15 GB free). Hits `GPUresident on` fast segments above ~800k atoms (756k OK, 971k fails). Dropping GPUresident ALONE then blows up RATTLE — 4 fs only survives under its GPU constraint solver. FIXED: `gpu_resident_probe()` + `downgrade_gpu_resident()` (GPUresident off, 4→2 fs, steps/freqs ×2 → same ns, same frames). [detail](LESSONS_archive.md#k6)
 
+## L. Rented-GPU runs / cost safety (RunPod)
+
+> **Read [REFERENCE_RUNPOD_RUNBOOK](REFERENCE_RUNPOD_RUNBOOK.md) BEFORE renting anything, and run
+> `experiments/exp43_runpod_bench/preflight.py <job>` — it mechanically refuses every failure below.**
+> The 3x6x400 run (1.94M atoms, $13/$15) found **11 bugs; 9 of them produced NO error of any kind.**
+> A passing 6hb e2e (225k atoms, 5 min, $0.03) reached **none** of them. **Scale, duration and money each
+> expose a disjoint class of failure.**
+
+- **L1** — ⚠️ **THE META-LESSON: on a rented pod, "fails safe" can mean "fails expensive."** The relaxation
+  early-stop evaluator fails safe to **HOLD** (run everything) — correct for the science, ruinous for the
+  wallet (~4x). Two subsystems were *documented* as fail-safe and both did, into the most expensive possible
+  behaviour. **Always ask: safe for whom — the science, or the bill?** [detail](LESSONS_archive.md#l1)
+- **L2** — **`fast=True` SILENTLY disabled relaxation early-stop (a 4x cost bug, zero errors).**
+  `outputEnergies` was a hardcoded **9600 STEPS**; chunk step-counts derive from a target simulated *TIME*, so
+  4 fs HALVES the steps for identical physics while a step-denominated cadence fires half as often *per ns*.
+  Frames/chunk fell **25 → 12**, under the evaluator's `min_frames=20`; every `p10` reported HOLD forever and
+  no chunk could bridge. The accelerator still ran, still answered — always "no". **General rule: any
+  step-denominated cadence is a latent bug the moment the timestep becomes a variable.** (Bit us TWICE — a
+  late `cell_shrink` resume runs `total-restart_step` and starves the same way.) [detail](LESSONS_archive.md#l2)
+- **L3** — **`cell_shrink` was NOT self-healing; "bounded retry" meant "fails 4x".** The retry re-ran the
+  ORIGINAL conf, whose `extendedSystem` points at the *previous* segment's `.xsc` — the ORIGINAL cell. NAMD
+  rebuilt the same patch grid and shrank into the same wall, identically, four times. Measured:
+  156.6x89.1x1436.2 → 152.0x86.5x1393.4 (-3.0%). FIXED: `remote_resume_conf.py` resumes from the segment's
+  OWN restart files. **A documented "self-healing" behaviour is worthless until something has watched it
+  heal.** [detail](LESSONS_archive.md#l3)
+- **L4** — **A DNS blip orphaned a billing pod — and its id had never been persisted.** A transient
+  `Temporary failure in name resolution` on a routine poll became a fatal error, killed the launcher, and the
+  launcher's `finally` is the ONLY thing that destroys a pod. NAMD (setsid-detached, output on the volume)
+  carried on happily, so nothing looked wrong. Worse: `runpod_executor` never called `job.save()`, so the
+  orphan could not even be **named**, let alone reaped. **The on-pod kill-switch has no API key: it can stop
+  NAMD, never the billing.** [detail](LESSONS_archive.md#l4)
+- **L5** — **The spend ledger FROZE while a real GPU billed on.** It deduped pod rows by keeping the FIRST
+  seen — which was the *closed* row written by the dying launcher — so the live row was discarded and
+  `spent()` stuck at $0.95 while the true figure was $1.35. The budget guard reads that number; it could never
+  have fired. **A safety net can have the same hole as the thing it protects** (the ledger existed *because*
+  the kill-switch had no memory). **A ledger that under-reports is worse than no ledger, because it is
+  trusted.** [detail](LESSONS_archive.md#l5)
+- **L6** — **You pay GPU rates to DOWNLOAD your results, and the price table lied.** The network volume is
+  reachable only *through a live pod*, so fetching 5.2 GB burned ~100 min (~$1.20) with the card idle — a
+  quarter of what the science cost. Fetch selectively: the final checkpoint is ~140 MB and is all production
+  needs; DCDs persist on the volume. Separately, `GPU_TYPES` carried **COMMUNITY** prices while Community
+  cloud is excluded in code — every estimate was **~2.2x low**. And the per-Matom throughput fit does **not**
+  transfer across GPU architectures (4090 fit predicted 20.9 ms/step; the Blackwell did **26.4**).
+  [detail](LESSONS_archive.md#l6)
+
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.

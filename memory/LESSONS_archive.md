@@ -864,3 +864,153 @@ Building the free-ssDNA-tail model, the gate was the WLC oracle: a free n-nt tai
 ROOT CAUSE: a chain's local bond angles relax in picoseconds; its **long-wavelength bending modes** relax orders of magnitude more slowly. Langevin *and* local-move MC both converge `⟨cos θ⟩` almost instantly and then leave the global conformation frozen near wherever it started — so ⟨R_ee²⟩ was still remembering the initial condition after 232 ns. The signature, once you look for it: the tangent correlation `⟨u_i·u_{i+k}⟩` **PLATEAUS** at a finite value (0.64 at k = 12!) instead of decaying to zero. A WLC's must decay to zero. Locally floppy but globally rigid = not equilibrated. The cure was the **pivot move** (rotate everything beyond node i — positions *and* triads — rigidly about it; frame-indifference ⇒ exactly ONE element changes energy, so it is O(1) and decorrelates the whole chain in a handful of moves). With it the correlation decayed properly, ⟨R_ee²⟩ converged, and the real answer appeared: the chain is only **1.74×** stiffer than `EI = k_BT·L_p`, because it is discretised *at* its own persistence length (b/L_p ≈ 1.01), far from the continuum limit that identity assumes.
 
 **How to avoid**: (1) **Agreement between two samplers is not convergence** — if both are under-converged in the same mode, they agree *and* are wrong. Cross-validate against a sampler with a *different failure mode* (here: a global move), not merely a different algorithm. (2) For any polymer/chain observable, check the **tangent correlation decays to zero**. A plateau means unequilibrated, always; it is a cheap, unambiguous convergence assertion and it is now pinned in the oracle test. (3) Separate FAST/local observables (bond stretch, ⟨cos θ⟩) from SLOW/global ones (⟨R_ee²⟩, R_g) and never validate the latter with MD run-lengths sized for the former. (4) A response that is *flat* in a parameter the physics says it must depend on (EI here) is a convergence bug, not a material property — do not calibrate against it. See [[project_snupi_ssdna]] (SS-2) and `snupi_tails.pivot_sample_chain`.
+
+---
+
+# L. Rented-GPU runs / cost safety (RunPod)
+
+All from the 3x6x400 production run (2026-07-14): 1.94M atoms, full ladder + 5.5 ns
+production, $13 of a $15 cap. **Eleven bugs. Nine produced no error of any kind.**
+
+## L1
+**On a rented pod, "fails safe" can mean "fails expensive."**
+
+Tier-A relaxation early-stop decides whether a chunk has plateaued. When it cannot decide
+— missing MDAnalysis, too few frames, an unreadable log — it reports **HOLD**: run
+everything. That is unambiguously the right default *for the science*. On a rented GPU it
+is the single most expensive thing it can do: the un-accelerated ladder is ~35 h and ~$26
+against ~4.6 h and ~$4.
+
+Two subsystems were *documented* as fail-safe (`cell_shrink` "self-heals"; the evaluator
+"fails safe to run") and both did exactly what the docs said — into the most expensive
+possible behaviour. Neither raised anything.
+
+**How to avoid**: (1) For every fail-safe path, ask **safe for whom — the science or the
+bill?** and make the expensive branch *loud*. (2) `runpod_executor._ensure_mdanalysis()` is
+now a **hard gate**: a pod that cannot import MDAnalysis REFUSES to launch rather than
+quietly running the expensive path. (3) Anything whose failure mode is "costs 4x with no
+error" belongs in `preflight.py`, not in a comment.
+
+## L2
+**`fast=True` silently disabled relaxation early-stop — a 4x cost bug with zero errors.**
+
+`outputEnergies`/`dcdFreq` were a hardcoded **9600 STEPS**. Chunk step-counts are derived
+from a target simulated *TIME*, so enabling `fast` (2 fs → 4 fs) HALVES every chunk's step
+count for identical physics — while a step-denominated print interval keeps firing just as
+often *per step*, i.e. **half as often per nanosecond**. A `p10` chunk fell from 25 ENERGY
+frames to **12**, under the evaluator's `min_frames = 20`. `energy_plateaued` therefore
+returned False for every `p10` in the ladder, no `p10` could ever bridge, and the
+accelerator's ceiling collapsed from ~10x to ~2x.
+
+The accelerator was still emitted, still ran, and still answered — it just answered HOLD
+every single time. Nothing errored. The only symptom was the bill. On the live pod it
+turned a ~4 h / ~$3 ladder into a ~15 h / ~$11 one that could not finish inside its own
+kill-switch. Found only by reading `min_frames` against the conf's actual cadence.
+
+The live run then cleared the bar by **one frame** (`n_energy_frames: 21` vs a threshold of
+20) — and only because it happened to cell-shrink *early*. **The same bug has a second
+trigger**: a resume runs `total - restart_step`, so a shrink at step 44,000 leaves
+76,000/4,000 = **19 frames** and starves the chunk all over again.
+
+**How to avoid**: **Any step-denominated cadence is a latent bug the moment the timestep
+becomes a variable.** Derive cadences from the chunk's own length (`md_protocols._output_freq`)
+and, on a resume, from the **remaining** steps (`remote_resume_conf._output_freq`). Pinned by
+`tests/test_md_cutoff.py::TestEarlyStopFrameBudget` and
+`tests/test_remote_resume_conf.py`, both proven can-go-red. `preflight.py` refuses a package
+whose chunks are starved.
+
+## L3
+**`cell_shrink` was never self-healing on a pod: "bounded retry" meant "fails four times".**
+
+"Periodic cell has become too small" is an NPT box relaxing ~3% to equilibrium density and
+crossing NAMD's fixed patch grid. The memory said *"self-healing on restart; bounded retry
+in the chain script."* The first half was an assumption and it was **false**: the chain
+script's retry simply re-ran the **original conf**, whose `extendedSystem` points at the
+*previous* segment's `.xsc` — i.e. the **ORIGINAL** cell. NAMD rebuilt the same patch grid,
+the box shrank into the same wall, and all four retries died at the identical step. This
+path had evidently never been exercised.
+
+Measured live (the soft chunk shrank at step 4000):
+
+    conf (original) : 156.636 x  89.136 x 1436.190
+    restart @ 4000  : 151.972 x  86.482 x 1393.426    (-3.0% on EVERY axis)
+
+**How to avoid**: `backend/core/remote_resume_conf.py` (stdlib-only, vendored, drop-list
+pinned in lockstep with `md_protocols._RESUME_DROP`) rebuilds the conf against the segment's
+**own** `restart.{coor,vel,xsc}`, which carry the shrunken cell, and runs only the remaining
+steps. It deliberately keeps writing the **SAME** `.dcd` (not a `.cont<k>.dcd`): Tier A reads
+its WC series off `output/<seg>.dcd`, so a continuation written elsewhere would leave that
+series holding only the few PRE-shrink frames and **silently report HOLD forever**.
+Confirmed firing on a live pod. **A documented "self-healing" behaviour is worthless until
+something has watched it heal.**
+
+## L4
+**A transient DNS blip orphaned a billing pod — and its id had never been persisted.**
+
+A routine status poll hit `[Errno -3] Temporary failure in name resolution`. `_request`
+turned that blip into a **fatal** `RunpodError`; it propagated out of the poll loop and
+killed the launcher — and the launcher's `finally` is the **only** thing that destroys the
+pod. NAMD, being `setsid`-detached with output on the network volume, carried on perfectly
+happily, so the ladder kept advancing while nothing was left alive to turn the meter off.
+
+**And worse:** `runpod_executor` **never called `job.save()`**. Nothing about the pod was
+persisted, so a crashed launcher left an orphaned, billing pod that no later process could
+even **name**, let alone reap or resume.
+
+⚠️ **The on-pod kill-switch CANNOT stop the billing.** It runs on the pod with no API key: it
+can `pkill` NAMD, never destroy the pod.
+
+**How to avoid**: (1) `_request` retries the network layer and 5xx/429 with backoff; **never
+a 4xx** (a bad payload or rejected key fails identically forever and hammering it just burns
+pod-time). (2) The pod id is saved the **instant** it exists, and again after launch.
+(3) `experiments/exp43_runpod_bench/supervise.py` re-attaches to an orphaned pod (poll →
+fetch → destroy). (4) `reap.py --kill` is the panic button; it reads `~/.runpod_key` so it
+works with no environment. **Finish every run by confirming `0 pods`.**
+
+## L5
+**The spend ledger FROZE while a real GPU billed on.**
+
+The ledger exists **because** the in-code kill-switch is per-POD and has no memory (two pods
+each get the full budget) — and then it grew the same class of hole. A pod bills
+continuously from creation to destruction, no matter how many processes watch it. The
+launcher opened the pod, died (its `finally` **closed** the row), and a supervisor
+re-adopted it, writing a second, **open** row for the SAME pod. `_all_rows` deduped by
+keeping the **first** row seen — the closed one — so the live, still-accruing row was
+discarded and `spent()` **froze at $0.95** while the GPU billed on for another 25 minutes.
+True spend: **$1.35**. The budget guard reads that number; it could never have fired.
+
+Two sibling bugs in the same teardown: `supervise.py` called `job.save()` **before**
+interpreting the poll verdict, so a finished ladder was recorded as `"running"`; and
+`reap.py` destroyed pods without **closing** them in the ledger, so a reaped pod accrued
+forever.
+
+**How to avoid**: collapse rows per pod (`started` = earliest sighting; `ended = None` if ANY
+observer still has it open); `close_pod()` closes the pod in **every** job's file; save
+**after** deciding, not before; the panic button must not corrupt the accounting it protects.
+**A ledger that under-reports is worse than no ledger, because it is trusted.** Pinned by
+`tests/test_spend_ledger.py`.
+
+## L6
+**You pay GPU rates to download your results — and the price table lied.**
+
+Three cost traps, none of which errors:
+
+1. **The network volume is reachable only through a LIVE pod**, so `fetch_outputs` runs while
+   the GPU bills, idle. The relaxation produced **5.2 GB**; at domestic downlink (~48 MB/min)
+   that is **~100 min ≈ $1.20** — a quarter of what the science itself cost ($3.99), spent
+   moving files. **Fetch selectively**: the final checkpoint is ~140 MB and is all production
+   needs; the DCDs are the bulk and they **persist on the volume** (pull them later, or on
+   the next pod, which is billing anyway).
+2. **`GPU_TYPES` carried COMMUNITY prices** while Community cloud is excluded in code (no card
+   in EU-RO-1, where the volume pins us). Every estimate — `plan_execution`, `POST
+   /runpod/estimate` — was **~2.2x low**. A "$5" overnight ladder is really $11. The live
+   kill-switch was never affected (it reads the pod's *actual* rate).
+3. **The per-Matom throughput fit does NOT transfer across GPU architectures.** The 4090's
+   measured 11.2 ms/step/Matom predicted **20.9** ms/step for 1.94M atoms; the RTX PRO 4500
+   Blackwell actually does **26.4** (1.26x slower). **Re-measure on any new card before
+   costing a run off it** — and take the measurement from the live ladder's own log rather
+   than renting a throwaway benchmark pod.
+
+**How to avoid**: `preflight.py` costs the run at the **measured** rate and prints both the
+best case (every stage bridges) and the worst (no bridge ever), so a run that only fits in
+the optimistic branch is visible before a cent is spent.

@@ -48,7 +48,8 @@ and shared across both computers (see `CLAUDE.md` → Memory layout).
 [DEFORMATION_THEORY](REFERENCE_DEFORMATION_THEORY.md) DTP-6 / loop-skip ·
 [SQUARE_LATTICE](REFERENCE_SQUARE_LATTICE.md) DTP-SQ ·
 [CROSSOVER_AUTOBREAK](REFERENCE_CROSSOVER_AUTOBREAK.md) ligation, circular ·
-[PLAYWRIGHT](REFERENCE_PLAYWRIGHT.md) troubleshooting only, never routine
+[PLAYWRIGHT](REFERENCE_PLAYWRIGHT.md) troubleshooting only, never routine ·
+**[RUNPOD_RUNBOOK](REFERENCE_RUNPOD_RUNBOOK.md)** — hardened protocol for a rented-GPU NAMD run. READ + run `preflight.py` BEFORE renting anything
 
 ## User feedback (open the one matching your area)
 
