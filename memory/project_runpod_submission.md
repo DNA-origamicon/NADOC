@@ -176,8 +176,20 @@ RunPod**. To close the loop:
 5. **NOT YET EXERCISED IN THE APP** — the radio is served and the pure logic is unit-tested,
    but no click-through and no live pod round-trip. Phase 4 = end-to-end on a real pod.
 
-- [ ] **Phase 4 — end-to-end on a live pod**, auto-resume on reclaim, cost readout in the
-      panel, pod-leak reaper on startup.
+- [x] **Phase 5 — a REAL production-scale ladder (3x6x400, 1.94M atoms).** 2026-07-14.
+      The 6hb e2e (Phase 4) proved the *plumbing*; it did not exercise a single one of the
+      things that actually break at scale. Five bugs, four of them SILENT:
+      1. `early_stop_relax` was a no-op on runpod (the flag existed, nothing read it).
+      2. Tier B structurally cannot pay for a real ladder (can't touch k < 0.1).
+      3. `fast=True` silently disabled early-stop via the frame budget (4x cost).
+      4. `cell_shrink` retry could never heal (restarted from the ORIGINAL box).
+      5. `GPU_TYPES` held COMMUNITY prices in a SECURE-only world (~2.2x under).
+      Plus: production child didn't inherit `archive_path` (trajectory → system disk),
+      the $15 was a per-JOB cap not a session cap, and PEP 668 blocks `pip install`.
+
+- [ ] **Phase 6 — the panel.** Cost readout, pod-leak reaper on startup, and the Clusters
+      card / RunPod radio / pre-flight gate have STILL never been clicked in a browser.
+      Everything above was driven from `experiments/exp43_runpod_bench/*.py`.
 
 ## MEASURED on a rented RTX 4090 (2026-07-13) — the numbers the code is calibrated to
 
