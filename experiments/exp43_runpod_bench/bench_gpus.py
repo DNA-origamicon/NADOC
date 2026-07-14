@@ -78,16 +78,29 @@ MIN_USEFUL_NS_DAY = TARGET_NS * 24 / MAX_WALL_H     # = 10 ns/day
 # DELIBERATELY ABSENT: A100 (sm_80), H100/H200 (sm_90), B200 (sm_100). Every one of them
 # rents fine and dies at step 0. B200 is the trap — "Blackwell", but not sm_120.
 CANDIDATES = [
-    ("NVIDIA RTX 4000 Ada Generation",      "RTX 4000 Ada",     "sm_89",  0.26),
-    ("NVIDIA L4",                            "L4",               "sm_89",  0.39),
+    # ── sm_120 Blackwell: the CURRENT binary already runs these. No rebuild needed. ──
+    # The PRO 4500 ($0.74) vs PRO 6000 ($1.99) pair is the cleanest possible test of
+    # "does compute scale with cost" — SAME architecture, 2.7x the price, no confound.
+    ("NVIDIA RTX PRO 6000 Blackwell Server Edition",       "RTX PRO 6000",      "sm_120", 1.99),
+    ("NVIDIA RTX PRO 6000 Blackwell Workstation Edition",  "RTX PRO 6000 WK",   "sm_120", 1.89),
     ("NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
-                                             "RTX PRO 6000 MaxQ", "sm_120", 0.50),
-    ("NVIDIA GeForce RTX 4090",              "RTX 4090",         "sm_89",  0.69),
-    ("NVIDIA RTX 6000 Ada Generation",       "RTX 6000 Ada",     "sm_89",  0.77),
-    ("NVIDIA GeForce RTX 5090",              "RTX 5090",         "sm_120", 0.99),
-    ("NVIDIA L40S",                          "L40S",             "sm_89",  0.99),
+                                                           "RTX PRO 6000 MaxQ", "sm_120", 0.50),
+    ("NVIDIA GeForce RTX 5090",                            "RTX 5090",          "sm_120", 0.99),
+    # ── sm_89 Ada: also covered by the current binary. ──
+    ("NVIDIA L40S",                                        "L40S",              "sm_89",  0.99),
+    ("NVIDIA GeForce RTX 4090",                            "RTX 4090",          "sm_89",  0.69),
+    ("NVIDIA RTX 6000 Ada Generation",                     "RTX 6000 Ada",      "sm_89",  0.77),
+    ("NVIDIA RTX 4000 Ada Generation",                     "RTX 4000 Ada",      "sm_89",  0.26),
+    ("NVIDIA L4",                                          "L4",                "sm_89",  0.39),
 ]
 
+# ⚠️ NOT here, and they CANNOT be until NAMD is rebuilt — each rents FINE and dies at step 0
+# with "no kernel image is available for execution":
+#   A100        sm_80   $1.39-1.49
+#   H100/H200   sm_90   $2.89-4.39
+#   B200        sm_100  $5.89        <- reads as "Blackwell" but is NOT sm_120. The trap.
+# See bench_hpc_gpus notes: needs `build_patched_namd.sh` widened to
+# -gencode arch=compute_80/90/100 and NAMD_BUILD_ARCHS extended to match.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("bench")
 for noisy in ("asyncssh", "httpx", "httpcore"):
@@ -98,36 +111,69 @@ def slug(label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
 
 
+async def _step(conn, label, cmd, want=None, timeout=300.0):
+    """Run one setup step and SAY WHAT HAPPENED.
+
+    Every substep between "pod created" and "here is a number" used to be silent, so a
+    half-failed setup surfaced only as "no benchmark line" with no way to tell which of
+    six things broke. On a rented GPU that is a diagnosis you pay for by the minute.
+    """
+    r = await conn.run(cmd, timeout=timeout)
+    out = (r.stdout or "").strip()
+    ok = (r.rc == 0) and (want is None or want(out))
+    log.info("    %-26s %s%s", label, "ok" if ok else "*** FAILED ***",
+             f"  [{out[:60]}]" if out else "")
+    if not ok:
+        raise RuntimeError(f"{label}: rc={r.rc} out={out[:200]!r} err={(r.stderr or '')[:120]!r}")
+    return out
+
+
 async def prepare_bench_dir(conn, parent_remote: str, name_stem: str, steps: int,
                             final_ckpt: str, sdir: str) -> str:
-    """Copy the package server-side and write a short production conf. Costs no upload."""
-    prod_conf = None
-    r = await conn.run(f"ls {parent_remote}/*production*.conf 2>/dev/null | head -1")
-    # The relaxation dir has no production conf; take the child's if present, else build
-    # from the relaxation's last fast conf. Simplest: use the production child's package.
-    r2 = await conn.run(
-        f"ls /workspace/nadoc_jobs/*/[!.]*production*.conf 2>/dev/null | head -1")
-    prod_conf = (r.stdout.strip() or r2.stdout.strip()).splitlines()[0] if (
-        r.stdout.strip() or r2.stdout.strip()) else None
+    """Copy the package server-side and write a short production conf. Costs no upload.
+
+    Each substep is CHECKED and LOGGED — see _step. A benchmark that silently ran on a
+    half-copied package would report a number that means nothing.
+    """
+    # 0. The pod is what we think it is.
+    await _step(conn, "GPU present",
+                "nvidia-smi --query-gpu=name,memory.total,driver_version "
+                "--format=csv,noheader", want=lambda o: bool(o))
+    await _step(conn, "volume mounted", "test -d /workspace/namd && echo yes",
+                want=lambda o: o == "yes")
+    await _step(conn, "NAMD binary", f"test -x {NAMD_ON_VOLUME} && echo yes",
+                want=lambda o: o == "yes")
+
+    # 1. Find a production conf to benchmark (the expensive integrator — the one we ship).
+    r = await conn.run(
+        "ls /workspace/nadoc_jobs/*/[!.]*production*.conf 2>/dev/null | head -1")
+    prod_conf = (r.stdout or "").strip().splitlines()
     if not prod_conf:
         raise RuntimeError("no production conf on the volume to benchmark")
-
+    prod_conf = prod_conf[0]
     src = prod_conf.rsplit("/", 1)[0]
+    log.info("    %-26s %s", "production conf", prod_conf.split("/")[-1])
+
+    # 2. Package -> bench dir. A `cp` ON THE VOLUME, not an upload.
     await conn.run(f"mkdir -p {sdir}/output")
-    # Hardlink/copy the package next to the bench conf — a `cp` ON THE VOLUME, not an upload.
     await conn.run(
         f"cp -n {src}/*.psf {src}/*.pdb {src}/*.txt {sdir}/ 2>/dev/null; "
         f"cp -rn {src}/forcefield {sdir}/ 2>/dev/null; "
-        f"cp -n {src}/*.extra {sdir}/ 2>/dev/null; true", timeout=300.0)
-    # Seed from the RELAXED final checkpoint (the whole point — this is a real, equilibrated
-    # 1.94M-atom system, not a fresh box).
-    await conn.run(
-        f"cp -n {parent_remote}/output/{final_ckpt}.coor {sdir}/output/ 2>/dev/null; "
-        f"cp -n {parent_remote}/output/{final_ckpt}.vel  {sdir}/output/ 2>/dev/null; "
-        f"cp -n {parent_remote}/output/{final_ckpt}.xsc  {sdir}/output/ 2>/dev/null; true",
-        timeout=300.0)
+        f"cp -n {src}/*.extra {sdir}/ 2>/dev/null; true", timeout=600.0)
+    await _step(conn, "package copied",
+                f"ls {sdir}/*.psf {sdir}/*.pdb {sdir}/forcefield/* 2>/dev/null | wc -l",
+                want=lambda o: o.isdigit() and int(o) >= 5)
 
-    # Short run, no trajectory, sparse energies — we want ms/step, nothing else.
+    # 3. The RELAXED checkpoint — the whole point. A bench on un-equilibrated coords is
+    #    a bench of a different system.
+    await conn.run(
+        f"for e in coor vel xsc; do cp -n {parent_remote}/output/{final_ckpt}.$e "
+        f"{sdir}/output/ 2>/dev/null; done; true", timeout=600.0)
+    await _step(conn, "relaxed checkpoint",
+                f"stat -c %s {sdir}/output/{final_ckpt}.coor 2>/dev/null || echo 0",
+                want=lambda o: o.isdigit() and int(o) > 1_000_000)
+
+    # 4. Rewrite the conf: short run, no trajectory.
     conf = (await conn.run(f"cat {prod_conf}")).stdout
     conf = re.sub(r"(?m)^run\s+\d+", f"run                {steps}", conf)
     conf = re.sub(r"(?m)^outputEnergies\s+\d+", "outputEnergies     200", conf)
@@ -139,7 +185,21 @@ async def prepare_bench_dir(conn, parent_remote: str, name_stem: str, steps: int
                             f".{'coor' if m.group(1) == 'Coordinates' else 'vel'}", conf)
     conf = re.sub(r"(?m)^extendedSystem\s+\S+",
                   f"extendedSystem     output/{final_ckpt}.xsc", conf)
-    await conn.run(f"cat > {sdir}/bench.conf << 'NADOC_EOF'\n{conf}\nNADOC_EOF", timeout=120.0)
+    await conn.run(f"cat > {sdir}/bench.conf << 'NADOC_EOF'\n{conf}\nNADOC_EOF",
+                   timeout=120.0)
+
+    # 5. VERIFY the conf is the one we meant to run. A bench of the wrong integrator (or
+    #    the wrong step count) is worse than no bench — it produces a confident wrong
+    #    number. This is how production got sized 2x wrong in the first place.
+    await _step(conn, "conf: run steps",
+                f"grep -cE '^run +{steps}$' {sdir}/bench.conf", want=lambda o: o == "1")
+    await _step(conn, "conf: GPUresident", f"grep -c '^GPUresident' {sdir}/bench.conf",
+                want=lambda o: o == "1")
+    await _step(conn, "conf: 4 fs timestep", f"grep -cE '^timestep +4' {sdir}/bench.conf",
+                want=lambda o: o == "1")
+    await _step(conn, "conf: seeds from relax",
+                f"grep -c '{final_ckpt}' {sdir}/bench.conf",
+                want=lambda o: o.isdigit() and int(o) >= 3)
     return f"{sdir}/bench.conf"
 
 
@@ -179,22 +239,48 @@ async def bench_one(client, ledger, gpu_id, label, sm, usd_hr, steps, parent_rem
                 conf = await prepare_bench_dir(conn, parent_remote, name_stem, steps,
                                                final_ckpt, sdir)
                 threads = namd_threads(vcpus)
-                cmd = (f"cd {sdir} && {NAMD_ON_VOLUME} +p{threads} +setcpuaffinity "
-                       f"+devices 0 {conf} > bench.log 2>&1; echo done")
-                await conn.run(cmd, timeout=1800.0)
-                log_txt = (await conn.run(f"tail -c 60000 {sdir}/bench.log")).stdout
+                log.info("    %-26s +p%d on %d vCPU", "launching NAMD", threads, vcpus)
+                # Detached, so we can WATCH it. Blocking on a 5-minute `conn.run` tells us
+                # nothing until it is over — and if NAMD dies at step 0 (wrong arch) we
+                # want to know in seconds, not after the timeout.
+                await conn.run(
+                    f"cd {sdir} && setsid nohup {NAMD_ON_VOLUME} +p{threads} "
+                    f"+setcpuaffinity +devices 0 {conf} > bench.log 2>&1 "
+                    f"< /dev/null & echo $!")
 
-                if "no kernel image is available" in log_txt:
-                    result["note"] = "WRONG ARCH — died at step 0"
+                log_txt = ""
+                for _ in range(60):                      # up to ~10 min
+                    await asyncio.sleep(10)
+                    log_txt = (await conn.run(f"tail -c 60000 {sdir}/bench.log")).stdout
+                    if "no kernel image is available" in log_txt:
+                        result["note"] = "WRONG ARCH — died at step 0"
+                        log.error("    %-26s %s", "NAMD", result["note"])
+                        return result
+                    fatal = re.search(r"^FATAL ERROR:.*", log_txt, re.M)
+                    if fatal:
+                        result["note"] = fatal.group(0)[:70]
+                        log.error("    %-26s %s", "NAMD", result["note"])
+                        return result
+                    energies = re.findall(r"^ENERGY:\s+(\d+)", log_txt, re.M)
+                    marks = re.findall(r"Benchmark time:.*?([\d.]+)\s+s/step", log_txt)
+                    if energies:
+                        log.info("    %-26s step %s / %d   (%d benchmark lines)",
+                                 "NAMD running", energies[-1], steps, len(marks))
+                    if len(marks) >= 3 or (energies and int(energies[-1]) >= steps):
+                        break
+                else:
+                    result["note"] = "timed out before NAMD produced a benchmark line"
                     return result
+
                 m = re.findall(r"Benchmark time:.*?([\d.]+)\s+s/step", log_txt)
                 if not m:
-                    fatal = re.search(r"^FATAL ERROR:.*", log_txt, re.M)
-                    result["note"] = (fatal.group(0)[:70] if fatal else "no benchmark line")
+                    result["note"] = "no benchmark line"
                     return result
                 # NAMD's first Benchmark line is warm-up; take the settled tail.
                 s_per_step = sum(float(x) for x in m[-3:]) / len(m[-3:])
                 result["ms_step"] = s_per_step * 1000
+                log.info("    %-26s %.1f ms/step (from %d lines)",
+                         "measured", result["ms_step"], len(m))
             finally:
                 await conn.close()
     except Exception as exc:  # noqa: BLE001
