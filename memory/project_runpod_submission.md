@@ -315,6 +315,38 @@ step count while its timestep stays 1 fs** (`timestep = 1.0 if spec.soft else (4
 else 2.0)`), so the soft warm-up drops from 240 ps to **120 ps** of simulated time. It errs
 toward *less* warm-up. Harmless-looking, but it is a silent change to protocol intent.
 
+## ⚠️ `cell_shrink` was NOT self-healing on a pod — "bounded retry" meant "fails 4×" (fixed 2026-07-14)
+
+The memory said *"self-healing on restart; bounded retry in the chain script"*. The first
+half was an assumption, and it was **false on RunPod**. This path had never been exercised.
+
+Self-healing requires the restart to rebuild the patch grid at the **SMALLER** box. The
+chain script's retry simply **re-ran the original conf** — whose `extendedSystem` points at
+the *previous* segment's `.xsc`, i.e. the **ORIGINAL** cell. So NAMD rebuilt the same grid,
+the box shrank into the same wall, and all four retries died at the identical step.
+
+Measured live on the 3x6x400 pod (the soft chunk shrank at step 4000):
+
+    conf (original) : 156.636 x  89.136 x 1436.190
+    restart @ 4000  : 151.972 x  86.482 x 1393.426     (-3.0% on EVERY axis)
+
+`backend/core/remote_resume_conf.py` is the pod-side writer (stdlib-only, vendored,
+drop-list pinned in lockstep with `md_protocols._RESUME_DROP`) — the RunPod equivalent of
+the local runner's `_write_resume_conf`. On a retry the chain script rebuilds the conf
+against the segment's **own** `restart.{coor,vel,xsc}` and runs only the remaining steps.
+**Confirmed firing on a live pod**: `SHRINK → [nadoc-resume] resumes at step 4000 → RESUME
+… (attempt 1) → START`, then the chunk ran past the point it had died at twice.
+
+⚠️ It deliberately keeps writing the **SAME** `.dcd` (not `md_protocols`'
+`.cont<k>.dcd`): Tier-A reads its WC series off `output/<seg>.dcd`, so a continuation
+written elsewhere would leave that series holding only the few PRE-shrink frames, fall
+under the evaluator's window, and **silently report HOLD forever** — the segment would lose
+its ability to bridge, and nothing would say so.
+
+**The meta-lesson, twice over tonight: a documented "self-healing"/"fail-safe" behaviour is
+worthless until something has actually watched it heal.** Both this and the `fast`/early-stop
+bug presented as *silence*, not as errors.
+
 ## Cost anatomy of the 3x6x400 ladder (1.94M atoms, RTX PRO 4500, measured)
 
 | chunk | timestep | mode | ms/step | note |
