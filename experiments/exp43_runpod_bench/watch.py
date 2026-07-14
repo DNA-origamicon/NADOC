@@ -79,8 +79,19 @@ async def main() -> int:
             print(ledger.summary())
             return 1 if problems else 0
 
-        pod = pods[0]
-        print(f"POD      {pod.id}  {pod.desired_status}  ${pod.cost_per_hr}/hr")
+        # Pick the pod THIS JOB is on — never just pods[0]. Once a second pod exists (a
+        # benchmark, a build), pods[0] is a coin flip: the sentinel files still read fine
+        # because the VOLUME is shared, but `kill -0 <pid>` is pod-LOCAL, so we check the
+        # job's PID on someone else's machine and report a perfectly healthy run as DEAD.
+        # A false alarm that kills a good pod costs exactly as much as a missed real one.
+        pod = next((p for p in pods if p.id == job.runpod_pod_id), None)
+        if pod is None:
+            print(f"PODS     {len(pods)} live, but NONE is this job's pod "
+                  f"({job.runpod_pod_id}) — it is gone")
+            print(ledger.summary())
+            return 1
+        print(f"POD      {pod.id}  {pod.desired_status}  ${pod.cost_per_hr}/hr"
+              + (f"   ({len(pods)} pods live)" if len(pods) > 1 else ""))
 
         endpoint = ssh_endpoint(pod)
         if endpoint is None:

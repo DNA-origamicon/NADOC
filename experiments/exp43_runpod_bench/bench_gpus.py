@@ -97,6 +97,14 @@ CANDIDATES = [
     ("NVIDIA RTX 6000 Ada Generation",                     "RTX 6000 Ada",      "sm_89",  0.77),
     ("NVIDIA RTX 4000 Ada Generation",                     "RTX 4000 Ada",      "sm_89",  0.26),
     ("NVIDIA L4",                                          "L4",                "sm_89",  0.39),
+
+    # ── PROBE: does the multi-arch binary ALREADY cover sm_80? ─────────────────────
+    # cuobjdump on the binary lists sm_80/86/90/100 — but that is the UNION of NAMD's own
+    # kernels AND the bundled NVIDIA libs (cuFFT etc.), so it is NOT proof of coverage
+    # (LESSONS: "do not read the union as NAMD's coverage"). A 5-minute, $0.12 A100 run
+    # settles it empirically and, if it works, saves an hour-long rebuild entirely. The
+    # harness already detects "no kernel image is available" and reports WRONG ARCH.
+    ("NVIDIA A100 80GB PCIe",                              "A100 PCIe",         "sm_80",  1.39),
 ]
 
 # ⚠️ NOT here, and they CANNOT be until NAMD is rebuilt — each rents FINE and dies at step 0
