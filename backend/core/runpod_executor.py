@@ -48,6 +48,12 @@ from backend.core.runpod_script import (
 
 log = logging.getLogger(__name__)
 
+# Hard ceiling on a single pod's life. The stall watchdog kills a HUNG NAMD (no log
+# output for 30 min), but a run that is merely slower than expected would keep billing
+# all night unattended. 20 h covers a full early-stopped relax ladder on a ~2M-atom
+# system (~11-12 h predicted) with real headroom, and caps the damage of a bad estimate.
+MAX_POD_LIFETIME_S = 20 * 3600
+
 REMOTE_ROOT = "/workspace/nadoc_jobs"
 CHAIN_SCRIPT = "nadoc_chain.sh"
 STATUS_FILE = "nadoc_status"
@@ -84,6 +90,7 @@ async def submit_job(
     n_atoms: int,
     vcpus: int,
     gpu_resident: bool = True,
+    max_lifetime_s: int = MAX_POD_LIFETIME_S,
 ) -> int:
     """Stage the package, write the chain script, launch it detached. Returns its PID.
 
@@ -107,6 +114,7 @@ async def submit_job(
         namd_bin=NAMD_ON_VOLUME,
         threads=namd_threads(vcpus),
         devices="0",
+        max_lifetime_s=max_lifetime_s,
     )
     tmp = Path(workspace_dir) / "md_jobs" / job.job_id / CHAIN_SCRIPT
     tmp.parent.mkdir(parents=True, exist_ok=True)

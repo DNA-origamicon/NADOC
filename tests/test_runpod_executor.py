@@ -351,3 +351,22 @@ class TestRunJobOnPodAlwaysTerminates:
 
 async def _nosleep(_):
     return None
+
+
+class TestOvernightSafety:
+    def test_the_chain_script_carries_a_hard_kill_switch(self, tmp_path):
+        """An UNATTENDED overnight run must not be able to bill until morning. The stall
+        watchdog kills a HUNG NAMD (no log output for 30 min), but a run that is merely
+        slower than predicted would keep going. MAX_POD_LIFETIME_S is the backstop."""
+        job = _job(tmp_path)
+        conn = _conn({"setsid": (0, "1\n", "")})
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="m",
+                           n_atoms=225_504, vcpus=16))
+        script = (tmp_path / "md_jobs" / job.job_id / rx.CHAIN_SCRIPT).read_text()
+        assert "LIFETIME_GUARD" in script
+        assert str(rx.MAX_POD_LIFETIME_S) in script
+
+    def test_the_ceiling_is_long_enough_for_a_real_relax_ladder(self):
+        """A 1.86M-atom early-stopped relax is ~11-12 h predicted. The cap must not cut a
+        legitimate run short."""
+        assert rx.MAX_POD_LIFETIME_S >= 16 * 3600
