@@ -1,10 +1,20 @@
 /**
  * "Multiscale" orbit mode — the DEFAULT navigation mode (View → Orbit mode).
  *
- * Built on OrbitControls so rotate / pan / target / dispose behave exactly as in
- * Turntable mode — but with `enableZoom = false`, because the stock dolly is the
- * thing this mode exists to replace. See multiscale_nav.js for the rule and the
- * reasoning; in short:
+ * Built on **TrackballControls** with `noZoom = true`: we keep its rotate and
+ * pan, and replace the dolly, which is the thing this mode exists to fix.
+ *
+ * Why Trackball and not Orbit: OrbitControls is a *turntable*. It holds a fixed
+ * world up-vector and clamps the polar angle to [minPolarAngle, maxPolarAngle]
+ * (OrbitControls.js — `_spherical.phi` is clamped every update), so the camera
+ * hits a wall at straight-up and straight-down and can never tumble through the
+ * poles. That restriction is unacceptable here — you must be able to rotate a
+ * bundle freely to any orientation. TrackballControls has no polar clamp and no
+ * up-vector constraint, so rotation is unrestricted. Its own wheel handler
+ * early-returns when `noZoom` is set (before preventDefault), so it does not
+ * fight the dolly below.
+ *
+ * The navigation law itself is unchanged — see multiscale_nav.js. In short:
  *
  *   • Wheel dollies along the *cursor ray* (zoom to mouse position), by a step
  *     proportional to the distance to the nearest helix axis — not to the orbit
@@ -12,16 +22,16 @@
  *     to zero and the camera flies straight through the structure and out the
  *     far side at a constant pace.
  *   • Shift multiplies the local scale (precise ↔ travel).
- *   • The orbit pivot is re-parked in front of the camera at the local scale on
- *     every wheel and every drag-start (ChimeraX `cofr frontCenter` semantics).
- *     This is what stops orbiting from swinging you around a pivot left behind
- *     187 nm away in the middle of the bundle — and, because three.js scales pan
- *     speed by the camera-to-target distance, it also makes panning correctly
- *     scaled at every zoom level for free.
+ *   • The pivot is re-parked in front of the camera at the local scale on every
+ *     wheel and every drag-start (ChimeraX `cofr frontCenter` semantics). This
+ *     stops rotation from swinging you around a pivot left behind 187 nm away in
+ *     the middle of the bundle — and, because TrackballControls scales pan speed
+ *     by |camera − target|, it also makes panning correctly scaled at every zoom
+ *     level for free.
  */
 
 import * as THREE from 'three'
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 import { clientToNdc } from './ndc.js'
 import {
   MULTISCALE_DEFAULTS,
@@ -40,10 +50,11 @@ const _EMPTY = new Float64Array(0)
  * @param {Function}                getSegments  — () → Float64Array of helix axis segments
  */
 export function makeMultiscaleControls(camera, canvas, target, getSegments) {
-  const c = new OrbitControls(camera, canvas)
-  c.enableDamping     = false
-  c.screenSpacePanning = true
-  c.enableZoom        = false     // the wheel is ours — see _onWheel
+  const c = new TrackballControls(camera, canvas)
+  c.noZoom       = true      // the wheel is ours — see _onWheel
+  c.rotateSpeed  = 3.0       // match the old Trackball mode's feel
+  c.panSpeed     = 0.8
+  c.staticMoving = true      // no rotational inertia
   if (target) c.target.copy(target)
 
   const params = { ...MULTISCALE_DEFAULTS }

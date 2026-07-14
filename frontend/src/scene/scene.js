@@ -259,6 +259,10 @@ export function initScene(canvas) {
     camera.aspect = w / h
     camera.updateProjectionMatrix()
     renderer.setSize(w, h)
+    // TrackballControls (and Multiscale, which builds on it) caches the canvas
+    // rect for its screen→trackball mapping; without this, rotation drifts after
+    // any resize. OrbitControls reads the rect live and has no such method.
+    _inner.handleResize?.()
     _onResize?.(w, h)
   })
   resizeObserver.observe(container)
