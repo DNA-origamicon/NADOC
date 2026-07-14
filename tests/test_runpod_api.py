@@ -9,6 +9,7 @@ termination paths.
 from __future__ import annotations
 
 import asyncio
+import re
 
 import httpx
 import pytest
@@ -356,3 +357,89 @@ class TestTransientFailuresDoNotKillTheRun:
 
 async def _no_sleep(_):
     return None
+
+
+class TestAPodThatNeverProvisionsSTILLBILLS:
+    """`client.pod()` creates the pod, THEN waits for SSH, THEN yields. Billing starts at
+    CREATE — not at the yield.
+
+    A host whose driver is too old for the image's CUDA does not fail at create: RunPod
+    rents it, the pod boots, reports RUNNING, and never starts sshd ("minimum cuda version
+    requirement not met"). It bills for the entire wait_for_ssh timeout (10 min) and is then
+    destroyed. Callers registered the pod id at the YIELD, so that spend reached no ledger
+    at all and the budget guard was wrong by however many pods failed to provision.
+    Measured on an EU-RO-1 RTX 4090.
+    """
+
+    def test_on_created_fires_even_when_the_pod_never_exposes_ssh(self, monkeypatch):
+        monkeypatch.setattr(rp.asyncio, "sleep", _no_sleep)
+        booked: list[str] = []
+        terminated: list[str] = []
+
+        def handler(request):
+            if request.method == "POST" and request.url.path.endswith("/pods"):
+                return httpx.Response(200, json={"id": "DEAD1", "desiredStatus": "RUNNING",
+                                                 "costPerHr": 0.69})
+            if request.method == "DELETE":
+                terminated.append(request.url.path)
+                return httpx.Response(200, json={})
+            # GET: RUNNING forever, but NEVER an ssh endpoint.
+            return httpx.Response(200, json={"id": "DEAD1", "desiredStatus": "RUNNING",
+                                             "costPerHr": 0.69})
+
+        client = RunpodClient("k", transport=httpx.MockTransport(handler))
+
+        async def go():
+            async with client.pod({"x": 1}, wait_timeout_s=0.0,
+                                  on_created=lambda p: booked.append(p.id)):
+                pass  # pragma: no cover — wait_for_ssh must raise before we get here
+
+        with pytest.raises(Exception):
+            asyncio.run(go())
+
+        assert booked == ["DEAD1"], "the pod BILLED — it must reach the ledger"
+        assert terminated, "and it must still be destroyed"
+
+    def test_on_created_reports_the_live_rate(self, monkeypatch):
+        monkeypatch.setattr(rp.asyncio, "sleep", _no_sleep)
+        seen = {}
+
+        def handler(request):
+            body = {"id": "P1", "desiredStatus": "RUNNING", "costPerHr": 0.74,
+                    "publicIp": "1.2.3.4", "portMappings": {"22": 1234}}
+            return httpx.Response(200, json=body)
+
+        client = RunpodClient("k", transport=httpx.MockTransport(handler))
+
+        async def go():
+            async with client.pod({"x": 1},
+                                  on_created=lambda p: seen.update(id=p.id, rate=p.cost_per_hr)):
+                pass
+
+        asyncio.run(go())
+        assert seen == {"id": "P1", "rate": 0.74}
+
+
+class TestNeverRentAHostThatCannotRunTheImage:
+    def test_the_payload_pins_the_cuda_version(self):
+        """The image is a cu128 build. A host with an older driver rents FINE, boots, and
+        never starts sshd — billing for the whole timeout. allowedCudaVersions moves that
+        failure to CREATE time, where it is free and instant."""
+        p = rp.build_create_payload(name="n", gpu_type_ids=["g"], network_volume_id="v")
+        assert p["allowedCudaVersions"] == rp.DEFAULT_ALLOWED_CUDA
+        assert p["allowedCudaVersions"], "an empty list would allow ANY host"
+
+    def test_the_pin_matches_the_image_tag(self):
+        """If DEFAULT_IMAGE moves to a different cuXXX, this pin must move with it — else
+        we go straight back to renting hosts that boot and never start sshd.
+
+        `cu1281` = CUDA 12.8.1 -> major 12, minor 8.
+        """
+        m = re.search(r"cu(\d{2})(\d)", rp.DEFAULT_IMAGE)
+        assert m, f"cannot read a CUDA version out of {rp.DEFAULT_IMAGE!r}"
+        want = f"{m.group(1)}.{m.group(2)}"          # "12.8"
+        assert want in rp.DEFAULT_ALLOWED_CUDA, (
+            f"image needs CUDA {want} but allowedCudaVersions is "
+            f"{rp.DEFAULT_ALLOWED_CUDA} — hosts too old for the image would be rented, "
+            f"boot, never start sshd, and bill for the whole wait_for_ssh timeout"
+        )

@@ -48,6 +48,17 @@ API_BASE = "https://rest.runpod.io/v1"
 # patched sm_89 NAMD on the volume).
 DEFAULT_IMAGE = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 
+# ⚠️ The image is a **cu128** build: it needs a host driver new enough for CUDA 12.8. Not
+# every host has one. A host that is too old does NOT fail at create — RunPod rents it, the
+# pod boots, reports RUNNING, and **never starts sshd** ("minimum cuda version requirement
+# not met"). It then bills for the entire wait_for_ssh timeout (10 min) before we give up
+# and destroy it. Measured on an EU-RO-1 RTX 4090.
+#
+# `allowedCudaVersions` moves that failure to CREATE time, where it is FREE and INSTANT:
+# RunPod simply reports no matching instances instead of handing us a pod that cannot run.
+# Keep this in step with DEFAULT_IMAGE's cuXXX tag.
+DEFAULT_ALLOWED_CUDA = ["12.8"]
+
 # Where the network volume mounts. Everything durable (patched NAMD, packages,
 # checkpoints) lives here; anything outside it dies with the pod.
 VOLUME_MOUNT_PATH = "/workspace"
@@ -102,6 +113,7 @@ def build_create_payload(
     container_disk_gb: int = DEFAULT_CONTAINER_DISK_GB,
     cloud_type: str = "COMMUNITY",
     env: Optional[dict[str, str]] = None,
+    allowed_cuda_versions: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     """Body for ``POST /v1/pods``.
 
@@ -128,6 +140,11 @@ def build_create_payload(
         "containerDiskInGb": container_disk_gb,
         "ports": ["22/tcp"],
         "interruptible": interruptible,
+        # Never rent a host whose driver cannot run the image (see DEFAULT_ALLOWED_CUDA).
+        "allowedCudaVersions": list(
+            allowed_cuda_versions if allowed_cuda_versions is not None
+            else DEFAULT_ALLOWED_CUDA
+        ),
         # ⚠️ Do NOT set `dockerStartCmd`. RunPod's images run their own start script,
         # and THAT is what launches sshd (plus keeps the container alive). Overriding it
         # with e.g. `sleep infinity` produces a pod that boots, reports RUNNING, exposes
@@ -359,12 +376,24 @@ class RunpodClient:
         *,
         fallbacks: Optional[list[dict[str, Any]]] = None,
         wait_timeout_s: float = 600.0,
+        on_created=None,
     ):
         """Create a pod, yield it ready-for-SSH, and ALWAYS terminate it.
 
         The `finally` is the cost model. Do not create pods any other way.
+
+        ``on_created(PodInfo)`` fires the INSTANT the pod exists — before ``wait_for_ssh``.
+        **This is not a nicety: billing starts at creation, not at the yield.** A pod that
+        boots but never exposes SSH (e.g. the host's driver is too old for the image's CUDA
+        — RunPod reports "minimum cuda version requirement not met") bills for the whole
+        ``wait_timeout_s`` and is then destroyed here. If the caller only learns the pod id
+        at the yield, that spend is **invisible**: it never reaches the ledger, and the
+        budget guard is wrong by however many pods failed to provision. Measured: a 4090
+        bench pod billed ~10 min this way and appeared in no ledger at all.
         """
         info = await self.create_pod_first_available([payload, *(fallbacks or [])])
+        if on_created is not None:
+            on_created(info)                       # it is BILLING from this moment
         try:
             yield await self.wait_for_ssh(info.id, timeout_s=wait_timeout_s)
         finally:

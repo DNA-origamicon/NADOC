@@ -444,7 +444,17 @@ async def run_job_on_pod(
     )
 
     # cheapest tier first; fall back when the volume's datacenter has no instances
-    async with client.pod(payloads[0], fallbacks=payloads[1:]) as pod:  # terminates in a finally
+    def _created(info):
+        # The pod is BILLING from this instant — before wait_for_ssh, before the yield.
+        # A host too old for the image's CUDA boots, never starts sshd, and bills for the
+        # whole timeout. Registering only at the yield made that spend invisible.
+        job.runpod_pod_id = info.id
+        job.save(workspace_dir)
+        if on_pod is not None:
+            on_pod(info.id)
+
+    async with client.pod(payloads[0], fallbacks=payloads[1:],
+                          on_created=_created) as pod:  # terminates in a finally
         job.runpod_pod_id = pod.id
         # ...and PERSIST it the instant it exists, for exactly the same reason: a crash
         # between here and the first save would leave a billing pod that no later process
