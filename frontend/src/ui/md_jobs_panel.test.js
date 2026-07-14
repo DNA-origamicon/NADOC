@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { normalizeWorkspacePath, filterJobsForPart, newestCompletedForPart, seededBadge, mdSegGlyphKind } from './md_jobs_panel.js'
+import { normalizeWorkspacePath, filterJobsForPart, newestCompletedForPart, seededBadge, mdSegGlyphKind,
+  mdIsLocalTarget,
+  mdIsRemoteJob,
+} from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
 // (only the shared-base parity block at the bottom drives the real panel; the
@@ -878,5 +881,34 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
     heading().click()                                                  // no-op → poll keeps running
     await vi.advanceTimersByTimeAsync(20000)
     expect(mdApi.listMdJobs.mock.calls.length).toBeGreaterThan(nPolled)
+  })
+})
+
+// ── Three run targets: local | alpine | runpod ────────────────────────────────
+// Most of this panel was written when there were only TWO targets, so `!== 'alpine'`
+// was a safe synonym for "local". It is not any more: a RunPod job that tests
+// `!== 'alpine'` gets classified as LOCAL and autostarted on the user's own desktop
+// GPU. These pins exist so that regression is impossible to reintroduce silently.
+describe('mdIsLocalTarget / mdIsRemoteJob', () => {
+  it('treats only "local" (and missing) as local', () => {
+    expect(mdIsLocalTarget('local')).toBe(true)
+    expect(mdIsLocalTarget(undefined)).toBe(true)
+    expect(mdIsLocalTarget(null)).toBe(true)
+    expect(mdIsLocalTarget('alpine')).toBe(false)
+    expect(mdIsLocalTarget('runpod')).toBe(false)
+  })
+
+  it('classifies a RunPod job as REMOTE, not local', () => {
+    expect(mdIsRemoteJob({ execution_target: 'runpod' })).toBe(true)
+    expect(mdIsRemoteJob({ execution_target: 'alpine' })).toBe(true)
+    expect(mdIsRemoteJob({ execution_target: 'local' })).toBe(false)
+    expect(mdIsRemoteJob({})).toBe(false)
+  })
+
+  it('a running RunPod job has no local readouts until results are fetched', () => {
+    // Its metrics live on the pod; the health grid would spin forever otherwise.
+    expect(mdHasLocalReadouts({ execution_target: 'runpod', health_samples: [] })).toBe(false)
+    expect(mdHasLocalReadouts({ execution_target: 'runpod', health_samples: [{}] })).toBe(true)
+    expect(mdHasLocalReadouts({ execution_target: 'local', health_samples: [] })).toBe(true)
   })
 })

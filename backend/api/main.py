@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -45,6 +46,7 @@ from backend.api.routes_assembly_validation import router as assembly_validation
 from backend.api.routes_assembly_workspace import router as assembly_workspace_router
 from backend.api.routes_camera_poses import router as camera_poses_router
 from backend.api.routes_cluster import router as cluster_router
+from backend.api.routes_runpod import router as runpod_router
 from backend.api.routes_cluster_joints import router as cluster_joints_router
 from backend.api.routes_clusters import router as clusters_router
 from backend.api.routes_deformation import router as deformation_router
@@ -132,6 +134,22 @@ async def _md_supervisor_loop() -> None:
         await asyncio.sleep(_MD_SUPERVISOR_INTERVAL_S)
 
 
+async def _terminate_runpod_pods() -> None:
+    """Destroy every pod this process still owns.  Best-effort; never blocks shutdown."""
+    try:
+        from backend.api import routes_runpod
+        from backend.core import runpod_supervisor
+
+        session = routes_runpod._SESSION  # noqa: SLF001
+        if not session.is_connected():
+            return
+        for job_id in runpod_supervisor.running_job_ids():
+            with contextlib.suppress(Exception):
+                await runpod_supervisor.stop_job(job_id, client=session.client)
+    except Exception:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("runpod: pod cleanup on shutdown failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Server startup/shutdown hook."""
@@ -142,6 +160,11 @@ async def lifespan(app: FastAPI):
     # Resume any NAMD jobs interrupted by a previous shutdown, then keep watching.
     md_supervisor = asyncio.create_task(_md_supervisor_loop())
     yield
+    # A RunPod pod bills from creation to termination.  On a CLEAN shutdown we still
+    # hold the API key in memory, so this is the last moment we can kill anything we
+    # started.  (On an UNCLEAN death the key dies with us and we cannot — which is why
+    # POST /runpod/connect reaps orphans the instant you reconnect.)
+    await _terminate_runpod_pods()
     md_supervisor.cancel()
     try:
         await md_supervisor
@@ -183,6 +206,7 @@ app.include_router(loop_skip_router,   prefix="/api")
 app.include_router(camera_poses_router, prefix="/api")
 app.include_router(clusters_router,    prefix="/api")
 app.include_router(cluster_router,     prefix="/api")
+app.include_router(runpod_router,      prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")
 app.include_router(animations_router,  prefix="/api")
 app.include_router(chain_sim_router,    prefix="/api")

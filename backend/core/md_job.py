@@ -190,6 +190,23 @@ class MdJob:
     # clean fetch, → failed once it hits the cap).  See md_executor.reconcile_remote_job.
     fetch_attempts: int = 0
 
+    # ── Remote execution (RunPod — execution_target == "runpod") ───────────────
+    # A rented GPU pod, not a scheduler: NADOC creates it, runs the whole segment
+    # ladder as ONE detached bash script, fetches results, and DESTROYS it.  See
+    # backend.core.runpod_executor + the runpod-submission plan.
+    #
+    # ``runpod_pod_id`` is the handle we must terminate — a pod bills from creation
+    # to termination whether or not it is computing, so a lost id is a silent,
+    # unbounded cost.  ``runpod_pid`` is the chain script's PID on the pod: it is the
+    # ONLY reliable liveness handle, because NAMD renames its process to
+    # "NAMD masterPe" and `pgrep namd3` therefore matches nothing.
+    runpod_pod_id: Optional[str] = None
+    runpod_pid: Optional[int] = None
+    # Last heartbeat epoch written by the chain script.  A stale heartbeat on an
+    # INTERRUPTIBLE pod is normal — it means the pod was reclaimed, i.e. resume, not
+    # fail.  The chain script is idempotent, so resume = relaunch it.
+    runpod_heartbeat: Optional[int] = None
+
     # ── Paths ──────────────────────────────────────────────────────────────────
 
     def job_dir(self, workspace_dir: Path) -> Path:
@@ -252,6 +269,9 @@ class MdJob:
         data.setdefault("resumable", False)
         data.setdefault("resume_history", [])
         data.setdefault("fetch_attempts", 0)
+        data.setdefault("runpod_pod_id", None)
+        data.setdefault("runpod_pid", None)
+        data.setdefault("runpod_heartbeat", None)
         return cls(**data)
 
     @classmethod

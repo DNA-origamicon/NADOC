@@ -4979,7 +4979,7 @@
                    per-job controls inside still show/hide with the selection. ── -->
               <div class="ox-card" id="md-jobs-cluster-card" style="margin-bottom:6px">
                 <div id="md-jobs-cluster-toggle" class="ox-card__header" style="color:#c9d1d9">
-                  <span id="md-jobs-cluster-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Cluster (Alpine)</span>
+                  <span id="md-jobs-cluster-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Clusters</span>
                 </div>
                 <div id="md-jobs-cluster-body" class="ox-card__body">
                   <!-- #md-cluster-connection-mount (the connect chip) is prepended here at init. -->
@@ -4995,6 +4995,9 @@
                     <label id="md-run-target-alpine-label" style="display:flex;align-items:center;gap:3px;cursor:pointer">
                       <input id="md-run-target-alpine" type="radio" name="md-run-target" value="alpine" style="accent-color:#58a6ff">Alpine
                     </label>
+                    <label id="md-run-target-runpod-label" style="display:flex;align-items:center;gap:3px;cursor:pointer">
+                      <input id="md-run-target-runpod" type="radio" name="md-run-target" value="runpod" style="accent-color:#d29922">RunPod
+                    </label>
                     <span id="md-run-target-hint" style="font-size:10px;color:#484f58"></span>
                   </div>
 
@@ -5003,6 +5006,12 @@
                        reconnect).  Populated by mdRemoteReconnectPrompt. -->
                   <div id="md-jobs-cluster-reconnect-note"
                        style="display:none;font-size:var(--text-xs);color:#d29922;background:#1c1400;border:1px solid #6b4e00;border-radius:3px;padding:5px;margin-bottom:6px"></div>
+
+                  <!-- RunPod status + pre-flight. Visible while the RunPod run-target is selected.
+                       Every row maps to a failure that already cost a real, billing pod; the Run
+                       button stays disabled until they are all green. -->
+                  <div id="md-jobs-runpod-status"
+                       style="display:none;border:1px solid #30363d;border-radius:3px;padding:6px;margin-bottom:6px;background:#0d1117"></div>
 
                   <!-- Alpine-specific status (prepared→submit / SLURM-queued wait). -->
                   <div id="md-jobs-cluster-status" style="display:none;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px"></div>

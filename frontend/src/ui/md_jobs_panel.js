@@ -34,6 +34,7 @@ import { runExclusive } from './primitives/button_busy.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { initAdvancedOptimize, renderRunPath } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
+import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -323,8 +324,25 @@ export function mdReplicaStateText(job) {
  *  land only after it finishes and results are fetched (health_samples populated).  So a
  *  remote job has local readouts only once it carries samples; before that the metric
  *  grid + health spinner would spin forever on data that lives on the cluster. */
+/** Pure: does this run target execute on THIS machine?
+ *
+ *  There are now THREE targets (local / alpine / runpod), and most of this panel was
+ *  written when there were two — so "not alpine" was a safe synonym for "local".  It is
+ *  no longer: a RunPod job that tests `!== 'alpine'` gets treated as LOCAL and launched
+ *  on the user's desktop GPU.  Ask this question, never `!== 'alpine'`. */
+export function mdIsLocalTarget(target) {
+  return !target || target === 'local'
+}
+
+/** Pure: does this job execute on a remote machine — an Alpine cluster OR a rented
+ *  RunPod GPU?  Anything not local streams no local WebSocket and has no local
+ *  readouts until its results are fetched. */
+export function mdIsRemoteJob(job) {
+  return !mdIsLocalTarget(job?.execution_target)
+}
+
 export function mdHasLocalReadouts(job) {
-  if (job?.execution_target !== 'alpine') return true
+  if (!mdIsRemoteJob(job)) return true
   return (job?.health_samples?.length ?? 0) > 0
 }
 
@@ -593,6 +611,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const runBtn        = document.getElementById('md-jobs-run-btn')
   const runTargetLocal  = document.getElementById('md-run-target-local')
   const runTargetAlpine = document.getElementById('md-run-target-alpine')
+  const runTargetRunpod = document.getElementById('md-run-target-runpod')
+  const runpodStatusEl  = document.getElementById('md-jobs-runpod-status')
   const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
   const runTargetHint   = document.getElementById('md-run-target-hint')
   const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
@@ -752,7 +772,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   // ── Run target (Local subprocess vs. Alpine cluster) ────────────────────────
   function _currentRunTarget() {
-    return runTargetAlpine?.checked ? 'alpine' : 'local'
+    if (runTargetAlpine?.checked) return 'alpine'
+    if (runTargetRunpod?.checked) return 'runpod'
+    return 'local'
   }
 
   // Show/hide the "reconnect to monitor & fetch results" nudge from the live cluster state
@@ -781,6 +803,42 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       _paintRunControl()   // the Relax button reverts from "Prepare for Alpine" → "Relax"
     }
   }
+
+  // ── RunPod: pre-flight gate ────────────────────────────────────────────────
+  // A pod bills from the moment it is created. Every pre-flight row maps to a failure
+  // that ALREADY cost a real, billing pod: a wrong-architecture GPU that boots and dies
+  // at step 0; a missing SSH key on a pod that refuses every connection; no network
+  // volume, so the pod has neither NAMD nor any packages. So the Run button stays
+  // DISABLED until every check is green — we refuse to rent a GPU we already know
+  // cannot run the job.
+  const _runpod = initRunpodStatus({
+    mount: runpodStatusEl,
+    onChange: () => _paintRunpodGate(),
+  })
+
+  function _paintRunpodGate() {
+    const isRunpod = _currentRunTarget() === 'runpod'
+    if (runpodStatusEl) runpodStatusEl.style.display = isRunpod ? 'block' : 'none'
+    if (!isRunpod || !runBtn) return
+    const pre = _runpod.preflight
+    const ready = runpodCanLaunch(pre)
+    runBtn.disabled = !ready
+    runBtn.style.opacity = ready ? '1' : '0.5'
+    runBtn.style.cursor = ready ? 'pointer' : 'not-allowed'
+    runBtn.title = ready
+      ? 'Rent a GPU, run the ladder, fetch the results, then destroy the pod'
+      : `Cannot run on RunPod yet:\n${runpodBlockReason(pre)}`
+  }
+
+  // Selecting RunPod must refresh the connection box. Otherwise it keeps showing Alpine's
+  // "cluster: disconnected" and the user has no idea what state RunPod is in.
+  for (const _el of [runTargetLocal, runTargetAlpine, runTargetRunpod]) {
+    _el?.addEventListener('change', () => {
+      if (_currentRunTarget() === 'runpod') _runpod.refresh()
+      else _paintRunpodGate()
+    })
+  }
+
   window.addEventListener('nadoc:cluster-state-change', (e) => {
     _updateRunTargetGate(e.detail?.state)
     _renderReconnectPrompt()
@@ -1804,7 +1862,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // the relaxation ran).  Local-resource guards (concurrent job, disk) apply only to
     // a local run — an Alpine run writes on the cluster's scratch.
     const runTarget = _currentRunTarget()
-    const isLocalRun = runTarget !== 'alpine'
+    const isLocalRun = mdIsLocalTarget(runTarget)
     if (isLocalRun && !(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     const steps = _productionSteps()
     const ns = _productionNs(steps)
@@ -2011,7 +2069,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // so the local-resource guards (concurrent NADOC job, external GPU hog, local
     // disk space) don't apply and would wrongly block a submit while a local job runs.
     const runTarget = _currentRunTarget()
-    const isLocalRun = runTarget !== 'alpine'
+    const isLocalRun = mdIsLocalTarget(runTarget)
 
     const anchors = _anchorsCard?.getAnchors?.() ?? []
     const fieldSpec = _efieldCard?.getFieldSpec?.()
@@ -2200,7 +2258,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // relaxation — not Alpine, not a production child)?  The single Advanced toggle is a
   // launch default for everything else and a live control for this.
   function _isLiveRelax(job) {
-    return !!job && job.status === 'running' && job.execution_target !== 'alpine' && !mdIsProductionChild(job)
+    return !!job && job.status === 'running' && mdIsLocalTarget(job.execution_target) && !mdIsProductionChild(job)
   }
 
   // The ONE early-stop toggle (Advanced): a launch default when configuring a run, and a

@@ -38,7 +38,7 @@ from typing import Callable, Optional
 from backend.core.md_ensemble import _DEFAULT_BASE_SEED, generate_seeds
 
 # The run targets a stage may execute on (mirrors ``MdJob.execution_target``).
-_VALID_RUN_TARGETS = ("local", "alpine")
+_VALID_RUN_TARGETS = ("local", "alpine", "runpod")
 
 
 @dataclass

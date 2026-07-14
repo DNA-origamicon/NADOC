@@ -12,9 +12,51 @@ from __future__ import annotations
 import os
 import tarfile
 
+import pytest
 from fastapi.testclient import TestClient
 
+import backend.core.engines as engines
+import backend.core.fs_browse as fs_browse
 from backend.api.main import app
+
+
+@pytest.fixture
+def stub_host_probes(monkeypatch):
+    """Pin the host probes so ``engines_status()`` runs entirely in-process.
+
+    The real probe is *slow on WSL*: one ``engines_status()`` fires ~39
+    ``shutil.which`` calls — each walking the whole Windows PATH over the
+    ``/mnt/c`` drvfs mount (~950 ``stat`` syscalls) — plus six subprocess spawns
+    (``nvidia-smi`` ×2, a real ``mpicxx -E`` C++ preprocess, ``lmp -h`` …).  That
+    is ~3–5 s **per request**, and it measures this laptop, not the code.
+
+    These tests are about the *aggregation* and about ``NADOC_ENGINES_FORCE_MISSING``
+    reaching the route — so we pin the probes exactly as ``test_engines.py::_patch_all``
+    already does for the same function.  Pinning every engine *found* also sharpens
+    the assertions: FORCE_MISSING now has to override a **located** binary rather
+    than merely agree with an absent one.
+    """
+    for name, path in (
+        ("find_oxdna", "/o/oxDNA"),
+        ("find_oxdna_anm", "/a/oxDNA"),
+        ("find_dnanalysis", "/o/DNAnalysis"),
+        ("find_namd", "/n/namd3"),
+        ("find_gmx", "/g/gmx"),
+        ("find_psfgen", "/n/psfgen"),
+        ("find_lammps", "/l/lmp"),
+        ("find_mrdna", "/m/mrdna"),
+        ("find_arbd", "/b/arbd"),
+    ):
+        monkeypatch.setattr(engines, name, lambda p=path: p)
+    monkeypatch.setattr(
+        engines.hardware,
+        "enumerate_cuda_devices",
+        lambda: [{"index": 0, "name": "RTX 2080", "uuid": "GPU-x"}],
+    )
+    monkeypatch.setattr(engines, "_gpu_arch", lambda: "75")
+    monkeypatch.setattr(engines, "_mpi_build_usable", lambda: True)
+    monkeypatch.setattr(engines, "lammps_supports_cgdna", lambda _p: True)
+    monkeypatch.setattr(engines.shutil, "which", lambda c: "/usr/bin/" + c)
 
 
 def _make_namd_tar(dirpath, filename="NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar.gz"):
@@ -29,7 +71,7 @@ def _make_namd_tar(dirpath, filename="NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar
     return tar_path
 
 
-def test_status_endpoint_reflects_simulation(monkeypatch):
+def test_status_endpoint_reflects_simulation(monkeypatch, stub_host_probes):
     monkeypatch.setenv("NADOC_ENGINES_FORCE_MISSING", "oxdna,namd")
     with TestClient(app) as client:
         st = client.get("/api/engines/status").json()
@@ -78,10 +120,17 @@ def test_browse_endpoint_lists_a_directory(tmp_path):
     assert namd["is_dir"] is False and namd["matches"] is True
 
 
-def test_browse_endpoint_defaults_to_downloads():
+def test_browse_endpoint_defaults_to_downloads(tmp_path, monkeypatch):
+    # Point the default at a tmp folder instead of the *real* Downloads: on WSL that
+    # is the Windows one (`/mnt/c/Users/<you>/Downloads`, 2000+ files) and scandir+stat
+    # over the drvfs mount costs ~4 s.  Redirecting it also lets us assert the actual
+    # landing folder rather than merely "cwd is truthy".
+    (tmp_path / "arbd-may24.tar.gz").write_text("x")
+    monkeypatch.setattr(fs_browse, "default_downloads_dir", lambda: str(tmp_path))
     with TestClient(app) as client:
         body = client.get("/api/engines/browse").json()
-    assert body["cwd"] and isinstance(body["entries"], list)   # opened *somewhere* sensible
+    assert body["cwd"] == str(tmp_path)                        # opened at the Downloads default
+    assert [e["name"] for e in body["entries"]] == ["arbd-may24.tar.gz"]
 
 
 def test_install_ws_finishes_a_downloaded_namd_archive(tmp_path, monkeypatch):
@@ -132,7 +181,7 @@ def _make_arbd_tar(dirpath, filename="arbd-may24-beta.tar.gz"):
     return tar_path
 
 
-def test_status_lists_mrdna_arbd_cuda_rows():
+def test_status_lists_mrdna_arbd_cuda_rows(stub_host_probes):
     with TestClient(app) as client:
         st = client.get("/api/engines/status").json()
     for key in ("mrdna", "arbd", "cuda"):

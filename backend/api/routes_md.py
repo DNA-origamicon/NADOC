@@ -2043,7 +2043,14 @@ async def start_md_job(job_id: str) -> dict:
     if job.status in (MdStatus.running, MdStatus.completed):
         raise HTTPException(400, f"Job is {job.status.value} — cannot start")
 
-    # Re-check NAMD available
+    # ── RunPod: rent a GPU, run the ladder there, destroy the pod ─────────────
+    # Must come BEFORE find_namd(): a RunPod job runs NAMD on the POD (the patched
+    # sm_89 build on the network volume), so requiring a LOCAL NAMD would refuse to
+    # start a perfectly valid remote job on a machine that has no GPU at all.
+    if job.execution_target == "runpod":
+        return await _start_runpod_job(job)
+
+    # Re-check NAMD available (local execution only)
     try:
         find_namd()
     except RuntimeError as exc:
@@ -2057,6 +2064,78 @@ async def start_md_job(job_id: str) -> dict:
 
     start_job(job, _workspace())
     return {"ok": True, "job_id": job_id, "status": "running"}
+
+
+async def _start_runpod_job(job: MdJob) -> dict:
+    """Launch a job on a rented RunPod GPU.
+
+    Resume is FREE here and needs no special path: the chain script skips any step whose
+    ``output/<name>.coor`` already sits on the network volume, so re-starting an
+    interrupted job simply continues it. (Alpine needs a bespoke resume because SLURM
+    walltimes cut MID-segment; a reclaimed pod does not.)
+    """
+    from backend.api import routes_runpod
+    from backend.core import runpod_preflight, runpod_supervisor
+
+    session = routes_runpod._SESSION  # noqa: SLF001 — the in-memory RunPod session
+
+    if runpod_supervisor.is_running(job.job_id):
+        return {"ok": True, "message": "Job already running on a pod"}
+
+    # ── PRE-FLIGHT: never rent a pod we already know cannot run the job ───────
+    # Each check corresponds to a failure that has already cost a real, billing pod:
+    # a wrong-arch GPU that boots and dies at step 0; a missing SSH key on a pod that
+    # refuses every connection; no volume, so no NAMD and no packages.
+    try:
+        n_atoms = runpod_supervisor.n_atoms_for(job, _workspace())
+    except RuntimeError:
+        n_atoms = None
+
+    stock = None
+    if session.is_connected() and session.api_key:
+        try:
+            stock = await runpod_preflight.fetch_gpu_stock(session.api_key)
+        except Exception:  # noqa: BLE001 — becomes a FAILED check, not a 500
+            logger.warning("runpod: GPU stock lookup failed", exc_info=True)
+
+    pre = runpod_preflight.evaluate(
+        connected=session.is_connected(),
+        network_volume_id=session.network_volume_id,
+        ssh_key_present=bool(_runpod_client_keys()),
+        stock=stock,
+        n_atoms=n_atoms,
+    )
+    if not pre.ok:
+        raise HTTPException(400, runpod_preflight.blocking_reason(pre))
+
+    try:
+        runpod_supervisor.start_job(
+            job,
+            _workspace(),
+            client=session.require(),
+            network_volume_id=session.network_volume_id,
+            client_keys=_runpod_client_keys(),
+        )
+    except RuntimeError as exc:  # unsizable system / unreadable package
+        raise HTTPException(400, str(exc)) from exc
+
+    job.status = MdStatus.running
+    job.error = None
+    job.failure_kind = None
+    job.user_stopped = False
+    job.save(_workspace())
+    return {"ok": True, "job_id": job.job_id, "status": "running", "target": "runpod"}
+
+
+def _runpod_client_keys() -> Optional[list[str]]:
+    """The SSH private key used to reach a pod.
+
+    RunPod injects the PUBLIC keys registered in the account's Settings into every pod at
+    creation. A key added to a *running* pod's authorized_keys dies with that pod, which
+    is the classic "permission denied (publickey)" on the next launch.
+    """
+    key = Path.home() / ".ssh" / "id_ed25519"
+    return [str(key)] if key.exists() else None
 
 
 class SubmitRemoteRequest(BaseModel):
@@ -2502,6 +2581,37 @@ async def stop_md_job(job_id: str) -> dict:
     # Mark as user-stopped so the startup/supervisor auto-resume leaves it alone.
     job.user_stopped = True
     job.save(_workspace())
+
+    # ── RunPod: cancel the task AND destroy the pod ───────────────────────────
+    # MUST come before the `!= "local"` branch below, which is the Alpine scancel path.
+    # A RunPod job falling into it would find no cluster session, return "stopped" — and
+    # LEAVE THE POD RUNNING, billing indefinitely with nothing watching it.
+    if job.execution_target == "runpod":
+        from backend.api import routes_runpod
+        from backend.core import runpod_supervisor
+
+        session = routes_runpod._SESSION  # noqa: SLF001
+        await runpod_supervisor.stop_job(
+            job_id, client=session.client if session.is_connected() else None
+        )
+        pod_id = job.runpod_pod_id
+        job.status = MdStatus.stopped
+        job.error = None
+        job.runpod_pid = None
+        job.save(_workspace())
+        if pod_id and not session.is_connected():
+            # We could not reach RunPod to confirm the kill. Say so loudly — a surviving
+            # pod is a silent bill, and the user can terminate it from the pods list.
+            return {
+                "ok": True,
+                "job_id": job_id,
+                "status": "stopped",
+                "warning": (
+                    f"Not connected to RunPod — could not confirm pod {pod_id} was "
+                    f"destroyed. Reconnect and check the pods list; a live pod is billing."
+                ),
+            }
+        return {"ok": True, "job_id": job_id, "status": "stopped"}
 
     # Remote (Alpine/SLURM) jobs: scancel over the live session (this endpoint runs
     # on the main loop the asyncssh connection is bound to).

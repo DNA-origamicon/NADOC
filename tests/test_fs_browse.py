@@ -42,7 +42,11 @@ def test_list_dir_hides_dotfiles(tmp_path):
     assert ".secret" not in names and "visible.txt" in names
 
 
-def test_list_dir_missing_path_falls_back_to_downloads():
+def test_list_dir_missing_path_falls_back_to_downloads(tmp_path, monkeypatch):
+    # Redirect the default away from the *real* Downloads: on WSL that resolves to
+    # /mnt/c/Users/<you>/Downloads, and scandir+stat'ing its 2000+ entries over the
+    # drvfs mount takes seconds.  The fallback behaviour under test is unchanged.
+    monkeypatch.setattr(fb, "default_downloads_dir", lambda: str(tmp_path))
     res = fb.list_dir("/no/such/dir/xyz-does-not-exist")
     # falls back to a real, listable directory (the Downloads default)
     assert os.path.isdir(res["cwd"])
