@@ -58,11 +58,18 @@ STATUS_FILE = "nadoc_status"
 HEARTBEAT_FILE = "nadoc_heartbeat"
 
 # The patched NAMD lives on the NETWORK VOLUME, built once per GPU architecture.
-# Pods are disposable; the toolchain is not. (4090 = sm_89, 3080 Ti = sm_86.)
-# MULTI-ARCH build (sm_89 Ada + sm_120 Blackwell, + PTX fallback). The old sm_89-only
-# binary rents a Blackwell card happily and then dies at step 0 with
-# "no kernel image is available for execution on the device".
-NAMD_ON_VOLUME = "/workspace/namd/3.0.2p1-cuda-multi/namd3"
+# Pods are disposable; the toolchain is not.
+#
+# MULTI-ARCH: sm_80 (Ampere/A100) + sm_89 (Ada) + sm_90 (Hopper/H100) + sm_120 (Blackwell
+# workstation), plus a compute_120 PTX fallback. Built 2026-07-14 by
+# experiments/exp43_runpod_bench/build_namd_multiarch.py.
+#
+# ⚠️ A card outside these archs rents FINE and dies at step 0: "no kernel image is
+# available for execution on the device". And ⚠️ `cuobjdump --list-elf` CANNOT tell you the
+# coverage — it reports sm_50..sm_120 for BOTH the old 2-arch binary and this one, because
+# it shows the union with the bundled NVIDIA libs (cuFFT etc.). The only proof is running
+# the card. (The old sm_89+sm_120 binary was PROVEN to fail on an A100 this way, for $0.12.)
+NAMD_ON_VOLUME = "/workspace/namd/3.0.2p1-cuda-a80/namd3"
 
 
 def remote_dir_for(job: MdJob) -> str:

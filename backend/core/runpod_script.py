@@ -70,23 +70,32 @@ class GpuType:
     sm: str  # CUDA compute capability, e.g. "sm_89"
 
 
-# ⚠️ THE BINARY IS SINGLE-ARCH. `tools/namd_tilelist_fix/build_patched_namd.sh` compiles
-# for ONE `sm_XX` ("restricting codegen to $SM — single arch: ~4x faster nvcc pass"), and
-# the build on the network volume is **sm_89**. Running it on any other architecture dies
-# instantly with:
+# ⚠️ A CARD OUTSIDE THESE ARCHS RENTS FINE AND DIES AT STEP 0:
 #
 #     FATAL ERROR: CUDA error cudaMemcpyToSymbol(constExclusions, ...) in
 #     CudaComputeNonbondedKernel.cu, bindExclusions ... no kernel image is available
 #
-# This is EXACTLY the failure that wasted the first pod launch (an A100 = sm_80), and the
-# same one that made the local sm_75 binary useless on the 4090. So GPU selection MUST be
-# filtered by architecture — offering a card the binary cannot run on is not a fallback,
-# it is a guaranteed, billing failure.
+# Offering a card the binary cannot run is not a fallback, it is a guaranteed BILLING
+# failure. So GPU selection MUST be filtered by architecture.
 #
-# To widen this list: rebuild NAMD with more `-gencode` arches and add them here.
-# The MULTI-ARCH build on the volume (/workspace/namd/3.0.2p1-cuda-multi/namd3) covers
-# Ada + Blackwell, plus a PTX fallback so a future card JITs instead of hard-failing.
-NAMD_BUILD_ARCHS: tuple[str, ...] = ("sm_89", "sm_120")
+# The volume's binary (/workspace/namd/3.0.2p1-cuda-a80/namd3, built 2026-07-14 by
+# experiments/exp43_runpod_bench/build_namd_multiarch.py) covers:
+#     sm_80   Ampere    (A100)
+#     sm_89   Ada       (4090, L4, L40S, RTX 6000 Ada)
+#     sm_90   Hopper    (H100, H200)
+#     sm_120  Blackwell (RTX PRO 4500/5000/6000, RTX 50-series)
+# ...plus a compute_120 PTX fallback. STILL EXCLUDED: sm_86 (A6000/3090) and sm_100 (B200 —
+# "Blackwell", but a DATACENTER arch, not sm_120; that is the trap).
+#
+# ⚠️ **`cuobjdump --list-elf` CANNOT tell you the coverage.** It reports the identical
+# sm_50..sm_120 union for the OLD 2-arch binary and this 4-arch one, because it shows
+# NAMD's kernels UNIONED with the bundled NVIDIA libs (cuFFT etc.). The old binary was
+# PROVEN to fail on an A100 despite cuobjdump listing sm_80. **The only proof is running
+# the card** — which costs ~$0.12 and five minutes.
+#
+# To widen further: rebuild with more `-gencode` arches (build_namd_multiarch.py) and add
+# them here.
+NAMD_BUILD_ARCHS: tuple[str, ...] = ("sm_80", "sm_89", "sm_90", "sm_120")
 
 # A hard price ceiling. Without one, "fall back to whatever is available" quietly rents an
 # H100 to relax a 225k-atom duplex.
@@ -94,18 +103,12 @@ DEFAULT_MAX_USD_PER_HOUR = 1.00
 
 # Cheapest-first. Ids verified against RunPod's live gpuTypes list.
 #
-# Deliberately only TWO cards (user decision, 2026-07-13): both are sm_89 (so the patched
-# binary runs), both are proven, and the pair covers the whole VRAM range we need —
-# 24 GB holds everything up to VoltronCore's 5.66M atoms GPU-resident (17.7 GB measured),
-# and the 48 GB card is the headroom.
-#
-# NOT offered while the binary is sm_89-only — these rent successfully and then die at
-# step 0 with "no kernel image is available":
+# NOT offered (the binary cannot run them — they rent fine and die at step 0):
 #   RTX A6000 / RTX 3090  sm_86
-#   A100 80GB             sm_80
-#   H100 80GB             sm_90
-# L4 / L40S are sm_89 and WOULD work; excluded by choice, not by capability.
-# Ids verified against RunPod's live gpuTypes list.
+#   B200                  sm_100   <- reads as "Blackwell" but is NOT sm_120. The trap.
+# L4 / L40S are sm_89 and WOULD work; excluded because they are terrible value —
+# MEASURED: the L4 does 131.3 ms/step = 2.6 ns/day = $3.56/ns, so 5 ns takes 46 HOURS.
+# Cheap per hour, awful per nanosecond AND per day. See [[gpu-value-is-two-axes]].
 #
 # ⚠️ These are the **SECURE** prices, live-checked against RunPod's `gpuTypes` GraphQL
 # on 2026-07-14. They MUST be, because Community cloud is excluded in code (it has no
@@ -137,6 +140,14 @@ GPU_TYPES: tuple[GpuType, ...] = (
     GpuType("NVIDIA RTX PRO 4500 Blackwell", "RTX PRO 4500", 32_623, 0.74, "sm_120"),
     GpuType("NVIDIA RTX 6000 Ada Generation", "RTX 6000 Ada", 49_140, 0.77, "sm_89"),
     GpuType("NVIDIA RTX PRO 5000 Blackwell", "RTX PRO 5000", 49_152, 0.96, "sm_120"),
+    # Ampere + the big Blackwell, unlocked by the sm_80/89/90/120 rebuild (2026-07-14).
+    # MEASURED $/ns on the real 1.94M-atom system — compute does NOT scale with cost:
+    #   RTX PRO 4500  $0.74  37.2 ms/step   9.3 ns/day  $1.91/ns
+    #   RTX PRO 6000  $1.99  18.5 ms/step  18.6 ns/day  $2.56/ns   (2.7x price -> 2.0x speed)
+    # The premium buys WALL-CLOCK, not throughput-per-dollar.
+    GpuType("NVIDIA A100 80GB PCIe", "A100 PCIe", 81_920, 1.39, "sm_80"),
+    GpuType("NVIDIA RTX PRO 6000 Blackwell Server Edition",
+            "RTX PRO 6000", 97_887, 1.99, "sm_120"),
 )
 
 

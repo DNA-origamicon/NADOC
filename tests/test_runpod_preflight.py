@@ -57,9 +57,15 @@ class TestGpuTable:
         for g in GPU_TYPES:
             assert g.sm in NAMD_BUILD_ARCHS, f"{g.label} is {g.sm}"
 
-    def test_both_architectures_are_actually_offered(self):
+    def test_every_offered_arch_is_one_the_binary_was_built_for(self):
+        """The table and the binary must not drift apart. A card whose arch the binary
+        lacks rents FINE and dies at step 0 — a guaranteed billing failure."""
         archs = {g.sm for g in GPU_TYPES}
-        assert archs == {"sm_89", "sm_120"}
+        assert archs <= set(NAMD_BUILD_ARCHS), (
+            f"offered {archs - set(NAMD_BUILD_ARCHS)} but the binary was not built for it"
+        )
+        # ...and the build covers Ampere->Blackwell after the 2026-07-14 rebuild.
+        assert set(NAMD_BUILD_ARCHS) == {"sm_80", "sm_89", "sm_90", "sm_120"}
 
 
 class TestHappyPath:
@@ -118,11 +124,17 @@ class TestEachFailureBlocks:
         assert "stock" in pf.blocking_reason(pre).lower()
 
     def test_a_wrong_arch_card_in_the_table_fails_the_arch_check(self):
-        """Guard against someone re-adding an A100 without rebuilding NAMD."""
-        bad = (GpuType("NVIDIA A100 80GB PCIe", "A100 80GB", 81_920, 1.19, "sm_80"),)
+        """Guard against offering a card the binary cannot run.
+
+        The A100 (sm_80) used to be the example here — it is now BUILT and valid, so the
+        example moves to the B200: it reads as "Blackwell" but is sm_100, a DATACENTER
+        arch, NOT the sm_120 of the RTX PRO/50-series. That is exactly the trap this gate
+        exists for, and it is a $5.89/hr way to learn it.
+        """
+        bad = (GpuType("NVIDIA B200", "B200", 183_000, 5.89, "sm_100"),)
         pre = pf.evaluate(
             connected=True, network_volume_id=VOLUME, ssh_key_present=True,
-            stock={"NVIDIA A100 80GB PCIe": {"stock": "High"}}, allowed=bad,
+            stock={"NVIDIA B200": {"stock": "High"}}, allowed=bad,
         )
         assert not pre.ok
         assert "cannot run" in pf.blocking_reason(pre)
