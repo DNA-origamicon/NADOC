@@ -19,6 +19,7 @@ import json
 import httpx
 import pytest
 
+from backend.core import md_executor
 from backend.core import runpod_executor as rx
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.runpod_api import RunpodClient, RunpodError
@@ -533,3 +534,107 @@ class TestStagingReusesTheVolume:
         _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
                            n_atoms=225_504, vcpus=8))
         assert any(p.endswith("d.psf") for p in sent)
+
+
+class TestProductionChildSeedsFromParentOnTheVolume:
+    """A production child shares its parent's structure files (build_replica_package
+    HARDLINKS the PSF/PDB/forcefield). Those are already on the network volume under the
+    parent's job_id, so hand them across with a `cp` on the volume instead of re-uploading
+    1.21 GB over domestic ADSL — 15 min of pod time on the very run where wall-clock is
+    nanoseconds.
+    """
+
+    def _child(self, tmp_path):
+        job = _job(tmp_path)
+        job.parent_job_id = "PARENT123456"
+        job.run_kind = "production"
+        return job
+
+    def test_copies_the_parents_identical_files_instead_of_uploading_them(self, tmp_path):
+        job = self._child(tmp_path)
+        sent: list[str] = []
+        cmds: list[str] = []
+
+        class _Conn(RunpodConnection):
+            async def run(self, cmd, timeout=60.0):
+                cmds.append(cmd)
+                if "find . -type f" in cmd and "PARENT123456" in cmd:
+                    pkg = job.package_dir(tmp_path)
+                    lines = [f"{p.stat().st_size} {rel}"
+                             for p, rel in md_executor.stage_plan(pkg)]
+                    return _R(0, "\n".join(lines), "")
+                if "find . -type f" in cmd:          # the child's own dir, post-copy
+                    pkg = job.package_dir(tmp_path)
+                    lines = [f"{p.stat().st_size} {rel}"
+                             for p, rel in md_executor.stage_plan(pkg)]
+                    return _R(0, "\n".join(lines), "")
+                if "setsid" in cmd:
+                    return _R(0, "11\n", "")
+                return _R(0, "", "")
+
+            async def sftp_put(self, local, remote):
+                sent.append(remote)
+
+        conn = _Conn(host="h", port=1, pod_id="p1")
+        conn._conn = FakeSSH()  # noqa: SLF001
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+
+        assert any("cp -n" in c and "PARENT123456" in c for c in cmds), \
+            "must copy from the parent's dir on the volume"
+        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME)
+        assert [p for p in sent if not p.endswith(always)] == [], "no package re-upload"
+
+    def test_never_drags_across_the_parents_output_or_sentinels(self, tmp_path):
+        """THE hazard. A blanket `cp -r` of the parent's dir would bring its
+        output/*.coor and chain sentinels — and the chain script's idempotent skip-guard
+        would then declare the child's segments ALREADY COMPLETE and run NOTHING,
+        producing an empty production run that reports success."""
+        job = self._child(tmp_path)
+        cmds: list[str] = []
+
+        class _Conn(RunpodConnection):
+            async def run(self, cmd, timeout=60.0):
+                cmds.append(cmd)
+                if "find . -type f" in cmd and "PARENT123456" in cmd:
+                    # The parent's dir ALSO holds completed outputs and sentinels.
+                    pkg = job.package_dir(tmp_path)
+                    lines = [f"{p.stat().st_size} {rel}"
+                             for p, rel in md_executor.stage_plan(pkg)]
+                    lines += ["999 output/d_01.coor", "5 nadoc_status",
+                              "12 nadoc_chain.out"]
+                    return _R(0, "\n".join(lines), "")
+                if "setsid" in cmd:
+                    return _R(0, "11\n", "")
+                return _R(0, "", "")
+
+            async def sftp_put(self, local, remote):
+                pass
+
+        conn = _Conn(host="h", port=1, pod_id="p1")
+        conn._conn = FakeSSH()  # noqa: SLF001
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+
+        copies = " ".join(c for c in cmds if "cp -n" in c)
+        assert "output/" not in copies, "a copied .coor would make the child SKIP its work"
+        assert "nadoc_status" not in copies
+        assert "nadoc_chain.out" not in copies
+
+    def test_a_relaxation_job_never_seeds_from_anything(self, tmp_path):
+        job = _job(tmp_path)                     # no parent_job_id
+        cmds: list[str] = []
+
+        class _Conn(RunpodConnection):
+            async def run(self, cmd, timeout=60.0):
+                cmds.append(cmd)
+                return _R(0, "11\n", "") if "setsid" in cmd else _R(0, "", "")
+
+            async def sftp_put(self, local, remote):
+                pass
+
+        conn = _Conn(host="h", port=1, pod_id="p1")
+        conn._conn = FakeSSH()  # noqa: SLF001
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+        assert not any("cp -n" in c for c in cmds)

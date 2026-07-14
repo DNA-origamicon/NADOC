@@ -106,6 +106,39 @@ async def _remote_file_sizes(conn: RunpodConnection, remote: str) -> dict[str, i
     return sizes
 
 
+async def _seed_from_parent(conn, job: MdJob, remote: str, plan: list) -> None:
+    """Copy the parent's identical staged files into the child's remote dir, on the pod.
+
+    Safe by construction: only names the child's own ``stage_plan`` asks for, and only
+    when the parent's copy is byte-for-byte the same SIZE. Nothing from ``output/`` and
+    none of the chain sentinels can come across, so the child cannot inherit a checkpoint
+    that would make the skip-guard declare its segments already done.
+    """
+    parent_remote = f"{REMOTE_ROOT}/{job.parent_job_id}"
+    parent_sizes = await _remote_file_sizes(conn, parent_remote)
+    if not parent_sizes:
+        return
+
+    reusable = [
+        rel for local_path, rel in plan
+        if parent_sizes.get(rel) == local_path.stat().st_size
+    ]
+    if not reusable:
+        return
+
+    cmds = " ; ".join(
+        f"cp -n {parent_remote}/{rel} {remote}/{rel} 2>/dev/null" for rel in reusable
+    )
+    # mkdir the subdirs (forcefield/) first, else cp has nowhere to land.
+    dirs = sorted({rel.rsplit("/", 1)[0] for rel in reusable if "/" in rel})
+    mk = " ; ".join(f"mkdir -p {remote}/{d}" for d in dirs)
+    await conn.run(f"{mk} ; {cmds} ; true", timeout=300.0)
+    log.info(
+        "runpod: seeded %d file(s) from parent %s on the volume (no re-upload)",
+        len(reusable), job.parent_job_id,
+    )
+
+
 async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     """Make ``import MDAnalysis`` work on the pod, or raise.
 
@@ -186,6 +219,19 @@ async def submit_job(
     # speed, before NAMD runs a single step. Compare by size, which is enough to catch a
     # truncated transfer and costs one `find` instead of hashing 1.21 GB over SSH.
     plan = list(md_executor.stage_plan(pkg))
+    # A production child shares its parent's structure files (build_replica_package
+    # HARDLINKS the PSF/PDB/forcefield rather than copying them). The parent's copies are
+    # already on the volume, so hand them across server-side — a local `cp` on the volume
+    # instead of a 1.21 GB re-upload over domestic ADSL, which is 15 min of pod time on
+    # the very run where wall-clock is nanoseconds.
+    #
+    # Copies ONLY files in the child's own stage_plan, and only when the size matches.
+    # A blanket `cp -r` of the parent's directory would drag across output/*.coor and the
+    # chain sentinels — and the skip-guard would then declare the child's segments already
+    # complete and run NOTHING.
+    if job.parent_job_id:
+        await _seed_from_parent(conn, job, remote, plan)
+
     remote_sizes = await _remote_file_sizes(conn, remote)
     skipped = sent = 0
     for local_path, rel in plan:
