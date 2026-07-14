@@ -206,6 +206,31 @@ def plan_execution(n_atoms: int) -> dict:
     }
 
 
+# The spend this test is allowed to cost, in dollars. It is a BUDGET, not a duration:
+# the same $15 buys 44 h on a $0.34/hr card and 6 h on a $2.39/hr one, so the wall-clock
+# cap has to be derived from the rate of the pod actually rented, never hardcoded.
+DEFAULT_BUDGET_USD = 15.0
+
+# Never emit a guard shorter than this. A bogus/zero rate must not render a script that
+# kills the ladder seconds after it starts.
+MIN_LIFETIME_S = 900
+
+
+def lifetime_for_budget(
+    budget_usd: float = DEFAULT_BUDGET_USD,
+    cost_per_hr: Optional[float] = None,
+) -> int:
+    """Seconds a pod may live before the kill-switch fires, given a dollar budget.
+
+    ``cost_per_hr`` is the rate RunPod reports for the pod we actually got. When it is
+    missing or nonsense, fall back to ``DEFAULT_MAX_USD_PER_HOUR`` — the price ceiling
+    the pod was rented under, so it is the worst case it CAN be billing. Guessing high
+    yields a SHORTER lifetime, which is the safe direction to be wrong in.
+    """
+    rate = cost_per_hr if (cost_per_hr and cost_per_hr > 0) else DEFAULT_MAX_USD_PER_HOUR
+    return max(MIN_LIFETIME_S, int(budget_usd / rate * 3600))
+
+
 # NAMD stops scaling long before it runs out of cores when there is ONE GPU: past this
 # many PEs the extra threads add synchronisation cost and nothing else. Measured on the
 # 4090 pod: +p8 42.98, +p16 41.38, +p32 18.85 ns/day. A 128-vCPU machine would otherwise

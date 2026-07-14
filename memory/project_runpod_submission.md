@@ -35,6 +35,22 @@ model block), [[md-job-system]] (the local job system), [[project_water_shell_ca
    with terminate in a `finally` and a hard `max_lifetime_s` kill-switch. That IS the cost
    model. An orphaned pod bills at $0.34–2.39/hr until someone notices.
 
+   **The kill-switch is a BUDGET, not a duration** (user decision, 2026-07-14: $15 for
+   this test). `runpod_script.lifetime_for_budget(budget_usd, cost_per_hr)` derives the
+   wall-clock from the rate of the pod we ACTUALLY got — the same $15 buys 44 h at
+   $0.34/hr and 6 h at $2.39/hr, so a hardcoded duration is wrong on every card but one.
+   `DEFAULT_BUDGET_USD = 15.0`. Unknown rate → assume `DEFAULT_MAX_USD_PER_HOUR` (guess
+   HIGH → shorter life → safe direction). Floor `MIN_LIFETIME_S = 900`.
+
+   ⚠️ **The guard is per-POD, not per-JOB.** It stops a runaway ladder; it does NOT cap
+   cumulative spend. Every spot reclaim relaunches with a FRESH budget, so N resumes can
+   cost N × $15. Cumulative accounting is not built — see Open items.
+
+   ⚠️ **The guard cannot stop the billing.** It runs ON the pod (`sleep N; pkill -9`) and
+   has no API key, so it can only kill NAMD. Pod DESTRUCTION lives in the backend's
+   `client.pod()` `finally`. If the backend dies, the guard fires, NAMD stops, and the
+   pod keeps billing with an idle GPU. The reaper-on-connect is the backstop for that.
+
 4. **API key in backend memory only** (user decision), mirroring the Alpine credential
    rule. No Duo, so re-entry after a server restart is cheap.
 
@@ -212,6 +228,11 @@ $0.34/hr community cloud.
 
 ## Open items
 
+- **Cumulative spend is not tracked.** The `$15` kill-switch caps ONE pod's life. A spot
+  reclaim relaunches with a fresh budget, so a job that gets reclaimed 3× can bill 3×$15
+  and no code notices. To fix properly, `MdJob` needs a `spent_usd` that accumulates
+  across pods and shrinks the next pod's budget. Until then, **$15 is a per-pod cap, and
+  the real exposure on a heavily-reclaimed job is a multiple of it.**
 - **The prep pipeline can emit a degenerate package and nobody notices.** Job `f702f4a3282f`
   shipped a VoltronCore package with **279 coincident atoms (0.000 Å)** and 634k real
   clashes; NAMD died with an uninterpretable NaN. A rebuild from the SAME design is clean

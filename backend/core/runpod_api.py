@@ -65,7 +65,19 @@ class PodInfo:
 
     @property
     def is_terminated(self) -> bool:
+        """The pod is not going to run anything. NOT the same as 'it costs nothing'."""
         return self.desired_status in {"TERMINATED", "EXITED"}
+
+    @property
+    def is_destroyed(self) -> bool:
+        """The pod is GONE — off the account, billing nothing.
+
+        ``EXITED`` is deliberately NOT destroyed: the container stopped but the pod still
+        exists and still holds (and bills for) its disk. Conflating the two is what let an
+        orphaned EXITED pod sit on the account indefinitely — the reaper skipped it as
+        'already dead'. Reap on this; poll on ``is_terminated``.
+        """
+        return self.desired_status == "TERMINATED"
 
 
 # ── Pure ─────────────────────────────────────────────────────────────────────

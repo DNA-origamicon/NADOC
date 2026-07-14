@@ -247,7 +247,10 @@ async def reap_orphan_pods(client: RunpodClient) -> list[str]:
         name = str(pod.raw.get("name") or "")
         if not name.startswith("nadoc-"):
             continue
-        if pod.id in tracked or pod.is_terminated:
+        # is_DESTROYED, not is_terminated: an EXITED pod is a stopped container that is
+        # still on the account and still billing for its disk. Skipping those is what
+        # orphaned pod 2tnfzwx9j3mvhm — it sat EXITED and every reap walked past it.
+        if pod.id in tracked or pod.is_destroyed:
             continue
         with contextlib.suppress(Exception):
             await client.terminate_pod(pod.id)

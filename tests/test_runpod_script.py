@@ -159,6 +159,14 @@ class TestChainScript:
         assert "LIFETIME_GUARD" in self.script(max_lifetime_s=7200)
         assert "LIFETIME_GUARD" not in self.script()
 
+    def test_lifetime_guard_is_wired_by_the_executor(self):
+        """The guard was dead code for its whole life: it rendered only when a caller
+        passed max_lifetime_s, and the ONE production call site never did. Assert the
+        derived value actually reaches the script."""
+        s = self.script(max_lifetime_s=bm.lifetime_for_budget(15.0, 0.69))
+        assert "LIFETIME_GUARD" in s
+        assert "78260" in s  # 15 / 0.69 * 3600
+
     def test_writes_status_and_heartbeat_sentinels(self):
         s = self.script()
         assert "nadoc_status" in s
@@ -427,3 +435,28 @@ class TestThreadCap:
         assert bm.namd_threads(32) == 16
         assert bm.namd_threads(12) == 6
         assert bm.namd_threads(4) == 2
+
+
+class TestLifetimeForBudget:
+    """The cap is a BUDGET ($15), not a duration — the same money buys very different
+    wall-clocks depending on which card the fallback list landed on."""
+
+    def test_derives_hours_from_the_rate_of_the_pod_we_actually_got(self):
+        # $15 on the cheap card buys ~44 h; on the expensive one, ~18 h. A hardcoded
+        # duration would be wrong on every card but one.
+        assert bm.lifetime_for_budget(15.0, 0.34) == int(15 / 0.34 * 3600)
+        assert bm.lifetime_for_budget(15.0, 0.82) == int(15 / 0.82 * 3600)
+
+    def test_cheaper_pod_is_allowed_to_live_longer(self):
+        assert bm.lifetime_for_budget(15.0, 0.34) > bm.lifetime_for_budget(15.0, 0.82)
+
+    def test_unknown_rate_assumes_the_worst_case_price_ceiling(self):
+        """RunPod can report costPerHr as null. Guessing HIGH yields a SHORTER lifetime,
+        which is the safe direction to be wrong in."""
+        expected = int(15.0 / bm.DEFAULT_MAX_USD_PER_HOUR * 3600)
+        assert bm.lifetime_for_budget(15.0, None) == expected
+        assert bm.lifetime_for_budget(15.0, 0.0) == expected
+
+    def test_never_emits_a_suicidally_short_guard(self):
+        """A bogus rate must not render a script that kills the ladder on startup."""
+        assert bm.lifetime_for_budget(0.0, 0.34) == bm.MIN_LIFETIME_S

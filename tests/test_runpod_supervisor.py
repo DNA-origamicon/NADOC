@@ -149,6 +149,34 @@ class TestOrphanReaper:
         assert _run(sup.reap_orphan_pods(c)) == []
         assert c.terminated == []
 
+    def test_reaps_an_exited_pod(self):
+        """REGRESSION: an EXITED pod is a STOPPED container still on the account, still
+        billing for its disk — not a destroyed one. The reaper used to skip it as
+        'already dead', which is how pod 2tnfzwx9j3mvhm survived every reap."""
+
+        class C(FakeClient):
+            async def list_pods(self):
+                from backend.core.runpod_api import parse_pod
+                return [parse_pod({"id": "zombie", "desiredStatus": "EXITED",
+                                   "name": "nadoc-6hb-abc"})]
+
+        c = C()
+        assert _run(sup.reap_orphan_pods(c)) == ["zombie"]
+        assert c.terminated == ["zombie"]
+
+    def test_does_not_reap_an_already_destroyed_pod(self):
+        """TERMINATED is gone: re-terminating is a pointless API call."""
+
+        class C(FakeClient):
+            async def list_pods(self):
+                from backend.core.runpod_api import parse_pod
+                return [parse_pod({"id": "gone", "desiredStatus": "TERMINATED",
+                                   "name": "nadoc-6hb-abc"})]
+
+        c = C()
+        assert _run(sup.reap_orphan_pods(c)) == []
+        assert c.terminated == []
+
     def test_does_not_reap_a_pod_it_is_currently_tracking(self):
         class C(FakeClient):
             async def list_pods(self):

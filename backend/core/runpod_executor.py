@@ -37,9 +37,11 @@ from backend.core.runpod_api import (
 )
 from backend.core.runpod_conn import RunpodConnection
 from backend.core.runpod_script import (
+    DEFAULT_BUDGET_USD,
     ChainStep,
     completed_steps,
     heartbeat_is_stale,
+    lifetime_for_budget,
     namd_threads,
     parse_status_file,
     plan_execution,
@@ -84,6 +86,7 @@ async def submit_job(
     n_atoms: int,
     vcpus: int,
     gpu_resident: bool = True,
+    max_lifetime_s: Optional[int] = None,
 ) -> int:
     """Stage the package, write the chain script, launch it detached. Returns its PID.
 
@@ -107,6 +110,7 @@ async def submit_job(
         namd_bin=NAMD_ON_VOLUME,
         threads=namd_threads(vcpus),
         devices="0",
+        max_lifetime_s=max_lifetime_s,
     )
     tmp = Path(workspace_dir) / "md_jobs" / job.job_id / CHAIN_SCRIPT
     tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -244,6 +248,7 @@ async def run_job_on_pod(
     sleep=None,
     interruptible: bool = True,
     on_pod: Optional[Callable[[str], None]] = None,
+    budget_usd: float = DEFAULT_BUDGET_USD,
 ) -> MdStatus:
     """Provision → stage → run → fetch → **destroy**. The pod cannot outlive this call.
 
@@ -276,9 +281,17 @@ async def run_job_on_pod(
         await conn.connect()
         try:
             vcpus = await _remote_vcpus(conn)
+            # Derive the kill-switch from the rate of the pod we ACTUALLY got — not a
+            # hardcoded duration. The fallback list means we may be on the $0.34 card or
+            # the $0.82 one, and the same budget buys very different wall-clocks.
+            lifetime_s = lifetime_for_budget(budget_usd, pod.cost_per_hr)
+            log.info(
+                "runpod: pod %s at $%s/hr, $%.2f budget -> kill-switch at %.1f h",
+                pod.id, pod.cost_per_hr, budget_usd, lifetime_s / 3600,
+            )
             await submit_job(
                 job, workspace_dir, conn=conn, min_name=min_name,
-                n_atoms=n_atoms, vcpus=vcpus,
+                n_atoms=n_atoms, vcpus=vcpus, max_lifetime_s=lifetime_s,
             )
 
             while True:
