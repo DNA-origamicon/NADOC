@@ -101,6 +101,19 @@ Implemented exactly this way in `snupi_dynamics.py`; validated by the 1-DOF `⟨
   - **Cost:** one O((6N)³) inverse + eigendecomposition (RPY run ~3× the Stokes run on 2HB: 11.5 vs
     3.6 s). Practical for small/medium designs; large bundles need the block-structure / iterative
     route (Phase-2 perf). dt auto-sizing unchanged (friction-independent ω_max).
+  - **⚠️ RETRACTED 2026-07-13 — "generalized RPY loses PD at origami bead density" was OUR BUG.** The
+    1b-ii sub-section below (and `snupi_hydrodynamics`'s docstring) used to claim the many-body
+    superposition of the generalized RPY goes indefinite at σ=1.1 nm beads 0.34 nm apart, so
+    `friction_matrix(generalized=True)` raised and translational-only became "the production model".
+    **False.** The SNUPI dynamics SI (Note 3.2 + 4.2) builds the FULL 6N×6N generalized RPY on exactly
+    this bead set and Cholesky-factors Z, asserting PD (proved, refs 7/15). Our bug: `ε·r` is
+    ANTISYMMETRIC and ODD in r, so reciprocity forces `μ^tr_ij = +μ^rt_ij` — **the two cross-blocks of
+    a pair are EQUAL, not transposes**. We stored `tr` / `trᵀ` (the SI's literal `μ^rt = [μ^tr]ᵀ`),
+    flipping one sign; the error COMPOUNDS through the superposition (min eig −2.6e-2 → −1.8e-1 as
+    N 40 → 480). With the parity right, Ξ is PD with a min eigenvalue *stable* in N (+1.58e-3). Fixed
+    + pinned in `tests/test_snupi_hydro_coarse.py`. Related latent bug also fixed: `_rpy_pair_rr` /
+    `_rpy_pair_rt` / the self blocks took a radius `a` but hardcoded the σ=1.1 nm drag — harmless while
+    every caller used the default, silently wrong for any other radius (which the blob model needs).
 - **Phase 2 — base-stacking Morse + salt-schedule driver → the switch. ✅ DONE 2026-07-12 (mechanism).**
   `backend/physics/snupi_stacking.py` (Morse element) + `simulate_reconfiguration` / `stacking_force_all`
   / `bond_lengths` in `snupi_dynamics.py`. Tests: `tests/test_snupi_stacking.py` (6) + reconfiguration
@@ -229,6 +242,48 @@ toggles (deform / flex-RMSF / deviation / cylinders) visualize it with **zero ne
     aware (fixed 60k-step trajectory) and RPY-aware (dense friction ∝ nodes², calibrated to the 882-node
     /658 s run) → the bar now climbs from 0 with a real ETA. Dynamics jobs also get an honest stage label
     (`dynamics` / `dynamics-rpy`, not `nonlinear`). Tests in `test_snupi_job.py` (stage-name + estimate).
+
+## Hydrodynamics is MEMORY-BOUND — the O(N²) wall + the coarse blob model (2026-07-13)
+**Symptom:** running full-hydrodynamics SNUPI on a full-size origami crashes VS Code. **Cause:** a
+genuine OOM, and it is *inherent to the method*, not our code. `Z = Ξ⁻¹` is dense in the 6N DOF (N = one
+FE node per bp) and the paper's own algorithm (SI Note 4.3) holds several dense 6N×6N matrices at once
+(Z, Cholesky S, auxiliaries j and b). Measured peak RSS of our exact path ≈ **1.5e-6 · N² GB**
+(N=798→1.01 GB, 1200→2.20, 1596→3.85 — the model reproduces these to a few %).
+
+| design | nodes | exact peak |
+|---|---|---|
+| **SNUPI's OWN `Ex4_Triangle_dynamic`** (the only dynamics example it ships) | 339 | 0.2 GB |
+| `snupi_dyn_demo` (ran fine, 11 min) | 882 | 1.2 GB |
+| `26hb_platform_v3` | 5200 | 41 GB |
+| `2x20sq_m13` (full M13) | 7240 | **79–83 GB** |
+
+**We were 21× outside the regime SNUPI demonstrates.** On a 30 GB box the machine swaps and the OOM
+killer takes the biggest process — the user's editor. Two responses, both shipped:
+
+1. **Preflight guard** (`snupi_hydrodynamics.check_friction_memory` / `estimate_friction_memory_gb` /
+   `hydro_memory_budget_gb`, budget = ½ physical RAM, override `NADOC_HYDRO_MEM_GB`). Called from
+   `simulate_equilibrium` AND from `POST /snupi/jobs` (→ **413** before the detached worker spawns).
+   User's call: **refuse with a clear error**, never silently downgrade to Stokes.
+2. **Coarse blob hydrodynamics** — `backend/physics/snupi_hydro_coarse.py`. One hydrodynamic bead per
+   `k` bp (default **k=8**). Physically overdue anyway: σ=1.1 nm beads 0.34 nm apart are ~90%
+   overlapping, i.e. resolving the flow far below any scale it varies on.
+   - **Model** `Ξ = D + AᵀCA`: `C` = generalized RPY between the B blob centres at blob radius
+     σ_b = hypot((k−1)·rise/2, σ); `A` = node→blob map (sum forces / broadcast velocity — the rigid-blob
+     picture); `D` = diag(μ_self(σ) − μ_self(σ_b)) > 0, so each node's self-drag stays EXACT and Ξ SPD.
+   - **Woodbury ⇒ `Z = D⁻¹ − Yᵀ G⁻¹ Y` — diagonal minus rank-6B.** Nothing 6N×6N is ever formed; the
+     only dense object is 6B×6B. Noise is drawn from the MOBILITY side
+     (`y = M^½D^½g₁ + M^½AᵀL_C g₂`, then `β̃ = √(2kTΔt)·Z̃y`) so we never Cholesky a 6N×6N Z — the
+     paper's dense bottleneck. New `snupi_dynamics.gjf_integrate_operator_friction` (mass-weighted, so
+     it reduces LINE-FOR-LINE to the validated diagonal `gjf_integrate` — verified bit-identical).
+   - **Result: full M13 (7240 nodes) runs in 1.74 GB / 11 s setup**, vs 83 GB refused. B=920 blobs.
+   - **⚠️ Valid range k ≥ 4, default 8 — it does NOT converge to exact as k→1, it DEGENERATES.** At k=2,
+     σ_b=1.113 nm vs σ=1.1 → `D` is only **1.1%** of the node self-mobility, so the blob supplies ~99% of
+     the drag while containing 2 nodes: they get slaved together and the hydrodynamic enhancement is
+     LOST. Measured on 6hbx100_noT (630 nodes, breathing-mode τ vs exact generalized RPY):
+     **τ/τ_exact = 0.52 (k=2), 0.86 (k=4), 0.97 (k=8), 1.10 (k=16); no-HI Stokes = 0.58.** k=2 lands on
+     the Stokes value — the tell. `build_coarse_friction` refuses k<4 (k=1 → use the exact path).
+     Caveat: the τ estimator is only ~±20% at these trajectory lengths (≈5τ of data), so read k≥8 as
+     "recovers the hydrodynamic speedup that Stokes lacks", not as a 3%-accurate claim.
 
 ## Decisions / open
 - Frame value proposition honestly: for **static shape + equilibrium flexibility** our NMA already

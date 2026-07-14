@@ -24,7 +24,7 @@ vi.mock('./md_jobs_panel.js', () => ({
 
 import {
   initSimulateJobs, nodeIsActive, nodeIsResumable, verbForNode,
-  masterProgressPct, masterProgressColor, masterProgressTooltip, masterStatusText, nodeDetailText,
+  masterProgressPct, masterProgressColor, masterProgressTooltip, masterStatusText, nodeDetailText, formatEta,
 } from './simulate_jobs.js'
 
 // ── pure helpers ──────────────────────────────────────────────────────────────
@@ -105,9 +105,47 @@ describe('pure helpers', () => {
     expect(masterStatusText({ engine: 'cando', status: 'queued' })).toMatch(/^CanDo · queued/)
     expect(masterStatusText(null)).toMatch(/Select a run/)
   })
+  it('masterStatusText carries the SNUPI %, ETA and phase under the one master bar', () => {
+    // SNUPI has a SINGLE stage, so the stage-count fallback would read 0% for the whole solve —
+    // it stamps a real progress_fraction instead, and the master bar/status is the only place it shows.
+    const running = { engine: 'snupi', status: 'running', progress_fraction: 0.42,
+                      eta_seconds: 95, phase: 'trajectory' }
+    expect(masterProgressPct(running)).toBe(42)
+    const t = masterStatusText(running)
+    expect(t).toMatch(/^SNUPI · running · 42%/)
+    expect(t).toContain('~1m 35s left')      // ETA is formatted, not a bare "95s"
+    expect(t).toContain('trajectory')
+    // The slow, step-less friction build must name itself or the bar looks stuck.
+    expect(masterStatusText({ engine: 'snupi', status: 'running', progress_fraction: 0.02,
+                              phase: 'building hydrodynamic friction' }))
+      .toContain('building hydrodynamic friction')
+    expect(masterStatusText({ engine: 'snupi', status: 'completed' })).toMatch(/^SNUPI · completed/)
+  })
+  it('formatEta reads as m:ss for multi-minute solves', () => {
+    expect(formatEta(45)).toBe('45s')
+    expect(formatEta(95)).toBe('1m 35s')
+    expect(formatEta(650)).toBe('10m 50s')
+  })
   it('nodeDetailText explains the LAMMPS CPU fallback', () => {
-    expect(nodeDetailText(lmNode({ ranks: 6 }))).toMatch(/CPU \(LAMMPS, 6 cores\) because the GPU was busy/)
-    expect(nodeDetailText(oxNode({ n_units: 100 }))).toMatch(/oxDNA \(GPU\) · 100 nucleotides/)
+    expect(nodeDetailText(lmNode({ ranks: 6 }), 'oxdna')).toMatch(/CPU \(LAMMPS, 6 cores\) because the GPU was busy/)
+    expect(nodeDetailText(oxNode({ n_units: 100 }), 'oxdna')).toMatch(/oxDNA \(GPU\) · 100 nucleotides/)
+  })
+  it('nodeDetailText never labels another engine\'s run as oxDNA', () => {
+    // Regression: this used to FALL THROUGH — any non-LAMMPS node with n_units got the
+    // "oxDNA (GPU) · N nucleotides" line, so a SNUPI/mrDNA/CanDo/NAMD run claimed it ran on oxDNA.
+    for (const engine of ['snupi', 'mrdna', 'cando', 'namd']) {
+      expect(nodeDetailText({ engine, status: 'completed', n_units: 1260 }, engine)).toBe('')
+    }
+  })
+  it('nodeDetailText only shows on the oxDNA tab', () => {
+    // "Show all job types" lets you select an oxDNA run from any tab — the oxDNA-flavoured note must
+    // not appear under another engine's panel.
+    const ox = oxNode({ n_units: 100 })
+    expect(nodeDetailText(ox, 'oxdna')).toMatch(/oxDNA \(GPU\)/)
+    for (const tab of ['snupi', 'mrdna', 'cando', 'namd']) {
+      expect(nodeDetailText(ox, tab)).toBe('')
+    }
+    expect(nodeDetailText(lmNode(), 'snupi')).toBe('')   // LAMMPS groups under oxDNA — same gate
   })
 })
 

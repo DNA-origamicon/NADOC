@@ -2354,6 +2354,22 @@
       animation: anim-baking-slide 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
 
+    /* ── SNUPI Stop button ───────────────────────────────────────────────
+       Always present under the run buttons so the panel never reflows when a run
+       starts; greyed + non-interactive until there is something to stop. */
+    #snupi-jobs-stop-btn {
+      background: #3a1418;
+      border: 1px solid #b62324;
+      color: #ff7b72;
+      cursor: pointer;
+    }
+    #snupi-jobs-stop-btn:disabled {
+      background: #161b22;
+      border-color: #21262d;
+      color: #484f58;
+      cursor: not-allowed;
+    }
+
     /* ── Autostaple progress popup ───────────────────────────────────── */
     #op-progress {
       display: none;
@@ -4433,14 +4449,12 @@
           <div class="panel-section" id="snupi-jobs-panel">
             <div id="snupi-jobs-body" style="margin-top:2px">
 
-              <!-- running job's progress bar -->
-              <div id="snupi-jobs-progress" style="display:none;margin-bottom:6px">
-                <div style="height:4px;background:#161b22;border-radius:2px;overflow:hidden">
-                  <div class="bar" style="height:100%;width:0%;background:#d29bff;transition:width .3s"></div>
-                </div>
-              </div>
+              <!-- NO progress bar here by design: the ONE bar for every engine lives in the unified
+                   Jobs card (#simulate-jobs-progress), with the % / ETA / phase on the status line
+                   directly beneath it. SNUPI stamps a live `progress_fraction` on running jobs
+                   (routes_snupi.list_snupi_jobs) so that shared bar advances during the solve. -->
 
-              <!-- two run buttons: Coarse (linear preview) + Fine (nonlinear).
+              <!-- two run buttons: Coarse (linear preview) + Fine (nonlinear), then Stop.
                    Relocated above the jobs card at init (see main.js run-control move). -->
               <div id="snupi-launch-row" style="display:flex;gap:5px;margin-bottom:6px">
                 <button id="snupi-jobs-coarse-btn"
@@ -4452,6 +4466,15 @@
                         title="FINE SNUPI prediction (geometrically-nonlinear corotational solve). Slower (~1 min on a 6HB) — the accurate SNUPI shape (twist–stretch couplings + compliant crossovers)."
                         style="flex:1;font-size:var(--text-xs);padding:6px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
                   ⤴ Fine (nonlinear)
+                </button>
+              </div>
+              <!-- Stop: ALWAYS present directly under the run buttons (never appears/disappears and
+                   shifts the layout) — disabled + greyed until a run is actually in flight. -->
+              <div id="snupi-stop-row" style="display:flex;gap:5px;margin-bottom:6px">
+                <button id="snupi-jobs-stop-btn" disabled
+                        title="Stop the running SNUPI solve"
+                        style="flex:1;font-size:var(--text-xs);padding:6px;border-radius:3px;font-weight:600">
+                  ■ Stop
                 </button>
               </div>
 
@@ -4495,8 +4518,18 @@
                     <input id="snupi-jobs-dynamics" type="checkbox"> Langevin dynamics (thermal trajectory)
                   </label>
                   <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px;margin-left:16px"
-                         title="Dynamics only: use the full Rotne–Prager–Yamakawa coupled hydrodynamic friction matrix instead of diagonal Stokes drag">
+                         title="Dynamics only: use the Rotne–Prager–Yamakawa coupled hydrodynamic friction matrix instead of diagonal Stokes drag">
                     <input id="snupi-jobs-hydrodynamics" type="checkbox"> ↳ Hydrodynamics (RPY coupled friction)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px;margin-left:32px"
+                         title="The exact per-bp friction matrix is dense and scales as O(N²) — a full M13 origami would need ~83 GB of RAM. Coarse-graining to one hydrodynamic bead per k bp makes origami-scale runs fit (~1.7 GB at k=8). Minimum 4; below that the blob is no bigger than a bead and the hydrodynamic coupling degenerates to plain Stokes. Exact = no coarse-graining (small designs only).">
+                    ↳ Coarse beads
+                    <select id="snupi-jobs-hydro-coarse" style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:3px;font-size:var(--text-xs);padding:1px 3px">
+                      <option value="8" selected>1 bead / 8 bp (default)</option>
+                      <option value="4">1 bead / 4 bp (finer, slower)</option>
+                      <option value="16">1 bead / 16 bp (coarser, faster)</option>
+                      <option value="">Exact — 1 bead / bp (small designs only)</option>
+                    </select>
                   </label>
                 </div>
               </div>
@@ -4557,14 +4590,12 @@
 
               <!-- ── Detail (selected job) ─────────────────────────────────── -->
               <div id="snupi-jobs-detail" style="display:none;margin-top:6px;border-top:1px solid #21262d;padding-top:6px">
-                <div id="snupi-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px"></div>
+                <!-- pre-line: solveDetailText() appends a second line (step counter / rate / retry). -->
+                <div id="snupi-jobs-detail-status" style="font-size:var(--text-xs);color:#c9d1d9;margin-bottom:4px;min-height:14px;white-space:pre-line"></div>
                 <div id="snupi-jobs-timeline" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px;font-family:var(--font-mono, monospace)"></div>
                 <div id="snupi-jobs-summary" style="display:none;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:6px;padding:5px 6px;background:#12161c;border:1px solid #21262d;border-radius:3px"></div>
                 <div id="snupi-jobs-detail-error" style="display:none;font-size:var(--text-xs);color:#ff7b72;margin-bottom:4px"></div>
-                <div style="display:flex;gap:5px;margin-bottom:6px">
-                  <button id="snupi-jobs-stop-btn"
-                          style="display:none;flex:1;font-size:var(--text-xs);padding:4px;background:#3a1418;border:1px solid #b62324;color:#ff7b72;border-radius:3px;cursor:pointer">■ Stop</button>
-                </div>
+                <!-- Stop lives under the run buttons (#snupi-stop-row), not here — one fixed home. -->
               </div>
 
               <!-- ── Display (mutually-exclusive viz modes; collapsible card) ────────── -->

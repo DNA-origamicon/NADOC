@@ -7,6 +7,8 @@ import {
   launchBlocked,
   materialLabel,
   solverLabel,
+  runningJob,
+  solveDetailText,
   detailStatusText,
   stageChip,
   formatSummary,
@@ -75,14 +77,56 @@ describe('materialLabel', () => {
   })
 })
 
+describe('solveDetailText', () => {
+  it('shows the step counter and rate so a long solve visibly ticks', () => {
+    const t = solveDetailText({ step: 4500, n_steps: 60000, steps_per_s: 148 })
+    expect(t).toContain('step 4,500/60,000')
+    expect(t).toContain('148 steps/s')
+  })
+  it('explains a restart — the ONE case where the step count goes backwards', () => {
+    // On divergence the integrator halves dt and restarts the whole trajectory (a 2×/4× wall-clock
+    // hit). Silent before; now it says so.
+    expect(solveDetailText({ step: 100, n_steps: 60000, attempt: 2 }))
+      .toContain('restart 2 (dt halved — diverged)')
+    expect(solveDetailText({ step: 100, n_steps: 60000, attempt: 0 })).not.toContain('restart')
+  })
+  it('is blank when the job reports no detail', () => {
+    expect(solveDetailText(null)).toBe('')
+    expect(solveDetailText({})).toBe('')
+  })
+})
+
+describe('runningJob', () => {
+  it('finds the job in flight so Stop can target it, not the selected one', () => {
+    const jobs = [
+      { job_id: 'old', status: 'completed' },
+      { job_id: 'live', status: 'running' },
+    ]
+    expect(runningJob(jobs)?.job_id).toBe('live')
+  })
+  it('is null when nothing is active — Stop stays greyed out', () => {
+    expect(runningJob([{ job_id: 'a', status: 'completed' }])).toBeNull()
+    expect(runningJob([])).toBeNull()
+    expect(runningJob(undefined)).toBeNull()
+  })
+})
+
 describe('solverLabel', () => {
   it('names Fine/Coarse from the nonlinear flag', () => {
     expect(solverLabel({ nonlinear: true })).toBe('Fine (nonlinear)')
     expect(solverLabel({ nonlinear: false })).toBe('Coarse (linear)')
   })
+  it('distinguishes coarse-grained hydrodynamics from the exact per-bp friction', () => {
+    // A coarse run only APPROXIMATES the RPY kinetics (1 hydrodynamic bead per k bp), so the label
+    // must say so — it must not read as the exact friction.
+    expect(solverLabel({ dynamics: true, hydrodynamics: true, hydro_coarse_bp: 8 }))
+      .toBe('Dynamics (RPY, 1 bead/8 bp)')
+    expect(solverLabel({ dynamics: true, hydrodynamics: true, hydro_coarse_bp: null }))
+      .toBe('Dynamics (RPY, exact)')
+  })
   it('names the Langevin dynamics modes when dynamics is set', () => {
     expect(solverLabel({ dynamics: true })).toBe('Dynamics (Langevin)')
-    expect(solverLabel({ dynamics: true, hydrodynamics: true })).toBe('Dynamics (RPY)')
+    expect(solverLabel({ dynamics: true, hydrodynamics: true })).toBe('Dynamics (RPY, exact)')
   })
 })
 

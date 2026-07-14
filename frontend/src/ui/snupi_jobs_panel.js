@@ -81,6 +81,18 @@ export function launchBlocked(launching, jobs, selectedJob) {
   return snupiJobIsActive(selectedJob)
 }
 
+/**
+ * The SNUPI job a Stop button would act on: the one in flight, if any.
+ *
+ * The Stop button is ALWAYS rendered (under the run buttons) so the panel never reflows when a run
+ * starts — it is merely disabled when this returns null. It targets the ACTIVE job rather than the
+ * selected one: a freshly-launched run is what you want to stop, even if you have since clicked an
+ * older completed run in the list.
+ */
+export function runningJob(jobs) {
+  return (Array.isArray(jobs) ? jobs : []).find(snupiJobIsActive) || null
+}
+
 /** Human name for the material law of a job. */
 export function materialLabel(job) {
   return job?.material === 'cando' ? 'CanDo (isotropic)' : 'SNUPI'
@@ -88,8 +100,36 @@ export function materialLabel(job) {
 
 /** Human name for the solver mode of a job. */
 export function solverLabel(job) {
-  if (job?.dynamics) return job?.hydrodynamics ? 'Dynamics (RPY)' : 'Dynamics (Langevin)'
+  if (job?.dynamics) {
+    if (!job?.hydrodynamics) return 'Dynamics (Langevin)'
+    // Name the coarse-graining: a coarse run APPROXIMATES the RPY kinetics (1 bead per k bp), so it
+    // must not read as the exact per-bp friction.
+    return job?.hydro_coarse_bp
+      ? `Dynamics (RPY, 1 bead/${job.hydro_coarse_bp} bp)`
+      : 'Dynamics (RPY, exact)'
+  }
   return job?.nonlinear ? 'Fine (nonlinear)' : 'Coarse (linear)'
+}
+
+/**
+ * Fine detail for a long-running dynamics solve: the GJF step counter, the measured step rate, and
+ * the divergence-retry attempt. Rendered as a second line under the status.
+ *
+ * The step counter is the load-bearing bit — a multi-minute origami solve otherwise gives you no way
+ * to tell a grinding run from a wedged one. The retry note explains the one case where the step count
+ * legitimately goes BACKWARDS: on divergence the integrator halves dt and restarts the whole
+ * trajectory (a 2×/4× wall-clock hit that used to be completely silent).
+ */
+export function solveDetailText(progress) {
+  if (!progress) return ''
+  const bits = []
+  const { step, n_steps: nSteps, steps_per_s: rate, attempt } = progress
+  if (typeof step === 'number' && nSteps) {
+    bits.push(`step ${step.toLocaleString()}/${nSteps.toLocaleString()}`)
+  }
+  if (rate) bits.push(`${Math.round(rate).toLocaleString()} steps/s`)
+  if (attempt) bits.push(`restart ${attempt} (dt halved — diverged)`)
+  return bits.length ? `\n${bits.join(' · ')}` : ''
 }
 
 /** Human status line for the detail block. */
@@ -102,7 +142,11 @@ export function detailStatusText(job, progress) {
       const pct = formatProgress(job, progress)
       const eta = progress?.eta_seconds
       const etaStr = (typeof eta === 'number' && eta > 0) ? ` · ~${Math.ceil(eta)}s left` : ''
-      return `Solving ${materialLabel(job)} FEM — ${solverLabel(job)} ${pct}${etaStr}`
+      // The worker names its phase for dynamics jobs. Building the hydrodynamic friction is a real,
+      // slow, step-less phase — say so, or the bar looks stuck at 10% for no visible reason.
+      const phase = progress?.phase ? ` · ${progress.phase}` : ''
+      const head = `Solving ${materialLabel(job)} FEM — ${solverLabel(job)} ${pct}${etaStr}${phase}`
+      return `${head}${solveDetailText(progress)}`
     }
     case 'completed': {
       const s = job.sim_seconds ? ` in ${job.sim_seconds}s` : ''
@@ -149,7 +193,6 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   const arrow = $('snupi-jobs-arrow')
   const coarseBtn = $('snupi-jobs-coarse-btn')
   const fineBtn = $('snupi-jobs-fine-btn')
-  const progressEl = $('snupi-jobs-progress')
   const advToggle = $('snupi-jobs-adv-toggle')
   const advArrow = $('snupi-jobs-adv-arrow')
   const advBody = $('snupi-jobs-adv-body')
@@ -161,6 +204,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   const materialSelect = $('snupi-jobs-material')
   const dynamicsInput = $('snupi-jobs-dynamics')
   const hydroInput = $('snupi-jobs-hydrodynamics')
+  const hydroCoarseInput = $('snupi-jobs-hydro-coarse')
   const showAll = $('snupi-jobs-show-all')
   const listEl = $('snupi-jobs-list')
   const detail = $('snupi-jobs-detail')
@@ -249,6 +293,14 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       btn.style.cursor = busy ? 'not-allowed' : 'pointer'
       btn.style.opacity = busy ? '0.5' : '1'
     }
+    _syncStopBtn()
+  }
+
+  /** Stop is always present under the run buttons; greyed out (disabled) until a run is in flight.
+   *  The :disabled styling lives in index.html so the two states can't drift apart here. */
+  function _syncStopBtn() {
+    if (!stopBtn) return
+    stopBtn.disabled = !runningJob(_jobs)
   }
 
   async function _launch(nonlinear) {
@@ -268,6 +320,9 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
         material:  mat,
         dynamics:      dynamicsInput ? !!dynamicsInput.checked : false,
         hydrodynamics: hydroInput ? !!hydroInput.checked : false,
+        // '' = exact (1 bead/bp). The exact friction is dense O(N²) — the backend refuses (413) if it
+        // would not fit, rather than let the OOM killer take the machine.
+        hydro_coarse_bp: parseInt(hydroCoarseInput?.value, 10) || null,
         autostart: true,
         design_source_path: getWorkspacePath?.() || null,
         anchors: anchors.length ? anchors : null,
@@ -379,16 +434,13 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       summaryEl.style.display = html ? '' : 'none'
       summaryEl.innerHTML = html
     }
-    if (progressEl) {
-      const pct = _progress?.overall != null ? Math.round(_progress.overall * 100) : 0
-      progressEl.style.display = job.status === 'running' ? '' : 'none'
-      progressEl.querySelector('.bar')?.style.setProperty('width', `${pct}%`)
-    }
+    // NO progress bar here: the one bar lives in the unified Jobs card, fed by the live
+    // `progress_fraction` this engine stamps on running jobs. See index.html.
     if (detailError) {
       detailError.style.display = job.status === 'failed' ? '' : 'none'
       detailError.textContent = job.status === 'failed' ? (job.error || 'Solve failed.') : ''
     }
-    if (stopBtn) stopBtn.style.display = job.status === 'running' ? '' : 'none'
+    _syncStopBtn()
     _syncDisplayStatus()
     _metricsCard?.sync()
   }
@@ -426,8 +478,11 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   // ── Control buttons ───────────────────────────────────────────────────────────
   if (stopBtn) {
     stopBtn.addEventListener('click', async () => {
-      if (!_selectedId) return
-      await api.stopSnupiJob(_selectedId)
+      // Stop the job that is actually IN FLIGHT, not merely the selected one — you may have clicked
+      // an older completed run in the list while the new one is still solving.
+      const job = runningJob(_jobs)
+      if (!job) return
+      await api.stopSnupiJob(job.job_id)
       await _fetchJobs()
     })
   }

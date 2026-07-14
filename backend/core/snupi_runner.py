@@ -190,9 +190,18 @@ def _estimate_seconds(job: SnupiJob) -> float:
         # eigsh for dt auto-sizing.  ~10 s at 630 nodes / 60k steps.
         est = 5.0 + (nodes / 630.0) * step_scale * 10.0
         if getattr(job, "hydrodynamics", False):
-            # RPY dense friction inverse+eigendecomposition + a dense (6N)² transform per step.
-            # Calibrated to an 882-node / 60k-step run ≈ 650 s (grows ∝ nodes²).
-            est += (nodes / 882.0) ** 2 * step_scale * 650.0
+            coarse = getattr(job, "hydro_coarse_bp", None)
+            if coarse:
+                # COARSE blob RPY: the dense object is 6B×6B for B = nodes/k blobs, not 6N×6N — so the
+                # cost falls as (nodes/k)², NOT nodes². Using the dense law here would over-estimate a
+                # full M13 coarse run by ~60×, and the bar would crawl. Calibrated on the k=8 / 7240-node
+                # M13 run: ~14.5 ms per step of friction work at B=920 ⇒ ~900 s per 60k steps.
+                blobs = max(1.0, nodes / float(coarse))
+                est += (blobs / 920.0) ** 2 * step_scale * 900.0
+            else:
+                # EXACT RPY: dense friction inverse + eigendecomposition + a dense (6N)² transform per
+                # step. Calibrated to an 882-node / 60k-step run ≈ 650 s (grows ∝ nodes²).
+                est += (nodes / 882.0) ** 2 * step_scale * 650.0
         return max(2.0, est)
 
     if job.nonlinear:
@@ -204,26 +213,93 @@ def _estimate_seconds(job: SnupiJob) -> float:
     return max(2.0, est)
 
 
+PROGRESS_FILE = "progress.json"
+
+
+def write_progress(job_dir: Path, fraction: float, phase: str, info: dict | None = None) -> None:
+    """Publish REAL solve progress from the (detached) worker to the job dir.
+
+    Written atomically — the server polls this file while the worker is mid-solve, and a torn read
+    would show a nonsense percentage. ``info`` carries the fine detail (step / n_steps / dt / node +
+    blob counts / divergence-retry attempt) so a long run can be inspected while it runs rather than
+    only post-mortem. Best-effort: a progress-write failure must never kill a solve that has already
+    burned minutes of CPU."""
+    try:
+        tmp = job_dir / (PROGRESS_FILE + ".tmp")
+        tmp.write_text(json.dumps({
+            "fraction": max(0.0, min(1.0, float(fraction))),
+            "phase":    phase,
+            "at":       time.time(),
+            **(info or {}),
+        }))
+        tmp.replace(job_dir / PROGRESS_FILE)
+    except Exception:                                  # pragma: no cover — best-effort
+        pass
+
+
+def log_worker(job_dir: Path, message: str) -> None:
+    """Append a timestamped line to the job's ``worker.log`` — the thing you ``tail -f`` when a solve
+    has been running for half an hour and you want to know it is still moving. It was previously
+    written to only on a crash, so a healthy long run produced a 0-byte log and no way to tell a
+    grinding solve from a wedged one."""
+    try:
+        with (job_dir / "worker.log").open("a") as fh:
+            fh.write(f"[{time.strftime('%H:%M:%S')}] {message}\n")
+    except Exception:                                  # pragma: no cover — best-effort
+        pass
+
+
+def read_progress(job_dir: Path) -> dict | None:
+    """The worker's last published progress, or None if it hasn't reported yet."""
+    try:
+        return json.loads((job_dir / PROGRESS_FILE).read_text())
+    except Exception:
+        return None
+
+
 def job_progress(job: SnupiJob, workspace_dir: Path) -> dict:
-    """Overall progress fraction + ETA for the panel."""
+    """Overall progress fraction + ETA for the panel.
+
+    Dynamics jobs publish REAL progress (a fixed GJF step count → an exact fraction, see
+    ``snupi_dynamics._report_progress``), so we use it when present and derive the ETA from the
+    observed rate rather than from a wall-clock guess. Everything else — and a dynamics job that
+    hasn't reported its first step yet — falls back to :func:`_estimate_seconds`.
+    """
     stage = job.stages[0] if job.stages else None
     overall = 0.0
     eta_seconds: float | None = None
+    phase: str | None = None
+    detail: dict = {}
     if job.status == SnupiStatus.completed:
         overall = 1.0
     elif job.status in (SnupiStatus.failed, SnupiStatus.stopped):
         overall = 0.0
     elif job.status == SnupiStatus.running and stage and stage.started_at:
         elapsed = time.time() - stage.started_at
-        est = _estimate_seconds(job)
-        overall = min(0.97, elapsed / est)
-        eta_seconds = max(0.0, est - elapsed)
+        prog = read_progress(job.job_dir(workspace_dir))
+        frac = (prog or {}).get("fraction")
+        if frac is not None and frac > 0.0:
+            phase = prog.get("phase")
+            overall = min(0.99, float(frac))
+            # ETA from the MEASURED rate: elapsed/frac is the projected total.
+            eta_seconds = max(0.0, elapsed / max(frac, 1e-3) - elapsed)
+            detail = {k: prog.get(k) for k in
+                      ("step", "n_steps", "steps_per_s", "dt_ns", "n_nodes", "n_blobs", "attempt")
+                      if prog.get(k) is not None}
+        else:
+            est = _estimate_seconds(job)
+            overall = min(0.97, elapsed / est)
+            eta_seconds = max(0.0, est - elapsed)
     return {
         "overall":      overall,
         "status":       job.status.value,
         "stage_status": stage.status if stage else None,
         "eta_seconds":  eta_seconds,
+        "phase":        phase,
         "sim_seconds":  job.sim_seconds,
+        # Fine detail for a long-running solve: step/n_steps, the measured step rate, the auto-sized
+        # dt, the node/blob counts, and the divergence-retry attempt. Empty for jobs that don't report.
+        **detail,
     }
 
 
@@ -274,8 +350,52 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
         from backend.physics.fem_solver import predict_shape
 
         t0 = time.monotonic()
+        # REAL progress out of the detached worker: the dynamics solve is a fixed number of GJF steps,
+        # so it can report an exact fraction instead of the panel guessing from wall-clock. Throttled —
+        # the integrator calls this every 500 steps, and we only rewrite the file when the percentage
+        # actually moves, so a 60k-step run does ~100 tiny writes, not 120.
+        _last = [-1.0]
+        _phase_seen = [""]
+
+        def _progress(fraction: float, phase: str, info: dict | None = None) -> None:
+            info = info or {}
+            moved = fraction - _last[0] >= 0.01 or fraction >= 1.0
+            new_phase = phase != _phase_seen[0]
+            if not (moved or new_phase):
+                return
+            _last[0] = max(_last[0], fraction)
+            elapsed = time.monotonic() - t0
+            rate = (info.get("step") or 0) / elapsed if elapsed > 0 else 0.0
+            eta = (elapsed / fraction - elapsed) if fraction > 0.01 else None
+            write_progress(jd, fraction, phase, {
+                **info,
+                "elapsed_s":  round(elapsed, 1),
+                "steps_per_s": round(rate, 1) if rate else None,
+                "eta_s":      round(eta) if eta else None,
+            })
+            # A tail-able heartbeat. Phase changes always log; otherwise every ~10 % so a 60k-step run
+            # writes ~10 lines, not hundreds.
+            if new_phase:
+                _phase_seen[0] = phase
+                log_worker(jd, f"phase: {phase}  " + " ".join(
+                    f"{k}={v}" for k, v in info.items() if v is not None))
+            elif int(fraction * 10) != int((_last[0] - 0.011) * 10):
+                step, nsteps = info.get("step"), info.get("n_steps")
+                bits = [f"{fraction * 100:.0f}%"]
+                if step is not None and nsteps:
+                    bits.append(f"step {step}/{nsteps}")
+                if rate:
+                    bits.append(f"{rate:.0f} steps/s")
+                if eta:
+                    bits.append(f"eta {eta / 60:.1f} min")
+                bits.append(f"elapsed {elapsed / 60:.1f} min")
+                log_worker(jd, " · ".join(bits))
+
         result = predict_shape(
             design,
+            # Only the dynamics path reports; the static solve is a single sparse solve with no
+            # natural fraction, so it keeps the wall-clock estimate.
+            progress_cb = _progress if getattr(job, "dynamics", False) else None,
             nonlinear = job.nonlinear,
             n_steps   = job.n_steps,
             with_rmsf = job.with_rmsf,
@@ -290,6 +410,9 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
             # trajectory RMSF (same display payload). hydrodynamics=True → full RPY coupled friction.
             dynamics      = getattr(job, "dynamics", False),
             hydrodynamics = getattr(job, "hydrodynamics", False),
+            # Coarse blob hydrodynamics (1 bead / k bp) — the only mode that fits at origami scale;
+            # the exact per-bp friction is dense O(N²). None = exact (guarded by check_friction_memory).
+            hydro_coarse_bp = getattr(job, "hydro_coarse_bp", None),
             # Anchors (Dirichlet BC) + uniform E-field body load — job-request annotations, never a
             # topology edit (C1/C2).  A field needs ≥1 anchor to hold against (COM drift);
             # predict_shape falls back to the free centroid-pinned solve if a selection resolves

@@ -118,8 +118,16 @@ class CreateSnupiJobRequest(BaseModel):
                                          "time-mean shape + trajectory RMSF) instead of the static "
                                          "equilibrium solve (project_snupi_dynamics).")
     hydrodynamics: bool = Field(False,
-                             description="Dynamics only: use the full Rotne–Prager–Yamakawa coupled "
+                             description="Dynamics only: use the Rotne–Prager–Yamakawa coupled "
                                          "friction matrix vs diagonal Stokes drag.")
+    hydro_coarse_bp: Optional[int] = Field(None, ge=4, le=64,
+                             description="Hydrodynamics only: coarse-grain to ONE hydrodynamic bead "
+                                         "per this many bp (blob RPY). The exact per-bp friction is a "
+                                         "dense O(N²) matrix (~83 GB on a full M13 origami), so any "
+                                         "large design must coarse-grain; 8 is the calibrated default. "
+                                         "Minimum 4 — below that the blob is no bigger than a bead and "
+                                         "the hydrodynamic coupling degenerates to Stokes. "
+                                         "None = exact (refused up front if it would not fit).")
     # Job-request annotations (C1/C2): anchors held fixed (Dirichlet BC) + a uniform E-field body
     # load, both threaded into predict_shape(...).  Never a topology edit (Three-Layer Law).
     anchors:    Optional[list] = Field(None, description="Shared oxDNA anchor-scope descriptors "
@@ -152,6 +160,19 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
     from backend.physics.oxdna_interface import _strand_nucleotide_order
 
     material = body.material if body.material in ("snupi", "cando") else "snupi"
+
+    # Preflight the RPY friction BEFORE spawning the detached worker. The friction is dense and O(N²)
+    # in the FE node count (1 node/bp), so a full-size origami wants tens of GB; letting the worker try
+    # drives the machine into swap and the OOM killer takes whatever is largest (in practice the user's
+    # editor). Refuse here with the node count + the coarse-graining way out.
+    if body.dynamics and body.hydrodynamics:
+        from backend.physics.fem_solver import build_fem_mesh
+        from backend.physics.snupi_hydrodynamics import HydroMemoryError, check_friction_memory
+        try:
+            check_friction_memory(len(build_fem_mesh(design).nodes), body.hydro_coarse_bp)
+        except HydroMemoryError as exc:
+            raise HTTPException(413, str(exc)) from exc
+
     job = new_snupi_job(
         design_name        = name,
         nonlinear          = body.nonlinear,
@@ -161,6 +182,7 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
         mgcl2_M            = body.mgcl2_M,
         dynamics           = body.dynamics,
         hydrodynamics      = body.hydrodynamics,
+        hydro_coarse_bp    = body.hydro_coarse_bp,
         anchors            = body.anchors,
         field              = body.field,
         n_nucleotides      = len(_strand_nucleotide_order(design)),
@@ -201,6 +223,23 @@ async def list_snupi_jobs() -> list[dict]:
         d = j.to_dict()
         d["out_of_date"] = _is_out_of_date(j, current_fp)
         d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+        # A RUNNING job carries its live fraction + ETA so the ONE master progress bar in the unified
+        # Jobs card advances during the solve. Without this the card falls back to counting completed
+        # STAGES — and a SNUPI job has exactly one stage, so it would sit at 0 % for the whole run and
+        # jump to 100 % at the end (which is why this panel used to carry a second bar of its own).
+        if d.get("status") == "running":
+            try:
+                from backend.core.snupi_runner import job_progress
+                p = job_progress(j, ws)
+                d["progress_fraction"] = round(float(p.get("overall") or 0.0), 4)
+                d["eta_seconds"] = p.get("eta_seconds")
+                d["phase"] = p.get("phase")
+                # Fine detail (step / n_steps / rate / retry) so a long solve visibly ticks.
+                for k in ("step", "n_steps", "steps_per_s", "attempt"):
+                    if p.get(k) is not None:
+                        d[k] = p[k]
+            except Exception:  # noqa: BLE001 — progress is advisory, never sink the list
+                pass
         out.append(d)
     return out
 

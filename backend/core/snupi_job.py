@@ -75,10 +75,14 @@ class SnupiJob:
     mgcl2_M:             float = 0.02
     # Langevin structural DYNAMICS (project_snupi_dynamics): instead of the static equilibrium
     # solve, run a thermal trajectory and report its time-MEAN shape + TRAJECTORY RMSF (same
-    # display payload).  hydrodynamics=True uses the full Rotne–Prager–Yamakawa friction matrix
-    # (coupled) vs the diagonal Stokes drag.  Physical-layer/display-only.
+    # display payload).  hydrodynamics=True uses the coupled Rotne–Prager–Yamakawa friction matrix
+    # vs the diagonal Stokes drag.  Physical-layer/display-only.
+    # hydro_coarse_bp=k → the COARSE blob hydrodynamics (1 bead per k bp, snupi_hydro_coarse): the
+    # exact per-bp friction is a dense O(N²) matrix (≈83 GB on a full M13 origami — it OOMs the
+    # machine), so anything past a few thousand nodes MUST coarse-grain.  None = exact.
     dynamics:            bool = False
     hydrodynamics:       bool = False
+    hydro_coarse_bp:     Optional[int] = None
     # ── Job-request annotations (C1/C2): anchors + uniform E-field, NEVER a topology edit ──
     # anchors: shared oxDNA scope descriptors (overhang/cluster/domain/strand/base) held fixed
     # (Dirichlet BC) during the FEM solve.  field: {"field_pN": <force/nt, pN>, "dir": [x,y,z]} —
@@ -140,6 +144,7 @@ class SnupiJob:
         data.setdefault("mgcl2_M", 0.02)
         data.setdefault("dynamics", False)
         data.setdefault("hydrodynamics", False)
+        data.setdefault("hydro_coarse_bp", None)
         data.setdefault("anchors", None)
         data.setdefault("field", None)
         data.setdefault("design_source_path", None)
@@ -193,6 +198,7 @@ def new_snupi_job(
     mgcl2_M: float = 0.02,
     dynamics: bool = False,
     hydrodynamics: bool = False,
+    hydro_coarse_bp: Optional[int] = None,
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
     n_nucleotides: int = 0,
@@ -201,10 +207,13 @@ def new_snupi_job(
     feature_log_position: Optional[int] = None,
     doc_id: Optional[str] = None,
 ) -> SnupiJob:
-    # Dynamics jobs run a Langevin trajectory (± full-RPY hydrodynamics), not the static solve —
-    # give the panel an honest stage label so the ~minutes-long run doesn't read as a "nonlinear" solve.
+    # Dynamics jobs run a Langevin trajectory (± RPY hydrodynamics), not the static solve — give the
+    # panel an honest stage label so the ~minutes-long run doesn't read as a "nonlinear" solve.
     if dynamics:
-        stage_name = "dynamics-rpy" if hydrodynamics else "dynamics"
+        if hydrodynamics:
+            stage_name = f"dynamics-rpy-coarse{hydro_coarse_bp}" if hydro_coarse_bp else "dynamics-rpy"
+        else:
+            stage_name = "dynamics"
     else:
         stage_name = "nonlinear" if nonlinear else "linear"
     return SnupiJob(
@@ -220,6 +229,7 @@ def new_snupi_job(
         mgcl2_M            = mgcl2_M,
         dynamics           = dynamics,
         hydrodynamics      = hydrodynamics,
+        hydro_coarse_bp    = hydro_coarse_bp,
         anchors            = anchors,
         field              = field,
         stages             = [SnupiStageStatus(name=stage_name)],

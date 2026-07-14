@@ -80,6 +80,7 @@ def gjf_integrate(
     sample_every: int = 20,
     rng: Optional[np.random.Generator] = None,
     v0: Optional[np.ndarray] = None,
+    progress_cb: Optional[Callable[[float], None]] = None,
 ):
     """Grønbech-Jensen–Farago (2013) Langevin integrator over FLAT generalized coordinates.
 
@@ -114,8 +115,11 @@ def gjf_integrate(
         f = f_new
         if step >= n_equil and (step - n_equil) % sample_every == 0:
             samples.append(q.copy())
-        if step % 500 == 0 and not np.isfinite(q).all():
-            raise _GJFDiverged(f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)")
+        if step % 500 == 0:
+            if not np.isfinite(q).all():
+                raise _GJFDiverged(
+                    f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)")
+            _report_progress(progress_cb, step, n_steps)
     return np.array(samples), v
 
 
@@ -198,6 +202,96 @@ class _GJFDiverged(RuntimeError):
     """Raised when the explicit GJF step exceeds the stiff-mode stability limit."""
 
 
+# Share of the progress bar given to the friction/setup phase before the trajectory starts stepping.
+# The dt auto-sizing eigsh + the friction build are genuinely slow at scale, so the bar must not sit
+# at 0% through them; but the trajectory dominates, so keep the slice small.
+_SETUP_FRACTION = 0.10
+
+
+def _report_progress(cb: Optional[Callable[[float, int], None]], step: int, n_steps: int) -> None:
+    """Report the trajectory fraction + step index to an optional callback. REAL progress, not a
+    wall-clock guess: the dynamics run is a fixed number of GJF steps, so ``step/n_steps`` is exactly
+    how far along we are. The runner turns this into the panel's percentage and a ``worker.log``
+    heartbeat (see ``snupi_runner.solve_and_cache``).
+
+    Never let a reporting failure kill a multi-minute solve — the callback writes a file."""
+    if cb is None:
+        return
+    try:
+        cb(min(1.0, step / max(1, n_steps)), step)
+    except Exception:                                  # pragma: no cover — progress is best-effort
+        pass
+
+
+# ── Operator (structured) friction — no dense 6N×6N anywhere ────────────────────
+
+def gjf_integrate_operator_friction(
+    force_fn: Callable[[np.ndarray], np.ndarray],
+    q0: np.ndarray,
+    m_diag: np.ndarray,
+    fric,
+    *,
+    kT: float = KBT_300,
+    dt: float = DT_DEFAULT,
+    n_steps: int = 20000,
+    n_equil: int = 4000,
+    sample_every: int = 20,
+    rng: Optional[np.random.Generator] = None,
+    progress_cb: Optional[Callable[[float], None]] = None,
+):
+    """GJF Langevin with a friction supplied as an OPERATOR rather than a dense matrix — the route that
+    makes origami-scale hydrodynamics fit in RAM.
+
+    ``fric`` is a :class:`backend.physics.snupi_hydro_coarse.CoarseFriction` (or anything exposing
+    ``apply_Ztilde(x)``, ``apply_b_inv(x, dt)`` and ``sample_beta(kT, dt, rng)``). Nothing 6N×6N is ever
+    formed — cf. :func:`gjf_integrate_matrix_friction`, which needs the full eigendecomposition of Z̃.
+
+    We integrate in MASS-WEIGHTED coordinates ``q̃ = M^{1/2} q``, where the equation becomes unit-mass
+    with symmetric friction ``Z̃ = M^{-1/2} Z M^{-1/2}``. The GJF update is then the direct matrix
+    analogue of the scalar one, with every operator symmetric (so the orderings that bite in the
+    unsymmetric ``γ = M⁻¹Z`` form cannot):
+
+        b = (I + Δt·Z̃/2)⁻¹                a = (I − Δt·Z̃/2)·b
+        Δq̃ = b·[Δt·ṽ + (Δt²/2)·f̃ + (Δt/2)·β̃]
+        ṽ  = a·ṽ + (Δt/2)·(a·f̃ + f̃_new) + b·β̃ ,     ⟨β̃β̃ᵀ⟩ = 2 k_BT Δt Z̃
+
+    Setting Z̃ = diag(γ) and M = I reduces this LINE FOR LINE to the validated :func:`gjf_integrate`
+    (m = 1), which is how its correctness is inherited. Returns ``(samples_q, v_final)`` in PHYSICAL
+    coordinates."""
+    rng = np.random.default_rng() if rng is None else rng
+    m_diag = np.asarray(m_diag, dtype=float)
+    m_half, minv_half = np.sqrt(m_diag), 1.0 / np.sqrt(m_diag)
+
+    fric.prepare_gjf(dt)
+
+    def force_tilde(qt):
+        return minv_half * force_fn(minv_half * qt)
+
+    qt = m_half * np.asarray(q0, dtype=float)
+    vt = np.zeros_like(qt)
+    ft = force_tilde(qt)
+
+    def apply_a(x):
+        bx = fric.apply_b_inv(x, dt)
+        return bx - 0.5 * dt * fric.apply_Ztilde(bx)
+
+    samples = []
+    for step in range(n_steps):
+        beta = fric.sample_beta(kT, dt, rng)
+        qt = qt + fric.apply_b_inv(dt * vt + (0.5 * dt * dt) * ft + (0.5 * dt) * beta, dt)
+        ft_new = force_tilde(qt)
+        vt = apply_a(vt) + 0.5 * dt * (apply_a(ft) + ft_new) + fric.apply_b_inv(beta, dt)
+        ft = ft_new
+        if step >= n_equil and (step - n_equil) % sample_every == 0:
+            samples.append(minv_half * qt)
+        if step % 500 == 0:
+            if not np.isfinite(qt).all():
+                raise _GJFDiverged(
+                    f"GJF diverged at step {step} (dt={dt} too large for the stiffest mode)")
+            _report_progress(progress_cb, step, n_steps)
+    return np.array(samples), minv_half * vt
+
+
 # ── Matrix (hydrodynamic) friction via a mass-weighted eigen-transform ──────────
 
 def gjf_integrate_matrix_friction(
@@ -212,6 +306,7 @@ def gjf_integrate_matrix_friction(
     n_equil: int = 4000,
     sample_every: int = 20,
     rng: Optional[np.random.Generator] = None,
+    progress_cb: Optional[Callable[[float], None]] = None,
 ):
     """GJF Langevin with a FULL (coupled) friction matrix ``Z`` — the hydrodynamic case (Phase 1b).
 
@@ -239,6 +334,7 @@ def gjf_integrate_matrix_friction(
     samples_p, v = gjf_integrate(
         force_p, p0, np.ones_like(m_diag), lam,
         kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil, sample_every=sample_every, rng=rng,
+        progress_cb=progress_cb,
     )
     samples_q = (samples_p @ U.T) * minv_half[None, :]     # p → q = M^{-1/2} U p, per row
     return samples_q, v
@@ -524,6 +620,9 @@ def simulate_equilibrium(
     seed: int = 0,
     nonlinear_force: bool = False,
     modified_gjf: bool = False,
+    hydro_coarse_bp: Optional[int] = None,
+    hydro_generalized: bool = False,
+    progress_cb: Optional[Callable[[float, str], None]] = None,
 ) -> dict:
     """Run an equilibrium Langevin trajectory of ``design`` and return frames + trajectory RMSF.
 
@@ -542,11 +641,22 @@ def simulate_equilibrium(
     large-amplitude reconfiguration. Because the equilibrium covariance is k_BT·K⁻¹, the returned
     ``rmsf`` must agree with :func:`fem_solver.compute_rmsf_nma` on the same K — the validation gate.
 
-    ``hydrodynamics`` (Phase 1b) swaps the diagonal Stokes drag for the full Rotne–Prager–Yamakawa
-    friction matrix Z (:func:`snupi_hydrodynamics.friction_matrix`) + correlated noise, integrated by
+    ``hydrodynamics`` (Phase 1b) swaps the diagonal Stokes drag for the Rotne–Prager–Yamakawa friction
+    matrix Z (:func:`snupi_hydrodynamics.friction_matrix`) + correlated noise, integrated by
     :func:`gjf_integrate_matrix_friction`. The EQUILIBRIUM RMSF is unchanged (friction-independent);
-    RPY only alters the kinetics + dynamic cross-correlations. Costs an O((6N)³) eigendecomposition
-    once, so it's practical for small/medium designs (Phase-2 perf work for large bundles).
+    RPY only alters the kinetics + dynamic cross-correlations.
+
+    **Hydrodynamics is memory-bound — pick a mode.** Z is dense and O(N²): measured peak ≈ 1.5e-6·N² GB,
+    so a full M13 origami (N ≈ 7240) wants ≈ 79 GB. :func:`snupi_hydrodynamics.check_friction_memory`
+    preflights this and REFUSES rather than let the OOM killer take the machine.
+
+    * ``hydro_coarse_bp=k`` — the coarse blob model (:mod:`snupi_hydro_coarse`): one hydrodynamic bead
+      per ``k`` bp, structured (diagonal-minus-low-rank) friction, integrated by
+      :func:`gjf_integrate_operator_friction`. Nothing 6N×6N is ever formed, so origami scale fits
+      (≈0.4 GB at k=8). This is the ONLY mode that runs a full-size design. ``k=1`` = the exact model.
+    * ``hydro_generalized`` — use the FULL generalized RPY (rotation–translation + rotation–rotation
+      coupling, SI Note 3.2) instead of translational-only. Paper-faithful; costs the 4× memory of a
+      dense 6N×6N Z in the exact path (free in the coarse path, where the dense object is 6B×6B).
 
     Returns ``{positions0, frames, rmsf, helix_ids, bp_indices, n_frame, dt_ns, friction, stiffness, mass_diag}``
     (positions in nm; frames are absolute node positions, rigid-body drift retained —
@@ -614,22 +724,71 @@ def simulate_equilibrium(
         def force_fn(q):
             return f_ext - (Kcsr @ q)
 
+    # Progress: the friction build is a real, non-trivial phase (a dense O((6N)³) factorisation, or
+    # ~11 s even coarse at M13 scale), so give it its own slice of the bar rather than letting the
+    # panel sit at 0% through it. The trajectory then fills the rest.
+    def _phase(frac: float, label: str, info: Optional[dict] = None) -> None:
+        if progress_cb is not None:
+            try:
+                progress_cb(frac, label, info or {})
+            except Exception:                          # pragma: no cover — progress is best-effort
+                pass
+
     Z = None
+    coarse_fric = None
     if hydrodynamics:
-        from backend.physics.snupi_hydrodynamics import friction_matrix
-        Z = friction_matrix(X0)
+        from backend.physics.snupi_hydrodynamics import check_friction_memory, friction_matrix
+        # Preflight the O(N²) friction BEFORE allocating: a dense 6N×6N Z on a full-size origami wants
+        # tens of GB and the OOM killer takes the user's editor, not just this job.
+        check_friction_memory(n, hydro_coarse_bp)
+        _phase(0.0, "building hydrodynamic friction",
+               {"n_nodes": n, "coarse_bp": hydro_coarse_bp,
+                "n_blobs": (math.ceil(n / hydro_coarse_bp) if hydro_coarse_bp else n)})
+        if hydro_coarse_bp:
+            from backend.physics.snupi_hydro_coarse import build_coarse_friction
+            coarse_fric = build_coarse_friction(mesh, X0, m_diag, hydro_coarse_bp,
+                                                generalized=hydro_generalized)
+        else:
+            Z = friction_matrix(X0, generalized=hydro_generalized)
+
+    _phase(_SETUP_FRACTION, "trajectory", {"n_nodes": n, "n_steps": n_steps, "dt_ns": dt})
+
+    # The trajectory occupies the remaining [_SETUP_FRACTION, 1] of the bar. `_attempt_box` carries
+    # the divergence-retry index so the reported detail says WHY the step counter just reset to 0 —
+    # a dt halving restarts the whole trajectory, which otherwise looks like the bar going backwards
+    # (or, on the old time-based bar, like a run silently taking 2×/4× as long for no visible reason).
+    _attempt_box = [0]
+
+    traj_cb = None
+    if progress_cb is not None:
+        def traj_cb(f: float, step: int) -> None:                       # noqa: F811
+            _phase(_SETUP_FRACTION + (1.0 - _SETUP_FRACTION) * f, "trajectory",
+                   {"step": step, "n_steps": n_steps, "dt_ns": dt,
+                    "n_nodes": n, "attempt": _attempt_box[0]})
 
     # Run with a divergence-guarded retry: if the auto/explicit dt still overshoots the stiffest
     # mode, halve and retry (up to 4×) so the run always completes at a stable step.
     samples = None
     for _attempt in range(4):
+        _attempt_box[0] = _attempt
+        if _attempt:
+            # A retry throws away the whole trajectory and starts over at half the step — that is a
+            # 2×/4× wall-clock hit, so SAY so rather than let the run just appear to take forever.
+            _phase(_SETUP_FRACTION, "trajectory (restarted: dt halved after divergence)",
+                   {"attempt": _attempt, "dt_ns": dt, "n_steps": n_steps, "n_nodes": n})
         rng = np.random.default_rng(seed)
         try:
-            if hydrodynamics:
+            if coarse_fric is not None:
+                samples, _v = gjf_integrate_operator_friction(
+                    force_fn, np.zeros(6 * n), m_diag, coarse_fric,
+                    kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
+                    sample_every=sample_every, rng=rng, progress_cb=traj_cb,
+                )
+            elif hydrodynamics:
                 samples, _v = gjf_integrate_matrix_friction(
                     force_fn, np.zeros(6 * n), m_diag, Z,
                     kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
-                    sample_every=sample_every, rng=rng,
+                    sample_every=sample_every, rng=rng, progress_cb=traj_cb,
                 )
             elif modified_gjf:
                 samples, _v = gjf_modified_integrate(
@@ -641,7 +800,7 @@ def simulate_equilibrium(
                 samples, _v = gjf_integrate(
                     force_fn, np.zeros(6 * n), m_diag, gamma,
                     kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
-                    sample_every=sample_every, rng=rng,
+                    sample_every=sample_every, rng=rng, progress_cb=traj_cb,
                 )
             break
         except _GJFDiverged:
@@ -663,7 +822,10 @@ def simulate_equilibrium(
         "bp_indices": [node.global_bp for node in mesh.nodes],
         "n_frame": int(len(samples)),
         "dt_ns": float(dt),
-        "friction": "rpy" if hydrodynamics else "stokes",
+        "friction": (
+            f"rpy-coarse{hydro_coarse_bp}" if coarse_fric is not None
+            else "rpy" if hydrodynamics else "stokes"
+        ),
         "stiffness": Kcsr,
         "mass_diag": m_diag,
     }

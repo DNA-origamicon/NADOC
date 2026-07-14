@@ -2113,7 +2113,9 @@ async function main() {
   _moveRunControls(runControlEls.oxdna, 'oxdna-launch-row')
   _moveRunControls(runControlEls.mrdna, 'mrdna-launch-row')
   _moveRunControls(runControlEls.cando, 'cando-launch-row', 'cando-autorefine-row')
-  _moveRunControls(runControlEls.snupi, 'snupi-launch-row')
+  // Stop travels WITH the run buttons (it sits directly under them, always present, greyed until a
+  // run is in flight) — otherwise it would be stranded in the panel below.
+  _moveRunControls(runControlEls.snupi, 'snupi-launch-row', 'snupi-stop-row')
   _moveRunControls(runControlEls.namd, 'md-launch-row')
 
   // NAMD: tuck the launch CONFIG (Protocol, Run-on, production steps / total time / note)

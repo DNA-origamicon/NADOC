@@ -2103,25 +2103,39 @@ def _predict_shape_dynamics(
     material: str = "snupi",
     mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
     hydrodynamics: bool = False,
+    hydro_coarse_bp: Optional[int] = None,
     n_steps: int = 60000,
     with_rmsf: bool = True,
+    progress_cb=None,
 ) -> dict:
     """Langevin-dynamics shape prediction → the standard predict_shape payload.
 
-    Runs :func:`snupi_dynamics.simulate_equilibrium` (GJF Langevin; diagonal Stokes or full RPY
+    Runs :func:`snupi_dynamics.simulate_equilibrium` (GJF Langevin; diagonal Stokes or RPY
     hydrodynamic friction) and packages the time-mean shape as ``positions``/``axis`` and the
     trajectory RMSF as ``rmsf`` — identical keys to the static solve, so the display layer is
-    unchanged. Physical-layer/display-only (Three-Layer Law)."""
+    unchanged. Physical-layer/display-only (Three-Layer Law).
+
+    ``hydro_coarse_bp`` selects the coarse blob hydrodynamics (1 bead per k bp) — REQUIRED for
+    origami-scale designs, where the exact per-bp friction is a dense O(N²) matrix that will not fit
+    (see :func:`snupi_hydrodynamics.check_friction_memory`, which refuses rather than OOM)."""
     from backend.physics import snupi_dynamics as dyn
 
     out = dyn.simulate_equilibrium(
         design, material=material, hydrodynamics=hydrodynamics,
+        hydro_coarse_bp=hydro_coarse_bp,
         with_electrostatics=(material == "snupi"), mgcl2_M=mgcl2_M,
         n_steps=n_steps, n_equil=max(1, n_steps // 5), sample_every=40, seed=0,
+        progress_cb=progress_cb,
     )
     positions, axis = deformed_positions_with_axis(design, mesh, out["mean_u"])
+    if hydrodynamics:
+        # Name the coarse-graining in the solver label — a coarse run is an APPROXIMATION to the RPY
+        # kinetics (see snupi_hydro_coarse), so it must not read as the exact per-bp friction.
+        solver = f"dynamics-rpy-coarse{hydro_coarse_bp}" if hydro_coarse_bp else "dynamics-rpy"
+    else:
+        solver = "dynamics"
     result: dict = {
-        "solver": "dynamics-rpy" if hydrodynamics else "dynamics",
+        "solver": solver,
         "positions": positions,
         "axis": axis,
         "anchor_keys": [],
@@ -2154,7 +2168,9 @@ def predict_shape(
     corotational: bool = False,
     dynamics: bool = False,
     hydrodynamics: bool = False,
+    hydro_coarse_bp: Optional[int] = None,
     dynamics_steps: int = 60000,
+    progress_cb=None,
 ) -> dict:
     """Predict the CanDo-style equilibrium shape + flexibility of ``design`` (Physical layer).
 
@@ -2218,7 +2234,8 @@ def predict_shape(
         # cylinders) visualizes the dynamics result with no new display code.
         return _predict_shape_dynamics(
             design, mesh, material=material, mgcl2_M=mgcl2_M,
-            hydrodynamics=hydrodynamics, n_steps=dynamics_steps, with_rmsf=with_rmsf)
+            hydrodynamics=hydrodynamics, hydro_coarse_bp=hydro_coarse_bp,
+            n_steps=dynamics_steps, with_rmsf=with_rmsf, progress_cb=progress_cb)
 
     fixed_nodes, anchor_keys = resolve_anchor_nodes(design, mesh, anchors)
 

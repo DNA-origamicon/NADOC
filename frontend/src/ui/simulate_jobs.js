@@ -180,18 +180,50 @@ export function masterStatusText(node) {
   // NAMD (and any engine with a live/segment fraction) shows overall % while running so a
   // single-segment production reads as progress, not a bare "running".
   if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterProgressPct(node)}%`
+  // SNUPI reports a REAL fraction (a fixed GJF step count) + an ETA measured from the observed rate,
+  // plus the current phase — building the hydrodynamic friction is a slow, step-less phase, so name it
+  // or the bar looks stuck. This line sits directly under the master bar.
+  if (node.engine === 'snupi' && node.status === 'running') {
+    const parts = [`${eng} · running · ${masterProgressPct(node)}%`]
+    const eta = Number(node.eta_seconds)
+    if (Number.isFinite(eta) && eta > 0) parts.push(`~${formatEta(eta)} left`)
+    if (node.phase) parts.push(node.phase)
+    return parts.join(' · ')
+  }
   return `${eng} · ${node.status}`
 }
 
-/** The expandable detail note. A LAMMPS run explains why it ran on CPU; an oxDNA run
- *  gets a brief size line (its rich detail lives in the oxDNA panel). */
-export function nodeDetailText(node) {
+/** Compact ETA: seconds under a minute, else m:ss — a multi-minute RPY solve reads badly as "412s". */
+export function formatEta(seconds) {
+  const s = Math.max(0, Math.ceil(Number(seconds) || 0))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return `${m}m ${String(s % 60).padStart(2, '0')}s`
+}
+
+/**
+ * The expandable detail note under the master bar. This note is oxDNA-SPECIFIC: an oxDNA run gets a
+ * brief size line (its rich detail lives in the oxDNA panel), and a LAMMPS run explains why it fell
+ * back to CPU (LAMMPS runs are oxDNA's CPU fallback and group under the oxDNA tab).
+ *
+ * ``activeEngine`` is the engine TAB currently selected. The note only renders on the oxDNA tab: with
+ * "Show all job types" on you can select an oxDNA run from any tab, and an oxDNA-flavoured line has no
+ * business appearing under, say, the SNUPI panel.
+ *
+ * It also returns '' for every other engine. It used to FALL THROUGH — any non-LAMMPS node with
+ * ``n_units`` was labelled "oxDNA (GPU) · N nucleotides", so selecting a SNUPI / mrDNA / CanDo / NAMD
+ * run claimed it had run on oxDNA. Engines other than oxDNA have no detail note here; theirs lives in
+ * their own panel.
+ */
+export function nodeDetailText(node, activeEngine = 'oxdna') {
   if (!node) return ''
+  if (activeEngine !== 'oxdna') return ''            // not the oxDNA tab → no oxDNA note
   if (node.engine === 'lammps') {
     const cores = Number(node.ranks) || 1
     return `Ran on CPU (LAMMPS, ${cores} core${cores === 1 ? '' : 's'}) because the GPU was busy — ` +
            'the same oxDNA2 force field, multi-core, faster than single-core.'
   }
+  if (node.engine !== 'oxdna') return ''             // never label another engine's run "oxDNA"
   const n = Number(node.n_units) || 0
   return n ? `oxDNA (GPU) · ${n.toLocaleString()} nucleotides` : ''
 }
@@ -363,7 +395,13 @@ export function initSimulateJobs({
       progressBar.style.background = node ? masterProgressColor(node) : _C.accent
     }
     if (progressWrap) progressWrap.title = node ? masterProgressTooltip(node) : ''
-    if (detailEl) detailEl.textContent = nodeDetailText(node)
+    if (detailEl) {
+      // oxDNA-only note, gated to the oxDNA tab. Collapse the element when there's nothing to say,
+      // so other engines don't get a blank gap under the bar.
+      const text = nodeDetailText(node, _activeEngine)
+      detailEl.textContent = text
+      detailEl.style.display = text ? '' : 'none'
+    }
     _renderTimeline(node)
     _renderRunButton()
     _renderActions(node)
@@ -583,8 +621,11 @@ export function initSimulateJobs({
     _updateEngineLabel()
     if (_sel.id && !_visibleNodes().some((n) => n.engine === _sel.engine && n.job_id === _sel.id)) {
       _sel = { engine: null, id: null }
-      _renderMaster()
     }
+    // ALWAYS re-render the master block on a tab switch, not only when the selection was cleared:
+    // in "show all job types" mode the selection SURVIVES the switch, and the detail note is gated on
+    // the active tab (oxDNA-only) — without this it would linger under another engine's panel.
+    _renderMaster()
     _renderList()
   }
   showAllToggle?.addEventListener('change', () => {

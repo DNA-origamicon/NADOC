@@ -76,6 +76,10 @@ def test_new_job_stage_name_tracks_solver(tmp_path):
     # Dynamics jobs run a Langevin trajectory, not the static solve → honest stage label.
     assert new_snupi_job("d", dynamics=True).stages[0].name == "dynamics"
     assert new_snupi_job("d", dynamics=True, hydrodynamics=True).stages[0].name == "dynamics-rpy"
+    # Coarse-grained hydrodynamics is an APPROXIMATION to the RPY kinetics — name it, so it can't be
+    # mistaken for the exact per-bp friction.
+    assert new_snupi_job("d", dynamics=True, hydrodynamics=True,
+                         hydro_coarse_bp=8).stages[0].name == "dynamics-rpy-coarse8"
 
 
 def test_estimate_seconds_accounts_for_dynamics_and_rpy():
