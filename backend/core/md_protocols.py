@@ -525,6 +525,7 @@ def _common_header(
     structure_psf: Optional[str] = None,
     gbis: bool = False,
     gbis_ion_conc_M: float = 0.15,
+    output_freq: int = 9_600,
 ) -> str:
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
@@ -606,9 +607,9 @@ nonbondedFreq      1
 fullElectFrequency 2
 stepspercycle      20
 {gpu_line}
-outputEnergies     9600
-xstFreq            9600
-restartfreq        9600
+outputEnergies     {output_freq}
+xstFreq            {output_freq}
+restartfreq        {output_freq}
 binaryrestart      yes
 """
 
@@ -652,6 +653,8 @@ def _segment_conf(
         _common_header(
             name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
             gpu_resident=gpu_resident, structure_psf=eff_psf, gbis=gbis,
+            # From THIS chunk's length, so the frame count survives a timestep change.
+            output_freq=_output_freq(spec.steps),
         )
     ]
     lines.append(f"outputName         output/{spec.name}\n")
@@ -1286,9 +1289,40 @@ def _scale_label(scale: Optional[float]) -> str:
     return s.replace(".", "p")
 
 
+# The relaxation early-stop evaluator refuses to judge a plateau on fewer than
+# ``CutoffParams.min_frames`` (20) ENERGY frames — "insufficient data" fails SAFE to
+# "run the whole thing". Aim comfortably above that.
+_ENERGY_FRAMES_PER_CHUNK = 30
+
+
+def _output_freq(steps: int, cycle: int = AKSIMENTIEV_STEPS_PER_CYCLE) -> int:
+    """ENERGY/DCD print interval giving ~30 frames for a chunk of ``steps``, whatever
+    the timestep.
+
+    This used to be a hardcoded 9600 STEPS, and that silently broke relaxation
+    early-stop the moment ``fast`` was enabled. The chunk step-counts are derived from a
+    target simulated TIME, so doubling the timestep (2 fs -> 4 fs, the `fast` path)
+    HALVES every chunk's step count for the same physics — while a step-denominated
+    print interval kept firing just as often per step, i.e. HALF as often per
+    nanosecond. A p10 chunk went from 25 ENERGY frames to 12, under the evaluator's
+    min_frames=20, so `energy_plateaued` returned False for every p10 in the ladder and
+    no p10 could ever bridge. The accelerator was still *emitted*, still *ran*, and
+    still reported HOLD every time — a silent 4x cost increase with no error anywhere.
+
+    Deriving the cadence from the chunk's own length makes the frame count invariant
+    under timestep, which is what the evaluator actually cares about.
+    """
+    f = max(cycle, steps // _ENERGY_FRAMES_PER_CHUNK)
+    return max(cycle, f - (f % cycle))      # NAMD wants a multiple of stepspercycle
+
+
 def _display_dcd_freq(steps: int) -> int:
-    """Write sparse frames for multi-ns relaxation without filling the disk."""
-    return 9_600
+    """Write sparse frames for multi-ns relaxation without filling the disk.
+
+    Same cadence as the ENERGY print: Tier-A early-stop reads a WC base-pairing series
+    off THIS trajectory, so a chunk whose DCD is too sparse can't be judged either.
+    """
+    return _output_freq(steps)
 
 
 def _round_up_to_cycle(steps: int, cycle: int = AKSIMENTIEV_STEPS_PER_CYCLE) -> int:

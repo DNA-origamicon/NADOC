@@ -272,3 +272,63 @@ def test_runner_consumes_midrun_override(tmp_path: Path, monkeypatch: pytest.Mon
     # consumed at the p10 boundary → p50/p100 skipped, next stage runs
     assert confs == [_MIN, "T_01_p10", "T_02_p100"]
     assert MdJob.load(job.job_id, tmp_path).early_stop_relax is True   # persisted by runner
+
+
+class TestEarlyStopFrameBudget:
+    """The print cadence must give every chunk enough ENERGY frames to be JUDGED.
+
+    This is the silent-failure class of bug: the accelerator is still emitted, still
+    runs, and still answers — it just answers HOLD every single time, because the
+    evaluator refuses to judge a plateau on too few frames ("insufficient data" fails
+    SAFE to "run the whole thing"). Nothing errors. The only symptom is a 4x bill.
+
+    What happened: outputEnergies was a hardcoded 9600 STEPS. Chunk step-counts are
+    derived from a target simulated TIME, so enabling `fast` (2 fs -> 4 fs) halves every
+    chunk's steps for identical physics — and a step-denominated print interval then
+    fires half as often per nanosecond. A p10 chunk fell from 25 frames to 12, under
+    min_frames=20, and NO p10 in the ladder could ever bridge.
+    """
+
+    # The real 3x6x400 ladder: same simulated time, different timestep.
+    P10_AT_2FS = 240_000
+    P10_AT_4FS = 120_000     # identical physics — 120k*4fs == 240k*2fs == 480 ps
+
+    def test_frame_count_is_invariant_under_the_timestep(self):
+        from backend.core.md_protocols import _output_freq
+
+        frames_2fs = self.P10_AT_2FS // _output_freq(self.P10_AT_2FS)
+        frames_4fs = self.P10_AT_4FS // _output_freq(self.P10_AT_4FS)
+        assert frames_2fs == frames_4fs, (
+            f"the same 480 ps yields {frames_2fs} frames at 2 fs but {frames_4fs} at "
+            f"4 fs — enabling `fast` would silently disable early-stop"
+        )
+
+    def test_every_chunk_clears_the_evaluators_min_frames(self):
+        """Including the SHORTEST chunk (p10), which is the one that saves the most:
+        bridging at p10 skips p50+p100, i.e. 90% of the stage."""
+        from backend.core.md_cutoff import CutoffParams
+        from backend.core.md_protocols import _output_freq
+
+        min_frames = CutoffParams().min_frames
+        for steps in (self.P10_AT_4FS, 480_000, 600_000):     # p10, p50, p100 (fast)
+            got = steps // _output_freq(steps)
+            assert got >= min_frames, (
+                f"a {steps}-step chunk yields {got} ENERGY frames but the evaluator "
+                f"needs {min_frames} — it will report HOLD forever and never bridge"
+            )
+
+    def test_the_cadence_is_a_multiple_of_stepspercycle(self):
+        """NAMD wants output intervals aligned to stepspercycle."""
+        from backend.core.md_protocols import (
+            AKSIMENTIEV_STEPS_PER_CYCLE,
+            _output_freq,
+        )
+
+        for steps in (120_000, 240_000, 480_000, 600_000, 100):
+            assert _output_freq(steps) % AKSIMENTIEV_STEPS_PER_CYCLE == 0
+
+    def test_a_tiny_chunk_still_gets_a_sane_cadence(self):
+        from backend.core.md_protocols import _output_freq
+
+        assert _output_freq(100) > 0
+        assert _output_freq(0) > 0
