@@ -399,10 +399,34 @@ has it open; and `close_pod()` closes the pod in EVERY job's file.
 | chunk | timestep | mode | ms/step | note |
 |---|---|---|---|---|
 | minimisation (4800) | 2 fs | offload | **53.6** | ~5 min; TOTAL → −9.0e6, clean |
-| stage-1 p10 (120k) | **1 fs** | **offload** (soft) | **51.5** | **1.7 h / $1.27** — the single most expensive chunk per ns, and unavoidable |
-| every other chunk | 4 fs | GPU-resident | ~21 (predicted) | |
+| stage-1 p10 (120k) | **1 fs** | **offload** (soft) | **43–51** | **~1.5 h / $1.1** — the most expensive chunk per ns, and unavoidable |
+| every other chunk | 4 fs | **GPU-resident** | **26.4** | **13.1 ns/day** at 1.94M atoms |
 
-The soft first chunk is 40% of a best-case ladder's cost. It is the price of a safe start.
+⚠️ **The RTX PRO 4500 Blackwell is 1.26× SLOWER than the 4090 extrapolation.** The
+measured 11.2 ms/step/Matom (4090) predicted **20.9** ms/step; the Blackwell does **26.4**.
+The per-Matom fit does NOT transfer across architectures — re-measure on any new card
+before costing a run off it.
+
+The soft first chunk is ~40% of a best-case ladder's cost. It is the price of a safe start.
+
+## Tier-A early-stop CONFIRMED on a live 1.94M-atom pod (2026-07-14)
+
+    [nadoc-health] wrote 30 wc frames
+    [nadoc-cutoff] {"n_energy_frames": 21, "n_wc_frames": 30,
+                    "energy_plateaued": true, "wc_plateaued": true, "tier": "A"}
+    [NADOC] early-stop: ..._k0p5_p10 plateaued — bridging 2 chunk(s)
+    SKIP  ..._k0p5_p50  (already complete)
+    SKIP  ..._k0p5_p100 (already complete)
+
+Stage 1 bridged away **1,080,000 steps**. WC series it judged on: `1.0 → 0.954 → … →
+0.949`, flat at ~94.7%.
+
+⚠️ **`n_energy_frames: 21` against `min_frames = 20` — a margin of ONE frame.** Before the
+frame-budget fix that number was **12**. And note the *resumed* chunk runs
+`total − restart_step`, so a cell-shrink at a LATER step leaves fewer frames: a shrink past
+~step 40k would drop a p10 back under 20 and **silently disable its bridge**. Not yet
+hardened — `_output_freq` should be derived from the REMAINING steps on a resume, not the
+original total.
 
 ## Open items
 
