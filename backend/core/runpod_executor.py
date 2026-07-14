@@ -218,9 +218,13 @@ def pod_payloads_for(job: MdJob, n_atoms: int, *, network_volume_id: str,
     # and let it pick whatever is actually free in the volume's datacenter.
     gpu_ids = [g.key for g in plan["gpus"]]
 
+    # SECURE ONLY (user decision, 2026-07-14). Community Cloud is a pool of third-party
+    # hosts: cheaper, but variable reliability, and in EU-RO-1 (where the network volume
+    # pins us) it frequently has NO card at all — every COMMUNITY attempt so far returned
+    # 500 "There are no instances currently available". For an unattended overnight run
+    # the halved price is not worth the variance.
     payloads = []
-    for cloud_type, spot in (("COMMUNITY", interruptible), ("SECURE", interruptible),
-                             ("SECURE", False)):
+    for cloud_type, spot in (("SECURE", interruptible), ("SECURE", False)):
         payloads.append(build_create_payload(
             name=name,
             gpu_type_ids=gpu_ids,

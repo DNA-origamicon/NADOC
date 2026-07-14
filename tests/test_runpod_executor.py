@@ -111,13 +111,15 @@ class TestPodSizing:
         assert payload["networkVolumeId"] == VOLUME
         assert payload["interruptible"] is True
 
-    def test_falls_back_across_cloud_tiers_as_well_as_cards(self, tmp_path):
-        """COMMUNITY 4090s are frequently absent from the volume's region, which is why a
-        hand-made pod silently lands on SECURE at ~2x the price ($0.69 vs $0.34/hr)."""
+    def test_never_offers_community_cloud(self, tmp_path):
+        """SECURE only (user decision). Community is a pool of third-party hosts — cheaper,
+        but variable, and in EU-RO-1 (where the volume pins us) it frequently has NO card at
+        all: every COMMUNITY attempt returned 500 "no instances currently available". For an
+        unattended overnight run the halved price is not worth the variance."""
         payloads = rx.pod_payloads_for(_job(tmp_path), 225_504, network_volume_id=VOLUME)
         tiers = [(p["cloudType"], p["interruptible"]) for p in payloads]
-        assert tiers[0] == ("COMMUNITY", True), "try the cheap tier first"
-        assert ("SECURE", False) in tiers, "on-demand secure is the last resort"
+        assert all(t == "SECURE" for t, _ in tiers), tiers
+        assert ("SECURE", False) in tiers, "on-demand must be reachable for a long run"
 
     def test_refuses_a_system_no_gpu_can_hold(self, tmp_path):
         with pytest.raises(RunpodError, match="carve|GBIS"):
