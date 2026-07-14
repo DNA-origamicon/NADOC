@@ -15,6 +15,7 @@ live 3x6x400 pod before the fix:
 
 from __future__ import annotations
 
+import re
 import subprocess
 
 import pytest
@@ -22,6 +23,7 @@ import pytest
 from backend.core.md_protocols import _RESUME_DROP as PROTOCOL_DROP
 from backend.core.remote_resume_conf import (
     _RESUME_DROP,
+    _output_freq,
     build_resume_conf,
     restart_step_of,
 )
@@ -92,6 +94,35 @@ class TestResumeConf:
     def test_refuses_a_checkpoint_at_or_past_the_end(self):
         with pytest.raises(ValueError, match="at/past"):
             build_resume_conf(CONF, "s_01_p10", 120_000, 120_000)
+
+    def test_recomputes_the_print_cadence_from_the_REMAINING_steps(self):
+        """A resume runs `total - restart_step`, not `total`. Inheriting the original
+        step-denominated cadence starves a LATE restart of ENERGY frames:
+
+            shrink at step   4,000 -> 116,000 left / 4,000 = 29 frames   (fine)
+            shrink at step  44,000 ->  76,000 left / 4,000 = 19 frames   (UNDER 20!)
+
+        ...and below min_frames the evaluator reports "insufficient data", which fails
+        SAFE to HOLD — so the chunk silently loses its bridge and the stage runs in full.
+        The same silent 4x-cost failure as the original hardcoded-9600 bug, triggered by a
+        cell shrink instead of by `fast`.
+        """
+        from backend.core.md_cutoff import CutoffParams
+        min_frames = CutoffParams().min_frames
+
+        for restart_step in (4_000, 44_000, 90_000, 119_000):
+            out = build_resume_conf(CONF, "s_01_p10", restart_step, 120_000)
+            remaining = 120_000 - restart_step
+            freq = int(re.search(r"^outputEnergies\s+(\d+)", out, re.M).group(1))
+            frames = remaining // freq
+            assert frames >= min_frames, (
+                f"a resume at step {restart_step} yields only {frames} ENERGY frames "
+                f"(need {min_frames}) — it would silently never bridge"
+            )
+
+    def test_the_resumed_cadence_is_cycle_aligned(self):
+        for steps in (76_000, 116_000, 1_000):
+            assert _output_freq(steps) % 20 == 0
 
     def test_drop_list_stays_in_lockstep_with_md_protocols(self):
         """This file is VENDORED to the pod with no NADOC on sys.path. If the protocol's

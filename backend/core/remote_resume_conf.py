@@ -51,6 +51,32 @@ _RESUME_DROP = frozenset([
     "reinitvels", "firsttimestep", "dcdFile", "xstFile", "run",
 ])
 
+# ...and these, which the resume must RE-DERIVE rather than inherit. See _output_freq.
+_RESUME_RECOMPUTE = frozenset(["outputEnergies", "dcdFreq", "xstFreq", "restartfreq"])
+
+# Tier-A/B early-stop refuses to judge a plateau on fewer than CutoffParams.min_frames
+# (20) ENERGY frames. Same target as md_protocols._ENERGY_FRAMES_PER_CHUNK.
+_FRAMES_PER_CHUNK = 30
+_STEPS_PER_CYCLE = 20
+
+
+def _output_freq(steps):
+    """Print interval giving ~30 frames for a chunk of ``steps`` — RECOMPUTED on resume.
+
+    A resume runs ``total - restart_step``, not ``total``. Inheriting the original conf's
+    step-denominated cadence therefore yields FEWER frames the later the restart happens:
+
+        shrink at step   4,000 -> 116,000 left / 4,000 = 29 frames   (fine)
+        shrink at step  44,000 ->  76,000 left / 4,000 = 19 frames   (UNDER min_frames!)
+
+    ...and below 20 the evaluator reports "insufficient data", which fails SAFE to HOLD —
+    so the chunk silently loses its ability to bridge and the stage runs in full. Exactly
+    the same silent 4x-cost failure as the original hardcoded-9600 bug, just triggered by
+    a cell shrink instead of by `fast`. Recompute from what is actually left to run.
+    """
+    f = max(_STEPS_PER_CYCLE, steps // _FRAMES_PER_CHUNK)
+    return max(_STEPS_PER_CYCLE, f - (f % _STEPS_PER_CYCLE))
+
 
 def restart_step_of(xsc_text):
     """The step number NAMD checkpointed at — the first field of the last data line.
@@ -73,10 +99,12 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
         raise ValueError(
             "resume step %d is at/past the segment total %d" % (restart_step, total_steps)
         )
+    drop = _RESUME_DROP | _RESUME_RECOMPUTE
     kept = [
         line for line in conf_text.splitlines()
-        if (line.split()[0] if line.split() else "") not in _RESUME_DROP
+        if (line.split()[0] if line.split() else "") not in drop
     ]
+    freq = _output_freq(remaining)
     kept += [
         "binCoordinates     output/%s.restart.coor" % segment_name,
         "binVelocities      output/%s.restart.vel" % segment_name,
@@ -84,6 +112,13 @@ def build_resume_conf(conf_text, segment_name, restart_step, total_steps):
         "extendedSystem     output/%s.restart.xsc" % segment_name,
         "dcdFile            output/%s.dcd" % segment_name,
         "xstFile            output/%s.xst" % segment_name,
+        # Re-derived from the REMAINING steps, so the resumed chunk still yields enough
+        # frames for early-stop to judge it. Inheriting the original cadence silently
+        # starves a late restart of frames and kills its bridge.
+        "outputEnergies     %d" % freq,
+        "dcdFreq            %d" % freq,
+        "xstFreq            %d" % freq,
+        "restartfreq        %d" % freq,
         "firsttimestep      %d" % int(restart_step),
         # NAMD 3's Tcl `run` has no `upto`; firsttimestep already advanced the label, so
         # run only what is left. restart_step is a multiple of restartfreq (itself a
