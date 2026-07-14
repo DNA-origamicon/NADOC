@@ -359,6 +359,41 @@ its ability to bridge, and nothing would say so.
 worthless until something has actually watched it heal.** Both this and the `fast`/early-stop
 bug presented as *silence*, not as errors.
 
+## ⚠️ A DNS blip ORPHANED a billing pod — and nothing had persisted its id (fixed 2026-07-14)
+
+A routine status poll hit `[Errno -3] Temporary failure in name resolution`. `_request`
+turned that transient blip into a **fatal** `RunpodError`; it propagated out of the poll
+loop and killed the launcher — and the launcher's `finally` is the **only** thing that
+destroys the pod. (The on-pod kill-switch has no API key: it can stop NAMD, never the
+billing.) NAMD, being `setsid`-detached with output on the network volume, carried on
+perfectly happily — so the ladder kept advancing while nothing on the machine was left to
+turn the meter off.
+
+**And it was worse:** `runpod_executor` **never called `job.save()`**. Nothing about the
+pod was persisted, so a crashed launcher left an orphaned, billing pod that no later
+process could even **name**, let alone reap or resume.
+
+Three fixes: `_request` retries the network layer + 5xx/429 with backoff (never a 4xx — it
+fails identically forever and just burns pod-time); the pod id is saved the INSTANT it
+exists; and `experiments/exp43_runpod_bench/supervise.py` re-attaches to an orphaned pod
+(poll → fetch → destroy). `reap.py --kill` is the panic button — reads `~/.runpod_key`, so
+it works with no environment.
+
+## ⚠️ The spend ledger FROZE while a real GPU billed on (fixed 2026-07-14)
+
+The ledger exists **because** the in-code kill-switch is per-POD and has no memory — and
+then it grew the same class of hole. A pod bills continuously from creation to destruction
+regardless of how many processes watch it. The launcher opened the pod, died (its `finally`
+**closed** the row), and a supervisor re-adopted it (a second, **open** row for the SAME
+pod). `_all_rows` deduped by keeping the FIRST row — the closed one — so the live row was
+discarded and `spent()` **froze at $0.95** while the GPU billed on for another 25 min. The
+budget guard reads that number; it could never have fired. True spend was **$1.35**.
+
+Now collapsed per pod: `started` = earliest sighting, `ended = None` if ANY observer still
+has it open; and `close_pod()` closes the pod in EVERY job's file.
+
+**A ledger that under-reports is worse than no ledger, because it is trusted.**
+
 ## Cost anatomy of the 3x6x400 ladder (1.94M atoms, RTX PRO 4500, measured)
 
 | chunk | timestep | mode | ms/step | note |
