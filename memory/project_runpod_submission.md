@@ -226,13 +226,77 @@ $0.34/hr community cloud.
   already-finished simulation: NAMD dies with "Can't modify CUDASOAintegrate when that mode
   was never enabled" — *after* silently running the whole segment in offload mode.
 
+## Relaxation early-stop on a pod (2026-07-14) — the feature that makes a big ladder affordable
+
+**`early_stop_relax` existed for `local` and `alpine` but NOT `runpod`.** The flag was
+settable on the job and `render_chain_script` **silently ignored it** — no code path read
+it. That is not a missing nicety, it is the difference between a run happening and not:
+the 3x6x400 ladder is 4.8M steps (at 4 fs) ≈ **28 h ≈ $21** un-accelerated, which fits
+neither a night nor a budget.
+
+Ported by **reusing `slurm_script`'s emitters** (`_early_stop_block` / `_bridge_lines`)
+rather than copying them — the bridge bash is the subtle half (explicit names, never a
+glob, so `_p50` can't sweep `_p100`) and a second copy would drift out of lockstep with
+the tests that pin it.
+
+**The bridge and the resume trick are the SAME trick.** On a plateau the pod copies the
+chunk's final `{coor,vel,xsc}` onto every remaining chunk's expected names; `run_step`'s
+existing "`output/<name>.coor` exists → SKIP" guard then walks straight past them, and
+the next stage's `previous` (which points at `_p100`) finds the bridged file. No new skip
+logic was needed.
+
+⚠️ **Tier B CANNOT pay for a real ladder.** Tier B (stdlib, energy+volume plateau) may only
+skip stages restrained at ENM `k >= 0.1` — below that, base-pairing keeps degrading after
+the energy flattens, so an energy-only plateau would bridge away a stage that hadn't
+finished relaxing. **k=0.01 and the k=0/MGHH melt therefore always run in FULL**, capping
+Tier B at ~5.28M of the 9.6M 2-fs steps — over budget in its BEST case. **Tier A** (WC
+base-pairing gate, needs MDAnalysis on the pod) holds the fragile stages directly and makes
+EVERY chunk eligible; that is where exp36's measured **4.9×** comes from.
+
+⚠️ **Tier A fails SAFE to HOLD, and "hold" on a rented pod is a BUDGET event.** No
+`wc.json` (MDAnalysis missing, health step failed) → no skip → the full expensive ladder,
+until the kill-switch guillotines it half-finished — neither a finished relaxation nor the
+money to retry. So `runpod_executor._ensure_mdanalysis()` is a **hard gate**: a pod that
+cannot import MDAnalysis refuses to launch. (The pytorch image ships numpy+scipy but not
+MDAnalysis; it is a ~30 s pip.)
+
+## ⚠️ GPU_TYPES carried COMMUNITY prices — every estimate was ~2.2× low (fixed 2026-07-14)
+
+Community cloud is **excluded in code** (no card in EU-RO-1, where the volume pins us), so
+the only prices we can pay are SECURE — and the table held the community ones. Live-checked
+against RunPod's `gpuTypes` GraphQL:
+
+| card | community | **SECURE (what we pay)** |
+|---|---|---|
+| RTX 4090 | 0.34 | **0.69** |
+| RTX PRO 4500 | 0.34 | **0.74** |
+| RTX 6000 Ada | 0.74 | **0.77** |
+| RTX PRO 5000 | 0.82 | **0.96** |
+
+`plan_execution` and `POST /runpod/estimate` both read these, so both were lying — a "$5"
+overnight ladder is really $11. **The live kill-switch was never affected**
+(`lifetime_for_budget` uses the pod's *actual* reported rate).
+
+The table is **strictly cheapest-first** again (pinned). The PRO 4500 had been put first
+only because at the community price the two **tied** at $0.34, making its 32 GB + HIGH
+stock a free tiebreak; real prices break the tie. Leading with the cheaper-but-scarce 4090
+costs nothing — `gpuTypeIds` is a **fallback list**, so RunPod just rents the next card
+when none is free. (Which is exactly what happened on the first real run: asked for a 4090,
+got a PRO 4500 at $0.74.)
+
 ## Open items
 
-- **Cumulative spend is not tracked.** The `$15` kill-switch caps ONE pod's life. A spot
-  reclaim relaunches with a fresh budget, so a job that gets reclaimed 3× can bill 3×$15
-  and no code notices. To fix properly, `MdJob` needs a `spent_usd` that accumulates
-  across pods and shrinks the next pod's budget. Until then, **$15 is a per-pod cap, and
-  the real exposure on a heavily-reclaimed job is a multiple of it.**
+- **Cumulative spend is not tracked *in the app*.** The kill-switch caps ONE pod's life and
+  has no memory, so a relaxation pod and a production child each get the full budget — a
+  "$15 cap" silently authorises $15 × N. `experiments/exp43_runpod_bench/spend_ledger.py`
+  is the stopgap (sums every pod in a session; budget decisions read it), but the real fix
+  is an `MdJob.spent_usd` that accumulates across pods and SHRINKS the next pod's budget.
+- **Staging is billable.** The 1.9M-atom package is 1.21 GB and uploads over SFTP at
+  domestic upstream speed — ~15 min of pod time (~$0.20) before NAMD runs a single step.
+  It lands on the NETWORK VOLUME (`REMOTE_ROOT=/workspace/nadoc_jobs`, `volumeMountPath=
+  /workspace`), so **staged inputs AND outputs survive the pod dying** — a second pod for
+  the same job_id re-uses them and the chain script skips completed steps. Worth exploiting:
+  a pre-staging step on a cheap pod, or simply not re-staging for the production child.
 - **The prep pipeline can emit a degenerate package and nobody notices.** Job `f702f4a3282f`
   shipped a VoltronCore package with **279 coincident atoms (0.000 Å)** and 634k real
   clashes; NAMD died with an uninterpretable NaN. A rebuild from the SAME design is clean
