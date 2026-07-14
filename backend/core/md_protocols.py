@@ -531,6 +531,7 @@ def _common_header(
     gbis: bool = False,
     gbis_ion_conc_M: float = 0.15,
     output_freq: int = 9_600,
+    restart_freq: Optional[int] = None,
 ) -> str:
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
@@ -614,7 +615,7 @@ stepspercycle      20
 {gpu_line}
 outputEnergies     {output_freq}
 xstFreq            {output_freq}
-restartfreq        {output_freq}
+restartfreq        {restart_freq or output_freq}
 binaryrestart      yes
 """
 
@@ -660,6 +661,12 @@ def _segment_conf(
             gpu_resident=gpu_resident, structure_psf=eff_psf, gbis=gbis,
             # From THIS chunk's length, so the frame count survives a timestep change.
             output_freq=_output_freq(spec.steps),
+            # ...but the RESTART cadence is a DIFFERENT question. It is crash insurance,
+            # not a sampling rate, and tying it to the frame count gave 9.5-11.8 min
+            # between writes on the long chunks — so a dead pod cost that much compute.
+            # See _RESTART_EVERY_STEPS: the optimum is ~3 min, and both extremes cost real
+            # money.
+            restart_freq=_restart_freq(spec.steps),
         )
     ]
     lines.append(f"outputName         output/{spec.name}\n")
@@ -1300,6 +1307,31 @@ def _scale_label(scale: Optional[float]) -> str:
 _ENERGY_FRAMES_PER_CHUNK = 30
 
 
+# A restart write is ~90 MB (coor+vel, 1.9M atoms) pushed SYNCHRONOUSLY to the network
+# volume, so it is not free — but it is the only thing standing between a dead pod and
+# lost compute. The interval is a genuine optimum, not a preference:
+#
+#     wasted fraction   = w / T          (w = write cost, T = interval)
+#     expected loss     = T / 2          per pod death
+#     minimise 3600*w/T + lambda*T/2  ->  T* = sqrt(w / (lambda/2))
+#
+# With w ~ 1 s and the OBSERVED pod-death rate on RunPod (2 pods lost in ~10 h, so
+# lambda ~ 0.2/h): T* ~ 190 s ~ 3 min, i.e. ~5,000 steps at 35.5 ms/step. Overhead 0.56%.
+#
+# ⚠️ Note this is a fixed STEP COUNT, not a fraction of the run. Write size scales with
+# atoms and so does step time, so a fixed step count holds the overhead fraction roughly
+# CONSTANT across system sizes. The old `steps // 50` rule was wrong in both directions:
+# 9.5 min between writes on a long run (we lost 27,000 steps to a dead pod that way) and
+# seconds on a short one.
+_RESTART_EVERY_STEPS = 5_000
+
+
+def _restart_freq(steps: int, cycle: int = AKSIMENTIEV_STEPS_PER_CYCLE) -> int:
+    """Crash insurance, NOT a sampling rate. See _RESTART_EVERY_STEPS."""
+    r = min(max(cycle, _RESTART_EVERY_STEPS), max(cycle, steps // 4))
+    return max(cycle, r - (r % cycle))
+
+
 def _production_output_freqs(steps: int, cycle: int = 10) -> tuple[int, int]:
     """``(energy_freq, restart_freq)`` for an unrestrained PRODUCTION run.
 
@@ -1309,20 +1341,16 @@ def _production_output_freqs(steps: int, cycle: int = 10) -> tuple[int, int]:
       * ``outputEnergies 100`` forces a GPU->host energy reduction every 100 steps. In
         GPU-resident mode the whole point is that the data never leaves the card; this
         drags it back 13,750 times over a 1.375M-step run, and prints 13,750 energy
-        frames nobody reads.
-      * ``restartfreq 1000`` writes ~90 MB of restart files (coor+vel, 1.9M atoms) every
-        1000 steps — to a NETWORK filesystem. At ~50 ms/step that is 90 MB every 50
-        seconds, sustained, for the entire run.
+        frames nobody reads. Scale it: ~400 frames is plenty to watch progress and spot
+        a blow-up.
 
-    Neither figure was chosen for a 2M-atom system on a rented GPU; they are fine on a
-    250k-atom local run. Scale them with the run instead: ~400 energy frames (plenty to
-    watch progress and spot a blow-up) and ~50 restarts (crash protection every ~2% of
-    the run). Measured impact: production was running at 50 ms/step against the
-    relaxation's 26.4 — and the LEGITIMATE physics difference (fullElect 1, spc 10)
-    accounts for only part of that.
+      * ``restartfreq`` is the crash-insurance dial, and BOTH extremes cost real money —
+        see _RESTART_EVERY_STEPS above. Rented GPUs die (host failure, reclaim, an
+        over-broad reap); the restart file is what makes that a 3-minute loss instead of
+        a 5-hour one.
     """
     e = max(cycle, steps // 400)
-    r = max(cycle, steps // 50)
+    r = min(max(cycle, _RESTART_EVERY_STEPS), max(cycle, steps // 4))
     return (max(cycle, e - (e % cycle)), max(cycle, r - (r % cycle)))
 
 
