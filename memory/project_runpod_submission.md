@@ -428,6 +428,25 @@ frame-budget fix that number was **12**. And note the *resumed* chunk runs
 hardened — `_output_freq` should be derived from the REMAINING steps on a resume, not the
 original total.
 
+## ⚠️ You pay GPU rates to DOWNLOAD your results
+
+The network volume is only reachable **through a live pod**, so `fetch_outputs` runs while
+the GPU is still billing. The 3x6x400 relaxation produced **5.2 GB** of output; at domestic
+downlink (~50 MB/min) that is **~100 min of pod time ≈ $1.20** — a quarter of what the
+science itself cost ($3.99), spent moving files with the GPU idle.
+
+Ideas, none implemented:
+* Fetch only the **final checkpoint** (`.coor/.vel/.xsc`, ~140 MB) on the GPU pod, and
+  leave the DCDs on the volume — they persist. Pull them later on a **CPU-only** pod
+  (far cheaper) or when actually needed.
+* The volume IS durable storage. Treat it as the archive of first resort and fetch lazily.
+* Compress in flight (`rsync -z`); DCD is float32 and compresses poorly, so this is weak.
+
+**Also note:** production's `_seed_from_parent` copies the parent's package on the volume
+server-side, so the production pod does NOT re-upload — but the parent's final `.coor` must
+be present LOCALLY for `build_replica_package` to seed from. So the fetch cannot simply be
+skipped; it must be made selective.
+
 ## Open items
 
 - **Cumulative spend is not tracked *in the app*.** The kill-switch caps ONE pod's life and
