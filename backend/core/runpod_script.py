@@ -70,7 +70,9 @@ class GpuType:
 # it is a guaranteed, billing failure.
 #
 # To widen this list: rebuild NAMD with more `-gencode` arches and add them here.
-NAMD_BUILD_ARCHS: tuple[str, ...] = ("sm_89",)
+# The MULTI-ARCH build on the volume (/workspace/namd/3.0.2p1-cuda-multi/namd3) covers
+# Ada + Blackwell, plus a PTX fallback so a future card JITs instead of hard-failing.
+NAMD_BUILD_ARCHS: tuple[str, ...] = ("sm_89", "sm_120")
 
 # A hard price ceiling. Without one, "fall back to whatever is available" quietly rents an
 # H100 to relax a 225k-atom duplex.
@@ -89,9 +91,17 @@ DEFAULT_MAX_USD_PER_HOUR = 1.00
 #   A100 80GB             sm_80
 #   H100 80GB             sm_90
 # L4 / L40S are sm_89 and WOULD work; excluded by choice, not by capability.
+# Ids verified against RunPod's live gpuTypes list.
+#
+# RTX PRO 4500 is FIRST on purpose: 32 GB for the SAME $0.34/hr as a 24 GB 4090, and it
+# is the only card in that tier RunPod reports as HIGH stock. The 4090 sits at "Low"
+# essentially always, which is what kept producing
+#   500 "There are no instances currently available".
 GPU_TYPES: tuple[GpuType, ...] = (
+    GpuType("NVIDIA RTX PRO 4500 Blackwell", "RTX PRO 4500", 32_623, 0.34, "sm_120"),
     GpuType("NVIDIA GeForce RTX 4090", "RTX 4090", 24_564, 0.34, "sm_89"),
     GpuType("NVIDIA RTX 6000 Ada Generation", "RTX 6000 Ada", 49_140, 0.74, "sm_89"),
+    GpuType("NVIDIA RTX PRO 5000 Blackwell", "RTX PRO 5000", 49_152, 0.82, "sm_120"),
 )
 
 

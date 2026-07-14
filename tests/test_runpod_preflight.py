@@ -37,14 +37,22 @@ def _ok(**over):
 
 
 class TestGpuTable:
-    def test_only_4090_and_rtx6000ada_are_offered(self):
-        assert [g.label for g in GPU_TYPES] == ["RTX 4090", "RTX 6000 Ada"]
+    def test_the_cheapest_card_is_the_32gb_blackwell_not_the_4090(self):
+        """Same $0.34/hr, 32 GB instead of 24 GB, and HIGH stock instead of Low."""
+        assert GPU_TYPES[0].label == "RTX PRO 4500"
+        assert GPU_TYPES[0].vram_mb > 24_564
+        assert GPU_TYPES[0].usd_per_hour == 0.34
 
-    def test_both_are_an_arch_the_binary_can_run(self):
+    def test_every_offered_card_is_an_arch_the_binary_can_run(self):
         """An A100 (sm_80) rented fine and died at step 0 with 'no kernel image is
-        available'. Never offer a card the single-arch binary cannot run."""
+        available'. NEVER offer a card the binary cannot run — the multi-arch build
+        covers Ada (sm_89) and Blackwell (sm_120), and nothing else."""
         for g in GPU_TYPES:
-            assert g.sm in NAMD_BUILD_ARCHS
+            assert g.sm in NAMD_BUILD_ARCHS, f"{g.label} is {g.sm}"
+
+    def test_both_architectures_are_actually_offered(self):
+        archs = {g.sm for g in GPU_TYPES}
+        assert archs == {"sm_89", "sm_120"}
 
 
 class TestHappyPath:
@@ -161,3 +169,11 @@ class TestStockFetch:
     @pytest.mark.parametrize("status", ["Low", "Medium", "High"])
     def test_any_named_stock_level_counts_as_available(self, status):
         assert pf.in_stock({"stock": status}) is True
+
+
+def test_gpu_table_is_strictly_cheapest_first():
+    """The table IS the fallback priority order handed to RunPod as `gpuTypeIds`. If it
+    is not price-sorted, a mid-priced card gets skipped in favour of a dearer one — which
+    is exactly the mistake that rented a $1.39/hr A100 for a duplex."""
+    prices = [g.usd_per_hour for g in GPU_TYPES]
+    assert prices == sorted(prices), [(g.label, g.usd_per_hour) for g in GPU_TYPES]

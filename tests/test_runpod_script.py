@@ -60,14 +60,21 @@ class TestVramModel:
 
 class TestGpuSizing:
     def test_small_system_gets_the_cheapest_card_resident(self):
+        """RTX PRO 4500 is preferred over the 4090: 32 GB vs 24 GB for the SAME $0.34/hr,
+        and it is the only card in that tier RunPod reports as HIGH stock. The 4090 sits
+        at "Low" essentially always, which is what kept producing
+        500 "There are no instances currently available"."""
         plan = plan_execution(SIXHB)
-        assert plan["gpu"].label == "RTX 4090"
+        assert plan["gpu"].label == "RTX PRO 4500"
+        assert plan["gpu"].vram_mb > 24_564          # more VRAM than a 4090…
+        assert plan["gpu"].usd_per_hour == 0.34      # …for the same money
         assert plan["gpu_resident"] is True
 
-    def test_flat_sheet_still_fits_resident_on_a_4090(self):
-        # 5,016 MB measured, 24.5 GB card => comfortable.
+    def test_flat_sheet_fits_resident_on_the_cheapest_card(self):
+        # 5,016 MB measured; even the 24 GB 4090 was comfortable, so the 32 GB PRO 4500
+        # certainly is.
         plan = plan_execution(FLAT)
-        assert plan["gpu"].label == "RTX 4090"
+        assert plan["gpu"].label == "RTX PRO 4500"
         assert plan["gpu_resident"] is True
 
     def test_voltroncore_is_too_big_for_resident_on_a_4090(self):
@@ -399,8 +406,10 @@ class TestOnlyOfferCardsTheBinaryCanRun:
             assert gpu.usd_per_hour <= bm.DEFAULT_MAX_USD_PER_HOUR
 
     def test_the_ceiling_is_configurable_for_a_genuinely_big_job(self):
-        cheap = bm.recommend_gpus(SIXHB, max_usd_per_hour=0.40)
-        assert [g.label for g in cheap] == ["RTX 4090"]
+        """At the $0.40 tier both 32 GB and 24 GB cards qualify — and offering BOTH is the
+        point: a single named card is regularly unavailable in the volume's datacenter."""
+        cheap = [g.label for g in bm.recommend_gpus(SIXHB, max_usd_per_hour=0.40)]
+        assert cheap == ["RTX PRO 4500", "RTX 4090"]
 
     def test_still_offers_several_cards_so_availability_failures_are_survivable(self):
         """A network volume pins the datacenter; one named card is regularly unavailable

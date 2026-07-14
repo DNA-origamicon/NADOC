@@ -106,7 +106,7 @@ class TestPodSizing:
         # Naming a single GPU is what made RunPod answer 500 "There are no instances
         # currently available" — a network volume pins the datacenter (EU-RO-1), and the
         # one card we asked for simply was not free there.
-        assert payload["gpuTypeIds"][0] == "NVIDIA GeForce RTX 4090"
+        assert payload["gpuTypeIds"][0] == "NVIDIA RTX PRO 4500 Blackwell"
         assert len(payload["gpuTypeIds"]) > 1, "must offer fallbacks, not one card"
         assert payload["networkVolumeId"] == VOLUME
         assert payload["interruptible"] is True

@@ -14,6 +14,18 @@
 #        sudo apt install cuda-toolkit-12-6
 #   3. ./build_patched_namd.sh /path/to/NAMD_3.0.2_Source.tar.gz [/usr/local/cuda-12.6] [sm_75]
 #
+#      $3 accepts a COMMA-SEPARATED LIST for a multi-arch binary:
+#          ./build_patched_namd.sh src.tar.gz /usr/local/cuda-12.8 sm_89,sm_120
+#      A single-arch binary is ~4x faster to compile but runs on ONE GPU family, and
+#      renting any other card gives a pod that boots fine and then dies at step 0 with
+#      "no kernel image is available for execution on the device".  That has cost real
+#      money (an sm_80 A100 rented against an sm_89 build).  Arch cheat-sheet:
+#          sm_75  Turing    (2080 Super)
+#          sm_86  Ampere    (3080 Ti, 3090, A6000)
+#          sm_89  Ada       (4090, L4, L40S, RTX 6000 Ada)
+#          sm_90  Hopper    (H100)
+#          sm_120 Blackwell (RTX 50-series, RTX PRO 4500/5000/6000) -- needs CUDA >= 12.8
+#
 # Installs to ~/Applications/NAMD_3.0.2p1_Linux-x86_64-multicore-CUDA/, which NADOC's
 # find_namd() prefers automatically (it reverse-sorts ~/Applications/NAMD_*, and
 # "3.0.2p1" sorts above "3.0.2_").
@@ -21,8 +33,7 @@ set -euo pipefail
 
 TARBALL=${1:?usage: build_patched_namd.sh <NAMD_3.0.2_Source.tar.gz> [cuda-prefix] [sm_arch]}
 CUDA_PREFIX=${2:-/usr/local/cuda-12.6}
-SM=${3:-sm_75}                     # RTX 2080 SUPER = Turing sm_75; 3080 Ti = Ampere sm_86
-CC=${SM#sm_}
+SM=${3:-sm_75}                     # one arch, or a comma-separated list (see USAGE)
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=$(mktemp -d)
 DEST=$HOME/Applications/NAMD_3.0.2p1_Linux-x86_64-multicore-CUDA
@@ -47,16 +58,23 @@ tar xzf fftw-linux-x86_64.tar.gz && mv linux-x86_64 fftw
 tar xzf tcl8.6.13-linux-x86_64.tar.gz && mv tcl8.6.13-linux-x86_64 tcl
 tar xzf tcl8.6.13-linux-x86_64-threaded.tar.gz && mv tcl8.6.13-linux-x86_64-threaded tcl-threaded
 
-echo "==> restricting codegen to $SM (single arch: ~4x faster nvcc pass)"
-python3 - "$CC" <<'PY'
+echo "==> codegen targets: $SM"
+python3 - "$SM" <<'PY'
 import sys
 from pathlib import Path
-cc = sys.argv[1]
+
+# Accept "sm_89" or "sm_89,sm_120".  Emit one -gencode per arch, plus a PTX fallback for
+# the NEWEST one so a future card can JIT rather than hard-fail with "no kernel image".
+archs = [a.strip().removeprefix("sm_") for a in sys.argv[1].split(",") if a.strip()]
+flags = " ".join(f"-gencode arch=compute_{cc},code=sm_{cc}" for cc in archs)
+newest = max(archs, key=int)
+flags += f" -gencode arch=compute_{newest},code=compute_{newest}"   # PTX, forward-compat
+
 p = Path("arch/Linux-x86_64.cuda11")
 out, skip = [], False
 for ln in p.read_text().splitlines():
     if ln.startswith("CUDAGENCODE"):
-        out.append(f"CUDAGENCODE = -gencode arch=compute_{cc},code=sm_{cc}")
+        out.append(f"CUDAGENCODE = {flags}")
         skip = True
         continue
     if skip:
@@ -65,6 +83,7 @@ for ln in p.read_text().splitlines():
         skip = False
     out.append(ln)
 p.write_text("\n".join(out) + "\n")
+print(f"    CUDAGENCODE = {flags}")
 PY
 
 echo "==> configuring"

@@ -55,7 +55,10 @@ HEARTBEAT_FILE = "nadoc_heartbeat"
 
 # The patched NAMD lives on the NETWORK VOLUME, built once per GPU architecture.
 # Pods are disposable; the toolchain is not. (4090 = sm_89, 3080 Ti = sm_86.)
-NAMD_ON_VOLUME = "/workspace/namd/3.0.2p1-cuda-sm89/namd3"
+# MULTI-ARCH build (sm_89 Ada + sm_120 Blackwell, + PTX fallback). The old sm_89-only
+# binary rents a Blackwell card happily and then dies at step 0 with
+# "no kernel image is available for execution on the device".
+NAMD_ON_VOLUME = "/workspace/namd/3.0.2p1-cuda-multi/namd3"
 
 
 def remote_dir_for(job: MdJob) -> str:
