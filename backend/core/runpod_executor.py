@@ -82,6 +82,24 @@ class MdAnalysisMissing(RuntimeError):
     """Tier-A early-stop was requested but the pod cannot import MDAnalysis."""
 
 
+async def _remote_file_sizes(conn: RunpodConnection, remote: str) -> dict[str, int]:
+    """``{path-relative-to-remote: size}`` for everything already on the volume.
+
+    One `find` rather than a stat per file: the package is ~35 files but a round-trip per
+    file over SSH to EU-RO-1 is ~150 ms, and we are paying for the pod while we ask.
+    Returns {} on any failure — the safe direction is to re-upload, never to skip.
+    """
+    res = await conn.run(f"cd {remote} 2>/dev/null && find . -type f -printf '%s %P\\n'")
+    if res.rc != 0:
+        return {}
+    sizes: dict[str, int] = {}
+    for line in res.stdout.splitlines():
+        size, _, rel = line.partition(" ")
+        if rel and size.isdigit():
+            sizes[rel] = int(size)
+    return sizes
+
+
 async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     """Make ``import MDAnalysis`` work on the pod, or raise.
 
@@ -102,13 +120,24 @@ async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
         return
 
     log.info("runpod: MDAnalysis absent — installing (Tier-A early-stop needs it)")
-    res = await conn.run(
-        "python3 -m pip install --no-input --quiet MDAnalysis", timeout=600.0
+    # The pytorch image's python is PEP 668 "externally managed" and a plain pip install
+    # dies with `error: externally-managed-environment`. --break-system-packages is the
+    # documented override and is entirely safe HERE: the pod is a disposable container we
+    # destroy within hours, so there is no OS install to preserve. Try the polite form
+    # first anyway, in case a future image isn't marked externally-managed.
+    attempts = (
+        "python3 -m pip install --no-input --quiet MDAnalysis",
+        "python3 -m pip install --no-input --quiet --break-system-packages MDAnalysis",
     )
-    if res.rc != 0:
-        raise MdAnalysisMissing(
-            f"pip install MDAnalysis failed on the pod: {res.stderr or res.stdout}"
-        )
+    last = ""
+    for cmd in attempts:
+        res = await conn.run(cmd, timeout=900.0)
+        if res.rc == 0:
+            break
+        last = (res.stderr or res.stdout).strip()
+        log.warning("runpod: `%s` failed: %s", cmd.split("--")[0].strip(), last[:200])
+    else:
+        raise MdAnalysisMissing(f"could not install MDAnalysis on the pod: {last}")
 
     res = await conn.run(probe)
     if res.rc != 0:
@@ -142,8 +171,24 @@ async def submit_job(
     await conn.mkdir_p(remote)
 
     # REUSED from the Alpine executor — this is the whole point of the conn duck-type.
-    for local_path, rel in md_executor.stage_plan(pkg):
+    #
+    # But SKIP what is already there. The staging target is the NETWORK VOLUME
+    # (REMOTE_ROOT=/workspace/nadoc_jobs, volumeMountPath=/workspace), so it OUTLIVES the
+    # pod: a relaunch after any failure — or the production child of the same job — finds
+    # the package already uploaded. Re-sending it is not free: the 1.9M-atom 3x6x400
+    # package is 1.21 GB, which is ~15 min of BILLABLE pod time at domestic upstream
+    # speed, before NAMD runs a single step. Compare by size, which is enough to catch a
+    # truncated transfer and costs one `find` instead of hashing 1.21 GB over SSH.
+    plan = list(md_executor.stage_plan(pkg))
+    remote_sizes = await _remote_file_sizes(conn, remote)
+    skipped = sent = 0
+    for local_path, rel in plan:
+        if remote_sizes.get(rel) == local_path.stat().st_size:
+            skipped += 1
+            continue
         await conn.sftp_put(str(local_path), f"{remote}/{rel}")
+        sent += 1
+    log.info("runpod: staged %d file(s), reused %d already on the volume", sent, skipped)
 
     manifest = json.loads((pkg / "manifest.json").read_text())
     early_stop = md_executor._early_stop_on(job, manifest)

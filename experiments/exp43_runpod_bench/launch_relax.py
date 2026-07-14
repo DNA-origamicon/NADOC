@@ -75,10 +75,31 @@ async def main() -> int:
     client = RunpodClient(key)
     pod_seen: list[str] = []
 
+    async def _rate_of(pid: str) -> float:
+        """What the pod ACTUALLY bills — not what we planned to pay.
+
+        `plan` sizes off the cheapest card that fits (a $0.69 4090), but gpuTypeIds is a
+        fallback list and RunPod rents whatever is free — on the first run we asked for a
+        4090 and got a $0.74 PRO 4500. Booking the planned rate in the ledger understates
+        every subsequent budget decision by that difference.
+        """
+        try:
+            pod = await client.get_pod(pid)
+            if pod.cost_per_hr:
+                return float(pod.cost_per_hr)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("could not read the pod's live rate (%s) — assuming the plan's", exc)
+        return float(plan["gpu"].usd_per_hour)
+
     def _on_pod(pid: str) -> None:
         pod_seen.append(pid)
         log.info("POD %s IS NOW BILLING", pid)
-        ledger.open_pod(pid, plan["gpu"].usd_per_hour, note="relax 3x6x400")
+        rate = asyncio.get_running_loop().create_task(_rate_of(pid))
+
+        def _book(t: asyncio.Task) -> None:
+            ledger.open_pod(pid, t.result(), note="relax 3x6x400")
+
+        rate.add_done_callback(_book)
 
     try:
         status = await run_job_on_pod(

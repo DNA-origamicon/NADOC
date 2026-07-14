@@ -446,3 +446,87 @@ class TestTierAEarlyStopGate:
 class _R:
     def __init__(self, rc, stdout, stderr):
         self.rc, self.stdout, self.stderr = rc, stdout, stderr
+
+
+class TestStagingReusesTheVolume:
+    """The staging target is the NETWORK VOLUME, so it OUTLIVES the pod.
+
+    Re-uploading is not free: the 1.9M-atom 3x6x400 package is 1.21 GB, ~15 min of
+    BILLABLE pod time at domestic upstream speed before NAMD runs a single step. A
+    relaunch after a failed gate (or the production child of the same job) must reuse
+    what is already there.
+    """
+
+    def test_skips_files_already_on_the_volume_at_the_same_size(self, tmp_path):
+        job = _job(tmp_path)
+        sent: list[str] = []
+
+        class _Conn(RunpodConnection):
+            async def run(self, cmd, timeout=60.0):
+                if "find . -type f" in cmd:
+                    # Everything already present, at its true local size.
+                    pkg = job.package_dir(tmp_path)
+                    lines = [f"{p.stat().st_size} {rel}"
+                             for p, rel in __import__(
+                                 "backend.core.md_executor", fromlist=["x"]
+                             ).stage_plan(pkg)]
+                    return _R(0, "\n".join(lines), "")
+                if "setsid" in cmd:
+                    return _R(0, "3\n", "")
+                return _R(0, "", "")
+
+            async def sftp_put(self, local, remote):
+                sent.append(remote)
+
+        conn = _Conn(host="h", port=1, pod_id="p1")
+        conn._conn = FakeSSH()  # noqa: SLF001
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+        # The chain script itself is always re-sent (it encodes THIS run's kill-switch
+        # and early-stop wiring), but no package file is.
+        assert all(p.endswith(rx.CHAIN_SCRIPT) for p in sent), sent
+
+    def test_reuploads_a_truncated_file(self, tmp_path):
+        """Size mismatch => re-send. A partial transfer must not be mistaken for done."""
+        job = _job(tmp_path)
+        sent: list[str] = []
+
+        class _Conn(RunpodConnection):
+            async def run(self, cmd, timeout=60.0):
+                if "find . -type f" in cmd:
+                    return _R(0, "1 d.psf", "")     # 1 byte — truncated
+                if "setsid" in cmd:
+                    return _R(0, "3\n", "")
+                return _R(0, "", "")
+
+            async def sftp_put(self, local, remote):
+                sent.append(remote)
+
+        conn = _Conn(host="h", port=1, pod_id="p1")
+        conn._conn = FakeSSH()  # noqa: SLF001
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+        assert any(p.endswith("d.psf") for p in sent), "a truncated file must be re-sent"
+
+    def test_a_failed_listing_reuploads_everything(self, tmp_path):
+        """Fail-safe: if we cannot tell what is there, send it. Wasting $0.19 beats
+        running NAMD against a package with a missing file."""
+        job = _job(tmp_path)
+        sent: list[str] = []
+
+        class _Conn(RunpodConnection):
+            async def run(self, cmd, timeout=60.0):
+                if "find . -type f" in cmd:
+                    return _R(1, "", "no such dir")
+                if "setsid" in cmd:
+                    return _R(0, "3\n", "")
+                return _R(0, "", "")
+
+            async def sftp_put(self, local, remote):
+                sent.append(remote)
+
+        conn = _Conn(host="h", port=1, pod_id="p1")
+        conn._conn = FakeSSH()  # noqa: SLF001
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+        assert any(p.endswith("d.psf") for p in sent)
