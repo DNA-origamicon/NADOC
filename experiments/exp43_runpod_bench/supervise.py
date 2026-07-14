@@ -84,7 +84,6 @@ async def main() -> int:
                 await asyncio.sleep(POLL_S)
                 continue
 
-            job.save(WORKSPACE)
             spent = ledger.spent()
             log.info("state=%s segment=%s alive=%s stale=%s  spent=$%.2f / $%.2f",
                      state.get("state"), state.get("segment"), state.get("alive"),
@@ -94,25 +93,33 @@ async def main() -> int:
             # run_job_on_pod's loop — a supervisor that got this wrong would poll a
             # finished ladder forever and bill for an idle GPU until the budget backstop.
             st = state.get("state")
+            done = True
             if st == "completed":
                 job.status = MdStatus.completed
-                break
-            if st == "failed":
+            elif st == "failed":
                 job.status = MdStatus.failed
                 job.error = f"NAMD failed at segment {state.get('segment')}"
-                break
-            if st == "lifetime":
+            elif st == "lifetime":
                 job.status = MdStatus.paused
                 job.resumable = True
                 job.error = "Pod hit its maximum lifetime; resume to continue."
-                break
-            if not state.get("alive") and state.get("stale"):
+            elif not state.get("alive") and state.get("stale"):
                 job.status = MdStatus.paused
                 job.resumable = True
                 job.error = "Pod stopped mid-run; resume from the checkpoint."
-                break
-            if spent > HARD_CAP_USD:
+            elif spent > HARD_CAP_USD:
                 log.error("BUDGET EXCEEDED ($%.2f) — killing the pod NOW", spent)
+            else:
+                done = False
+
+            # SAVE AFTER deciding, not before. Saving first persisted the PRE-verdict
+            # status, so the terminal state ("completed") only ever reached disk via the
+            # save AFTER the fetch — and the fetch takes ~100 min for 5 GB. Interrupt it
+            # (as we did, to stop paying GPU rates for a download) and the job record
+            # still said "running" despite a finished, fully-bridged ladder. The one
+            # thing a supervisor exists to record, recorded last.
+            job.save(WORKSPACE)
+            if done:
                 break
             await asyncio.sleep(POLL_S)
 

@@ -22,8 +22,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from backend.core.runpod_api import RunpodClient  # noqa: E402
+from experiments.exp43_runpod_bench.spend_ledger import SpendLedger  # noqa: E402
 
 KEY_FILE = Path.home() / ".runpod_key"
+
+# Where the job ledgers live. Reaping must CLOSE the pod here too, or a destroyed pod
+# keeps accruing in `spent()` forever and every later budget decision is wrong.
+LEDGER_ROOT = Path("/media/jojo/Archive/nadoc_jobs")
 
 
 async def main() -> int:
@@ -49,12 +54,18 @@ async def main() -> int:
             print("\nre-run with --kill to destroy them")
             return 1
 
+        ledgers = [SpendLedger(f) for f in sorted(LEDGER_ROOT.glob("*/spend.json"))]
         for p in pods:
             print(f"destroying {p.id} ...", flush=True)
             try:
                 await client.terminate_pod(p.id)
             except Exception as exc:  # noqa: BLE001
                 print(f"  !! FAILED: {exc} — destroy it by hand in the RunPod console")
+                continue
+            # The pod is gone; stop it accruing. Skipping this is how a destroyed pod
+            # keeps inflating spent() and silently eats the remaining budget.
+            for led in ledgers:
+                led.close_pod(p.id)
 
         left = [p for p in await client.list_pods() if not p.is_destroyed]
         print(f"\nstill on the account: {len(left)} "
