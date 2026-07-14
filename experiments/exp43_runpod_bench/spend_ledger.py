@@ -19,7 +19,24 @@ import json
 import time
 from pathlib import Path
 
-HARD_CAP_USD = 15.0
+# Raised 15 -> 120 for the 24hb campaign (2026-07-14, user-approved).
+#
+# The $15 was sized for the 3x6x400 run. The 24hb 0xT run alone is ~$70 (a ~$5 Tier-A
+# ladder + ~$65 for 50 ns of production on a $0.74/hr PRO 4500), on top of the $9.91 this
+# ledger had already accumulated. At $15 the cap did not merely warn — it would have
+# SILENTLY BROKEN the run in two places, both of which read the ledger and trust it:
+#
+#   * launch_production.py sizes production from ledger.remaining(), which was $3.59 —
+#     it would have truncated 50 ns to a few percent of its length, and reported success.
+#   * supervise.py destroys the pod when spent > HARD_CAP_USD — so once the ladder pushed
+#     cumulative spend past $15, ANY healthy pod would have been reaped the moment a
+#     supervisor attached to it.
+#
+# This is LESSONS L5 from the other side: a ledger that is *trusted* is dangerous when it
+# is *stale*, not only when it under-reports. $120 covers the approved run end to end and
+# still stops a runaway far short of the account balance. Re-check this number before
+# adding the 1xT/2xT variants — do not let it drift into "effectively no cap".
+HARD_CAP_USD = 120.0
 
 # Leave this much unspent. Reserve, not slack: it absorbs the minutes a pod bills while
 # it is being provisioned, staged and torn down — time that does no science but is

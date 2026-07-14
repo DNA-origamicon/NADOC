@@ -28,7 +28,31 @@ answer that was quietly the wrong one, or a bill that was quietly 4× too big.
 
 ## 0. Before you rent anything (all free)
 
-Run the gate. It mechanically checks everything that has bitten us:
+**First, the balance — the one number that can kill a run, and the one nothing could see.**
+RunPod destroys every pod the instant the balance hits zero, so a multi-day run that dies at
+80% for want of credit wastes everything spent to that point.
+
+```bash
+python experiments/exp43_runpod_bench/balance.py --require 300   # exits non-zero if short
+```
+
+⚠️ **Balance lives ONLY on the legacy GraphQL API** (`myself { clientBalance }`). The REST API
+this toolchain otherwise uses has **no billing endpoint at all**. And **you must call it with
+`httpx`, never urllib** — `api.runpod.io` is behind Cloudflare, which 403s urllib's fingerprint
+with body `error code: 1010`. **That is a bot-block, not a rejected key**, and mistaking one for
+the other once had us defending a $7.96 balance figure when the true balance was $207.53 (see
+LESSONS **L9**). `balance.py` **fails loud** — it refuses rather than warning-and-proceeding,
+because on a rented GPU "fail-safe" means "fail-expensive" (§L1).
+
+⚠️ **If this is a MULTI-VARIANT comparison, diff the prepped CONFS across variants before you
+rent** (`timestep`, `rigidBonds`, `GPUresident`, `structure`). Designs that differ in one field
+do NOT imply protocols that differ in one field: **extra crossover bases silently force the
+declash protocol (1 fs, no HMR, no GPUresident), so a 0xT control runs a different integrator
+from its 1xT/2xT variants** — confounding the very difference you are paying to measure, and
+costing 4x on the variants that carry it. `preflight.py` catches the cost half; only a conf
+diff catches the confound. See LESSONS **L8**.
+
+Then run the gate. It mechanically checks everything that has bitten us:
 
 ```bash
 python experiments/exp43_runpod_bench/preflight.py <job_id>
@@ -89,15 +113,32 @@ difference between the run existing and not.**
 ```bash
 python experiments/exp43_runpod_bench/prep_3x6x400.py     # free; ends in the gate
 python experiments/exp43_runpod_bench/preflight.py <job>  # refuses a bad package
-RUNPOD_API_KEY=$(cat ~/.runpod_key) nohup python .../launch_relax.py &
-RUNPOD_API_KEY=$(cat ~/.runpod_key) nohup python .../supervise.py <job> &   # OWNS the pod
+RUNPOD_API_KEY=$(cat ~/.runpod_key) setsid nohup python .../launch_relax.py &
+# NO supervisor here. See below.
 ```
 
+- 🛑 **DO NOT launch `supervise.py` alongside a healthy launcher.** The previous version of
+  this runbook told you to, and **doing so destroys your own pod.** `supervise.py` ADOPTS a
+  pod and then applies `run_job_on_pod`'s done-test to it. During STAGING — the several
+  minutes the launcher spends SFTP-ing a 739 MB package — NAMD has not started, so the pod
+  reports `state=unknown, segment=None, alive=False, stale=True`. The supervisor reads that
+  as **"ladder finished"**, fetches, and **terminates the pod out from under the launcher**,
+  which then dies with `upload failed: Connection not open`. Measured 2026-07-14: pod
+  `aq6ri6d53kd6v0` destroyed **62 seconds** after creation, mid-upload.
+  **`supervise.py` is a RE-ATTACH tool** (its own docstring says so) — for a pod whose
+  launcher has ALREADY DIED. Keep it on standby; attach it only then.
 - **ON-DEMAND, not spot.** A reclaim restarts the interrupted segment from its TOP (no
   `.coor` until it completes) and chunks are 120k–600k steps. One reclaim costs more hours
   than spot saves dollars.
-- **Always attach `supervise.py`.** The process that creates the pod is the ONLY thing that
-  destroys it. See §4.
+- **The launcher owns the pod.** Its `finally` destroys ONLY the pods it created
+  (`pod_seen`) — never a blanket sweep. If the launcher dies, the pod survives: THEN attach
+  `supervise.py`. See §4.
+- ⚠️ **`spend_ledger.HARD_CAP_USD` is a real gate, and a stale one is a silent saboteur.**
+  `launch_production.py` sizes production from `ledger.remaining()` and `supervise.py`
+  DESTROYS the pod when `spent > HARD_CAP_USD`. The cap was $15 while the 24hb 0xT run alone
+  costs ~$70 — production would have been truncated to a few percent of its length and
+  reported as success. Raised to $120 (2026-07-14). **Check it covers the run before you
+  launch.**
 - The kill-switch is a **BUDGET**, not a duration: `lifetime_for_budget(usd, pod.cost_per_hr)`
   derives wall-clock from the rate of the card you ACTUALLY got.
 

@@ -192,6 +192,27 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   pulled off the GPU every 100 steps, and **90 MB of restart files written to a NETWORK filesystem every
   1000 steps**. Pure overhead, ZERO effect on the trajectory: **50.0 → 35.5 ms/step (29%) just by scaling
   them to the run.** [detail](LESSONS_archive.md#l7)
+- **L10** — 🛑 **NEVER attach `supervise.py` to a healthy launcher — it destroys your own pod.**
+  The runbook's §2 said to (now fixed). During STAGING NAMD hasn't started, so the pod reports
+  `alive=False, segment=None, stale=True`; the supervisor reads that as "ladder finished" and
+  terminates the pod mid-upload (measured: 62 s after creation). It is a **RE-ATTACH** tool —
+  for a pod whose launcher already DIED. **A done-test that can't tell NOT-STARTED from
+  FINISHED, whose false-positive branch is destructive, is a destroy-your-own-work bug.**
+  Also: `spend_ledger.HARD_CAP_USD` was a stale $15 against a ~$70 run — it silently truncates
+  production (`launch_production` sizes off `ledger.remaining()`) and makes `supervise` reap on
+  sight. [detail](LESSONS_archive.md#l10)
+- **L8** — ⚠️ **Extra crossover bases silently VETO the fast integrator, so every 0xT-vs-NxT MD
+  comparison is CONFOUNDED and costs 4x.** `design_has_extra_bases()` auto-routes any such design
+  to the declash protocol, which forces `fast=False` (1 fs, `rigidBonds none`, no HMR) in BOTH the
+  ladder *and* production. The 0xT control then samples at 4 fs+HMR while 1xT/2xT sample at 1 fs —
+  any stiffness difference is part integrator, part extra-base. Measured (24hb, 50 ns): $87/1.8 d
+  for 0xT vs **$348/7.3 d each** for 1xT/2xT; budget said $196-262, truth ~$784. `preflight.py`
+  catches the cost half; **nothing catches the confound half but a cross-variant CONF diff.**
+  [detail](LESSONS_archive.md#l8)
+- **L9** — **A RunPod GraphQL 403 with body `error code: 1010` is CLOUDFLARE blocking urllib, NOT a
+  bad key.** Reading the status code instead of the body produced a confident, false "your key is
+  scoped REST-only" diagnosis — and defended a **$7.96** balance figure that was really **$207.53**
+  (26x). Use `httpx`; **read the body of a 403 before believing it.** [detail](LESSONS_archive.md#l9)
 - **L6** — **You pay GPU rates to DOWNLOAD your results, and the price table lied.** The network volume is
   reachable only *through a live pod*, so fetching 5.2 GB burned ~100 min (~$1.20) with the card idle — a
   quarter of what the science cost. Fetch selectively: the final checkpoint is ~140 MB and is all production

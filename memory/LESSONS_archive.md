@@ -1060,3 +1060,112 @@ says so in the log. (2) **Any hardcoded I/O cadence is a latent bug at scale** �
 shape as L2's step-denominated cadence. Ask what it costs at 10x the atoms on a network
 filesystem. (3) When a run is slower than expected, **diff its conf against the one that was
 fast** before assuming the hardware changed.
+
+## L8
+
+### L8. Extra crossover bases silently VETO the fast integrator — so every 0xT-vs-NxT MD comparison is confounded, and costs 4x (2026-07-14)
+
+Symptom: **none.** Prepped the 24hb campaign's three variants (0xT / 1xT / 2xT) with an
+identical `prepare_equilibrium_aware_namd(..., fast=True)` call. All three prepped fine, all
+three passed the degeneracy gate. But the segment step-counts came out **120k/480k/600k for
+0xT and 240k/960k/1.2M for 1xT and 2xT** — 2x, for designs that differ only in `extra_bases`.
+
+ROOT CAUSE — deliberate, undocumented at the call site, and it fires twice:
+
+```
+md_protocols.py:1618   declash = declash or design_has_extra_bases(design)
+md_protocols.py:1641   soft_ladder = declash or force_soft
+md_protocols.py:1642   fast = fast and not soft_ladder        # <- fast dies HERE (ladder)
+routes_md.py:834       fast = relaxed_fast and not declash    # <- and AGAIN (production)
+routes_md.py:835       timestep_fs = 4.0 if fast else 1.0
+```
+
+Any design carrying extra crossover bases is auto-routed to the **declash protocol** and
+comes out at **1 fs, `rigidBonds none`, plain PSF, no GPUresident**, with the HMR PSF written
+but referenced by nothing. The rationale is sound (extra T's are unpaired ssDNA; `rigidBonds
+all` at 4 fs is said to crash RATTLE on them) and it is a **permanent** property of the
+design, not a build transient that a relaxation ladder anneals away.
+
+**Two silent consequences:**
+
+1. **THE COMPARISON IS CONFOUNDED.** The 0xT control samples with 4 fs + HMR + `rigidBonds
+   all`; the 1xT/2xT variants with 1 fs + flexible hydrogens. Any inter-helix stiffness
+   difference you then extract is part extra-base, part integrator — and measuring that
+   difference *is the whole campaign*. **A multi-variant study that does not force a MATCHED
+   integrator is partly measuring its own protocol.**
+2. **4x the money and wall-clock**, on exactly the two variants that carry the independent
+   variable. Measured, 24hb @ 1.32M atoms, 50 ns, RTX PRO 6000: 0xT **$87 / 1.8 d**;
+   1xT and 2xT **$348 / 7.3 d each**. Budget said $196-262; truth was **~$784**.
+
+`preflight.py` caught the COST half (it refuses a package that lost `fast` — "segments use
+GPUresident + 4 fs: 0/12; HMR PSF written but referenced by nothing") before a cent was
+spent. **Nothing catches the CONFOUND half.** Only a cross-variant conf diff does.
+
+**How to avoid:** before ANY multi-variant MD comparison, diff the **prepped confs** — not
+the designs — across variants on `timestep`, `rigidBonds`, `GPUresident`, and `structure`
+(HMR vs plain). *Designs that differ in one field do not imply protocols that differ in one
+field.* ⚠️ The existing `6hbx100_noT/_1xT/_2xT` and `2hb_noT/_2xT` results go through this
+same code path and should be re-checked for the same confound.
+
+## L9
+
+### L9. RunPod GraphQL 403 "error code: 1010" is CLOUDFLARE, not a bad key — and believing it produced a 26x error in the balance (2026-07-14)
+
+Symptom: `myself { clientBalance }` returns **HTTP 403** for every auth style (`?api_key=`,
+`Authorization: Bearer`, raw header), while the same key works perfectly against the REST API.
+
+ROOT CAUSE: `api.runpod.io` sits behind Cloudflare, which blocks **`Python-urllib`'s client
+fingerprint** — 403 with body **`error code: 1010`**. Nothing to do with the key. The identical
+request via **`httpx` returns 200 instantly** (the codebase already uses httpx in
+`runpod_preflight.py`; the kickoff doc's own snippet uses httpx too — it would have worked).
+
+What it cost: I read the *status code* and not the *body*, concluded the key was a "modern
+scoped REST key that the legacy GraphQL API rejects", built a coherent and completely false
+story on top of it (REST genuinely has no billing endpoint — `/billing`, `/account`, `/me` all
+400 — so I declared the balance structurally unreadable), and told the user to mint a new key.
+The user said the key already had GraphQL access. It did.
+
+The real damage was not the hour. The balance came back **$207.53** — against the **$7.96**
+the task brief asserted. **A 26x error in the single number the entire go/no-go decision rested
+on**, and my "diagnosis" had been actively defending the wrong figure.
+
+**How to avoid:** (1) **Read the BODY of a 403 before believing it** — `error code: 1010` is
+Cloudflare, not auth; a bare status code is not a diagnosis. (2) Use **httpx** for anything at
+`api.runpod.io`, never urllib. (3) Balance lives ONLY on the legacy GraphQL API; the public
+REST API has no billing endpoint — that part was true. (4) `balance.py` now wraps this and
+**fails loud**: `--require N` exits non-zero rather than warning and proceeding, because on a
+rented GPU "fail-safe" means "fail-expensive" (L1).
+
+## L10
+
+### L10. The runbook told me to attach `supervise.py` to a healthy launcher — and it destroyed my own pod 62 seconds in (2026-07-14)
+
+Symptom: launched the 24hb_0xT ladder; pod `aq6ri6d53kd6v0` came up and the launcher began
+SFTP-ing the 739 MB package. Per **the runbook's own §2**, attached `supervise.py`. One minute
+later the launcher died with `RunpodSSHError: upload failed (24hb_0xT.pdb): Connection not
+open` — because the supervisor had **terminated the pod underneath it.**
+
+ROOT CAUSE: `supervise.py` ADOPTS a pod and applies `run_job_on_pod`'s done-test to it. During
+STAGING, NAMD has not started yet, so the pod honestly reports
+`state=unknown segment=None alive=False stale=True`. The supervisor interprets that as
+**"ladder finished: MdStatus.paused — fetching results"** and destroys the pod. It is not
+wrong about what it sees; it is wrong about *when it is allowed to look*. Its own docstring is
+explicit — *"RE-ATTACH to a pod whose launcher **died**"* — and the runbook's §2
+(`nohup launch_relax.py & ; nohup supervise.py <job> &`) contradicted it. **I followed the
+document that was authoritative-looking rather than the one that was correct.**
+
+Damage: $0.01, no science lost. Only because it fired during staging rather than at hour 30 of
+a production run — the same race at the end of a 3.7-day run destroys the trajectory.
+
+Two things that DID hold, and should be kept: the supervisor reaped **only its own pod**
+(`leaving 1 pod(s) alone (not mine): ['wel852jxxb1w1t']`) — the blast-radius fix works; and the
+spend ledger booked the pod **once** despite `_on_pod` firing twice.
+
+**How to avoid:** (1) **A supervisor must never share a pod with a live launcher.**
+`supervise.py` is standby-only; attach it if and only if the launcher process is gone.
+(2) **An "is it finished?" test that cannot distinguish NOT-STARTED-YET from FINISHED is a
+destroy-your-own-work bug** — absence of a running job is not evidence of a completed one. Any
+done-test whose false-positive branch is *destructive* must require positive evidence of
+completion (a final `.coor`, a `completed` sentinel), never the mere absence of life.
+(3) When a runbook and a module's own docstring disagree about who owns a resource, **believe
+the code**, and fix the runbook.

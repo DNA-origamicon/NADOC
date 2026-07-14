@@ -37,7 +37,25 @@ from backend.core.runpod_executor import remote_dir_for  # noqa: E402
 from experiments.exp43_runpod_bench.spend_ledger import HARD_CAP_USD, SpendLedger  # noqa: E402
 
 WORKSPACE = ROOT / "workspace"
-JOB_ID = os.environ.get("NADOC_WATCH_JOB") or (Path(__file__).parent / "JOB_ID_3x6x400").read_text().strip()
+def _resolve_job_id() -> str:
+    """Job id from argv, else $NADOC_WATCH_JOB, else the 3x6x400 default.
+
+    ⚠️ This USED to read the JOB_ID_3x6x400 file unconditionally and ignore argv entirely,
+    so `watch.py --oneline <job_id>` silently monitored a DIFFERENT JOB and reported on it
+    with total confidence ("PODS 2 live, but NONE is this job's pod — it is gone"). On a
+    rented pod that is the worst possible failure: you watch a healthy run through the lens
+    of a dead one, and either panic-kill it or miss that it wedged. An argument that is
+    accepted and ignored is worse than one that is rejected.
+    """
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if args:
+        return args[0]
+    if os.environ.get("NADOC_WATCH_JOB"):
+        return os.environ["NADOC_WATCH_JOB"]
+    return (Path(__file__).parent / "JOB_ID_3x6x400").read_text().strip()
+
+
+JOB_ID = _resolve_job_id()
 
 # "Periodic cell has become too small" is an NPT box relaxing ~3% to equilibrium density
 # crossing NAMD's fixed patch grid. It is SELF-HEALING and the chain script already
@@ -222,7 +240,12 @@ async def oneline() -> int:
         "step " + (got.get("PROGRESS", "").split("last step ")[-1] if "last step" in got.get("PROGRESS", "") else "?"),
         got.get("SANITY", "").replace("TOTAL = ", "E="),
         got.get("SPEED", "").split("(")[0].strip(),
-        got.get("OUTPUT", "").split()[0] + " coor",
+        # `.split()[0]` IndexError'd on an empty OUTPUT — i.e. before the FIRST segment
+        # has written a .coor. That is precisely the early window a rented pod most needs
+        # watching (staging, minimisation, segment 1), and the watchdog crashed through
+        # all of it. A monitor that dies when there is nothing to report yet is worse than
+        # no monitor: it reads as "the tooling is broken", not "0 coor so far".
+        ((got.get("OUTPUT", "").split() or ["0"])[0] + " coor"),
     ]
     print(" | ".join(b for b in bits if b and b != "?"), flush=True)
     if rc:
