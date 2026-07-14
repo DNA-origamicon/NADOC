@@ -182,6 +182,16 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   have fired. **A safety net can have the same hole as the thing it protects** (the ledger existed *because*
   the kill-switch had no memory). **A ledger that under-reports is worse than no ledger, because it is
   trusted.** [detail](LESSONS_archive.md#l5)
+- **L7** — **PRODUCTION IS NOT AS FAST AS THE RELAXATION — sizing it off the relaxation's rate mis-sized this
+  run 2x.** `build_production_conf` DELIBERATELY runs a more expensive integrator: `fullElectFrequency 1`
+  (vs 2 — PME every step; at 4 fs that is PME every 4 fs, matching the Aksimentiev reference, and
+  `fullElect 2` here would be PME every **8 fs**, past the r-RESPA resonance limit) and `stepspercycle 10`
+  (vs 20). **Measured on the same card and system: relaxation 26.4 ms/step, production 35.5.** Always cost
+  production from a PRODUCTION measurement. ⚠️ **Separately, `outputEnergies 100` + `restartfreq 1000` were
+  hardcoded** — fine for a 250k-atom local job, ruinous for 1.9M atoms GPU-resident: an energy reduction
+  pulled off the GPU every 100 steps, and **90 MB of restart files written to a NETWORK filesystem every
+  1000 steps**. Pure overhead, ZERO effect on the trajectory: **50.0 → 35.5 ms/step (29%) just by scaling
+  them to the run.** [detail](LESSONS_archive.md#l7)
 - **L6** — **You pay GPU rates to DOWNLOAD your results, and the price table lied.** The network volume is
   reachable only *through a live pod*, so fetching 5.2 GB burned ~100 min (~$1.20) with the card idle — a
   quarter of what the science cost. Fetch selectively: the final checkpoint is ~140 MB and is all production

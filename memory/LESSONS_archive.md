@@ -1014,3 +1014,49 @@ Three cost traps, none of which errors:
 **How to avoid**: `preflight.py` costs the run at the **measured** rate and prints both the
 best case (every stage bridges) and the worst (no bridge ever), so a run that only fits in
 the optimistic branch is visible before a cent is spent.
+
+## L7
+**Production is not as fast as the relaxation — and two hardcoded I/O cadences were burning 29%.**
+
+Two distinct problems, found only because production ran at **50.0 ms/step** against the
+relaxation's **26.4** on the same card and the same system.
+
+**(a) The physics difference is REAL and permanent.** `build_production_conf` deliberately
+runs a more expensive integrator than the relaxation's fast chunks:
+
+    fullElectFrequency 1  (relax: 2)   PME EVERY step. At 4 fs that is PME every 4 fs,
+                                       matching the Aksimentiev reference. fullElect 2
+                                       here would be PME every 8 fs — past the r-RESPA
+                                       resonance-stability limit (~4 fs). NOT negotiable.
+    stepspercycle      10 (relax: 20)  40 fs pairlist rebuild. Deliberate.
+
+`launch_production.py` had sized the run from the relaxation's ms/step and even *claimed in
+its docstring* that "production runs the SAME integrator as the relaxation's fast chunks."
+It does not. The 5.5 ns run was therefore costed at 10.1 h / $7.5 when it was really
+19 h / $14 — unaffordable, and the kill-switch would have truncated it.
+
+⚠️ **Note the corollary:** the RELAXATION runs 4 fs with `fullElect 2` = PME every **8 fs**,
+which by this same argument is past the resonance limit. It is ENM-restrained throughout so
+it probably does not matter, but it is an unexamined inconsistency.
+
+**(b) `outputEnergies 100` and `restartfreq 1000` were HARDCODED** in the production
+template. Perfectly reasonable for a 250k-atom local run; ruinous for 1.9M atoms in
+GPU-resident mode:
+
+  * `outputEnergies 100` forces a **GPU→host energy reduction every 100 steps**. The entire
+    point of GPU-resident is that the data never leaves the card; this drags it back 13,750
+    times over a 1.375M-step run and prints 13,750 energy frames nobody reads.
+  * `restartfreq 1000` writes **~90 MB of restart files (coor+vel, 1.9M atoms) every 1000
+    steps — to a NETWORK filesystem.** At 50 ms/step that is 90 MB every 50 seconds,
+    sustained, for the whole run.
+
+Neither has **any** effect on the trajectory. Scaling them to the run
+(`md_protocols._production_output_freqs`: ~400 energy frames, ~50 restarts) took production
+from **50.0 → 35.5 ms/step — a 29% speedup for zero physics.**
+
+**How to avoid**: (1) **Never size production from a relaxation rate.** `launch_production.py`
+now applies an explicit `PRODUCTION_PENALTY` when only a relaxation measurement exists, and
+says so in the log. (2) **Any hardcoded I/O cadence is a latent bug at scale** — the same
+shape as L2's step-denominated cadence. Ask what it costs at 10x the atoms on a network
+filesystem. (3) When a run is slower than expected, **diff its conf against the one that was
+fast** before assuming the hardware changed.

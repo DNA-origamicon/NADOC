@@ -37,7 +37,7 @@ from backend.core.runpod_executor import remote_dir_for  # noqa: E402
 from experiments.exp43_runpod_bench.spend_ledger import HARD_CAP_USD, SpendLedger  # noqa: E402
 
 WORKSPACE = ROOT / "workspace"
-JOB_ID = (Path(__file__).parent / "JOB_ID_3x6x400").read_text().strip()
+JOB_ID = os.environ.get("NADOC_WATCH_JOB") or (Path(__file__).parent / "JOB_ID_3x6x400").read_text().strip()
 
 # "Periodic cell has become too small" is an NPT box relaxing ~3% to equilibrium density
 # crossing NAMD's fixed patch grid. It is SELF-HEALING and the chain script already

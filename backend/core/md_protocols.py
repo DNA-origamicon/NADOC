@@ -374,6 +374,11 @@ def build_production_conf(
     # let the uniform force stream the whole structure across the box (COM drift).
     # Default (None, None) → "" so the ensemble path stays byte-identical.
     ext_forces = external_forces_block(anchors_file, field)
+    # Scale the I/O cadences to the RUN, not to a 250k-atom local job (see
+    # _production_output_freqs): the hardcoded outputEnergies 100 / restartfreq 1000
+    # were pure overhead on a 1.9M-atom GPU-resident run — a GPU->host energy pull every
+    # 100 steps, and 90 MB of restart files to a NETWORK filesystem every 1000.
+    prod_e, prod_r = _production_output_freqs(spec.steps, cycle=spc)
     return f"""\
 structure          {psf}
 coordinates        {name_stem}.pdb
@@ -417,9 +422,9 @@ langevinPistonTarget  1.01325
 langevinPistonPeriod  200.0
 langevinPistonDecay   100.0
 langevinPistonTemp 300
-outputEnergies     100
-xstFreq            1000
-restartfreq        1000
+outputEnergies     {prod_e}
+xstFreq            {prod_e}
+restartfreq        {prod_r}
 binaryrestart      yes
 constraints        off
 {ext_forces}outputName         output/{spec.name}
@@ -1293,6 +1298,32 @@ def _scale_label(scale: Optional[float]) -> str:
 # ``CutoffParams.min_frames`` (20) ENERGY frames — "insufficient data" fails SAFE to
 # "run the whole thing". Aim comfortably above that.
 _ENERGY_FRAMES_PER_CHUNK = 30
+
+
+def _production_output_freqs(steps: int, cycle: int = 10) -> tuple[int, int]:
+    """``(energy_freq, restart_freq)`` for an unrestrained PRODUCTION run.
+
+    Both were hardcoded — ``outputEnergies 100`` and ``restartfreq 1000`` — and on a
+    1.9M-atom GPU-resident run both are pure overhead with ZERO effect on the trajectory:
+
+      * ``outputEnergies 100`` forces a GPU->host energy reduction every 100 steps. In
+        GPU-resident mode the whole point is that the data never leaves the card; this
+        drags it back 13,750 times over a 1.375M-step run, and prints 13,750 energy
+        frames nobody reads.
+      * ``restartfreq 1000`` writes ~90 MB of restart files (coor+vel, 1.9M atoms) every
+        1000 steps — to a NETWORK filesystem. At ~50 ms/step that is 90 MB every 50
+        seconds, sustained, for the entire run.
+
+    Neither figure was chosen for a 2M-atom system on a rented GPU; they are fine on a
+    250k-atom local run. Scale them with the run instead: ~400 energy frames (plenty to
+    watch progress and spot a blow-up) and ~50 restarts (crash protection every ~2% of
+    the run). Measured impact: production was running at 50 ms/step against the
+    relaxation's 26.4 — and the LEGITIMATE physics difference (fullElect 1, spc 10)
+    accounts for only part of that.
+    """
+    e = max(cycle, steps // 400)
+    r = max(cycle, steps // 50)
+    return (max(cycle, e - (e % cycle)), max(cycle, r - (r % cycle)))
 
 
 def _output_freq(steps: int, cycle: int = AKSIMENTIEV_STEPS_PER_CYCLE) -> int:

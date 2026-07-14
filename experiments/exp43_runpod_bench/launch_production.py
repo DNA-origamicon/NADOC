@@ -52,17 +52,34 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("prod")
 
 
-def measured_s_per_step(parent: MdJob, workspace: Path) -> Optional[float]:
-    """Read the real 4 fs GPU-resident rate out of the relaxation's own NAMD logs.
+# ⚠️ PRODUCTION IS NOT AS FAST AS THE RELAXATION, and sizing it off the relaxation's rate
+# is how this run was mis-sized by 2x. Production DELIBERATELY runs a more expensive
+# integrator (build_production_conf):
+#
+#   fullElectFrequency 1 (relax: 2)  — PME EVERY step. At 4 fs that is PME every 4 fs,
+#                                      matching the Aksimentiev reference. fullElect 2
+#                                      would be PME every 8 fs, past the r-RESPA
+#                                      resonance-stability limit. NOT negotiable.
+#   stepspercycle 10 (relax: 20)     — 40 fs pairlist rebuild. Deliberate.
+#
+# MEASURED: relaxation fast chunks 26.4 ms/step; production 50.0 ms/step on the same card
+# and system. Some of that gap was I/O waste (now fixed — see _production_output_freqs),
+# but the physics difference is real and permanent. Always cost production from a
+# PRODUCTION measurement, never from the relaxation's.
+PRODUCTION_PENALTY = 1.35   # conservative, applied when only a relaxation rate is known
 
-    Production runs the SAME integrator as the relaxation's fast chunks (4 fs + HMR +
-    GPUresident), so the parent's logs are a direct measurement — no extrapolation from a
-    4090 and no separate benchmark pod.
+
+def measured_s_per_step(parent: MdJob, workspace: Path) -> Optional[float]:
+    """Read the 4 fs GPU-resident rate out of the relaxation's own NAMD logs.
+
+    ⚠️ This is the RELAXATION's rate. Production runs a more expensive integrator by
+    design (see PRODUCTION_PENALTY above) — the caller MUST inflate it, or size from a
+    real production log.
 
     Deliberately ignores the 00_min (2 fs) and the SOFT first chunk (1 fs, offload, no
     GPUresident, flexible H bonds): those run a different integrator entirely, and the
-    soft chunk measured 43-51 ms/step against the fast path's ~21. Sizing production off
-    the wrong one would halve or double the run.
+    soft chunk measured 43-51 ms/step against the fast path's 26.4. Sizing off the wrong
+    one halves or doubles the run.
     """
     pkg = parent.package_dir(workspace)
     rates: list[float] = []
@@ -122,11 +139,18 @@ async def main() -> int:
     # direction. Guess HIGH; the ledger books the pod's real rate afterwards anyway.
     rate = max(float(plan["gpu"].usd_per_hour), PRO_4500_SECURE_USD_PER_HR)
 
-    s_per_step = args.s_per_step or measured_s_per_step(parent, WORKSPACE)
+    s_per_step = args.s_per_step
+    src = "given"
     if not s_per_step:
-        log.error("no 4 fs GPU-resident benchmark line in the relaxation logs — pass "
-                  "--s-per-step explicitly rather than let me guess")
-        return 1
+        relax = measured_s_per_step(parent, WORKSPACE)
+        if not relax:
+            log.error("no 4 fs GPU-resident benchmark line in the relaxation logs — pass "
+                      "--s-per-step (a PRODUCTION rate) explicitly rather than let me guess")
+            return 1
+        # Inflate: production's integrator is more expensive BY DESIGN. Sizing off the
+        # relaxation's rate is exactly how this run was mis-sized 2x.
+        s_per_step = relax * PRODUCTION_PENALTY
+        src = f"relaxation {relax*1000:.1f} ms/step x {PRODUCTION_PENALTY} production penalty"
 
     remaining = ledger.remaining()      # already nets off the $1.50 teardown reserve
     ns = args.ns if args.ns is not None else size_production_ns(remaining, rate, s_per_step)
@@ -135,9 +159,8 @@ async def main() -> int:
 
     log.info("spent so far : $%.2f  (cap $15.00)", ledger.spent())
     log.info("remaining    : $%.2f  after the teardown reserve", remaining)
-    log.info("measured     : %.1f ms/step  (%.1f ns/day at %g fs)%s",
-             s_per_step * 1000, TIMESTEP_FS * 1e-6 / s_per_step * 86400, TIMESTEP_FS,
-             "" if args.s_per_step else "   [read from the relaxation's own logs]")
+    log.info("rate         : %.1f ms/step  (%.1f ns/day at %g fs)   [%s]",
+             s_per_step * 1000, TIMESTEP_FS * 1e-6 / s_per_step * 86400, TIMESTEP_FS, src)
     log.info("production   : %.2f ns = %s steps ~ %.1f h ~ $%.2f",
              ns, f"{steps:,}", hours, hours * rate)
 
