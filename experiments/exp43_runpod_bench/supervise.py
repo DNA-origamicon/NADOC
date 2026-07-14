@@ -55,12 +55,21 @@ async def main() -> int:
     client = RunpodClient(api_key)
 
     pod_id = job.runpod_pod_id
+    seen_pods: set[str] = set()
     try:
         pods = [p for p in await client.list_pods() if not p.is_destroyed]
         if not pods:
             log.info("no pod on the account — nothing to supervise. Nothing is billing.")
             return 0
-        pod = next((p for p in pods if p.id == pod_id), pods[0])
+        # Adopt THIS JOB's pod — never just pods[0]. With a bench or build pod also live,
+        # pods[0] is a coin flip, and we would supervise (and later destroy) the wrong one.
+        pod = next((p for p in pods if p.id == pod_id), None)
+        if pod is None:
+            log.error("job %s says its pod is %s, but that pod is gone. "
+                      "Nothing to supervise; NOT touching the %d other live pod(s).",
+                      job.job_id, pod_id, len(pods))
+            return 1
+        seen_pods.add(pod.id)
         log.info("adopting pod %s ($%s/hr), job %s", pod.id, pod.cost_per_hr, job.job_id)
         if pod.id not in ledger.live_pods():
             ledger.open_pod(pod.id, float(pod.cost_per_hr or 0.74), note="relax (adopted)")
@@ -132,17 +141,31 @@ async def main() -> int:
         await conn.close()
 
     finally:
-        # The whole point of this script.
-        for p in [p for p in await client.list_pods() if not p.is_destroyed]:
-            log.info("destroying pod %s", p.id)
+        # ⚠️ ONLY THIS SUPERVISOR'S OWN POD. This used to destroy EVERY pod on the account:
+        #
+        #     for p in await client.list_pods(): terminate(p)      # ← catastrophic
+        #
+        # A `finally` runs on ANY exit — a normal finish, an exception, or a SIGTERM. So
+        # killing one supervisor (e.g. tidying up a stale one) silently reaped every OTHER
+        # running pod too. That is exactly how the 3x6x400 production run died at 62%:
+        # collateral damage from a supervisor for a DIFFERENT job exiting.
+        #
+        # A cleanup routine must never have a blast radius larger than the thing it owns.
+        # `reap.py --kill` is the all-pods panic button, and it is opt-in on purpose.
+        mine = [p for p in await client.list_pods()
+                if p.id in seen_pods and not p.is_destroyed]
+        for p in mine:
+            log.info("destroying MY pod %s", p.id)
             try:
                 await client.terminate_pod(p.id)
             except Exception as exc:  # noqa: BLE001
                 log.error("could not destroy %s: %s — DO IT BY HAND", p.id, exc)
             ledger.close_pod(p.id)
-        left = [p for p in await client.list_pods() if not p.is_destroyed]
-        log.info("live pods: %d %s", len(left),
-                 "— nothing billing" if not left else f"*** STILL BILLING {[p.id for p in left]}")
+        others = [p for p in await client.list_pods()
+                  if p.id not in seen_pods and not p.is_destroyed]
+        if others:
+            log.info("leaving %d pod(s) alone (not mine): %s",
+                     len(others), [p.id for p in others])
         log.info("\n%s", ledger.summary())
         await client.aclose()
 

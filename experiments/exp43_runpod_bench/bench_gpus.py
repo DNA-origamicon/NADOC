@@ -72,11 +72,12 @@ TARGET_NS = 5.0            # the production run we actually want
 MAX_WALL_H = 12.0          # ...and the window we want it inside (an overnight)
 MIN_USEFUL_NS_DAY = TARGET_NS * 24 / MAX_WALL_H     # = 10 ns/day
 
-# (runpod gpuTypeId, label, sm, $/hr secure). ONLY cards whose arch we can positively name
+# (runpod gpuTypeId, label, sm, $/hr secure). ONLY cards whose arch the binary was BUILT for
 # and that hold 1.94M atoms GPU-resident (~6.6 GB). Prices live-checked 2026-07-14.
 #
-# DELIBERATELY ABSENT: A100 (sm_80), H100/H200 (sm_90), B200 (sm_100). Every one of them
-# rents fine and dies at step 0. B200 is the trap — "Blackwell", but not sm_120.
+# The binary now covers sm_80 / sm_89 / sm_90 / sm_120 (rebuilt 2026-07-14), so Ampere and
+# Hopper are in. STILL ABSENT: sm_86 (A6000/3090) and B200 (sm_100 — "Blackwell", but a
+# DATACENTER arch, NOT sm_120; it rents fine and dies at step 0. The trap.)
 CANDIDATES = [
     # ── sm_120 Blackwell: the CURRENT binary already runs these. No rebuild needed. ──
     # The PRO 4500 ($0.74) vs PRO 6000 ($1.99) pair is the cleanest possible test of
@@ -98,22 +99,23 @@ CANDIDATES = [
     ("NVIDIA RTX 4000 Ada Generation",                     "RTX 4000 Ada",      "sm_89",  0.26),
     ("NVIDIA L4",                                          "L4",                "sm_89",  0.39),
 
-    # ── PROBE: does the multi-arch binary ALREADY cover sm_80? ─────────────────────
-    # cuobjdump on the binary lists sm_80/86/90/100 — but that is the UNION of NAMD's own
-    # kernels AND the bundled NVIDIA libs (cuFFT etc.), so it is NOT proof of coverage
-    # (LESSONS: "do not read the union as NAMD's coverage"). A 5-minute, $0.12 A100 run
-    # settles it empirically and, if it works, saves an hour-long rebuild entirely. The
-    # harness already detects "no kernel image is available" and reports WRONG ARCH.
+    # ── sm_80 Ampere: UNLOCKED by the 2026-07-14 rebuild. ─────────────────────────
+    # The OLD binary was proven to fail on these ("no kernel image is available", died at
+    # step 0) for $0.12 — even though cuobjdump listed sm_80. That list is the UNION of
+    # NAMD's kernels and the bundled NVIDIA libs, and it reports the IDENTICAL sm_50..120
+    # for the old 2-arch binary and the new 4-arch one. Never read the union as coverage;
+    # run the card.
+    #
+    # ⚠️ EU-RO-1 A100 stock churns by the MINUTE (free at 13:05, gone at 13:12, gone at
+    # 13:35). Use --retry-min; a one-shot sweep just misses it.
     ("NVIDIA A100 80GB PCIe",                              "A100 PCIe",         "sm_80",  1.39),
+    ("NVIDIA A100-SXM4-80GB",                              "A100 SXM",          "sm_80",  1.49),
 ]
 
-# ⚠️ NOT here, and they CANNOT be until NAMD is rebuilt — each rents FINE and dies at step 0
-# with "no kernel image is available for execution":
-#   A100        sm_80   $1.39-1.49
-#   H100/H200   sm_90   $2.89-4.39
-#   B200        sm_100  $5.89        <- reads as "Blackwell" but is NOT sm_120. The trap.
-# See bench_hpc_gpus notes: needs `build_patched_namd.sh` widened to
-# -gencode arch=compute_80/90/100 and NAMD_BUILD_ARCHS extended to match.
+# H100 / H200 (sm_90) ARE in the rebuilt binary — but they are NOT offered in EU-RO-1, which
+# the network volume PINS us to. Reaching them needs a second volume in a datacenter that
+# has them (EU-FR-1, EU-NL-1, EUR-IS-3, US-CA-2 all do). B200 (sm_100) is not in the build
+# at all.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("bench")
 for noisy in ("asyncssh", "httpx", "httpcore"):
@@ -320,6 +322,9 @@ async def main() -> int:
     ap.add_argument("--budget", type=float, default=2.0,
                     help="hard cap for the WHOLE sweep, on top of the session ledger")
     ap.add_argument("--only", default="", help="comma-separated labels")
+    ap.add_argument("--retry-min", type=int, default=0,
+                    help="keep retrying UNAVAILABLE cards for this many minutes. EU-RO-1 "
+                         "stock churns by the minute — a one-shot sweep just misses it.")
     args = ap.parse_args()
 
     parent = MdJob.load(PARENT_ID, WORKSPACE)
@@ -346,6 +351,18 @@ async def main() -> int:
                 break
             r = await bench_one(client, ledger, gpu_id, label, sm, usd_hr, args.steps,
                                 parent_remote, parent.name_stem, final_ckpt)
+            # Stock, not capability. Keep asking — but NEVER retry a real failure (a wrong
+            # arch or a NAMD fatal will fail identically forever and just burn pod-time).
+            deadline = time.time() + args.retry_min * 60
+            while (r["ms_step"] is None and "unavailable" in r["note"]
+                   and time.time() < deadline
+                   and ledger.spent() - start_spend < args.budget):
+                wait = 120
+                log.info("%-20s unavailable — retrying in %ds (%.0f min left)",
+                         label, wait, (deadline - time.time()) / 60)
+                await asyncio.sleep(wait)
+                r = await bench_one(client, ledger, gpu_id, label, sm, usd_hr, args.steps,
+                                    parent_remote, parent.name_stem, final_ckpt)
             results.append(r)
             if r["ms_step"]:
                 nsday = TIMESTEP_FS * 1e-6 / (r["ms_step"] / 1000) * 86400

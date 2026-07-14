@@ -197,3 +197,80 @@ class TestChainScriptActuallyResumes:
         resumed = (tmp_path / "s_01_p10.resume.conf").read_text()
         assert "extendedSystem     output/s_01_p10.restart.xsc" in resumed
         assert "run                116000" in resumed
+
+
+class TestAPodThatDiesMidSegmentRESUMES:
+    """The idempotent skip-guard only works at SEGMENT granularity: it skips a step whose
+    `output/<name>.coor` exists. An INCOMPLETE segment has no .coor — so without a
+    mid-segment resume it restarts FROM ZERO.
+
+    That is not academic. The 3x6x400 production pod was destroyed at 62% of an 800,000-step
+    segment (collateral damage from an over-broad reap in supervise.py). Restarting from
+    zero would have thrown away five hours of GPU time. "A reclaimed pod resumes, it does
+    not restart" was only ever true BETWEEN segments; this makes it true WITHIN one.
+    """
+
+    def _fake_namd(self, tmp_path):
+        p = tmp_path / "fake_namd"
+        p.write_text(
+            "#!/bin/bash\n"
+            'conf="${!#}"\n'
+            'name=$(basename "$conf" .conf)\n'
+            'name=${name%.resume}\n'
+            'echo "$conf" >> confs_used.txt\n'
+            "mkdir -p output\n"
+            'echo coords > "output/${name}.coor"\n'
+            "exit 0\n"
+        )
+        p.chmod(0o755)
+        return p
+
+    def test_a_relaunch_resumes_from_the_checkpoint_the_dead_pod_left(self, tmp_path):
+        """When the POD dies, the chain script dies WITH it — the in-script retry loop
+        never runs. The resume therefore has to happen on RELAUNCH, on attempt 0.
+
+        This models exactly what is on the volume after the 3x6x400 production pod was
+        destroyed at 62%: restart.{coor,vel,xsc} present, no .coor. A fresh chain script
+        must pick those up rather than start the 800,000-step segment again from zero.
+        """
+        import shutil
+
+        from backend.core import remote_resume_conf
+        from backend.core.runpod_script import (
+            RESUME_CONF_NAME,
+            ChainStep,
+            render_chain_script,
+        )
+
+        shutil.copy(remote_resume_conf.__file__, tmp_path / RESUME_CONF_NAME)
+        (tmp_path / "s_01_p10.conf").write_text(
+            CONF.replace("run                120000", "run                800000"))
+
+        # What the dead pod left behind on the network volume.
+        out = tmp_path / "output"
+        out.mkdir()
+        (out / "s_01_p10.restart.xsc").write_text(
+            "#$LABELS step a_x\n500000 151.97 0 0 0 86.48 0 0 0 1393.4 0 0 0\n")
+        (out / "s_01_p10.restart.coor").write_text("r")
+        (out / "s_01_p10.restart.vel").write_text("r")
+
+        script = tmp_path / "chain.sh"
+        script.write_text(render_chain_script(
+            steps=[ChainStep("s_01_p10", steps=800_000)],
+            remote_dir=str(tmp_path),
+            namd_bin=str(self._fake_namd(tmp_path)),
+            threads=2,
+        ))
+        script.chmod(0o755)
+        proc = subprocess.run(["bash", str(script)], cwd=tmp_path, capture_output=True,
+                              text=True, timeout=120)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+
+        used = (tmp_path / "confs_used.txt").read_text().split()
+        assert used == ["s_01_p10.resume.conf"], (
+            f"a relaunch must RESUME from the dead pod's checkpoint, not restart from "
+            f"zero: {used}"
+        )
+        resumed = (tmp_path / "s_01_p10.resume.conf").read_text()
+        assert "firsttimestep      500000" in resumed
+        assert "run                300000" in resumed, "must run only what is LEFT"
