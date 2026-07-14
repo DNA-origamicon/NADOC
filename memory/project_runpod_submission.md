@@ -284,6 +284,47 @@ costs nothing — `gpuTypeIds` is a **fallback list**, so RunPod just rents the 
 when none is free. (Which is exactly what happened on the first real run: asked for a 4090,
 got a PRO 4500 at $0.74.)
 
+## ⚠️ `fast=True` SILENTLY DISABLED early-stop — a 4× cost bug with no error (fixed 2026-07-14)
+
+The nastiest bug of the night, and it produced **no failure of any kind** — the accelerator
+was emitted, ran, and answered. It just answered **HOLD every single time**.
+
+`outputEnergies`/`dcdFreq` were a hardcoded **9600 STEPS**. Chunk step-counts are derived
+from a target simulated *TIME*, so enabling `fast` (2 fs → 4 fs) HALVES every chunk's step
+count for identical physics — while a step-denominated print interval keeps firing just as
+often *per step*, i.e. **half as often per nanosecond**. A p10 chunk fell from **25 ENERGY
+frames to 12**, under the evaluator's `min_frames = 20`. `energy_plateaued` therefore
+returned False for every p10 in the ladder, **no p10 could ever bridge**, and the
+accelerator's ceiling collapsed from ~4.9× to ~2×.
+
+On the live pod that turned a **~4 h / ~$3** ladder into a **~15 h / ~$11** one that could
+not finish inside its own kill-switch. Caught only by reading the evaluator's `min_frames`
+against the conf's actual cadence — never by a failure.
+
+`md_protocols._output_freq(steps)` now derives the cadence from the chunk's own length
+(~30 frames), so the frame count is **invariant under the timestep** — the only thing the
+evaluator cares about. `tests/test_md_cutoff.py::TestEarlyStopFrameBudget` pins it and is
+proven can-go-red.
+
+**The general lesson: any step-denominated cadence is a latent bug the moment the timestep
+becomes a variable.** `_display_dcd_freq` had the same shape (it *took* `steps` and ignored
+it). Check `restartfreq`/`xstFreq` consumers before trusting them either.
+
+Related, NOT fixed (needs a physics call): **`fast` also halves the SOFT first chunk's
+step count while its timestep stays 1 fs** (`timestep = 1.0 if spec.soft else (4.0 if fast
+else 2.0)`), so the soft warm-up drops from 240 ps to **120 ps** of simulated time. It errs
+toward *less* warm-up. Harmless-looking, but it is a silent change to protocol intent.
+
+## Cost anatomy of the 3x6x400 ladder (1.94M atoms, RTX PRO 4500, measured)
+
+| chunk | timestep | mode | ms/step | note |
+|---|---|---|---|---|
+| minimisation (4800) | 2 fs | offload | **53.6** | ~5 min; TOTAL → −9.0e6, clean |
+| stage-1 p10 (120k) | **1 fs** | **offload** (soft) | **51.5** | **1.7 h / $1.27** — the single most expensive chunk per ns, and unavoidable |
+| every other chunk | 4 fs | GPU-resident | ~21 (predicted) | |
+
+The soft first chunk is 40% of a best-case ladder's cost. It is the price of a safe start.
+
 ## Open items
 
 - **Cumulative spend is not tracked *in the app*.** The kill-switch caps ONE pod's life and
