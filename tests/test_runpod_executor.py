@@ -638,3 +638,29 @@ class TestProductionChildSeedsFromParentOnTheVolume:
         _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
                            n_atoms=225_504, vcpus=8))
         assert not any("cp -n" in c for c in cmds)
+
+
+class TestTheJobRecordSurvivesACrashedLauncher:
+    """The launcher's `finally` is the ONLY thing that destroys a pod. If it dies, the
+    pod bills on — NAMD is detached (setsid, output on the network volume) so the run
+    itself carries on perfectly well, and nothing is left alive to turn the meter off.
+
+    Recovery therefore depends entirely on the job record naming the pod. It didn't:
+    runpod_executor never called job.save(), so a crashed launcher left an orphaned,
+    billing pod that nothing could even NAME, let alone reap or resume. This happened
+    for real (a transient DNS failure mid-poll).
+    """
+
+    def test_submit_persists_the_pod_id_pid_and_remote_dir(self, tmp_path):
+        job = _job(tmp_path)
+        job.runpod_pod_id = "POD123"
+        conn = _conn({"setsid": (0, "4242\n", "")})
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+
+        # Re-read from DISK — an in-memory field is worth nothing to a new process.
+        reloaded = MdJob.load(job.job_id, tmp_path)
+        assert reloaded.runpod_pod_id == "POD123", "a pod nobody can name is a pod nobody can kill"
+        assert reloaded.runpod_pid == 4242
+        assert reloaded.remote_scratch_dir == rx.remote_dir_for(job)
+        assert reloaded.status == MdStatus.running
