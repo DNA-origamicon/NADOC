@@ -622,6 +622,8 @@ def simulate_equilibrium(
     modified_gjf: bool = False,
     hydro_coarse_bp: Optional[int] = None,
     hydro_generalized: bool = False,
+    tails: bool = False,
+    tail_max_nt: Optional[int] = None,
     progress_cb: Optional[Callable[[float, str], None]] = None,
 ) -> dict:
     """Run an equilibrium Langevin trajectory of ``design`` and return frames + trajectory RMSF.
@@ -658,9 +660,23 @@ def simulate_equilibrium(
       coupling, SI Note 3.2) instead of translational-only. Paper-faithful; costs the 4× memory of a
       dense 6N×6N Z in the exact path (free in the coarse path, where the dense object is 6B×6B).
 
+    ``tails`` (SS-2, ``material="snupi"`` only) adds the FREE ssDNA tails — overhangs, toeholds,
+    dangling scaffold ends — as explicit one-bead-per-nucleotide Langevin chains hanging off their
+    anchor base pairs (:mod:`snupi_tails`). **A documented NADOC extension: published SNUPI cannot
+    represent a free tail at all**, having no distal base-pair node to connect to. The tails enter
+    the force, mass and drag of THIS integrator only; they are absent from ``K``, from the static
+    solve, and from the NMA, by decision (a floppy tail's near-zero eigenvalues would flood the
+    200-mode RMSF basis). With ``hydrodynamics`` they also join the coarse blob set (SS-3), at their
+    own smaller bead radius — which requires ``hydro_coarse_bp`` (the exact per-bp friction is
+    single-radius). Consequently every core observable below is unchanged, and the tails are
+    reported alongside rather than mixed in: ``frames``/``rmsf``/``positions0``/``helix_ids``/
+    ``bp_indices``/``mean_u`` stay strictly duplex-core, and the tail beads arrive as
+    ``tail_frames``/``tail_positions0``/``tail_nodes``. Downstream Kabsch fits therefore keep
+    fitting on the core, which is what they must do. ``tail_max_nt`` optionally truncates each tail.
+
     Returns ``{positions0, frames, rmsf, helix_ids, bp_indices, n_frame, dt_ns, friction, stiffness, mass_diag}``
     (positions in nm; frames are absolute node positions, rigid-body drift retained —
-    :func:`trajectory_rmsf` removes it).
+    :func:`trajectory_rmsf` removes it), plus the ``tail_*`` keys above when ``tails=True``.
     """
     from backend.physics.fem_solver import (
         build_fem_mesh,
@@ -670,7 +686,7 @@ def simulate_equilibrium(
         SNUPI_DEFAULT_MGCL2_M,
     )
 
-    mesh = build_fem_mesh(design)
+    mesh = build_fem_mesh(design, material=material)
     n = len(mesh.nodes)
     X0 = np.array([node.position for node in mesh.nodes], dtype=float)
 
@@ -693,6 +709,42 @@ def simulate_equilibrium(
     gamma = stokes_friction_diag(n)
     kT = KBT_300 * (temperature_K / 300.0)
 
+    # ── Free ssDNA tails (SS-2) — dynamics-only, appended AFTER the core's DOF ────────
+    block = None
+    if tails:
+        from backend.physics import snupi_tails as st
+        if material != "snupi":
+            raise ValueError(
+                "free ssDNA tails are a snupi-only extension (material='snupi'); "
+                f"got material={material!r}")
+        if hydrodynamics and not hydro_coarse_bp:
+            # The tails' drag lives in the COARSE blob model (SS-3, snupi_hydro_coarse): its blob set
+            # takes both species, giving each its own bead radius (σ_ss = 0.5 nm vs σ = 1.1 nm for a
+            # bp). The exact path would instead need an unequal-radius RPY tensor (Zuk 2014) — a
+            # different tensor, with its own overlap regularizations — and it cannot run origami scale
+            # anyway. Refuse rather than silently drop the tails' drag.
+            raise ValueError(
+                "hydrodynamics + free ssDNA tails needs the coarse blob model: pass "
+                "hydro_coarse_bp=k (8 is the calibrated default). The exact per-bp friction does not "
+                "support the tails' smaller hydrodynamic radius.")
+        block = st.build_tail_block(design, mesh, max_nt=tail_max_nt)
+        if block.n_tail == 0:
+            block = None                       # no tails in this design — take the plain path
+
+    n_tot = n if block is None else block.n_total
+    q_start = np.zeros(6 * n_tot)
+    if block is not None:
+        X0 = np.vstack([X0, block.positions])
+        m_diag = np.concatenate([m_diag, block.mass_diag()])
+        gamma = np.concatenate([gamma, block.stokes_diag()])
+        f_ext = np.concatenate([f_ext, np.zeros(6 * block.n_tail)])
+        _touched = block.touched_nodes()
+        # The tails start as thermal COILS, not rods (snupi_tails._coil_run): X0 already holds the
+        # coiled positions, and q_start carries the bead triads that go with them. Starting straight
+        # would strand every tail in a fully extended state that no affordable trajectory can relax
+        # — collapsing a rod into a coil is precisely the slow long-wavelength mode.
+        q_start[6 * n:] = block.q0
+
     if dt is None:
         if modified_gjf:
             # The modified GJF (Simpson midpoint force) has a much wider stable region than plain GJF,
@@ -704,9 +756,15 @@ def simulate_equilibrium(
             # frequency √λ of (K, M). 0.8/ω_max ≈ 0.4·(2/ω_max) leaves a stability margin.
             from scipy.sparse import diags
             from scipy.sparse.linalg import eigsh
-            Md = diags(m_diag).tocsr()
+            Md = diags(m_diag[:6 * n]).tocsr()          # K is core-only; so is its mass metric
             lam_g = float(eigsh(Kcsr, k=1, M=Md, which="LM", return_eigenvectors=False)[0])
             omega_max = math.sqrt(max(lam_g, 1e-30))
+            if block is not None:
+                # The tails are not in K, so their stiffest mode is invisible to that eigensolve. A
+                # stiff ssDNA link (EA = 710 pN on a 0.68 nm bond) on a light nucleotide bead is
+                # comparable to the duplex core's stiffest mode, so it must enter the step sizing —
+                # otherwise a tail-driven instability only ever surfaces as a divergence retry.
+                omega_max = max(omega_max, st.tail_omega_max(block))
             dt = min(DT_DEFAULT, 0.8 / omega_max)
 
     if nonlinear_force:
@@ -716,13 +774,26 @@ def simulate_equilibrium(
         # unchanged). SLOW at origami scale — the per-step Python element loop is the target of the
         # Phase-2(d) F(x) perf rewrite. dt auto-sizing still uses the linear K tangent (same stiff modes).
         from backend.physics.fem_solver import build_corotational_elements
-        _X0cr, _cr_elements = build_corotational_elements(mesh, X0)
+        _X0cr, _cr_elements = build_corotational_elements(mesh, X0[:n])
 
-        def force_fn(q):
-            return f_ext - corotational_internal_force(q, X0, _cr_elements)
+        def core_int(q):
+            return corotational_internal_force(q[:6 * n], X0[:n], _cr_elements)
     else:
+        def core_int(q):
+            return Kcsr @ q[:6 * n]
+
+    if block is None:
         def force_fn(q):
-            return f_ext - (Kcsr @ q)
+            return f_ext - core_int(q)
+    else:
+        # Hybrid force: the duplex core keeps its validated model (the linear K, or the
+        # corotational element set), and the tails add their COROTATIONAL chain force on top. The
+        # two overlap only at the anchor nodes, where the forces simply add — which is exactly how
+        # the core comes to feel each tail's mass and drag.
+        def force_fn(q):
+            f = f_ext - st.tail_internal_force(q, X0, block, _touched)
+            f[:6 * n] -= core_int(q)
+            return f
 
     # Progress: the friction build is a real, non-trivial phase (a dense O((6N)³) factorisation, or
     # ~11 s even coarse at M13 scale), so give it its own slice of the bar rather than letting the
@@ -739,15 +810,18 @@ def simulate_equilibrium(
     if hydrodynamics:
         from backend.physics.snupi_hydrodynamics import check_friction_memory, friction_matrix
         # Preflight the O(N²) friction BEFORE allocating: a dense 6N×6N Z on a full-size origami wants
-        # tens of GB and the OOM killer takes the user's editor, not just this job.
-        check_friction_memory(n, hydro_coarse_bp)
-        _phase(0.0, "building hydrodynamic friction",
-               {"n_nodes": n, "coarse_bp": hydro_coarse_bp,
-                "n_blobs": (math.ceil(n / hydro_coarse_bp) if hydro_coarse_bp else n)})
+        # tens of GB and the OOM killer takes the user's editor, not just this job. The blob count is
+        # the real B (helix fragmentation + tail chains push it above ⌈N/k⌉), so count it — it is O(N).
+        nb = None
         if hydro_coarse_bp:
-            from backend.physics.snupi_hydro_coarse import build_coarse_friction
+            from backend.physics.snupi_hydro_coarse import blob_count, build_coarse_friction
+            nb = blob_count(mesh, hydro_coarse_bp, block)
+        check_friction_memory(n_tot, hydro_coarse_bp, nb)
+        _phase(0.0, "building hydrodynamic friction",
+               {"n_nodes": n_tot, "coarse_bp": hydro_coarse_bp, "n_blobs": nb or n_tot})
+        if hydro_coarse_bp:
             coarse_fric = build_coarse_friction(mesh, X0, m_diag, hydro_coarse_bp,
-                                                generalized=hydro_generalized)
+                                                generalized=hydro_generalized, block=block)
         else:
             Z = friction_matrix(X0, generalized=hydro_generalized)
 
@@ -780,25 +854,25 @@ def simulate_equilibrium(
         try:
             if coarse_fric is not None:
                 samples, _v = gjf_integrate_operator_friction(
-                    force_fn, np.zeros(6 * n), m_diag, coarse_fric,
+                    force_fn, q_start, m_diag, coarse_fric,
                     kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
                     sample_every=sample_every, rng=rng, progress_cb=traj_cb,
                 )
             elif hydrodynamics:
                 samples, _v = gjf_integrate_matrix_friction(
-                    force_fn, np.zeros(6 * n), m_diag, Z,
+                    force_fn, q_start, m_diag, Z,
                     kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
                     sample_every=sample_every, rng=rng, progress_cb=traj_cb,
                 )
             elif modified_gjf:
                 samples, _v = gjf_modified_integrate(
-                    force_fn, np.zeros(6 * n), m_diag, gamma,
+                    force_fn, q_start, m_diag, gamma,
                     kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
                     sample_every=sample_every, rng=rng,
                 )
             else:
                 samples, _v = gjf_integrate(
-                    force_fn, np.zeros(6 * n), m_diag, gamma,
+                    force_fn, q_start, m_diag, gamma,
                     kT=kT, dt=dt, n_steps=n_steps, n_equil=n_equil,
                     sample_every=sample_every, rng=rng, progress_cb=traj_cb,
                 )
@@ -808,13 +882,19 @@ def simulate_equilibrium(
     if samples is None:
         raise _GJFDiverged("GJF failed to stabilise after halving dt 4×")
 
-    disp = samples.reshape(len(samples), n, 6)[:, :, :3]     # translational displacement per frame
-    frames = X0[None, :, :] + disp
-    rmsf = trajectory_rmsf(frames, X0)
+    disp_all = samples.reshape(len(samples), n_tot, 6)[:, :, :3]   # translational disp per frame
+    frames_all = X0[None, :, :] + disp_all
+    # Everything below the tail block is reported on the DUPLEX CORE ONLY, byte-for-byte as before:
+    # `frames`, `rmsf`, `mean_u`, `positions0` are (…, n, …). Mixing tail beads into them would put
+    # floppy, badly-placed points into every downstream Kabsch fit and RMSF comparison — the exact
+    # bug the VoltronCore DISPLAY fix had to undo. The tails are reported separately.
+    disp = disp_all[:, :n, :]
+    frames = frames_all[:, :n, :]
+    rmsf = trajectory_rmsf(frames, X0[:n])
     mean_u = np.zeros(6 * n, dtype=float)
     mean_u.reshape(n, 6)[:, :3] = disp.mean(axis=0)          # mean translational displacement per node
-    return {
-        "positions0": X0,
+    out = {
+        "positions0": X0[:n],
         "frames": frames,
         "mean_u": mean_u,
         "rmsf": rmsf,
@@ -827,5 +907,22 @@ def simulate_equilibrium(
             else "rpy" if hydrodynamics else "stokes"
         ),
         "stiffness": Kcsr,
-        "mass_diag": m_diag,
+        "mass_diag": m_diag[:6 * n],
     }
+    if block is not None:
+        out.update({
+            "tail_block": block,
+            "tail_nodes": [
+                {"helix_id": nd.helix_id, "bp_index": nd.bp, "direction": nd.direction,
+                 "run": nd.run, "index_in_run": nd.index_in_run,
+                 "overhang_ids": list(nd.overhang_ids)}
+                for nd in block.nodes
+            ],
+            "tail_positions0": X0[n:],
+            "tail_frames": frames_all[:, n:, :],
+            # The FULL stack (core + tails) in one array — what snupi_tails.tail_end_to_end and the
+            # SS-4 display path index into, since a tail's end-to-end vector starts at a CORE node.
+            "frames_all": frames_all,
+            "n_tail_nodes": int(block.n_tail),
+        })
+    return out

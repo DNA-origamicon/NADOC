@@ -57,12 +57,46 @@ Instead we sample from the MOBILITY side, where the covariance is a sum rather t
 
 which is the exact fluctuation–dissipation covariance, obtained with only a 6B×6B Cholesky.
 
+**Free ssDNA tails (SS-3).** Pass the dynamics-side :class:`snupi_tails.TailBlock` and the tail beads
+join the blob set too, so overhangs feel the solvent and the solvent feels them. Two species now share
+one model, and the way they are reconciled is the whole trick:
+
+* A node's OWN hydrodynamic radius is its species' — σ = 1.1 nm for a base pair, σ_ss = 0.5 nm for an
+  ssDNA nucleotide (:data:`snupi_tails.SS_HYDRO_RADIUS_NM`). It enters only ``D``, so every node's
+  self-drag stays EXACT for its species: ``Ξ_ii = D_i + C_bb = μ_self(σ_i)`` by construction.
+* Every BLOB, of either species, is the SAME sphere σ_b. That keeps ``C`` a single-radius RPY — no
+  unequal-radius (Zuk 2014) tensor, no new overlap regularizations, and the existing PD guarantee and
+  the k = 8 calibration carry over untouched. What we choose instead is how many NUCLEOTIDES fit in
+  that sphere: :func:`ss_blob_nt` inverts the worm-like chain to find the run length whose coil has the
+  same enclosing radius as a k-bp duplex blob (k = 8 ⇒ σ_b = 1.62 nm ⇒ 11 nt). A blob is then a
+  uniformly sized hydrodynamic object everywhere in the structure, which is exactly what the
+  single-radius RPY assumes.
+
+This is a good approximation and not merely a convenient one, because the pair mobility we actually
+need is nearly radius-blind: the leading RPY term is ``1/(8πηr)`` — Oseen, INDEPENDENT of bead radius —
+so blob↔blob coupling is right at leading order whatever σ_b is. (Check, at the separation that
+matters: an ssDNA bead 2 nm from a bp bead has true unequal-radius RPY cross-mobility 0.19·μ_self(σ_ss);
+this blob model gives 0.20.) Only the near-field/overlap correction carries a radius, and there the
+blob model under-couples (0.24 vs 0.37 at r = 1.2 nm) — i.e. tails come out slightly more free-draining
+than reality, which is the conservative direction.
+
+Tails are never merged into a duplex blob, even the 3-mers: sharing a blob means sharing a mobility,
+and a tail slaved to its anchor helix's blob would be dragged around by the duplex instead of waving.
+
+The friction is built ONCE, from the reference configuration (SNUPI's own ``DYN_MAT_FREQ 0`` default),
+so where a tail's blobs SIT is fixed by the conformation it starts in — and this is the second reason
+:func:`snupi_tails._coil_run` had to exist. A tail started as a straight rod (SS-2) would put its outer
+blobs 19 nm out into the solvent, far from where the chain actually spends its time, and freeze that
+misplacement into the friction for the whole run. Started as a thermal coil, the blob centres sit in a
+typical conformation from the first step.
+
 Everything is in the module's nm · pN · ns unit system (see :mod:`snupi_dynamics`).
 """
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import List, Optional
 
 import numpy as np
@@ -93,12 +127,51 @@ def blob_radius_nm(coarse_bp: int, sigma: float = HYDRO_RADIUS_NM) -> float:
     return float(math.hypot(half_len, sigma))
 
 
-def blob_partition(mesh, coarse_bp: int) -> np.ndarray:
-    """Assign each FE node to a blob: ``coarse_bp`` CONSECUTIVE bp of the same helix per blob.
-    Returns ``bead_of`` (int array, len N) with blob ids 0..B-1. Blobs never straddle a helix — a helix
-    whose length is not a multiple of ``coarse_bp`` just ends in a short blob."""
+@lru_cache(maxsize=None)
+def ss_blob_nt(coarse_bp: int) -> int:
+    """How many ssDNA NUCLEOTIDES stand in one blob, so that an ssDNA blob is the same sphere as a
+    ``coarse_bp``-bp duplex blob (see the module docstring: one blob radius ⇒ one-radius RPY).
+
+    A duplex blob of k bp encloses a rigid cylinder ⇒ radius :func:`blob_radius_nm`. An ssDNA run of
+    n nt is not rigid — it is a coil whose mean size is its worm-like-chain RMS end-to-end distance
+    ``√⟨R²⟩`` (:func:`snupi_tails.wlc_mean_square_end_to_end`) — so it encloses a sphere of radius
+    ``hypot(√⟨R²⟩/2, σ_ss)``. Return the n whose sphere is closest to the duplex blob's.
+
+    k = 8 ⇒ σ_b = 1.62 nm ⇒ **11 nt**. Note it is NOT the naive contour ratio (0.68 nm/nt vs the
+    0.34 nm rise would say 4 nt): a coil is far more compact than the chain laid out straight, so
+    many more nucleotides fit in the same sphere.
+    """
+    from backend.physics.snupi_tails import SS_HYDRO_RADIUS_NM, wlc_mean_square_end_to_end
+
+    target = blob_radius_nm(coarse_bp)
+    best, best_err = 1, math.inf
+    for n in range(1, 129):
+        r = math.hypot(0.5 * math.sqrt(wlc_mean_square_end_to_end(n)), SS_HYDRO_RADIUS_NM)
+        err = abs(r - target)
+        if err < best_err:
+            best, best_err = n, err
+        elif r > target:                      # radius is monotone in n — past the target, stop
+            break
+    return best
+
+
+def blob_partition(mesh, coarse_bp: int, block=None) -> np.ndarray:
+    """Assign each node to a blob: ``coarse_bp`` CONSECUTIVE bp of the same helix per blob.
+    Returns ``bead_of`` (int array) with blob ids 0..B-1. Blobs never straddle a helix — a helix whose
+    length is not a multiple of ``coarse_bp`` just ends in a short blob.
+
+    With a :class:`snupi_tails.TailBlock`, the tail beads (global indices ``n_bp..``) are partitioned
+    too and the array is length ``block.n_total``. A tail is a chain of its own, so it is partitioned
+    ALONG the chain, one run at a time, into ⌈n/:func:`ss_blob_nt`⌉ blobs of as-equal-as-possible size —
+    balanced rather than greedy so a run never ends in a 1-bead sliver. A tail shorter than
+    ``ss_blob_nt`` is one blob (VoltronCore's 24 3-mers), and NEVER joins its anchor's duplex blob:
+    blob-mates share a mobility, and a tail sharing the helix's would be dragged along by it instead of
+    fluctuating freely.
+    """
     k = max(int(coarse_bp), 1)
-    bead_of = np.empty(len(mesh.nodes), dtype=int)
+    n_core = len(mesh.nodes)
+    n_tot = n_core if block is None else block.n_total
+    bead_of = np.empty(n_tot, dtype=int)
     nxt = 0
     per_helix: dict[str, List[int]] = {}
     for i, nd in enumerate(mesh.nodes):
@@ -109,7 +182,26 @@ def blob_partition(mesh, coarse_bp: int) -> np.ndarray:
             for i in idx[c:c + k]:
                 bead_of[i] = nxt
             nxt += 1
+
+    if block is not None and block.n_tail:
+        k_ss = ss_blob_nt(k)
+        per_run: dict[int, List[int]] = {}
+        for g, nd in enumerate(block.nodes):
+            per_run.setdefault(nd.run, []).append(g)
+        for run in sorted(per_run):
+            beads = sorted(per_run[run], key=lambda g: block.nodes[g].index_in_run)
+            n_blob = max(1, math.ceil(len(beads) / k_ss))
+            for chunk in np.array_split(np.array(beads, dtype=int), n_blob):
+                bead_of[n_core + chunk] = nxt
+                nxt += 1
     return bead_of
+
+
+def blob_count(mesh, coarse_bp: int, block=None) -> int:
+    """Number of blobs :func:`blob_partition` will produce — the B that sets the coarse friction's
+    only dense object (6B×6B), so the memory preflight needs it BEFORE anything is allocated.
+    O(N) and allocation-free; ⌈N/k⌉ is NOT a valid substitute once helices and tails fragment it."""
+    return int(blob_partition(mesh, coarse_bp, block).max()) + 1
 
 
 @dataclass
@@ -189,13 +281,31 @@ class CoarseFriction:
         return math.sqrt(2.0 * kT * dt) * self.apply_Ztilde(y)
 
 
+def node_radii(mesh, block=None, sigma: float = HYDRO_RADIUS_NM) -> np.ndarray:
+    """Per-node hydrodynamic radius (N,) — σ = 1.1 nm for a duplex bp node, σ_ss = 0.5 nm for an ssDNA
+    tail bead. This is the ONLY place the two species differ hydrodynamically; it enters ``D``, which
+    is what makes each node's self-drag exact for its own species (see the module docstring)."""
+    from backend.physics.snupi_tails import SS_HYDRO_RADIUS_NM
+
+    n_core = len(mesh.nodes)
+    n_tot = n_core if block is None else block.n_total
+    a = np.full(n_tot, float(sigma))
+    a[n_core:] = SS_HYDRO_RADIUS_NM
+    return a
+
+
 def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: int,
                           sigma: float = HYDRO_RADIUS_NM,
-                          generalized: bool = True) -> CoarseFriction:
+                          generalized: bool = True,
+                          block=None) -> CoarseFriction:
     """Assemble the blob RPY friction for ``mesh`` at reference positions ``X0`` (N,3 nm).
 
     ``m_diag`` is the (6N,) diagonal mass (dynamics units). ``coarse_bp`` bp per blob; 1 = exact model
     (but then use :mod:`snupi_hydrodynamics` directly — D would vanish).
+
+    ``block`` (SS-3) is the dynamics-side :class:`snupi_tails.TailBlock`. Its beads extend ``X0``,
+    ``m_diag`` and the blob set, so free ssDNA tails get hydrodynamic drag and hydrodynamic coupling
+    rather than the diagonal Stokes drag of SS-2. ``X0``/``m_diag`` must then already cover core+tails.
 
     ``generalized`` defaults to True here (unlike the exact path): the blob coupling matrix is only
     6B×6B, so the paper-faithful rotation–translation / rotation–rotation coupling costs nothing worth
@@ -213,8 +323,8 @@ def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: i
             f"coarse_bp ≥ {MIN_COARSE_BP} ({DEFAULT_COARSE_BP} is the calibrated default), or "
             f"coarse_bp=None for the exact per-bp friction."
         )
-    n = len(mesh.nodes)
-    bead_of = blob_partition(mesh, k)
+    bead_of = blob_partition(mesh, k, block)
+    n = len(bead_of)
     nb = int(bead_of.max()) + 1
 
     centres = np.zeros((nb, 3))
@@ -223,20 +333,24 @@ def build_coarse_friction(mesh, X0: np.ndarray, m_diag: np.ndarray, coarse_bp: i
     np.add.at(counts, bead_of, 1.0)
     centres /= counts[:, None]
 
+    # ONE radius for every blob, of either species — that is what keeps C a single-radius RPY (module
+    # docstring). The species enters through the per-NODE radius below, not here.
     sigma_b = blob_radius_nm(k, sigma)
     if generalized:
         C = rpy_mobility_generalized(centres, sigma_b)      # (6B,6B) SPD — all four blocks
     else:
         C = mobility_translational_6n(centres, sigma_b)     # tt coupling + self rotational Stokes
 
-    # D = μ_self(σ) − μ_self(σ_b) per node: exactly the self-mobility the blob does NOT already supply,
-    # so that Ξ_ii = D_i + C_bb = μ_self(σ) is the node's EXACT Stokes self-mobility. Positive because
-    # σ_b > σ and μ_self falls as 1/a (trans) / 1/a³ (rot) ⇒ Ξ stays SPD.
-    mu_t = mu_self_trans(sigma) - mu_self_trans(sigma_b)
-    mu_r = mu_self_rot(sigma) - mu_self_rot(sigma_b)
-    d = np.tile(np.array([mu_t] * 3 + [mu_r] * 3), n)      # (6N,) diagonal of D
+    # D = μ_self(σ_i) − μ_self(σ_b) per node: exactly the self-mobility the blob does NOT already
+    # supply, so that Ξ_ii = D_i + C_bb = μ_self(σ_i) is the node's EXACT Stokes self-mobility — for a
+    # 0.5 nm ssDNA bead as much as for a 1.1 nm bp. Positive because σ_b > σ_i for BOTH species and
+    # μ_self falls as 1/a (trans) / 1/a³ (rot) ⇒ Ξ stays SPD.
+    a_node = node_radii(mesh, block, sigma)
+    d = np.empty(6 * n, dtype=float)
+    d.reshape(n, 6)[:, :3] = (mu_self_trans(a_node) - mu_self_trans(sigma_b))[:, None]
+    d.reshape(n, 6)[:, 3:] = (mu_self_rot(a_node) - mu_self_rot(sigma_b))[:, None]
     if not (d > 0).all():                                   # pragma: no cover — σ_b > σ guarantees it
-        raise ValueError("coarse D is not positive — blob radius must exceed the bead radius")
+        raise ValueError("coarse D is not positive — blob radius must exceed every bead radius")
 
     dinv = 1.0 / d
     # G = C⁻¹ + A D⁻¹ Aᵀ  (the second term is block-diagonal: sum of D⁻¹ over each blob's nodes)

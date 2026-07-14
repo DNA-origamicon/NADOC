@@ -4518,6 +4518,10 @@
                     <input id="snupi-jobs-dynamics" type="checkbox"> Langevin dynamics (thermal trajectory)
                   </label>
                   <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px;margin-left:16px"
+                         title="Dynamics only: simulate the free single-stranded DNA — overhangs, toeholds, dangling scaffold ends — as explicit one-bead-per-nucleotide thermal chains, and show them moving. Without this they carry no mass, no drag and no motion, and stand frozen at their drawn pose. A NADOC extension: published SNUPI cannot represent a free tail at all (its ssDNA element must connect two base pairs). With Hydrodynamics this needs a Coarse-beads value.">
+                    <input id="snupi-jobs-tails" type="checkbox"> ↳ Free ssDNA tails (overhangs wave)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-top:5px;margin-left:16px"
                          title="Dynamics only: use the Rotne–Prager–Yamakawa coupled hydrodynamic friction matrix instead of diagonal Stokes drag">
                     <input id="snupi-jobs-hydrodynamics" type="checkbox"> ↳ Hydrodynamics (RPY coupled friction)
                   </label>

@@ -70,6 +70,22 @@ Pin: `tests/test_cando_linkers.py::test_wound_backbones_no_rise_collapse_with_ss
 `axis_end` stops short of `length_bp`; asserts u=0 recon err < 1 nm; proven to FAIL 4.93 nm on the old formula).
 
 
+## ⚙ 2026-07-13 — DISPLAY fix #3: 47% of every frame was beads the renderer cannot draw
+`nucleotide_positions` emits a bead at EVERY bp of a helix, strand or no strand — and a helix is routinely
+declared far longer than the strands on it (VoltronCore: a 288-bp helix carrying 48 bp of duplex). The renderer
+draws only nucleotides with a `strand_id` (`_geometry_for_helices` → helix_renderer's `assignedGeometry`), so
+**12 921 of VoltronCore's 27 687 emitted beads were unaddressable dead payload** — and, being the beads furthest
+outside the meshed bp range, the winding extrapolated them wildly (4.5 nm mean / **19 nm max** motion across a
+trajectory, vs 0.26 nm for a real duplex bead) **while sitting in the Kabsch fit**. Same class of bug as fix #1
+(overhang beads skewing the fit). **Fix** (`deformed_positions_with_axis`): emit only strand-covered beads.
+Payload 27 687 → **14 766** (−47%); the fit improved — u=0 FEM-display vs the rendered pose **0.40 → 0.241 nm
+mean / 0.67 → 0.565 max** (so fix #2's "residual" is now half what it was). `test_predict_shape_covers_every_
+nucleotide_including_each_loop_copy` had ENSHRINED the dead payload (its oracle was the raw lattice, though its
+docstring claimed "every nucleotide the renderer draws"); it now pins a **bijection** with the drawn set.
+Cando+snupi share this; ordinary fully-covered bundles are byte-identical. Also new: `deformed_positions_with_axis`
+now optionally emits SIMULATED free-ssDNA tail beads (`tail_positions=`/`tail_nodes=`, [[project_snupi_ssdna]] SS-4)
+— they ride the same rigid alignment but stay OUT of the Kabsch, which fix #1 is the reason for.
+
 ## Visual-vs-NAMD automation + the shape gap (2026-07-12)
 `scripts/snupi_visual_compare.py` quantifies EVERY SNUPI display mode against the free-k0 NAMD DCD
 (shape RMSD to the MD mean + twist/bend/span; RMSF pattern; DCCM), across cando / snupi-default /
@@ -114,7 +130,8 @@ snupi-corotational. CI-safe building-block pins in `tests/test_snupi_visual_comp
   the Gaussian NMA, [0,1], captures off-axis coupling the Pearson DCCM misses). Pin `test_g7_generalized_*`.
 - **Remaining caveat:** eigenstrain + field are dead loads in the corotational solve (not co-rotated).
   **Verdict unchanged: Phase D improves only the Fine SHAPE, not the validated RMSF/DCCM metrics (separate NMA).**
-  ALL gaps G1–G12 now closed; only G9/G10 remain (situational — ssDNA gaps / canonical 2.25 nm CO init config).
+  ALL gaps G1–G12 now closed. **G9 closed 2026-07-13** (SS-1 — SNUPI's real ssDNA element, measured from
+  the binary; see [[project_snupi_ssdna]]). Only **G10** remains (canonical 2.25 nm CO init config).
 
 ## ✅ Phase C DONE (2026-07-12) — G7 + G8 (new observables, no impact on the RMSF verdict)
 - **G7 BP–BP cross-correlation matrix (DCCM, S11).** `compute_correlation_matrix(K, n, M)` — the
@@ -229,7 +246,7 @@ Impact key: **[R]** changes the NMA operator/modes → moves the validated RMSF-
 | G6 ✅ | Generalized eigenproblem + mass matrix (S10) | K·Φ = M·Φ·Λ with a sequence-dependent nodal MASS matrix M (Σ of the two base masses / N_A) | **DONE: `assemble_mass_matrix` (SPD) + generalized `eigsh(K,M=M,σ)` for snupi; cando K-only** | **[R]** | **DONE 2026-07-11.** Near-no-op on RMSF (bp mass ~seq-independent); kept for **G8**. |
 | G7 ✅ | BP–BP cross-correlation matrix (S11) | Pearson PC_ij + generalized (MI-based) GC_ij correlation MATRIX, MD vs FE | **DONE: `compute_correlation_matrix` (Pearson DCCM) + MD comparator (`snupi_dccm_compare.py`)** | **[+]** | **DONE 2026-07-12.** snupi→MD 0.491 > cando 0.454 (HC) — 2nd validation channel. (MI-based GC deferred.) |
 | G8 ✅ | Persistence length from NMA (S12) | bend + torsion L_p from NMA natural FREQUENCIES (Euler-Bernoulli fit βₖLc=4.733,7.853…) | **DONE (bending): `persistence_length_from_nma` fundamental ω₁ → EI_eff → L_p ≈ 2.6–4.5 µm** | **[+]** | **DONE 2026-07-12.** Torsion=None + no clean overtone series (short/thick bundles) — documented. |
-| G9 | Short-ssDNA model (S5) | equilibrated end-to-end distance for SHORT ssDNA (gaps) + nonlinear FJC/WLC, Pb=0.74 nm | translational Marko–Siggia WLC spring for extra-base crossovers only | **[S]**/**[R]** for gapped designs | **Med** — matters only for designs with ssDNA gaps/linkers; add the finite-Ree short-chain stiffness. |
+| G9 ✅ | Short-ssDNA model (S5) | equilibrated end-to-end distance for SHORT ssDNA (gaps) + nonlinear FJC/WLC | **CLOSED 2026-07-13** — `snupi_material.ssdna_element`, MEASURED from the SNUPI binary's `PROP` array (n = 1…24), one isotropic EB beam per bridging run | done | See [[project_snupi_ssdna]] SS-1. Extra-base crossovers still use the old spring (not in any domain → invisible to the classifier). |
 | G10 | Canonical initial config (S8) | build from caDNAno: straight helices, 0.34 nm rise, **2.25 nm initial CO distance**, gradual ω=34.29°/33.75° twist, major-groove angle | NADOC's own helix-axis geometry (`deformed_helix_axes`) | **[R]** (sets ES engagement + initial strain) | **Med-High** — a parallel initial-config path; risks diverging from NADOC's geometric layer (Three-Layer). Prefer to keep NADOC geometry; only adopt SNUPI's 2.25 nm CO spacing if exp42 shows it matters. |
 | G11 ✅ | Electrostatic consistent tangent (S6.2/S9) | full nonlinear-spring tangent inside the Newton solve | **DONE (in the corotational Newton): FULL tangent `axial_only=False` via the `extra_ft` hook** | **[R]** minor | **DONE 2026-07-12.** The fixed-point NMA path still uses PD axial-only (correct there). |
 | G12 ✅ | Salt as a parameter (S7) | q=0.7 e @ 20 mM, 1.5 e @ 100 mM MgCl₂ (λ_D from ionic strength) | **DONE: `mgcl2_M` job param (default 0.02) → `ESParams.for_conditions`, cached per molarity** | **[R]** minor | **DONE 2026-07-11.** |
@@ -255,8 +272,11 @@ Impact key: **[R]** changes the NMA operator/modes → moves the validated RMSF-
   opt-in `corotational=True`, 6HB converges ~47 s. Does NOT move the validated RMSF/DCCM (Fine SHAPE only).
 
 **Phase E — situational:**
-- **G9** short-ssDNA (only for gapped/linker designs); **G10** canonical initial config (only if exp42 shows
-  the 2.25 nm CO spacing matters — otherwise keep NADOC geometry, respect the Three-Layer Law).
+- ~~**G9** short-ssDNA~~ — **CLOSED 2026-07-13** by SS-1 ([[project_snupi_ssdna]]). Not situational after all:
+  it also fixed two real structural bugs (rigid beams through vacuum; 33 of VoltronCore's 35 ssDNA hops
+  entirely uncoupled). exp42 flat (≤0.004), cando byte-identical.
+- **G10** canonical initial config (only if exp42 shows the 2.25 nm CO spacing matters — otherwise keep
+  NADOC geometry, respect the Three-Layer Law).
 
 Every phase is gated behind `material="snupi"` (CanDo stays byte-identical) and pinned with a mechanical
 unit test; re-run `scripts/snupi_cross_compare.py` after each [R] phase to measure the exp42 delta.

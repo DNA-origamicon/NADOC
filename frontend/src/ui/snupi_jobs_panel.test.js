@@ -6,6 +6,7 @@ import {
   snupiJobIsActive,
   launchBlocked,
   materialLabel,
+  advancedGuards,
   solverLabel,
   runningJob,
   solveDetailText,
@@ -127,6 +128,38 @@ describe('solverLabel', () => {
   it('names the Langevin dynamics modes when dynamics is set', () => {
     expect(solverLabel({ dynamics: true })).toBe('Dynamics (Langevin)')
     expect(solverLabel({ dynamics: true, hydrodynamics: true })).toBe('Dynamics (RPY, exact)')
+  })
+  it('names the free ssDNA tails — a NADOC extension published SNUPI cannot represent', () => {
+    expect(solverLabel({ dynamics: true, tails: true })).toBe('Dynamics (Langevin) + ssDNA tails')
+    expect(solverLabel({ dynamics: true, hydrodynamics: true, hydro_coarse_bp: 8, tails: true }))
+      .toBe('Dynamics (RPY, 1 bead/8 bp) + ssDNA tails')
+    expect(solverLabel({ nonlinear: true, tails: true })).toBe('Fine (nonlinear)')  // static: no tails
+  })
+})
+
+describe('advancedGuards', () => {
+  it('gates free ssDNA tails on the dynamics engine — they are absent from the static solve', () => {
+    // The failure this replaces: the box looked armed, the flag was dropped, and a plain static
+    // solve ran with no tails and no error.
+    const off = advancedGuards({ dynamics: false, tails: true })
+    expect(off.tailsDisabled).toBe(true)
+    expect(off.tailsReason).toMatch(/dynamics/i)
+    expect(advancedGuards({ dynamics: true }).tailsDisabled).toBe(false)
+  })
+  it('gates tails on the SNUPI material — CanDo has no ssDNA chain model', () => {
+    expect(advancedGuards({ dynamics: true, material: 'cando' }).tailsDisabled).toBe(true)
+    expect(advancedGuards({ dynamics: true, material: 'snupi' }).tailsDisabled).toBe(false)
+  })
+  it('gates hydrodynamics — and its coarse-bead size — on dynamics', () => {
+    expect(advancedGuards({ dynamics: false }).hydroDisabled).toBe(true)
+    expect(advancedGuards({ dynamics: true, hydrodynamics: false }).coarseDisabled).toBe(true)
+    expect(advancedGuards({ dynamics: true, hydrodynamics: true }).coarseDisabled).toBe(false)
+  })
+  it('forbids EXACT friction with tails — an ssDNA bead needs its own radius, which only blobs carry', () => {
+    expect(advancedGuards({ dynamics: true, hydrodynamics: true, tails: true }).exactDisabled).toBe(true)
+    expect(advancedGuards({ dynamics: true, hydrodynamics: true, tails: false }).exactDisabled).toBe(false)
+    // no hydrodynamics at all → the choice is moot, not forbidden
+    expect(advancedGuards({ dynamics: true, tails: true }).exactDisabled).toBe(false)
   })
 })
 

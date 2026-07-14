@@ -320,12 +320,23 @@ def test_predict_shape_covers_every_nucleotide_including_each_loop_copy():
 
     Regression (this bug): the pre-fix deformed_positions emitted no `copy` field, so
     all loop copies aliased to copy 0 → the extra loop bases were never moved/coloured
-    by any display toggle.  A collapsed-key assertion passed anyway (false confidence)."""
+    by any display toggle.  A collapsed-key assertion passed anyway (false confidence).
+
+    THE ORACLE IS THE RENDERER'S OWN NUCLEOTIDE LIST (``_geometry_for_helices`` — what
+    ``GET /design/geometry`` serves and the renderer draws), not the raw lattice.  This test
+    used to build its expectation from ``nucleotide_positions``, which emits a bead at EVERY bp
+    of a helix whether a strand is there or not — the scaffold-cap bp carry a REVERSE strand and
+    no FORWARD one, and a helix is routinely declared longer than the strands on it.  Demanding
+    coverage of those bare lattice sites forced the display to emit beads the renderer cannot
+    address: 126 here, and 12 921 on VoltronCore (~47% of every trajectory frame), which also
+    dragged the Kabsch fit around (they are the beads furthest outside the meshed range, so the
+    winding extrapolates them wildly).  The real invariant is a BIJECTION with the drawn set —
+    every drawn bead addressed, and nothing emitted that isn't drawn."""
     from collections import Counter
 
     from backend.api import headless_build as hb
     from backend.api import state as design_state
-    from backend.core.geometry import nucleotide_positions
+    from backend.api.crud import _geometry_for_helices
     from backend.physics.fem_solver import deformed_positions
 
     cells = [(0, 1), (1, 1), (1, 2), (1, 3), (0, 3), (0, 2)]
@@ -339,18 +350,17 @@ def test_predict_shape_covers_every_nucleotide_including_each_loop_copy():
             for bp in (20, 40, 60):
                 hb.loop_skip(h.id, bp, 1 if h.grid_pos[0] == 0 else -1)
         d = design_state.get_or_404().model_copy(deep=True)
+        drawn_nucs = _geometry_for_helices(d, None)   # exactly what the renderer receives
 
     # Every nucleotide the renderer draws, keyed WITH its loop-copy index (appearance
     # order within a (helix, bp, dir) — the same order the renderer + backend assign).
     seen: Counter = Counter()
     expected: set = set()
-    total_nuc = 0
-    for helix in d.helices:
-        for nuc in nucleotide_positions(helix):
-            k = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
-            expected.add((*k, seen[k]))
-            seen[k] += 1
-            total_nuc += 1
+    for nuc in drawn_nucs:
+        k = (nuc["helix_id"], nuc["bp_index"], nuc["direction"])
+        expected.add((*k, seen[k]))
+        seen[k] += 1
+    total_nuc = len(drawn_nucs)
     # The test is only meaningful if the design actually has loop copies (copy > 0).
     assert any(c > 0 for *_rest, c in expected), "design must contain loop inserts (copy>0)"
 
@@ -362,6 +372,8 @@ def test_predict_shape_covers_every_nucleotide_including_each_loop_copy():
     covered = {(p["helix_id"], p["bp_index"], p["direction"], p["copy"]) for p in pos}
     missing = expected - covered
     assert not missing, f"{len(missing)} loop/ss nucleotide(s) stranded (no predicted position)"
+    dead = covered - expected
+    assert not dead, f"{len(dead)} bead(s) emitted that the renderer cannot draw (dead payload)"
     assert covered == expected            # exact per-copy coverage, no phantom keys
     assert len(pos) == total_nuc          # no loop copies collapsed away
 

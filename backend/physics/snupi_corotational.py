@@ -99,11 +99,18 @@ def _cr_frame(x1, x2, R1, R2):
     return np.column_stack([e1, e2, e3]), Lf
 
 
-def element_reference(x10, x20, R10, R20):
+def element_reference(x10, x20, R10, R20, rest_length=None):
     """Rest data ``(L0, E0, Rref1, Rref2)`` from the initial config; ``RrefN = E0ᵀ RN0`` is node N's
     initial orientation relative to the initial corotated frame (so rest/rigid motion → zero
-    deformation)."""
+    deformation).
+
+    ``rest_length`` overrides ``L0`` for an element whose UNSTRESSED length differs from the
+    distance between its nodes in the initial config — SNUPI's ssDNA element, whose rest length is
+    the WLC RMS end-to-end distance (G9/SS-1). The axial deformation ``Lf − L0`` then starts
+    non-zero, so a short single-stranded gap enters the solve pre-tensioned, as it physically is."""
     E0, L0 = _cr_frame(x10, x20, R10, R20)
+    if rest_length is not None:
+        L0 = float(rest_length)
     return L0, E0, E0.T @ R10, E0.T @ R20
 
 

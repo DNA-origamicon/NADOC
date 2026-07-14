@@ -5,11 +5,11 @@
       "design": "6hbx100_noT",
       "lattice": "HC",
       "nadoc": "6hbx100_noT.nadoc",
-      "solve_seconds": 2.5,
+      "solve_seconds": 2.4,
       "n_bp_nodes": 630,
       "rmsf_mean_nm": {
         "cando": 0.4109,
-        "snupi": 0.4622,
+        "snupi": 0.4598,
         "md": 0.3377
       },
       "rmsf_reference": "namd",
@@ -20,46 +20,46 @@
           "n": 630
         },
         "snupi": {
-          "pearson": 0.623,
-          "spearman": 0.4202,
+          "pearson": 0.619,
+          "spearman": 0.4174,
           "n": 630
         }
       },
       "shape_descriptors": {
         "twist_total_deg": {
           "namd": 23.568,
-          "cando": -0.027,
-          "snupi": -0.027
+          "cando": -0.001,
+          "snupi": -0.001
         },
         "twist_per_turn_deg": {
           "namd": 2.326,
-          "cando": -0.003,
-          "snupi": -0.003
+          "cando": -0.0,
+          "snupi": -0.0
         },
         "bend_angle_deg": {
           "namd": 6.9,
-          "cando": 1.196,
-          "snupi": 1.196
+          "cando": 0.901,
+          "snupi": 0.901
         },
         "bend_radius_nm": {
           "namd": 265.161,
-          "cando": 1540.368,
-          "snupi": 1540.368
+          "cando": 2031.322,
+          "snupi": 2031.322
         },
         "radius_of_gyration_nm": {
           "namd": 10.554,
-          "cando": 10.624,
-          "snupi": 10.624
+          "cando": 10.595,
+          "snupi": 10.595
         },
         "end_to_end_nm": {
           "namd": 33.631,
-          "cando": 33.873,
-          "snupi": 33.873
+          "cando": 33.66,
+          "snupi": 33.66
         },
         "axial_span_nm": {
           "namd": 35.522,
-          "cando": 35.708,
-          "snupi": 35.708
+          "cando": 35.397,
+          "snupi": 35.397
         }
       }
     },
@@ -67,11 +67,11 @@
       "design": "3x4SQ",
       "lattice": "SQ",
       "nadoc": "3x4SQ.nadoc",
-      "solve_seconds": 2.2,
+      "solve_seconds": 2.4,
       "n_bp_nodes": 488,
       "rmsf_mean_nm": {
         "cando": 0.4628,
-        "snupi": 0.4572,
+        "snupi": 0.457,
         "md": 0.2733
       },
       "rmsf_reference": "namd",
@@ -82,8 +82,8 @@
           "n": 488
         },
         "snupi": {
-          "pearson": 0.7629,
-          "spearman": 0.6412,
+          "pearson": 0.7623,
+          "spearman": 0.6407,
           "n": 488
         }
       },
@@ -91,37 +91,37 @@
         "twist_total_deg": {
           "namd": 0.325,
           "cando": 5.535,
-          "snupi": 12.231
+          "snupi": 11.416
         },
         "twist_per_turn_deg": {
           "namd": 0.077,
           "cando": 1.372,
-          "snupi": 3.019
+          "snupi": 2.82
         },
         "bend_angle_deg": {
           "namd": 13.206,
           "cando": 14.139,
-          "snupi": 14.377
+          "snupi": 11.728
         },
         "bend_radius_nm": {
           "namd": 49.632,
           "cando": 45.445,
-          "snupi": 44.94
+          "snupi": 54.939
         },
         "radius_of_gyration_nm": {
           "namd": 5.279,
           "cando": 5.135,
-          "snupi": 5.128
+          "snupi": 5.133
         },
         "end_to_end_nm": {
           "namd": 14.543,
           "cando": 13.773,
-          "snupi": 13.774
+          "snupi": 13.797
         },
         "axial_span_nm": {
           "namd": 14.881,
           "cando": 14.137,
-          "snupi": 14.2
+          "snupi": 14.194
         }
       }
     }

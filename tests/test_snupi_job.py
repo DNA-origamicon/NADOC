@@ -180,6 +180,30 @@ def test_runner_forwards_material_anchors_field_to_predict_shape(routed_6hb, tmp
     assert "stop-after-capture" in (job.error or "")
 
 
+def test_runner_forwards_the_ssdna_tail_flags_to_predict_shape(routed_6hb, tmp_path, monkeypatch):
+    """SS-4: the free-ssDNA-tail flags must survive the trip to the worker. If they don't, the
+    Advanced-card checkbox silently does nothing and the overhangs stay frozen."""
+    import backend.physics.fem_solver as fs
+    from backend.core import snupi_runner as sr
+    from backend.core.snupi_job import new_snupi_job
+
+    captured = {}
+
+    def _spy(design, **kw):
+        captured.update(kw)
+        raise RuntimeError("stop-after-capture")
+
+    monkeypatch.setattr(fs, "predict_shape", _spy)
+
+    job = new_snupi_job("6hb", dynamics=True, tails=True, tail_max_nt=8, n_nucleotides=1000)
+    job.save(tmp_path)
+    sr.prepare_snupi_job(routed_6hb, job, tmp_path)
+    sr.solve_and_cache(job, tmp_path)
+    assert captured.get("dynamics") is True
+    assert captured.get("tails") is True
+    assert captured.get("tail_max_nt") == 8
+
+
 def test_linear_snupi_job_completes_and_caches(routed_6hb, tmp_path):
     from backend.core import snupi_runner as sr
     from backend.core.snupi_job import SnupiStatus

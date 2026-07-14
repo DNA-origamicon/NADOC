@@ -161,10 +161,27 @@ XOVER_STIFF_SCALE = 100.0  # crossover-link stiffness relative to DNA (≈10× s
 
 @dataclass
 class FEMNode:
-    """One node on the helix axis; 6 DOF."""
+    """One node on the helix axis; 6 DOF.
+
+    ``kind`` distinguishes the two node classes (SS-0, see ``snupi_ssdna`` and
+    ``memory/project_snupi_ssdna.md``):
+
+    * ``"bp"`` — a duplex-core base pair. The ONLY class SNUPI has, and the only class
+      that enters the static stiffness matrix and the NMA. Every node is this today.
+    * ``"ss"`` — a single-stranded nucleotide on a free tail (overhang / dangling scaffold
+      end). A NADOC extension beyond published SNUPI, added in SS-2. It participates in the
+      Langevin dynamics only — **never** in ``assemble_global_stiffness`` / the NMA, because
+      a floppy tail's near-zero eigenvalues would flood the 200-mode basis and destroy the
+      validated duplex-core RMSF.
+
+    ``direction`` is set on ``ss`` nodes so a tail bead maps back to its render bead key
+    ``(helix_id, bp, direction)``; it stays None on ``bp`` nodes (a bp has both backbones).
+    """
     helix_id: str
     global_bp: int          # global bp index (matches NucleotidePosition.bp_index)
     position: np.ndarray    # 3D axis position, nm
+    kind: str = "bp"                    # "bp" | "ss"
+    direction: Optional[str] = None     # ss nodes only: the backbone this nucleotide is on
 
 
 @dataclass
@@ -190,6 +207,15 @@ class FEMElement:
     # anisotropic bending EIy≠EIz is oriented per-bp instead of in an arbitrary phase. Used ONLY
     # by the RMSF NMA under material="snupi" (bp_registered_frame=True); None → fall back to el.R.
     R_bp: Optional[np.ndarray] = None
+    # G9/SS-1: SNUPI's ssDNA element. When set, this beam is not duplex at all — it is the
+    # single collapsed beam SNUPI puts across a run of `ss_nt` UNPAIRED nucleotides bridging
+    # two bp nodes (an interior scaffold gap or a cross-helix ssDNA hop). It is ISOTROPIC:
+    # `ea`/`ei`/`gj` come from snupi_material.ssdna_element and are assembled with the plain
+    # Euler-Bernoulli `_beam_stiffness_local`, bypassing the anisotropic motif 6×6 entirely.
+    # `length` is then the WLC RMS end-to-end REST length (SNUPI's), not the node separation —
+    # so the element carries the real pre-tension in the corotational solve. Only emitted for
+    # material="snupi"; None on every duplex/crossover beam and on the whole cando path.
+    ss_nt: Optional[int] = None
 
 
 @dataclass
@@ -328,7 +354,7 @@ def _classify_crossovers(design: Design) -> Dict[str, str]:
     return out
 
 
-def build_fem_mesh(design: Design) -> FEMMesh:
+def build_fem_mesh(design: Design, material: str = "cando") -> FEMMesh:
     """
     Build an FEMMesh from a NADOC Design.
 
@@ -341,7 +367,16 @@ def build_fem_mesh(design: Design) -> FEMMesh:
     Crossover indices that fall just outside a helix's bp range (e.g. scaffold
     routing junctions) are clamped to the nearest helix endpoint so they
     still contribute mechanical coupling between adjacent helix ends.
+
+    ``material="snupi"`` additionally gives every BRIDGING ssDNA run — a stretch of unpaired
+    nucleotides with a meshed bp node on both sides — SNUPI's real ssDNA element (G9/SS-1;
+    see :func:`_add_snupi_ssdna_bridges`).  Under ``"cando"`` (the default) the mesh is
+    byte-identical to before: an interior gap keeps its full-stiffness duplex beam and a
+    cross-helix hop keeps its crude L_P_SS = 1.5 nm axial spring.
     """
+    if material not in ("cando", "snupi"):
+        raise ValueError(f"unknown FEM material {material!r} (expected 'cando' or 'snupi')")
+    snupi_ss = material == "snupi"
     mesh = FEMMesh()
     # Map (helix_id, global_bp) → node index for crossover wiring.
     node_map: Dict[Tuple[str, int], int] = {}
@@ -388,6 +423,14 @@ def build_fem_mesh(design: Design) -> FEMMesh:
         nicks = nick_bp.get(helix.id, set())
         for k in range(len(bps) - 1):
             gap = bps[k + 1] - bps[k]
+            if snupi_ss and gap > 1:
+                # Not a duplex step at all — the intervening bp carry no base pair. Whatever
+                # DOES connect these two blocks (an interior ssDNA gap, or nothing at all when
+                # the strand physically leaves the helix and comes back) is emitted by
+                # _add_snupi_ssdna_bridges from the real strand path. Welding them with a
+                # full-stiffness duplex beam here — the cando behaviour — is what produced
+                # VoltronCore's two 22.1 nm rigid beams through 54 bp of vacuum.
+                continue
             nicked = bps[k] in nicks or bps[k + 1] in nicks
             family = "nicked_bp" if nicked else "regular_bp"
             # G1: resolve the element's bp-step motif from the forward-strand sequence.
@@ -465,12 +508,66 @@ def build_fem_mesh(design: Design) -> FEMMesh:
     # mechanically UNCOUPLED. Whole sub-bundles joined to the body only by the scaffold or a
     # staple crossing through such stubs then float free (→ they explode in the nonlinear
     # solve, and add spurious rigid modes to the RMSF NMA). Couple every such hop explicitly.
-    _add_ssdna_hops(design, mesh, helix_bp_range, _resolve_node)
+    _add_ssdna_hops(design, mesh, helix_bp_range, _resolve_node, ss_springs=not snupi_ss)
+
+    # ── SNUPI's ssDNA element (G9/SS-1) ─────────────────────────────────────────
+    if snupi_ss:
+        _add_snupi_ssdna_bridges(design, mesh, node_map)
 
     return mesh
 
 
-def _add_ssdna_hops(design, mesh, helix_bp_range, resolve_node) -> None:
+def _add_snupi_ssdna_bridges(design, mesh, node_map) -> None:
+    """Give every BRIDGING ssDNA run SNUPI's real ssDNA element (material="snupi" only).
+
+    SNUPI's third connection type — after the bp step and the crossover step — is the
+    "end-to-end connection of single-stranded DNA": each contiguous run of unpaired
+    nucleotides collapses to exactly ONE 2-node beam between the two base-pair nodes that
+    flank it (verified by bijection against the real binary — see project_snupi_ssdna).  The
+    beam is isotropic and soft, and its rest length is the worm-like-chain RMS end-to-end
+    distance, NOT the contour: 24 nt spans 4.15 nm, not 16 nm.  Properties come from
+    :func:`snupi_material.ssdna_element`, which is measured from SNUPI itself.
+
+    This replaces two wrong models at once (both kept on the cando path):
+      * an INTERIOR gap (both flanks on the same helix) used to be spanned by a
+        full-stiffness dsDNA beam — rigid where the structure is actually floppy;
+      * a cross-helix HOP used to get a translational-only WLC spring at L_P_SS = 1.5 nm —
+        the right idea, wrong constants, and with no bending or torsional stiffness at all.
+
+    Runs are enumerated by :func:`snupi_ssdna.classify_ssdna_runs`, which walks the strand
+    path at NUCLEOTIDE granularity.  TAIL runs (overhangs, dangling ends — one meshed
+    neighbour) are skipped: they bear no load between duplexes and published SNUPI cannot
+    represent them at all.  They are a NADOC extension that lives in the Langevin dynamics
+    only (SS-2/3/4), never in this stiffness matrix.
+    """
+    from backend.physics.snupi_material import ssdna_element
+    from backend.physics.snupi_ssdna import classify_ssdna_runs
+
+    for run in classify_ssdna_runs(design):
+        if run.kind != "bridge":
+            continue
+        a5, a3 = run.anchor_5, run.anchor_3
+        ni = node_map.get((a5.helix_id, a5.bp))
+        nj = node_map.get((a3.helix_id, a3.bp))
+        if ni is None or nj is None or ni == nj:
+            continue
+        prop = ssdna_element(run.n_nt)
+        chord = mesh.nodes[nj].position - mesh.nodes[ni].position
+        norm = float(np.linalg.norm(chord))
+        # Rest length is SNUPI's, not the node separation — so the element carries the real
+        # pre-tension (short gaps sit taut). The frame only needs an axial direction; the
+        # element is isotropic, so the transverse phase is immaterial.
+        axis_hat = chord / norm if norm > 1e-9 else np.array([0.0, 0.0, 1.0])
+        mesh.elements.append(FEMElement(
+            node_i=ni, node_j=nj,
+            length=prop["l_rest"],
+            R=_frame_from_helix_axis(axis_hat),
+            ea=prop["ea"], ei=prop["ei"], gj=prop["gj"],
+            ss_nt=run.n_nt,
+        ))
+
+
+def _add_ssdna_hops(design, mesh, helix_bp_range, resolve_node, ss_springs: bool = True) -> None:
     """Close the FEM load path across every strand's ssDNA HELIX HOPS — the general
     mechanism for ssDNA-connected blocks (any strand type, not just LINKER).
 
@@ -487,7 +584,11 @@ def _add_ssdna_hops(design, mesh, helix_bp_range, resolve_node) -> None:
     Endpoint polarity follows the strand path (prev domain's 3' exit → next domain's 5'
     entry), reusing the proven traversal — no independent geometry reasoning. Strand-END
     overhangs never couple (``prev`` is None until the first meshed domain), and same-helix
-    ssDNA gaps are skipped (only cross-helix hops are real mechanical couplings)."""
+    ssDNA gaps are skipped (only cross-helix hops are real mechanical couplings).
+
+    ``ss_springs=False`` (material="snupi") suppresses the ssDNA WLC spring branch: those hops
+    get SNUPI's real ssDNA BEAM instead, from :func:`_add_snupi_ssdna_bridges`. The ds LINKER
+    rigid bridges below are unaffected — they are duplex, not ssDNA."""
     for s in design.strands:
         if s.is_reference or len(s.domains) < 2:
             continue
@@ -508,6 +609,10 @@ def _add_ssdna_hops(design, mesh, helix_bp_range, resolve_node) -> None:
                 if ni is not None and nj is not None and ni != nj:
                     if ss_between > 0:
                         # ss hop: compliant WLC tether across the ssDNA run.
+                        if not ss_springs:
+                            prev = dm
+                            ss_between = 0
+                            continue      # snupi: a real ssDNA beam covers this hop instead
                         L_c = ss_between * RISE_SS
                         k_trans = 3.0 * KBT / (2.0 * L_c * L_P_SS)
                         mesh.springs.append(
@@ -715,7 +820,16 @@ def assemble_global_stiffness(
     _kloc_cache: Dict[Tuple, np.ndarray] = {}
     for el in mesh.elements:
         L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
-        if material == "snupi":
+        if el.ss_nt is not None:
+            # G9/SS-1: SNUPI's ssDNA element is the ONE isotropic element in the model — a
+            # plain Euler-Bernoulli beam with scalar (EA, EI, GJ) and zero shear rigidity.
+            # It has no motif and no 6×6, so it bypasses the anisotropic path entirely.
+            key = ("ss", round(L, 6), el.ea, el.ei, el.gj)
+            K_local = _kloc_cache.get(key)
+            if K_local is None:
+                K_local = _beam_stiffness_local(L, el.ea, el.ei, el.gj)
+                _kloc_cache[key] = K_local
+        elif material == "snupi":
             # G1: use the element's SEQUENCE-specific 6×6 when its bp-step motif is resolved
             # (motif_D), else the family sequence-mean (family_mean_D). motif is None for
             # nicked/crossover/unsequenced steps → identical to the pre-G1 mean behaviour.
@@ -943,6 +1057,8 @@ def assemble_prestress_force(mesh: FEMMesh, design: Design,
     # and carry no eigenstrain.
     elems_by_helix: Dict[str, List[FEMElement]] = {}
     for el in mesh.elements:
+        if el.ss_nt is not None:
+            continue      # ssDNA bridge: no duplex, so no loop/skip rest-twist eigenstrain
         hi = mesh.nodes[el.node_i].helix_id
         if hi == mesh.nodes[el.node_j].helix_id:
             elems_by_helix.setdefault(hi, []).append(el)
@@ -1084,7 +1200,8 @@ def _reframe_elements(mesh: FEMMesh, positions: List[np.ndarray]) -> None:
         L = float(np.linalg.norm(v))
         if L < 1e-9:
             continue
-        el.length = L
+        if el.ss_nt is None:
+            el.length = L      # ssDNA: `length` is SNUPI's REST length, not the chord — keep it
         el.R = _frame_from_helix_axis(v / L)
 
 
@@ -1306,6 +1423,16 @@ def build_corotational_elements(mesh: "FEMMesh", X0: Optional[np.ndarray] = None
     elements = []
     for el in mesh.elements:
         L = el.length if el.length > 1e-9 else FEM_RISE_PER_BP
+        if el.ss_nt is not None:
+            # G9/SS-1: isotropic Euler-Bernoulli ssDNA beam, and its rest length is SNUPI's WLC
+            # RMS end-to-end distance rather than the node separation — so a short gap enters the
+            # Newton solve genuinely TAUT and pulls its two duplexes together, which is the
+            # pre-tension the ssDNA paper measures (~12 pN).
+            ref = cr.element_reference(X0[el.node_i], X0[el.node_j], np.eye(3), np.eye(3),
+                                       rest_length=L)
+            K12 = cr.local_beam_stiffness_12(L, el.ea, el.gj, el.ei, el.ei)
+            elements.append((el.node_i, el.node_j, ref, K12))
+            continue
         D = _sm.motif_D(el.motif_family, el.motif) if el.motif else _sm.family_mean_D(el.motif_family)
         ref = cr.element_reference(X0[el.node_i], X0[el.node_j], np.eye(3), np.eye(3))
         elements.append((el.node_i, el.node_j, ref, _snupi_element_stiffness(L, D)))
@@ -1850,10 +1977,104 @@ def _wound_backbones_for_helix(helix, straight_nucs, node_anchors):
     return positions, normals, tangents
 
 
+def _tail_bead_entries(
+    design: "Design",
+    tail_positions: Optional[np.ndarray],
+    tail_nodes: Optional[List[dict]],
+    cs: np.ndarray, cd: np.ndarray, R: np.ndarray,
+) -> List[dict]:
+    """Display entries for the SIMULATED free-ssDNA tail beads (SS-4), or ``[]``.
+
+    ``tail_positions`` (T, 3) are absolute FEM-frame bead positions from the Langevin engine
+    (``snupi_dynamics.simulate_equilibrium(tails=True)`` → ``tail_frames``); ``tail_nodes`` is
+    its parallel metadata list.  They are carried through the caller's core-only Kabsch
+    transform ``(cs, cd, R)`` — the tails must NOT influence that fit.
+
+    Orientation: only the tail beads' POSITIONS are simulated (the trajectory keeps the
+    translational DOF), so each bead's slab frame is rebuilt geometrically — tangent along the
+    chain, base normal = the rendered normal orthogonalised against it.  A tail is drawn as a
+    chain of beads; this only keeps its slabs from degenerating.
+    """
+    if tail_positions is None or not tail_nodes:
+        return []
+    pts = np.asarray(tail_positions, dtype=float)
+    if pts.shape[0] != len(tail_nodes):
+        raise ValueError(
+            f"tail_positions has {pts.shape[0]} beads but tail_nodes has {len(tail_nodes)}")
+
+    from backend.core.geometry import nucleotide_positions
+
+    # Rendered (straight-frame) base frames, keyed exactly like a renderer bead.  Built from the
+    # design rather than from the caller's per-helix loop because a tail commonly lives on a
+    # FULLY-UNMESHED helix (a dedicated overhang helix), which that loop never visits.
+    hids = {nd["helix_id"] for nd in tail_nodes}
+    frame_by_key: Dict[Tuple[str, int, str], Tuple[np.ndarray, np.ndarray]] = {}
+    for helix in design.helices:
+        if helix.id not in hids:
+            continue
+        for nuc in nucleotide_positions(helix):
+            frame_by_key.setdefault(
+                (nuc.helix_id, nuc.bp_index, nuc.direction.value),
+                (np.asarray(nuc.base_normal, dtype=float),
+                 np.asarray(nuc.axis_tangent, dtype=float)))
+
+    # Chain tangent per bead: the local direction of the ssDNA chain (central difference within
+    # the run; the ends take their one bond).  A 1-nt run has no chain direction — fall back to
+    # the rendered axis tangent.
+    runs: Dict[int, List[int]] = {}
+    for i, nd in enumerate(tail_nodes):
+        runs.setdefault(int(nd.get("run", 0)), []).append(i)
+
+    tangents = np.zeros_like(pts)
+    for members in runs.values():
+        members.sort(key=lambda i: int(tail_nodes[i].get("index_in_run", 0)))
+        for j, i in enumerate(members):
+            lo = members[max(0, j - 1)]
+            hi = members[min(len(members) - 1, j + 1)]
+            t = pts[hi] - pts[lo] if hi != lo else np.zeros(3)
+            n = float(np.linalg.norm(t))
+            if n < 1e-9:
+                key = (tail_nodes[i]["helix_id"], tail_nodes[i]["bp_index"],
+                       tail_nodes[i]["direction"])
+                t = frame_by_key.get(key, (None, np.array([0.0, 0.0, 1.0])))[1]
+                n = float(np.linalg.norm(t)) or 1.0
+            tangents[i] = t / n
+
+    aligned = _apply_transform(pts, cs, cd, R)
+    tan_aligned = tangents @ R.T
+
+    entries: List[dict] = []
+    seen: Dict[Tuple[str, int, str], int] = {}
+    for i, nd in enumerate(tail_nodes):
+        key = (nd["helix_id"], nd["bp_index"], nd["direction"])
+        nrm = frame_by_key.get(key, (np.array([1.0, 0.0, 0.0]), None))[0]
+        # Orthogonalise the rendered base normal against the chain tangent (Gram–Schmidt); a
+        # degenerate result (normal ∥ tangent) takes any perpendicular.
+        t = tangents[i]
+        nrm = np.asarray(nrm, dtype=float) - float(nrm @ t) * t
+        if float(np.linalg.norm(nrm)) < 1e-6:
+            alt = np.array([1.0, 0.0, 0.0]) if abs(t[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+            nrm = np.cross(t, alt)
+        nrm = (nrm / float(np.linalg.norm(nrm))) @ R.T
+        copy = seen.get(key, 0)
+        seen[key] = copy + 1
+        entries.append({
+            "helix_id": key[0], "bp_index": key[1], "direction": key[2], "copy": copy,
+            "backbone_position": aligned[i].tolist(),
+            "nx": float(nrm[0]), "ny": float(nrm[1]), "nz": float(nrm[2]),
+            "tx": float(tan_aligned[i][0]), "ty": float(tan_aligned[i][1]),
+            "tz": float(tan_aligned[i][2]),
+        })
+    return entries
+
+
 def deformed_positions_with_axis(
     design: "Design",
     mesh: FEMMesh,
     u: np.ndarray,
+    *,
+    tail_positions: Optional[np.ndarray] = None,
+    tail_nodes: Optional[List[dict]] = None,
 ) -> Tuple[List[dict], List[dict]]:
     """
     Apply FEM displacements to the actual backbone bead positions from the
@@ -1894,6 +2115,20 @@ def deformed_positions_with_axis(
     oxDNA overlays do.  Rigid alignment preserves every intrinsic quantity (bond lengths,
     twist, curvature) — only the global pose changes.  Display-only; topology untouched.
 
+    FREE ssDNA TAILS (SS-4): overhang / toehold / dangling-scaffold-end beads carry no duplex
+    FEM node, so by default they are OMITTED (see the overhang comment below) and the renderer
+    keeps them at their rendered ball-joint pose.  When the Langevin engine has actually
+    SIMULATED them (``snupi_dynamics.simulate_equilibrium(tails=True)``), pass their bead
+    positions as ``tail_positions`` (T, 3) with the matching ``tail_nodes`` metadata (the
+    ``tail_nodes`` payload that call returns: helix_id / bp_index / direction / run /
+    index_in_run) and they are emitted at those positions instead — carried through the SAME
+    rigid alignment as the duplex core.  The Kabsch fit is still computed on the duplex core
+    ALONE: a tail is a floppy thermal coil sitting nowhere near its rendered pose, and letting
+    it into the fit is exactly the bug the VoltronCore DISPLAY fix had to undo.  A simulated
+    tail bead's position bears no relation to its rendered one (a coil ~2–5 nm across vs the
+    extended chain the renderer draws at the duplex rise) — that is the point, and nothing here
+    tries to reconcile them.
+
     Returns a list of dicts covering EVERY nucleotide (incl. each loop-insert copy):
     {helix_id, bp_index, direction, copy, backbone_position, nx, ny, nz, tx, ty, tz}
     where (nx,ny,nz) is the wound base-normal (slab bnDir) and (tx,ty,tz) the wound
@@ -1930,12 +2165,26 @@ def deformed_positions_with_axis(
     # unmeshed helix OR is an extension domain on a meshed duplex helix) plus any fully-unmeshed
     # helix (reference geometry) — applyFemPositions then keeps them at their correct RENDERED pose
     # (the snapshot geometry the overlay draws on). Clean bundles with no overhangs are unaffected.
+    #
+    # STRAND-COVERED beads only.  ``nucleotide_positions`` emits a bead for EVERY bp of a helix,
+    # strand or no strand — and a helix is routinely declared far longer than the strands actually
+    # on it (VoltronCore: a 288-bp helix carrying 48 bp of duplex).  The renderer never draws those
+    # bare-lattice nucleotides (it keeps only those with a ``strand_id`` — helix_renderer's
+    # ``assignedGeometry``), so emitting them was pure dead payload: 12 921 of VoltronCore's 27 687
+    # beads, ~47% of every trajectory frame.  Worse, they are the beads FURTHEST outside the meshed
+    # bp range, so the winding extrapolates them wildly (4.5 nm mean / 19 nm max motion across a
+    # trajectory, vs 0.26 nm for a real duplex bead) and they were dragging the Kabsch fit with them
+    # — the same class of bug as the overhang beads below.  Fully strand-covered designs (every
+    # ordinary bundle) are unaffected: every bead is covered, so nothing is dropped.
     overhang_keys: set = set()
+    strand_keys: set = set()
     for s in design.strands:
         for dm in s.domains:
-            if getattr(dm, "overhang_id", None):
-                for _bp in domain_bp_range(dm):
-                    overhang_keys.add((dm.helix_id, _bp, dm.direction.value))
+            for _bp in domain_bp_range(dm):
+                k = (dm.helix_id, _bp, dm.direction.value)
+                strand_keys.add(k)
+                if getattr(dm, "overhang_id", None):
+                    overhang_keys.add(k)
 
     seen: Counter = Counter()
     meta: List[Tuple[str, int, str, int]] = []
@@ -1959,6 +2208,8 @@ def deformed_positions_with_axis(
         wound, wnrm, wtan = _wound_backbones_for_helix(helix, straight, node_anchors.get(helix.id, []))
         for nuc, dn, w, wn, wt in zip(straight, shown, wound, wnrm, wtan):
             k = (nuc.helix_id, nuc.bp_index, nuc.direction.value)
+            if k not in strand_keys:          # bare lattice position — no strand, never drawn
+                continue
             if k in overhang_keys:            # overhang extension bead on a meshed duplex helix
                 continue                       # (no FEM basis; keep it at its rendered pose)
             fem_pts.append(w)
@@ -1982,6 +2233,9 @@ def deformed_positions_with_axis(
          "tx": float(t[0]), "ty": float(t[1]), "tz": float(t[2])}
         for m, p, n, t in zip(meta, aligned, nrm_aligned, tan_aligned)
     ]
+
+    # SIMULATED free ssDNA tails (SS-4) — appended AFTER the Kabsch fit, which stays core-only.
+    positions.extend(_tail_bead_entries(design, tail_positions, tail_nodes, cs, cd, R))
 
     # The FEM AXIS-node positions (one per duplex-core bp = mesh node), carried through
     # the SAME rigid alignment as the backbones so they overlay in-frame.  These are the
@@ -2073,11 +2327,17 @@ def _dynamics_trajectory_payload(design: "Design", mesh: "FEMMesh", out: dict, X
     """Downsample the Langevin trajectory into the {keys, frames, n_frames} wire shape the frontend
     trajectory player consumes (``framesToUpdates``): ``keys`` = per-nucleotide [helix,bp,dir,copy];
     each frame = 6 floats/key (backbone x,y,z + normal). Reconstructs each frame's backbone via the
-    same :func:`deformed_positions_with_axis` used for the mean shape (translational motion only)."""
+    same :func:`deformed_positions_with_axis` used for the mean shape (translational motion only).
+
+    When the run carried free ssDNA TAILS (SS-4), each frame's tail beads ride along at their own
+    simulated positions — so the overhangs wave in the player instead of standing frozen at their
+    rendered pose."""
     frames = out["frames"]                       # (n_frame, n_node, 3) absolute node positions
     n_node = len(mesh.nodes)
     if frames is None or len(frames) == 0:
         return {"keys": [], "frames": [], "n_frames": 0}
+    tail_frames = out.get("tail_frames")
+    tail_nodes  = out.get("tail_nodes")
     sel = np.unique(np.linspace(0, len(frames) - 1,
                                 min(_DYNAMICS_TRAJ_FRAMES, len(frames))).astype(int))
     keys = None
@@ -2085,7 +2345,10 @@ def _dynamics_trajectory_payload(design: "Design", mesh: "FEMMesh", out: dict, X
     for fi in sel:
         u = np.zeros(6 * n_node, dtype=float)
         u.reshape(n_node, 6)[:, :3] = frames[fi] - X0
-        pos, _ax = deformed_positions_with_axis(design, mesh, u)
+        pos, _ax = deformed_positions_with_axis(
+            design, mesh, u,
+            tail_positions=(tail_frames[fi] if tail_frames is not None else None),
+            tail_nodes=tail_nodes)
         if keys is None:
             keys = [[p["helix_id"], p["bp_index"], p["direction"], p.get("copy", 0)] for p in pos]
         flat: list = []
@@ -2104,6 +2367,8 @@ def _predict_shape_dynamics(
     mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
     hydrodynamics: bool = False,
     hydro_coarse_bp: Optional[int] = None,
+    tails: bool = False,
+    tail_max_nt: Optional[int] = None,
     n_steps: int = 60000,
     with_rmsf: bool = True,
     progress_cb=None,
@@ -2117,25 +2382,44 @@ def _predict_shape_dynamics(
 
     ``hydro_coarse_bp`` selects the coarse blob hydrodynamics (1 bead per k bp) — REQUIRED for
     origami-scale designs, where the exact per-bp friction is a dense O(N²) matrix that will not fit
-    (see :func:`snupi_hydrodynamics.check_friction_memory`, which refuses rather than OOM)."""
+    (see :func:`snupi_hydrodynamics.check_friction_memory`, which refuses rather than OOM).
+
+    ``tails`` (SS-4) simulates the FREE ssDNA — overhangs, toeholds, dangling scaffold ends — as
+    explicit one-bead-per-nucleotide Langevin chains (:mod:`snupi_tails`; a documented NADOC
+    extension, published SNUPI cannot represent them) and DISPLAYS them: the tail beads come back
+    in ``positions`` and in every ``trajectory`` frame at their simulated positions, instead of
+    being omitted and left at their rendered pose."""
     from backend.physics import snupi_dynamics as dyn
 
     out = dyn.simulate_equilibrium(
         design, material=material, hydrodynamics=hydrodynamics,
-        hydro_coarse_bp=hydro_coarse_bp,
+        hydro_coarse_bp=hydro_coarse_bp, tails=tails, tail_max_nt=tail_max_nt,
         with_electrostatics=(material == "snupi"), mgcl2_M=mgcl2_M,
         n_steps=n_steps, n_equil=max(1, n_steps // 5), sample_every=40, seed=0,
         progress_cb=progress_cb,
     )
-    positions, axis = deformed_positions_with_axis(design, mesh, out["mean_u"])
+    # The mean shape's tails are the LAST frame's conformation, NOT the time-mean of the tail
+    # beads. Averaging a freely-fluctuating chain over its conformations shrinks it toward its
+    # anchor — the mean of a coil is not a coil, and the payload would show every overhang
+    # collapsed into a stub with sub-bond-length "bonds". The duplex core still reports its
+    # time-mean (it fluctuates about ONE well-defined equilibrium shape, so its mean IS that
+    # shape); a tail has no such mean, so we show it in an actual equilibrium conformation.
+    tail_frames = out.get("tail_frames")
+    positions, axis = deformed_positions_with_axis(
+        design, mesh, out["mean_u"],
+        tail_positions=(tail_frames[-1] if tail_frames is not None and len(tail_frames) else None),
+        tail_nodes=out.get("tail_nodes"))
     if hydrodynamics:
         # Name the coarse-graining in the solver label — a coarse run is an APPROXIMATION to the RPY
         # kinetics (see snupi_hydro_coarse), so it must not read as the exact per-bp friction.
         solver = f"dynamics-rpy-coarse{hydro_coarse_bp}" if hydro_coarse_bp else "dynamics-rpy"
     else:
         solver = "dynamics"
+    if tails:
+        solver += "+tails"
     result: dict = {
         "solver": solver,
+        "n_tail_nodes": int(out.get("n_tail_nodes", 0)),
         "positions": positions,
         "axis": axis,
         "anchor_keys": [],
@@ -2169,6 +2453,8 @@ def predict_shape(
     dynamics: bool = False,
     hydrodynamics: bool = False,
     hydro_coarse_bp: Optional[int] = None,
+    tails: bool = False,
+    tail_max_nt: Optional[int] = None,
     dynamics_steps: int = 60000,
     progress_cb=None,
 ) -> dict:
@@ -2219,13 +2505,21 @@ def predict_shape(
     A beam FEM needs at least one element (two nodes); an empty mesh otherwise crashes deep
     in the solver with a cryptic ``AxisError``.  The job runner surfaces this message.
     """
-    mesh = build_fem_mesh(design)
+    mesh = build_fem_mesh(design, material=material)
     if len(mesh.nodes) < _MIN_FEM_NODES:
         raise ValueError(
             f"CanDo FEM shape prediction needs a double-helical (duplex) core of at least "
             f"{_MIN_FEM_NODES} base pairs, but this design meshed {len(mesh.nodes)}. "
             "There is no paired region to solve — pair the scaffold with staples first."
         )
+
+    if tails and not dynamics:
+        # Free tails exist ONLY in the Langevin engine — they are absent from K, the static solve
+        # and the NMA by decision (a floppy tail's near-zero eigenvalues would flood the 200-mode
+        # RMSF basis). Refuse rather than silently drop them.
+        raise ValueError(
+            "tails=True requires dynamics=True — free ssDNA tails live in the Langevin engine "
+            "only (they never enter the static stiffness or the NMA; see project_snupi_ssdna).")
 
     if dynamics:
         # Langevin structural-dynamics engine (project_snupi_dynamics): run an equilibrium thermal
@@ -2235,6 +2529,7 @@ def predict_shape(
         return _predict_shape_dynamics(
             design, mesh, material=material, mgcl2_M=mgcl2_M,
             hydrodynamics=hydrodynamics, hydro_coarse_bp=hydro_coarse_bp,
+            tails=tails, tail_max_nt=tail_max_nt,
             n_steps=dynamics_steps, with_rmsf=with_rmsf, progress_cb=progress_cb)
 
     fixed_nodes, anchor_keys = resolve_anchor_nodes(design, mesh, anchors)

@@ -83,6 +83,13 @@ class SnupiJob:
     dynamics:            bool = False
     hydrodynamics:       bool = False
     hydro_coarse_bp:     Optional[int] = None
+    # Free ssDNA TAILS (SS-4, dynamics + snupi only): simulate the overhangs / toeholds / dangling
+    # scaffold ends as explicit one-bead-per-nucleotide Langevin chains and DISPLAY them at their
+    # simulated positions (they otherwise stand frozen at their rendered pose).  A documented NADOC
+    # extension — published SNUPI cannot represent a free tail at all (no distal bp node).
+    # tail_max_nt optionally truncates each tail.  Never a topology edit.
+    tails:               bool = False
+    tail_max_nt:         Optional[int] = None
     # ── Job-request annotations (C1/C2): anchors + uniform E-field, NEVER a topology edit ──
     # anchors: shared oxDNA scope descriptors (overhang/cluster/domain/strand/base) held fixed
     # (Dirichlet BC) during the FEM solve.  field: {"field_pN": <force/nt, pN>, "dir": [x,y,z]} —
@@ -145,6 +152,8 @@ class SnupiJob:
         data.setdefault("dynamics", False)
         data.setdefault("hydrodynamics", False)
         data.setdefault("hydro_coarse_bp", None)
+        data.setdefault("tails", False)
+        data.setdefault("tail_max_nt", None)
         data.setdefault("anchors", None)
         data.setdefault("field", None)
         data.setdefault("design_source_path", None)
@@ -199,6 +208,8 @@ def new_snupi_job(
     dynamics: bool = False,
     hydrodynamics: bool = False,
     hydro_coarse_bp: Optional[int] = None,
+    tails: bool = False,
+    tail_max_nt: Optional[int] = None,
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
     n_nucleotides: int = 0,
@@ -214,6 +225,8 @@ def new_snupi_job(
             stage_name = f"dynamics-rpy-coarse{hydro_coarse_bp}" if hydro_coarse_bp else "dynamics-rpy"
         else:
             stage_name = "dynamics"
+        if tails:
+            stage_name += "+tails"
     else:
         stage_name = "nonlinear" if nonlinear else "linear"
     return SnupiJob(
@@ -230,6 +243,8 @@ def new_snupi_job(
         dynamics           = dynamics,
         hydrodynamics      = hydrodynamics,
         hydro_coarse_bp    = hydro_coarse_bp,
+        tails              = tails,
+        tail_max_nt        = tail_max_nt,
         anchors            = anchors,
         field              = field,
         stages             = [SnupiStageStatus(name=stage_name)],

@@ -128,6 +128,17 @@ class CreateSnupiJobRequest(BaseModel):
                                          "Minimum 4 — below that the blob is no bigger than a bead and "
                                          "the hydrodynamic coupling degenerates to Stokes. "
                                          "None = exact (refused up front if it would not fit).")
+    tails:      bool = Field(False,
+                             description="Dynamics + snupi only: simulate the FREE ssDNA — overhangs, "
+                                         "toeholds, dangling scaffold ends — as explicit one-bead-per-"
+                                         "nucleotide Langevin chains and display them at their simulated "
+                                         "positions (they are otherwise omitted and left at their "
+                                         "rendered pose). A documented NADOC extension: published SNUPI "
+                                         "cannot represent a free tail (it has no distal bp node). With "
+                                         "hydrodynamics this requires hydro_coarse_bp.")
+    tail_max_nt: Optional[int] = Field(None, ge=1, le=200,
+                             description="Tails only: truncate each tail to at most this many "
+                                         "nucleotides. None = the full tail.")
     # Job-request annotations (C1/C2): anchors held fixed (Dirichlet BC) + a uniform E-field body
     # load, both threaded into predict_shape(...).  Never a topology edit (Three-Layer Law).
     anchors:    Optional[list] = Field(None, description="Shared oxDNA anchor-scope descriptors "
@@ -161,15 +172,39 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
 
     material = body.material if body.material in ("snupi", "cando") else "snupi"
 
+    # Free ssDNA tails (SS-4) live in the Langevin engine ONLY, under the SNUPI material — they never
+    # enter the static stiffness or the NMA (a floppy tail's near-zero eigenvalues would flood the
+    # 200-mode RMSF basis).  And with hydrodynamics they need the coarse blob model, because they
+    # carry their own smaller bead radius and the exact per-bp friction is single-radius.  Refuse
+    # here with the fix, rather than let the detached worker die minutes in.
+    if body.tails:
+        if not body.dynamics:
+            raise HTTPException(400, "Free ssDNA tails need Langevin dynamics — tick 'Langevin "
+                                     "dynamics' as well (they are absent from the static solve).")
+        if material != "snupi":
+            raise HTTPException(400, "Free ssDNA tails are a SNUPI-material extension; the CanDo "
+                                     "baseline has no ssDNA chain model.")
+        if body.hydrodynamics and not body.hydro_coarse_bp:
+            raise HTTPException(400, "Free ssDNA tails with hydrodynamics need the coarse blob model "
+                                     "— choose a 'Coarse beads' value (the exact per-bp friction is "
+                                     "single-radius and cannot carry the tails' smaller bead).")
+
     # Preflight the RPY friction BEFORE spawning the detached worker. The friction is dense and O(N²)
     # in the FE node count (1 node/bp), so a full-size origami wants tens of GB; letting the worker try
     # drives the machine into swap and the OOM killer takes whatever is largest (in practice the user's
     # editor). Refuse here with the node count + the coarse-graining way out.
     if body.dynamics and body.hydrodynamics:
         from backend.physics.fem_solver import build_fem_mesh
+        from backend.physics.snupi_hydro_coarse import blob_count
         from backend.physics.snupi_hydrodynamics import HydroMemoryError, check_friction_memory
+        mesh = build_fem_mesh(design, material=material)
+        # Count the blobs for real. The coarse friction's only dense object is 6B×6B, and B is NOT
+        # ⌈N/k⌉ — blobs never straddle a helix, so a design's helix boundaries fragment it upwards.
+        # The ⌈N/k⌉ fallback therefore UNDERSTATES the cost, which is the wrong way for a guard whose
+        # job is to stop the OOM killer taking the user's editor.
+        nb = blob_count(mesh, body.hydro_coarse_bp) if body.hydro_coarse_bp else None
         try:
-            check_friction_memory(len(build_fem_mesh(design).nodes), body.hydro_coarse_bp)
+            check_friction_memory(len(mesh.nodes), body.hydro_coarse_bp, nb)
         except HydroMemoryError as exc:
             raise HTTPException(413, str(exc)) from exc
 
@@ -183,6 +218,8 @@ async def create_snupi_job(body: CreateSnupiJobRequest) -> dict:
         dynamics           = body.dynamics,
         hydrodynamics      = body.hydrodynamics,
         hydro_coarse_bp    = body.hydro_coarse_bp,
+        tails              = body.tails,
+        tail_max_nt        = body.tail_max_nt,
         anchors            = body.anchors,
         field              = body.field,
         n_nucleotides      = len(_strand_nucleotide_order(design)),

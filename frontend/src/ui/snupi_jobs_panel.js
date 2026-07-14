@@ -98,15 +98,51 @@ export function materialLabel(job) {
   return job?.material === 'cando' ? 'CanDo (isotropic)' : 'SNUPI'
 }
 
+/**
+ * Which Advanced-card options are live, given the current ticks — and WHY not, when they aren't.
+ *
+ * The dependencies are real physics constraints the backend enforces with a 400, not styling:
+ *  • Free ssDNA tails exist ONLY inside the Langevin engine. They never enter the static stiffness
+ *    or the NMA (a floppy tail's near-zero eigenvalues would flood the 200-mode RMSF basis), so a
+ *    Coarse/Fine static run cannot have them — and they are a SNUPI-material extension, so the
+ *    isotropic CanDo baseline cannot either.
+ *  • Hydrodynamics is a property of the dynamics friction, so it needs dynamics too.
+ *  • Tails + hydrodynamics REQUIRE the coarse blob model: the exact per-bp friction is single-radius
+ *    and cannot carry an ssDNA bead's smaller radius. So "Exact" is not offerable in that combination.
+ *
+ * Returned flags drive both the disabled state and the tooltip, so a box can never sit ticked while
+ * being silently dropped from the request.
+ */
+export function advancedGuards({ dynamics = false, hydrodynamics = false, tails = false,
+                                 material = 'snupi' } = {}) {
+  const tailsReason = !dynamics
+    ? 'Needs Langevin dynamics — free ssDNA tails exist only in the dynamics engine (never in the static solve or the NMA).'
+    : material === 'cando'
+      ? 'SNUPI material only — the CanDo isotropic baseline has no ssDNA chain model.'
+      : null
+  return {
+    tailsDisabled: tailsReason !== null,
+    tailsReason,
+    hydroDisabled: !dynamics,
+    hydroReason: dynamics ? null : 'Needs Langevin dynamics — hydrodynamic friction is a dynamics property.',
+    coarseDisabled: !(dynamics && hydrodynamics),
+    // Tails carry their own (smaller) hydrodynamic bead radius, which only the blob model can express.
+    exactDisabled: dynamics && hydrodynamics && tails && material === 'snupi',
+  }
+}
+
 /** Human name for the solver mode of a job. */
 export function solverLabel(job) {
   if (job?.dynamics) {
-    if (!job?.hydrodynamics) return 'Dynamics (Langevin)'
+    // Free ssDNA tails (overhangs/toeholds/dangling ends) simulated as explicit chains — a NADOC
+    // extension beyond published SNUPI, so the label says so rather than letting it pass as SNUPI.
+    const tails = job?.tails ? ' + ssDNA tails' : ''
+    if (!job?.hydrodynamics) return `Dynamics (Langevin)${tails}`
     // Name the coarse-graining: a coarse run APPROXIMATES the RPY kinetics (1 bead per k bp), so it
     // must not read as the exact per-bp friction.
     return job?.hydro_coarse_bp
-      ? `Dynamics (RPY, 1 bead/${job.hydro_coarse_bp} bp)`
-      : 'Dynamics (RPY, exact)'
+      ? `Dynamics (RPY, 1 bead/${job.hydro_coarse_bp} bp)${tails}`
+      : `Dynamics (RPY, exact)${tails}`
   }
   return job?.nonlinear ? 'Fine (nonlinear)' : 'Coarse (linear)'
 }
@@ -205,6 +241,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   const dynamicsInput = $('snupi-jobs-dynamics')
   const hydroInput = $('snupi-jobs-hydrodynamics')
   const hydroCoarseInput = $('snupi-jobs-hydro-coarse')
+  const tailsInput = $('snupi-jobs-tails')
   const showAll = $('snupi-jobs-show-all')
   const listEl = $('snupi-jobs-list')
   const detail = $('snupi-jobs-detail')
@@ -284,6 +321,53 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     })
   }
 
+  // ── Advanced-card guards ──────────────────────────────────────────────────────
+  // A dependent option is disabled AND unticked when its prerequisite is off, so the card can never
+  // show a ticked box whose flag the request drops (the failure mode this replaces: ticking "Free
+  // ssDNA tails" without dynamics looked armed, then ran an ordinary static solve with no tails and
+  // no error). The backend rejects the same combinations with a 400 — this just stops you getting
+  // there. See advancedGuards() for why each dependency exists.
+  function _syncAdvancedGuards() {
+    const g = advancedGuards({
+      dynamics:      !!dynamicsInput?.checked,
+      hydrodynamics: !!hydroInput?.checked,
+      tails:         !!tailsInput?.checked,
+      material:      materialSelect?.value === 'cando' ? 'cando' : 'snupi',
+    })
+    const gate = (input, disabled, reason) => {
+      if (!input) return
+      if (disabled) input.checked = false      // never leave a dropped flag looking armed
+      input.disabled = disabled
+      const label = input.closest('label')
+      if (label) {
+        label.style.opacity = disabled ? '0.45' : '1'
+        if (reason) label.dataset.guardReason = reason
+        else delete label.dataset.guardReason
+      }
+      input.title = reason || ''
+    }
+    gate(tailsInput, g.tailsDisabled, g.tailsReason)
+    gate(hydroInput, g.hydroDisabled, g.hydroReason)
+
+    if (hydroCoarseInput) {
+      hydroCoarseInput.disabled = g.coarseDisabled
+      const exact = Array.from(hydroCoarseInput.options).find((o) => o.value === '')
+      if (exact) {
+        exact.disabled = g.exactDisabled
+        // Tails need a blob radius the exact per-bp friction cannot express — fall back to the
+        // calibrated default rather than letting a doomed combination be submitted.
+        if (g.exactDisabled && hydroCoarseInput.value === '') hydroCoarseInput.value = '8'
+      }
+      const label = hydroCoarseInput.closest('label')
+      if (label) label.style.opacity = g.coarseDisabled ? '0.45' : '1'
+    }
+  }
+
+  for (const el of [dynamicsInput, hydroInput, tailsInput, materialSelect]) {
+    el?.addEventListener('change', _syncAdvancedGuards)
+  }
+  _syncAdvancedGuards()
+
   // ── Run (Coarse = linear preview; Fine = nonlinear corotational) ──────────────
   function _updateLaunchButtons() {
     const busy = launchBlocked(_launching, _jobs, _selectedJob())
@@ -313,12 +397,16 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
       const fieldSpec = _efieldCard.getFieldSpec()
       const fieldOn = _efieldCard.isEnabled()
       const mat = materialSelect?.value === 'cando' ? 'cando' : 'snupi'
+      const dynamicsOn = dynamicsInput ? !!dynamicsInput.checked : false
       const body_ = {
         nonlinear,
         n_steps:   Math.max(1, parseInt(stepsInput?.value, 10) || 20),
         with_rmsf: rmsfInput ? !!rmsfInput.checked : true,
         material:  mat,
-        dynamics:      dynamicsInput ? !!dynamicsInput.checked : false,
+        dynamics:      dynamicsOn,
+        // Free ssDNA tails exist only inside the Langevin engine (never in the static solve / NMA),
+        // so a ticked box without dynamics is not a request we can honour — don't send it.
+        tails:         dynamicsOn && !!tailsInput?.checked,
         hydrodynamics: hydroInput ? !!hydroInput.checked : false,
         // '' = exact (1 bead/bp). The exact friction is dense O(N²) — the backend refuses (413) if it
         // would not fit, rather than let the OOM killer take the machine.

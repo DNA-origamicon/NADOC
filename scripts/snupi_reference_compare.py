@@ -171,7 +171,10 @@ def run_snupi(basename: str, lattice: str, *, timeout_s: int = 2400) -> Path:
 # ── Mimic side ───────────────────────────────────────────────────────────────
 
 def _mimic_mesh_nodes(design: Design):
-    mesh = build_fem_mesh(design)
+    # material="snupi" so the NMA channel below sees SNUPI's real ssDNA elements (SS-1/G9).
+    # The NODE set is identical either way — ssDNA bridges join existing bp nodes and add none —
+    # so the topological node match against SNUPI is unaffected.
+    mesh = build_fem_mesh(design, material="snupi")
     keys = [(n.helix_id, int(n.global_bp)) for n in mesh.nodes]
     pos = np.array([n.position for n in mesh.nodes], dtype=float)
     return mesh, keys, pos

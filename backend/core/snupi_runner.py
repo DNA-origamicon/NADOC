@@ -189,6 +189,10 @@ def _estimate_seconds(job: SnupiJob) -> float:
         # Langevin base (diagonal Stokes): a sparse K·q per step (O(nodes)) + one generalised
         # eigsh for dt auto-sizing.  ~10 s at 630 nodes / 60k steps.
         est = 5.0 + (nodes / 630.0) * step_scale * 10.0
+        if getattr(job, "tails", False):
+            # Free-ssDNA tails add a second force evaluation per step (the batched corotational
+            # chain kernel). Measured on VoltronCore: ~2.1× the per-step cost of the core alone.
+            est *= 2.1
         if getattr(job, "hydrodynamics", False):
             coarse = getattr(job, "hydro_coarse_bp", None)
             if coarse:
@@ -413,6 +417,10 @@ def solve_and_cache(job: SnupiJob, workspace_dir: Path) -> None:
             # Coarse blob hydrodynamics (1 bead / k bp) — the only mode that fits at origami scale;
             # the exact per-bp friction is dense O(N²). None = exact (guarded by check_friction_memory).
             hydro_coarse_bp = getattr(job, "hydro_coarse_bp", None),
+            # Free ssDNA tails (overhangs / toeholds / dangling ends) as explicit Langevin chains,
+            # displayed at their simulated positions (SS-4). Dynamics-only; a NADOC extension.
+            tails         = getattr(job, "tails", False),
+            tail_max_nt   = getattr(job, "tail_max_nt", None),
             # Anchors (Dirichlet BC) + uniform E-field body load — job-request annotations, never a
             # topology edit (C1/C2).  A field needs ≥1 anchor to hold against (COM drift);
             # predict_shape falls back to the free centroid-pinned solve if a selection resolves

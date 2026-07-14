@@ -56,16 +56,27 @@ _I3 = np.eye(3)
 _DENSE_PEAK_FACTOR = 5.5
 
 
-def estimate_friction_memory_gb(n_nodes: int, coarse_bp: int | None = None) -> float:
+def estimate_friction_memory_gb(n_nodes: int, coarse_bp: int | None = None,
+                                n_blobs: int | None = None) -> float:
     """Predicted PEAK process memory (GB) of building + using the RPY friction for ``n_nodes`` FE nodes.
 
     ``coarse_bp=None`` → the exact path (dense 6N×6N). ``coarse_bp=k`` → the coarse-grained blob model
-    (:mod:`backend.physics.snupi_hydro_coarse`), whose dense object is only 6B×6B for B = ⌈N/k⌉ beads.
+    (:mod:`backend.physics.snupi_hydro_coarse`), whose dense object is only 6B×6B for B blobs.
+
+    ``n_blobs`` is the ACTUAL B. Pass it whenever you have it (:func:`snupi_hydro_coarse.blob_count`
+    is O(N) and allocation-free): blobs never straddle a helix, and free ssDNA tails are blobbed along
+    the chain, so B > ⌈N/k⌉ in general and the ⌈N/k⌉ fallback UNDERSTATES the cost — the wrong way for a
+    guard to be wrong.
 
     This is the number the preflight guard refuses on, so it is deliberately a *peak*, not a steady
     state: a full M13 origami (≈7240 nodes) predicts ≈79 GB exact, ≈0.4 GB coarse at k=8."""
     n = max(int(n_nodes), 1)
-    dim = 6 * n if not coarse_bp else 6 * math.ceil(n / max(int(coarse_bp), 1))
+    if not coarse_bp:
+        dim = 6 * n
+    elif n_blobs:
+        dim = 6 * int(n_blobs)
+    else:
+        dim = 6 * math.ceil(n / max(int(coarse_bp), 1))
     return _DENSE_PEAK_FACTOR * (dim ** 2) * 8 / 1e9
 
 
@@ -94,10 +105,11 @@ class HydroMemoryError(MemoryError):
     """Raised (before allocating anything) when an RPY solve would not fit in the memory budget."""
 
 
-def check_friction_memory(n_nodes: int, coarse_bp: int | None = None) -> None:
+def check_friction_memory(n_nodes: int, coarse_bp: int | None = None,
+                          n_blobs: int | None = None) -> None:
     """Preflight the RPY memory cost; raise :class:`HydroMemoryError` with an actionable message rather
     than let the allocation OOM the machine. Call BEFORE building any matrix."""
-    need = estimate_friction_memory_gb(n_nodes, coarse_bp)
+    need = estimate_friction_memory_gb(n_nodes, coarse_bp, n_blobs)
     budget = hydro_memory_budget_gb()
     if need <= budget:
         return
