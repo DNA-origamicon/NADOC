@@ -44,6 +44,20 @@ JOB_ID = (Path(__file__).parent / "JOB_ID_3x6x400").read_text().strip()
 # retries it (bounded). Do NOT panic-kill on it.
 BENIGN = ("Periodic cell has become too small",)
 
+# The ladder is NOT one timestep. The minimisation is 2 fs, the first dynamics chunk is
+# the SOFT integrator (flexible H bonds, 1 fs, offload — no GPUresident), and everything
+# after it is the fast path (4 fs + HMR + GPUresident). Reporting ns/day against the wrong
+# one silently mis-sizes production by 4x.
+TIMESTEP_FS = {"min": 2.0, "soft": 1.0, "fast": 4.0}
+
+
+def _kind(seg: str) -> str:
+    if "_min" in seg:
+        return "min"
+    if seg.endswith("_01_300K_NPT_ENM_k0p5_p10"):
+        return "soft"
+    return "fast"
+
 
 async def main() -> int:
     key = os.environ["RUNPOD_API_KEY"]
@@ -100,27 +114,61 @@ async def main() -> int:
         if cur:
             log_txt = (await conn.run(f"tail -c 200000 {remote}/{cur}.log 2>/dev/null")).stdout
             energies = re.findall(r"^ENERGY:\s+(\d+)\s+.*", log_txt, re.M)
-            totals = re.findall(r"^ENERGY:\s+\d+(?:\s+\S+){10}\s+(\S+)", log_txt, re.M)
             n_frames = len(energies)
             print(f"PROGRESS {cur}: {n_frames} ENERGY frames, last step {energies[-1] if energies else '-'}")
 
-            if totals:
-                last = totals[-1]
+            # Find TOTAL by NAME from the ETITLE header, never by a hardcoded column
+            # index. Counting columns by hand got TEMP instead of TOTAL — and TEMP is
+            # legitimately 0.0 during a minimisation, so the watchdog screamed
+            # "structure blew up" at a perfectly healthy run. A false alarm that kills a
+            # good pod costs exactly as much as a missed real one.
+            head = re.search(r"^ETITLE:\s+(.*)$", log_txt, re.M)
+            rows = [ln.split()[1:] for ln in log_txt.splitlines() if ln.startswith("ENERGY:")]
+            if head and rows:
+                cols = head.group(1).split()
                 try:
+                    i_total = cols.index("TOTAL")
+                    last = rows[-1][i_total]
                     val = float(last)
                     ok = val == val and abs(val) < 1e10 and val < 0    # NaN != NaN
-                    print(f"SANITY   TOTAL = {val:.3e}  {'ok' if ok else '*** BAD ***'}")
+                    print(f"SANITY   TOTAL = {val:.4e}  {'ok' if ok else '*** BAD ***'}")
                     if not ok:
                         problems.append(f"TOTAL energy is {last} — structure blew up")
-                except ValueError:
-                    problems.append(f"TOTAL energy unparseable: {last!r} (NaN?)")
+                except (ValueError, IndexError):
+                    problems.append(f"TOTAL energy unparseable in {cur} (NaN?)")
 
             # ms/step — the number the entire budget hangs on.
-            m = re.findall(r"Benchmark time:.*?(\d+\.\d+)\s+s/step", log_txt)
-            if m:
-                s_per_step = float(m[-1])
-                print(f"SPEED    {s_per_step * 1000:.1f} ms/step  "
-                      f"({4e-6 / s_per_step * 86400:.1f} ns/day at 4 fs)")
+            #
+            # NAMD prints `Benchmark time:` only for DYNAMICS, so a minimisation gives
+            # none. Fall back to wall-clock/step from the log's own age, which works for
+            # every segment type. (And remember NAMD reports throughput in DIFFERENT
+            # UNITS by mode — offload prints days/ns, GPU-resident prints ns/day — so
+            # never trust a single parsed rate line without knowing which mode you're in.)
+            m = re.findall(r"Benchmark time:.*?([\d.]+)\s+s/step", log_txt)
+            s_per_step = float(m[-1]) if m else None
+            if s_per_step is None and len(energies) >= 2:
+                # Two samples a few seconds apart: how far did the step counter move, and
+                # how long did that take? Works for a minimisation too (which prints no
+                # Benchmark line at all) and needs no file birth-time — `stat -c %W`
+                # returns 0 on the pod's network FS.
+                before = int(energies[-1])
+                t0 = time.time()
+                await asyncio.sleep(20)
+                again = (await conn.run(
+                    f"grep -c '^ENERGY:' {remote}/{cur}.log; "
+                    f"grep '^ENERGY:' {remote}/{cur}.log | tail -1 | awk '{{print $2}}'")).stdout
+                dt = time.time() - t0
+                try:
+                    after = int(again.split()[-1])
+                    if after > before:
+                        s_per_step = dt / (after - before)
+                except (ValueError, IndexError):
+                    pass
+            if s_per_step:
+                ts_fs = TIMESTEP_FS.get(_kind(cur), 4.0)
+                print(f"SPEED    {s_per_step * 1000:.1f} ms/step   "
+                      f"({ts_fs * 1e-6 / s_per_step * 86400:.1f} ns/day at {ts_fs:g} fs)"
+                      f"   [{_kind(cur)}]")
 
             fatal = re.findall(r"^FATAL ERROR:.*", log_txt, re.M)
             for f in fatal:
@@ -144,5 +192,36 @@ async def main() -> int:
     return 0
 
 
+async def oneline() -> int:
+    """One compact line per poll — for the overnight Monitor, which turns every stdout
+    line into a notification. The verbose form would emit eight per poll."""
+    import io
+    import contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = await main()
+    got = {}
+    for ln in buf.getvalue().splitlines():
+        if ln[:8].strip():
+            got[ln[:8].strip()] = ln[8:].strip()
+    bits = [
+        got.get("COST", "?").split()[0],
+        got.get("STATUS", "?").split()[0],
+        (got.get("PROGRESS", "") or "-").split(":")[0][-28:],
+        "step " + (got.get("PROGRESS", "").split("last step ")[-1] if "last step" in got.get("PROGRESS", "") else "?"),
+        got.get("SANITY", "").replace("TOTAL = ", "E="),
+        got.get("SPEED", "").split("(")[0].strip(),
+        got.get("OUTPUT", "").split()[0] + " coor",
+    ]
+    print(" | ".join(b for b in bits if b and b != "?"), flush=True)
+    if rc:
+        for p in buf.getvalue().split("*** PROBLEMS ***")[-1].splitlines():
+            if p.strip().startswith("-"):
+                print("PROBLEM:" + p.strip()[1:], flush=True)
+    return rc
+
+
 if __name__ == "__main__":
+    if "--oneline" in sys.argv:
+        raise SystemExit(asyncio.run(oneline()))
     raise SystemExit(asyncio.run(main()))
