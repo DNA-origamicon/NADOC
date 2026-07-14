@@ -13,6 +13,7 @@ import asyncio
 import httpx
 import pytest
 
+from backend.core import runpod_api as rp
 from backend.core.runpod_api import (
     DEFAULT_IMAGE,
     VOLUME_MOUNT_PATH,
@@ -278,3 +279,80 @@ def _recording_handler(deleted: list):
         return httpx.Response(200, json=_pod_json())
 
     return handler
+
+
+class TestTransientFailuresDoNotKillTheRun:
+    """A single DNS blip must not kill a 10-hour run. It did.
+
+    A routine status poll hit `[Errno -3] Temporary failure in name resolution`.
+    `_request` turned it into a fatal RunpodError, that propagated out of the poll loop
+    and killed the launcher — and the launcher's `finally` is the ONLY thing that
+    destroys the pod. The pod then billed on with NAMD still happily running and nothing
+    alive to reap it. (The on-pod kill-switch has no API key: it can stop NAMD, never the
+    billing.)
+    """
+
+    def _client(self, handler):
+        return RunpodClient("k", transport=httpx.MockTransport(handler))
+
+    def test_a_transient_dns_failure_is_retried_not_fatal(self, monkeypatch):
+        monkeypatch.setattr(rp.asyncio, "sleep", _no_sleep)
+        calls = {"n": 0}
+
+        def handler(request):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise httpx.ConnectError("[Errno -3] Temporary failure in name resolution")
+            return httpx.Response(200, json={"id": "p1", "desiredStatus": "RUNNING"})
+
+        pod = asyncio.run(self._client(handler).get_pod("p1"))
+        assert pod.id == "p1"
+        assert calls["n"] == 3, "must retry through the blip, not die on it"
+
+    def test_a_5xx_is_retried(self, monkeypatch):
+        monkeypatch.setattr(rp.asyncio, "sleep", _no_sleep)
+        calls = {"n": 0}
+
+        def handler(request):
+            calls["n"] += 1
+            if calls["n"] < 2:
+                return httpx.Response(502, text="bad gateway")
+            return httpx.Response(200, json={"id": "p1", "desiredStatus": "RUNNING"})
+
+        assert asyncio.run(self._client(handler).get_pod("p1")).id == "p1"
+
+    def test_a_4xx_fails_FAST_and_is_never_retried(self, monkeypatch):
+        """A bad payload or rejected key fails identically forever; retrying it just
+        burns pod-time while the meter runs."""
+        monkeypatch.setattr(rp.asyncio, "sleep", _no_sleep)
+        calls = {"n": 0}
+
+        def handler(request):
+            calls["n"] += 1
+            return httpx.Response(400, text="malformed")
+
+        with pytest.raises(RunpodError):
+            asyncio.run(self._client(handler).get_pod("p1"))
+        assert calls["n"] == 1, "a 4xx must not be retried"
+
+    def test_a_401_still_fails_immediately(self, monkeypatch):
+        monkeypatch.setattr(rp.asyncio, "sleep", _no_sleep)
+
+        def handler(request):
+            return httpx.Response(401, text="nope")
+
+        with pytest.raises(RunpodError, match="401"):
+            asyncio.run(self._client(handler).get_pod("p1"))
+
+    def test_gives_up_eventually_rather_than_hanging_forever(self, monkeypatch):
+        monkeypatch.setattr(rp.asyncio, "sleep", _no_sleep)
+
+        def handler(request):
+            raise httpx.ConnectError("down")
+
+        with pytest.raises(RunpodError, match="unreachable after"):
+            asyncio.run(self._client(handler).get_pod("p1"))
+
+
+async def _no_sleep(_):
+    return None

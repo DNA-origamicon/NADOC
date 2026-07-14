@@ -22,10 +22,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
+
+log = logging.getLogger(__name__)
+
+# A transient network failure must not kill a 10-hour run. Retry the network layer and
+# 5xx/429; never a 4xx (it will fail identically forever and just burns pod-time).
+_MAX_API_RETRIES = 5
+_RETRY_BASE_S = 2.0
 
 API_BASE = "https://rest.runpod.io/v1"
 
@@ -207,19 +215,60 @@ class RunpodClient:
         await self._client.aclose()
 
     async def _request(self, method: str, path: str, **kw) -> Any:
-        try:
-            resp = await self._client.request(method, path, **kw)
-        except httpx.HTTPError as exc:
-            raise RunpodError(f"RunPod API unreachable: {exc}") from exc
-        if resp.status_code == 401:
-            raise RunpodError("RunPod rejected the API key (401).")
-        if resp.status_code >= 400:
-            raise RunpodError(
-                f"RunPod API {method} {path} failed ({resp.status_code}): {resp.text[:300]}"
-            )
-        if not resp.content:
-            return None
-        return resp.json()
+        """One API call, retrying TRANSIENT failures.
+
+        A single DNS blip must not kill a 10-hour run. It did: a routine status poll hit
+        ``[Errno -3] Temporary failure in name resolution``, ``_request`` turned it into a
+        fatal ``RunpodError``, that propagated out of the poll loop and killed the
+        launcher — and the launcher's ``finally`` is the ONLY thing that destroys the pod.
+        The pod then billed on, with NAMD still happily running and nothing left alive to
+        reap it. (The on-pod kill-switch cannot help: it has no API key, so it can stop
+        NAMD but never the billing.)
+
+        Retries the network layer and 5xx/429 — i.e. "the request did not land, or the
+        far end is having a moment". A 4xx is NOT retried: a bad payload or a rejected key
+        will fail identically forever, and hammering it just costs pod-time.
+
+        NOTE this makes a create_pod retry possible. That is safe here because every
+        create is followed by a list/reconcile in `pod()`'s finally, and an orphan from a
+        double-create would be caught by the reaper — whereas the failure it prevents
+        (a leaked, billing pod nobody owns) is unbounded.
+        """
+        last: Exception | None = None
+        for attempt in range(_MAX_API_RETRIES):
+            try:
+                resp = await self._client.request(method, path, **kw)
+            except httpx.HTTPError as exc:
+                last = exc
+                await self._backoff(attempt, f"{method} {path}: {exc}")
+                continue
+
+            if resp.status_code == 401:
+                raise RunpodError("RunPod rejected the API key (401).")
+            if resp.status_code == 429 or resp.status_code >= 500:
+                last = RunpodError(
+                    f"RunPod API {method} {path} -> {resp.status_code}: {resp.text[:200]}"
+                )
+                await self._backoff(attempt, str(last))
+                continue
+            if resp.status_code >= 400:
+                raise RunpodError(
+                    f"RunPod API {method} {path} failed ({resp.status_code}): "
+                    f"{resp.text[:300]}"
+                )
+            if not resp.content:
+                return None
+            return resp.json()
+
+        raise RunpodError(f"RunPod API unreachable after {_MAX_API_RETRIES} tries: {last}")
+
+    async def _backoff(self, attempt: int, why: str) -> None:
+        if attempt >= _MAX_API_RETRIES - 1:
+            return
+        delay = _RETRY_BASE_S * (2 ** attempt)
+        log.warning("runpod: %s — retrying in %.0fs (%d/%d)",
+                    why, delay, attempt + 1, _MAX_API_RETRIES)
+        await asyncio.sleep(delay)
 
     async def create_pod(self, payload: dict[str, Any]) -> PodInfo:
         return parse_pod(await self._request("POST", "/pods", json=payload) or {})

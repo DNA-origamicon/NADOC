@@ -295,6 +295,15 @@ async def submit_job(
     job.remote_project_dir = remote  # one filesystem: no project/scratch split
     job.status = MdStatus.running
     job.error = None
+
+    # PERSIST. Nothing here used to be written to disk, so a launcher that died left NO
+    # record of which pod, which pid, or which remote dir — and the launcher's `finally`
+    # is the only thing that destroys the pod. A crash therefore produced an orphaned,
+    # billing pod that nothing could even identify, let alone reap or resume. NAMD itself
+    # is detached (setsid, output on the network volume) and carries on regardless, so
+    # this record is the ONLY link back to a run that is still very much alive.
+    job.save(workspace_dir)
+
     log.info("runpod: job %s launched on pod %s as pid %s", job.job_id, job.runpod_pod_id, pid)
     return pid
 
@@ -437,6 +446,10 @@ async def run_job_on_pod(
     # cheapest tier first; fall back when the volume's datacenter has no instances
     async with client.pod(payloads[0], fallbacks=payloads[1:]) as pod:  # terminates in a finally
         job.runpod_pod_id = pod.id
+        # ...and PERSIST it the instant it exists, for exactly the same reason: a crash
+        # between here and the first save would leave a billing pod that no later process
+        # could even name, let alone reap.
+        job.save(workspace_dir)
         if on_pod is not None:
             # Register the pod id the INSTANT it exists. A caller that cannot name the
             # pod cannot kill it, and an unkillable pod bills until a human notices.
