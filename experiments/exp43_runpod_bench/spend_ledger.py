@@ -28,6 +28,15 @@ HEADROOM_USD = 1.50
 
 
 class SpendLedger:
+    """One job's pods — but ``spent()`` sums EVERY job's, which is the point.
+
+    The $15 is a cap on the SESSION, not on a job. The first attempt at the 3x6x400
+    ladder burned $0.27 across two pods before being killed and re-prepped under a new
+    job_id; a per-job ledger would have handed the replacement a fresh, full $15. So each
+    job writes its own file (no cross-process coordination, no lock), and the total is a
+    sum over all of them.
+    """
+
     def __init__(self, path: Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -35,10 +44,26 @@ class SpendLedger:
             self.path.write_text("[]")
 
     def _load(self) -> list[dict]:
+        return self._load_file(self.path)
+
+    @staticmethod
+    def _load_file(p: Path) -> list[dict]:
         try:
-            return json.loads(self.path.read_text())
+            return json.loads(p.read_text())
         except Exception:  # noqa: BLE001 — a corrupt ledger must not authorise spending
             return []
+
+    def _all_rows(self) -> list[dict]:
+        """Every pod of every job under the same archive root."""
+        root = self.path.parent.parent            # <archive>/nadoc_jobs/
+        rows: list[dict] = []
+        seen: set[str] = set()
+        for f in sorted(root.glob("*/spend.json")):
+            for r in self._load_file(f):
+                if r["pod_id"] not in seen:
+                    seen.add(r["pod_id"])
+                    rows.append(r)
+        return rows
 
     def open_pod(self, pod_id: str, usd_per_hour: float, note: str = "") -> None:
         rows = self._load()
@@ -59,10 +84,11 @@ class SpendLedger:
         self.path.write_text(json.dumps(rows, indent=2))
 
     def spent(self) -> float:
-        """Dollars burned so far, counting any pod still open as billing RIGHT NOW."""
+        """Dollars burned this SESSION — every pod of every job — counting any still-open
+        pod as billing RIGHT NOW."""
         now = time.time()
         total = 0.0
-        for r in self._load():
+        for r in self._all_rows():
             end = r["ended"] if r["ended"] is not None else now
             total += (end - r["started"]) / 3600.0 * r["usd_per_hour"]
         return total
@@ -72,10 +98,10 @@ class SpendLedger:
         return max(0.0, HARD_CAP_USD - HEADROOM_USD - self.spent())
 
     def live_pods(self) -> list[str]:
-        return [r["pod_id"] for r in self._load() if r["ended"] is None]
+        return [r["pod_id"] for r in self._all_rows() if r["ended"] is None]
 
     def summary(self) -> str:
-        rows = self._load()
+        rows = self._all_rows()
         out = [f"{'pod':22s} {'$/hr':>6s} {'hours':>7s} {'cost':>7s}  note"]
         for r in rows:
             end = r["ended"] if r["ended"] is not None else time.time()
