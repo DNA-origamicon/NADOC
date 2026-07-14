@@ -883,6 +883,68 @@ class TestProductionAppend:
         assert [s.name for s in reloaded.segments] == parent_seg_names
         assert reloaded.run_kind is None
 
+    def test_production_child_of_an_archived_parent_stays_on_the_archive_drive(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A relaxation is archived because its folder is too big for the system disk —
+        and PRODUCTION is the part that writes the big trajectory.
+
+        The child used to default to archived=False, so job_dir() resolved back to
+        workspace/md_jobs/<id> and it would dump gigabytes of DCD onto the exact disk
+        the parent had been moved off. For a 1.9M-atom run on a 20 GB system disk that
+        is a full disk overnight, not a tidiness issue.
+        """
+        from backend.core import job_archive
+        from backend.core.md_job import MdJob
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+
+        # Archive the parent by hand (an "external drive" under tmp_path).
+        drive = tmp_path / "external_drive" / "nadoc_jobs"
+        archived_dir = drive / parent.job_id
+        archived_dir.mkdir(parents=True)
+        for f in parent.job_dir(tmp_path).rglob("*"):
+            if f.is_file():
+                dst = archived_dir / f.relative_to(parent.job_dir(tmp_path))
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(f.read_bytes())
+        parent.archived = True
+        parent.archive_path = str(archived_dir)
+        parent.save(tmp_path)
+        # An archived job is discoverable ONLY through the index — MdJob.load() consults
+        # it to find the folder. Without this entry the route would silently load the
+        # stale workspace job.json (still archived=False) and the test would pass for
+        # entirely the wrong reason.
+        idx = job_archive.read_index(tmp_path, "md_jobs")
+        idx[parent.job_id] = parent.archive_path
+        job_archive._write_index(tmp_path, "md_jobs", idx)
+
+        result, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+
+        assert child.archived is True
+        # Sibling of the parent, on the same drive — one archive root per family.
+        assert child.job_dir(tmp_path) == drive / child.job_id
+        assert child.job_dir(tmp_path).is_relative_to(drive)
+        # And decisively: nothing was written to the system-disk workspace.
+        assert not (tmp_path / "md_jobs" / child.job_id).exists()
+
+    def test_production_child_of_an_unarchived_parent_stays_in_the_workspace(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The inverse pin: archiving is INHERITED, never invented."""
+        from backend.core.md_job import MdJob
+
+        routes_md = self._routes_md(tmp_path, monkeypatch)
+        parent = self._ready_job(tmp_path)
+        result, _ = self._spawn(routes_md, tmp_path, monkeypatch, parent)
+        child = MdJob.load(result["job"]["job_id"], tmp_path)
+
+        assert child.archived is False
+        assert child.archive_path is None
+        assert child.job_dir(tmp_path) == tmp_path / "md_jobs" / child.job_id
+
     def test_repeated_productions_get_distinct_seeds(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     ) -> None:

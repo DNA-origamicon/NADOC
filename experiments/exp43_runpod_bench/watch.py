@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from backend.core.md_job import MdJob  # noqa: E402
-from backend.core.runpod_api import RunpodClient  # noqa: E402
+from backend.core.runpod_api import RunpodClient, ssh_endpoint  # noqa: E402
 from backend.core.runpod_conn import RunpodConnection  # noqa: E402
 from backend.core.runpod_executor import remote_dir_for  # noqa: E402
 from experiments.exp43_runpod_bench.spend_ledger import HARD_CAP_USD, SpendLedger  # noqa: E402
@@ -68,8 +68,13 @@ async def main() -> int:
         pod = pods[0]
         print(f"POD      {pod.id}  {pod.desired_status}  ${pod.cost_per_hr}/hr")
 
+        endpoint = ssh_endpoint(pod)
+        if endpoint is None:
+            print("SSH      not reachable yet (pod still booting)")
+            return 0
+        host, port = endpoint
         conn = RunpodConnection(
-            host=pod.ssh_host, port=pod.ssh_port, pod_id=pod.id,
+            host=host, port=port, pod_id=pod.id,
             client_keys=[str(Path.home() / ".ssh" / "id_ed25519")],
         )
         await conn.connect()

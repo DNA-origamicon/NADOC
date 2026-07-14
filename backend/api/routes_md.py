@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
+from backend.core import job_archive
 from backend.core import md_chain_executor as _chain
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross_engine_seed
@@ -1818,6 +1819,20 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     # flags out-of-date — it derives from the parent's frozen package, not the live design.
     child.design_fingerprint = parent.design_fingerprint
     child.feature_log_position = parent.feature_log_position
+
+    # INHERIT THE PARENT'S ARCHIVE. A relaxation is archived precisely because its job
+    # folder is too big for the system disk — and production is the part that writes the
+    # LARGE trajectory. A child that silently defaulted to archived=False would resolve
+    # job_dir() back to workspace/md_jobs/<id> and dump gigabytes of DCD onto the very
+    # disk the parent was moved off, which is the opposite of what the user asked for.
+    # Sibling of the parent's folder, so one archive root holds the whole family.
+    if parent.archived and parent.archive_path:
+        child.archived = True
+        child.archive_path = str(Path(parent.archive_path).parent / child.job_id)
+        Path(child.archive_path).mkdir(parents=True, exist_ok=True)
+        idx = job_archive.read_index(_workspace(), "md_jobs")
+        idx[child.job_id] = child.archive_path
+        job_archive._write_index(_workspace(), "md_jobs", idx)
 
     md_ensemble.build_replica_package(
         parent, child,
