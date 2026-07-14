@@ -54,16 +54,38 @@ class SpendLedger:
             return []
 
     def _all_rows(self) -> list[dict]:
-        """Every pod of every job under the same archive root."""
+        """Every pod of every job, ONE row per pod, collapsed over its whole life.
+
+        A pod bills continuously from creation to destruction, no matter how many
+        processes happened to be watching it. So the same pod_id can legitimately appear
+        several times — the launcher opened it, died, and a supervisor re-adopted it (and
+        was itself restarted). Those are not separate pods; they are separate *observers*
+        of one pod.
+
+        Collapsing is not cosmetic. The previous version deduped by keeping the FIRST row
+        seen — which was the CLOSED one written by the dying launcher's `finally`. The
+        pod's live, still-accruing row was therefore discarded and `spent()` FROZE while
+        a real GPU billed on. The budget guard would never have fired. A ledger that
+        under-reports is worse than no ledger, because it is trusted.
+
+        started = earliest sighting; ended = None if ANY observer still has it open.
+        """
         root = self.path.parent.parent            # <archive>/nadoc_jobs/
-        rows: list[dict] = []
-        seen: set[str] = set()
+        merged: dict[str, dict] = {}
         for f in sorted(root.glob("*/spend.json")):
             for r in self._load_file(f):
-                if r["pod_id"] not in seen:
-                    seen.add(r["pod_id"])
-                    rows.append(r)
-        return rows
+                pid = r["pod_id"]
+                cur = merged.get(pid)
+                if cur is None:
+                    merged[pid] = dict(r)
+                    continue
+                cur["started"] = min(cur["started"], r["started"])
+                if cur["ended"] is None or r["ended"] is None:
+                    cur["ended"] = None           # still billing somewhere
+                else:
+                    cur["ended"] = max(cur["ended"], r["ended"])
+                cur["usd_per_hour"] = max(cur["usd_per_hour"], r["usd_per_hour"])
+        return list(merged.values())
 
     def open_pod(self, pod_id: str, usd_per_hour: float, note: str = "") -> None:
         rows = self._load()
@@ -77,11 +99,21 @@ class SpendLedger:
         self.path.write_text(json.dumps(rows, indent=2))
 
     def close_pod(self, pod_id: str) -> None:
-        rows = self._load()
-        for r in rows:
-            if r["pod_id"] == pod_id and r["ended"] is None:
-                r["ended"] = time.time()
-        self.path.write_text(json.dumps(rows, indent=2))
+        """Close this pod in EVERY job's file — the pod is gone, so no observer's row for
+        it can still be open. Closing only our own file would leave another file's row
+        open forever and `spent()` would grow without bound after the pod was destroyed.
+        """
+        root = self.path.parent.parent
+        now = time.time()
+        for f in list(root.glob("*/spend.json")) + [self.path]:
+            rows = self._load_file(f)
+            dirty = False
+            for r in rows:
+                if r["pod_id"] == pod_id and r["ended"] is None:
+                    r["ended"] = now
+                    dirty = True
+            if dirty:
+                f.write_text(json.dumps(rows, indent=2))
 
     def spent(self) -> float:
         """Dollars burned this SESSION — every pod of every job — counting any still-open
