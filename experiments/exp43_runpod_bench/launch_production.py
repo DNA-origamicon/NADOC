@@ -22,8 +22,10 @@ import argparse
 import asyncio
 import logging
 import os
+import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -42,8 +44,38 @@ CHILD_ID_FILE = Path(__file__).parent / "JOB_ID_3x6x400_production"
 
 TIMESTEP_FS = 4.0
 
+# The card we are actually given, every time: the 4090 we ask for first is never free in
+# EU-RO-1 and RunPod falls through to this one. Secure price, live-checked 2026-07-14.
+PRO_4500_SECURE_USD_PER_HR = 0.74
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("prod")
+
+
+def measured_s_per_step(parent: MdJob, workspace: Path) -> Optional[float]:
+    """Read the real 4 fs GPU-resident rate out of the relaxation's own NAMD logs.
+
+    Production runs the SAME integrator as the relaxation's fast chunks (4 fs + HMR +
+    GPUresident), so the parent's logs are a direct measurement — no extrapolation from a
+    4090 and no separate benchmark pod.
+
+    Deliberately ignores the 00_min (2 fs) and the SOFT first chunk (1 fs, offload, no
+    GPUresident, flexible H bonds): those run a different integrator entirely, and the
+    soft chunk measured 43-51 ms/step against the fast path's ~21. Sizing production off
+    the wrong one would halve or double the run.
+    """
+    pkg = parent.package_dir(workspace)
+    rates: list[float] = []
+    for log_path in sorted(pkg.glob("*.log")) + sorted(pkg.parent.glob("*.log")):
+        name = log_path.stem
+        if "_00_min" in name or name.endswith("_01_300K_NPT_ENM_k0p5_p10"):
+            continue                      # 2 fs minimisation / 1 fs soft chunk
+        found = re.findall(r"Benchmark time:.*?([\d.]+)\s+s/step", log_path.read_text(errors="ignore"))
+        rates += [float(x) for x in found]
+    if not rates:
+        return None
+    # The last few benchmark lines are the settled ones; NAMD's first is warm-up.
+    return sum(rates[-3:]) / len(rates[-3:])
 
 
 def size_production_ns(remaining_usd: float, usd_per_hr: float, s_per_step: float) -> float:
@@ -63,8 +95,8 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ns", type=float, default=None,
                     help="production length; default = whatever the remaining budget buys")
-    ap.add_argument("--s-per-step", type=float, required=True,
-                    help="MEASURED seconds/step from the relaxation log")
+    ap.add_argument("--s-per-step", type=float, default=None,
+                    help="MEASURED s/step. Default: read it from the relaxation's own logs.")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -82,17 +114,30 @@ async def main() -> int:
     ledger = SpendLedger(Path(parent.archive_path) / "spend.json")
     n_atoms = n_atoms_for(parent, WORKSPACE)
     plan = plan_execution(n_atoms)
-    rate = plan["gpu"].usd_per_hour
+
+    # Plan against the rate we will ACTUALLY be charged, not the cheapest card we ask
+    # for. gpuTypeIds is a fallback list: we ask for a $0.69 4090 and RunPod has given us
+    # a $0.74 PRO 4500 on every single pod tonight, because the 4090 is never free in
+    # EU-RO-1. Sizing off $0.69 would quietly under-budget by 7% — in the unsafe
+    # direction. Guess HIGH; the ledger books the pod's real rate afterwards anyway.
+    rate = max(float(plan["gpu"].usd_per_hour), PRO_4500_SECURE_USD_PER_HR)
+
+    s_per_step = args.s_per_step or measured_s_per_step(parent, WORKSPACE)
+    if not s_per_step:
+        log.error("no 4 fs GPU-resident benchmark line in the relaxation logs — pass "
+                  "--s-per-step explicitly rather than let me guess")
+        return 1
 
     remaining = ledger.remaining()      # already nets off the $1.50 teardown reserve
-    ns = args.ns if args.ns is not None else size_production_ns(remaining, rate, args.s_per_step)
+    ns = args.ns if args.ns is not None else size_production_ns(remaining, rate, s_per_step)
     steps = int(ns * 1e6 / TIMESTEP_FS)
-    hours = steps * args.s_per_step / 3600.0
+    hours = steps * s_per_step / 3600.0
 
     log.info("spent so far : $%.2f  (cap $15.00)", ledger.spent())
     log.info("remaining    : $%.2f  after the teardown reserve", remaining)
-    log.info("measured     : %.1f ms/step  (%.1f ns/day at %g fs)",
-             args.s_per_step * 1000, TIMESTEP_FS * 1e-6 / args.s_per_step * 86400, TIMESTEP_FS)
+    log.info("measured     : %.1f ms/step  (%.1f ns/day at %g fs)%s",
+             s_per_step * 1000, TIMESTEP_FS * 1e-6 / s_per_step * 86400, TIMESTEP_FS,
+             "" if args.s_per_step else "   [read from the relaxation's own logs]")
     log.info("production   : %.2f ns = %s steps ~ %.1f h ~ $%.2f",
              ns, f"{steps:,}", hours, hours * rate)
 
