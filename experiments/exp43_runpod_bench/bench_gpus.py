@@ -86,6 +86,11 @@ CANDIDATES = [
     ("NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
                                                            "RTX PRO 6000 MaxQ", "sm_120", 0.50),
     ("NVIDIA GeForce RTX 5090",                            "RTX 5090",          "sm_120", 0.99),
+    # The BASELINE — the card the relaxation and production actually ran on. Always
+    # re-benchmark it in the same sweep as anything you compare against it, under the same
+    # settings. Comparing a fresh bench to an old number measured a different way is how a
+    # 2x error gets into a decision.
+    ("NVIDIA RTX PRO 4500 Blackwell",                      "RTX PRO 4500",      "sm_120", 0.74),
     # ── sm_89 Ada: also covered by the current binary. ──
     ("NVIDIA L40S",                                        "L40S",              "sm_89",  0.99),
     ("NVIDIA GeForce RTX 4090",                            "RTX 4090",          "sm_89",  0.69),
@@ -146,7 +151,7 @@ async def prepare_bench_dir(conn, parent_remote: str, name_stem: str, steps: int
 
     # 1. Find a production conf to benchmark (the expensive integrator — the one we ship).
     r = await conn.run(
-        "ls /workspace/nadoc_jobs/*/[!.]*production*.conf 2>/dev/null | head -1")
+        "ls -t /workspace/nadoc_jobs/*/[!.]*production*.conf 2>/dev/null | head -1")
     prod_conf = (r.stdout or "").strip().splitlines()
     if not prod_conf:
         raise RuntimeError("no production conf on the volume to benchmark")
@@ -176,7 +181,11 @@ async def prepare_bench_dir(conn, parent_remote: str, name_stem: str, steps: int
     # 4. Rewrite the conf: short run, no trajectory.
     conf = (await conn.run(f"cat {prod_conf}")).stdout
     conf = re.sub(r"(?m)^run\s+\d+", f"run                {steps}", conf)
-    conf = re.sub(r"(?m)^outputEnergies\s+\d+", "outputEnergies     200", conf)
+    # One energy report, at the end. NAMD prints its `Benchmark time:` lines regardless of
+    # outputEnergies, so we lose nothing — and we stop measuring an overhead that real
+    # production does not pay. (Benching at outputEnergies 200 is measuring the bug we
+    # just fixed.)
+    conf = re.sub(r"(?m)^outputEnergies\s+\d+", f"outputEnergies     {steps}", conf)
     conf = re.sub(r"(?m)^dcdFreq\s+\d+", "dcdFreq            0", conf)
     conf = re.sub(r"(?m)^restartfreq\s+\d+", f"restartfreq        {steps * 10}", conf)
     conf = re.sub(r"(?m)^outputName\s+\S+", "outputName         output/bench", conf)
@@ -243,8 +252,12 @@ async def bench_one(client, ledger, gpu_id, label, sm, usd_hr, steps, parent_rem
                 # Detached, so we can WATCH it. Blocking on a 5-minute `conn.run` tells us
                 # nothing until it is over — and if NAMD dies at step 0 (wrong arch) we
                 # want to know in seconds, not after the timeout.
+                # ⚠️ `;` NOT `&&`. `cd X && CMD &` backgrounds the whole COMPOUND in a
+                # subshell, and that subshell's stdout is still the SSH channel — so the
+                # channel never closes and conn.run times out. Exactly the trap
+                # launch_detached() was written for; it bit us again here.
                 await conn.run(
-                    f"cd {sdir} && setsid nohup {NAMD_ON_VOLUME} +p{threads} "
+                    f"cd {sdir} || exit 90; setsid nohup {NAMD_ON_VOLUME} +p{threads} "
                     f"+setcpuaffinity +devices 0 {conf} > bench.log 2>&1 "
                     f"< /dev/null & echo $!")
 
@@ -261,12 +274,11 @@ async def bench_one(client, ledger, gpu_id, label, sm, usd_hr, steps, parent_rem
                         result["note"] = fatal.group(0)[:70]
                         log.error("    %-26s %s", "NAMD", result["note"])
                         return result
-                    energies = re.findall(r"^ENERGY:\s+(\d+)", log_txt, re.M)
                     marks = re.findall(r"Benchmark time:.*?([\d.]+)\s+s/step", log_txt)
-                    if energies:
-                        log.info("    %-26s step %s / %d   (%d benchmark lines)",
-                                 "NAMD running", energies[-1], steps, len(marks))
-                    if len(marks) >= 3 or (energies and int(energies[-1]) >= steps):
+                    done = re.search(r"(?m)^(WRITING|End of program)", log_txt)
+                    log.info("    %-26s %d benchmark line(s)%s", "NAMD running",
+                             len(marks), "  [finished]" if done else "")
+                    if len(marks) >= 3 or done:
                         break
                 else:
                     result["note"] = "timed out before NAMD produced a benchmark line"
