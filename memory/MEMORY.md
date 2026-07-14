@@ -60,7 +60,7 @@ Files are `feedback_<name>.md`. Match the name against what you're editing; each
 forbid git in subagent prompts) · aksel_abandoned · crossover_no_reasoning · phase_constants_locked · native_files_preserve_positions ·
 **staples_are_user_intent** (unstapled scaffold = intentional ssDNA loop; routers never touch staples) ·
 design_renderer_visibility_rule · overhang_definition · interrupt_before_doubting_user · busy_popup_threshold ·
-user_todo_smoke_tests · playwright_fixtures_location · display_toggle_visual_verify · no_bulk_reformat ·
+user_todo_smoke_tests · **gpu_value_is_two_axes** (rented GPUs: judge on $/ns AND ns/day — cheap+slow is not a deal) · playwright_fixtures_location · display_toggle_visual_verify · no_bulk_reformat ·
 loopskip_no_crossover_ends · browser_console_debugging
 
 **MD / simulation:** c1_pair_builder · wc_calibration · cg_pipeline_lessons · gromacs_debugging · sd_em_constraints ·

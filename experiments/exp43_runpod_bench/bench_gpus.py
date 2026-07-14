@@ -63,6 +63,15 @@ SSH_KEY = str(Path.home() / ".ssh" / "id_ed25519")
 
 TIMESTEP_FS = 4.0
 
+# ⚠️ $/ns ALONE IS THE WRONG METRIC. It ranks a cheap crawling card top: an RTX 4000 Ada at
+# $0.26/hr doing 4 ns/day has fine $/ns and is useless — a 5 ns production would take 30
+# hours. Wall-clock is a first-class constraint, not a tiebreak. A card is only USABLE if it
+# can deliver a target run inside a working window; among usable cards, THEN take the
+# cheapest $/ns.
+TARGET_NS = 5.0            # the production run we actually want
+MAX_WALL_H = 12.0          # ...and the window we want it inside (an overnight)
+MIN_USEFUL_NS_DAY = TARGET_NS * 24 / MAX_WALL_H     # = 10 ns/day
+
 # (runpod gpuTypeId, label, sm, $/hr secure). ONLY cards whose arch we can positively name
 # and that hold 1.94M atoms GPU-resident (~6.6 GB). Prices live-checked 2026-07-14.
 #
@@ -247,18 +256,52 @@ async def main() -> int:
             ledger.close_pod(p.id)
         await client.aclose()
 
-    print("\n" + "=" * 78)
-    print(f"$/ns CALIBRATION — 3x6x400, 1.94M atoms, PRODUCTION conf, {args.steps} steps")
-    print("=" * 78)
-    print(f"{'card':22s} {'arch':8s} {'$/hr':>6s} {'ms/step':>9s} {'ns/day':>8s} {'$/ns':>8s}")
+    def nsday(r):
+        return TIMESTEP_FS * 1e-6 / (r["ms_step"] / 1000) * 86400
+
     ok = [r for r in results if r["ms_step"]]
-    for r in sorted(ok, key=lambda r: r["usd_hr"] * 24 / (TIMESTEP_FS * 1e-6 / (r["ms_step"] / 1000) * 86400)):
-        nsday = TIMESTEP_FS * 1e-6 / (r["ms_step"] / 1000) * 86400
-        print(f"{r['label']:22s} {r['sm']:8s} {r['usd_hr']:6.2f} {r['ms_step']:9.1f} "
-              f"{nsday:8.1f} {r['usd_hr'] * 24 / nsday:8.2f}")
+    for r in ok:
+        r["ns_day"] = nsday(r)
+        r["usd_ns"] = r["usd_hr"] * 24 / r["ns_day"]
+        r["h_for_target"] = TARGET_NS * 24 / r["ns_day"]
+        r["usable"] = r["ns_day"] >= MIN_USEFUL_NS_DAY
+
+    print("\n" + "=" * 86)
+    print(f"GPU CALIBRATION — 3x6x400, 1.94M atoms, PRODUCTION conf ({args.steps} steps)")
+    print(f"target: {TARGET_NS:g} ns inside {MAX_WALL_H:g} h  =>  need "
+          f">= {MIN_USEFUL_NS_DAY:.1f} ns/day to be USABLE")
+    print("=" * 86)
+    hdr = (f"{'card':22s} {'arch':8s} {'$/hr':>6s} {'ms/step':>8s} {'ns/day':>7s} "
+           f"{'$/ns':>7s} {'h for ' + format(TARGET_NS, 'g') + 'ns':>10s}   verdict")
+    print(hdr)
+    print("-" * 86)
+    # Cheapest $/ns FIRST, but only among cards fast enough to be usable. The too-slow ones
+    # are listed after, however good their $/ns looks — that is the whole point.
+    for r in sorted([x for x in ok if x["usable"]], key=lambda x: x["usd_ns"]):
+        print(f"{r['label']:22s} {r['sm']:8s} {r['usd_hr']:6.2f} {r['ms_step']:8.1f} "
+              f"{r['ns_day']:7.1f} {r['usd_ns']:7.2f} {r['h_for_target']:10.1f}   OK")
+    for r in sorted([x for x in ok if not x["usable"]], key=lambda x: x["usd_ns"]):
+        print(f"{r['label']:22s} {r['sm']:8s} {r['usd_hr']:6.2f} {r['ms_step']:8.1f} "
+              f"{r['ns_day']:7.1f} {r['usd_ns']:7.2f} {r['h_for_target']:10.1f}   "
+              f"TOO SLOW — cheap $/ns, but {TARGET_NS:g} ns takes {r['h_for_target']:.0f} h")
     for r in results:
         if not r["ms_step"]:
-            print(f"{r['label']:22s} {r['sm']:8s}  -- {r['note']}")
+            print(f"{r['label']:22s} {r['sm']:8s}   --  {r['note']}")
+
+    usable = [x for x in ok if x["usable"]]
+    print()
+    if usable:
+        best_cost = min(usable, key=lambda x: x["usd_ns"])
+        best_fast = max(usable, key=lambda x: x["ns_day"])
+        print(f"cheapest USABLE : {best_cost['label']}  ${best_cost['usd_ns']:.2f}/ns  "
+              f"({best_cost['ns_day']:.1f} ns/day)")
+        print(f"fastest USABLE  : {best_fast['label']}  {best_fast['ns_day']:.1f} ns/day  "
+              f"(${best_fast['usd_ns']:.2f}/ns)")
+    elif ok:
+        # NEVER call the cheapest of a bad field "the best". A card that cannot finish the
+        # target run in the window is not a candidate, however little it costs per ns.
+        print(f"*** NO CARD BENCHMARKED IS USABLE *** (need >= {MIN_USEFUL_NS_DAY:.1f} "
+              f"ns/day; best was {max(ok, key=lambda x: x['ns_day'])['ns_day']:.1f})")
     print(f"\nsweep cost: ${ledger.spent() - start_spend:.2f}   "
           f"session total: ${ledger.spent():.2f} / ${HARD_CAP_USD:.2f}")
     return 0

@@ -56,8 +56,14 @@ DEFAULT_IMAGE = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 #
 # `allowedCudaVersions` moves that failure to CREATE time, where it is FREE and INSTANT:
 # RunPod simply reports no matching instances instead of handing us a pod that cannot run.
-# Keep this in step with DEFAULT_IMAGE's cuXXX tag.
-DEFAULT_ALLOWED_CUDA = ["12.8"]
+#
+# ⚠️ It is a list of ACCEPTABLE versions, NOT a minimum — so it must name 12.8 AND
+# EVERYTHING ABOVE IT. A newer driver runs an older image perfectly well: the live PRO 4500
+# host reports **CUDA 13.0** (driver 580.159.04). Listing only "12.8" excluded it and every
+# other modern host, and the entire GPU sweep came back "no instances available" — a filter
+# so tight it rented nothing at all. Keep the FLOOR in step with DEFAULT_IMAGE's cuXXX tag,
+# and keep the CEILING open.
+DEFAULT_ALLOWED_CUDA = ["12.8", "12.9", "13.0"]
 
 # Where the network volume mounts. Everything durable (patched NAMD, packages,
 # checkpoints) lives here; anything outside it dies with the pod.
