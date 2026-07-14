@@ -55,16 +55,18 @@ class TestEstimate:
     """Pure sizing — no key, no network, no pod."""
 
     def test_small_system_gets_the_cheapest_card_resident(self, client):
-        """RTX PRO 4500: 32 GB for the same $0.34/hr as a 24 GB 4090, and the only card in
-        that tier RunPod reports as HIGH stock (the 4090 is perpetually "Low", which is
-        what kept producing 500 "no instances currently available")."""
+        """The estimate must quote the SECURE price we actually pay ($0.69 for a 4090).
+
+        It used to quote $0.34 — the COMMUNITY price — while Community cloud is excluded
+        in code (no card in EU-RO-1). Every cost this endpoint reported was therefore
+        ~2.2x low, which is how an $11 overnight ladder is mistaken for a $5 one.
+        """
         r = client.post("/api/runpod/estimate", json={"n_atoms": 225_504})
         assert r.status_code == 200
         body = r.json()
         assert body["feasible"] is True
-        assert body["gpu"]["label"] == "RTX PRO 4500"
-        assert body["gpu"]["vram_mb"] > 24_564
-        assert body["gpu"]["usd_per_hour"] == 0.34
+        assert body["gpu"]["label"] == "RTX 4090"
+        assert body["gpu"]["usd_per_hour"] == 0.69
         assert body["gpu_resident"] is True
 
     def test_voltroncore_sized_from_the_measured_model(self, client):

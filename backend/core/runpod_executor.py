@@ -22,6 +22,7 @@ does so in a ``finally`` via ``RunpodClient.pod``.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
@@ -77,6 +78,46 @@ def chain_steps_for(job: MdJob, min_name: str) -> list[ChainStep]:
 # ── Submit ───────────────────────────────────────────────────────────────────
 
 
+class MdAnalysisMissing(RuntimeError):
+    """Tier-A early-stop was requested but the pod cannot import MDAnalysis."""
+
+
+async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
+    """Make ``import MDAnalysis`` work on the pod, or raise.
+
+    Tier A's whole job is to make the ladder affordable, and it does that by SKIPPING
+    chunks. Its fail-safe is to NOT skip — which is right for the science and ruinous
+    for the wallet: the un-accelerated ladder is ~55 h / ~$41, so a missing MDAnalysis
+    turns a $8 night into a pod that bills until the kill-switch guillotines it
+    mid-ladder, leaving neither a finished relaxation nor the money to retry.
+
+    So this is a hard gate, not a best-effort ``|| true``. The pytorch image ships
+    numpy+scipy but not MDAnalysis; installing it is a ~30 s pip on an already-rented
+    pod, and if that fails we want to know before the ladder starts.
+    """
+    probe = 'python3 -c "import MDAnalysis; print(MDAnalysis.__version__)"'
+    res = await conn.run(probe)
+    if res.rc == 0:
+        log.info("runpod: MDAnalysis %s already present", res.stdout.strip())
+        return
+
+    log.info("runpod: MDAnalysis absent — installing (Tier-A early-stop needs it)")
+    res = await conn.run(
+        "python3 -m pip install --no-input --quiet MDAnalysis", timeout=600.0
+    )
+    if res.rc != 0:
+        raise MdAnalysisMissing(
+            f"pip install MDAnalysis failed on the pod: {res.stderr or res.stdout}"
+        )
+
+    res = await conn.run(probe)
+    if res.rc != 0:
+        raise MdAnalysisMissing(
+            f"MDAnalysis still not importable after install: {res.stderr or res.stdout}"
+        )
+    log.info("runpod: MDAnalysis %s installed", res.stdout.strip())
+
+
 async def submit_job(
     job: MdJob,
     workspace_dir: Path,
@@ -104,6 +145,23 @@ async def submit_job(
     for local_path, rel in md_executor.stage_plan(pkg):
         await conn.sftp_put(str(local_path), f"{remote}/{rel}")
 
+    manifest = json.loads((pkg / "manifest.json").read_text())
+    early_stop = md_executor._early_stop_on(job, manifest)
+    tier = md_executor._early_stop_tier(job)
+
+    if early_stop:
+        # Same three scripts the sbatch stages, uploaded through the same helper — the
+        # conn duck-type means the Alpine stager works verbatim over an SSH'd pod.
+        await md_executor._stage_early_stop_evaluator(
+            conn, remote, workspace_dir, job, tier=tier
+        )
+        if tier == "A":
+            # Tier A fails SAFE to HOLD, and "hold" on a rented pod means running the
+            # FULL 9.6M-step ladder at ~$41. A silent import failure here is therefore
+            # a budget event, not a degraded-quality event: prove MDAnalysis is
+            # importable NOW, while we have spent cents, not at chunk 1 of stage 4.
+            await _ensure_mdanalysis(conn)
+
     script = render_chain_script(
         steps=chain_steps_for(job, min_name),
         remote_dir=remote,
@@ -111,8 +169,14 @@ async def submit_job(
         threads=namd_threads(vcpus),
         devices="0",
         max_lifetime_s=max_lifetime_s,
+        manifest=manifest,
+        early_stop_relax=early_stop,
+        early_stop_tier=tier,
+        name_stem=job.name_stem,
     )
-    tmp = Path(workspace_dir) / "md_jobs" / job.job_id / CHAIN_SCRIPT
+    # job_dir(), never workspace/md_jobs/<id> — this job is ARCHIVED onto an external
+    # drive and the hardcoded path would quietly resurrect a folder on the system disk.
+    tmp = job.job_dir(workspace_dir) / CHAIN_SCRIPT
     tmp.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_text(script)
     await conn.sftp_put(str(tmp), f"{remote}/{CHAIN_SCRIPT}")

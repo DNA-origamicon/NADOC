@@ -37,11 +37,18 @@ def _ok(**over):
 
 
 class TestGpuTable:
-    def test_the_cheapest_card_is_the_32gb_blackwell_not_the_4090(self):
-        """Same $0.34/hr, 32 GB instead of 24 GB, and HIGH stock instead of Low."""
-        assert GPU_TYPES[0].label == "RTX PRO 4500"
-        assert GPU_TYPES[0].vram_mb > 24_564
-        assert GPU_TYPES[0].usd_per_hour == 0.34
+    def test_the_cheapest_card_leads_the_fallback_list(self):
+        """At SECURE prices the 4090 ($0.69) undercuts the 32 GB PRO 4500 ($0.74).
+
+        The PRO 4500 used to lead because at the COMMUNITY price the two TIED at $0.34,
+        making its extra VRAM + HIGH stock a free tiebreak. The real prices break the
+        tie, and the list is a FALLBACK chain — so leading with the scarce-but-cheaper
+        card is free: RunPod falls through to the PRO 4500 when no 4090 is available.
+        """
+        assert GPU_TYPES[0].label == "RTX 4090"
+        assert GPU_TYPES[0].usd_per_hour == 0.69
+        assert GPU_TYPES[1].label == "RTX PRO 4500"   # the fallback that is always there
+        assert GPU_TYPES[1].vram_mb > GPU_TYPES[0].vram_mb
 
     def test_every_offered_card_is_an_arch_the_binary_can_run(self):
         """An A100 (sm_80) rented fine and died at step 0 with 'no kernel image is

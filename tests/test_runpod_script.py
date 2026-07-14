@@ -60,21 +60,23 @@ class TestVramModel:
 
 class TestGpuSizing:
     def test_small_system_gets_the_cheapest_card_resident(self):
-        """RTX PRO 4500 is preferred over the 4090: 32 GB vs 24 GB for the SAME $0.34/hr,
-        and it is the only card in that tier RunPod reports as HIGH stock. The 4090 sits
-        at "Low" essentially always, which is what kept producing
-        500 "There are no instances currently available"."""
+        """At SECURE prices (the only ones we can pay — Community has no card in EU-RO-1)
+        the 4090 is the cheapest that fits, at $0.69/hr.
+
+        It is also the scarce one ("Low" stock in EU-RO-1). That costs us nothing to ask
+        for: `gpuTypeIds` is a fallback LIST, so if no 4090 is free RunPod rents the next
+        card in it (the PRO 4500) and we pay $0.05/hr more. Asking cheapest-first is
+        strictly better than conceding the nickel up front.
+        """
         plan = plan_execution(SIXHB)
-        assert plan["gpu"].label == "RTX PRO 4500"
-        assert plan["gpu"].vram_mb > 24_564          # more VRAM than a 4090…
-        assert plan["gpu"].usd_per_hour == 0.34      # …for the same money
+        assert plan["gpu"].label == "RTX 4090"
+        assert plan["gpu"].usd_per_hour == 0.69
         assert plan["gpu_resident"] is True
 
     def test_flat_sheet_fits_resident_on_the_cheapest_card(self):
-        # 5,016 MB measured; even the 24 GB 4090 was comfortable, so the 32 GB PRO 4500
-        # certainly is.
+        # 5,016 MB measured — comfortable on the 24 GB 4090, which is also the cheapest.
         plan = plan_execution(FLAT)
-        assert plan["gpu"].label == "RTX PRO 4500"
+        assert plan["gpu"].label == "RTX 4090"
         assert plan["gpu_resident"] is True
 
     def test_voltroncore_is_too_big_for_resident_on_a_4090(self):
@@ -414,10 +416,14 @@ class TestOnlyOfferCardsTheBinaryCanRun:
             assert gpu.usd_per_hour <= bm.DEFAULT_MAX_USD_PER_HOUR
 
     def test_the_ceiling_is_configurable_for_a_genuinely_big_job(self):
-        """At the $0.40 tier both 32 GB and 24 GB cards qualify — and offering BOTH is the
-        point: a single named card is regularly unavailable in the volume's datacenter."""
-        cheap = [g.label for g in bm.recommend_gpus(SIXHB, max_usd_per_hour=0.40)]
-        assert cheap == ["RTX PRO 4500", "RTX 4090"]
+        """At the $0.75 tier both the 32 GB and 24 GB cards qualify — and offering BOTH is
+        the point: a single named card is regularly unavailable in the volume's datacenter.
+
+        ($0.75, not $0.40: these are SECURE prices. A $0.40 ceiling now excludes every
+        card we can actually rent and would return an empty list.)
+        """
+        cheap = [g.label for g in bm.recommend_gpus(SIXHB, max_usd_per_hour=0.75)]
+        assert cheap == ["RTX 4090", "RTX PRO 4500"]
 
     def test_still_offers_several_cards_so_availability_failures_are_survivable(self):
         """A network volume pins the datacenter; one named card is regularly unavailable
@@ -460,3 +466,150 @@ class TestLifetimeForBudget:
     def test_never_emits_a_suicidally_short_guard(self):
         """A bogus rate must not render a script that kills the ladder on startup."""
         assert bm.lifetime_for_budget(0.0, 0.34) == bm.MIN_LIFETIME_S
+
+
+class TestRelaxationEarlyStop:
+    """The accelerator that decides whether this run is affordable AT ALL.
+
+    The 3x6x400 ladder is 9.6M steps ~ 55.7 h ~ $41 on a secure PRO 4500 — over any
+    sane overnight budget. Early-stop is what brings it to ~11 h / ~$8. So these are
+    not quality-of-life tests: if the bridge silently fails to skip, the pod bills
+    the full ladder and the kill-switch chops it off half-finished.
+
+    The bridge is EXECUTED, never pattern-matched. A script that emits a
+    beautiful-looking bridge block which doesn't actually cause `run_step` to skip
+    would pass any text assertion and cost $30.
+    """
+
+    # Two stages x three chunks. Stage 01 is well-restrained (k=0.5, Tier-B eligible);
+    # stage 02 is the fragile low-restraint one (k=0.01) that ONLY Tier A may skip.
+    STEPS = [
+        ChainStep("m", is_minimization=True),
+        ChainStep("s_01_k0p5_p10"), ChainStep("s_01_k0p5_p50"), ChainStep("s_01_k0p5_p100"),
+        ChainStep("s_02_k0p01_p10"), ChainStep("s_02_k0p01_p50"), ChainStep("s_02_k0p01_p100"),
+    ]
+    MANIFEST = {
+        "minimization": {"name": "m"},
+        "segments": [
+            {"name": "s_01_k0p5_p10", "scale": 0.5},
+            {"name": "s_01_k0p5_p50", "scale": 0.5},
+            {"name": "s_01_k0p5_p100", "scale": 0.5},
+            {"name": "s_02_k0p01_p10", "scale": 0.01},
+            {"name": "s_02_k0p01_p50", "scale": 0.01},
+            {"name": "s_02_k0p01_p100", "scale": 0.01},
+        ],
+    }
+
+    @staticmethod
+    def _fake_namd(tmp_path):
+        """Records every conf it is invoked for, and writes the full checkpoint set.
+
+        `ran.txt` is the oracle: a bridged chunk must NEVER appear in it. Writes .dcd
+        too, because Tier A's health step is gated on the trajectory existing.
+        """
+        p = tmp_path / "fake_namd"
+        p.write_text(
+            "#!/bin/bash\n"
+            'conf="${!#}"\n'
+            'name=$(basename "$conf" .conf)\n'
+            'echo "$name" >> ran.txt\n'
+            "mkdir -p output\n"
+            'for ext in coor vel xsc dcd; do echo x > "output/${name}.${ext}"; done\n'
+            "exit 0\n"
+        )
+        p.chmod(0o755)
+        return p
+
+    @staticmethod
+    def _fake_evaluators(tmp_path, *, plateau: bool):
+        """Stand in for the two staged python scripts.
+
+        The real cutoff evaluator's contract is its EXIT CODE (0 = plateau/skip,
+        nonzero = hold), so a fake that honours the exit code exercises the bash
+        exactly as the real one does.
+        """
+        cut = tmp_path / "nadoc_cutoff_eval.py"
+        cut.write_text(f"import sys\nsys.exit({0 if plateau else 1})\n")
+        health = tmp_path / "nadoc_health_eval.py"
+        # Mirrors the real one: writes the wc.json Tier A gates on.
+        health.write_text(
+            "import sys\n"
+            "out = sys.argv[sys.argv.index('--out') + 1]\n"
+            "open(out, 'w').write('[0.98, 0.98, 0.98]')\n"
+        )
+
+    def _run(self, tmp_path, *, plateau, tier, **kw):
+        self._fake_evaluators(tmp_path, plateau=plateau)
+        script = tmp_path / "chain.sh"
+        script.write_text(
+            render_chain_script(
+                steps=self.STEPS, remote_dir=str(tmp_path),
+                namd_bin=str(self._fake_namd(tmp_path)), threads=2,
+                manifest=self.MANIFEST, early_stop_relax=True,
+                early_stop_tier=tier, name_stem="s", **kw,
+            )
+        )
+        script.chmod(0o755)
+        proc = subprocess.run(["bash", str(script)], cwd=tmp_path,
+                              capture_output=True, text=True, timeout=120)
+        ran = (tmp_path / "ran.txt").read_text().split() if (tmp_path / "ran.txt").exists() else []
+        return proc, ran
+
+    def test_tier_a_plateau_bridges_and_the_skipped_chunks_never_run(self, tmp_path):
+        """THE test. A plateau at _p10 must mean _p50 and _p100 are never executed.
+
+        This is the whole $33 of savings. It works only because the bridge writes the
+        skipped chunks' .coor, which `run_step`'s idempotent skip-guard then trips on
+        — the resume trick and the early-stop trick are the same trick.
+        """
+        proc, ran = self._run(tmp_path, plateau=True, tier="A")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert (tmp_path / "nadoc_status").read_text().strip() == "completed"
+
+        # Both stages plateaued at their first chunk: only _p10 of each ever ran.
+        assert ran == ["m", "s_01_k0p5_p10", "s_02_k0p01_p10"], ran
+        for skipped in ("s_01_k0p5_p50", "s_01_k0p5_p100",
+                        "s_02_k0p01_p50", "s_02_k0p01_p100"):
+            assert skipped not in ran
+            # ...and the bridge left them a checkpoint, so the NEXT stage can read it.
+            assert (tmp_path / "output" / f"{skipped}.coor").exists()
+
+    def test_hold_runs_every_chunk(self, tmp_path):
+        """Fail-safe: no plateau => nothing is skipped. Correct, and expensive."""
+        proc, ran = self._run(tmp_path, plateau=False, tier="A")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert ran == [s.name for s in self.STEPS], ran
+
+    def test_tier_b_refuses_to_skip_the_low_restraint_stage(self, tmp_path):
+        """Tier B may skip k=0.5 but NEVER k=0.01.
+
+        Below k=0.1 base-pairing keeps degrading after the energy flattens, so an
+        energy-only plateau there would bridge away a stage that had not actually
+        finished relaxing. This gate is why Tier B cannot pay for the 3x6x400 run:
+        it structurally cannot touch half the ladder.
+        """
+        proc, ran = self._run(tmp_path, plateau=True, tier="B")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert ran == [
+            "m",
+            "s_01_k0p5_p10",                                     # plateaued -> bridged
+            "s_02_k0p01_p10", "s_02_k0p01_p50", "s_02_k0p01_p100",  # never eligible
+        ], ran
+
+    def test_off_by_default_emits_no_evaluator_call(self):
+        """A job that didn't opt in must render the exact script it rendered before."""
+        s = render_chain_script(steps=self.STEPS, remote_dir="/w", namd_bin="/n",
+                                threads=2, manifest=self.MANIFEST)
+        assert "nadoc_cutoff_eval.py" not in s
+
+    def test_no_manifest_means_no_skipping(self):
+        """Fail-safe: without scales we cannot judge restraint, so we run everything."""
+        s = render_chain_script(steps=self.STEPS, remote_dir="/w", namd_bin="/n",
+                                threads=2, early_stop_relax=True, early_stop_tier="A")
+        assert "nadoc_cutoff_eval.py" not in s
+
+    def test_rejects_an_unknown_tier(self):
+        with pytest.raises(ValueError, match="must be 'A' or 'B'"):
+            render_chain_script(steps=self.STEPS, remote_dir="/w", namd_bin="/n",
+                                threads=2, manifest=self.MANIFEST,
+                                early_stop_relax=True, early_stop_tier="Z")

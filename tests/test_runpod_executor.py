@@ -14,6 +14,7 @@ No network anywhere: httpx MockTransport + a stubbed asyncssh connection.
 from __future__ import annotations
 
 import asyncio
+import json
 
 import httpx
 import pytest
@@ -40,6 +41,13 @@ def _job(tmp_path, n_segs=2) -> MdJob:
     pkg.mkdir(parents=True, exist_ok=True)
     (pkg / "d.psf").write_text("psf")
     (pkg / "d.pdb").write_text("pdb")
+    # submit_job reads the manifest to get the per-chunk ENM scales that decide
+    # early-stop eligibility. No manifest => no scales => nothing is skippable (the
+    # fail-safe direction), so a package without one must still submit cleanly.
+    (pkg / "manifest.json").write_text(json.dumps({
+        "minimization": {"name": "d_min"},
+        "segments": [{"name": s.name, "scale": 0.5} for s in job.segments],
+    }))
     return job
 
 
@@ -106,7 +114,7 @@ class TestPodSizing:
         # Naming a single GPU is what made RunPod answer 500 "There are no instances
         # currently available" — a network volume pins the datacenter (EU-RO-1), and the
         # one card we asked for simply was not free there.
-        assert payload["gpuTypeIds"][0] == "NVIDIA RTX PRO 4500 Blackwell"
+        assert payload["gpuTypeIds"][0] == "NVIDIA GeForce RTX 4090"
         assert len(payload["gpuTypeIds"]) > 1, "must offer fallbacks, not one card"
         assert payload["networkVolumeId"] == VOLUME
         assert payload["interruptible"] is True
@@ -351,3 +359,90 @@ class TestRunJobOnPodAlwaysTerminates:
 
 async def _nosleep(_):
     return None
+
+
+class TestTierAEarlyStopGate:
+    """Tier-A early-stop is what makes a big ladder affordable — so its failure mode is
+    a BUDGET failure, not a quality failure.
+
+    The evaluator fails safe to HOLD (never skip) when it can't measure base-pairing.
+    That is right for the science and ruinous for the wallet: HOLD means the full
+    9.6M-step ladder, ~55 h, ~$41 on a secure pod. So a pod that cannot import
+    MDAnalysis must REFUSE to start, not quietly run the expensive path.
+    """
+
+    def _tier_a_job(self, tmp_path):
+        """A job with a real CHUNKED stage — the only shape early-stop can act on.
+
+        A stage is a set of `_pNN` chunks sharing a base name. A single-chunk stage has
+        nothing after it to bridge, so it is correctly never eligible; the plain `_job`
+        fixture (d_01, d_02) is exactly that and would render no early-stop block at all.
+        """
+        job = _job(tmp_path)
+        job.early_stop_relax = True
+        job.early_stop_tier = "A"
+        job.segments = [
+            MdSegmentStatus(name=f"d_01_k0p5_p{p}", stage="relax", percent=float(p), steps=100)
+            for p in (10, 50, 100)
+        ]
+        (job.package_dir(tmp_path) / "manifest.json").write_text(json.dumps({
+            "minimization": {"name": "d_min"},
+            "segments": [{"name": s.name, "scale": 0.5} for s in job.segments],
+        }))
+        return job
+
+    def test_stages_the_evaluators_and_enables_early_stop_in_the_script(self, tmp_path):
+        job = self._tier_a_job(tmp_path)
+        conn = _conn({"setsid": (0, "7\n", ""), "import MDAnalysis": (0, "2.7.0\n", "")})
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+        script = (job.job_dir(tmp_path) / rx.CHAIN_SCRIPT).read_text()
+        assert "nadoc_cutoff_eval.py" in script
+        assert "nadoc_health_eval.py" in script, "Tier A must run the WC health step"
+
+    def test_refuses_to_launch_when_the_pod_cannot_import_mdanalysis(self, tmp_path):
+        """The $33 test. A silent fallthrough here bills the full ladder."""
+        job = self._tier_a_job(tmp_path)
+        conn = _conn({
+            "import MDAnalysis": (1, "", "ModuleNotFoundError: No module named 'MDAnalysis'"),
+            "pip install": (1, "", "network unreachable"),
+        })
+        with pytest.raises(rx.MdAnalysisMissing):
+            _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                               n_atoms=225_504, vcpus=8))
+
+    def test_installs_mdanalysis_when_the_image_lacks_it(self, tmp_path):
+        """The pytorch image ships numpy+scipy but not MDAnalysis; a ~30 s pip fixes it."""
+        job = self._tier_a_job(tmp_path)
+        calls = {"n": 0}
+
+        class _Conn(RunpodConnection):
+            async def run(self, cmd, timeout=60.0):
+                if "import MDAnalysis" in cmd:
+                    calls["n"] += 1
+                    # Absent on the first probe, present once pip has run.
+                    return (_R(1, "", "ModuleNotFoundError") if calls["n"] == 1
+                            else _R(0, "2.7.0", ""))
+                if "setsid" in cmd:
+                    return _R(0, "9\n", "")
+                return _R(0, "", "")
+
+        conn = _Conn(host="h", port=1, pod_id="p1")
+        conn._conn = FakeSSH()  # noqa: SLF001
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+        assert calls["n"] == 2, "must re-probe after installing, not assume pip worked"
+
+    def test_off_by_default_stages_nothing_and_never_probes(self, tmp_path):
+        job = _job(tmp_path)                       # early_stop_relax defaults False
+        conn = _conn({"setsid": (0, "1\n", "")})
+        _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
+                           n_atoms=225_504, vcpus=8))
+        script = (job.job_dir(tmp_path) / rx.CHAIN_SCRIPT).read_text()
+        assert "nadoc_cutoff_eval.py" not in script
+        assert not any("MDAnalysis" in c for c in conn._conn.commands)  # noqa: SLF001
+
+
+class _R:
+    def __init__(self, rc, stdout, stderr):
+        self.rc, self.stdout, self.stderr = rc, stdout, stderr

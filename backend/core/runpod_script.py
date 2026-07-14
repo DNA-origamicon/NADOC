@@ -33,6 +33,20 @@ import shlex
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+# The relaxation early-stop accelerator is IDENTICAL on a pod and on a cluster node:
+# the same stdlib evaluator reads the same NAMD log and the same copy-forward bridge
+# fakes up the skipped chunks' checkpoints. Import the emitters rather than copying
+# them — the bridge bash is the subtle half (explicit names, never a glob, so `_p50`
+# can't sweep `_p100`), and a second copy would drift out of lockstep with the tests
+# that pin it.
+from backend.core.slurm_script import (
+    _DEFAULT_EARLY_STOP_MIN_K,
+    _chain_scales,
+    _early_stop_block,
+    _early_stop_eligible,
+    _stage_last_chunk_index,
+)
+
 # ── VRAM model ───────────────────────────────────────────────────────────────
 # Linear fits to the three measured points above. Both are ~0.4 GB fixed overhead
 # plus a per-atom slope; the offload fit reproduces all three within ~3%.
@@ -93,15 +107,36 @@ DEFAULT_MAX_USD_PER_HOUR = 1.00
 # L4 / L40S are sm_89 and WOULD work; excluded by choice, not by capability.
 # Ids verified against RunPod's live gpuTypes list.
 #
-# RTX PRO 4500 is FIRST on purpose: 32 GB for the SAME $0.34/hr as a 24 GB 4090, and it
-# is the only card in that tier RunPod reports as HIGH stock. The 4090 sits at "Low"
-# essentially always, which is what kept producing
-#   500 "There are no instances currently available".
+# ⚠️ These are the **SECURE** prices, live-checked against RunPod's `gpuTypes` GraphQL
+# on 2026-07-14. They MUST be, because Community cloud is excluded in code (it has no
+# card in EU-RO-1, where the network volume pins us — every attempt 500'd). The table
+# previously carried the COMMUNITY prices, which are roughly HALF:
+#
+#     card            community   SECURE (what we actually pay)
+#     RTX 4090          0.34        0.69
+#     RTX PRO 4500      0.34        0.74
+#     RTX 6000 Ada      0.74        0.77
+#     RTX PRO 5000      0.82        0.96
+#
+# Costing a secure-only run off community prices under-reports it by ~2.2x, which is how
+# a "$5" overnight ladder quietly becomes an $11 one. `plan_execution` and
+# `POST /runpod/estimate` both read these numbers, so they were both lying.
+#
+# ORDER = FALLBACK PRIORITY, and it stays STRICTLY CHEAPEST-FIRST (pinned by
+# test_gpu_table_is_strictly_cheapest_first). RunPod takes `gpuTypeIds` as a list and
+# rents the first one available, so the cheap-but-scarce card costs NOTHING to ask for:
+# if the 4090 (chronically "Low" stock in EU-RO-1) isn't free, RunPod simply falls
+# through to the PRO 4500 and we pay $0.05/hr more. Asking cheapest-first is therefore
+# strictly better than pre-emptively conceding the nickel.
+#
+# The PRO 4500 used to head this list because at the COMMUNITY price the two TIED at
+# $0.34 — and at equal cost its 32 GB and HIGH stock made it the obvious tiebreak. The
+# real prices break that tie, so the ordering reverts to the invariant.
 GPU_TYPES: tuple[GpuType, ...] = (
-    GpuType("NVIDIA RTX PRO 4500 Blackwell", "RTX PRO 4500", 32_623, 0.34, "sm_120"),
-    GpuType("NVIDIA GeForce RTX 4090", "RTX 4090", 24_564, 0.34, "sm_89"),
-    GpuType("NVIDIA RTX 6000 Ada Generation", "RTX 6000 Ada", 49_140, 0.74, "sm_89"),
-    GpuType("NVIDIA RTX PRO 5000 Blackwell", "RTX PRO 5000", 49_152, 0.82, "sm_120"),
+    GpuType("NVIDIA GeForce RTX 4090", "RTX 4090", 24_564, 0.69, "sm_89"),
+    GpuType("NVIDIA RTX PRO 4500 Blackwell", "RTX PRO 4500", 32_623, 0.74, "sm_120"),
+    GpuType("NVIDIA RTX 6000 Ada Generation", "RTX 6000 Ada", 49_140, 0.77, "sm_89"),
+    GpuType("NVIDIA RTX PRO 5000 Blackwell", "RTX PRO 5000", 49_152, 0.96, "sm_120"),
 )
 
 
@@ -125,6 +160,11 @@ def recommend_gpu(
     candidates: Sequence[GpuType] = GPU_TYPES,
 ) -> Optional[GpuType]:
     """Cheapest GPU that can hold this system, or None if nothing fits.
+
+    ``GPU_TYPES`` is strictly price-ordered, so "cheapest that fits" == "first that fits".
+    This is the SIZING/COSTING answer; the pod payload offers the whole tail of the list
+    as fallbacks, so an unavailable cheap card degrades to the next one rather than
+    failing.
 
     GPU-resident is worth 3.3-4.1x, so it is the DEFAULT and we size for it. If the
     system is too big to be resident anywhere affordable, the caller should retry
@@ -286,6 +326,12 @@ def render_chain_script(
     stall_timeout_s: int = STALL_TIMEOUT_S,
     max_lifetime_s: Optional[int] = None,
     watchdog_poll_s: int = WATCHDOG_POLL_S,
+    manifest: Optional[dict] = None,
+    early_stop_relax: bool = False,
+    early_stop_tier: str = "B",
+    early_stop_min_k: Optional[float] = None,
+    name_stem: str = "",
+    health_python: str = "python3",
 ) -> str:
     """Emit the bash script that runs the whole ladder on the pod.
 
@@ -307,6 +353,32 @@ def render_chain_script(
 
     * **A heartbeat file** so the poller can distinguish "still working" from
       "silently dead" without an SSH round-trip per segment.
+
+    * **Relaxation early-stop** (``early_stop_relax``) — the on-pod analogue of the
+      in-sbatch accelerator, and on RunPod it is a BUDGET feature, not a nicety. The
+      full 3x6x400 ladder is 9.6M steps ~= 55.7 h ~= $41 on a secure PRO 4500. It does
+      not fit in a night or in a budget. With the accelerator it is ~11 h.
+
+      After each non-final relaxation chunk, the pod evaluates whether the stage has
+      plateaued and, if so, **bridges**: it copies that chunk's final ``{coor,vel,xsc}``
+      onto every remaining chunk's expected names. The bridge needs no new skip logic —
+      ``run_step``'s existing "``output/<name>.coor`` exists => SKIP" guard then walks
+      straight past them, and the next stage's ``previous`` (which points at ``_p100``)
+      finds the bridged file. The idempotent-resume trick and the early-stop trick are
+      the same trick.
+
+      **Tier matters, and Tier B cannot pay for this run.** Tier B (stdlib, energy+volume
+      plateau) may only skip stages restrained at ENM ``k >= min_k`` (0.1), because below
+      that base-pairing keeps degrading after the energy flattens — so k=0.01 and the
+      k=0/MGHH melt always run in FULL. That caps Tier B at 5.28M steps (~$22.7): over
+      budget even in its best case. Tier A adds the WC base-pairing series (an on-pod
+      MDAnalysis health step), which holds the fragile stages directly and therefore makes
+      EVERY relaxation chunk eligible — that is where exp36's measured 4.9x comes from.
+
+      Tier A **fails safe to HOLD**: no ``wc.json`` (MDAnalysis missing, health step
+      failed, no frames yet) => no skip => the full ladder runs. Safe for the science,
+      *expensive* on a rented pod — so confirm MDAnalysis imports on the pod before
+      trusting Tier A to bring a run inside budget.
     """
     q = shlex.quote
     lines: list[str] = [
@@ -395,12 +467,29 @@ def render_chain_script(
         "",
     ]
 
-    for step in steps:
+    tier = (early_stop_tier or "B").upper()
+    if early_stop_relax and tier not in ("A", "B"):
+        raise ValueError(f"early_stop_tier {tier!r} must be 'A' or 'B'")
+    min_k = _DEFAULT_EARLY_STOP_MIN_K if early_stop_min_k is None else float(early_stop_min_k)
+
+    chain = [s.name for s in steps]
+    # Scales come from the manifest, positionally aligned to the chain (chain[0] is the
+    # minimisation -> None). No manifest => no scales => nothing is eligible, which is
+    # the fail-safe direction: run everything.
+    scales = _chain_scales(manifest, chain) if (early_stop_relax and manifest) else []
+
+    for i, step in enumerate(steps):
         kind = "minimization" if step.is_minimization else "segment"
         lines.append(f"# {kind}: {step.name}")
         lines.append(
             f'run_step_with_retries {q(step.name)} {q(step.name + ".conf")} || exit 1'
         )
+        if scales and _early_stop_eligible(chain, scales, i, min_k, tier):
+            last = _stage_last_chunk_index(chain, i)
+            lines += _early_stop_block(
+                step.name, chain[i + 1 : last + 1],
+                tier=tier, name_stem=name_stem, health_python=health_python,
+            )
 
     lines += [
         "",
