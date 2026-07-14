@@ -49,6 +49,14 @@ PADDING_NM = 1.2
 MINIMIZE_STEPS = 4800
 MIN_SCALE = 0.5
 
+# THE single biggest free win, and it is a PREP-TIME flag — not a runtime one. `fast`
+# writes confs with `GPUresident on`, a 4 fs timestep and the HMR PSF. Measured on the
+# 4090: 3.3-4.1x, scaling BETTER with system size. The shipped equilibrium_aware confs
+# do NOT enable it, so a package prepped without this runs at 2 fs in offload mode and
+# quietly costs ~4x the money for the same science. (Without it the HMR PSF is still
+# written but referenced by nothing.)
+FAST = True
+
 JOB_ID_FILE = Path(__file__).parent / "JOB_ID_3x6x400"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -120,6 +128,13 @@ def main() -> int:
     )
     job.execution_target = "runpod"
 
+    # MANDATORY, not an optimisation. The full ladder is 9.6M steps ~ 55.7 h ~ $41 on a
+    # secure pod: it fits neither the night nor the budget. Tier A (WC-gated) is the only
+    # tier that can skip the low-restraint stages (k=0.01, MGHH k=0), and those are half
+    # the ladder — Tier B structurally cannot touch them and tops out at ~$22.7.
+    job.early_stop_relax = True
+    job.early_stop_tier = "A"
+
     # ARCHIVED FROM BIRTH. job_dir() returns archive_path, so prep, staging, fetch and the
     # production child all resolve to the archive HD. The system disk has 20 GB free; a
     # 1.9M-atom production run would fill it overnight.
@@ -154,6 +169,7 @@ def main() -> int:
             padding_nm=PADDING_NM,
             minimize_steps=MINIMIZE_STEPS,
             min_scale=MIN_SCALE,
+            fast=FAST,
         )
     except Exception as exc:
         job.status = MdStatus.failed
