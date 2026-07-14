@@ -39,6 +39,7 @@ from backend.core.runpod_api import (
 from backend.core.runpod_conn import RunpodConnection
 from backend.core.runpod_script import (
     DEFAULT_BUDGET_USD,
+    RESUME_CONF_NAME,
     ChainStep,
     completed_steps,
     heartbeat_is_stale,
@@ -69,9 +70,14 @@ def remote_dir_for(job: MdJob) -> str:
 
 
 def chain_steps_for(job: MdJob, min_name: str) -> list[ChainStep]:
-    """The ladder: minimisation, then every segment, in order."""
+    """The ladder: minimisation, then every segment, in order.
+
+    ``steps`` is carried through because a cell-shrink resume has to run
+    ``total - restart_step``, and the pod cannot know the total from the conf alone once
+    the conf has been rewritten.
+    """
     steps = [ChainStep(min_name, is_minimization=True)]
-    steps += [ChainStep(seg.name) for seg in job.segments]
+    steps += [ChainStep(seg.name, steps=int(seg.steps or 0)) for seg in job.segments]
     return steps
 
 
@@ -189,6 +195,16 @@ async def submit_job(
         await conn.sftp_put(str(local_path), f"{remote}/{rel}")
         sent += 1
     log.info("runpod: staged %d file(s), reused %d already on the volume", sent, skipped)
+
+    # The cell-shrink resume writer. Staged ALWAYS — an NPT box crossing its patch grid
+    # has nothing to do with early-stop, and without this the chain script's "bounded
+    # retry" just re-runs the identical failing conf four times.
+    from backend.core import remote_resume_conf
+
+    await md_executor._put_text(
+        conn, Path(remote_resume_conf.__file__).read_text(),
+        f"{remote}/{RESUME_CONF_NAME}", workspace_dir, job,
+    )
 
     manifest = json.loads((pkg / "manifest.json").read_text())
     early_stop = md_executor._early_stop_on(job, manifest)

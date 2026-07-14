@@ -482,9 +482,12 @@ class TestStagingReusesTheVolume:
         conn._conn = FakeSSH()  # noqa: SLF001
         _run(rx.submit_job(job, tmp_path, conn=conn, min_name="d_min",
                            n_atoms=225_504, vcpus=8))
-        # The chain script itself is always re-sent (it encodes THIS run's kill-switch
-        # and early-stop wiring), but no package file is.
-        assert all(p.endswith(rx.CHAIN_SCRIPT) for p in sent), sent
+        # The small generated/helper scripts are always re-sent — the chain script encodes
+        # THIS run's kill-switch and early-stop wiring, and the resume writer is a few KB.
+        # The point of this test is that no PACKAGE file (the 1.21 GB) is re-uploaded.
+        always = (rx.CHAIN_SCRIPT, rx.RESUME_CONF_NAME)
+        package_files = [p for p in sent if not p.endswith(always)]
+        assert package_files == [], package_files
 
     def test_reuploads_a_truncated_file(self, tmp_path):
         """Size mismatch => re-send. A partial transfer must not be mistaken for done."""

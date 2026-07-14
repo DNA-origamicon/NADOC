@@ -298,6 +298,9 @@ class ChainStep:
 
     name: str  # conf/output stem, e.g. "6hb_01_300K_NPT_ENM_k0p5_p10"
     is_minimization: bool = False
+    # Total steps in this segment. Needed ONLY to resume it after a cell-shrink restart:
+    # the resume conf must run `total - restart_step`, not the original `run`.
+    steps: int = 0
 
 
 STALL_TIMEOUT_S = 1800  # 30 min with no new ENERGY frame => the run is wedged
@@ -313,6 +316,12 @@ STALL_TIMEOUT_S = 1800  # 30 min with no new ENERGY frame => the run is wedged
 # kernel on a carved box (see project_water_shell_carve).
 CELL_SHRINK_PATTERN = "Periodic cell has become too small"
 MAX_CELL_SHRINK_RETRIES = 4
+
+# The pod-side resume-conf writer (backend/core/remote_resume_conf.py, staged under this
+# name). Without it a cell-shrink retry re-runs the ORIGINAL conf, restarts from the
+# ORIGINAL box, and shrinks into the same wall — so "bounded retry" means "fails four
+# times", not "self-heals".
+RESUME_CONF_NAME = "nadoc_resume_conf.py"
 WATCHDOG_POLL_S = 30    # how often the watchdog checks the log mtime + heartbeat
 
 
@@ -403,14 +412,32 @@ def render_chain_script(
 
     lines += [
         "run_step() {",
-        "  local name=$1 conf=$2 attempt=${3:-0}",
+        "  local name=$1 conf=$2 attempt=${3:-0} total=${4:-0}",
         "  if [ -f \"output/${name}.coor\" ]; then",
         '    echo "SKIP  $name (already complete)"',
         "    return 0",
         "  fi",
+        "",
+        "  # A cell-shrink RETRY must resume from the segment's OWN restart files: they",
+        "  # carry the SHRUNKEN cell. Re-running the original conf restarts from the",
+        "  # ORIGINAL box (its extendedSystem points at the previous segment), so NAMD",
+        "  # rebuilds the SAME patch grid, the box shrinks into the SAME wall, and every",
+        "  # retry fails identically. Measured live: 156.6 x 89.1 x 1436.2 -> 152.0 x",
+        "  # 86.5 x 1393.4, a uniform -3.0%. Without this, cell_shrink is not self-healing",
+        "  # at all — it is a bounded loop that always ends in failure.",
+        '  local runconf="$conf"',
+        '  if [ "$attempt" -gt 0 ] && [ -f "output/${name}.restart.xsc" ] && [ "$total" -gt 0 ]; then',
+        f"    if python3 {RESUME_CONF_NAME} --seg \"$name\" --total-steps \"$total\"; then",
+        '      runconf="${name}.resume.conf"',
+        '      echo "RESUME $name from its own checkpoint (attempt $attempt)"',
+        "    else",
+        '      echo "RESUME $name FAILED to build — falling back to the original conf"',
+        "    fi",
+        "  fi",
+        "",
         '  echo "START $name"; echo "$name" > nadoc_current',
         f"  {q(namd_bin)} +p{int(threads)} +setcpuaffinity +devices {q(devices)} "
-        '"$conf" > "${name}.log" 2>&1 &',
+        '"$runconf" > "${name}.log" 2>&1 &',
         "  local pid=$!",
         "",
         "  # Watchdog: the ONLY reliable handle on NAMD is the pid we just spawned.",
@@ -453,9 +480,9 @@ def render_chain_script(
         "}",
         "",
         "run_step_with_retries() {",
-        "  local name=$1 conf=$2 attempt=0",
+        "  local name=$1 conf=$2 total=${3:-0} attempt=0",
         f"  while [ $attempt -le {int(MAX_CELL_SHRINK_RETRIES)} ]; do",
-        "    run_step \"$name\" \"$conf\" \"$attempt\"",
+        '    run_step "$name" "$conf" "$attempt" "$total"',
         "    local rc=$?",
         "    [ $rc -eq 0 ] && return 0",
         "    [ $rc -ne 75 ] && return 1",
@@ -482,7 +509,8 @@ def render_chain_script(
         kind = "minimization" if step.is_minimization else "segment"
         lines.append(f"# {kind}: {step.name}")
         lines.append(
-            f'run_step_with_retries {q(step.name)} {q(step.name + ".conf")} || exit 1'
+            f'run_step_with_retries {q(step.name)} {q(step.name + ".conf")} '
+            f"{int(step.steps)} || exit 1"
         )
         if scales and _early_stop_eligible(chain, scales, i, min_k, tier):
             last = _stage_last_chunk_index(chain, i)
