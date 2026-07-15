@@ -57,7 +57,7 @@ class FakeSSH:
         self.responses = responses or {}
         self.commands: list[str] = []
 
-    async def run(self, cmd, check=False):
+    async def run(self, cmd, check=False, retries=0):
         self.commands.append(cmd)
         for needle, (rc, out, err) in self.responses.items():
             if needle in cmd:
@@ -420,7 +420,7 @@ class TestTierAEarlyStopGate:
         calls = {"n": 0}
 
         class _Conn(RunpodConnection):
-            async def run(self, cmd, timeout=60.0):
+            async def run(self, cmd, timeout=60.0, retries=0):
                 if "import MDAnalysis" in cmd:
                     calls["n"] += 1
                     # Absent on the first probe, present once pip has run.
@@ -465,7 +465,7 @@ class TestStagingReusesTheVolume:
         sent: list[str] = []
 
         class _Conn(RunpodConnection):
-            async def run(self, cmd, timeout=60.0):
+            async def run(self, cmd, timeout=60.0, retries=0):
                 if "find . -type f" in cmd:
                     # Everything already present, at its true local size.
                     pkg = job.package_dir(tmp_path)
@@ -498,7 +498,7 @@ class TestStagingReusesTheVolume:
         sent: list[str] = []
 
         class _Conn(RunpodConnection):
-            async def run(self, cmd, timeout=60.0):
+            async def run(self, cmd, timeout=60.0, retries=0):
                 if "find . -type f" in cmd:
                     return _R(0, "1 d.psf", "")     # 1 byte — truncated
                 if "setsid" in cmd:
@@ -521,7 +521,7 @@ class TestStagingReusesTheVolume:
         sent: list[str] = []
 
         class _Conn(RunpodConnection):
-            async def run(self, cmd, timeout=60.0):
+            async def run(self, cmd, timeout=60.0, retries=0):
                 if "find . -type f" in cmd:
                     return _R(1, "", "no such dir")
                 if "setsid" in cmd:
@@ -558,7 +558,7 @@ class TestProductionChildSeedsFromParentOnTheVolume:
         cmds: list[str] = []
 
         class _Conn(RunpodConnection):
-            async def run(self, cmd, timeout=60.0):
+            async def run(self, cmd, timeout=60.0, retries=0):
                 cmds.append(cmd)
                 if "find . -type f" in cmd and "PARENT123456" in cmd:
                     pkg = job.package_dir(tmp_path)
@@ -596,7 +596,7 @@ class TestProductionChildSeedsFromParentOnTheVolume:
         cmds: list[str] = []
 
         class _Conn(RunpodConnection):
-            async def run(self, cmd, timeout=60.0):
+            async def run(self, cmd, timeout=60.0, retries=0):
                 cmds.append(cmd)
                 if "find . -type f" in cmd and "PARENT123456" in cmd:
                     # The parent's dir ALSO holds completed outputs and sentinels.
@@ -628,7 +628,7 @@ class TestProductionChildSeedsFromParentOnTheVolume:
         cmds: list[str] = []
 
         class _Conn(RunpodConnection):
-            async def run(self, cmd, timeout=60.0):
+            async def run(self, cmd, timeout=60.0, retries=0):
                 cmds.append(cmd)
                 return _R(0, "11\n", "") if "setsid" in cmd else _R(0, "", "")
 

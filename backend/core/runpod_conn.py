@@ -21,6 +21,7 @@ Differences from :class:`~backend.core.cluster_ssh.ClusterConnection`:
 from __future__ import annotations
 
 import asyncio
+import logging
 import shlex
 from pathlib import Path, PurePosixPath
 from typing import Optional
@@ -28,6 +29,8 @@ from typing import Optional
 import asyncssh
 
 from backend.core.cluster_ssh import RunResult
+
+log = logging.getLogger(__name__)
 
 _CHUNK = 256 * 1024
 
@@ -113,16 +116,55 @@ class RunpodConnection:
 
     # ── the conn contract ────────────────────────────────────────────────────
 
-    async def run(self, cmd: str, timeout: float = 60.0) -> RunResult:
-        conn = self._require()
+    async def run(self, cmd: str, timeout: float = 60.0, retries: int = 0) -> RunResult:
+        """Run ``cmd`` on the pod.
+
+        ``retries`` > 0 tolerates a TRANSIENT SSH drop (EU-RO-1 SSH flakes; a single dropped
+        channel once aborted a whole multi-hour run): on a transport failure it RECONNECTS and
+        retries, up to ``retries`` times.  Use it ONLY for IDEMPOTENT / read-only commands
+        (status reads, `kill -0`, `pip install`) — NEVER for a side-effecting launch, where a
+        reconnect-retry could double-execute (``launch_detached`` keeps the default 0).  A
+        timeout is NOT retried (the command may still be running remotely)."""
+        last: Optional[Exception] = None
+        for attempt in range(retries + 1):
+            try:
+                conn = self._require()
+            except RunpodSSHError as exc:      # not connected — try to (re)establish
+                last = exc
+                if attempt < retries and await self._reconnect():
+                    continue
+                raise
+            try:
+                res = await asyncio.wait_for(conn.run(cmd, check=False), timeout=timeout)
+                rc = getattr(res, "exit_status", 0) or 0
+                return RunResult(rc=int(rc), stdout=_s(res.stdout), stderr=_s(res.stderr))
+            except asyncio.TimeoutError as exc:
+                raise RunpodSSHError(f"command timed out after {timeout}s: {cmd}") from exc
+            except Exception as exc:  # noqa: BLE001 — broken pipe / pod reclaimed / SSH drop
+                last = exc
+                if attempt < retries:
+                    log.warning("runpod ssh: transport drop (try %d/%d), reconnecting: %s",
+                                attempt + 1, retries, exc)
+                    await self._reconnect()
+                    await asyncio.sleep(2.0 * (attempt + 1))
+                    continue
+                raise RunpodSSHError(
+                    f"command failed on transport after {attempt + 1} tr{'y' if attempt == 0 else 'ies'}: {exc}"
+                ) from exc
+        raise RunpodSSHError(f"command failed on transport: {last}")
+
+    async def _reconnect(self) -> bool:
+        """Drop the dead connection and re-establish it. Returns True on success."""
         try:
-            res = await asyncio.wait_for(conn.run(cmd, check=False), timeout=timeout)
-        except asyncio.TimeoutError as exc:
-            raise RunpodSSHError(f"command timed out after {timeout}s: {cmd}") from exc
-        except Exception as exc:  # noqa: BLE001 — broken pipe / pod reclaimed
-            raise RunpodSSHError(f"command failed on transport: {exc}") from exc
-        rc = getattr(res, "exit_status", 0) or 0
-        return RunResult(rc=int(rc), stdout=_s(res.stdout), stderr=_s(res.stderr))
+            await self.close()
+        except Exception:  # noqa: BLE001
+            self._conn = None
+        try:
+            await self.connect()
+            return True
+        except RunpodSSHError as exc:
+            log.warning("runpod ssh: reconnect failed: %s", exc)
+            return False
 
     async def mkdir_p(self, remote_dir: str) -> None:
         await self.run(f"mkdir -p {shlex.quote(remote_dir)}")
@@ -201,11 +243,14 @@ class RunpodConnection:
         we spawned is the only reliable handle — this cost an hour of debugging and a
         contaminated benchmark.
         """
-        res = await self.run(f"kill -0 {int(pid)} 2>/dev/null && echo alive || echo dead")
+        res = await self.run(f"kill -0 {int(pid)} 2>/dev/null && echo alive || echo dead",
+                             retries=3)
         return "alive" in res.stdout
 
     async def read_file(self, remote_path: str) -> str:
-        res = await self.run(f"cat {shlex.quote(remote_path)} 2>/dev/null || true")
+        # retries: read_file backs the poll loop's status/heartbeat reads; a transient SSH
+        # drop there must not abort a live run (the chain runs detached and keeps going).
+        res = await self.run(f"cat {shlex.quote(remote_path)} 2>/dev/null || true", retries=3)
         return res.stdout
 
 

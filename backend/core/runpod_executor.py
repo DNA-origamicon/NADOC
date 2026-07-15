@@ -36,7 +36,7 @@ from backend.core.runpod_api import (
     build_create_payload,
     ssh_endpoint,
 )
-from backend.core.runpod_conn import RunpodConnection
+from backend.core.runpod_conn import RunpodConnection, RunpodSSHError
 from backend.core.runpod_script import (
     DEFAULT_BUDGET_USD,
     RESUME_CONF_NAME,
@@ -67,6 +67,11 @@ HEARTBEAT_FILE = "nadoc_heartbeat"
 # pod's finally-teardown, billing until a human intervenes.  The volume keeps every output, so
 # abandoning a slow fetch is cheap; a live pod is not.  Generous enough for a ~140 MB checkpoint.
 FETCH_TIMEOUT_S = 900.0
+# How many CONSECUTIVE poll SSH failures to tolerate before pausing the run. The chain runs
+# detached (setsid) so the job keeps going on the pod during a network blip; conn.run already
+# reconnects+retries per-call, this is the belt-and-suspenders so a longer wobble pauses
+# (resumable) rather than crashes the whole run. Reset to 0 on any successful poll.
+MAX_POLL_SSH_FAILURES = 5
 
 # The patched NAMD lives on the NETWORK VOLUME, built once per GPU architecture.
 # Pods are disposable; the toolchain is not.
@@ -170,8 +175,11 @@ async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     numpy+scipy but not MDAnalysis; installing it is a ~30 s pip on an already-rented
     pod, and if that fails we want to know before the ladder starts.
     """
+    # retries: setup runs over a freshly-booted pod whose SSH sometimes drops a channel
+    # (EU-RO-1 flake); a transient drop here once aborted the whole run. probe + pip are
+    # idempotent, so reconnect-and-retry rather than crash.
     probe = 'python3 -c "import MDAnalysis; print(MDAnalysis.__version__)"'
-    res = await conn.run(probe)
+    res = await conn.run(probe, retries=3)
     if res.rc == 0:
         log.info("runpod: MDAnalysis %s already present", res.stdout.strip())
         return
@@ -188,7 +196,7 @@ async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     )
     last = ""
     for cmd in attempts:
-        res = await conn.run(cmd, timeout=900.0)
+        res = await conn.run(cmd, timeout=900.0, retries=2)
         if res.rc == 0:
             break
         last = (res.stderr or res.stdout).strip()
@@ -196,7 +204,7 @@ async def _ensure_mdanalysis(conn: RunpodConnection) -> None:
     else:
         raise MdAnalysisMissing(f"could not install MDAnalysis on the pod: {last}")
 
-    res = await conn.run(probe)
+    res = await conn.run(probe, retries=3)
     if res.rc != 0:
         raise MdAnalysisMissing(
             f"MDAnalysis still not importable after install: {res.stderr or res.stdout}"
@@ -510,8 +518,29 @@ async def run_job_on_pod(
                 n_atoms=n_atoms, vcpus=vcpus, max_lifetime_s=lifetime_s,
             )
 
+            ssh_failures = 0
             while True:
-                st = await poll_job(job, conn=conn)
+                try:
+                    st = await poll_job(job, conn=conn)
+                    ssh_failures = 0
+                except RunpodSSHError as exc:
+                    # A transient SSH drop must not abort a live run — the chain is detached
+                    # and the volume keeps every completed step. conn.run already reconnects
+                    # per-call; tolerate a longer wobble here, then pause (resumable).
+                    ssh_failures += 1
+                    if ssh_failures > MAX_POLL_SSH_FAILURES:
+                        log.error("lost SSH to pod %s for %d consecutive polls — pausing "
+                                  "(resumable; the volume holds all progress): %s",
+                                  pod.id, ssh_failures, exc)
+                        job.status = MdStatus.paused
+                        job.resumable = True
+                        job.error = "Lost SSH to the pod; resume to continue from the checkpoint."
+                        break
+                    log.warning("poll SSH error %d/%d — reconnecting and retrying: %s",
+                                ssh_failures, MAX_POLL_SSH_FAILURES, exc)
+                    await conn._reconnect()
+                    await sleep(poll_s)
+                    continue
                 if st["state"] == "completed":
                     job.status = MdStatus.completed
                     break
