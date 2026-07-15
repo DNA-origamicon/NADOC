@@ -40,45 +40,15 @@ just test-status    # session open? which heavy groups are owed?
 
 ## Test policy (THE LAW)
 
-**Heavy (`slow`) tests — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves, trajectory
-benchmarks — never run in an ordinary coding session.** They take minutes, and the cost
-of Claude reflexively escalating to the full suite after a change that "distantly touches
-simulations" is what killed dev velocity. They now run **only inside a test-dedicated
-session**: a window the *user* opens in *their own* terminal with `just test-session`
-(TTY-only, expiring). `scripts/test_guard.sh` refuses `just test` / `just test-slow` /
-`just test-all` outside one.
+**Heavy (`slow`) tests — real oxDNA/NAMD/mrdna sims, CanDo-FEM solves, trajectory benchmarks — never run in an ordinary coding session.** Reflexively escalating to the full suite after a change that "distantly touches simulations" is what killed dev velocity. They run **only inside a test-dedicated session**: a window the *user* opens in their own terminal with `just test-session` (TTY-only, expiring). `scripts/test_guard.sh` refuses `just test` / `just test-slow` / `just test-all` outside one.
 
 As an agent:
 
-- **Your loop is `just test-smart`** (no confirm needed any more; it's fast-only). It runs
-  the fast suite and, if your change made a heavy group stale, *parks* that group in
-  `.nadoc-slow-pending` and tells you — it does not run it. Say so in your done message
-  ("deferred slow[cando] — needs a test-dedicated session"); that is a complete and
-  correct verification for a normal change, not a gap you should try to close.
-- **If you believe the heavy suite really must run, ASK the user to open a
-  test-dedicated session.** Do not work around the guard: never hand-write
-  `.nadoc-test-session`, never set `NADOC_TEST_FORCE=1`, never invoke pytest directly to
-  dodge the wrapper (`uv run pytest tests/` bare, no `-m "not slow"`, is exactly the move
-  this policy forbids).
-- **Budget — the gate is PER-TEST, not total time.** Any *unmarked* test over ~5s
-  (`NADOC_PER_TEST_BUDGET_SEC`) is heavy and must be relegated: the guard prints `HEAVY
-  TEST IN THE FAST SUITE` and lists the offenders in `.nadoc-slow-candidates.json`. You
-  must then **launch a triage subagent** (Agent tool, `general-purpose`, following
-  `.claude/skills/triage-slow-tests/SKILL.md`) that relegates them to the slow suite
-  (`slow` + area marker in `tests/conftest.py`). Never raise the budget, never just move on.
-- **Total wall-clock is a backstop only (90s), not a target.** Total time grows with the
-  *number* of tests (which only goes up) and with whatever else is using the CPU, so a
-  fixed ceiling on it just ratchets healthy tests out of the fast suite — that churn cost
-  more time than it ever saved. A run between 60s and 90s prints a note and **requires
-  nothing**. Only above 90s with no single over-budget test does the guard ask for triage
-  (`FAST SUITE TOO SLOW` — the suite got fat in aggregate).
-- Pytest runs under `nice -n 10` so a test run doesn't make the app stutter while the user
-  is actually using NADOC (`NADOC_TEST_NICE=0` opts out).
-
-The lock still applies: overlapping `just test*` runs saturate the CPU, so a second run
-refuses while one is live. Heavy tests additionally auto-skip while a production
-NAMD/oxDNA/mrDNA job is running (`NADOC_IGNORE_SIM_GUARD=1` overrides). See
-`memory/project_test_parallelization.md`.
+- **Your loop is `just test-smart`** (fast-only, no confirm). It runs the fast suite and *parks* any newly-stale heavy group in `.nadoc-slow-pending` instead of running it. Report it ("deferred slow[cando] — needs a test-dedicated session"): that is complete verification for a normal change, **not** a gap to close.
+- **Never work around the guard.** No hand-writing `.nadoc-test-session`, no `NADOC_TEST_FORCE=1`, no bare `uv run pytest tests/` (dodging the `-m "not slow"` wrapper is exactly what this forbids). If the heavy suite truly must run, **ask the user to open a test-dedicated session**.
+- **The gate is PER-TEST, not total time.** Any *unmarked* test over ~5s (`NADOC_PER_TEST_BUDGET_SEC`) → the guard prints `HEAVY TEST IN THE FAST SUITE` (offenders in `.nadoc-slow-candidates.json`); **launch a triage subagent** (`/triage-slow-tests` → `.claude/skills/triage-slow-tests/SKILL.md`) to relegate them (`slow` + area marker in `tests/conftest.py`). Never raise the budget.
+- **Total wall-clock is a 90s backstop, not a target** — it grows with test *count* and CPU load, so a fixed ceiling just ratchets healthy tests out. 60–90s requires nothing; only above 90s with no single over-budget test does the guard ask for triage (`FAST SUITE TOO SLOW`).
+- Pytest runs under `nice -n 10` (`NADOC_TEST_NICE=0` opts out). Overlapping `just test*` runs refuse while one is live; heavy tests also auto-skip during a production NAMD/oxDNA/mrDNA job (`NADOC_IGNORE_SIM_GUARD=1` overrides). See `memory/project_test_parallelization.md`.
 
 App URL when both servers run: `http://localhost:5173` (or WSL eth0 IP if `mirrored` networking is off — see `START.md`).
 
@@ -93,7 +63,7 @@ This project uses Claude Code's hierarchical memory — load only what's relevan
 - `memory/project_*.md` — current-work topic files. Open the one(s) relevant to the task.
 - `memory/REFERENCE_*.md` — stable domain knowledge (DNA topology, B-DNA constants, atomistic, FEM theory).
 - `memory/feedback_*.md` — user feedback rules. Read whenever they touch the area you're editing.
-- `.claude/rules/*.md` — path-scoped architectural maps + diagnostic patterns. Loaded automatically when you read matching files.
+- `.claude/rules/*.md` — path-scoped architectural maps. Loaded automatically when you read matching files, so keep them lean. **Symptom→diagnosis debugging content lives in `.claude/runbooks/RUNBOOK_<AREA>.md`** (no frontmatter → not auto-loaded; each rule links to its runbook via a `## Diagnostics →` pointer). Read a runbook only when actually debugging that area; don't re-inline diagnostics into a rule.
 - `.claude/skills/*/SKILL.md` — the session loops (`/carve-router`, `/automate-feature`, `/continue-coverage`, …).
 
 **What syncs between the two computers.** `.gitignore` uses `.claude/*` plus negations, so **`.claude/rules/` and `.claude/skills/` are versioned and shared** — edit them like any other source file and they reach the other machine on push. **`.claude/settings.local.json` (permission allowlist) and `.claude/worktrees/` stay machine-local** and are never committed. `memory/` is tracked too, and `~/.claude/projects/-home-joshua-NADOC/memory/` is a **symlink** to it, so there is exactly one copy of every memory file to maintain. Consequence: a rule or skill edited on one computer and not pushed will silently diverge — if you change guidance, commit it.
@@ -102,6 +72,7 @@ This project uses Claude Code's hierarchical memory — load only what's relevan
 
 ## Workflow conventions
 
+- **Delegate file-heavy investigation to a read-only subagent (context economy).** Before reading more than ~3 files to answer a *where/how does X work* question — or before any broad grep/search sweep across subsystems — spawn a `general-purpose` (or `Explore`) subagent to do the search and report back **paths + the load-bearing snippet only**. The subagent's file reads never enter this session's context; only its summary does. Reserve the main window for reasoning and the edit, not grep output. Brief every subagent **read-only and no-git** (see Git conventions). This applies to the load/context step of the session loops (`/carve-router`, `/automate-feature`) too — mirror how `/continue-coverage` already delegates its read phase.
 - **Before claiming done on a change that alters behavior in a subsystem with a `memory/project_*.md` topic file, confirm you have read that topic file's head.** Order doesn't matter — grep first, read topic file second is fine — but skipping it entirely is the failure mode. Changes that do *not* alter subsystem behavior (renames, comments, test-only edits, formatting, a fix wholly described by the prompt) don't need it — say so in the done message instead of reading it. Never read the topic file's `*_archive.md` for this.
 - **Skim `memory/feedback_*.md` filenames against the area you're touching.** If one matches (e.g. `feedback_crossover_no_reasoning` while editing crossover code), open it. They're short and the cost of skipping a relevant one is high.
 - Before claiming a feature works, run `just test-smart` (it scopes to what your change affects) and verify the affected behavior in the running app.
@@ -165,8 +136,7 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 
 ## Verification expectations
 
-- **Every backend code change runs `just test-smart` before claiming done — no exceptions, even for one-line changes that mirror a documented fix.** It runs the fast suite (always) and finishes in under a minute. Cite the decision it printed (`FAST` / `fast+slow[area]`) **and** the pass count; flag any unexpected drop. If it says heavy groups were **DEFERRED**, report that verbatim — deferring is the correct outcome, not a gap. Never escalate to `just test` / `just test-slow` yourself: those need a test-dedicated session the *user* opens (see Test policy). Frontend-only changes touch no Python → `just test-smart` returns `FAST`; run `just test-frontend` for the JS.
-- **An unmarked test over ~5s is a process failure; a slow *total* is usually not.** When the guard says `HEAVY TEST IN THE FAST SUITE` (or `FAST SUITE TOO SLOW`, its 90s aggregate backstop), launch a triage subagent (`.claude/skills/triage-slow-tests/SKILL.md`) to relegate the offenders before claiming done. A run that merely passes the 60s soft mark needs no action — say the time and move on.
+- **Every backend code change runs `just test-smart` before claiming done — no exceptions, even a one-line change.** Cite the decision (`FAST` / `fast+slow[area]`) **and** pass count; flag any unexpected drop; report `DEFERRED` heavy groups verbatim (deferring is correct, not a gap). Frontend-only changes touch no Python → `FAST`; run `just test-frontend` for the JS. (Guard/triage/escalation rules: see Test policy above.)
 - **Every frontend code change must be exercised in the running app before claiming done.** If `just frontend` isn't running or no representative design has been loaded, your "done" message must lead with `NOT VERIFIED IN APP` and explain why. Type-checking and tests do not validate UI correctness.
 - Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/26hb_platform_v3.nadoc`) and visually confirm.
 - Don't claim "tests pass" without running them.

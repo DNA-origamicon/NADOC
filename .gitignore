@@ -121,11 +121,12 @@ Literature/
 # ── Claude Code config ───────────────────────────────────────────────────────
 # `.claude/*` (not `.claude/`) so the negations below can re-include children:
 # git cannot re-include a file whose parent DIRECTORY is excluded.
-# Shared across both computers: the path-scoped rules + the session skills.
+# Shared across both computers: the path-scoped rules + the session skills + on-demand runbooks.
 # Machine-local: settings.local.json (permission allowlist), worktrees/.
 .claude/*
 !.claude/rules/
 !.claude/skills/
+!.claude/runbooks/
 
 # ── SSH keys (should never be committed) ─────────────────────────────────────
 sshIDKEY

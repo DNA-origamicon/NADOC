@@ -30,6 +30,10 @@ the umbilical cord. So:
 2. **Load context:** read `backend_router_carveup.md` (protocol + backlog + the living `## Next-session
    handoff`) and `backend_router_extraction_log.md` (conventions + coupling probe + lessons + last metrics
    rows). Skim `.claude/rules/api-and-state.md` (the mutation contract you must not break).
+   **Context economy:** the god-file scan in steps 3–5 (locate the region's `# ──` banner, still-used gate, coupling probe)
+   is file-heavy — delegate it to a read-only, no-git `general-purpose` subagent that returns only the region range,
+   before-`B`, and the still-used verdict (per `CLAUDE.md` → Workflow conventions). Do the protocol/handoff reasoning and
+   the extraction itself here.
 3. **Pick the region:** the handoff's `▶ NEXT` for this file, or the topmost unchecked backlog entry with the
    cleanest probed `B`, or one the user names. **Locate it by its `# ──` banner, not the printed line number**
    (they drift) — `grep -n "# ──" backend/api/<file>.py`.

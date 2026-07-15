@@ -46,6 +46,9 @@ nothing. So:
    difficulties). Read `FEATURE_DEVELOPMENT.md` (module-first law). Skim the area's `memory/project_*.md`
    (e.g. `headless_build`, `assembly_overhaul`). Open `design_automation_harness.md` /
    `design_automation_metrics.md` ONLY for the specific item you're extending — never wholesale.
+   **Context economy:** delegate the step-3 surface re-derivation (route-exists + UI-wired greps) and any broad
+   source-reading to a read-only, no-git `general-purpose` subagent that reports just the route/UI verdict + the
+   relevant signatures (per `CLAUDE.md` → Workflow conventions) — keep grep output out of the main context.
 3. **Re-derive the surface (cheap, do it):** confirm the REST route still exists + what it expects
    (`rg "<url>" backend/api/`) and is still UI-wired (`rg "<fn>" frontend/src/api/`). Dead route → propose
    deleting it via `issues_ledger.md`, don't wrap it.
