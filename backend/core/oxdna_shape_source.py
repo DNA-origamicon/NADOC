@@ -38,7 +38,12 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
     flexible ssDNA with no dsDNA-core column and no cross-engine RMSF counterpart, so — like the
     NAMD twin (:mod:`namd_shape_source`) — we guard ``bp_index`` explicitly and skip them here.
     (Pre-fix this ``int(...)`` raised on ANY design with a linker/extra base, 500-ing the oxDNA
-    comparison-card column — the class of bug ``md_pkey`` records having hit the live MD display.)"""
+    comparison-card column — the class of bug ``md_pkey`` records having hit the live MD display.)
+
+    Strand-extension tail beads are dropped for the same reason, but need their OWN guard: their
+    key is ``("__ext_<id>", bead_index, direction)``, whose ``bp_index`` IS an int, so the
+    ``isinstance`` check above sails right past them.  Hence the explicit ``__`` helix-id test —
+    without it a floppy ssDNA tail would leak into the dsDNA-core RMSF column."""
     out: list[dict] = []
     for p in rmsf_positions or []:
         r = p.get("rmsf")
@@ -46,6 +51,8 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
             continue
         if not isinstance(p.get("bp_index"), int):
             continue
+        if str(p.get("helix_id", "")).startswith("__"):
+            continue      # synthetic particle (extension tail / insert), not a design position
         direction = p.get("direction")
         out.append({
             "helix_id": p["helix_id"],

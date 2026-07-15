@@ -32,6 +32,11 @@ export function regionSurfaceSignature(design) {
 export function initAtomSurfaceDisplay({
   scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
   unfoldView, overhangLinkArcs,
+  // True when a simulation overlay is active in a mode that REBUILDS the atomistic
+  // renderer from the job's atoms + relaxed frame (oxDNA relaxed/rmsf/trajectory).
+  // When so, switching to an atomistic rep skips the design-atoms build (the "native
+  // flash") and keeps the relaxed CG up until the overlay swaps in.
+  getSimOverlayWillDriveAtomistic = () => false,
 }) {
   // ── Per-region overlay renderers (mixed representation) ─────────────────────
   // A focal domain/strand/cluster can be pinned to surface / vdw / ballstick; the
@@ -281,10 +286,23 @@ export function initAtomSurfaceDisplay({
   }
 
   async function _applyAtomisticMode(mode) {
+    // A sim overlay (oxDNA relaxed/rmsf/trajectory) will rebuild the atomistic renderer
+    // from the JOB's atoms + relaxed frame — so DON'T build+show the DESIGN atoms first
+    // (the multi-second "native flash").  Keep the relaxed CG visible; the overlay hides
+    // it when its atoms land (onHeavyApplied → setCGVisible(false)).  If the overlay
+    // never lands (build fails), the relaxed CG stays up — a sane fallback.
+    const _deferToOverlay = mode !== 'off' && !!getSimOverlayWillDriveAtomistic()
     atomisticRenderer.setMode(mode)
-    // Hide CG model when any atomistic mode is active; restore when off
-    _setCGVisible(mode === 'off')
+    // Hide CG model when any atomistic mode is active; restore when off — but keep it
+    // up while deferring to the overlay.
+    _setCGVisible(mode === 'off' || _deferToOverlay)
     _setAtomisticSlidersVisible(mode !== 'off')
+    // Set the atomistic colour mode from the current global coloringMode NOW — it's
+    // module-persistent, so the overlay's later atom rebuild re-applies it. Without
+    // this the deferred path never sets it and the atoms fall back to the cpk default
+    // (switching full→atomistic would drop strand/base/cluster colouring).
+    if (mode !== 'off') _refreshAtomColors()
+    if (_deferToOverlay) return
     if (mode !== 'off' && !_atomDataCache) {
       showPersistentToast('Loading atomistic model…')
       try {
@@ -301,6 +319,20 @@ export function initAtomSurfaceDisplay({
         dismissToast()
       }
     }
+  }
+
+  // Loading toast for the DEFERRED full→atomistic path: it skips the design-atoms fetch
+  // (+ its "Loading atomistic model…" toast) and lets the oxDNA/MD overlay rebuild the
+  // atomistic geometry instead.  That build reports progress via the heavy-status event
+  // (kind='atomistic' only fires when an overlay drives atomistic — i.e. the deferred
+  // case), so mirror the toast off it.  `building:false` fires in the build's `finally`,
+  // so the toast clears on completion AND on failure.
+  for (const _evt of ['nadoc:oxdna-heavy-status', 'nadoc:md-heavy-status']) {
+    window.addEventListener(_evt, (e) => {
+      if (e.detail?.kind !== 'atomistic') return
+      if (e.detail.building) showPersistentToast('Loading atomistic model…')
+      else dismissToast()
+    })
   }
 
   // Invalidate atom cache on design change; re-hide CG root after any geometry rebuild.

@@ -74,6 +74,19 @@ class ComparisonResult:
 # so the MD trajectory keys them uniquely (their stored helix/bp/direction is the
 # SOURCE nucleotide's, which would otherwise collide across multiple inserts).
 _XB_SENTINEL = "__xb__"
+# Must equal backend.physics.oxdna_interface._EXT_PREFIX (same core→physics reason).
+_EXT_PREFIX = "__ext_"
+
+
+def is_synthetic_pkey(key: tuple) -> bool:
+    """True for a key that is not a real design position — a crossover extra-base
+    insert or a strand-extension tail bead.
+
+    NOTE this cannot be spelled ``isinstance(key[1], int)``: an extension key's second
+    element IS an int (its bead index), so every filter written that way to catch
+    ``__xb__`` lets extension tails straight through.  Test the helix-id slot instead.
+    """
+    return isinstance(key[0], str) and key[0].startswith("__")
 
 
 def md_pkey(atom) -> tuple:
@@ -81,6 +94,9 @@ def md_pkey(atom) -> tuple:
 
     ``("__xb__", crossover_id, extra_base_k)`` for a crossover extra-base insert
     (whose stored helix/bp/direction is the SOURCE nucleotide's and would collide);
+    ``("__ext_<id>", bead_index, direction)`` for a strand-extension tail base — the
+    SAME key the oxDNA walk emits, so a NAMD trajectory and an oxDNA frame route a
+    tail through the identical display path;
     ``(helix_id, bp_index, direction, copy_k)`` for a ``+1`` loop-insertion copy
     (``copy_k >= 1``), whose stored helix/bp/direction ALSO collides with the base it
     bulges off; else the plain ``(helix_id, bp_index, direction)``.  Single source of
@@ -93,6 +109,8 @@ def md_pkey(atom) -> tuple:
     expects — mirrors the oxDNA ``copy`` convention (``copy ?? 0``)."""
     if getattr(atom, "crossover_id", None) is not None:
         return (_XB_SENTINEL, atom.crossover_id, atom.extra_base_k)
+    if getattr(atom, "extension_id", None) is not None:
+        return (f"{_EXT_PREFIX}{atom.extension_id}", atom.ext_k, atom.direction)
     ck = getattr(atom, "copy_k", None)
     if ck:
         return (atom.helix_id, atom.bp_index, atom.direction, int(ck))
@@ -105,17 +123,21 @@ def md_rigid_reference(model, p_order):
     Returns ``(eq_positions (N,3), eq_valid (N,), rigid_mask (N,))`` for the N
     entries of *p_order* (the design's P-atom equilibrium positions in nm).
     ``rigid_mask`` excludes entries with no design P atom, ssDNA / loop nucleotides
-    (``bp_index < 0``), AND crossover extra-base inserts (keyed by a string
-    ``crossover_id``) — all flexible, so including them would bias the rigid-body
-    rotation fit.  The ``isinstance`` guard keeps the string insert keys from
-    crashing the ``bp_index >= 0`` compare (the live-display bug)."""
+    (``bp_index < 0``), crossover extra-base inserts (keyed by a string
+    ``crossover_id``), AND strand-extension tail beads — all flexible, so including
+    them would bias the rigid-body rotation fit.  The ``isinstance`` guard keeps the
+    string insert keys from crashing the ``bp_index >= 0`` compare (the live-display
+    bug); the ``is_synthetic_pkey`` guard is what catches EXTENSION tails, whose
+    ``bp_index`` is a perfectly ordinary non-negative int and so would otherwise be
+    treated as rigid dsDNA core."""
     import numpy as np
     p_ref = {md_pkey(a): np.array([a.x, a.y, a.z]) for a in model.atoms if a.name == "P"}
     eq_list = [p_ref.get(tuple(k)) for k in p_order]
     eq_valid = np.array([v is not None for v in eq_list], dtype=bool)
     eq_positions = np.array([v if v is not None else np.zeros(3) for v in eq_list])
     rigid_mask = eq_valid & np.array(
-        [isinstance(k[1], int) and k[1] >= 0 for k in p_order], dtype=bool)
+        [(not is_synthetic_pkey(tuple(k))) and isinstance(k[1], int) and k[1] >= 0
+         for k in p_order], dtype=bool)
     return eq_positions, eq_valid, rigid_mask
 
 
@@ -123,20 +145,22 @@ def md_snap_mask(p_order, eq_valid, rigid_mask):
     """Atoms that receive the design-eq nearest-image PBC snap in the live display.
 
     Superset of ``rigid_mask``: rigid dsDNA (bp≥0) PLUS crossover extra-base
-    inserts (keyed ``_XB_SENTINEL``).  Extra bases are kept OUT of ``rigid_mask``
-    (the Kabsch/centroid fit) because they are flexible and would bias the
-    rigid-body rotation — but they still have a valid, spatially-constrained
-    design-eq position, so they must be snapped to their nearest periodic image.
-    Without this, a strand-boundary reset in the sequential unwrap can leave an
-    extra base a full box away from the structure (the "few bases wrapped" bug).
+    inserts (keyed ``_XB_SENTINEL``) PLUS strand-extension tail beads (keyed
+    ``__ext_<id>``).  Both are kept OUT of ``rigid_mask`` (the Kabsch/centroid fit)
+    because they are flexible and would bias the rigid-body rotation — but they
+    still have a valid, spatially-constrained design-eq position (a tail is only a
+    few bases long and is covalently bonded to its anchor), so they must be snapped
+    to their nearest periodic image.  Without this, a strand-boundary reset in the
+    sequential unwrap can leave an extra base a full box away from the structure
+    (the "few bases wrapped" bug).
     Genuinely free ssDNA tails (``bp_index < 0`` integer) stay OUT: their
     transverse swing can exceed the ~half-box, so a whole-box snap would
     over-correct them onto the wrong image.
     """
     import numpy as np
-    is_xb = np.array(
-        [k[0] == _XB_SENTINEL for k in p_order], dtype=bool)
-    return (rigid_mask | is_xb) & eq_valid
+    is_synth = np.array(
+        [is_synthetic_pkey(tuple(k)) for k in p_order], dtype=bool)
+    return (rigid_mask | is_synth) & eq_valid
 
 
 def build_chain_map(model: "AtomisticModel") -> ChainMap:

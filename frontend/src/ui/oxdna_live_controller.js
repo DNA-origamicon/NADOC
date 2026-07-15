@@ -27,6 +27,7 @@
  */
 
 import { showToast } from './toast.js'
+import { shouldTearDownDisplays } from './display_tab_policy.js'
 import * as api from '../api/client.js'
 
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', dim: '#8b949e' }
@@ -334,9 +335,10 @@ export function initOxdnaLive({
     if (_on) stop()
     _setButton()
   })
-  // Leaving the Dynamics tab or switching design → stop the live session.
+  // Leaving the Dynamics tab or switching design → stop the live session. The
+  // view-only tabs (Photo) are exempt: they render the live frames as-is.
   window.addEventListener('nadoc:left-tab-change', (e) => {
-    if (e.detail?.activeTab !== 'dynamics' && _on) stop()
+    if (shouldTearDownDisplays(e.detail?.activeTab) && _on) stop()
   })
   window.addEventListener('nadoc:workspace-path-change', () => { if (_on) stop() })
 

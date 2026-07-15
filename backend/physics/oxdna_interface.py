@@ -163,6 +163,62 @@ def _build_ls_lookup(design: Design) -> dict[tuple[str, int], int]:
 # Sentinel occupying element 0 of an extra-base key — never a real helix id.
 _XB_SENTINEL = "__xb__"
 
+# Strand-extension tail beads reuse the key the GEOMETRY layer already emits for
+# them — ``(f"__ext_{ext.id}", bead_index, direction)`` (design_geometry.py
+# ``_strand_extension_geometry``) — rather than getting an ``__xb__``-style sentinel
+# of their own.  That is deliberate: the beads are then resolvable straight out of
+# the geometry list by ``resolved_nuc_map`` pass 1, and the FRONTEND already
+# addresses them under exactly this key (helix_renderer's ``_keyToEntry`` is
+# ```${helix_id}:${bp_index}:${direction}``), so relaxed-display updates flow through
+# the existing real-nucleotide path with no JS change at all.
+_EXT_PREFIX = "__ext_"
+
+
+def is_extension_key(key: tuple) -> bool:
+    """True for a strand-extension tail bead key ``("__ext_<id>", i, dir)``."""
+    return isinstance(key[0], str) and key[0].startswith(_EXT_PREFIX)
+
+
+def is_synthetic_nuc_key(key: tuple) -> bool:
+    """True for any key that is NOT a real (helix, bp, direction) design position —
+    crossover extra-base inserts and strand-extension tail beads.
+
+    Use this in preference to ``key[0] == _XB_SENTINEL``: an extension key's second
+    element is an ``int >= 0``, so it PASSES the ``isinstance(k[1], int)`` filters
+    that were written to catch ``__xb__``, and would otherwise leak into rigid-body
+    fits, helix-axis reconstruction and shape descriptors as a junk one-nucleotide
+    "helix".
+    """
+    return key[0] == _XB_SENTINEL or is_extension_key(key)
+
+
+def _drop_synthetic(key: tuple, include_extra_bases: bool, include_extensions: bool) -> bool:
+    """Whether a read-back should skip *key*: synthetic particles occupy a slot (so
+    real-nucleotide indices stay aligned) but are absent from the design-keyed map
+    unless the caller opts in."""
+    if key[0] == _XB_SENTINEL:
+        return not include_extra_bases
+    if is_extension_key(key):
+        return not include_extensions
+    return False
+
+
+def strand_extension_tails(design: Design) -> dict[str, dict[str, object]]:
+    """``{strand_id: {"five_prime": ext, "three_prime": ext}}`` for every extension
+    that contributes real nucleotides.
+
+    Modification-only extensions (a fluorophore/biotin with no ``sequence``) are
+    dropped here: they are not DNA, so they must never become oxDNA particles or
+    atomistic residues.  The geometry layer still draws them (as a separate
+    ``is_modification`` bead) — this filter is what keeps them out of the physics.
+    """
+    out: dict[str, dict[str, object]] = {}
+    for ext in design.extensions:
+        if not ext.sequence:
+            continue
+        out.setdefault(ext.strand_id, {})[ext.end] = ext
+    return out
+
 
 def crossover_extra_base_junctions(design: Design) -> dict[tuple[str, int], tuple[str, str]]:
     """Map each strand-domain junction that carries crossover extra bases to
@@ -220,22 +276,29 @@ def crossover_extra_base_junctions(design: Design) -> dict[tuple[str, int], tupl
 
 
 class _NucStep(NamedTuple):
-    """One emitted nucleotide in the canonical oxDNA order.  Real nucleotides and
-    crossover extra-base inserts both flow through here so every walk site agrees."""
+    """One emitted nucleotide in the canonical oxDNA order.  Real nucleotides,
+    crossover extra-base inserts and strand-extension tail bases all flow through
+    here so every walk site agrees."""
     key:            tuple
     strand:         object        # the owning Strand
     strand_idx:     int           # 1-based, oxDNA convention
-    domain_index:   Optional[int] # None for extra-base inserts
-    helix_id:       Optional[str] # None for inserts
+    domain_index:   Optional[int] # None for extra-base inserts / extension beads
+    helix_id:       Optional[str] # None for inserts / extension beads
     bp:             Optional[int]
-    direction:      Optional[str] # Direction.value; None for inserts
+    direction:      Optional[str] # Direction.value; None for inserts / extension beads
     overhang_id:    Optional[str]
-    base_override:  Optional[str] # set ONLY for extra bases (their own base char)
+    base_override:  Optional[str] # set for extra bases AND extension beads (own base char)
     is_extra_base:  bool
     eb_k:           Optional[int] # 0-based position within the insert run
     eb_n:           Optional[int] # run length
     flank_prev_key: Optional[tuple]  # extra-base only: preceding real nt key
     flank_next_key: Optional[tuple]  # extra-base only: following real nt key
+    # ── strand-extension tail bases ──────────────────────────────────────────
+    is_extension:   bool = False
+    ext_id:         Optional[str] = None
+    ext_end:        Optional[str] = None    # "five_prime" | "three_prime"
+    ext_k:          Optional[int] = None    # bead index i (== the geometry bp_index)
+    ext_anchor_key: Optional[tuple] = None  # the real terminal nt the tail hangs off
 
 
 def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
@@ -246,9 +309,19 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
     extra-base geometry resolver — so the nucleotide order can never drift between
     them.  Loop copies (delta≥1) emit 4-tuple keys; skips (delta≤-1) are dropped;
     extra bases emit ``(_XB_SENTINEL, crossover_id, k)`` keys threaded in-chain
-    between the flanking real nucleotides on the same strand."""
+    between the flanking real nucleotides on the same strand.
+
+    Strand extensions (5′/3′ terminal tails) emit ``("__ext_<id>", i, direction)``
+    keys — 5′ tail beads BEFORE the strand's first domain, 3′ tail beads AFTER its
+    last.  Bead ``i`` is the geometry layer's distance-rank from the anchor (i=0 is
+    nearest the duplex), so a 5′ tail must be walked OUTERMOST-FIRST (i = n-1 … 0)
+    to run 5′→3′, and a 3′ tail innermost-first (i = 0 … n-1).  Either way the
+    ``ordinal`` within the tail indexes ``ext.sequence`` directly, because scadnano
+    stores that sequence 5′→3′.  Emitting them here is what makes ``topology_rows``'
+    n3/n5 threading bond the tail into the chain for free."""
     ls_lookup = _build_ls_lookup(design)
     junctions = crossover_extra_base_junctions(design)
+    tails = strand_extension_tails(design)
     for si, strand in enumerate(design.strands, start=1):
         # Per-domain emitted real keys (with loop expansion), so an insert can name
         # its flanking nucleotides (last of prev domain, first of next domain).
@@ -279,6 +352,30 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
                                 else (domain.helix_id, bp, domain.direction.value, k))
             dom_keys.append(keys)
 
+        strand_tails = tails.get(strand.id, {})
+
+        def _tail_steps(ext, anchor_key: tuple):
+            """Yield the tail's beads in 5′→3′ chain order."""
+            n = len(ext.sequence)
+            dom = strand.domains[0] if ext.end == "five_prime" else strand.domains[-1]
+            # 5′ tail: outermost bead (i = n-1) is the 5′ terminus, so walk i downward.
+            beads = range(n - 1, -1, -1) if ext.end == "five_prime" else range(n)
+            for ordinal, i in enumerate(beads):
+                yield _NucStep(
+                    key=(f"{_EXT_PREFIX}{ext.id}", i, dom.direction.value),
+                    strand=strand, strand_idx=si,
+                    domain_index=None, helix_id=None, bp=None, direction=None,
+                    overhang_id=None, base_override=ext.sequence[ordinal],
+                    is_extra_base=False, eb_k=None, eb_n=None,
+                    flank_prev_key=None, flank_next_key=None,
+                    is_extension=True, ext_id=ext.id, ext_end=ext.end, ext_k=i,
+                    ext_anchor_key=anchor_key,
+                )
+
+        ext5 = strand_tails.get("five_prime")
+        if ext5 is not None and dom_keys and dom_keys[0]:
+            yield from _tail_steps(ext5, dom_keys[0][0])
+
         for di, domain in enumerate(strand.domains):
             for key in dom_keys[di]:
                 yield _NucStep(
@@ -304,6 +401,10 @@ def _walk_strand_nucleotides(design: Design) -> Iterator[_NucStep]:
                     overhang_id=None, base_override=ch, is_extra_base=True,
                     eb_k=k, eb_n=n, flank_prev_key=prev_key, flank_next_key=next_key,
                 )
+
+        ext3 = strand_tails.get("three_prime")
+        if ext3 is not None and dom_keys and dom_keys[-1]:
+            yield from _tail_steps(ext3, dom_keys[-1][-1])
 
 
 def _extra_base_inserts(design: Design) -> dict[tuple, tuple]:
@@ -528,8 +629,14 @@ def count_undefined_bases(
             seq_idx = 0
         if exclude_reference and step.strand.is_reference:
             continue
-        if step.is_extra_base:
-            base = (step.base_override or "N").upper()  # carries its own base, no seq_idx
+        # MUST match topology_rows' assignment exactly, or this over-reports: an extra
+        # base AND an extension tail base both carry their own base char and neither
+        # advances the strand-sequence cursor.  Keying off `is_extra_base` alone let
+        # extension bases fall through to seq[seq_idx] — counted as undefined AND
+        # shifting every real base after them, so a fully-sequenced design with tails
+        # was rejected by the "undefined bases" relaxation gate.
+        if step.base_override is not None:
+            base = step.base_override.upper()
         else:
             base = seq[seq_idx] if seq_idx < len(seq) else 'N'
             seq_idx += 1
@@ -598,7 +705,9 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
     n_strands = len(design.strands)
 
     # Per-nucleotide sequence: real nts consume the strand sequence string in order;
-    # extra bases carry their own base char and do NOT advance the sequence cursor.
+    # extra bases AND extension tail beads carry their own base char (base_override)
+    # and do NOT advance the sequence cursor — neither is part of ``strand.sequence``
+    # (a 4×8bp staple with a T extension still carries exactly its 32 designed bases).
     seq_lookup: dict[tuple, str] = {}
     cur_strand = None
     seq = ""
@@ -608,8 +717,8 @@ def topology_rows(design: Design) -> tuple[list[tuple[int, str, int, int]], int]
             cur_strand = step.strand
             seq = step.strand.sequence or ""
             seq_idx = 0
-        if step.is_extra_base:
-            seq_lookup[step.key] = step.base_override or 'N'
+        if step.base_override is not None:
+            seq_lookup[step.key] = step.base_override
         else:
             seq_lookup[step.key] = seq[seq_idx] if seq_idx < len(seq) else 'N'
             seq_idx += 1
@@ -666,6 +775,46 @@ def write_topology(design: Design, path: str | Path) -> None:
     for si, base, n3, n5 in rows:
         lines.append(f"{si} {base} {n3} {n5}")
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class StaleJobTopologyError(RuntimeError):
+    """A finished job's on-disk topology has a different particle count than the
+    design's CURRENT nucleotide order — the job was run by an older build."""
+
+
+def assert_topology_matches_design(top_path: str | Path, design: Design) -> None:
+    """Raise :class:`StaleJobTopologyError` if *top_path* was written by a build
+    whose nucleotide walk differs from today's.
+
+    Why this has to exist: adding strand extensions GREW ``_strand_nucleotide_order``
+    for any design that has them.  A job run before that has fewer particle lines in
+    its ``.dat`` than the order now expects, and because extension beads are
+    interleaved (a 5′ tail sits BEFORE its strand's first domain), the reader would
+    silently hand every real nucleotide after the first extension the WRONG particle
+    line — garbage positions in the display, health, atomistic and audit routes, with
+    no error anywhere.  ``_protein_lead_offset`` cannot catch it: it clamps a deficit
+    to 0 (deliberately, to tolerate a truncated mid-write frame), and the design-level
+    fingerprint in ``oxdna_staleness`` cannot either — the design did not change, the
+    WALK did.  So compare the particle counts explicitly and fail loudly.
+    """
+    top = Path(top_path)
+    if not top.exists():
+        return
+    first = top.read_text(encoding="utf-8").splitlines()[:1]
+    if not first:
+        return
+    try:
+        n_top = int(first[0].split()[0])
+    except (ValueError, IndexError):
+        return
+    n_now = len(_strand_nucleotide_order(design))
+    if n_top != n_now:
+        raise StaleJobTopologyError(
+            f"This oxDNA job's topology has {n_top} particles but the design now "
+            f"walks to {n_now}. The job predates a change to the nucleotide walk "
+            f"(most likely strand-extension support, which adds one particle per "
+            f"extension base). Re-run the relaxation to regenerate it."
+        )
 
 
 # ── Configuration writer ──────────────────────────────────────────────────────
@@ -742,10 +891,13 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
     order = _strand_nucleotide_order(design)
     ls_lookup_conf = _build_ls_lookup(design)
     resolved_map: dict[tuple, dict] = {}
-    # Pass 1: real nucleotides (3-tuple + loop 4-tuple).  Extra-base inserts depend
-    # on flanking real nucleotides resolved here, so they are done in pass 2.
+    # Pass 1: real nucleotides (3-tuple + loop 4-tuple).  Extra-base inserts and
+    # extension tail beads both hang off a real nucleotide resolved here, so they are
+    # done in passes 2 / 2b.  (Extension keys are 3-tuples, so they would otherwise
+    # fall into the `else` branch below and be handed to _compute_nuc_geometry with a
+    # synthetic "__ext_…" helix id.)
     for key in order:
-        if key[0] == _XB_SENTINEL:
+        if is_synthetic_nuc_key(key):
             continue
         if len(key) == 4:
             copies = geo_copies.get(key[:3])
@@ -767,9 +919,171 @@ def resolved_nuc_map(design: Design, geometry: list[dict]) -> dict[tuple, dict]:
         next_nuc = resolved_map.get(next_key)
         if prev_nuc is not None and next_nuc is not None:
             resolved_map[key] = _resolve_extra_base_geometry(prev_nuc, next_nuc, k, n)
+    # Pass 2b: strand-extension tail beads.  POSITION comes straight from the geometry
+    # list (the Bézier arc the display already draws, now at ssDNA contour spacing);
+    # the FRAME must be rebuilt — see _resolve_extension_geometry.  Walked in CHAIN
+    # order per tail so each bead is oriented against its already-resolved predecessor
+    # (the anchor for the first bead, the previous bead after that).
+    # Solve each tail ANCHOR-OUTWARD (bead 0, 1, … n-1 by distance from the duplex),
+    # which is NOT the chain order for a 5′ tail — there the chain runs tip → anchor.
+    # It has to be this way round: the anchor is a real duplex nucleotide whose frame is
+    # already fixed, so the bond that touches it can only be satisfied by choosing the
+    # frame of bead 0.  Walking a 5′ tail in chain order instead makes bead 0's frame
+    # answer to bead 1 and leaves the bead0→anchor bond unconstrained — it collapsed to
+    # 0.476 units, under the FENE short cliff.  Anchor-outward, every bond is solved
+    # exactly once, by whichever bead is further from the duplex.
+    tails: dict[str, list[tuple]] = {}
+    for key, anchor_key, end in extension_beads(design):
+        tails.setdefault(key[0], []).append((key[1], key, anchor_key, end))
+
+    for ext_id, beads in tails.items():
+        beads.sort()                              # by bead index = distance from anchor
+        prev = None
+        for bi, (_k, key, anchor_key, end) in enumerate(beads):
+            bead = geo_map.get(key)
+            if bead is None:
+                continue
+            if prev is None:
+                prev = resolved_map.get(anchor_key)
+                if prev is None:
+                    break                         # anchor unresolved: skip the whole tail
+            # The next bead outward, so the solve can pick the root that keeps the
+            # following bond reachable.  None at the free tip.
+            next_geo = geo_map.get(beads[bi + 1][1]) if bi + 1 < len(beads) else None
+            next_cm  = next_geo["backbone_position"] if next_geo else None
+
+            nuc = _resolve_extension_geometry(prev, bead, end, next_cm=next_cm)
+            resolved_map[key] = nuc
+            prev = nuc
     # Pass 3: re-seat flexible ssDNA runs onto a contour-length arc between their
     # posed rigid anchors (near-relaxed ssDNA seed instead of a rigid half-helix).
     return _apply_flexible_segment_arc(design, resolved_map)
+
+
+def extension_beads(design: Design) -> list[tuple[tuple, tuple, str]]:
+    """``[(bead_key, anchor_key, end)]`` for every strand-extension tail bead, from
+    the same walk that defines the particle order."""
+    return [(s.key, s.ext_anchor_key, s.ext_end)
+            for s in _walk_strand_nucleotides(design) if s.is_extension]
+
+
+def effective_a3(nuc: dict) -> np.ndarray:
+    """The a3 (5′→3′) unit vector that :func:`nuc_conf_line` will actually WRITE for
+    *nuc* — i.e. its axis tangent, negated on a REVERSE strand.
+
+    Anything reconstructing a nucleotide's backbone SITE from a resolved-geometry dict
+    must use this, not the raw ``axis_tangent``: the site is
+    ``CM + POS_MM_BACK1·a1 + POS_MM_BACK2·(a3 × a1)``, so the sign of a3 flips the a2
+    lever arm and moves the site.  Reading ``axis_tangent`` directly silently gives the
+    wrong site for every REVERSE nucleotide.
+    """
+    t = np.asarray(nuc["axis_tangent"], dtype=float)
+    a3 = t if nuc.get("direction") == "FORWARD" else -t
+    return a3 / (np.linalg.norm(a3) + 1e-14)
+
+
+def _resolve_extension_geometry(prev_nuc: dict, bead_nuc: dict, end: str,
+                                next_cm=None) -> dict:
+    """oxDNA geometry for one strand-extension tail bead, oriented against its chain
+    predecessor (*prev_nuc* — the real anchor nucleotide for the first bead of a tail,
+    the previous bead after that).
+
+    The DISPLAY dict cannot be passed through, for two independent reasons:
+
+    * **Frame.**  The display sets ``base_normal = -radial`` and
+      ``axis_tangent ≈ +radial`` (both along the arc), so ``|a1·a3| ≈ 1`` — oxDNA
+      needs an orthonormal frame and would get a degenerate one.
+    * **Chain direction.**  ``nuc_conf_line`` writes ``a3 = tangent`` for FORWARD and
+      ``-tangent`` for REVERSE, but a tail's 5′→3′ has nothing to do with its anchor
+      domain's direction: a 3′ tail runs OUTWARD (+arc tangent) and a 5′ tail runs
+      INWARD (−arc tangent), on both FORWARD and REVERSE strands.
+
+    a3 is therefore the true 5′→3′ arc tangent, and the frame is reported under
+    ``direction: "FORWARD"`` so ``nuc_conf_line`` emits a3 verbatim (the same idiom
+    :func:`_resolve_extra_base_geometry` uses).
+
+    **a1 is SOLVED, not picked.**  A free ssDNA base has no WC partner, so a1 is only
+    constrained to be ⟂ a3 — but it is NOT free of consequence: oxDNA's FENE spring
+    acts between BACKBONE SITES, and the site sits at ``CM + POS_MM_BACK1·a1 +
+    POS_MM_BACK2·a2`` — i.e. a ~0.48-unit lever arm whose direction is set by a1.
+    Rotating a1 about a3 swings this tail's site bond over 0.399…0.978 units
+    (measured): pick a1 badly and the bond lands past the FENE cliff (in EITHER
+    direction — the potential diverges at ``r0 ± delta``, and a too-SHORT bond is just
+    as fatal as a too-long one, while ``backbone_fene_stretch`` only reports the long
+    side).  Since the offset is a fixed-magnitude vector in the plane ⟂ a3, the site
+    distance is a sinusoid in the rotation angle, so we solve it in closed form and
+    place the site at oxDNA's FENE REST LENGTH ``r0`` — the tail starts relaxed rather
+    than merely legal.  When r0 is unreachable (the CM spacing puts it out of range of
+    the lever arm) we take the closest achievable distance instead.
+    """
+    # Lazy: oxdna_health imports THIS module, so a top-level import would be circular.
+    from backend.core.oxdna_health import FENE_R0_OXDNA2
+
+    tan = np.asarray(bead_nuc["axis_tangent"], dtype=float)
+    tan = tan / (np.linalg.norm(tan) + 1e-14)
+    a3 = tan if end == "three_prime" else -tan
+
+    cm = np.asarray(bead_nuc["backbone_position"], dtype=float)
+
+    # An orthonormal basis (u, v) of the plane ⟂ a3.  With a1 = u·cosθ + v·sinθ and
+    # a2 = a3 × a1, the site offset collapses to R·(u·cosψ + v·sinψ) — a vector of
+    # FIXED magnitude R at angle ψ = θ + φ.  So we solve for ψ, then back out θ.
+    seed = np.array([0.0, 0.0, 1.0]) if abs(a3[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    u = np.cross(a3, seed)
+    u = u / (np.linalg.norm(u) + 1e-14)
+    v = np.cross(a3, u)
+
+    R   = float(np.hypot(_POS_MM_BACK1, _POS_MM_BACK2)) * OXDNA_LENGTH_UNIT   # nm
+    phi = float(np.arctan2(_POS_MM_BACK2, _POS_MM_BACK1))
+
+    prev_site = oxdna_backbone_site(
+        np.asarray(prev_nuc["backbone_position"], dtype=float),
+        np.asarray(prev_nuc["base_normal"], dtype=float),
+        effective_a3(prev_nuc),
+    )
+    d  = cm - prev_site                 # predecessor's site → this bead's CM
+    P, Q = float(np.dot(d, u)), float(np.dot(d, v))
+
+    # |d + R·(u cosψ + v sinψ)|² = target²  ⇒  P cosψ + Q sinψ = c
+    target = FENE_R0_OXDNA2 * OXDNA_LENGTH_UNIT      # the FENE rest length, in nm
+    hyp    = float(np.hypot(P, Q))
+    if hyp < 1e-12:
+        psis = [0.0]
+    else:
+        c = (target ** 2 - float(np.dot(d, d)) - R ** 2) / (2.0 * R * hyp)
+        base = float(np.arctan2(Q, P))
+        # |c| > 1 ⇒ r0 is out of the lever arm's reach; ±1 clamps to the closest
+        # achievable site distance (acos(±1) = 0 or π — the extremes of the sinusoid).
+        off  = float(np.arccos(float(np.clip(c, -1.0, 1.0))))
+        # BOTH roots give this bond the same length but put the site on opposite sides
+        # of the chain.  That choice is not free: this bead's site is the NEXT bead's
+        # anchor, so the wrong root can push the next bond out of reach of its own lever
+        # arm (a greedy chain that fights itself — one bond crept to 1.005 units, a hair
+        # under the FENE cliff).  Prefer the root that leaves the site nearer the next
+        # bead, which keeps the following solve well inside its reachable range.
+        psis = [base + off, base - off]
+
+    def _a1_of(psi: float) -> np.ndarray:
+        theta = psi - phi
+        w = u * np.cos(theta) + v * np.sin(theta)
+        return w / (np.linalg.norm(w) + 1e-14)
+
+    if len(psis) == 1 or next_cm is None:
+        best_psi = psis[0]
+    else:
+        nxt = np.asarray(next_cm, dtype=float)
+        best_psi = min(psis, key=lambda p: float(np.linalg.norm(
+            oxdna_backbone_site(cm, _a1_of(p), a3) - nxt)))
+    a1 = _a1_of(best_psi)
+
+    return {
+        "helix_id": bead_nuc["helix_id"], "bp_index": bead_nuc["bp_index"],
+        # "FORWARD" so nuc_conf_line uses a3 as-is (it is already 5′→3′).
+        "direction": "FORWARD",
+        "backbone_position": bead_nuc["backbone_position"],
+        "base_normal": a1.tolist(),
+        "axis_tangent": a3.tolist(),
+    }
 
 
 # oxDNA's base (H-bond) interaction site sits at CM + POS_BASE·a1 (model.h
@@ -802,6 +1116,18 @@ def oxdna_native_seed_map(
     intact (no paired↔unpaired discontinuity), so it introduces no over-stretch — in
     fact it REMOVES the FENE over-stretch NADOC's wide seed carries.
 
+    STRAND-EXTENSION TAIL BEADS ARE THE ONE EXCEPTION, and getting it wrong aborts
+    the run.  "Shift along your own a1" is only bond-preserving when neighbours SHARE
+    an a1 — true along a duplex backbone, false for a tail: a tail bead's a1 is
+    rebuilt ⟂ to the arc (:func:`_resolve_extension_geometry`), so it is roughly ⟂ to
+    its anchor's a1.  Shifting the two ends of that bond in different directions by
+    ``delta`` (measured 0.44 nm on VoltronCoreScad — 65 % of the 0.68 nm bond itself)
+    stretches it past oxDNA's FENE cliff: 163 of 334 tails land over 1.006 units and
+    oxDNA aborts at config load.  Leaving tails unshifted is worse (334/334 over,
+    because their anchor still moves away from them).  So a tail is translated
+    RIGIDLY WITH ITS ANCHOR — by ``delta · a1_anchor`` — which preserves the bond
+    exactly and puts 0/334 over the cliff.
+
     Physical-layer only: this is the oxDNA simulation's STARTING configuration,
     never written back into Design topology.  Orientation (a1/a3) is untouched.
     Returns the map unchanged when there are no designed pairs to seed.
@@ -811,12 +1137,22 @@ def oxdna_native_seed_map(
         a1 = np.asarray(nuc["base_normal"], dtype=float)
         a1_of[key] = a1 / (np.linalg.norm(a1) + 1e-14)
 
+    # Tail beads follow their anchor's a1, not their own (see docstring).
+    shift_dir = dict(a1_of)
+    for bead_key, anchor_key, _end in extension_beads(design):
+        if bead_key in shift_dir and anchor_key in a1_of:
+            shift_dir[bead_key] = a1_of[anchor_key]
+
     # Designed WC pairs are keyed by the 3-tuple (helix, bp, dir); loop-insertion
     # copies carry a 4th copy-index element and are single-stranded inserts (no WC
     # partner), so exclude them from the pair-separation median.  They are still
     # shifted below (a1_of covers every key) so backbone bonds stay intact.
-    fwd = {(k[0], k[1]) for k in resolved_map if len(k) == 3 and k[2] == "FORWARD"}
-    rev = {(k[0], k[1]) for k in resolved_map if len(k) == 3 and k[2] == "REVERSE"}
+    # Extension keys are ALSO 3-tuples, so they must be excluded explicitly — they are
+    # unpaired ssDNA and have no business setting the duplex width.
+    fwd = {(k[0], k[1]) for k in resolved_map
+           if len(k) == 3 and k[2] == "FORWARD" and not is_synthetic_nuc_key(k)}
+    rev = {(k[0], k[1]) for k in resolved_map
+           if len(k) == 3 and k[2] == "REVERSE" and not is_synthetic_nuc_key(k)}
     seps: list[float] = []
     for hid, bp in fwd & rev:
         f = resolved_map[(hid, bp, "FORWARD")]
@@ -835,7 +1171,7 @@ def oxdna_native_seed_map(
     for key, nuc in resolved_map.items():
         shifted = dict(nuc)
         shifted["backbone_position"] = (
-            np.asarray(nuc["backbone_position"], float) + delta * a1_of[key]
+            np.asarray(nuc["backbone_position"], float) + delta * shift_dir[key]
         )
         out[key] = shifted
     return out
@@ -937,8 +1273,9 @@ def read_configuration(
     for i, key in enumerate(order):
         if offset + i >= len(data_lines):
             break
-        if key[0] == _XB_SENTINEL:
-            continue  # extra-base insert: occupies a particle slot but is not a design key
+        if is_synthetic_nuc_key(key):
+            continue  # extra-base insert / extension bead: occupies a particle slot
+                      # but is not a design key
         parts = data_lines[offset + i].split()
         if len(parts) < 3:
             continue
@@ -958,6 +1295,7 @@ def read_configuration_full(
     *,
     copies:    bool = False,
     include_extra_bases: bool = False,
+    include_extensions:  bool = False,
 ) -> dict[tuple, dict]:
     """
     Read an oxDNA configuration (.dat) and return position + orientation per nuc.
@@ -986,6 +1324,10 @@ def read_configuration_full(
     ``(_XB_SENTINEL, crossover_id, k)`` key (default drops them so the design-keyed
     display + recovery oracle stay clean).  Used by the relaxed-display + heavy-rep
     routes to render extra bases at their real simulated positions.
+
+    ``include_extensions=True`` likewise keeps strand-extension tail beads under
+    their ``("__ext_<id>", i, direction)`` key.  Default-off for the same reason:
+    every existing design-keyed consumer expects real (helix, bp, dir) keys only.
     """
     order = _strand_nucleotide_order(design)
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
@@ -996,8 +1338,8 @@ def read_configuration_full(
     for i, key in enumerate(order):
         if offset + i >= len(data_lines):
             break
-        if key[0] == _XB_SENTINEL and not include_extra_bases:
-            continue  # extra-base insert: not a design key (kept only for particle alignment)
+        if _drop_synthetic(key, include_extra_bases, include_extensions):
+            continue  # insert / tail bead: not a design key (kept only for particle alignment)
         parts = data_lines[offset + i].split()
         if len(parts) < 9:
             continue
@@ -1020,6 +1362,7 @@ def configuration_full_from_particles(
     *,
     copies: bool = False,
     include_extra_bases: bool = False,
+    include_extensions:  bool = False,
 ) -> dict[tuple, dict]:
     """In-memory twin of :func:`read_configuration_full`: build the SAME
     ``(helix_id, bp_index, direction) -> {backbone_position(nm), a1, a3}`` map
@@ -1043,8 +1386,8 @@ def configuration_full_from_particles(
         j = offset + i
         if j >= len(particles):
             break
-        if key[0] == _XB_SENTINEL and not include_extra_bases:
-            continue  # extra-base insert: not a design key (kept only for particle alignment)
+        if _drop_synthetic(key, include_extra_bases, include_extensions):
+            continue  # insert / tail bead: not a design key (kept only for particle alignment)
         p = particles[j]
         pos_nm = np.asarray(p.pos, dtype=float) * OXDNA_LENGTH_UNIT
         ori = np.asarray(p.orientation, dtype=float)
@@ -1117,6 +1460,7 @@ def read_configuration_unwrapped(
     align:      bool = True,
     copies:     bool = False,
     include_extra_bases: bool = False,
+    include_extensions:  bool = False,
 ) -> dict[tuple, dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
@@ -1144,10 +1488,12 @@ def read_configuration_unwrapped(
     the a1/a3 orientation vectors are rotated by the same alignment.
     """
     relax = read_configuration_full(conf_path, design, copies=copies,
-                                    include_extra_bases=include_extra_bases)
-    # Reference stays design-keyed (no extra bases) so the Kabsch fit aligns on the
-    # rigid duplex, not the floppy single-stranded inserts; inserts are still carried
-    # through the transform via their backbone-bond connection to the strand.
+                                    include_extra_bases=include_extra_bases,
+                                    include_extensions=include_extensions)
+    # Reference stays design-keyed (no extra bases, no extension tails) so the Kabsch
+    # fit aligns on the rigid duplex, not the floppy single-stranded inserts/tails;
+    # those are still carried through the transform via their backbone-bond connection
+    # to the strand.
     ref = read_configuration_full(reference_path, design, copies=copies)
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
@@ -1162,6 +1508,7 @@ def read_configuration_full_unwrapped(
     *,
     copies: bool = False,
     include_extra_bases: bool = False,
+    include_extensions:  bool = False,
 ) -> dict[tuple, dict]:
     """``read_configuration_full`` + PBC make-whole, WITHOUT any reference alignment.
 
@@ -1178,7 +1525,8 @@ def read_configuration_full_unwrapped(
     shape as :func:`read_configuration_full`.  Used by the NAMD-seed reconstruction.
     """
     relax = read_configuration_full(conf_path, design, copies=copies,
-                                    include_extra_bases=include_extra_bases)
+                                    include_extra_bases=include_extra_bases,
+                                    include_extensions=include_extensions)
     box = _parse_box_nm(conf_path)
     if box is None or not np.all(box > 0):
         return relax
@@ -1768,32 +2116,30 @@ def backbone_bond_pairs(design: Design) -> list[tuple[tuple, tuple]]:
     junction's bonds are simply skipped rather than measured as one phantom bond
     spanning the whole (now wider) gap — which would otherwise read as a spurious
     FENE over-stretch and fail an otherwise-healthy relaxation.
+
+    Derived from ``_walk_strand_nucleotides`` — the same walk that defines the
+    particle order — so the bond list can never drift from the topology it measures.
+    Loop copies (4-tuple keys) collapse onto their base 3-tuple, so a run of copies
+    at one bp contributes a single key rather than a chain of zero-length self-bonds.
     """
     pairs: list[tuple[tuple, tuple]] = []
-    ls_lookup = _build_ls_lookup(design)
-    junctions = crossover_extra_base_junctions(design)
-    for strand in design.strands:
-        seq_keys: list[tuple] = []
-        doms = strand.domains
-        for di, domain in enumerate(doms):
-            lo = min(domain.start_bp, domain.end_bp)
-            hi = max(domain.start_bp, domain.end_bp)
-            if domain.direction == Direction.FORWARD:
-                bp_range = range(lo, hi + 1)
-            else:
-                bp_range = range(hi, lo - 1, -1)
-            for bp in bp_range:
-                delta = ls_lookup.get((domain.helix_id, bp), 0)
-                if delta <= -1:
-                    continue
-                seq_keys.append((domain.helix_id, bp, domain.direction.value))
-            hit = junctions.get((strand.id, di))
-            if hit is not None and di + 1 < len(doms):
-                xo_id, extra = hit
-                for k in range(len(extra)):
-                    seq_keys.append((_XB_SENTINEL, xo_id, k))
+    cur_strand = None
+    seq_keys: list[tuple] = []
+
+    def _flush() -> None:
         for a, b in zip(seq_keys, seq_keys[1:]):
             pairs.append((a, b))
+
+    for step in _walk_strand_nucleotides(design):
+        if step.strand is not cur_strand:
+            _flush()
+            cur_strand = step.strand
+            seq_keys = []
+        key = step.key[:3]
+        if seq_keys and seq_keys[-1] == key:
+            continue        # loop copy of the bp already recorded
+        seq_keys.append(key)
+    _flush()
     return pairs
 
 

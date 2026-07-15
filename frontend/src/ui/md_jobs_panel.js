@@ -35,6 +35,7 @@ import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { initAdvancedOptimize, renderRunPath } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
+import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -1073,6 +1074,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return !!pane && !pane.hidden
   }
 
+  // Dynamics OR any view-only tab (Photo): the tabs on which an MD display —
+  // a live frame, a scrubbed trajectory frame, an RMSD/RMSF colouring — is
+  // allowed to stay on screen. See display_tab_policy.js.
+  function _isDisplayTabVisible() {
+    return displayTabIds().some(id => {
+      const pane = document.getElementById(`tab-content-${id}`)
+      return !!pane && !pane.hidden
+    })
+  }
+
   // Readiness dot next to the Display-MD toggle: 'warming' | 'ready' | 'error' | 'off'.
   // Reflects the background prewarm (socket load) as well as the live display, so the
   // user can see when toggling will paint instantly vs pay the ~5 s load.
@@ -1915,10 +1926,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // shouldn't persist off-tab) but KEEPS the background prewarm socket warm, so
   // returning + re-toggling is instant.  Prewarm now spans tabs (Option 1); it is
   // torn down only on Display-MD handoff (_startMdDisplay) or app teardown.
+  // The Photo tab is EXEMPT: it renders what's on screen, so the MD frame the user
+  // picked has to still be there when the photo renderer draws it.
   document.querySelectorAll('#left-tab-strip .left-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       setTimeout(() => {
-        if (displayToggle?.checked && !_isDynamicsTabVisible()) {
+        if (displayToggle?.checked && !_isDisplayTabVisible()) {
           _stopMdDisplay('Native positions restored')  // also resumes prewarm
         } else if (!displayToggle?.checked) {
           _startMdPrewarm()
@@ -1928,9 +1941,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   })
 
   window.addEventListener('nadoc:left-tab-change', evt => {
-    if (evt.detail?.activeTab !== 'dynamics') {
+    const tab = evt.detail?.activeTab
+    if (shouldTearDownDisplays(tab)) {
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')  // resumes prewarm
-    } else if (!displayToggle?.checked) {
+    } else if (shouldResumeDisplays(tab) && !displayToggle?.checked) {
       _startMdPrewarm()
     }
   })

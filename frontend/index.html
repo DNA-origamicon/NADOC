@@ -5399,8 +5399,31 @@
                       style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">✎</button>
               <button id="photo-profile-delete" title="Delete the current profile"
                       style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">×</button>
+              <button id="photo-profile-reset" title="Reset all photo settings to their defaults"
+                      style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">Reset</button>
             </div>
             <div id="photo-profile-status" style="font-size:11px;color:#6a737d;min-height:14px"></div>
+          </div>
+
+          <!-- Style preset — a named bundle of the ordinary settings below.
+               Picking one writes a coherent set of them at once; every knob it
+               touches stays individually adjustable. Shows "Custom" as soon as
+               the live settings stop matching any preset. -->
+          <div style="padding:8px 14px;border-bottom:1px solid #21262d;display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e">
+              <span style="min-width:46px" title="A named bundle of the settings below. Publication = the molecular-figure look (flat materials, occlusion shading, silhouette outlines, near-parallel camera, no bloom/mist/floor/reflections).">Style</span>
+              <select id="photo-style-select"
+                      style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                <option value="publication">Publication (figure)</option>
+                <option value="studio">Studio (product render)</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div style="color:#6a737d;font-size:11px;line-height:1.3">
+              Publication turns OFF the photoreal knobs (bloom, mist, reflections, floor,
+              specular) and turns ON the figure ones (flat materials, occlusion shading,
+              outlines, near-parallel camera). Everything stays editable below.
+            </div>
           </div>
 
           <!-- Resolution -->
@@ -5454,6 +5477,7 @@
           <div class="panel-section">
             <h2>Lighting</h2>
             <select id="photo-lighting-select" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+              <option value="ambient">Ambient (occlusion-only, figure)</option>
               <option value="scientific">Scientific (flat, publication)</option>
               <option value="studio" selected>Studio (warm key + cool fill)</option>
               <option value="softbox">Soft Box (diffuse, no shadows)</option>
@@ -5588,6 +5612,97 @@
             </div>
           </div>
 
+          <!-- Figure (publication look) — outline, depth cue, occlusion shading.
+               Each control is independent; the Publication style preset above is
+               just a bundle that switches the right ones on. -->
+          <div class="panel-section">
+            <h2>Figure (publication)</h2>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
+
+              <!-- Silhouette outline -->
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer"
+                     title="Dark contour at depth/normal discontinuities. Separates overlapping helices without relying on lighting — the single biggest 'publication look' lever.">
+                <input id="photo-outline" type="checkbox"> Silhouette outline
+              </label>
+              <div id="photo-outline-controls" style="display:none;flex-direction:column;gap:4px;margin-left:20px;color:#8b949e">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px">Thickness</span>
+                  <input id="photo-outline-thickness" type="range" min="0.5" max="4" step="0.1" value="1.4"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-outline-thickness-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.4 px</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px">Strength</span>
+                  <input id="photo-outline-strength" type="range" min="0" max="1" step="0.05" value="1"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-outline-strength-label" style="color:#c9d1d9;min-width:34px;text-align:right">100%</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px" title="How big a depth step counts as a silhouette. Lower = more contours.">Silhouette</span>
+                  <input id="photo-outline-depth-sens" type="range" min="0.05" max="1.5" step="0.05" value="0.35"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-outline-depth-sens-label" style="color:#c9d1d9;min-width:34px;text-align:right">0.35</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px" title="How sharp a fold within one surface counts as a crease line. Higher = fewer interior lines.">Creases</span>
+                  <input id="photo-outline-crease-sens" type="range" min="0.1" max="2" step="0.05" value="0.85"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-outline-crease-sens-label" style="color:#c9d1d9;min-width:34px;text-align:right">0.85</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px">Colour</span>
+                  <input id="photo-outline-color" type="color" value="#1b1f24"
+                         style="width:32px;height:20px;padding:1px;border:1px solid #30363d;border-radius:2px;background:#0d1117;cursor:pointer">
+                </div>
+              </div>
+
+              <!-- Depth cue -->
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer"
+                     title="Fades the far side of the structure toward a flat colour, so a thick bundle recedes instead of turning to mush. The window tracks the structure's own depth, so it works at any FOV.">
+                <input id="photo-depthcue" type="checkbox"> Depth cue
+              </label>
+              <div id="photo-depthcue-controls" style="display:none;flex-direction:column;gap:4px;margin-left:20px;color:#8b949e">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px">Strength</span>
+                  <input id="photo-depthcue-strength" type="range" min="0" max="1" step="0.05" value="0.35"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-depthcue-strength-label" style="color:#c9d1d9;min-width:34px;text-align:right">35%</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px" title="Usually matches the background colour.">Fade to</span>
+                  <input id="photo-depthcue-color" type="color" value="#ffffff"
+                         style="width:32px;height:20px;padding:1px;border:1px solid #30363d;border-radius:2px;background:#0d1117;cursor:pointer">
+                </div>
+              </div>
+
+              <!-- Occlusion shading (GTAO) -->
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer"
+                     title="Ground-truth ambient occlusion. Under the flat/ambient figure rig this is the PRIMARY shading cue — crevices between helices carry the shape, not a key light. Much stronger than the SSAO garnish under Post-processing.">
+                <input id="photo-ao" type="checkbox"> Occlusion shading (GTAO)
+              </label>
+              <div id="photo-ao-controls" style="display:none;flex-direction:column;gap:4px;margin-left:20px;color:#8b949e">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px" title="World-space reach, in nm. ~2 nm reaches between neighbouring helices in a bundle.">Radius</span>
+                  <input id="photo-ao-radius" type="range" min="0.2" max="10" step="0.1" value="2"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-ao-radius-label" style="color:#c9d1d9;min-width:42px;text-align:right">2.0 nm</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:62px">Intensity</span>
+                  <input id="photo-ao-intensity" type="range" min="0" max="2" step="0.05" value="1"
+                         style="flex:1;accent-color:#58a6ff">
+                  <span id="photo-ao-intensity-label" style="color:#c9d1d9;min-width:42px;text-align:right">1.00×</span>
+                </div>
+              </div>
+
+              <div style="color:#6a737d;font-size:11px;line-height:1.3;border-top:1px solid #21262d;padding-top:6px">
+                Pair these with the <em>Ambient</em> lighting rig and the <em>Flat</em> materials
+                for the full molecular-figure look. Path-traced mode bypasses the composer, so
+                outline and depth cue do not apply there.
+              </div>
+            </div>
+          </div>
+
           <!-- Post-processing -->
           <div class="panel-section">
             <h2>Post-processing</h2>
@@ -5619,6 +5734,7 @@
               <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
                 <span style="min-width:70px">Full / beads</span>
                 <select id="photo-material-full" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="flat">Flat (figure)</option>
                   <option value="matte" selected>Matte</option>
                   <option value="glossy">Glossy</option>
                   <option value="metallic">Metallic</option>
@@ -5627,6 +5743,7 @@
               <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
                 <span style="min-width:70px">Surface</span>
                 <select id="photo-material-surface" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="flat">Flat (figure)</option>
                   <option value="gummy" selected>Gummy</option>
                   <option value="wax">Wax (SSS)</option>
                   <option value="skin">Skin (SSS)</option>
@@ -5637,6 +5754,7 @@
               <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
                 <span style="min-width:70px">Cylinders</span>
                 <select id="photo-material-cylinders" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="flat">Flat (figure)</option>
                   <option value="matte" selected>Matte</option>
                   <option value="glossy">Glossy</option>
                   <option value="metallic">Metallic</option>
@@ -5645,6 +5763,7 @@
               <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
                 <span style="min-width:70px">Atomistic</span>
                 <select id="photo-material-atomistic" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  <option value="cpk-flat">CPK Flat (figure)</option>
                   <option value="cpk-matte" selected>CPK Matte</option>
                   <option value="cpk-glossy">CPK Glossy</option>
                   <option value="cpk-metallic">CPK Metallic</option>
@@ -5772,13 +5891,18 @@
             <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs)">
               <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
                 <span style="min-width:28px">FOV</span>
-                <input id="photo-fov" type="range" min="20" max="90" step="1" value="55"
+                <input id="photo-fov" type="range" min="4" max="90" step="1" value="55"
                        style="flex:1;accent-color:#58a6ff">
                 <span id="photo-fov-label" style="color:#c9d1d9;min-width:28px;text-align:right">55°</span>
               </div>
-              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer">
-                <input id="photo-ortho" type="checkbox"> Orthographic projection
+              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer"
+                     title="Snaps to an 8° long lens and dollies back to keep the framing. Removes the vanishing point — perspective distortion across a 60 nm object is a video-game tell. Visually parallel; not a true orthographic camera (see figure_camera.js).">
+                <input id="photo-parallel" type="checkbox"> Parallel projection (long lens)
               </label>
+              <div style="color:#6a737d;font-size:11px;line-height:1.3">
+                Changing FOV dollies the camera to keep the subject the same size, so the
+                framing you set is preserved. Exiting photo mode restores the editor's lens.
+              </div>
             </div>
           </div>
 

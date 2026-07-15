@@ -49,7 +49,11 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
     dsDNA-core column, so they carry no cross-engine RMSF counterpart — the same reason
     ``_core_column_key`` (used by the shape core filter) returns ``None`` for them.
     Guarding here keeps the str-vs-int compare from crashing the gold-override column on
-    any design with a linker (the class of bug ``md_pkey`` records having hit live)."""
+    any design with a linker (the class of bug ``md_pkey`` records having hit live).
+
+    Strand-extension tail beads are dropped too, and need a SEPARATE guard: they are keyed
+    ``("__ext_<id>", bead_index, direction)`` with an INT ``bp_index``, so the isinstance
+    check above does not catch them."""
     out: list[dict] = []
     for p in rmsf_positions or []:
         r = p.get("rmsf")
@@ -57,6 +61,8 @@ def _rmsf_profile(rmsf_positions) -> list[dict]:
             continue
         if not isinstance(p.get("bp_index"), int):
             continue
+        if str(p.get("helix_id", "")).startswith("__"):
+            continue      # synthetic particle (extension tail / insert), not a design position
         direction = p.get("direction")
         out.append({
             "helix_id": p["helix_id"],

@@ -117,6 +117,18 @@ DSDNA_PERSISTENCE_LENGTH_NM: float = 50.0  # dsDNA in physiological buffer
 SSDNA_RISE_PER_BASE_NM: float = 0.59   # ssDNA relaxed conformation
 DSDNA_RISE_PER_BP_NM: float = BDNA_RISE_PER_BP   # alias = 0.334 nm
 
+# ssDNA CONTOUR length per nucleotide — the backbone-to-backbone spacing of a chain
+# laid out taut, which is what a single-stranded seed (extension tails, free tails)
+# must use.  Distinct from SSDNA_RISE_PER_BASE_NM above, which is the *relaxed*
+# (entropically coiled) end-to-end rise used for tether/loop rest lengths.
+#
+# 0.68 nm is also the right seed for oxDNA: its FENE backbone spring sits at
+# r0 = 0.7564 oxDNA units ≈ 0.644 nm and is only defined out to r0 ± 0.25 units
+# (≈ 0.431–0.857 nm).  A seed at 0.68 nm lands essentially on r0; seeding a tail at
+# the dsDNA rise (0.34 nm) puts every bond under the lower cliff and oxDNA diverges
+# at config load.  Source: SNUPI Default.snp SS_LCT1_L.
+SSDNA_CONTOUR_PER_NT_NM: float = 0.68
+
 # Twist aliases
 DSDNA_TWIST_PER_BP_DEG: float = BDNA_TWIST_PER_BP_DEG  # alias = 34.3°/bp
 SKIP_TWIST_DEFICIT_DEG: float = -34.3   # one missing bp = −34.3° twist deficit

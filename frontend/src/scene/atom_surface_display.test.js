@@ -216,6 +216,40 @@ describe('initAtomSurfaceDisplay', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('applyAtomisticMode DEFERS to an active sim overlay: no native flash (keeps CG, skips design fetch)', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({ getSimOverlayWillDriveAtomistic: () => true })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applyAtomisticMode('ballstick')
+    expect(deps.atomisticRenderer.setMode).toHaveBeenCalledWith('ballstick')
+    // CG stays up (relaxed shape) until the overlay lands; design atoms are NOT fetched.
+    expect(deps._root.visible).toBe(true)
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(deps.atomisticRenderer.update).not.toHaveBeenCalled()
+  })
+
+  it('deferring to a sim overlay STILL sets the atomistic colour mode (keeps strand coloring, no cpk default)', async () => {
+    mountIds(DOM)
+    const store = createMockStore({ currentDesign: null, currentGeometry: null, coloringMode: 'strand' })
+    const deps = makeDeps({ store, getSimOverlayWillDriveAtomistic: () => true })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applyAtomisticMode('ballstick')
+    // Colour mode applied from the global coloringMode even though the design-atoms
+    // fetch was skipped — the overlay's later atom rebuild re-applies this persistent mode.
+    expect(deps.atomisticRenderer.setColorMode).toHaveBeenCalledWith('strand', expect.anything())
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('applyAtomisticMode does NOT defer when no overlay drives atomistic (normal design view)', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({ getSimOverlayWillDriveAtomistic: () => false })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applyAtomisticMode('ballstick')
+    expect(deps._root.visible).toBe(false)         // CG hidden
+    expect(global.fetch).toHaveBeenCalledTimes(1)  // design atoms fetched
+    expect(deps.atomisticRenderer.update).toHaveBeenCalled()
+  })
+
   it('applySurfaceMode reflects in getSurfaceMode and fetches the surface', async () => {
     mountIds(DOM)
     const deps = makeDeps()

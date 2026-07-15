@@ -37,6 +37,7 @@ import { formatJobTime } from '../scene/trajectory_range.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
 import { confirmNoConcurrentJob, confirmGpuLaunch, confirmDiskSpaceOk } from './job_activity.js'
+import { shouldTearDownDisplays, shouldResumeDisplays } from './display_tab_policy.js'
 import * as api from '../api/client.js'
 
 const POLL_MS = 1500
@@ -785,9 +786,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (autorefineDevToggle.checked) {
       if (!_selectedId) { autorefineDevToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       oxdnaLive?.stop()                 // mutually exclusive with relaxed / flex / trajectory / live
-      if (displayToggle?.checked) _setDisplayOff()
-      if (flexToggle?.checked) _setFlexOff()
-      if (trajToggle?.checked) _setTrajOff()
+      // Tear down by ACTIVE mode (radios already cleared the peer checkboxes).
+      if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
+      if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+      if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       await _refreshDeviation()
     } else {
       _setDeviationOff()
@@ -1714,9 +1716,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         flexToggle.checked = false; _setFlexStatus('Waiting for a production or field run', _C.warn); _syncVizOffRadio(); return
       }
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
-      if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive with OxDNA display
-      if (trajToggle?.checked) _setTrajOff()
-      if (autorefineDevToggle?.checked) _setDeviationOff()
+      // Tear down by ACTIVE mode (radios already cleared the peer checkboxes).
+      if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
+      if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
+      if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
       await _refreshFlex()
     } else {
       _setFlexOff()
@@ -1815,9 +1818,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
       }
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
-      if (displayToggle?.checked) _setDisplayOff()   // mutually exclusive overlays
-      if (flexToggle?.checked) _setFlexOff()
-      if (autorefineDevToggle?.checked) _setDeviationOff()
+      // Tear down by ACTIVE mode (radios already cleared the peer checkboxes).
+      if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
+      if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+      if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
       await _refreshTraj()
     } else {
       _setTrajOff()
@@ -1976,9 +1980,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (displayToggle.checked) {
       if (!_selectedId) { displayToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
       oxdnaLive?.stop()   // mutually exclusive with the live overlay
-      if (flexToggle?.checked) _setFlexOff()   // mutually exclusive with the flexibility map
-      if (trajToggle?.checked) _setTrajOff()
-      if (autorefineDevToggle?.checked) _setDeviationOff()
+      // Radios auto-uncheck the prior view BEFORE this handler fires, so the peer
+      // toggles' `.checked` is already false — tear down by the ACTIVE overlay MODE
+      // instead, or the flex/deviation legend (and bar/status) lingers on the switch.
+      if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+      if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
+      if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
       await _refreshDisplay()
     } else {
       _setDisplayOff()
@@ -2071,12 +2078,20 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   })
 
   // ── Pause display when leaving the Dynamics tab ───────────────────────────
+  // …except for the view-only tabs (Photo), which exist to render whatever is on
+  // screen: a relaxed frame, a scrubbed trajectory frame, an RMSF/deviation
+  // colouring. Tearing the display down there would photograph the un-simulated
+  // design. Polling still stops off-Dynamics — the overlay is already drawn.
+  // See display_tab_policy.js.
   window.addEventListener('nadoc:left-tab-change', (e) => {
-    if (e.detail?.activeTab !== 'dynamics') {
+    const tab = e.detail?.activeTab
+    if (shouldTearDownDisplays(tab)) {
       if (oxdnaDisplay?.isActive()) _allDisplaysOff()
+    }
+    if (shouldResumeDisplays(tab)) {
+      if (_base.isOpen()) _onOpen()
+    } else {
       _base.clearPoll()
-    } else if (_base.isOpen()) {
-      _onOpen()
     }
   })
 

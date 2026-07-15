@@ -759,6 +759,60 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     expect($('oxdna-jobs-traj-toggle').disabled).toBe(false)
   })
 
+  it('an active oxDNA display is torn down when leaving Dynamics for an EDITING tab', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'done' }) }])
+    const disp = fakeDisplay()
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    $('oxdna-jobs-display-toggle').checked = true
+    $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve()
+    expect(disp.isActive()).toBe(true)
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', { detail: { activeTab: 'design' } }))
+    expect(disp.stopAndRestore).toHaveBeenCalled()
+  })
+
+  it('an active oxDNA display SURVIVES switching to the Photo tab (so it can be photographed)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 3, stages: relaxStages({ kind: 'production', status: 'done' }) }])
+    const disp = fakeDisplay()
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    $('oxdna-jobs-display-toggle').checked = true
+    $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve()
+    expect(disp.isActive()).toBe(true)
+    window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', { detail: { activeTab: 'photo' } }))
+    expect(disp.stopAndRestore).not.toHaveBeenCalled()
+    expect(disp.isActive()).toBe(true)   // relaxed frame still on the shared bead overlay
+  })
+
+  it('switching flex map → OxDNA display clears the flex legend (radios pre-uncheck the flex toggle, so tear down by MODE not checkbox)', async () => {
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'j1', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 4, stages: relaxStages({ kind: 'production', status: 'done' }) }])
+    const disp = fakeDisplay()
+    const flexScale = { show: vi.fn(), hide: vi.fn() }
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp, flexScale })
+    await selectFirstJob(panel)
+    // Turn on the flexibility map → legend shows, mode becomes 'rmsf'.
+    $('oxdna-jobs-flex-toggle').checked = true
+    $('oxdna-jobs-flex-toggle').dispatchEvent(new Event('change'))
+    await flush()
+    expect(disp.displayRmsf).toHaveBeenCalled()
+    expect(flexScale.show).toHaveBeenCalled()
+    expect(disp.mode()).toBe('rmsf')
+    flexScale.hide.mockClear()
+    // Switch to OxDNA display. A radio group auto-unchecks the flex toggle BEFORE this
+    // handler runs — the old checkbox-gated cleanup would miss it and leave the legend up.
+    $('oxdna-jobs-flex-toggle').checked = false            // the browser's radio uncheck
+    $('oxdna-jobs-display-toggle').checked = true
+    $('oxdna-jobs-display-toggle').dispatchEvent(new Event('change'))
+    await flush()
+    expect(disp.displayJob).toHaveBeenCalled()             // relaxed frame now shown
+    expect(flexScale.hide).toHaveBeenCalled()              // legend cleared (the fix)
+  })
+
   it('selecting a job dispatches nadoc:oxdna-job-selected (so the E-field Run button reacts)', async () => {
     api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jSel', design_source_path: 'A.nadoc', status: 'completed',
       created_at: 1, current_stage_idx: 3, stages: relaxStages() }])

@@ -251,7 +251,9 @@ def _reconstruction_badness(design: Design, override: dict) -> int:
 # v7 = unpaired (ssDNA) nucleotides — incl. single-stranded scaffold crossovers at the
 #      helix ends — placed at relaxed NAS-bead positions (nuc_pos_override_ssdna_from_arbd)
 #      instead of the phantom-duplex dsDNA axis, so far-end crossover bonds don't stretch.
-_DISPLAY_VERSION = 7
+# v8 = strand-extension tails (5′/3′ ssDNA) are real beads in the model, and their
+#      relaxed positions are emitted under the shared ``__ext_<id>`` geometry key.
+_DISPLAY_VERSION = 8
 
 
 def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
@@ -307,6 +309,22 @@ def _display_positions(design: Design, job_dir: Path) -> tuple[list[dict], int]:
         override = {**override, **ss}
 
     positions: list[dict] = []
+
+    # Strand-extension tails: their beads are keyed ``("__ext_<id>", i, direction)``
+    # (the geometry layer's key, shared with oxDNA/NAMD), so they are NOT on any helix
+    # and the per-helix walk below never sees them.  They ARE unpaired ssDNA, so the ss
+    # pass above already placed them on the relaxed structure (anchored to their
+    # relaxed root) — emit those entries straight through for the frontend, which
+    # addresses the same key.
+    for key, pos in override.items():
+        if isinstance(key[0], str) and key[0].startswith("__ext_"):
+            positions.append({
+                "helix_id":          key[0],
+                "bp_index":          key[1],
+                "direction":         key[2],
+                "backbone_position": pos.tolist(),
+            })
+
     for helix in design.helices:
         nuc_list = list(nucleotide_positions(helix))
         dir_disps: dict[str, dict[int, object]] = {"FORWARD": {}, "REVERSE": {}}

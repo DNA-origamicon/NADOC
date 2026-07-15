@@ -343,5 +343,5 @@ export function createFloor({ scene }) {
     return _mesh ? { center: _lastCenter, reach: _lastReach } : null
   }
 
-  return { build, dispose, getLastBBox, getMesh, isActive, getReach }
+  return { build, dispose, getLastBBox, getMesh, isActive, getReach, computeSceneBBox: _computeSceneBBox }
 }

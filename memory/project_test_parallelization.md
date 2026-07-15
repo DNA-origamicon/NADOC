@@ -22,20 +22,34 @@ an ordinary coding session**. Three new pieces, all machine-local + gitignored:
 - **`scripts/test_guard.sh` grew a 3rd arg** → `<label> <gate> <slow>`. `slow=1` recipes
   (`test`, `test-slow`, `test-all`) **REFUSE to start** unless the session window is open.
   `slow=0` recipes (`test-smart`, `test-fast`, `test-affected`, `test-file`) are fast-only, need
-  no confirm any more (the gate was pure friction once they couldn't run sims), and are subject to
-  a **60s wall-clock BUDGET** (`NADOC_TEST_BUDGET_SEC`). Over budget → loud banner demanding a
-  triage subagent. Budget is skipped inside a session (test-smart legitimately drains heavy groups there).
+  no confirm any more (the gate was pure friction once they couldn't run sims). Budgets are skipped
+  inside a session (test-smart legitimately drains heavy groups there).
+- **Budget policy reworked 2026-07-14 (the 60s ceiling was ratcheting).** The old rule — hard-fail
+  any fast run over 60 s — measured three things at once: test weight (a defect), suite SIZE (only
+  ever grows), and CPU contention from the user actually *using* NADOC on the same box (not a defect
+  either). So every healthy new test eventually pushed 59 s → 61 s and mandated a triage that bought
+  the seconds back by relegating something innocent; the churn cost more time than the guard saved
+  (user, 2026-07-14). Now: **the per-test 5 s rule is the mandatory gate** (scale-free — a 5 s test is
+  heavy at any suite size, and it's what actually catches real offenders), and **total wall-clock is a
+  90 s backstop only** (`NADOC_TEST_BUDGET_SEC`), firing only when the suite got fat in aggregate with
+  no single culprit. 60–90 s prints a note and requires nothing (`NADOC_TEST_SOFT_BUDGET_SEC`). Pytest
+  also now runs under **`nice -n 10`** (`NADOC_TEST_NICE=0` opts out) so `-n auto` doesn't make the app
+  stutter while the user is working in it — which alone kept the 62 s run that triggered this change
+  under the soft mark.
 - **`scripts/select_tests.py` never escalates outside a session.** A FULL/AREAS verdict is
   **downgraded to FAST and the owed groups are parked in `.nadoc-slow-pending`**, accumulating
   across sessions/commits until the user opens a window and runs `just test-slow` (or `just test`,
-  which also clears it + bumps the watermark). So `just test-smart` is *always* <60s. Reporting
+  which also clears it + bumps the watermark). So `just test-smart` is *always* the fast suite only
+  (~60s, and never minutes). Reporting
   "DEFERRED slow[cando]" IS a complete verification for a normal change — not a gap to close.
 - **Budget watchdog in conftest** (`pytest_runtest_logreport` + `pytest_sessionfinish`, aggregated
   on the xdist controller): times every test, flags any **unmarked** test over 5s
   (`NADOC_PER_TEST_BUDGET_SEC`), writes `.nadoc-slow-candidates.json` (violators + slowest_25 +
   **slowest_files_15** — per-FILE totals matter because `--dist loadfile` makes the slowest single
   file a hard wall-clock floor). That file is the input to **`.claude/skills/triage-slow-tests`**,
-  the mandated subagent when the budget blows. Never raise the budget; relegate the offender.
+  the mandated subagent when a violator appears. Never raise the budget; relegate the offender.
+  The guard reads `violators` out of that JSON — a non-empty list is what triggers triage now,
+  ahead of (and independent of) the 90 s total-time backstop.
 
 **First run of the guard immediately caught a 3-minute lie:** the "fast" suite was documented as
 ~50s but was actually **176s**. The whole SNUPI FEM family was unregistered — `test_snupi_element`

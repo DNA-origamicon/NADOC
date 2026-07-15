@@ -87,6 +87,9 @@ function _fmt(n) { return n ? n.toLocaleString() : '—' }
  */
 
 import { showConfirm } from './primitives/confirm.js'
+import { DEFAULT_PHOTO_SETTINGS } from '../scene/photo_renderer.js'
+import { initPhotoFigurePanel } from './photo_figure_panel.js'
+import { resolveStyle, detectStyle } from '../scene/photo_renderer/style_presets.js'
 
 export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store, player, exportPhotoVideo, withExportRepresentation, setExportRepresentation }) {
   // Run the export render `fn` with the assembly's chosen export representation
@@ -100,6 +103,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const profileNew    = _el('photo-profile-new')
   const profileRename = _el('photo-profile-rename')
   const profileDelete = _el('photo-profile-delete')
+  const profileReset  = _el('photo-profile-reset')
   const profileStatus = _el('photo-profile-status')
   const lightingSel  = _el('photo-lighting-select')
   const bgRadios     = document.querySelectorAll('input[name="photo-bg"]')
@@ -177,7 +181,7 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   const dpiLabel     = _el('photo-dpi-label')
   const fovSlider    = _el('photo-fov')
   const fovLabel     = _el('photo-fov-label')
-  const orthoChk     = _el('photo-ortho')
+  const styleSel     = _el('photo-style-select')
   const qualFast     = _el('photo-quality-fast')
   const qualPT       = _el('photo-quality-pt')
   const ptProgress   = _el('photo-pt-progress')
@@ -195,6 +199,9 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
 
   if (!exitBtn) return   // panel HTML not loaded yet
 
+  // Figure (publication) controls — outline / depth cue / occlusion shading /
+  // parallel projection. Own module; we delegate apply + sync to it.
+  const figure = initPhotoFigurePanel(photoRenderer)
 
   // ── Profile machinery ─────────────────────────────────────────────────────
   // Settings to skip when applying a profile (HDR file blob can't be persisted;
@@ -213,7 +220,8 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     if (s.ssao  !== undefined) photoRenderer.setSSAO(s.ssao)
     if (s.bloom !== undefined) photoRenderer.setBloom(s.bloom, s.bloomStrength, s.bloomRadius, s.bloomThreshold)
     if (s.exposure !== undefined) photoRenderer.setExposure(s.exposure)
-    if (s.fov   != null)       photoRenderer.setFOV(s.fov)
+    // Outline / depth cue / occlusion shading / parallel projection (owns fov).
+    figure.applySettings(s)
     if (s.fluorophoreEmissive !== undefined) {
       photoRenderer.setFluorophoreEmissive(s.fluorophoreEmissive, s.fluorophoreIntensity ?? 5)
     }
@@ -255,6 +263,26 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
       speed:    s.mistNoiseSpeed,
     })
     syncToState()
+  }
+
+  /** Restore every photo-mode setting to the factory defaults and write them
+   *  into the active profile (so the reset survives a reload rather than being
+   *  undone by the next autosave). `_applyProfile` covers everything that has a
+   *  renderer setter (including the figure controls); path tracing is driven
+   *  straight from the UI radios, so it's reset here. */
+  function _resetToDefaults() {
+    _applyProfile({ ...DEFAULT_PHOTO_SETTINGS })
+    // Quality: back to the fast raster path.
+    if (photoRenderer.isPathTracingEnabled?.()) photoRenderer.enablePathTracing(false)
+    if (qualFast) qualFast.checked = true
+    if (qualPT)   qualPT.checked   = false
+    if (ptProgress) ptProgress.style.display = 'none'
+    const name = _getActiveProfileName()
+    if (name) {
+      const profiles = _loadProfiles()
+      profiles[name] = photoRenderer.getSettings()
+      _saveProfiles(profiles)
+    }
   }
 
   function _populateProfileDropdown() {
@@ -393,12 +421,50 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
     _populateProfileDropdown()
   })
 
+  // Reset — every photo setting back to the factory defaults, in place (the
+  // active profile keeps its name and is overwritten with the defaults).
+  profileReset?.addEventListener('click', async () => {
+    const ok = await showConfirm({
+      title: 'Reset photo settings',
+      message: 'Restore all photo-mode settings (lighting, materials, background, '
+             + 'floor, sun, mist, effects) to their defaults? The current camera view is kept.',
+      danger: true,
+      confirmLabel: 'Reset',
+    })
+    if (!ok) return
+    _resetToDefaults()
+  })
+
   // Auto-save on any user interaction inside the photo panel (event delegation).
   // Programmatic .value writes from syncToState/_applyProfile do NOT fire input/change,
   // so loading a profile doesn't trigger a recursive save loop.
   const _photoTab = document.getElementById('tab-content-photo')
   _photoTab?.addEventListener('input',  _schedulePersist, true)
   _photoTab?.addEventListener('change', _schedulePersist, true)
+
+  // Keep the Style dropdown honest: the moment the user changes any control the
+  // active preset has an opinion about, the dropdown must fall back to "Custom".
+  //
+  // Registered on the BUBBLE phase, deliberately. The autosave listeners above
+  // use capture, which runs BEFORE the control's own handler has pushed the
+  // change into the renderer — so a capture-phase read here would see the old
+  // settings and leave the dropdown showing a preset the user just deviated
+  // from. (Deferring the read to a microtask does NOT fix that: the microtask
+  // queue drains between individual listener callbacks, not after the whole
+  // event dispatch.) Bubbling to this ancestor happens after the target's
+  // handler has run, which is exactly the ordering we need.
+  //
+  // The Style select is excluded from its OWN refresh: a <select> fires `input`
+  // BEFORE `change`, so refreshing on that `input` would rewrite styleSel.value
+  // back to whatever the (not yet updated) settings match — and the `change`
+  // handler, which reads styleSel.value, would then apply the wrong style. The
+  // dropdown is set correctly for that case by _applyProfile → syncToState.
+  function _refreshStyleLabel(e) {
+    if (!styleSel || e?.target === styleSel) return
+    styleSel.value = detectStyle(photoRenderer.getSettings())
+  }
+  _photoTab?.addEventListener('input',  _refreshStyleLabel)
+  _photoTab?.addEventListener('change', _refreshStyleLabel)
 
   // ── Resolution helpers ───────────────────────────────────────────────────────
 
@@ -720,18 +786,33 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
   resHIn?.addEventListener('input', _updateDPILabel)
   _updateDPILabel()
 
-  // FOV
+  // FOV. setFOV dollies the camera so the framing is preserved, and flips the
+  // `parallel` flag once the lens gets long enough — so the Parallel checkbox
+  // and the Style dropdown both have to be refreshed from the new state.
   fovSlider?.addEventListener('input', () => {
     const v = parseInt(fovSlider.value)
     if (fovLabel) fovLabel.textContent = `${v}°`
     photoRenderer.setFOV(v)
+    figure.syncToState()
+    if (styleSel) styleSel.value = detectStyle(photoRenderer.getSettings())
   })
 
-  // Ortho
-  orthoChk?.addEventListener('change', () => {
-    // Ortho toggle is communicated back to main.js via onEnter/onExit callbacks
-    // which manage camera switching; here we just record the intent.
-    photoRenderer.getSettings().ortho = orthoChk.checked
+  // Style preset — a named bundle of the ordinary settings. Applied through the
+  // SAME path as loading a profile, so there is exactly one code path that turns
+  // a settings object into renderer state. Picking "Custom" is a no-op (it is a
+  // label for "matches no preset", not a preset you can apply).
+  styleSel?.addEventListener('change', () => {
+    const patch = resolveStyle(styleSel.value)
+    if (!patch) return
+    _applyProfile({ ...photoRenderer.getSettings(), ...patch })
+    // Path tracing isn't part of _applyProfile (it's driven from the Quality
+    // radios), so honour the preset's choice here.
+    if (patch.pathTracing === false && photoRenderer.isPathTracingEnabled?.()) {
+      photoRenderer.enablePathTracing(false)
+      if (qualFast) qualFast.checked = true
+      if (qualPT)   qualPT.checked   = false
+      if (ptProgress) ptProgress.style.display = 'none'
+    }
   })
 
   // Quality (path tracing toggle)
@@ -833,6 +914,11 @@ export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store
       if (fovLabel) fovLabel.textContent = `${Math.round(s.fov ?? sceneCtx.camera.fov)}°`
     }
     if (ptProgress) ptProgress.style.display = s.pathTracing ? '' : 'none'
+    figure.syncToState()
+    // The Style dropdown is a VIEW of the settings, not a stored setting: it
+    // shows whichever preset the live settings match, or "Custom" the moment
+    // the user changes anything a preset has an opinion about.
+    if (styleSel) styleSel.value = detectStyle(s)
     _updateDPILabel()
   }
 

@@ -34,6 +34,8 @@ from typing import Dict, List
 
 import numpy as np
 
+from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
+
 _PARAMS_PATH = Path(__file__).resolve().parents[1] / "data" / "parameters" / "snupi_params.json"
 
 # SNUPI beam DOF order (dx = axial).
@@ -285,7 +287,7 @@ def ssdna_element(n_nt: int) -> Dict[str, float]:
 # Sourced from ~/SNUPI/Default.snp lines 88-153.  The resulting chain is validated against the
 # WLC end-to-end oracle, NOT against SNUPI (which has no such element to compare to) — see
 # `tests/test_snupi_ssdna.py::test_free_tail_reproduces_the_wlc_end_to_end_distribution`.
-SS_CONTOUR_PER_NT = 0.68     # nm  — SS_LCT1_L
+SS_CONTOUR_PER_NT = SSDNA_CONTOUR_PER_NT_NM   # nm — SS_LCT1_L (shared with the oxDNA tail seed)
 SS_PERSISTENCE_NM = 0.67     # nm  — SS_LPB_L
 SS_EA_TAUT = 710.0           # pN  — SS_EA_H
 SS_GJ_SHORT = 15.0           # pN·nm^2 — SS_GJ_H

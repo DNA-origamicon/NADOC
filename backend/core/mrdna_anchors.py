@@ -59,13 +59,21 @@ def _anchor_nt_positions(design: "Design", anchors) -> np.ndarray:
     """The (M,3) Å backbone positions of every nucleotide the scopes resolve to.
 
     Reuses the shared resolver; stale / ssDNA-only / extra-base-insert keys drop
-    silently (extra-base inserts carry ``helix_id=None`` so no scope selects them)."""
+    silently (extra-base inserts carry ``helix_id=None`` so no scope selects them).
+
+    Strand-extension tail beads are dropped EXPLICITLY (``helix_id`` starts ``__ext_``):
+    a 'strand' scope does select them, but a floppy terminal ssDNA tail is not a rigid
+    tether point, and its key — a 3-tuple whose bp_index is an ordinary int — otherwise
+    resolves like a real nucleotide.  (``__lnk__`` virtual linker helices are real duplex
+    and stay anchorable, so this tests the extension prefix, not just ``__``.)"""
     if not anchors:
         return np.empty((0, 3))
+    from backend.core.mrdna_bridge import _EXT_PREFIX  # noqa: PLC0415
     from backend.physics.oxdna_interface import resolve_anchor_particles  # noqa: PLC0415
 
     _parts, keys = resolve_anchor_particles(design, anchors)
-    hbd = {(k[0], k[1], k[2]) for k in keys if len(k) >= 3}
+    hbd = {(k[0], k[1], k[2]) for k in keys
+           if len(k) >= 3 and not (isinstance(k[0], str) and k[0].startswith(_EXT_PREFIX))}
     if not hbd:
         return np.empty((0, 3))
 
@@ -73,7 +81,7 @@ def _anchor_nt_positions(design: "Design", anchors) -> np.ndarray:
 
     r, _bp, _stk, _tp, _ori, _seq, nt_key = _build_nt_arrays(design, return_nt_key=True)
     idxs = [idx for (h_id, bp_idx, direction, _k), idx in nt_key.items()
-            if (h_id, bp_idx, direction) in hbd]
+            if not h_id.startswith(_EXT_PREFIX) and (h_id, bp_idx, direction) in hbd]
     if not idxs:
         return np.empty((0, 3))
     return np.asarray(r)[idxs]

@@ -33,6 +33,22 @@ describe('toFemUpdates', () => {
       { helix_id: '__xb__', bp_index: 'xo-123', direction: 1, backbone_position: [7, 8, 9] },
     ])
   })
+
+  it('passes strand-extension (__ext_) tail beads through for the deform toggle', () => {
+    // A 5′/3′ ssDNA tail bead is keyed ("__ext_<id>", bead_index, direction) — the
+    // SAME geometry key oxDNA and NAMD emit, which design_renderer already addresses
+    // (`${helix_id}:${bp_index}:${direction}`), so no renderer change is needed.  Note
+    // bp_index here is an ordinary int (unlike __xb__'s crossover-id string): a filter
+    // that drops non-int bp_index would NOT drop these.
+    const resp = { ready: true, positions: [
+      { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', backbone_position: [1, 2, 3] },
+      { helix_id: '__ext_e1', bp_index: 0, direction: 'REVERSE', backbone_position: [4, 5, 6] },
+    ] }
+    expect(toFemUpdates(resp)).toEqual([
+      { helix_id: 'h0', bp_index: 3, direction: 'FORWARD', backbone_position: [1, 2, 3] },
+      { helix_id: '__ext_e1', bp_index: 0, direction: 'REVERSE', backbone_position: [4, 5, 6] },
+    ])
+  })
 })
 
 describe('beadsToPoints', () => {

@@ -1265,6 +1265,22 @@ def design_has_extra_bases(design: "Design") -> bool:
     )
 
 
+def design_has_extensions(design: "Design") -> bool:
+    """True if the design carries any strand extension that contributes real DNA.
+
+    Only SEQUENCE-bearing extensions count: a modification-only extension (a
+    fluorophore or biotin with no ``sequence``) is not DNA and builds no residue.
+
+    Extension tails are single-stranded, unpaired, and seeded on a geometric arc
+    poking radially out of the duplex, so — exactly like crossover extra bases — they
+    can start in steric contact with a neighbouring helix.  The declash protocol
+    handles them for free once enabled: ``identify_unpaired_residues`` is purely
+    geometric (C1′–C1′ > 10.8 Å ⇒ unpaired), so tail residues are auto-detected as
+    single-stranded, kept out of the ENM, and relaxed with the soft integrator.
+    """
+    return any(getattr(e, "sequence", None) for e in getattr(design, "extensions", []))
+
+
 # ── Box extraction ────────────────────────────────────────────────────────────
 
 def parse_box_from_namd_conf(conf_text: str) -> tuple[float, float, float]:
@@ -1614,8 +1630,9 @@ def prepare_mgh_slow_release(
     # bases relax out of clash.  References are rebuilt from the declashed coords
     # by the runner after minimisation (rebuild_declashed_references).  Enabled
     # automatically whenever the design inserts extra bases at crossovers (they
-    # are built clashed); the explicit flag can force it on otherwise.
-    declash = declash or design_has_extra_bases(design)
+    # are built clashed) or carries strand extensions (free ssDNA tails seeded on a
+    # geometric arc); the explicit flag can force it on otherwise.
+    declash = declash or design_has_extra_bases(design) or design_has_extensions(design)
     declash_enm_file: Optional[str] = None
     n_unpaired = 0
     if declash:

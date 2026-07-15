@@ -1,13 +1,24 @@
 ---
 name: triage-slow-tests
-description: Triage a per-change test suite that blew the 60s budget — find what made it slow and relegate it to the test-dedicated (slow) suite. Use when scripts/test_guard.sh prints "TEST BUDGET EXCEEDED", when `just test-smart` / `just test-fast` takes over a minute, or when the user asks why the fast suite got slow. NOT for fixing failing tests (that's the issues ledger).
+description: Triage a heavy test that leaked into the fast suite — find what made it slow and relegate it to the test-dedicated (slow) suite. Use when scripts/test_guard.sh prints "HEAVY TEST IN THE FAST SUITE" (an unmarked test over the 5s per-test budget) or "FAST SUITE TOO SLOW" (the 90s aggregate backstop), or when the user asks why the fast suite got slow. NOT for fixing failing tests (that's the issues ledger).
 ---
 
 # Triage slow tests
 
-The per-change loop (`just test-smart`, `just test-fast`) is only useful if it stays
-under **60 s**. When it doesn't, something heavy has leaked into the fast suite. Your
-job is to find it and move it out — never to raise the budget.
+The per-change loop (`just test-smart`, `just test-fast`) stops being a per-change loop
+when heavy work leaks into it. Your job is to find that work and move it out — never to
+raise a budget.
+
+**Which signal fired matters.** The mandatory gate is **per-test**: an unmarked test over
+5 s (`NADOC_PER_TEST_BUDGET_SEC`) is heavy no matter how large the suite grows, so it is a
+real defect and there is a specific offender to relegate. The **total wall-clock** trigger
+(90 s backstop) is different: it fires with *no* single over-budget test, which means the
+suite got fat in aggregate — broad drift, not one culprit. Do **not** answer that by
+relegating whichever tests happen to be slowest; look for accidental slowness affecting many
+tests (an unstubbed host probe, a fixture rebuilt per-test, a real sleep) and *fix* it. See
+the WSL host-probe entry in [project_test_parallelization](../../../memory/project_test_parallelization.md).
+Total time also grows simply because the suite has more tests in it, and because other work
+on the machine is competing for CPU — neither is a defect, and neither is yours to "fix".
 
 ## The law you are enforcing
 
@@ -49,7 +60,9 @@ in an ordinary coding session is a bug in the test layout, not a fact of life.
    Check `scripts/select_tests.py`'s `LEAF_RULES` too: the *source* file that the newly
    relegated test covers should route to the same area.
 4. **Verify the budget is back.** `NADOC_TEST_CONFIRM=1 just test-fast` — it prints
-   `test budget: Ns / 60s ok`. Confirm the relegated tests still *exist* in the slow
+   `test time: Ns / 60s ok` (or a "under the 90s backstop — no action needed" note, which
+   is also a pass: the bar is zero per-test violators, not a total-time number, and the
+   run is `nice`d so a busy machine inflates it). Confirm the relegated tests still *exist* in the slow
    suite: `uv run pytest tests/ -m slow --collect-only -q | tail -3` (collect-only is
    cheap and does not run them).
 5. **Report** — for each violator: seconds, why it was slow, relegated (which bucket +

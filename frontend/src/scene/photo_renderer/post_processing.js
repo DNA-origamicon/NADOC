@@ -16,10 +16,12 @@ import * as THREE from 'three'
 import { EffectComposer }   from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass }       from 'three/addons/postprocessing/RenderPass.js'
 import { SSAOPass }         from 'three/addons/postprocessing/SSAOPass.js'
+import { GTAOPass }         from 'three/addons/postprocessing/GTAOPass.js'
 import { SMAAPass }         from 'three/addons/postprocessing/SMAAPass.js'
 import { UnrealBloomPass }  from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass }       from 'three/addons/postprocessing/OutputPass.js'
 import { VolumetricInscatterPass } from './volumetric_inscatter_pass.js'
+import { FigurePass }              from './figure_pass.js'
 
 /**
  * @param {THREE.WebGLRenderer} renderer
@@ -27,6 +29,9 @@ import { VolumetricInscatterPass } from './volumetric_inscatter_pass.js'
  * @param {THREE.Camera}        camera
  * @param {object}              opts
  * @param {boolean} [opts.ssao=true]
+ * @param {boolean} [opts.ao=false]           — GTAO (occlusion shading)
+ * @param {number}  [opts.aoRadius=2.0]       — nm
+ * @param {number}  [opts.aoIntensity=1.0]
  * @param {boolean} [opts.bloom=false]
  * @param {number}  [opts.bloomStrength=0.5]
  * @param {number}  [opts.bloomRadius=0.4]
@@ -35,6 +40,9 @@ import { VolumetricInscatterPass } from './volumetric_inscatter_pass.js'
 export function createComposer(renderer, scene, camera, opts = {}) {
   const {
     ssao          = true,
+    ao            = false,
+    aoRadius      = 2.0,
+    aoIntensity   = 1.0,
     bloom         = false,
     bloomStrength = 0.5,
     bloomRadius   = 0.4,
@@ -79,6 +87,39 @@ export function createComposer(renderer, scene, camera, opts = {}) {
   ssaoPass.enabled       = !!ssao
   composer.addPass(ssaoPass)
 
+  // ── GTAO — "occlusion shading" (the figure look) ─────────────────────────────
+  // Ground-truth ambient occlusion, a much stronger and cleaner effect than the
+  // SSAO garnish above. In the publication style this is the PRIMARY shading
+  // cue: with flat materials and an ambient rig there is no key light, so the
+  // crevices between helices are what conveys shape. Radius is in world units
+  // (nm) — a couple of nm reaches between neighbouring helices in a bundle.
+  // Always constructed, toggled via `enabled` (same rule as SSAO/Bloom: never
+  // reconstruct the composer post-activate — see the note above).
+  const gtaoPass = new GTAOPass(scene, camera, w, h)
+  gtaoPass.output = GTAOPass.OUTPUT.Default   // AO multiplied into the beauty pass
+  gtaoPass.blendIntensity = aoIntensity
+  gtaoPass.updateGtaoMaterial({
+    radius:           aoRadius,
+    distanceExponent: 1.0,
+    thickness:        1.0,
+    scale:            1.0,
+    samples:          16,
+    screenSpaceRadius: false,   // radius is in nm, not pixels
+  })
+  gtaoPass.enabled = !!ao
+  composer.addPass(gtaoPass)
+
+  // ── Figure pass — silhouette outlines + depth cue ────────────────────────────
+  // Placed AFTER the occlusion passes (so the contour is drawn over the shaded
+  // image, not multiplied by AO) and BEFORE SMAA (so the contour gets
+  // anti-aliased along with everything else — an un-AA'd 1 px outline is the
+  // thing that makes a "toon" filter look cheap). Starts disabled; the
+  // orchestrator enables it when outline and/or depth cue are on.
+  const figurePass = new FigurePass(scene, camera)
+  figurePass.enabled = false
+  figurePass.setSize(w, h)
+  composer.addPass(figurePass)
+
   // ── SMAA anti-aliasing ───────────────────────────────────────────────────────
   const smaaPass = new SMAAPass(w, h)
   composer.addPass(smaaPass)
@@ -97,14 +138,18 @@ export function createComposer(renderer, scene, camera, opts = {}) {
   function setSize(width, height) {
     composer.setSize(width, height)
     ssaoPass?.setSize(width, height)
+    gtaoPass?.setSize(width, height)
+    figurePass.setSize(width, height)
     inscatterPass.setSize(width, height)
   }
 
   function dispose() {
     inscatterPass.dispose()
+    figurePass.dispose()
+    gtaoPass.dispose?.()
     bloomPass.dispose?.()
     composer.dispose()
   }
 
-  return { composer, ssaoPass, bloomPass, inscatterPass, setSize, dispose }
+  return { composer, ssaoPass, gtaoPass, figurePass, bloomPass, inscatterPass, setSize, dispose }
 }

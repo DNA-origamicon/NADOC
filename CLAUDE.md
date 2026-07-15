@@ -24,7 +24,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 just dev            # backend (FastAPI on :8000)
 just frontend       # Vite dev server (:5173)
-just test-smart     # DEFAULT per-change loop: fast suite, scoped. ALWAYS <60s.
+just test-smart     # DEFAULT per-change loop: fast suite, scoped. ~60s; 90s backstop.
 just test-affected FILE... # tightest inner loop: point pytest at the area you edit
 just test-file FILE # single test file (fast tests only)
 just test-frontend  # JS unit tests (Vitest)
@@ -60,13 +60,20 @@ As an agent:
   `.nadoc-test-session`, never set `NADOC_TEST_FORCE=1`, never invoke pytest directly to
   dodge the wrapper (`uv run pytest tests/` bare, no `-m "not slow"`, is exactly the move
   this policy forbids).
-- **Budget: 60s.** If a fast-only recipe exceeds it, the guard prints `TEST BUDGET
-  EXCEEDED` and writes the slowest unmarked tests to `.nadoc-slow-candidates.json`. You
+- **Budget — the gate is PER-TEST, not total time.** Any *unmarked* test over ~5s
+  (`NADOC_PER_TEST_BUDGET_SEC`) is heavy and must be relegated: the guard prints `HEAVY
+  TEST IN THE FAST SUITE` and lists the offenders in `.nadoc-slow-candidates.json`. You
   must then **launch a triage subagent** (Agent tool, `general-purpose`, following
-  `.claude/skills/triage-slow-tests/SKILL.md`) that diagnoses what got slow and relegates
-  it to the slow suite (`slow` + area marker in `tests/conftest.py`). Never raise the
-  budget, and never just move on.
-- A single unmarked test over ~5s is flagged the same way (`NADOC_PER_TEST_BUDGET_SEC`).
+  `.claude/skills/triage-slow-tests/SKILL.md`) that relegates them to the slow suite
+  (`slow` + area marker in `tests/conftest.py`). Never raise the budget, never just move on.
+- **Total wall-clock is a backstop only (90s), not a target.** Total time grows with the
+  *number* of tests (which only goes up) and with whatever else is using the CPU, so a
+  fixed ceiling on it just ratchets healthy tests out of the fast suite — that churn cost
+  more time than it ever saved. A run between 60s and 90s prints a note and **requires
+  nothing**. Only above 90s with no single over-budget test does the guard ask for triage
+  (`FAST SUITE TOO SLOW` — the suite got fat in aggregate).
+- Pytest runs under `nice -n 10` so a test run doesn't make the app stutter while the user
+  is actually using NADOC (`NADOC_TEST_NICE=0` opts out).
 
 The lock still applies: overlapping `just test*` runs saturate the CPU, so a second run
 refuses while one is live. Heavy tests additionally auto-skip while a production
@@ -159,7 +166,7 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 ## Verification expectations
 
 - **Every backend code change runs `just test-smart` before claiming done — no exceptions, even for one-line changes that mirror a documented fix.** It runs the fast suite (always) and finishes in under a minute. Cite the decision it printed (`FAST` / `fast+slow[area]`) **and** the pass count; flag any unexpected drop. If it says heavy groups were **DEFERRED**, report that verbatim — deferring is the correct outcome, not a gap. Never escalate to `just test` / `just test-slow` yourself: those need a test-dedicated session the *user* opens (see Test policy). Frontend-only changes touch no Python → `just test-smart` returns `FAST`; run `just test-frontend` for the JS.
-- **A fast-only run that exceeds 60s is a process failure.** The guard says `TEST BUDGET EXCEEDED`; you must launch a triage subagent (`.claude/skills/triage-slow-tests/SKILL.md`) to relegate the offenders to the slow suite before claiming done.
+- **An unmarked test over ~5s is a process failure; a slow *total* is usually not.** When the guard says `HEAVY TEST IN THE FAST SUITE` (or `FAST SUITE TOO SLOW`, its 90s aggregate backstop), launch a triage subagent (`.claude/skills/triage-slow-tests/SKILL.md`) to relegate the offenders before claiming done. A run that merely passes the 60s soft mark needs no action — say the time and move on.
 - **Every frontend code change must be exercised in the running app before claiming done.** If `just frontend` isn't running or no representative design has been loaded, your "done" message must lead with `NOT VERIFIED IN APP` and explain why. Type-checking and tests do not validate UI correctness.
 - Geometry/topology changes: load a representative `.nadoc` design (e.g. `Examples/26hb_platform_v3.nadoc`) and visually confirm.
 - Don't claim "tests pass" without running them.
@@ -172,7 +179,7 @@ If any of these come up, I'll stop and explain rather than charge ahead:
 ### Done checklist (acknowledge each before claiming a task done)
 
 - [ ] Tests run: `just test-smart` (cite its decision — `FAST`/`fast+slow[area]` — the pass count, and any `DEFERRED` heavy groups). Frontend-only changes get `FAST` (no Python touched → no backend tests); run `just test-frontend` and say so explicitly. `just test` / `just test-slow` are test-dedicated-session only — never run them, ask the user
-- [ ] Budget honoured: the run finished inside 60s. If not, a triage subagent (`/triage-slow-tests`) ran and the offenders were relegated to the slow suite
+- [ ] Budget honoured: no unmarked test over ~5s, and the run stayed under the 90s backstop. If either tripped, a triage subagent (`/triage-slow-tests`) ran and the offenders were relegated. Between 60s and 90s = fine, no action
 - [ ] Frontend changes exercised in running app, OR `NOT VERIFIED IN APP` caveat at top of message
 - [ ] If the change alters subsystem behavior: relevant `project_*.md` topic file **head** was read this session (cite which one). If it doesn't alter behavior, say "no topic file needed: [why]" — don't read one to satisfy the checklist
 - [ ] Topic file **head** scanned for stale claims this change addressed; updated if needed (update the head, not the archive)

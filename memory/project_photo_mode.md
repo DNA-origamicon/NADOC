@@ -11,6 +11,185 @@ Photo mode lives at [frontend/src/scene/photo_renderer.js](frontend/src/scene/ph
 
 **Why:** publication-grade rendering for figures and animations. Activate/deactivate must restore the live scene exactly (lights, materials, scene.environment, scene.background) — the live editor still has to work after exit. **How to apply:** never mutate scene state from photo-mode code outside the saved-state pattern (`_savedMaterials`, `_savedSceneEnv`, `_savedSceneBackground`, `_savedLightState`). Adding a new visual feature means adding a save slot and a restore step in `deactivate()`.
 
+## Render-speed: idle gate + interactive preview + backend frame cache — 2026-07-14
+
+Testing "oxDNA display → Photo → switch to surface/atomistic" was painfully slow. Two
+independent causes, both now mitigated (the cheap tier of a larger plan; impostors for
+atomistic and a topology-once/coords-per-frame backend rebuild remain as the big
+structural wins if needed):
+
+**Frontend — the photo render loop re-rasterised the whole (heavy) scene 4-6× every
+animation frame** (SSAO+GTAO+outline+inscatter+bloom), unconditionally, even parked.
+[photo_renderer.js](frontend/src/scene/photo_renderer.js) `_installComposerRenderFn` now:
+- **idle gate** — a `_dirty` flag + camera-matrix compare skips the composite when nothing
+  changed (last frame persists on the canvas). A `_IDLE_KEEPALIVE_FRAMES` (20 ≈ 3 Hz)
+  keepalive still redraws so an *untracked* scene change (a live-sim frame applied while
+  the camera is parked) appears within ~0.3 s. Public `invalidate()` forces an immediate
+  redraw for callers that mutate the scene silently.
+- **interactive preview** — while the camera moves, draw ONE plain `renderer.render` (no
+  post chain), snapping back to the full composite `_PREVIEW_SETTLE_FRAMES` (3) still
+  frames after motion stops. Keeps orbiting responsive on atomistic/surface geometry.
+- Every public `set*` is auto-wrapped to call `_invalidate()` after it runs (loop over the
+  api object), so a setting change always redraws even while idle — no per-setter
+  annotation, no future setter silently missing the redraw. The old scattered
+  `if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }` became `_invalidate()`.
+- Path-tracing path is unchanged (it has its own progressive render fn; the gate is
+  raster-only). Tests: `photo_renderer.test.js` "P-T — render throttle" (4 cases).
+
+**Deeper backend rebuild ("topology once, stream coords") — INVESTIGATED AND REJECTED
+(2026-07-14).** Profiling the slow designs (U6hb: 240 xovers + 72 skips) showed the all-atom
+STAMP is <1 s of a ~9 s build; **86% is the L-BFGS-B backbone-bridge minimiser**
+(`atomistic_minimisers._minimize_backbone_bridge`, one solve per crossover + per skip). That
+solver is frame-dependent (no cross-frame cache) and ULP-chaotic — a batched-matmul stamp
+that changed floats only at ~1e-16 moved backbone geometry up to **0.8 Å** at junctions by
+tipping the near-degenerate minima. Reverted; kept the byte-identical per-atom stamp. The
+right backend lever is the per-frame OUTPUT cache below (each frame builds once); the win for
+huge designs is frontend impostors. Locked by `tests/test_atomistic_geometry_lock.py`. See
+LESSONS **H15**.
+
+**Backend — each atomistic/surface frame was a full all-atom rebuild (~23 atoms/nt, pure
+Python), regenerated even for a frame you'd already visited.** Alignment was cached; the
+*output* was not. Added a per-frame output LRU in
+[oxdna_health.py](backend/core/oxdna_health.py) (`_display_out_get/_put`,
+`display_out_cache_clear`, element-count bounded, 6M-elem budget): keys `("cta", aligned_key,
+idx)` / `("cts", …, sparams)` in `composite_trajectory_atomistic/_surface`, and
+`("dispA"/"dispS", conf_sig, align[, sparams])` at the relaxed-display routes
+([routes_oxdna.py](backend/api/routes_oxdna.py)). Re-scrubbing a frame or flipping the rep
+atomistic→surface→atomistic on the same frame is now free. `Atom` is now
+`@dataclass(slots=True)` (atomistic.py) — cheaper per-atom alloc during the rebuild.
+
+## Simulation displays survive the Photo tab — 2026-07-14
+
+**The bug was never in photo mode.** The photo renderer reuses the live `THREE.Scene`
+in place (material/light/env swap; no clone, no rebuild from topology), so it renders
+whatever is on screen — including simulated positions. But every engine panel writes its
+result into the *shared* bead overlay via `designRenderer.applyFemPositions()` (there is no
+separate sim scene graph), and each panel used to revert that overlay on **any**
+`nadoc:left-tab-change` away from `dynamics`. Clicking Photo fires that event → oxDNA /
+NAMD-MD / live-oxDNA displays called `stopAndRestore()` → `revertToGeometry()` **before**
+`photoRenderer.activate()` drew a frame. The user photographed the un-simulated design.
+
+**Fix: [frontend/src/ui/display_tab_policy.js](frontend/src/ui/display_tab_policy.js)** — one
+shared predicate (`shouldTearDownDisplays(activeTab)` / `shouldResumeDisplays` /
+`displayTabIds`) declaring `dynamics` the display home tab and `photo` a *view-only,
+display-preserving* tab. Consumers: `oxdna_jobs_panel` (`_allDisplaysOff`),
+`oxdna_live_controller` (`stop()`), `md_jobs_panel` (both the `left-tab-change` listener AND
+the per-button click handler, whose `_isDynamicsTabVisible()` DOM check became
+`_isDisplayTabVisible()`). Polling still pauses off-Dynamics; only the *teardown* is exempted.
+**All the panels must agree** — one that still tears down un-simulates the shot for everyone.
+
+Also: `main.js setActiveTab` used to call `_leaveAnimationsTab()` (a backend re-seek →
+`design_renderer._rebuild()` from topology) on Animations→Photo, which dropped *every*
+overlay. Now deferred via `_animLeaveDeferred` and paid off when Photo is exited to a
+non-Animations tab.
+
+**Known latent bug, deliberately NOT fixed:** `mrdna_jobs_panel.js:548`,
+`cando_jobs_panel.js:698`, `snupi_jobs_panel.js:620` guard on `e.detail?.from`, a field the
+event never carries (`detail` is `{activeTab, collapsed}`), so those overlays are torn down
+on *no* tab change at all — they already survive Photo, but they also survive Design/Assembly,
+which the code clearly did not intend. Making the guard live is a behaviour change beyond the
+Photo fix; ask before doing it.
+
+## Publication / figure mode — 2026-07-14
+
+**The diagnosis first, because it governs every choice below.** Photo mode was a
+*product-visualization* renderer (gummy/glass/metallic PBR, HDRI, bloom, volumetric mist,
+neon floor grid, mirror floor, path tracing). The user's renders "looked amateurish" next
+to a cryo-EM/ChimeraX figure — and the reason is that the ChimeraX house style is a
+deliberate **rejection** of exactly those knobs, not a tuning of them. A journal figure has
+no specular highlight, no reflections, no bloom, no floor, no shadow. Shape is carried by
+**ambient occlusion + a silhouette outline**, under a **near-parallel** camera, with **flat
+matte** materials. Photorealism is what reads as amateur 3D in a paper. So the feature is
+not "more sliders" — it is a second, opposed aesthetic that had to be added alongside.
+
+**Everything is an ordinary independent setting; the "Publication" style preset is only a
+named bundle that switches the right ones on.** One code path turns a settings object into
+renderer state (`_applyProfile`), and a style is applied through it like a profile.
+
+New modules (all under `photo_renderer/`):
+
+- **[figure_pass.js](../frontend/src/scene/photo_renderer/figure_pass.js)** — the big lever.
+  Silhouette **outline** (Roberts cross on linearized depth *and* view-space normals: the
+  depth term gives silhouettes, the normal term gives creases) + **depth cue**. Both share
+  ONE depth+normal pre-pass (`scene.overrideMaterial = MeshNormalMaterial` into a
+  pass-owned RT with a `DepthStencilFormat`/`UnsignedInt248Type` DepthTexture — the same
+  driver-safe combination the inscatter pass uses; do NOT attach depth to the composer's
+  main target, see the gotcha below). They stay independently toggleable; `pass.enabled =
+  hasEffect()` so both-off costs nothing.
+  **Pre-pass exclusions** (same skip-list as the material swap): additive-blending sprites,
+  line materials, and `userData.sharedLodImpostor` — the impostors compose instance
+  transforms in a custom vertex shader MeshNormalMaterial doesn't have, so under the
+  override they collapse to the source origin and stamp a bogus edge there.
+  Background pixels (`depth >= 0.9999`) are left untouched, so the contour is drawn just
+  *inside* the object and a transparent-background export stays transparent.
+- **[style_presets.js](../frontend/src/scene/photo_renderer/style_presets.js)** — pure.
+  `publication` / `studio` bundles + `resolveStyle` / `detectStyle`. The Style dropdown is a
+  *view* of the settings, not a stored setting: `detectStyle` re-derives it, so it falls back
+  to "Custom" the moment the user deviates. A test asserts every key a preset sets is a real
+  key of `DEFAULT_PHOTO_SETTINGS` (a typo would otherwise silently no-op).
+- **[figure_camera.js](../frontend/src/scene/photo_renderer/figure_camera.js)** — pure dolly
+  maths for the near-parallel projection.
+- **[ui/photo_figure_panel.js](../frontend/src/ui/photo_figure_panel.js)** — the section's
+  controls; `photo_panel` constructs it and delegates `applySettings` / `syncToState`.
+
+Plus: `flat`/`cpk-flat` **material presets** (`specularIntensity: 0` is what actually kills
+the highlight — roughness alone only widens it; `matte` still catches an HDRI sheen), an
+`ambient` **lighting preset** (no key light; three weak wide-spread fills), and **GTAO**
+in the composer (`post_processing.js`) as real occlusion shading — the `ssao` pass stays as
+the photoreal garnish and is a separate control.
+
+### Decisions that cost time — don't re-litigate
+
+- **"Parallel projection" is an 8° long lens + dolly, NOT an OrthographicCamera.** A real
+  ortho swap means touching every consumer of the shared PerspectiveCamera: the
+  `PERSPECTIVE_CAMERA` shader defines baked into SSAO/GTAO at construction, the inscatter
+  pass's perspective ray march, the path tracer's camera, OrbitControls' distance-based
+  zoom, and main.js's per-frame near/far rewrite — and **the composer cannot be rebuilt
+  post-activate** (PMREM state → bloom paints garbage). At 8° the residual convergence over
+  a 60 nm object is sub-pixel at print resolution. `setFOV` now **dollies** to preserve
+  framing (`dollyDistanceForFov`), and `deactivate()` restores the editor's lens *with* a
+  dolly so the user keeps whatever framing they orbited to.
+- **The depth-cue window is `[nearest bbox corner, that + bbox DIAGONAL]`.** Two wrong
+  versions preceded it: (1) a bounding *sphere* is orientation-blind, so a long bundle seen
+  side-on reports its *length* as the depth extent — an order of magnitude too wide — and
+  the fade started at the camera and washed the whole structure out; (2) normalizing to the
+  *current view's* depth extent forces a full 0→1 fade in every view, so a thin helix seen
+  side-on gets the same total wash as a deep bundle seen end-on. Against a **fixed** length
+  (the design's diagonal, a constant), depth cue does what it should: near-nothing on a
+  shallow view, strong only when you are genuinely looking down the depth of a structure.
+  Anchoring to the structure (not to a fraction of camera distance) is also what makes it
+  survive the parallel projection, where camera distance balloons ~7×.
+- **The Style dropdown's refresh listener must be on the BUBBLE phase.** The autosave
+  listeners use capture, which runs *before* the control's own handler has pushed the change
+  into the renderer — a capture-phase read leaves the dropdown showing a preset the user just
+  deviated from. Deferring to a microtask does **not** fix it (the microtask queue drains
+  *between* listener callbacks, not after the dispatch). And the Style select is excluded
+  from its own refresh: a `<select>` fires `input` **before** `change`, so refreshing on that
+  `input` rewrote `styleSel.value` back to the old match and the `change` handler then applied
+  the *wrong style*.
+- **Export parity is not automatic.** `renderToBlob` / `beginFrameSession` build their own
+  composers in a separate GL context, so the figure + GTAO passes need
+  `_pushFigureParamsTo` / `_pushAOParamsTo` per export composer, and the cue range re-pushed
+  per tile — same per-renderer rule as the HDRI bake.
+
+### Known caveats
+
+- **Zoomed far out, the outline swallows small features.** The contour is a pixel-space
+  effect; when a bead is 2–3 px across, the crease term fires over the whole sphere and the
+  strand renders as black line-art with no fill. At normal framing and at export resolution
+  it is correct. The Thickness / Creases sliders are the mitigation.
+- Path-traced mode bypasses the EffectComposer, so **outline + depth cue do not apply in PT**
+  (same limitation as mist). The panel says so.
+- GTAO + the figure pre-pass add two full-scene renders per frame; on software GL (headless)
+  frames get slow enough that Playwright's element-screenshot stability wait times out — use
+  `page.screenshot` there, not `locator.screenshot`.
+
+Verified in-app on the isolated smoke stack (never the user's :8000 — see
+[[feedback_no_live_server_mutation_for_verify]]): Publication applies through to every
+control, each control toggles independently, the pass disables when both effects are off,
+`renderToBlob` produces a real PNG with the outline, exit restores the lens, zero console
+errors (i.e. no shader-compile failures). Screenshots confirmed the flat/outlined look.
+
 ## Export-only high-detail GEOMETRY swap — 2026-05-22
 
 Distinct from the rep upgrade below (which changes *which* representation is built):

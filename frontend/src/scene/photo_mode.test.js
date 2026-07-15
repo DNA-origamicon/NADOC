@@ -125,7 +125,9 @@ describe('initPhotoMode factory', () => {
     expect(deps.bluntEnds.setVisible).toHaveBeenCalledWith(false)
     expect(deps.assemblyRenderer.setPhotoMode).toHaveBeenCalledWith(true)
     expect(deps.assemblyJointRenderer.setVisible).toHaveBeenCalledWith(false)
-    expect(deps.viewCube.hide).toHaveBeenCalled()
+    // The view cube + roll buttons stay up in photo mode (DOM overlay — it can
+    // never reach the offscreen export render, and it's how figures get framed).
+    expect(deps.viewCube.hide).not.toHaveBeenCalled()
     expect(deps.store.getState().photoActive).toBe(true)
     expect(document.getElementById('mode-indicator').style.display).toBe('none')
   })
@@ -160,7 +162,7 @@ describe('initPhotoMode factory', () => {
     expect(deps.bluntEnds.setVisible).toHaveBeenLastCalledWith(true)
     expect(deps.assemblyRenderer.setPhotoMode).toHaveBeenLastCalledWith(false)
     expect(deps.assemblyJointRenderer.setVisible).toHaveBeenLastCalledWith(true)
-    expect(deps.viewCube.show).toHaveBeenCalled()
+    expect(deps.viewCube.show).not.toHaveBeenCalled()   // never hidden → nothing to restore
     expect(deps.store.getState().photoActive).toBe(false)
   })
 

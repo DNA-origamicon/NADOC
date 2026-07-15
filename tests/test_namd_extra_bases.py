@@ -10,7 +10,7 @@ tagged with the crossover-insert identity (``crossover_id`` + ``extra_base_k``),
 threaded inline in the owning chain, and joined by real phosphodiester linker
 atoms (O3′/P/O5′).  The pre-existing atomistic tests only assert the *negative*
 (a direct crossover adds no hidden bases); nothing pinned the positive build, so
-a regression in ``_build_extra_base_atoms`` / ``_thread_extra_bases_inline`` would
+a regression in ``_build_extra_base_atoms`` / ``_thread_inserts_inline`` would
 ship silently.
 
 **Part B — the NAMD shared-descriptor source is robust to inserts in the MD

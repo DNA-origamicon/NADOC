@@ -406,6 +406,13 @@ _SLOW_MODULES = {
     "test_snupi_element",        # ~127 s: assembles + solves the SNUPI stiffness matrix
     "test_snupi_dynamics",       # ~85 s: GJF Langevin sampling runs (kT K^-1 covariance)
     "test_snupi_corotational",   # ~47 s: nonlinear co-rotational Newton iterations
+    # Golden CG→atomistic display-split parity: each parametrized builder does a routed
+    # 6hb build (auto_scaffold/crossover/break) + multiple all-atom atomistic
+    # reconstructions (~3.7–3.9 s standalone; the first case trips past the per-test
+    # budget under cold imports + first-time atomistic-cache warming on a nice-10 busy
+    # CPU). Same heavy-atomistic family as test_atomistic / test_oxdna_relaxation; the
+    # whole file is atomistic reconstruction work, so relegate it whole (area "atomistic").
+    "test_atomistic_display_split",
 }
 
 # Whole test CLASSES that share an expensive class-scoped fixture (the build runs
@@ -465,6 +472,21 @@ _SLOW_TESTS = {
     # Lives in an otherwise-fast file (the other 10 job tests are sub-second), so it
     # is marked per-test rather than relegating the whole module.
     "test_linear_snupi_job_completes_and_caches",
+    # SNUPI ssDNA (SS-2): a scipy `minimize` nonlinear relaxation of the corotational
+    # beam triads, repeated over a sweep of kink angles × chain lengths — ~5 s of pure
+    # solve uncontended, ~11.5 s under `-n auto`.  Same numeric-solve class as the
+    # whole-file-relegated test_snupi_{element,dynamics,corotational} (area "cando").
+    # Marked per-test, not whole-module: the rest of test_snupi_ssdna.py is sub-second
+    # element/topology pins worth keeping in the fast suite.
+    "test_ssdna_chain_joint_stiffness_is_ei_over_the_bond_length",
+    # Strand extensions → oxDNA: the full-scale (VoltronCoreScad, 206 strands / 15020
+    # particles / 334 tails) twin of the "tails don't move the real bonds" invariant.  It
+    # builds the whole design's geometry + seeded config TWICE (~9.6 s).  The invariant
+    # itself stays in the fast suite, pinned on the 6hb fixture
+    # (test_extensions_do_not_disturb_the_rest_of_the_design); this one only adds the
+    # scale check, so it is per-test relegated (area "oxdna") rather than whole-module —
+    # the rest of test_oxdna_extensions.py is the fast per-change FENE/arc oracle.
+    "test_voltroncore_extensions_do_not_disturb_the_rest_of_the_design",
     # extra-base heavy reps
     "test_heavy_rep_extra_bases_follow_sim_positions",
     "test_md_chain_map_keys_extra_bases_uniquely",

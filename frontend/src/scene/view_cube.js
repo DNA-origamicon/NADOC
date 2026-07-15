@@ -297,8 +297,10 @@ export function initViewCube(container, camera, controls, getRoot) {
     cube.style.transform = `matrix3d(${e.join(',')})`
   }
 
-  // Run a dedicated rAF loop — but skip the CSS write when the cube is hidden.
-  // Idle tabs and photo-mode (cube hidden) shouldn't pay per-frame work here.
+  // Run a dedicated rAF loop — but skip the CSS write when the cube is hidden
+  // (welcome screen), so an idle tab doesn't pay per-frame work here. Photo mode
+  // deliberately leaves the cube up: it's how the user frames a figure, and being
+  // pure DOM it can't reach the offscreen export render.
   ;(function _loop() {
     if (wrap.style.display !== 'none') _syncCube()
     requestAnimationFrame(_loop)

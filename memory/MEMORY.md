@@ -96,10 +96,12 @@ scaffold_router · seamless_router · dumbbell_autoscaffold · advanced_staple_d
 **MD (NAMD+oxDNA):** lammps_oxdna · oxpy_binding_patch · proteins_in_simulation · oxdna_efield ·
 oxdna_relaxation · benchmark_tuning · md_engines_panel
 
-**MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel
+**MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel ·
+mrdna_extensions (DONE: 5′/3′ tails are CG beads; guard `__ext_`, NOT `__` — `__lnk__` is real duplex)
 
-**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · skip_twist_selfconsistency · regional_autorefine ·
-skip_twist_curvature_sweep · md_twist_validation
+**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · **strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD;
+read before touching the nucleotide walk, the native seed, or any `__xb__`-style key filter) ·
+skip_twist_selfconsistency · regional_autorefine · skip_twist_curvature_sweep · md_twist_validation
 
 **Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE: base SNUPI recreated for $0 — snupi≥cando vs MD; `material="snupi"` in fem_solver; +electrostatics) · snupi_frontend_tab (frontend SNUPI engine tab, SHIPPED) · **snupi_gaps** (gap analysis vs full published SNUPI; A–D DONE + refinements) · **snupi_reference_compare** (REAL SNUPI installed on this machine at `~/SNUPI`; NADOC→caDNAno→SNUPI→mimic comparator loop plan) · **snupi_dynamics** (Langevin time-integration / Nat Commun 2023 — friction+noise+GJF+stacking; Phase 1 = equilibrium-dynamics validator vs NMA) · **snupi_ssdna** (PLAN SS-0…SS-5: bridging-ssDNA element = G9, + FREE tails/overhangs/scaffold-ends = a NADOC extension SNUPI structurally can't represent; target VoltronCore + hydrodynamics)
 

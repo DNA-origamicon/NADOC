@@ -41,6 +41,14 @@ from backend.core.deformation import (
     deformed_nucleotide_arrays,
     effective_helix_for_geometry,
 )
+from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
+
+# How far the extension arc bows off the straight radial, as a fraction of the arc
+# length.  Bounds the worst consecutive bead spacing at
+# sqrt(1 + (2·_EXT_BOW_FRAC)²) · SSDNA_CONTOUR_PER_NT_NM = 0.793 nm — inside oxDNA's
+# 0.857 nm FENE ceiling with ~8 % margin.  If a seed ever trips ``fene_safe``, this
+# is the knob: 0.20 pulls the worst spacing down to 0.732 nm.
+_EXT_BOW_FRAC: float = 0.30
 
 
 def _strand_nucleotide_info(design: Design, helix_ids: frozenset[str] | None = None) -> dict:
@@ -136,12 +144,32 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
     Compute geometry dicts for StrandExtension entries.
 
     Extension beads are placed along a quadratic Bézier arc starting at the
-    terminal nucleotide and curving radially outward from the helix centre in
-    XY, with a +Z bow of 30 % of the total arc length.  Sequence beads come
+    terminal nucleotide and curving radially outward from the helix centre,
+    bowing in the direction the strand was already heading.  Sequence beads come
     first (bp_index 0…n-1), then the fluorophore bead if a modification is
     set (bp_index n, is_modification=True).
 
     Synthetic helix_id: ``__ext_{extension.id}``
+
+    THE SPACING IS LOAD-BEARING, NOT COSMETIC.  These beads are real nucleotides:
+    they are emitted into the oxDNA topology + configuration (and the atomistic
+    model) as single-stranded tail particles, so consecutive bead separations ARE
+    oxDNA backbone bonds.  oxDNA's FENE spring is only defined over
+    ~0.431–0.857 nm (``oxdna_health.FENE_*``); the arc must therefore hand every
+    consecutive pair a separation inside that window.  Two properties do that:
+
+    * ``arc_len = n_total * SSDNA_CONTOUR_PER_NT_NM`` (0.68 nm/nt, ≈ oxDNA's FENE
+      rest length) and bead *i* at ``t = (i+1)/n_total`` — so the LAST bead lands
+      exactly on the arc end.  (The old ``(i+1)/(n_total+1)`` reserved a phantom
+      slot past the tip, which put a lone bead at *half* the arc.)
+    * the bow is taken ⟂ to the radial in the deformed frame.  Because p1's radial
+      component is exactly half of p2's, the radial part of B(t) is exactly linear
+      in t, so the only non-uniformity is the bow term — bounded independent of n.
+      Consecutive spacing therefore stays in [0.680, 0.793] nm for every n.
+
+    A world-axis bow would NOT be safe: a cluster rotation that lines the radial up
+    with the bow axis degenerates the Bézier (the arc doubles back), which both
+    over- and under-shoots the FENE window.
     """
     import numpy as np
 
@@ -189,11 +217,30 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
         if n_total == 0:
             continue
 
-        # Arc endpoint and Bézier control point.
-        arc_len = n_total * 0.34           # nm, one bead-spacing per bead
+        # Arc endpoint and Bézier control point.  One ssDNA contour length per
+        # nucleotide, so consecutive beads sit an oxDNA-FENE-legal bond apart.
+        arc_len = n_total * SSDNA_CONTOUR_PER_NT_NM
         p2 = p0 + radial * arc_len
         mid = (p0 + p2) * 0.5
-        p1 = mid + np.array([0.0, 0.0, arc_len * 0.30])  # +Z bow
+
+        # Bow direction: keep heading the way the strand was already going as it
+        # left the duplex (3′ tail bows along the anchor's 5′→3′; a 5′ tail is
+        # walked backwards, so it bows against it).  Taken in the anchor's own
+        # deformed frame — NOT a world axis — so the arc follows bend / twist /
+        # cluster transforms and can never degenerate against the radial.
+        chain_tan = np.array(nuc_a.axis_tangent, dtype=float)
+        if dom.direction == Direction.REVERSE:
+            chain_tan = -chain_tan
+        bow_dir = chain_tan if ext.end == "three_prime" else -chain_tan
+        bow_dir = bow_dir - float(np.dot(bow_dir, radial)) * radial   # ⟂ radial
+        bow_len = float(np.linalg.norm(bow_dir))
+        if bow_len < 1e-6:      # axis_tangent ∥ radial (degenerate frame): any ⟂ vector
+            bow_dir = np.cross(radial, np.array([0.0, 0.0, 1.0]))
+            if float(np.linalg.norm(bow_dir)) < 1e-6:
+                bow_dir = np.cross(radial, np.array([0.0, 1.0, 0.0]))
+            bow_len = float(np.linalg.norm(bow_dir))
+        bow_dir = bow_dir / bow_len
+        p1 = mid + bow_dir * (arc_len * _EXT_BOW_FRAC)
 
         # Base-normal: inward radial (slabs face toward the helix).
         bn = -radial
@@ -201,7 +248,8 @@ def _strand_extension_geometry(design: Design, nuc_pos_map: dict) -> list[dict]:
         synthetic_helix_id = f"__ext_{ext.id}"
 
         def _bead(i: int, is_mod: bool, mod_name: str | None) -> dict:
-            t = (i + 1) / (n_total + 1)
+            # Last bead lands ON the arc end (t=1) — no phantom slot past the tip.
+            t = (i + 1) / n_total
             pos = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2
             tangent = 2 * (1 - t) * (p1 - p0) + 2 * t * (p2 - p1)
             tlen = float(np.linalg.norm(tangent))

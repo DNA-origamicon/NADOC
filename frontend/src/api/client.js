@@ -2110,6 +2110,18 @@ export const getOxdnaDisplayAtomistic = (id, align = true) =>
  *  renderer from the topology the relaxed positions belong to (loaded design may differ). */
 export const getOxdnaAtomisticModel = (id) =>
   _oxdnaJSON('GET', `/oxdna/jobs/${id}/atomistic-model`)
+/** Design-FIXED stamp descriptor ({atom_nuc, atom_local, nonrigid_serials, topology_hash})
+ *  — fetched ONCE per job; drives the fast client-side CG→atomistic expansion. */
+export const getOxdnaAtomisticStamp = (id) =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/atomistic-stamp`)
+/** COMBINED renderer topology (atoms+bonds) + stamp descriptor in one disk-cached build
+ *  — fetched once per job; the fast path's single setup fetch (replaces model + stamp). */
+export const getOxdnaAtomisticDisplayBundle = (id) =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/atomistic-display-bundle`)
+/** Compact per-frame atomistic payload ({ready, frames:[12·nNuc], nonrigid_xyz, topology_hash})
+ *  — per-nucleotide (origin,R) + non-rigid XYZ; expand with scene/atomistic_stamp.js. */
+export const getOxdnaDisplayAtomisticFrames = (id, align = true) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/display-atomistic-frames?align=${align ? 'true' : 'false'}`)
 /** Molecular surface for the relaxed-display structure ({ready, surface:{vertices,faces,…}}). */
 export const getOxdnaDisplaySurface = (id, align = true, params = {}) =>
   _oxdnaJSON('POST', `/oxdna/jobs/${id}/display-surface?align=${align ? 'true' : 'false'}`, params)

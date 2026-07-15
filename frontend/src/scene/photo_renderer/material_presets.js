@@ -10,6 +10,18 @@ import * as THREE from 'three'
 
 // ── Preset tables ─────────────────────────────────────────────────────────────
 
+// The `flat` / `cpk-flat` entries are the FIGURE materials: pure Lambertian
+// diffuse with the specular lobe switched off entirely (`specularIntensity: 0`,
+// which is what actually kills the highlight on MeshPhysicalMaterial —
+// roughness alone only widens it). This is the molecular-figure convention:
+// no highlight anywhere, shape read from ambient occlusion + the outline pass,
+// never from a glint. `matte` is NOT the same thing — it still has a specular
+// response and, under an HDRI, still catches a sheen that reads as "3D render".
+const FLAT = Object.freeze({
+  roughness: 1.0, metalness: 0.0, clearcoat: 0.0,
+  specularIntensity: 0.0, sheen: 0.0, transmission: 0.0,
+})
+
 export const PRESETS = {
   full: {
     matte: {
@@ -21,6 +33,7 @@ export const PRESETS = {
     metallic: {
       roughness: 0.30, metalness: 1.0, clearcoat: 0.0,
     },
+    flat: { ...FLAT },
   },
 
   cylinders: {
@@ -33,9 +46,11 @@ export const PRESETS = {
     metallic: {
       roughness: 0.30, metalness: 1.0, clearcoat: 0.0,
     },
+    flat: { ...FLAT },
   },
 
   surface: {
+    flat: { ...FLAT },
     gummy: {
       roughness: 0.55, metalness: 0.0,
       transmission: 0.45, transparent: true, ior: 1.4, thickness: 1.0,
@@ -63,6 +78,7 @@ export const PRESETS = {
   },
 
   atomistic: {
+    'cpk-flat': { ...FLAT },
     'cpk-matte': {
       roughness: 0.60, metalness: 0.0,
     },
@@ -77,10 +93,10 @@ export const PRESETS = {
 
 // Preset labels shown in the UI dropdowns
 export const PRESET_LABELS = {
-  full:      { matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
-  cylinders: { matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
-  surface:   { gummy: 'Gummy (default)', wax: 'Wax (SSS)', skin: 'Skin (SSS)', matte: 'Matte', glass: 'Glass' },
-  atomistic: { 'cpk-matte': 'CPK Matte', 'cpk-glossy': 'CPK Glossy', 'cpk-metallic': 'CPK Metallic' },
+  full:      { flat: 'Flat (figure)', matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
+  cylinders: { flat: 'Flat (figure)', matte: 'Matte', glossy: 'Glossy', metallic: 'Metallic' },
+  surface:   { flat: 'Flat (figure)', gummy: 'Gummy (default)', wax: 'Wax (SSS)', skin: 'Skin (SSS)', matte: 'Matte', glass: 'Glass' },
+  atomistic: { 'cpk-flat': 'CPK Flat (figure)', 'cpk-matte': 'CPK Matte', 'cpk-glossy': 'CPK Glossy', 'cpk-metallic': 'CPK Metallic' },
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────

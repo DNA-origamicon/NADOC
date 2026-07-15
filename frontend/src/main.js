@@ -52,6 +52,7 @@ import { initJointPick } from './scene/joint_pick.js'
 import { initEmptySpaceMenu } from './scene/empty_space_menu.js'
 import { initAssemblyLasso, toggleInstanceSelection } from './scene/assembly_lasso.js'
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
+import { preservesDisplays } from './ui/display_tab_policy.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
@@ -1914,6 +1915,9 @@ async function main() {
     // never moves them — redraw them at the frame's simulated positions instead of
     // leaving a stale geometric arc floating over the sim (null reverts to the arc).
     onFrame: (u) => flexibleArcs.applySimPositions(u),
+    // When switching full→atomistic with this overlay active, the design "native flash"
+    // is suppressed (CG stays up) until the reconstructed atoms land — hide CG now.
+    onHeavyApplied: () => _atomSurface?.setCGVisible(false),
   })
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
@@ -2303,6 +2307,10 @@ async function main() {
   _atomSurface = initAtomSurfaceDisplay({
     scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
     unfoldView, overhangLinkArcs,
+    // Suppress the design "native flash" on full→atomistic while an oxDNA overlay is
+    // reconstructing atomistic (relaxed/rmsf/trajectory) — it rebuilds from the job's
+    // atoms + relaxed frame; the CG stays up until those land (onHeavyApplied).
+    getSimOverlayWillDriveAtomistic: () => oxdnaDisplay.drivesHeavy?.() ?? false,
   })
   const _applySurfaceMode           = _atomSurface.applySurfaceMode
   const _applyAtomisticMode         = _atomSurface.applyAtomisticMode
@@ -6297,6 +6305,17 @@ async function main() {
         }
       }
 
+      // Animations → Photo defers the re-seek above instead of running it: the
+      // re-seek rebuilds the design from topology, which would drop whatever the
+      // user is trying to photograph (an oxDNA/NAMD frame, an animation pose).
+      // We owe it on the way OUT of Photo — that's what this flag remembers.
+      let _animLeaveDeferred = false
+
+      function _leaveAnimationsTabUnlessPhoto(tabId) {
+        if (preservesDisplays(tabId)) { _animLeaveDeferred = true; return }
+        _leaveAnimationsTab()
+      }
+
       function setActiveTab(tabId) {
         if (leftPanel.classList.contains('locked-hidden')) return
         if (!TABS.includes(tabId)) return
@@ -6304,7 +6323,15 @@ async function main() {
         // override is in-memory only and otherwise stays installed). Pass
         // skipTabRestore so the exit doesn't yank us back to feature-log — the
         // switch below lands us on the tab the user actually clicked.
-        if (tabId !== 'photo') _photoMode.exit({ skipTabRestore: true })
+        if (tabId !== 'photo') {
+          _photoMode.exit({ skipTabRestore: true })
+          // Pay off a re-seek we skipped on the way into Photo. Going back to
+          // Animations cancels it instead — we never really left.
+          if (_animLeaveDeferred) {
+            _animLeaveDeferred = false
+            if (tabId !== 'scene') _leaveAnimationsTab()
+          }
+        }
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         if (collapsed) {
           collapsed = false
@@ -6315,7 +6342,9 @@ async function main() {
           activeTab = tabId
         }
         const nowOnAnimations = !collapsed && activeTab === 'scene'
-        if (wasOnAnimations && !nowOnAnimations) _leaveAnimationsTab()
+        if (wasOnAnimations && !nowOnAnimations) {
+          _leaveAnimationsTabUnlessPhoto(collapsed ? null : activeTab)
+        }
         _render()
         window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
           detail: { activeTab, collapsed },
@@ -6561,7 +6590,7 @@ async function main() {
   // post-init, on file close/new/open / assembly-enter).
   const _photoMode = initPhotoMode({
     store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
-    bluntEnds, assemblyJointRenderer, viewCube, player: animPlayer, originAxes,
+    bluntEnds, assemblyJointRenderer, player: animPlayer, originAxes,
   })
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).

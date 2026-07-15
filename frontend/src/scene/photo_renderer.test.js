@@ -320,3 +320,61 @@ describe('P-B — automation contract', () => {
     for (const [, , key] of CASES) expect(keys).toContain(key)
   })
 })
+
+// ── Tier P-T: render-loop throttle (idle gate + interactive preview) ──────────
+// setup() hides sceneCtx, so build the context here to capture the render fn the
+// photo renderer installs, then drive it frame-by-frame and count composites.
+describe('P-T — render throttle', () => {
+  function throttleSetup() {
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000)
+    const renderer = makeFakeRenderer()
+    seedMeshes(scene)
+    const sceneCtx = { scene, camera, renderer, setRenderFn: vi.fn(), resetRenderFn: vi.fn() }
+    const pr = createPhotoRenderer(sceneCtx)
+    pr.setEnvironment('off')
+    pr.activate({ environment: 'off' })
+    const renderFn = sceneCtx.setRenderFn.mock.calls.at(-1)[0]
+    return { pr, camera, renderer, renderFn,
+             composite: () => lastComposer.composer.render.mock.calls.length,
+             preview:   () => renderer.render.mock.calls.length }
+  }
+
+  it('renders one full composite on the first frame, then skips while idle', () => {
+    const { renderFn, composite, preview } = throttleSetup()
+    renderFn()
+    expect(composite()).toBe(1)              // first frame: full quality
+    expect(preview()).toBe(0)                // not the cheap raster path
+    for (let i = 0; i < 5; i++) renderFn()   // parked, nothing changed
+    expect(composite()).toBe(1)              // …no extra composites
+  })
+
+  it('draws a cheap preview raster while the camera moves, not the full composite', () => {
+    const { renderFn, camera, composite, preview } = throttleSetup()
+    renderFn()                               // settle to idle (composite=1)
+    camera.position.x += 5                    // user orbits
+    renderFn()
+    expect(preview()).toBe(1)                // one plain raster
+    expect(composite()).toBe(1)             // composite NOT re-run mid-motion
+  })
+
+  it('snaps back to a full composite a few still frames after motion stops', () => {
+    const { renderFn, camera, composite } = throttleSetup()
+    renderFn()
+    camera.position.x += 5; renderFn()        // move → preview
+    expect(composite()).toBe(1)
+    renderFn(); renderFn(); renderFn()        // 3 still frames → settle
+    expect(composite()).toBe(2)              // final sharp frame drawn once
+  })
+
+  it('a setter marks the scene dirty so its change redraws while idle', () => {
+    const { pr, renderFn, composite } = throttleSetup()
+    renderFn()
+    expect(composite()).toBe(1)
+    for (let i = 0; i < 3; i++) renderFn()    // idle, no composites
+    expect(composite()).toBe(1)
+    pr.setExposure(2.0)                       // any set* → _invalidate()
+    renderFn()
+    expect(composite()).toBe(2)              // change redrawn immediately
+  })
+})

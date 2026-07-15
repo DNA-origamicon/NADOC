@@ -35,6 +35,7 @@ from backend.core.md_protocols import (
     _round_up_to_cycle,
     _segment_conf,
     design_has_extra_bases,
+    design_has_extensions,
     identify_unpaired_residues,
     mgh_slow_release_segments,
     namd_efield_vector,
@@ -147,9 +148,10 @@ def build_namd_gbis_package(
             "GBIS E-field prepared with no anchor (scopes %r resolved to no DNA "
             "residues) — the structure will drift down-field.", anchors)
 
-    # 5. Declash (auto for designs that insert extra bases at crossovers): minimise
-    #    against an ss-excluded ENM so the inserted bases relax out of clash.
-    declash = declash or design_has_extra_bases(design)
+    # 5. Declash (auto for designs that insert extra bases at crossovers, or carry
+    #    strand-extension ssDNA tails): minimise against an ss-excluded ENM so the
+    #    inserted bases / tails relax out of clash.
+    declash = declash or design_has_extra_bases(design) or design_has_extensions(design)
     declash_enm_file: Optional[str] = None
     n_unpaired = 0
     if declash:

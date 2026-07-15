@@ -45,7 +45,7 @@ export function planExportRepUpgrade(state) {
 
 export function initPhotoMode({
   store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
-  bluntEnds, assemblyJointRenderer, viewCube, player, originAxes,
+  bluntEnds, assemblyJointRenderer, player, originAxes,
 }) {
   const { scene, renderer } = sceneCtx
 
@@ -216,11 +216,15 @@ export function initPhotoMode({
     // the new instances clean too.
     assemblyRenderer.setPhotoMode(true)
     assemblyJointRenderer.setVisible(false)
-    // Partial UI lockdown for clean publication renders:
-    // hide the view cube + nav HUD; leave selection/orbit/zoom enabled so the
-    // user can still frame parts. Active gizmos remain visible (they self-hide
-    // when their owning panel exits transform mode).
-    viewCube.hide()
+    // Partial UI lockdown for clean publication renders: hide the nav HUD, leave
+    // selection/orbit/zoom enabled so the user can still frame parts. Active
+    // gizmos remain visible (they self-hide when their owning panel exits
+    // transform mode).
+    //
+    // The view cube + roll buttons STAY VISIBLE — they're the main way to frame a
+    // figure, and they're pure DOM/CSS overlays (#vc-wrap / #vc-roll), not scene
+    // objects, so they can never appear in an export: PNG/video renders go through
+    // an offscreen WebGLRenderer over the Three.js scene only.
     const modeIndicator = document.getElementById('mode-indicator')
     if (modeIndicator) modeIndicator.style.display = 'none'
     store.setState({ photoActive: true })
@@ -245,8 +249,7 @@ export function initPhotoMode({
     bluntEnds?.setVisible(tf?.bluntEnds ?? true)
     assemblyRenderer.setPhotoMode(false)
     assemblyJointRenderer.setVisible(true)
-    // Restore the partial-lockdown UI.
-    viewCube.show()
+    // Restore the partial-lockdown UI (the view cube was never hidden).
     const modeIndicator = document.getElementById('mode-indicator')
     if (modeIndicator) modeIndicator.style.display = ''
     store.setState({ photoActive: false })

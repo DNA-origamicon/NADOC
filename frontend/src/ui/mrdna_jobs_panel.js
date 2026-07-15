@@ -545,6 +545,13 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     if (beadsToggle) beadsToggle.checked = false
     _syncDisplayStatus()
   }
+  // NOTE: `e.detail` is `{ activeTab, collapsed }` (main.js setActiveTab) — it has no
+  // `from`, so this guard never fires and the mrDNA overlay currently survives EVERY
+  // tab change, editing tabs included. Left as-is deliberately: it already satisfies
+  // "the overlay must survive the Photo tab" (display_tab_policy.js), and making the
+  // guard live would newly drop the overlay on Design/Assembly — a behaviour change
+  // beyond the Photo fix. Fix it with `shouldTearDownDisplays(e.detail?.activeTab)`
+  // if that teardown is actually wanted.
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.from === 'dynamics') _stopDisplays()
   })

@@ -390,4 +390,96 @@ affected by the shadow. To fully purge the shadow the user would also need `apt 
 libnvidia-compute-535-server`. If any OTHER GPU engine (LAMMPS-GPU/ARBD/mrdna) is ever seen to segfault the
 same way, the identical env fix applies — factor `oxdna_subprocess_env`'s driver-dir logic into their runners.
 
+## §26. Fast CG→atomistic display (vectored per-nucleotide stamp) — SHIPPED 2026-07-14
+
+The relaxed-display atomistic rep no longer serialises every atom's XYZ per frame. The all-atom
+placement is, per nucleotide, a **fixed local template rigidly stamped by that nucleotide's frame**
+(`world = origin + R·local`, `_atom_frame`), except a ~24% non-rigid minority (backbone-closure
+linkers `O3'/P/O5'/OP1/OP2`, crossover/skip bridges, extra-base inserts, extension tails, proteins).
+
+- **`build_atomistic_model(..., frame_sink=dict)`** ([atomistic.py](../backend/core/atomistic.py)) —
+  out-param records `{(h,bp,dir,copy): (origin, R)}` from the ONE authoritative loop (no second
+  code path → zero placement drift). Requesting a `frame_sink` forces the full loop (skips the
+  cached-reference fast return).
+- **`atomistic_stamp_descriptor(design)`** (cached by topology hash) — design-fixed: per atom serial,
+  rigid (its template-local coord + nucleotide index) vs non-rigid. Classified EMPIRICALLY from ONE
+  `close_backbone=True` build: non-rigid iff built pos deviates >1e-6 nm from its stamp (closure
+  moves linkers ~1 Å; ring/base atoms sit exactly on the stamp).
+- **`oxdna_health.display_frames_payload(design, frame)`** — compact per-frame payload
+  `{frames:[12·n_nuc] (origin+R, deformation folded via 4-marker `apply_deformations_to_atoms`),
+  nonrigid_xyz:[3·k]}`. Runs the authoritative `build_display_model` once (memoised); non-rigid
+  coords are byte-exact from `model.atoms`.
+- **Routes** ([routes_oxdna.py](../backend/api/routes_oxdna.py)): `GET .../atomistic-stamp` (once/job),
+  `POST .../display-atomistic-frames`. **No MD mirror** — NAMD heavy rep is direct-atom from PSF/DCD.
+- **Frontend**: [scene/atomistic_stamp.js](../frontend/src/scene/atomistic_stamp.js) pure
+  `expandStampFrames(descriptor, frame)` → flat Float32 (serial-indexed) → the SAME
+  `atomistic_renderer.applyPositionLerp(flat, flat, 0)`. Wired in
+  [ui/oxdna_display.js](../frontend/src/ui/oxdna_display.js) `_relaxedAtomisticFlat` (relaxed mode
+  only; rmsf/trajectory still on the legacy route — Phase 3). Falls back to the legacy full-flat
+  route when the stamp endpoints are absent (e.g. the MD viz adapter → its atomistic branch stays a
+  no-op as before).
+- **Validated**: golden parity `tests/test_atomistic_display_split.py` (slow[atomistic]) + live real
+  jobs → reassembly matches `frame_atomistic_flat` to **5.5e-6 nm**.
+
+### §26b. The REAL latency fix (2026-07-14) — the payload split was NOT the bottleneck
+
+User tested on VoltronCore (14774 nt): "native loads, then ~5 min later the oxDNA display positions
+appear." Profiling `build_display_model` showed the 58 s build is **~42 s of L-BFGS-B backbone-bridge
+minimisation** (`_minimize_backbone_bridge` at every crossover/skip) — MD-SEED-quality phosphate
+geometry, pointless for a viewer. The per-frame TRANSFER (what the split shrank) was never the cost.
+
+Fixes (user-approved; all display-only, never touch MD seeds / PDB export / topology):
+- **`fast_bridges` param on `build_atomistic_model`** — swaps `_minimize_backbone_bridge` for the cheap
+  `_interpolate_backbone_bridge` (already the minimiser's x0). **6.2× faster build (34 s→5.5 s)**; only
+  the ~1.5% phosphate-linker atoms move (≤2.4 Å at junctions, invisible at scale). Threaded through the
+  two direct crossover/skip sites + `_build_extra_base_atoms`/`_build_extension_atoms` (`bridge_fn`).
+  Default False. ON for: `build_display_model`, the descriptor, `GET /oxdna/jobs/{id}/atomistic-model`,
+  and **`GET /design/atomistic`** (the "native flash" renderer source — every atomistic view is 6× faster).
+- **`atomistic_display_bundle(design)` + `GET /oxdna/jobs/{id}/atomistic-display-bundle`** — ONE build
+  serving BOTH renderer topology (atoms+bonds) AND the stamp descriptor, **disk-cached per job**
+  (`job_dir/atomistic_display_bundle.json`, keyed by topology_hash). Frontend `_ensureJobAtomistic`
+  fetches it (descriptor rides along) instead of separate model + stamp fetches. `_classify_stamp` is
+  the shared classifier.
+- Net VoltronCore: first switch **~5 min → ~25 s** (`/design/atomistic` ~6 s + bundle ~13 s cold/~4 s
+  disk + frames ~6.5 s); repeat switches near-instant (bundle cached frontend-side, frames memoised).
+- **Native-flash skip (2026-07-14, DONE):** switching full→atomistic while an oxDNA overlay is active
+  in a mode that reconstructs atomistic (relaxed/rmsf/trajectory — NOT live/deviation, which are
+  CG-only) no longer builds+shows the DESIGN atoms first. `atom_surface_display._applyAtomisticMode`
+  defers (keeps relaxed CG up, skips the design fetch) when `getSimOverlayWillDriveAtomistic()` →
+  `oxdnaDisplay.drivesHeavy()`; the overlay hides CG when its atoms land via `onHeavyApplied`.
+
+### §26c. ssDNA overhangs mis-placed in the atomistic display (2026-07-14, FIXED)
+
+User (VoltronCore +z view): the atomistic rep put the green ssDNA overhangs (and cluster edges) in
+different positions than the CG "expected" display. Diagnosis: **547/14774 nucleotides >10 Å off, worst
+~74 nm; 81% are ssDNA** (51% of all ssDNA). Cause: the DISPLAY placement is AXIS-DERIVED
+(`_frame_atomistic_overrides` fits `deformed_helix_axes`, `_atom_frame` measures each base's radial vs
+that centerline). Floppy UNPAIRED ssDNA has no helix to fit → garbage centerline → atoms flung tens of
+nm off. The CG bead display places beads DIRECTLY at the oxDNA backbone site → always right (why they
+diverged).
+
+Fix — `oxdna_health._ssdna_frame_override(frame)`: for UNPAIRED real nucleotides (no WC partner at
+`(helix,bp,other_dir)`) build the a1/a3 rigid-frame override `{key:(CM,a1,a3)}`; `build_display_model`
+passes it as `frame_override`, so ssDNA is placed by the calibrated `_oxdna_rigid_frame` stamp (which
+lands atoms at the relaxed pose) while paired duplex stays on the axis path (correct WC pairing). The
+a1/a3 stamp was rejected for DUPLEX (collapses WC C1'–C1') — but ssDNA has no pair to collapse, so it's
+exactly right there. **VoltronCore: ssDNA max 737 Å → 44.5 Å (median 6.5 Å); duplex max 364 → 38 Å.**
+Stamp reassembly still matches `frame_atomistic_flat` to 5.5e-6 nm (fast path carries the fix; the
+descriptor is topology-fixed, unaffected).
+
+**Cluster double-transform (2026-07-14, FIXED — same session):** the 2×3 cluster shifted ~3.2 nm
+full→atomistic. Cause: `build_display_model` ran `build_atomistic_model` with the DEFAULT
+`apply_design_geometry=True`, re-applying the design's cluster/deformation rigid transform on top of
+sim positions that ALREADY include it (the CG bead display applies none → they diverged by exactly the
+cluster transform). Fix: `build_display_model` now passes **`apply_design_geometry=False`** (the sim
+frame is the final deformed+clustered world; the axis is fit from it) and `display_frames_payload`
+dropped its now-redundant deformation/cluster G-fold (markers). **VoltronCore cluster duplex: median
+32 Å → 3.8 Å, max 38 → 12.9 Å**; non-cluster unchanged; parity 5.5e-6 nm. Applies to ALL display
+builds (legacy display-atomistic, surface, audit) — a strict fix for clustered/deformed designs, no-op
+otherwise. NB the seed path already used False for the identical "don't double-apply" reason (see
+`build_atomistic_model` docstring ~L1617).
+
+- **Still open:** first-switch ~25 s (one authoritative build + 300k-atom JSON/mesh) — precompute or a
+  lean frames-only build would push toward instant. See [[project_md_viz_tools]].
+
 > **History.** Experiment narratives, dated UPDATE sections + resolved investigations live in [project_oxdna_relaxation_archive.md](project_oxdna_relaxation_archive.md). Read on demand only.

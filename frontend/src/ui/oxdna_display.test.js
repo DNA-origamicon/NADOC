@@ -460,6 +460,32 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(atom.applyPositionLerp).toHaveBeenCalledWith([1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6], 0, null, [], null)
   })
 
+  it('relaxed display uses the FAST stamp path when the bundle endpoint exists', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('ballstick')
+    // Combined bundle: renderer topology (atoms+bonds) + stamp descriptor in one fetch.
+    // 2 rigid atoms under one identity-framed nucleotide.
+    api.getOxdnaAtomisticDisplayBundle = vi.fn().mockResolvedValue({
+      topology_hash: 'jobtopo', n_nuc: 1, n_atoms: 2,
+      atoms: [{ serial: 0, element: 'C', strand_id: 's', residue: 'DT' }, { serial: 1, element: 'O', strand_id: 's', residue: 'DT' }],
+      bonds: [[0, 1]],
+      atom_nuc: [0, 0], atom_local: [1, 0, 0, 0, 1, 0], nonrigid_serials: [],
+    })
+    api.getOxdnaDisplayAtomisticFrames = vi.fn().mockResolvedValue({
+      ready: true, topology_hash: 'jobtopo', n_nuc: 1,
+      frames: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], nonrigid_xyz: [],
+    })
+    await ctrl.displayJob('job1')
+    await tick()
+    // Fast path: bundle + frames fetched; the SLOW full-flat + separate model NOT called.
+    expect(api.getOxdnaAtomisticDisplayBundle).toHaveBeenCalledWith('job1')
+    expect(api.getOxdnaDisplayAtomisticFrames).toHaveBeenCalledWith('job1', true)
+    expect(api.getOxdnaDisplayAtomistic).not.toHaveBeenCalled()
+    expect(api.getOxdnaAtomisticModel).not.toHaveBeenCalled()
+    // Expanded client-side: atom0 = origin+R·(1,0,0)=(1,0,0), atom1 = (0,1,0).
+    const arg = atom.applyPositionLerp.mock.calls.at(-1)[0]
+    expect(Array.from(arg)).toEqual([1, 0, 0, 0, 1, 0])
+  })
+
   it('rebuilds the job topology only ONCE per job (cached across frames)', async () => {
     const { ctrl, api } = makeHeavyDeps('ballstick')
     await ctrl.displayJob('job1'); await tick()

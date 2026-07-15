@@ -94,6 +94,7 @@ def get_atomistic() -> dict:
             design,
             exclude_helix_ids=pdb_helix_ids,
             nuc_frame_override=nuc_frame_override,
+            fast_bridges=True,   # display renderer: cheap interpolated linkers (6× faster on large designs)
         )
         return atomistic_to_json(merge_models(pdb_model, template_model))
 
@@ -101,6 +102,7 @@ def get_atomistic() -> dict:
         build_atomistic_model(
             design,
             nuc_frame_override=nuc_frame_override,
+            fast_bridges=True,   # display renderer: cheap interpolated linkers (6× faster on large designs)
         )
     )
 

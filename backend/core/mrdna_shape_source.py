@@ -46,11 +46,19 @@ def _rmsf_profile(rmsf) -> list[dict]:
     RMSF-profile shape.  Entries without an ``rmsf_nm`` value are dropped (a base with no
     fluctuation sample); entries whose ``bp_index`` is not an integer are dropped too — the
     ``__xb__`` extra-base inserts, which are not part of the comparable dsDNA core (the
-    copy-key gap)."""
+    copy-key gap).
+
+    Strand-extension tail beads (``helix_id="__ext_<id>"``) drop out on the EXTENSION-PREFIX
+    test, not that one: a tail's ``bp_index`` is an ordinary ``int >= 0``, so it PASSES the
+    isinstance filter written to catch ``__xb__`` and would otherwise leak a floppy ssDNA
+    tail into the rigid dsDNA-core RMSF column."""
     out: list[dict] = []
     for p in rmsf or []:
         v = p.get("rmsf_nm")
         if v is None:
+            continue
+        h = p.get("helix_id")
+        if isinstance(h, str) and h.startswith("__ext_"):   # tails have an INT bp_index
             continue
         bp = p.get("bp_index")
         if not isinstance(bp, int):   # __xb__ inserts (string crossover id) drop out

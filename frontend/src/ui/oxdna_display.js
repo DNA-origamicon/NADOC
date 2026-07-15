@@ -19,6 +19,7 @@
 
 import { strideIndices, nearestOf } from '../scene/trajectory_range.js'
 import { colormapHex } from './colormaps.js'
+import { expandStampFrames, stampTopologyMatches } from '../scene/atomistic_stamp.js'
 
 /**
  * Pure mapping: a /oxdna/jobs/{id}/display response → applyFemPositions updates.
@@ -181,6 +182,10 @@ export function initOxdnaDisplay({
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
   onFrame = null,
+  // Fired after a heavy (atomistic) frame's atoms are applied — lets the caller hide
+  // the CG model exactly when the reconstructed atoms land (so switching full→atomistic
+  // while this overlay is active shows no "native flash").
+  onHeavyApplied = () => {},
 }) {
   // Single chokepoint for the bead-position overlay: applies the frame to the rigid
   // design mesh AND forwards it to any per-frame consumer (onFrame) — e.g. flexible
@@ -229,6 +234,13 @@ export function initOxdnaDisplay({
   // colours/bonds/positions).  So before overlaying any oxDNA atomistic frame we
   // REBUILD the renderer from the job's own atomistic model (once per job).
   let _atomTopoJob = null
+  // Fast CG→atomistic path: the design-fixed stamp descriptor (atom_nuc / atom_local /
+  // nonrigid_serials), fetched once per job.  Lets the relaxed atomistic frame ship as
+  // per-nucleotide (origin,R) + a small non-rigid set and be expanded client-side
+  // (scene/atomistic_stamp.js) instead of a slow all-atom rebuild + serialise.  Absent
+  // on the MD adapter (no stamp endpoints) → that path falls through to the legacy route.
+  let _stampDesc    = null   // last fetched descriptor payload
+  let _stampDescJob = null   // job the descriptor belongs to
   // Flexibility-map cache + scale, KEPT across toggle-off so re-toggling the same
   // job shows the already-computed map instantly (no recompute).  _rmsfBounds is the
   // active RMSF colour scale shared by beads + atomistic + surface (null = data
@@ -249,11 +261,26 @@ export function initOxdnaDisplay({
   }
 
   /** Ensure the atomistic renderer holds the JOB's topology (atoms+bonds), so the
-   *  relaxed positions line up serial-for-serial.  Returns false if it could not. */
+   *  relaxed positions line up serial-for-serial.  Prefers the COMBINED display bundle
+   *  (topology + stamp descriptor, ONE disk-cached build) and caches the descriptor as
+   *  a side effect; falls back to the legacy atomistic-model route (and, for the MD
+   *  adapter which has neither, becomes a no-op → heavy rep stays off as before).
+   *  Returns false if it could not. */
   async function _ensureJobAtomistic(ar, epoch) {
     if (_atomTopoJob === _jobId) return true            // already rebuilt for this job
-    const model = await api.getOxdnaAtomisticModel(_jobId)
-    if (epoch !== _epoch) return false
+    let model = null
+    if (typeof api.getOxdnaAtomisticDisplayBundle === 'function') {
+      const b = await api.getOxdnaAtomisticDisplayBundle(_jobId).catch(() => null)
+      if (epoch !== _epoch) return false
+      if (b?.atoms?.length) {
+        model = b
+        if (Array.isArray(b.atom_nuc)) { _stampDesc = b; _stampDescJob = _jobId }   // descriptor rides along
+      }
+    }
+    if (!model && typeof api.getOxdnaAtomisticModel === 'function') {
+      model = await api.getOxdnaAtomisticModel(_jobId)
+      if (epoch !== _epoch) return false
+    }
     if (!model?.atoms?.length) return false
     ar.update({ atoms: model.atoms, bonds: model.bonds || [] })
     _atomTopoJob = _jobId
@@ -261,9 +288,33 @@ export function initOxdnaDisplay({
     return true
   }
 
+  /** Flat all-atom XYZ for the relaxed-display frame, FAST path first: ensure the job
+   *  topology + stamp descriptor (one bundle fetch), fetch the compact per-nucleotide
+   *  frames, and expand `origin + R·local` client-side; if the stamp path is
+   *  unavailable or the topology hash mismatches, fall back to the legacy
+   *  /display-atomistic full-flat route.  Epoch/live-guarded by the caller. */
+  async function _relaxedAtomisticFlat(epoch, live) {
+    const ar = getAtomisticRenderer?.()
+    if (ar && ar.getMode?.() !== 'off') await _ensureJobAtomistic(ar, epoch)   // topology + descriptor
+    if (!live()) return null
+    const desc = (_stampDescJob === _jobId) ? _stampDesc : null
+    if (desc && typeof api.getOxdnaDisplayAtomisticFrames === 'function') {
+      const fr = await api.getOxdnaDisplayAtomisticFrames(_jobId, _align)
+      if (!live()) return null
+      if (fr?.ready && stampTopologyMatches(desc, fr)) {
+        const flat = expandStampFrames(desc, fr)
+        if (flat) return flat            // ChimeraX-speed: no per-atom network payload
+      }
+    }
+    const r = await api.getOxdnaDisplayAtomistic(_jobId, _align)   // legacy fallback
+    return (live() && r?.ready) ? r.atomistic : null
+  }
+
   async function _pushAtomistic(arr, epoch, live, colorByKey = null) {
     const ar = getAtomisticRenderer?.()
-    if (!ar || ar.getMode?.() === 'off' || !Array.isArray(arr) || !arr.length) return
+    // arr may be a plain Array (legacy flat route) OR a Float32Array (fast stamp
+    // expansion) — accept both array-likes, reject only null/empty.
+    if (!ar || ar.getMode?.() === 'off' || !arr || !arr.length) return
     if (!(await _ensureJobAtomistic(ar, epoch))) return
     if (live && !live()) return
     ar.applyPositionLerp(arr, arr, 0, null, [], null)
@@ -271,6 +322,7 @@ export function initOxdnaDisplay({
     if (colorByKey) ar.applyScalarColors?.(colorByKey)
     else ar.clearScalarColors?.()
     _heavyActive = true
+    onHeavyApplied()   // atoms are live → the caller can now hide the CG model (no flash)
   }
   function _pushSurface(data, rmsf = false) {
     const sr = getSurfaceRenderer?.()
@@ -388,8 +440,8 @@ export function initOxdnaDisplay({
     try {
       if (_mode === 'relaxed') {
         if (kind === 'atomistic') {
-          const r = await api.getOxdnaDisplayAtomistic(_jobId, _align)
-          if (live() && r?.ready) await _pushAtomistic(r.atomistic, epoch, live)
+          const flat = await _relaxedAtomisticFlat(epoch, live)
+          if (live() && flat) await _pushAtomistic(flat, epoch, live)
         } else {
           const r = await api.getOxdnaDisplaySurface(_jobId, _align)
           if (live() && r?.ready) _pushSurface(r.surface)
@@ -439,6 +491,7 @@ export function initOxdnaDisplay({
     _bakedAtom = null
     _bakedSurf = null
     _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
+    _stampDescJob = null  // and re-fetches the stamp descriptor for that job
     _lastSurfRmsf = null
   }
 
@@ -700,5 +753,10 @@ export function initOxdnaDisplay({
     isActive: () => _active,
     mode: () => _mode,
     activeJobId: () => _jobId,
+    // True when this overlay is active in a mode that REBUILDS the atomistic renderer
+    // from the job's atoms (relaxed / rmsf / trajectory) — NOT the CG-only modes
+    // (live / deviation), which would leave an atomistic switch with nothing to show.
+    // Used to suppress the design "native flash" on full→atomistic.
+    drivesHeavy: () => _active && (_mode === 'relaxed' || _mode === 'rmsf' || _mode === 'trajectory'),
   }
 }

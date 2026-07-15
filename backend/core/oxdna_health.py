@@ -2134,6 +2134,72 @@ _FRAME_CACHE = None     # lazily-created OrderedDict[frame_key -> aligned frame 
 _FRAME_CACHE_NT = 0     # running Σ len(frame) across the cache (for memory-bounded evict)
 _FRAME_CACHE_MAX_NT = 3_000_000   # ~a couple of large lineages' shared ancestors
 
+# Per-frame DISPLAY OUTPUT cache: the finished atomistic flat-XYZ list / surface JSON
+# for one relaxed or trajectory frame.  The two caches above memoize the *aligned frame*
+# (the expensive PBC-unwrap + Kabsch step); they do NOT memoize the all-atom rebuild that
+# turns that frame into ~23 atoms/nucleotide — which the frontend comment rightly calls
+# "≈ several seconds each".  Re-scrubbing to a frame you already visited, or flipping the
+# representation atomistic→surface→atomistic on the SAME frame, used to re-pay that rebuild
+# every time.  This cache makes the second visit free.  Keyed by a caller-supplied tuple
+# that fully determines the output (aligned-cache-key + frame idx + any surface params, or
+# for the relaxed single frame the conf-file signature + align).  Bounded by cumulative
+# element count (floats/ints across cached payloads), so memory scales with structure size
+# the same way the frame cache does.
+_DISPLAY_OUT_CACHE = None   # lazily-created OrderedDict[key -> list|dict payload]
+_DISPLAY_OUT_ELEMS = 0      # running Σ payload element count (for memory-bounded evict)
+_DISPLAY_OUT_MAX_ELEMS = 6_000_000   # ~30 large-origami frames, or hundreds of small ones
+
+
+def _out_payload_elems(payload) -> int:
+    """Rough element count of a display payload for the memory budget: the flat-XYZ
+    list length, or a surface dict's vertices+faces(+colors) lengths."""
+    if isinstance(payload, list):
+        return len(payload)
+    if isinstance(payload, dict):
+        n = len(payload.get("vertices", ())) + len(payload.get("faces", ()))
+        n += len(payload.get("vertex_colors", ())) + len(payload.get("vertex_rmsf", ()))
+        return n
+    return 0
+
+
+def _display_out_get(key):
+    """Return a cached display payload (LRU-touched) or None."""
+    global _DISPLAY_OUT_CACHE
+    if _DISPLAY_OUT_CACHE is None:
+        return None
+    v = _DISPLAY_OUT_CACHE.get(key)
+    if v is not None:
+        try:
+            _DISPLAY_OUT_CACHE.move_to_end(key)
+        except KeyError:
+            pass
+    return v
+
+
+def _display_out_put(key, payload):
+    """Insert a display payload, evicting oldest until under the element budget."""
+    global _DISPLAY_OUT_CACHE, _DISPLAY_OUT_ELEMS
+    from collections import OrderedDict
+    if _DISPLAY_OUT_CACHE is None:
+        _DISPLAY_OUT_CACHE = OrderedDict(); _DISPLAY_OUT_ELEMS = 0
+    if key in _DISPLAY_OUT_CACHE:
+        return
+    _DISPLAY_OUT_CACHE[key] = payload
+    _DISPLAY_OUT_ELEMS += _out_payload_elems(payload)
+    while _DISPLAY_OUT_ELEMS > _DISPLAY_OUT_MAX_ELEMS and len(_DISPLAY_OUT_CACHE) > 1:
+        try:
+            _, ev = _DISPLAY_OUT_CACHE.popitem(last=False)
+            _DISPLAY_OUT_ELEMS -= _out_payload_elems(ev)
+        except KeyError:
+            break
+
+
+def display_out_cache_clear():
+    """Drop the whole display-output cache (test hook / manual invalidation)."""
+    global _DISPLAY_OUT_CACHE, _DISPLAY_OUT_ELEMS
+    _DISPLAY_OUT_CACHE = None
+    _DISPLAY_OUT_ELEMS = 0
+
 
 def _aligned_cache_key(stages, reference_conf_path, max_frames, copies):
     import os
@@ -2518,8 +2584,15 @@ def _frame_atomistic_overrides(design, frame: dict):
     so DISPLAY uses it; the long sequential O3'→P bonds are handled separately by
     ``close_backbone=True`` (display-only backbone closure), which made the σ
     per-domain position smoother (a prior band-aid) unnecessary."""
-    from backend.physics.oxdna_interface import oxdna_backbone_site, _XB_SENTINEL
+    from backend.physics.oxdna_interface import (
+        oxdna_backbone_site, _XB_SENTINEL, is_extension_key, is_synthetic_nuc_key,
+    )
     from backend.core.cg_to_atomistic import deformed_helix_axes
+
+    def _sited(rec) -> bool:
+        return (rec.get("backbone_position") is not None
+                and rec.get("a1") is not None and rec.get("a3") is not None)
+
     # Crossover extra-base inserts: keyed (_XB_SENTINEL, crossover_id, k).  Their
     # backbone-site positions drive the heavy-rep placement; they are EXCLUDED from
     # frame3 (real-nucleotide overrides only) so deformed_helix_axes never forms a
@@ -2527,36 +2600,137 @@ def _frame_atomistic_overrides(design, frame: dict):
     xb_pos_override = {
         (key[1], key[2]): oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
         for key, rec in frame.items()
-        if key[0] == _XB_SENTINEL and rec.get("backbone_position") is not None
-        and rec.get("a1") is not None and rec.get("a3") is not None
+        if key[0] == _XB_SENTINEL and _sited(rec)
+    }
+    # Strand-extension tail beads: keyed ("__ext_<id>", bead_index, direction).  Same
+    # deal — they place the heavy rep's tail residues, but must NOT reach frame3.
+    # NOTE an extension key is a 3-tuple whose bp_index is an int >= 0, so it passes
+    # every `isinstance(k[1], int)` filter written to catch __xb__: it has to be
+    # excluded EXPLICITLY or deformed_helix_axes builds a junk one-nucleotide "helix".
+    ext_pos_override = {
+        (key[0][len("__ext_"):], key[1]): oxdna_backbone_site(
+            rec["backbone_position"], rec["a1"], rec["a3"])
+        for key, rec in frame.items()
+        if is_extension_key(key) and _sited(rec)
     }
     # Collapse loop-insertion copies to their 3-tuple base (last copy wins) — both the
     # backbone-site override and deformed_helix_axes are keyed by (helix, bp, dir).
     frame3 = {key[:3]: rec for key, rec in frame.items()
-              if key[0] != _XB_SENTINEL
-              and rec.get("backbone_position") is not None
-              and rec.get("a1") is not None and rec.get("a3") is not None}
+              if not is_synthetic_nuc_key(key) and _sited(rec)}
     nuc_pos_override = {
         key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
         for key, rec in frame3.items()
     }
     axis_override = deformed_helix_axes(design, frame3, sigma=2.0)
-    return nuc_pos_override, axis_override, xb_pos_override
+    return nuc_pos_override, axis_override, xb_pos_override, ext_pos_override
 
 
-def build_display_model(design, frame: dict):
+def _ssdna_frame_override(frame: dict) -> dict:
+    """Build a per-nucleotide oxDNA a1/a3 rigid-frame override for the UNPAIRED (ssDNA)
+    nucleotides in a relaxed frame — the free overhangs / tails / loops.
+
+    The axis-derived display placement (``_frame_atomistic_overrides`` + ``_atom_frame``)
+    fits a helix centerline and measures each base's radial against it.  For floppy ssDNA
+    there is no helix to fit, so the centerline is meaningless and those nucleotides are
+    flung tens of nm off their true simulated site (VoltronCore: ssDNA max 74 nm).  ssDNA
+    has NO Watson–Crick partner, so the a1/a3 rigid stamp — rejected for DUPLEX because it
+    collapses base pairs — places it EXACTLY at the relaxed pose (max drops to ~1.5 nm).
+    So: rigid-stamp the unpaired nucleotides, leave the paired duplex on the axis path.
+
+    Returns ``{(helix, bp, dir[, copy]): (CM, a1, a3)}`` for unpaired real nucleotides."""
+    import numpy as _np
+    from backend.physics.oxdna_interface import is_synthetic_nuc_key
+
+    def _real(k) -> bool:
+        return (isinstance(k, tuple) and len(k) >= 3 and isinstance(k[1], int)
+                and not is_synthetic_nuc_key(k))
+
+    present = {k[:3] for k in frame if _real(k)}
+    fo: dict = {}
+    for k, v in frame.items():
+        if not _real(k):
+            continue
+        h, bp, d = k[:3]
+        other = "REVERSE" if d == "FORWARD" else "FORWARD"
+        if (h, bp, other) in present:
+            continue                                   # paired duplex → axis-derived path
+        if (v.get("backbone_position") is None or v.get("a1") is None or v.get("a3") is None):
+            continue
+        fo[k] = (_np.asarray(v["backbone_position"], float),
+                 _np.asarray(v["a1"], float), _np.asarray(v["a3"], float))
+    return fo
+
+
+def build_display_model(design, frame: dict, frame_sink: dict | None = None):
     """The canonical relaxed-frame DISPLAY reconstruction — ONE builder shared by the
     atomistic/surface display sinks AND the validation audit, so what's measured is
     exactly what's drawn.  Axis-derived base placement (correct WC pairing/stacking)
     + display-only backbone closure (connected O3'→P).  Atom serial ordering is
     identical to ``build_atomistic_model(design)`` (overrides change positions, never
-    topology), so the renderer's serial-keyed bond list stays valid."""
+    topology), so the renderer's serial-keyed bond list stays valid.
+
+    ``frame_sink`` (out-param): if given, receives ``{(h,bp,dir,copy): (origin, R)}``
+    — the per-nucleotide UNDEFORMED rigid frame — for the fast display path
+    (``display_frames_payload``)."""
     from backend.core.atomistic import build_atomistic_model
-    nuc_pos_override, axis_override, xb_pos_override = _frame_atomistic_overrides(design, frame)
+    (nuc_pos_override, axis_override,
+     xb_pos_override, ext_pos_override) = _frame_atomistic_overrides(design, frame)
+    # Anchor floppy UNPAIRED ssDNA (overhangs/tails/loops) at its true relaxed pose via the
+    # a1/a3 rigid stamp — the axis-derived path has no helix to fit there and flings it tens
+    # of nm off.  Paired duplex stays on the axis path (correct WC pairing).
+    frame_override = _ssdna_frame_override(frame)
     return build_atomistic_model(
         design, nuc_pos_override=nuc_pos_override, axis_override=axis_override,
-        xb_pos_override=xb_pos_override,
-        close_backbone=True, relaxed_oxdna_phase=True)
+        frame_override=frame_override,
+        xb_pos_override=xb_pos_override, ext_pos_override=ext_pos_override,
+        close_backbone=True, relaxed_oxdna_phase=True, frame_sink=frame_sink,
+        fast_bridges=True,   # DISPLAY: cheap interpolated phosphate linkers (6× faster; ≤2.4 Å at junctions)
+        # The relaxed CG override already supplies each nucleotide's FINAL world position
+        # (deformed + cluster-transformed, then simulated) and the axis is fit from those
+        # positions — so DON'T re-apply the design's deformation/cluster transform, which
+        # would DOUBLE it on the clustered helices (VoltronCore: the 2×3 cluster shifted
+        # ~3.2 nm vs the CG display).  Same reason the oxDNA/mrDNA seed path uses False.
+        apply_design_geometry=False)
+
+
+def display_frames_payload(design, frame: dict) -> dict:
+    """Compact per-frame payload for the FAST CG→atomistic display path: per-nucleotide
+    rigid frames (origin + R) plus the small set of non-rigid atom positions, instead
+    of every atom's XYZ.  The client holds the design-fixed ``atomistic_stamp_descriptor``
+    (fetched once) and expands ``world = origin + R @ local`` for the rigid majority.
+
+    Runs the AUTHORITATIVE ``build_display_model`` once (memoised upstream by the route),
+    so the non-rigid coordinates are byte-exact and the rigid frames come from the same
+    loop.  ``build_display_model`` uses ``apply_design_geometry=False`` (the sim frame is
+    already the FINAL deformed + cluster-transformed world, and the axis is fit from it),
+    so the recorded frames are final as-is — no deformation/cluster fold is needed.
+
+    Returns ``{ready, n_nuc, frames:[12*n_nuc], nonrigid_xyz:[3*k], topology_hash}``
+    where ``frames`` is ``origin[3] + R[9]`` (row-major) per nucleotide in the
+    descriptor's ``nuc_keys`` order.  Reproduces ``frame_atomistic_flat`` to ~1e-4 nm
+    (see ``tests/test_atomistic_display_split.py``)."""
+    from backend.core.atomistic import atomistic_stamp_descriptor
+
+    desc = atomistic_stamp_descriptor(design)
+    sink: dict = {}
+    model = build_display_model(design, frame, frame_sink=sink)
+
+    frames: list = []
+    for key in desc.nuc_keys:
+        origin, R = sink[key]
+        frames.extend((round(float(origin[0]), 6), round(float(origin[1]), 6), round(float(origin[2]), 6),
+                       round(float(R[0, 0]), 7), round(float(R[0, 1]), 7), round(float(R[0, 2]), 7),
+                       round(float(R[1, 0]), 7), round(float(R[1, 1]), 7), round(float(R[1, 2]), 7),
+                       round(float(R[2, 0]), 7), round(float(R[2, 1]), 7), round(float(R[2, 2]), 7)))
+
+    atoms = model.atoms
+    nonrigid_xyz: list = []
+    for s in desc.nonrigid_serials:
+        a = atoms[s]
+        nonrigid_xyz.extend((round(a.x, 6), round(a.y, 6), round(a.z, 6)))
+
+    return {"ready": True, "n_nuc": len(desc.nuc_keys), "frames": frames,
+            "nonrigid_xyz": nonrigid_xyz, "topology_hash": desc.topology_hash}
 
 
 def frame_atomistic_flat(design, frame: dict) -> list:
@@ -2620,11 +2794,17 @@ def composite_trajectory_atomistic(design, stages, reference_conf_path,
     match ``composite_trajectory``'s ``frames`` ordering exactly."""
     _, ordered, _, _ = _aligned_downsampled_frames(
         design, stages, reference_conf_path, max_frames, copies=True)
+    akey = _aligned_cache_key(stages, reference_conf_path, max_frames, True)
     out: dict[str, list] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(ordered):
             continue
-        out[str(idx)] = frame_atomistic_flat(design, ordered[idx])
+        ck = ("cta", akey, idx)
+        payload = _display_out_get(ck)
+        if payload is None:
+            payload = frame_atomistic_flat(design, ordered[idx])
+            _display_out_put(ck, payload)
+        out[str(idx)] = payload
     return out
 
 
@@ -2638,13 +2818,21 @@ def composite_trajectory_surface(design, stages, reference_conf_path, frame_indi
     (marching cubes); the frontend rebuilds the buffer on a count change."""
     _, ordered, _, _ = _aligned_downsampled_frames(
         design, stages, reference_conf_path, max_frames, copies=True)
+    akey = _aligned_cache_key(stages, reference_conf_path, max_frames, True)
+    sparams = (color_mode, round(probe_radius, 4), round(grid_spacing, 4),
+               round(radius_inflate, 4), int(smooth))
     out: dict[str, dict] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(ordered):
             continue
-        out[str(idx)] = frame_surface_json(
-            design, ordered[idx], color_mode, probe_radius, grid_spacing,
-            radius_inflate, smooth)
+        ck = ("cts", akey, idx, sparams)
+        payload = _display_out_get(ck)
+        if payload is None:
+            payload = frame_surface_json(
+                design, ordered[idx], color_mode, probe_radius, grid_spacing,
+                radius_inflate, smooth)
+            _display_out_put(ck, payload)
+        out[str(idx)] = payload
     return out
 
 

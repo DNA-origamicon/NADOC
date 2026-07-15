@@ -1435,7 +1435,8 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody) -> dic
 
 
 def _relaxed_full_map(job, align: bool, *, copies: bool = False,
-                      include_extra_bases: bool = False):
+                      include_extra_bases: bool = False,
+                      include_extensions: bool = False):
     """Shared relaxed-frame reader for the display + display-atomistic/surface
     routes. Returns ``(design, full_map, stage_name, conf_path, ref_conf)`` where
     ``full_map`` is ``{(hid,bp,dir): {backbone_position(CM), a1, a3}}`` — the same
@@ -1449,7 +1450,8 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
 
     ``include_extra_bases=True`` keeps crossover extra-base inserts (keyed
     ``(_XB_SENTINEL, crossover_id, k)``) so the display renders them at their real
-    simulated positions instead of the geometric arc."""
+    simulated positions instead of the geometric arc.  ``include_extensions=True``
+    does the same for strand-extension tail beads (keyed ``("__ext_<id>", i, dir)``)."""
     jd = job.job_dir(_workspace())
 
     # Pick the latest stage with a last_conf.dat (prefer the most-advanced done stage).
@@ -1471,6 +1473,18 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
         raise HTTPException(500, "design.json snapshot missing for this job")
     design = Design.model_validate_json(snap.read_text())
 
+    # A job written by an older build can have FEWER particles than the design now
+    # walks to (strand extensions add one per extension base).  The reader cannot
+    # detect that on its own — it clamps the deficit and silently hands every
+    # nucleotide after the first extension the WRONG particle line.  Fail loudly.
+    from backend.physics.oxdna_interface import (
+        assert_topology_matches_design, StaleJobTopologyError,
+    )
+    try:
+        assert_topology_matches_design(jd / "topology.top", design)
+    except StaleJobTopologyError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
     # Unwrap PBC, then align to the design location.  For a field run the ANCHORED
     # beads are a POSITIONAL-ONLY reference (translate the anchor onto its design
     # spot, NO rotation) so the field-induced reorientation we're studying stays
@@ -1487,11 +1501,13 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
         full_map = read_configuration_unwrapped(
             conf_path, design, ref_conf,
             align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align,
-            copies=copies, include_extra_bases=include_extra_bases)
+            copies=copies, include_extra_bases=include_extra_bases,
+            include_extensions=include_extensions)
     else:
         full_map = read_configuration_unwrapped(conf_path, design, ref_conf,
                                                 align=align, copies=copies,
-                                                include_extra_bases=include_extra_bases)
+                                                include_extra_bases=include_extra_bases,
+                                                include_extensions=include_extensions)
     return (design, full_map, stage_name, conf_path, ref_conf)
 
 
@@ -1512,7 +1528,7 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
     # copies=True keys each loop-insertion copy under its own 4-tuple so the display
     # can move every loop bead (not just the collapsed last copy) to its relaxed spot.
     design, full_map, stage_name, conf_path, ref_conf = _relaxed_full_map(
-        job, align, copies=True, include_extra_bases=True)
+        job, align, copies=True, include_extra_bases=True, include_extensions=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False, "positions": [], "stage_name": None}
 
@@ -1575,14 +1591,23 @@ async def get_oxdna_display_atomistic(job_id: str, align: bool = True) -> dict:
     hash to the atoms it is rendering and rebuild from GET .../atomistic-model on a
     mismatch; blindly overlaying these positions on a different topology maps every
     serial to the wrong atom (scrambled colours/bonds/positions)."""
-    from backend.core.oxdna_health import frame_atomistic_flat
+    from backend.core.oxdna_health import (frame_atomistic_flat, _traj_file_sig,
+                                           _display_out_get, _display_out_put)
     from backend.core.atomistic import atomistic_reference_topology_hash
 
     job = _load_job(job_id)
-    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True)
+    design, full_map, stage_name, conf_path, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True, include_extensions=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
-    data = await run_in_threadpool(frame_atomistic_flat, design, full_map)
+    # Cache the all-atom rebuild (the "≈ several seconds" step) keyed by the conf
+    # file's signature + align, so flipping the representation atomistic→surface→
+    # atomistic on the same relaxed frame re-fetches instantly.  The signature
+    # changes when a still-writing run advances the conf, so a live run stays fresh.
+    ck = ("dispA", _traj_file_sig(str(conf_path)), bool(align))
+    data = _display_out_get(ck)
+    if data is None:
+        data = await run_in_threadpool(frame_atomistic_flat, design, full_map)
+        _display_out_put(ck, data)
     return {"job_id": job.job_id, "ready": True, "stage_name": stage_name,
             "atomistic": data, "topology_hash": atomistic_reference_topology_hash(design),
             "n_atoms": len(data) // 3}
@@ -1603,10 +1628,107 @@ async def get_oxdna_atomistic_model(job_id: str) -> dict:
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
     design = Design.model_validate_json(snap.read_text())
-    model = await run_in_threadpool(build_atomistic_model, design)
+    # Display topology only — the relaxed positions overwrite these coords via
+    # applyPositionLerp, so use the cheap interpolated phosphate bridges (6× faster
+    # build on large structures; the exact MD-seed geometry would be discarded anyway).
+    model = await run_in_threadpool(
+        lambda: build_atomistic_model(design, fast_bridges=True))
     out = atomistic_to_json(model)
     out["topology_hash"] = atomistic_reference_topology_hash(design)
     return out
+
+
+@router.get("/oxdna/jobs/{job_id}/atomistic-stamp")
+async def get_oxdna_atomistic_stamp(job_id: str) -> dict:
+    """Design-FIXED stamp descriptor for the fast CG→atomistic display path — fetched
+    ONCE per job alongside GET .../atomistic-model.  Says, per atom serial, whether it
+    is a rigid template stamp (and which nucleotide + its template-local coord) or a
+    non-rigid atom (closure/bridge/insert/tail).  The per-frame POST
+    .../display-atomistic-frames then ships only per-nucleotide frames + the non-rigid
+    positions, and the client expands ``origin + R @ local`` for the rigid majority.
+
+    Same serial space + ``topology_hash`` as atomistic-model (both build from the JOB
+    design), so the client rebuilds from atomistic-model on a hash mismatch."""
+    from backend.core.atomistic import atomistic_stamp_descriptor
+    from backend.core.models import Design
+    job = _load_job(job_id)
+    snap = job.job_dir(_workspace()) / "design.json"
+    if not snap.exists():
+        raise HTTPException(500, "design.json snapshot missing for this job")
+    design = Design.model_validate_json(snap.read_text())
+    desc = await run_in_threadpool(atomistic_stamp_descriptor, design)
+    # Flatten atom_local (3*n_atoms) for a compact wire; nuc_keys as [h,bp,dir,copy].
+    atom_local_flat: list = []
+    for (nx, ny, nz) in desc.atom_local:
+        atom_local_flat.extend((nx, ny, nz))
+    return {
+        "job_id": job.job_id,
+        "topology_hash": desc.topology_hash,
+        "n_nuc": len(desc.nuc_keys),
+        "n_atoms": len(desc.atom_nuc),
+        "nuc_keys": [list(k) for k in desc.nuc_keys],
+        "atom_nuc": desc.atom_nuc,
+        "atom_local": atom_local_flat,
+        "nonrigid_serials": desc.nonrigid_serials,
+    }
+
+
+@router.get("/oxdna/jobs/{job_id}/atomistic-display-bundle")
+async def get_oxdna_atomistic_display_bundle(job_id: str) -> dict:
+    """Combined renderer topology (atoms+bonds) + stamp descriptor in ONE build
+    (fast interpolated bridges), DISK-CACHED per job by topology hash — so the whole
+    display-atomistic setup for a job is built once ever, not per switch/session.
+    Replaces the separate atomistic-model + atomistic-stamp fetches on the fast path."""
+    import json
+    from backend.core.atomistic import (atomistic_display_bundle,
+                                         atomistic_reference_topology_hash)
+    from backend.core.models import Design
+    job = _load_job(job_id)
+    jd = job.job_dir(_workspace())
+    snap = jd / "design.json"
+    if not snap.exists():
+        raise HTTPException(500, "design.json snapshot missing for this job")
+    design = Design.model_validate_json(snap.read_text())
+    thash = atomistic_reference_topology_hash(design)
+    cache_f = jd / "atomistic_display_bundle.json"
+    if cache_f.exists():
+        try:
+            cached = json.loads(cache_f.read_text())
+            if cached.get("topology_hash") == thash:
+                return cached
+        except Exception:
+            pass   # corrupt/stale cache → rebuild
+    out = await run_in_threadpool(atomistic_display_bundle, design)
+    try:
+        cache_f.write_text(json.dumps(out))
+    except Exception:
+        pass       # cache write best-effort; correctness doesn't depend on it
+    return out
+
+
+@router.post("/oxdna/jobs/{job_id}/display-atomistic-frames")
+async def get_oxdna_display_atomistic_frames(job_id: str, align: bool = True) -> dict:
+    """FAST per-frame payload for the relaxed-display atomistic rep: per-nucleotide
+    rigid frames (origin + R, deformation folded) + the small non-rigid atom set,
+    instead of every atom's XYZ (≈4–5× smaller).  The client holds the stamp descriptor
+    (GET .../atomistic-stamp) and expands the fixed templates.  Same conf-signature
+    memoisation as display-atomistic so a rep flip on the same frame re-fetches
+    instantly and a still-writing run stays fresh."""
+    from backend.core.oxdna_health import (display_frames_payload, _traj_file_sig,
+                                           _display_out_get, _display_out_put)
+    from backend.core.atomistic import atomistic_reference_topology_hash
+    job = _load_job(job_id)
+    design, full_map, stage_name, conf_path, _ = _relaxed_full_map(
+        job, align, copies=True, include_extra_bases=True, include_extensions=True)
+    if full_map is None:
+        return {"job_id": job.job_id, "ready": False}
+    ck = ("dispAF", _traj_file_sig(str(conf_path)), bool(align))
+    data = _display_out_get(ck)
+    if data is None:
+        data = await run_in_threadpool(display_frames_payload, design, full_map)
+        _display_out_put(ck, data)
+    return {"job_id": job.job_id, "ready": True, "stage_name": stage_name,
+            "topology_hash": atomistic_reference_topology_hash(design), **data}
 
 
 @router.post("/oxdna/jobs/{job_id}/display-surface")
@@ -1615,15 +1737,25 @@ async def get_oxdna_display_surface(job_id: str, body: OxdnaSurfaceBody,
     """Molecular surface mesh for the relaxed-display structure — the surface
     counterpart of GET /oxdna/jobs/{id}/display. ``surface`` = {vertices, faces,
     vertex_colors?} (same wire format as /design/features/surface-batch)."""
-    from backend.core.oxdna_health import frame_surface_json
+    from backend.core.oxdna_health import (frame_surface_json, _traj_file_sig,
+                                           _display_out_get, _display_out_put)
 
     job = _load_job(job_id)
-    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True)
+    design, full_map, stage_name, conf_path, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True, include_extensions=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
-    data = await run_in_threadpool(
-        frame_surface_json, design, full_map, body.color_mode, body.probe_radius,
-        body.grid_spacing, body.radius_inflate, body.smooth)
+    # Cache keyed by conf signature + align + the surface mesh params (a different
+    # probe/grid/smooth is a different mesh).  Surface = atomistic rebuild + marching
+    # cubes, so the re-visit saving is even larger than the atomistic case.
+    sparams = (body.color_mode, round(body.probe_radius, 4), round(body.grid_spacing, 4),
+               round(body.radius_inflate, 4), int(body.smooth))
+    ck = ("dispS", _traj_file_sig(str(conf_path)), bool(align), sparams)
+    data = _display_out_get(ck)
+    if data is None:
+        data = await run_in_threadpool(
+            frame_surface_json, design, full_map, body.color_mode, body.probe_radius,
+            body.grid_spacing, body.radius_inflate, body.smooth)
+        _display_out_put(ck, data)
     return {"job_id": job.job_id, "ready": True, "stage_name": stage_name, "surface": data}
 
 
@@ -1641,7 +1773,7 @@ async def get_oxdna_display_atomistic_audit(job_id: str, align: bool = True) -> 
     from backend.core.atomistic_validation import audit_bonds
 
     job = _load_job(job_id)
-    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True)
+    design, full_map, stage_name, _, _ = _relaxed_full_map(job, align, copies=True, include_extra_bases=True, include_extensions=True)
     if full_map is None:
         return {"job_id": job.job_id, "ready": False}
     report = await run_in_threadpool(audit_bonds, design, full_map)

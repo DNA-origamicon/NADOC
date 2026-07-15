@@ -9,19 +9,24 @@
 #   2. LOCK      — refuse to start if another guarded test run is still alive. An
 #                  atomic mkdir lock (.nadoc-test.lock/) holds the running pid+label.
 #                  Overlapping runs saturate the CPU (pytest runs `-n auto`).
-#   3. BUDGET    — agent-facing (fast-only) recipes must finish inside
-#                  NADOC_TEST_BUDGET_SEC (default 60s). Over budget prints a loud
-#                  banner pointing at the slow-candidate report so the offenders get
-#                  relegated to the slow suite. The run's own pass/fail is unchanged.
+#   3. BUDGET    — for agent-facing (fast-only) recipes. The MANDATORY gate is
+#                  per-test: any unmarked test over 5s (tests/conftest.py) is heavy
+#                  and must be relegated — that signal is scale-free. Total wall-clock
+#                  is only a BACKSTOP (NADOC_TEST_BUDGET_SEC, default 90s), because
+#                  total time also grows with suite SIZE and with CPU contention, and
+#                  a fixed ceiling on a growing suite just ratchets healthy tests out.
+#                  Either trigger prints a loud banner pointing at the slow-candidate
+#                  report. The run's own pass/fail is unchanged.
 #
 # Usage: scripts/test_guard.sh <label> <gate:1|0> <slow:1|0> -- <command...>
 #   gate=1   "is this really necessary?" confirm (non-interactive: NADOC_TEST_CONFIRM=1)
 #   slow=1   the command CAN run slow tests -> requires an open test-dedicated session
-#   slow=0   fast-only -> no session needed, but the wall-clock budget is enforced
+#   slow=0   fast-only -> no session needed, but the budgets above are enforced
 #
 # Escape hatches:
 #   NADOC_TEST_CONFIRM=1     answer "yes" to the confirm gate up front (for agents)
-#   NADOC_TEST_BUDGET_SEC=N  raise/lower the fast-suite wall-clock budget
+#   NADOC_TEST_BUDGET_SEC=N  raise/lower the total-time backstop
+#   NADOC_TEST_NICE=0        run pytest at normal CPU priority (default: nice -n 10)
 #   NADOC_TEST_FORCE=1       bypass EVERYTHING (last resort; you own the fallout).
 #                            Agents: this one is not yours to set — see CLAUDE.md.
 set -uo pipefail
@@ -33,7 +38,8 @@ SLOW="${1:?slow flag required}"; shift
 
 LOCKDIR="${NADOC_TEST_LOCK:-.nadoc-test.lock}"
 SESSION_MARKER="${NADOC_TEST_SESSION_FILE:-.nadoc-test-session}"
-BUDGET="${NADOC_TEST_BUDGET_SEC:-60}"
+BUDGET="${NADOC_TEST_BUDGET_SEC:-90}"        # hard backstop: triage required above this
+SOFT_BUDGET="${NADOC_TEST_SOFT_BUDGET_SEC:-60}"  # informational mark: printed, never enforced
 CANDIDATES=".nadoc-slow-candidates.json"
 
 hr='────────────────────────────────────────────────────────────────────'
@@ -136,29 +142,57 @@ EOF
 fi
 
 # ---- 4. Run the wrapped command under the held lock, timed ------------------
+# Run at low CPU priority: the dev machine is also the machine NADOC is *used* on,
+# and `-n auto` pytest against every core makes the app/servers stutter. `nice`
+# lets the OS hand cores back to the foreground app; on an idle machine the run is
+# just as fast. Set NADOC_TEST_NICE=0 to opt out.
+NICE_LEVEL="${NADOC_TEST_NICE:-10}"
 START=$(date +%s)
-"$@"
+if [[ "$NICE_LEVEL" != "0" ]] && command -v nice >/dev/null 2>&1; then
+  nice -n "$NICE_LEVEL" "$@"
+else
+  "$@"
+fi
 RC=$?
 ELAPSED=$(( $(date +%s) - START ))
 
 # ---- 5. Budget check (fast-only recipes) -----------------------------------
-# A per-change suite that creeps past the budget is a *process* failure, not a test
-# failure: something heavy leaked into the fast suite. Report it loudly — the fix is
-# to relegate the offenders to the slow suite (.claude/skills/triage-slow-tests).
+# TWO signals, and only one of them is a defect:
+#
+#   * PER-TEST (the real gate).  An unmarked test over NADOC_PER_TEST_BUDGET_SEC
+#     (5s, enforced in tests/conftest.py, violators listed in $CANDIDATES) is heavy
+#     no matter how big the suite gets.  Scale-free, so it is the mandatory trigger.
+#   * TOTAL WALL-CLOCK (a backstop only).  Total time mixes test weight with suite
+#     SIZE (which only grows) and with CPU contention from whatever else is running
+#     on this machine.  Holding a growing suite to a fixed ceiling just ratchets:
+#     every healthy new test eventually forces a triage that buys seconds back by
+#     relegating something innocent.  So it fires only well above the noise floor
+#     ($BUDGET, default 90s), as a "the suite genuinely got fat" catch-all.  A run
+#     between $SOFT_BUDGET and $BUDGET prints a note and requires nothing.
+#
 # (Inside a test-dedicated session even the slow=0 recipes may legitimately drain heavy
-# groups — `just test-smart` does — so the budget is only enforced outside one.)
+# groups — `just test-smart` does — so neither budget is enforced inside one.)
 if session_open; then
   exit $RC
 fi
 
-if [[ "$SLOW" != "1" && "$ELAPSED" -gt "$BUDGET" ]]; then
+[[ "$SLOW" == "1" ]] && exit $RC
+
+# Did conftest flag any unmarked test over the per-test budget?
+n_violators=0
+if [[ -f "$CANDIDATES" ]] && command -v python3 >/dev/null 2>&1; then
+  n_violators="$(python3 -c 'import json,sys
+try:
+    print(len(json.load(open(sys.argv[1])).get("violators", [])))
+except Exception:
+    print(0)' "$CANDIDATES" 2>/dev/null || echo 0)"
+fi
+
+triage_banner() {
   cat >&2 <<EOF
 
 $hr
-⚠  TEST BUDGET EXCEEDED — '$LABEL' took ${ELAPSED}s (budget ${BUDGET}s).
-
-The per-change suite must stay under ${BUDGET}s or it stops being a per-change
-suite. Something heavy has crept into it.
+⚠  $1
 
 REQUIRED NEXT STEP (agents): launch the triage subagent — do not just move on.
     Agent tool, subagent_type "general-purpose", following
@@ -170,8 +204,17 @@ they only run in a test-dedicated session.
 Slowest unmarked tests: $CANDIDATES
 $hr
 EOF
-elif [[ "$SLOW" != "1" ]]; then
-  printf '\ntest budget: %ss / %ss ok\n' "$ELAPSED" "$BUDGET" >&2
+}
+
+if [[ "$n_violators" -gt 0 ]]; then
+  triage_banner "HEAVY TEST IN THE FAST SUITE — ${n_violators} unmarked test(s) over the per-test budget ('$LABEL', ${ELAPSED}s total)."
+elif [[ "$ELAPSED" -gt "$BUDGET" ]]; then
+  triage_banner "FAST SUITE TOO SLOW — '$LABEL' took ${ELAPSED}s (backstop ${BUDGET}s), with no single test over the per-test budget. The suite has gotten fat in aggregate."
+elif [[ "$ELAPSED" -gt "$SOFT_BUDGET" ]]; then
+  printf '\ntest time: %ss (over the %ss soft mark, under the %ss backstop — no action needed)\n' \
+    "$ELAPSED" "$SOFT_BUDGET" "$BUDGET" >&2
+else
+  printf '\ntest time: %ss / %ss ok\n' "$ELAPSED" "$SOFT_BUDGET" >&2
 fi
 
 exit $RC

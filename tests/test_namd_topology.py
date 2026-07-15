@@ -167,7 +167,7 @@ def test_write_segment_pdbs_unique_segids_and_aligned_resids(tmp_path) -> None:
 
 # ── crossover extra bases thread inline in the psfgen residue numbering ────────
 #   psfgen bonds residues in seq_num order.  _build_extra_base_atoms appends the
-#   inserts at the END of each chain's range; without _thread_extra_bases_inline
+#   inserts at the END of each chain's range; without _thread_inserts_inline
 #   psfgen would bond the last insert of one crossover to the first insert of the
 #   NEXT (a 50 Å junk O3'→P bond) instead of prev_real → eb → eb → next_real.
 
@@ -190,7 +190,7 @@ def _routed_6hb_with_extra(sequence="TT"):
 def test_extra_bases_thread_inline_in_seq_num() -> None:
     """Every insert sits immediately after its source-flank nucleotide in the
     chain's seq_num order (insert.seq_num == flank.seq_num + k + 1), NOT clustered
-    at the chain tail.  Can-go-red: without _thread_extra_bases_inline the inserts
+    at the chain tail.  Can-go-red: without _thread_inserts_inline the inserts
     keep their end-appended seq_num far past every real residue."""
 
     from backend.core.atomistic import build_atomistic_model

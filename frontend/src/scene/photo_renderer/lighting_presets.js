@@ -12,6 +12,22 @@ import * as THREE from 'three'
 // ── Preset descriptors ────────────────────────────────────────────────────────
 
 export const LIGHTING_PRESETS = {
+  // The molecular-figure rig (ChimeraX "ambient" lighting mode). There is no
+  // key light and no light *direction* to speak of: shape is carried by ambient
+  // occlusion (turn on Occlusion shading) and by the outline pass, not by a
+  // highlight. The three weak directionals are a multi-direction fill, spread
+  // wide so none of them reads as a key — they only stop the structure from
+  // going completely flat when occlusion is off. Pair with the `flat` materials.
+  ambient: {
+    label: 'Ambient (occlusion-only, figure)',
+    ambient: { color: 0xffffff, intensity: 0.75 },
+    lights: [
+      { color: 0xffffff, intensity: 0.18, position: [ 10,  10,  10] },
+      { color: 0xffffff, intensity: 0.18, position: [-10,   4,  -8] },
+      { color: 0xffffff, intensity: 0.18, position: [  2, -10,   6] },
+    ],
+  },
+
   scientific: {
     label: 'Scientific',
     ambient: { color: 0xffffff, intensity: 0.5 },

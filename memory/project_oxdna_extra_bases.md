@@ -6,6 +6,15 @@ configuration. Before this work they reached only the atomistic/GROMACS path
 (`atomistic.py` `_build_extra_base_atoms`); the oxDNA writer ignored them, so a CG
 relaxation of a design with extra bases was byte-identical to one without.
 
+> **SIBLING FEATURE — read it if you touch the walk, the native seed, or any `__xb__` key
+> filter:** [project_strand_extensions_sim](project_strand_extensions_sim.md). Strand
+> extensions (5′/3′ ssDNA tails) now flow through the SAME `_walk_strand_nucleotides`,
+> `topology_rows` and `resolved_nuc_map`. Two things there generalise a rule stated here:
+> per-nucleotide sequence assignment keys off `step.base_override is not None` (NOT
+> `is_extra_base` — extensions carry an override too), and a tail key is a 3-tuple whose
+> `bp_index` is an ordinary `int >= 0`, so `isinstance(k[1], int)` filters written to catch
+> `__xb__` do **not** catch it. Use `is_synthetic_nuc_key()`.
+
 ## What it does
 
 All wiring is in `backend/physics/oxdna_interface.py`:

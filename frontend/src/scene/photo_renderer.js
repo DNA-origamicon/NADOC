@@ -33,6 +33,7 @@ import { PRESETS, makeMaterial, makeFluorophoreEmissive } from './photo_renderer
 import { LIGHTING_PRESETS, applyLighting } from './photo_renderer/lighting_presets.js'
 import { createComposer }                  from './photo_renderer/post_processing.js'
 import { createFloor }                     from './photo_renderer/floor.js'
+import { dollyDistanceForFov, PARALLEL_FOV, PERSPECTIVE_FOV } from './photo_renderer/figure_camera.js'
 import { showToast }                       from '../ui/toast.js'
 import { RoomEnvironment }                 from 'three/addons/environments/RoomEnvironment.js'
 import { RGBELoader }                      from 'three/addons/loaders/RGBELoader.js'
@@ -63,10 +64,108 @@ function _inferRepr(obj) {
   return 'full'
 }
 
+// ── Factory-default settings ─────────────────────────────────────────────────
+// The single source of truth for "what photo mode looks like out of the box".
+// Each renderer instance starts from a copy (`_settings` below); the photo
+// panel's Reset button applies this same object through the profile-apply path,
+// so a reset lands exactly where a fresh install does.
+export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
+  lighting:  'studio',
+  lightingYaw:   0,    // deg; rotates the photo light rig around scene Y
+  lightingPitch: 0,    // deg; tilts the rig around scene X (after yaw)
+  full:      'matte',
+  cylinders: 'matte',
+  surface:   'gummy',
+  atomistic: 'cpk-matte',
+  bgType:    'transparent',
+  bgColor:   '#ffffff',
+  ssao:      true,
+  bloom:     false,
+  bloomStrength: 0.5,
+  bloomRadius:   0.4,
+  bloomThreshold: 0.85,
+  exposure:   1.0,    // filmic tone-mapping exposure (renderer.toneMappingExposure)
+  fov:        null,   // null = keep current
+  pathTracing: false,
+
+  // ── Figure controls (the "publication" look — see photo_renderer/figure_pass.js
+  // and photo_renderer/style_presets.js). Each is INDEPENDENT; the Publication
+  // style preset is just a bundle that switches the right ones on.
+
+  // Silhouette outline — the single biggest publication-look lever. A dark
+  // contour at depth/normal discontinuities, so overlapping helices separate
+  // without lighting having to do it.
+  outline:                  false,
+  outlineColor:             '#1b1f24',
+  outlineStrength:          1.0,    // 0..1 contour opacity
+  outlineThickness:         1.4,    // px
+  outlineDepthSensitivity:  0.35,   // silhouettes (lower = more contours)
+  outlineCreaseSensitivity: 0.85,   // creases within one surface
+
+  // Depth cue — distance fade toward a flat colour so the back of a thick
+  // bundle recedes. The fade window tracks the scene bbox, not the camera
+  // distance, so it behaves identically at any FOV.
+  depthCue:         false,
+  depthCueColor:    '#ffffff',
+  depthCueStrength: 0.35,   // 0..1 fade at the far edge of the structure
+
+  // Occlusion shading (GTAO) — proper ambient occlusion, strong enough to be
+  // the PRIMARY shading cue under the flat/ambient figure rig. Distinct from
+  // the `ssao` garnish, which stays as-is for the photoreal styles.
+  ao:          false,
+  aoRadius:    2.0,   // nm — reaches between neighbouring helices in a bundle
+  aoIntensity: 1.0,
+
+  // Near-parallel ("long lens") projection — kills the vanishing point without
+  // swapping in a real OrthographicCamera. See photo_renderer/figure_camera.js
+  // for why that trade was made.
+  parallel: false,
+  fluorophoreEmissive:  false,
+  fluorophoreIntensity: 5.0,
+  environment:           'room',  // 'off' | 'room' | 'file' — default to a neutral
+                                   // studio so metallic/glossy PBR presets actually
+                                   // reflect (metalness=1 with no env renders dark).
+                                   // Reflections only; background follows bgType.
+  environmentName:       'Room Studio',  // human-readable identifier
+  environmentBackground: false,
+  translucency:          0.0,     // 0..1, applied to full + cylinders reps
+  envEffect:             'none',  // 'none' | 'mist'
+  mistDensity:           0.05,    // scattering coefficient per scene unit (nm⁻¹)
+  mistColor:             '#cad3e0',// tint applied to inscatter
+  mistHaloIntensity:     1.0,     // overall scatter multiplier (drives uScatter uniform)
+  mistNoiseContrast:     0.0,     // 0 = uniform mist; 1 = density swings 0..2× the base
+  mistNoiseScale:        0.05,    // noise frequency in 1/nm; lower = bigger wisps (~20 nm at 0.05)
+  mistNoiseSpeed:        0.0,     // drift speed; 0 = static noise
+
+  // Sun — independent directional light steered by polar coords relative to
+  // the chosen floor's normal (or world +Y if no floor). Lets the user place
+  // a shadow exactly where they want; preset rig keeps providing fill/rim.
+  sun:           false,           // sun enabled (off by default to preserve existing profiles)
+  sunAzimuth:    135,             // deg, around the floor normal (0 = world +X projected onto floor)
+  sunElevation:  35,              // deg, above the floor plane (0 = grazing; 90 = straight down toward floor)
+  sunStrength:   1.5,
+  sunColor:      '#ffffff',
+
+  // Floor (resting surface) — off by default. See photo_renderer/floor.js.
+  floor:           'off',         // 'off' | '-y' | '+y' | '-x' | '+x' | '-z' | '+z'
+  floorMaterial:   'matte',       // 'matte' | 'glossy' | 'metallic' | 'mirror' | 'shadow-catcher'
+  floorColor:      '#888888',
+  floorOpacity:    1.0,
+  floorSize:       2.0,           // (deprecated) plane is now effectively infinite; kept for old profiles
+  floorOffset:     0.0,           // additional offset along outward normal (nm)
+  floorShadows:    true,          // cast rig shadows onto the floor
+  floorGrid:       false,         // overlay a GridHelper on the floor
+  floorGridDensity: 10,           // grid cells per bbox diameter (higher = finer)
+  floorGridNeon:   false,         // 80s-vaporwave neon style for the grid
+  floorGridColor:  '#ff00ff',     // neon colour (magenta default)
+  floorGridGlow:   3.0,           // HDR multiplier on neon grid colour (drives Bloom)
+  floorGridFade:   1.5,           // grid fade reach (× the base camera-height window; higher = grid extends farther before dissolving)
+})
+
 // ── Photo renderer factory ────────────────────────────────────────────────────
 
 export function createPhotoRenderer(sceneCtx) {
-  const { scene, camera, renderer, setRenderFn, resetRenderFn } = sceneCtx
+  const { scene, camera, renderer, controls, setRenderFn, resetRenderFn } = sceneCtx
 
   let _active          = false
   let _composerHandle  = null   // { composer, ssaoPass, bloomPass, setSize, dispose }
@@ -90,66 +189,8 @@ export function createPhotoRenderer(sceneCtx) {
   const _FLUORO_LIGHT_GAIN = 12.0
 
   // ── Current settings (persisted across activate/deactivate for UI binding) ──
-  const _settings = {
-    lighting:  'studio',
-    lightingYaw:   0,    // deg; rotates the photo light rig around scene Y
-    lightingPitch: 0,    // deg; tilts the rig around scene X (after yaw)
-    full:      'matte',
-    cylinders: 'matte',
-    surface:   'gummy',
-    atomistic: 'cpk-matte',
-    bgType:    'transparent',
-    bgColor:   '#ffffff',
-    ssao:      true,
-    bloom:     false,
-    bloomStrength: 0.5,
-    bloomRadius:   0.4,
-    bloomThreshold: 0.85,
-    exposure:   1.0,    // filmic tone-mapping exposure (renderer.toneMappingExposure)
-    fov:        null,   // null = keep current
-    ortho:      false,
-    pathTracing: false,
-    fluorophoreEmissive:  false,
-    fluorophoreIntensity: 5.0,
-    environment:           'room',  // 'off' | 'room' | 'file' — default to a neutral
-                                     // studio so metallic/glossy PBR presets actually
-                                     // reflect (metalness=1 with no env renders dark).
-                                     // Reflections only; background follows bgType.
-    environmentName:       'Room Studio',  // human-readable identifier
-    environmentBackground: false,
-    translucency:          0.0,     // 0..1, applied to full + cylinders reps
-    envEffect:             'none',  // 'none' | 'mist'
-    mistDensity:           0.05,    // scattering coefficient per scene unit (nm⁻¹)
-    mistColor:             '#cad3e0',// tint applied to inscatter
-    mistHaloIntensity:     1.0,     // overall scatter multiplier (drives uScatter uniform)
-    mistNoiseContrast:     0.0,     // 0 = uniform mist; 1 = density swings 0..2× the base
-    mistNoiseScale:        0.05,    // noise frequency in 1/nm; lower = bigger wisps (~20 nm at 0.05)
-    mistNoiseSpeed:        0.0,     // drift speed; 0 = static noise
-
-    // Sun — independent directional light steered by polar coords relative to
-    // the chosen floor's normal (or world +Y if no floor). Lets the user place
-    // a shadow exactly where they want; preset rig keeps providing fill/rim.
-    sun:           false,           // sun enabled (off by default to preserve existing profiles)
-    sunAzimuth:    135,             // deg, around the floor normal (0 = world +X projected onto floor)
-    sunElevation:  35,              // deg, above the floor plane (0 = grazing; 90 = straight down toward floor)
-    sunStrength:   1.5,
-    sunColor:      '#ffffff',
-
-    // Floor (resting surface) — off by default. See photo_renderer/floor.js.
-    floor:           'off',         // 'off' | '-y' | '+y' | '-x' | '+x' | '-z' | '+z'
-    floorMaterial:   'matte',       // 'matte' | 'glossy' | 'metallic' | 'mirror' | 'shadow-catcher'
-    floorColor:      '#888888',
-    floorOpacity:    1.0,
-    floorSize:       2.0,           // (deprecated) plane is now effectively infinite; kept for old profiles
-    floorOffset:     0.0,           // additional offset along outward normal (nm)
-    floorShadows:    true,          // cast rig shadows onto the floor
-    floorGrid:       false,         // overlay a GridHelper on the floor
-    floorGridDensity: 10,           // grid cells per bbox diameter (higher = finer)
-    floorGridNeon:   false,         // 80s-vaporwave neon style for the grid
-    floorGridColor:  '#ff00ff',     // neon colour (magenta default)
-    floorGridGlow:   3.0,           // HDR multiplier on neon grid colour (drives Bloom)
-    floorGridFade:   1.5,           // grid fade reach (× the base camera-height window; higher = grid extends farther before dissolving)
-  }
+  // Starts as a mutable copy of the module-level factory defaults.
+  const _settings = { ...DEFAULT_PHOTO_SETTINGS }
 
   // Environment state — kept separately so we can restore on deactivate and
   // re-bake against the offscreen renderer during export.
@@ -180,6 +221,31 @@ export function createPhotoRenderer(sceneCtx) {
   const _savedCastShadow     = new Map()   // mesh → original castShadow
   let _shadowRigApplied      = false       // tracks whether rig changes are live
 
+  // ── Figure state (outline / depth cue / occlusion / parallel) ─────────────
+  // The eight corners of the drawable scene's bounding box, refreshed on
+  // activate + whenever the meshes are rebuilt. Each frame they are projected
+  // onto the camera's forward axis to get the depth-cue window (_pushCueRangeTo):
+  // the fade then spans exactly the STRUCTURE's extent along the view direction.
+  //
+  // Why the corners and not a bounding sphere (which is what this was first
+  // written with): a sphere is orientation-blind, so for a long thin bundle
+  // viewed side-on it reports the ROD'S LENGTH as the depth extent when the
+  // actual depth is the rod's diameter — an order of magnitude too wide. The
+  // fade window then started at the camera and washed the whole structure out.
+  // Projecting the box is exact for any view, and it costs 8 dot products.
+  //
+  // Anchoring to the structure (rather than to a fraction of the camera
+  // distance) is also what lets the cue survive the near-parallel projection,
+  // where camera distance balloons ~7× but the structure's own depth doesn't.
+  let _cueCorners  = null   // Vector3[8] | null
+  let _cueDiagonal = 0      // nm — the design's bbox diagonal (the cue window LENGTH)
+  const _camScratch     = new THREE.Vector3()
+  const _camForward     = new THREE.Vector3()
+  const _cueVecScratch  = new THREE.Vector3()
+  // Camera FOV on entry, so exiting photo mode restores the editor's projection
+  // (the parallel toggle drives FOV down to 8° and dollies out to match).
+  let _savedFov = null
+
   // ── Path tracing state ────────────────────────────────────────────────────
   let _ptRenderer    = null
   let _ptFsQuad      = null   // FullScreenQuad for blitting PT result
@@ -187,6 +253,43 @@ export function createPhotoRenderer(sceneCtx) {
   let _ptBuilding    = false
   let _ptEnabled     = false
   let _onSamplesUpdate = null  // callback(count) from panel
+
+  // ── Render-loop throttle (raster path only) ───────────────────────────────
+  // The photo composer re-rasterises the whole (heavy) scene 4-6× per frame
+  // (SSAO + GTAO + outline + inscatter + bloom).  Running that every animation
+  // frame — even parked on a static structure — is what made switching to an
+  // atomistic/surface rep in photo mode feel frozen.  So:
+  //   • _dirty gate — skip the composite entirely when nothing changed (the last
+  //     frame persists on the canvas); a low-rate keepalive still redraws so a
+  //     scene change we weren't told about (e.g. a live-sim frame applied while
+  //     the camera is parked) still appears within a fraction of a second.
+  //   • preview quality — while the camera is moving, draw ONE plain raster (no
+  //     post chain) instead of the full composite, then snap back to full quality
+  //     a few still frames after motion stops.
+  const _lastCam = new THREE.Matrix4()
+  let _camPrimed  = false
+  let _dirty      = true   // a full-quality frame is owed
+  let _previewing = false  // currently drawing cheap interactive previews
+  let _idleFrames = 0      // consecutive frames with no camera motion
+  const _PREVIEW_SETTLE_FRAMES = 3     // still frames before we redraw at full quality
+  const _IDLE_KEEPALIVE_FRAMES = 20    // force a redraw at least this often when idle (~3 Hz)
+
+  /** True if the camera moved since the last check; refreshes the snapshot. */
+  function _cameraMoved() {
+    camera.updateMatrixWorld()
+    if (_camPrimed && _lastCam.equals(camera.matrixWorld)) return false
+    _lastCam.copy(camera.matrixWorld)
+    _camPrimed = true
+    return true
+  }
+
+  /** Mark the scene dirty so the next frame redraws at full quality (and restart
+   *  path-trace accumulation when it's on). Replaces the old scattered
+   *  `_invalidate()`. */
+  function _invalidate() {
+    _dirty = true
+    if (_ptEnabled && _ptRenderer) { _ptRenderer.reset(); _ptSamples = 0 }
+  }
 
   // ── Background helpers ────────────────────────────────────────────────────
 
@@ -296,6 +399,9 @@ export function createPhotoRenderer(sceneCtx) {
     // Rebuild the floor (recomputes bbox + refits shadow cameras to the new
     // geometry) and re-flag every mesh if shadows are live.
     if (_settings.floor !== 'off') _rebuildFloor()
+    // New meshes → new bounds → the depth-cue window has to be re-measured
+    // (e.g. the export-representation upgrade replaces every assembly mesh).
+    _refreshCueBox()
   }
 
   // ── Environment (HDRI) ────────────────────────────────────────────────────
@@ -385,14 +491,14 @@ export function createPhotoRenderer(sceneCtx) {
     _applyEnvToScene()
     console.log(`[photo] setEnvironment(${mode}) → ${_settings.environmentName || 'off'}`)
     showToast(`Environment: ${_settings.environmentName || 'off'}`, 2200)
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setEnvironmentBackground(enabled) {
     _settings.environmentBackground = enabled
     if (!_active) return
     _applyBackground()
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   // ── Translucency override (full + cylinders reps) ─────────────────────────
@@ -423,7 +529,7 @@ export function createPhotoRenderer(sceneCtx) {
       const repr = MESH_NAME_TO_REPR[obj.name] ?? _inferRepr(obj)
       _applyTranslucencyOverride(obj.material, repr)
     })
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   // ── Environmental effects (volumetric inscatter / mist) ───────────────────
@@ -731,11 +837,11 @@ export function createPhotoRenderer(sceneCtx) {
     if (_shadowRigApplied) _enableRigShadows()
   }
 
-  function setSun(on)             { _settings.sun          = !!on; _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
-  function setSunAzimuth(deg)     { _settings.sunAzimuth   = deg;  _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
-  function setSunElevation(deg)   { _settings.sunElevation = deg;  _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
-  function setSunStrength(v)      { _settings.sunStrength  = v;    _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
-  function setSunColor(hex)       { _settings.sunColor     = hex;  _applySun(); if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 } }
+  function setSun(on)             { _settings.sun          = !!on; _applySun(); _invalidate() }
+  function setSunAzimuth(deg)     { _settings.sunAzimuth   = deg;  _applySun(); _invalidate() }
+  function setSunElevation(deg)   { _settings.sunElevation = deg;  _applySun(); _invalidate() }
+  function setSunStrength(v)      { _settings.sunStrength  = v;    _applySun(); _invalidate() }
+  function setSunColor(hex)       { _settings.sunColor     = hex;  _applySun(); _invalidate() }
 
   // Flip castShadow=true on every scene mesh that can safely participate in
   // depth-only shadow rendering. Skips: helper lines, additive sprites, shared-
@@ -790,7 +896,7 @@ export function createPhotoRenderer(sceneCtx) {
     // Sun's "up" axis is the floor normal and its target is the bbox centre —
     // both change with the floor, so re-place it whenever the floor rebuilds.
     _applySun()
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setFloor(axis) {
@@ -809,6 +915,149 @@ export function createPhotoRenderer(sceneCtx) {
   function setFloorGridColor(hex) { _settings.floorGridColor = hex; _rebuildFloor() }
   function setFloorGridGlow(v)    { _settings.floorGridGlow  = v;   _rebuildFloor() }
   function setFloorGridFade(v)    { _settings.floorGridFade  = v;   _rebuildFloor() }
+
+  // ── Figure pass: outline + depth cue ──────────────────────────────────────
+
+  function _figurePass() { return _composerHandle?.figurePass ?? null }
+  function _gtaoPass()   { return _composerHandle?.gtaoPass   ?? null }
+
+  /** Recompute the scene bbox corners + diagonal the depth-cue window uses. */
+  function _refreshCueBox() {
+    const box = _floor.computeSceneBBox?.()
+    if (!box || box.isEmpty() || !Number.isFinite(box.min.x)) {
+      _cueCorners = null
+      _cueDiagonal = 0
+      return
+    }
+    const { min, max } = box
+    _cueCorners = [
+      new THREE.Vector3(min.x, min.y, min.z), new THREE.Vector3(max.x, min.y, min.z),
+      new THREE.Vector3(min.x, max.y, min.z), new THREE.Vector3(max.x, max.y, min.z),
+      new THREE.Vector3(min.x, min.y, max.z), new THREE.Vector3(max.x, min.y, max.z),
+      new THREE.Vector3(min.x, max.y, max.z), new THREE.Vector3(max.x, max.y, max.z),
+    ]
+    _cueDiagonal = Math.max(max.distanceTo(min), 1e-3)
+  }
+
+  /** Depth-cue window for the CURRENT camera pose.
+   *
+   *  START: the nearest corner of the structure along the view axis — so the
+   *  fade always begins at the front of the object, whatever the camera does.
+   *
+   *  LENGTH: the bounding box DIAGONAL — a constant for the design, NOT the
+   *  depth extent of the current view. This is the load-bearing choice. Scaling
+   *  the window to the current depth extent (the obvious thing, and what this
+   *  did first) normalizes every view to a full 0→1 fade, so a flat subject
+   *  seen side-on gets the same total wash as a deep bundle seen end-on — the
+   *  cue desaturates a thin helix for no reason. Against a fixed length, depth
+   *  cue does what it is supposed to: near-nothing on a shallow view, strong
+   *  when you are actually looking down the depth of a thick structure.
+   *
+   *  Pushed every frame (and per export tile) because the near corner tracks
+   *  the camera. */
+  function _pushCueRangeTo(pass) {
+    if (!pass || !_cueCorners) return
+    camera.getWorldDirection(_camForward)
+    let near = Infinity
+    for (const corner of _cueCorners) {
+      const d = _cueVecScratch.subVectors(corner, camera.position).dot(_camForward)
+      if (d < near) near = d
+    }
+    // The camera can sit inside the box (a close-up), which puts corners behind
+    // it — clamp to the near plane so the fade never starts behind the viewer.
+    near = Math.max(near, camera.near)
+    pass.setCueRange(near, near + _cueDiagonal)
+  }
+
+  /** Push every outline/depth-cue setting into a figure pass and set its
+   *  `enabled` (EffectComposer skips a disabled pass entirely, so both effects
+   *  off = no depth pre-pass, no cost). Used for the live composer AND for the
+   *  per-export composers — which is what keeps preview and export in sync. */
+  function _pushFigureParamsTo(pass) {
+    if (!pass) return
+    pass.setParams({
+      outline:                  _settings.outline,
+      outlineColor:             _settings.outlineColor,
+      outlineStrength:          _settings.outlineStrength,
+      outlineThickness:         _settings.outlineThickness,
+      outlineDepthSensitivity:  _settings.outlineDepthSensitivity,
+      outlineCreaseSensitivity: _settings.outlineCreaseSensitivity,
+      depthCue:                 _settings.depthCue,
+      depthCueColor:            _settings.depthCueColor,
+      depthCueStrength:         _settings.depthCueStrength,
+    })
+    _pushCueRangeTo(pass)
+    pass.enabled = pass.hasEffect()
+  }
+
+  function _applyFigure() {
+    if (!_active) return
+    if (_settings.depthCue && !_cueCorners) _refreshCueBox()
+    _pushFigureParamsTo(_figurePass())
+    _invalidate()
+  }
+
+  function setOutline(on)         { _settings.outline = !!on; if (on) _refreshCueBox(); _applyFigure() }
+  function setOutlineColor(hex)   { _settings.outlineColor    = hex; _applyFigure() }
+  function setOutlineStrength(v)  { _settings.outlineStrength = v;   _applyFigure() }
+  function setOutlineThickness(v) { _settings.outlineThickness = v;  _applyFigure() }
+  function setOutlineSensitivity({ depth, crease } = {}) {
+    if (depth  !== undefined) _settings.outlineDepthSensitivity  = depth
+    if (crease !== undefined) _settings.outlineCreaseSensitivity = crease
+    _applyFigure()
+  }
+  function setDepthCue(on)        { _settings.depthCue = !!on; if (on) _refreshCueBox(); _applyFigure() }
+  function setDepthCueColor(hex)  { _settings.depthCueColor    = hex; _applyFigure() }
+  function setDepthCueStrength(v) { _settings.depthCueStrength = v;   _applyFigure() }
+
+  // ── Occlusion shading (GTAO) ──────────────────────────────────────────────
+
+  function _pushAOParamsTo(pass) {
+    if (!pass) return
+    pass.blendIntensity = _settings.aoIntensity
+    pass.updateGtaoMaterial({ radius: _settings.aoRadius })
+    pass.enabled = !!_settings.ao
+  }
+
+  function _applyAO() {
+    if (!_active) return
+    _pushAOParamsTo(_gtaoPass())
+    _invalidate()
+  }
+
+  function setAO(on)         { _settings.ao          = !!on; _applyAO() }
+  function setAORadius(v)    { _settings.aoRadius    = v;    _applyAO() }
+  function setAOIntensity(v) { _settings.aoIntensity = v;    _applyAO() }
+
+  // ── Near-parallel projection ──────────────────────────────────────────────
+
+  /** Change FOV while keeping the subject the same size on screen, by dollying
+   *  the camera along its view axis. Without the dolly, dragging FOV down to 8°
+   *  would simply zoom the structure to fill the screen, which is not what the
+   *  control is for. See photo_renderer/figure_camera.js. */
+  function _applyFovWithDolly(newFov) {
+    const target = controls?.target
+    const oldFov = camera.fov
+    if (target && Number.isFinite(oldFov) && oldFov > 0) {
+      const dist = camera.position.distanceTo(target)
+      const newDist = dollyDistanceForFov(dist, oldFov, newFov)
+      if (dist > 1e-6 && Number.isFinite(newDist)) {
+        _camScratch.subVectors(camera.position, target).normalize().multiplyScalar(newDist)
+        camera.position.copy(target).add(_camScratch)
+      }
+    }
+    camera.fov = newFov
+    camera.updateProjectionMatrix()
+    controls?.update?.()
+    _invalidate()
+  }
+
+  function setParallel(on) {
+    _settings.parallel = !!on
+    _settings.fov = on ? PARALLEL_FOV : PERSPECTIVE_FOV
+    if (!_active) return
+    _applyFovWithDolly(_settings.fov)
+  }
 
   // ── Path tracer ───────────────────────────────────────────────────────────
 
@@ -916,15 +1165,19 @@ export function createPhotoRenderer(sceneCtx) {
     renderer.toneMapping         = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = _settings.exposure
 
-    // Save and optionally override FOV
-    if (_settings.fov != null) {
-      camera.fov = _settings.fov
-      camera.updateProjectionMatrix()
+    // Save the editor's FOV so deactivate() can restore the projection, then
+    // apply the photo FOV with a dolly so the framing the user set is kept.
+    _savedFov = camera.fov
+    if (_settings.fov != null && _settings.fov !== camera.fov) {
+      _applyFovWithDolly(_settings.fov)
     }
 
     // Build EffectComposer
     _composerHandle = createComposer(renderer, scene, camera, {
       ssao:          _settings.ssao,
+      ao:            _settings.ao,
+      aoRadius:      _settings.aoRadius,
+      aoIntensity:   _settings.aoIntensity,
       bloom:         _settings.bloom,
       bloomStrength: _settings.bloomStrength,
       bloomRadius:   _settings.bloomRadius,
@@ -952,6 +1205,12 @@ export function createPhotoRenderer(sceneCtx) {
     // Sun light is independent of the preset rig; build it after the floor so
     // it can use the floor's bbox/normal. No-op when `sun` is false.
     _applySun()
+
+    // Figure controls (outline / depth cue / occlusion shading). The cue window
+    // needs the scene bounds, so measure them once the scene is final.
+    _refreshCueBox()
+    _pushFigureParamsTo(_figurePass())
+    _pushAOParamsTo(_gtaoPass())
 
     // Override render loop — sync fluoro lights and (when mist is on) push light
     // uniforms to the inscatter pass each frame so halos track design moves.
@@ -1001,6 +1260,14 @@ export function createPhotoRenderer(sceneCtx) {
       _savedToneMapping = null
     }
 
+    // Restore the editor's projection. Done WITH a dolly so the user keeps
+    // whatever framing they orbited to inside photo mode — only the lens
+    // changes back, not the shot. (Without this, exiting a parallel-projection
+    // render would leave the editor stuck at an 8° FOV, 7× too far out.)
+    if (_savedFov != null && camera.fov !== _savedFov) _applyFovWithDolly(_savedFov)
+    _savedFov  = null
+    _cueCorners = null
+
     // Dispose composer
     _composerHandle?.dispose()
     _composerHandle = null
@@ -1026,14 +1293,14 @@ export function createPhotoRenderer(sceneCtx) {
     // applyLighting() recreates the directional lights with castShadow=false,
     // so re-apply the shadow rig if a floor with shadows is live.
     if (_shadowRigApplied) _enableRigShadows()
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setLightingDirection(yawDeg, pitchDeg) {
     if (yawDeg   != null) _settings.lightingYaw   = yawDeg
     if (pitchDeg != null) _settings.lightingPitch = pitchDeg
     _applyLightingRotation()
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setFluorophoreEmissive(enabled, intensity) {
@@ -1066,7 +1333,7 @@ export function createPhotoRenderer(sceneCtx) {
         : `Fluorophores → off`,
       2400,
     )
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setFluorophoreIntensity(intensity) {
@@ -1079,7 +1346,7 @@ export function createPhotoRenderer(sceneCtx) {
     })
     const lightIntensity = intensity * _FLUORO_LIGHT_GAIN
     for (const l of _fluoroLights) l.intensity = lightIntensity
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   // ── Environmental effect setters ─────────────────────────────────────────
@@ -1196,7 +1463,7 @@ export function createPhotoRenderer(sceneCtx) {
         : `Photo ${repr}: ${presetName} → ${updated} meshes`
     showToast(msg, 2200)
 
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setBackground(type, color = '#ffffff') {
@@ -1206,12 +1473,44 @@ export function createPhotoRenderer(sceneCtx) {
   }
 
   function _installComposerRenderFn() {
+    // Prime the throttle so the FIRST frame renders full quality (no motion, one
+    // full-quality debt) rather than flashing an unstyled preview on entry.
+    camera.updateMatrixWorld()
+    _lastCam.copy(camera.matrixWorld)
+    _camPrimed  = true
+    _dirty      = true
+    _previewing = false
+    _idleFrames = _PREVIEW_SETTLE_FRAMES
     setRenderFn(() => {
+      const moved = _cameraMoved()
+      if (moved) { _idleFrames = 0; _previewing = true; _dirty = true }
+      else       { _idleFrames++ }
+
+      // A few still frames after motion stops → drop the preview and render the
+      // final full-quality frame (the outstanding _dirty debt drives it).
+      if (_previewing && !moved && _idleFrames >= _PREVIEW_SETTLE_FRAMES) _previewing = false
+
+      // Idle with nothing owed: skip the composite (the last frame persists on
+      // the canvas). A slow keepalive still redraws so an untracked scene change
+      // (e.g. a live-sim frame applied while parked) appears within ~0.3 s.
+      if (!_previewing && !_dirty && (_idleFrames % _IDLE_KEEPALIVE_FRAMES) !== 0) return
+
+      if (_previewing) {
+        // Cheap interactive preview: a single plain raster, no post chain. Keeps
+        // orbiting/dollying responsive on heavy atomistic/surface geometry.
+        renderer.resetState?.()
+        renderer.render(scene, camera)
+        return
+      }
+
       _syncFluoroLights()
       if (_settings.envEffect === 'mist') {
         _gatherLightsForInscatter()
         _pushLightsTo(_inscatterPass())
       }
+      // The depth-cue window is a function of where the camera is relative to
+      // the structure, so it has to be refreshed as the user orbits/dollies.
+      if (_settings.depthCue) _pushCueRangeTo(_figurePass())
       // Flush WebGLState's texture-unit binding cache before the composer
       // touches the scene. Without this, the bloom pass's heavy texture-unit
       // churn (5-level mip chain + high-pass + composite) can desync the
@@ -1222,6 +1521,7 @@ export function createPhotoRenderer(sceneCtx) {
       // happens to keep the relevant binding stable enough to avoid the bug.
       renderer.resetState?.()
       _composerHandle.composer.render()
+      _dirty = false
     })
   }
 
@@ -1243,7 +1543,7 @@ export function createPhotoRenderer(sceneCtx) {
     if (!_active) return
     const p = _composerHandle?.ssaoPass
     if (p) p.enabled = !!enabled
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setBloom(enabled, strength, radius, threshold) {
@@ -1258,14 +1558,16 @@ export function createPhotoRenderer(sceneCtx) {
     bp.strength  = _settings.bloomStrength
     bp.radius    = _settings.bloomRadius
     bp.threshold = _settings.bloomThreshold
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function setFOV(fov) {
     _settings.fov = fov
+    // A FOV at or below the parallel threshold IS the parallel projection —
+    // keep the flag (and therefore the checkbox) honest either way.
+    _settings.parallel = fov <= PARALLEL_FOV
     if (!_active) return
-    camera.fov = fov
-    camera.updateProjectionMatrix()
+    _applyFovWithDolly(fov)
   }
 
   // Master exposure for filmic tone mapping. Higher = brighter before roll-off.
@@ -1273,7 +1575,7 @@ export function createPhotoRenderer(sceneCtx) {
     _settings.exposure = v
     if (!_active) return
     renderer.toneMappingExposure = v
-    if (_ptEnabled) { _ptRenderer?.reset(); _ptSamples = 0 }
+    _invalidate()
   }
 
   function enablePathTracing(enabled) {
@@ -1302,6 +1604,12 @@ export function createPhotoRenderer(sceneCtx) {
       bloomThreshold: h.bloomPass?.threshold,
       ssao:           !!h.ssaoPass?.enabled,
       mist:           !!h.inscatterPass?.enabled,
+      // Figure pass is enabled iff at least one of outline / depth cue is on.
+      figure:         !!h.figurePass?.enabled,
+      outline:        (h.figurePass?.uniforms?.uOutline?.value ?? 0) > 0.5,
+      depthCue:       (h.figurePass?.uniforms?.uCue?.value ?? 0) > 0.5,
+      ao:             !!h.gtaoPass?.enabled,
+      aoIntensity:    h.gtaoPass?.blendIntensity,
       toneMapping:    renderer.toneMapping,
       exposure:       renderer.toneMappingExposure,
     }
@@ -1383,6 +1691,9 @@ export function createPhotoRenderer(sceneCtx) {
 
     const composerOpts = {
       ssao:           _settings.ssao,
+      ao:             _settings.ao,
+      aoRadius:       _settings.aoRadius,
+      aoIntensity:    _settings.aoIntensity,
       bloom:          _settings.bloom,
       bloomStrength:  _settings.bloomStrength,
       bloomRadius:    _settings.bloomRadius,
@@ -1409,6 +1720,11 @@ export function createPhotoRenderer(sceneCtx) {
       _gatherLightsForInscatter()
       _pushLightsTo(sessionComposer.inscatterPass)
     }
+    // Figure pass + occlusion shading: this session's composer has its own pass
+    // instances in its own GL context, so they need the settings pushed into
+    // them exactly like the live one (same per-renderer rule as the HDRI bake).
+    _pushFigureParamsTo(sessionComposer.figurePass)
+    _pushAOParamsTo(sessionComposer.gtaoPass)
 
     let _disposed = false
 
@@ -1429,6 +1745,7 @@ export function createPhotoRenderer(sceneCtx) {
               _gatherLightsForInscatter()
               _pushLightsTo(sessionComposer.inscatterPass)
             }
+            if (_settings.depthCue) _pushCueRangeTo(sessionComposer.figurePass)
             _syncFluoroLights()
             // Same per-frame state-cache flush we do on the live renderer
             // (see _installComposerRenderFn). Without this, exports of a
@@ -1529,6 +1846,9 @@ export function createPhotoRenderer(sceneCtx) {
 
     const composerOpts = {
       ssao:          _settings.ssao,
+      ao:            _settings.ao,
+      aoRadius:      _settings.aoRadius,
+      aoIntensity:   _settings.aoIntensity,
       bloom:         _settings.bloom,
       bloomStrength: _settings.bloomStrength,
       bloomRadius:   _settings.bloomRadius,
@@ -1562,6 +1882,11 @@ export function createPhotoRenderer(sceneCtx) {
       _gatherLightsForInscatter()
       _pushLightsTo(exportComposer.inscatterPass)
     }
+    // Figure pass + occlusion shading — per-renderer pass instances, same rule
+    // as the env bake: push the settings into THIS composer or the export comes
+    // out without the outline the preview is showing.
+    _pushFigureParamsTo(exportComposer.figurePass)
+    _pushAOParamsTo(exportComposer.gtaoPass)
 
     const origAspect = camera.aspect
     camera.aspect = width / height
@@ -1580,6 +1905,7 @@ export function createPhotoRenderer(sceneCtx) {
             _gatherLightsForInscatter()
             _pushLightsTo(exportComposer.inscatterPass)
           }
+          if (_settings.depthCue) _pushCueRangeTo(exportComposer.figurePass)
           _syncFluoroLights()
           // Match the live render loop's per-frame state-cache flush, otherwise
           // bloom + HDRI + metallic exports can come out fully black.
@@ -1610,10 +1936,12 @@ export function createPhotoRenderer(sceneCtx) {
   function handleResize(width, height) {
     if (!_active || !_composerHandle) return
     _composerHandle.setSize(width, height)
+    _camPrimed = false   // re-prime; a resize invalidates the cached matrix framing
+    _invalidate()
     if (_ptEnabled && _ptRenderer) _ptRenderer.reset()
   }
 
-  return {
+  const _api = {
     activate,
     deactivate,
     setLighting,
@@ -1653,6 +1981,20 @@ export function createPhotoRenderer(sceneCtx) {
     setBloom,
     setFOV,
     setExposure,
+    // Figure controls — each independent; the Publication style preset just
+    // switches the right ones on (see photo_renderer/style_presets.js).
+    setOutline,
+    setOutlineColor,
+    setOutlineStrength,
+    setOutlineThickness,
+    setOutlineSensitivity,
+    setDepthCue,
+    setDepthCueColor,
+    setDepthCueStrength,
+    setAO,
+    setAORadius,
+    setAOIntensity,
+    setParallel,
     getComposerState,
     enablePathTracing,
     onSamplesUpdate,
@@ -1666,6 +2008,11 @@ export function createPhotoRenderer(sceneCtx) {
     renderToBlob,
     beginFrameSession,
     handleResize,
+    // Force the next frame to redraw at full quality. Call after mutating the
+    // scene in a way the render throttle can't detect on its own (e.g. a live
+    // sim frame applied while the camera is parked). The idle keepalive already
+    // catches such changes within ~0.3 s; this makes them instant.
+    invalidate: _invalidate,
 
     // Exposed for debug helpers
     get _composerHandle() { return _composerHandle },
@@ -1673,4 +2020,17 @@ export function createPhotoRenderer(sceneCtx) {
     get PRESETS()         { return PRESETS },
     get LIGHTING_PRESETS(){ return LIGHTING_PRESETS },
   }
+
+  // Every public `set*` mutates how the scene looks, so mark it dirty after it
+  // runs — that way its change redraws immediately even while the render loop is
+  // idle-throttled (see _installComposerRenderFn), without hand-annotating ~30
+  // setter bodies (and without a future setter silently missing the redraw).
+  for (const k of Object.keys(_api)) {
+    if (/^set[A-Z]/.test(k) && typeof _api[k] === 'function') {
+      const fn = _api[k]
+      _api[k] = (...args) => { const r = fn(...args); _invalidate(); return r }
+    }
+  }
+
+  return _api
 }

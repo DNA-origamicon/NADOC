@@ -27,11 +27,17 @@ from backend.core.constants import (
     BDNA_MINOR_GROOVE_ANGLE_RAD,
     BDNA_RISE_PER_BP,
     HELIX_RADIUS,
+    SSDNA_CONTOUR_PER_NT_NM,
 )
 from backend.core.models import Design, Direction
 from backend.core.sequences import _build_loop_skip_map, domain_bp_range
 
 _NM_TO_ANGSTROM = 10.0
+
+# Synthetic helix_id prefix of a strand-extension tail bead — the key the geometry layer,
+# oxDNA and the atomistic model already share (``("__ext_<ext_id>", bead_index, dir)``).
+# Kept in sync with ``oxdna_interface._EXT_PREFIX``.
+_EXT_PREFIX = "__ext_"
 
 
 def mrdna_tool_path() -> str:
@@ -1329,6 +1335,61 @@ def _orientation_matrix(
     return np.column_stack([radial, azimuthal, axis_hat])
 
 
+def _extension_bead_positions(
+    ext,
+    anchor_pos: np.ndarray,
+    radial: np.ndarray,
+    axis_hat: np.ndarray,
+    direction: str,
+) -> List[np.ndarray]:
+    """Ideal backbone positions (Å) of a strand extension's sequence beads, bead
+    ``i`` = distance-rank from the anchor (i=0 nearest the duplex).
+
+    The SAME outward quadratic Bézier the display and oxDNA already lay tails on
+    (``design_geometry._strand_extension_geometry``), recomputed here in the
+    UNDEFORMED helix frame ``_build_nt_arrays`` works in: arc length
+    ``n_total * SSDNA_CONTOUR_PER_NT_NM`` with bead *i* at ``t=(i+1)/n_total``, so
+    consecutive beads sit ~one ssDNA contour length (0.68 nm) apart and the last one
+    lands ON the arc end.  ``n_total`` counts a modification bead if there is one
+    (it occupies the outermost slot in the geometry layer, though it is NOT DNA and
+    never becomes a bead here) — so all three engines put the DNA beads at the same
+    fractions of the same arc.
+
+    The bow is taken in the ANCHOR'S OWN frame (⟂ its outward radial, along the
+    direction the strand was heading), never a world axis: a world bow degenerates
+    when a rotation lines the radial up with it.
+    """
+    from backend.core.design_geometry import _EXT_BOW_FRAC
+
+    n_seq = len(ext.sequence or "")
+    n_total = n_seq + (1 if ext.modification is not None else 0)
+    if n_seq == 0 or n_total == 0:
+        return []
+
+    arc_len = n_total * SSDNA_CONTOUR_PER_NT_NM * _NM_TO_ANGSTROM
+    p0 = np.asarray(anchor_pos, dtype=float)
+    p2 = p0 + radial * arc_len
+
+    chain_tan = axis_hat if direction == 'FORWARD' else -axis_hat
+    bow_dir = chain_tan if ext.end == "three_prime" else -chain_tan
+    bow_dir = bow_dir - float(np.dot(bow_dir, radial)) * radial     # ⟂ radial
+    bow_len = float(np.linalg.norm(bow_dir))
+    if bow_len < 1e-6:      # degenerate frame (tangent ∥ radial): any ⟂ direction
+        bow_dir = np.cross(radial, np.array([0.0, 0.0, 1.0]))
+        if float(np.linalg.norm(bow_dir)) < 1e-6:
+            bow_dir = np.cross(radial, np.array([0.0, 1.0, 0.0]))
+        bow_len = float(np.linalg.norm(bow_dir))
+    bow_dir = bow_dir / bow_len
+
+    p1 = (p0 + p2) * 0.5 + bow_dir * (arc_len * _EXT_BOW_FRAC)
+
+    out: List[np.ndarray] = []
+    for i in range(n_seq):
+        t = (i + 1) / n_total
+        out.append((1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2)
+    return out
+
+
 def _build_nt_arrays(
     design: Design,
     return_nt_key: bool = False,
@@ -1345,6 +1406,12 @@ def _build_nt_arrays(
     orientation: (N,3,3) float — local nucleotide orientation matrices
     seq        : list[str] or None — sequence characters
     nt_key     : dict (h_id, bp_idx, dir_str, k) → index  (only if return_nt_key=True)
+
+    Synthetic beads: crossover extra-base inserts carry NO nt_key (they are keyed only
+    by their flanking real nucleotides), while strand-extension tail beads DO — under
+    the shared geometry key ``("__ext_<ext_id>", bead_index, direction, 0)``, so the
+    display / ssDNA read-back paths can address them the way oxDNA and NAMD already do.
+    Any consumer walking nt_key must therefore skip ``h_id.startswith("__")``.
     """
     ls_map = _build_loop_skip_map(design)
 
@@ -1379,15 +1446,33 @@ def _build_nt_arrays(
     # oxDNA path's owning-strand junction map so the two engines agree on where the
     # inserts go (same reciprocal-crossover handling).  Keyed (strand_id, prev_di).
     # Lazy import avoids any import-time cycle between core and physics.
-    from backend.physics.oxdna_interface import crossover_extra_base_junctions
+    from backend.physics.oxdna_interface import (
+        crossover_extra_base_junctions,
+        strand_extension_tails,
+    )
     xb_junctions = crossover_extra_base_junctions(design)
+
+    # Strand extensions (5′/3′ terminal ssDNA tails).  ONE anchor instead of the
+    # extra base's two: the tail hangs off the strand's first/last real nucleotide and
+    # its far end is free.  ``strand_extension_tails`` drops modification-only
+    # extensions (a fluorophore is not DNA → zero beads).
+    ext_tails = strand_extension_tails(design)
 
     # Recorded for the stacking pass: (prev_real_idx, [extra_base_idx...], next_real_idx).
     extra_base_inserts: List[Tuple[int, List[int], int]] = []
+    # Recorded for the stacking pass: each tail's bead chain in 5′→3′ order, INCLUDING
+    # its anchor (5′ tail: [tip … bead0, anchor]; 3′ tail: [anchor, bead0 … tip]).
+    extension_chains: List[List[int]] = []
 
     for strand in design.strands:
         strand_indices: List[int] = []
         seq_offset = 0
+
+        strand_tails = ext_tails.get(strand.id, {})
+        # (idx, backbone_pos_ang, radial, axis_hat, direction) of this strand's FIRST
+        # and LAST emitted real nucleotide — the anchors its 5′ / 3′ tails hang off.
+        first_anchor: Optional[tuple] = None
+        last_anchor: Optional[tuple] = None
 
         # Which domains emit ≥1 nucleotide — guards against arming an insert whose
         # following domain is entirely skipped (its flank would land on the wrong nt).
@@ -1443,6 +1528,11 @@ def _build_nt_arrays(
                     orientations.append(orient)
                     seq_chars.append(char)
 
+                    anchor_rec = (idx, backbone_ang, rad, axis_hat, direction)
+                    if first_anchor is None:
+                        first_anchor = anchor_rec
+                    last_anchor = anchor_rec
+
                     # This real nt is the *next* flank of a pending extra-base insert:
                     # materialise the single-stranded beads between prev and this nt,
                     # threading their indices into the strand chain (prev → eb… → this).
@@ -1472,6 +1562,42 @@ def _build_nt_arrays(
                     and domain_emits[di + 1] and strand_indices):
                 pending_xb = (hit[0], hit[1], strand_indices[-1])
 
+        # ── Strand-extension tails ────────────────────────────────────────────
+        # Bead ``i`` is the geometry layer's distance-rank from the anchor (i=0
+        # nearest the duplex), so a 5′ tail runs 5′→3′ only when walked OUTERMOST
+        # FIRST (i = n-1 … 0) — the outermost bead IS the strand's 5′ terminus — and a
+        # 3′ tail innermost-first (i = 0 … n-1).  Either way ``ordinal`` indexes
+        # ``ext.sequence`` directly (scadnano stores it 5′→3′): the tail carries its OWN
+        # base identity and must never consume the strand's sequence cursor.
+        def _emit_tail(ext, anchor: tuple) -> List[int]:
+            a_idx, a_pos, a_rad, a_axis, a_dir = anchor
+            pts = _extension_bead_positions(ext, a_pos, a_rad, a_axis, a_dir)
+            n = len(pts)
+            beads = range(n - 1, -1, -1) if ext.end == "five_prime" else range(n)
+            out: List[int] = []
+            for ordinal, i in enumerate(beads):
+                b_idx = len(positions)
+                nt_key[(f"{_EXT_PREFIX}{ext.id}", i, a_dir, 0)] = b_idx
+                positions.append(pts[i])
+                orientations.append(orientations[a_idx])
+                seq_chars.append(ext.sequence[ordinal])
+                out.append(b_idx)
+            return out
+
+        ext5 = strand_tails.get("five_prime")
+        if ext5 is not None and first_anchor is not None:
+            tail = _emit_tail(ext5, first_anchor)
+            if tail:
+                strand_indices[0:0] = tail                    # tip … bead0 → anchor …
+                extension_chains.append([*tail, first_anchor[0]])
+
+        ext3 = strand_tails.get("three_prime")
+        if ext3 is not None and last_anchor is not None:
+            tail = _emit_tail(ext3, last_anchor)
+            if tail:
+                strand_indices.extend(tail)                   # … anchor → bead0 … tip
+                extension_chains.append([last_anchor[0], *tail])
+
         strand_seqs.append(strand_indices)
 
     N = len(positions)
@@ -1484,6 +1610,14 @@ def _build_nt_arrays(
     # ── Pass 2: base-pair array ───────────────────────────────────────────────
     bp_arr = -np.ones(N, dtype=int)
     for (h_id, bp_idx, direction, k), idx in nt_key.items():
+        # Extension tail beads are free ssDNA — no WC partner, so they stay at −1.
+        # Guard on the EXTENSION prefix, never on `isinstance(bp_idx, int)`: a tail's
+        # bp_index is an ordinary int ≥ 0 (unlike __xb__'s crossover-id string), so it
+        # passes every isinstance filter written to catch extra bases.  Note the test is
+        # `__ext_`, not `__`: a ``__lnk__`` linker helix is a VIRTUAL helix carrying real
+        # WC-paired duplex, and must keep pairing normally.
+        if h_id.startswith(_EXT_PREFIX):
+            continue
         partner_dir = 'REVERSE' if direction == 'FORWARD' else 'FORWARD'
         partner_idx = nt_key.get((h_id, bp_idx, partner_dir, k), -1)
         bp_arr[idx] = partner_idx
@@ -1540,6 +1674,14 @@ def _build_nt_arrays(
     # 3′-chain is already threaded via strand_seqs in Pass 3.
     for prev_idx, eb_idxs, next_idx in extra_base_inserts:
         chain = [prev_idx, *eb_idxs, next_idx]
+        for a, b in zip(chain[:-1], chain[1:]):
+            stack_arr[a] = b
+
+    # Thread stacking along each extension tail (anchor → tail for 3′, tail → anchor
+    # for 5′).  Runs AFTER the domain walk on purpose: a 3′ tail's anchor may have been
+    # given an intrahelical (across-the-nick) stack partner above, but its real 3′
+    # neighbour is the tail, so the tail wins.
+    for chain in extension_chains:
         for a, b in zip(chain[:-1], chain[1:]):
             stack_arr[a] = b
 

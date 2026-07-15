@@ -359,7 +359,7 @@ _BASE_CHAR_TO_RESIDUE: dict[str, str] = {
 # ── Output dataclass ──────────────────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(slots=True)
 class Atom:
     serial:     int
     name:       str
@@ -390,6 +390,13 @@ class Atom:
     # P-atom mapping can address each via ``(helix_id, bp_index, direction, copy_k)``
     # instead of collapsing them (the analogue of ``extra_base_k`` for crossover inserts).
     copy_k:       Optional[int] = None
+    # Strand-extension tail identity (None for regular nucleotides).  Like the
+    # extra-base fields above, the stored helix_id/bp_index/direction remain the
+    # ANCHOR nucleotide's key so the existing topology writers are unchanged; these
+    # let the display + MD P-atom mapping address each tail base as
+    # ``("__ext_<id>", ext_k, direction)`` — the same key the oxDNA walk emits.
+    extension_id: Optional[str] = None
+    ext_k:        Optional[int] = None
 
 
 @dataclass
@@ -1093,9 +1100,12 @@ def build_atomistic_model(
     axis_override: "dict[tuple[str, int], tuple[_np.ndarray, _np.ndarray]] | None" = None,
     frame_override: "dict[tuple, tuple[_np.ndarray, _np.ndarray, _np.ndarray]] | None" = None,
     xb_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
+    ext_pos_override: "dict[tuple[str, int], _np.ndarray] | None" = None,
     close_backbone: bool = False,
     relaxed_oxdna_phase: bool = False,
     apply_design_geometry: bool = True,
+    frame_sink: "dict[tuple, tuple[_np.ndarray, _np.ndarray]] | None" = None,
+    fast_bridges: bool = False,
 ) -> AtomisticModel:
     """
     Build the heavy-atom model for the entire design.
@@ -1114,7 +1124,9 @@ def build_atomistic_model(
     - Extra crossover bases: full ribose + base placed along the interpolation
       line between the two junction nucleotides, with backbone atoms minimised.
     """
-    if nuc_pos_override is None and nuc_frame_override is None:
+    # frame_sink requires the full per-nucleotide loop (the cached-reference fast
+    # path never computes per-nucleotide frames), so requesting one forces it.
+    if frame_sink is None and nuc_pos_override is None and nuc_frame_override is None:
         ref_model = atomistic_model_from_reference(design, exclude_helix_ids)
         if ref_model is not None:
             return _append_protein_atoms(ref_model, design) if include_proteins else ref_model
@@ -1186,6 +1198,15 @@ def build_atomistic_model(
     atoms:  list[Atom]            = []
     bonds:  list[tuple[int, int]] = []
     serial  = 0
+
+    # DISPLAY speed: the crossover/skip/insert phosphate bridges are placed by an
+    # L-BFGS-B minimiser for MD-SEED-quality bond angles — that dominates the build on
+    # a large crossover-dense structure (≈42 s of a 58 s VoltronCore build) and is
+    # pointless for a viewer.  `fast_bridges` swaps it for the cheap linear
+    # interpolation that is ALREADY the minimiser's initial guess: 6× faster, only the
+    # ~1.5% phosphate-linker atoms move (≤2.4 Å at junctions).  Default False keeps the
+    # exact geometry for MD seeds / PDB export / NAMD / periodic-cell.
+    _bridge_fn = _interpolate_backbone_bridge if fast_bridges else _minimize_backbone_bridge
 
     for strand in design.strands:
         chain_id = strand_to_chain[strand.id]
@@ -1351,7 +1372,21 @@ def build_atomistic_model(
                         origin, R = _atom_frame(nuc_pos, direction, axis_point=axis_pt,
                                                 helix_direction=_hd)
 
+                    # Record the per-nucleotide rigid frame (UNDEFORMED — the
+                    # deformation/cluster post-pass below runs after this loop) so a
+                    # fast display path can ship (origin, R) and expand the fixed
+                    # template client-side instead of re-serialising every atom.  See
+                    # atomistic_stamp_descriptor + oxdna_health.display_frames_payload.
+                    if frame_sink is not None:
+                        frame_sink[(h_id, bp, dir_str, copy_k)] = (origin, R)
+
                     # ── Sugar + phosphate atoms ───────────────────────────────
+                    # NB: stamped per-atom (origin + R @ local), NOT batched. A
+                    # batched (local_stack @ R.T) matmul differs at the last ULP,
+                    # and the backbone-bridge L-BFGS-B minimiser downstream has
+                    # near-degenerate minima that amplify that ULP into ~0.1–0.8 Å
+                    # geometry swings on crossover/skip designs. Keep it per-atom
+                    # so the display stays byte-identical (test_atomistic_batch_stamp).
                     sugar_name_to_serial: dict[str, int] = {}
                     for atom_name, element, n, y, z_local in sugar_template:
                         local = _np.array([n, y, z_local])
@@ -1480,7 +1515,7 @@ def build_atomistic_model(
                 src_s = bp_to_sugar_serials.get(src_key)
                 dst_s = bp_to_sugar_serials.get(dst_key)
                 if src_s and dst_s:
-                    _minimize_backbone_bridge(atoms, src_s, dst_s)
+                    _bridge_fn(atoms, src_s, dst_s)
 
             prev_domain = domain
 
@@ -1538,7 +1573,7 @@ def build_atomistic_model(
                         src_s = bp_to_sugar_serials.get(prev_key_bb)
                         dst_s = bp_to_sugar_serials.get(cur_key_bb)
                         if src_s and dst_s:
-                            _minimize_backbone_bridge(atoms, src_s, dst_s)
+                            _bridge_fn(atoms, src_s, dst_s)
 
                 prev_key_bb = cur_key_bb
 
@@ -1558,16 +1593,31 @@ def build_atomistic_model(
         bp_to_sugar_serials = bp_to_sugar_serials,
         exclude_helix_ids  = exclude_helix_ids,
         xb_pos_override    = xb_pos_override,
+        bridge_fn          = _bridge_fn,
     )
 
-    # ── Thread extra-base inserts inline in the per-chain residue numbering ────
-    # _build_extra_base_atoms appends the inserts at the END of each chain's
-    # seq_num range.  The psfgen topology writer bonds residues in seq_num order,
-    # so end-appended inserts get threaded prev_real → eb → eb → next-crossover's
-    # eb (a 55 Å junk bond), instead of prev_real → eb → eb → next_real at the
-    # actual junction.  Renumber every chain so each insert sits immediately after
-    # its source-flank nucleotide (see _thread_extra_bases_inline).
-    _thread_extra_bases_inline(atoms)
+    # ── Strand-extension tail atoms (5′/3′ terminal tails) ────────────────────
+    serial = _build_extension_atoms(
+        design              = design,
+        atoms               = atoms,
+        bonds               = bonds,
+        serial              = serial,
+        strand_to_chain     = strand_to_chain,
+        nuc_pos_cache       = nuc_pos_cache,
+        bp_to_sugar_serials = bp_to_sugar_serials,
+        ext_pos_override    = ext_pos_override,
+        bridge_fn           = _bridge_fn,
+    )
+
+    # ── Thread inserts + tails into the per-chain residue numbering ───────────
+    # Both builders append their residues at the END of each chain's seq_num range.
+    # The psfgen topology writer bonds residues in seq_num order, so end-appended
+    # inserts get threaded prev_real → eb → eb → next-crossover's eb (a 55 Å junk
+    # bond) instead of prev_real → eb → eb → next_real at the actual junction, and an
+    # end-appended 5′ tail would sit after the 3′ end of its own strand.  Renumber
+    # every chain into true chain order (see _thread_inserts_inline) — which is also
+    # what lands psfgen's 5TER/3TER/DEO5 patches on the tails.
+    _thread_inserts_inline(atoms, design)
 
     # ── DISPLAY-ONLY: close the sequential backbone (relaxed-frame reconstruction) ─
     # oxDNA's per-nucleotide CG frames do NOT enforce all-atom backbone continuity,
@@ -1604,33 +1654,198 @@ def build_atomistic_model(
     return model
 
 
-def _thread_extra_bases_inline(atoms: list[Atom]) -> None:
-    """Re-number per-chain ``seq_num`` so crossover extra-base inserts sit inline in
-    the strand, immediately after their source-flank nucleotide, in-place.
+# ── Fast CG→atomistic display: stamp descriptor ──────────────────────────────
+# The relaxed-display all-atom set is, per nucleotide, a fixed local template
+# rigidly stamped by that nucleotide's frame (world = origin + R @ local), EXCEPT
+# a small "non-rigid" minority that later passes move off the stamp: sequential
+# phosphate linkers (_close_sequential_backbone), crossover/skip bridges
+# (_minimize_backbone_bridge), extra-base inserts, extension tails, proteins.
+# The descriptor captures the FIXED (design-determined) part — which serial is
+# rigid, its template-local coord, and which nucleotide it belongs to — so a fast
+# path can ship only per-nucleotide frames (origin, R) + the non-rigid positions
+# and let the client expand the rest. See oxdna_health.display_frames_payload.
 
-    ``_build_extra_base_atoms`` appends every insert to the END of its chain's
-    ``seq_num`` range.  Consumers that rely on ``seq_num`` order to define backbone
-    connectivity — the CHARMM psfgen topology builder above all — then bond the
-    inserts as one contiguous run at the chain tail (``prev_real → eb → eb → the
-    next crossover's eb``), producing wildly stretched O3′→P bonds between inserts
-    that belong to different junctions.  Threading them inline restores
-    ``prev_real → eb… → next_real`` at each real junction.
 
-    Each insert atom carries its source (owning, 3′) flank nucleotide's
-    ``(helix_id, bp_index, direction)`` (set by ``_build_extra_base_atoms``); the
-    insert is placed right after the real residue with that key, ordered by
-    ``extra_base_k``.  An insert whose flank can't be resolved uniquely (e.g. a
-    looped helix where ``(helix, bp, dir)`` is not unique) is left at the chain
-    tail — the same position as before, so no regression for that case.
+@dataclass(slots=True)
+class StampDescriptor:
+    nuc_keys:         list                 # [(helix_id, bp_index, dir_str, copy_k)] in emission order
+    atom_nuc:         list                 # per serial: index into nuc_keys, or -1 (non-rigid)
+    atom_local:      list                  # per serial: (n, y, z) template-local; (0,0,0) if non-rigid
+    nonrigid_serials: list                 # sorted serials where atom_nuc == -1
+    topology_hash:    str
+
+
+from collections import OrderedDict as _OrderedDict
+
+_STAMP_DESC_CACHE: "_OrderedDict[str, StampDescriptor]" = _OrderedDict()
+_STAMP_DESC_CACHE_MAX = 8
+
+
+def _template_local_map(residue: str, dir_str: str) -> dict:
+    """{atom_name: (n, y, z)} template-local coords for one (residue, direction) —
+    the sugar/phosphate (direction-independent) merged with the direction-specific
+    base template.  Mirrors the calibration's _local helper (one source of truth for
+    what 'the fixed template' is)."""
+    d = {name: (n, y, z) for name, _e, n, y, z in _SUGAR}
+    base = BASE_TEMPLATES if dir_str == "FORWARD" else BASE_TEMPLATES_REV
+    for name, _e, n, y, z in base[residue][0]:
+        d[name] = (n, y, z)
+    return d
+
+
+def atomistic_stamp_descriptor(design: Design) -> StampDescriptor:
+    """Design-fixed descriptor for the fast CG→atomistic display path (cached by
+    topology hash).  Classifies each atom RIGID (a pure origin+R@local stamp) vs
+    NON-RIGID (moved by closure / bridge / insert / extension) EMPIRICALLY, from ONE
+    display build (backbone closure ON, ideal geometry): an atom is non-rigid iff its
+    built position deviates from its own template stamp.  Robust — closure moves the 5
+    phosphate-linker atoms by ~1 Å per sequential pair and the bridge minimisers move
+    their linkers too, both far above the 1e-6 nm threshold, while the ring/base atoms
+    sit exactly on the stamp."""
+    thash = atomistic_reference_topology_hash(design)
+    cached = _STAMP_DESC_CACHE.get(thash)
+    if cached is not None:
+        _STAMP_DESC_CACHE.move_to_end(thash)
+        return cached
+
+    sink: dict = {}
+    m = build_atomistic_model(design, close_backbone=True, relaxed_oxdna_phase=True,
+                              apply_design_geometry=False, frame_sink=sink, fast_bridges=True)
+    desc = _classify_stamp(m, sink, thash)
+    _STAMP_DESC_CACHE[thash] = desc
+    while len(_STAMP_DESC_CACHE) > _STAMP_DESC_CACHE_MAX:
+        _STAMP_DESC_CACHE.popitem(last=False)
+    return desc
+
+
+def _classify_stamp(model, sink: dict, thash: str) -> StampDescriptor:
+    """Classify each atom of a display build (close_backbone=True, ideal geometry, its
+    `frame_sink`) rigid vs non-rigid — shared by `atomistic_stamp_descriptor` and the
+    combined `atomistic_display_bundle` so one build serves both."""
+    atoms = model.atoms
+    TOL = 1e-6
+    n = len(atoms)
+    nuc_keys: list = []
+    key_to_idx: dict = {}
+    atom_nuc = [-1] * n
+    atom_local: list = [(0.0, 0.0, 0.0)] * n
+    nonrigid: list = []
+    _tl_cache: dict = {}
+
+    for s in range(n):
+        a = atoms[s]
+        # Inserts / tails / proteins: never a plain nucleotide stamp.
+        if a.extra_base_k is not None or a.extension_id is not None or not a.helix_id:
+            nonrigid.append(s)
+            continue
+        key = (a.helix_id, a.bp_index, a.direction, a.copy_k or 0)
+        fr = sink.get(key)
+        tk = (a.residue, a.direction)
+        tl = _tl_cache.get(tk)
+        if tl is None:
+            tl = _template_local_map(a.residue, a.direction)
+            _tl_cache[tk] = tl
+        local = tl.get(a.name)
+        if fr is None or local is None:
+            nonrigid.append(s)
+            continue
+        origin, R = fr
+        exp = origin + R @ _np.asarray(local, dtype=float)
+        d_stamp = ((a.x - exp[0]) ** 2 + (a.y - exp[1]) ** 2 + (a.z - exp[2]) ** 2) ** 0.5
+        if d_stamp > TOL:
+            nonrigid.append(s)      # moved by a bridge minimiser or by sequential closure
+            continue
+        idx = key_to_idx.get(key)
+        if idx is None:
+            idx = len(nuc_keys)
+            key_to_idx[key] = idx
+            nuc_keys.append(key)
+        atom_nuc[s] = idx
+        atom_local[s] = (float(local[0]), float(local[1]), float(local[2]))
+
+    return StampDescriptor(nuc_keys=nuc_keys, atom_nuc=atom_nuc, atom_local=atom_local,
+                           nonrigid_serials=nonrigid, topology_hash=thash)
+
+
+def atomistic_display_bundle(design: Design) -> dict:
+    """ONE build serving BOTH the renderer topology AND the stamp descriptor (fast
+    bridges), so the display path pays a single build instead of two.  Returns the wire
+    dict: atoms + bonds (atomistic_to_json) merged with the descriptor arrays + hashes.
+    Route-level disk caching makes it a one-time-per-job cost."""
+    thash = atomistic_reference_topology_hash(design)
+    sink: dict = {}
+    m = build_atomistic_model(design, close_backbone=True, relaxed_oxdna_phase=True,
+                              apply_design_geometry=False, frame_sink=sink, fast_bridges=True)
+    desc = _classify_stamp(m, sink, thash)
+    _STAMP_DESC_CACHE[thash] = desc          # warm the in-proc descriptor cache too
+    while len(_STAMP_DESC_CACHE) > _STAMP_DESC_CACHE_MAX:
+        _STAMP_DESC_CACHE.popitem(last=False)
+    out = atomistic_to_json(m)
+    atom_local_flat: list = []
+    for (nx, ny, nz) in desc.atom_local:
+        atom_local_flat.extend((nx, ny, nz))
+    out.update({
+        "topology_hash": thash,
+        "n_nuc": len(desc.nuc_keys),
+        "n_atoms": len(desc.atom_nuc),
+        "nuc_keys": [list(k) for k in desc.nuc_keys],
+        "atom_nuc": desc.atom_nuc,
+        "atom_local": atom_local_flat,
+        "nonrigid_serials": desc.nonrigid_serials,
+    })
+    return out
+
+
+def _thread_inserts_inline(atoms: list[Atom], design: "Design") -> None:
+    """Re-number per-chain ``seq_num`` so crossover extra-base inserts AND
+    strand-extension tail bases sit at their true chain positions, in place.
+
+    Both builders append their residues to the END of the chain's ``seq_num`` range.
+    Consumers that rely on ``seq_num`` order to define backbone connectivity — the
+    CHARMM psfgen topology builder above all — then bond them as one contiguous run at
+    the chain tail (``prev_real → eb → eb → the next crossover's eb``), producing
+    wildly stretched O3′→P bonds between inserts that belong to different junctions.
+    Threading them restores ``prev_real → eb… → next_real`` at each real junction.
+
+    Order per chain (a chain IS a strand — ``strand_to_chain`` gives each strand a
+    unique letter, going two-letter past Z, so there is no wrap collision)::
+
+        [5′ tail, OUTERMOST first] + [real residue, each trailed by its inserts] + [3′ tail]
+
+    The 5′ tail comes first and its outermost base is emitted first because that base
+    IS the strand's 5′ terminus.  This is also what makes the CHARMM terminal patches
+    correct for free: ``namd_topology`` derives them purely from residue ORDER
+    (``first 5TER`` / ``last 3TER`` / ``patch DEO5 {first_resid}``), so after the
+    contiguous 1-based renumber below the outermost 5′ tail base becomes ``resid 1``
+    and the 3′ tail tip becomes ``resid N``.  The anchor correctly stops being a
+    terminus and becomes an internal ``DEOX`` residue.  No negative seq_num, no
+    patch-list change.
+
+    Each extra-base insert carries its source (owning, 3′) flank nucleotide's
+    ``(helix_id, bp_index, direction)``; the insert is placed right after the real
+    residue with that key, ordered by ``extra_base_k``.  An insert whose flank can't be
+    resolved uniquely (e.g. a looped helix where ``(helix, bp, dir)`` is not unique) is
+    left at the chain tail — the same position as before, so no regression for that
+    case.  Extension residues are excluded from that flank lookup: they carry their
+    ANCHOR's key, so they would otherwise masquerade as the anchor residue.
 
     Physical-layer only: touches ``seq_num`` (a residue counter), never topology.
     """
     from collections import defaultdict
 
-    # residue key: real → ("r", seq_num); insert → ("x", crossover_id, extra_base_k)
+    # residue key:  real   → ("r",  seq_num)
+    #               insert → ("x",  crossover_id, extra_base_k)
+    #               5′ tail→ ("e5", extension_id, ext_k)
+    #               3′ tail→ ("e3", extension_id, ext_k)
+    ext_end_by_id: dict[str, str] = {e.id: e.end for e in design.extensions}
+
     def _rkey(a: Atom):
         if getattr(a, "crossover_id", None) is not None:
             return ("x", a.crossover_id, a.extra_base_k)
+        eid = getattr(a, "extension_id", None)
+        if eid is not None:
+            return ("e5" if ext_end_by_id.get(eid) == "five_prime" else "e3",
+                    eid, a.ext_k)
         return ("r", a.seq_num)
 
     by_chain: dict[str, list[Atom]] = defaultdict(list)
@@ -1643,14 +1858,17 @@ def _thread_extra_bases_inline(atoms: list[Atom]) -> None:
         for a in chain_atoms:
             residues[_rkey(a)].append(a)
 
-        real_rkeys = [k for k in residues if k[0] == "r"]
+        real_rkeys   = [k for k in residues if k[0] == "r"]
         insert_rkeys = [k for k in residues if k[0] == "x"]
-        if not insert_rkeys:
+        e5_rkeys     = [k for k in residues if k[0] == "e5"]
+        e3_rkeys     = [k for k in residues if k[0] == "e3"]
+        if not insert_rkeys and not e5_rkeys and not e3_rkeys:
             continue  # nothing to thread on this chain
 
         real_rkeys.sort(key=lambda k: k[1])  # by existing seq_num
 
         # (helix, bp, dir) → real residue key, dropping non-unique keys (loops).
+        # Extension residues never enter here: they carry their ANCHOR's key.
         flank_to_real: dict[tuple, tuple] = {}
         ambiguous: set[tuple] = set()
         for k in real_rkeys:
@@ -1676,11 +1894,16 @@ def _thread_extra_bases_inline(atoms: list[Atom]) -> None:
         for lst in inserts_after.values():
             lst.sort(key=lambda k: k[2])  # by extra_base_k
 
-        # Emit real residues in order, each trailed by its inserts; orphans last.
-        ordered: list[tuple] = []
+        # 5′ tail: OUTERMOST base first (highest ext_k) — it is the 5′ terminus.
+        # 3′ tail: innermost base first (lowest ext_k) — it adjoins the anchor.
+        e5_rkeys.sort(key=lambda k: -k[2])
+        e3_rkeys.sort(key=lambda k: k[2])
+
+        ordered: list[tuple] = list(e5_rkeys)
         for k in real_rkeys:
             ordered.append(k)
             ordered.extend(inserts_after.get(k, ()))
+        ordered.extend(e3_rkeys)
         ordered.extend(sorted(orphaned, key=lambda k: (str(k[1]), k[2])))
 
         # Contiguous 1-based renumber in the new order.
@@ -1735,6 +1958,68 @@ def _close_sequential_backbone(atoms: list[Atom], bonds: list[tuple[int, int]]) 
 # ── Extra-base arc geometry helpers ──────────────────────────────────────────
 # _bezier_pt, _bezier_tan, _arc_bow_dir, _arc_ctrl_pt and _BOW_FRAC_3D moved to
 # atomistic_helpers (Pass 11-A); imported above.
+
+
+def _align_glycosidic(
+    atoms:                list[Atom],
+    residue:              str,
+    sugar_name_to_serial: dict[str, int],
+    base_name_to_serial:  dict[str, int],
+    target_c1n:           _np.ndarray,
+) -> str:
+    """Rotate a single-stranded residue's ribose + base as a rigid body about C2′ so
+    its C1′→N glycosidic bond points along *target_c1n*, in place.  Returns the
+    glycosidic nitrogen's atom name (``N9`` for purines, ``N1`` for pyrimidines).
+
+    The phosphate group (P, OP1, OP2, O5′) is held fixed — it is the anchor the
+    backbone bridge minimiser then works against.  Shared verbatim by the crossover
+    extra-base placer and the strand-extension tail placer, which need the identical
+    base orientation.
+    """
+    _glycosidic_n = "N9" if residue in ("DA", "DG") else "N1"
+    _n_serial  = base_name_to_serial.get(_glycosidic_n)
+    _c1_serial = sugar_name_to_serial.get("C1'")
+    _c2_serial = sugar_name_to_serial.get("C2'")
+    if _n_serial is None or _c1_serial is None or _c2_serial is None:
+        return _glycosidic_n
+
+    _c1_pos  = _atom_pos(atoms, _c1_serial)
+    _n_pos   = _atom_pos(atoms, _n_serial)
+    _c2_pos  = _atom_pos(atoms, _c2_serial)
+    _c1n_dir = _normalise(_n_pos - _c1_pos)
+    _rot_ax  = _np.cross(_c1n_dir, target_c1n)
+    _sin_t   = float(_np.linalg.norm(_rot_ax))
+    _cos_t   = float(_np.dot(_c1n_dir, target_c1n))
+    if _sin_t < 1e-9:
+        if _cos_t < 0.0:
+            # 180° rotation — pick an arbitrary perpendicular axis
+            _perp = _np.array([0.0, 0.0, 1.0])
+            if abs(float(_np.dot(_c1n_dir, _perp))) > 0.9:
+                _perp = _np.array([1.0, 0.0, 0.0])
+            _rot_ax  = _normalise(_np.cross(_c1n_dir, _perp))
+            _R_align = 2.0 * _np.outer(_rot_ax, _rot_ax) - _np.eye(3)
+        else:
+            _R_align = _np.eye(3)
+    else:
+        _k = _rot_ax / _sin_t
+        _K = _np.array([
+            [ 0.0,   -_k[2],  _k[1]],
+            [ _k[2],  0.0,   -_k[0]],
+            [-_k[1],  _k[0],  0.0  ],
+        ])
+        _R_align = _np.eye(3) + _sin_t * _K + (1.0 - _cos_t) * (_K @ _K)
+
+    _phosphate = {"P", "OP1", "OP2", "O5'"}
+    for _aname, _s in sugar_name_to_serial.items():
+        if _aname not in _phosphate:
+            _p_rel = _atom_pos(atoms, _s) - _c2_pos
+            _set_atom_pos(atoms, _s, _c2_pos + _R_align @ _p_rel)
+    for _aname, _s in base_name_to_serial.items():
+        if _aname not in sugar_name_to_serial:
+            _p_rel = _atom_pos(atoms, _s) - _c2_pos
+            _set_atom_pos(atoms, _s, _c2_pos + _R_align @ _p_rel)
+
+    return _glycosidic_n
 
 
 def _extra_base_frame(
@@ -1801,6 +2086,7 @@ def _build_extra_base_atoms(
     bp_to_sugar_serials: dict[tuple[str, int, str], dict[str, int]],
     exclude_helix_ids:  "set[str] | None",
     xb_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
+    bridge_fn=_minimize_backbone_bridge,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
@@ -2032,45 +2318,8 @@ def _build_extra_base_atoms(
             # Rotate ribose + base as a rigid body about C2′ so that the
             # C1′→N bond aligns with target_c1n (±avg_axis).
             # Anchors excluded from rotation: P, OP1, OP2, O5′ (phosphate group).
-            _glycosidic_n = "N9" if residue in ("DA", "DG") else "N1"
-            _n_serial  = base_name_to_serial.get(_glycosidic_n)
-            _c1_serial = sugar_name_to_serial.get("C1'")
-            _c2_serial = sugar_name_to_serial.get("C2'")
-            if _n_serial is not None and _c1_serial is not None and _c2_serial is not None:
-                _c1_pos  = _atom_pos(atoms, _c1_serial)
-                _n_pos   = _atom_pos(atoms, _n_serial)
-                _c2_pos  = _atom_pos(atoms, _c2_serial)
-                _c1n_dir = _normalise(_n_pos - _c1_pos)
-                _rot_ax  = _np.cross(_c1n_dir, target_c1n)
-                _sin_t   = float(_np.linalg.norm(_rot_ax))
-                _cos_t   = float(_np.dot(_c1n_dir, target_c1n))
-                if _sin_t < 1e-9:
-                    if _cos_t < 0.0:
-                        # 180° rotation — pick an arbitrary perpendicular axis
-                        _perp = _np.array([0.0, 0.0, 1.0])
-                        if abs(float(_np.dot(_c1n_dir, _perp))) > 0.9:
-                            _perp = _np.array([1.0, 0.0, 0.0])
-                        _rot_ax  = _normalise(_np.cross(_c1n_dir, _perp))
-                        _R_align = 2.0 * _np.outer(_rot_ax, _rot_ax) - _np.eye(3)
-                    else:
-                        _R_align = _np.eye(3)
-                else:
-                    _k = _rot_ax / _sin_t
-                    _K = _np.array([
-                        [ 0.0,   -_k[2],  _k[1]],
-                        [ _k[2],  0.0,   -_k[0]],
-                        [-_k[1],  _k[0],  0.0  ],
-                    ])
-                    _R_align = _np.eye(3) + _sin_t * _K + (1.0 - _cos_t) * (_K @ _K)
-                _phosphate = {"P", "OP1", "OP2", "O5'"}
-                for _aname, _s in sugar_name_to_serial.items():
-                    if _aname not in _phosphate:
-                        _p_rel = _atom_pos(atoms, _s) - _c2_pos
-                        _set_atom_pos(atoms, _s, _c2_pos + _R_align @ _p_rel)
-                for _aname, _s in base_name_to_serial.items():
-                    if _aname not in sugar_name_to_serial:
-                        _p_rel = _atom_pos(atoms, _s) - _c2_pos
-                        _set_atom_pos(atoms, _s, _c2_pos + _R_align @ _p_rel)
+            _glycosidic_n = _align_glycosidic(
+                atoms, residue, sugar_name_to_serial, base_name_to_serial, target_c1n)
 
             # ── Intra-residue bonds ───────────────────────────────────────────
             for a_name, b_name in _SUGAR_BONDS:
@@ -2148,7 +2397,7 @@ def _build_extra_base_atoms(
         else:
             # Fallback for >3 extra bases: sequential per-pair bridge
             for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
-                _minimize_backbone_bridge(atoms, prev_s_item, next_s_item)
+                bridge_fn(atoms, prev_s_item, next_s_item)
 
     # ── Run all minimisation jobs ─────────────────────────────────────────────
     # Single crossover: no thread overhead.  Multiple: run in parallel (each job
@@ -2162,6 +2411,195 @@ def _build_extra_base_atoms(
             futures = [pool.submit(job) for job in _mini_jobs]
             for fut in futures:
                 fut.result()   # re-raise any exception from the worker
+
+    return serial
+
+
+def _build_extension_atoms(
+    design:              "Design",
+    atoms:               list[Atom],
+    bonds:               list[tuple[int, int]],
+    serial:              int,
+    strand_to_chain:     dict[str, str],
+    nuc_pos_cache:       dict[str, dict[tuple[int, "Direction"], "NucleotidePosition"]],
+    bp_to_sugar_serials: dict[tuple[str, int, str], dict[str, int]],
+    ext_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
+    bridge_fn=_minimize_backbone_bridge,
+) -> int:
+    """Place all-atom residues for every strand extension (5′/3′ terminal tail).
+
+    The sibling of :func:`_build_extra_base_atoms`, and simpler in exactly one way
+    that matters: an extra base BRIDGES two anchors (C3′(src) → C5′(dst)), whereas a
+    tail hangs off ONE.  That is why the bridge minimisers ``_minimize_{1,2,3}_extra_base``
+    cannot be reused here — they solve for a linker pinned at both ends.  Each
+    consecutive pair along the tail instead gets ``_minimize_backbone_bridge`` (already
+    the ``n > 3`` fallback for extra bases), and the tail's FREE terminus gets no bridge
+    at all: its dangling O3′ (3′ tail) or P/O5′ (5′ tail) is exactly what a chain
+    terminus is.
+
+    Positions reuse the SAME Bézier arc the CG geometry lays down
+    (``design_geometry._strand_extension_geometry``) so the all-atom and coarse-grained
+    tails agree, but rooted on the anchor's real C3′/C5′ ATOM rather than its CG bead —
+    the trick ``_build_extra_base_atoms`` uses to get physical O3′→P bond lengths.
+
+    Modification-only extensions (a fluorophore, no ``sequence``) contribute nothing:
+    they are not DNA and have no residue.
+
+    ``ext_pos_override`` maps ``(extension_id, k)`` → a real simulated backbone
+    position; when present the tail is placed at its RELAXED pose (heavy-rep display)
+    and the bridge minimisation is skipped, mirroring ``xb_pos_override``.
+    """
+    from backend.core.constants import SSDNA_CONTOUR_PER_NT_NM
+
+    strand_by_id = {s.id: s for s in design.strands}
+
+    # Continue each chain's residue numbering; _thread_inserts_inline re-threads later.
+    tail_seq_num: dict[str, int] = {}
+    for a in atoms:
+        cur = tail_seq_num.get(a.chain_id, 0)
+        if a.seq_num > cur:
+            tail_seq_num[a.chain_id] = a.seq_num
+
+    for ext in design.extensions:
+        if not ext.sequence:
+            continue
+        strand = strand_by_id.get(ext.strand_id)
+        if strand is None or not strand.domains:
+            continue
+
+        five = ext.end == "five_prime"
+        dom  = strand.domains[0] if five else strand.domains[-1]
+        bp   = dom.start_bp if five else dom.end_bp
+        anchor_key = (dom.helix_id, bp, dom.direction.value)
+
+        anchor_s = bp_to_sugar_serials.get(anchor_key)
+        if anchor_s is None:
+            continue     # anchor is on an excluded helix — nothing to hang from
+
+        # nuc_pos_cache is keyed (bp, Direction, copy_k); copy 0 is the base nucleotide
+        # (a loop insertion adds copies 1…n, which a terminal anchor never is).
+        nuc = (nuc_pos_cache.get(dom.helix_id) or {}).get((bp, dom.direction, 0))
+        if nuc is None:
+            continue
+
+        # Root the arc on the real terminal sugar atom the tail bonds THROUGH:
+        # a 3′ tail leaves via the anchor's O3′/C3′, a 5′ tail enters via its C5′.
+        root_name = "C3'" if not five else "C5'"
+        root_serial = anchor_s.get(root_name)
+        if root_serial is None:
+            continue
+        p0 = _atom_pos(atoms, root_serial)
+
+        # Same construction as the CG arc: radially outward in the DEFORMED frame,
+        # bowing the way the strand was already heading as it left the duplex.
+        radial = _normalise(-_np.asarray(nuc.base_normal, dtype=float))
+        chain_tan = _np.asarray(nuc.axis_tangent, dtype=float)
+        if dom.direction == Direction.REVERSE:
+            chain_tan = -chain_tan
+        bow_dir = chain_tan if not five else -chain_tan
+        bow_dir = bow_dir - float(_np.dot(bow_dir, radial)) * radial
+        if float(_np.linalg.norm(bow_dir)) < 1e-6:
+            bow_dir = _np.cross(radial, _np.array([0.0, 0.0, 1.0]))
+            if float(_np.linalg.norm(bow_dir)) < 1e-6:
+                bow_dir = _np.cross(radial, _np.array([0.0, 1.0, 0.0]))
+        bow_dir = _normalise(bow_dir)
+
+        n = len(ext.sequence)
+        arc_len = n * SSDNA_CONTOUR_PER_NT_NM
+        p2   = p0 + radial * arc_len
+        ctrl = (p0 + p2) * 0.5 + bow_dir * (arc_len * 0.30)
+
+        chain_id  = strand_to_chain.get(strand.id, "A")
+        strand_id = strand.id
+
+        # Base orientation target, mirroring the extra-base rule.
+        avg_axis   = _normalise(_np.asarray(nuc.axis_tangent, dtype=float))
+        tail_sugars: list[dict[str, int]] = []
+
+        for i in range(n):                       # i = distance rank from the anchor
+            t = (i + 1) / n
+            origin_pos = _bezier_pt(p0, ctrl, p2, t)
+            arc_tan    = _bezier_tan(p0, ctrl, p2, t)
+            # 5′→3′ runs OUTWARD along the arc for a 3′ tail, INWARD for a 5′ tail.
+            chain_dir  = arc_tan if not five else -arc_tan
+
+            sim = (ext_pos_override or {}).get((ext.id, i))
+            if sim is not None:
+                origin_pos = _np.asarray(sim, dtype=float)
+
+            origin, R = _extra_base_frame(origin_pos, chain_dir, bow_dir)
+
+            # The tail's sequence is stored 5′→3′.  For a 3′ tail bead i IS the i-th
+            # base from the 5′ end of the tail; for a 5′ tail the OUTERMOST bead
+            # (i = n-1) is the 5′ terminus, so the order reverses.
+            base_char = ext.sequence[i] if not five else ext.sequence[n - 1 - i]
+            residue = _BASE_CHAR_TO_RESIDUE.get(base_char.upper(), "DT")
+
+            z_sign     = float(_np.dot(_np.cross(bow_dir, chain_dir), avg_axis))
+            target_c1n = avg_axis if z_sign > 0.0 else -avg_axis
+
+            tail_seq_num[chain_id] = tail_seq_num.get(chain_id, 0) + 1
+            seq_num = tail_seq_num[chain_id]
+
+            def _emit(atom_name, element, local) -> int:
+                nonlocal serial
+                world = origin + R @ local
+                atoms.append(Atom(
+                    serial=serial, name=atom_name, element=element, residue=residue,
+                    chain_id=chain_id, seq_num=seq_num,
+                    x=float(world[0]), y=float(world[1]), z=float(world[2]),
+                    strand_id=strand_id or "",
+                    # Anchor's key (like extra bases): the topology writers are
+                    # unchanged; extension_id/ext_k give the tail its own identity.
+                    helix_id=anchor_key[0], bp_index=anchor_key[1],
+                    direction=anchor_key[2],
+                    extension_id=ext.id, ext_k=i,
+                ))
+                s = serial
+                serial += 1
+                return s
+
+            sugar_name_to_serial: dict[str, int] = {}
+            for atom_name, element, n_c, y_c, z_c in _SUGAR:
+                sugar_name_to_serial[atom_name] = _emit(
+                    atom_name, element, _np.array([n_c, y_c, z_c]))
+
+            base_atoms_def, base_bond_defs = BASE_TEMPLATES[residue]
+            base_name_to_serial: dict[str, int] = {**sugar_name_to_serial}
+            for atom_name, element, n_c, y_c, z_c in base_atoms_def:
+                base_name_to_serial[atom_name] = _emit(
+                    atom_name, element, _np.array([n_c, y_c, z_c]))
+
+            _align_glycosidic(atoms, residue, sugar_name_to_serial,
+                              base_name_to_serial, target_c1n)
+
+            for a_name, b_name in _SUGAR_BONDS:
+                sa, sb = sugar_name_to_serial.get(a_name), sugar_name_to_serial.get(b_name)
+                if sa is not None and sb is not None:
+                    bonds.append((sa, sb))
+            for a_name, b_name in base_bond_defs:
+                sa, sb = base_name_to_serial.get(a_name), base_name_to_serial.get(b_name)
+                if sa is not None and sb is not None:
+                    bonds.append((sa, sb))
+
+            tail_sugars.append(dict(base_name_to_serial))
+
+        # ── Backbone through the tail, in 5′→3′ chain order ───────────────────
+        #   3′ tail: anchor → bead0 → … → bead(n-1)   (free O3′ at the tip)
+        #   5′ tail: bead(n-1) → … → bead0 → anchor   (free P/O5′ at the tip; the
+        #            ANCHOR's phosphate is now an internal linkage, not the 5′ end)
+        chain_s = ([anchor_s] + tail_sugars) if not five else (tail_sugars[::-1] + [anchor_s])
+        for prev_s, next_s in zip(chain_s, chain_s[1:]):
+            o3, p = prev_s.get("O3'"), next_s.get("P")
+            if o3 is not None and p is not None:
+                bonds.append((o3, p))
+
+        # Relaxed/trajectory positions are authoritative — do not re-seat them onto
+        # the geometric arc (same rule as xb_pos_override).
+        if ext_pos_override and (ext.id, 0) in ext_pos_override:
+            continue
+        for prev_s, next_s in zip(chain_s, chain_s[1:]):
+            bridge_fn(atoms, prev_s, next_s)
 
     return serial
 

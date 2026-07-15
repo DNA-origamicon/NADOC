@@ -129,6 +129,56 @@ def test_display_route_surfaces_extra_bases(tmp_path, mock_oxdna):
     assert real and all(isinstance(p["bp_index"], int) for p in real)
 
 
+def test_display_route_surfaces_extension_tails(tmp_path, mock_oxdna):
+    """END-TO-END: a design with 5′/3′ strand extensions relaxes, and its tail bases come
+    back in the /display payload keyed ``("__ext_<id>", bead_index, direction)``.
+
+    That key is exactly what ``helix_renderer``'s ``_keyToEntry`` already indexes
+    (```${helix_id}:${bp_index}:${direction}``), and extension beads already pass the
+    ``assignedGeometry`` filter into ``backboneEntries`` — which is why the relaxed view
+    picks the tails up with NO frontend change.  This test is what pins that contract: if
+    the key shape ever drifts, the tails would silently freeze at their design pose in the
+    relaxed view while the rest of the structure moved.
+
+    Before this feature the tails were absent from the topology altogether, so a relaxation
+    of VoltronCoreScad (334 single-T extensions) was byte-identical to one without them.
+    """
+    from backend.api import headless_build as hb
+    from backend.api import state as design_state
+    from backend.core.models import LatticeType, StrandExtension
+    from tests.conftest import SIX_HB_CELLS
+
+    with hb.scratch_session(LatticeType.HONEYCOMB):
+        hb.create_bundle(SIX_HB_CELLS, 84, lattice=LatticeType.HONEYCOMB, name="6hb")
+        hb.auto_scaffold(seamless=True)
+        hb.full_autostaple()
+        d = design_state.get_or_404().model_copy(deep=True)
+    d = _sequence_for_oxdna(d)
+
+    staples = [s for s in d.strands if s.strand_type.value == "staple"]
+    d.extensions = [
+        StrandExtension(strand_id=staples[0].id, end="three_prime", sequence="TT"),
+        StrandExtension(strand_id=staples[1].id, end="five_prime",  sequence="T"),
+    ]
+
+    job = hox.run_relaxation(d, tmp_path, min_bp_retained=0.0)
+    assert job.status is OxdnaStatus.completed, job.error
+
+    display = hox.read_relaxed_positions(job.job_id, tmp_path)
+    tails = [p for p in display["positions"] if str(p["helix_id"]).startswith("__ext_")]
+
+    assert len(tails) == 3, "every extension base must reach the display payload"
+    ids = {f"__ext_{e.id}" for e in d.extensions}
+    assert {p["helix_id"] for p in tails} == ids
+    assert all(isinstance(p["bp_index"], int) for p in tails)      # bead index
+    assert all(len(p["backbone_position"]) == 3 for p in tails)
+    assert all(p["direction"] in ("FORWARD", "REVERSE") for p in tails)
+
+    # …and the real nucleotides are still all present and design-keyed alongside them.
+    real = [p for p in display["positions"] if not str(p["helix_id"]).startswith("__")]
+    assert real and all(isinstance(p["bp_index"], int) for p in real)
+
+
 def test_append_production_after_completion(sequenced_6hb, tmp_path, mock_oxdna):
     """A completed relaxation can be extended with an unbiased production stage —
     it reaches completed again and the relaxed geometry still reads back."""
