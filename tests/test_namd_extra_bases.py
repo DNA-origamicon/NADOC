@@ -101,6 +101,37 @@ def test_inserts_are_threaded_inline_in_the_owning_chain():
     assert len(insert_seqs) == 2 and insert_seqs[1] - insert_seqs[0] == 1
 
 
+def test_seeded_insert_keeps_canonical_backbone_bonds():
+    """An oxDNA-seeded insert (``xb_pos_override`` set → the scipy bridge-minimisation
+    is skipped) must still have CANONICAL intra-residue backbone bonds.
+
+    Regression pin for the 24hb 4 fs blocker: the glycosidic rotation used to exclude
+    the phosphate group {P,OP1,OP2,O5'} on the assumption the skipped minimisation would
+    re-place it, so an overridden insert stranded O5'/P → O5'-C5' stretched to ~6 A
+    (0.6 nm), a fatal 4 fs RATTLE start.  Measured on the seeded 24hb_1xT package built by
+    the pre-fix code: 384 O5'-C5' bonds at ~6.1 A.  The fix rotates the phosphate rigidly
+    with its own sugar for an overridden insert.  See NAMD_4FS_RATTLE_RESEARCH.md."""
+    import numpy as np
+
+    ov = {("xo_extra", 0): np.array([2.0, 1.0, 3.0])}   # arbitrary relaxed backbone pos (nm)
+    model = build_atomistic_model(_design("T"), xb_pos_override=ov)
+    pos = {a.name: np.array([a.x, a.y, a.z])
+           for a in model.atoms if a.crossover_id == "xo_extra" and a.extra_base_k == 0}
+    assert {"P", "O5'", "C5'", "C4'"} <= set(pos), "insert missing backbone atoms"
+
+    def blen(n1, n2):
+        return float(np.linalg.norm(pos[n1] - pos[n2]))
+
+    # Canonical B-DNA intra-residue backbone bonds are ~0.14-0.16 nm; the pre-fix bug
+    # produced ~0.6 nm.  0.20 nm cleanly separates healed from stranded.
+    o5_c5 = blen("O5'", "C5'")
+    p_o5 = blen("P", "O5'")
+    c5_c4 = blen("C5'", "C4'")
+    assert o5_c5 < 0.20, f"O5'-C5' = {o5_c5:.3f} nm — phosphate stranded (should be ~0.144)"
+    assert p_o5 < 0.20, f"P-O5' = {p_o5:.3f} nm"
+    assert c5_c4 < 0.20, f"C5'-C4' = {c5_c4:.3f} nm"
+
+
 # ── Part B: descriptors emit from an MD frame that CONTAINS the inserts ────────
 
 def _md_frame(core, *, with_inserts):

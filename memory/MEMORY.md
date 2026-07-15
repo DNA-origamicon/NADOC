@@ -55,8 +55,11 @@ and shared across both computers (see `CLAUDE.md` → Memory layout).
 
 Files are `feedback_<name>.md`. Match the name against what you're editing; each is short.
 
-**General:** **concurrent_sessions** (another Claude session may share this worktree — never `git stash`/`reset`/`restore`;
+**General:** **runpod_downloads_to_archive** (RunPod fetches + big local test scratch go on `/media/jojo/Archive`, NOT the ~92%-full system disk) ·
+**concurrent_sessions** (another Claude session may share this worktree — never `git stash`/`reset`/`restore`;
 **no_live_server_mutation_for_verify** (never POST/DELETE/reset the shared running server to verify — clobbers concurrent work; verify via pytest scratch_session) ·
+**use_completion_triggers** (wait on long sims with a background completion trigger that notifies on finish — never foreground sleep/poll loops) ·
+**runpod_babysitter_must_act** (a RunPod monitor must KILL the pod / alert on failure, not just log; launcher's fetch_outputs has no timeout → hung fetch bills idle) ·
 forbid git in subagent prompts) · aksel_abandoned · crossover_no_reasoning · phase_constants_locked · native_files_preserve_positions ·
 **staples_are_user_intent** (unstapled scaffold = intentional ssDNA loop; routers never touch staples) ·
 design_renderer_visibility_rule · overhang_definition · interrupt_before_doubting_user · busy_popup_threshold ·
@@ -65,7 +68,8 @@ loopskip_no_crossover_ends · browser_console_debugging
 
 **MD / simulation:** c1_pair_builder · wc_calibration · cg_pipeline_lessons · gromacs_debugging · sd_em_constraints ·
 no_parallel_gromacs · mrdna_gromacs_atomistic · mdanalysis_live_reload · pbc_trajectory_alignment ·
-bundle_param_extraction · namd_pdb_serial_limit · namd_cufix_oc_stub · namd_anisotropic_barostat
+bundle_param_extraction · namd_pdb_serial_limit · namd_cufix_oc_stub · namd_anisotropic_barostat ·
+**namd_4fs_production_only** (4.0 fs is the ONLY acceptable production dt; never lower it to dodge RATTLE — fix the clash)
 
 ## Active topic files
 

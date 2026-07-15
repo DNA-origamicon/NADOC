@@ -41,6 +41,38 @@ MEASURED_MS_PER_STEP_SOFT = 51.5
 SECURE_USD_PER_HR = 0.74
 
 
+def _worst_intra_backbone_stretch(pdb: Path, psf: Path) -> tuple[float, str]:
+    """Longest INTRA-residue covalent bond (Å) + a label. Catches the seed-builder
+    phosphate-stranding bug (O5'-C5' at ~6 Å = fatal 4 fs RATTLE start) BEFORE renting
+    a pod. Inter-residue O3'-P linkages wrap across the periodic box (benign), so only
+    same-(seg,resid) bonds are measured. The 4 fs-proven 0xT control maxes at ~3.5 Å
+    (normal crossover-junction geometry the ladder heals), so >5 Å = a real seed defect."""
+    import numpy as np
+
+    xyz, name, resid, seg = [], [], [], []
+    for line in pdb.open():
+        if line.startswith(("ATOM", "HETATM")):
+            xyz.append((float(line[30:38]), float(line[38:46]), float(line[46:54])))
+            name.append(line[12:16].strip()); resid.append(line[22:26].strip()); seg.append(line[72:76].strip())
+    xyz = np.asarray(xyz)
+    lines = psf.read_text().splitlines()
+    bonds: list[tuple[int, int]] = []
+    for i, ln in enumerate(lines):
+        if "!NBOND" in ln:
+            nb = int(ln.split()[0]); vals: list[int] = []; j = i + 1
+            while len(vals) < nb * 2:
+                vals += [int(x) for x in lines[j].split()]; j += 1
+            it = iter(vals); bonds = list(zip(it, it)); break
+    a = np.array([b[0] - 1 for b in bonds]); b = np.array([b[1] - 1 for b in bonds])
+    d = np.linalg.norm(xyz[a] - xyz[b], axis=1)
+    intra = np.array([(seg[a[k]], resid[a[k]]) == (seg[b[k]], resid[b[k]]) for k in range(len(d))])
+    if not intra.any():
+        return 0.0, ""
+    di = np.where(intra, d, 0.0)
+    k = int(di.argmax())
+    return float(di[k]), f"{name[a[k]]}-{name[b[k]]} in {resid[a[k]]} {seg[a[k]]}"
+
+
 class Gate:
     def __init__(self):
         self.failures: list[str] = []
@@ -96,6 +128,18 @@ def main() -> int:
         g.check(min_d > 0.05, "min heavy-atom distance > 0.05 A",
                 f"{min_d:.4f} A — DEGENERATE", on_pass=f"{min_d:.4f} A")
 
+        # Seed-builder health: a catastrophic intra-residue backbone stretch (the
+        # phosphate-stranding bug — O5'-C5' ~6 A on oxDNA-seeded extra bases) is a fatal
+        # 4 fs RATTLE start no minimisation escapes. The 4 fs-proven 0xT control maxes at
+        # ~3.5 A, so >5 A is a real defect. See NAMD_4FS_RATTLE_RESEARCH.md.
+        psf = pkg / f"{job.name_stem}.psf"
+        if psf.exists():
+            worst, where = _worst_intra_backbone_stretch(pdb, psf)
+            g.check(worst <= 5.0, "no catastrophic intra-residue backbone stretch (<5 A)",
+                    f"{worst:.2f} A ({where}) — SEED DEFECT; extra-base phosphate stranded, "
+                    f"4 fs will die at step 0. Re-seed (oxDNA) / check the seed builder.",
+                    on_pass=f"worst {worst:.2f} A")
+
     manifest = json.loads((pkg / "manifest.json").read_text())
 
     # ── 2. The fast path is actually ON ─────────────────────────────────────
@@ -111,6 +155,32 @@ def main() -> int:
             and any(f"{job.name_stem}_hmr.psf" in c.read_text() for c in confs),
             "HMR PSF exists AND is referenced",
             "written but referenced by nothing => prepped without fast=True")
+
+    # ── 2b. 4 fs is the ONLY sanctioned production timestep ─────────────────
+    # A prior session drifted toward "accept 3.0/3.5 fs and match it" to dodge a RATTLE clash
+    # on the extra-base sugars. That is forbidden: 4 fs is the only shippable production dt;
+    # the fix for a 4 fs instability is to remove the clash (oxDNA-seed the design), not to
+    # lower the timestep. Lower dt is legitimate ONLY in the soft ramp chunk (1 fs, offload).
+    # See memory/feedback_namd_4fs_production_only.md.
+    print("\ntimestep — 4 fs is the ONLY sanctioned production dt (lower dt only in the soft ramp)")
+    bad_dt = []
+    for c in confs:
+        txt = c.read_text()
+        m = re.search(r"^\s*timestep\s+([0-9.]+)", txt, re.M)
+        if not m:
+            continue
+        dt = float(m.group(1))
+        # The soft/declash ramp chunk (offload, no GPUresident) is exempt — it is a 1 fs
+        # relaxation stage feeding the 4 fs production, not a production run itself.
+        if "GPUresident" not in txt:
+            continue
+        if abs(dt - 4.0) > 1e-6:
+            bad_dt.append(f"{c.stem}={dt:g}fs")
+    g.check(not bad_dt, "every GPUresident (production/fast) conf runs timestep 4.0",
+            f"SUB-4fs PRODUCTION dt: {', '.join(bad_dt)} — 4 fs is the ONLY sanctioned "
+            f"production timestep. Fix the clash (oxDNA-seed the extra bases); do NOT lower "
+            f"the production dt. See memory/feedback_namd_4fs_production_only.md",
+            on_pass="all 4.0 fs")
 
     # ── 3. Early-stop can actually FIRE ─────────────────────────────────────
     # THE silent 4x bug. outputEnergies was a hardcoded 9600 STEPS; enabling `fast` halves

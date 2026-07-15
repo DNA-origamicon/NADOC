@@ -61,6 +61,12 @@ REMOTE_ROOT = "/workspace/nadoc_jobs"
 CHAIN_SCRIPT = "nadoc_chain.sh"
 STATUS_FILE = "nadoc_status"
 HEARTBEAT_FILE = "nadoc_heartbeat"
+# The post-run fetch must NEVER be able to keep a pod billing.  ``fetch_outputs`` has no
+# internal timeout; an SFTP channel that hangs (a real, observed failure — see the runbook's
+# "stuck fetch bills an idle pod indefinitely") would otherwise wedge run_job_on_pod BEFORE the
+# pod's finally-teardown, billing until a human intervenes.  The volume keeps every output, so
+# abandoning a slow fetch is cheap; a live pod is not.  Generous enough for a ~140 MB checkpoint.
+FETCH_TIMEOUT_S = 900.0
 
 # The patched NAMD lives on the NETWORK VOLUME, built once per GPU architecture.
 # Pods are disposable; the toolchain is not.
@@ -528,7 +534,18 @@ async def run_job_on_pod(
                 await sleep(poll_s)
 
             # Always fetch what exists — even a failed/paused run has useful output.
-            await fetch_results(job, workspace_dir, conn=conn)
+            # BOUNDED: a hung fetch must not keep the pod billing.  On timeout, abandon the
+            # fetch and fall through to teardown — the outputs remain on the volume.
+            try:
+                await asyncio.wait_for(
+                    fetch_results(job, workspace_dir, conn=conn), timeout=FETCH_TIMEOUT_S
+                )
+            except asyncio.TimeoutError:
+                log.error(
+                    "fetch_outputs exceeded %.0fs — ABANDONING the fetch so the pod is destroyed "
+                    "(outputs persist on the volume; pull them later). This is the stuck-fetch "
+                    "billing guard.", FETCH_TIMEOUT_S,
+                )
         finally:
             await conn.close()
 

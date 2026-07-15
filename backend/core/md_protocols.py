@@ -316,6 +316,36 @@ def build_remote_resume_conf(
     return "\n".join(kept) + "\n"
 
 
+# 4 fs is the ONLY sanctioned PRODUCTION timestep (HMR + rigidBonds all fast path).  The
+# single long-standing exception is the explicit 1.0 fs conservative-reference run
+# (rigidBonds none, no HMR) — a deliberately-requested accuracy mode, NOT a stability
+# workaround.  Any intermediate value (2 / 2.5 / 3 / 3.5 fs) is the banned "lower the
+# timestep to dodge a RATTLE clash" anti-pattern: the fix for a 4 fs instability is to remove
+# the offending clash (e.g. oxDNA-seed the extra bases), never to lower production dt.  Lower
+# dt is legitimate ONLY in ramp/anneal/relaxation stages, which do not pass through here.
+# See memory/feedback_namd_4fs_production_only.md.
+PRODUCTION_TIMESTEP_FS = 4.0
+_CONSERVATIVE_REFERENCE_DT_FS = 1.0
+
+
+def require_sanctioned_production_timestep(dt_fs: float) -> float:
+    """Enforce the 4 fs-only production rule; return ``dt_fs`` if it is allowed.
+
+    Raises ``ValueError`` for any production timestep that is neither the 4.0 fs fast path
+    nor the explicit 1.0 fs conservative-reference path.  This is a hard guard against
+    silently shipping a sub-4 fs production run as a workaround for a local clash/instability.
+    """
+    if dt_fs not in (PRODUCTION_TIMESTEP_FS, _CONSERVATIVE_REFERENCE_DT_FS):
+        raise ValueError(
+            f"production timestep {dt_fs:g} fs is not sanctioned: 4.0 fs is the only "
+            f"acceptable production dt (or the explicit 1.0 fs conservative-reference path). "
+            f"Lower dt is allowed ONLY in ramp/anneal/relaxation. Fix the clash (oxDNA-seed "
+            f"the design), do not lower the production timestep. See "
+            f"memory/feedback_namd_4fs_production_only.md"
+        )
+    return dt_fs
+
+
 def build_production_conf(
     spec: "SegmentSpec",
     name_stem: str,
@@ -368,6 +398,7 @@ def build_production_conf(
         psf = f"{name_stem}.psf"
         rigid, ts, gpu_line = "none", 1.0, ""
         nbf, fef, spc = 1, 1, 10
+    require_sanctioned_production_timestep(ts)  # 4 fs-only rule (or explicit 1 fs reference)
     prev = start_checkpoint or spec.previous
     # Anchors + E-field carry into the unrestrained run — where a field's deflection
     # actually develops.  Dropping them here would silently un-anchor the field job and
@@ -1039,13 +1070,20 @@ _DECLASH_BUILD_PDB_SUFFIX = "_build.pdb"  # backup of the original (clashed) bui
 _C1_NO_PARTNER_ANG = 10.8  # C1'-C1' beyond this (no cross-seg partner) ⇒ unpaired
 
 
-def identify_unpaired_residues(psf_path: Path, pdb_path: Path) -> set[tuple[str, str]]:
+def identify_unpaired_residues(
+    psf_path: Path, pdb_path: Path, *, full_segid: bool = False
+) -> set[tuple[str, str]]:
     """Return (chain_id, resid) of DNA residues with no Watson-Crick partner.
 
     A residue is "unpaired" (single-stranded) if its C1' atom has no
     cross-segment C1' neighbour within _C1_NO_PARTNER_ANG Å — i.e. it is not
     part of a duplex.  Chain id is taken as the last character of the PSF segid
     (DNAA→A … DNAI→I), matching the PDB chain column.
+
+    ``full_segid=True`` returns the FULL segid (e.g. "D01C") instead of its last
+    character — the key format ``write_hmr_psf(heavy_residues=…)`` and
+    ``extra_base_segid_resids`` match against the PSF's NATOM segid token, where
+    last-char keys would alias many segids.
     """
     import MDAnalysis as mda  # noqa: PLC0415
     from scipy.spatial import cKDTree  # noqa: PLC0415
@@ -1067,7 +1105,8 @@ def identify_unpaired_residues(psf_path: Path, pdb_path: Path) -> set[tuple[str,
         ]
         mind = min((float(np.linalg.norm(pos[k] - pos[m])) for m in nbrs), default=99.0)
         if mind > _C1_NO_PARTNER_ANG:
-            ss.add((str(seg[k])[-1], str(int(resid[k]))))
+            chain = str(seg[k]) if full_segid else str(seg[k])[-1]
+            ss.add((chain, str(int(resid[k]))))
     return ss
 
 
@@ -1123,7 +1162,13 @@ def _base_name_stem(package_dir: Path) -> str:
     return base[0].stem
 
 
-def write_hmr_psf(src_psf: Path, dst_psf: Path, factor: float = 3.0) -> int:
+def write_hmr_psf(
+    src_psf: Path,
+    dst_psf: Path,
+    factor: float = 3.0,
+    heavy_residues: "set[tuple[str, str]] | None" = None,
+    heavy_factor: float = 8.0,
+) -> int:
     """Write dst_psf = src_psf with non-water hydrogen masses scaled by ``factor``.
 
     Hydrogen Mass Repartitioning lets the dynamics run at a 4 fs timestep with
@@ -1133,10 +1178,29 @@ def write_hmr_psf(src_psf: Path, dst_psf: Path, factor: float = 3.0) -> int:
     partner, conserving total mass exactly.  Water is left untouched (already
     rigid; repartitioning it would perturb solvent density).
 
+    ``heavy_residues`` — a set of ``(segid, resid)`` keys (full segid, resid as str)
+    whose atoms are made HEAVIER instead of HMR-lightened: they skip repartitioning and
+    every atom mass is scaled by ``heavy_factor`` (from physical).  Use it for the
+    single-stranded / dangling crossover extra bases.  Even with a clean seed they blow a
+    4 fs step at step 0: their fast heavy-atom torsional/librational modes (sugar pucker,
+    glycosidic, thymine-methyl rotation) are NOT frozen by ``rigidBonds`` (only X-H
+    stretches are), and HMR *lightens* those carbons (thymine C5M CH3 -> ~6 amu) making it
+    WORSE — the failure gets monotonically worse with more HMR.  A heavy-atom mode has
+    frequency w = sqrt(k/m), so raising the mass slows it; scaling the dangling bases by
+    ~8x drops those modes below the 4 fs stability limit (empirically converts a
+    deterministic step-0 blow-up into survival, with the failure moving off the extra
+    bases entirely).  This is thermodynamically FREE — mass drops out of the
+    configurational partition function, so every equilibrium/fluctuation observable (the
+    inter-helix stiffness the campaign measures) is UNCHANGED; only the extra bases'
+    kinetics slow (a minor sampling-rate cost, not a bias, and they are not the measured
+    DOF).  0xT (no dangling bases) needs no heavy set.  ``heavy_factor`` is tunable —
+    validate/tune it on a full-ladder run.  See NAMD_4FS_RATTLE_RESEARCH.md.
+
     Only the mass token of each atom record is rewritten, at its original column
     width, so atom ordering and every other field stay byte-for-byte intact.
     Returns the number of hydrogens repartitioned.
     """
+    heavy_residues = heavy_residues or set()
     lines = src_psf.read_text().splitlines()
 
     def _find(tag: str) -> int:
@@ -1152,13 +1216,16 @@ def write_hmr_psf(src_psf: Path, dst_psf: Path, factor: float = 3.0) -> int:
 
     mass = [0.0] * (n_atoms + 1)            # 1-based
     resname = [""] * (n_atoms + 1)
+    heavy = [False] * (n_atoms + 1)         # dangling extra bases: mass scaled UP, no HMR
     span: list[Optional[tuple[int, int, int, int]]] = [None] * (n_atoms + 1)
     for k in range(n_atoms):
         li = natom_i + 1 + k
         toks = list(re.finditer(r"\S+", lines[li]))
         aid = int(toks[0].group())
-        resname[aid] = toks[3].group()
-        m = toks[7]                          # atomid seg resid resname name type charge MASS
+        resname[aid] = toks[3].group()       # atomid seg resid resname name type charge MASS
+        if heavy_residues and (toks[1].group(), toks[2].group()) in heavy_residues:
+            heavy[aid] = True
+        m = toks[7]
         mass[aid] = float(m.group())
         span[aid] = (li, m.start(), m.end(), m.end() - m.start())
 
@@ -1179,7 +1246,7 @@ def write_hmr_psf(src_psf: Path, dst_psf: Path, factor: float = 3.0) -> int:
     heavy_delta: dict[int, float] = {}
     n_hmr = 0
     for aid in range(1, n_atoms + 1):
-        if not _is_h(aid) or resname[aid] in _HMR_WATER_RESNAMES:
+        if not _is_h(aid) or resname[aid] in _HMR_WATER_RESNAMES or heavy[aid]:
             continue
         parents = [p for p in neigh[aid] if not _is_h(p)]
         if len(parents) != 1:                # ion-model H bonded to >1 heavy: skip
@@ -1190,6 +1257,14 @@ def write_hmr_psf(src_psf: Path, dst_psf: Path, factor: float = 3.0) -> int:
         n_hmr += 1
     for aid, d in heavy_delta.items():
         mass[aid] -= d
+    # Dangling extra bases: uniform mass scale-UP on their (physical) atoms — slows their
+    # fast heavy-atom modes below the 4 fs limit.  Applied AFTER HMR; a heavy residue's
+    # atoms were skipped by the HMR loop (its H never donated, its heavy atoms received no
+    # delta — DNA H are intra-residue), so they are still at physical mass here.
+    if heavy_residues and heavy_factor != 1.0:
+        for aid in range(1, n_atoms + 1):
+            if heavy[aid] and resname[aid] not in _HMR_WATER_RESNAMES:
+                mass[aid] *= heavy_factor
 
     out = list(lines)
     for aid in range(1, n_atoms + 1):
@@ -1521,6 +1596,7 @@ def prepare_mgh_slow_release(
     declash: bool = False,
     force_soft: bool = False,
     fast: bool = False,
+    pre_declashed: bool = False,
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
 ) -> tuple[str, str, list[SegmentSpec]]:
@@ -1596,7 +1672,19 @@ def prepare_mgh_slow_release(
         progress("enm", None, "Building elastic-network restraints…")
     pdb_path = package_dir / f"{name_stem}.pdb"
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
-    enm_report = write_aksimentiev_enm_files(pdb_path, package_dir, name_stem, progress=progress)
+    # Exclude single-stranded crossover extra bases from the LADDER ENM so they relax to
+    # their true conformation rather than being pinned into a stretched backbone bond.
+    # Without this, an oxDNA-SEEDED FAST (4 fs) ladder restrains the seeded inserts and the
+    # minimiser stretches ~14 C4'-C5' bonds to ~2 A — enough to trip a 4 fs RATTLE step.
+    # (The un-seeded declash path hid this behind its soft 1 fs integrator; ss inserts
+    # should never be ENM-pinned there either, so the exclusion is correct for both.)
+    _ladder_enm_exclude: "set[tuple[str, str]]" = set()
+    if design_has_extra_bases(design) or declash:
+        _ladder_enm_exclude = identify_unpaired_residues(
+            package_dir / f"{name_stem}.psf", pdb_path)
+    enm_report = write_aksimentiev_enm_files(
+        pdb_path, package_dir, name_stem,
+        exclude_residues=_ladder_enm_exclude or None, progress=progress)
 
     # Anchors (optional): resolve the shared anchor scopes to DNA residues and write a
     # fixedAtoms marker PDB the whole ladder reads.  A JOB-REQUEST annotation resolved
@@ -1632,7 +1720,18 @@ def prepare_mgh_slow_release(
     # automatically whenever the design inserts extra bases at crossovers (they
     # are built clashed) or carries strand extensions (free ssDNA tails seeded on a
     # geometric arc); the explicit flag can force it on otherwise.
-    declash = declash or design_has_extra_bases(design) or design_has_extensions(design)
+    #
+    # ``pre_declashed`` OVERRIDES the extra-base auto-enable: an oxDNA-SEEDED structure
+    # (build_namd_seed) already has its extra bases at relaxed, non-clashing
+    # positions with healthy backbone bonds, so the soft declash ladder — and the
+    # 1 fs / no-HMR / no-fast penalty it forces — is unnecessary.  Seeding is
+    # precisely what lets an extra-base design run the 4 fs fast ladder (the
+    # geometric-guess build could not: its stacked sugars minimised into a ~3.1 A
+    # C4'-C5' bond that is fatal to a 4 fs RATTLE step). See the 24hb 4 fs
+    # investigation + backend/core/oxdna_seed.py.
+    declash = (declash
+               or (design_has_extra_bases(design) and not pre_declashed)
+               or design_has_extensions(design))
     declash_enm_file: Optional[str] = None
     n_unpaired = 0
     if declash:

@@ -250,3 +250,41 @@ def test_extra_base_junction_backbone_bonds_are_sane(tmp_path) -> None:
     assert lengths.max() < 3.0, (
         f"a backbone bond is stretched to {lengths.max():.1f} Å — extra-base inserts "
         "are not threaded inline in the psfgen residue order")
+
+
+def test_extra_base_segid_resids_maps_extra_bases_by_ordinal(tmp_path):
+    """extra_base_segid_resids maps model crossover_id-tagged residues to the PSF's
+    (segid, resid) by ORDINAL — the robust bridge, since extra bases are unmarked THY
+    residues in the final PSF and geometric ss-detection misses crossover-sandwiched ones."""
+    from types import SimpleNamespace as NS
+
+    from backend.core.namd_topology import extra_base_segid_resids
+
+    # chains sorted A,B; chain A residue 2 is an extra base (ordinal 1)
+    model = NS(atoms=[
+        NS(chain_id="A", seq_num=1, crossover_id=None),
+        NS(chain_id="A", seq_num=2, crossover_id="xo1"),
+        NS(chain_id="A", seq_num=3, crossover_id=None),
+        NS(chain_id="B", seq_num=1, crossover_id=None),
+    ])
+    psf = tmp_path / "t.psf"
+    psf.write_text("\n".join([
+        "       4 !NATOM",
+        "       1 D000     1        THY  C1'  CN7   0.0   12.0   0",
+        "       2 D000     2        THY  C1'  CN7   0.0   12.0   0",
+        "       3 D000     3        ADE  C1'  CN7   0.0   12.0   0",
+        "       4 D001     1        CYT  C1'  CN7   0.0   12.0   0",
+        "       0 !NBOND: bonds",
+    ]) + "\n")
+    assert extra_base_segid_resids(model, psf) == {("D000", "2")}
+
+
+def test_extra_base_segid_resids_empty_without_extra_bases(tmp_path):
+    from types import SimpleNamespace as NS
+
+    from backend.core.namd_topology import extra_base_segid_resids
+
+    model = NS(atoms=[NS(chain_id="A", seq_num=1, crossover_id=None)])
+    psf = tmp_path / "t.psf"
+    psf.write_text("       1 !NATOM\n       1 D000 1 THY C1' CN7 0.0 12.0 0\n       0 !NBOND\n")
+    assert extra_base_segid_resids(model, psf) == set()

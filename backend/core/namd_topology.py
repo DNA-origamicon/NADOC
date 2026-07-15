@@ -283,6 +283,65 @@ def built_pdb_residue_keys(
     return keys
 
 
+def extra_base_segid_resids(
+    model: AtomisticModel, psf_path: Path, *, sort_chains: bool = True
+) -> set[tuple[str, str]]:
+    """``(segid, resid)`` of every crossover extra-base residue in a psfgen'd PSF.
+
+    Extra bases carry NO distinguishing mark in the final CHARMM PSF/PDB (they are
+    ordinary THY/ADE/CYT/GUA residues), and geometric single-strand detection misses the
+    ones sandwiched at a crossover junction (their C1' sits near a neighbouring duplex
+    C1').  But the built PDB's residue ORDER is preserved into the PSF (the same
+    contiguity/ordinal bridge the ENM uses — see :func:`built_pdb_residue_keys`), so the
+    robust map is by ORDINAL: mark each extra-base residue from the model's per-atom
+    ``crossover_id`` tag, then read that ordinal's ``(segid, resid)`` from the PSF's
+    ordered DNA residues.  ``sort_chains`` must match the package's chain order (True for
+    the psfgen / equilibrium-aware path).
+
+    Used to make the dangling extra bases HEAVY in the HMR PSF
+    (``write_hmr_psf(heavy_residues=…)``): their fast heavy-atom torsional modes blow a
+    4 fs step, and HMR *lightens* those carbons (thymine C5M, sugar C5') making it worse —
+    so their masses are scaled UP instead, slowing the modes below the 4 fs limit
+    (equilibrium-exact).  Returns an empty set when the design has no extra bases.
+    """
+    atoms_by_chain: dict[str, list[Atom]] = {}
+    for a in model.atoms:
+        atoms_by_chain.setdefault(a.chain_id, []).append(a)
+    chain_order = sorted(atoms_by_chain) if sort_chains else list(atoms_by_chain)
+    xb_ordinals: set[int] = set()
+    ordinal = 0
+    for chain_id in chain_order:
+        by_res: dict[int, list[Atom]] = {}
+        for a in atoms_by_chain[chain_id]:
+            by_res.setdefault(a.seq_num, []).append(a)
+        for seq in sorted(by_res):
+            if any(getattr(x, "crossover_id", None) is not None for x in by_res[seq]):
+                xb_ordinals.add(ordinal)
+            ordinal += 1
+    if not xb_ordinals:
+        return set()
+
+    _DNA = {"THY", "ADE", "CYT", "GUA", "DA", "DT", "DC", "DG"}
+    seg_res: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    in_atoms = False
+    for line in Path(psf_path).read_text().splitlines():
+        if "!NATOM" in line:
+            in_atoms = True
+            continue
+        if "!NBOND" in line:
+            break
+        if not in_atoms:
+            continue
+        t = line.split()
+        if len(t) >= 8 and t[0].isdigit() and t[3] in _DNA:
+            key = (t[1], t[2])
+            if key not in seen:
+                seen.add(key)
+                seg_res.append(key)
+    return {seg_res[o] for o in xb_ordinals if o < len(seg_res)}
+
+
 def resolve_anchor_residue_indices(
     design: Design,
     anchors: "list[dict] | None",

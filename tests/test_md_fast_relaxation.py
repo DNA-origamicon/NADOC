@@ -40,6 +40,27 @@ def _masses(psf_text: str) -> dict[int, float]:
     return out
 
 
+def test_write_hmr_psf_heavy_residues_scale_up_and_skip_hmr(tmp_path: Path):
+    """heavy_residues (dangling extra bases) are NOT HMR-lightened — every atom is scaled
+    UP by heavy_factor from physical mass, to slow their fast heavy-atom modes below the
+    4 fs limit. Water untouched; the residue's H are not repartitioned."""
+    src = tmp_path / "s.psf"
+    dst = tmp_path / "s_heavy.psf"
+    src.write_text(_PSF)
+
+    # mark the DNA residue (segid SOL, resid 1) heavy
+    n = M.write_hmr_psf(src, dst, heavy_residues={("SOL", "1")}, heavy_factor=8.0)
+    assert n == 0  # no H repartitioned — the only DNA residue is heavy, water is skipped
+
+    m = _masses(dst.read_text())
+    assert abs(m[1] - 12.011 * 8.0) < 1e-3   # carbon scaled x8 from physical (NOT lightened)
+    assert abs(m[2] - 1.008 * 8.0) < 1e-3    # each H scaled x8 (NOT the 3.024 HMR value)
+    assert abs(m[6] - 15.9994) < 1e-4        # water O untouched
+    assert abs(m[7] - 1.008) < 1e-4          # water H untouched
+    # column widths preserved
+    assert [len(l) for l in _PSF.splitlines()] == [len(l) for l in dst.read_text().splitlines()]
+
+
 def test_write_hmr_psf_conserves_mass_and_skips_water(tmp_path: Path):
     src = tmp_path / "s.psf"
     dst = tmp_path / "s_hmr.psf"
