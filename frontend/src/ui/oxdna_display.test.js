@@ -497,7 +497,7 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     const { ctrl, api, surf } = makeHeavyDeps('surface')
     await ctrl.displayJob('job1')
     await tick()
-    expect(api.getOxdnaDisplaySurface).toHaveBeenCalledWith('job1', true)
+    expect(api.getOxdnaDisplaySurface).toHaveBeenCalledWith('job1', true, expect.anything())
     const data = { vertices: [0, 0, 0, 1, 1, 1], faces: [0, 1, 2] }
     expect(surf.applyPositionLerp).toHaveBeenCalledWith(data, data, 0)
   })
@@ -523,6 +523,31 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(pushed.scalar).toBe(true)                          // forces viridis through any colour mode
     expect(pushed.vertex_colors).toBeInstanceOf(Float32Array)
     expect(pushed.vertex_colors.length).toBe(3 * 3)           // 3 verts × RGB
+  })
+
+  it('stopAndRestore clears active/mode BEFORE restoring the design heavy rep (so the restore does not re-defer → rep persists, no revert to CG)', async () => {
+    const seen = {}
+    const surf = { getMode: () => 'on', applyPositionLerp: vi.fn() }
+    const atom = { getMode: () => 'off', clearScalarColors: vi.fn() }
+    const designRenderer = { applyFemPositions: vi.fn(), clearScalarColors: vi.fn() }
+    const api = {
+      getOxdnaDisplay: vi.fn().mockResolvedValue({ ready: true, stage_name: 's',
+        positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0 }] }),
+      getOxdnaDisplaySurface: vi.fn().mockResolvedValue(
+        { ready: true, surface: { vertices: [0, 0, 0, 1, 1, 1], faces: [0, 1, 2] } }),
+    }
+    // The restore callback captures the controller's active/mode state at restore time —
+    // drivesHeavy() (which decides whether applySurfaceMode DEFERS) reads exactly these.
+    const ctrl = initOxdnaDisplay({
+      designRenderer, api,
+      getAtomisticRenderer: () => atom, getSurfaceRenderer: () => surf,
+      getCurrentRepr: () => 'surface',
+      onRestoreDesignHeavy: () => { seen.active = ctrl.isActive(); seen.mode = ctrl.mode() },
+    })
+    await ctrl.displayJob('job1'); await tick()
+    ctrl.stopAndRestore()
+    expect(seen.active).toBe(false)   // overlay already inactive → drivesHeavy() false → no defer
+    expect(seen.mode).toBe(null)
   })
 
   it('flex map is cached across toggle-off → re-toggle is instant (no re-fetch)', async () => {

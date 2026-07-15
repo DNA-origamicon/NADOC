@@ -482,4 +482,142 @@ otherwise. NB the seed path already used False for the identical "don't double-a
 - **Still open:** first-switch ~25 s (one authoritative build + 300k-atom JSON/mesh) — precompute or a
   lean frames-only build would push toward instant. See [[project_md_viz_tools]].
 
+### §27. Surface-display speedups (2026-07-15)
+
+Surface has NO per-nucleotide decomposition (it's one global marching-cubes mesh), so the atomistic
+stamp trick doesn't apply. VoltronCore first view was ~14 s + a ~46 MB JSON mesh. Profile:
+`build_display_model` ~6 s (shared, Atom-object creation) · `compute_surface` 4.6 s (binary_erosion
+1.8 · marching_cubes 1.1 · strand KDTree 0.8 · grid 0.6) · `smooth_mesh` 1.5 s. Four wins shipped:
+
+- **Adaptive grid** (`surface.adaptive_grid_spacing`, cap `_ADAPTIVE_VOXEL_CAP=3.5M`) — coarsen the
+  occupancy grid on LARGE structures (0.20→~0.31 nm on VoltronCore) so voxel count stays bounded.
+  Compute ~4.6→~2 s, mesh 723k→337k verts, invisible at 10-100 nm scale. Small designs keep 0.20.
+- **`close_backbone=False` for surface** — a VdW envelope needs atom positions, not connected
+  phosphate linkers; skips the closure (`build_display_model(..., close_backbone=…)` param).
+- **Binary mesh transfer** — `oxdna_health.pack_surface_bin` + `POST .../display-surface-bin`
+  (`Response` octet-stream: u32 magic/nVerts/nFaces/colorKind · f32 verts · u32 faces · u8 rgb | f32
+  rmsf; nVerts=0 ⇒ not ready). Frontend `scene/surface_bin.js parseSurfaceBin` wraps the buffer as
+  typed arrays — **no million-number JSON.parse** and ~2× smaller (VoltronCore 30→13.6 MB). Wired in
+  `oxdna_display._relaxedSurfaceMesh` (binary-first, JSON fallback for the MD adapter). rmsf/traj
+  surface still JSON (follow-on).
+- **Native-flash skip for surface** — `atom_surface_display._applySurfaceMode` defers to the overlay
+  (keeps relaxed CG up, skips the `/design/surface` design build) when
+  `getSimOverlayWillDriveHeavy()` (renamed from `…Atomistic`; covers atomistic+surface) → the overlay
+  hides CG when its mesh lands (`_pushSurface`→`onHeavyApplied`). Loading toast now covers
+  `kind==='surface'` ("Computing surface…") via the heavy-status listener.
+
+Net VoltronCore: ~14 s + 46 MB JSON → **~9.4 s + 13.6 MB binary**, repeat views cached. Floor is the
+shared ~6 s all-atom build (a positions-only build would trim it — same open item as atomistic).
+
+**Surface-defer render bug (2026-07-15, FIXED same day):** the native-flash skip broke surface
+rendering — `surface_renderer._mode`/`_mesh` are set ONLY by `update(data)`, and the defer path
+`return`ed before it, so the renderer stayed mode 'off' with no mesh and `_pushSurface` bailed → the
+surface NEVER drew (looked like it "took forever"; toast dismissed because the build finished without
+drawing). Fix: the defer path now `surfaceRenderer.update({vertices:[],faces:[]}, colorMode)` to
+activate mode 'on' + an empty mesh the overlay's `applyPositionLerp` populates (mirrors how the
+atomistic defer sets `atomisticRenderer.setMode()` up front). The "extra-bases at native" the user saw
+was the flexible crossover-arc overlay (`flexible_arcs.setRepresentation` shows only for full/beads →
+hidden in surface, revealing the geometric arc) while the CG lingered during the broken never-render
+state — moot once the surface draws and `onHeavyApplied` hides the CG. Predicate renamed
+`getSimOverlayWillDriveAtomistic`→`…Heavy` (covers atomistic+surface).
+
+**Surface probe-radius on an overlay (2026-07-15, FIXED):** changing probe radius while a sim overlay
+owned the surface called `_applySurfaceMode` → the defer path → blanked to an empty mesh (reverted to
+CG) and never regenerated, AND the overlay surface fetch ignored the sidebar params. Fix: when
+`getSimOverlayWillDriveHeavy()`, the probe/colour-mode change calls `onSurfaceParamsChanged` (→
+`oxdnaDisplay.reapplyForRepr`, DEBOUNCED 250 ms in main.js since each rebuild is seconds) instead of
+`_applySurfaceMode`; `oxdna_display._relaxedSurfaceMesh` now passes `getSurfaceParams()`
+(`{probe_radius, color_mode}` from `atom_surface_display`) to the surface fetch, and the route's cache
+key already includes them → new probe = rebuild. Verified: probe 0.28→0.6 gives 337k→252k verts.
+
+**Rep persistence on sim-display OFF (2026-07-15, FIXED + audited):** turning the sim display off while
+in a heavy rep (surface/atomistic) reverted the display to CG/full. Root cause (a native-flash-skip
+regression): `oxdna_display.stopAndRestore` called `_restoreHeavy()` (→ `onRestoreDesignHeavy` →
+`_restoreDesignHeavy` → `applySurfaceMode/applyAtomisticMode`) BEFORE clearing `_active`/`_mode`, so
+`drivesHeavy()` still returned true and the restore's applyMode DEFERRED — blanking the design
+surface/atoms and leaving the CG up. Fix: clear `_active=false; _mode=null; _jobId=null` FIRST, then
+restore. Also removed the `_heavyActive` gate on `onRestoreDesignHeavy` (self-gates on
+getMode/getSurfaceMode) so turning off DURING the deferred build (before the overlay pushed, when
+`_heavyActive` is still false) also restores the design heavy rep instead of leaving the CG up.
+**Rep-persistence audit** (surface/atomistic/full × sim on/off): sim-OFF in heavy rep → FIXED (design
+heavy shown, rep persists); switch sim mode (relaxed↔rmsf↔traj) in heavy rep → persists (brief
+design-heavy rebuild between, pre-existing, could optimise); switch rep while sim on → intended change
+(reapplyForRepr); turn sim ON in heavy rep → persists (sim heavy); deviation/live in heavy rep → NOT a
+revert but CG-only modes don't reconstruct the heavy rep (heavy shows design — known limitation).
+No store-level rep reset in any off/panel path (`setCGVisible(true)` at atom_surface:85 is
+`applySurfaceMode('off')` = leaving surface rep, an intended change).
+
+**DESIGN surface was still the OLD slow path (2026-07-15, FIXED):** toggling the sim surface OFF shows
+the DESIGN surface via `GET /design/surface` (`routes_display_geometry.get_surface`) — a SEPARATE route
+from the oxDNA-overlay surface, and it had none of the optimizations, so Off was ~37 s vs the overlay's
+~9 s. Fixed by giving it the same `fast_bridges=True` build + `adaptive_grid_spacing` (VoltronCore
+37 s→6 s, 6×). Still JSON (not binary) — its ~30 MB transfer is the only remaining gap vs the overlay's
+13.6 MB binary; add a `/design/surface-bin` + frontend `_ensureSurfaceData` binary path if it matters.
+NB the STL-export route builds its own model (exact geometry) — unaffected by the display fast_bridges.
+
+**CG-bead surface = the real speedup (2026-07-15):** profiling showed the all-atom REBUILD (~300k
+`Atom` objects + per-nucleotide numpy overhead) dominates, and it's wasted — at the ~0.3 nm display grid
+individual atoms aren't resolved (subsampling atoms 8× → 1.6 Å envelope change). So the DEFAULT surface
+now rasterises ~2 coarse spheres/nucleotide (backbone + base, `bead_radius=0.5 nm`) straight from the CG
+geometry / relaxed frame — NO all-atom rebuild. `surface.cg_surface_mesh` + `make_cg_bead`;
+`oxdna_health._cg_beads_from_frame` (backbone via `oxdna_backbone_site`, base ≈ CM+a1·0.34 nm) +
+`_strand_id_map`; design beads from `_geometry_for_design` in `get_surface`. Envelope within ~2.8 Å of
+the all-atom surface (< the grid's own spacing) — ChimeraX-style low-res. **VoltronCore: design surface
+6 s→1.4 s (4×), sim surface 9.4 s→4.8 s (2×).** A `detail` param ('coarse' default | 'fine' = exact
+all-atom) on `frame_surface_json` + `get_surface` + `OxdnaSurfaceBody`; frontend **"High detail"
+checkbox** (`cb-surface-highdetail`) in the Surface-options sidebar threads `detail` via
+`getSurfaceParams` (overlay) + the `/design/surface` URL. Coarse mesh is slightly bumpier/bigger (CG
+beads) — raise `CG_BEAD_RADIUS_NM` toward 0.55-0.6 if it reads too bumpy. Still open: sim-coarse's
+`_strand_id_map` (_geometry_for_design ~0.6 s) + per-nuc `oxdna_backbone_site` are the residual overhead.
+
+### §27b. Vectorized fine-surface build + design-surface binary transfer (2026-07-15)
+
+Two follow-ons to §27, both validated by a new visual-regression suite.
+
+- **Surface visual-regression tests** (`tests/test_surface_visual_regression.py`, slow+atomistic;
+  6hb stays fast). `surface_hausdorff(meshA, meshB)` (symmetric cKDTree vertex distance,
+  mean/p99/max) + `mesh_volume`/`mesh_area` oracles; panel = 6hb · 18hb_routed · VoltronCore
+  (`workspace/oxdna_jobs/154d3ea291b7/design.json`, skips if absent). Pins: fine-surface
+  determinism (rebuild → 0 Å), vertex/face/volume/area invariants (±8%/±5% bands), coarse-vs-fine
+  characterization (~2.8 Å mean), and a provably-red perturbation test. **These gate the vectorized
+  build** (`test_vectorized_fine_surface_matches_exact_build` + a deformed case).
+
+- **`atomistic.surface_atom_cloud(design) → (positions, radii, strand_ids)`** — vectorised all-atom
+  point cloud for the DESIGN fine surface, no 300k `Atom` objects. `_atom_frames_batch` (the
+  per-nucleotide frame math batched over `(N,3)` stacks — **byte-identical** to the locked scalar
+  `_atom_frame`, the 37k `numpy.cross` calls collapsed) → einsum template stamp → `_apply_cloud_bridges`
+  (the fast_bridges crossover + skip phosphate-linker lerp, array form) → 4-marker deformation/cluster
+  fold. `surface.compute_surface_from_cloud` rasterises it (occupancy grid grouped by radius; **must**
+  pad the bbox by `max(VDW_RADIUS.values())×scale` like `_build_occupancy_grid`, else the grid shifts
+  ~1 Å). **Byte-identical (0 Å) to the exact fast_bridges build on all panel designs**; VoltronCore
+  fine build **7.1 s → 0.83 s**, full fine surface ~2.4 s. Wired in `routes_display_geometry.
+  _build_design_surface_mesh` detail='fine' via `_can_use_surface_cloud` — designs with
+  flexible-ssDNA frames / extra-base crossovers / extension tails FALL BACK to the exact `Atom` build
+  (those atoms aren't in the cloud yet — no envelope regression, just no speedup). The relaxed-overlay
+  fine surface (`frame_surface_json` detail='fine') was left on the existing path (coarse is its default).
+
+- **`GET /design/surface-bin`** — binary sibling of `/design/surface` (JSON), mirrors the overlay's
+  `display-surface-bin`. `pack_surface_bin` extended with an OPTIONAL trailing strand-index block
+  (`strand_kind` u32 · JSON id table · u32[nVerts]) so the design surface still recolours client-side;
+  the overlay omits it (backward-compatible). Frontend `surface_bin.js parseSurfaceBin` reads the tail
+  (alignment-safe `buf.slice` for the index array); `surface_renderer` `_isIndexable` accepts a
+  Uint32Array `vertex_strand_index`; `atom_surface_display._ensureSurfaceData` fetches binary-first
+  (`api.getDesignSurfaceBin`) with JSON fallback. **VoltronCore coarse design surface 74 MB JSON →
+  19.7 MB binary (3.75×)** and no million-number `JSON.parse`. NB the live dev server needs a restart to
+  serve the new route; until then the frontend falls back to JSON automatically.
+
+**STILL OPEN — surface VISUAL QUALITY (next session's focus, 2026-07-15).** Speed is now
+maxed (build 7 s→0.8 s, byte-identical); the remaining gap is *appearance*. On a VoltronCore-
+size design ChimeraX is about as slow as NADOC but its molecular surface looks markedly better
+than ours. User confirmed via ChimeraX. Investigated + ruled out as NON-fixes for the coarse
+default: bases ARE included and contribute (removing them shifts the envelope up to ~9.6 Å), but
+the outer duplex surface is backbone-defined by physics — pushing the CG base bead toward the
+axis is FLAT (coarse-vs-fine ~2.75 Å regardless of displacement 0.3→0.9 nm; it only fills
+invisible core), and larger bead radius just fattens away from the true all-atom envelope (0.45 nm
+matches fine best). So the quality gap is NOT base-bead placement. Likely levers to explore next
+session: true SES/Connolly (rolling-probe reentrant surfaces, not morphological closing on a voxel
+grid) · finer/adaptive meshing + better normals/shading · higher grid resolution where afforded ·
+matching ChimeraX's probe/vertex-density defaults. A NEW session owns this — this commit's
+vectorized build + binary transfer are DONE and shipped; the visual quality is the open item.
+
 > **History.** Experiment narratives, dated UPDATE sections + resolved investigations live in [project_oxdna_relaxation_archive.md](project_oxdna_relaxation_archive.md). Read on demand only.

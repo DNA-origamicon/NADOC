@@ -151,6 +151,7 @@ def get_surface(
     probe_radius: float = 0.28,
     radius_inflate: float = 1.30,
     smooth: int = 15,
+    detail: str = "coarse",
 ) -> dict:
     """
     Compute and return a triangulated molecular surface mesh.
@@ -177,26 +178,97 @@ def get_surface(
     }
     """
     import time
-    from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
+    from backend.core.surface import surface_to_json
 
     design = design_state.get_or_404()
-    model = build_atomistic_model(
-        design,
-        nuc_frame_override=_flexible_display_override(design),
-    )
-
     t0 = time.perf_counter()
-    mesh = compute_surface(
-        model.atoms,
-        grid_spacing=grid_spacing,
-        probe_radius=probe_radius,
-        radius_scale=1.2 * radius_inflate,
-    )
-    mesh = smooth_mesh(mesh, iterations=smooth)
+    mesh = _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflate, smooth, detail)
     t_ms = (time.perf_counter() - t0) * 1000.0
 
     return surface_to_json(mesh, design, color_mode=color_mode, t_ms=t_ms)
+
+
+@router.get("/design/surface-bin")
+def get_surface_bin(
+    color_mode: str = "strand",
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
+    radius_inflate: float = 1.30,
+    smooth: int = 15,
+    detail: str = "coarse",
+):
+    """Binary counterpart of ``GET /design/surface`` — the SAME mesh packed by
+    ``oxdna_health.pack_surface_bin`` into a compact little-endian blob (~2× smaller AND no
+    million-number ``JSON.parse`` on the client; decode with ``scene/surface_bin.js``).  The
+    strand-index table rides along so the design surface still recolours client-side (mirrors
+    the sim overlay's ``display-surface-bin``).  Empty 16-byte header (n_verts=0) = empty."""
+    from fastapi import Response
+    from backend.core.surface import surface_to_json
+    from backend.core.oxdna_health import pack_surface_bin
+
+    design = design_state.get_or_404()
+    mesh = _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflate, smooth, detail)
+    data = surface_to_json(mesh, design, color_mode=color_mode)
+    return Response(content=pack_surface_bin(data), media_type="application/octet-stream")
+
+
+def _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflate, smooth, detail):
+    """Build the design's molecular surface mesh — the shared body of ``get_surface`` and
+    ``get_surface_bin`` (JSON vs binary transfer).  ``detail='coarse'`` (default) rasterises
+    ~2 CG spheres/nucleotide from design geometry (no all-atom rebuild — ~3× faster, envelope
+    within ~2.8 Å); ``'fine'`` builds the exact all-atom model."""
+    from backend.core.surface import (compute_surface, compute_surface_from_cloud, smooth_mesh,
+                                      adaptive_grid_spacing, adaptive_grid_spacing_arr,
+                                      cg_surface_mesh, make_cg_bead)
+    if detail == "coarse":
+        from backend.core.design_geometry import _geometry_for_design
+        beads = []
+        for g in _geometry_for_design(design):
+            for _k in ("backbone_position", "base_position"):
+                p = g.get(_k)
+                if p is None:
+                    continue
+                beads.append(make_cg_bead(
+                    p[0], p[1], p[2], strand_id=g.get("strand_id", ""),
+                    helix_id=g.get("helix_id", ""), bp_index=int(g.get("bp_index", 0)),
+                    direction=g.get("direction", "FORWARD")))
+        return cg_surface_mesh(beads, grid_spacing=grid_spacing, probe_radius=probe_radius, smooth=smooth)
+
+    # FINE (all-atom) surface.  The vectorised point cloud (surface_atom_cloud) reproduces the
+    # full fast_bridges build BYTE-FOR-BYTE on designs it covers (VoltronCore build 7 s → 0.8 s)
+    # — but it omits flexible-ssDNA frames, extra-base crossover atoms, and extension tails, so
+    # those designs fall back to the exact Atom-object build (correctness over speed).
+    if _can_use_surface_cloud(design):
+        from backend.core.atomistic import surface_atom_cloud
+        pos, radii, sids = surface_atom_cloud(design)
+        gs = adaptive_grid_spacing_arr(pos, grid_spacing)
+        mesh = compute_surface_from_cloud(pos, radii, sids, grid_spacing=gs,
+                                          probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+        return smooth_mesh(mesh, iterations=smooth)
+
+    from backend.core.atomistic import build_atomistic_model
+    # DISPLAY surface: cheap interpolated phosphate bridges (fast_bridges — 6× faster
+    # build; the VdW envelope is unaffected) + adaptive grid coarsening.
+    model = build_atomistic_model(
+        design, nuc_frame_override=_flexible_display_override(design), fast_bridges=True)
+    mesh = compute_surface(
+        model.atoms, grid_spacing=adaptive_grid_spacing(model.atoms, grid_spacing),
+        probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+    return smooth_mesh(mesh, iterations=smooth)
+
+
+def _can_use_surface_cloud(design) -> bool:
+    """The vectorised ``surface_atom_cloud`` fast path reproduces the exact fine surface only
+    for designs without flexible-ssDNA display frames, extra-base crossovers, or 5'/3' extension
+    tails (it stamps the standard nucleotide templates + phosphate bridges).  Those designs fall
+    back to the exact Atom-object build — no speedup, but no envelope regression."""
+    if getattr(design, "flexible_connections", None):
+        return False
+    if getattr(design, "extensions", None):
+        return False
+    if any(getattr(xo, "extra_bases", None) for xo in design.crossovers):
+        return False
+    return True
 
 
 @router.post("/design/surface/region")

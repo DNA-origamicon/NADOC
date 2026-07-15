@@ -2007,6 +2007,18 @@ async function _oxdnaJSON(method, path, body = undefined) {
   return r.json().catch(() => null)
 }
 
+/** Binary sibling of _oxdnaJSON — returns the response as an ArrayBuffer (or null). */
+async function _oxdnaBin(method, path, body = undefined) {
+  const opts = { method, headers: { ...docHeaders() } }
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json'
+    opts.body = JSON.stringify(body)
+  }
+  const r = await fetch(`${BASE}${path}`, opts).catch(() => null)
+  if (!r || !r.ok) return null
+  return r.arrayBuffer().catch(() => null)
+}
+
 /** Last API error message (e.g. the 400 detail from a rejected create). */
 export const lastErrorMessage    = ()            => store.getState().lastError?.message ?? null
 
@@ -2125,6 +2137,17 @@ export const getOxdnaDisplayAtomisticFrames = (id, align = true) =>
 /** Molecular surface for the relaxed-display structure ({ready, surface:{vertices,faces,…}}). */
 export const getOxdnaDisplaySurface = (id, align = true, params = {}) =>
   _oxdnaJSON('POST', `/oxdna/jobs/${id}/display-surface?align=${align ? 'true' : 'false'}`, params)
+/** BINARY surface mesh (ArrayBuffer) for the relaxed-display structure — ~2× smaller than
+ *  JSON and no million-number parse; decode with scene/surface_bin.js. Null on error. */
+export const getOxdnaDisplaySurfaceBin = (id, align = true, params = {}) =>
+  _oxdnaBin('POST', `/oxdna/jobs/${id}/display-surface-bin?align=${align ? 'true' : 'false'}`, params)
+/** BINARY molecular surface (ArrayBuffer) for the ACTIVE DESIGN — the binary sibling of the
+ *  /design/surface JSON (~2× smaller, no million-number parse; carries the strand-index table
+ *  so the surface still recolours client-side). Decode with scene/surface_bin.js. Null on error. */
+export const getDesignSurfaceBin = ({ color_mode = 'strand', probe_radius = 0.28,
+                                      detail = 'coarse' } = {}) =>
+  _oxdnaBin('GET', `/design/surface-bin?color_mode=${color_mode}`
+                   + `&probe_radius=${probe_radius}&detail=${detail}`)
 /** All-atom flat-XYZ for the flexibility-map AVERAGE structure ({ready, atomistic:[…]}). */
 export const getOxdnaRmsfAtomistic = (id) =>
   _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-atomistic`)

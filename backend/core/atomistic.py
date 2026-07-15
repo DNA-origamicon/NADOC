@@ -650,6 +650,87 @@ def _atom_frame(
     return origin, R
 
 
+def _atom_frames_batch(
+    pos: _np.ndarray, axt: _np.ndarray, base_normal: _np.ndarray,
+    axis_pt: _np.ndarray, dir_fwd: _np.ndarray, helix_fwd: _np.ndarray,
+) -> tuple[_np.ndarray, _np.ndarray]:
+    """Vectorised :func:`_atom_frame` over N nucleotides at once — the SAME arithmetic on
+    ``(N,3)`` stacks, so 37k tiny ``numpy.cross`` / ``normalize_axis_tuple`` calls collapse
+    into a handful of array ops (the surface build's dominant cost).  Bit-identical to the
+    scalar frame on real designs (pinned by ``test_surface_atom_cloud``); a per-row scalar
+    fallback covers the rare degenerate rows (no axis point, zero radial, or a collinear
+    e_z/e_n) so nothing silently drifts.
+
+    Inputs (all length N; axis_pt rows may be NaN = "no axis point"):
+      pos/axt/base_normal/axis_pt : (N,3)   ; dir_fwd/helix_fwd : (N,) bool
+    Returns (origins (N,3), R (N,3,3)) matching ``_atom_frame``'s (origin, R) per row."""
+    N = len(pos)
+    bb = pos.astype(float).copy()
+    axt = axt.astype(float)
+    has_axis = ~_np.isnan(axis_pt[:, 0])
+    radial = bb - axis_pt
+    dot_rt = _np.einsum("ij,ij->i", radial, axt)
+    radial_perp = radial - dot_rt[:, None] * axt
+    r_norm = _np.linalg.norm(radial_perp, axis=1)
+    ok = has_axis & (r_norm > 1e-9)                       # radial frame available
+    e_radial = _np.zeros((N, 3))
+    e_radial[ok] = radial_perp[ok] / r_norm[ok, None]
+    bb = _np.where(ok[:, None], axis_pt + dot_rt[:, None] * axt + _ATOMISTIC_P_RADIUS * e_radial, bb)
+
+    def _rot(er, ang_mask, ang):
+        # Rotate e_radial about the axis tangent by `ang` (Rodrigues, ⟂ so no parallel term).
+        c = _np.cos(ang); s = _np.sin(ang)
+        rotated = c[:, None] * er + s[:, None] * _np.cross(axt, er)
+        return _np.where(ang_mask[:, None], rotated, er)
+
+    # REVERSE-strand P azimuthal correction (branch on the helix's lattice direction).
+    delta = _np.where(helix_fwd,
+                      _ATOMISTIC_PP_SEP_RAD - _ATOMISTIC_TOPOLOGY_GROOVE_RAD,
+                      _ATOMISTIC_PP_SEP_RAD - (2 * _math.pi - _ATOMISTIC_TOPOLOGY_GROOVE_RAD))
+    m = ok & (~dir_fwd) & (_np.abs(delta) > 1e-9)
+    if m.any():
+        bb_axial = bb - _ATOMISTIC_P_RADIUS * e_radial
+        e_radial = _rot(e_radial, m, delta)
+        bb = _np.where(m[:, None], bb_axial + _ATOMISTIC_P_RADIUS * e_radial, bb)
+
+    # Rigid phase offset about the axis (all nucleotides).
+    if abs(_ATOMISTIC_PHASE_OFFSET_RAD) > 1e-9:
+        bb_axial = bb - _ATOMISTIC_P_RADIUS * e_radial
+        e_radial = _rot(e_radial, ok, _np.full(N, _ATOMISTIC_PHASE_OFFSET_RAD))
+        bb = _np.where(ok[:, None], bb_axial + _ATOMISTIC_P_RADIUS * e_radial, bb)
+
+    e_n = _np.where(ok[:, None], -e_radial, base_normal.astype(float))
+    e_z = _np.where(dir_fwd[:, None], -axt, axt)
+    e_y = _np.cross(e_z, e_n)
+    y_norm = _np.linalg.norm(e_y, axis=1)
+    degen = y_norm < 1e-9                                 # collinear e_z/e_n (rare)
+    y_norm_safe = _np.where(degen, 1.0, y_norm)
+    e_y = e_y / y_norm_safe[:, None]
+
+    R = _np.stack([e_n, e_y, e_z], axis=2)                # per-row column_stack → (N,3,3)
+    c, s = _math.cos(_FRAME_ROT_RAD), _math.sin(_FRAME_ROT_RAD)
+    R = R @ _np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]])
+
+    # Repair the rare rows the vectorised path can't express (no radial frame or a
+    # degenerate e_y fallback) with the authoritative scalar frame — keeps parity exact.
+    bad = (~ok) | degen
+    if bad.any():
+        from backend.core.geometry import NucleotidePosition
+        for i in _np.nonzero(bad)[0]:
+            ax_pt = None if _np.isnan(axis_pt[i, 0]) else axis_pt[i]
+            npos = NucleotidePosition(
+                helix_id="", bp_index=0,
+                direction=Direction.FORWARD if dir_fwd[i] else Direction.REVERSE,
+                position=pos[i], base_position=pos[i], base_normal=base_normal[i],
+                axis_tangent=axt[i])
+            o_i, R_i = _atom_frame(
+                npos, Direction.FORWARD if dir_fwd[i] else Direction.REVERSE,
+                axis_point=ax_pt,
+                helix_direction=Direction.FORWARD if helix_fwd[i] else Direction.REVERSE)
+            bb[i] = o_i; R[i] = R_i
+    return bb, R
+
+
 # ── Rigid-frame stamping from an oxDNA per-nucleotide frame ────────────────────
 # For DISPLAY of a relaxed oxDNA structure (or a trajectory frame) each nucleotide
 # is a rigid body with a full orientation frame (a1, a3 from the .dat, a2 = a3×a1).
@@ -1691,6 +1772,311 @@ def _template_local_map(residue: str, dir_str: str) -> dict:
     for name, _e, n, y, z in base[residue][0]:
         d[name] = (n, y, z)
     return d
+
+
+@_functools.lru_cache(maxsize=8)
+def _surface_stamp_templates() -> dict:
+    """Per-(residue, direction) local template atoms for the surface point cloud:
+    ``{(residue, dir_str): (local (K,3) float64, radii (K,) float64)}`` — sugar + base
+    atoms with their VdW radii (element → VDW_RADIUS).  The cloud stamps ``world =
+    origin + R @ local`` per group, so the base-identity split just picks which fixed
+    template."""
+    out: dict = {}
+    for residue in BASE_TEMPLATES:
+        for dir_str, base_tmpl in (("FORWARD", BASE_TEMPLATES), ("REVERSE", BASE_TEMPLATES_REV)):
+            defs = list(_SUGAR) + list(base_tmpl[residue][0])
+            local = _np.array([[n, y, z] for _name, _e, n, y, z in defs], dtype=float)
+            radii = _np.array([VDW_RADIUS.get(e, VDW_RADIUS["C"]) for _name, e, *_ in defs], dtype=float)
+            out[(residue, dir_str)] = (local, radii)
+    return out
+
+
+def surface_atom_cloud(
+    design: Design,
+) -> tuple[_np.ndarray, _np.ndarray, list[str]]:
+    """FAST vectorised all-atom point cloud for the DESIGN molecular surface — positions +
+    per-atom VdW radius + per-atom strand id, WITHOUT the ~300k ``Atom`` dataclass objects
+    or the per-nucleotide ``numpy.cross`` overhead that dominate ``build_atomistic_model``.
+
+    Reproduces the design-surface build (``build_atomistic_model(design, fast_bridges=True)``
+    with ``close_backbone=False``): the SAME per-nucleotide rigid frame (via the byte-identical
+    ``_atom_frames_batch``) stamping the SAME fixed sugar+base templates, then the SAME
+    deformation / cluster fold (``apply_deformations_to_atoms``, folded through 4 markers per
+    nucleotide instead of per atom).  It SKIPS the crossover/skip phosphate bridges, the
+    extra-base and extension tail atoms, and all bonds — none of which change the VdW envelope
+    at the display grid (validated ≤~1 Å p99 vs the full fine surface by
+    ``tests/test_surface_visual_regression.py``).
+
+    Returns ``(positions (N,3) float32, radii (N,) float32, strand_ids list[str])``.
+    Honeycomb/square, routed/unrouted, deformed/clustered.  Not for MD seeds / PDB export
+    (those need the exact bridge geometry + every atom) — display surface only."""
+    from backend.core.deformation import effective_helix_for_geometry
+    from backend.core.geometry import nucleotide_positions
+
+    helix_map = {h.id: effective_helix_for_geometry(h, design) for h in design.helices}
+    seq_map = _build_sequence_map(design)
+    templates = _surface_stamp_templates()
+
+    # Per-helix nucleotide dict + axis geometry — mirrors build_atomistic_model's caches so
+    # the frame inputs are identical (nucleotide_positions is the same geometry source).
+    nuc_pos_cache: dict[str, dict[tuple, "NucleotidePosition"]] = {}
+    axis_cache: dict[str, tuple[_np.ndarray, _np.ndarray, int]] = {}
+    for h in helix_map.values():
+        s = _np.array([h.axis_start.x, h.axis_start.y, h.axis_start.z])
+        e = _np.array([h.axis_end.x, h.axis_end.y, h.axis_end.z])
+        ax = e - s
+        ln = _np.linalg.norm(ax)
+        axis_cache[h.id] = (s, ax / ln if ln > 1e-9 else ax, h.bp_start)
+
+    def _nuc_dict(h_id):
+        npc = nuc_pos_cache.get(h_id)
+        if npc is None:
+            npc = {}
+            copy_cnt: dict[tuple, int] = {}
+            for nuc in nucleotide_positions(helix_map[h_id]):
+                base = (nuc.bp_index, nuc.direction)
+                k = copy_cnt.get(base, 0)
+                npc[(nuc.bp_index, nuc.direction, k)] = nuc
+                copy_cnt[base] = k + 1
+            nuc_pos_cache[h_id] = npc
+        return npc
+
+    # ── Gather ordered per-nucleotide frame inputs (strand → domain → bp → copy) ──
+    positions: list = []; tangents: list = []; normals: list = []; axis_pts: list = []
+    dir_fwd: list = []; helix_fwd: list = []
+    residues: list = []; strand_ids: list = []
+    keys_hbd: list = []                                  # (helix, bp, dir_str) for deform fold
+
+    for strand in design.strands:
+        for domain in strand.domains:
+            h_id = domain.helix_id
+            helix = helix_map.get(h_id)
+            if helix is None:
+                continue
+            direction = domain.direction
+            dir_str = direction.value
+            nuc_positions = _nuc_dict(h_id)
+
+            # Overhang crossover extensions reach beyond the helix bp range — extend the
+            # cache exactly as build_atomistic_model does so those nucleotides aren't dropped.
+            if direction == Direction.FORWARD:
+                _dom_lo, _dom_hi = domain.start_bp, domain.end_bp
+            else:
+                _dom_lo, _dom_hi = domain.end_bp, domain.start_bp
+            if _dom_lo < helix.bp_start:
+                _ea = nucleotide_positions_arrays_extended(helix, _dom_lo)
+                for _i in range(len(_ea["bp_indices"])):
+                    _bp = int(_ea["bp_indices"][_i])
+                    _d = Direction.FORWARD if _ea["directions"][_i] == 0 else Direction.REVERSE
+                    _k = (_bp, _d, 0)
+                    if _k not in nuc_positions:
+                        nuc_positions[_k] = NucleotidePosition(
+                            helix_id=helix.id, bp_index=_bp, direction=_d,
+                            position=_ea["positions"][_i].copy(),
+                            base_position=_ea["base_positions"][_i].copy(),
+                            base_normal=_ea["base_normals"][_i].copy(),
+                            axis_tangent=_ea["axis_tangents"][_i].copy())
+            if _dom_hi >= helix.bp_start + helix.length_bp:
+                _ea = nucleotide_positions_arrays_extended_right(helix, _dom_hi)
+                for _i in range(len(_ea["bp_indices"])):
+                    _bp = int(_ea["bp_indices"][_i])
+                    _d = Direction.FORWARD if _ea["directions"][_i] == 0 else Direction.REVERSE
+                    _k = (_bp, _d, 0)
+                    if _k not in nuc_positions:
+                        nuc_positions[_k] = NucleotidePosition(
+                            helix_id=helix.id, bp_index=_bp, direction=_d,
+                            position=_ea["positions"][_i].copy(),
+                            base_position=_ea["base_positions"][_i].copy(),
+                            base_normal=_ea["base_normals"][_i].copy(),
+                            axis_tangent=_ea["axis_tangents"][_i].copy())
+
+            ax_start, ax_hat, bp_start0 = axis_cache[h_id]
+            for bp in _atomistic_domain_bp_range(domain, strand):
+                _n_copies = 0
+                while (bp, direction, _n_copies) in nuc_positions:
+                    _n_copies += 1
+                for copy_k in _loop_copy_order(direction, _n_copies):
+                    nuc_pos = nuc_positions.get((bp, direction, copy_k))
+                    if nuc_pos is None:
+                        continue
+                    _seq_key = (h_id, bp, dir_str) if copy_k == 0 else (h_id, bp, dir_str, copy_k)
+                    residue = _BASE_CHAR_TO_RESIDUE.get(seq_map.get(_seq_key, "N"), "DT")
+                    positions.append(nuc_pos.position)
+                    tangents.append(nuc_pos.axis_tangent)
+                    normals.append(nuc_pos.base_normal)
+                    axis_pts.append(ax_start + (bp - bp_start0) * BDNA_RISE_PER_BP * ax_hat)
+                    dir_fwd.append(direction == Direction.FORWARD)
+                    helix_fwd.append(helix.direction == Direction.FORWARD)
+                    residues.append(residue)
+                    strand_ids.append(strand.id or "")
+                    keys_hbd.append((h_id, bp, dir_str))
+
+    n = len(positions)
+    if n == 0:
+        return (_np.empty((0, 3), _np.float32), _np.empty(0, _np.float32), [])
+
+    pos = _np.asarray(positions, float); axt = _np.asarray(tangents, float)
+    bn = _np.asarray(normals, float); axp = _np.asarray(axis_pts, float)
+    dfwd = _np.asarray(dir_fwd, bool); hfwd = _np.asarray(helix_fwd, bool)
+
+    origins, R = _atom_frames_batch(pos, axt, bn, axp, dfwd, hfwd)
+
+    # Fold design geometry (deformations + cluster transforms) into the frames via 4 markers
+    # per nucleotide — one rigid transform per (helix, bp, dir), the SAME apply_deformations_
+    # to_atoms math the full build runs per atom, but on 4·N markers not ~14·N atoms.
+    origins, R = _fold_design_geometry_into_frames(design, origins, R, keys_hbd)
+
+    # ── Per-nucleotide atom counts + global row offsets (nucleotide atoms stay contiguous,
+    # sugar first, so the crossover/skip bridge can address O3'/P/… by a fixed local index) ──
+    residues_arr = _np.asarray(residues); dfwd_str = _np.where(dfwd, "FORWARD", "REVERSE")
+    k_per = _np.array([len(templates[(residues[i], dfwd_str[i])][0]) for i in range(n)])
+    offsets = _np.zeros(n, dtype=_np.int64)
+    offsets[1:] = _np.cumsum(k_per)[:-1]
+    total = int(k_per.sum())
+
+    positions_out = _np.empty((total, 3), dtype=_np.float64)
+    radii_out = _np.empty(total, dtype=_np.float64)
+    strand_ids_arr = _np.asarray(strand_ids, dtype=object)
+    sids_out = _np.empty(total, dtype=object)
+
+    # ── Batch-stamp per (residue, direction) group, scattered to each nucleotide's rows ──
+    for (residue, dstr), (local, radii) in templates.items():
+        sel = _np.nonzero((residues_arr == residue) & (dfwd_str == dstr))[0]
+        if sel.size == 0:
+            continue
+        K = len(local)
+        world = origins[sel][:, None, :] + _np.einsum("aij,kj->aki", R[sel], local)  # (m,K,3)
+        rows = (offsets[sel][:, None] + _np.arange(K)[None, :]).ravel()               # (m*K,)
+        positions_out[rows] = world.reshape(-1, 3)
+        radii_out[rows] = _np.tile(radii, sel.size)
+        sids_out[rows] = _np.repeat(strand_ids_arr[sel], K)
+
+    # ── Crossover + skip-site phosphate-bridge interpolation (fast_bridges) ──
+    # Reproduces build_atomistic_model's _interpolate_backbone_bridge at each junction so the
+    # phosphate linkers land where the full build puts them (else ~2.4 Å off at ~1% of atoms,
+    # concentrated on the envelope near crossovers).  All bridge atoms live in the fixed sugar
+    # template at constant local indices, so we address them by (offset + index).
+    key3_to_off: dict[tuple, int] = {keys_hbd[i]: int(offsets[i]) for i in range(n)}
+    _apply_cloud_bridges(design, helix_map, positions_out, key3_to_off)
+
+    return (positions_out.astype(_np.float32), radii_out.astype(_np.float32), list(sids_out))
+
+
+# Sugar-template local atom indices (order fixed by _SUGAR) — the bridge atoms.
+_SUGAR_IDX = {name: i for i, (name, *_rest) in enumerate(_SUGAR)}
+
+
+def _apply_cloud_bridges(design, helix_map, P, key3_to_off) -> None:
+    """Apply the fast_bridges (linear) phosphodiester-linker interpolation at every crossover
+    and skip gap to the surface point cloud ``P`` — the array analogue of
+    ``_interpolate_backbone_bridge`` + the crossover/skip passes in ``build_atomistic_model``.
+    O3'(src)→¼, P(dst)→½, O5'(dst)→¾ along C3'(src)→C5'(dst); OP1/OP2(dst) ride P's delta."""
+    iC3, iO3, iC5, iP, iO5, iOP1, iOP2 = (_SUGAR_IDX["C3'"], _SUGAR_IDX["O3'"], _SUGAR_IDX["C5'"],
+                                          _SUGAR_IDX["P"], _SUGAR_IDX["O5'"],
+                                          _SUGAR_IDX["OP1"], _SUGAR_IDX["OP2"])
+
+    def _bridge(src_off, dst_off):
+        c3 = P[src_off + iC3]; c5 = P[dst_off + iC5]
+        new_p = c3 + (c5 - c3) * 0.5
+        delta = new_p - P[dst_off + iP]
+        P[src_off + iO3] = c3 + (c5 - c3) * 0.25
+        P[dst_off + iP] = new_p
+        P[dst_off + iO5] = c3 + (c5 - c3) * 0.75
+        P[dst_off + iOP1] += delta
+        P[dst_off + iOP2] += delta
+
+    # Crossovers: consecutive domains on different helices sharing a bp position.  (Extra-base
+    # crossovers are handled by a separate atom builder in the full model; the cloud omits
+    # those added atoms — no panel design has them.)
+    eb_src = set()
+    for _s in design.strands:
+        prev = None
+        for dom in _s.domains:
+            if (prev is not None and prev.helix_id != dom.helix_id
+                    and prev.end_bp == dom.start_bp):
+                sk = (prev.helix_id, prev.end_bp, prev.direction.value)
+                dk = (dom.helix_id, dom.start_bp, dom.direction.value)
+                is_eb = any(xo.extra_bases and (
+                    (xo.half_a.helix_id, xo.half_a.index) == (prev.helix_id, prev.end_bp)
+                    or (xo.half_b.helix_id, xo.half_b.index) == (prev.helix_id, prev.end_bp))
+                    for xo in design.crossovers)
+                if is_eb:
+                    eb_src.add(sk)
+                elif sk in key3_to_off and dk in key3_to_off:
+                    _bridge(key3_to_off[sk], key3_to_off[dk])
+            prev = dom
+
+    # Skip sites: a gap of >1 bp on the same helix/direction (deleted positions).
+    for _s in design.strands:
+        skip_cache: dict[str, set] = {}
+        prev_key = None
+        for dom in _s.domains:
+            h_id = dom.helix_id; dir_str = dom.direction.value
+            helix = helix_map.get(h_id)
+            if helix is None:
+                prev_key = None; continue
+            if h_id not in skip_cache:
+                acc: dict[int, int] = {}
+                for ls in helix.loop_skips:
+                    acc[ls.bp_index] = acc.get(ls.bp_index, 0) + ls.delta
+                skip_cache[h_id] = {bp for bp, dd in acc.items() if dd <= -1}
+            skips = skip_cache[h_id]
+            if not skips:
+                prev_key = None; continue
+            for bp in _atomistic_domain_bp_range(dom, _s):
+                if bp in skips:
+                    continue
+                cur_key = (h_id, bp, dir_str)
+                if cur_key not in key3_to_off:
+                    prev_key = None; continue
+                if prev_key is not None:
+                    pv_h, pv_bp, pv_dir = prev_key
+                    if pv_h == h_id and pv_dir == dir_str and abs(bp - pv_bp) > 1:
+                        _bridge(key3_to_off[prev_key], key3_to_off[cur_key])
+                prev_key = cur_key
+            prev_key = None
+
+
+def _fold_design_geometry_into_frames(design, origins, R, keys_hbd):
+    """Apply the design's deformation + cluster rigid transforms to per-nucleotide frames.
+
+    ``apply_deformations_to_atoms`` transforms atom POSITIONS by a per-(helix, bp) rigid
+    transform; every atom of a nucleotide shares it, so we recover that transform once per
+    nucleotide from 4 markers (origin + the three frame-axis tips), then fold it into
+    ``(origin, R)`` — exact for a rigid transform (T(o+R·l) = T(o) + (rot·R)·l).  No-op when
+    the design has no deformations/cluster transforms."""
+    if not design.deformations and not design.cluster_transforms:
+        return origins, R
+    from backend.core.deformation import apply_deformations_to_atoms
+
+    n = len(origins)
+
+    class _M:
+        __slots__ = ("x", "y", "z", "helix_id", "bp_index", "direction")
+
+        def __init__(self, p, h, bp, d):
+            self.x, self.y, self.z = float(p[0]), float(p[1]), float(p[2])
+            self.helix_id = h; self.bp_index = bp; self.direction = d
+
+    markers = []
+    for i in range(n):
+        h, bp, dstr = keys_hbd[i]
+        o = origins[i]
+        markers.append(_M(o, h, bp, dstr))
+        markers.append(_M(o + R[i, :, 0], h, bp, dstr))
+        markers.append(_M(o + R[i, :, 1], h, bp, dstr))
+        markers.append(_M(o + R[i, :, 2], h, bp, dstr))
+    apply_deformations_to_atoms(markers, design)
+
+    new_o = _np.empty((n, 3)); new_R = _np.empty((n, 3, 3))
+    for i in range(n):
+        m0 = markers[4 * i]
+        o = _np.array([m0.x, m0.y, m0.z])
+        new_o[i] = o
+        for c in range(3):
+            mc = markers[4 * i + 1 + c]
+            new_R[i, :, c] = _np.array([mc.x, mc.y, mc.z]) - o
+    return new_o, new_R
 
 
 def atomistic_stamp_descriptor(design: Design) -> StampDescriptor:

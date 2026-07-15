@@ -1576,6 +1576,7 @@ class OxdnaSurfaceBody(BaseModel):
     grid_spacing: float = 0.20
     radius_inflate: float = 1.30
     smooth: int = 15
+    detail: str = "coarse"   # 'coarse' = fast CG-bead envelope (default) | 'fine' = full all-atom
 
 
 @router.post("/oxdna/jobs/{job_id}/display-atomistic")
@@ -1748,15 +1749,42 @@ async def get_oxdna_display_surface(job_id: str, body: OxdnaSurfaceBody,
     # probe/grid/smooth is a different mesh).  Surface = atomistic rebuild + marching
     # cubes, so the re-visit saving is even larger than the atomistic case.
     sparams = (body.color_mode, round(body.probe_radius, 4), round(body.grid_spacing, 4),
-               round(body.radius_inflate, 4), int(body.smooth))
+               round(body.radius_inflate, 4), int(body.smooth), body.detail)
     ck = ("dispS", _traj_file_sig(str(conf_path)), bool(align), sparams)
     data = _display_out_get(ck)
     if data is None:
         data = await run_in_threadpool(
             frame_surface_json, design, full_map, body.color_mode, body.probe_radius,
-            body.grid_spacing, body.radius_inflate, body.smooth)
+            body.grid_spacing, body.radius_inflate, body.smooth, None, body.detail)
         _display_out_put(ck, data)
     return {"job_id": job.job_id, "ready": True, "stage_name": stage_name, "surface": data}
+
+
+@router.post("/oxdna/jobs/{job_id}/display-surface-bin")
+async def get_oxdna_display_surface_bin(job_id: str, body: OxdnaSurfaceBody,
+                                        align: bool = True):
+    """Binary counterpart of display-surface — the SAME cached mesh packed into a compact
+    little-endian blob (~2× smaller than JSON, no million-number JSON.parse on the client;
+    see oxdna_health.pack_surface_bin).  Empty 16-byte header (n_verts=0) = not ready."""
+    from fastapi import Response
+    from backend.core.oxdna_health import (frame_surface_json, pack_surface_bin,
+                                           _traj_file_sig, _display_out_get, _display_out_put)
+    job = _load_job(job_id)
+    design, full_map, _stage, conf_path, _ = _relaxed_full_map(
+        job, align, copies=True, include_extra_bases=True, include_extensions=True)
+    if full_map is None:
+        return Response(content=pack_surface_bin({}), media_type="application/octet-stream")
+    sparams = (body.color_mode, round(body.probe_radius, 4), round(body.grid_spacing, 4),
+               round(body.radius_inflate, 4), int(body.smooth), body.detail)
+    ck = ("dispS", _traj_file_sig(str(conf_path)), bool(align), sparams)
+    data = _display_out_get(ck)
+    if data is None:
+        data = await run_in_threadpool(
+            frame_surface_json, design, full_map, body.color_mode, body.probe_radius,
+            body.grid_spacing, body.radius_inflate, body.smooth, None, body.detail)
+        _display_out_put(ck, data)
+    buf = await run_in_threadpool(pack_surface_bin, data)
+    return Response(content=buf, media_type="application/octet-stream")
 
 
 @router.post("/oxdna/jobs/{job_id}/display-atomistic-audit")

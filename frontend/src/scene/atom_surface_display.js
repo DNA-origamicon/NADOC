@@ -21,6 +21,7 @@ import { buildNucLetterMap, buildStapleColorMap } from './helix_renderer.js'
 import { atomColorsFromLetters, computeAtomStrandColors } from './color_util.js'
 import { showPersistentToast, dismissToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
+import { parseSurfaceBin } from './surface_bin.js'
 
 // Stable signature for a design's per-region surface columns — used to skip a
 // (slow) surface recompute when the pinned columns are unchanged.
@@ -32,11 +33,15 @@ export function regionSurfaceSignature(design) {
 export function initAtomSurfaceDisplay({
   scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
   unfoldView, overhangLinkArcs,
-  // True when a simulation overlay is active in a mode that REBUILDS the atomistic
-  // renderer from the job's atoms + relaxed frame (oxDNA relaxed/rmsf/trajectory).
-  // When so, switching to an atomistic rep skips the design-atoms build (the "native
-  // flash") and keeps the relaxed CG up until the overlay swaps in.
-  getSimOverlayWillDriveAtomistic = () => false,
+  // True when a simulation overlay is active in a mode that REBUILDS the heavy rep
+  // (atomistic OR surface) from the job's atoms + relaxed frame (oxDNA relaxed/rmsf/
+  // trajectory).  When so, switching to atomistic/surface skips the DESIGN heavy build
+  // (the "native flash") and keeps the relaxed CG up until the overlay swaps in.
+  getSimOverlayWillDriveHeavy = () => false,
+  // Called when a surface option (probe radius / colour mode) changes WHILE a sim overlay
+  // owns the surface — the overlay must re-generate its mesh with the new params (the
+  // design-surface path doesn't apply).  Reads the live params via getSurfaceParams().
+  onSurfaceParamsChanged = () => {},
 }) {
   // ── Per-region overlay renderers (mixed representation) ─────────────────────
   // A focal domain/strand/cluster can be pinned to surface / vdw / ballstick; the
@@ -54,6 +59,7 @@ export function initAtomSurfaceDisplay({
 
   let _surfaceDataCache   = null   // cached API response; null = needs re-fetch
   let _surfaceProbeRadius = 0.28   // current probe radius for SES (nm)
+  let _surfaceDetail      = 'coarse'  // 'coarse' = fast CG-bead envelope | 'fine' = full all-atom
   let _surfaceMode        = 'off'  // mirrors store.surfaceMode
   let _atomDataCache  = null
   let _regionSurfaceSig   = null
@@ -82,26 +88,53 @@ export function initAtomSurfaceDisplay({
       _setSurfacePanelVisible(false)
       return
     }
-    // Hide CG model and any active atomistic overlay
-    _setCGVisible(false)
+    // A sim overlay (relaxed/rmsf/trajectory) will rebuild the surface from the job's
+    // atoms + relaxed frame — so DON'T compute+show the DESIGN surface first (the "native
+    // flash").  Keep the relaxed CG up until the overlay's mesh lands (it hides CG on
+    // apply via onHeavyApplied).
+    const _deferToOverlay = !!getSimOverlayWillDriveHeavy()
+    _setCGVisible(_deferToOverlay)
     if (atomisticRenderer.getMode() !== 'off') {
       atomisticRenderer.setMode('off')
       store.setState({ atomisticMode: 'off' })
     }
     _setSurfacePanelVisible(true)
+    if (_deferToOverlay) {
+      // Activate the surface renderer NOW with an empty mesh (mode 'on' + a mesh for the
+      // overlay's applyPositionLerp to populate).  Without this the design-surface update()
+      // is skipped, so the renderer stays mode 'off' with no mesh and the overlay's
+      // _pushSurface bails → the surface never renders.  Mirrors how the atomistic defer
+      // sets atomisticRenderer.setMode() up front.
+      surfaceRenderer.update({ vertices: [], faces: [] },
+                             store.getState().surfaceColorMode ?? 'strand')
+      return
+    }
     if (!_surfaceDataCache) {
       showPersistentToast('Computing surface…')
       try {
         const { surfaceColorMode } = store.getState()
-        const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}`
-        const resp = await fetch(url, { headers: docHeaders() })
-        if (!resp.ok) {
-          dismissToast()
-          console.error('Surface fetch failed:', resp.status)
-          return
+        const params = { color_mode: surfaceColorMode, probe_radius: _surfaceProbeRadius,
+                         detail: _surfaceDetail }
+        // Binary-first: ~2× smaller AND no million-number JSON.parse (which blocks the main
+        // thread on a big design). The blob carries the strand-index table so client-side
+        // recolour still works. Fall back to the JSON route if the binary path yields nothing.
+        let data = null
+        if (typeof api.getDesignSurfaceBin === 'function') {
+          const buf = await api.getDesignSurfaceBin(params)
+          if (buf) data = parseSurfaceBin(buf)
         }
-        _surfaceDataCache = await resp.json()
-        console.debug(`Surface computed: ${_surfaceDataCache.stats?.n_verts} verts, ${_surfaceDataCache.stats?.n_faces} faces, ${_surfaceDataCache.stats?.compute_ms} ms`)
+        if (!data) {
+          const url = `/api/design/surface?color_mode=${surfaceColorMode}&probe_radius=${_surfaceProbeRadius}&detail=${_surfaceDetail}`
+          const resp = await fetch(url, { headers: docHeaders() })
+          if (!resp.ok) {
+            dismissToast()
+            console.error('Surface fetch failed:', resp.status)
+            return
+          }
+          data = await resp.json()
+        }
+        _surfaceDataCache = data
+        console.debug(`Surface computed: ${_surfaceDataCache.stats?.n_verts ?? _surfaceDataCache.vertices?.length / 3} verts`)
       } catch (e) {
         dismissToast()
         console.error('Surface fetch error:', e)
@@ -130,7 +163,13 @@ export function initAtomSurfaceDisplay({
   store.subscribe((newState, prevState) => {
     if (newState.surfaceColorMode !== prevState.surfaceColorMode) {
       if (_surfaceMode !== 'off') {
-        if (newState.surfaceColorMode === 'uniform' || _surfaceDataCache?.vertex_colors) {
+        if (getSimOverlayWillDriveHeavy() && newState.surfaceColorMode !== 'uniform') {
+          // Overlay owns the surface and needs strand vertex colours it may not have →
+          // set the renderer's colour mode so the regenerated mesh's colours are applied,
+          // then re-generate the overlay mesh (with the new color_mode). Uniform is in-place.
+          surfaceRenderer.setColorMode(newState.surfaceColorMode)
+          onSurfaceParamsChanged()
+        } else if (newState.surfaceColorMode === 'uniform' || _surfaceDataCache?.vertex_colors) {
           // Switch colour in-place — no re-fetch needed
           surfaceRenderer.setColorMode(newState.surfaceColorMode)
         } else {
@@ -160,11 +199,24 @@ export function initAtomSurfaceDisplay({
   _slSurfaceProbe?.addEventListener('input', () => {
     _surfaceProbeRadius = parseFloat(_slSurfaceProbe.value)
     if (_svSurfaceProbe) _svSurfaceProbe.textContent = _surfaceProbeRadius.toFixed(2)
-    if (_surfaceMode !== 'off') {
-      _surfaceDataCache = null
-      _applySurfaceMode('on')
-    }
+    _regenSurfaceForParamChange()
   })
+
+  // High-detail toggle: off = fast coarse CG-bead envelope (default), on = exact all-atom.
+  const _cbHighDetail = document.getElementById('cb-surface-highdetail')
+  _cbHighDetail?.addEventListener('change', () => {
+    _surfaceDetail = _cbHighDetail.checked ? 'fine' : 'coarse'
+    _regenSurfaceForParamChange()
+  })
+
+  // Re-generate the active surface after a param change: if a sim overlay owns it,
+  // re-run the overlay's surface fetch (with the new params) — _applySurfaceMode would
+  // take the defer path and just blank it; otherwise re-fetch the design surface.
+  function _regenSurfaceForParamChange() {
+    if (_surfaceMode === 'off') return
+    if (getSimOverlayWillDriveHeavy()) onSurfaceParamsChanged()
+    else { _surfaceDataCache = null; _applySurfaceMode('on') }
+  }
 
   // Surface colour-mode toggle buttons
   document.getElementById('surface-color-strand')?.addEventListener('click', () => {
@@ -291,7 +343,7 @@ export function initAtomSurfaceDisplay({
     // (the multi-second "native flash").  Keep the relaxed CG visible; the overlay hides
     // it when its atoms land (onHeavyApplied → setCGVisible(false)).  If the overlay
     // never lands (build fails), the relaxed CG stays up — a sane fallback.
-    const _deferToOverlay = mode !== 'off' && !!getSimOverlayWillDriveAtomistic()
+    const _deferToOverlay = mode !== 'off' && !!getSimOverlayWillDriveHeavy()
     atomisticRenderer.setMode(mode)
     // Hide CG model when any atomistic mode is active; restore when off — but keep it
     // up while deferring to the overlay.
@@ -329,8 +381,9 @@ export function initAtomSurfaceDisplay({
   // so the toast clears on completion AND on failure.
   for (const _evt of ['nadoc:oxdna-heavy-status', 'nadoc:md-heavy-status']) {
     window.addEventListener(_evt, (e) => {
-      if (e.detail?.kind !== 'atomistic') return
-      if (e.detail.building) showPersistentToast('Loading atomistic model…')
+      const kind = e.detail?.kind
+      if (kind !== 'atomistic' && kind !== 'surface') return
+      if (e.detail.building) showPersistentToast(kind === 'surface' ? 'Computing surface…' : 'Loading atomistic model…')
       else dismissToast()
     })
   }
@@ -448,6 +501,10 @@ export function initAtomSurfaceDisplay({
     getRegionSurfaceRenderer:   () => regionSurfaceRenderer,
     getSurfaceMode: () => _surfaceMode,
     getSurfaceProbeRadius: () => _surfaceProbeRadius,
+    // Live surface params for the sim-overlay surface fetch (so its mesh honours the
+    // sidebar's probe radius + colour mode instead of the backend defaults).
+    getSurfaceParams: () => ({ probe_radius: _surfaceProbeRadius, detail: _surfaceDetail,
+                               color_mode: store.getState().surfaceColorMode ?? 'strand' }),
     invalidateAtomCache: () => { _atomDataCache = null },
     invalidateSurfaceCache: () => { _surfaceDataCache = null },
   }

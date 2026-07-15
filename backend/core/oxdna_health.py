@@ -2656,12 +2656,13 @@ def _ssdna_frame_override(frame: dict) -> dict:
             continue                                   # paired duplex → axis-derived path
         if (v.get("backbone_position") is None or v.get("a1") is None or v.get("a3") is None):
             continue
-        fo[k] = (_np.asarray(v["backbone_position"], float),
-                 _np.asarray(v["a1"], float), _np.asarray(v["a3"], float))
+        fo[k] = (np.asarray(v["backbone_position"], float),
+                 np.asarray(v["a1"], float), np.asarray(v["a3"], float))
     return fo
 
 
-def build_display_model(design, frame: dict, frame_sink: dict | None = None):
+def build_display_model(design, frame: dict, frame_sink: dict | None = None,
+                        close_backbone: bool = True):
     """The canonical relaxed-frame DISPLAY reconstruction — ONE builder shared by the
     atomistic/surface display sinks AND the validation audit, so what's measured is
     exactly what's drawn.  Axis-derived base placement (correct WC pairing/stacking)
@@ -2683,7 +2684,7 @@ def build_display_model(design, frame: dict, frame_sink: dict | None = None):
         design, nuc_pos_override=nuc_pos_override, axis_override=axis_override,
         frame_override=frame_override,
         xb_pos_override=xb_pos_override, ext_pos_override=ext_pos_override,
-        close_backbone=True, relaxed_oxdna_phase=True, frame_sink=frame_sink,
+        close_backbone=close_backbone, relaxed_oxdna_phase=True, frame_sink=frame_sink,
         fast_bridges=True,   # DISPLAY: cheap interpolated phosphate linkers (6× faster; ≤2.4 Å at junctions)
         # The relaxed CG override already supplies each nucleotide's FINAL world position
         # (deformed + cluster-transformed, then simulated) and the axis is fit from those
@@ -2761,29 +2762,115 @@ def _vertex_rmsf(mesh, atoms, rmsf_by_key: dict) -> list:
     return out
 
 
+def _strand_id_map(design) -> dict:
+    """{(helix_id, bp_index, direction): strand_id} from design geometry — for colouring the
+    coarse CG-bead surface (which has no all-atom model to carry strand ids)."""
+    from backend.core.design_geometry import _geometry_for_design
+    return {(g["helix_id"], g["bp_index"], g["direction"]): g.get("strand_id", "")
+            for g in _geometry_for_design(design)}
+
+
+def _cg_beads_from_frame(design, frame: dict) -> list:
+    """Coarse per-nucleotide spheres (backbone site + base site) from a relaxed FRAME — the
+    fast CG-surface input, skipping the ~300k-atom rebuild.  Base site ≈ CM + a1·0.34 nm
+    (oxDNA POS_BASE); backbone site via oxdna_backbone_site."""
+    from backend.physics.oxdna_interface import oxdna_backbone_site, is_synthetic_nuc_key
+    from backend.core.surface import make_cg_bead
+    _BASE_OFF_NM = 0.34
+    sid = _strand_id_map(design)
+    beads: list = []
+    for k, v in frame.items():
+        if not (isinstance(k, tuple) and len(k) >= 3 and isinstance(k[1], int)
+                and not is_synthetic_nuc_key(k)):
+            continue
+        if v.get("backbone_position") is None or v.get("a1") is None or v.get("a3") is None:
+            continue
+        cm = np.asarray(v["backbone_position"], float)
+        a1 = np.asarray(v["a1"], float)
+        bb = oxdna_backbone_site(cm, a1, np.asarray(v["a3"], float))
+        base = cm + a1 * _BASE_OFF_NM
+        s = sid.get((k[0], k[1], k[2]), "")
+        for p in (bb, base):
+            beads.append(make_cg_bead(p[0], p[1], p[2], strand_id=s,
+                                      helix_id=k[0], bp_index=k[1], direction=k[2]))
+    return beads
+
+
 def frame_surface_json(design, frame: dict, color_mode: str = "strand",
                        probe_radius: float = 0.28, grid_spacing: float = 0.20,
                        radius_inflate: float = 1.30, smooth: int = 15,
-                       rmsf_by_key: dict | None = None) -> dict:
+                       rmsf_by_key: dict | None = None, detail: str = "coarse") -> dict:
     """Molecular surface ``{vertices, faces, vertex_colors?|vertex_rmsf?}`` for ONE
     per-nucleotide frame — the SAME wire format as ``/design/features/surface-batch``.
     Shared sink for the composite trajectory AND the single relaxed/rmsf frames.
     ``color_mode='rmsf'`` (with ``rmsf_by_key``) emits a per-vertex RMSF list so the
-    flexibility map colours the surface the same way it colours the beads."""
-    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
-    model = build_display_model(design, frame)
-    mesh = compute_surface(model.atoms, grid_spacing=grid_spacing,
-                           probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
-    mesh = smooth_mesh(mesh, iterations=smooth)
+    flexibility map colours the surface the same way it colours the beads.
+
+    ``detail='coarse'`` (default) builds the envelope from ~2 CG spheres/nucleotide (no
+    all-atom rebuild — ~3× faster, ~2.8 Å from the atomic surface); ``'fine'`` uses the
+    full all-atom model."""
+    from backend.core.surface import (compute_surface, smooth_mesh, surface_to_json,
+                                       adaptive_grid_spacing, cg_surface_mesh)
+    if detail == "coarse":
+        beads = _cg_beads_from_frame(design, frame)
+        mesh = cg_surface_mesh(beads, grid_spacing=grid_spacing, probe_radius=probe_radius, smooth=smooth)
+        rmsf_atoms = beads
+    else:
+        # Surface = a VdW envelope, so it needs atom POSITIONS, not a connected backbone —
+        # skip the phosphate-linker closure (close_backbone=False) to shave the build.
+        model = build_display_model(design, frame, close_backbone=False)
+        gs = adaptive_grid_spacing(model.atoms, grid_spacing)
+        mesh = compute_surface(model.atoms, grid_spacing=gs,
+                               probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+        mesh = smooth_mesh(mesh, iterations=smooth)
+        rmsf_atoms = model.atoms
     entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
              "faces": [int(f) for f in mesh.faces.ravel()]}
     if color_mode == "rmsf" and rmsf_by_key:
-        entry["vertex_rmsf"] = _vertex_rmsf(mesh, model.atoms, rmsf_by_key)
+        entry["vertex_rmsf"] = _vertex_rmsf(mesh, rmsf_atoms, rmsf_by_key)
     elif color_mode == "strand":
         vc = surface_to_json(mesh, design, color_mode="strand").get("vertex_colors")
         if vc:
             entry["vertex_colors"] = [round(float(c), 4) for c in vc]
     return entry
+
+
+def pack_surface_bin(data: dict) -> bytes:
+    """Pack a surface mesh dict ({vertices, faces, vertex_colors?|vertex_rmsf?}) into a
+    compact little-endian binary blob — ~2× smaller than the JSON text AND no million-number
+    ``JSON.parse`` on the client (it wraps the buffer as typed arrays directly).
+
+    Layout:  uint32 magic(0x4E535246) · uint32 n_verts · uint32 n_faces · uint32 color_kind
+             float32[n_verts*3] vertices · uint32[n_faces*3] faces
+             color_kind 1 → uint8[n_verts*3] rgb(0-255) ; 2 → float32[n_verts] rmsf ; 0 → none
+             uint32 strand_kind
+             strand_kind 1 → uint32 table_len · bytes[table_len] (UTF-8 JSON strand-id list)
+                            · uint32[n_verts] vertex_strand_index ; 0 → none
+    The trailing strand block lets the DESIGN surface recolour client-side by strand/group/
+    cluster WITHOUT a re-fetch (the overlay omits it — its ``data`` has no strand table).
+    n_verts == 0 signals "not ready / empty"."""
+    import struct
+    v = np.asarray(data.get("vertices") or [], dtype=np.float32)
+    f = np.asarray(data.get("faces") or [], dtype=np.uint32)
+    nv, nf = v.size // 3, f.size // 3
+    if data.get("vertex_colors"):
+        rgb = np.clip(np.asarray(data["vertex_colors"], dtype=np.float32) * 255.0, 0, 255).astype(np.uint8)
+        color_kind, color_bytes = 1, rgb.tobytes()
+    elif data.get("vertex_rmsf"):
+        color_kind, color_bytes = 2, np.asarray(data["vertex_rmsf"], dtype=np.float32).tobytes()
+    else:
+        color_kind, color_bytes = 0, b""
+    tbl = data.get("vertex_strand_index_table")
+    idx = data.get("vertex_strand_index")
+    if nv and tbl is not None and idx is not None:
+        import json
+        tbl_bytes = json.dumps(tbl).encode("utf-8")
+        strand_block = (struct.pack("<II", 1, len(tbl_bytes)) + tbl_bytes
+                        + np.asarray(idx, dtype=np.uint32).tobytes())
+    else:
+        strand_block = struct.pack("<I", 0)
+    return (struct.pack("<IIII", 0x4E535246, nv, nf, color_kind)
+            + v.tobytes() + f.tobytes() + color_bytes + strand_block)
 
 
 def composite_trajectory_atomistic(design, stages, reference_conf_path,

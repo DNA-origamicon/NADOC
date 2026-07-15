@@ -157,6 +157,41 @@ def _marching_cubes_safe(
     return SurfaceMesh(vertices=verts, faces=faces, vertex_strand_ids=strand_ids)
 
 
+# Voxel budget for the adaptive grid.  At 0.20 nm a 14774-nt VoltronCore rasterises to
+# ~12M voxels (~4.6 s for occupancy + morphology + marching cubes) and a ~46 MB mesh;
+# capping at 3.5M coarsens it to ~0.31 nm — surface compute ~4.6→~2 s and the mesh ~4×
+# smaller — with no visible loss at the 10-100 nm scale these origami live at.
+_ADAPTIVE_VOXEL_CAP = 3_500_000
+
+
+def adaptive_grid_spacing(atoms: list[Atom], requested: float,
+                          cap_voxels: int = _ADAPTIVE_VOXEL_CAP,
+                          max_spacing: float = 0.40) -> float:
+    """Coarsen the surface grid for LARGE structures so the voxel count stays bounded.
+
+    Returns ``requested`` (the finest allowed — default 0.20 nm) for small designs; a big
+    one is coarsened just enough to keep the grid under ``cap_voxels`` (never coarser than
+    ``max_spacing``).  Marching-cubes cost + mesh size scale with the voxel count, so this
+    halves both on large origami without a visible change at their 10-100 nm scale."""
+    if not atoms:
+        return requested
+    positions = np.asarray([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
+    return adaptive_grid_spacing_arr(positions, requested, cap_voxels, max_spacing)
+
+
+def adaptive_grid_spacing_arr(positions: np.ndarray, requested: float,
+                              cap_voxels: int = _ADAPTIVE_VOXEL_CAP,
+                              max_spacing: float = 0.40) -> float:
+    """:func:`adaptive_grid_spacing` for a raw ``(N,3)`` positions array (the point-cloud
+    fast path) — same voxel-cap coarsening, no ``Atom`` objects."""
+    positions = np.asarray(positions, dtype=np.float64)
+    if positions.shape[0] == 0:
+        return requested
+    span = np.maximum(positions.max(axis=0) - positions.min(axis=0), 1e-6) + 2.0  # + padding slack
+    gs_cap = float(np.prod(span) / max(cap_voxels, 1)) ** (1.0 / 3.0)
+    return float(min(max_spacing, max(requested, gs_cap)))
+
+
 def compute_surface(
     atoms: list[Atom],
     grid_spacing: float = 0.20,
@@ -205,6 +240,93 @@ def compute_surface(
         grid = binary_erosion(dilated, structure=struct)
 
     return _marching_cubes_safe(grid, 0.5, grid_spacing, bbox_min, atoms)
+
+
+# ── Fast coarse (CG-bead) surface ─────────────────────────────────────────────
+# The all-atom rebuild (~300k Atom objects) DOMINATES the surface time and is largely
+# wasted: at the display grid (~0.3 nm) individual atoms aren't resolved.  Rasterising
+# ~2 spheres per nucleotide (backbone + base, from the CG geometry / relaxed frame) skips
+# the rebuild entirely and lands within ~2.8 Å of the full-atom envelope (< the grid's own
+# spacing).  This is the ChimeraX-style low-resolution surface; the full-atom path stays
+# available for "high detail".
+CG_BEAD_RADIUS_NM = 0.50   # per-nucleotide sphere radius (nm) ≈ a nucleotide's atomic extent
+
+
+def make_cg_bead(x, y, z, strand_id: str = "", helix_id: str = "",
+                 bp_index: int = 0, direction: str = "FORWARD") -> Atom:
+    """One coarse per-nucleotide sphere as an element-'C' Atom (radius set by cg_surface_mesh
+    via radius_scale); carries strand/helix/bp/dir for colouring + RMSF lookup."""
+    return Atom(serial=0, name="CG", element="C", residue="DT", chain_id="A", seq_num=0,
+                x=float(x), y=float(y), z=float(z), strand_id=strand_id, helix_id=helix_id,
+                bp_index=int(bp_index), direction=direction)
+
+
+def compute_surface_from_cloud(
+    positions: np.ndarray,
+    radii: np.ndarray,
+    strand_ids: list,
+    grid_spacing: float = 0.20,
+    probe_radius: float = 0.28,
+    radius_scale: float = 1.2,
+) -> SurfaceMesh:
+    """Molecular surface from a raw point cloud (positions + per-atom VdW radius + per-atom
+    strand id) instead of ``Atom`` objects — the fast fine-surface path fed by
+    ``atomistic.surface_atom_cloud``.  Same morphological-closing algorithm as
+    :func:`compute_surface` (scaled VdW spheres → dilate/erode by the probe → marching cubes),
+    but the occupancy grid is built by grouping the FEW distinct radii rather than by element,
+    and vertex strand ids come from a nearest-cloud-point KD-tree."""
+    positions = np.asarray(positions, dtype=np.float64)
+    radii = np.asarray(radii, dtype=np.float64) * radius_scale
+    if positions.shape[0] == 0:
+        return SurfaceMesh(vertices=np.empty((0, 3), np.float32),
+                           faces=np.empty((0, 3), np.int32), vertex_strand_ids=[])
+
+    # Pad the bbox by the SAME max radius _build_occupancy_grid uses — the max over the WHOLE
+    # VDW_RADIUS table (not just the elements present) — so this grid's origin aligns voxel-for-
+    # voxel with compute_surface's; a different pad shifts bbox_min and offsets the whole mesh
+    # by the sub-voxel remainder (~1 Å).  Per-atom dilation still uses each atom's own radius.
+    max_r = max(VDW_RADIUS.values()) * radius_scale
+    padding = 0.5 + probe_radius
+    bbox_min = positions.min(axis=0) - (max_r + padding)
+    bbox_max = positions.max(axis=0) + (max_r + padding)
+    shape = tuple((np.ceil((bbox_max - bbox_min) / grid_spacing)).astype(int) + 1)
+
+    grid = np.zeros(shape, dtype=bool)
+    idx_all = np.clip(np.round((positions - bbox_min) / grid_spacing).astype(int),
+                      0, np.array(shape) - 1)
+    # Group by the handful of distinct radii (P/C/N/O × scale) → one dilation each.
+    uniq = np.unique(np.round(radii, 6))
+    for r in uniq:
+        mask = np.round(radii, 6) == r
+        sub = np.zeros(shape, dtype=bool)
+        gi = idx_all[mask]
+        sub[gi[:, 0], gi[:, 1], gi[:, 2]] = True
+        grid |= binary_dilation(sub, structure=_sphere_struct(r / grid_spacing))
+
+    if probe_radius > 0:
+        struct = _sphere_struct(probe_radius / grid_spacing)
+        grid = binary_erosion(binary_dilation(grid, structure=struct), structure=struct)
+
+    if grid.max() <= 0.5 or grid.min() >= 0.5:
+        return SurfaceMesh(vertices=np.empty((0, 3), np.float32),
+                           faces=np.empty((0, 3), np.int32), vertex_strand_ids=[])
+    verts, faces, _, _ = marching_cubes(grid.astype(np.float32), level=0.5, allow_degenerate=False)
+    verts = (verts * grid_spacing + bbox_min).astype(np.float32)
+    _, nn = cKDTree(positions).query(verts, workers=-1)
+    vsids = [strand_ids[int(i)] if strand_ids else "" for i in nn]
+    return SurfaceMesh(vertices=verts, faces=faces.astype(np.int32), vertex_strand_ids=vsids)
+
+
+def cg_surface_mesh(bead_atoms: list, grid_spacing: float = 0.20, probe_radius: float = 0.28,
+                    smooth: int = 15, bead_radius: float = CG_BEAD_RADIUS_NM) -> SurfaceMesh:
+    """FAST approximate molecular surface from coarse per-nucleotide spheres — skips the
+    all-atom rebuild (the bottleneck).  ~3× faster than the full-atom path; envelope within
+    ~2.8 Å of it (< the grid spacing).  ``bead_radius`` (nm) sets the sphere size; the grid
+    is coarsened adaptively for large structures."""
+    rs = bead_radius / VDW_RADIUS["C"]
+    gs = adaptive_grid_spacing(bead_atoms, grid_spacing)
+    mesh = compute_surface(bead_atoms, grid_spacing=gs, probe_radius=probe_radius, radius_scale=rs)
+    return smooth_mesh(mesh, iterations=smooth)
 
 
 # ── Mesh smoothing ────────────────────────────────────────────────────────────

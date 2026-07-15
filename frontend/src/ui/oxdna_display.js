@@ -20,6 +20,7 @@
 import { strideIndices, nearestOf } from '../scene/trajectory_range.js'
 import { colormapHex } from './colormaps.js'
 import { expandStampFrames, stampTopologyMatches } from '../scene/atomistic_stamp.js'
+import { parseSurfaceBin } from '../scene/surface_bin.js'
 
 /**
  * Pure mapping: a /oxdna/jobs/{id}/display response → applyFemPositions updates.
@@ -182,6 +183,9 @@ export function initOxdnaDisplay({
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
   onFrame = null,
+  // Live surface params (probe radius / colour mode) from the Surface-options sidebar, so
+  // the overlay surface honours them instead of the backend defaults.  () => ({...}).
+  getSurfaceParams = () => ({}),
   // Fired after a heavy (atomistic) frame's atoms are applied — lets the caller hide
   // the CG model exactly when the reconstructed atoms land (so switching full→atomistic
   // while this overlay is active shows no "native flash").
@@ -337,6 +341,22 @@ export function initOxdnaDisplay({
     }
     sr.applyPositionLerp(data, data, 0)
     _heavyActive = true
+    onHeavyApplied()   // surface is live → caller can hide the CG model (no native flash)
+  }
+
+  /** Relaxed-display surface mesh, BINARY path first (compact + no million-number
+   *  JSON.parse); falls back to the legacy JSON route when the binary endpoint is absent
+   *  (e.g. the MD viz adapter) or returns nothing. */
+  async function _relaxedSurfaceMesh(live) {
+    const params = getSurfaceParams() || {}   // sidebar probe radius / colour mode
+    if (typeof api.getOxdnaDisplaySurfaceBin === 'function') {
+      const buf = await api.getOxdnaDisplaySurfaceBin(_jobId, _align, params)
+      if (!live()) return null
+      const mesh = parseSurfaceBin(buf)
+      if (mesh) return mesh
+    }
+    const r = await api.getOxdnaDisplaySurface(_jobId, _align, params)
+    return (live() && r?.ready) ? r.surface : null
   }
 
   // Heavy reconstruction is slow (one all-atom rebuild per frame). Announce when one
@@ -443,8 +463,8 @@ export function initOxdnaDisplay({
           const flat = await _relaxedAtomisticFlat(epoch, live)
           if (live() && flat) await _pushAtomistic(flat, epoch, live)
         } else {
-          const r = await api.getOxdnaDisplaySurface(_jobId, _align)
-          if (live() && r?.ready) _pushSurface(r.surface)
+          const mesh = await _relaxedSurfaceMesh(live)
+          if (live() && mesh) _pushSurface(mesh)
         }
       } else if (_mode === 'rmsf') {
         if (kind === 'atomistic') {
@@ -487,7 +507,13 @@ export function initOxdnaDisplay({
     // colours (keyed by helix:bp:dir, which the design's own atoms also match)
     // would repaint the restored design atoms by stale RMSF.
     getAtomisticRenderer?.()?.clearScalarColors?.()
-    if (_heavyActive) { onRestoreDesignHeavy?.(); _heavyActive = false }
+    // Rebuild the design heavy rep unconditionally (self-gates in _restoreDesignHeavy:
+    // no-op unless an atomistic/surface mode is on).  NOT gated on _heavyActive — during
+    // the deferred-build window the overlay hasn't pushed atoms yet (_heavyActive false)
+    // but the heavy rep IS active with the CG showing, so turning off must still restore
+    // the DESIGN surface/atoms rather than leave the CG up (rep appearing to revert).
+    onRestoreDesignHeavy?.()
+    _heavyActive = false
     _bakedAtom = null
     _bakedSurf = null
     _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
@@ -723,13 +749,19 @@ export function initOxdnaDisplay({
     _playing = false
     _setHeavyBusy(false, null)   // clear any "building…" spinner the cancelled fetch left up
     if (!_active) return
+    // Clear the active/mode state BEFORE restoring the heavy rep.  _restoreHeavy →
+    // onRestoreDesignHeavy re-applies the current atomistic/surface mode, and that path
+    // checks drivesHeavy() to decide whether to DEFER to this overlay (keep the CG up) —
+    // if we're still "active" it would defer and blank the design surface/atoms, making
+    // the representation appear to revert to full/CG.  Turning the display off must leave
+    // the heavy rep showing the plain DESIGN geometry, not fall back to CG.
+    _active = false
+    _mode = null
+    _jobId = null
     designRenderer?.clearScalarColors?.()
     _applyFem(null)
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
     _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
-    _active = false
-    _mode = null
-    _jobId = null
     _rmsfResp = null
     _traj = null
   }

@@ -53,7 +53,7 @@ import { surfaceSegments } from './design_queries.js'
 const DOM = [
   'surface-options-panel',
   'sl-surface-opacity', 'sv-surface-opacity',
-  'sl-surface-probe', 'sv-surface-probe',
+  'sl-surface-probe', 'sv-surface-probe', 'cb-surface-highdetail',
   'surface-color-strand', 'surface-color-uniform',
   'sl-atom-vdw-scale', 'sv-atom-vdw-scale',
   'repr-atom-radius-row',
@@ -218,7 +218,7 @@ describe('initAtomSurfaceDisplay', () => {
 
   it('applyAtomisticMode DEFERS to an active sim overlay: no native flash (keeps CG, skips design fetch)', async () => {
     mountIds(DOM)
-    const deps = makeDeps({ getSimOverlayWillDriveAtomistic: () => true })
+    const deps = makeDeps({ getSimOverlayWillDriveHeavy: () => true })
     const api = initAtomSurfaceDisplay(deps)
     await api.applyAtomisticMode('ballstick')
     expect(deps.atomisticRenderer.setMode).toHaveBeenCalledWith('ballstick')
@@ -231,7 +231,7 @@ describe('initAtomSurfaceDisplay', () => {
   it('deferring to a sim overlay STILL sets the atomistic colour mode (keeps strand coloring, no cpk default)', async () => {
     mountIds(DOM)
     const store = createMockStore({ currentDesign: null, currentGeometry: null, coloringMode: 'strand' })
-    const deps = makeDeps({ store, getSimOverlayWillDriveAtomistic: () => true })
+    const deps = makeDeps({ store, getSimOverlayWillDriveHeavy: () => true })
     const api = initAtomSurfaceDisplay(deps)
     await api.applyAtomisticMode('ballstick')
     // Colour mode applied from the global coloringMode even though the design-atoms
@@ -242,12 +242,42 @@ describe('initAtomSurfaceDisplay', () => {
 
   it('applyAtomisticMode does NOT defer when no overlay drives atomistic (normal design view)', async () => {
     mountIds(DOM)
-    const deps = makeDeps({ getSimOverlayWillDriveAtomistic: () => false })
+    const deps = makeDeps({ getSimOverlayWillDriveHeavy: () => false })
     const api = initAtomSurfaceDisplay(deps)
     await api.applyAtomisticMode('ballstick')
     expect(deps._root.visible).toBe(false)         // CG hidden
     expect(global.fetch).toHaveBeenCalledTimes(1)  // design atoms fetched
     expect(deps.atomisticRenderer.update).toHaveBeenCalled()
+  })
+
+  it('applySurfaceMode DEFERS to an active sim overlay: no native flash (keeps CG, skips design surface fetch)', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({ getSimOverlayWillDriveHeavy: () => true })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applySurfaceMode('on')
+    expect(api.getSurfaceMode()).toBe('on')
+    expect(deps._root.visible).toBe(true)          // relaxed CG stays up
+    expect(global.fetch).not.toHaveBeenCalled()    // design surface NOT computed
+    // Renderer activated with an empty mesh (mode 'on' + a mesh) so the overlay's push
+    // can populate it — without this _pushSurface bails and nothing renders.
+    expect(deps.surfaceRenderer.update).toHaveBeenCalledWith({ vertices: [], faces: [] }, expect.anything())
+  })
+
+  it('changing probe radius while a sim overlay owns the surface re-generates the OVERLAY (not a design fetch, no revert)', async () => {
+    mountIds(DOM)
+    const onSurfaceParamsChanged = vi.fn()
+    const deps = makeDeps({ getSimOverlayWillDriveHeavy: () => true, onSurfaceParamsChanged })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applySurfaceMode('on')               // defer path → surfaceMode 'on'
+    global.fetch.mockClear()
+    deps.surfaceRenderer.update.mockClear()
+    const probe = document.getElementById('sl-surface-probe')
+    probe.value = '0.4'
+    probe.dispatchEvent(new Event('input'))
+    expect(onSurfaceParamsChanged).toHaveBeenCalled()          // overlay regen triggered
+    expect(global.fetch).not.toHaveBeenCalled()                // NOT the design-surface path
+    expect(deps.surfaceRenderer.update).not.toHaveBeenCalled() // not blanked to an empty mesh
+    expect(api.getSurfaceParams().probe_radius).toBeCloseTo(0.4)  // new radius exposed to the overlay fetch
   })
 
   it('applySurfaceMode reflects in getSurfaceMode and fetches the surface', async () => {

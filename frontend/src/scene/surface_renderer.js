@@ -30,6 +30,10 @@ const UNIFORM_COLOR      = 0xC8D8E8   // soft blue-grey, neutral molecular surfa
 
 // ── Module ────────────────────────────────────────────────────────────────────
 
+// A per-vertex strand index list may arrive as a plain array (JSON payload) or a
+// Uint32Array (binary surface-bin payload) — both index the same way.
+const _isIndexable = (a) => Array.isArray(a) || ArrayBuffer.isView(a)
+
 export function initSurfaceRenderer(scene) {
   let _mesh         = null   // THREE.Mesh currently in scene
   let _cachedData   = null   // last data object from API (retains vertex_strand_index*)
@@ -48,7 +52,7 @@ export function initSurfaceRenderer(scene) {
     // group overrides, and custom strand colours from the current session.
     if (strandHexMap
         && Array.isArray(data.vertex_strand_index_table)
-        && Array.isArray(data.vertex_strand_index)) {
+        && _isIndexable(data.vertex_strand_index)) {   // plain array (JSON) or Uint32Array (binary)
       const tbl   = data.vertex_strand_index_table
       const idx   = data.vertex_strand_index
       const tblR  = new Float32Array(tbl.length)
@@ -99,7 +103,7 @@ export function initSurfaceRenderer(scene) {
 
   function _hasVertexColorSource() {
     if (!_cachedData) return false
-    if (_strandHexMap && Array.isArray(_cachedData.vertex_strand_index)) return true
+    if (_strandHexMap && _isIndexable(_cachedData.vertex_strand_index)) return true
     return !!_cachedData.vertex_colors
   }
 

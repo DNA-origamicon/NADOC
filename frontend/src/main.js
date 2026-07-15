@@ -1918,6 +1918,8 @@ async function main() {
     // When switching full→atomistic with this overlay active, the design "native flash"
     // is suppressed (CG stays up) until the reconstructed atoms land — hide CG now.
     onHeavyApplied: () => _atomSurface?.setCGVisible(false),
+    // The overlay surface honours the Surface-options sidebar (probe radius / colour mode).
+    getSurfaceParams: () => _atomSurface?.getSurfaceParams?.() ?? {},
   })
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
@@ -2304,13 +2306,23 @@ async function main() {
   // injected; the 3 region-overlay renderers are owned by the module. Alias-consts
   // below keep every external call site (repr_option_sliders #83, switcher #84,
   // reset spine, periodic-MD) byte-identical.
+  // Debounce the overlay surface regen: the probe slider fires per drag-tick and each
+  // rebuild is seconds — only rebuild once the user settles on a value.
+  let _surfRegenTimer = null
+  const _regenOverlaySurfaceDebounced = () => {
+    if (_surfRegenTimer) clearTimeout(_surfRegenTimer)
+    _surfRegenTimer = setTimeout(() => { _surfRegenTimer = null; oxdnaDisplay.reapplyForRepr() }, 250)
+  }
   _atomSurface = initAtomSurfaceDisplay({
     scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
     unfoldView, overhangLinkArcs,
-    // Suppress the design "native flash" on full→atomistic while an oxDNA overlay is
-    // reconstructing atomistic (relaxed/rmsf/trajectory) — it rebuilds from the job's
-    // atoms + relaxed frame; the CG stays up until those land (onHeavyApplied).
-    getSimOverlayWillDriveAtomistic: () => oxdnaDisplay.drivesHeavy?.() ?? false,
+    // Suppress the design "native flash" on full→atomistic/surface while an oxDNA overlay
+    // is reconstructing the heavy rep (relaxed/rmsf/trajectory) — it rebuilds from the
+    // job's atoms + relaxed frame; the CG stays up until those land (onHeavyApplied).
+    getSimOverlayWillDriveHeavy: () => oxdnaDisplay.drivesHeavy?.() ?? false,
+    // A surface option changed while the overlay owns the surface → re-generate its mesh
+    // with the new probe radius / colour mode (debounced; reapplyForRepr re-runs the fetch).
+    onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,
   })
   const _applySurfaceMode           = _atomSurface.applySurfaceMode
   const _applyAtomisticMode         = _atomSurface.applyAtomisticMode
