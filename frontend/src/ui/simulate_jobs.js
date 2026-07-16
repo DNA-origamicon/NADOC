@@ -24,6 +24,7 @@
  */
 
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
+import { mountDirectoryButton } from './run_location.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { jobDisplayName as oxDisplayName, runRowLabel, runChildTitle } from './oxdna_jobs_panel.js'
@@ -303,6 +304,10 @@ export function initSimulateJobs({
   const archiveActionBtn = $('simulate-jobs-archive-btn')
   const deleteActionBtn = $('simulate-jobs-delete-btn')
   const archiveProgress = $('simulate-jobs-archive-progress')
+
+  // The ONE shared "📁 Directory" button, above the jobs list — sets where new runs (any
+  // engine) write their large trajectories. Each engine's create reads getRunDir().
+  mountDirectoryButton($('simulate-run-dir'), { api })
 
   let _nodes = []
   let _sel = { engine: null, id: null }

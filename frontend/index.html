@@ -3670,6 +3670,10 @@
                    default; "Show all job types" reveals every engine's runs (each tagged).
                    Selecting a row routes to that engine's tab + detail/viz (an [L] node's
                    viz uses the LAMMPS controller this card owns). -->
+              <!-- Shared run-location: one "📁 Directory" button for ALL engines, above the
+                   jobs list. Sets where new runs write (large trajectories → a roomy drive);
+                   mounted by simulate_jobs.js (run_location.js). -->
+              <div id="simulate-run-dir" style="margin-bottom:4px"></div>
               <div id="simulate-jobs" class="ox-card" style="margin-bottom:2px">
                 <div id="simulate-jobs-toggle" class="ox-card__header" style="color:#c9d1d9">
                   <span id="simulate-jobs-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Jobs</span><span id="simulate-jobs-engine-label" style="margin-left:6px;font-size:10px;color:#6e7681"></span>
