@@ -19,7 +19,7 @@
  *                              exportCadnano / exportSurfaceStl / exportSurface3mf
  * @returns {{ showNamdPromptModal: Function }}
  */
-import { showToast } from './toast.js'
+import { showToast, showPersistentToast, dismissToast } from './toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { getStapleColorOrder } from './spreadsheet.js'
 
@@ -34,6 +34,41 @@ export function triggerDownload(url) {
   a.href = url
   a.download = ''
   a.click()
+}
+
+/** Ask which coordinate set to export. Resolves to 'native', 'visualized', or null. */
+export function showPdbPositionModal(visualizationName, trajectory = null) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div')
+    overlay.className = 'modal-overlay'
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px'
+    const box = document.createElement('div')
+    box.style.cssText = 'width:min(520px,100%);background:#1a2530;border:1px solid #455a64;border-radius:10px;padding:22px;color:#cfd8dc;font-family:sans-serif;box-shadow:0 12px 48px rgba(0,0,0,.7)'
+    const title = document.createElement('h2')
+    title.textContent = 'Export PDB positions'
+    title.style.cssText = 'font-size:17px;margin:0 0 10px;color:#eceff1'
+    const text = document.createElement('p')
+    text.textContent = trajectory
+      ? `Export frame ${trajectory.frame} of ${trajectory.total} from the ${visualizationName} view?`
+      : `${visualizationName} is currently displayed. Which positions should the PDB use?`
+    text.style.cssText = 'font-size:13px;line-height:1.5;margin:0 0 20px'
+    const buttons = document.createElement('div')
+    buttons.style.cssText = 'display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap'
+    const finish = value => { overlay.remove(); resolve(value) }
+    for (const [label, value, primary] of [
+      ['Cancel', null, false],
+      ['Native NADOC positions', 'native', false],
+      [trajectory ? `Export frame ${trajectory.frame} of ${trajectory.total}` : `${visualizationName} positions`, 'visualized', true],
+    ]) {
+      const button = document.createElement('button')
+      button.textContent = label
+      button.style.cssText = `padding:8px 14px;border-radius:5px;cursor:pointer;color:#fff;border:1px solid ${primary ? '#0288d1' : '#546e7a'};background:${primary ? '#0288d1' : '#263238'}`
+      button.addEventListener('click', () => finish(value))
+      buttons.appendChild(button)
+    }
+    overlay.addEventListener('click', e => { if (e.target === overlay) finish(null) })
+    box.append(title, text, buttons); overlay.appendChild(box); document.body.appendChild(overlay)
+  })
 }
 
 /**
@@ -148,7 +183,8 @@ export function showNamdPromptModal(promptText) {
   return cleanup
 }
 
-export function initExportMenu({ store, api }) {
+export function initExportMenu({ store, api, getPdbVisualization = () => null }) {
+  let pdbExportBusy = false
   // Shared guard: every export needs a design loaded. Returns true if OK.
   const haveDesign = () => {
     if (!store.getState().currentDesign) {
@@ -180,16 +216,36 @@ export function initExportMenu({ store, api }) {
     if (!ok) showToast('Export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
   })
 
-  // ── Export PDB for NAMD ────────────────────────────────────────────────────────
-  document.getElementById('menu-file-export-pdb')?.addEventListener('click', () => {
-    if (!haveDesign()) return
-    triggerDownload('/api/design/export/pdb')
+  // ── Export PDB ─────────────────────────────────────────────────────────────────
+  document.getElementById('menu-file-export-pdb')?.addEventListener('click', async () => {
+    if (!haveDesign() || pdbExportBusy) return
+    const visualization = getPdbVisualization()
+    let positions = null
+    if (visualization?.positions?.length) {
+      const choice = await showPdbPositionModal(visualization.name, visualization.trajectory)
+      if (choice === null) return
+      if (choice === 'visualized') positions = visualization.positions
+    }
+    pdbExportBusy = true
+    showPersistentToast('Generating PDB…', { severity: 'info', loading: true })
+    let ok = false
+    try {
+      ok = await api.exportPdb(positions, visualization)
+    } catch (_) {
+      ok = false
+    } finally {
+      pdbExportBusy = false
+      dismissToast()
+    }
+    if (ok) showToast('PDB generated. Download starting…', { severity: 'success' })
+    else showToast('PDB export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
   })
 
   // ── Export PSF for NAMD ────────────────────────────────────────────────────────
-  document.getElementById('menu-file-export-psf')?.addEventListener('click', () => {
+  document.getElementById('menu-file-export-psf')?.addEventListener('click', async () => {
     if (!haveDesign()) return
-    triggerDownload('/api/design/export/psf')
+    const ok = await api.exportPsf()
+    if (!ok) showToast('PSF export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' })
   })
 
   // ── Export Surface STL (3D print) ──────────────────────────────────────────────
@@ -218,8 +274,12 @@ export function initExportMenu({ store, api }) {
   document.getElementById('menu-file-export-namd-complete')?.addEventListener('click', async () => {
     if (!haveDesign()) return
 
-    // Trigger the download immediately — don't make the user wait for the prompt fetch.
-    triggerDownload('/api/design/export/namd-complete')
+    // Doc-scoped, error-aware download (a raw <a> can't send the doc header and
+    // would silently save a 404 body).  Kick it off but don't await before the
+    // prompt fetch — both run concurrently.
+    api.exportNamdComplete()
+      .then((ok) => { if (!ok) showToast('NAMD package export failed: ' + exportErrorMessage(store.getState()), { severity: 'error' }) })
+      .catch(() => showToast('NAMD package export failed.', { severity: 'error' }))
 
     // Fetch and display the AI assistant prompt in a popup.
     let promptText = null

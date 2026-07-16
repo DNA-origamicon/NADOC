@@ -220,6 +220,8 @@ def _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflat
     from backend.core.surface import (compute_surface, compute_surface_from_cloud, smooth_mesh,
                                       adaptive_grid_spacing, adaptive_grid_spacing_arr,
                                       cg_surface_mesh, make_cg_bead)
+    if detail == "chimerax":
+        return _build_chimerax_surface(design)
     if detail == "coarse":
         from backend.core.design_geometry import _geometry_for_design
         beads = []
@@ -255,6 +257,31 @@ def _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflat
         model.atoms, grid_spacing=adaptive_grid_spacing(model.atoms, grid_spacing),
         probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
     return smooth_mesh(mesh, iterations=smooth)
+
+
+def _build_chimerax_surface(design):
+    """EXPERIMENTAL 'ChimeraX quality' surface (``detail='chimerax'``).  Mimics ChimeraX's
+    default molecular surface on two axes: (1) a FINE ~0.5 Å grid + 1.4 Å water probe + true
+    VdW radii (vs the display path's coarse ~3 Å grid that blurs the helical grooves), and
+    (2) a SEPARATE surface PER STRAND (like ChimeraX's per-chain surfaces), so complementary
+    strands are distinct geometry with a real solvent gap between them instead of one fused
+    blob with a jagged colour seam.  See ``surface.compute_split_surfaces_from_cloud`` +
+    ``surface.CHIMERAX_*``.  EXPENSIVE (one marching-cubes pass per strand) but voxel-capped."""
+    import numpy as np
+    from backend.core.surface import compute_split_surfaces_from_cloud
+    if _can_use_surface_cloud(design):
+        from backend.core.atomistic import surface_atom_cloud
+        pos, radii, sids = surface_atom_cloud(design)
+    else:
+        # Extra-base crossovers / flexible ssDNA / extension tails → exact Atom build (includes
+        # every atom the cloud omits; the extra-base atoms carry their crossover's strand id).
+        from backend.core.atomistic import build_atomistic_model, VDW_RADIUS
+        model = build_atomistic_model(
+            design, nuc_frame_override=_flexible_display_override(design), fast_bridges=True)
+        pos = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
+        radii = np.array([VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) for a in model.atoms], dtype=float)
+        sids = [a.strand_id or "" for a in model.atoms]
+    return compute_split_surfaces_from_cloud(pos, radii, sids)
 
 
 def _can_use_surface_cloud(design) -> bool:

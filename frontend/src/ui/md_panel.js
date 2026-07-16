@@ -945,5 +945,14 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       return !!(_ws && (_ws.readyState === WebSocket.OPEN ||
                         _ws.readyState === WebSocket.CONNECTING))
     },
+
+    /** True only while a received NAMD frame is actually driving the scene. */
+    isActive() { return _displayVisible && !!_lastFrameMsg },
+    mode() { return this.isActive() ? 'trajectory' : null },
+    trajectoryInfo() {
+      return this.isActive()
+        ? { frame: (_lastFrameMsg.frame_idx ?? 0) + 1, total: _lastFrameMsg.n_frames ?? _nFrames }
+        : null
+    },
   }
 }

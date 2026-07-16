@@ -28,10 +28,12 @@ from __future__ import annotations
 
 import logging
 import shutil
+import asyncio
+import threading
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -1333,7 +1335,7 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")
-async def get_oxdna_trajectory(job_id: str) -> dict:
+async def get_oxdna_trajectory(job_id: str, request: Request) -> dict:
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
     selected job AND all of its ancestors (relax → field1 → field2 → …), each
     frame PBC-unwrapped + Kabsch-aligned to the design reference, downsampled,
@@ -1348,14 +1350,32 @@ async def get_oxdna_trajectory(job_id: str) -> dict:
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
 
+    cancelled = threading.Event()
+
+    class _TrajectoryCancelled(Exception):
+        pass
+
     def _prog(done: int, total: int) -> None:
+        if cancelled.is_set():
+            raise _TrajectoryCancelled()
         _TRAJ_PROGRESS[job_id] = {"done": done, "total": total}
 
     _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
     try:
-        result = await run_in_threadpool(
-            composite_trajectory, design, stages, ref, 200, _prog)
+        task = asyncio.create_task(run_in_threadpool(
+            composite_trajectory, design, stages, ref, 200, _prog))
+        while not task.done():
+            if await request.is_disconnected():
+                cancelled.set()
+                break
+            await asyncio.sleep(0.1)
+        try:
+            result = await task
+        except _TrajectoryCancelled:
+            return {"ready": False, "reason": "cancelled", "n_frames": 0,
+                    "keys": [], "frames": [], "markers": [], "stages": []}
     finally:
+        cancelled.set()
         _TRAJ_PROGRESS.pop(job_id, None)
     return {"ready": result["n_frames"] > 0, **result}
 

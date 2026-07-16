@@ -32,8 +32,9 @@ URLs are unchanged from their previous home in crud.py. Mounting is done in
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
 from backend.api import state as design_state
 # Shared export/geometry resolvers used by many routes across crud.py +
@@ -42,6 +43,61 @@ from backend.api import state as design_state
 from backend.api.crud import _design_for_export, _geometry_for_design
 
 router = APIRouter()
+
+
+class PdbVisualizationPosition(BaseModel):
+    # Renderer keys can be numeric for imported caDNAno designs and extra-base
+    # sentinels use string identifiers. Normalize them when building overrides.
+    helix_id: str | int
+    bp_index: int | str  # extra crossover bases use the crossover id here
+    direction: str | int
+    backbone_position: list[float] = Field(min_length=3, max_length=3)
+    copy: int = 0
+
+
+class PdbVisualizationExport(BaseModel):
+    positions: list[PdbVisualizationPosition]
+    visualization: "PdbVisualizationSource | None" = None
+
+
+class PdbVisualizationSource(BaseModel):
+    engine: str | None = None
+    mode: str | None = None
+    job_id: str | None = None
+    frame: int | None = None  # one-based UI frame number
+
+
+PdbVisualizationExport.model_rebuild()
+
+
+def _pdb_visualization_overrides(positions: list[PdbVisualizationPosition]):
+    """Split renderer positions into regular, crossover-insert, and tail overrides."""
+    import numpy as np
+
+    def _direction(value: str | int) -> str:
+        text = str(value).upper()
+        if text in {"1", "+1", "FORWARD"}:
+            return "FORWARD"
+        if text in {"-1", "REVERSE"}:
+            return "REVERSE"
+        return text
+
+    regular = {}
+    crossover = {}
+    extensions = {}
+    for p in positions:
+        helix_id = str(p.helix_id)
+        xyz = np.asarray(p.backbone_position, dtype=float)
+        if helix_id == "__xb__":
+            crossover[(p.bp_index, int(p.direction))] = xyz
+        elif helix_id.startswith("__ext_"):
+            extensions[(helix_id[len("__ext_"):], int(p.bp_index))] = xyz
+        else:
+            key = (helix_id, int(p.bp_index), _direction(p.direction))
+            if p.copy:
+                key += (p.copy,)
+            regular[key] = xyz
+    return regular, crossover, extensions
 
 
 # ── oxDNA export / run ────────────────────────────────────────────────────────
@@ -208,12 +264,80 @@ def export_pdb_file() -> Response:
     from backend.core.pdb_export import export_pdb
 
     design   = _design_for_export()
-    pdb_text = export_pdb(design)
+    pdb_text = export_pdb(design, viewer_terminals=True)
     name     = (design.metadata.name or "design").replace(" ", "_")
     return Response(
         content     = pdb_text.encode("utf-8"),
         media_type  = "chemical/x-pdb",
         headers     = {"Content-Disposition": f'attachment; filename="{name}.pdb"'},
+    )
+
+
+@router.post("/design/export/pdb/visualized")
+def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
+    """Export a PDB translated onto the simulation/FEM positions shown by the UI."""
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.pdb_export import export_pdb
+
+    design = _design_for_export()
+
+    # oxDNA has a validated, frame-aware all-atom reconstruction used by the
+    # atomistic display. Use that exact source when possible. Merely translating
+    # native residues onto CG backbone points leaves their native straight-axis
+    # orientation intact, producing the visibly incorrect one-axis base stack.
+    src = payload.visualization
+    model = None
+    if src and src.engine == "oxdna" and src.job_id:
+        from backend.api.routes_oxdna import (
+            _composite_inputs, _load_job, _relaxed_full_map, _rmsf_average_frame,
+        )
+        from backend.core.atomistic import build_atomistic_model
+        from backend.core.oxdna_health import (
+            composite_trajectory_atomistic, frame_atomistic_flat,
+        )
+
+        job = _load_job(src.job_id)
+        if src.mode == "rmsf":
+            design, frame_map, _ = _rmsf_average_frame(job)
+            flat = frame_atomistic_flat(design, frame_map) if frame_map is not None else None
+        elif src.mode == "trajectory" and src.frame is not None:
+            design, stages, ref = _composite_inputs(job)
+            idx = max(0, src.frame - 1)
+            frames = composite_trajectory_atomistic(design, stages, ref, [idx]) if stages else {}
+            flat = frames.get(str(idx))
+        else:
+            design, frame_map, _, _, _ = _relaxed_full_map(
+                job, True, copies=True, include_extra_bases=True, include_extensions=True)
+            flat = frame_atomistic_flat(design, frame_map) if frame_map is not None else None
+
+        if flat is None:
+            raise HTTPException(409, "The selected oxDNA frame is no longer available for PDB export.")
+        model = build_atomistic_model(design, fast_bridges=True)
+        if len(flat) != len(model.atoms) * 3:
+            raise HTTPException(409, "The selected oxDNA frame does not match its saved topology.")
+        for i, atom in enumerate(model.atoms):
+            atom.x, atom.y, atom.z = map(float, flat[i * 3:i * 3 + 3])
+    # nuc_pos_override is intentionally the same axis-derived atomistic stamping
+    # path used for relaxed CG display: it moves each residue to the selected CG
+    # backbone position while preserving chemically sane DNA orientation.
+    override, xb_override, ext_override = _pdb_visualization_overrides(payload.positions)
+    if model is None:
+        model = build_atomistic_model(
+            design,
+            nuc_pos_override=override,
+            xb_pos_override=xb_override or None,
+            ext_pos_override=ext_override or None,
+            # Simulation beads define the rigid nucleotide positions, but oxDNA
+            # does not place individual phosphate-linker atoms. Re-seat those
+            # atoms between fixed sugar anchors, including 5'/3' extension joins.
+            close_backbone=True,
+        )
+    pdb_text = export_pdb(design, model=model, viewer_terminals=True)
+    name = (design.metadata.name or "design").replace(" ", "_")
+    return Response(
+        content=pdb_text.encode("utf-8"),
+        media_type="chemical/x-pdb",
+        headers={"Content-Disposition": f'attachment; filename="{name}.pdb"'},
     )
 
 
@@ -489,4 +613,3 @@ def export_psf_file() -> Response:
         media_type  = "text/plain",
         headers     = {"Content-Disposition": f'attachment; filename="{name}.psf"'},
     )
-

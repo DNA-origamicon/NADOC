@@ -143,6 +143,10 @@ export function initAtomSurfaceDisplay({
       dismissToast()
     }
     const { surfaceColorMode, surfaceOpacity } = store.getState()
+    // ChimeraX-quality builds a SEPARATE surface per strand (real geometric gaps between
+    // strands), so every vertex is unambiguously one strand and per-vertex colours are
+    // already solid — the crisp-zone face-flatten (for the fused mesh) isn't needed here.
+    surfaceRenderer.setCrispZones?.(false)
     surfaceRenderer.update(_surfaceDataCache, surfaceColorMode)
     surfaceRenderer.applyStrandColors(_getAtomStrandColors())
     surfaceRenderer.setOpacity(surfaceOpacity)
@@ -205,7 +209,23 @@ export function initAtomSurfaceDisplay({
   // High-detail toggle: off = fast coarse CG-bead envelope (default), on = exact all-atom.
   const _cbHighDetail = document.getElementById('cb-surface-highdetail')
   _cbHighDetail?.addEventListener('change', () => {
+    // Ignored while ChimeraX quality owns the detail level (checkbox is disabled then).
+    if (_cbChimerax?.checked) return
     _surfaceDetail = _cbHighDetail.checked ? 'fine' : 'coarse'
+    _regenSurfaceForParamChange()
+  })
+
+  // EXPERIMENTAL "ChimeraX quality" toggle: high-fidelity SES at a fine 0.5 Å grid +
+  // 1.4 Å water probe + true VdW radii (detail='chimerax'). Overrides High detail while on.
+  const _cbChimerax = document.getElementById('cb-surface-chimerax')
+  _cbChimerax?.addEventListener('change', () => {
+    if (_cbChimerax.checked) {
+      _surfaceDetail = 'chimerax'
+      if (_cbHighDetail) _cbHighDetail.disabled = true
+    } else {
+      _surfaceDetail = _cbHighDetail?.checked ? 'fine' : 'coarse'
+      if (_cbHighDetail) _cbHighDetail.disabled = false
+    }
     _regenSurfaceForParamChange()
   })
 

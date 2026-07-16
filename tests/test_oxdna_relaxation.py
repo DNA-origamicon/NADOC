@@ -2365,6 +2365,44 @@ def _ideal_frame_override(design, geometry, tmp_path, *, copies=False):
                 np.asarray(r["a3"])) for k, r in frames.items()}
 
 
+def test_melted_designed_pair_uses_true_oxdna_rigid_frames(design, geometry, tmp_path):
+    """A complementary design key is not proof that a pair remains duplex.
+
+    Once oxDNA separates the base sites beyond its formed-pair cutoff, both sides
+    must bypass the shared helix-axis reconstruction and retain their own a1/a3
+    poses.  Otherwise a short locally melted segment is exported at an invented
+    position between its two simulated strands.
+    """
+    from backend.core.oxdna_health import _ssdna_frame_override
+    from backend.physics.oxdna_interface import read_configuration_full
+
+    conf = tmp_path / "melted.dat"
+    write_configuration(design, geometry, conf, box_nm=200.0, oxdna_native_seed=True)
+    frame = read_configuration_full(conf, design, copies=True)
+    forward = next(k for k in frame if len(k) == 3 and k[2] == "FORWARD"
+                   and (k[0], k[1], "REVERSE") in frame
+                   and (k[0], k[1] + 1, "FORWARD") in frame
+                   and (k[0], k[1] + 1, "REVERSE") in frame)
+    forward2 = (forward[0], forward[1] + 1, "FORWARD")
+    reverse = (forward[0], forward[1], "REVERSE")
+    reverse2 = (forward[0], forward[1] + 1, "REVERSE")
+
+    # The ideal pair remains on the duplex axis-derived path.
+    ideal = _ssdna_frame_override(design, frame)
+    assert forward not in ideal
+    assert reverse not in ideal
+
+    melted = {k: {name: np.asarray(value).copy() for name, value in rec.items()}
+              for k, rec in frame.items()}
+    melted[forward]["backbone_position"] += np.array([5.0, 0.0, 0.0])
+    melted[forward2]["backbone_position"] += np.array([5.0, 0.0, 0.0])
+    overrides = _ssdna_frame_override(design, melted)
+    assert forward in overrides
+    assert forward2 in overrides
+    assert reverse in overrides
+    assert reverse2 in overrides
+
+
 def test_rigid_frame_calibration_buckets_exact():
     """The empirical calibration covers all four (strand_dir, helix_is_forward)
     buckets and each (Q, c) is a near-exact constant — the internal residual assert

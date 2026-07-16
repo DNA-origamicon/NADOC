@@ -629,6 +629,13 @@ _SLOW_TESTS = {
     # test_atomistic.py (large-design PDB/NAMD-package writes)
     "test_namd_package_includes_identity_sidecars",
     "test_pdb_atom_records_fixed_width_large_design",
+    # test_pdb_export.py: builds a full all-atom model (build_atomistic_model) on a
+    # design carrying BOTH extra-base inserts and 5'/3' extension tails, then runs the
+    # real export_pdb path (~6.4 s under a loaded box). Same heavy-atomistic
+    # reconstruction family as test_atomistic; the other pdb-export tests in the file
+    # are sub-second serial/CONECT string checks, so this one is per-test relegated
+    # (area "atomistic").
+    "test_pdb_includes_extra_base_and_extension_atoms",
     # test_remote_health_eval.py (MDAnalysis DCD load + WC-health eval)
     "test_health_eval_writes_wc_json_matching_run_health_check",
     # test_md_prep_wiring.py / test_md_analysis_runner.py (real solvation-progress + watched-subprocess timing)
@@ -693,7 +700,9 @@ def _slow_area_for(module: str) -> str:
         return "namd"
     if "mrdna" in module:
         return "mrdna"
-    if "atomistic" in module:
+    # pdb_export builds a full atomistic model then writes the PDB — same heavy
+    # reconstruction stack as the atomistic tests, so its slow tests belong there.
+    if "atomistic" in module or "pdb_export" in module:
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"

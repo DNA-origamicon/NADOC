@@ -22,11 +22,20 @@ import * as client from '../api/client.js'
 export function initLammpsDisplay({ designRenderer = null, api = client } = {}) {
   let _mode = null          // 'display' | 'rmsf' | 'deviation' | 'trajectory' | null
   let _traj = null          // { keys, frames } while in trajectory mode
+  let _trajIdx = 0
   let _jobId = null
   let _rmsfResp = null      // cached payloads so the scale widget can recolour without a re-fetch
   let _devResp = null
   let _rmsfCmap = 'viridis'
   let _devCmap = 'devramp'
+  let _epoch = 0
+  let _loadAbort = null
+  function _beginLoad() {
+    _loadAbort?.abort()
+    _loadAbort = new AbortController()
+    return { epoch: ++_epoch, signal: _loadAbort.signal }
+  }
+  function _cancelLoad() { _loadAbort?.abort(); _loadAbort = null; _epoch++ }
 
   function _restore() {
     designRenderer?.applyFemPositions(null)
@@ -35,7 +44,9 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
 
   async function displayJob(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
-    const resp = await api.getLammpsDisplay(jobId, align)
+    const { epoch, signal } = _beginLoad()
+    const resp = await api.getLammpsDisplay(jobId, align, signal)
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const updates = toFemUpdates(resp)
     if (!updates.length) return { ok: false, reason: resp?.reason || 'not ready' }
     designRenderer.clearScalarColors?.()          // plain positions, no per-base colour
@@ -46,7 +57,9 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
 
   async function displayRmsf(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
-    const resp = await api.getLammpsRmsf(jobId)
+    const { epoch, signal } = _beginLoad()
+    const resp = await api.getLammpsRmsf(jobId, signal)
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
     _rmsfResp = resp
@@ -59,7 +72,9 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
 
   async function displayDeviation(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
-    const resp = await api.getLammpsDeviation(jobId)
+    const { epoch, signal } = _beginLoad()
+    const resp = await api.getLammpsDeviation(jobId, signal)
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
     _devResp = resp
@@ -91,7 +106,9 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
 
   async function loadTrajectory(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
-    const t = await api.getLammpsTrajectory(jobId)
+    const { epoch, signal } = _beginLoad()
+    const t = await api.getLammpsTrajectory(jobId, signal)
+    if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!t || !t.ready) { _traj = null; return { ok: false, reason: t?.reason || 'not ready' } }
     _traj = { keys: t.keys, frames: t.frames }
     _mode = 'trajectory'; _jobId = jobId
@@ -102,11 +119,14 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
 
   function showFrame(i) {
     if (_mode !== 'trajectory' || !_traj) return
-    const f = _traj.frames[i]
+    const idx = Math.max(0, Math.min(_traj.frames.length - 1, i | 0))
+    const f = _traj.frames[idx]
+    if (f) _trajIdx = idx
     if (f) designRenderer.applyFemPositions(framesToUpdates(_traj.keys, f))
   }
 
   function stopAndRestore() {
+    _cancelLoad()
     // No-op when nothing is displayed. `_restore()` reverts every backbone bead to
     // the design geometry (applyFemPositions(null) → revertToGeometry), so calling
     // it while inactive CLOBBERS positions this overlay never set — e.g. the live
@@ -123,5 +143,8 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   return {
     displayJob, displayRmsf, displayDeviation, recolorRmsf, recolorDeviation, loadTrajectory, showFrame, stopAndRestore,
     mode: () => _mode, activeJobId: () => _jobId, isActive: () => _mode !== null,
+    trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
+      ? { frame: _trajIdx + 1, total: _traj.frames.length }
+      : null,
   }
 }

@@ -329,6 +329,22 @@ describe('initOxdnaDisplay controller', () => {
       [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0, backbone_position: [2, 2, 2], nx: 1, ny: 0, nz: 0 }])
   })
 
+  it('aborts an in-flight trajectory request when toggled off before it loads', async () => {
+    const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
+    let signal, release
+    const api = { getOxdnaTrajectory: vi.fn((id, s) => {
+      signal = s
+      return new Promise(resolve => { release = () => resolve(null) })
+    }) }
+    const ctrl = initOxdnaDisplay({ designRenderer, api })
+    const pending = ctrl.loadTrajectory('wrong-job')
+    expect(signal.aborted).toBe(false)
+    ctrl.cancelPendingLoad()
+    expect(signal.aborted).toBe(true)
+    release()
+    await expect(pending).resolves.toMatchObject({ ok: false, reason: 'superseded' })
+  })
+
   it('loadTrajectory reports not-ready when there are no frames', async () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const api = { getOxdnaTrajectory: vi.fn().mockResolvedValue({ ready: false, reason: 'no trajectory yet' }) }

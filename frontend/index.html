@@ -3311,7 +3311,7 @@
           <button class="dropdown-item" id="menu-file-export-seq-csv">Export Sequences (CSV)</button>
           <button class="dropdown-item" id="menu-file-export-seq-xlsx">Export Sequences (Excel, overhang bold)</button>
           <button class="dropdown-item" id="menu-file-export-cadnano">Export caDNAno (.json)</button>
-          <button class="dropdown-item" id="menu-file-export-pdb">Export PDB for NAMD (.pdb)</button>
+          <button class="dropdown-item" id="menu-file-export-pdb">Export PDB</button>
           <button class="dropdown-item" id="menu-file-export-psf">Export NAMD Topology (.psf)</button>
           <button class="dropdown-item" id="menu-file-export-stl">Export Surface STL (3D print)</button>
           <button class="dropdown-item" id="menu-file-export-3mf">Export Surface 3MF (multi-color print)</button>
@@ -6854,6 +6854,10 @@
               <div class="slider-row">
                 <label title="Off: fast coarse envelope from per-nucleotide spheres. On: exact all-atom surface (slower).">High detail</label>
                 <input type="checkbox" id="cb-surface-highdetail">
+              </div>
+              <div class="slider-row">
+                <label title="EXPERIMENTAL. Solvent-excluded surface at ChimeraX's fine 0.5 Å grid + 1.4 Å water probe + true VdW radii — smooth, groove-following, like ChimeraX's default molecular surface. Slow; best on small parts (large designs auto-coarsen).">ChimeraX quality<span style="color:#8b949e;font-size:var(--text-xs)"> (exp.)</span></label>
+                <input type="checkbox" id="cb-surface-chimerax">
               </div>
             </div>
           </div>

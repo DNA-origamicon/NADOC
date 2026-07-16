@@ -212,6 +212,17 @@ export function initOxdnaDisplay({
   // was turned off or superseded by a newer call bails instead of re-applying
   // stale positions (the "toggle off but sim positions stay" desync).
   let _epoch = 0
+  let _loadAbort = null
+  function _beginLoad() {
+    _loadAbort?.abort()
+    _loadAbort = new AbortController()
+    return _loadAbort.signal
+  }
+  function _cancelLoad() {
+    _loadAbort?.abort()
+    _loadAbort = null
+    _epoch++
+  }
 
   // ── Heavy reps (atomistic / surface) ───────────────────────────────────────
   // The CG overlay above is applied via designRenderer.applyFemPositions; when the
@@ -527,7 +538,8 @@ export function initOxdnaDisplay({
   async function displayJob(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
-    const resp = await api.getOxdnaDisplay(jobId, align)
+    const signal = _beginLoad()
+    const resp = await api.getOxdnaDisplay(jobId, align, signal)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }   // off/newer call won
     const updates = toFemUpdates(resp)
     if (!updates.length) {
@@ -571,6 +583,7 @@ export function initOxdnaDisplay({
     const updates = toFemUpdates({ ready: true, positions })
     if (!updates.length) return false
     _epoch++   // supersede any in-flight relaxed/flex/traj fetch
+    _cancelLoad()
     designRenderer.clearScalarColors?.()
     _applyFem(updates)
     proteinRenderer?.clearOxdnaTransforms?.()
@@ -593,7 +606,8 @@ export function initOxdnaDisplay({
     if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId) {
       resp = _rmsfCache.resp
     } else {
-      resp = await api.getOxdnaRmsf(jobId)
+      const signal = _beginLoad()
+      resp = await api.getOxdnaRmsf(jobId, signal)
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
@@ -688,7 +702,8 @@ export function initOxdnaDisplay({
   async function loadTrajectory(jobId) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
-    const resp = await api.getOxdnaTrajectory(jobId)
+    const signal = _beginLoad()
+    const resp = await api.getOxdnaTrajectory(jobId, signal)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
@@ -744,6 +759,7 @@ export function initOxdnaDisplay({
   /** Clear the overlay (positions + colours) and restore the design. */
   function stopAndRestore() {
     _epoch++   // cancel any in-flight display fetch so it can't re-apply after we restore
+    _cancelLoad() // also terminate the HTTP/body transfer and release browser resources
     _heavyToken++   // and any in-flight heavy reconstruction
     _prebuildToken++   // and any in-flight playback prebuild
     _playing = false
@@ -785,6 +801,10 @@ export function initOxdnaDisplay({
     isActive: () => _active,
     mode: () => _mode,
     activeJobId: () => _jobId,
+    cancelPendingLoad: _cancelLoad,
+    trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
+      ? { frame: _frameIdx + 1, total: _traj.frames.length }
+      : null,
     // True when this overlay is active in a mode that REBUILDS the atomistic renderer
     // from the job's atoms (relaxed / rmsf / trajectory) — NOT the CG-only modes
     // (live / deviation), which would leave an atomistic switch with nothing to show.

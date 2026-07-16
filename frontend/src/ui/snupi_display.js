@@ -24,6 +24,13 @@ export function initSnupiDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
 }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
+  let _loadAbort = null
+  function _beginLoad() {
+    _loadAbort?.abort()
+    _loadAbort = new AbortController()
+    return { epoch: ++_epoch, signal: _loadAbort.signal }
+  }
+  function _cancelLoad() { _loadAbort?.abort(); _loadAbort = null; _epoch++ }
   let _jobId = null         // job whose overlay is applied (or null)
   let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
   let _stats = null         // last flex/deviation/cando summary for the panel readout
@@ -72,9 +79,9 @@ export function initSnupiDisplay({
 
   /** Deform the model to the predicted shape (no recolour). */
   async function showDeform(jobId) {
-    const epoch = ++_epoch
+    const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getSnupiDisplay(jobId), api.getSnupiSnapshotGeometry(jobId)])
+      api.getSnupiDisplay(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const updates = toFemUpdates(resp)
     if (!updates.length || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
@@ -107,9 +114,9 @@ export function initSnupiDisplay({
 
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
   async function showFlex(jobId) {
-    const epoch = ++_epoch
+    const { epoch, signal } = _beginLoad()
     const [disp, rmsf, snap] = await Promise.all([
-      api.getSnupiDisplay(jobId), api.getSnupiRmsf(jobId), api.getSnupiSnapshotGeometry(jobId)])
+      api.getSnupiDisplay(jobId, signal), api.getSnupiRmsf(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const map = flexColorMap(disp, rmsf, undefined, undefined, _flexCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
@@ -127,9 +134,9 @@ export function initSnupiDisplay({
   /** Deform to the predicted shape + recolour beads green→red by deviation from the
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
   async function showDeviation(jobId) {
-    const epoch = ++_epoch
+    const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getSnupiDeviation(jobId), api.getSnupiSnapshotGeometry(jobId)])
+      api.getSnupiDeviation(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
@@ -146,8 +153,8 @@ export function initSnupiDisplay({
 
   /** CanDo-style output: draw the predicted shape as jointed-cylinder tubes (native model hidden). */
   async function showCandoStyle(jobId) {
-    const epoch = ++_epoch
-    const resp = await api.getSnupiCylinders(jobId)
+    const { epoch, signal } = _beginLoad()
+    const resp = await api.getSnupiCylinders(jobId, signal)
     if (epoch !== _epoch) return { ok: false }
     if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
       return { ok: false, reason: 'not-ready' }
@@ -208,9 +215,9 @@ export function initSnupiDisplay({
 
   /** Animate a dynamics job's thermal trajectory (the actual motion, not just its mean shape). */
   async function showTrajectory(jobId) {
-    const epoch = ++_epoch
+    const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getSnupiTrajectory(jobId), api.getSnupiSnapshotGeometry(jobId)])
+      api.getSnupiTrajectory(jobId, signal), api.getSnupiSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     if (!resp?.ready || !resp.n_frames || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
     _prepareForExternal()
@@ -244,6 +251,7 @@ export function initSnupiDisplay({
   }
 
   function stopDeform() {
+    _cancelLoad()
     if (_mode === null) return
     stopTrajectory()
     _clearAll()
@@ -253,7 +261,6 @@ export function initSnupiDisplay({
   /** Restore the native model — used when leaving the tab / deleting the job. */
   function stopAndRestore() {
     stopDeform()
-    _epoch++   // invalidate any in-flight fetch
   }
 
   return {
@@ -269,6 +276,9 @@ export function initSnupiDisplay({
     deformActive: () => _mode !== null,
     deformJobId:  () => _jobId,
     mode:         () => _mode,
+    trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
+      ? { frame: _trajIdx + 1, total: _traj.frames.length }
+      : null,
     lastStats:    () => _stats,
   }
 }

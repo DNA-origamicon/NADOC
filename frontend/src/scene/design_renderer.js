@@ -28,6 +28,10 @@ export function initDesignRenderer(scene, storeRef) {
   let _helixCtrl        = null
   let _femArcUpdater    = null   // unfold_view.applyFemArcs — keeps arcs synced with applyFemPositions
   let _scalarArcUpdater = null   // unfold_view.applyFemArcColors — recolours arcs with the RMSF scalar map
+  // Last simulation/FEM displacement applied to the shared design model.  Keeping
+  // the source payload here lets non-rendering consumers (notably PDB export) use
+  // exactly the positions currently on screen without coupling to every engine.
+  let _activeFemUpdates = null
   let _designVisible    = true   // controlled by setDesignVisible(); re-applied after every _rebuild
   // VISIBILITY RULE: design_renderer has ONE scene object — _helixCtrl.root.
   // Extra-base beads+slabs (from buildCrossoverConnections) are children of root,
@@ -982,6 +986,9 @@ export function initDesignRenderer(scene, storeRef) {
      * @param {Array<{helix_id, bp_index, direction, backbone_position}>} updates
      */
     applyFemPositions(updates, amp = 1.0) {
+      _activeFemUpdates = Array.isArray(updates)
+        ? updates.map(u => ({ ...u, backbone_position: [...u.backbone_position] }))
+        : null
       // Split off crossover extra-base inserts (helix_id "__xb__"): the simulation
       // frame carries their REAL positions, which the helix renderer can't place
       // (no design key). Route them to the extra-base bead/slab instances below.
@@ -999,6 +1006,11 @@ export function initDesignRenderer(scene, storeRef) {
       // frame when present, else re-interpolate from the now-live endpoint
       // positions (reverted-to-geometry when updates===null).
       this.applyClusterCrossoverUpdate([])
+    },
+
+    /** Snapshot of the simulation/FEM positions currently driving the model. */
+    getFemPositions() {
+      return _activeFemUpdates?.map(u => ({ ...u, backbone_position: [...u.backbone_position] })) ?? null
     },
 
     /** Register unfold_view's applyFemArcs so the arcs follow applyFemPositions. */

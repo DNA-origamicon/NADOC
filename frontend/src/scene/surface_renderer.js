@@ -43,6 +43,8 @@ export function initSurfaceRenderer(scene) {
   let _liveVerts    = null   // Float32Array reference into the live mesh position buffer
   let _strandHexMap = null   // Map<strand_id, hex> last applied via applyStrandColors
   let _meshName     = 'dna-surface'  // overridable so the region overlay can use a distinct name
+  let _crispZones   = false  // crisp per-face strand zones (ChimeraX look) vs Gouraud-blended
+  let _crispFaceVert = null  // Int32Array[nFaces]: source vertex whose strand colours each face
 
   // ── Geometry builder ────────────────────────────────────────────────────────
 
@@ -82,7 +84,94 @@ export function initSurfaceRenderer(scene) {
     return null
   }
 
+  // Pick the source vertex whose strand id colours a whole face.  Majority of the 3
+  // corners (tie-break to the first) → the zone boundary falls on a triangle EDGE
+  // instead of being Gouraud-blended across the triangle interior.
+  function _chooseFaceVert(idx, i0, i1, i2) {
+    const a = idx[i0], b = idx[i1], c = idx[i2]
+    if (a === b || a === c) return i0
+    if (b === c) return i1
+    return i0
+  }
+
+  // Per-face strand colours for a NON-INDEXED buffer: all 3 corners of a face get the
+  // single colour of that face's chosen strand → flat (crisp) colour zones.  Length =
+  // nFaces*3 vertices * 3 channels.  faceVert[f] is the source vertex chosen for face f.
+  function _buildCrispColorArray(data, strandHexMap, faceVert) {
+    const nFaces = faceVert.length
+    const tbl = data.vertex_strand_index_table
+    const idx = data.vertex_strand_index
+    const baked = data.vertex_colors
+    const useMap = strandHexMap && Array.isArray(tbl) && _isIndexable(idx)
+    if (!useMap && !baked) return null
+    const out = new Float32Array(nFaces * 9)
+    for (let f = 0; f < nFaces; f++) {
+      const vi = faceVert[f]
+      let r = 0.6, g = 0.6, b = 0.6
+      if (useMap) {
+        const hex = strandHexMap.get(tbl[idx[vi]])
+        if (hex != null) {
+          r = ((hex >> 16) & 0xFF) / 255
+          g = ((hex >>  8) & 0xFF) / 255
+          b = ( hex        & 0xFF) / 255
+        }
+      } else {
+        r = baked[vi*3]; g = baked[vi*3 + 1]; b = baked[vi*3 + 2]
+      }
+      for (let k = 0; k < 3; k++) {
+        out[f*9 + k*3] = r; out[f*9 + k*3 + 1] = g; out[f*9 + k*3 + 2] = b
+      }
+    }
+    return out
+  }
+
+  // Non-indexed geometry with crisp per-face strand colours but SMOOTH shading: normals
+  // are computed on the shared (indexed) mesh and copied to each face corner, so the
+  // surface stays rounded while colour boundaries are sharp — ChimeraX's "colour zone" look.
+  function _buildCrispGeometry(data) {
+    const srcVerts = new Float32Array(data.vertices)
+    const faces    = data.faces
+    const nFaces   = (faces.length / 3) | 0
+
+    // Smooth per-vertex normals from the shared topology.
+    const tmp = new THREE.BufferGeometry()
+    tmp.setAttribute('position', new THREE.BufferAttribute(srcVerts, 3))
+    tmp.setIndex(new THREE.BufferAttribute(new Uint32Array(faces), 1))
+    tmp.computeVertexNormals()
+    const srcNormals = tmp.attributes.normal.array
+    tmp.dispose()
+
+    const pos = new Float32Array(nFaces * 9)
+    const nor = new Float32Array(nFaces * 9)
+    const faceVert = new Int32Array(nFaces)
+    const idx = _isIndexable(data.vertex_strand_index) ? data.vertex_strand_index : null
+
+    for (let f = 0; f < nFaces; f++) {
+      const i0 = faces[f*3], i1 = faces[f*3 + 1], i2 = faces[f*3 + 2]
+      faceVert[f] = idx ? _chooseFaceVert(idx, i0, i1, i2) : i0
+      const corners = [i0, i1, i2]
+      for (let k = 0; k < 3; k++) {
+        const vi = corners[k]
+        pos[f*9 + k*3] = srcVerts[vi*3]; pos[f*9 + k*3 + 1] = srcVerts[vi*3 + 1]; pos[f*9 + k*3 + 2] = srcVerts[vi*3 + 2]
+        nor[f*9 + k*3] = srcNormals[vi*3]; nor[f*9 + k*3 + 1] = srcNormals[vi*3 + 1]; nor[f*9 + k*3 + 2] = srcNormals[vi*3 + 2]
+      }
+    }
+
+    _crispFaceVert = faceVert
+    _liveVerts = pos
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3))   // pre-smoothed; don't recompute
+    const colArr = _buildCrispColorArray(data, _strandHexMap, faceVert)
+    if (colArr) geo.setAttribute('color', new THREE.BufferAttribute(colArr, 3))
+    return geo
+  }
+
   function _buildGeometry(data) {
+    _crispFaceVert = null
+    if (_crispZones && _colorMode === 'strand' && data.faces?.length) {
+      return _buildCrispGeometry(data)
+    }
     const geo = new THREE.BufferGeometry()
 
     const vertsArr = new Float32Array(data.vertices)
@@ -156,7 +245,9 @@ export function initSurfaceRenderer(scene) {
   function applyStrandColors(strandHexMap) {
     _strandHexMap = strandHexMap instanceof Map ? strandHexMap : null
     if (!_mesh || !_cachedData) return
-    const colArr = _buildVertexColorArray(_cachedData, _strandHexMap)
+    const colArr = (_crispZones && _colorMode === 'strand' && _crispFaceVert)
+      ? _buildCrispColorArray(_cachedData, _strandHexMap, _crispFaceVert)
+      : _buildVertexColorArray(_cachedData, _strandHexMap)
     if (!colArr) return
     _mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colArr, 3))
     if (_colorMode === 'strand' && !_mesh.material.vertexColors) {
@@ -164,6 +255,20 @@ export function initSurfaceRenderer(scene) {
       _mesh.material.color.setHex(0xFFFFFF)
       _mesh.material.needsUpdate = true
     }
+  }
+
+  /**
+   * Toggle crisp per-face strand colour zones (ChimeraX "colour zone" look) vs the
+   * default Gouraud-blended per-vertex colours.  Crisp mode gives sharp boundaries
+   * between strands while keeping smooth shading; the mesh is rebuilt non-indexed, so
+   * this is best on the fine ChimeraX-quality surface (small triangles → clean edges).
+   * @param {boolean} on
+   */
+  function setCrispZones(on) {
+    on = !!on
+    if (on === _crispZones) return
+    _crispZones = on
+    if (_cachedData) _replaceMesh()
   }
 
   /**
@@ -197,6 +302,7 @@ export function initSurfaceRenderer(scene) {
     }
     _cachedData = null
     _liveVerts  = null
+    _crispFaceVert = null
     _mode       = 'off'
   }
 
@@ -342,9 +448,15 @@ export function initSurfaceRenderer(scene) {
     const tbl = _cachedData?.vertex_strand_index_table
     const idx = _cachedData?.vertex_strand_index
     if (!tbl || !idx || !face) return null
+    // Crisp mode is non-indexed: face.a is a corner in the expanded buffer, so the
+    // face number is a/3 and its strand is the source vertex we chose for that face.
+    if (_crispZones && _crispFaceVert) {
+      const vi = _crispFaceVert[(face.a / 3) | 0]
+      return vi == null ? null : (tbl[idx[vi]] ?? null)
+    }
     return tbl[idx[face.a]] ?? null
   }
 
   return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode,
-           applyStrandColors, applyScalarVertexColors, getMesh, strandIdAt }
+           applyStrandColors, applyScalarVertexColors, getMesh, strandIdAt, setCrispZones }
 }

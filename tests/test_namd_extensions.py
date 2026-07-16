@@ -97,6 +97,49 @@ def test_md_pkey_matches_the_oxdna_key():
         assert is_synthetic_pkey(k)
 
 
+def test_simulated_tail_backbone_closure_reseats_linkers_at_both_ends():
+    """oxDNA tail beads stay fixed while their atom-level O3'-P linkers are closed."""
+    from backend.api.crud import _geometry_for_design
+
+    d = _with_tails()
+    ext_override = {
+        (n["extension_id"], int(n["bp_index"])): np.asarray(
+            n["backbone_position"], dtype=float)
+        for n in _geometry_for_design(d)
+        if n.get("extension_id") and not n.get("is_modification")
+    }
+    raw = build_atomistic_model(d, ext_pos_override=ext_override, close_backbone=False)
+    closed = build_atomistic_model(d, ext_pos_override=ext_override, close_backbone=True)
+
+    def extension_o3p_distances(model):
+        by = {a.serial: a for a in model.atoms}
+        distances = []
+        for i, j in model.bonds:
+            a, b = by[i], by[j]
+            if {a.name, b.name} != {"O3'", "P"}:
+                continue
+            if a.extension_id is None and b.extension_id is None:
+                continue
+            distances.append(float(np.linalg.norm(
+                np.array([a.x - b.x, a.y - b.y, a.z - b.z]))) * 10.0)
+        return distances
+
+    raw_dist = extension_o3p_distances(raw)
+    closed_dist = extension_o3p_distances(closed)
+    assert len(raw_dist) == len(closed_dist) == 3
+    # The oxDNA bead separation is coarser than the atomistic linker contour;
+    # closure distributes the small residual instead of breaking an adjacent bond.
+    assert max(closed_dist) < 3.0
+    assert max(closed_dist) < max(raw_dist)
+
+    # Closure may move linker atoms, but never the simulated ribose/base anchors.
+    rigid_names = {"C1'", "C2'", "C3'", "C4'", "O4'", "N1", "N9"}
+    for before, after in zip(raw.atoms, closed.atoms):
+        if before.extension_id is not None and before.name in rigid_names:
+            assert np.allclose(
+                [before.x, before.y, before.z], [after.x, after.y, after.z])
+
+
 # ── Chain termini — what makes the psfgen patches land ───────────────────────
 
 

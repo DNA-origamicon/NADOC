@@ -65,7 +65,7 @@ describe('initCandoDisplay controller', () => {
     const r = await c.showDeform('job1')
     expect(r.ok).toBe(true)
     // Renders the job's OWN snapshot topology first, THEN overlays the FEM shape.
-    expect(api.getCandoSnapshotGeometry).toHaveBeenCalledWith('job1')
+    expect(api.getCandoSnapshotGeometry).toHaveBeenCalledWith('job1', expect.any(AbortSignal))
     expect(designRenderer.renderExternalGeometry).toHaveBeenCalled()
     expect(designRenderer.applyFemPositions).toHaveBeenCalledWith(expect.any(Array))
     expect(c.deformActive()).toBe(true)
@@ -271,7 +271,7 @@ describe('initCandoDisplay — flex / deviation modes', () => {
     await c.showDeviation('j')
     api.getCandoDeviation.mockClear()
     await c.refresh()
-    expect(api.getCandoDeviation).toHaveBeenCalledWith('j')
+    expect(api.getCandoDeviation).toHaveBeenCalledWith('j', expect.any(AbortSignal))
   })
 
   it('drives the shared colour-scale widget: shown for flex/deviation, hidden for deform/off', async () => {

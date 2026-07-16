@@ -83,10 +83,11 @@ _IONS = {
 
 
 class _Atom:
-    __slots__ = ("name", "res_name", "chain_id", "res_seq", "pos", "element")
+    __slots__ = ("serial", "name", "res_name", "chain_id", "res_seq", "pos", "element")
 
-    def __init__(self, name: str, res_name: str, chain_id: str,
+    def __init__(self, serial: int, name: str, res_name: str, chain_id: str,
                  res_seq: int, pos: np.ndarray, element: str = ""):
+        self.serial = serial
         self.name = name
         self.res_name = res_name
         self.chain_id = chain_id
@@ -109,6 +110,35 @@ class _Residue:
 
     def has(self, atom_name: str) -> bool:
         return atom_name in self.atoms
+
+
+def _decode_pdb_int(field: str, width: int) -> int:
+    """Decode decimal or standard PDB hybrid-36 fixed-width integer."""
+    value = field.strip()
+    offset = 10 * 36 ** (width - 1)
+    block = 26 * 36 ** (width - 1)
+    if value and value[0].isupper():
+        return int(value, 36) - offset + 10 ** width
+    if value and value[0].islower():
+        return int(value.upper(), 36) - offset + 10 ** width + block
+    return int(value)
+
+
+def _parse_conect(text: str) -> list[tuple[int, int]]:
+    """Parse unique 1-based serial pairs from fixed-width CONECT records."""
+    bonds: set[tuple[int, int]] = set()
+    for line in text.splitlines():
+        if not line.startswith("CONECT") or len(line) < 16:
+            continue
+        source = _decode_pdb_int(line[6:11], 5)
+        for start in range(11, len(line), 5):
+            field = line[start:start + 5]
+            if not field.strip():
+                continue
+            target = _decode_pdb_int(field, 5)
+            if source != target:
+                bonds.add(tuple(sorted((source, target))))
+    return sorted(bonds)
 
 
 def _parse_dna_atoms(text: str) -> dict[tuple[str, int], _Residue]:
@@ -137,7 +167,7 @@ def _parse_dna_atoms(text: str) -> dict[tuple[str, int], _Residue]:
             continue
 
         chain_id = line[21]
-        res_seq = int(line[22:26])
+        res_seq = _decode_pdb_int(line[22:26], 4)
         key = (chain_id, res_seq)
         atom_name = line[12:16].strip()
         pos = np.array([
@@ -150,7 +180,7 @@ def _parse_dna_atoms(text: str) -> dict[tuple[str, int], _Residue]:
         if key not in residues:
             residues[key] = _Residue(chain_id, res_seq, res_name)
         residues[key].atoms[atom_name] = _Atom(
-            atom_name, res_name, chain_id, res_seq, pos, element,
+            _decode_pdb_int(line[6:11], 5), atom_name, res_name, chain_id, res_seq, pos, element,
         )
 
     return residues
@@ -366,7 +396,7 @@ def _analyze_duplex_pdb(
 class _PdbAnalysis:
     """Result of parsing + analysing a PDB file."""
     __slots__ = (
-        "dna_residues", "duplex_infos", "xform", "warnings",
+        "dna_residues", "duplex_infos", "xform", "warnings", "conect_bonds",
     )
 
     def __init__(self) -> None:
@@ -374,6 +404,7 @@ class _PdbAnalysis:
         self.duplex_infos: list[tuple[int, _DuplexInfo]] = []
         self.xform: Callable[[np.ndarray], np.ndarray] = lambda p: p
         self.warnings: list[str] = []
+        self.conect_bonds: list[tuple[int, int]] = []
 
 
 def _analyze_pdb(content: str) -> _PdbAnalysis:
@@ -390,6 +421,7 @@ def _analyze_pdb(content: str) -> _PdbAnalysis:
     if not dna_residues:
         raise ValueError("No DNA residues found in PDB file.")
     result.dna_residues = dna_residues
+    result.conect_bonds = _parse_conect(content)
 
     wc_pairs = _detect_wc_pairs(dna_residues)
     if not wc_pairs:
@@ -559,7 +591,8 @@ def import_pdb(
     )
 
     # ── Build atomistic model from real PDB positions ────────────────────
-    atomistic = _build_pdb_atomistic(dna_residues, res_mapping, xform)
+    atomistic = _build_pdb_atomistic(
+        dna_residues, res_mapping, xform, analysis.conect_bonds)
 
     total_bp = sum(h.length_bp for h in helices)
     warnings.append(f"Imported {len(helices)} duplex(es), {total_bp} total bp.")
@@ -581,6 +614,7 @@ def _build_pdb_atomistic(
     dna_residues: dict[tuple[str, int], _Residue],
     res_mapping: dict[tuple[str, int], tuple[str, str, int, str]],
     xform: Callable[[np.ndarray], np.ndarray],
+    conect_bonds: list[tuple[int, int]] | None = None,
 ) -> AtomisticModel:
     """Build an AtomisticModel using real PDB atom positions (after alignment).
 
@@ -590,6 +624,7 @@ def _build_pdb_atomistic(
     """
     atoms: list[Atom] = []
     bonds: list[tuple[int, int]] = []
+    pdb_serial_to_model: dict[int, int] = {}
 
     # Assign chain letters: group strands in order encountered.
     strand_chain: dict[str, str] = {}
@@ -645,6 +680,7 @@ def _build_pdb_atomistic(
                 direction=direction,
             ))
             atom_serials[atom_name] = serial
+            pdb_serial_to_model[pdb_atom.serial] = serial
             serial += 1
 
         # Intra-residue bonds (sugar + base).
@@ -665,6 +701,15 @@ def _build_pdb_atomistic(
         o3_serial = atom_serials.get("O3'")
         if o3_serial is not None:
             last_o3_serial[strand_id] = o3_serial
+
+    if conect_bonds:
+        explicit = {
+            tuple(sorted((pdb_serial_to_model[a], pdb_serial_to_model[b])))
+            for a, b in conect_bonds
+            if a in pdb_serial_to_model and b in pdb_serial_to_model
+        }
+        if explicit:
+            bonds = sorted(explicit)
 
     return AtomisticModel(atoms=atoms, bonds=bonds)
 

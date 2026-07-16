@@ -659,18 +659,14 @@ def test_pdb_cryst1_covers_atoms():
     assert az >= span_z, f"CRYST1 c={az:.3f} < atom span_z={span_z:.3f}"
 
 
-def test_pdb_link_records_include_backbone_bonds():
-    """
-    LINK records must cover all inter-residue O3'→P bonds.
-    For a multi-helix design (which has crossovers), the number of LINK
-    records should match the number of inter-residue backbone bonds in the model.
-    """
+def test_pdb_backbone_uses_unambiguous_conect_not_link():
+    """Routine backbone bonds use serial-addressed CONECT, never ambiguous LINK."""
     design   = _small_design()
     model    = build_atomistic_model(design)
     pdb      = export_pdb(design)
 
     link_lines = [l for l in pdb.splitlines() if l.startswith("LINK")]
-    assert len(link_lines) > 0, "Expected LINK records for backbone bonds"
+    assert link_lines == []
 
     # Count expected inter-residue O3'→P bonds from the model
     atom_by_serial = {a.serial: a for a in model.atoms}
@@ -682,9 +678,8 @@ def test_pdb_link_records_include_backbone_bonds():
                (b.name == "O3'" and a.name == "P"):
                 expected += 1
 
-    assert len(link_lines) == expected, (
-        f"Expected {expected} LINK records, found {len(link_lines)}"
-    )
+    assert expected > 0
+    assert len([l for l in pdb.splitlines() if l.startswith("CONECT")]) > 0
 
 
 def test_pdb_multiple_ter_records():

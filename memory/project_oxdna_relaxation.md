@@ -606,8 +606,58 @@ Two follow-ons to §27, both validated by a new visual-regression suite.
   19.7 MB binary (3.75×)** and no million-number `JSON.parse`. NB the live dev server needs a restart to
   serve the new route; until then the frontend falls back to JSON automatically.
 
-**STILL OPEN — surface VISUAL QUALITY (next session's focus, 2026-07-15).** Speed is now
-maxed (build 7 s→0.8 s, byte-identical); the remaining gap is *appearance*. On a VoltronCore-
+**SURFACE VISUAL QUALITY — experimental "ChimeraX quality" toggle shipped (2026-07-15).**
+Root cause CONFIRMED: it was never the SES *algorithm* (compute_surface's dilate→erode closing
+IS a valid solvent-excluded surface) nor base-bead placement — it was **grid RESOLUTION**. Both
+the coarse default AND "High detail" run through `adaptive_grid_spacing` (cap `_ADAPTIVE_VOXEL_CAP`
+3.5M → ~0.31 nm on big designs), which staircases the ~1 nm helical grooves into blobs; even the
+all-atom "fine" mesh gets rasterised onto that coarse grid and the atom detail is thrown away.
+Proof on the 2hb extra-base test part: coarse=5910 verts, fine=5894 verts (≈identical!), **chimerax
+=74711 verts** — 12.7× denser at the same size. New `detail='chimerax'` path (`surface.CHIMERAX_*`
+constants + `routes_display_geometry._build_chimerax_surface`, mirrored in `oxdna_health.
+frame_surface_json`): FINE all-atom envelope at ChimeraX's 0.5 Å grid + 1.4 Å water probe + TRUE
+VdW radii (no display 1.2× inflation), voxel cap 12M (small parts get full res; huge designs
+auto-coarsen). Frontend: experimental checkbox `cb-surface-chimerax` in Surface options (overrides
+High detail while on; disables it). Test part `workspace/surface_chimerax_test.nadoc` (=Examples/
+2hb_xover_atoms_test, extra bases TT/T → exact Atom build, so extra-base atoms included). Params
+(`CHIMERAX_GRID_SPACING`/`_PROBE_RADIUS`/`_RADIUS_SCALE`) are ONE-line tunable — pending a 1:1
+tune against a NADOC→PDB→ChimeraX SES screenshot from the user. **NOT YET VISUALLY VERIFIED IN
+APP** (backend mesh density verified numerically; the rendered look + ChimeraX match is the open
+tuning loop). App-side test part is now `workspace/6hbx32.nadoc` (ChimeraX ref = `Examples/6hbx32.pdb`;
+PDB exporter was broken so the user exported it manually) — the 2hb was dropped.
+
+**Crisp per-strand colour ZONES (2026-07-15, follow-up).** User feedback: chimerax surface looks
+great but strand colours *bleed* into each other vs ChimeraX's sharp boundaries. Cause: per-vertex
+strand colours are Gouraud-interpolated, so every triangle straddling two strands blends them into a
+one-triangle-wide band. Fix in `surface_renderer.js` (`setCrispZones(on)` + `_buildCrispGeometry`):
+in crisp mode the mesh is rebuilt NON-INDEXED with one flat strand colour per face (majority of the
+3 corners → boundary falls on a triangle edge), while NORMALS are computed on the shared/indexed
+topology and copied to the corners so SHADING stays smooth (ChimeraX "colour zone" look = crisp
+colour + rounded shape). `atom_surface_display` turns it on only when `_surfaceDetail==='chimerax'`
+(coarse/fine keep Gouraud blending — no default regression). `applyStrandColors`/`strandIdAt` are
+crisp-aware. Tests: `surface_renderer.test.js` (5, new).
+
+**Per-STRAND split surface — the real ChimeraX match (2026-07-15, SUPERSEDES crisp-only).** User
+feedback with side-by-side: crisp zones removed the colour bleed but the strands were still one
+FUSED blob with a jagged seam; ChimeraX's default `surface` builds a SEPARATE surface per chain, so
+complementary strands are distinct geometry with a real solvent GAP between them (the double-helix
+groove pattern). Fix: `surface.compute_split_surfaces_from_cloud(positions, radii, strand_ids)` —
+each strand's atoms get their OWN cropped occupancy grid → dilate/erode by the probe → marching
+cubes → Taubin smooth, then concatenate (offset face indices), one strand id per vertex.
+`routes_display_geometry._build_chimerax_surface` now calls it (cloud path, or exact Atom build for
+extra-base designs). Every vertex is unambiguously one strand → per-vertex colours are already solid
+and the separation is GEOMETRIC, so **crisp mode is turned OFF for chimerax** (`setCrispZones(false)`
+in atom_surface_display; the crisp renderer code + its 5 tests stay as a general capability). Cost:
+ONE marching pass per strand — 6hbx32 (9 strands) = **513k verts / 13.6s**; bounded by a shared
+`_SPLIT_VOXEL_BUDGET=90M` split across strands (`eff_cap` floor 500k) so a 200-staple origami
+auto-coarsens instead of hanging. NB the internal base-pair kiss (~0.03 Å) is EXPECTED (H-bonded
+atoms overlap even in ChimeraX) and hidden in the duplex core; the visible outer backbone ridges are
+groove-separated. Tests: `tests/test_surface_split.py` (3, fast). NB per-face crisp colour is crisp
+because triangles on the fine mesh are sub-nm (that path is now dormant for chimerax). Interior-cavity
+AO shading (also in the ChimeraX ref) is a SEPARATE lever = photo-mode GTAO/SSAO, not added to the
+live viewport — flag if the user wants it live.
+
+**Prior framing (superseded by the toggle above).** On a VoltronCore-
 size design ChimeraX is about as slow as NADOC but its molecular surface looks markedly better
 than ours. User confirmed via ChimeraX. Investigated + ruled out as NON-fixes for the coarse
 default: bases ARE included and contribute (removing them shifts the envelope up to ~9.6 Å), but

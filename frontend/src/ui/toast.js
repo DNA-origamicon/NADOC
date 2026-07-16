@@ -10,6 +10,7 @@
  *
  * Options:
  *   severity:  'info' | 'success' | 'warning' | 'error'   (default 'info')
+ *   loading:   true — prepend an animated activity spinner
  *   duration:  ms (default 2200; ignored by showPersistentToast)
  *   action:    { label, onClick }  — adds a button (e.g. "Undo")
  *
@@ -56,6 +57,7 @@ function _createToast(msg, severity) {
   el.style.gap = '8px'
 
   const msgEl = document.createElement('span')
+  msgEl.className = 'toast-message'
   msgEl.textContent = msg
   msgEl.style.flex = '1'
   el.appendChild(msgEl)
@@ -134,14 +136,32 @@ export function showPersistentToast(msg, opts = {}) {
   // Find existing persistent toast (timer === null marks persistent)
   const existing = _toasts.find((t) => t.timer === null && t.el.dataset.persistent === '1')
   if (existing) {
-    const span = existing.el.querySelector('span')
+    const span = existing.el.querySelector('.toast-message')
     if (span) span.textContent = msg
+    if (opts.loading && !existing.el.querySelector('.nadoc-spinner')) {
+      const spinner = document.createElement('span')
+      spinner.className = 'nadoc-spinner'
+      spinner.setAttribute('aria-hidden', 'true')
+      spinner.style.flex = '0 0 auto'
+      existing.el.insertBefore(spinner, existing.el.firstChild)
+      existing.el.setAttribute('role', 'status')
+      existing.el.setAttribute('aria-live', 'polite')
+    }
     _restack()
     return
   }
   const severity = opts.severity ?? 'info'
   const el = _createToast(msg, severity)
   el.dataset.persistent = '1'
+  if (opts.loading) {
+    const spinner = document.createElement('span')
+    spinner.className = 'nadoc-spinner'
+    spinner.setAttribute('aria-hidden', 'true')
+    spinner.style.flex = '0 0 auto'
+    el.insertBefore(spinner, el.firstChild)
+    el.setAttribute('role', 'status')
+    el.setAttribute('aria-live', 'polite')
+  }
   const t = { el, timer: null }
   _toasts.push(t)
   if (opts.action) _addActionButton(el, opts.action, () => _removeToast(t))

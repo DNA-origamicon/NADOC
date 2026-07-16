@@ -2220,6 +2220,11 @@ class AtomisticReferenceAtom(BaseModel):
     aux_t: float = 0.0
     crossover_id: Optional[str] = None
     extra_base_k: Optional[int] = None
+    # Loop-insertion + strand-extension identity (added with the foundational
+    # extra-base/extension/loop atomistic work; older files load with these None).
+    copy_k: Optional[int] = None
+    extension_id: Optional[str] = None
+    ext_k: Optional[int] = None
 
 
 class AtomisticReference(BaseModel):

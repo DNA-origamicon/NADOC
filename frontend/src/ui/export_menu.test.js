@@ -17,11 +17,12 @@ vi.mock('./toast.js', () => ({
   showPersistentToast: vi.fn(),
   dismissToast: vi.fn(),
 }))
-import { showToast } from './toast.js'
+import { showToast, showPersistentToast, dismissToast } from './toast.js'
 
 import {
   exportErrorMessage,
   triggerDownload,
+  showPdbPositionModal,
   showNamdPromptModal,
   initExportMenu,
 } from './export_menu.js'
@@ -90,6 +91,26 @@ describe('showNamdPromptModal', () => {
   })
 })
 
+describe('showPdbPositionModal', () => {
+  beforeEach(() => { clearDom() })
+
+  it('names the active visualization and resolves the selected positions', async () => {
+    const result = showPdbPositionModal('oxDNA RMSF')
+    expect(document.body.textContent).toContain('oxDNA RMSF is currently displayed')
+    const button = [...document.querySelectorAll('button')].find(b => b.textContent === 'oxDNA RMSF positions')
+    button.click()
+    await expect(result).resolves.toBe('visualized')
+  })
+
+  it('identifies the exact current trajectory frame', async () => {
+    const result = showPdbPositionModal('oxDNA trajectory', { frame: 17, total: 80 })
+    expect(document.body.textContent).toContain('Export frame 17 of 80 from the oxDNA trajectory view?')
+    const button = [...document.querySelectorAll('button')].find(b => b.textContent === 'Export frame 17 of 80')
+    button.click()
+    await expect(result).resolves.toBe('visualized')
+  })
+})
+
 // ── initExportMenu (factory) ─────────────────────────────────────────────────
 
 const DOM = {
@@ -116,6 +137,9 @@ function makeDeps(initialState = {}) {
     exportCadnano: vi.fn().mockResolvedValue(true),
     exportSurfaceStl: vi.fn().mockResolvedValue(true),
     exportSurface3mf: vi.fn().mockResolvedValue({ ok: true }),
+    exportPdb: vi.fn().mockResolvedValue(true),
+    exportPsf: vi.fn().mockResolvedValue(true),
+    exportNamdComplete: vi.fn().mockResolvedValue(true),
   }
   return { store, api }
 }
@@ -169,25 +193,40 @@ describe('initExportMenu', () => {
     expect(deps.api.exportSequenceXlsx).toHaveBeenCalledWith({}, [])
   })
 
-  it('PDB / PSF export trigger direct downloads of the backend URLs', () => {
+  it('PDB / PSF export call the doc-scoped api download methods', async () => {
     mountIds(DOM)
-    const real = document.createElement.bind(document)
-    const made = []
-    const spy = vi.spyOn(document, 'createElement').mockImplementation(tag => {
-      const el = real(tag)
-      if (tag === 'a') { el.click = vi.fn(); made.push(el) }
-      return el
-    })
     const deps = makeDeps({ currentDesign: { strands: [] } })
     initExportMenu(deps)
     click('menu-file-export-pdb')
     click('menu-file-export-psf')
-    expect(made.map(a => a.getAttribute('href'))).toEqual([
-      '/api/design/export/pdb',
-      '/api/design/export/psf',
-    ])
-    expect(made.every(a => a.click.mock.calls.length === 1)).toBe(true)
-    spy.mockRestore()
+    await tick()
+    expect(deps.api.exportPdb).toHaveBeenCalledTimes(1)
+    expect(showPersistentToast).toHaveBeenCalledWith('Generating PDB…', { severity: 'info', loading: true })
+    expect(dismissToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('PDB generated. Download starting…', { severity: 'success' })
+    expect(deps.api.exportPsf).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed PDB export toasts the backend error instead of downloading it', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({ currentDesign: { strands: [] }, lastError: { message: 'No active design.' } })
+    deps.api.exportPdb.mockResolvedValue(false)
+    initExportMenu(deps)
+    click('menu-file-export-pdb')
+    await tick()
+    expect(showToast).toHaveBeenCalledWith('PDB export failed: No active design.', { severity: 'error' })
+  })
+
+  it('offers active simulation positions and forwards them when selected', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({ currentDesign: { strands: [] } })
+    const positions = [{ helix_id: 'h0', bp_index: 1, direction: 'forward', backbone_position: [1, 2, 3] }]
+    initExportMenu({ ...deps, getPdbVisualization: () => ({ name: 'oxDNA RMSF', positions }) })
+    click('menu-file-export-pdb')
+    await tick()
+    ;[...document.querySelectorAll('button')].find(b => b.textContent === 'oxDNA RMSF positions').click()
+    await tick()
+    expect(deps.api.exportPdb).toHaveBeenCalledWith(positions, { name: 'oxDNA RMSF', positions })
   })
 
   it('STL export reports success', async () => {
@@ -234,13 +273,6 @@ describe('initExportMenu', () => {
 
   it('NAMD package export downloads then shows the prompt modal', async () => {
     mountIds(DOM)
-    const real = document.createElement.bind(document)
-    const made = []
-    const spy = vi.spyOn(document, 'createElement').mockImplementation(tag => {
-      const el = real(tag)
-      if (tag === 'a') { el.click = vi.fn(); made.push(el) }
-      return el
-    })
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       text: async () => 'PROMPT BODY',
@@ -250,11 +282,10 @@ describe('initExportMenu', () => {
     click('menu-file-export-namd-complete')
     await tick()
     await tick()
-    expect(made.some(a => a.getAttribute('href') === '/api/design/export/namd-complete')).toBe(true)
+    expect(deps.api.exportNamdComplete).toHaveBeenCalledTimes(1)
     expect(fetchSpy).toHaveBeenCalledWith('/api/design/export/namd-prompt', expect.any(Object))
     const ta = document.querySelector('textarea')
     expect(ta?.value).toBe('PROMPT BODY')
-    spy.mockRestore()
     fetchSpy.mockRestore()
   })
 })

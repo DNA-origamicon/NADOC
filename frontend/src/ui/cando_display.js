@@ -146,6 +146,13 @@ export function initCandoDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
 }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
+  let _loadAbort = null
+  function _beginLoad() {
+    _loadAbort?.abort()
+    _loadAbort = new AbortController()
+    return { epoch: ++_epoch, signal: _loadAbort.signal }
+  }
+  function _cancelLoad() { _loadAbort?.abort(); _loadAbort = null; _epoch++ }
   let _jobId = null         // job whose overlay is applied (or null)
   let _mode = null          // 'deform' | 'flex' | 'deviation' | 'cando' | null
   let _stats = null         // last flex/deviation/cando summary for the panel readout
@@ -207,9 +214,9 @@ export function initCandoDisplay({
 
   /** Deform the model to the predicted shape (no recolour). */
   async function showDeform(jobId) {
-    const epoch = ++_epoch
+    const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getCandoDisplay(jobId), api.getCandoSnapshotGeometry(jobId)])
+      api.getCandoDisplay(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const updates = toFemUpdates(resp)
     if (!updates.length || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
@@ -242,9 +249,9 @@ export function initCandoDisplay({
 
   /** Deform to the predicted shape + recolour beads by per-bp RMSF (flexibility map). */
   async function showFlex(jobId) {
-    const epoch = ++_epoch
+    const { epoch, signal } = _beginLoad()
     const [disp, rmsf, snap] = await Promise.all([
-      api.getCandoDisplay(jobId), api.getCandoRmsf(jobId), api.getCandoSnapshotGeometry(jobId)])
+      api.getCandoDisplay(jobId, signal), api.getCandoRmsf(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const map = flexColorMap(disp, rmsf, undefined, undefined, _flexCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
@@ -264,9 +271,9 @@ export function initCandoDisplay({
   /** Deform to the predicted shape + recolour beads green→red by deviation from the
    *  design's intended geometry (deviation map).  Reports the global RMSD. */
   async function showDeviation(jobId) {
-    const epoch = ++_epoch
+    const { epoch, signal } = _beginLoad()
     const [resp, snap] = await Promise.all([
-      api.getCandoDeviation(jobId), api.getCandoSnapshotGeometry(jobId)])
+      api.getCandoDeviation(jobId, signal), api.getCandoSnapshotGeometry(jobId, signal)])
     if (epoch !== _epoch) return { ok: false }
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map || !_snapshotReady(snap)) return { ok: false, reason: 'not-ready' }
@@ -285,8 +292,8 @@ export function initCandoDisplay({
    *  representation (one grey tube per helix + crossover joints) with the native
    *  NADOC model hidden.  Standalone rep, like the mrDNA CG-beads mode. */
   async function showCandoStyle(jobId) {
-    const epoch = ++_epoch
-    const resp = await api.getCandoCylinders(jobId)
+    const { epoch, signal } = _beginLoad()
+    const resp = await api.getCandoCylinders(jobId, signal)
     if (epoch !== _epoch) return { ok: false }
     if (!resp?.ready || !cylinderOverlay || (!resp.helices?.length && !resp.joints?.length)) {
       return { ok: false, reason: 'not-ready' }
@@ -318,6 +325,7 @@ export function initCandoDisplay({
   }
 
   function stopDeform() {
+    _cancelLoad()
     if (_mode === null) return
     _clearAll()
     _jobId = null; _mode = null; _stats = null
@@ -326,7 +334,6 @@ export function initCandoDisplay({
   /** Restore the native model — used when leaving the tab / deleting the job. */
   function stopAndRestore() {
     stopDeform()
-    _epoch++   // invalidate any in-flight fetch
   }
 
   return {

@@ -45,6 +45,14 @@ OXDNA_BASE_SITE_NM: float = 0.4 * OXDNA_LENGTH_UNIT   # ≈ 0.341 nm
 # bonding range, so it read ~100% even as the structure melted.)
 BP_FORMED_CUTOFF_NM: float = 0.8
 
+# Display reconstruction may still use the common duplex-axis placer for a loose,
+# distorted pair outside the strict hydrogen-bond cutoff.  Beyond this much wider
+# separation there is no meaningful shared helix axis: averaging the two strands
+# invents positions unrelated to either oxDNA particle.  Kept separate from the
+# health metric above because its purpose is geometric reconstruction, not claiming
+# that a hydrogen bond remains formed.
+DUPLEX_AXIS_MAX_BASE_SEPARATION_NM: float = 2.0
+
 # A backbone bond longer than this (nm) is treated as an unresolved steric
 # clash / over-stretch.  Healthy CG backbone bonds are ~0.6–0.8 nm.
 BACKBONE_CLASH_NM: float = 1.5
@@ -2598,7 +2606,13 @@ def _frame_atomistic_overrides(design, frame: dict):
     # frame3 (real-nucleotide overrides only) so deformed_helix_axes never forms a
     # junk "__xb__" helix group.
     xb_pos_override = {
-        (key[1], key[2]): oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
+        (key[1], key[2]): {
+            "cm": np.asarray(rec["backbone_position"], dtype=float),
+            "position": oxdna_backbone_site(
+                rec["backbone_position"], rec["a1"], rec["a3"]),
+            "a1": np.asarray(rec["a1"], dtype=float),
+            "a3": np.asarray(rec["a3"], dtype=float),
+        }
         for key, rec in frame.items()
         if key[0] == _XB_SENTINEL and _sited(rec)
     }
@@ -2608,8 +2622,13 @@ def _frame_atomistic_overrides(design, frame: dict):
     # every `isinstance(k[1], int)` filter written to catch __xb__: it has to be
     # excluded EXPLICITLY or deformed_helix_axes builds a junk one-nucleotide "helix".
     ext_pos_override = {
-        (key[0][len("__ext_"):], key[1]): oxdna_backbone_site(
-            rec["backbone_position"], rec["a1"], rec["a3"])
+        (key[0][len("__ext_"):], key[1]): {
+            "cm": np.asarray(rec["backbone_position"], dtype=float),
+            "position": oxdna_backbone_site(
+                rec["backbone_position"], rec["a1"], rec["a3"]),
+            "a1": np.asarray(rec["a1"], dtype=float),
+            "a3": np.asarray(rec["a3"], dtype=float),
+        }
         for key, rec in frame.items()
         if is_extension_key(key) and _sited(rec)
     }
@@ -2625,7 +2644,7 @@ def _frame_atomistic_overrides(design, frame: dict):
     return nuc_pos_override, axis_override, xb_pos_override, ext_pos_override
 
 
-def _ssdna_frame_override(frame: dict) -> dict:
+def _ssdna_frame_override(design, frame: dict) -> dict:
     """Build a per-nucleotide oxDNA a1/a3 rigid-frame override for the UNPAIRED (ssDNA)
     nucleotides in a relaxed frame — the free overhangs / tails / loops.
 
@@ -2635,29 +2654,125 @@ def _ssdna_frame_override(frame: dict) -> dict:
     flung tens of nm off their true simulated site (VoltronCore: ssDNA max 74 nm).  ssDNA
     has NO Watson–Crick partner, so the a1/a3 rigid stamp — rejected for DUPLEX because it
     collapses base pairs — places it EXACTLY at the relaxed pose (max drops to ~1.5 nm).
-    So: rigid-stamp the unpaired nucleotides, leave the paired duplex on the axis path.
+    So: rigid-stamp the unpaired nucleotides, leave the *formed* duplex on the axis
+    path.  "Formed" is deliberately a geometric test, not merely the presence of
+    the opposite design key.  A locally melted designed pair still has both keys;
+    treating it as duplex makes ``deformed_helix_axes`` combine two particles that
+    can be many nanometres apart and invents a third, unrelated all-atom pose.
 
     Returns ``{(helix, bp, dir[, copy]): (CM, a1, a3)}`` for unpaired real nucleotides."""
     import numpy as _np
-    from backend.physics.oxdna_interface import is_synthetic_nuc_key
+    from backend.physics.oxdna_interface import (
+        _strand_nucleotide_order, is_synthetic_nuc_key, topology_rows,
+        oxdna_backbone_site,
+    )
+    from backend.core.atomistic import _extra_base_frame
 
     def _real(k) -> bool:
         return (isinstance(k, tuple) and len(k) >= 3 and isinstance(k[1], int)
                 and not is_synthetic_nuc_key(k))
 
     present = {k[:3] for k in frame if _real(k)}
-    fo: dict = {}
-    for k, v in frame.items():
+    order = _strand_nucleotide_order(design)
+    rows, _ = topology_rows(design)
+
+    def _site(k):
+        v = frame.get(k)
+        if v is None or v.get("backbone_position") is None:
+            return None
+        if v.get("a1") is not None and v.get("a3") is not None:
+            return oxdna_backbone_site(v["backbone_position"], v["a1"], v["a3"])
+        return np.asarray(v["backbone_position"], float)
+
+    # A single wildly displaced particle is more likely a broken/incomplete frame
+    # and historically stays on the guarded axis path (the validation audit relies
+    # on that behavior).  Local melting is a segment phenomenon: require at least
+    # two covalently adjacent designed pairs to be separated before switching their
+    # residues to independent rigid frames.
+    separated_pairs: set[tuple] = set()
+    for k in order:
         if not _real(k):
+            continue
+        v0 = frame.get(k)
+        h0, bp0, d0 = k[:3]
+        other0 = (h0, bp0, "REVERSE" if d0 == "FORWARD" else "FORWARD")
+        v1 = frame.get(other0)
+        if (v0 is None or v1 is None or v0.get("backbone_position") is None
+                or v1.get("backbone_position") is None or v0.get("a1") is None
+                or v1.get("a1") is None):
+            continue
+        b0 = (_np.asarray(v0["backbone_position"], float)
+              + OXDNA_BASE_SITE_NM * _np.asarray(v0["a1"], float))
+        b1 = (_np.asarray(v1["backbone_position"], float)
+              + OXDNA_BASE_SITE_NM * _np.asarray(v1["a1"], float))
+        if float(_np.linalg.norm(b0 - b1)) > DUPLEX_AXIS_MAX_BASE_SEPARATION_NM:
+            separated_pairs.add(k[:3])
+
+    melted_segment: set[tuple] = set()
+    for idx, k in enumerate(order):
+        if k[:3] not in separated_pairs:
+            continue
+        _strand, _base, n3, n5 = rows[idx]
+        neighbours = (order[j][:3] for j in (n3, n5) if j >= 0 and _real(order[j]))
+        if any(nk in separated_pairs for nk in neighbours):
+            melted_segment.add(k[:3])
+
+    fo: dict = {}
+    for idx, k in enumerate(order):
+        v = frame.get(k)
+        if not _real(k):
+            continue
+        if v is None:
             continue
         h, bp, d = k[:3]
         other = "REVERSE" if d == "FORWARD" else "FORWARD"
-        if (h, bp, other) in present:
-            continue                                   # paired duplex → axis-derived path
+        partner_key = (h, bp, other)
+        if partner_key in present:
+            if k[:3] in melted_segment:
+                pass  # locally melted duplex segment → independent rigid frame below
+            else:
+                continue                       # formed/near or isolated outlier → shared axis
+            partner_site = _site(partner_key)
+            # Backbone sites remain about a duplex diameter apart even for a formed
+            # pair, so compare oxDNA's actual base interaction sites instead.  The
+            # display cutoff is intentionally looser than hydrogen-bond retention:
+            # a distorted-but-near pair still has a meaningful shared helix axis.
+            partner = frame.get(partner_key)
+            if (partner is not None and partner_site is not None
+                    and v.get("backbone_position") is not None and v.get("a1") is not None
+                    and partner.get("backbone_position") is not None
+                    and partner.get("a1") is not None):
+                base = (_np.asarray(v["backbone_position"], float)
+                        + OXDNA_BASE_SITE_NM * _np.asarray(v["a1"], float))
+                partner_base = (_np.asarray(partner["backbone_position"], float)
+                                + OXDNA_BASE_SITE_NM * _np.asarray(partner["a1"], float))
+                if (float(_np.linalg.norm(base - partner_base))
+                        <= DUPLEX_AXIS_MAX_BASE_SEPARATION_NM):
+                    continue                           # defensive: formed duplex → axis path
         if (v.get("backbone_position") is None or v.get("a1") is None or v.get("a3") is None):
             continue
-        fo[k] = (np.asarray(v["backbone_position"], float),
-                 np.asarray(v["a1"], float), np.asarray(v["a3"], float))
+        site = _site(k)
+        if site is None:
+            continue
+        _strand, _base, n3, n5 = rows[idx]
+        p5 = _site(order[n5]) if n5 >= 0 else None
+        p3 = _site(order[n3]) if n3 >= 0 else None
+        if p5 is not None and p3 is not None:
+            chain_dir = p3 - p5
+        elif p3 is not None:
+            chain_dir = p3 - site
+        elif p5 is not None:
+            chain_dir = site - p5
+        else:
+            chain_dir = np.asarray(v["a3"], float)
+        if float(np.linalg.norm(chain_dir)) < 1e-9:
+            chain_dir = np.asarray(v["a3"], float)
+        # a1 points toward the base in oxDNA and supplies the base-facing/bow
+        # direction; the strand tangent independently fixes ribose polarity.
+        fo[k] = _extra_base_frame(
+            np.asarray(site, float), np.asarray(chain_dir, float),
+            np.asarray(v["a1"], float),
+        )
     return fo
 
 
@@ -2679,7 +2794,7 @@ def build_display_model(design, frame: dict, frame_sink: dict | None = None,
     # Anchor floppy UNPAIRED ssDNA (overhangs/tails/loops) at its true relaxed pose via the
     # a1/a3 rigid stamp — the axis-derived path has no helix to fit there and flings it tens
     # of nm off.  Paired duplex stays on the axis path (correct WC pairing).
-    frame_override = _ssdna_frame_override(frame)
+    frame_override = _ssdna_frame_override(design, frame)
     return build_atomistic_model(
         design, nuc_pos_override=nuc_pos_override, axis_override=axis_override,
         frame_override=frame_override,
@@ -2819,10 +2934,21 @@ def frame_surface_json(design, frame: dict, color_mode: str = "strand",
         # Surface = a VdW envelope, so it needs atom POSITIONS, not a connected backbone —
         # skip the phosphate-linker closure (close_backbone=False) to shave the build.
         model = build_display_model(design, frame, close_backbone=False)
-        gs = adaptive_grid_spacing(model.atoms, grid_spacing)
-        mesh = compute_surface(model.atoms, grid_spacing=gs,
-                               probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
-        mesh = smooth_mesh(mesh, iterations=smooth)
+        if detail == "chimerax":
+            # EXPERIMENTAL ChimeraX-quality SES: fine 0.5 Å grid + 1.4 Å probe + true VdW.
+            from backend.core.surface import (CHIMERAX_GRID_SPACING, CHIMERAX_PROBE_RADIUS,
+                                              CHIMERAX_RADIUS_SCALE, CHIMERAX_VOXEL_CAP,
+                                              CHIMERAX_MAX_SPACING, CHIMERAX_SMOOTH)
+            gs = adaptive_grid_spacing(model.atoms, CHIMERAX_GRID_SPACING,
+                                       cap_voxels=CHIMERAX_VOXEL_CAP, max_spacing=CHIMERAX_MAX_SPACING)
+            mesh = compute_surface(model.atoms, grid_spacing=gs,
+                                   probe_radius=CHIMERAX_PROBE_RADIUS, radius_scale=CHIMERAX_RADIUS_SCALE)
+            mesh = smooth_mesh(mesh, iterations=CHIMERAX_SMOOTH)
+        else:
+            gs = adaptive_grid_spacing(model.atoms, grid_spacing)
+            mesh = compute_surface(model.atoms, grid_spacing=gs,
+                                   probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+            mesh = smooth_mesh(mesh, iterations=smooth)
         rmsf_atoms = model.atoms
     entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
              "faces": [int(f) for f in mesh.faces.ravel()]}

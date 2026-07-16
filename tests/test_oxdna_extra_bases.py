@@ -233,6 +233,34 @@ def test_heavy_rep_extra_bases_follow_sim_positions(routed_6hb):
     assert np.linalg.norm(centroid(geo, 0) - np.array([40, 40, 40])) > 10.0
 
 
+def test_heavy_rep_extra_base_uses_full_simulated_orientation(routed_6hb):
+    """A full oxDNA override carries a1/a3, not merely the insert position."""
+    from backend.core.atomistic import build_atomistic_model
+
+    d = _with_extra(routed_6hb, "T")
+    xoid = d.crossovers[0].id
+    cm = np.array([40.0, 40.0, 40.0])
+
+    def built(a1):
+        # The position is the corresponding backbone site; the calibrated rigid
+        # placer consumes CM+a1+a3 while legacy array-only overrides remain valid.
+        ov = {(xoid, 0): {"cm": cm, "position": cm - 0.3 * np.asarray(a1),
+                          "a1": np.asarray(a1), "a3": np.array([0.0, 0.0, 1.0])}}
+        return build_atomistic_model(d, xb_pos_override=ov, close_backbone=True,
+                                     relaxed_oxdna_phase=True, fast_bridges=True)
+
+    def glycosidic_vector(model):
+        aa = [a for a in model.atoms if a.crossover_id == xoid]
+        pos = {a.name: np.array([a.x, a.y, a.z]) for a in aa}
+        return pos["N1"] - pos["C1'"]
+
+    vx = glycosidic_vector(built([1.0, 0.0, 0.0]))
+    vy = glycosidic_vector(built([0.0, 1.0, 0.0]))
+    assert np.linalg.norm(vx) == pytest.approx(np.linalg.norm(vy), abs=1e-8)
+    cosine = float(np.dot(vx, vy) / (np.linalg.norm(vx) * np.linalg.norm(vy)))
+    assert cosine < 0.99, "changing simulated a1 must change base orientation"
+
+
 # ── MD viz: extra-base P atoms get unique keys (no source collision) ──────────
 
 def test_md_chain_map_keys_extra_bases_uniquely(routed_6hb):

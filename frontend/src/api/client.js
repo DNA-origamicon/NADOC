@@ -1212,6 +1212,68 @@ export async function exportCadnano() {
   return true
 }
 
+/**
+ * Stream a backend export URL to a file download, doc-scoped and error-aware.
+ *
+ * Unlike a raw `<a href>` download, this sends `docHeaders()` so the backend
+ * resolves the CALLER'S document session (not DEFAULT_DOC_ID), and it inspects
+ * the response: on failure it records `lastError` and returns false so the menu
+ * can toast, instead of the browser silently saving the 404 error body as a
+ * bogus `<name>.json` file.  Used by the PDB/PSF/NAMD-package exports, whose
+ * fixed-width outputs can't be produced client-side.
+ */
+async function _downloadBinaryExport(path, fallbackName, options = null) {
+  const r = await fetch(`${BASE}${path}`, options ?? { headers: docHeaders() })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    const detail = json?.detail
+    const message = Array.isArray(detail)
+      ? detail.slice(0, 3).map(e => {
+          const field = Array.isArray(e?.loc) ? e.loc.filter(x => x !== 'body').join('.') : ''
+          return `${field ? `${field}: ` : ''}${e?.msg || JSON.stringify(e)}`
+        }).join('; ') + (detail.length > 3 ? `; and ${detail.length - 3} more validation errors` : '')
+      : (typeof detail === 'object' && detail !== null ? JSON.stringify(detail) : detail)
+    store.setState({ lastError: { status: r.status, message: message || r.statusText } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : fallbackName
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return true
+}
+
+export function exportPdb(positions = null, visualization = null) {
+  if (!Array.isArray(positions) || !positions.length) {
+    return _downloadBinaryExport('/design/export/pdb', 'design.pdb')
+  }
+  return _downloadBinaryExport('/design/export/pdb/visualized', 'design.pdb', {
+    method: 'POST',
+    headers: { ...docHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      positions,
+      visualization: visualization ? {
+        engine: visualization.engine,
+        mode: visualization.mode,
+        job_id: visualization.jobId,
+        frame: visualization.trajectory?.frame ?? null,
+      } : null,
+    }),
+  })
+}
+
+export function exportPsf() {
+  return _downloadBinaryExport('/design/export/psf', 'design.psf')
+}
+
+export function exportNamdComplete() {
+  return _downloadBinaryExport('/design/export/namd-complete', 'design_namd_complete.zip')
+}
+
 export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadius } = {}) {
   const params = new URLSearchParams({ target_mm: String(targetMm) })
   if (gridSpacing != null) params.set('grid_spacing', String(gridSpacing))
@@ -1992,13 +2054,18 @@ export async function runOxdna(steps = 10000) {
 // /md/jobs API.  They do NOT mutate the design, so they bypass _request's
 // design-sync and just return parsed JSON (or null on error).
 
-async function _oxdnaJSON(method, path, body = undefined) {
+async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
   const opts = { method, headers: { ...docHeaders() } }
+  if (signal) opts.signal = signal
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json'
     opts.body = JSON.stringify(body)
   }
-  const r = await fetch(`${BASE}${path}`, opts)
+  const r = await fetch(`${BASE}${path}`, opts).catch(err => {
+    if (err?.name === 'AbortError') return null
+    throw err
+  })
+  if (!r) return null
   if (!r.ok) {
     const json = await r.json().catch(() => null)
     store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
@@ -2045,13 +2112,13 @@ export const listLammpsJobs      = ()            => _oxdnaJSON('GET',  '/lammps/
 export const getLammpsJob        = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}`)
 export const stopLammpsJob       = (id)          => _oxdnaJSON('POST', `/lammps/jobs/${id}/stop`)
 /** Scrub-able trajectory ({ready, keys, frames, stages, markers}) — same shape as the oxDNA one. */
-export const getLammpsTrajectory = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}/trajectory`)
+export const getLammpsTrajectory = (id, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/trajectory`, undefined, { signal })
 /** Final structure as applyFemPositions positions (the display view); align superposes onto design pose. */
-export const getLammpsDisplay    = (id, align=true) => _oxdnaJSON('GET', `/lammps/jobs/${id}/display?align=${align}`)
+export const getLammpsDisplay    = (id, align=true, signal) => _oxdnaJSON('GET', `/lammps/jobs/${id}/display?align=${align}`, undefined, { signal })
 /** Per-base average position + RMSF (flexibility map) — same shape as the oxDNA one. */
-export const getLammpsRmsf       = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}/rmsf`)
+export const getLammpsRmsf       = (id, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/rmsf`, undefined, { signal })
 /** Per-base deviation (nm) from the design pose (deviation map) — same shape as the oxDNA one. */
-export const getLammpsDeviation  = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}/deviation`)
+export const getLammpsDeviation  = (id, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/deviation`, undefined, { signal })
 
 /** Forecast free-disk-after for an oxDNA relaxation run (same body as createOxdnaJob). */
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
@@ -2083,7 +2150,7 @@ export const stopAutorefine      = (id)          => _oxdnaJSON('POST', `/design/
 export const applyAutorefineSkips = (id, period) => _oxdnaJSON('POST',
   `/design/oxdna/autorefine/${id}/apply${period != null ? `?period=${period}` : ''}`)
 /** Per-nucleotide deviation map of a job's production mean structure vs its design. */
-export const getOxdnaDeviation   = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/deviation`)
+export const getOxdnaDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/deviation`, undefined, { signal })
 /** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a
  *  job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getOxdnaMetricsRun`. */
 export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)
@@ -2099,10 +2166,10 @@ export const getShapeCompareRun  = (runId)       => _oxdnaJSON('GET',  `/shape/c
 export const getOxdnaShapeSource = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/shape-source`)
 export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
-export const getOxdnaDisplay     = (id, align = true) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`)
+export const getOxdnaDisplay     = (id, align = true, signal) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`, undefined, { signal })
 export const getOxdnaRmsd        = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsd`)
-export const getOxdnaRmsf         = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf`)
-export const getOxdnaTrajectory  = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory`)
+export const getOxdnaRmsf        = (id, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf`, undefined, { signal })
+export const getOxdnaTrajectory  = (id, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory`, undefined, { signal })
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast. */
 export const getOxdnaTrajectoryMeta = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-meta`)
 /** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
@@ -2178,8 +2245,8 @@ export const getMrdnaErrorLog    = (id)          => _oxdnaJSON('GET',  `/mrdna/j
 export const startMrdnaJob       = (id)          => _oxdnaJSON('POST', `/mrdna/jobs/${id}/start`)
 export const stopMrdnaJob        = (id)          => _oxdnaJSON('POST', `/mrdna/jobs/${id}/stop`)
 export const deleteMrdnaJob      = (id)          => _oxdnaJSON('DELETE', `/mrdna/jobs/${id}`)
-export const getMrdnaDisplay     = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/display`)
-export const getMrdnaBeads       = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/beads`)
+export const getMrdnaDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/display`, undefined, { signal })
+export const getMrdnaBeads       = (id, signal)  => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/beads`, undefined, { signal })
 /** Designed (analytic Dietz) vs simulated (mrDNA) curvature for a completed job. */
 export const getMrdnaCurvature   = (id)          => _oxdnaJSON('GET',  `/mrdna/jobs/${id}/curvature`)
 /** Analytic curvature of the ACTIVE design's loop/skip pattern (instant, no run). */
@@ -2198,16 +2265,16 @@ export const getCandoErrorLog    = (id)          => _oxdnaJSON('GET',  `/cando/j
 export const startCandoJob       = (id)          => _oxdnaJSON('POST', `/cando/jobs/${id}/start`)
 export const stopCandoJob        = (id)          => _oxdnaJSON('POST', `/cando/jobs/${id}/stop`)
 export const deleteCandoJob      = (id)          => _oxdnaJSON('DELETE', `/cando/jobs/${id}`)
-export const getCandoDisplay     = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/display`)
+export const getCandoDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/display`, undefined, { signal })
 /** Full geometry of the job's OWN design snapshot (topology at solve time), for the
  *  display modes to render instead of the live model. */
-export const getCandoSnapshotGeometry = (id)     => _oxdnaJSON('GET',  `/cando/jobs/${id}/snapshot-geometry`)
+export const getCandoSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/cando/jobs/${id}/snapshot-geometry`, undefined, { signal })
 /** Per-bp RMSF (nm) for the flexibility map (Item 3). */
-export const getCandoRmsf        = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/rmsf`)
+export const getCandoRmsf        = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/rmsf`, undefined, { signal })
 /** Per-bp deviation from the intended (displayed) geometry + global RMSD (Item 3). */
-export const getCandoDeviation   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`)
+export const getCandoDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/deviation`, undefined, { signal })
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
-export const getCandoCylinders   = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/cylinders`)
+export const getCandoCylinders   = (id, signal)  => _oxdnaJSON('GET',  `/cando/jobs/${id}/cylinders`, undefined, { signal })
 /** CanDo source bundle for the cross-engine comparison card (S5/C5): shared descriptors + RMSF. */
 export const getCandoShapeSource = (id)          => _oxdnaJSON('GET',  `/cando/jobs/${id}/shape-source`)
 /** mrDNA source bundle for the cross-engine comparison card (S5/M5): shared descriptors + CG-trajectory RMSF. */
@@ -2228,16 +2295,16 @@ export const getSnupiErrorLog    = (id)          => _oxdnaJSON('GET',  `/snupi/j
 export const startSnupiJob       = (id)          => _oxdnaJSON('POST', `/snupi/jobs/${id}/start`)
 export const stopSnupiJob        = (id)          => _oxdnaJSON('POST', `/snupi/jobs/${id}/stop`)
 export const deleteSnupiJob      = (id)          => _oxdnaJSON('DELETE', `/snupi/jobs/${id}`)
-export const getSnupiDisplay     = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/display`)
+export const getSnupiDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/display`, undefined, { signal })
 /** Full geometry of the job's OWN design snapshot (topology at solve time). */
-export const getSnupiSnapshotGeometry = (id)     => _oxdnaJSON('GET',  `/snupi/jobs/${id}/snapshot-geometry`)
+export const getSnupiSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/snupi/jobs/${id}/snapshot-geometry`, undefined, { signal })
 /** Per-bp RMSF (nm) for the flexibility map. */
-export const getSnupiRmsf        = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/rmsf`)
-export const getSnupiTrajectory  = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/trajectory`)
+export const getSnupiRmsf        = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/rmsf`, undefined, { signal })
+export const getSnupiTrajectory  = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/trajectory`, undefined, { signal })
 /** Per-bp deviation from the intended (displayed) geometry + global RMSD. */
-export const getSnupiDeviation   = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/deviation`)
+export const getSnupiDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/deviation`, undefined, { signal })
 /** CanDo-style jointed-cylinder geometry (per-helix axis tubes + crossover joints). */
-export const getSnupiCylinders   = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/cylinders`)
+export const getSnupiCylinders   = (id, signal)  => _oxdnaJSON('GET',  `/snupi/jobs/${id}/cylinders`, undefined, { signal })
 /** SNUPI source bundle for the cross-engine comparison card: shared descriptors + RMSF. */
 export const getSnupiShapeSource = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/shape-source`)
 
@@ -2278,12 +2345,12 @@ export const fsListDir           = (path)        => _oxdnaJSON('GET',  `/fs/list
 export const fsMkdir             = (path, name)  => _oxdnaJSON('POST', '/fs/mkdir', { path, name })
 /** Composite NAMD trajectory ({keys, frames, markers, stages}) — same shape as
  *  getOxdnaTrajectory, so the animation trajectory path is shared. */
-export const getMdTrajectory     = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory`)
+export const getMdTrajectory     = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory`, undefined, { signal })
 /** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast. */
 export const getMdTrajectoryMeta = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory-meta`)
 /** Per-nucleotide flexibility map (RMSF) over the NAMD run — same shape as
  *  getOxdnaRmsf, so the flexibility-map display code is shared. */
-export const getMdRmsf           = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`)
+export const getMdRmsf           = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`, undefined, { signal })
 /** Kill the in-flight trajectory/RMSF/surface analysis for a job (view toggled
  *  off / job deselected) so a heavy MDAnalysis read of a live DCD can't run away.
  *  `kind` cancels one view; omit to cancel all. Never throws. */

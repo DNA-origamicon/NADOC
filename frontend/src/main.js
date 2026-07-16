@@ -6847,7 +6847,25 @@ async function main() {
   })
 
   // ── Export menu (File → Export submenu) ──────────────────────────────────────
-  initExportMenu({ store, api })
+  initExportMenu({
+    store, api,
+    getPdbVisualization: () => {
+      const positions = designRenderer.getFemPositions?.()
+      if (!positions?.length) return null
+      const active = [
+        [mdViz, 'NAMD', 'namd'], [mdDisplayController, 'NAMD', 'namd'], [oxdnaDisplay, 'oxDNA', 'oxdna'], [lammpsDisplay, 'LAMMPS', 'lammps'],
+        [snupiDisplay, 'SNUPI', 'snupi'], [candoDisplay, 'CanDo', 'cando'], [mrdnaDisplay, 'mrDNA', 'mrdna'],
+      ].find(([controller]) => controller?.isActive?.() || controller?.deformActive?.() || controller?.mode?.() != null)
+      if (!active) return null
+      const mode = active[0].mode?.()
+      const modeName = ({ rmsf: 'RMSF', relaxed: 'relaxed', trajectory: 'trajectory', deviation: 'deviation', flex: 'RMSF', deform: 'deformed' })[mode] || mode
+      return {
+        name: `${active[1]}${modeName ? ` ${modeName}` : ''}`,
+        engine: active[2], mode, jobId: active[0].activeJobId?.() ?? active[0].deformJobId?.() ?? null,
+        positions, trajectory: active[0].trajectoryInfo?.() ?? null,
+      }
+    },
+  })
 
   // ── Representation option sliders → ui/repr_option_sliders.js ─────────────────
   // Owns the four tuning sliders + the per-repr row-visibility (`updateForRepr`,

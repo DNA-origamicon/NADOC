@@ -252,6 +252,24 @@ def compute_surface(
 CG_BEAD_RADIUS_NM = 0.50   # per-nucleotide sphere radius (nm) ≈ a nucleotide's atomic extent
 
 
+# ── EXPERIMENTAL "ChimeraX quality" SES parameters ────────────────────────────
+# Match ChimeraX's DEFAULT molecular (solvent-excluded) surface.  compute_surface's
+# dilate-by-probe → erode-by-probe morphological closing IS a valid SES, so the
+# algorithm was never the problem — the quality gap vs ChimeraX was purely voxel
+# RESOLUTION: the display path caps the grid at _ADAPTIVE_VOXEL_CAP (~0.31 nm on a
+# big design), which staircases the ~1 nm helical grooves into blobs.  These knobs
+# render at ChimeraX's true 0.5 Å grid with a 1.4 Å water probe and TRUE VdW radii
+# (no display-path 1.2× inflation).  EXPENSIVE — the voxel cap here is far higher
+# so small parts get the full grid; VoltronCore-scale designs still auto-coarsen.
+CHIMERAX_GRID_SPACING = 0.05        # nm (0.5 Å — ChimeraX default gridSpacing)
+CHIMERAX_PROBE_RADIUS = 0.14        # nm (1.4 Å — ChimeraX default water probe)
+CHIMERAX_RADIUS_SCALE = 1.0         # true VdW radii (no display 1.2× inflation)
+CHIMERAX_VOXEL_CAP    = 12_000_000  # ~4× the display cap; small designs stay at 0.05 nm
+CHIMERAX_MAX_SPACING  = 0.25        # nm — auto-coarsen ceiling for huge designs
+CHIMERAX_SMOOTH       = 8           # Taubin iters — fewer; the fine grid is already smooth
+_SPLIT_VOXEL_BUDGET   = 90_000_000  # total voxel budget shared across per-strand surfaces
+
+
 def make_cg_bead(x, y, z, strand_id: str = "", helix_id: str = "",
                  bp_index: int = 0, direction: str = "FORWARD") -> Atom:
     """One coarse per-nucleotide sphere as an element-'C' Atom (radius set by cg_surface_mesh
@@ -315,6 +333,79 @@ def compute_surface_from_cloud(
     _, nn = cKDTree(positions).query(verts, workers=-1)
     vsids = [strand_ids[int(i)] if strand_ids else "" for i in nn]
     return SurfaceMesh(vertices=verts, faces=faces.astype(np.int32), vertex_strand_ids=vsids)
+
+
+def compute_split_surfaces_from_cloud(
+    positions: np.ndarray,
+    radii: np.ndarray,
+    strand_ids: list,
+    grid_spacing: float = CHIMERAX_GRID_SPACING,
+    probe_radius: float = CHIMERAX_PROBE_RADIUS,
+    radius_scale: float = CHIMERAX_RADIUS_SCALE,
+    smooth: int = CHIMERAX_SMOOTH,
+    cap_voxels: int = CHIMERAX_VOXEL_CAP,
+    max_spacing: float = CHIMERAX_MAX_SPACING,
+) -> SurfaceMesh:
+    """Per-STRAND independent solvent-excluded surfaces, concatenated into ONE mesh.
+
+    ChimeraX's default ``surface`` builds a separate surface per chain, so complementary
+    strands are DISTINCT geometry with a real solvent gap between them (the double-helix
+    groove pattern).  NADOC's single fused surface instead melts every strand into one blob
+    and colours it — giving a jagged colour seam where strands touch, not a gap.  This builds
+    each strand's atoms on their OWN cropped occupancy grid → dilate/erode by the probe →
+    marching cubes → Taubin smooth, then concatenates the parts (offsetting face indices).
+    Every vertex belongs unambiguously to one strand, so the per-vertex colours are already
+    solid (no crisp-zone flattening needed) and the separation is GEOMETRIC.
+
+    EXPENSIVE: one marching-cubes pass per strand.  Each strand's grid is cropped to its own
+    (small) bbox, and coarsened per strand by the voxel cap, so cost stays bounded."""
+    positions = np.asarray(positions, dtype=np.float64)
+    radii = np.asarray(radii, dtype=np.float64)
+    sids = [s or "" for s in strand_ids]
+    sids_arr = np.asarray(sids, dtype=object)
+
+    # First-appearance strand order (matches the palette assignment in surface_to_json).
+    order: list = []
+    seen: set = set()
+    for s in sids:
+        if s not in seen:
+            seen.add(s)
+            order.append(s)
+
+    # One marching-cubes pass PER strand, so total cost scales with strand count.  Split a
+    # global voxel budget across strands (floored) so a small design gets fine per-strand
+    # grids while a 200-staple origami auto-coarsens instead of hanging for minutes.
+    eff_cap = int(min(cap_voxels, max(500_000, _SPLIT_VOXEL_BUDGET // max(1, len(order)))))
+
+    parts_v: list[np.ndarray] = []
+    parts_f: list[np.ndarray] = []
+    parts_sid: list[str] = []
+    voff = 0
+    for s in order:
+        mask = sids_arr == s
+        sub_pos = positions[mask]
+        if sub_pos.shape[0] < 4:
+            continue
+        sub_r = radii[mask]
+        gs = adaptive_grid_spacing_arr(sub_pos, grid_spacing, cap_voxels=eff_cap,
+                                       max_spacing=max_spacing)
+        m = compute_surface_from_cloud(sub_pos, sub_r, None, grid_spacing=gs,
+                                       probe_radius=probe_radius, radius_scale=radius_scale)
+        if m.vertices.shape[0] == 0:
+            continue
+        m = smooth_mesh(m, iterations=smooth)
+        parts_v.append(m.vertices)
+        parts_f.append(m.faces + voff)
+        parts_sid.extend([s] * m.vertices.shape[0])
+        voff += m.vertices.shape[0]
+
+    if not parts_v:
+        return SurfaceMesh(np.empty((0, 3), np.float32), np.empty((0, 3), np.int32), [])
+    return SurfaceMesh(
+        vertices=np.concatenate(parts_v, axis=0).astype(np.float32),
+        faces=np.concatenate(parts_f, axis=0).astype(np.int32),
+        vertex_strand_ids=parts_sid,
+    )
 
 
 def cg_surface_mesh(bead_atoms: list, grid_spacing: float = 0.20, probe_radius: float = 0.28,

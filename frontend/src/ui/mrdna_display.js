@@ -70,6 +70,13 @@ export function initMrdnaDisplay({
   let _epoch = 0                 // bumps on every request → stale responses ignored
   let _deformJobId = null        // job whose relaxed positions are applied (or null)
   let _beadsJobId  = null        // job whose bead cloud is drawn (or null)
+  let _loadAbort = null
+  function _beginLoad() {
+    _loadAbort?.abort()
+    _loadAbort = new AbortController()
+    return { epoch: ++_epoch, signal: _loadAbort.signal }
+  }
+  function _cancelLoad() { _loadAbort?.abort(); _loadAbort = null; _epoch++ }
 
   // Show/hide the native NADOC model (whatever rep) while the CG-beads mode owns
   // the view.  designRenderer.setDesignVisible covers the design root; the injected
@@ -81,8 +88,8 @@ export function initMrdnaDisplay({
   }
 
   async function showDeform(jobId) {
-    const epoch = ++_epoch
-    const resp = await api.getMrdnaDisplay(jobId)
+    const { epoch, signal } = _beginLoad()
+    const resp = await api.getMrdnaDisplay(jobId, signal)
     if (epoch !== _epoch) return { ok: false }
     const updates = toFemUpdates(resp)
     if (!updates.length) return { ok: false, reason: 'not-ready' }
@@ -92,14 +99,15 @@ export function initMrdnaDisplay({
   }
 
   function stopDeform() {
+    _cancelLoad()
     if (_deformJobId === null) return
     designRenderer.applyFemPositions(null)
     _deformJobId = null
   }
 
   async function showBeads(jobId) {
-    const epoch = ++_epoch
-    const resp = await api.getMrdnaBeads(jobId)
+    const { epoch, signal } = _beginLoad()
+    const resp = await api.getMrdnaBeads(jobId, signal)
     if (epoch !== _epoch) return { ok: false }
     const pts = beadsToPoints(resp)
     if (!pts.length || !beadOverlay) return { ok: false, reason: 'not-ready' }
@@ -113,6 +121,7 @@ export function initMrdnaDisplay({
   }
 
   function hideBeads() {
+    _cancelLoad()
     if (_beadsJobId === null) return
     beadOverlay?.update([], _BEAD_RADIUS_NM, 0.95)
     connectionOverlay?.clear()
@@ -124,7 +133,6 @@ export function initMrdnaDisplay({
   function stopAndRestore() {
     stopDeform()
     hideBeads()
-    _epoch++   // invalidate any in-flight fetches
   }
 
   return {

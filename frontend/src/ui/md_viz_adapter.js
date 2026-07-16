@@ -18,7 +18,7 @@
  */
 export function mdVizApiAdapter(api) {
   return {
-    getOxdnaTrajectory: (id) => api.getMdTrajectory(id),
-    getOxdnaRmsf:       (id) => api.getMdRmsf(id),
+    getOxdnaTrajectory: (id, signal) => api.getMdTrajectory(id, signal),
+    getOxdnaRmsf:       (id, signal) => api.getMdRmsf(id, signal),
   }
 }

@@ -169,12 +169,22 @@ def _cryst1_record(atoms: list, margin_nm: float = 5.0) -> str:
 # ── Hybrid-36 encoding ────────────────────────────────────────────────────────
 # PDB fixed-width fields overflow at 99,999 (5-char serial) and 9,999 (4-char
 # residue number).  The hybrid-36 scheme (used by cctbx, OpenMM, VMD, PyMOL)
-# extends these fields using letter prefixes:
-#   5-char serial:  0-99999 decimal → A0000-Z9999 (100000-359999) → a0000-z9999
-#   4-char seq_num: 0-9999 decimal  → A000-Z999  (10000-35999)   → a000-z999
-# This supports up to ~87 million atoms (5-char) / ~83 thousand residues (4-char).
+# extends these fields using base-36 upper- then lower-case blocks. For example,
+# width 5 transitions 99999 → A0000, A0009 → A000A. This exact algorithm is
+# understood by ChimeraX, cctbx, OpenMM, VMD, and PyMOL.
 
-_H36_DIGITS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+_H36_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_H36_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+
+def _base36(value: int, width: int, digits: str) -> str:
+    chars = []
+    for _ in range(width):
+        value, rem = divmod(value, 36)
+        chars.append(digits[rem])
+    if value:
+        raise ValueError("base-36 overflow")
+    return "".join(reversed(chars))
 
 
 def _h36(value: int, width: int) -> str:
@@ -186,11 +196,13 @@ def _h36(value: int, width: int) -> str:
     if 0 <= value < dec_max:
         return f"{value:{width}d}"
     value -= dec_max
-    per_letter = 10 ** (width - 1)                 # 1000 or 10000
-    for letter in _H36_DIGITS:
-        if value < per_letter:
-            return letter + f"{value:0{width - 1}d}"
-        value -= per_letter
+    block = 26 * 36 ** (width - 1)
+    offset = 10 * 36 ** (width - 1)
+    if value < block:
+        return _base36(value + offset, width, _H36_UPPER)
+    value -= block
+    if value < block:
+        return _base36(value + offset, width, _H36_LOWER)
     raise ValueError(f"hybrid-36 overflow: value out of range for width {width}")
 
 
@@ -881,7 +893,8 @@ def _pdb_atom_name(name: str, element: str) -> str:
     return f"{name:<4s}"
 
 
-def _pdb_atom_record(atom: Atom) -> str:
+def _pdb_atom_record(atom: Atom, *, chain: str | None = None,
+                     seq_num: int | None = None) -> str:
     """
     Format one PDB ATOM record (80-char fixed-width).
 
@@ -905,15 +918,18 @@ def _pdb_atom_record(atom: Atom) -> str:
       77-78 element symbol (right-justified, 2 chars)
     """
     # PDB serials are 1-based; AtomisticModel uses 0-based serials.
-    # Cycle within 1-9999: NAMD misidentifies record type when a 5-digit serial
-    # (≥10000) immediately follows "ATOM  " or "HETATM" with no leading space.
+    # Encode with hybrid-36 (the same scheme used by the CONECT/TER records below
+    # and by namd_topology's psfgen PDB writer).  A prior version wrapped serials
+    # mod-9999, which made ATOM serials non-unique and — fatally — mismatched the
+    # hybrid-36 serials the CONECT records reference, so every design over 9999
+    # atoms exported with broken connectivity.  For serials ≤ 99999 hybrid-36 is
+    # byte-identical to plain decimal, so the NAMD/psfgen path is unaffected.
     serial_1   = atom.serial + 1
-    pdb_serial = (serial_1 - 1) % 9999 + 1
-    serial_str = f"{pdb_serial:5d}"
-    seq_str    = _h36(atom.seq_num, 4)
+    serial_str = _h36(serial_1, 5)
+    seq_str    = _h36(atom.seq_num if seq_num is None else seq_num, 4)
     name_field = _pdb_atom_name(atom.name, atom.element)
     resname    = f"{atom.residue:>3s}"
-    chain      = _chain_char(atom.chain_id)
+    chain      = _chain_char(atom.chain_id) if chain is None else chain
     x_ang      = atom.x * 10.0
     y_ang      = atom.y * 10.0
     z_ang      = atom.z * 10.0
@@ -956,7 +972,8 @@ def _pdb_conect_records(bonds: list[tuple[int, int]]) -> list[str]:
 
 
 def _pdb_link_record(
-    atom_a: Atom, atom_b: Atom, dist_ang: float
+    atom_a: Atom, atom_b: Atom, dist_ang: float,
+    seq_a: int | None = None, seq_b: int | None = None,
 ) -> str:
     """
     Generate a LINK record for a covalent bond between two residues
@@ -978,13 +995,15 @@ def _pdb_link_record(
     """
     n1  = _pdb_atom_name(atom_a.name, atom_a.element)
     r1  = f"{atom_a.residue:>3s}"
-    c1  = atom_a.chain_id[0] if atom_a.chain_id else "A"
+    # Must use the exact same multi-character→PDB-chain mapping as ATOM records.
+    # Taking chain_id[0] aliases AA..AZ back onto A and creates distant LINK bonds.
+    c1  = _chain_char(atom_a.chain_id)
     n2  = _pdb_atom_name(atom_b.name, atom_b.element)
     r2  = f"{atom_b.residue:>3s}"
-    c2  = atom_b.chain_id[0] if atom_b.chain_id else "A"
+    c2  = _chain_char(atom_b.chain_id)
     return (
-        f"LINK        {n1} {r1} {c1}{atom_a.seq_num:4d}                "
-        f"{n2} {r2} {c2}{atom_b.seq_num:4d}                  {dist_ang:5.2f}"
+        f"LINK        {n1} {r1} {c1}{_h36(atom_a.seq_num if seq_a is None else seq_a, 4)}                "
+        f"{n2} {r2} {c2}{_h36(atom_b.seq_num if seq_b is None else seq_b, 4)}                  {dist_ang:5.2f}"
     )
 
 
@@ -996,6 +1015,7 @@ def export_pdb(
     non_std_bonds: Optional[list[tuple[int, int]]] = None,
     box_margin_nm: float = 5.0,
     model: Optional[AtomisticModel] = None,
+    viewer_terminals: bool = False,
 ) -> str:
     """
     Export the design as a PDB file string.
@@ -1029,60 +1049,176 @@ def export_pdb(
     if model is None:
         model = build_atomistic_model(design)
     atoms = model.atoms
-    bonds = model.bonds
+    bonds = list(model.bonds)
+
+    # A NADOC strand is one covalent polymer even when its route crosses domains,
+    # skips a lattice position, or came from a reconstructed simulation frame.
+    # Some of those paths can reach this layer with an incomplete inter-residue
+    # bond list.  Viewers then treat otherwise standard nucleotides (for example
+    # /X DT 45) as detached residues.  Validate the invariant directly from the
+    # lossless internal chain IDs before they are mapped into PDB's one-character
+    # namespace, and restore only the canonical consecutive O3' -> P edge.
+    dna_residues = {"DA", "DC", "DG", "DT"}
+    backbone_atoms: dict[tuple[str, int], dict[str, Atom]] = {}
+    for atom in atoms:
+        if atom.residue in dna_residues and atom.name in {"O3'", "P"}:
+            backbone_atoms.setdefault((atom.chain_id, atom.seq_num), {})[atom.name] = atom
+    bond_keys = {tuple(sorted((i, j))) for i, j in bonds}
+    repaired_backbone_bonds = 0
+    for (chain_id, seq_num), current in backbone_atoms.items():
+        nxt = backbone_atoms.get((chain_id, seq_num + 1))
+        if nxt is None or "O3'" not in current or "P" not in nxt:
+            continue
+        edge = tuple(sorted((current["O3'"].serial, nxt["P"].serial)))
+        if edge not in bond_keys:
+            bonds.append((current["O3'"].serial, nxt["P"].serial))
+            bond_keys.add(edge)
+            repaired_backbone_bonds += 1
+
+    if viewer_terminals:
+        # The simulation template carries P/OP1/OP2 on every residue. At a true
+        # 5′ terminus there is no preceding O3′→P bond, leaving an impossible
+        # three-coordinate phosphate that viewers protonate incorrectly. For a
+        # standalone/viewer PDB, represent the conventional unphosphorylated 5′
+        # end instead: O5′ remains and receives its terminal H in AddH tools.
+        atom_by_serial_all = {a.serial: a for a in atoms}
+        incoming_p: set[int] = set()
+        for i, j in bonds:
+            a, b = atom_by_serial_all.get(i), atom_by_serial_all.get(j)
+            if a is None or b is None:
+                continue
+            if a.name == "O3'" and b.name == "P" and (a.chain_id, a.seq_num) != (b.chain_id, b.seq_num):
+                incoming_p.add(b.serial)
+            elif b.name == "O3'" and a.name == "P" and (a.chain_id, a.seq_num) != (b.chain_id, b.seq_num):
+                incoming_p.add(a.serial)
+        terminal_residues = {
+            (a.chain_id, a.seq_num) for a in atoms
+            if a.name == "P" and a.seq_num == 1 and a.serial not in incoming_p
+        }
+        omitted = {
+            a.serial for a in atoms
+            if (a.chain_id, a.seq_num) in terminal_residues and a.name in {"P", "OP1", "OP2"}
+        }
+        if omitted:
+            atoms = [a for a in atoms if a.serial not in omitted]
+            bonds = [(i, j) for i, j in bonds if i not in omitted and j not in omitted]
+            non_std_bonds = [(i, j) for i, j in non_std_bonds if i not in omitted and j not in omitted]
 
     lines: list[str] = [
         "REMARK  NADOC all-atom model (Phase AA, heavy atoms only)",
         "REMARK  Coordinates in Angstroms.  CHARMM36 atom names.",
         "REMARK  Non-standard bonds (if any) listed as LINK records.",
     ]
+    if viewer_terminals:
+        lines.append("REMARK  Viewer termini: unlinked residue-1 P/OP1/OP2 omitted; O5' is the unphosphorylated 5' end.")
+    if repaired_backbone_bonds:
+        lines.append(
+            f"REMARK  Restored {repaired_backbone_bonds} missing consecutive-strand O3'-P bonds."
+        )
 
     # ── CRYST1 record (periodic boundary cell) ────────────────────────────
     lines.append(_cryst1_record(atoms, margin_nm=box_margin_nm))
 
     atom_by_serial = {a.serial: a for a in atoms}
 
-    # ── LINK records for inter-residue O3′→P bonds (inc. crossovers) ─────
-    # Emit LINK for every bond where the two atoms belong to different
-    # residues (different seq_num OR different chain_id).  This covers both
-    # intra-chain sequential bonds and crossover bonds.  Intra-residue bonds
-    # do NOT get LINK records.
+    internal_chains = list(dict.fromkeys(a.chain_id for a in atoms))
+    use_multi_models = viewer_terminals and len(internal_chains) > len(_CHAIN_CHARS)
+    if use_multi_models:
+        lines.append(
+            f"REMARK  {len(internal_chains)} strands exceed PDB's 62-chain limit; split across "
+            f"{math.ceil(len(internal_chains) / len(_CHAIN_CHARS))} MODEL records."
+        )
+
+    # PDB chain IDs wrap after 62 strands. If every wrapped strand also restarts
+    # at residue 1, ChimeraX merges unrelated residues with identical
+    # (chain,resSeq), producing template mismatches and distant missing-structure
+    # pseudobonds. Continue numbering within each reused PDB chain character;
+    # TER still marks every real strand boundary.
+    chain_offsets: dict[str, int] = {}
+    internal_offsets: dict[str, int] = {}
+    internal_max_seq: dict[str, int] = {}
+    for a in atoms:
+        internal_max_seq[a.chain_id] = max(internal_max_seq.get(a.chain_id, 0), a.seq_num)
+    for a in atoms:
+        if a.chain_id in internal_offsets:
+            continue
+        pdb_chain = _chain_char(a.chain_id)
+        internal_offsets[a.chain_id] = chain_offsets.get(pdb_chain, 0)
+        chain_offsets[pdb_chain] = internal_offsets[a.chain_id] + internal_max_seq[a.chain_id]
+
+    def _pdb_seq(a: Atom) -> int:
+        return a.seq_num if use_multi_models else internal_offsets[a.chain_id] + a.seq_num
+
+    # ── Connectivity ──────────────────────────────────────────────────────
+    # CONECT below is the complete topology and addresses atoms by unique serial.
+    # Do NOT redundantly emit routine O3′→P backbone LINK records: LINK addresses
+    # residues by the limited (name, one-char chain, resSeq) namespace, and ChimeraX
+    # can resolve those onto the wrong residue in large origami designs (e.g. the
+    # observed false DT 21 O3′ → DT 24 P edge). Reserve LINK for caller-supplied
+    # genuinely non-standard chemistry only.
     all_model_bonds = list(bonds)
     for si, sj in non_std_bonds:
         all_model_bonds.append((si, sj))
 
-    for i, j in all_model_bonds:
+    for i, j in ([] if use_multi_models else non_std_bonds):
         a = atom_by_serial.get(i)
         b = atom_by_serial.get(j)
         if a is None or b is None:
             continue
-        if a.chain_id != b.chain_id or a.seq_num != b.seq_num:
-            dx = (a.x - b.x) * 10.0
-            dy = (a.y - b.y) * 10.0
-            dz = (a.z - b.z) * 10.0
-            dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-            if a.name == "O3'" and b.name == "P":
-                lines.append(_pdb_link_record(a, b, dist))
-            elif b.name == "O3'" and a.name == "P":
-                lines.append(_pdb_link_record(b, a, dist))
+        dx = (a.x - b.x) * 10.0
+        dy = (a.y - b.y) * 10.0
+        dz = (a.z - b.z) * 10.0
+        dist = math.sqrt(dx*dx + dy*dy + dz*dz)
+        lines.append(_pdb_link_record(a, b, dist, _pdb_seq(a), _pdb_seq(b)))
 
     # ── ATOM records grouped by chain; emit TER after each chain ──────────
-    # Atoms are ordered by serial; group into per-chain runs.
     from itertools import groupby
-    ter_serial = len(atoms) + 1   # first serial after all atoms
-    for _chain, chain_atoms_iter in groupby(atoms, key=lambda a: a.chain_id):
-        chain_atoms = list(chain_atoms_iter)
-        for atom in chain_atoms:
-            lines.append(_pdb_atom_record(atom))
-        last = chain_atoms[-1]
-        lines.append(
-            f"TER   {_h36(ter_serial, 5)}      "
-            f"{last.residue:>3s} {_chain_char(last.chain_id)}{_h36(last.seq_num, 4)}"
-        )
-        ter_serial += 1
+    ter_serial = max((a.serial for a in atoms), default=-1) + 2  # first 1-based serial after all atoms
 
-    # ── CONECT records ────────────────────────────────────────────────────
-    lines.extend(_pdb_conect_records(all_model_bonds))
+    def _emit_chain_block(block_atoms: list[Atom], block_bonds: list[tuple[int, int]]) -> None:
+        nonlocal ter_serial
+        if viewer_terminals:
+            # Inserted crossover bases and terminal extensions are constructed in
+            # post-passes, so raw model order can revisit a chain several times and
+            # place residues in an order such as 2..19,22..39,20,21,1,40. ChimeraX
+            # uses ATOM/TER order to infer polymer segments even when CONECT is
+            # complete, producing false missing-structure pseudobonds (for example
+            # O3' 21 -> P 30). Emit each internal strand once in residue order while
+            # retaining the original serials used by CONECT.
+            chain_order = list(dict.fromkeys(a.chain_id for a in block_atoms))
+            grouped = [
+                sorted(
+                    (a for a in block_atoms if a.chain_id == chain_id),
+                    key=lambda a: (a.seq_num, a.serial),
+                )
+                for chain_id in chain_order
+            ]
+        else:
+            grouped = [list(items) for _, items in groupby(block_atoms, key=lambda a: a.chain_id)]
+
+        for chain_atoms in grouped:
+            for atom in chain_atoms:
+                lines.append(_pdb_atom_record(
+                    atom, chain=_chain_char(atom.chain_id), seq_num=_pdb_seq(atom)))
+            last = chain_atoms[-1]
+            lines.append(
+                f"TER   {_h36(ter_serial, 5)}      "
+                f"{last.residue:>3s} {_chain_char(last.chain_id)}{_h36(_pdb_seq(last), 4)}"
+            )
+            ter_serial += 1
+        lines.extend(_pdb_conect_records(block_bonds))
+
+    if use_multi_models:
+        for model_idx, start in enumerate(range(0, len(internal_chains), len(_CHAIN_CHARS)), 1):
+            chunk = set(internal_chains[start:start + len(_CHAIN_CHARS)])
+            block_atoms = [a for a in atoms if a.chain_id in chunk]
+            serials = {a.serial for a in block_atoms}
+            block_bonds = [(i, j) for i, j in all_model_bonds if i in serials and j in serials]
+            lines.append(f"MODEL     {model_idx:4d}")
+            _emit_chain_block(block_atoms, block_bonds)
+            lines.append("ENDMDL")
+    else:
+        _emit_chain_block(list(atoms), all_model_bonds)
 
     lines.append("END")
     return "\n".join(lines) + "\n"

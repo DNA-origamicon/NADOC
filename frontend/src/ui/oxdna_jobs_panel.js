@@ -751,6 +751,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (autorefineDevStatus) { autorefineDevStatus.textContent = text || ''; autorefineDevStatus.style.color = color }
   }
   function _setDeviationOff() {
+    _devAbort?.abort()
+    _devAbort = null
+    _devBusy = false
     if (oxdnaDisplay?.mode() === 'deviation') oxdnaDisplay.stopAndRestore()
     if (autorefineDevToggle) autorefineDevToggle.checked = false
     _flexScale.hide()
@@ -758,11 +761,17 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _syncVizOffRadio()
     _updateButtons(_selectedJob())
   }
+  let _devAbort = null
   async function _refreshDeviation() {
     if (!_selectedId) return
+    _devAbort?.abort()
+    const abort = new AbortController()
+    _devAbort = abort
     _devBusy = true; _updateButtons(_selectedJob())
     _setDevStatus('Loading deviation map…')
-    const resp = await api.getOxdnaDeviation(_selectedId)
+    const resp = await api.getOxdnaDeviation(_selectedId, abort.signal)
+    if (abort.signal.aborted) return
+    if (_devAbort === abort) _devAbort = null
     _devBusy = false; _updateButtons(_selectedJob())
     if (!resp || !resp.ready) {
       if (autorefineDevToggle) autorefineDevToggle.checked = false
@@ -1675,6 +1684,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       `<div style="font-size:9px;color:${_C.dim}">rigid → flexible (RMSF)</div>`
   }
   function _setFlexOff() {
+    oxdnaDisplay?.cancelPendingLoad?.()
     if (oxdnaDisplay?.mode() === 'rmsf') oxdnaDisplay.stopAndRestore()
     if (flexToggle) flexToggle.checked = false
     _flexScale.hide()
@@ -1749,6 +1759,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
   function _setTrajOff() {
     trajPlayer.stop()
+    _trajBusy = false
+    oxdnaDisplay?.cancelPendingLoad?.()
     if (oxdnaDisplay?.mode() === 'trajectory') oxdnaDisplay.stopAndRestore()
     if (trajToggle) trajToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'

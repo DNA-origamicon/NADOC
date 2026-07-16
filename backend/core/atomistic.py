@@ -427,6 +427,8 @@ def merge_models(*models: AtomisticModel) -> AtomisticModel:
                 crossover_id=a.crossover_id,
                 extra_base_k=a.extra_base_k,
                 copy_k=getattr(a, "copy_k", None),
+                extension_id=getattr(a, "extension_id", None),
+                ext_k=getattr(a, "ext_k", None),
             ))
         for i, j in model.bonds:
             bonds.append((i + offset, j + offset))
@@ -497,6 +499,8 @@ def atomistic_model_from_reference(
             crossover_id=getattr(ref_atom, "crossover_id", None),
             extra_base_k=getattr(ref_atom, "extra_base_k", None),
             copy_k=getattr(ref_atom, "copy_k", None),
+            extension_id=getattr(ref_atom, "extension_id", None),
+            ext_k=getattr(ref_atom, "ext_k", None),
         ))
 
     bonds: list[tuple[int, int]] = []
@@ -1175,7 +1179,7 @@ def _append_protein_atoms(model: AtomisticModel, design: Design) -> AtomisticMod
 def build_atomistic_model(
     design: Design,
     exclude_helix_ids: set[str] | None = None,
-    nuc_pos_override: "dict[tuple[str, int, str], _np.ndarray] | None" = None,
+    nuc_pos_override: "dict[tuple, _np.ndarray] | None" = None,
     nuc_frame_override: "dict[tuple[str, int, str], NucleotidePosition] | None" = None,
     include_proteins: bool = False,
     axis_override: "dict[tuple[str, int], tuple[_np.ndarray, _np.ndarray]] | None" = None,
@@ -1373,9 +1377,12 @@ def build_atomistic_model(
                     if nuc_pos is None:
                         continue  # skip position (no nucleotide) — belt-and-braces
 
-                    # Apply CG position override for copy 0 only.
-                    if nuc_pos_override is not None and copy_k == 0:
-                        cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
+                    # Apply a CG position override. Four-part keys address loop
+                    # copies; the legacy three-part key addresses copy 0.
+                    if nuc_pos_override is not None:
+                        cg_pos = nuc_pos_override.get((h_id, bp, dir_str, copy_k))
+                        if cg_pos is None and copy_k == 0:
+                            cg_pos = nuc_pos_override.get((h_id, bp, dir_str))
                         if cg_pos is not None:
                             import dataclasses as _dc
                             nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
@@ -1401,8 +1408,13 @@ def build_atomistic_model(
                         if _fo is None and copy_k == 0:
                             _fo = frame_override.get((h_id, bp, dir_str))
                     if _fo is not None:
-                        origin, R = _oxdna_rigid_frame(
-                            _fo[0], _fo[1], _fo[2], direction, helix.direction)
+                        if len(_fo) == 2:
+                            # Direct (origin, R) frame prepared for flexible ssDNA
+                            # from its simulated 5'->3' neighbours.
+                            origin, R = _fo
+                        else:
+                            origin, R = _oxdna_rigid_frame(
+                                _fo[0], _fo[1], _fo[2], direction, helix.direction)
                     else:
                         _frame_key = (h_id, bp, dir_str)
                         _use_prepared_frame = False
@@ -1412,9 +1424,11 @@ def build_atomistic_model(
                                 nuc_pos = _nfo
                                 _use_prepared_frame = True
 
-                        # Apply CG position override for copy 0 only (NAMD-seed path).
-                        if nuc_pos_override is not None and copy_k == 0:
-                            cg_pos = nuc_pos_override.get(_frame_key)
+                        # Apply CG position override (including explicit loop copies).
+                        if nuc_pos_override is not None:
+                            cg_pos = nuc_pos_override.get((h_id, bp, dir_str, copy_k))
+                            if cg_pos is None and copy_k == 0:
+                                cg_pos = nuc_pos_override.get(_frame_key)
                             if cg_pos is not None:
                                 import dataclasses as _dc
                                 nuc_pos = _dc.replace(nuc_pos, position=cg_pos)
@@ -2319,14 +2333,30 @@ def _close_sequential_backbone(atoms: list[Atom], bonds: list[tuple[int, int]]) 
         if {a.name, b.name} != {"O3'", "P"}:
             continue
         src, dst = (a, b) if a.name == "O3'" else (b, a)
-        if not (src.helix_id == dst.helix_id and src.direction == dst.direction
-                and abs(src.bp_index - dst.bp_index) == 1):
+        regular_run = (
+            src.helix_id == dst.helix_id
+            and src.direction == dst.direction
+            and abs(src.bp_index - dst.bp_index) == 1
+        )
+        extension_junction = (
+            getattr(src, "extension_id", None) is not None
+            or getattr(dst, "extension_id", None) is not None
+        )
+        if not (regular_run or extension_junction):
             continue   # crossover / skip / extra-base bridge — already handled
         key = ((src.strand_id, src.seq_num), (dst.strand_id, dst.seq_num))
         if key in seen:
             continue
         seen.add(key)
-        _interpolate_backbone_bridge(atoms, by_res[key[0]], by_res[key[1]])
+        if extension_junction:
+            src_s, dst_s = by_res[key[0]], by_res[key[1]]
+            # Distribute any residual CG/atomistic span mismatch across the whole
+            # C3'-O3'-P-O5'-C5' linker. Pinning only O3'-P merely transfers the
+            # break into C3'-O3' and P-O5'. This deterministic closure is also fast
+            # enough for hundreds of Voltron tail junctions per trajectory frame.
+            _interpolate_backbone_bridge(atoms, src_s, dst_s)
+        else:
+            _interpolate_backbone_bridge(atoms, by_res[key[0]], by_res[key[1]])
 
 
 # ── Crossover interpolation helpers ──────────────────────────────────────────
@@ -2456,6 +2486,23 @@ def _extra_base_frame(
     c, s = _math.cos(_FRAME_ROT_RAD), _math.sin(_FRAME_ROT_RAD)
     R = R @ _np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
     return origin.copy(), R
+
+
+def _sim_override_parts(value) -> tuple[_np.ndarray, "tuple[_np.ndarray, _np.ndarray] | None"]:
+    """Normalise a synthetic-nucleotide override.
+
+    Historical callers pass only a backbone-site ``ndarray``.  oxDNA display/export
+    callers may additionally pass ``{"position", "a1", "a3"}``, allowing inserts
+    and extensions to retain the simulated rigid orientation instead of being put
+    back onto their native NADOC crossover/tail frame.
+    """
+    if isinstance(value, dict):
+        pos = _np.asarray(value["position"], dtype=float)
+        if value.get("a1") is not None and value.get("a3") is not None:
+            return pos, (_np.asarray(value["a1"], dtype=float),
+                         _np.asarray(value["a3"], dtype=float))
+        return pos, None
+    return _np.asarray(value, dtype=float), None
 
 
 # ── Extra-base atom builder ───────────────────────────────────────────────────
@@ -2623,6 +2670,12 @@ def _build_extra_base_atoms(
         z_sign     = float(_np.dot(_np.cross(bow_dir, line_dir), avg_axis))
         target_c1n = avg_axis if z_sign > 0.0 else -avg_axis
 
+        simulated_insert_sites = {
+            k: _sim_override_parts(xb_pos_override[(xo.id, k)])[0]
+            for k in range(n)
+            if xb_pos_override is not None and (xo.id, k) in xb_pos_override
+        }
+
         for i, base_char in enumerate(xo.extra_bases, start=1):
             t_i = i / (n + 1)
             if line_len > 1e-9:
@@ -2636,9 +2689,24 @@ def _build_extra_base_atoms(
             # rep shows the true ssDNA conformation instead of the geometric arc.
             _xb_sim = (xb_pos_override.get((xo.id, i - 1))
                        if xb_pos_override is not None else None)
+            _xb_frame = None
             if _xb_sim is not None:
-                origin_pos = _np.asarray(_xb_sim, dtype=float)
-            origin, R = _extra_base_frame(origin_pos, arc_dir, bow_dir)
+                origin_pos, _xb_frame = _sim_override_parts(_xb_sim)
+                prev_site = simulated_insert_sites.get(i - 2, line_p0)
+                next_site = simulated_insert_sites.get(i, line_p1)
+                relaxed_dir = next_site - prev_site
+                if float(_np.linalg.norm(relaxed_dir)) > 1e-9:
+                    arc_dir = _normalise(relaxed_dir)
+            if _xb_frame is not None:
+                sim_a1, _sim_a3 = _xb_frame
+                # Chemical chain direction comes from the actual simulated 5'/3'
+                # neighbours.  a1 contributes only the base-facing axis, projected
+                # perpendicular to that chain.  Raw a3 is a nucleotide body axis,
+                # not a guarantee that C5'/C3' point at the bonded neighbours.
+                origin, R = _extra_base_frame(
+                    origin_pos, arc_dir, _normalise(sim_a1))
+            else:
+                origin, R = _extra_base_frame(origin_pos, arc_dir, bow_dir)
 
             residue = _BASE_CHAR_TO_RESIDUE.get(base_char.upper(), "DT")
             extra_seq_num[chain_id] = extra_seq_num.get(chain_id, 0) + 1
@@ -2704,8 +2772,11 @@ def _build_extra_base_atoms(
             # Rotate ribose + base as a rigid body about C2′ so that the
             # C1′→N bond aligns with target_c1n (±avg_axis).
             # Anchors excluded from rotation: P, OP1, OP2, O5′ (phosphate group).
-            _glycosidic_n = _align_glycosidic(
-                atoms, residue, sugar_name_to_serial, base_name_to_serial, target_c1n)
+            if _xb_frame is None:
+                _glycosidic_n = _align_glycosidic(
+                    atoms, residue, sugar_name_to_serial, base_name_to_serial, target_c1n)
+            else:
+                _glycosidic_n = "N9" if residue in {"DA", "DG"} else "N1"
 
             # ── Intra-residue bonds ───────────────────────────────────────────
             for a_name, b_name in _SUGAR_BONDS:
@@ -2747,14 +2818,74 @@ def _build_extra_base_atoms(
             _rnd4(line_p0), _rnd4(line_p1), _rnd4(target_c1n),
         ) if (src_s is not None and dst_s is not None) else None
 
-        # When the inserts carry REAL simulated positions (relaxed-display /
-        # trajectory ``xb_pos_override``), those positions are authoritative — skip
-        # the scipy bridge minimisation, which would otherwise re-seat the whole
-        # insert onto the geometric junction arc and discard the simulated pose.
+        # Simulated insert centres are authoritative, but their coarse frames do not
+        # contain explicit phosphodiester atoms.  Close only the linker atoms after
+        # the chain-aware rigid placement above; never translate the ribose/base off
+        # its oxDNA site and never reuse a native-junction minimiser cache.
         _xb_overridden = (xb_pos_override is not None
                           and (xo.id, 0) in xb_pos_override)
-        if _xb_overridden:
-            pass
+        first_override = ((xb_pos_override or {}).get((xo.id, 0))
+                          if _xb_overridden else None)
+        _xb_constrained = (isinstance(first_override, dict)
+                           and first_override.get("cm") is not None)
+        if _xb_constrained:
+            # Coarse oxDNA sites are particle centres, not atomistic sugar anchors.
+            # After orienting every rigid nucleotide, make a small tethered
+            # translation (max 0.35 nm) of insert bodies so adjacent C3'->C5'
+            # spans approach the ~0.60 nm available contour length.  This preserves
+            # each base's oxDNA orientation and keeps its centre close to the
+            # simulated site, while avoiding transferring the entire frame mismatch
+            # into O3'/P/O5' covalent bonds.
+            shifts = [_np.zeros(3) for _ in eb_sugar_serials]
+            body_index = {id(s): i for i, s in enumerate(eb_sugar_serials)}
+            target_span = 0.60
+            max_shift = 0.35
+            for _ in range(10):
+                corr = [_np.zeros(3) for _ in eb_sugar_serials]
+                weight = [0 for _ in eb_sugar_serials]
+                for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
+                    if "C3'" not in prev_s_item or "C5'" not in next_s_item:
+                        continue
+                    gap = (_atom_pos(atoms, next_s_item["C5'"])
+                           - _atom_pos(atoms, prev_s_item["C3'"]))
+                    gl = float(_np.linalg.norm(gap))
+                    if gl <= target_span or gl < 1e-12:
+                        continue
+                    excess = gap * ((gl - target_span) / gl)
+                    pi = body_index.get(id(prev_s_item))
+                    ni = body_index.get(id(next_s_item))
+                    movable = int(pi is not None) + int(ni is not None)
+                    if movable == 0:
+                        continue
+                    if pi is not None:
+                        corr[pi] += excess / movable
+                        weight[pi] += 1
+                    if ni is not None:
+                        corr[ni] -= excess / movable
+                        weight[ni] += 1
+                moved = False
+                for bi, sdict in enumerate(eb_sugar_serials):
+                    if not weight[bi]:
+                        continue
+                    step = 0.55 * corr[bi] / weight[bi]
+                    proposed = shifts[bi] + step
+                    pn = float(_np.linalg.norm(proposed))
+                    if pn > max_shift:
+                        proposed *= max_shift / pn
+                    delta = proposed - shifts[bi]
+                    if float(_np.linalg.norm(delta)) < 1e-7:
+                        continue
+                    shifts[bi] = proposed
+                    for serial_i in set(sdict.values()):
+                        a = atoms[serial_i]
+                        a.x += float(delta[0]); a.y += float(delta[1]); a.z += float(delta[2])
+                    moved = True
+                if not moved:
+                    break
+            for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
+                bridge_fn(atoms, prev_s_item, next_s_item)
+        elif _xb_overridden:
+            pass  # legacy position-only override remains strictly authoritative
         elif n == 1 and src_s is not None and dst_s is not None:
             _mini_jobs.append(_functools.partial(
                 _minimize_1_extra_base,
@@ -2895,6 +3026,12 @@ def _build_extension_atoms(
         p2   = p0 + radial * arc_len
         ctrl = (p0 + p2) * 0.5 + bow_dir * (arc_len * 0.30)
 
+        simulated_sites = {
+            i: _sim_override_parts(ext_pos_override[(ext.id, i)])[0]
+            for i in range(n)
+            if ext_pos_override and (ext.id, i) in ext_pos_override
+        }
+
         chain_id  = strand_to_chain.get(strand.id, "A")
         strand_id = strand.id
 
@@ -2910,10 +3047,34 @@ def _build_extension_atoms(
             chain_dir  = arc_tan if not five else -arc_tan
 
             sim = (ext_pos_override or {}).get((ext.id, i))
+            sim_frame = None
             if sim is not None:
-                origin_pos = _np.asarray(sim, dtype=float)
+                origin_pos, sim_frame = _sim_override_parts(sim)
 
-            origin, R = _extra_base_frame(origin_pos, chain_dir, bow_dir)
+                # A relaxed ssDNA tail is free to fold past its original Bezier
+                # tangent. Orient its atom template from the SIMULATED polyline,
+                # always in chemical 5'->3' order, rather than retaining a stale
+                # design tangent that can swap the C3'/C5' ends. ext_k increases
+                # away from the anchor for both tail types.
+                if five:
+                    three_side = simulated_sites.get(i - 1, p0)
+                    five_side = simulated_sites.get(i + 1)
+                    relaxed_dir = (three_side - origin_pos if five_side is None
+                                   else three_side - five_side)
+                else:
+                    five_side = simulated_sites.get(i - 1, p0)
+                    three_side = simulated_sites.get(i + 1)
+                    relaxed_dir = (origin_pos - five_side if three_side is None
+                                   else three_side - five_side)
+                if float(_np.linalg.norm(relaxed_dir)) > 1e-9:
+                    chain_dir = _normalise(relaxed_dir)
+
+            if sim_frame is not None:
+                sim_a1, _sim_a3 = sim_frame
+                origin, R = _extra_base_frame(
+                    origin_pos, chain_dir, _normalise(sim_a1))
+            else:
+                origin, R = _extra_base_frame(origin_pos, chain_dir, bow_dir)
 
             # The tail's sequence is stored 5′→3′.  For a 3′ tail bead i IS the i-th
             # base from the 5′ end of the tail; for a 5′ tail the OUTERMOST bead
@@ -2956,8 +3117,9 @@ def _build_extension_atoms(
                 base_name_to_serial[atom_name] = _emit(
                     atom_name, element, _np.array([n_c, y_c, z_c]))
 
-            _align_glycosidic(atoms, residue, sugar_name_to_serial,
-                              base_name_to_serial, target_c1n)
+            if sim_frame is None:
+                _align_glycosidic(atoms, residue, sugar_name_to_serial,
+                                  base_name_to_serial, target_c1n)
 
             for a_name, b_name in _SUGAR_BONDS:
                 sa, sb = sugar_name_to_serial.get(a_name), sugar_name_to_serial.get(b_name)
@@ -2980,10 +3142,8 @@ def _build_extension_atoms(
             if o3 is not None and p is not None:
                 bonds.append((o3, p))
 
-        # Relaxed/trajectory positions are authoritative — do not re-seat them onto
-        # the geometric arc (same rule as xb_pos_override).
-        if ext_pos_override and (ext.id, 0) in ext_pos_override:
-            continue
+        # The simulated bead centres stay fixed; only the explicit linker atoms are
+        # re-seated because oxDNA does not provide atomistic O3'/P/O5' coordinates.
         for prev_s, next_s in zip(chain_s, chain_s[1:]):
             bridge_fn(atoms, prev_s, next_s)
 
