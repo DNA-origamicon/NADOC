@@ -349,17 +349,28 @@ describe('P-T — render throttle', () => {
     expect(composite()).toBe(1)              // …no extra composites
   })
 
-  it('draws a cheap preview raster while the camera moves, not the full composite', () => {
+  it('with Full-quality-while-orbiting ON (default), moving redraws the full composite, no preview', () => {
     const { renderFn, camera, composite, preview } = throttleSetup()
     renderFn()                               // settle to idle (composite=1)
+    camera.position.x += 5                    // user orbits
+    renderFn()
+    expect(preview()).toBe(0)                // never the cheap raster path
+    expect(composite()).toBe(2)             // full composite (with GTAO) runs mid-motion
+  })
+
+  it('setOrbitFullQuality(false) restores the cheap preview raster while the camera moves', () => {
+    const { pr, renderFn, camera, composite, preview } = throttleSetup()
+    pr.setOrbitFullQuality(false)
+    renderFn()                               // dirty from the setter → settle (composite=1)
     camera.position.x += 5                    // user orbits
     renderFn()
     expect(preview()).toBe(1)                // one plain raster
     expect(composite()).toBe(1)             // composite NOT re-run mid-motion
   })
 
-  it('snaps back to a full composite a few still frames after motion stops', () => {
-    const { renderFn, camera, composite } = throttleSetup()
+  it('with the cheap preview on, snaps back to a full composite a few still frames after motion stops', () => {
+    const { pr, renderFn, camera, composite } = throttleSetup()
+    pr.setOrbitFullQuality(false)
     renderFn()
     camera.position.x += 5; renderFn()        // move → preview
     expect(composite()).toBe(1)

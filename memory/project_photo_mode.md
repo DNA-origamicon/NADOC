@@ -29,6 +29,15 @@ animation frame** (SSAO+GTAO+outline+inscatter+bloom), unconditionally, even par
 - **interactive preview** — while the camera moves, draw ONE plain `renderer.render` (no
   post chain), snapping back to the full composite `_PREVIEW_SETTLE_FRAMES` (3) still
   frames after motion stops. Keeps orbiting responsive on atomistic/surface geometry.
+  **NOW GATED by the `orbitFullQuality` setting (2026-07-15, default ON).** With it ON,
+  camera motion only marks the frame dirty — the FULL composite (GTAO/outline/bloom/mist)
+  renders every orbit frame, so ambient-occlusion shadows stay live instead of popping in
+  ~3 frames after motion stops (user saw the AO "second set of shadows" redraw on settle —
+  that was this preview dropping the post chain). OFF → the old cheap preview (for very heavy
+  structures that stutter). Setting + `setOrbitFullQuality` in photo_renderer.js (render loop
+  reads it live in `_installComposerRenderFn`); checkbox `#photo-orbit-fullquality` in the
+  Figure section, wired in `photo_figure_panel.js`; persisted via getSettings. Throttle tests
+  updated + extended (`photo_renderer.test.js` P-T tier).
 - Every public `set*` is auto-wrapped to call `_invalidate()` after it runs (loop over the
   api object), so a setting change always redraws even while idle — no per-setter
   annotation, no future setter silently missing the redraw. The old scattered
@@ -123,10 +132,18 @@ New modules (all under `photo_renderer/`):
   Background pixels (`depth >= 0.9999`) are left untouched, so the contour is drawn just
   *inside* the object and a transparent-background export stays transparent.
 - **[style_presets.js](../frontend/src/scene/photo_renderer/style_presets.js)** — pure.
-  `publication` / `studio` bundles + `resolveStyle` / `detectStyle`. The Style dropdown is a
-  *view* of the settings, not a stored setting: `detectStyle` re-derives it, so it falls back
-  to "Custom" the moment the user deviates. A test asserts every key a preset sets is a real
-  key of `DEFAULT_PHOTO_SETTINGS` (a typo would otherwise silently no-op).
+  `publication` / `publication2` / `studio` bundles + `resolveStyle` / `detectStyle`. The Style
+  dropdown is a *view* of the settings, not a stored setting: `detectStyle` re-derives it, so it
+  falls back to "Custom" the moment the user deviates. A test asserts every key a preset sets is a
+  real key of `DEFAULT_PHOTO_SETTINGS` (a typo would otherwise silently no-op). **`publication2`
+  (2026-07-15)** mimics a ChimeraX "soft lighting + strong ambient occlusion on black" render: same
+  flat/matte materials as `publication` but with a soft directional key (`lighting:'scientific'`)
+  for rounded form, strong GTAO (`ao:true, aoRadius 2.5, aoIntensity 1.5, ssao:false`) as the
+  PRIMARY depth cue, **outline + depthCue OFF** (occlusion shadow separates strands, not contours —
+  works because the per-strand split surface has real crevices to occlude), moderate perspective
+  (`parallel:false, fov 30`), `bgType:'black'`. The dropdown is a STATIC `<select>` in index.html
+  (line ~5417) — a new preset needs BOTH the STYLE_PRESETS entry AND an `<option>`. Values inferred
+  from the reference image; AO strength / lighting / fov are the tuning knobs if the user wants it closer.
 - **[figure_camera.js](../frontend/src/scene/photo_renderer/figure_camera.js)** — pure dolly
   maths for the near-parallel projection.
 - **[ui/photo_figure_panel.js](../frontend/src/ui/photo_figure_panel.js)** — the section's

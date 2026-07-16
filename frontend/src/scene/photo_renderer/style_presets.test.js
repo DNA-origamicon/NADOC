@@ -43,6 +43,36 @@ describe('resolveStyle', () => {
     expect(p.translucency).toBe(0)
   })
 
+  it('publication2 = soft occlusion look: AO on, but NO outline and a directional key', () => {
+    const p = resolveStyle('publication2')
+    expect(STYLE_PRESETS.publication2.label).toBe('Publication 2 (soft occlusion)')
+    // Its defining differences from `publication`:
+    expect(p.outline).toBe(false)        // separation comes from occlusion, not contours
+    expect(p.depthCue).toBe(false)
+    expect(p.lighting).toBe('scientific')// a soft top key, not occlusion-only 'ambient'
+    expect(p.parallel).toBe(false)       // moderate perspective, not the near-parallel lens
+    expect(p.bgType).toBe('black')
+    // Strong ambient occlusion is the primary shading cue.
+    expect(p.ao).toBe(true)
+    expect(p.ssao).toBe(false)
+    expect(p.aoIntensity).toBeGreaterThan(1.0)
+    // Same non-photoreal matte materials as publication.
+    expect(p.full).toBe('flat')
+    expect(p.surface).toBe('flat')
+    expect(p.atomistic).toBe('cpk-flat')
+    // Photoreal knobs stay off.
+    expect(p.bloom).toBe(false)
+    expect(p.pathTracing).toBe(false)
+    expect(p.floor).toBe('off')
+  })
+
+  it('publication2 is distinguishable from publication (detectStyle picks the right one)', () => {
+    expect(detectStyle({ ...DEFAULT_PHOTO_SETTINGS, ...resolveStyle('publication2') }))
+      .toBe('publication2')
+    expect(detectStyle({ ...DEFAULT_PHOTO_SETTINGS, ...resolveStyle('publication') }))
+      .toBe('publication')
+  })
+
   it('studio restores the photoreal look and turns the figure controls off', () => {
     const p = resolveStyle('studio')
     expect(p.outline).toBe(false)

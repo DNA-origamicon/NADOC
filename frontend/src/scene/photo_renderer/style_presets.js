@@ -77,6 +77,55 @@ export const STYLE_PRESETS = Object.freeze({
     bgType:                'white',
   }),
 
+  // A second molecular-figure look, tuned to ChimeraX's "soft lighting + strong
+  // ambient occlusion on a black background" render (no silhouette outline). Where
+  // `publication` is occlusion-ONLY/flat and separates overlapping helices with a
+  // black contour, `publication2` keeps a gentle top key light for rounded form and
+  // lets DEEP ambient-occlusion shadow do the separating — the strands' own gaps
+  // (per-strand split surface) go dark in the crevices exactly like the ChimeraX shot.
+  publication2: Object.freeze({
+    label: 'Publication 2 (soft occlusion)',
+
+    // Soft single key from above + occlusion — gentle directional shading, not flat.
+    lighting:      'scientific',
+    lightingYaw:   0,
+    lightingPitch: 0,
+    sun:           false,
+
+    // Matte, zero specular (same non-photoreal materials as Publication).
+    full:      'flat',
+    cylinders: 'flat',
+    surface:   'flat',
+    atomistic: 'cpk-flat',
+    translucency: 0,
+
+    // NO outline and NO depth-cue fog — occlusion shadow does the separation here.
+    outline:  false,
+    depthCue: false,
+
+    // Strong GTAO is the PRIMARY depth cue — deep crevice/cavity darkening.
+    ao:          true,
+    aoRadius:    2.5,
+    aoIntensity: 1.5,
+    ssao:        false,
+
+    // Moderate perspective (ChimeraX's default camera), not the near-parallel lens.
+    parallel: false,
+    fov:      30,
+
+    // Black background; everything photoreal off.
+    bloom:                 false,
+    envEffect:             'none',
+    environment:           'off',
+    environmentBackground: false,
+    floor:                 'off',
+    floorGrid:             false,
+    fluorophoreEmissive:   false,
+    pathTracing:           false,
+    exposure:              1.0,
+    bgType:                'black',
+  }),
+
   studio: Object.freeze({
     label: 'Studio (product render)',
 

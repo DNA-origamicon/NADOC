@@ -52,6 +52,9 @@ export function initPhotoFigurePanel(photoRenderer) {
   const aoInt       = _el('photo-ao-intensity')
   const aoIntLbl    = _el('photo-ao-intensity-label')
 
+  // Full-quality-while-orbiting toggle (keeps occlusion shading live during orbit)
+  const orbitFullChk = _el('photo-orbit-fullquality')
+
   // Camera
   const parallelChk = _el('photo-parallel')
 
@@ -121,6 +124,10 @@ export function initPhotoFigurePanel(photoRenderer) {
     photoRenderer.setAOIntensity(v)
   })
 
+  orbitFullChk?.addEventListener('change', () => {
+    photoRenderer.setOrbitFullQuality(orbitFullChk.checked)
+  })
+
   parallelChk?.addEventListener('change', () => {
     photoRenderer.setParallel(parallelChk.checked)
   })
@@ -149,6 +156,8 @@ export function initPhotoFigurePanel(photoRenderer) {
     if (s.aoRadius    !== undefined) photoRenderer.setAORadius(s.aoRadius)
     if (s.aoIntensity !== undefined) photoRenderer.setAOIntensity(s.aoIntensity)
     if (s.ao          !== undefined) photoRenderer.setAO(s.ao)
+
+    if (s.orbitFullQuality !== undefined) photoRenderer.setOrbitFullQuality(s.orbitFullQuality)
 
     // `parallel` drives FOV (and dollies the camera), so it must win over any
     // stale `fov` in the same settings object — apply it last.
@@ -180,6 +189,8 @@ export function initPhotoFigurePanel(photoRenderer) {
     if (aoRadiusLbl) aoRadiusLbl.textContent = `${(s.aoRadius ?? 2.0).toFixed(1)} nm`
     if (aoInt)       aoInt.value     = s.aoIntensity ?? 1.0
     if (aoIntLbl)    aoIntLbl.textContent = `${(s.aoIntensity ?? 1.0).toFixed(2)}×`
+
+    if (orbitFullChk) orbitFullChk.checked = s.orbitFullQuality !== false  // default ON
 
     if (parallelChk) parallelChk.checked = !!s.parallel
 

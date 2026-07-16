@@ -88,6 +88,13 @@ export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
   fov:        null,   // null = keep current
   pathTracing: false,
 
+  // Full-quality rendering WHILE the camera is orbiting/dollying. Default ON: the
+  // full composite (GTAO occlusion, outline, bloom, mist) is drawn every frame, so
+  // ambient-occlusion shadows stay live during orbit instead of popping in a few
+  // frames after motion stops. Turn OFF to fall back to the cheap single-pass
+  // preview (no post chain) if orbiting a very heavy structure stutters.
+  orbitFullQuality: true,
+
   // ── Figure controls (the "publication" look — see photo_renderer/figure_pass.js
   // and photo_renderer/style_presets.js). Each is INDEPENDENT; the Publication
   // style preset is just a bundle that switches the right ones on.
@@ -1029,6 +1036,11 @@ export function createPhotoRenderer(sceneCtx) {
   function setAORadius(v)    { _settings.aoRadius    = v;    _applyAO() }
   function setAOIntensity(v) { _settings.aoIntensity = v;    _applyAO() }
 
+  // Full-quality composite while orbiting (vs the cheap single-pass preview). The
+  // render loop reads _settings.orbitFullQuality live, so just flip the flag; the
+  // auto-invalidate wrapper redraws. See _installComposerRenderFn.
+  function setOrbitFullQuality(on) { _settings.orbitFullQuality = !!on }
+
   // ── Near-parallel projection ──────────────────────────────────────────────
 
   /** Change FOV while keeping the subject the same size on screen, by dollying
@@ -1483,7 +1495,10 @@ export function createPhotoRenderer(sceneCtx) {
     _idleFrames = _PREVIEW_SETTLE_FRAMES
     setRenderFn(() => {
       const moved = _cameraMoved()
-      if (moved) { _idleFrames = 0; _previewing = true; _dirty = true }
+      // With orbitFullQuality on, motion marks the frame dirty (redraw) but does NOT
+      // enter the cheap preview — so the full composite (GTAO etc.) renders every
+      // orbit frame and the occlusion shadows never drop out. Off → cheap preview.
+      if (moved) { _idleFrames = 0; _dirty = true; _previewing = !_settings.orbitFullQuality }
       else       { _idleFrames++ }
 
       // A few still frames after motion stops → drop the preview and render the
@@ -1994,6 +2009,7 @@ export function createPhotoRenderer(sceneCtx) {
     setAO,
     setAORadius,
     setAOIntensity,
+    setOrbitFullQuality,
     setParallel,
     getComposerState,
     enablePathTracing,
