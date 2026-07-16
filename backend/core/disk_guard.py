@@ -21,6 +21,7 @@ estimated.
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 from pathlib import Path
 
@@ -142,7 +143,64 @@ def forecast(target_dir: Path, predicted_bytes: int) -> dict:
         "warn": after < WARN_MIN_FREE_BYTES,
         "warn_threshold_bytes": WARN_MIN_FREE_BYTES,
         "abort_threshold_bytes": ABORT_MIN_FREE_BYTES,
+        # When the run won't comfortably fit, point the user at a roomier volume so the UI
+        # can offer "archive & run there" instead of just Continue/Cancel.
+        "suggested_archive": (suggest_archive_dir(target_dir, predicted)
+                              if after < WARN_MIN_FREE_BYTES else None),
     }
+
+
+def _safe_iterdir(p: Path) -> list[Path]:
+    try:
+        return list(p.iterdir())
+    except OSError:
+        return []
+
+
+def _candidate_volumes() -> list[Path]:
+    """Mounted volumes a big run could be redirected to: external/removable drives under
+    /media/<user>/<drive> and /mnt/<drive>, plus the home directory."""
+    out: list[Path] = []
+    for base in ("/media", "/mnt"):
+        b = Path(base)
+        if not b.is_dir():
+            continue
+        for lvl1 in _safe_iterdir(b):        # /media/<user>  or  /mnt/<drive>
+            if lvl1.is_dir():
+                out.append(lvl1)
+                for lvl2 in _safe_iterdir(lvl1):   # /media/<user>/<drive>
+                    if lvl2.is_dir():
+                        out.append(lvl2)
+    out.append(Path.home())
+    return out
+
+
+def suggest_archive_dir(target_dir: Path, predicted_bytes: int) -> "dict | None":
+    """A roomier, writable volume on a DIFFERENT filesystem than ``target_dir`` that has room
+    for the run — for the low-disk popup's "archive to a larger drive and run there" prompt.
+    Returns ``{path, free_bytes}`` of the emptiest qualifying volume, or ``None`` if none is
+    clearly better (so the popup falls back to plain Continue/Cancel)."""
+    try:
+        tp = Path(target_dir)
+        while not tp.exists() and tp.parent != tp:
+            tp = tp.parent
+        target_dev = os.stat(tp).st_dev
+    except OSError:
+        target_dev = None
+    need = max(0, int(predicted_bytes)) + WARN_MIN_FREE_BYTES
+    best: "dict | None" = None
+    for r in _candidate_volumes():
+        try:
+            if not r.is_dir() or not os.access(r, os.W_OK):
+                continue
+            if target_dev is not None and os.stat(r).st_dev == target_dev:
+                continue                     # same disk → no help
+            fb = shutil.disk_usage(r).free
+            if fb >= need and (best is None or fb > best["free_bytes"]):
+                best = {"path": str(r), "free_bytes": fb}
+        except OSError:
+            continue
+    return best
 
 
 # ── Guard (during a run) ─────────────────────────────────────────────────────────

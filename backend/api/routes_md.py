@@ -27,6 +27,7 @@ import time
 import uuid
 from dataclasses import asdict
 from pathlib import Path
+import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -140,6 +141,14 @@ class CreateJobRequest(BaseModel):
     )
     cluster_name: Optional[str] = Field(
         None, description="Cluster profile name for remote execution (default 'alpine').",
+    )
+    run_dir: Optional[str] = Field(
+        None,
+        description="Directory to write this run into (archive-from-birth). A NAMD run "
+                    "produces multi-GB trajectories; pointing it at a roomy volume (e.g. an "
+                    "external Archive drive) keeps them off a full system disk. The job's "
+                    "folder is created at <run_dir>/<job_id> and the app resolves it via the "
+                    "archive index. None → the default workspace location.",
     )
     anchors: Optional[list] = Field(
         None,
@@ -1231,6 +1240,31 @@ def _seed_design_name(body: CreateJobRequest) -> str:
     return "design"
 
 
+def _apply_run_dir(job: MdJob, run_dir: Optional[str]) -> None:
+    """Archive a FRESH job at ``run_dir`` from birth so its (multi-GB) NAMD outputs land
+    there instead of the workspace/system disk.  Validates the target, sets the archive
+    fields, creates ``<run_dir>/<job_id>``, and indexes it so the app resolves the job via
+    the archive index (same mechanism as the post-hoc archive flow, just applied up front).
+    No-op when ``run_dir`` is falsy.  Raises HTTPException(400) on a bad/unwritable target.
+    """
+    if not run_dir:
+        return
+    base = Path(run_dir).expanduser()
+    if not base.is_dir():
+        raise HTTPException(400, f"Run directory does not exist: {run_dir}")
+    if not os.access(base, os.W_OK):
+        raise HTTPException(400, f"Run directory is not writable: {run_dir}")
+    dest = base.resolve() / job.job_id
+    dest.mkdir(parents=True, exist_ok=True)
+    job.archived = True
+    job.archive_path = str(dest)
+    ws = _workspace()
+    idx = job_archive.read_index(ws, "md_jobs")
+    idx[job.job_id] = str(dest)
+    job_archive._write_index(ws, "md_jobs", idx)
+    logger.info("run_dir: job %s archived-from-birth at %s", job.job_id, dest)
+
+
 def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     """Create a seeded job in the DRAFT state (no solvation yet).
 
@@ -1255,6 +1289,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     job.early_stop_tier = (body.early_stop_tier or "B").upper()
     job.prep_params = body.model_dump()
     job.status = MdStatus.draft
+    _apply_run_dir(job, body.run_dir)
     job.save(_workspace())
     logger.info("create_md_job: DRAFT job_id=%s design=%s seed_oxdna=%s seed_mrdna=%s",
                 job.job_id, name, body.oxdna_job_id, body.mrdna_job_id)
@@ -1312,6 +1347,10 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
             seed_mrdna_job_id  = body.mrdna_job_id if seeded else None,
             parent_job_id      = parent_job_id,
         )
+        # Archive a fresh (non-draft) job at the requested run_dir BEFORE prep runs, so the
+        # solvated package + trajectory are built there.  A draft was already placed by
+        # _spawn_draft_job; a refit keeps its existing location.
+        _apply_run_dir(job, body.run_dir)
     # Remote-execution tag (default "local"): submission itself happens later via
     # /md/jobs/{id}/submit-remote once the package is prepared and a cluster session
     # is connected.  Tagging here lets the UI show the intended target from creation.
