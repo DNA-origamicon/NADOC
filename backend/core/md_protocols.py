@@ -775,6 +775,7 @@ def _min_conf(
     scale: float,
     *,
     enm_file: Optional[str] = None,
+    no_enm: bool = False,
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
     gbis: bool = False,
@@ -783,6 +784,16 @@ def _min_conf(
     # declash protocol to minimise against an ss-excluded network.  Minimisation
     # (and the soft first segment it feeds) stays on the unmodified PSF + standard
     # CUDA; the HMR PSF only enters at the first hard, rigid-bond fast segment.
+    #
+    # ``no_enm`` drops the base-ring ENM entirely from the minimisation (the Mg
+    # extrabonds stay).  Used by the oxDNA-seeded path: the seed backmap carries
+    # duplex base clashes at crossover junctions (ring atoms down to ~0.3 A), and
+    # an ENM built from those coords pins the clashes as its reference — a stiff
+    # k0.5 restraint then stores that clash energy and dumps it catastrophically
+    # when the ladder relaxes to k0.1 (70x over the velocity limit).  Minimising
+    # WITHOUT the ENM lets the clashes open, after which the runner rebuilds the
+    # ENM from the declashed coords (rebuild_declashed_references) so it never
+    # encodes the clash again.  See PIPELINE_4FS_EXTRA_BASES.md.
     enm = enm_file or f"{name_stem}_k{scale:g}.enm.extra"
     lines = [_common_header(name_stem, box, mgh_extrabonds, rigid_bonds="none", gbis=gbis)]
     lines.append(f"outputName         output/{min_name}\n")
@@ -796,7 +807,8 @@ def _min_conf(
     lines.append("extraBonds         on\n")
     if mgh_extrabonds:
         lines.append("extraBondsFile     mgh_extrabonds.txt\n")
-    lines.append(f"extraBondsFile     {enm}\n")
+    if not no_enm:
+        lines.append(f"extraBondsFile     {enm}\n")
     lines.append("constraints        off\n")
     lines.append(external_forces_block(anchors_file, field))
     lines.append(f"minimize           {minimize_steps}\n")
@@ -953,6 +965,7 @@ def write_aksimentiev_enm_files(
     base_k: float = 0.5,
     scales: tuple[float, ...] = (0.5, 0.1, 0.01),
     cut_ang: float = 8.0,
+    min_ang: float = 0.0,
     progress=None,
     exclude_residues: "set[tuple[str, str]] | None" = None,
 ) -> dict[str, object]:
@@ -999,11 +1012,26 @@ def write_aksimentiev_enm_files(
         pairs = pairs[rid[pairs[:, 0]] != rid[pairs[:, 1]]]
 
     if len(pairs):
+        _pd = np.linalg.norm(positions[pairs[:, 0]] - positions[pairs[:, 1]], axis=1)
+        if min_ang > 0.0:
+            # Never restrain a sub-physical inter-residue ring contact.  When the ENM is
+            # rebuilt from a declashed-but-imperfect structure (topologically-locked
+            # crossover-junction overlaps a no-ENM minimise can't fully open), pairs can
+            # sit at ~2.1 A — far below the legit WC/stacking floor (~2.85 A).  Pinning
+            # those makes the ENM fight the steric separation and a 4 fs step trips
+            # "atoms moving too fast".  Dropping them lets the soft segment relax the
+            # residue apart; the ~500/1.08M bonds lost are negligible for framework
+            # stiffness.  See the 24hb k0.5 hand-off investigation.
+            keep = _pd >= min_ang
+            pairs = pairs[keep]
+            _pd = _pd[keep]
+
+    if len(pairs):
         ga = gidx[pairs[:, 0]]
         gb = gidx[pairs[:, 1]]
         lo = np.minimum(ga, gb)               # canonical (a ≤ b) bond ordering
         hi = np.maximum(ga, gb)
-        dists = np.linalg.norm(positions[pairs[:, 0]] - positions[pairs[:, 1]], axis=1)
+        dists = _pd
     else:
         lo = hi = np.empty(0, dtype=np.int64)
         dists = np.empty(0, dtype=float)
@@ -1277,12 +1305,20 @@ def write_hmr_psf(
     return n_hmr
 
 
+# Inter-residue ring pairs closer than this in the declashed structure are residual,
+# topologically-locked clashes (a no-ENM minimise can't fully open crossover-junction
+# overlaps), NOT legit WC/stacking contacts (those bottom out ~2.85 A).  The rebuilt ENM
+# drops them so it never pins a sub-physical distance that a 4 fs step blows up on.
+_ENM_DECLASH_MIN_REF_ANG = 2.8
+
+
 def rebuild_declashed_references(
     package_dir: Path,
     name_stem: str,
     min_coor: Path,
     *,
     scales: tuple[float, ...] = (0.5, 0.1, 0.01),
+    min_ang: float = _ENM_DECLASH_MIN_REF_ANG,
 ) -> dict[str, object]:
     """After the declash minimisation, re-anchor every reference to the relaxed coords.
 
@@ -1311,6 +1347,7 @@ def rebuild_declashed_references(
         package_dir,
         name_stem,
         scales=scales,
+        min_ang=min_ang,
         exclude_residues=ss,
     )
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
@@ -1746,6 +1783,18 @@ def prepare_mgh_slow_release(
         )
         declash_enm_file = f"{name_stem}_declash_k{min_scale:g}.enm.extra"
 
+    # oxDNA-SEEDED extra-base designs (pre_declashed) skip the soft declash ladder
+    # above, but their backmap still carries DUPLEX base clashes at crossover junctions
+    # (inter-residue ring atoms down to ~0.3 A) that the seed-built ENM would pin as its
+    # reference.  A stiff k0.5 ENM masks the stored clash energy; relaxing to k0.1 dumps
+    # it (70x over the velocity limit) and NAMD dies.  Fix: minimise WITHOUT the base-ring
+    # ENM (no_enm below) so the duplex declashes, then have the runner rebuild the ENM from
+    # the declashed minimise coords (rebuild_declashed_references) — all WITHOUT dropping to
+    # the soft 1 fs ladder, which is exactly what pre_declashed preserves.  This is a
+    # DISTINCT trigger from ``declash`` above (which is coupled to soft_ladder/fast).  See
+    # PIPELINE_4FS_EXTRA_BASES.md + the 24hb k0.1 investigation.
+    rebuild_enm_from_min = bool(pre_declashed and design_has_extra_bases(design))
+
     # Create output dir
     if progress is not None:
         progress("finalize", None, "Writing simulation configs…")
@@ -1785,6 +1834,7 @@ def prepare_mgh_slow_release(
             minimize_steps,
             min_scale,
             enm_file=declash_enm_file,
+            no_enm=rebuild_enm_from_min,
             anchors_file=anchors_file,
             field=field,
         )
@@ -1870,8 +1920,14 @@ def prepare_mgh_slow_release(
             else None
         ),
         "declash": declash,
-        "declash_min_coor": f"output/{min_name}.coor" if declash else None,
+        "declash_min_coor": (
+            f"output/{min_name}.coor" if (declash or rebuild_enm_from_min) else None),
         "n_unpaired_excluded": n_unpaired if declash else 0,
+        # Seeded extra-base path: minimise ran WITHOUT the ENM (no_enm) to open the seed
+        # backmap's duplex clashes; the runner rebuilds the ENM from the declashed coords
+        # so k0.1 no longer releases stored clash energy.  Decoupled from ``declash``
+        # (which forces the soft 1 fs ladder) — this keeps the fast 4 fs ladder.
+        "rebuild_enm_from_min": rebuild_enm_from_min,
         "salt": {
             "mode": salt_mode,
             "nacl_mM": ion_conc_mM,
@@ -1892,8 +1948,13 @@ def prepare_mgh_slow_release(
             "name":  min_name,
             "steps": minimize_steps,
             "scale": min_scale,
-            "restraint": "aksimentiev_base_ring_enm",
-            "extra_bonds_file": f"{name_stem}_k{min_scale:g}.enm.extra",
+            # Seeded extra-base path minimises with NO base-ring ENM so the seed
+            # backmap's duplex clashes can open (the ENM is rebuilt from these coords).
+            "restraint": (
+                "mgh_only_no_enm" if rebuild_enm_from_min else "aksimentiev_base_ring_enm"),
+            "extra_bonds_file": (
+                None if rebuild_enm_from_min
+                else declash_enm_file or f"{name_stem}_k{min_scale:g}.enm.extra"),
         },
         "aksimentiev_enm": enm_report,
         "fast_relaxation": {

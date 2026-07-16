@@ -78,12 +78,19 @@ def separate_coincident_atoms(model, *, min_sep: float = 0.03, nudge_to: float =
 
 
 def oxdna_extra_base_override(design, relaxed_conf, design_ref):
-    """`xb_pos_override` (keyed ``(crossover_id, k)``, NANOMETRES) from an oxDNA relax.
+    """oxDNA-relaxed extra-base pose from a relax, keyed ``(crossover_id, k)``.
 
     Reads the relaxed conf, PBC-unwraps + Kabsch-aligns it to the design reference (so the
-    extra-base coords land in the design's own frame), and returns the aligned extra-base
-    backbone positions. Units are nm — the SAME units build_atomistic_model works in, so the
-    override goes in verbatim (NO nm->A scaling; an earlier x10 exploded the box).
+    extra-base coords land in the design's own frame), and returns TWO dicts:
+      * ``pos``    — backbone/CM position (NANOMETRES), for ``xb_pos_override``.
+      * ``orient`` — ``(a1, a3)`` orientation vectors (a1 = base-pairing direction, a3 =
+                     5'->3' base-plane normal), for ``xb_orient_override``.
+    The Kabsch fit rotates a1/a3 with the positions (unwrap_align_to_reference, rotate=True),
+    so both land in the design frame.  Orienting the atomistic base ring from a1/a3 (instead
+    of the geometric arc) is what keeps the ~6 A ring off its neighbours at crossover
+    junctions — oxDNA already relaxed the beads clash-free, but the geometric backmap
+    discarded that orientation.  Units are nm — the SAME units build_atomistic_model works in,
+    so the position goes in verbatim (NO nm->A scaling; an earlier x10 exploded the box).
     """
     import numpy as np
     from pathlib import Path
@@ -101,8 +108,11 @@ def oxdna_extra_base_override(design, relaxed_conf, design_ref):
     ref = read_configuration_full(design_ref, design, include_extra_bases=True, copies=True)
     adj = _build_unwrap_adjacency(relax, design)
     aligned = unwrap_align_to_reference(relax, ref, design, box, align=True, rotate=True, adj=adj)
-    return {(k[1], k[2]): np.asarray(v["backbone_position"])
-            for k, v in aligned.items() if k[0] == _XB_SENTINEL}
+    pos = {(k[1], k[2]): np.asarray(v["backbone_position"])
+           for k, v in aligned.items() if k[0] == _XB_SENTINEL}
+    orient = {(k[1], k[2]): (np.asarray(v["a1"]), np.asarray(v["a3"]))
+              for k, v in aligned.items() if k[0] == _XB_SENTINEL}
+    return pos, orient
 
 
 def build_ideal_duplex_seeded_model(design, relaxed_conf, design_ref):
@@ -114,8 +124,9 @@ def build_ideal_duplex_seeded_model(design, relaxed_conf, design_ref):
     4 fs. Reorients + clears any backmap coincidences.
     """
     from backend.core.atomistic import build_atomistic_model
-    ov = oxdna_extra_base_override(design, relaxed_conf, design_ref)
-    m = build_atomistic_model(design, xb_pos_override=ov or None)
+    pos_ov, orient_ov = oxdna_extra_base_override(design, relaxed_conf, design_ref)
+    m = build_atomistic_model(design, xb_pos_override=pos_ov or None,
+                              xb_orient_override=orient_ov or None)
     reorient_to_principal_axes(m)
     separate_coincident_atoms(m)
     return m

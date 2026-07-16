@@ -1230,6 +1230,35 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     else:
         logger.info("[%s] Minimization already done (skipping)", job.job_id)
 
+    # ── Declash reference rebuild ─────────────────────────────────────────────
+    # For declash designs, re-anchor the ENM ladder, heavy-atom restraints and
+    # the C1'/WC health reference to the declashed coordinates produced by the
+    # minimisation.  Idempotent (skips if already rebuilt), so it is safe across
+    # resume.  Two triggers:
+    #   • ``declash`` — the soft ss-excluded ladder (geometric-build extra bases).
+    #   • ``rebuild_enm_from_min`` — the oxDNA-SEEDED fast path: the minimise ran with
+    #     NO base-ring ENM (no_enm) so the seed backmap's duplex clashes could open;
+    #     rebuild the ENM from those declashed coords so k0.1 no longer releases stored
+    #     clash energy.  Keeps the fast 4 fs ladder (unlike ``declash``, which is soft).
+    #
+    # MUST run BEFORE the GPU-resident probe below: that probe seeds from the declashed
+    # minimise coords, and for the seeded path the on-disk ENM still encodes the clash
+    # until we rebuild it — probing the 4 fs conf against a clash-encoding ENM on already
+    # declashed coordinates would blow the 20-step probe up and falsely downgrade
+    # GPU-resident for the whole run.
+    if manifest.get("declash") or manifest.get("rebuild_enm_from_min"):
+        from backend.core.md_protocols import rebuild_declashed_references  # noqa: PLC0415
+
+        try:
+            report = rebuild_declashed_references(package_dir, job.name_stem, min_coor)
+            logger.info("[%s] Declash references: %s", job.job_id, report)
+        except Exception as exc:
+            logger.error("[%s] Declash reference rebuild failed: %s", job.job_id, exc)
+            job.status = MdStatus.failed
+            job.error = f"Declash reference rebuild failed: {exc}"
+            job.save(workspace_dir)
+            return
+
     # ── GPU-resident pre-flight ───────────────────────────────────────────────
     # The "fast" segments (HMR + rigidBonds all + 4 fs + GPUresident) can fail on
     # this host for two unrelated reasons: a pinned host pool too small for the
@@ -1252,24 +1281,6 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             )
             if not ok:
                 await asyncio.to_thread(downgrade_gpu_resident_confs, package_dir, job.job_id)
-
-    # ── Declash reference rebuild ─────────────────────────────────────────────
-    # For declash designs, re-anchor the ENM ladder, heavy-atom restraints and
-    # the C1'/WC health reference to the declashed coordinates produced by the
-    # ss-excluded minimisation.  Idempotent (skips if already rebuilt), so it is
-    # safe across resume.
-    if manifest.get("declash"):
-        from backend.core.md_protocols import rebuild_declashed_references  # noqa: PLC0415
-
-        try:
-            report = rebuild_declashed_references(package_dir, job.name_stem, min_coor)
-            logger.info("[%s] Declash references: %s", job.job_id, report)
-        except Exception as exc:
-            logger.error("[%s] Declash reference rebuild failed: %s", job.job_id, exc)
-            job.status = MdStatus.failed
-            job.error = f"Declash reference rebuild failed: {exc}"
-            job.save(workspace_dir)
-            return
 
     # ── Segments ──────────────────────────────────────────────────────────────
 
