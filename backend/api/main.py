@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, ORJSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -190,6 +191,13 @@ app = FastAPI(
 # state.py / assembly_state.py resolve the right per-document session.  Pure-ASGI
 # middleware (not BaseHTTPMiddleware) so the value propagates to the endpoint.
 app.add_middleware(DocContextMiddleware)
+
+# Structural exports and geometry payloads are highly compressible text. A
+# Voltron-scale PDB is ~34 MB uncompressed but ~8.5 MB at gzip level 3; browsers
+# transparently decode Content-Encoding while preserving the downloaded .pdb.
+# Level 3 captures almost all of the transfer reduction without adding meaningful
+# delay to an already CPU-heavy export (~0.45 s in the Voltron benchmark).
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=3)
 
 # Allow Vite dev server (port 5173) to call the API in development.
 app.add_middleware(

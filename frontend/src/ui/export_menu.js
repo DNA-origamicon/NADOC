@@ -37,7 +37,7 @@ export function triggerDownload(url) {
 }
 
 /** Ask which coordinate set to export. Resolves to 'native', 'visualized', or null. */
-export function showPdbPositionModal(visualizationName, trajectory = null) {
+export function showPdbPositionModal(visualizationName, trajectory = null, coloring = null) {
   return new Promise(resolve => {
     const overlay = document.createElement('div')
     overlay.className = 'modal-overlay'
@@ -52,9 +52,24 @@ export function showPdbPositionModal(visualizationName, trajectory = null) {
       ? `Export frame ${trajectory.frame} of ${trajectory.total} from the ${visualizationName} view?`
       : `${visualizationName} is currently displayed. Which positions should the PDB use?`
     text.style.cssText = 'font-size:13px;line-height:1.5;margin:0 0 20px'
+    let colorCheck = null
+    const colorRow = document.createElement('label')
+    if (coloring?.values?.length) {
+      colorRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin:-8px 0 18px;font-size:13px;cursor:pointer'
+      colorCheck = document.createElement('input')
+      colorCheck.type = 'checkbox'; colorCheck.checked = true
+      const label = document.createElement('span')
+      label.textContent = `Include current ${coloring.title || 'simulation'} coloring (ChimeraX B-factor)`
+      colorRow.append(colorCheck, label)
+    }
     const buttons = document.createElement('div')
     buttons.style.cssText = 'display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap'
-    const finish = value => { overlay.remove(); resolve(value) }
+    const finish = value => {
+      overlay.remove()
+      resolve(colorCheck && value != null
+        ? { choice: value, includeColoring: colorCheck.checked }
+        : value)
+    }
     for (const [label, value, primary] of [
       ['Cancel', null, false],
       ['Native NADOC positions', 'native', false],
@@ -67,7 +82,9 @@ export function showPdbPositionModal(visualizationName, trajectory = null) {
       buttons.appendChild(button)
     }
     overlay.addEventListener('click', e => { if (e.target === overlay) finish(null) })
-    box.append(title, text, buttons); overlay.appendChild(box); document.body.appendChild(overlay)
+    box.append(title, text)
+    if (colorCheck) box.appendChild(colorRow)
+    box.appendChild(buttons); overlay.appendChild(box); document.body.appendChild(overlay)
   })
 }
 
@@ -222,9 +239,11 @@ export function initExportMenu({ store, api, getPdbVisualization = () => null })
     const visualization = getPdbVisualization()
     let positions = null
     if (visualization?.positions?.length) {
-      const choice = await showPdbPositionModal(visualization.name, visualization.trajectory)
-      if (choice === null) return
+      const result = await showPdbPositionModal(visualization.name, visualization.trajectory, visualization.coloring)
+      if (result === null) return
+      const choice = typeof result === 'object' ? result.choice : result
       if (choice === 'visualized') positions = visualization.positions
+      if (typeof result === 'object' && !result.includeColoring) visualization.coloring = null
     }
     pdbExportBusy = true
     showPersistentToast('Generating PDB…', { severity: 'info', loading: true })

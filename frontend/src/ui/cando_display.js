@@ -164,6 +164,8 @@ export function initCandoDisplay({
   let _flexCmap = 'viridis'
   let _devCmap = 'devramp'
   let _candoCmap = 'jet'
+  let _flexBounds = null
+  let _devBounds = null
 
   // Show/hide the native NADOC model while the CanDo-style cylinder rep owns the view
   // (mirrors the mrDNA CG-beads mode).  The injected setDesignVisible (main.js
@@ -232,12 +234,14 @@ export function initCandoDisplay({
   function _recolorFlex(lo, hi, cmap) {
     if (_mode !== 'flex' || !_flexResp) return
     if (cmap) _flexCmap = cmap
+    _flexBounds = { lo, hi }
     const map = flexColorMap(_flexResp.disp, _flexResp.rmsf, lo, hi, _flexCmap)
     if (map) designRenderer.applyScalarColors(map.colorByKey)
   }
   function _recolorDeviation(lo, hi, cmap) {
     if (_mode !== 'deviation' || !_devResp) return
     if (cmap) _devCmap = cmap
+    _devBounds = { lo, hi }
     const map = deviationColorMap(_devResp, lo, hi, _devCmap)
     if (map) designRenderer.applyScalarColors(map.colorByKey)
   }
@@ -260,6 +264,7 @@ export function initCandoDisplay({
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _flexResp = { disp, rmsf }
+    _flexBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'flex'
     _stats = { kind: 'flex', min: map.min, max: map.max }
     // Hand the shared scale widget this map's range + a live recolour callback; it
@@ -282,6 +287,7 @@ export function initCandoDisplay({
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _devResp = resp
+    _devBounds = { lo: map.min, hi: map.max }
     _jobId = jobId; _mode = 'deviation'
     _stats = { kind: 'deviation', min: map.min, max: map.max, rmsd: map.rmsd }
     flexScale?.show({ title: 'Deviation (nm)', min: map.min, max: map.max, mapType: 'deviation', onRecolor: _recolorDeviation })
@@ -348,5 +354,24 @@ export function initCandoDisplay({
     deformJobId:  () => _jobId,
     mode:         () => _mode,
     lastStats:    () => _stats,
+    coloringInfo: () => {
+      if (_mode === 'flex' && _flexResp?.disp?.positions?.length) {
+        const byBp = new Map((_flexResp.rmsf?.rmsf || []).map(r => [`${r.helix_id}:${r.bp_index}`, r.rmsf_nm]))
+        return {
+          attribute: 'rmsf', title: 'RMSF', unit: 'nm', colormap: _flexCmap,
+          lo: _flexBounds?.lo ?? 0, hi: _flexBounds?.hi ?? 1,
+          values: _flexResp.disp.positions.flatMap(p => {
+            const value = byBp.get(`${p.helix_id}:${p.bp_index}`)
+            return value === undefined ? [] : [{ helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy: p.copy ?? 0, value }]
+          }),
+        }
+      }
+      if (_mode === 'deviation' && _devResp?.positions?.length) return {
+        attribute: 'deviation', title: 'Deviation', unit: 'nm', colormap: _devCmap,
+        lo: _devBounds?.lo ?? 0, hi: _devBounds?.hi ?? 1,
+        values: _devResp.positions.map(p => ({ helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy: p.copy ?? 0, value: p.deviation })),
+      }
+      return null
+    },
   }
 }

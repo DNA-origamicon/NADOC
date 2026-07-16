@@ -61,7 +61,9 @@ def atomistic_fingerprint(design: "Design") -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def build_atomistic_model_cached(design: "Design", *, fingerprint: str | None = None):
+def build_atomistic_model_cached(
+    design: "Design", *, fingerprint: str | None = None, fast_bridges: bool = False,
+):
     """``build_atomistic_model(design)`` with a bounded cache + single-flight build.
 
     Pass ``fingerprint`` if the caller already computed one (avoids re-hashing);
@@ -69,7 +71,10 @@ def build_atomistic_model_cached(design: "Design", *, fingerprint: str | None = 
     """
     from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
 
-    key = fingerprint if fingerprint is not None else atomistic_fingerprint(design)
+    base_key = fingerprint if fingerprint is not None else atomistic_fingerprint(design)
+    # Bridge construction changes coordinates, so keep exact and interpolated
+    # models in distinct cache entries.
+    key = f"{base_key}:fast_bridges={int(fast_bridges)}"
 
     # Fast path: already built.
     with _registry_lock:
@@ -87,7 +92,7 @@ def build_atomistic_model_cached(design: "Design", *, fingerprint: str | None = 
                 _cache.move_to_end(key)
                 return _cache[key]
 
-        model = build_atomistic_model(design)
+        model = build_atomistic_model(design, fast_bridges=fast_bridges)
 
         with _registry_lock:
             _cache[key] = model

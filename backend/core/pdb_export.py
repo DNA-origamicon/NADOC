@@ -178,6 +178,23 @@ _H36_LOWER = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 
 def _base36(value: int, width: int, digits: str) -> str:
+    # PDB only uses widths four and five here. Direct indexed conversion avoids
+    # allocating/reversing a temporary list for every atom and bond endpoint.
+    if width == 5 and 0 <= value < 36 ** 5:
+        return (
+            digits[value // 1679616]
+            + digits[(value // 46656) % 36]
+            + digits[(value // 1296) % 36]
+            + digits[(value // 36) % 36]
+            + digits[value % 36]
+        )
+    if width == 4 and 0 <= value < 36 ** 4:
+        return (
+            digits[value // 46656]
+            + digits[(value // 1296) % 36]
+            + digits[(value // 36) % 36]
+            + digits[value % 36]
+        )
     chars = []
     for _ in range(width):
         value, rem = divmod(value, 36)
@@ -894,7 +911,9 @@ def _pdb_atom_name(name: str, element: str) -> str:
 
 
 def _pdb_atom_record(atom: Atom, *, chain: str | None = None,
-                     seq_num: int | None = None) -> str:
+                     seq_num: int | None = None, bfactor: float = 0.0,
+                     serial_field: str | None = None,
+                     seq_field: str | None = None) -> str:
     """
     Format one PDB ATOM record (80-char fixed-width).
 
@@ -924,9 +943,8 @@ def _pdb_atom_record(atom: Atom, *, chain: str | None = None,
     # hybrid-36 serials the CONECT records reference, so every design over 9999
     # atoms exported with broken connectivity.  For serials ≤ 99999 hybrid-36 is
     # byte-identical to plain decimal, so the NAMD/psfgen path is unaffected.
-    serial_1   = atom.serial + 1
-    serial_str = _h36(serial_1, 5)
-    seq_str    = _h36(atom.seq_num if seq_num is None else seq_num, 4)
+    serial_str = serial_field or _h36(atom.serial + 1, 5)
+    seq_str    = seq_field or _h36(atom.seq_num if seq_num is None else seq_num, 4)
     name_field = _pdb_atom_name(atom.name, atom.element)
     resname    = f"{atom.residue:>3s}"
     chain      = _chain_char(atom.chain_id) if chain is None else chain
@@ -934,17 +952,21 @@ def _pdb_atom_record(atom: Atom, *, chain: str | None = None,
     y_ang      = atom.y * 10.0
     z_ang      = atom.z * 10.0
     elem_field = f"{atom.element:>2s}"
+    bfactor = max(-99.99, min(999.99, float(bfactor)))
 
     return (
         f"ATOM  {serial_str} {name_field}{' '}{resname} {chain}"
         f"{seq_str}    "
         f"{x_ang:8.3f}{y_ang:8.3f}{z_ang:8.3f}"
-        f"  1.00  0.00"
+        f"  1.00{bfactor:6.2f}"
         f"          {elem_field}  "
     )
 
 
-def _pdb_conect_records(bonds: list[tuple[int, int]]) -> list[str]:
+def _pdb_conect_records(
+    bonds: list[tuple[int, int]],
+    serial_fields: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
     """
     Generate CONECT records from 0-based bond pairs.
 
@@ -953,20 +975,31 @@ def _pdb_conect_records(bonds: list[tuple[int, int]]) -> list[str]:
     in sets of 4.  Only heavy-atom bonds are included (no H–X bonds since
     the model has no hydrogens).
     """
-    from collections import defaultdict
-    adj: dict[int, list[int]] = defaultdict(list)
+    if not bonds:
+        return []
+    max_serial = max(max(i, j) for i, j in bonds)
+    # Atom serials are dense and zero-based. A list avoids hundreds of thousands
+    # of defaultdict operations and makes source-serial ordering implicit.
+    adj: list[list[int] | None] = [None] * (max_serial + 1)
     for i, j in bonds:
+        if adj[i] is None: adj[i] = []
+        if adj[j] is None: adj[j] = []
         adj[i].append(j)
         adj[j].append(i)
 
     lines = []
-    for serial_0 in sorted(adj):
-        partners = sorted(adj[serial_0])
-        serial_str = _h36(serial_0 + 1, 5)
+    for serial_0, raw_partners in enumerate(adj):
+        if raw_partners is None:
+            continue
+        partners = sorted(raw_partners)
+        serial_str = serial_fields[serial_0] if serial_fields is not None else _h36(serial_0 + 1, 5)
         # Emit in groups of 4 partners
         for start in range(0, len(partners), 4):
             chunk = partners[start:start + 4]
-            partner_str = "".join(_h36(p + 1, 5) for p in chunk)
+            partner_str = "".join(
+                serial_fields[p] if serial_fields is not None else _h36(p + 1, 5)
+                for p in chunk
+            )
             lines.append(f"CONECT{serial_str}{partner_str}")
     return lines
 
@@ -1016,6 +1049,8 @@ def export_pdb(
     box_margin_nm: float = 5.0,
     model: Optional[AtomisticModel] = None,
     viewer_terminals: bool = False,
+    scalar_by_key: Optional[dict[tuple, float]] = None,
+    scalar_metadata: Optional[dict] = None,
 ) -> str:
     """
     Export the design as a PDB file string.
@@ -1050,6 +1085,21 @@ def export_pdb(
         model = build_atomistic_model(design)
     atoms = model.atoms
     bonds = list(model.bonds)
+    scalar_by_key = scalar_by_key or {}
+    # Large origami serials are reused in ATOM plus reciprocal CONECT records.
+    # Encode hybrid-36 once per atom instead of repeating the base-36 division
+    # several times per bond endpoint.
+    max_serial = max((a.serial for a in atoms), default=-1)
+    serial_fields = [_h36(i + 1, 5) for i in range(max_serial + 1)]
+
+    def _scalar_key(a: Atom) -> tuple:
+        direction = str(getattr(a.direction, "value", a.direction))
+        if a.crossover_id is not None:
+            return ("__xb__", a.crossover_id, int(a.extra_base_k or 0))
+        if a.extension_id is not None:
+            return (f"__ext_{a.extension_id}", int(a.ext_k or 0), direction)
+        key = (a.helix_id, int(a.bp_index), direction)
+        return key + (int(a.copy_k),) if a.copy_k else key
 
     # A NADOC strand is one covalent polymer even when its route crosses domains,
     # skips a lattice position, or came from a reconstructed simulation frame.
@@ -1111,6 +1161,20 @@ def export_pdb(
     ]
     if viewer_terminals:
         lines.append("REMARK  Viewer termini: unlinked residue-1 P/OP1/OP2 omitted; O5' is the unphosphorylated 5' end.")
+    if scalar_by_key:
+        meta = scalar_metadata or {}
+        title = str(meta.get("title") or meta.get("attribute") or "simulation value")
+        unit = str(meta.get("unit") or "")
+        cmap = "".join(c for c in str(meta.get("colormap") or "viridis")
+                       if c.isalnum() or c in "_-") or "viridis"
+        palette = str(meta.get("palette") or cmap).replace('"', '')
+        lo = float(meta.get("lo", min(scalar_by_key.values())))
+        hi = float(meta.get("hi", max(scalar_by_key.values())))
+        lines.append(f"REMARK  NADOC_COLOR_VALUE {title} ({unit}) stored in B-factor column.".rstrip())
+        lines.append(
+            f"REMARK  CHIMERAX color byattribute bfactor palette \"{palette}\" "
+            f"range {lo:.6g},{hi:.6g} target as"
+        )
     if repaired_backbone_bonds:
         lines.append(
             f"REMARK  Restored {repaired_backbone_bonds} missing consecutive-strand O3'-P bonds."
@@ -1177,6 +1241,7 @@ def export_pdb(
 
     def _emit_chain_block(block_atoms: list[Atom], block_bonds: list[tuple[int, int]]) -> None:
         nonlocal ter_serial
+        seq_fields: dict[int, str] = {}
         if viewer_terminals:
             # Inserted crossover bases and terminal extensions are constructed in
             # post-passes, so raw model order can revisit a chain several times and
@@ -1185,28 +1250,34 @@ def export_pdb(
             # complete, producing false missing-structure pseudobonds (for example
             # O3' 21 -> P 30). Emit each internal strand once in residue order while
             # retaining the original serials used by CONECT.
-            chain_order = list(dict.fromkeys(a.chain_id for a in block_atoms))
+            by_chain: dict[str, list[Atom]] = {}
+            for atom in block_atoms:
+                by_chain.setdefault(atom.chain_id, []).append(atom)
             grouped = [
-                sorted(
-                    (a for a in block_atoms if a.chain_id == chain_id),
-                    key=lambda a: (a.seq_num, a.serial),
-                )
-                for chain_id in chain_order
+                sorted(chain_atoms, key=lambda a: (a.seq_num, a.serial))
+                for chain_atoms in by_chain.values()
             ]
         else:
             grouped = [list(items) for _, items in groupby(block_atoms, key=lambda a: a.chain_id)]
 
         for chain_atoms in grouped:
             for atom in chain_atoms:
+                pdb_seq = _pdb_seq(atom)
+                seq_field = seq_fields.get(pdb_seq)
+                if seq_field is None:
+                    seq_field = seq_fields[pdb_seq] = _h36(pdb_seq, 4)
                 lines.append(_pdb_atom_record(
-                    atom, chain=_chain_char(atom.chain_id), seq_num=_pdb_seq(atom)))
+                    atom, chain=_chain_char(atom.chain_id), seq_num=pdb_seq,
+                    bfactor=(scalar_by_key.get(_scalar_key(atom), 0.0) if scalar_by_key else 0.0),
+                    serial_field=serial_fields[atom.serial],
+                    seq_field=seq_field))
             last = chain_atoms[-1]
             lines.append(
                 f"TER   {_h36(ter_serial, 5)}      "
                 f"{last.residue:>3s} {_chain_char(last.chain_id)}{_h36(_pdb_seq(last), 4)}"
             )
             ter_serial += 1
-        lines.extend(_pdb_conect_records(block_bonds))
+        lines.extend(_pdb_conect_records(block_bonds, serial_fields))
 
     if use_multi_models:
         for model_idx, start in enumerate(range(0, len(internal_chains), len(_CHAIN_CHARS)), 1):

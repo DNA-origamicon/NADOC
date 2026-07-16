@@ -1190,7 +1190,7 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     trust a short run.
     """
     from backend.core.models import Design
-    from backend.core.oxdna_health import production_rmsf, rmsf_confidence
+    from backend.core.oxdna_health import production_rmsf_cached, rmsf_confidence
 
     job = _load_job(job_id)
     # Sampling stages whose trajectory the flexibility map pools: production runs
@@ -1221,7 +1221,11 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
     ref_conf = _design_ref_conf(jd, design)
 
     # copies=True → a per-loop-copy flexibility value so every loop bead recolours.
-    result = await run_in_threadpool(production_rmsf, design, trajs, ref_conf, copies=True)
+    cached = await run_in_threadpool(
+        production_rmsf_cached, design, trajs, ref_conf, copies=True)
+    # average_frame contains NumPy arrays for server-side reconstruction and is
+    # intentionally retained only in the cache, not sent in the CG map payload.
+    result = {k: v for k, v in cached.items() if k != "average_frame"}
     # Attach the confidence metric (frames pooled + statistical RMSF error) and
     # whether production is still running, so the panel can warn "preliminary".
     result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
@@ -1240,7 +1244,7 @@ async def get_oxdna_deviation(job_id: str) -> dict:
     from backend.api.skip_twist_tuning import core_reference_geometry
     from backend.core.models import Design
     from backend.core.oxdna_health import (
-        geometry_deviation_map, production_rmsf, rmsf_confidence,
+        geometry_deviation_map, production_rmsf_cached, rmsf_confidence,
     )
 
     job = _load_job(job_id)
@@ -1258,7 +1262,7 @@ async def get_oxdna_deviation(job_id: str) -> dict:
     ref_conf = _design_ref_conf(jd, design)
 
     def _compute():
-        mean = production_rmsf(design, trajs, ref_conf, copies=True)
+        mean = production_rmsf_cached(design, trajs, ref_conf, copies=True)
         if not mean.get("ready") or not mean.get("positions"):
             return None, mean
         return geometry_deviation_map(mean["positions"], core_reference_geometry(design)), mean
@@ -1289,7 +1293,7 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
     optional: a job with only a relaxation run still supplies the shape column.  All
     outputs are Physical-layer/display only (Three-Layer Law)."""
     from backend.api.skip_twist_tuning import core_reference_geometry
-    from backend.core.oxdna_health import production_rmsf
+    from backend.core.oxdna_health import production_rmsf_cached
     from backend.core.oxdna_shape_source import build_oxdna_shape_source
 
     job = _load_job(job_id)
@@ -1323,7 +1327,7 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
         if trajs:
             break
     if trajs:
-        res = await run_in_threadpool(production_rmsf, design, trajs, ref_conf)
+        res = await run_in_threadpool(production_rmsf_cached, design, trajs, ref_conf)
         if res.get("ready"):
             rmsf_positions = res["positions"]
             n_frames = res.get("n_frames")
@@ -1866,7 +1870,7 @@ def _rmsf_average_frame(job):
     coloured by flexibility.  Both are None when no sampling frames exist yet
     (mirrors GET /rmsf's not-ready paths)."""
     from backend.core.models import Design
-    from backend.core.oxdna_health import production_rmsf
+    from backend.core.oxdna_health import production_rmsf_cached
 
     prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
     if not prod_stages:
@@ -1880,7 +1884,7 @@ def _rmsf_average_frame(job):
         return (None, None, None)
     design = Design.model_validate_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
-    result = production_rmsf(design, trajs, ref_conf, include_average_frame=True)
+    result = production_rmsf_cached(design, trajs, ref_conf, copies=True)
     if not result.get("ready"):
         return (design, None, None)
     rmsf_by_key = {

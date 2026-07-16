@@ -24,8 +24,18 @@
  */
 
 import {
-  COLORMAP_LIST, colormapGradientCss, loadColormap, saveColormap, normalizeColormap,
+  COLORMAPS, COLORMAP_LIST, colormapGradientCss, loadColormap, saveColormap, normalizeColormap,
 } from './colormaps.js'
+
+export function chimeraxPalette(name) {
+  return COLORMAPS[normalizeColormap(name)].lut
+    .map(([r, g, b]) => `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`)
+    .join(':')
+}
+
+export function chimeraxColorCommand(name, lo, hi) {
+  return `color byattribute bfactor palette "${chimeraxPalette(name)}" range ${Number(lo).toPrecision(6)},${Number(hi).toPrecision(6)} target as`
+}
 
 /**
  * Pure: normalise a (lo, hi) pair to a valid, ordered range.  Swaps if reversed
@@ -62,6 +72,7 @@ export function initFlexScale() {
   const minInput = document.getElementById('flex-scale-min')
   const resetBtn = document.getElementById('flex-scale-reset')
   const cmapBtn  = document.getElementById('flex-scale-cmap')
+  let helpBtn = document.getElementById('flex-scale-help')
 
   let _dataMin  = 0
   let _dataMax  = 1
@@ -71,6 +82,47 @@ export function initFlexScale() {
   let _colormap = 'viridis'
   let _onRecolor = null      // active map's recolour callback (lo, hi, colormapName)
   let _popup    = null       // lazily-built colormap-picker popup
+
+  if (!helpBtn && root) {
+    helpBtn = document.createElement('button')
+    helpBtn.id = 'flex-scale-help'; helpBtn.type = 'button'; helpBtn.textContent = '?'
+    helpBtn.title = 'Show ChimeraX recoloring commands'
+    helpBtn.style.cssText = 'position:absolute;right:-7px;top:-8px;width:17px;height:17px;padding:0;border-radius:50%;border:1px solid var(--color-border-default);background:var(--color-bg-inset);color:var(--color-text-secondary);font-size:10px;font-weight:700;cursor:pointer'
+    root.appendChild(helpBtn)
+  }
+
+  function _showChimeraxHelp() {
+    const overlay = document.createElement('div')
+    overlay.className = 'modal-overlay'
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px'
+    const box = document.createElement('div')
+    box.style.cssText = 'width:min(680px,100%);background:#1a2530;border:1px solid #455a64;border-radius:10px;padding:20px;color:#cfd8dc;box-shadow:0 12px 48px rgba(0,0,0,.7)'
+    const h = document.createElement('h2'); h.textContent = `ChimeraX coloring — ${titleEl?.textContent || 'simulation map'}`; h.style.cssText = 'font-size:16px;margin:0 0 10px;color:#eceff1'
+    const p = document.createElement('p'); p.textContent = 'Export the PDB with “Include current coloring” enabled, open it in ChimeraX, then enter:'; p.style.cssText = 'font-size:13px;line-height:1.45'
+    const pre = document.createElement('textarea'); pre.readOnly = true; pre.value = chimeraxColorCommand(_colormap, _lo, _hi); pre.style.cssText = 'box-sizing:border-box;width:100%;height:72px;padding:10px;background:#111c24;color:#b0bec5;border:1px solid #37474f;border-radius:5px;font:12px monospace;resize:none'
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:12px'
+    const copy = document.createElement('button'); copy.textContent = 'Copy'; const close = document.createElement('button'); close.textContent = 'Close'
+    for (const b of [copy, close]) b.style.cssText = 'padding:7px 14px;border-radius:5px;border:1px solid #546e7a;background:#263238;color:#fff;cursor:pointer'
+    const done = () => overlay.remove(); close.onclick = done; overlay.onclick = e => { if (e.target === overlay) done() }
+    copy.onclick = async () => { await navigator.clipboard?.writeText(pre.value); copy.textContent = 'Copied!' }
+    row.append(copy, close); box.append(h, p, pre, row); overlay.appendChild(box); document.body.appendChild(overlay)
+  }
+  helpBtn?.addEventListener('click', _showChimeraxHelp)
+
+  // Put the same help affordance beside every scalar-colour visualization choice.
+  // The controls are static labels in the jobs panels; deriving these buttons here
+  // keeps their command synchronized with this legend's currently adjusted state.
+  for (const input of document.querySelectorAll(
+    'input[type="radio"][value="flex"], input[type="radio"][value="rmsf"], input[type="radio"][value="deviation"]')) {
+    const label = input.closest('label')
+    if (!label || label.querySelector('.chimerax-color-help')) continue
+    const button = document.createElement('button')
+    button.type = 'button'; button.className = 'chimerax-color-help'; button.textContent = '?'
+    button.title = 'Show ChimeraX recoloring commands'
+    button.style.cssText = 'margin-left:5px;width:17px;height:17px;padding:0;border-radius:50%;border:1px solid var(--color-border-default);background:var(--color-bg-inset);color:var(--color-text-secondary);font-size:10px;font-weight:700;cursor:pointer'
+    button.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); _showChimeraxHelp() })
+    label.appendChild(button)
+  }
 
   function _gap() { return Math.max(1e-6, (_dataMax - _dataMin) * 0.01) }
 
@@ -226,6 +278,8 @@ export function initFlexScale() {
     isVisible: () => !!root && root.style.display !== 'none',
     getBounds: () => ({ lo: _lo, hi: _hi }),
     getColormap: () => _colormap,
+    getChimeraxPalette: () => chimeraxPalette(_colormap),
+    getChimeraxCommand: () => chimeraxColorCommand(_colormap, _lo, _hi),
     setColormap: (name) => _setColormap(name),
   }
 }

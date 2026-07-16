@@ -54,6 +54,18 @@ extra CPU cores do nothing for a CUDA run. The opposite fingerprint (GPU idle, o
 100%) is the `production_rmsf` mean-structure/RMSF evaluation — single-threaded numpy reading the
 whole trajectory, the only serial-CPU bottleneck in the autorefine loop.
 
+**UPDATE 2026-07-16 — PDB export / RMSF cache benchmark (Voltron scale):** PDB export now shares
+the file-signature-keyed `production_rmsf_cached` result with the flexibility and deviation views,
+including the average `a1/a3` frame required for atomistic reconstruction. On the 14,774-nt
+Voltron job, the first full RMSF evaluation took **91.8 s**, while the export-side lookup after the
+map was displayed took **0.015 s**; a growing trajectory invalidates naturally through its
+`(path,size,mtime_ns)` signature. A ~303k-atom native Voltron PDB takes **~11.8 s cold / ~4.9 s
+warm** locally after switching export to cached `fast_bridges=True`. Hybrid-36 serial precomputation,
+single-pass chain grouping, and dense adjacency generation reduced standalone PDB serialization to
+**~4.1 s**. The ~34 MB PDB compresses to ~8.5 MB at HTTP gzip level 3 in ~0.45 s; browser decoding
+is transparent and the downloaded artifact remains a standard `.pdb` with reciprocal `CONECT`
+records.
+
 **Production timing (14,386 nt, CUDA mixed precision, DNA2, dt=0.005, the autorefine full-scale):**
 one 10M-step production round ≈ **20–22 min** on the 3080 Ti; a full relax (mc+md_relax+equil) +
 4 pooled production rounds (→400 frames at print_every=100k) + evals ≈ **~1.5 h** per autorefine

@@ -109,6 +109,16 @@ describe('showPdbPositionModal', () => {
     button.click()
     await expect(result).resolves.toBe('visualized')
   })
+
+  it('offers current coloring enabled by default and returns the toggle state', async () => {
+    const result = showPdbPositionModal('oxDNA RMSF', null, { title: 'RMSF', values: [{ value: 0.2 }] })
+    const checkbox = document.querySelector('input[type="checkbox"]')
+    expect(checkbox.checked).toBe(true)
+    expect(document.body.textContent).toContain('Include current RMSF coloring')
+    const button = [...document.querySelectorAll('button')].find(b => b.textContent === 'oxDNA RMSF positions')
+    button.click()
+    await expect(result).resolves.toEqual({ choice: 'visualized', includeColoring: true })
+  })
 })
 
 // ── initExportMenu (factory) ─────────────────────────────────────────────────

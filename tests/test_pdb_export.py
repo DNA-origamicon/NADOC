@@ -87,6 +87,30 @@ def _conect_tokens(pdb: str):
     return tokens
 
 
+def test_pdb_can_store_residue_scalar_values_and_chimerax_recipe():
+    design = _design_with_loop_insertion()
+    model = build_atomistic_model(design)
+    target = next(a for a in model.atoms if not a.copy_k)
+    key = (target.helix_id, target.bp_index, str(getattr(target.direction, "value", target.direction)))
+    pdb = export_pdb(
+        design, model=model, scalar_by_key={key: 0.42},
+        scalar_metadata={
+            "title": "RMSF", "unit": "nm", "colormap": "viridis",
+            "palette": "#000000:#ffffff", "lo": 0.1, "hi": 0.8,
+        },
+    )
+    assert 'REMARK  NADOC_COLOR_VALUE RMSF (nm) stored in B-factor column.' in pdb
+    assert 'color byattribute bfactor palette "#000000:#ffffff" range 0.1,0.8 target as' in pdb
+    target_serials = {
+        a.serial + 1 for a in model.atoms
+        if (a.helix_id, a.bp_index, str(getattr(a.direction, "value", a.direction))) == key
+    }
+    target_lines = [line for line in pdb.splitlines() if line.startswith("ATOM  ") and _decode_pdb_int(line[6:11], 5) in target_serials]
+    assert target_lines
+    assert {float(line[60:66]) for line in target_lines} == {0.42}
+    assert any(float(line[60:66]) == 0.0 for line in pdb.splitlines() if line.startswith("ATOM  "))
+
+
 # ── Non-standard atoms reach the export ───────────────────────────────────────
 
 def test_pdb_includes_extra_base_and_extension_atoms():

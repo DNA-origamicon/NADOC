@@ -6859,10 +6859,17 @@ async function main() {
       if (!active) return null
       const mode = active[0].mode?.()
       const modeName = ({ rmsf: 'RMSF', relaxed: 'relaxed', trajectory: 'trajectory', deviation: 'deviation', flex: 'RMSF', deform: 'deformed' })[mode] || mode
+      const coloring = active[0].coloringInfo?.() ?? null
+      if (coloring && flexScale?.isVisible?.()) {
+        const bounds = flexScale.getBounds?.()
+        if (bounds) { coloring.lo = bounds.lo; coloring.hi = bounds.hi }
+        coloring.colormap = flexScale.getColormap?.() || coloring.colormap
+        coloring.palette = flexScale.getChimeraxPalette?.() || null
+      }
       return {
         name: `${active[1]}${modeName ? ` ${modeName}` : ''}`,
         engine: active[2], mode, jobId: active[0].activeJobId?.() ?? active[0].deformJobId?.() ?? null,
-        positions, trajectory: active[0].trajectoryInfo?.() ?? null,
+        positions, trajectory: active[0].trajectoryInfo?.() ?? null, coloring,
       }
     },
   })

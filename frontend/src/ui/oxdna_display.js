@@ -206,6 +206,7 @@ export function initOxdnaDisplay({
   let _devResp = null  // cached /deviation payload so the scale can recolour without re-fetching
   let _rmsfCmap = 'viridis'    // active flex-map colormap (widget-driven)
   let _devCmap  = 'devramp'    // active deviation-map colormap (widget-driven)
+  let _devBounds = null
   let _traj = null     // cached /trajectory payload {keys, frames, markers, n_frames, stages}
   // Monotonic token: bumped by every display call AND by stopAndRestore, so an
   // async fetch (live-follow poll / job-switch) that resolves AFTER the overlay
@@ -641,6 +642,7 @@ export function initOxdnaDisplay({
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
     _devResp = resp   // cache so the scale widget can recolour without re-fetching
+    _devBounds = { lo: map.min, hi: map.max }
     _applyFem(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _active = true
@@ -690,6 +692,8 @@ export function initOxdnaDisplay({
     if (cmap) _devCmap = cmap
     const map = deviationColorMap(_devResp, lo, hi, _devCmap)
     if (!map) return false
+    _devBounds = { lo: Number.isFinite(lo) ? lo : map.min,
+                   hi: Number.isFinite(hi) ? hi : map.max }
     designRenderer.applyScalarColors(map.colorByKey)
     return true
   }
@@ -805,6 +809,25 @@ export function initOxdnaDisplay({
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       ? { frame: _frameIdx + 1, total: _traj.frames.length }
       : null,
+    coloringInfo: () => {
+      const resp = _mode === 'rmsf' ? _rmsfResp : (_mode === 'deviation' ? _devResp : null)
+      if (!resp?.positions?.length) return null
+      const rmsf = _mode === 'rmsf'
+      const bounds = rmsf ? _activeBounds() : (_devBounds || {
+        lo: Number.isFinite(resp.min_deviation) ? resp.min_deviation : 0,
+        hi: Number.isFinite(resp.max_deviation) ? resp.max_deviation : 1,
+      })
+      return {
+        attribute: rmsf ? 'rmsf' : 'deviation',
+        title: rmsf ? 'RMSF' : 'Deviation', unit: 'nm',
+        colormap: rmsf ? _rmsfCmap : _devCmap,
+        lo: bounds.lo, hi: bounds.hi,
+        values: resp.positions.map(p => ({
+          helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
+          copy: p.copy ?? 0, value: rmsf ? p.rmsf : p.deviation,
+        })),
+      }
+    },
     // True when this overlay is active in a mode that REBUILDS the atomistic renderer
     // from the job's atoms (relaxed / rmsf / trajectory) — NOT the CG-only modes
     // (live / deviation), which would leave an atomistic switch with nothing to show.

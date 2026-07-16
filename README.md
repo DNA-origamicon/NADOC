@@ -114,7 +114,18 @@ twisting bundles by inserting/deleting base pairs. Enforces physical limits
 
 ### Atomistic & NAMD export
 All-atom template with PDB/PSF export. One-click NAMD simulation package (ZIP)
-with GBIS implicit solvent config.
+with GBIS implicit solvent config. PDB export can use either native NADOC
+coordinates or the currently displayed simulation/FEM coordinates. Scalar maps
+(RMSF and deviation) can be embedded as per-atom B-factors using the current
+legend bounds and colormap; the export dialog enables this by default, and the
+`?` controls beside colored visualization modes provide the matching ChimeraX
+`color byattribute bfactor` command.
+
+Large-design exports use the validated interpolated phosphate-bridge builder,
+reuse cached native atomistic models and already-computed oxDNA RMSF average
+frames, and precompute PDB hybrid-36 identifiers. HTTP gzip reduces the transfer
+size transparently (the saved file is still a normal `.pdb`). Full reciprocal
+`CONECT` topology is retained so importing the PDB preserves strand connectivity.
 
 ### oxDNA relaxation → NAMD seed pipeline
 Local oxDNA (CUDA) coarse-grained relaxation as a Dynamics sub-panel: staged

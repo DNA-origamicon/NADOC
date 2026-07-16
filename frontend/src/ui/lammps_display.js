@@ -28,6 +28,8 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   let _devResp = null
   let _rmsfCmap = 'viridis'
   let _devCmap = 'devramp'
+  let _rmsfBounds = null
+  let _devBounds = null
   let _epoch = 0
   let _loadAbort = null
   function _beginLoad() {
@@ -63,6 +65,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
     _rmsfResp = resp
+    _rmsfBounds = { lo: map.min, hi: map.max }
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _mode = 'rmsf'; _traj = null; _jobId = jobId
@@ -78,6 +81,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
     _devResp = resp
+    _devBounds = { lo: map.min, hi: map.max }
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _mode = 'deviation'; _traj = null; _jobId = jobId
@@ -88,6 +92,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   function recolorRmsf(lo, hi, cmap) {
     if (_mode !== 'rmsf' || !_rmsfResp || !designRenderer) return false
     if (cmap) _rmsfCmap = cmap
+    _rmsfBounds = { lo, hi }
     const map = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)
     if (!map) return false
     designRenderer.applyScalarColors(map.colorByKey)
@@ -98,6 +103,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   function recolorDeviation(lo, hi, cmap) {
     if (_mode !== 'deviation' || !_devResp || !designRenderer) return false
     if (cmap) _devCmap = cmap
+    _devBounds = { lo, hi }
     const map = deviationColorMap(_devResp, lo, hi, _devCmap)
     if (!map) return false
     designRenderer.applyScalarColors(map.colorByKey)
@@ -146,5 +152,19 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       ? { frame: _trajIdx + 1, total: _traj.frames.length }
       : null,
+    coloringInfo: () => {
+      const resp = _mode === 'rmsf' ? _rmsfResp : (_mode === 'deviation' ? _devResp : null)
+      if (!resp?.positions?.length) return null
+      const rmsf = _mode === 'rmsf'
+      const bounds = (rmsf ? _rmsfBounds : _devBounds) || { lo: 0, hi: 1 }
+      return {
+        attribute: rmsf ? 'rmsf' : 'deviation', title: rmsf ? 'RMSF' : 'Deviation', unit: 'nm',
+        colormap: rmsf ? _rmsfCmap : _devCmap, lo: bounds.lo, hi: bounds.hi,
+        values: resp.positions.map(p => ({
+          helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
+          copy: p.copy ?? 0, value: rmsf ? p.rmsf : p.deviation,
+        })),
+      }
+    },
   }
 }

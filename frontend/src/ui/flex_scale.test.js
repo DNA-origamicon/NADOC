@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
-import { clampBounds, valueToFraction, fractionToValue, initFlexScale } from './flex_scale.js'
+import { clampBounds, valueToFraction, fractionToValue, chimeraxColorCommand, initFlexScale } from './flex_scale.js'
 
 describe('clampBounds', () => {
   it('orders, swaps reversed pairs, and never collapses the span', () => {
@@ -24,6 +24,15 @@ describe('valueToFraction / fractionToValue', () => {
     expect(fractionToValue(5, 0, 4)).toBe(4)         // clamp
     // inverse
     expect(fractionToValue(valueToFraction(1.3, 0.2, 2.2), 0.2, 2.2)).toBeCloseTo(1.3)
+  })
+})
+
+describe('ChimeraX recoloring command', () => {
+  it('uses the exported B-factor attribute and selected numeric window', () => {
+    const command = chimeraxColorCommand('viridis', 0.125, 0.75)
+    expect(command).toContain('color byattribute bfactor')
+    expect(command).toContain('range 0.125000,0.750000 target as')
+    expect(command).toContain('palette "#')
   })
 })
 

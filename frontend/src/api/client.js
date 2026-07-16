@@ -1248,20 +1248,21 @@ async function _downloadBinaryExport(path, fallbackName, options = null) {
 }
 
 export function exportPdb(positions = null, visualization = null) {
-  if (!Array.isArray(positions) || !positions.length) {
+  if ((!Array.isArray(positions) || !positions.length) && !visualization?.coloring) {
     return _downloadBinaryExport('/design/export/pdb', 'design.pdb')
   }
   return _downloadBinaryExport('/design/export/pdb/visualized', 'design.pdb', {
     method: 'POST',
     headers: { ...docHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      positions,
-      visualization: visualization ? {
+      positions: Array.isArray(positions) ? positions : [],
+      visualization: visualization && Array.isArray(positions) && positions.length ? {
         engine: visualization.engine,
         mode: visualization.mode,
         job_id: visualization.jobId,
         frame: visualization.trajectory?.frame ?? null,
       } : null,
+      coloring: visualization?.coloring || null,
     }),
   })
 }

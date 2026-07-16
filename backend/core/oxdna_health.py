@@ -322,6 +322,46 @@ def production_rmsf(
     return out
 
 
+# RMSF is expensive on large jobs because every trajectory frame is parsed,
+# unwrapped, aligned, and accumulated. The user necessarily computes this once
+# to view the flexibility map; retain that exact result (including the average
+# orientation frame needed by PDB export) so export does not repeat the work.
+_PRODUCTION_RMSF_CACHE = None
+_PRODUCTION_RMSF_CACHE_MAX = 4
+
+
+def production_rmsf_cached(design, production_traj_path, reference_conf_path,
+                           *, copies: bool = False) -> dict:
+    """LRU-cached :func:`production_rmsf` including its average reconstruction frame.
+
+    File size+mtime signatures naturally invalidate running trajectories as they
+    grow. Completed trajectories reuse the same calculation across RMSF display,
+    deviation display, atomistic display, and PDB export.
+    """
+    global _PRODUCTION_RMSF_CACHE
+    from collections import OrderedDict
+
+    paths = (list(production_traj_path)
+             if isinstance(production_traj_path, (list, tuple))
+             else [production_traj_path])
+    key = (tuple(_traj_file_sig(p) for p in paths), _traj_file_sig(reference_conf_path),
+           bool(copies))
+    if _PRODUCTION_RMSF_CACHE is not None:
+        cached = _PRODUCTION_RMSF_CACHE.get(key)
+        if cached is not None:
+            _PRODUCTION_RMSF_CACHE.move_to_end(key)
+            return cached
+    result = production_rmsf(
+        design, paths, reference_conf_path, include_average_frame=True, copies=copies)
+    if _PRODUCTION_RMSF_CACHE is None:
+        _PRODUCTION_RMSF_CACHE = OrderedDict()
+    _PRODUCTION_RMSF_CACHE[key] = result
+    _PRODUCTION_RMSF_CACHE.move_to_end(key)
+    while len(_PRODUCTION_RMSF_CACHE) > _PRODUCTION_RMSF_CACHE_MAX:
+        _PRODUCTION_RMSF_CACHE.popitem(last=False)
+    return result
+
+
 def twist_series_stats(series) -> dict:
     """Mean + correlation-corrected sampling error of a per-frame scalar time series.
 
