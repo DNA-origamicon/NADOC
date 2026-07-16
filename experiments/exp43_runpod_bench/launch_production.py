@@ -39,8 +39,10 @@ from experiments.exp43_runpod_bench.spend_ledger import SpendLedger  # noqa: E40
 
 WORKSPACE = ROOT / "workspace"
 NETWORK_VOLUME = "77pnhye88p"
-PARENT_ID = (Path(__file__).parent / "JOB_ID_3x6x400").read_text().strip()
-CHILD_ID_FILE = Path(__file__).parent / "JOB_ID_3x6x400_production"
+# Parent relaxation job is selected by --parent-stem (reads JOB_ID_<stem>); defaults to the
+# original 3x6x400 bench for back-compat. The production child id is written to
+# JOB_ID_<stem>_production.
+DEFAULT_PARENT_STEM = "3x6x400"
 
 TIMESTEP_FS = 4.0
 
@@ -115,14 +117,19 @@ async def main() -> int:
     ap.add_argument("--s-per-step", type=float, default=None,
                     help="MEASURED s/step. Default: read it from the relaxation's own logs.")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--parent-stem", default=DEFAULT_PARENT_STEM,
+                    help="relaxation job to seed production from; reads JOB_ID_<stem> "
+                         "(e.g. 24hb_0xT, 24hb_1xT_seeded). Default: the 3x6x400 bench.")
     args = ap.parse_args()
+    parent_id = (Path(__file__).parent / f"JOB_ID_{args.parent_stem}").read_text().strip()
+    child_id_file = Path(__file__).parent / f"JOB_ID_{args.parent_stem}_production"
 
     key = os.environ.get("RUNPOD_API_KEY")
     if not key and not args.dry_run:
         print("RUNPOD_API_KEY not set", file=sys.stderr)
         return 2
 
-    parent = MdJob.load(PARENT_ID, WORKSPACE)
+    parent = MdJob.load(parent_id, WORKSPACE)
     if parent.status != MdStatus.completed:
         log.error("parent is %s, not completed — refusing to seed production from it",
                   parent.status)
@@ -184,7 +191,7 @@ async def main() -> int:
         ),
     )
     child = MdJob.load(result["job"]["job_id"], WORKSPACE)
-    CHILD_ID_FILE.write_text(child.job_id + "\n")
+    child_id_file.write_text(child.job_id + "\n")
 
     log.info("child        : %s  target=%s  archived=%s",
              child.job_id, child.execution_target, child.archived)
