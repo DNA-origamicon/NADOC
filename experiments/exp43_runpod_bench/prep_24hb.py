@@ -100,6 +100,11 @@ def sanity_gate(pkg: Path, stem: str) -> bool:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("stem", choices=VARIANTS, help="design stem to prep")
+    ap.add_argument("--pre-declashed", action="store_true",
+                    help="Treat the geometric build as already declashed: skip the soft "
+                         "declash ladder and run the FAST 4 fs ladder even for extra-base "
+                         "designs. Use only when the build is measured clash-free (e.g. the "
+                         "geometric 1xT build: 0 ring clashes, healthy backbone).")
     args = ap.parse_args()
     stem = args.stem
 
@@ -156,6 +161,7 @@ def main() -> int:
             minimize_steps=MINIMIZE_STEPS,
             min_scale=MIN_SCALE,
             fast=FAST,
+            pre_declashed=args.pre_declashed,
         )
     except Exception as exc:
         job.status = MdStatus.failed

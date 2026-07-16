@@ -20,7 +20,9 @@ from backend.core.md_protocols import (EQUILIBRIUM_AWARE_PROTOCOL,
                                         prepare_equilibrium_aware_namd, write_hmr_psf)
 from backend.core.models import Design
 from backend.core.namd_topology import extra_base_segid_resids
-from backend.core.oxdna_seed import build_ideal_duplex_seeded_model
+from backend.core.oxdna_seed import (build_ideal_duplex_seeded_model,
+                                      reorient_to_principal_axes, separate_coincident_atoms)
+from backend.core.atomistic import build_atomistic_model
 
 WORKSPACE = ROOT / "workspace"
 ARCHIVE_ROOT = Path("/media/jojo/Archive/nadoc_jobs")
@@ -102,13 +104,27 @@ def main() -> int:
     ap.add_argument("stem")
     ap.add_argument("oxdna_job", nargs="?", help="oxDNA relax JOB ID (for seeding)")
     ap.add_argument("--padding", type=float, default=1.2, help="water padding nm")
+    ap.add_argument("--geometric", action="store_true",
+                    help="Skip oxDNA position-seeding: build the GEOMETRIC extra-base model "
+                         "(bow-out placement) which is clash-free, then apply the same Fix B "
+                         "(heavy extra bases) + fast 4 fs ladder. The oxDNA position seed drops "
+                         "extra bases into an ideal-lattice duplex and creates 0.3 A ring "
+                         "overlaps; the geometric build avoids that, and Fix B still slows the "
+                         "fast extra-base modes below the 4 fs limit.")
     args = ap.parse_args()
     stem = args.stem
     design = Design.model_validate_json((WORKSPACE / f"{stem}.nadoc").read_text())
 
     seed_model = None
     n_xb = sum(1 for x in design.crossovers if x.extra_bases)
-    if n_xb and args.oxdna_job:
+    if n_xb and args.geometric:
+        # Geometric build + Fix B: clash-free (0 ring clashes) AND heavy extra bases.
+        log.info("GEOMETRIC extra-base build (no oxDNA seed) + Fix B heavy bases")
+        seed_model = build_atomistic_model(design)
+        reorient_to_principal_axes(seed_model)
+        separate_coincident_atoms(seed_model)
+        log.info("geometric model atoms=%d", len(seed_model.atoms))
+    elif n_xb and args.oxdna_job:
         oj = WORKSPACE / "oxdna_jobs" / args.oxdna_job
         conf = next((c for c in (oj/"1_production"/"last_conf.dat", oj/"3_equil"/"last_conf.dat",
                                  oj/"conf.dat") if c.exists()), None)
