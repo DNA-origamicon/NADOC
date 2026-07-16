@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
+import time as _time
 from pathlib import Path
 from typing import Optional
 
@@ -30,6 +32,47 @@ router = APIRouter(tags=["jobs"])
 # "Busy" = actively consuming the machine (the spinner / concurrency-guard states).
 # Queued jobs are waiting their turn and are intentionally NOT counted as running.
 _BUSY = {"running", "preparing"}
+
+# A remote (RunPod) job's status in our local index is only a launch RECORD — the local
+# app has no lifecycle poller for CLI-launched pod jobs (unlike Alpine's Slurm poll), so a
+# killed launcher leaves the job wedged at "running" forever. The authoritative liveness
+# signal is RunPod itself: pods are named ``nadoc-<design>-<job_id>``, so a job is genuinely
+# running iff its id is a substring of a live pod's name. Cache it briefly so a
+# frequently-polled /jobs/active doesn't hammer the API.
+_REMOTE_POD_CACHE: dict = {"t": -1e9, "names": None}
+_REMOTE_POD_TTL_S = 30.0
+
+
+def _live_remote_pod_names() -> "set[str] | None":
+    """Best-effort names of live RunPod pods. ``None`` when undeterminable (no API key /
+    RunPod unreachable) — callers MUST fail-open and leave the job's status untouched then,
+    never hide a job we simply couldn't verify."""
+    now = _time.monotonic()
+    if _REMOTE_POD_CACHE["names"] is not None and now - _REMOTE_POD_CACHE["t"] < _REMOTE_POD_TTL_S:
+        return _REMOTE_POD_CACHE["names"]
+    key = os.environ.get("RUNPOD_API_KEY")
+    if not key:
+        kp = Path.home() / ".runpod_key"
+        key = kp.read_text().strip() if kp.exists() else None
+    if not key:
+        return None
+    try:
+        import asyncio  # noqa: PLC0415
+        from backend.core.runpod_api import RunpodClient  # noqa: PLC0415
+
+        async def _names() -> set[str]:
+            client = RunpodClient(key)
+            try:
+                pods = await asyncio.wait_for(client.list_pods(), timeout=10)
+            finally:
+                await client.aclose()
+            return {(p.raw or {}).get("name", "") for p in pods if not p.is_destroyed}
+
+        names = asyncio.run(_names())
+    except Exception:  # noqa: BLE001 — any failure → undeterminable → fail-open
+        return None
+    _REMOTE_POD_CACHE.update(t=now, names=names)
+    return names
 
 
 def _conf_timestep_fs(conf_path: Path) -> Optional[float]:
@@ -99,6 +142,30 @@ def _collect_active() -> list[dict]:
                 pass
             if j.status.value not in _BUSY:
                 continue
+            # reconcile_job_status leaves REMOTE jobs untouched.  Alpine jobs have the Slurm
+            # poller (md_executor.poll_remote_jobs); RUNPOD jobs launched from the CLI have NO
+            # local lifecycle poller, so a killed launcher wedges them at "running" forever.
+            # Verify a runpod job against RunPod itself: it is live only if the in-server
+            # supervisor is running it OR a live pod carries its id — else it is orphaned →
+            # mark terminal so the detector stops claiming a phantom job.  (Alpine untouched.)
+            if getattr(j, "execution_target", "local") == "runpod":
+                pod_names = _live_remote_pod_names()
+                if pod_names is not None:                       # None => can't verify → keep
+                    try:
+                        from backend.core.runpod_supervisor import is_running as _rp_running
+                        supervised = _rp_running(j.job_id)
+                    except Exception:  # noqa: BLE001
+                        supervised = False
+                    if not supervised and not any(j.job_id in nm for nm in pod_names):
+                        try:
+                            from backend.core.md_job import MdStatus
+                            j.status = MdStatus.failed
+                            j.error = ("Remote pod is gone (orphaned launcher) — marked "
+                                       "terminal by the job reconciler.")
+                            j.save(ws)
+                        except Exception:  # noqa: BLE001
+                            pass
+                        continue
             out.append({
                 "engine": "md",
                 "job_id": j.job_id,

@@ -58,7 +58,10 @@ async def get_recommendation(devices: str = "0") -> dict:
 
         own_gpu_job = next(
             (j for j in _collect_active()
-             if j.get("resource_class") == "gpu" and j.get("status") == "running"),
+             if j.get("resource_class") == "gpu" and j.get("status") == "running"
+             # A remote (runpod/alpine) job runs on a pod/cluster and holds NO local GPU —
+             # it must never gate a LOCAL run. Only local jobs contend for this machine.
+             and j.get("execution_target", "local") == "local"),
             None)
     except Exception:  # noqa: BLE001
         pass
