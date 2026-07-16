@@ -16,6 +16,7 @@ import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progres
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk } from '../api/client.js'
+import { initRunLocation, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
@@ -713,6 +714,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const clusterStatusEl  = document.getElementById('md-jobs-cluster-status')
   const clusterReconnectEl = document.getElementById('md-jobs-cluster-reconnect-note')
   const _archive      = initJobArchive({ api, kind: 'md' })
+  // Run-location: a "📁 Directory" button next to Relax lets the user write a large run to a
+  // roomy volume (e.g. an external Archive drive) instead of a full system disk.  Mounted
+  // once next to the run button; the chosen dir rides along in the create payload as run_dir.
+  const runLocation   = initRunLocation({ api })
+  if (runBtn?.parentElement) runLocation.mountButton(runBtn.parentElement)
   const prodBox       = document.getElementById('md-jobs-production')
   const prodStepsInput = document.getElementById('md-jobs-prod-steps')
   const prodTimeEl    = document.getElementById('md-jobs-prod-time')
@@ -2123,6 +2129,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
       anchors:        anchors.length ? anchors : null,
       field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
+      run_dir:        runLocation.getRunDir(),   // write this run into the chosen folder (Archive-from-birth)
     }
 
     console.log(`[${_ts()}] md-jobs: Relax clicked`, payload)
@@ -2141,11 +2148,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (isLocalRun && !draftId) {
       try {
         const fc = await estimateMdDisk(payload)
-        if (!(await confirmDiskSpaceOk(fc))) {
-          hideOpProgress()
-          _launching = false
-          runBtn.disabled = false
-          return
+        // If the run won't fit, offer to archive it to a roomier drive and run THERE.
+        const rec = await runLocation.recommendArchive(fc)
+        if (!rec.proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
+        payload.run_dir = rec.runDir || null   // suggested archive OR the user's chosen dir
+        // No archive suggestion but still tight → the plain low-disk Continue/Cancel warning.
+        if (!archiveRecommendation(fc).show && !(await confirmDiskSpaceOk(fc))) {
+          hideOpProgress(); _launching = false; runBtn.disabled = false; return
         }
       } catch { /* forecast is best-effort — never block a launch on it */ }
     }
