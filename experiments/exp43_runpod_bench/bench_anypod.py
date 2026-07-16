@@ -49,6 +49,12 @@ NAMD_BIN = "/root/3.0.2p1-cuda-a80/namd3"        # where the NAMD tar extracts
 WORKDIR = "/root/24hb_0xT"                        # where the package tar extracts
 TIMESTEP_FS = 4.0
 
+# Compute capabilities the NAMD binary was BUILT for (sm_80/89/90/120). A card outside this
+# set rents fine and dies at step 0 with "no kernel image is available" — the silent wrong-arch
+# trap. We reject it on the compute_cap BEFORE the ~360 MB upload, so a bad card costs seconds,
+# not upload-minutes. (E.g. RTX 3090 / A6000 are sm_86 — NOT in the build.)
+SUPPORTED_CC = {"8.0", "8.9", "9.0", "12.0"}
+
 # (gpuTypeId, label, sm, $/hr secure). All sm_90 (H100/H200) or sm_89 reference, every arch
 # in the build. Ordered high-end first — the campaign the user asked to test.
 CARDS = [
@@ -57,6 +63,12 @@ CARDS = [
     ("NVIDIA H200",             "H200 SXM",  "sm_90", 3.59),
     ("NVIDIA H100 NVL",         "H100 NVL",  "sm_90", 2.59),
     ("NVIDIA L40S",             "L40S",      "sm_89", 0.99),   # value reference, same system
+    ("NVIDIA GeForce RTX 5090", "RTX 5090",  "sm_120", 0.69),  # consumer Blackwell — in build
+    ("NVIDIA GeForce RTX 3090", "RTX 3090",  "sm_86", 0.22),   # sm_86 — NOT in build (arch gate)
+    ("NVIDIA GeForce RTX 4090",        "RTX 4090",     "sm_89",  0.34),  # validate the estimate
+    ("NVIDIA RTX PRO 4500 Blackwell",  "RTX PRO 4500", "sm_120", 0.34),  # validate the estimate
+    ("NVIDIA RTX 6000 Ada Generation", "RTX 6000 Ada", "sm_89",  0.74),  # in build
+    ("NVIDIA RTX A6000",               "RTX A6000",    "sm_86",  0.33),  # sm_86 — arch gate
 ]
 
 
@@ -73,7 +85,20 @@ async def bench_one(client, ledger, clog, gpu_id, label, sm, usd_hr, steps) -> d
             result["usd_hr"] = float(pod.cost_per_hr or usd_hr)
             print(f"  {label}: pod {pod.id} at ${result['usd_hr']}/hr")
             gpu = (await conn.run("nvidia-smi --query-gpu=name --format=csv,noheader")).stdout.strip()
-            print(f"  {label}: GPU reports '{gpu}'")
+            cc = (await conn.run(
+                "nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1")
+                ).stdout.strip()
+            print(f"  {label}: GPU reports '{gpu}' (compute_cap {cc or '?'})")
+            # arch gate BEFORE the upload — reject a wrong-arch card in seconds, not upload-minutes
+            if cc and cc not in SUPPORTED_CC:
+                result["note"] = (f"arch sm_{cc.replace('.', '')} NOT in NAMD build "
+                                  f"(sm_80/89/90/120) — would die at step 0; needs a rebuild")
+                result["sm"] = f"sm_{cc.replace('.', '')}"
+                print(f"  {label}: SKIP (pre-upload arch gate) — {result['note']}")
+                return result
+            if not cc:
+                print(f"  {label}: WARN could not read compute_cap; proceeding "
+                      f"(NAMD will catch a bad arch)")
 
             # upload NAMD + package to the container disk, extract
             for tar in (NAMD_TAR, PKG_TAR):
