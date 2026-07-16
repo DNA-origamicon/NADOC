@@ -194,3 +194,6 @@ experiments/*/results/longrun_result.json
 
 # LAMMPS default runtime log (dropped in cwd on a run)
 log.lammps
+
+# RunPod campaign runtime logs (machine-local)
+experiments/exp43_runpod_bench/logs/

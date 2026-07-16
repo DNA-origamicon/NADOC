@@ -116,7 +116,9 @@ pipeline_validation_log · session_handoff
 
 **NAMD production / solvation:** **periodic_md** (the durable "why" behind periodic-cell MD — governed by
 [architecture_decisions](architecture_decisions.md)) · btube_benchmark · periodic_cell · namd_solvate ·
-water_shell_carve · 3x4sq_md_run · exp30_18hb_production
+water_shell_carve · 3x4sq_md_run · exp30_18hb_production ·
+**extra_base_4fs_geometric_fixb** (24hb extra-base 4 fs: winning seed = GEOMETRIC build + Fix B heavy bases,
+NOT the oxDNA position-seed — that was the blocker; supersedes PIPELINE_4FS_EXTRA_BASES.md)
 
 **Atomistic skip-site / GROMACS:** atomistic_skip_backbone · skip_site_gromacs_fix · langevin_heating ·
 gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export · sequence_clear_fix
