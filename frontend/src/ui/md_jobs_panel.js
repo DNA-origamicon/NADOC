@@ -36,6 +36,7 @@ import { runControlState, RUN_ACTION } from './job_run_control.js'
 import { initAdvancedOptimize, renderRunPath, productionTimestepWarning } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
+import { initRunpodSetup } from './runpod_setup.js'
 import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -632,6 +633,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const runTargetAlpine = document.getElementById('md-run-target-alpine')
   const runTargetRunpod = document.getElementById('md-run-target-runpod')
   const runpodStatusEl  = document.getElementById('md-jobs-runpod-status')
+  const runpodSetupEl   = document.getElementById('md-runpod-setup-mount')
   const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
   const runTargetHint   = document.getElementById('md-run-target-hint')
   const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
@@ -838,6 +840,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const _runpod = initRunpodStatus({
     mount: runpodStatusEl,
     onChange: () => _paintRunpodGate(),
+  })
+
+  // First-time setup wizard (API key → SSH key → volume → pre-flight). A successful setup
+  // re-runs the pre-flight so the gate above turns green without the user hunting for it.
+  initRunpodSetup({
+    mount: runpodSetupEl,
+    onConnected: () => _runpod.refresh(),
   })
 
   function _paintRunpodGate() {

@@ -74,7 +74,10 @@ class ConnectRequest(BaseModel):
     api_key: str = Field(..., min_length=8)
     # The volume carrying the patched NAMD + packages + checkpoints. A pod without it
     # is an empty box that would have to rebuild NAMD from source.
-    network_volume_id: str
+    #
+    # OPTIONAL so the setup wizard can verify the key FIRST (which is what unlocks the
+    # balance + volume-list lookups), then reconnect with the volume the user picked.
+    network_volume_id: Optional[str] = None
 
 
 @router.post("/runpod/connect")
@@ -87,9 +90,12 @@ async def connect(body: ConnectRequest):
         await client.aclose()
         raise HTTPException(400, str(exc)) from exc
 
+    # Don't drop a volume the user already chose on a key-only re-verify — but a fresh
+    # volume in this request always wins.
+    keep_volume = body.network_volume_id or _SESSION.network_volume_id
     await _SESSION.disconnect()
     _SESSION.client = client
-    _SESSION.network_volume_id = body.network_volume_id
+    _SESSION.network_volume_id = keep_volume
     _SESSION.api_key = body.api_key
     logger.info("runpod: connected (%d live pods)", len(pods))
 
@@ -126,6 +132,48 @@ async def status():
 async def disconnect():
     await _SESSION.disconnect()
     return _status_payload()
+
+
+@router.get("/runpod/balance")
+async def balance():
+    """The account balance — RunPod destroys every pod at $0. Shown in the setup wizard.
+
+    Needs the key (held in memory after ``connect``). Never 500s: an unreadable balance is
+    ``{"available": false, "reason": ...}`` so the wizard can warn rather than crash.
+    """
+    if not _SESSION.api_key:
+        return {"available": False, "reason": "not connected — enter your API key first"}
+    return await runpod_preflight.fetch_balance(_SESSION.api_key)
+
+
+@router.get("/runpod/volumes")
+async def volumes():
+    """Every network volume on the account, for the wizard's volume dropdown.
+
+    Read-only; creates no pod. The volume the user picks is the one carrying their patched
+    NAMD — the wizard sends it back via ``connect`` to finalise the session.
+    """
+    vols = await _SESSION.require().list_network_volumes()
+    return {"volumes": vols}
+
+
+@router.get("/runpod/ssh-public-key")
+def ssh_public_key():
+    """The local SSH public key, for the user to paste into RunPod Settings → SSH Keys.
+
+    RunPod injects account public keys into every pod at CREATION; a key added to a running
+    pod dies with it. Without the matching key registered, pods boot and refuse every login.
+    Returns ``present: false`` (not an error) when there is no local keypair, so the wizard
+    can show the ``ssh-keygen -t ed25519`` hint.
+    """
+    pub = Path.home() / ".ssh" / "id_ed25519.pub"
+    if not pub.exists():
+        return {"present": False, "public_key": None}
+    try:
+        return {"present": True, "public_key": pub.read_text().strip()}
+    except OSError as exc:
+        logger.warning("runpod: could not read %s: %s", pub, exc)
+        return {"present": False, "public_key": None}
 
 
 @router.get("/runpod/pods")

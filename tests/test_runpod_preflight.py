@@ -185,6 +185,34 @@ class TestStockFetch:
     def test_absent_stock_means_unavailable(self, status):
         assert pf.in_stock({"stock": status}) is False
 
+
+class TestBalanceFetch:
+    """RunPod kills every pod at $0 balance, so the wizard shows it up front. Balance
+    lives only on the legacy GraphQL API — same key-as-query-param quirk as stock."""
+
+    def test_reads_the_balance(self):
+        payload = {"data": {"myself": {"clientBalance": 207.0, "currentSpendPerHr": 0.34}}}
+        transport = httpx.MockTransport(lambda r: httpx.Response(200, json=payload))
+        got = asyncio.run(pf.fetch_balance("k", transport=transport))
+        assert got == {"available": True, "balance": 207.0, "spend_per_hr": 0.34}
+
+    def test_a_cloudflare_403_is_flagged_not_mistaken_for_a_bad_key(self):
+        """The 403 with body 'error code: 1010' is Cloudflare bot-blocking the client,
+        NOT a rejected key — an hour was once lost to that confusion."""
+        transport = httpx.MockTransport(
+            lambda r: httpx.Response(403, text="error code: 1010")
+        )
+        got = asyncio.run(pf.fetch_balance("k", transport=transport))
+        assert got["available"] is False
+        assert "Cloudflare" in got["reason"]
+
+    def test_never_raises_on_a_transport_error(self):
+        def handler(req):
+            raise httpx.ConnectError("down")
+
+        got = asyncio.run(pf.fetch_balance("k", transport=httpx.MockTransport(handler)))
+        assert got["available"] is False
+
     @pytest.mark.parametrize("status", ["Low", "Medium", "High"])
     def test_any_named_stock_level_counts_as_available(self, status):
         assert pf.in_stock({"stock": status}) is True

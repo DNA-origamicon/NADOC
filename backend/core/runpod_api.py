@@ -188,6 +188,26 @@ def parse_pod(data: dict[str, Any]) -> PodInfo:
     )
 
 
+def parse_network_volume(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalise one network-volume object from ``GET /networkvolumes``.
+
+    The volume is where everything durable lives (the patched multi-arch NAMD, the
+    packages, every checkpoint) and it PINS the pod to its datacenter. The setup wizard
+    lists these so the user picks the finished volume instead of pasting an opaque id.
+    """
+    size = data.get("size")
+    try:
+        size_gb = int(size) if size is not None else None
+    except (TypeError, ValueError):
+        size_gb = None
+    return {
+        "id": str(data.get("id", "")),
+        "name": data.get("name") or "",
+        "size_gb": size_gb,
+        "data_center_id": data.get("dataCenterId") or None,
+    }
+
+
 def ssh_endpoint(pod: PodInfo) -> Optional[tuple[str, int]]:
     """``(host, port)`` for direct-TCP SSH, or None while the pod is still booting.
 
@@ -304,6 +324,17 @@ class RunpodClient:
         if isinstance(data, dict):  # some deployments wrap it
             data = data.get("pods") or data.get("data") or []
         return [parse_pod(p) for p in data]
+
+    async def list_network_volumes(self) -> list[dict[str, Any]]:
+        """Every network volume on the account (``GET /networkvolumes``).
+
+        Read-only — creates nothing, bills nothing. Used by the setup wizard to offer the
+        volume as a dropdown. Same wrapping tolerance as ``list_pods``.
+        """
+        data = await self._request("GET", "/networkvolumes") or []
+        if isinstance(data, dict):  # some deployments wrap it
+            data = data.get("networkVolumes") or data.get("data") or []
+        return [parse_network_volume(v) for v in data]
 
     async def terminate_pod(self, pod_id: str) -> None:
         """Destroy the pod. Idempotent: terminating an already-dead pod is not an error.

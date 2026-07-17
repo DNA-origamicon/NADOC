@@ -5038,6 +5038,11 @@
                   <div id="md-jobs-cluster-reconnect-note"
                        style="display:none;font-size:var(--text-xs);color:#d29922;background:#1c1400;border:1px solid #6b4e00;border-radius:3px;padding:5px;margin-bottom:6px"></div>
 
+                  <!-- First-time RunPod setup wizard entry point (API key → SSH key → volume →
+                       pre-flight). Always present so a new user has a path in; the button is
+                       rendered by initRunpodSetup. -->
+                  <div id="md-runpod-setup-mount" style="margin-bottom:6px"></div>
+
                   <!-- RunPod status + pre-flight. Visible while the RunPod run-target is selected.
                        Every row maps to a failure that already cost a real, billing pod; the Run
                        button stays disabled until they are all green. -->

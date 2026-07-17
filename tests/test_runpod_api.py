@@ -21,6 +21,7 @@ from backend.core.runpod_api import (
     RunpodClient,
     RunpodError,
     build_create_payload,
+    parse_network_volume,
     parse_pod,
     pod_is_ready,
     ssh_endpoint,
@@ -114,6 +115,55 @@ class TestParsePod:
                          "portMappings": {"22": "not-a-port"}, "costPerHr": "free"})
         assert pod.ssh_port is None
         assert pod.cost_per_hr is None
+
+
+class TestNetworkVolumes:
+    """Listing volumes is read-only — it creates no pod and bills nothing. It exists so
+    the setup wizard can offer the account's volumes as a dropdown instead of an opaque
+    id the user has to paste."""
+
+    def test_parses_a_volume_object(self):
+        v = parse_network_volume(
+            {"id": "77pnhye88p", "name": "namd-vol", "size": 60, "dataCenterId": "EU-RO-1"}
+        )
+        assert v == {"id": "77pnhye88p", "name": "namd-vol",
+                     "size_gb": 60, "data_center_id": "EU-RO-1"}
+
+    def test_tolerates_garbage_size(self):
+        v = parse_network_volume({"id": "x", "size": "huge"})
+        assert v["size_gb"] is None
+        assert v["name"] == ""
+
+    def test_lists_volumes(self):
+        def handler(req):
+            assert req.url.path.endswith("/networkvolumes")
+            return httpx.Response(200, json=[
+                {"id": "v1", "name": "a", "size": 60, "dataCenterId": "EU-RO-1"},
+                {"id": "v2", "name": "b", "size": 100, "dataCenterId": "US-KS-2"},
+            ])
+
+        async def go():
+            c = _client(handler)
+            vols = await c.list_network_volumes()
+            await c.aclose()
+            return vols
+
+        vols = _run(go())
+        assert [v["id"] for v in vols] == ["v1", "v2"]
+        assert vols[1]["size_gb"] == 100
+
+    def test_unwraps_a_wrapped_response(self):
+        """Some deployments wrap the list in {"networkVolumes": [...]}."""
+        def handler(req):
+            return httpx.Response(200, json={"networkVolumes": [{"id": "v1"}]})
+
+        async def go():
+            c = _client(handler)
+            vols = await c.list_network_volumes()
+            await c.aclose()
+            return vols
+
+        assert [v["id"] for v in _run(go())] == ["v1"]
 
 
 def _client(handler):

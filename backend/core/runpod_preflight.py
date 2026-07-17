@@ -95,6 +95,50 @@ async def fetch_gpu_stock(
     return out
 
 
+async def fetch_balance(
+    api_key: str, *, transport: Optional[httpx.AsyncBaseTransport] = None
+) -> dict:
+    """The account balance — the one number that silently kills a run.
+
+    RunPod destroys every pod the instant the balance hits zero, so a multi-day run that
+    dies at 80% for want of credit wastes everything spent to that point. The setup wizard
+    shows this so the user tops up BEFORE renting.
+
+    Balance lives ONLY on the legacy GraphQL API (``myself { clientBalance }``) — the REST
+    v1 API exposes no billing endpoint. Same quirks as ``fetch_gpu_stock``: key as a query
+    param, a browser User-Agent (Cloudflare 403s ``error code: 1010`` on a bare python UA —
+    that is a bot-block, NOT a bad key). Never raises: an unreadable balance is
+    ``{"available": False, "reason": ...}``, because the caller is an endpoint, not a gate.
+    """
+    query = "query { myself { clientBalance currentSpendPerHr } }"
+    try:
+        async with httpx.AsyncClient(transport=transport, timeout=20.0) as client:
+            resp = await client.post(
+                f"{GRAPHQL_URL}?api_key={api_key}",
+                content=json.dumps({"query": query}),
+                headers={"Content-Type": "application/json", "User-Agent": _UA},
+            )
+        if resp.status_code in (401, 403):
+            body = resp.text[:120]
+            reason = f"HTTP {resp.status_code}"
+            if "1010" in body:
+                reason += " (Cloudflare bot-block, not a bad key)"
+            return {"available": False, "reason": reason}
+        if resp.status_code != 200:
+            return {"available": False, "reason": f"HTTP {resp.status_code}"}
+        body = resp.json() or {}
+        if body.get("errors"):
+            return {"available": False, "reason": f"GraphQL error: {body['errors']}"}
+        me = (body.get("data") or {}).get("myself") or {}
+        return {
+            "available": True,
+            "balance": float(me["clientBalance"]),
+            "spend_per_hr": float(me.get("currentSpendPerHr") or 0.0),
+        }
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        return {"available": False, "reason": str(exc)}
+
+
 def in_stock(entry: Optional[dict]) -> bool:
     return bool(entry) and entry.get("stock") not in _OUT_OF_STOCK
 

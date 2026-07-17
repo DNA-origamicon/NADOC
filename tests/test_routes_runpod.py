@@ -33,6 +33,7 @@ def _reset_session():
     yield
     routes_runpod._SESSION.client = None  # noqa: SLF001
     routes_runpod._SESSION.network_volume_id = None  # noqa: SLF001
+    routes_runpod._SESSION.api_key = None  # noqa: SLF001 — else /balance hits GraphQL for real
 
 
 def _pod(pid="p1", status="RUNNING"):
@@ -123,6 +124,77 @@ class TestConnect:
                     json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME})
         assert client.post("/api/runpod/disconnect").json()["connected"] is False
         assert client.get("/api/runpod/pods").status_code == 400
+
+
+class TestSetupWizard:
+    """The first-time-setup wizard connects the key BEFORE a volume is chosen (that is
+    what unlocks the balance + volume-list lookups), then reconnects with the volume."""
+
+    def test_connect_without_a_volume_is_allowed(self, client, monkeypatch):
+        """Key-first: the wizard verifies the key before the user has picked a volume."""
+        _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[]))
+        r = client.post("/api/runpod/connect", json={"api_key": "rp_abcdefgh"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["connected"] is True
+        assert body["network_volume_id"] is None
+
+    def test_a_key_only_reverify_keeps_the_chosen_volume(self, client, monkeypatch):
+        """Reconnecting to refresh status must not wipe a volume the user already set."""
+        _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[]))
+        client.post("/api/runpod/connect",
+                    json={"api_key": "rp_abcdefgh", "network_volume_id": VOLUME})
+        r = client.post("/api/runpod/connect", json={"api_key": "rp_abcdefgh"})
+        assert r.json()["network_volume_id"] == VOLUME
+
+    def test_volumes_list_needs_a_key(self, client):
+        assert client.get("/api/runpod/volumes").status_code == 400
+
+    def test_volumes_are_listed_for_the_dropdown(self, client, monkeypatch):
+        def handler(req):
+            if req.url.path.endswith("/networkvolumes"):
+                return httpx.Response(200, json=[
+                    {"id": VOLUME, "name": "namd", "size": 60, "dataCenterId": "EU-RO-1"},
+                ])
+            return httpx.Response(200, json=[])
+
+        _mock_runpod(monkeypatch, handler)
+        client.post("/api/runpod/connect", json={"api_key": "rp_abcdefgh"})
+        vols = client.get("/api/runpod/volumes").json()["volumes"]
+        assert vols[0]["id"] == VOLUME
+        assert vols[0]["size_gb"] == 60
+
+    def test_balance_is_unavailable_without_a_key(self, client):
+        body = client.get("/api/runpod/balance").json()
+        assert body["available"] is False
+        assert "API key" in body["reason"]
+
+    def test_balance_is_shown_once_connected(self, client, monkeypatch):
+        _mock_runpod(monkeypatch, lambda req: httpx.Response(200, json=[]))
+        client.post("/api/runpod/connect", json={"api_key": "rp_abcdefgh"})
+
+        async def fake_balance(api_key, **kw):
+            return {"available": True, "balance": 207.0, "spend_per_hr": 0.0}
+
+        monkeypatch.setattr(routes_runpod.runpod_preflight, "fetch_balance", fake_balance)
+        body = client.get("/api/runpod/balance").json()
+        assert body["available"] is True
+        assert body["balance"] == 207.0
+
+    def test_ssh_public_key_reports_present_when_it_exists(self, client, monkeypatch, tmp_path):
+        home = tmp_path
+        (home / ".ssh").mkdir()
+        (home / ".ssh" / "id_ed25519.pub").write_text("ssh-ed25519 AAAAC3Nz user@host\n")
+        monkeypatch.setattr(routes_runpod.Path, "home", staticmethod(lambda: home))
+        body = client.get("/api/runpod/ssh-public-key").json()
+        assert body["present"] is True
+        assert body["public_key"].startswith("ssh-ed25519")
+
+    def test_ssh_public_key_absent_is_not_an_error(self, client, monkeypatch, tmp_path):
+        monkeypatch.setattr(routes_runpod.Path, "home", staticmethod(lambda: tmp_path))
+        body = client.get("/api/runpod/ssh-public-key").json()
+        assert body["present"] is False
+        assert body["public_key"] is None
 
 
 class TestPodLeakCheck:
