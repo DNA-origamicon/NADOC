@@ -33,7 +33,7 @@ import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from '.
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import { runExclusive } from './primitives/button_busy.js'
 import { runControlState, RUN_ACTION } from './job_run_control.js'
-import { initAdvancedOptimize, renderRunPath } from './md_advanced_optimize.js'
+import { initAdvancedOptimize, renderRunPath, productionTimestepWarning } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
 import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
@@ -49,8 +49,25 @@ const _C = {
 }
 
 const _TERMINAL_STATUSES = new Set(['completed', 'failed', 'stopped'])
-const _PRODUCTION_TIMESTEP_FS = 1.0
-const _PRODUCTION_STEPS_PER_NS = 1_000_000 / _PRODUCTION_TIMESTEP_FS
+// Production runs at the timestep chosen in the Advanced card: 4 fs fast (default),
+// 2 fs medium, or 1 fs conservative.  (This was hard-coded to 1 fs, which under-reported
+// every fast production run's simulated time by 4x.)
+export const DEFAULT_PRODUCTION_TIMESTEP_FS = 4.0
+/** Pure: simulated ns for a raw NAMD step count at a given production timestep (fs). */
+export function productionNsFromSteps(steps, timestepFs = DEFAULT_PRODUCTION_TIMESTEP_FS) {
+  const ts = Number(timestepFs) > 0 ? Number(timestepFs) : DEFAULT_PRODUCTION_TIMESTEP_FS
+  return (Number(steps) || 0) * ts / 1_000_000
+}
+/** Pure: the production timestep a prepared job will actually use — its stored
+ *  `production_timestep_fs` (Advanced card), or the legacy fast?4:1 derivation for
+ *  jobs prepared before that field existed. */
+export function jobProductionTimestepFs(job) {
+  const pp = job?.prep_params
+  const ts = Number(pp?.production_timestep_fs)
+  if (ts === 1 || ts === 2 || ts === 4) return ts
+  if (pp) return pp.fast ? 4.0 : 1.0
+  return DEFAULT_PRODUCTION_TIMESTEP_FS
+}
 const _SHOW_ALL_KEY = 'nadoc:md-jobs-show-all'
 const _WORKSPACE_PATH_KEY = 'nadoc:workspace-path'
 const _MD_PREWARM_INTERVAL_MS = 30000
@@ -639,6 +656,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const watershellInput = document.getElementById('md-jobs-watershell')
   const minstepsInput = document.getElementById('md-jobs-minsteps')
   const autostartChk  = document.getElementById('md-jobs-autostart')
+  const prodTimestepSel = document.getElementById('md-jobs-prod-timestep')
+  const timestepWarnEl  = document.getElementById('md-jobs-timestep-warn')
   const fastChk       = document.getElementById('md-jobs-fast')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
   const optimizeBtn   = document.getElementById('md-jobs-optimize')
@@ -892,8 +911,36 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     padding_nm:     Number(paddingInput?.value) || undefined,
     minimize_steps: Number(minstepsInput?.value) || undefined,
     fast:           !!fastChk?.checked,
+    production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
   })
   const _paintRunPath = () => renderRunPath(runPathEl, _advValues())
+
+  // The production timestep the ETA + Start-Production controls should assume: a
+  // selected prepared job's own dt if one is selected, else the Advanced-card dropdown
+  // (which configures the NEXT relaxation).
+  const _effectiveProdTimestepFs = () => {
+    const job = _jobs.find(j => j.job_id === _selectedId)
+    if (job) return jobProductionTimestepFs(job)
+    return Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS
+  }
+
+  // Warn (inline, under the Fast checkbox) when the chosen production timestep outruns
+  // what the fast relaxation ladder validated for this design.
+  const _TS_WARN_STYLE = {
+    warn:  'border:1px solid #9e6a03;background:#2d2000;color:#d0b184',
+    error: 'border:1px solid #a1332a;background:#2b0f0d;color:#f0b4ad',
+  }
+  const _paintTimestepWarning = () => {
+    if (!timestepWarnEl) return
+    const w = productionTimestepWarning({
+      timestepFs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
+      fastLadder: !!fastChk?.checked,
+    })
+    if (!w) { timestepWarnEl.style.display = 'none'; timestepWarnEl.textContent = ''; return }
+    timestepWarnEl.style.cssText =
+      `display:block;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4;${_TS_WARN_STYLE[w.tone]}`
+    timestepWarnEl.textContent = `⚠ ${w.message}`
+  }
 
   const _optDevices = () => (computeSel?.value === 'cpu' ? 'cpu' : (devicesInput?.value || '0'))
   initAdvancedOptimize({
@@ -921,6 +968,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     el?.addEventListener('change', _paintRunPath)
   }
   _paintRunPath()
+
+  // Production-timestep dropdown + the Fast checkbox drive the ETA (fast runs cover 4x
+  // the ns per step) and the "you changed dt without the fast ladder" warning.
+  for (const el of [prodTimestepSel, fastChk]) {
+    el?.addEventListener('change', () => { _updateProductionTime(); _paintTimestepWarning() })
+  }
+  _paintTimestepWarning()
 
   // ── Jobs + Visualizations cards: simple collapse (start open), mirror oxDNA ──
   for (const [tid, bid, aid] of [
@@ -1196,13 +1250,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }
 
   function _productionNs(steps = _productionSteps()) {
-    return steps / _PRODUCTION_STEPS_PER_NS
+    return productionNsFromSteps(steps, _effectiveProdTimestepFs())
   }
 
   function _updateProductionTime() {
     const steps = _productionSteps()
     if (prodStepsInput && String(steps) !== prodStepsInput.value) prodStepsInput.value = String(steps)
-    if (prodTimeEl) prodTimeEl.textContent = `${_productionNs(steps).toFixed(3)} ns`
+    if (prodTimeEl) {
+      const ts = _effectiveProdTimestepFs()
+      prodTimeEl.textContent = `${_productionNs(steps).toFixed(3)} ns (${ts % 1 ? ts : ts.toFixed(0)} fs)`
+    }
   }
 
   function _setProductionEnabled(enabled) {
@@ -1215,6 +1272,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   }
 
   function _renderProductionControls(job, meta = _displayMeta) {
+    // The ETA depends on the selected job's production timestep (fast=4 fs covers 4x the
+    // ns per step), so refresh it whenever the selection/controls re-render.
+    _updateProductionTime()
     // Chain mode: the Production button queues a production STAGE (enabled whenever the
     // engines are present — queue ordering is preflight's job, not a live-parent check).
     if (getChainMode?.()) {
@@ -2121,6 +2181,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       minimize_steps: parseInt(minstepsInput?.value  ?? '10000', 10),
       autostart:      autostartChk?.checked ?? true,
       fast:           fastChk?.checked ?? true,
+      production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
       early_stop_relax: earlyStopChk?.checked ?? false,
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
@@ -2434,6 +2495,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     set(minstepsInput, p.minimize_steps)
     if (autostartChk) autostartChk.checked = p.autostart ?? true
     if (fastChk) fastChk.checked = p.fast ?? true
+    if (prodTimestepSel && p.production_timestep_fs != null) {
+      prodTimestepSel.value = String(p.production_timestep_fs)
+      _paintTimestepWarning()
+    }
     if (earlyStopChk) earlyStopChk.checked = p.early_stop_relax ?? false
     _syncSolventFields()   // gray explicit-solvent knobs if the draft is GBIS
     if (advBody && advBody.style.display === 'none') advToggle?.click()   // reveal the drawer

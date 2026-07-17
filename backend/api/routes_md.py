@@ -32,7 +32,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
@@ -117,6 +117,22 @@ class CreateJobRequest(BaseModel):
                     "Set false (or untick in the UI) if a very large design fails the "
                     "first hard segment with a GPU out-of-memory error.",
     )
+    production_timestep_fs: float = Field(
+        4.0,
+        description="Integrator timestep (fs) for the PRODUCTION run: 4.0 (fast, HMR + "
+                    "GPUresident — the default; needs the fast relaxation ladder), 2.0 "
+                    "(rigidBonds all + GPUresident, no HMR — a manual medium path), or 1.0 "
+                    "(conservative reference, rigidBonds none). Only these three are allowed; "
+                    "2.0 is a deliberate manual choice, never auto-selected. See "
+                    "memory/feedback_namd_4fs_production_only.md.",
+    )
+
+    @field_validator("production_timestep_fs")
+    @classmethod
+    def _sanctioned_production_timestep(cls, v: float) -> float:
+        if v not in (1.0, 2.0, 4.0):
+            raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
+        return float(v)
     design_source_path: Optional[str] = Field(
         None,
         description="Workspace path of the part used to create this job",
@@ -723,16 +739,18 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   box: tuple[float, float, float],
                                   mgh_extrabonds: bool, *,
                                   fast: bool = False,
+                                  timestep_fs: Optional[float] = None,
                                   structure_psf: Optional[str] = None,
                                   anchors_file: Optional[str] = None,
                                   field: Optional[dict] = None) -> str:
     # Thin delegate to the shared, parameterized builder in md_protocols (the ensemble
     # path calls the same builder with a per-replica seed + start_checkpoint).  Defaults
-    # here reproduce the original template byte-for-byte; anchors_file/field weave the
+    # here reproduce the original template byte-for-byte; timestep_fs (1/2/4) selects the
+    # integrator path for the user's Advanced-card choice; anchors_file/field weave the
     # external-forces block in for anchored/E-field production runs.
     return build_production_conf(
         spec, name_stem, box, mgh_extrabonds,
-        fast=fast, structure_psf=structure_psf,
+        fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
         anchors_file=anchors_file, field=field,
     )
 
@@ -827,12 +845,17 @@ def _production_steps_and_ns(body: ProductionRequest, timestep_fs: float) -> tup
 def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     """Resolve the production timestep, step count, and fast-mode eligibility.
 
-    Production is HMR/4fs-eligible exactly when the relaxation ladder itself
-    already validated 4 fs rigid dynamics for THIS design
-    (``fast_relaxation.enabled``) and it is not a declash design (residual
-    single-stranded contacts that crash rigidBonds RATTLE).  Note a NORMAL fast
-    ladder always carries ONE soft strain-relief segment, so "any soft segment"
-    is the wrong signal — it would force every design back to the slow path."""
+    A user can pick the production timestep by hand in the Advanced card (1/2/4 fs),
+    stored as ``manifest["production_timestep_fs"]``.  When present it wins; otherwise
+    (older packages) the timestep is auto-derived: HMR/4fs when the relaxation ladder
+    itself validated 4 fs rigid dynamics for THIS design (``fast_relaxation.enabled``)
+    and it is not a declash design (residual single-stranded contacts that crash
+    rigidBonds RATTLE), else the 1 fs conservative reference.
+
+    ``fast`` here means the 4 fs HMR + GPUresident path (needs the HMR PSF built in
+    ``_append_production_segments``).  2 fs is GPUresident but non-HMR; 1 fs is the
+    conservative reference.  Note a NORMAL fast ladder always carries ONE soft
+    strain-relief segment, so "any soft segment" is the wrong eligibility signal."""
     package_dir = job.package_dir(_workspace())
     try:
         manifest = json.loads((package_dir / "manifest.json").read_text())
@@ -840,8 +863,17 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         manifest = {}
     relaxed_fast = bool(manifest.get("fast_relaxation", {}).get("enabled"))
     declash = bool(manifest.get("declash"))
-    fast = relaxed_fast and not declash
-    timestep_fs = 4.0 if fast else 1.0
+    # User-selected production dt (Advanced card) wins; fall back to the auto default.
+    requested = manifest.get("production_timestep_fs")
+    if requested in (1.0, 2.0, 4.0):
+        timestep_fs = float(requested)
+    else:
+        timestep_fs = 4.0 if (relaxed_fast and not declash) else 1.0
+    # 4 fs implies the HMR/GPUresident fast path; declash designs never get it.
+    fast = (timestep_fs == 4.0) and not declash
+    if timestep_fs == 4.0 and declash:
+        # A declash design cannot run rigidBonds-all HMR at 4 fs — fall to the safe ref.
+        timestep_fs = 1.0
     total_steps, length_ns = _production_steps_and_ns(body, timestep_fs)
     return {
         "total_steps": total_steps,
@@ -887,12 +919,17 @@ def _append_production_segments(
     mgh_extrabonds = bool(manifest.get("mgh_extrabonds"))
     min_steps = int(manifest.get("minimization", {}).get("steps", 4800) or 4800)
 
-    # Fast production (HMR + GPUresident + 4 fs) needs the HMR PSF (non-water H x3)
-    # so rigidBonds all stays stable at 4 fs.  A fast relaxation ladder already
-    # wrote {stem}_hmr.psf; otherwise build it once here.  A from-seed job
-    # (reconstructed, unequilibrated coords) always runs the conservative path.
-    fast = bool(plan.get("fast")) and not from_seed
-    timestep_fs = 4.0 if fast else 1.0
+    # Production integrator timestep comes from the plan (user's Advanced-card choice:
+    # 4/2/1 fs, or the auto default).  A from-seed job (reconstructed, unequilibrated
+    # coords) always runs the 1 fs conservative path regardless of the request.
+    timestep_fs = float(plan.get("timestep_fs") or (4.0 if plan.get("fast") else 1.0))
+    if from_seed:
+        timestep_fs = 1.0
+    # 4 fs (HMR + GPUresident + rigidBonds all) needs the HMR PSF (non-water H x3) so
+    # rigidBonds all stays stable at 4 fs.  A fast relaxation ladder already wrote
+    # {stem}_hmr.psf; otherwise build it once here.  2 fs (rigidBonds all, GPUresident,
+    # standard masses) and 1 fs (conservative reference) use the plain PSF — no HMR.
+    fast = (timestep_fs == 4.0)
     structure_psf: Optional[str] = None
     n_hmr = 0
     if fast:
@@ -923,7 +960,7 @@ def _append_production_segments(
         if name in existing:
             previous = name
             continue
-        stage_label = "fast" if fast else "conservative"
+        stage_label = {4.0: "fast", 2.0: "medium", 1.0: "conservative"}.get(timestep_fs, "conservative")
         spec = SegmentSpec(
             name=name,
             stage=f"{length_ns:g} ns {stage_label} production run",
@@ -947,7 +984,7 @@ def _append_production_segments(
         else:
             conf = _conservative_production_conf(
                 spec, name_stem, box, mgh_extrabonds,
-                fast=fast, structure_psf=structure_psf,
+                fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
                 anchors_file=anchors_file, field=field,
             )
         (package_dir / f"{spec.name}.conf").write_text(conf)
@@ -968,12 +1005,17 @@ def _append_production_segments(
         "first_new_segment": segments[0].name,
         "last_new_segment": segments[-1].name,
         "timestep_fs": timestep_fs,
-        "settings": "fast_hmr_gpuresident_4fs" if fast else "conservative_unrestrained",
+        "settings": {
+            4.0: "fast_hmr_gpuresident_4fs",
+            2.0: "medium_gpuresident_2fs",
+            1.0: "conservative_unrestrained",
+        }.get(timestep_fs, "conservative_unrestrained"),
         "fast_production": {
             "enabled": fast,
             "hydrogens_repartitioned": n_hmr,
             "structure_psf": structure_psf,
-            "gpu_resident": fast,
+            # 2 fs is GPUresident (rigidBonds all) without HMR; only 4 fs uses HMR.
+            "gpu_resident": timestep_fs in (2.0, 4.0),
             "timestep_fs": timestep_fs,
             "note": "HMR (non-water H x3) + GPUresident + 4 fs; production "
                     "electrostatics unchanged from the conservative path — "
@@ -1506,6 +1548,7 @@ async def _prepare_job_bg(
             declash         = body.declash,
             force_soft      = body.force_soft,
             fast            = body.fast,
+            production_timestep_fs = body.production_timestep_fs,
             anchors         = body.anchors,
             field           = body.field,
             progress        = tracker.report,

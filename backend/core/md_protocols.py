@@ -316,31 +316,40 @@ def build_remote_resume_conf(
     return "\n".join(kept) + "\n"
 
 
-# 4 fs is the ONLY sanctioned PRODUCTION timestep (HMR + rigidBonds all fast path).  The
-# single long-standing exception is the explicit 1.0 fs conservative-reference run
+# 4 fs is the DEFAULT + only AUTO-selected PRODUCTION timestep (HMR + rigidBonds all fast
+# path).  The single long-standing exception is the explicit 1.0 fs conservative-reference run
 # (rigidBonds none, no HMR) — a deliberately-requested accuracy mode, NOT a stability
-# workaround.  Any intermediate value (2 / 2.5 / 3 / 3.5 fs) is the banned "lower the
-# timestep to dodge a RATTLE clash" anti-pattern: the fix for a 4 fs instability is to remove
-# the offending clash (e.g. oxDNA-seed the extra bases), never to lower production dt.  Lower
-# dt is legitimate ONLY in ramp/anneal/relaxation stages, which do not pass through here.
+# workaround.  2.0 fs (rigidBonds all, GPUresident, no HMR) is a THIRD sanctioned value, but
+# ONLY when a user picks it by hand in the Advanced card (``allow_manual_2fs=True``): the
+# automatic ``fast``-derived path can never yield it, so the banned "silently lower the
+# timestep to dodge a RATTLE clash" drift stays blocked.  Truly intermediate values
+# (2.5 / 3 / 3.5 fs) remain banned outright — the fix for a 4 fs instability is to remove the
+# offending clash (e.g. oxDNA-seed the extra bases), never to shave the production dt.  Lower
+# dt is otherwise legitimate ONLY in ramp/anneal/relaxation stages, which do not pass here.
 # See memory/feedback_namd_4fs_production_only.md.
 PRODUCTION_TIMESTEP_FS = 4.0
 _CONSERVATIVE_REFERENCE_DT_FS = 1.0
+_MANUAL_MEDIUM_DT_FS = 2.0
 
 
-def require_sanctioned_production_timestep(dt_fs: float) -> float:
-    """Enforce the 4 fs-only production rule; return ``dt_fs`` if it is allowed.
+def require_sanctioned_production_timestep(dt_fs: float, *, allow_manual_2fs: bool = False) -> float:
+    """Enforce the sanctioned-production-timestep rule; return ``dt_fs`` if it is allowed.
 
-    Raises ``ValueError`` for any production timestep that is neither the 4.0 fs fast path
-    nor the explicit 1.0 fs conservative-reference path.  This is a hard guard against
-    silently shipping a sub-4 fs production run as a workaround for a local clash/instability.
+    Allowed: the 4.0 fs fast path and the explicit 1.0 fs conservative-reference path always;
+    2.0 fs ONLY when ``allow_manual_2fs`` is set (an explicit user choice in the Advanced card,
+    never an automatic downgrade).  Raises ``ValueError`` for everything else — a hard guard
+    against silently shipping a sub-4 fs production run as a workaround for a local clash.
     """
-    if dt_fs not in (PRODUCTION_TIMESTEP_FS, _CONSERVATIVE_REFERENCE_DT_FS):
+    allowed = {PRODUCTION_TIMESTEP_FS, _CONSERVATIVE_REFERENCE_DT_FS}
+    if allow_manual_2fs:
+        allowed.add(_MANUAL_MEDIUM_DT_FS)
+    if dt_fs not in allowed:
+        extra = " (or the 2.0 fs manual medium path)" if allow_manual_2fs else ""
         raise ValueError(
-            f"production timestep {dt_fs:g} fs is not sanctioned: 4.0 fs is the only "
-            f"acceptable production dt (or the explicit 1.0 fs conservative-reference path). "
-            f"Lower dt is allowed ONLY in ramp/anneal/relaxation. Fix the clash (oxDNA-seed "
-            f"the design), do not lower the production timestep. See "
+            f"production timestep {dt_fs:g} fs is not sanctioned: 4.0 fs is the default "
+            f"acceptable production dt (or the explicit 1.0 fs conservative-reference path"
+            f"{extra}). Intermediate values (2.5/3/3.5 fs) are never allowed. Fix the clash "
+            f"(oxDNA-seed the design), do not lower the production timestep. See "
             f"memory/feedback_namd_4fs_production_only.md"
         )
     return dt_fs
@@ -354,6 +363,7 @@ def build_production_conf(
     *,
     seed: int = 54321,
     fast: bool = False,
+    timestep_fs: Optional[float] = None,
     structure_psf: Optional[str] = None,
     start_checkpoint: Optional[str] = None,
     anchors_file: Optional[str] = None,
@@ -369,9 +379,20 @@ def build_production_conf(
 
     ``fast`` = the HMR + ``rigidBonds all`` + 4 fs + GPUresident throughput mode (see
     ``routes_md._production_fast_plan``); ``structure_psf`` overrides the PSF (the HMR
-    PSF for fast runs).  ``start_checkpoint`` overrides ``spec.previous`` as the source
-    of ``binCoordinates``/``binVelocities``/``extendedSystem`` (default None keeps
-    ``spec.previous`` — the local segment-chain behaviour).
+    PSF for fast runs).
+
+    ``timestep_fs`` (optional) selects the integrator path explicitly for the user's
+    Advanced-card choice, overriding ``fast``:
+
+    * ``4.0`` → HMR + ``rigidBonds all`` + GPUresident (needs the HMR ``structure_psf``);
+    * ``2.0`` → ``rigidBonds all`` + GPUresident, standard (non-HMR) masses — the manual
+      medium path, stable at 2 fs without repartitioning;
+    * ``1.0`` → ``rigidBonds none`` + CPU-integrated conservative reference.
+
+    Left ``None`` it reproduces the ``fast``-derived binary (4 fs fast / 1 fs conservative)
+    byte-for-byte, so existing callers are unchanged.  ``start_checkpoint`` overrides
+    ``spec.previous`` as the source of ``binCoordinates``/``binVelocities``/
+    ``extendedSystem`` (default None keeps ``spec.previous`` — the local chain behaviour).
     """
     bx, by, bz = box
     cx, cy, cz = bx / 2, by / 2, bz / 2
@@ -386,19 +407,29 @@ def build_production_conf(
     # so the production ensemble is unchanged — only integrator/throughput knobs
     # move.  GPUresident is sound here because the solvated box is capped (no
     # covalent bond wraps the periodic image).
-    if fast:
+    # Resolve the integrator path.  When timestep_fs is None, fall back to the
+    # fast-derived binary so existing callers stay byte-identical.
+    ts = float(timestep_fs) if timestep_fs is not None else (4.0 if fast else 1.0)
+    if ts == 4.0:
         psf = structure_psf or f"{name_stem}.psf"
-        rigid, ts, gpu_line = "all", 4.0, "GPUresident        on\n"
+        rigid, gpu_line = "all", "GPUresident        on\n"
         # fullElectFrequency 1 at 4 fs → reciprocal PME every 4 fs, matching the
         # Aksimentiev reference (2 fs x 2).  fullElect 2 here would be PME every
         # 8 fs, past the r-RESPA resonance-stability limit (~4 fs) — and it only
         # bought ~0.7 ns/day.  stepspercycle 10 → 40 fs pairlist rebuild.
         nbf, fef, spc = 1, 1, 10
+    elif ts == 2.0:
+        # Manual medium path: standard (non-HMR) masses, rigidBonds all lets 2 fs run
+        # stably, GPUresident stays on (full box, no vacuum wrap).  This is the classic
+        # Aksimentiev 2 fs production config — no repartitioning needed.
+        psf = structure_psf or f"{name_stem}.psf"
+        rigid, gpu_line = "all", "GPUresident        on\n"
+        nbf, fef, spc = 1, 1, 10
     else:
         psf = f"{name_stem}.psf"
-        rigid, ts, gpu_line = "none", 1.0, ""
+        rigid, gpu_line = "none", ""
         nbf, fef, spc = 1, 1, 10
-    require_sanctioned_production_timestep(ts)  # 4 fs-only rule (or explicit 1 fs reference)
+    require_sanctioned_production_timestep(ts, allow_manual_2fs=(ts == 2.0))
     prev = start_checkpoint or spec.previous
     # Anchors + E-field carry into the unrestrained run — where a field's deflection
     # actually develops.  Dropping them here would silently un-anchor the field job and
@@ -1633,6 +1664,7 @@ def prepare_mgh_slow_release(
     declash: bool = False,
     force_soft: bool = False,
     fast: bool = False,
+    production_timestep_fs: float = 4.0,
     pre_declashed: bool = False,
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
@@ -1957,6 +1989,11 @@ def prepare_mgh_slow_release(
                 else declash_enm_file or f"{name_stem}_k{min_scale:g}.enm.extra"),
         },
         "aksimentiev_enm": enm_report,
+        # User-selected PRODUCTION integrator timestep (Advanced card, 1/2/4 fs).  The
+        # production plan (routes_md._production_fast_plan) reads this; absent (older
+        # packages) it falls back to the fast-derived 4/1 fs default.  2.0 fs is only ever
+        # here because the user picked it — never an automatic downgrade.
+        "production_timestep_fs": float(production_timestep_fs),
         "fast_relaxation": {
             "enabled": fast,
             "hydrogens_repartitioned": n_hmr,

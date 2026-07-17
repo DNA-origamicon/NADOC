@@ -10,6 +10,7 @@ import {
   formatStageLine,
   initAdvancedOptimize,
   planHasChanges,
+  productionTimestepWarning,
   renderRunPath,
   stagePercent,
 } from './md_advanced_optimize.js'
@@ -103,6 +104,34 @@ describe('describeRunPath — the rule that a carve kills GPU-resident', () => {
 
   it('treats a string shell value from the DOM as a number', () => {
     expect(describeRunPath({ compute: 'gpu', water_shell_a: '12', fast: true }).gpuResident).toBe(false)
+  })
+})
+
+describe('productionTimestepWarning — dt vs the fast relaxation ladder', () => {
+  it('no warning when the fast ladder is on, at any timestep', () => {
+    expect(productionTimestepWarning({ timestepFs: 4, fastLadder: true })).toBeNull()
+    expect(productionTimestepWarning({ timestepFs: 2, fastLadder: true })).toBeNull()
+    expect(productionTimestepWarning({ timestepFs: 1, fastLadder: true })).toBeNull()
+  })
+
+  it('4 fs without the fast ladder is an error (no HMR PSF → RATTLE)', () => {
+    const w = productionTimestepWarning({ timestepFs: 4, fastLadder: false })
+    expect(w.tone).toBe('error')
+    expect(w.message).toMatch(/fast relaxation ladder/i)
+  })
+
+  it('2 fs without the fast ladder is a soft warning', () => {
+    const w = productionTimestepWarning({ timestepFs: 2, fastLadder: false })
+    expect(w.tone).toBe('warn')
+  })
+
+  it('1 fs conservative is always safe, ladder or not', () => {
+    expect(productionTimestepWarning({ timestepFs: 1, fastLadder: false })).toBeNull()
+  })
+
+  it('coerces a string dropdown value and defaults to no warning', () => {
+    expect(productionTimestepWarning({ timestepFs: '4', fastLadder: false }).tone).toBe('error')
+    expect(productionTimestepWarning({})).toBeNull()   // defaults: 4 fs + ladder on
   })
 })
 

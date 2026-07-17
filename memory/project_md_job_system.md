@@ -332,6 +332,25 @@ production path:
   the ns/day claim is projected from the fast-relaxation validation, not measured
   on this production path.
 
+**User-selectable production timestep — 1/2/4 fs (2026-07-16):** the Advanced card gained a
+**Production timestep** dropdown (`#md-jobs-prod-timestep`, index.html) so the dt is no longer
+implied purely by the `fast` checkbox. Wire: dropdown → `CreateJobRequest.production_timestep_fs`
+(validated ∈ {1,2,4}) → `manifest["production_timestep_fs"]` (written in `md_protocols`
+prepare) → `_production_fast_plan` (manifest value wins; falls back to the old fast?4:1
+derivation for pre-existing packages) → `build_production_conf(timestep_fs=…)`. Three integrator
+paths: **4 fs** = HMR + `rigidBonds all` + GPUresident (needs the fast relax ladder / HMR PSF);
+**2 fs** = `rigidBonds all` + GPUresident on *standard* masses (no HMR — the manual medium path);
+**1 fs** = conservative reference (`rigidBonds none`, no GPUresident). A declash design requesting
+4 fs is still force-dropped to 1 fs. `require_sanctioned_production_timestep` now takes
+`allow_manual_2fs` (2 fs allowed ONLY via the explicit manual selection, never the auto path;
+2.5/3/3.5 still banned) — see [[feedback_namd_4fs_production_only]]. A warning appears under the
+Fast checkbox (`productionTimestepWarning`, `md_advanced_optimize.js`) when 4/2 fs is picked
+without the fast relax ladder. Also fixed the **production-time ETA**: it was hard-coded to
+`_PRODUCTION_TIMESTEP_FS = 1.0`, under-reporting every fast run's simulated ns by 4× — now
+`productionNsFromSteps(steps, ts)` + `jobProductionTimestepFs(job)` use the real dt, and the
+"Total time" readout shows the assumed fs. Tests: `test_md_production_timestep.py` (16),
+`md_advanced_optimize.test.js` + `md_jobs_panel.test.js` (pure helpers).
+
 **Disk-space guard + forecast (2026-07-02):** new `backend/core/disk_guard.py`
 owns the whole "will this run out of disk" policy for BOTH engines:
 - Thresholds: `WARN_MIN_FREE_BYTES=10 GiB` (pre-run popup), `ABORT_MIN_FREE_BYTES=5

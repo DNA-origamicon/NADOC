@@ -156,13 +156,16 @@ def main() -> int:
             "HMR PSF exists AND is referenced",
             "written but referenced by nothing => prepped without fast=True")
 
-    # ── 2b. 4 fs is the ONLY sanctioned production timestep ─────────────────
+    # ── 2b. GPUresident production dt must be a sanctioned value (4 or manual 2 fs) ──
     # A prior session drifted toward "accept 3.0/3.5 fs and match it" to dodge a RATTLE clash
-    # on the extra-base sugars. That is forbidden: 4 fs is the only shippable production dt;
-    # the fix for a 4 fs instability is to remove the clash (oxDNA-seed the design), not to
-    # lower the timestep. Lower dt is legitimate ONLY in the soft ramp chunk (1 fs, offload).
+    # on the extra-base sugars. That is forbidden: the fix for a 4 fs instability is to remove
+    # the clash (oxDNA-seed the design), not to shave the timestep. 4.0 fs is the default; 2.0
+    # fs is allowed ONLY as a deliberate user choice in the Advanced card (rigidBonds all,
+    # GPUresident, no HMR) — never an auto downgrade. Intermediate values (2.5/3/3.5 fs) stay
+    # banned. Lower dt is otherwise legitimate ONLY in the soft ramp chunk (1 fs, offload).
     # See memory/feedback_namd_4fs_production_only.md.
-    print("\ntimestep — 4 fs is the ONLY sanctioned production dt (lower dt only in the soft ramp)")
+    _SANCTIONED_GPU_DT = (2.0, 4.0)   # 1 fs conservative runs are never GPUresident
+    print("\ntimestep — GPUresident production dt must be 4 fs (or a manual 2 fs); no 2.5/3/3.5")
     bad_dt = []
     for c in confs:
         txt = c.read_text()
@@ -171,16 +174,17 @@ def main() -> int:
             continue
         dt = float(m.group(1))
         # The soft/declash ramp chunk (offload, no GPUresident) is exempt — it is a 1 fs
-        # relaxation stage feeding the 4 fs production, not a production run itself.
+        # relaxation stage feeding production, not a production run itself.
         if "GPUresident" not in txt:
             continue
-        if abs(dt - 4.0) > 1e-6:
+        if not any(abs(dt - v) < 1e-6 for v in _SANCTIONED_GPU_DT):
             bad_dt.append(f"{c.stem}={dt:g}fs")
-    g.check(not bad_dt, "every GPUresident (production/fast) conf runs timestep 4.0",
-            f"SUB-4fs PRODUCTION dt: {', '.join(bad_dt)} — 4 fs is the ONLY sanctioned "
-            f"production timestep. Fix the clash (oxDNA-seed the extra bases); do NOT lower "
-            f"the production dt. See memory/feedback_namd_4fs_production_only.md",
-            on_pass="all 4.0 fs")
+    g.check(not bad_dt, "every GPUresident (production/fast) conf runs timestep 4.0 or 2.0",
+            f"UNSANCTIONED PRODUCTION dt: {', '.join(bad_dt)} — only 4.0 fs (default) or a "
+            f"deliberate 2.0 fs manual choice are allowed on GPUresident. Fix the clash "
+            f"(oxDNA-seed the extra bases); do NOT drift to 2.5/3/3.5 fs. See "
+            f"memory/feedback_namd_4fs_production_only.md",
+            on_pass="all 4.0/2.0 fs")
 
     # ── 3. Early-stop can actually FIRE ─────────────────────────────────────
     # THE silent 4x bug. outputEnergies was a hardcoded 9600 STEPS; enabling `fast` halves

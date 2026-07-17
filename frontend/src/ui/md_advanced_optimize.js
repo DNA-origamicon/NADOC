@@ -111,6 +111,37 @@ export function describeRunPath({ compute = 'gpu', water_shell_a = 0, fast = tru
   }
 }
 
+/**
+ * Warn when the chosen PRODUCTION timestep is riskier than what THIS job's relaxation
+ * validated.  PURE.  The "fast relaxation ladder" (the Fast checkbox) is what builds and
+ * validates the HMR structure that makes 4 fs rigid dynamics stable; without it, an
+ * elevated timestep is a gamble.
+ *
+ * @param {{timestepFs:number, fastLadder:boolean}} opts
+ * @returns {{tone:'warn'|'error', message:string} | null}  null = no warning needed.
+ */
+export function productionTimestepWarning({ timestepFs = 4, fastLadder = true } = {}) {
+  const ts = Number(timestepFs)
+  if (fastLadder) return null                     // ladder validated 4 fs → any dt is safe
+  if (ts >= 4) {
+    return {
+      tone: 'error',
+      message: '4 fs production needs the fast relaxation ladder (it builds & validates the '
+             + 'HMR structure). With Fast relaxation off there is no repartitioned PSF — the '
+             + 'run is likely to blow up in RATTLE. Enable Fast relaxation, or drop to 2 / 1 fs.',
+    }
+  }
+  if (ts === 2) {
+    return {
+      tone: 'warn',
+      message: '2 fs without the fast relaxation ladder: it runs rigidBonds-all on standard '
+             + 'masses (usually stable), but this design was not ladder-validated at 2 fs — '
+             + 'watch the first frames for RATTLE / fast-atom warnings.',
+    }
+  }
+  return null                                     // 1 fs conservative reference → always safe
+}
+
 /** Escape text before it goes into innerHTML. */
 const esc = (s) => String(s).replace(/[&<>"']/g, c => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]

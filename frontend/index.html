@@ -4867,7 +4867,15 @@
                     <input id="md-jobs-watershell" type="number" value="0" min="0" step="1"
                            title="0 = full box. >0 keeps only water within this distance of the DNA — shrinks large designs to fit a small GPU. Use ≥8 Å; 12 Å is the validated default. TRADE-OFF: a carve leaves vacuum in the cell, which forces NVT (no barostat) AND disables NAMD's GPU-resident mode (it aborts at step 0 on a sparse cell). The run stays CUDA-accelerated on the offload path. Worth it only when the carve removes >~2.6x the atoms — true for bent/concave designs, false for straight bundles. Use ⚡ to decide."
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center" title="Integrator timestep for the PRODUCTION run. 4 fs (default) needs the fast relaxation ladder (HMR + rigidBonds all validated); 2 fs is a stable manual medium path (rigidBonds all + GPU-resident, no HMR); 1 fs is the conservative reference (rigidBonds none). Only 4/2/1 are allowed — intermediate values are never a fix for instability (remove the clash instead). Lowering it costs proportional wall-clock.">Production timestep</label>
+                    <select id="md-jobs-prod-timestep"
+                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <option value="4">4 fs (fast, HMR)</option>
+                      <option value="2">2 fs (medium)</option>
+                      <option value="1">1 fs (conservative)</option>
+                    </select>
                   </div>
+                  <div id="md-jobs-timestep-warn" style="display:none;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4"></div>
                   <!-- Derived, read-only: which NAMD code path the settings above actually
                        select.  GPU-resident is ~2.6x faster per atom but is silently
                        disabled by any water-shell carve, so it must be visible. -->

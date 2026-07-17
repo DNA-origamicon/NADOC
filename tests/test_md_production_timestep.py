@@ -1,0 +1,152 @@
+"""User-selectable production timestep (Advanced card: 1 / 2 / 4 fs).
+
+Fast, pure tests — no NAMD is run.  They pin:
+  * the sanctioned-timestep guard (2 fs allowed ONLY with the explicit manual flag),
+  * build_production_conf emitting the right integrator block per timestep, and
+  * the CreateJobRequest validator rejecting anything but 1/2/4.
+See memory/feedback_namd_4fs_production_only.md.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from backend.core.md_protocols import (
+    SegmentSpec,
+    build_production_conf,
+    require_sanctioned_production_timestep,
+)
+
+
+def _spec() -> SegmentSpec:
+    return SegmentSpec(
+        name="d_01_production_2ns_k0_p100", stage="production", percent=100.0,
+        steps=500_000, temp=300.0, damping=5.0, scale=None, npt=True,
+        previous="d_00_min", dcd_freq=1000,
+    )
+
+
+class TestSanctionedTimestepGuard:
+    def test_4_and_1_always_allowed(self) -> None:
+        assert require_sanctioned_production_timestep(4.0) == 4.0
+        assert require_sanctioned_production_timestep(1.0) == 1.0
+
+    def test_2fs_rejected_without_manual_flag(self) -> None:
+        # The AUTOMATIC path must never yield 2 fs — that is the banned drift.
+        with pytest.raises(ValueError, match="not sanctioned"):
+            require_sanctioned_production_timestep(2.0)
+
+    def test_2fs_allowed_only_with_manual_flag(self) -> None:
+        assert require_sanctioned_production_timestep(2.0, allow_manual_2fs=True) == 2.0
+
+    def test_intermediate_values_never_allowed(self) -> None:
+        for dt in (2.5, 3.0, 3.5):
+            with pytest.raises(ValueError):
+                require_sanctioned_production_timestep(dt, allow_manual_2fs=True)
+
+
+class TestBuildProductionConfTimestep:
+    def test_4fs_is_hmr_gpuresident_rigid_all(self) -> None:
+        conf = build_production_conf(_spec(), "d", (10.0, 10.0, 10.0), False,
+                                     timestep_fs=4.0, structure_psf="d_hmr.psf")
+        assert "timestep           4" in conf
+        assert "rigidBonds         all" in conf
+        assert "GPUresident        on" in conf
+        assert "structure          d_hmr.psf" in conf   # uses the repartitioned PSF
+
+    def test_2fs_is_gpuresident_rigid_all_but_plain_psf(self) -> None:
+        conf = build_production_conf(_spec(), "d", (10.0, 10.0, 10.0), False,
+                                     timestep_fs=2.0)
+        assert "timestep           2" in conf
+        assert "rigidBonds         all" in conf
+        assert "GPUresident        on" in conf
+        assert "structure          d.psf" in conf       # standard masses, no HMR
+
+    def test_1fs_is_conservative_reference(self) -> None:
+        conf = build_production_conf(_spec(), "d", (10.0, 10.0, 10.0), False,
+                                     timestep_fs=1.0)
+        assert "timestep           1" in conf
+        assert "rigidBonds         none" in conf
+        assert "GPUresident" not in conf
+
+    def test_timestep_none_reproduces_fast_binary(self) -> None:
+        # Backward compat: no timestep_fs → derive from fast (4 fs) / not-fast (1 fs).
+        fast = build_production_conf(_spec(), "d", (10.0, 10.0, 10.0), False,
+                                     fast=True, structure_psf="d_hmr.psf")
+        explicit = build_production_conf(_spec(), "d", (10.0, 10.0, 10.0), False,
+                                         timestep_fs=4.0, structure_psf="d_hmr.psf")
+        assert fast == explicit
+
+
+def _job_with_manifest(tmp_path: Path, manifest: dict):
+    from backend.core.md_job import MdJob, MdStatus
+    job = MdJob(
+        job_id="tsjob0001", design_name="d", protocol="equilibrium_aware_namd",
+        status=MdStatus.completed, created_at=0.0, package_subdir="package/pkg",
+        name_stem="stem", segments=[], current_segment_idx=0,
+    )
+    pkg = job.package_dir(tmp_path)
+    pkg.mkdir(parents=True, exist_ok=True)
+    (pkg / "manifest.json").write_text(json.dumps(manifest))
+    return job
+
+
+class TestProductionFastPlanHonorsManifest:
+    """The wire that matters: a stored production_timestep_fs drives the plan's dt."""
+
+    @pytest.mark.parametrize("stored,expected_ts,expected_fast", [
+        (4.0, 4.0, True),
+        (2.0, 2.0, False),   # GPUresident but not the HMR "fast" path
+        (1.0, 1.0, False),
+    ])
+    def test_manifest_timestep_wins(self, tmp_path, monkeypatch, stored,
+                                    expected_ts, expected_fast) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": stored,
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_fs"] == expected_ts
+        assert plan["fast"] is expected_fast
+
+    def test_absent_field_falls_back_to_fast_derived_4fs(self, tmp_path, monkeypatch) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_fs"] == 4.0
+
+    def test_declash_forces_conservative_even_if_4fs_requested(self, tmp_path, monkeypatch) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 4.0,
+            "fast_relaxation": {"enabled": True}, "declash": True,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_fs"] == 1.0
+        assert plan["fast"] is False
+
+
+class TestCreateJobRequestValidator:
+    def test_accepts_1_2_4(self) -> None:
+        from backend.api.routes_md import CreateJobRequest
+        for dt in (1.0, 2.0, 4.0):
+            assert CreateJobRequest(production_timestep_fs=dt).production_timestep_fs == dt
+
+    def test_defaults_to_4(self) -> None:
+        from backend.api.routes_md import CreateJobRequest
+        assert CreateJobRequest().production_timestep_fs == 4.0
+
+    def test_rejects_unsanctioned(self) -> None:
+        from pydantic import ValidationError
+
+        from backend.api.routes_md import CreateJobRequest
+        with pytest.raises(ValidationError):
+            CreateJobRequest(production_timestep_fs=3.0)

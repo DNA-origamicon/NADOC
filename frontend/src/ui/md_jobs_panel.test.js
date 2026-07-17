@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { normalizeWorkspacePath, filterJobsForPart, newestCompletedForPart, seededBadge, mdSegGlyphKind,
   mdIsLocalTarget,
   mdIsRemoteJob,
+  productionNsFromSteps,
+  jobProductionTimestepFs,
+  DEFAULT_PRODUCTION_TIMESTEP_FS,
 } from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
@@ -26,6 +29,41 @@ describe('mdSegGlyphKind', () => {
 
   it('renders a running chunk as pending once the job is terminal', () => {
     expect(mdSegGlyphKind('running', { jobLive: false })).toBe('pending')
+  })
+})
+
+describe('productionNsFromSteps — the ETA that used to be hard-coded to 1 fs', () => {
+  it('scales ns by the timestep (500k steps @ 4 fs = 2 ns, not 0.5)', () => {
+    expect(productionNsFromSteps(500_000, 4)).toBeCloseTo(2.0, 9)
+    expect(productionNsFromSteps(500_000, 2)).toBeCloseTo(1.0, 9)
+    expect(productionNsFromSteps(500_000, 1)).toBeCloseTo(0.5, 9)
+  })
+
+  it('defaults to the 4 fs fast production timestep', () => {
+    expect(DEFAULT_PRODUCTION_TIMESTEP_FS).toBe(4.0)
+    expect(productionNsFromSteps(1_000_000)).toBeCloseTo(4.0, 9)
+  })
+
+  it('guards against a bad/zero timestep by falling back to the default', () => {
+    expect(productionNsFromSteps(1_000_000, 0)).toBeCloseTo(4.0, 9)
+    expect(productionNsFromSteps(1_000_000, NaN)).toBeCloseTo(4.0, 9)
+  })
+})
+
+describe('jobProductionTimestepFs — what dt a prepared job will actually run', () => {
+  it('uses the stored production_timestep_fs when present (1/2/4)', () => {
+    expect(jobProductionTimestepFs({ prep_params: { production_timestep_fs: 2 } })).toBe(2)
+    expect(jobProductionTimestepFs({ prep_params: { production_timestep_fs: 1, fast: true } })).toBe(1)
+  })
+
+  it('falls back to fast?4:1 for jobs prepared before the field existed', () => {
+    expect(jobProductionTimestepFs({ prep_params: { fast: true } })).toBe(4)
+    expect(jobProductionTimestepFs({ prep_params: { fast: false } })).toBe(1)
+  })
+
+  it('defaults to 4 fs when there are no prep params at all', () => {
+    expect(jobProductionTimestepFs(null)).toBe(DEFAULT_PRODUCTION_TIMESTEP_FS)
+    expect(jobProductionTimestepFs({})).toBe(DEFAULT_PRODUCTION_TIMESTEP_FS)
   })
 })
 
