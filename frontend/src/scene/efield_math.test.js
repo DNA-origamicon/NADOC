@@ -4,7 +4,7 @@ import {
   pnToOxdna, oxdnaToPn, fieldVpmToPn, pnToFieldVpm,
   vecLen, scaleVec, normalize, rayPlaneVector,
   arrowLenForPn, pnForArrowLen, EFIELD_MAX_LEN_NM, EFIELD_MIN_LEN_NM, EFIELD_NM_PER_PN,
-  resolveSelectionAnchors, anchorKey, anchorLabel, dedupeAnchors, addAnchors, removeAnchor,
+  resolveSelectionAnchors, anchorSelectionState, highlightedAnchors, anchorKey, anchorLabel, dedupeAnchors, addAnchors, removeAnchor,
   buildFieldSpec, fieldSpecReady,
   fieldColorHex, fieldZone, EFIELD_PN_LOW, EFIELD_PN_GOOD, EFIELD_PN_DISRUPT,
   anchorAmplification, anchorTensionPn, safePnFor, disruptPnFor,
@@ -141,6 +141,122 @@ describe('resolveSelectionAnchors', () => {
   it('ignores a data-less nucleotide selection and empty state', () => {
     expect(resolveSelectionAnchors({ selectedObject: { type: 'nucleotide', id: 'n1' } })).toEqual([])
     expect(resolveSelectionAnchors(null)).toEqual([])
+  })
+  it('reads multi-selected clusters (not just a single selectedObject cluster)', () => {
+    expect(resolveSelectionAnchors({ multiSelectedClusterIds: ['c1', 'c2'] }))
+      .toEqual([{ kind: 'cluster', id: 'c1' }, { kind: 'cluster', id: 'c2' }])
+  })
+  it('reads ctrl-picked end beads as individual base anchors', () => {
+    expect(resolveSelectionAnchors({
+      ctrlBeadNucs: [
+        { helix_id: 'h1', bp_index: 5, direction: 'forward' },
+        { helix_id: 'h2', bp_index: 9, direction: 'reverse' },
+      ],
+    })).toEqual([
+      { kind: 'base', helixId: 'h1', bp: 5, direction: 'forward' },
+      { kind: 'base', helixId: 'h2', bp: 9, direction: 'reverse' },
+    ])
+  })
+  it('a ctrl-picked bead that is also the single selection dedupes to one anchor', () => {
+    expect(resolveSelectionAnchors({
+      ctrlBeadNucs: [{ helix_id: 'h1', bp_index: 5, direction: 'forward' }],
+      selectedObject: { type: 'nucleotide', data: { helix_id: 'h1', bp_index: 5, direction: 'forward' } },
+    })).toEqual([{ kind: 'base', helixId: 'h1', bp: 5, direction: 'forward' }])
+  })
+  it('combines every multi-select pool in one Add', () => {
+    const out = resolveSelectionAnchors({
+      multiSelectedOverhangIds: ['o1'],
+      multiSelectedClusterIds: ['c1'],
+      multiSelectedStrandIds: ['s1'],
+      multiSelectedDomainIds: [{ strandId: 's2', domainIndex: 0 }],
+      ctrlBeadNucs: [{ helix_id: 'h3', bp_index: 1, direction: 'forward' }],
+    })
+    expect(out.map(anchorKey).sort()).toEqual(
+      ['base:h3:1:forward', 'cluster:c1', 'domain:s2:0', 'overhang:o1', 'strand:s1'].sort(),
+    )
+  })
+})
+
+describe('highlightedAnchors', () => {
+  const A = { kind: 'overhang', id: 'o1' }
+  const B = { kind: 'strand', id: 's2' }
+  const C = { kind: 'cluster', id: 'c3' }
+  const all = [A, B, C]
+
+  it('toggle on, nothing focused → every anchor is lit', () => {
+    expect(highlightedAnchors(all, { glowAll: true, focusKey: null })).toEqual(all)
+  })
+
+  it('toggle off, nothing focused → none lit', () => {
+    expect(highlightedAnchors(all, { glowAll: false, focusKey: null })).toEqual([])
+  })
+
+  it('a focused entry lights ONLY itself — the rest go dark', () => {
+    expect(highlightedAnchors(all, { glowAll: true, focusKey: 'strand:s2' })).toEqual([B])
+  })
+
+  it('focus beats the toggle: an explicit click shows that one even with the toggle off', () => {
+    expect(highlightedAnchors(all, { glowAll: false, focusKey: 'strand:s2' })).toEqual([B])
+  })
+
+  it('dropping focus hands control back to the toggle (on → all, off → none)', () => {
+    expect(highlightedAnchors(all, { glowAll: true, focusKey: null })).toEqual(all)
+    expect(highlightedAnchors(all, { glowAll: false, focusKey: null })).toEqual([])
+  })
+
+  it('a stale focusKey falls back to the toggle rather than going dark', () => {
+    expect(highlightedAnchors(all, { glowAll: true, focusKey: 'overhang:GONE' })).toEqual(all)
+    expect(highlightedAnchors(all, { glowAll: false, focusKey: 'overhang:GONE' })).toEqual([])
+  })
+
+  it('defaults to highlight-all, and tolerates an empty/missing list', () => {
+    expect(highlightedAnchors(all)).toEqual(all)
+    expect(highlightedAnchors([])).toEqual([])
+    expect(highlightedAnchors(null)).toEqual([])
+  })
+
+  it('returns a copy — callers must not mutate the card\'s anchor array', () => {
+    const out = highlightedAnchors(all, { glowAll: true })
+    out.pop()
+    expect(all).toHaveLength(3)
+  })
+})
+
+describe('anchorSelectionState', () => {
+  it('passes the store state through and attaches ctrl-picked beads', () => {
+    const out = anchorSelectionState({
+      state: { multiSelectedStrandIds: ['s1'], selectedObject: null },
+      ctrlBeadNucs: [{ helix_id: 'h1', bp_index: 2, direction: 'forward' }],
+    })
+    expect(out.multiSelectedStrandIds).toEqual(['s1'])
+    expect(out.ctrlBeadNucs).toHaveLength(1)
+  })
+
+  it('subtracts a selected cluster\'s mirrored member strands (no double trap)', () => {
+    // Cluster multi-select mirrors members into multiSelectedStrandIds for the highlight.
+    // Keeping them would anchor the same nucleotides twice — once via the cluster, once
+    // per member strand — doubling the trap stiffness.
+    const out = anchorSelectionState({
+      state: { multiSelectedClusterIds: ['c1'], multiSelectedStrandIds: ['m1', 'm2'] },
+      clusterMemberStrandIds: id => (id === 'c1' ? ['m1', 'm2'] : []),
+    })
+    expect(out.multiSelectedStrandIds).toEqual([])
+    expect(resolveSelectionAnchors(out).map(anchorKey)).toEqual(['cluster:c1'])
+  })
+
+  it('keeps independently multi-selected strands that are not cluster members', () => {
+    const out = anchorSelectionState({
+      state: { multiSelectedClusterIds: ['c1'], multiSelectedStrandIds: ['m1', 'loner'] },
+      clusterMemberStrandIds: () => ['m1'],
+    })
+    expect(out.multiSelectedStrandIds).toEqual(['loner'])
+    expect(resolveSelectionAnchors(out).map(anchorKey).sort()).toEqual(['cluster:c1', 'strand:loner'])
+  })
+
+  it('tolerates a missing resolver / empty state', () => {
+    expect(anchorSelectionState({ state: { multiSelectedClusterIds: ['c1'] } }).multiSelectedStrandIds).toEqual([])
+    expect(anchorSelectionState({}).ctrlBeadNucs).toEqual([])
+    expect(anchorSelectionState().ctrlBeadNucs).toEqual([])
   })
 })
 

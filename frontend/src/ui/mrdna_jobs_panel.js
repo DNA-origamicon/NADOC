@@ -264,11 +264,12 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   // field/anchor backends are reachable.  Numeric field card (no gizmo — oxDNA owns the
   // one in-scene arrow); the anchors card shares the exact scope resolver via ids.
   const _anchorsCard = initOxdnaAnchorsSetup({
+    engine: 'mrdna',
     getSelection: () => (getSelection ? getSelection() : null),
     ids: {
       toggle: 'mrdna-anchors-toggle', arrow: 'mrdna-anchors-arrow', body: 'mrdna-anchors-body',
       add: 'mrdna-anchors-add', clear: 'mrdna-anchors-clear', list: 'mrdna-anchors-list',
-      status: 'mrdna-anchors-status',
+      status: 'mrdna-anchors-status', glow: 'mrdna-anchors-glow',
     },
   })
   const _efieldCard = initForcesCard({ engine: 'mrdna' })

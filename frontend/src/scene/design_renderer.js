@@ -899,6 +899,9 @@ export function initDesignRenderer(scene, storeRef) {
     /** Show purple glow over the backbone entries of oxDNA anchor (fixed) elements. */
     setAnchorGlow(entries) { _anchorGlowLayer.setEntries(entries) },
     clearAnchorGlow()      { _anchorGlowLayer.clear() },
+    /** Active anchor glow-sprite count (e2e/console use it to confirm the purple halo
+     *  actually rendered — mirrors clashGlowCount/fluoroGlowCount). */
+    anchorGlowCount()      { return _anchorGlowLayer.count() },
 
     /** Show red glow over backbone entries flagged as steric clashes. */
     setClashHighlight(entries) { _clashGlowLayer.setEntries(entries) },

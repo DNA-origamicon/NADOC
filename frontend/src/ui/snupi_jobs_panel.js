@@ -290,11 +290,12 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   // (C1/C2). The anchors card shares the exact oxDNA scope resolver (parameterised ids);
   // the field card is numeric-only (no in-scene gizmo, like CanDo).
   const _anchorsCard = initOxdnaAnchorsSetup({
+    engine: 'snupi',
     getSelection: () => (getSelection ? getSelection() : null),
     ids: {
       toggle: 'snupi-anchors-toggle', arrow: 'snupi-anchors-arrow', body: 'snupi-anchors-body',
       add: 'snupi-anchors-add', clear: 'snupi-anchors-clear', list: 'snupi-anchors-list',
-      status: 'snupi-anchors-status',
+      status: 'snupi-anchors-status', glow: 'snupi-anchors-glow',
     },
   })
   const _efieldCard = initForcesCard({

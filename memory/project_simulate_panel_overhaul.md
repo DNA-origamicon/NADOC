@@ -9,6 +9,64 @@ metadata:
 
 # Simulate panel UX overhaul (2026-07-08, in progress)
 
+## ⚡ Anchors: multi-select Add + halo no longer waits on the E-field + highlight-all toggle + click-a-chip focus — SHIPPED 2026-07-16
+User: "add multi-selected entries, and added entries keep a purple glow — today an anchor doesn't
+glow until the sim starts and you click the job entry."
+- **Root cause of the missing glow:** `_refreshAnchorGlow` gated the halo on the field being on
+  (`fieldOn && anchors.length ? anchors : []`). Anchors with no field → `setAnchors([])`. Clicking a
+  job row ran `applyConfig(cfg.field)` FIRST, flipping the gate — hence "only after the job entry".
+  An anchor is pinned regardless of any field, so the gate is gone.
+- **Halo now follows the ACTIVE ENGINE.** The card (`oxdna_anchors_setup.js`) takes an `engine` tag
+  and fires `nadoc:anchors-change {engine, anchors}` from ONE `_emit()` on every mutation (add / chip
+  × / clear / applyConfig). main.js caches the last set per engine (`_anchorsByEngine`) and shows the
+  selected one; `engineSelector.onSelect` refreshes. Previously only oxDNA had an `onChange`, so the
+  CanDo/mrDNA/NAMD/SNUPI anchor cards drove NO glow at all. Leaving Dynamics still clears; returning
+  now restores (it used to stay dark until the next anchor edit).
+- **Multi-select gaps closed** (`resolveSelectionAnchors`): `multiSelectedClusterIds` (ignored before
+  — a multi-selected cluster added a chip per member strand) and ctrl/Alt-picked END BEADS, which
+  live in `selection_manager`, not the store. New pure `anchorSelectionState({state, ctrlBeadNucs,
+  clusterMemberStrandIds})` in `efield_math.js` assembles what the card resolves "Add" against and
+  **subtracts a selected cluster's mirrored member strands** — cluster multi-select mirrors members
+  into `multiSelectedStrandIds` for the highlight, so leaving them in would trap the same nucleotides
+  twice (cluster anchor + per-member strand anchor) = double trap stiffness. Independently selected
+  strands aren't members, so they survive. New read-only `selectionManager.clusterMemberStrandIds(id)`
+  (membership needs the renderer) + `designRenderer.anchorGlowCount()` (mirrors clash/fluoro counts).
+- **All 5 anchor cards** now share `_anchorSelectionState` via their injected `getSelection`.
+- **Highlighting model — chips and halo always agree.** ONE pure rule,
+  `highlightedAnchors(anchors, {glowAll, focusKey})` in `efield_math.js`, decides what is purple;
+  the card ships that subset on the event as `highlighted` and main.js just draws it (so the list
+  and the scene cannot drift). The rule:
+  - **"Highlight all anchors" checkbox — per card, DEFAULT ON** (`<engine>-anchors-glow` ×5) → all
+    lit, or none.
+  - **Click a chip → ONLY that anchor** (`_focusKey`); the rest go dark in the list AND in 3D.
+    **Focus beats the toggle** — an explicit click is an explicit "show me this one", so it lights
+    even with the toggle off. Click the focused chip again, or the empty space beside the chips
+    (both readings of "click off"), to drop focus and hand control back to the toggle.
+  - A **stale focusKey falls back to the toggle** rather than going dark; removing/clearing/
+    applyConfig drop focus (never point at a deleted anchor).
+  - Lit chips use `#b14aff` (the halo's own colour) + `data-hl="1"`; the × calls
+    `stopPropagation()` so removing never focuses.
+  Two deliberate choices: (1) the **default lives in the factory** (`let _glow = true; if (glowEl)
+  glowEl.checked = _glow`), NOT in the markup's `checked` — a card whose HTML forgot the attribute
+  must still default on, not silently start dark; the attribute only keeps the pre-hydration paint
+  right. (2) toggling AND focusing call `_dispatch()` (event only), **never `_emit()`** —
+  `onChange` recomposes a running live oxDNA session, and looking at anchors must not perturb a
+  run. Hiding/focusing KEEPS the anchor set (display preference, not a delete). Session-scoped:
+  not persisted, so a reload is back to all-on. Card API gained `isGlowOn/getFocusKey/
+  getHighlighted`.
+- **Tests:** vitest for the new resolver paths + the event + the cluster subtraction + the toggle +
+  chip focus (incl. "toggle/focus must not fire onChange" and "default is the factory's, not the
+  markup's"). **jsdom gotcha:** the chip's PURPLE is not unit-assertable — jsdom's cssstyle drops
+  that whole `cssText` block (the `border` + `border-radius` combo; the pre-change string does it
+  too) so `style.cssText` reads `''`. `data-hl` is the semantic pin; colour is a screenshot job.
+  `e2e/anchor_glow_no_field.spec.js` (4 tests) pins "Add → halo, field OFF, no job" (pin PROVEN: a
+  stand-in gate makes it fail `0 > 0`), the toggle gating, chip-focus (sprite count halves 128→64
+  for 1-of-2 strands), and the tab clear/restore. Halo verified
+  in PIXELS (canvas screenshots ON vs OFF at one camera), per [[feedback_display_toggle_visual_verify]]
+  — a sprite COUNT alone is the same class of false pass as a status string. NOTE it does NOT use `scene_harness.loadScaffoldedPart` — that helper is
+  BROKEN on master (ignores its POST statuses, lands on a design with no helices; `bead_select.spec.js`
+  is red for the same reason), so the spec carries its own loader.
+
 ## ⚡ "Use as NAMD seed" now creates a deferred-prep DRAFT (configure-then-Relax) — 2026-07-11
 User ask: the seed button should NOT immediately solvate with defaults. Now it creates an **unstarted
 NAMD `draft`** (new `MdStatus.draft`) that records the seed source + default advanced params but DEFERS
@@ -537,12 +595,15 @@ DELETED; `#md-jobs-plan-btn` removed.
   repaint labels). **Click a queue row → `selectEngine(engine)` + the engine's `applyRunConfig`
   with the stage's `{field, surface, anchors}` — the IDENTICAL call the real oxDNA job-select
   makes, so it produces the same visuals: purple anchor glow (`oxdnaAnchorsSetup.applyConfig` →
-  `onChange` → `_refreshAnchorGlow`), the field arrow (forces_card `jobArrow:true` gizmo, dir +
-  magnitude), and the hard-surface grid (`oxdnaFloorSetup.applyConfig`). The stored stage shapes
+  the `nadoc:anchors-change` event → `_refreshAnchorGlow`; it was `onChange → _refreshAnchorGlow`
+  until 2026-07-16, see the anchor-halo entry at the top of this file), the field arrow
+  (forces_card `jobArrow:true` gizmo, dir + magnitude), and the hard-surface grid
+  (`oxdnaFloorSetup.applyConfig`). The stored stage shapes
   (`field:{field_pN,dir}`, `surface:{dir,offset_nm,stiff}`, anchors list) MATCH `runConfigForJob`
   exactly, so the echo is byte-identical; a relax stage (no field/surface/anchors) clears them so
-  a prior stage's visuals don't linger.** NAMD has no scene gizmo/glow (by existing design — real
-  NAMD job-select doesn't echo either), so clicking a NAMD row only repopulates its inputs. Two
+  a prior stage's visuals don't linger.** NAMD has no scene *gizmo* and its job-select doesn't
+  echo, so clicking a NAMD row only repopulates its inputs — but as of 2026-07-16 the NAMD (and
+  CanDo/mrDNA/SNUPI) Anchors cards DO drive the purple halo when their engine tab is active. Two
   vitest cases lock the row-click→applyRunConfig data + the relax-clears-echo behavior. Launch:
   warn/error popup, then one `createChain` per group.
 - **Engine wiring:** oxDNA + NAMD panels gained `getChainMode`/`enqueueChainStage` deps; Relax

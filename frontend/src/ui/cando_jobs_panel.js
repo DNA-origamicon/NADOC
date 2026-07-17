@@ -326,11 +326,12 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   // (C1/C2).  The anchors card shares the exact oxDNA scope resolver (parameterised ids);
   // the field card is numeric-only (the oxDNA panel owns the one in-scene arrow gizmo).
   const _anchorsCard = initOxdnaAnchorsSetup({
+    engine: 'cando',
     getSelection: () => (getSelection ? getSelection() : null),
     ids: {
       toggle: 'cando-anchors-toggle', arrow: 'cando-anchors-arrow', body: 'cando-anchors-body',
       add: 'cando-anchors-add', clear: 'cando-anchors-clear', list: 'cando-anchors-list',
-      status: 'cando-anchors-status',
+      status: 'cando-anchors-status', glow: 'cando-anchors-glow',
     },
   })
   const _efieldCard = initForcesCard({

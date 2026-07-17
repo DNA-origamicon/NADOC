@@ -284,21 +284,76 @@ export function removeAnchor(existing, key) {
 }
 
 /**
+ * Which anchors are highlighted (purple) right now — drives BOTH the 3D halo and the
+ * chip styling, so the list and the scene can never disagree.  The rule:
+ *   • one entry focused (clicked) → ONLY that one, whatever the toggle says. An explicit
+ *     click is an explicit "show me this one".
+ *   • nothing focused → the "Highlight all anchors" toggle decides: all, or none.
+ * A focusKey that matches no anchor (e.g. the focused chip was just removed) falls back to
+ * the toggle rather than going dark.
+ * PURE.
+ */
+export function highlightedAnchors(anchors, { glowAll = true, focusKey = null } = {}) {
+  const list = anchors || []
+  if (focusKey) {
+    const only = list.filter(a => anchorKey(a) === focusKey)
+    if (only.length) return only
+  }
+  return glowAll ? list.slice() : []
+}
+
+/**
+ * Build the selection snapshot an Anchors card resolves "Add" against.  The raw store
+ * state isn't enough for two of the ways you can multi-select:
+ *  • END BEADS (Ctrl/Alt-picked termini) are owned by selection_manager, not the store —
+ *    the caller passes their nuc records in as `ctrlBeadNucs`.
+ *  • CLUSTERS mirror their member strands into `multiSelectedStrandIds` for the highlight.
+ *    Left in, each cluster would yield one cluster anchor PLUS a redundant strand anchor
+ *    per member — the same nucleotides trapped twice, i.e. double the trap stiffness. So
+ *    subtract the mirrored members. Independently multi-selected strands aren't members
+ *    of a selected cluster, so they survive.
+ * Pure: `clusterMemberStrandIds` is injected because membership resolves through the live
+ * renderer (bead entries / cylinder records), which this module must not reach into.
+ */
+export function anchorSelectionState({ state, ctrlBeadNucs = [], clusterMemberStrandIds = null } = {}) {
+  const s = state || {}
+  const clusterIds = s.multiSelectedClusterIds ?? []
+  if (!clusterIds.length) return { ...s, ctrlBeadNucs }
+  const members = new Set(clusterIds.flatMap(id => clusterMemberStrandIds?.(id) || []))
+  return {
+    ...s,
+    multiSelectedStrandIds: (s.multiSelectedStrandIds ?? []).filter(id => !members.has(id)),
+    ctrlBeadNucs,
+  }
+}
+
+/**
  * Collect anchor descriptors from a store state snapshot.  Reads the multi-select
  * arrays (lasso) + the single `selectedObject`, restricted to the anchorable
  * scopes: overhang / domain / cluster / whole strand (e.g. an overhang-binding
  * oligo) / individual base.  Pure: takes the state object, returns descriptors;
- * the UI passes store.getState().
+ * the UI passes anchorSelectionState(...) (store.getState() + the bits it can't see).
  */
 export function resolveSelectionAnchors(state) {
   const s = state || {}
   const out = []
   for (const id of s.multiSelectedOverhangIds || []) out.push({ kind: 'overhang', id })
+  // Cluster-level multi-select mirrors each cluster's member strands into
+  // multiSelectedStrandIds too; the caller strips those so a cluster yields ONE cluster
+  // anchor rather than a redundant per-member-strand trap over the same nucleotides.
+  for (const id of s.multiSelectedClusterIds || []) {
+    if (id != null) out.push({ kind: 'cluster', id })
+  }
   for (const id of s.multiSelectedStrandIds || []) {
     if (id != null) out.push({ kind: 'strand', id })
   }
   for (const d of s.multiSelectedDomainIds || []) {
     if (d) out.push({ kind: 'domain', strandId: d.strandId, domainIndex: d.domainIndex })
+  }
+  // Ctrl/Alt-picked end beads are owned by selection_manager, not the store — the caller
+  // passes their nuc records through so multi-picked bases resolve like any other anchor.
+  for (const n of s.ctrlBeadNucs || []) {
+    if (n) out.push({ kind: 'base', helixId: n.helix_id, bp: n.bp_index, direction: n.direction })
   }
   const sel = s.selectedObject
   if (sel) {

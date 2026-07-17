@@ -4127,6 +4127,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     /** Returns a copy of the current ctrl-click nucleotide selection. */
     getCtrlBeads() { return [..._ctrlBeads] },
 
+    /** Strand ids belonging to a cluster. Read-only; resolves through the live bead
+     *  entries (or the cylinder records at cylinder LOD), so it needs the renderer —
+     *  which is why callers that only hold the store (e.g. the anchor cards) ask here. */
+    clusterMemberStrandIds(clusterId) {
+      return _clusterMemberStrandIds(clusterId, store.getState().currentDesign)
+    },
+
     /** Returns the world-space THREE.Vector3 for the nth ctrl-selected bead (0-indexed). */
     getCtrlBeadPos(n) { return _ctrlBeads[n]?.entry.pos.clone() ?? null },
 

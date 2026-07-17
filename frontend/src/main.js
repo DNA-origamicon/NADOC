@@ -194,6 +194,7 @@ import { initChainSimPanel } from './ui/chain_sim_panel.js'
 import { initClusterConnection } from './ui/cluster_connection.js'
 import { initBenchmarkPanel } from './ui/benchmark_panel.js'
 import { initAnchorGlow } from './scene/anchor_glow.js'
+import { anchorSelectionState } from './scene/efield_math.js'
 import { initClashOverlay } from './scene/clash_overlay.js'
 import { initOxdnaDisplay } from './ui/oxdna_display.js'
 import { initLammpsDisplay } from './ui/lammps_display.js'
@@ -1875,6 +1876,14 @@ async function main() {
   // show({ mapType, onRecolor }); the widget owns the draggable bounds + colormap picker.
   const flexScale = initFlexScale()
 
+  // The selection every engine's Anchors card resolves "Add" against — the store plus the
+  // two things it can't see (ctrl-picked end beads; which strands a cluster owns).
+  const _anchorSelectionState = () => anchorSelectionState({
+    state: store.getState(),
+    ctrlBeadNucs: (selectionManager?.getCtrlBeads?.() || []).map(b => b.nuc),
+    clusterMemberStrandIds: id => selectionManager?.clusterMemberStrandIds?.(id) || [],
+  })
+
   const mdPanel = initMdJobsPanel({
     mdDisplayController,
     getWorkspacePath: () => _workspacePath,
@@ -1886,7 +1895,7 @@ async function main() {
     // Phase 4: gate the Alpine run-target on the live cluster-connection state.
     getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
     // N2: the shared anchor-scope picker resolves the 3D selection to fixedAtoms scopes.
-    getSelection: () => store.getState(),
+    getSelection: _anchorSelectionState,
     // Chain Simulations: Relax/Production → "Queue …" when chain mode is on.
     getChainMode: _chainMode,
     enqueueChainStage: (protocol) => chainSim?.enqueue('namd', protocol),
@@ -2017,7 +2026,7 @@ async function main() {
     connectionOverlay: mrdnaConnOverlay,
     setDesignVisible:  (v) => _setDesignGeometryVisible(v),  // hoisted fn decl (defined below)
   })
-  const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
+  const mrdnaPanel = initMrdnaJobsPanel({ mrdnaDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
   // CanDo FEM (native shape predictor) — sibling of the mrDNA panel, in-process
   // solver. The "Predicted shape (deform model)" toggle deforms the NADOC model to
   // the FEM-predicted positions via applyFemPositions (display-only, Three-Layer).
@@ -2030,7 +2039,7 @@ async function main() {
     setDesignVisible: (v) => _setDesignGeometryVisible(v),
     flexScale,
   })
-  const candoPanel = initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
+  const candoPanel = initCandoJobsPanel({ candoDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
   // SNUPI FEM — the SAME in-process solver as CanDo, run with the anisotropic SNUPI
   // material law (predict_shape material="snupi"; validated ≥ CanDo vs MD at $0). Its own
   // display controller + cylinder overlay (independent instance) so its viz modes never
@@ -2042,7 +2051,7 @@ async function main() {
     setDesignVisible: (v) => _setDesignGeometryVisible(v),
     flexScale,
   })
-  const snupiPanel = initSnupiJobsPanel({ snupiDisplay, getWorkspacePath: () => _workspacePath, getSelection: () => store.getState() })
+  const snupiPanel = initSnupiJobsPanel({ snupiDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
   // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
   // on every design sync; both panels self-listen, so no store subscription here.)
@@ -2051,27 +2060,40 @@ async function main() {
   let _viewToolButtons = null   // assigned at initViewToolButtons (further down)
   const efieldGizmo = initEfieldGizmo(scene, camera, canvas, controls)
 
-  // Purple halo over the anchored (fixed) elements while a field run is being set up.
-  // Shown only when the field is enabled AND there are anchors — the thick arrow shows
-  // the field direction, the purple glow shows what's pinned.  Both setups call
-  // _refreshAnchorGlow on change (never during construction → no TDZ on the consts below).
+  // Forward-declared (assigned at initEngineSelector below): _refreshAnchorGlow reads it to
+  // pick the on-screen engine, and a `const` here would TDZ-throw — not just return
+  // undefined — if any future `await` let an anchors-change event land before that line.
+  let engineSelector = null
+  // Purple halo over the anchored (fixed) elements. Shown as soon as an anchor is added,
+  // for whichever engine's Anchors card is on screen — an anchor is pinned no matter what
+  // else the run does, so the halo must NOT wait on the E-field being enabled (it used to,
+  // which is why anchors only lit up once a job row restored a field config and flipped the
+  // gate). Every engine's card fires `nadoc:anchors-change`; cache the last set per engine
+  // and show the selected one, so switching tabs swaps the halo instead of mixing two
+  // engines' anchors.  Never fired during construction → no TDZ on the consts below.
   const anchorGlow = initAnchorGlow({ designRenderer, store })
   // Steric-clash overlay (the "clash" view-tool button) — owns its on/off + red
   // glow + count badge; re-fetches GET /design/clashes on posed-geometry change.
   const clashOverlay = initClashOverlay({ store, designRenderer })
+  const _anchorsByEngine = {}   // engine key → that card's last highlighted anchor set
   const _refreshAnchorGlow = () => {
-    const fieldOn = efieldSetup?.isEnabled?.()
-    const anchors = oxdnaAnchorsSetup?.getAnchors?.() || []
-    anchorGlow.setAnchors(fieldOn && anchors.length ? anchors : [])
+    const engine = engineSelector?.getSelected?.() ?? 'oxdna'
+    anchorGlow.setAnchors(_anchorsByEngine[engine] || [])
   }
+  // The card owns which anchors are lit (its "Highlight all anchors" toggle + any focused
+  // chip) and ships that subset on the event, so the chips and the halo can't disagree.
+  window.addEventListener('nadoc:anchors-change', (e) => {
+    _anchorsByEngine[e.detail.engine] = e.detail.highlighted || []
+    _refreshAnchorGlow()
+  })
 
   const efieldSetup = initForcesCard({
     engine: 'oxdna',
     gizmo: efieldGizmo,
-    // Field changed (gizmo drag / input edit): refresh the anchor halo AND, if a
-    // live session is running, update it — re-aim the field live (magnitude/dir) or
-    // recompose the engine if the field was just toggled on/off.
-    onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onElementsChanged?.() },
+    // Field changed (gizmo drag / input edit): if a live session is running, update it —
+    // re-aim the field live (magnitude/dir) or recompose the engine if the field was just
+    // toggled on/off. The anchor halo no longer keys off the field, so it needs no refresh.
+    onChange: () => oxdnaLive?.onElementsChanged?.(),
     // Total base count → scales the arrow's force range so big origami get finer
     // per-nt control (the arrow encodes total push; per-nt ∝ 1/N).
     getBaseCount: () => store.getState().currentGeometry?.length || 0,
@@ -2090,14 +2112,18 @@ async function main() {
     onChange: () => oxdnaLive?.onElementsChanged?.(),
   })
   const oxdnaAnchorsSetup = initOxdnaAnchorsSetup({
-    getSelection: () => store.getState(),
-    // Changing anchors refreshes the halo AND recomposes a running live session.
-    onChange: () => { _refreshAnchorGlow(); oxdnaLive?.onElementsChanged?.() },
+    engine: 'oxdna',
+    getSelection: _anchorSelectionState,
+    // The halo is driven by the shared `nadoc:anchors-change` listener above (all five
+    // engines); this callback only recomposes a running live session.
+    onChange: () => oxdnaLive?.onElementsChanged?.(),
   })
   // Leaving the Dynamics tab drops the field gizmo (forces_card) — clear the anchor
-  // halo too so it never lingers in other tabs.
+  // halo too so it never lingers in other tabs, and put it back on return (the anchors
+  // survive the tab switch, so the halo must too).
   window.addEventListener('nadoc:left-tab-change', (e) => {
     if (e.detail?.activeTab !== 'dynamics') anchorGlow.clear()
+    else _refreshAnchorGlow()
   })
   if (import.meta.env.DEV) window.__nadocOxdnaFloor = oxdnaFloorSetup
 
@@ -2164,7 +2190,7 @@ async function main() {
   // panels — shows the selected engine's panel + run-control cluster, hides the rest —
   // plus a capability strip (unsupported cards greyed-with-tooltip). (U4)  LAMMPS is NOT
   // a tab: it's the auto-policy CPU fallback and its runs appear in the unified list.
-  const engineSelector = initEngineSelector({
+  engineSelector = initEngineSelector({
     selectorMount: document.getElementById('engine-selector-mount'),
     stripMount:    document.getElementById('engine-capability-strip'),
     panelEls: {
@@ -2179,8 +2205,9 @@ async function main() {
     // selected engine (the auto-policy's recommended GPU engine) — not the first tab.
     initial: 'oxdna',
     // The unified Simulate job list re-scopes to the newly-active engine tab (bound
-    // lazily — simulateJobs is constructed just below, after the panels).
-    onSelect: (engine) => simulateJobs?.setActiveEngine?.(engine),
+    // lazily — simulateJobs is constructed just below, after the panels).  The anchor
+    // halo follows too, so it always shows the anchors of the card you're looking at.
+    onSelect: (engine) => { simulateJobs?.setActiveEngine?.(engine); _refreshAnchorGlow() },
   })
 
   // "Use as NAMD seed" (oxDNA / mrDNA panels) creates a NAMD job — surface it by
@@ -7253,6 +7280,14 @@ async function main() {
   if (import.meta.env.DEV) {
     window.__nadocTest = {
       scene,
+      store,
+      /** Anchors: the oxDNA card + the purple-halo sprite count, so a console/e2e check can
+       *  assert "added an anchor → it glows" without a field or a launched job. */
+      anchors: {
+        card: oxdnaAnchorsSetup,
+        selection: _anchorSelectionState,
+        glowCount: () => designRenderer.anchorGlowCount(),
+      },
       /** Camera-pose count of the loaded design (build-primitives readiness check). */
       getDesignCameraPoseCount: () => (store.getState().currentDesign?.camera_poses?.length ?? 0),
       /** Render the loaded design through its saved poses → {gifBase64, posterDataUrl}.

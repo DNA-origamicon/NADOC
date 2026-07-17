@@ -341,10 +341,15 @@ While configuring a field run, the field direction + the pinned elements are now
   pure `resolveAnchorEntries`) maps anchor descriptors → backbone entries (overhang→`nuc.overhang_id`,
   domain→`strand_id`+`domain_index`, cluster→`clusterMemberFilter`) → `designRenderer.setAnchorGlow`
   (new purple `createGlowLayer(scene, 0xb14aff, 3.6, 'anchorGlow')`, cleared on rebuild, refreshed in
-  `refreshAllGlow`). Gated in main.js `_refreshAnchorGlow`: shown only when **field enabled
-  (`efieldSetup.isEnabled()`) AND ≥1 anchor**; cleared on leaving the Dynamics tab. Both `efield_setup`
-  and `oxdna_anchors_setup` call `_refreshAnchorGlow` via `onChange` (fired on mutation only, never at
-  construction → no TDZ on the main.js consts). Tests: `anchor_glow.test.js` (9) + gizmo tests still
+  `refreshAllGlow`). **UPDATED 2026-07-16 — the field gate is GONE.** It used to show only when
+  **field enabled (`efieldSetup.isEnabled()`) AND ≥1 anchor**, which meant an added anchor stayed dark
+  until something turned a field on (clicking a job row restored the job's field first — the reported
+  bug). An anchor is pinned regardless of any field, so main.js `_refreshAnchorGlow` now shows the
+  ACTIVE ENGINE's anchors, full stop. Every engine's card fires `nadoc:anchors-change {engine,
+  anchors}` (one `_emit()` per mutation, never at construction → no TDZ on the main.js consts); main.js
+  caches per engine and `engineSelector.onSelect` re-refreshes. `efield_setup.onChange` no longer
+  touches the glow. Cleared on leaving the Dynamics tab, restored on return. See
+  [[project_simulate_panel_overhaul]] for the full entry. Tests: `anchor_glow.test.js` (9) + gizmo tests still
   green. Live-verified the arrow is a solid cyl+cone mesh + the anchorGlow layer is wired (throwaway
   e2e introspection). Live purple-on-actual-beads = human-eye → MV-ANCHGLOW.
 
@@ -368,7 +373,8 @@ engine driven by `headless_oxdna_build._prepare_field_rundir`); the live re-aim 
   getFieldSpec, getAnchors})` owns the toggle: on start it POSTs, polls `…/frame` every 500 ms →
   `oxdnaDisplay.displayLiveFrame(positions)` (a NEW `'live'` mode in `oxdna_display.js`, CG-only —
   no heavy rep, no jobId), and pushes field re-aims (throttled 150 ms) when the efield gizmo/inputs
-  change (main.js wires `efieldSetup.onChange → _refreshAnchorGlow() + oxdnaLive.onFieldChanged()`).
+  change (main.js wires `efieldSetup.onChange → oxdnaLive.onElementsChanged()`; the anchor halo no
+  longer keys off the field, so it is NOT refreshed from here — 2026-07-16).
   Mutual exclusion: starting Live dispatches `nadoc:oxdna-live-start` → panel `_allDisplaysOff()`;
   the panel calls `oxdnaLive.stop()` from the Relax/Production buttons + the display/flex/traj
   toggles. Leaving the Dynamics tab / switching design / selecting another job stops Live. main.js:

@@ -3118,11 +3118,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // fixedAtoms.  Resolves the current 3D selection to overhang/cluster/domain/strand/
   // base scopes sent in the create payload as `anchors`.
   const _anchorsCard = initOxdnaAnchorsSetup({
+    engine: 'namd',
     getSelection: () => (getSelection ? getSelection() : null),
     ids: {
       toggle: 'md-anchors-toggle', arrow: 'md-anchors-arrow', body: 'md-anchors-body',
       add: 'md-anchors-add', clear: 'md-anchors-clear', list: 'md-anchors-list',
-      status: 'md-anchors-status',
+      status: 'md-anchors-status', glow: 'md-anchors-glow',
     },
   })
 
