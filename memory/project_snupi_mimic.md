@@ -34,9 +34,9 @@ extra-crossover-base extension (the only part needing GPU MD) plugs into the sam
 
 ## Validation data — ON DISK, no new MD
 - **6hbx100_noT** — standard 6-helix honeycomb, no extra bases; complete set at
-  `workspace/md_jobs/892ad3d12d4f/package/6hbx100_noT_namd_solvated/` → psf + pdb +
+  `/media/jojo/Archive/nadoc_jobs/892ad3d12d4f/package/6hbx100_noT_namd_solvated/` → psf + pdb +
   **20 ns k=0 production DCD (1.96 GB)**. **Primary base-SNUPI target.**
-- **3x4SQ** — square lattice, k=0 DCD (`workspace/md_jobs/93cdbbd3a3f1/...`) → validates SQ params.
+- **3x4SQ** — square lattice, k=0 DCD (`/media/jojo/Archive/nadoc_jobs/93cdbbd3a3f1/...`) → validates SQ params.
 - 6hbx100_1xT / 2xT, 6hb_2xT — extra-base variants → the EXTENSION targets (base SNUPI can't
   predict these; use after the Δbase extra-base motifs are added).
 - ⚠ **18hb trajectory is NOT on this machine** (job `e29d1e5d5ace` absent; only exp30 summary
@@ -281,7 +281,7 @@ Everything to run the mimic exists:
   624 beams, 66 crossover rigid links). Comparable magnitude (shared crossover model); P4 tests
   RMSF-*pattern* correlation + shape vs the MD DCD, which is where couplings/anisotropy show.
 
-**P4 to-do:** from `workspace/md_jobs/892ad3d12d4f/package/6hbx100_noT_namd_solvated/` (psf+pdb+20ns
+**P4 to-do:** from `/media/jojo/Archive/nadoc_jobs/892ad3d12d4f/package/6hbx100_noT_namd_solvated/` (psf+pdb+20ns
 k=0 DCD), compute per-bp RMSF (bp-center = mean both-strand C1'; reuse `local_crossover_extract.py`
 / `build_p_gro_order`) + equilibrium shape/twist/bend/L_p. Correlate snupi vs cando vs MD.
 Success = snupi ≥ cando at matching MD, at $0.

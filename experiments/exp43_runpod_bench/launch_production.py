@@ -120,7 +120,46 @@ async def main() -> int:
     ap.add_argument("--parent-stem", default=DEFAULT_PARENT_STEM,
                     help="relaxation job to seed production from; reads JOB_ID_<stem> "
                          "(e.g. 24hb_0xT, 24hb_1xT_seeded). Default: the 3x6x400 bench.")
+    ap.add_argument("--gpu-prefs", default=None,
+                    help="ORDERED, comma-separated GPU preference by label "
+                         "(e.g. 'RTX 6000 Ada,RTX 5090,RTX PRO 4500'). Replaces the default "
+                         "cheapest-first fallback with EXACTLY these cards in THIS order — "
+                         "RunPod rents the first one available in the volume's datacenter. "
+                         "No cheaper card outside the list is offered. Cost/rate size from "
+                         "the FIRST (preferred) card.")
     args = ap.parse_args()
+
+    if args.gpu_prefs:
+        # Restrict + REORDER the whole planner (this launcher's sizing call AND the
+        # executor's pod_payloads_for) to exactly the requested cards, preserving priority.
+        # plan_execution -> recommend_gpus is resolved against runpod_script's module globals
+        # at call time, and recommend_gpus keeps the candidate ORDER (it does not re-sort),
+        # so patching the name there hands RunPod our priority list without touching core
+        # signatures or the pinned GPU table.
+        import backend.core.runpod_script as _rs  # noqa: E402
+        # Cards benchmarked on this system but not in the pinned cheapest-first table.
+        # Exact RunPod key + measured price from logs/bench_5090_3090.log (2026-07-15).
+        _EXTRA = {
+            "RTX 5090": _rs.GpuType("NVIDIA GeForce RTX 5090", "RTX 5090",
+                                    32_768, 0.99, "sm_120"),
+        }
+        _by_label = {g.label: g for g in _rs.GPU_TYPES} | _EXTRA
+        wanted = [s.strip() for s in args.gpu_prefs.split(",") if s.strip()]
+        unknown = [w for w in wanted if w not in _by_label]
+        if unknown:
+            log.error("unknown --gpu-prefs label(s) %s; known: %s", unknown,
+                      ", ".join(sorted(_by_label)))
+            return 2
+        ordered = tuple(_by_label[w] for w in wanted)
+        _orig_recommend = _rs.recommend_gpus
+
+        def _pref_recommend(n_atoms, **kw):  # keeps VRAM/arch/price filtering, our order
+            kw["candidates"] = ordered
+            return _orig_recommend(n_atoms, **kw)
+
+        _rs.recommend_gpus = _pref_recommend
+        log.info("GPU preference (in order): %s",
+                 " > ".join(f"{g.label} ${g.usd_per_hour:.2f}/hr" for g in ordered))
     parent_id = (Path(__file__).parent / f"JOB_ID_{args.parent_stem}").read_text().strip()
     child_id_file = Path(__file__).parent / f"JOB_ID_{args.parent_stem}_production"
 

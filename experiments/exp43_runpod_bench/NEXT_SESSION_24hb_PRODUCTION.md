@@ -4,6 +4,43 @@ Copy everything below the line into a fresh session.
 
 ---
 
+## ⏳ LIVE STATE (updated 2026-07-16 06:42) — BOTH PRODUCTIONS RUNNING
+
+Both 50 ns 4 fs productions are launched and stepping cleanly on **RTX 5090** pods
+(RTX 6000 Ada is currently UNAVAILABLE in EU-RO-1; 5090 is the sanctioned 2nd choice
+per the user's Ada>5090>4500 order, and is the fastest of the three).
+
+| variant | prod child job | pod | GPU | rate | seed frame |
+|---|---|---|---|---|---|
+| 0xT | `6fc87681f9de` | velgzf1e2ry3pq | 5090 $0.99/hr | 12.4 ms/step | MGHH_p100 |
+| 1xT | `06fe9c9bff7a` | zwyw0rp0c9amya | 5090 $0.99/hr | 13.9 ms/step | MGHH_p10 (Tier-A early-stop terminus) |
+
+- Data lands on `/media/jojo/Archive/nadoc_jobs/<child>/`. Each ~43–48 h → 50 ns; ~$43–48 each.
+- **Watchdogs running (detached, survive session):** `watchdog.py 6fc87681f9de` and
+  `watchdog.py 06fe9c9bff7a` — reap the pod on any persistent terminal state.
+- On resume: `reap.py` (confirm exactly these 2 pods, nothing rogue), then
+  `python watch.py <child> --oneline` each (coor grows, E finite/neg). On completion the
+  launcher fetches + tears down; watchdog backstops at 18 min grace.
+- **Final verification when both hit 12.5M steps / completed:** confirm trajectories +
+  checkpoints on the Archive child dirs, `reap.py` → ZERO pods, `just test-smart` green.
+
+### Two gotchas hit this session (NOT in the original handoff below — fix carried in code/notes)
+1. **`launch_production.py` gained `--gpu-prefs "RTX 6000 Ada,RTX 5090"`** (ordered GPU
+   priority). ⚠️ RunPod's `gpuTypeIds` list picks the **cheapest** available card, so NEVER
+   put a cheaper fallback (4500 $0.74) in the same list as a preferred pricier card (Ada
+   $0.77) — it silently takes the cheap one. Excluding 4500 → `[Ada,5090]` returns Ada if
+   available else 5090; only if BOTH 500 do you relaunch with `--gpu-prefs "RTX PRO 4500"`.
+2. **The reconcile snippet below (status→completed) is INSUFFICIENT.** `spawn_md_production`
+   also needs the parent's **segment statuses = "done"** (not "pending"). AND: the teardown
+   fetch pulls the *whole volume tree*, so stale MGHH p50/p100 `.coor` from a PRIOR ladder
+   attempt land locally with a fresh mtime — do NOT blanket-mark all segments done (0xT was
+   safe; 1xT was not). Seed from the segment the ladder ACTUALLY terminated at (watch.py's
+   last "completed | <seg>" line). For 1xT that was MGHH_p10 (early-stop); p50/p100 → skipped.
+3. **Sizing:** 1xT production first refused because it sized off the slow 4500 *ladder* rate;
+   production runs on the fast 5090 — pass `--s-per-step 0.014` (measured 5090 prod rate).
+
+---
+
 Start and babysit a single **50 ns, 4 fs** NAMD production run for each of two validated 24hb
 packages — **24hb_0xT** and **24hb_1xT** — on RunPod, landing trajectories on
 `/media/jojo/Archive/nadoc_jobs/<job_id>/`. Both packages are already prepped and locally

@@ -52,7 +52,13 @@ Truncated ladder off the fast confs: minimize(no-ENM) → `rebuild_declashed_ref
 `gpu_resident_probe` auto-downgrades — a manual probe hits it but it is not a physics failure.
 
 ## Open
-- 2xT (676 extra, TWO per crossover → neighbouring-sugar stacking) NOT yet probed — may still bite.
+- 2xT (676 extra, TWO per crossover) — VALIDATED 2026-07-16 (job `336a067ba241`). The geometric
+  build DOES have extra-base clashes here (150 inter-res ring + 203 sugar pairs <2.2 A, unlike 1xT's
+  0) because the two inserts per crossover stack — BUT the pipeline handles it: both clashing
+  partners are FREE ssDNA, so the no-ENM minimise + 25 ps soft relax them apart (unlike the 1xT
+  oxDNA case where the partner was a FIXED ideal-lattice duplex base), and Fix B holds the modes.
+  Full local 4 fs probe CLEAN through unrestrained MGHH (TEMP 298 K, TOTAL flat). So all three
+  variants (0/1/2 xT) reach stable 4 fs via geometric+FixB.
 - Supersedes the oxDNA-seed rationale in `experiments/exp43_runpod_bench/PIPELINE_4FS_EXTRA_BASES.md`
   (that doc says seeding is REQUIRED; it is actually counterproductive — update it).
 - 0xT NAMD ladder is complete on the volume (job `383f7dcc4a5d`); production not yet run.
