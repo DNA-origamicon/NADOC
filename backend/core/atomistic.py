@@ -2382,15 +2382,22 @@ def _align_glycosidic(
     sugar_name_to_serial: dict[str, int],
     base_name_to_serial:  dict[str, int],
     target_c1n:           _np.ndarray,
+    rotate_phosphate:     bool = False,
 ) -> str:
     """Rotate a single-stranded residue's ribose + base as a rigid body about C2′ so
     its C1′→N glycosidic bond points along *target_c1n*, in place.  Returns the
     glycosidic nitrogen's atom name (``N9`` for purines, ``N1`` for pyrimidines).
 
-    The phosphate group (P, OP1, OP2, O5′) is held fixed — it is the anchor the
-    backbone bridge minimiser then works against.  Shared verbatim by the crossover
+    The phosphate group (P, OP1, OP2, O5′) is normally held fixed — it is the anchor
+    the backbone bridge minimiser then works against.  Shared verbatim by the crossover
     extra-base placer and the strand-extension tail placer, which need the identical
     base orientation.
+
+    ``rotate_phosphate=True`` rotates the WHOLE nucleotide (phosphate included) as one
+    rigid unit.  Use it when the bridge minimiser is SKIPPED (a position-only override
+    insert): excluding the phosphate would strand P/OP1/OP2/O5′ at the template position
+    and stretch the intra-residue O5′-C5′ bond to ~0.6 nm — a fatal 4 fs RATTLE start
+    (the 24hb 4 fs blocker; see NAMD_4FS_RATTLE_RESEARCH.md).
     """
     _glycosidic_n = "N9" if residue in ("DA", "DG") else "N1"
     _n_serial  = base_name_to_serial.get(_glycosidic_n)
@@ -2425,7 +2432,7 @@ def _align_glycosidic(
         ])
         _R_align = _np.eye(3) + _sin_t * _K + (1.0 - _cos_t) * (_K @ _K)
 
-    _phosphate = {"P", "OP1", "OP2", "O5'"}
+    _phosphate = set() if rotate_phosphate else {"P", "OP1", "OP2", "O5'"}
     for _aname, _s in sugar_name_to_serial.items():
         if _aname not in _phosphate:
             _p_rel = _atom_pos(atoms, _s) - _c2_pos
@@ -2771,10 +2778,17 @@ def _build_extra_base_atoms(
             # ── Glycosidic bond alignment ─────────────────────────────────────
             # Rotate ribose + base as a rigid body about C2′ so that the
             # C1′→N bond aligns with target_c1n (±avg_axis).
-            # Anchors excluded from rotation: P, OP1, OP2, O5′ (phosphate group).
+            # Anchors excluded from rotation: P, OP1, OP2, O5′ (phosphate group) —
+            # EXCEPT for a position-only override insert (``_xb_sim`` set but no sim
+            # frame), where the bridge minimiser is skipped and would otherwise strand
+            # the phosphate (O5′-C5′ → ~0.6 nm, a fatal 4 fs RATTLE start): there we
+            # rotate it rigidly with its sugar.  Geometric build (``_xb_sim is None``)
+            # keeps the phosphate fixed — the minimiser re-places it — so that path is
+            # byte-unchanged.
             if _xb_frame is None:
                 _glycosidic_n = _align_glycosidic(
-                    atoms, residue, sugar_name_to_serial, base_name_to_serial, target_c1n)
+                    atoms, residue, sugar_name_to_serial, base_name_to_serial, target_c1n,
+                    rotate_phosphate=_xb_sim is not None)
             else:
                 _glycosidic_n = "N9" if residue in {"DA", "DG"} else "N1"
 
@@ -3118,8 +3132,13 @@ def _build_extension_atoms(
                     atom_name, element, _np.array([n_c, y_c, z_c]))
 
             if sim_frame is None:
+                # Same phosphate-stranding guard as the crossover placer: a position-only
+                # override tail (sim set, no frame) skips the bridge minimiser, so rotate the
+                # phosphate rigidly with its sugar; a geometric tail (sim is None) keeps it
+                # fixed (byte-unchanged) for the minimiser to place.
                 _align_glycosidic(atoms, residue, sugar_name_to_serial,
-                                  base_name_to_serial, target_c1n)
+                                  base_name_to_serial, target_c1n,
+                                  rotate_phosphate=sim is not None)
 
             for a_name, b_name in _SUGAR_BONDS:
                 sa, sb = sugar_name_to_serial.get(a_name), sugar_name_to_serial.get(b_name)
