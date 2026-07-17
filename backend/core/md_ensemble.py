@@ -165,6 +165,14 @@ def build_replica_package(
     )
 
     steps = max(100, int(total_steps))
+    # Drive the production integrator from ONE resolved timestep so the conf's dt and the
+    # ns label can never diverge.  The ensemble path previously passed only ``fast`` to
+    # build_production_conf, so a manual 2 fs replica silently emitted a 1 fs conf and ran
+    # half its labelled simulated time.  4 fs needs the HMR PSF (``use_fast``); if 4 fs was
+    # requested but no HMR PSF exists, fall back to the safe 1 fs reference — mirrors the
+    # missing-PSF guard in routes_md._append_production_segments.
+    eff_timestep_fs = 1.0 if (timestep_fs == 4.0 and not use_fast) else timestep_fs
+    length_ns = steps * eff_timestep_fs / 1_000_000.0
     label_ns = f"{length_ns:g}".replace(".", "p")
     prod_name = f"{name_stem}_01_production_{label_ns}ns_k0"
     prod = SegmentSpec(
@@ -185,7 +193,8 @@ def build_replica_package(
     (child_pkg / f"{prod_name}.conf").write_text(
         build_production_conf(
             prod, name_stem, box, mgh_extrabonds,
-            seed=seed, fast=use_fast, structure_psf=structure_psf,
+            seed=seed, fast=use_fast, timestep_fs=eff_timestep_fs,
+            structure_psf=structure_psf,
         )
     )
 
@@ -206,7 +215,7 @@ def build_replica_package(
         # total_ns_from_manifest = Σ(segment steps) × relax ts.  One production segment
         # at the production timestep → total_ns == length_ns (no production_extension,
         # which would double-count).
-        "relax_protocol_settings": {"timestep_fs": timestep_fs},
+        "relax_protocol_settings": {"timestep_fs": eff_timestep_fs},
         "fast_relaxation": {"enabled": use_fast, "structure_psf": structure_psf},
         "ensemble": {
             "parent_job_id": parent.job_id,
@@ -216,7 +225,7 @@ def build_replica_package(
             "equilibrated_from": ready_checkpoint,
             "length_ns": length_ns,
             "steps": steps,
-            "timestep_fs": timestep_fs,
+            "timestep_fs": eff_timestep_fs,
         },
     }
     text = json.dumps(child_manifest, indent=2)

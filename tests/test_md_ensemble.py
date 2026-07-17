@@ -56,14 +56,18 @@ def _make_parent(ws: Path, *, fast: bool = False, mgh: bool = False):
     return job
 
 
-def _build_replica(ws: Path, parent, *, seed=54321, index=0, fast=False):
+def _build_replica(ws: Path, parent, *, seed=54321, index=0, fast=False,
+                   timestep_fs=None, total_steps=500_000):
     child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
                     parent_job_id=parent.job_id, ensemble_seed=seed, ensemble_index=index)
     child.execution_target = "alpine"
     child.cluster_name = "alpine"
+    if timestep_fs is None:
+        timestep_fs = 4.0 if fast else 1.0
+    length_ns = total_steps * timestep_fs / 1_000_000.0
     me.build_replica_package(
         parent, child, seed=seed, index=index,
-        total_steps=500_000, length_ns=2.0, timestep_fs=4.0 if fast else 1.0,
+        total_steps=total_steps, length_ns=length_ns, timestep_fs=timestep_fs,
         fast=fast, ready_checkpoint=READY, workspace=ws,
     )
     return child
@@ -146,12 +150,54 @@ def test_production_conf_reads_reseed_and_carries_seed(tmp_path):
 
 
 def test_replica_manifest_total_ns(tmp_path):
-    parent = _make_parent(tmp_path)
+    # A 4 fs replica needs a fast (HMR) parent — else it downgrades to 1 fs (see
+    # test_replica_4fs_without_hmr_parent_downgrades). 500k steps × 4 fs = 2 ns.
+    parent = _make_parent(tmp_path, fast=True)
     child = _build_replica(tmp_path, parent, fast=True)
     manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
     # One production segment at the production timestep → total_ns == length_ns.
     assert cr.total_ns_from_manifest(manifest) == pytest.approx(2.0)
     assert cr.n_atoms_from_manifest(manifest) == 120_000
+
+
+def _prod_conf(child, ws) -> str:
+    return next(child.package_dir(ws).glob("demo_01_production_*.conf")).read_text()
+
+
+def test_replica_2fs_conf_runs_at_2fs(tmp_path):
+    # REGRESSION: the ensemble path used to pass only ``fast`` to build_production_conf,
+    # so a manual 2 fs replica silently emitted a 1 fs conf and ran HALF its labelled time.
+    parent = _make_parent(tmp_path)
+    child = _build_replica(tmp_path, parent, fast=False, timestep_fs=2.0, total_steps=500_000)
+    conf = _prod_conf(child, tmp_path)
+    assert "timestep           2" in conf
+    assert "rigidBonds         all" in conf          # 2 fs medium path, not the 1 fs ref
+    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
+    # 500k steps × 2 fs = 1 ns — label + manifest reflect the ACTUAL integrated time.
+    assert cr.total_ns_from_manifest(manifest) == pytest.approx(1.0)
+    assert manifest["ensemble"]["timestep_fs"] == 2.0
+    assert next(child.package_dir(tmp_path).glob("demo_01_production_1ns_*"))
+
+
+def test_replica_4fs_conf_runs_at_4fs(tmp_path):
+    parent = _make_parent(tmp_path, fast=True)
+    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0)
+    conf = _prod_conf(child, tmp_path)
+    assert "timestep           4" in conf
+    assert "structure          demo_hmr.psf" in conf
+
+
+def test_replica_4fs_without_hmr_parent_downgrades(tmp_path):
+    # 4 fs needs the HMR PSF; a parent without one can't run it, so it falls back to the
+    # safe 1 fs reference — and the label follows so simulated time never lies.
+    parent = _make_parent(tmp_path)          # no demo_hmr.psf
+    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
+    conf = _prod_conf(child, tmp_path)
+    assert "timestep           1" in conf
+    assert "rigidBonds         none" in conf
+    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
+    assert manifest["ensemble"]["timestep_fs"] == 1.0
+    assert cr.total_ns_from_manifest(manifest) == pytest.approx(0.5)  # 500k × 1 fs
 
 
 def test_fast_replica_uses_hmr_psf(tmp_path):

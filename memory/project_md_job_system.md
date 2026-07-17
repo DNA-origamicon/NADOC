@@ -301,6 +301,20 @@ stubbed-NAMD `run_job` proving skip + flag-off-runs-all). **NOT yet exercised on
 relax run** — needs one real run with the flag on to confirm the skipped structure matches a
 full run's endpoint (owes an MV row). [[md-prep-relaxation-exp29]], [[oxdna-relaxation]].
 
+**Ensemble-replica timestep fix (2026-07-17):** `md_ensemble.build_replica_package`
+received `timestep_fs` but never forwarded it to `build_production_conf` — it passed
+only `fast=use_fast`, so the conf integrator relied on the `fast`↔4 fs coincidence. A
+**manual 2 fs** replica (`fast=False`) therefore silently emitted a **1 fs** conf and ran
+HALF its labelled simulated time (steps computed at 2 fs, integrated at 1 fs). Fix: resolve
+one `eff_timestep_fs` (4 fs downgrades to 1 fs when no HMR PSF exists, mirroring
+`routes_md._append_production_segments`), recompute `length_ns = steps × eff_timestep_fs`
+from it, and pass `timestep_fs=eff_timestep_fs` to both the conf and the manifest slots so
+the ns label can never diverge from what NAMD actually integrates. The direct-production
+path was already correct. Tests: `test_md_ensemble.py::{test_replica_2fs_conf_runs_at_2fs,
+test_replica_4fs_conf_runs_at_4fs, test_replica_4fs_without_hmr_parent_downgrades}`.
+Surfaced while diagnosing a `24hb_2xT` local job "crash" (a dev-server restart orphaned a
+live NAMD run + mislabelled it `failed` — the sim itself was fine; see below).
+
 **Fast production runs — HMR + GPUresident + 4 fs (2026-07-02):** production was
 pinned at ~1.3 ns/day because `_conservative_production_conf`/`_seed_production_conf`
 in `routes_md.py` never got the fast-relaxation treatment — they ran `rigidBonds
