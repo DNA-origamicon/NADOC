@@ -48,7 +48,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   async function displayJob(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const resp = await api.getLammpsDisplay(jobId, align, signal)
+    const resp = await api.getLammpsDisplay(jobId, { align, signal })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const updates = toFemUpdates(resp)
     if (!updates.length) return { ok: false, reason: resp?.reason || 'not ready' }
@@ -62,7 +62,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   async function displayRmsf(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const resp = await api.getLammpsRmsf(jobId, align, signal)
+    const resp = await api.getLammpsRmsf(jobId, { align, signal })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
@@ -79,7 +79,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   async function displayDeviation(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const resp = await api.getLammpsDeviation(jobId, align, signal)
+    const resp = await api.getLammpsDeviation(jobId, { align, signal })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
@@ -117,7 +117,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   async function loadTrajectory(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const t = await api.getLammpsTrajectory(jobId, align, signal)
+    const t = await api.getLammpsTrajectory(jobId, { align, signal })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!t || !t.ready) { _traj = null; return { ok: false, reason: t?.reason || 'not ready' } }
     _traj = { keys: t.keys, frames: t.frames }

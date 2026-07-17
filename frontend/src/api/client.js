@@ -2058,7 +2058,20 @@ export async function runOxdna(steps = 10000) {
 
 async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
   const opts = { method, headers: { ...docHeaders() } }
-  if (signal) opts.signal = signal
+  // Type-check rather than truthiness-check: a positional arg mix-up used to land a
+  // non-signal here (e.g. `signal = true` from an `align` bound to the wrong param).
+  // `if (signal)` waved that straight through to fetch, which rejects with an opaque
+  // "Expected signal to be an instance of AbortSignal" from deep inside the request —
+  // or, worse, the real signal was dropped and the fetch just became un-abortable.
+  // Fail here instead, naming the route, so the mistake is obvious at the call site.
+  if (signal != null) {
+    if (!(signal instanceof AbortSignal)) {
+      throw new TypeError(
+        `_oxdnaJSON(${method} ${path}): signal must be an AbortSignal, got ${typeof signal}. `
+        + 'A positional align/signal mix-up is the usual cause — these APIs take (id, { align, signal }).')
+    }
+    opts.signal = signal
+  }
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json'
     opts.body = JSON.stringify(body)
@@ -2108,19 +2121,60 @@ export const createOxdnaJob      = (body)        => _oxdnaJSON('POST', '/oxdna/j
 // ── LAMMPS (CG-DNA / parallel oxDNA) jobs ──────────────────────────────────────
 /** Is a CG-DNA-capable LAMMPS installed? → {available, lammps_bin, cgdna_capable}. */
 export const lammpsAvailable     = ()            => _oxdnaJSON('GET',  '/lammps/available')
+/**
+ * Normalize a visualization call's `{ align, signal }` options — and make every legacy
+ * positional call fail LOUDLY.
+ *
+ * These fns were briefly `(id, align = true, signal)`. `align` was inserted BEFORE
+ * `signal`, so any caller still on the older `(id, signal)` shape silently bound its
+ * AbortSignal to `align`: the request became un-abortable (stale responses then raced the
+ * display) and `?align=[object AbortSignal]` went on the wire. Nothing threw at the call
+ * site. No positional signature can catch that, so the options object IS the fix, and this
+ * guard is the tripwire for anything still on the old shape.
+ */
+function _vizOpts(opts, fn) {
+  if (opts == null) return { align: true, signal: undefined }
+  if (typeof opts === 'boolean' || opts instanceof AbortSignal) {
+    throw new TypeError(
+      `${fn}(id, opts): expected an options object like { align, signal }, got a positional `
+      + `${typeof opts === 'boolean' ? 'boolean (the old (id, align, signal) form)' : 'AbortSignal (the old (id, signal) form)'}. `
+      + 'Update the call — the old form silently dropped the AbortSignal.')
+  }
+  const { align = true, signal } = opts
+  if (typeof align !== 'boolean') {
+    throw new TypeError(`${fn}: opts.align must be a boolean, got ${typeof align}.`)
+  }
+  if (signal != null && !(signal instanceof AbortSignal)) {
+    throw new TypeError(`${fn}: opts.signal must be an AbortSignal, got ${typeof signal}.`)
+  }
+  return { align, signal }
+}
+
 /** Launch a LAMMPS oxDNA2 run on the active design ({steps, dump_every, temperature, salt_molar, ranks}). */
 export const createLammpsJob     = (body)        => _oxdnaJSON('POST', '/lammps/jobs', body)
 export const listLammpsJobs      = ()            => _oxdnaJSON('GET',  '/lammps/jobs')
 export const getLammpsJob        = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}`)
 export const stopLammpsJob       = (id)          => _oxdnaJSON('POST', `/lammps/jobs/${id}/stop`)
 /** Scrub-able trajectory ({ready, keys, frames, stages, markers}) — same shape as the oxDNA one. */
-export const getLammpsTrajectory = (id, align=true, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
+export const getLammpsTrajectory = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getLammpsTrajectory')
+  return _oxdnaJSON('GET', `/lammps/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
+}
 /** Final structure as applyFemPositions positions (the display view); align superposes onto design pose. */
-export const getLammpsDisplay    = (id, align=true, signal) => _oxdnaJSON('GET', `/lammps/jobs/${id}/display?align=${align}`, undefined, { signal })
+export const getLammpsDisplay = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getLammpsDisplay')
+  return _oxdnaJSON('GET', `/lammps/jobs/${id}/display?align=${align}`, undefined, { signal })
+}
 /** Per-base average position + RMSF (flexibility map) — same shape as the oxDNA one. */
-export const getLammpsRmsf       = (id, align=true, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
+export const getLammpsRmsf = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getLammpsRmsf')
+  return _oxdnaJSON('GET', `/lammps/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
+}
 /** Per-base deviation (nm) from the design pose (deviation map) — same shape as the oxDNA one. */
-export const getLammpsDeviation  = (id, align=true, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/deviation?align=${align}`, undefined, { signal })
+export const getLammpsDeviation = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getLammpsDeviation')
+  return _oxdnaJSON('GET', `/lammps/jobs/${id}/deviation?align=${align}`, undefined, { signal })
+}
 
 /** Forecast free-disk-after for an oxDNA relaxation run (same body as createOxdnaJob). */
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
@@ -2152,7 +2206,10 @@ export const stopAutorefine      = (id)          => _oxdnaJSON('POST', `/design/
 export const applyAutorefineSkips = (id, period) => _oxdnaJSON('POST',
   `/design/oxdna/autorefine/${id}/apply${period != null ? `?period=${period}` : ''}`)
 /** Per-nucleotide deviation map of a job's production mean structure vs its design. */
-export const getOxdnaDeviation   = (id, align=true, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/deviation?align=${align}`, undefined, { signal })
+export const getOxdnaDeviation = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getOxdnaDeviation')
+  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/deviation?align=${align}`, undefined, { signal })
+}
 /** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a
  *  job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getOxdnaMetricsRun`. */
 export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)
@@ -2168,10 +2225,19 @@ export const getShapeCompareRun  = (runId)       => _oxdnaJSON('GET',  `/shape/c
 export const getOxdnaShapeSource = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/shape-source`)
 export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/health`)
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
-export const getOxdnaDisplay     = (id, align = true, signal) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`, undefined, { signal })
+export const getOxdnaDisplay = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getOxdnaDisplay')
+  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/display?align=${align}`, undefined, { signal })
+}
 export const getOxdnaRmsd        = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsd`)
-export const getOxdnaRmsf        = (id, align=true, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
-export const getOxdnaTrajectory  = (id, align=true, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
+export const getOxdnaRmsf = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getOxdnaRmsf')
+  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
+}
+export const getOxdnaTrajectory = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getOxdnaTrajectory')
+  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
+}
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast. */
 export const getOxdnaTrajectoryMeta = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-meta`)
 /** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
@@ -2218,11 +2284,15 @@ export const getDesignSurfaceBin = ({ color_mode = 'strand', probe_radius = 0.28
   _oxdnaBin('GET', `/design/surface-bin?color_mode=${color_mode}`
                    + `&probe_radius=${probe_radius}&detail=${detail}`)
 /** All-atom flat-XYZ for the flexibility-map AVERAGE structure ({ready, atomistic:[…]}). */
-export const getOxdnaRmsfAtomistic = (id, align=true) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-atomistic?align=${align}`)
+export const getOxdnaRmsfAtomistic = (id, opts) => {
+  const { align } = _vizOpts(opts, 'getOxdnaRmsfAtomistic')
+  return _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-atomistic?align=${align}`)
+}
 /** Molecular surface for the flexibility-map AVERAGE structure ({ready, surface:{…}}). */
-export const getOxdnaRmsfSurface = (id, params = {}, align=true) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-surface?align=${align}`, params)
+export const getOxdnaRmsfSurface = (id, params = {}, opts) => {
+  const { align } = _vizOpts(opts, 'getOxdnaRmsfSurface')
+  return _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-surface?align=${align}`, params)
+}
 
 // ── Ephemeral LIVE oxDNA field session (routes_oxdna_live.py) ────────────────
 // An in-process oxpy run that stores NO job — seeded from a completed relaxed

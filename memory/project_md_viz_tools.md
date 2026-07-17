@@ -88,10 +88,26 @@ and now applies to **trajectory, flexibility (RMSF) and deviation** too, not jus
 Flipping it live re-fetches whichever viz is active; the PDB export honours it
 (`align: active[0].alignment?.() ?? true`). Both display controllers expose `alignment: () => _align`.
 
-**HAZARD — `align` was inserted BEFORE `signal` in the client signatures:**
-`getOxdnaTrajectory(id, align = true, signal)`, and likewise `getOxdnaRmsf` / `getOxdnaDeviation` /
-`getLammpsTrajectory` / `getLammpsRmsf` / `getLammpsDeviation`. **Any caller not updated silently
-passes an AbortSignal as `align`** — it will not throw. Check the arg order before adding a caller.
+**HAZARD — RESOLVED 2026-07-16. It had already bitten.** `align` was inserted BEFORE `signal`
+(`getOxdnaTrajectory(id, align = true, signal)`, ditto `getOxdnaRmsf`/`getOxdnaDeviation`/`getOxdnaDisplay`/
+the four `getLammps*`). `md_viz_adapter` was still on the older `(id, signal)` shape, so the controller's
+`align` bound to its `signal` param: the **real AbortSignal was dropped** and `api.getMdTrajectory(id, true)`
+made `fetch` reject with `TypeError: Expected signal ("true") to be an instance of AbortSignal`. **NAMD
+trajectory scrub + flexibility map were dead in the app with a fully green suite** — every adapter test
+called the adapter directly on the old 2-arg contract, so nothing noticed. See [[LESSONS]] D14.
+
+**The fix — three layers, so it cannot be silent again:**
+1. **Options object.** All ten viz fetchers are now `(id, { align, signal })`
+   (`getOxdnaRmsfSurface` is `(id, params, { align })`). There is no positional boolean to mis-bind.
+2. **Tripwire.** `_vizOpts(opts, fn)` in `client.js` THROWS on a positional boolean or AbortSignal, on a
+   non-boolean `align`, and on a non-AbortSignal `signal` — naming the function.
+3. **Choke point.** `_oxdnaJSON` now type-checks `signal` (was `if (signal)`, which waved `true` straight
+   through to fetch) and throws naming the route. This backstops the ~15 fetchers still on the
+   unambiguous `(id, signal)` shape (`getMd*`, `getCando*`, `getSnupi*`, `getMrdna*`).
+
+`mdVizApiAdapter` takes `(id, { signal } = {})` and deliberately does NOT forward `align`: `/md/jobs/{id}/
+trajectory` and `/rmsf` have no align param (md_trajectory.py always Kabsch-aligns). If MD ever needs
+align=false it must be honoured server-side, not silently ignored in the adapter.
 
 **Caches are keyed on align** (frontend `_rmsfCache = {jobId, align, resp}`; backend
 `_PRODUCTION_RMSF_CACHE`, `_ALIGNED_CACHE`, per-frame `_frame_cache`) — without this, toggling served

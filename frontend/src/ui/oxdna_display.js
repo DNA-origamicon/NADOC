@@ -480,14 +480,14 @@ export function initOxdnaDisplay({
         }
       } else if (_mode === 'rmsf') {
         if (kind === 'atomistic') {
-          const r = await api.getOxdnaRmsfAtomistic(_jobId, _align)
+          const r = await api.getOxdnaRmsfAtomistic(_jobId, { align: _align })
           if (live() && r?.ready) {
             const { lo, hi } = _activeBounds()
             const m = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)   // same ramp/scale as the beads
             await _pushAtomistic(r.atomistic, epoch, live, m?.colorByKey || null)
           }
         } else {
-          const r = await api.getOxdnaRmsfSurface(_jobId, {}, _align)
+          const r = await api.getOxdnaRmsfSurface(_jobId, {}, { align: _align })
           if (live() && r?.ready) _pushSurface(r.surface, true)   // colour by per-vertex RMSF
         }
       } else if (_mode === 'trajectory') {
@@ -540,7 +540,7 @@ export function initOxdnaDisplay({
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     const signal = _beginLoad()
-    const resp = await api.getOxdnaDisplay(jobId, align, signal)
+    const resp = await api.getOxdnaDisplay(jobId, { align, signal })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }   // off/newer call won
     const updates = toFemUpdates(resp)
     if (!updates.length) {
@@ -608,7 +608,7 @@ export function initOxdnaDisplay({
       resp = _rmsfCache.resp
     } else {
       const signal = _beginLoad()
-      resp = await api.getOxdnaRmsf(jobId, align, signal)
+      resp = await api.getOxdnaRmsf(jobId, { align, signal })
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
@@ -708,7 +708,7 @@ export function initOxdnaDisplay({
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     const signal = _beginLoad()
-    const resp = await api.getOxdnaTrajectory(jobId, align, signal)
+    const resp = await api.getOxdnaTrajectory(jobId, { align, signal })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }

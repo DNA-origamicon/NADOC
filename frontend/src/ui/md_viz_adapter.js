@@ -17,8 +17,17 @@
  * Display-state only — never writes topology.
  */
 export function mdVizApiAdapter(api) {
+  // The controller calls these as `(id, { align, signal })`.  Take the OPTIONS OBJECT —
+  // taking `(id, signal)` here is what silently broke this adapter once: the controller's
+  // `align` bound to `signal`, the real AbortSignal was dropped, and `fetch` then rejected
+  // on `signal: true`.  Destructure explicitly so a shape change can't slide through again.
+  //
+  // `align` is intentionally NOT forwarded: /md/jobs/{id}/trajectory and /rmsf take no
+  // align param — md_trajectory.py always Kabsch-aligns each frame to the design — so there
+  // is nothing to pass it to.  The MD panel never asks for align=false, and if it ever
+  // does, the request must be honoured server-side rather than quietly ignored here.
   return {
-    getOxdnaTrajectory: (id, signal) => api.getMdTrajectory(id, signal),
-    getOxdnaRmsf:       (id, signal) => api.getMdRmsf(id, signal),
+    getOxdnaTrajectory: (id, { signal } = {}) => api.getMdTrajectory(id, signal),
+    getOxdnaRmsf:       (id, { signal } = {}) => api.getMdRmsf(id, signal),
   }
 }

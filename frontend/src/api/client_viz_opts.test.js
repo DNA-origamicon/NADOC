@@ -1,0 +1,86 @@
+/**
+ * Guards against the align/signal positional hazard.
+ *
+ * History: the visualization fetchers were briefly `(id, align = true, signal)` — `align`
+ * was inserted BEFORE `signal`. Any caller still on the older `(id, signal)` shape then
+ * bound its AbortSignal to `align`, so the request became un-abortable (stale responses
+ * raced the display) and `?align=[object AbortSignal]` went on the wire. Nothing threw at
+ * the call site. That is exactly how md_viz_adapter silently broke NAMD trajectory + RMSF.
+ *
+ * The fix is an options object — `(id, { align, signal })` — plus these two tripwires, so
+ * the mistake can never be silent again.
+ */
+import { describe, it, expect } from 'vitest'
+import {
+  getOxdnaTrajectory, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
+  getOxdnaRmsfAtomistic, getOxdnaRmsfSurface,
+  getLammpsTrajectory, getLammpsRmsf, getLammpsDeviation, getLammpsDisplay,
+  getMdTrajectory,
+} from './client.js'
+
+const VIZ = {
+  getOxdnaTrajectory, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
+  getLammpsTrajectory, getLammpsRmsf, getLammpsDeviation, getLammpsDisplay,
+  getOxdnaRmsfAtomistic,
+}
+
+describe('viz fetchers reject the legacy positional forms LOUDLY', () => {
+  const signal = new AbortController().signal
+
+  for (const [name, fn] of Object.entries(VIZ)) {
+    it(`${name}(id, signal) throws instead of dropping the signal`, () => {
+      // The old (id, signal) shape. Must not be mistaken for options.
+      expect(() => fn('J1', signal)).toThrow(TypeError)
+      expect(() => fn('J1', signal)).toThrow(/options object/i)
+    })
+
+    it(`${name}(id, true) throws instead of taking a positional align`, () => {
+      expect(() => fn('J1', true)).toThrow(/options object/i)
+    })
+  }
+
+  it('getOxdnaRmsfSurface guards its third arg too (id, params, opts)', () => {
+    expect(() => getOxdnaRmsfSurface('J1', {}, true)).toThrow(/options object/i)
+    expect(() => getOxdnaRmsfSurface('J1', {}, signal)).toThrow(TypeError)
+  })
+
+  it('a wrong-typed option is rejected rather than coerced onto the wire', () => {
+    // `?align=[object Object]` used to reach the backend as a 422; and a truthy non-boolean
+    // silently read as "aligned". Neither should be possible now.
+    expect(() => getOxdnaTrajectory('J1', { align: 'yes' })).toThrow(/must be a boolean/i)
+    expect(() => getOxdnaTrajectory('J1', { align: 1 })).toThrow(/must be a boolean/i)
+    expect(() => getOxdnaTrajectory('J1', { signal: true })).toThrow(/must be an AbortSignal/i)
+    expect(() => getOxdnaTrajectory('J1', { signal: 'abc' })).toThrow(/must be an AbortSignal/i)
+  })
+
+  it('the valid forms do NOT throw (bare, align-only, signal-only, both)', () => {
+    // These reach fetch; we only care that the guard lets them through. Swallow the
+    // network rejection — jsdom has no server.
+    const ok = (p) => { if (p && typeof p.catch === 'function') p.catch(() => {}) }
+    expect(() => ok(getOxdnaTrajectory('J1'))).not.toThrow()
+    expect(() => ok(getOxdnaTrajectory('J1', {}))).not.toThrow()
+    expect(() => ok(getOxdnaTrajectory('J1', { align: false }))).not.toThrow()
+    expect(() => ok(getOxdnaTrajectory('J1', { signal }))).not.toThrow()
+    expect(() => ok(getOxdnaTrajectory('J1', { align: true, signal }))).not.toThrow()
+  })
+})
+
+describe('_oxdnaJSON choke point: a non-AbortSignal signal never reaches fetch', () => {
+  it('rejects with a named, actionable TypeError', async () => {
+    // getMdTrajectory still takes a positional (id, signal) — it has no align — so this
+    // is the backstop for every fetcher of that shape, not just the viz ones above.
+    await expect(getMdTrajectory('J1', true)).rejects.toThrow(TypeError)
+    await expect(getMdTrajectory('J1', true)).rejects.toThrow(/must be an AbortSignal/i)
+    // The message names the route so the bad call site is findable.
+    await expect(getMdTrajectory('J1', true)).rejects.toThrow(/\/md\/jobs\/J1\/trajectory/)
+  })
+
+  it('a real AbortSignal passes the guard untouched', async () => {
+    // Can't assert the abort round-trip here: jsdom's fetch rejects on the relative
+    // `/api/...` URL before the signal is ever consulted. So assert the guard specifically
+    // — whatever this rejects with, it must NOT be the signal TypeError.
+    const c = new AbortController()
+    const err = await getMdTrajectory('J1', c.signal).then(() => null, e => e)
+    expect(String(err?.message ?? '')).not.toMatch(/must be an AbortSignal/i)
+  })
+})

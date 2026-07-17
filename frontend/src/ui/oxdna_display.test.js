@@ -332,8 +332,8 @@ describe('initOxdnaDisplay controller', () => {
   it('aborts an in-flight trajectory request when toggled off before it loads', async () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     let signal, release
-    const api = { getOxdnaTrajectory: vi.fn((id, align, s) => {
-      signal = s
+    const api = { getOxdnaTrajectory: vi.fn((id, opts) => {
+      signal = opts?.signal
       return new Promise(resolve => { release = () => resolve(null) })
     }) }
     const ctrl = initOxdnaDisplay({ designRenderer, api })
@@ -522,7 +522,7 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     const { ctrl, api, atom } = makeHeavyDeps('vdw')
     await ctrl.displayRmsf('jobF')
     await tick()
-    expect(api.getOxdnaRmsfAtomistic).toHaveBeenCalledWith('jobF', true)
+    expect(api.getOxdnaRmsfAtomistic).toHaveBeenCalledWith('jobF', { align: true })
     expect(atom.applyPositionLerp).toHaveBeenCalledWith([7, 8, 9], [7, 8, 9], 0, null, [], null)
     // Atoms get the SAME viridis ramp as the beads: a colorByKey keyed by helix:bp:dir.
     expect(atom.applyScalarColors).toHaveBeenCalled()
@@ -534,7 +534,7 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     const { ctrl, api, surf } = makeHeavyDeps('surface')
     await ctrl.displayRmsf('jobF')
     await tick()
-    expect(api.getOxdnaRmsfSurface).toHaveBeenCalledWith('jobF', {}, true)
+    expect(api.getOxdnaRmsfSurface).toHaveBeenCalledWith('jobF', {}, { align: true })
     const pushed = surf.applyPositionLerp.mock.calls.at(-1)[0]
     expect(pushed.scalar).toBe(true)                          // forces viridis through any colour mode
     expect(pushed.vertex_colors).toBeInstanceOf(Float32Array)

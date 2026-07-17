@@ -769,8 +769,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _devAbort = abort
     _devBusy = true; _updateButtons(_selectedJob())
     _setDevStatus('Loading deviation map…')
-    const resp = await api.getOxdnaDeviation(
-      _selectedId, alignToggle ? alignToggle.checked : true, abort.signal)
+    const resp = await api.getOxdnaDeviation(_selectedId,
+      { align: alignToggle ? alignToggle.checked : true, signal: abort.signal })
     if (abort.signal.aborted) return
     if (_devAbort === abort) _devAbort = null
     _devBusy = false; _updateButtons(_selectedJob())

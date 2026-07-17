@@ -1179,3 +1179,41 @@ Then profiled U6hb (16.7 s under cProfile): **`_minimize_backbone_bridge` = 86%*
 Shipped instead: `tests/test_atomistic_geometry_lock.py` — golden-hash byte-lock on `atomistic_positions_flat` (the 5-dp display wire format) for crossover designs (fast) + skip/deformation designs (slow). It is the artifact that caught this and now guards the locked geometry.
 
 **How to avoid**: (1) A speedup that changes floats "only at the ULP" is NOT safe if its output feeds a numerical optimizer / root-finder / eigensolver — those amplify ULP to macroscopic differences near degenerate solutions. Byte-identity through such a stage is the only safe contract; prove it on inputs that exercise the solver (here: skips + crossovers), not just the easy path. (2) PROFILE before optimising a "known" hot spot — the research premise (per-atom stamp dominates) was true only for crossover-free designs; the slow designs are optimizer-bound. (3) A per-frame OUTPUT cache beats making the per-frame build faster when re-visits dominate. See [[project_photo_mode]], [[REFERENCE_ATOMISTIC]].
+
+### D14. A green suite while the feature is DEAD in the app — an adapter unit-tested in isolation against a contract its caller had already left (2026-07-16)
+
+Symptom: NAMD trajectory scrub + flexibility map do nothing / error, while `just test-frontend` is 100%
+green and every `md_viz_adapter` test passes.
+
+Root cause: `align` was inserted BEFORE `signal` in the client viz fetchers
+(`getOxdnaTrajectory(id, align = true, signal)`). `oxdna_display.js` — the controller — was updated to
+`api.getOxdnaTrajectory(jobId, align, signal)`. `md_viz_adapter.js`, which maps the oxDNA-named controller
+calls onto the `/md/` routes, was NOT: it still declared `(id, signal) => api.getMdTrajectory(id, signal)`.
+So `align` (`true`) bound to the adapter's `signal` param, the REAL AbortSignal fell off the end of the
+arg list, and `_oxdnaJSON`'s `if (signal) opts.signal = signal` waved the boolean through to
+`fetch(url, { signal: true })` → `TypeError: RequestInit: Expected signal ("true") to be an instance of
+AbortSignal`. Not an AbortError, so `_oxdnaJSON`'s abort catch rethrew it.
+
+**Why the tests didn't catch it — the actual lesson.** `md_viz_adapter.test.js` poked the adapter
+directly: `a.getOxdnaTrajectory('J1', sig)`. That pins the contract the test AUTHOR remembered, not the
+one the caller uses. The seam's whole job is to match `oxdna_display`, and no test ever wired the two
+together, so the suite could not observe the drift. A seam tested only against a hand-written stand-in
+proves the stand-in agrees with itself.
+
+Fix (three layers):
+1. `(id, { align, signal })` options object for all ten viz fetchers — no positional boolean to mis-bind.
+2. `_vizOpts(opts, fn)` tripwire: throws on a positional boolean/AbortSignal, a non-boolean `align`, or a
+   non-AbortSignal `signal`, naming the function.
+3. `_oxdnaJSON` type-checks `signal` (`if (signal)` → `instanceof AbortSignal`) and throws naming the
+   route — the backstop for the ~15 fetchers still on the unambiguous `(id, signal)` shape.
+Plus contract tests in `md_viz_adapter.test.js` that build a REAL `initOxdnaDisplay` over the adapter and
+assert `getMdTrajectory`/`getMdRmsf` receive an actual `AbortSignal` (and that `cancelPendingLoad()`
+aborts it). All five fail against the old adapter — verified by reverting it.
+
+Generalise:
+- **Positional booleans next to optional callbacks/signals are a trap.** Adding a param in the middle is
+  invisible to every existing caller. Use an options object.
+- **Truthiness checks (`if (signal)`) launder type errors.** Type-check at choke points.
+- **Every adapter/seam needs ≥1 test driven by its real caller.** Isolation tests are necessary but they
+  cannot see contract drift — that is precisely the failure they must catch.
+
