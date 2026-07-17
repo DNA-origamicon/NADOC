@@ -289,7 +289,8 @@ def _current_design_fingerprint() -> "str | None":
 def _job_fingerprint(job: OxdnaJob) -> "str | None":
     """The job's creation fingerprint — the stored value, or (for a job saved before
     this field existed) one derived once from its frozen design.json snapshot."""
-    if job.design_fingerprint:
+    if job.design_fingerprint and (job.design_fingerprint.startswith("v2:")
+                                   or len(job.design_fingerprint) != 64):
         return job.design_fingerprint
     cached = _DERIVED_FP_CACHE.get(job.job_id)
     if cached is not None:

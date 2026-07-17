@@ -279,7 +279,8 @@ def _md_snapshot_design(job: MdJob):
 
 
 def _md_job_fingerprint(job: MdJob) -> "str | None":
-    if job.design_fingerprint:
+    if job.design_fingerprint and (job.design_fingerprint.startswith("v2:")
+                                   or len(job.design_fingerprint) != 64):
         return job.design_fingerprint
     cached = _MD_DERIVED_FP_CACHE.get(job.job_id)
     if cached is not None:

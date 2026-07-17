@@ -652,6 +652,27 @@ export function initDesignRenderer(scene, storeRef) {
       _applyRepresentationOverrides(newState.currentDesign)
     }
 
+    // Strand and group colours are presentation-only. Repaint the existing mesh
+    // materials in place before the structural-change early return below; this
+    // keeps loaded simulation positions intact and avoids geometry reconstruction.
+    if ((newState.strandColors !== prevState.strandColors ||
+         newState.strandGroups !== prevState.strandGroups) && _helixCtrl) {
+      const prevEff = _effectiveColors(prevState.strandColors ?? {}, prevState.strandGroups)
+      const newEff  = _effectiveColors(newState.strandColors  ?? {}, newState.strandGroups)
+      const palette = _helixCtrl.getPaletteColors()
+      const allIds  = new Set([...Object.keys(prevEff), ...Object.keys(newEff), ...palette.keys()])
+      for (const sid of allIds) {
+        const oldColor = prevEff[sid] ?? palette.get(sid)
+        const newColor = newEff[sid]  ?? palette.get(sid)
+        if (newColor != null && newColor !== oldColor) _helixCtrl.setStrandColor(sid, newColor)
+      }
+      if (newState.coloringMode && newState.coloringMode !== 'strand') {
+        _helixCtrl.applyColoring(
+          newState.coloringMode, newState.currentDesign, newEff,
+          new Set(newState.loopStrandIds ?? []))
+      }
+    }
+
     if (!geoChanged && !designChanged && !loopChanged) return
 
     // Skip rebuild when only visual-only design fields changed (cluster_transforms,
@@ -704,28 +725,6 @@ export function initDesignRenderer(scene, storeRef) {
     // Re-apply visibility after rebuild — root covers extra-base beads/slabs as children.
     if (!_designVisible) {
       if (_helixCtrl?.root) _helixCtrl.root.visible = false
-    }
-
-    // Group membership/color changes are color-only — no geometry rebuild needed.
-    // Compute per-strand effective color diff and apply live via setStrandColor.
-    if (newState.strandGroups !== prevState.strandGroups && _helixCtrl) {
-      const prevEff = _effectiveColors(prevState.strandColors ?? {}, prevState.strandGroups)
-      const newEff  = _effectiveColors(newState.strandColors  ?? {}, newState.strandGroups)
-      const palette = _helixCtrl.getPaletteColors()  // unmodified build-time palette
-      // Union of all strand IDs that appear in either effective map or the palette.
-      const allIds  = new Set([...Object.keys(prevEff), ...Object.keys(newEff), ...palette.keys()])
-      for (const sid of allIds) {
-        const oldColor = prevEff[sid] ?? palette.get(sid)
-        const newColor = newEff[sid]  ?? palette.get(sid)
-        if (newColor != null && newColor !== oldColor) {
-          _helixCtrl.setStrandColor(sid, newColor)
-        }
-      }
-      // In non-strand modes, restore the active coloring on top of the per-strand updates.
-      if (newState.coloringMode && newState.coloringMode !== 'strand') {
-        _helixCtrl.applyColoring(
-          newState.coloringMode, newState.currentDesign, newEff, new Set(newState.loopStrandIds ?? []))
-      }
     }
 
     // Thicken axis arrows when the bend/twist deformation tool is active.
@@ -935,7 +934,6 @@ export function initDesignRenderer(scene, storeRef) {
     setStrandColor(strandId, hexColor) {
       const { strandColors } = storeRef.getState()
       storeRef.setState({ strandColors: { ...strandColors, [strandId]: hexColor } })
-      _helixCtrl?.setStrandColor(strandId, hexColor)
     },
 
     getHelixCtrl() {

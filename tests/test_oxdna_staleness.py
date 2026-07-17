@@ -51,10 +51,14 @@ def test_fingerprint_changes_on_topology_edit():
 
 
 def test_fingerprint_ignores_display_only_fields():
-    """A cluster repositioning (display layer) or feature-log cursor move must NOT
-    mark a job stale — only structure/sequence/geometry does."""
+    """Display-only edits must NOT mark a job stale."""
     d = make_6hb_design()
     fp = oxdna_design_fingerprint(d)
+    recolored = d.copy_with(strands=[
+        strand.model_copy(update={"color": "#12ABEF"}) if i == 0 else strand
+        for i, strand in enumerate(d.strands)
+    ])
+    assert oxdna_design_fingerprint(recolored) == fp
     moved_cluster = d.copy_with(
         cluster_transforms=[ClusterRigidTransform(translation=[10.0, 0.0, 0.0])])
     assert oxdna_design_fingerprint(moved_cluster) == fp
@@ -79,6 +83,9 @@ def test_job_out_of_date_comparison():
     assert job_out_of_date("a", "a") is False
     assert job_out_of_date(None, "a") is False   # unknown → never blocked
     assert job_out_of_date("a", None) is False
+    # Upgrade compatibility: legacy colour-inclusive hashes cannot be directly
+    # compared with v2 and must not make an unchanged existing job look stale.
+    assert job_out_of_date("a" * 64, "v2:" + "b" * 64) is False
 
 
 # ── Guard helper + routes ─────────────────────────────────────────────────────

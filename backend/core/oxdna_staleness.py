@@ -40,13 +40,22 @@ _FINGERPRINT_FIELDS = {
     "photoproduct_junctions",
 }
 
+_FINGERPRINT_VERSION = "v2"
+
 
 def oxdna_design_fingerprint(design: Design) -> str:
     """Stable content hash of the oxDNA-build-relevant design fields (see module
     docstring).  Deterministic for a given design state, display-layer agnostic."""
     payload = design.model_dump(mode="json", include=_FINGERPRINT_FIELDS)
+    # Strand colours are persisted on the Strand model so they survive a file
+    # round-trip, but they do not affect topology, sequence, seed coordinates, or
+    # any simulation input.  Hashing them made a purely cosmetic recolour mark all
+    # existing jobs out of date.  Keep the rest of each strand intact (including
+    # is_reference, domains, and sequence), and remove only the presentation field.
+    for strand in payload.get("strands", []):
+        strand.pop("color", None)
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
+    return f"{_FINGERPRINT_VERSION}:{hashlib.sha256(raw).hexdigest()}"
 
 
 def effective_feature_log_position(design: Design) -> int | None:
@@ -67,6 +76,15 @@ def job_out_of_date(job_fingerprint: str | None, current_fingerprint: str | None
     Unknown on either side (old job without a stored fingerprint, or no active
     design) → not flagged (we never block on a guess)."""
     if not job_fingerprint or not current_fingerprint:
+        return False
+    # An unversioned hash came from the former colour-inclusive algorithm. It
+    # cannot be compared meaningfully with v2: the only difference may be a
+    # cosmetic colour, or there may be no difference at all after an upgrade.
+    # Callers with a frozen job snapshot derive a v2 hash before reaching here;
+    # callers without one degrade to "unknown" instead of showing a false alert.
+    if current_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:") \
+            and len(job_fingerprint) == 64 \
+            and not job_fingerprint.startswith(f"{_FINGERPRINT_VERSION}:"):
         return False
     return job_fingerprint != current_fingerprint
 
