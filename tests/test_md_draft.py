@@ -57,3 +57,56 @@ def test_spawn_draft_job_defers_prep(tmp_path, monkeypatch):
     loaded = MdJob.load(job.job_id, tmp_path)
     assert loaded.status == MdStatus.draft
     assert loaded.package_subdir == ""
+
+
+# ── Live-Display design resolution (2026-07-16) ──────────────────────────────
+# The live "Display MD" WS must map a trajectory onto the RUN's OWN design, not
+# whatever design is open in the editor — a mismatch scrambles the P-atom→(helix,bp)
+# assignment into cross-structure streaks.  _md_run_design / md_display_design_for_job
+# resolve the run's design WITHOUT the active-session fallback.
+
+def _tiny_design_json(tmp_path, name="run_design"):
+    """A minimal valid Design .nadoc on disk (via the demo design)."""
+    from backend.api.routes import _demo_design
+    d = _demo_design()
+    d = d.model_copy(update={"metadata": d.metadata.model_copy(update={"name": name})})
+    p = tmp_path / f"{name}.nadoc"
+    p.write_text(d.model_dump_json())
+    return p, d
+
+
+def test_md_run_design_resolves_from_source_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    _tiny_design_json(tmp_path, "run_design")
+    job = new_job(design_name="run_design", protocol="p", name_stem="s",
+                  package_subdir="", design_source_path="run_design.nadoc")
+    job.save(tmp_path)
+    # no design.json snapshot in the job dir → falls back to the recorded source .nadoc
+    got = routes_md._md_run_design(job)
+    assert got is not None
+    assert got.metadata.name == "run_design"
+
+
+def test_md_run_design_none_when_unresolvable(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    job = new_job(design_name="d", protocol="p", name_stem="s", package_subdir="",
+                  design_source_path="missing.nadoc")
+    job.save(tmp_path)
+    # neither snapshot nor a loadable source → None (NO active-session fallback)
+    assert routes_md._md_run_design(job) is None
+
+
+def test_md_display_design_for_job_returns_design_and_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    _tiny_design_json(tmp_path, "run_design")
+    job = new_job(design_name="run_design", protocol="p", name_stem="s",
+                  package_subdir="", design_source_path="run_design.nadoc")
+    job.save(tmp_path)
+    design, name = routes_md.md_display_design_for_job(job.job_id)
+    assert design is not None and design.metadata.name == "run_design"
+    assert name == "run_design"
+
+
+def test_md_display_design_for_job_unknown_id(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+    assert routes_md.md_display_design_for_job("nope") == (None, None)

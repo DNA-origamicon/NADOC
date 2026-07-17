@@ -114,6 +114,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
   // ── State ──────────────────────────────────────────────────────────────────
   let _configPath = null  // abs path to NAMD manifest/config
+  let _jobId      = null  // MD job id → backend maps the trajectory onto the RUN's
+                          // own design, not whatever design is open in the editor
   let _browseDir = ''     // last directory visited in file browser
 
   let _ws        = null
@@ -434,6 +436,10 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
         action:          'load',
         config_path:     _configPath,
         mode:            _repr,
+        job_id:          _jobId,
+        // Fallback only — the backend prefers the run's own design (resolved from
+        // job_id) so the trajectory maps onto the right topology even when a
+        // different design is open in the editor.
         design:          store?.getState?.().currentDesign ?? null,
       }))
       if (statusLine) statusLine.textContent = 'Loading…'
@@ -492,6 +498,15 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   function _handleMessage(msg) {
     if (msg.type === 'log') {
       _log(msg.message, 'info')
+      return
+    }
+
+    // Backend progress while a large solvated system is still parsing — keep the
+    // spinner but replace its text with the size note, so a slow first-open reads
+    // as "working (1.3M atoms)" rather than an indefinite hang.
+    if (msg.type === 'loading') {
+      _log(msg.message, 'info')
+      _emitMdDisplayEvent({ state: 'loading', message: msg.message })
       return
     }
 
@@ -818,8 +833,9 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   _loadPersistedPaths()
 
   return {
-    displayLatest(configPath, { forceReload = false, live = true } = {}) {
+    displayLatest(configPath, { forceReload = false, live = true, jobId = null } = {}) {
       if (!configPath) return
+      _jobId = jobId
       const nextMode = _targetStreamMode()
       const action = decideReload({
         wsState: _ws?.readyState ?? null,
@@ -860,8 +876,9 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       _openWebSocket()
     },
 
-    prewarmLatest(configPath, { forceReload = false } = {}) {
+    prewarmLatest(configPath, { forceReload = false, jobId = null } = {}) {
       if (!configPath) return
+      _jobId = jobId
       const nextMode = _targetStreamMode()
       const action = decideReload({
         wsState: _ws?.readyState ?? null,

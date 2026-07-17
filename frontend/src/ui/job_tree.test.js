@@ -14,6 +14,19 @@ describe('job_tree.flattenJobTree', () => {
     expect(rows.map(r => r.depth)).toEqual([0, 1, 1, 0])
     expect(rows.map(r => r.index)).toEqual([0, 1, 2, 0])
   })
+  it('floats a parent to the top by its newest child, above a newer childless root', () => {
+    // P is OLD but has a brand-new production child C; N is a childless root created
+    // after P but before C. Chronological-float: P's subtree (max=500) must outrank N
+    // (300), so the newest job C is NOT buried below N.
+    const jobs = [
+      { job_id: 'N', created_at: 300 },
+      { job_id: 'P', created_at: 100 },
+      { job_id: 'C', parent_job_id: 'P', created_at: 500 },
+    ]
+    const rows = flattenJobTree(jobs)
+    expect(rows.map(r => r.job.job_id)).toEqual(['P', 'C', 'N'])
+    expect(rows.map(r => r.depth)).toEqual([0, 1, 0])
+  })
   it('pre-order flattens a chained lineage with increasing depth', () => {
     const jobs = [
       { job_id: 'R', created_at: 100 },

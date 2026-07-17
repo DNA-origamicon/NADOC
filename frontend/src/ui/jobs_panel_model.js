@@ -112,9 +112,10 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
 }
 
 /**
- * Pure: the full ordered list model. Roots newest-first; children in run order
- * (flattenJobTree). Flat engines (hierarchical=false) number rows [1..N] in the
- * same newest-first order. Returns { empty, rows:[rowModel] }.
+ * Pure: the full ordered list model. Roots ordered by most-recent subtree activity
+ * (a fresh child run floats its parent up — flattenJobTree); children in run order.
+ * Flat engines (hierarchical=false) have no children, so subtree recency == created_at
+ * and rows number [1..N] newest-first. Returns { empty, rows:[rowModel] }.
  */
 export function buildJobListModel(jobs, ctx) {
   const sorted = (jobs || []).slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0))

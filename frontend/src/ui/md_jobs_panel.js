@@ -1445,7 +1445,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (!_inheritedSeedShown) {
         _setDisplayStatus(forceReload ? `Loading ${d.segment_name ?? 'latest MD segment'}...` : `Refreshing ${d.segment_name ?? 'latest frame'}...`, _C.muted, forceReload)
       }
-      mdDisplayController.displayLatest(d.config_path, { forceReload, live })
+      mdDisplayController.displayLatest(d.config_path, { forceReload, live, jobId: job.job_id })
       if (!live) {
         clearInterval(_displayTimer)
         _displayTimer = null
@@ -1488,7 +1488,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // an already-warm socket stays 'ready' (the controller re-emits ready on reuse).
       if (forceReload && _displayIndicatorState !== 'ready') _setDisplayIndicator('warming')
       _prewarmKey = key
-      mdDisplayController.prewarmLatest(d.config_path, { forceReload })
+      mdDisplayController.prewarmLatest(d.config_path, { forceReload, jobId: job.job_id })
     } catch (err) {
       console.warn(`[${_ts()}] md-jobs: MD display prewarm failed`, err)
       _setDisplayIndicator('error')

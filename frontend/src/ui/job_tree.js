@@ -14,8 +14,12 @@
  *  child (indent by depth); `index` is the GLOBAL run number (1..N) of a child among
  *  all non-root jobs in created_at order, so chained runs read Run 1 → Run 2 → …
  *  regardless of nesting; `childCount` is the number of direct children a node has
- *  (drives the expand/collapse chevron).  Roots are newest first; children oldest
- *  first (run order).  An orphan child (parent absent) is treated as its own root.
+ *  (drives the expand/collapse chevron).  Roots are ordered by the MOST RECENT
+ *  activity anywhere in their subtree (a fresh production/child run floats its old
+ *  parent to the top — see #chronological-float), so the top-level list reads
+ *  newest-first even when the newest job is a nested child; children within a parent
+ *  stay oldest-first (run order).  An orphan child (parent absent) is treated as its
+ *  own root.
  *
  *  Pass `{ collapsedIds }` (a Set of job ids) to NOT recurse into those parents —
  *  their subtree is hidden but the parent row still reports its `childCount`, so an
@@ -40,6 +44,22 @@ export function flattenJobTree(jobs, { collapsedIds = null } = {}) {
   list.filter(j => j.parent_job_id && ids.has(j.parent_job_id))
     .slice().sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
     .forEach((j, i) => runNo.set(j.job_id, i + 1))
+  // #chronological-float: a job's "recency" for ordering is the newest created_at in
+  // its whole subtree (itself + all descendants), so an old relaxation with a brand-new
+  // production run sorts by that run — not by its own age. Memoised; guards parent cycles.
+  const subtreeMax = new Map()
+  const recency = (job, stack) => {
+    const jid = job.job_id
+    if (subtreeMax.has(jid)) return subtreeMax.get(jid)
+    if (stack.has(jid)) return job.created_at || 0   // cycle guard (shouldn't happen)
+    stack.add(jid)
+    let m = job.created_at || 0
+    for (const k of (childrenOf.get(jid) || [])) m = Math.max(m, recency(k, stack))
+    stack.delete(jid)
+    subtreeMax.set(jid, m)
+    return m
+  }
+  list.forEach(j => recency(j, new Set()))
   const out = []
   const visit = (job, depth) => {
     const kids = (childrenOf.get(job.job_id) || [])
@@ -49,7 +69,9 @@ export function flattenJobTree(jobs, { collapsedIds = null } = {}) {
       visit(k, depth + 1)
     }
   }
-  roots.slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0)).forEach(r => visit(r, 0))
+  roots.slice()
+    .sort((a, b) => (subtreeMax.get(b.job_id) || 0) - (subtreeMax.get(a.job_id) || 0))
+    .forEach(r => visit(r, 0))
   return out
 }
 

@@ -2627,6 +2627,42 @@ def _load_design_for_refit(source_path: Optional[str]):
         return None
 
 
+def _md_run_design(job):
+    """The design a job's trajectory must be DISPLAYED against — its own frozen
+    snapshot (walking the parent chain), else its recorded source ``.nadoc``.  Returns
+    None when neither is resolvable (the caller then falls back to the open design).
+
+    Unlike ``_load_design_for_refit`` this deliberately does NOT fall back to the active
+    session: mapping a run onto whatever design happens to be open is the exact bug that
+    scrambles the P-atom→(helix,bp) assignment into cross-structure streaks."""
+    snap = _md_snapshot_design(job)
+    if snap is not None:
+        return snap
+    sp = getattr(job, "design_source_path", None)
+    if sp:
+        from backend.core.models import Design  # noqa: PLC0415
+        p = _workspace() / sp
+        if p.exists():
+            try:
+                return Design.from_json(p.read_text())
+            except (OSError, ValueError):
+                pass
+    return None
+
+
+def md_display_design_for_job(job_id: str):
+    """Resolve a job's own display design by id (for the live-Display WebSocket in
+    ws.py).  Returns ``(design_or_None, design_name_or_None)``: the design is None when
+    it can't be resolved (the WS then falls back to the design payload it was sent); the
+    name is the job's recorded ``design_name`` (used in the mismatch-guard message even
+    when the design itself couldn't be loaded)."""
+    try:
+        job = _load_job(job_id)
+    except Exception:  # noqa: BLE001
+        return None, None
+    return _md_run_design(job), getattr(job, "design_name", None)
+
+
 @router.post("/md/jobs/{job_id}/stop")
 async def stop_md_job(job_id: str) -> dict:
     """Cancel a running job."""

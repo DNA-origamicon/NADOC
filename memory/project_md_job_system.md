@@ -533,6 +533,30 @@ idempotent-and-guards-children); vitest `mdHasAppendedProduction` (+4). VERIFIED
 `a0e54cdbf20f` (6hbx100_1xT): 15→12 segs, 80 MB partial production moved to backup, then a
 fresh production child spawned off the cleaned relaxation.
 
+**Archived-abandoned remote jobs no longer render as "queued" forever (2026-07-16):**
+Symptom — dozens of old 24hb runpod jobs (and a few alpine) showed in the panel as
+active "queued" rows (○ badge + spinner) despite being archived + days old. Root cause
+was NOT a display bug: `status="queued"` is truthful. A remote job is BORN `queued`
+(`md_job.new_job`) and leaves it ONLY via a manual Start (runpod) / submit-review (alpine)
+— nothing auto-launches it, and `reconcile_job_status` returned ALL remote jobs untouched
+(`execution_target != "local"`), so a prepared-but-never-launched remote job stays `queued`
+indefinitely (this is a LEGIT state for a non-archived job — panel "awaiting Start/submit").
+Archiving is status-blind (moves the folder, never touches `status`), so an archived job the
+user put away kept the active-looking queued row. Fix: `namd_runner._remote_job_abandoned_queued`
+— an **archived** remote job at `queued` with **no remote handle** (`runpod_pod_id`/`slurm_job_id`
+both None) and `created_at` older than `_ABANDONED_QUEUED_MIN_AGE_S` (1 h, so it can't race an
+in-flight CLI archive-from-birth launch that's briefly archived+queued before `run_job_on_pod`
+stamps the pod id) is retired to `stopped` + `user_stopped=True` + `error=None` (clean-stop UI,
+no resume). Applied inside `reconcile_job_status`'s remote branch, so every panel/list/WS read
+heals it and persists to the archive; **no migration needed** — the records flip on the next
+`GET /md/jobs`. Save is try/except-guarded (archive drive may be offline → heal next load).
+**Deliberately scoped to `queued` only:** a non-archived queued job (awaiting Start/submit),
+a recently-created one (launch race), or one carrying a pod/slurm id is PROTECTED. Archived
+`running`-with-pod phantoms (e.g. runpod jobs whose launcher died) are left to the pod-aware
+`_collect_active` reaper in `routes_jobs.py` (billing safety — needs live-pod verification, not
+blind reaping). Tests: `test_md_resume.py::TestReconcileAbandonedRemoteQueued` (5 — runpod/alpine
+reap, non-archived protect, launch-race protect, pod-id protect). [[job-archive]].
+
 ## ⚡ Implicit-solvent (GBIS) protocol — no-water relaxation for small GPUs (2026-07-11)
 Third protocol `implicit_gbis_namd` (`IMPLICIT_GBIS_PROTOCOL`, in `md_protocols.SUPPORTED_PROTOCOLS`).
 **Why:** a large single-layer origami (e.g. GT_corner_v2, ~287k DNA atoms) in explicit water balloons to

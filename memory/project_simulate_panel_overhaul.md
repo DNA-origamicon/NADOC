@@ -85,6 +85,19 @@ glow until the sim starts and you click the job entry."
   BROKEN on master (ignores its POST statuses, lands on a design with no helices; `bead_select.spec.js`
   is red for the same reason), so the spec carries its own loader.
 
+## ⚡ Job list chronological-float — a fresh child run floats its old parent up — 2026-07-16
+The unified Simulate list (and the MD/oxDNA panels — all share `ui/job_tree.js` `flattenJobTree`) used to
+order top-level rows by the ROOT's own `created_at` (newest-first), so a brand-new production/child run
+nested under an OLD relaxation stayed buried near the bottom under its parent → the list "read out of
+chronological order." Fix (`#chronological-float`): roots now sort by the **newest `created_at` anywhere in
+their subtree** (memoised `subtreeMax`, parent-cycle-guarded), so a relaxation with a fresh child rises to
+the top; children still nest oldest→newest (run order). Backend list endpoints are unchanged (they return
+arbitrary UUID order; the frontend is the sole chronological sort — every consumer re-sorts via
+`buildJobListModel`/`flattenJobTree`). Pin: `job_tree.test.js` "floats a parent to the top by its newest
+child, above a newer childless root" (can-go-red — fails on the old root-created_at sort). Verified in-app
+against real 6hbx100_noT jobs (old relaxation `07c05aaecc12` renders above newer sibling `07eb3d008c76`,
+its fresh child `6d7c2e38e455` nested directly under it). Frontend-only; no `main.js` change.
+
 ## ⚡ "Use as NAMD seed" now creates a deferred-prep DRAFT (configure-then-Relax) — 2026-07-11
 User ask: the seed button should NOT immediately solvate with defaults. Now it creates an **unstarted
 NAMD `draft`** (new `MdStatus.draft`) that records the seed source + default advanced params but DEFERS

@@ -188,6 +188,61 @@ class TestReconcileMidSegment:
         assert result.status == MdStatus.stopped
 
 
+class TestReconcileAbandonedRemoteQueued:
+    """An ARCHIVED remote job stuck at ``queued`` with no remote handle, older than
+    the launch-race window, is retired to ``stopped`` — it can never be started from
+    the archive and otherwise renders as an active "queued" row forever."""
+
+    def _remote_queued(self, tmp_path: Path, *, exec_target: str = "runpod") -> MdJob:
+        job = _make_job(tmp_path)
+        job.status = MdStatus.queued
+        job.execution_target = exec_target
+        job.archived = True
+        job.created_at = 0.0  # epoch — far older than _ABANDONED_QUEUED_MIN_AGE_S
+        job.save(tmp_path)
+        return job
+
+    def test_archived_runpod_queued_retired_to_stopped(self, tmp_path: Path) -> None:
+        job = self._remote_queued(tmp_path, exec_target="runpod")
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.stopped
+        assert result.user_stopped is True
+        assert result.error is None
+        # persisted, so the panel/list reads the healed state next load
+        assert MdJob.load(job.job_id, tmp_path).status == MdStatus.stopped
+
+    def test_archived_alpine_queued_retired_to_stopped(self, tmp_path: Path) -> None:
+        job = self._remote_queued(tmp_path, exec_target="alpine")
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.stopped
+
+    def test_non_archived_queued_is_protected(self, tmp_path: Path) -> None:
+        # panel "prepared, awaiting Start/submit" — must persist, never reaped
+        job = self._remote_queued(tmp_path)
+        job.archived = False
+        job.save(tmp_path)
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.queued
+
+    def test_recent_queued_not_reaped_launch_race(self, tmp_path: Path) -> None:
+        # an in-flight CLI archive-from-birth launch is briefly archived+queued
+        import time as _t
+
+        job = self._remote_queued(tmp_path)
+        job.created_at = _t.time()  # just now
+        job.save(tmp_path)
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.queued
+
+    def test_queued_with_pod_id_not_reaped(self, tmp_path: Path) -> None:
+        # a real pod exists (launched) — leave it to the pod-aware reaper
+        job = self._remote_queued(tmp_path)
+        job.runpod_pod_id = "zwyw0rp0c9amya"
+        job.save(tmp_path)
+        result = nr.reconcile_job_status(job, tmp_path)
+        assert result.status == MdStatus.queued
+
+
 # ── resume_interrupted_jobs (supervisor selection) ──────────────────────────────
 
 
