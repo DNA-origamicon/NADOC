@@ -203,7 +203,12 @@ export function initChainSimPanel({
     const field = (allowField && runEl.field?.enabled && Number(runEl.field.field_pN) > 0)
       ? { field_pN: runEl.field.field_pN, dir: runEl.field.dir } : null
     const surface = runEl.surface?.enabled
-      ? { dir: runEl.surface.dir, offset_nm: runEl.surface.offsetNm ?? runEl.surface.offset_nm, stiff: runEl.surface.stiff }
+      ? {
+          dir: runEl.surface.dir,
+          offset_nm: runEl.surface.offsetNm ?? runEl.surface.offset_nm,
+          position_nm: runEl.surface.positionNm ?? runEl.surface.position_nm,
+          stiff: runEl.surface.stiff,
+        }
       : null
     const anchors = runEl.anchors?.length ? runEl.anchors : null
     // A production may seed off an ALREADY-COMPLETED job the user has selected (the

@@ -65,6 +65,15 @@ def test_wall_position_from_extent():
     assert pos2 == pytest.approx(-1.0)            # offset - min_proj = 1 - 2
 
 
+def test_absolute_wall_position_is_independent_of_structure_extent():
+    from backend.core.constants import NM_TO_OXDNA
+    from backend.physics.oxdna_interface import wall_position_from_absolute
+
+    expected = 7.5 * NM_TO_OXDNA
+    assert wall_position_from_absolute([0, 1, 0], -7.5) == pytest.approx(expected)
+    assert wall_position_from_absolute([0, 9, 0], -7.5) == pytest.approx(expected)
+
+
 # ── Composed external-forces writer ───────────────────────────────────────────
 
 def test_write_run_forces_composes_field_surface_anchors(design, geometry, tmp_path):
@@ -245,6 +254,20 @@ def test_run_surface_only_branches_child(design, monkeypatch, tmp_path):
     forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
     assert "type = repulsion_plane" in forces
     assert "type = string" not in forces                # no field requested
+
+
+def test_run_absolute_surface_position_is_preserved(design, monkeypatch, tmp_path):
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent = _completed_parent(tmp_path, design)
+    r = client.post(f"/api/oxdna/jobs/{parent.job_id}/run",
+                    json={"steps": 1000,
+                          "surface": {"dir": [0, 1, 0], "offset_nm": 99.0,
+                                      "position_nm": -7.5, "stiff": 5.0}})
+    assert r.status_code == 200, r.text
+    from backend.core.oxdna_job import OxdnaJob
+    child = OxdnaJob.load(r.json()["job_id"], tmp_path)
+    assert child.run_config["surface"]["position_nm"] == pytest.approx(-7.5)
+    assert r.json()["run_config"]["surface"]["position_nm"] == pytest.approx(-7.5)
 
 
 # ── fix_diffusion off for absolute-coordinate forces (the VoltronCore failure) ─

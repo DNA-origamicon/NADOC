@@ -13,7 +13,7 @@
  * (pure, unit-tested); this module is DOM wiring.
  *
  * Factory: initOxdnaFloorSetup({ onChange, ids }) → { getSurfaceSpec, isEnabled,
- *   refresh }.  getSurfaceSpec() → { dir, offsetNm, stiff, enabled }.  The `ids`
+ *   refresh }.  getSurfaceSpec() → { dir, offsetNm, positionNm, stiff, enabled }.  The `ids`
  *   bag lets a sibling engine (mrDNA, M8) mount the SAME card onto its own DOM ids
  *   with zero behaviour change — default ids are the oxDNA panel's.
  */
@@ -67,7 +67,7 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, ge
       offsetNm: floorClearanceFromAbsolute(axisSel?.value || '-y', _absolutePosition(), _bounds()),
       stiff: parseFloat(stiffIn?.value || '0'),
     })
-    return spec ? { ...spec, enabled: _enabled } : null
+    return spec ? { ...spec, positionNm: _absolutePosition(), enabled: _enabled } : null
   }
   function isEnabled() { return _enabled }
 

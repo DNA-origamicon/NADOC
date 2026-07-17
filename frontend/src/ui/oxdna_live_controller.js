@@ -170,7 +170,10 @@ export function initOxdnaLive({
 
     const body = { job_id: job.job_id }
     if (hasField) body.field = { field_pN: field.field_pN, dir: field.dir }
-    if (surface?.enabled) body.surface = { dir: surface.dir, offset_nm: surface.offsetNm, stiff: surface.stiff }
+    if (surface?.enabled) body.surface = {
+      dir: surface.dir, offset_nm: surface.offsetNm,
+      position_nm: surface.positionNm, stiff: surface.stiff,
+    }
     if (anchors.length) body.anchors = anchors
 
     _busy = true
@@ -287,7 +290,10 @@ export function initOxdnaLive({
     const field = el.field, surface = el.surface, anchors = el.anchors || []
     const body = {}
     if (field?.enabled && field.field_pN > 0) body.field = { field_pN: field.field_pN, dir: field.dir }
-    if (surface?.enabled) body.surface = { dir: surface.dir, offset_nm: surface.offsetNm, stiff: surface.stiff }
+    if (surface?.enabled) body.surface = {
+      dir: surface.dir, offset_nm: surface.offsetNm,
+      position_nm: surface.positionNm, stiff: surface.stiff,
+    }
     if (anchors.length) body.anchors = anchors
     _setStatus('Updating live run…', _C.accent)
     const r = await api.reconfigureOxdnaLive(_sid, body).catch(() => null)

@@ -2396,6 +2396,18 @@ def wall_position_from_extent(cm_positions, wall_dir, offset_oxdna: float = 0.0)
     return offset_oxdna - min_proj, min_proj
 
 
+def wall_position_from_absolute(wall_dir, position_nm: float) -> float:
+    """Convert an axis-aligned world coordinate into oxDNA's plane scalar.
+
+    oxDNA represents the plane as ``dir·r + position = 0``.  Keeping this scalar
+    derived solely from the requested world coordinate makes the wall invariant to
+    changes in the seed structure's extent between serial production runs.
+    """
+    direction = _normalize3(wall_dir)
+    axis_component = max(direction, key=abs)
+    return -axis_component * float(position_nm) * NM_TO_OXDNA
+
+
 def write_run_forces(
     path: str | Path,
     design: Design,
@@ -2464,12 +2476,19 @@ def surface_anchor_forces_text(
         stiff = float(wall.get("stiff", 0.0))
         if stiff > 0:
             offset_nm = float(wall.get("offset_nm", 0.0))
-            position, min_proj = wall_position_from_extent(
-                cm, wall.get("dir"), offset_nm * NM_TO_OXDNA)
+            absolute_nm = wall.get("position_nm")
+            if absolute_nm is not None:
+                position = wall_position_from_absolute(wall.get("dir"), absolute_nm)
+                min_proj = min((sum(p[i] * _normalize3(wall.get("dir"))[i]
+                                    for i in range(3)) for p in cm), default=0.0)
+            else:
+                position, min_proj = wall_position_from_extent(
+                    cm, wall.get("dir"), offset_nm * NM_TO_OXDNA)
             blocks.append(repulsion_plane_block(stiff, wall.get("dir"), position))
             wall_meta = {
                 "dir": _normalize3(wall.get("dir")), "stiff": stiff,
                 "offset_nm": offset_nm, "position": position, "min_proj": min_proj,
+                "position_nm": float(absolute_nm) if absolute_nm is not None else None,
             }
 
     for p in particles:

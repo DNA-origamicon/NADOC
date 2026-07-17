@@ -215,11 +215,13 @@ class SurfaceElement(BaseModel):
     """The hard-surface element of a composed run (one-sided repulsion plane).
 
     ``dir`` is the plane's outward normal (the structure rests on the side ``dir``
-    points toward); the plane's absolute height is derived from the structure's
-    extent along ``dir`` at run start, nudged by ``offset_nm``."""
+    points toward). ``position_nm`` is authoritative when supplied, keeping an
+    immobilization surface fixed across serial runs. ``offset_nm`` is the legacy
+    structure-relative placement used when no absolute position is supplied."""
     dir:       list[float] = Field(..., min_length=3, max_length=3)
     offset_nm: float = Field(0.0, description="nm of clearance the surface sits beyond "
                                               "the structure's lowest point")
+    position_nm: Optional[float] = Field(None, description="fixed world-axis plane coordinate in nm")
     stiff:     float = Field(5.0, gt=0.0, description="Repulsion-plane stiffness (oxDNA units)")
 
 
@@ -962,7 +964,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     wall_in = None
     if body.surface:
         wall_in = {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
-                   "stiff": body.surface.stiff}
+                   "position_nm": body.surface.position_nm, "stiff": body.surface.stiff}
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     has_forces = bool(field_in or wall_in or anchors)
 
@@ -996,6 +998,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             "steps":   body.steps,
             "field":   {"field_pN": body.field.field_pN, "dir": list(body.field.dir)} if body.field else None,
             "surface": {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
+                        "position_nm": body.surface.position_nm,
                         "stiff": body.surface.stiff} if body.surface else None,
             "anchors": [a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors],
         },

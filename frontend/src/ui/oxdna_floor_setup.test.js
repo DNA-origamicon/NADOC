@@ -119,6 +119,7 @@ describe('initOxdnaFloorSetup', () => {
     els['oxdna-floor-offset'].dispatchEvent(new Event('input'))
     expect(setSurfaceGrid).toHaveBeenLastCalledWith(expect.objectContaining({ positionNm: -4.37 }))
     expect(a.getSurfaceSpec().offsetNm).toBeCloseTo(1.37)
+    expect(a.getSurfaceSpec().positionNm).toBe(-4.37)
   })
 
   it('applyConfig(null) turns the surface off', () => {

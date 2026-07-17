@@ -1097,7 +1097,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // but NOT the electric field (a field-relaxed structure isn't how it'd settle).
     const el = getRunElements?.() || {}
     if (el.surface?.enabled) {
-      body.surface = { dir: el.surface.dir, offset_nm: el.surface.offsetNm, stiff: el.surface.stiff }
+      body.surface = {
+        dir: el.surface.dir, offset_nm: el.surface.offsetNm,
+        position_nm: el.surface.positionNm, stiff: el.surface.stiff,
+      }
     }
     if (el.anchors?.length) body.anchors = el.anchors
     try {
@@ -1597,7 +1600,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       body.field = { field_pN: el.field.field_pN, dir: el.field.dir }
     }
     if (el.surface?.enabled) {
-      body.surface = { dir: el.surface.dir, offset_nm: el.surface.offsetNm, stiff: el.surface.stiff }
+      body.surface = {
+        dir: el.surface.dir, offset_nm: el.surface.offsetNm,
+        position_nm: el.surface.positionNm, stiff: el.surface.stiff,
+      }
     }
     if (el.anchors?.length) body.anchors = el.anchors
     // A field with no anchors drifts the whole structure (COM drift) — the E-field
