@@ -68,6 +68,12 @@ FENE_HI = FENE_R0_OXDNA2 + FENE_DELTA      # 1.0064 units — the LONG-bond clif
 VOLTRON = Path("workspace/VoltronCoreScad.nadoc")
 SMALL   = Path("Examples/6hb_test.nadoc")
 
+# VOLTRON is a real user design (334 single-T extensions) kept in the local workspace, not
+# committed to the repo — skip its regressions cleanly on a checkout that doesn't have it
+# rather than erroring with FileNotFoundError.
+_needs_voltron = pytest.mark.skipif(
+    not VOLTRON.exists(), reason=f"{VOLTRON} not present (user-local design)")
+
 
 def _load(path: Path) -> Design:
     return Design.model_validate(json.loads(path.read_text()))
@@ -326,6 +332,7 @@ def test_extension_seed_bonds_sit_inside_the_fene_window(tmp_path, n, end):
     assert min(bonds) == pytest.approx(FENE_R0_OXDNA2, abs=1e-6), bonds
 
 
+@_needs_voltron
 def test_voltroncore_334_tails_are_all_fene_safe(tmp_path):
     """The real design that motivated this: 334 single-T extensions, every one of which
     used to be dropped from the simulation entirely."""
@@ -375,6 +382,7 @@ def test_extensions_do_not_disturb_the_rest_of_the_design(tmp_path):
     _assert_real_bonds_undisturbed(_small_with_extensions(), bare, tmp_path)
 
 
+@_needs_voltron
 def test_voltroncore_extensions_do_not_disturb_the_rest_of_the_design(tmp_path):
     """Full-scale twin of the test above: 206 strands / 15020 particles / 334 tails.
 
