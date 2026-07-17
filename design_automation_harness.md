@@ -8,6 +8,9 @@ oracle catalog row lives in `design_automation_log.md`; the metrics row in `desi
 
 ## Index (shipped wrappers — do NOT rebuild)
 
+- AF-37 (root-to-root half) direct-binding CREATION: create/patch/delete binding + sub-domain split/patch
+- RELOCATED-FROM-HANDOFF (2026-07-16): AF-27P2/29–36 gotchas, CORNER, DUPLEX-graph, AF-40/41 intake, test-guard
+- AF-39 ss-linker relax fixture (+ ⚠ CORRECTION to the AF-27 P2 metadata-only-fixture gotcha)
 - AF-38 direct-bind relax (binding + end-to-root, pose)
 - AF-27 P2 overhang-linker + bond relax (pose)
 - AF-36 hinge-design generator + phase-paired `build_hinge` + seek-fidelity
@@ -57,6 +60,66 @@ oracle catalog row lives in `design_automation_log.md`; the metrics row in `desi
 _Below: the verbatim `▶ HARNESS NOW AVAILABLE` blocks, plus the historical handoff narrative
 (audit notes, priority-track scoping, Tier-6/7 as-built assessments) that preceded them._
 
+
+> **■ HARNESS NOW AVAILABLE — AF-37 (root-to-root half): direct-binding CREATION wrappers (2026-07-16).**
+> Closes AF-38's gap **G2**. Before these, a script could RELAX a root-to-root binding but not BUILD one — every
+> test reached a bound binding through the private `_cv_create_bound_binding` backdoor, which skips the create
+> route's whole validation gate AND the feature log. All five alias-import the exact route handler the GUI's
+> overhang panels call (no `backend/core` push needed; `crud.py` untouched, LOC Δ = 0). Coverage **56 → 61**.
+> (⚠ the pre-2026-07-16 handoff said "coverage 54" — it was stale by 2; the live function-identity pin is truth.)
+> - `hb.create_overhang_binding(sub_domain_a_id, sub_domain_b_id, *, binding_mode='duplex', target_joint_id=None,
+>   allow_n_wildcard=True) -> Design` — wraps `POST /design/overhang-bindings`. **Starts UNBOUND** (creation only
+>   declares the pairing). Route gate: sub-domains differ, **equal `length_bp`**, both sequences **resolvable**
+>   (override else parent slice), **Watson-Crick complementary** (422); pair not already claimed by a linker/binding
+>   (409); `target_joint_id` real (404). New record is `design.overhang_bindings[-1]`; auto-named `B1`, `B2`, …
+> - `hb.patch_overhang_binding(binding_id, *, name=, bound=, binding_mode=, target_joint_id=, allow_n_wildcard=)
+>   -> Design` — wraps the PATCH. `bound=True` is the **TOPOLOGICAL** half: driven OH's domain relocates onto the
+>   driver's helix (antiparallel), driven-helix crossovers rewrite to the driver helix, emptied driven helix is
+>   deleted, pre-bind snapshot → `prior_driven_topology`. `bound=False` reverts from that snapshot.
+> - `hb.delete_overhang_binding(binding_id) -> Design` · `hb.split_sub_domain(overhang_id, sub_domain_id,
+>   split_at_offset) -> Design` (5' half keeps the id; tiling stays gap-less) · `hb.patch_sub_domain(overhang_id,
+>   sub_domain_id, *, name=, color=, sequence_override=, notes=) -> Design` (how you make an extruded overhang
+>   bindable at all — see gotcha 2).
+> - **Augment — 1 NEW reusable oracle** `assert_bind_unbind_inverse(before, bound, restored, *, binding_id)`
+>   (+ `_overhang_placement_set`). 4 clauses: non-vacuous (bind MOVED `canonical_topology`) / inverse (unbind
+>   restored it) / overhang mounts moved-then-restored / record lifecycle (`bound` T→F, snapshot set→cleared).
+>   Tests: `test_headless_build.py` (6 new, `_bindable_pair_headless` fixture).
+> - **⚠ GOTCHA 1 — the `_UNSET` sentinel is load-bearing.** Both PATCH routes branch on
+>   `model_fields_set`/`exclude_unset`. Send **only** explicitly-passed fields: `bound=None` reaching the model
+>   reads as an **unbind** (`next_bound=None` → falsy → the BOUND→UNBOUND branch), not "leave alone".
+> - **⚠ GOTCHA 2 — a hand-built `OverhangSpec` with `sequence=None` gets a `length_bp=1` sub-domain.**
+>   `_backfill_whole_overhang_sub_domain` (models.py:303) sizes it `len(seq) if seq else 1` — the model can't see
+>   the backing domain. So every `sequence_override` 422s on the length check. A **real `overhang_extrude` is
+>   FINE** (writes `sub_domains` explicitly → `length_bp=8`, `sequence=None`); this is a hand-fixture artifact,
+>   **not a product bug** (verified). Corollary: an extruded OH has no sequence → its sub-domain resolves to
+>   nothing → `patch_sub_domain(sequence_override=…)` is **required** before `create_overhang_binding` will accept.
+> - **⚠ GOTCHA 3 — extruding into an OCCUPIED neighbour cell silently SHARES that cell's helix**, so two overhangs
+>   land on one helix → one rigid body → `compute_bind_topology` refuses (422: "spans a single rigid body"; the
+>   heuristic driver pick needs both OHs on *different* clusters, and forced `driver_side` bypasses that guard only
+>   on the unified direct-apply path). Re-read the design between placements; assert distinct helices.
+> - **⚠ STEERING — `project_overhang_duplex_foundation.md` Phase 6 = "retire `OverhangBinding` after migration
+>   proven"** (pending). The route is live + UI-wired (3 callers) and `design.overhang_bindings` DATA still drives
+>   duplex derivation + `prior_driven_topology`, so wrapping it was right, and the oracle **outlives** the
+>   retirement (`synthesize_duplexes_from_bindings` needs exactly this inverse net to prove the migration).
+>   **But AF-37's remaining blocker is *sub-domain* bindings — what Phase 6 demotes.** Ask before investing.
+> - **NOT built, deliberately:** the handoff's `assert_binding_locks_joint`. Bind does relocation ONLY — the
+>   auto-relax was reverted **2026-05-14 (user)**, so `locked_angle_deg` stays `None` and the joint window is
+>   untouched; `test_overhang_bindings.py` already pins that at route level. It would have been a redundant oracle
+>   = a passthrough. The unpinned property was the topological inverse.
+
+
+
+> **■ RELOCATED FROM THE HANDOFF (2026-07-16) — banked gotchas + out-of-band shipped work.**
+> These paragraphs had accreted in `design_automation_backlog.md`'s `## Next-session handoff`, which the
+> protocol caps at ≤8 lines — the exact regression the 2026-06-25 split undid. Moved here VERBATIM (nothing
+> dropped) so the handoff can go back to being a pointer. Consult per-item, as with every block in this file.
+
+> **▶ CORNER PRIMITIVE SHIPPED (2026-07-08, outside the AF numbering; see `project_corner_primitive.md`):** `backend/api/headless_corner_build.build_corner(*, n_helices=6, base_length_bp=56, target_angle_deg=90, optimize=True, optimize_fold=True)` — two SQUARE sheets, mitre-trimmed, sheet B folded 180° about the miter diagonal (logged `cluster_op`), N cross-seam forced ligations. **TWO optimizer stages:** (1) phase-aware LENGTH optimizer (two-constraint principle: axial miter + rotational phase) → 1.87 nm FL stretch (vs reference 3.43); (2) FOLD-POSE optimizer (user request) — tunes B's fold rotation+shift to cut the seam clashes the tight mating packs → **co-optimized beats the hand-tuned reference on BOTH axes: 11 genuine clashes @ 2.82 nm (vs reference 11 @ 3.43).** Validated with the design-layer **clash detector** (`clash.clash_report`) via `steric_clash_count` (= clash count MINUS seam FL bonds — a good ligation IS a sub-0.65 nm "clash" so must be excluded). Oracle `assert_corner_folded` (7 clauses, all 3 layers). Optimizers FAST (path-B analytic: beads are trim-invariant → build straight once; fold grid pre-filters to near-A B beads, ~5.5s). Tests `test_headless_corner_build.py` (14). USER-DECIDED length objective: lexicographic min-total-stretch, ±2bp window; fold objective: min `clash+4·Σbond` s.t. bonds<1nm + angle±5°.
+> **▶ DUPLEX-GRAPH COVERAGE (2026-06-30, Proposal-B — outside the AF numbering; see `project_overhang_duplex_foundation.md`):** the register-bearing overhang `Duplex` graph now has: headless `hb.connect_duplex` (wraps `POST /design/duplexes/connect`; creates the register + relocates a different-length driven onto the driver's paired window); oracle `assert_duplex_relocated` (relocated-but-NOT-stretched length pin, round-trip stable); `summarize_duplexes` readout; and a `validate_design` soft check (flags a duplex whose register has ZERO complementary bases — the Q2 "applied but not pairing" warning; partial mismatches OK). Tests `test_duplex_automation.py` / `test_duplex_relocate.py` / `test_duplex_length_preserve.py`. Remaining duplex geometry: driver-flip re-place for the binding-less path + a binding-less relax (see topic file).
+> **▶ INTAKE (2026-07-01):** Constrained-move work shipped (ds-linker rigid strut + movable-link duplex swing + selection-driven Move/Rotate) with headless DESCRIPTORS tested (`cluster_connection_tethers` / `cluster_movable_links` in `test_connection_tethers.py`) but the constrained-drag SOLVERS are JS-only in the gizmo → NEW gaps **AF-40** (headless free-until-taut + ds rigid-strut projector port + `assert_tethers_satisfied`) and **AF-41** (headless movable-link chain solve + `assert_link_chain_settled`, depends on AF-40). Both mirror AF-29's parity-port pattern; today these behaviors are human-eye-only (MV-CONNTETHER / MV-CONNLINK / MV-MRSEL). Good self-contained pickups.
+> **▶ AF-42 GOTCHAS banked:** anchors do NOT depend on `length_bp` (complements sit on the real OH helices; only the bridge is virtual) → retune the span without re-deriving anchors. Reachable chord range **[2.773, 6.759] nm** ⇒ ds span needs `length_bp ≤ 21`. A **derived-facts comment can be self-refuting** — AF-39's block claimed the 6.346 nm ds span was "out of reach entirely" two sentences after stating a 6.759 max; both the harness and the fixture comment are corrected, and the lesson is banked in the log. `..._pulls_linker_toward_natural_span` does NOT discriminate fallback-vs-real (span 5.010 is reachable either way) — the load-bearing pin is the direct branch-assert.
+> **▶ GOTCHAS banked:** (AF-27 P2) the linker relax optimises CONNECTOR-ARC residuals (toward ~0.67nm each) by rotating the joint cluster — it does NOT directly minimise the raw anchor-to-anchor chord, but the consequence is the chord moves to the duplex's natural span (`_ds_target_length_nm`); so the solver-independent oracle is STRAIN-REDUCTION (`|chord − natural_span|` falls), NOT chord-≤-contour (which is either vacuous for a long linker already within, or unsatisfiable for a short one that can't close). The natural relax fixture is DEGENERATE when the joint origin lies ON the moving ANCHOR — **⚠ CORRECTED 2026-07-16 (AF-42): that origin is `[2.0,0,0]`, not `[2.5,0,0]`** (2.5 was the *fallback* backbone anchor's x, valid only while the ds fixture was mis-wired; it now *reduces* strain 1.824→1.638). Derive it, don't fish: origin = `[anchor.x, 0, anchor.z]` for axis dir `[0,1,0]`. Move the origin OFF the anchor (`[0,0,0]`) for a real reduction. Both relax routes are POSE-ONLY (mutate `cluster_transforms` + append a `ClusterOpLogEntry`, never the strand graph → `canonical_topology` invariant). DROP the grid_pos-less `demo_helix` from any relax test fixture or `canonical_topology` raises (sorts helix tuples, None grid_pos breaks `<`); the `__lnk__` virtual helix is FINE (it carries a grid_pos). **⚠ CORRECTED (AF-39/42): a metadata-only `OverhangConnection` is NOT a valid relax fixture** — geometry does NOT emit the `__lnk__` bridge from metadata; you must call `generate_linker_topology(design, conn)` or `_anchor_pos_and_normal` silently takes its synthetic-fixture fallback (`linker_relax.py:712`) and anchors on the overhang's own backbone nuc. (AF-36) hinge ssDNA is PHASE-PAIRED short/long, NOT uniform: neighbouring rail helices carry OPPOSITE phase → the TOWARD-facing rail takes a SHORT (2nt) tether, the AWAY-facing one a LONG (16nt ≈ 1 turn to re-phase); `_rail_faces_toward` (scaffold backbone radial · rail-pair chord at the gap-face duplex-edge bp) decides it, validated byte-for-byte vs the goldens; ALL ssDNA on the leaf-A rail, leaf B blunt. The 2x2 golden was INVERTED (mis-authored) — the user CORRECTED it mid-session; SURFACE a golden that contradicts a stated rule, don't silently match. Feature-log SEEK was blind to `cluster_joints`/`flexible_segment_marks`/`flexible_connections` (`_topology_substitute` swapped only strand-graph + overhangs) → they persisted at EVERY seek incl. the empty state; fix restores them from the seek snapshot (membership is topology-like, same rationale as overhangs; joints store a LOCAL-frame axis so invariant under the cluster-transform delta replay). Commit a relax as a logged `cluster_op` (`transform_cluster(log=True)` per moved cluster, from `compute_relax_transforms`), NOT the `flexible-relax` route, for seek fidelity (seek reconstructs cluster poses ONLY from `cluster_op`). "Set hinge angle = X°" → compose the fold onto the relaxed REST pose, solving θ so the SIGNED dihedral about the hinge axis == X (linear in θ → exact); place the joint BEFORE folding (rotation about its own axis leaves the hinge line invariant). (AF-35) preserve-verbatim placement is a rigid GRAFT, NOT a route-replay: `create_bundle` is destructive (the GUI placement uses `bundle-segment`, a DIFFERENT builder whose axis floats differ from `create_bundle`'s by the AF-30 ISSUE-13 re-trim) — so the only way to land the primitive's EXACT axis geometry is to copy its already-built helices and translate by one rigid lattice vector. `canonical_topology` rounds axes to 4 dp, so float add-then-subtract of the same world-delta is exact. The hinge ALSO carries 2 identity `cluster_transforms` (the rigid leaves) + a construction `feature_log` → the graft copies+remaps the clusters (verbatim) but does NOT graft the feature_log (it's the standalone's history, not the host's). `assert_primitive_placed` offset-corrects INDEPENDENTLY via `_lattice_position` (ground-truth lattice constant, NOT the graft's own `_world_delta`) so a graft plane-mapping/translation bug can't mask itself. Honeycomb odd-parity shift = non-rigid (stagger flips) → the graft raises (same rule as the GUI's parity-snap); SQUARE is unconstrained. Placement does NOT shift along-axis (`offset_nm`) — deferred. (AF-34) a plain `create_bundle` routed seamed is NOT compliant (its blunt full-length staples bury the end crossovers → 2bp margin) — so the oracle's GREEN meta-test uses a SEAMLESS route at `require_seams=False` (its end crossovers land in extended ssDNA) and the same seamless route at `require_seams=True` is the load-bearing RED; the genuine seamed-green path is the HINGE end-to-end (its duplex shift leaves proper margins). `build_hinge_primitive` needs NO golden file (builds from scratch) so the AF-34 end-to-end runs in a clean checkout. (AF-33) the 2x2 golden's recipe is `create_bundle(len=40, ligate_adjacent=True)` → resize EVERY helix's low-bp end +8 (shift duplex into bp 8…39) → 2 gap-bridge `(resize,force_ligate)` pairs; the bridge trims are ASYMMETRIC (`scaf_1_0` 3p −3, `scaf_1_1` 5p −16) — that's hand-authored gap geometry, replayed as a constant, NOT re-derived (ASK-FIRST). Replaying create-at-40-then-shift (not create-at-32) is load-bearing: AF-30 ISSUE-13 axis re-trim means only the same op sequence reproduces the golden's axis floats. `_fl_endpoint_set` check is load-bearing (canonical_topology blind to FLs). The whole golden recipe lives in the file's own `feature_log` (SnapshotLogEntry params + RoutingClusterLogEntry children). **(AF-33 P2, done)** 2x4 trims are ASYMMETRIC by column parity (even `3p −16` / odd `5p −2`) and differ from 2x2 → per-primitive constants, transcribed verbatim; 2x6 was generated by `build_hinge(2,6)` so it has NO trims (`build_hinge(2,6)` reproduces the 2x6 golden byte-for-byte; `build_hinge(2,4)` does NOT — golden has hand trims). Per-bridge (trim→FL) replay == golden's all-trims-then-all-FLs (per-column strand independence). (AF-30) the inverse pair is NOT clean from a raw `create_bundle` — `resize_strand_ends`' axis re-trim uses `(max_index−min_index)·rise` but `create_bundle` uses `length_bp·rise` (one rise longer), so the FIRST resize shifts the helix `axis_end` convention and `canonical_topology` (fingerprints axis floats) never restores → capture `start` AFTER a settling resize so both ±δ runs share the re-trim convention (logged ISSUE-13, ask-first geometry convention). The resize DOES change the nuc count (that's the point); the ISSUE-13 *axis-endpoint* off-by-one does NOT, so `assert_geometric_length_delta` stays clean — but pick the resized strand so its terminal domain DEFINES the helix extent, else the count won't move (resizing inward, within another strand's span, leaves `length_bp` unchanged). (AF-32) force-ligate→delete is a CLEAN inverse pair; `assert_forced_ligation` takes BOTH `before` AND `after`; 2hb HC bundle `[[0,0],[0,1]]` has one scaffold strand per helix off `create_bundle`. (AF-31) inverse pair is **delete→place** (place adds nicks). (AF-29) `cluster_gizmo.js` NOT rewired to pure `flexible_relax_solver.js`.
+> **▶ TEST-GUARD WARNING, expect it (2026-07-16):** `just test-smart` will likely print `HEAVY TEST IN THE FAST SUITE` on a batch of tests that are actually **0.7–1.5 s standalone** — the guard times per-test under `-n auto`/nice-10, so its 5 s budget is really a ~1.2 s bar and healthy tests oscillate across it run-to-run. **Do NOT triage on sight** (it's an infinite ratchet that strips coverage); check standalone time first (`pytest <nodeid> -p no:xdist -p no:randomly --durations=5`). Root cause + candidate fixes are filed as **ISSUE-20** in `issues_ledger.md`; the rule is banked as **LESSONS H11**. Budget/guard stay untouchable either way.
 
 > **■ HARNESS NOW AVAILABLE — AF-38 DIRECT-bind RELAX wrappers (binding + end-to-root, pose-layer, 2026-06-29).**
 > Completes "relax for ALL connection types": AF-27 P2 covered ds/ss LINKER + generic bond; these add the two DIRECT-bind paths.
@@ -113,9 +176,42 @@ _Below: the verbatim `▶ HARNESS NOW AVAILABLE` blocks, plus the historical han
 >   linker / unsatisfiable for a short one). The natural fixture is DEGENERATE: joint origin ON the moving overhang
 >   (`[2.5,0,0]`) → anchor on the hinge axis → rotation can't change the chord (strain flat) = the load-bearing can-go-red;
 >   put the origin OFF the overhang (`[0,0,0]`) for a real reduction. DROP the grid_pos-less `demo_helix` from any relax
->   fixture or `canonical_topology` raises (None grid_pos breaks the helix-tuple sort). A metadata-only `OverhangConnection`
->   (no real bridge strands) is a valid relax fixture — the geometry layer emits the `__lnk__` bridge from the connection
->   metadata, and `canonical_topology` then sees only the two real overhang helices.
+>   fixture or `canonical_topology` raises (None grid_pos breaks the helix-tuple sort).
+> - **⚠ CORRECTED 2026-07-16 (AF-39) — the claim that once sat here, "a metadata-only `OverhangConnection` (no real bridge
+>   strands) is a valid relax fixture; the geometry layer emits the `__lnk__` bridge from the connection metadata", is
+>   FALSE.** Verified by probe: strip the bridge strands and geometry emits NO `__lnk__` nucs at all, so
+>   `_anchor_pos_and_normal` silently falls through to its *synthetic-fixture fallback* (`linker_relax.py:712`) and anchors
+>   on the overhang's OWN backbone nuc instead of the complement. Call `generate_linker_topology(design, conn)` to get the
+>   REAL complement anchor. The resulting `__lnk__` virtual helix does NOT break `canonical_topology` (it carries a
+>   grid_pos), so the oracle's Three-Layer clause holds either way.
+> - **✔ FIXED 2026-07-16 (AF-42) — the ds fixture now calls `generate_linker_topology`.** `_two_overhang_leaves_with_joint`
+>   is wired, so BOTH relax fixtures resolve the real complement. Its numbers moved accordingly and are now DERIVED in a
+>   facts block above the fixture: anchor **[2.0, 0.866, 0]** (was fallback [2.5, −1.0, 0]), start chord **3.186** (was
+>   4.327), degenerate origin **[2.0,0,0]** (was [2.5,0,0] — the fallback's x, which no longer freezes anything: it now
+>   *reduces* strain 1.824→1.638). Default `length_bp` **24 → 16** (`_DS_LINKER_BP`): the reachable chord range is
+>   **[2.773, 6.759] nm**, so the old span 7.682 was UNREACHABLE and the relax merely saturated at the boundary; span
+>   5.010 lands exactly (strain → 0). `_DS_LINKER_BP_UNREACHABLE=24` keeps the saturation boundary pinned.
+>   New direct branch-assert `test_relax_ds_linker_anchors_on_the_real_complement_not_the_fallback` + helper
+>   `_ds_anchor_chord_nm(design, conn_id)`. **Anchors do NOT depend on `length_bp`** (complements sit on the real OH
+>   helices; only the bridge is virtual) — so you may retune the span freely without re-deriving the anchors.
+>
+> **■ HARNESS NOW AVAILABLE — ss-linker relax fixture (AF-39, 2026-07-16).**
+> - `tests/test_headless_build.py` → `_two_overhang_leaves_ss_linker(*, joint_origin, length_bp=20) -> (Design, conn_id)`
+>   — the ss sibling of `_two_overhang_leaves_with_joint`. Calls `generate_linker_topology` (load-bearing, see the
+>   correction above) so the relax resolves the REAL `__lnk__<conn>__s` complement anchor. Helper
+>   `_ss_anchor_chord_nm(design, conn_id)` re-measures the posed anchor chord (same lookup the oracle's strain clause uses).
+> - **NO new wrapper, NO new oracle** — reuses `hb.relax_overhang_connection(conn_id, bin_index=…)` +
+>   `assert_linker_relaxed_pose(…, natural_span_nm=ssdna_fjc.bin_r_ee(n_bp, bin))` unchanged. Coverage FLAT.
+> - **Reachability is the fixture-design constraint** (derive it before picking a bin, don't fish): the moving anchor
+>   `[2.0,0.866,0]` rides a radius-2.0 circle about the hinge axis and the fixed anchor is 4.749 nm off-axis → chord is
+>   confined to **[2.773, 6.759] nm**. At n_bp=20 that makes bins 23..39 (R_ee 2.843..4.187) reachable. ⚠ **CORRECTED
+>   2026-07-16 (AF-42):** this block used to add "and the ds span (6.346 nm) unreachable" — **FALSE**, and contradicted by
+>   the range in its own sentence (6.346 < 6.759). Confirmed reachable by a brute-force 360° sweep AND by a real bp=20
+>   relax landing on 6.346 (strain → 0). The ds span only leaves reach above `length_bp=21`. This makes AF-39's
+>   `test_relax_ss_linker_targets_fjc_r_ee_not_the_duplex_span` *stronger* than the comment implied — the ds yardstick it
+>   contradicts is reachable, so the by-contradiction proof is non-vacuous, not trivially true.
+>   **Do not use n_bp=20's default bin 27** (R_ee 3.179 vs start chord 3.186 → strain 0.007 nm,
+>   under the oracle's own eps=1e-3 margin → a near-vacuous test). Degenerate origin `[2.0,0,0]`; swinging origin `[0,0,0]`.
 >
 > **■ HARNESS NOW AVAILABLE — end-to-root direct binding: ConnectionVersion create + apply wrappers (TOPOLOGICAL, 2026-06-29).**
 > - `from backend.api import headless_build as hb` →

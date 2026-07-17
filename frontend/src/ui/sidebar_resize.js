@@ -1,6 +1,7 @@
 /**
- * Sidebar resize — drag-to-resize the left/right panels, with per-panel width
- * persisted to localStorage.
+ * Sidebar resize — drag-to-resize the left/right panels, with widths persisted
+ * to localStorage. The left width is scoped to the active workspace file; the
+ * right width remains global.
  *
  * Handle DOM lives in index.html as `.panel-resize-handle[data-resize="left|right"]`.
  * The left handle sits on the tab strip's outer edge (the border with the 3D
@@ -22,6 +23,12 @@ const MAX_PX = 600
 const LS_LEFT  = 'nadoc.leftPanel.width'
 const LS_RIGHT = 'nadoc.rightPanel.width'
 
+export function leftWidthStorageKey(workspacePath) {
+  return workspacePath
+    ? `${LS_LEFT}.file:${encodeURIComponent(workspacePath)}`
+    : LS_LEFT
+}
+
 function _readWidth(key) {
   const raw = localStorage.getItem(key)
   if (!raw) return null
@@ -38,17 +45,19 @@ function _applyWidth(panel, w) {
   panel.style.width = `${Math.round(w)}px`
 }
 
-function _wireHandle(side) {
+function _wireHandle(side, { getWorkspacePath = () => null } = {}) {
   const panel = document.getElementById(side === 'left' ? 'left-panel' : 'right-panel')
   if (!panel) return
   // The left handle lives in the tab strip (outer edge), the right handle in
   // its panel — locate document-wide so either placement works.
   const handle = document.querySelector(`.panel-resize-handle[data-resize="${side}"]`)
   if (!handle) return
-  const lsKey = side === 'left' ? LS_LEFT : LS_RIGHT
+  const storageKey = () => side === 'left'
+    ? leftWidthStorageKey(getWorkspacePath())
+    : LS_RIGHT
 
   // Restore persisted width on init (only if the panel isn't currently hidden).
-  const saved = _readWidth(lsKey)
+  const saved = _readWidth(storageKey())
   if (saved != null && !panel.classList.contains('hidden')) {
     _applyWidth(panel, saved)
   }
@@ -98,12 +107,20 @@ function _wireHandle(side) {
       panel.classList.add('hidden')
       panel.style.width = ''   // let .hidden take over
     } else {
-      _writeWidth(lsKey, w)
+      _writeWidth(storageKey(), w)
     }
   })
+
+  if (side === 'left') {
+    window.addEventListener('nadoc:workspace-path-change', (event) => {
+      const savedWidth = _readWidth(leftWidthStorageKey(event.detail?.path))
+      if (savedWidth == null) panel.style.width = ''
+      else                    _applyWidth(panel, savedWidth)
+    })
+  }
 }
 
-export function initSidebarResize() {
-  _wireHandle('left')
+export function initSidebarResize(options = {}) {
+  _wireHandle('left', options)
   _wireHandle('right')
 }

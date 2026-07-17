@@ -78,6 +78,7 @@ function makeDeps(overrides = {}) {
     setMenuToggle: vi.fn(),
     toggleUnfold: vi.fn(),
     toggleCadnano: vi.fn(),
+    toggleHelicalAxisLines: vi.fn(),
     savePartToAssembly: vi.fn(),
     saveAssemblyAsGuarded: vi.fn(),
     setAssemblyWorkspacePath: vi.fn(),
@@ -94,6 +95,21 @@ function makeDeps(overrides = {}) {
     ...overrides,
   }
 }
+
+describe('initKeyboardShortcuts — helical axis lines', () => {
+  beforeEach(() => { clearShortcuts(); clearDom() })
+
+  it('/ toggles helical axis lines and is ignored in text inputs', async () => {
+    const d = makeDeps()
+    initKeyboardShortcuts(d)
+
+    await press('/')
+    expect(d.toggleHelicalAxisLines).toHaveBeenCalledOnce()
+
+    await press('/', { tag: 'INPUT' })
+    expect(d.toggleHelicalAxisLines).toHaveBeenCalledOnce()
+  })
+})
 
 describe('initKeyboardShortcuts — Group 1 toggles', () => {
   beforeEach(() => {

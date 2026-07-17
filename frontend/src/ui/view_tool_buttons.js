@@ -102,12 +102,18 @@ export function initViewToolButtons({
     return any ? box : null
   }
 
-  function _placeSurfaceGrid(axis, offsetNm) {
+  function _placeSurfaceGrid(axis, offsetNm, positionNm = null) {
     const box = _designBBox()
     if (!box) return false
     const p = box.getCenter(new THREE.Vector3())
     const off = Number(offsetNm) || 0
-    switch (axis) {
+    if (positionNm != null && positionNm !== '' && Number.isFinite(Number(positionNm))) {
+      const coord = Number(positionNm)
+      if (axis.endsWith('x')) p.x = coord
+      else if (axis.endsWith('y')) p.y = coord
+      else if (axis.endsWith('z')) p.z = coord
+      else return false
+    } else switch (axis) {
       case '-y': p.y = box.min.y - off; break
       case '+y': p.y = box.max.y + off; break
       case '-x': p.x = box.min.x - off; break
@@ -123,10 +129,10 @@ export function initViewToolButtons({
   }
 
   // Public: the Hard surface card drives this on enable / axis / offset change.
-  function setSurfaceGrid({ enabled, axis = '-y', offsetNm = 0 } = {}) {
+  function setSurfaceGrid({ enabled, axis = '-y', offsetNm = 0, positionNm = null } = {}) {
     if (enabled) {
       _surfaceDriven = true
-      _placeSurfaceGrid(axis, offsetNm)
+      _placeSurfaceGrid(axis, offsetNm, positionNm)
       _gridHelper.visible = true
     } else if (_surfaceDriven) {
       // The surface that was driving the grid was turned off → reset to the plain

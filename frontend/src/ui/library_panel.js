@@ -11,6 +11,7 @@ import { showToast } from './toast.js'
 import { confirmAndDeleteFile } from './file_deletion.js'
 import { formatBytes } from './format_bytes.js'
 import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, normPath } from './job_activity.js'
+import { visibleWorkspaceEntries } from './sim_folders.js'
 
 const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
 
@@ -117,6 +118,7 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   let _sortKey = 'modified'
   let _sortDir = 'desc'
   let _query   = ''
+  let _showSimFolders = false
 
   // Per-design simulation activity: active MD/oxDNA jobs (polled) + a map from
   // workspace file path → the row's status <span>, so the spinner can be updated
@@ -143,7 +145,21 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   importBtn.addEventListener('click', _handleImport)
   newFolderBtn.addEventListener('click', () => _showNewFolderInput(treeEl, '', 0))
 
-  actionsEl.append(newPartBtn, newAsmBtn, importBtn, newFolderBtn)
+  const simToggleLabel = document.createElement('label')
+  simToggleLabel.className = 'lib-show-sim-folders'
+  simToggleLabel.style.cssText = 'display:flex;align-items:center;gap:4px;margin-left:auto;white-space:nowrap;cursor:pointer;color:var(--color-text-secondary);font-size:var(--text-xs)'
+  const simToggle = document.createElement('input')
+  simToggle.type = 'checkbox'
+  simToggle.checked = false
+  simToggle.dataset.role = 'show-sim-folders'
+  simToggle.style.cssText = 'margin:0;cursor:pointer;accent-color:var(--color-accent-primary)'
+  simToggle.addEventListener('change', () => {
+    _showSimFolders = simToggle.checked
+    _render()
+  })
+  simToggleLabel.append(simToggle, document.createTextNode('show sim folders'))
+
+  actionsEl.append(newPartBtn, newAsmBtn, importBtn, newFolderBtn, simToggleLabel)
   mount.appendChild(actionsEl)
 
   // ── Search bar ──────────────────────────────────────────────────────────────
@@ -226,7 +242,8 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     _statusEls.clear()   // rows are rebuilt below; re-registered in _renderFileRow
     // Apply search filter: include files matching the query, plus every folder
     // explicitly. _buildTree will only create folders for ancestors of kept files.
-    const entries = !_query ? _allEntries : _allEntries.filter(e => {
+    const visibleEntries = visibleWorkspaceEntries(_allEntries, _showSimFolders)
+    const entries = !_query ? visibleEntries : visibleEntries.filter(e => {
       if (e.type === 'folder') return true
       return (e.name?.toLowerCase().includes(_query)) ||
              (e.path?.toLowerCase().includes(_query))

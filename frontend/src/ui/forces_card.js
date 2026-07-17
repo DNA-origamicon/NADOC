@@ -27,7 +27,7 @@
 
 import {
   DEFAULT_Q_EFF, fieldVpmToPn, pnToFieldVpm,
-  arrowLenForPn, pnForArrowLen, nmPerPnForN, scaleVec, normalize, vecLen,
+  arrowLenForPn, nmPerPnForN, scaleVec, normalize, vecLen,
   fieldColorHex, fieldZone, EFIELD_PN_LOW,
 } from '../scene/efield_math.js'
 
@@ -124,28 +124,94 @@ export function initForcesCard({
   const dirZ = document.getElementById(id.dirZ)
   const readyEl = document.getElementById(id.ready)
 
+  // The legacy DOM supplied three Cartesian boxes. Reuse the first two as a
+  // spherical angle editor, and add a display-only arrow-offset disclosure.
+  // Building this small shared fragment here keeps every engine card identical.
+  let offsetInputs = []
+  let gizmoControlsToggle = null
+  if (dirX && dirY) {
+    const row = dirX.parentElement
+    const insertAfterDirection = element => {
+      if (row === document.body) row.appendChild(element)
+      else row?.insertAdjacentElement('afterend', element)
+    }
+    const label = row?.querySelector('span')
+    if (label) label.textContent = 'Direction (°)'
+    dirX.title = 'Azimuth (degrees)'; dirX.step = '5'; dirX.style.width = '62px'
+    dirY.title = 'Elevation (degrees)'; dirY.step = '5'; dirY.style.width = '62px'
+    dirX.setAttribute('aria-label', 'E-field azimuth in degrees')
+    dirY.setAttribute('aria-label', 'E-field elevation in degrees')
+    if (dirZ) dirZ.style.display = 'none'
+    if (gizmo && row && !row.parentElement?.querySelector('.efield-controls-toggle')) {
+      const controlsRow = document.createElement('label')
+      controlsRow.className = 'efield-controls-toggle'
+      controlsRow.style.cssText = 'display:flex;align-items:center;gap:6px;color:#8b949e;font-size:var(--text-xs);cursor:pointer;margin-top:5px'
+      controlsRow.innerHTML = '<input type="checkbox" checked> Show rotation controls'
+      insertAfterDirection(controlsRow)
+      gizmoControlsToggle = controlsRow.querySelector('input')
+    }
+    if (row && !row.querySelector('.efield-angle-label')) {
+      for (const [input, text] of [[dirX, 'Az'], [dirY, 'El']]) {
+        const tag = document.createElement('span')
+        tag.className = 'efield-angle-label'
+        tag.textContent = text
+        tag.style.cssText = 'font-size:10px;color:#6a737d;margin-left:2px'
+        row.insertBefore(tag, input)
+      }
+      const prefix = id.dirX.replace(/dir-x$/, '')
+      const section = document.createElement('div')
+      section.style.marginTop = '5px'
+      section.innerHTML = `<div class="efield-offset-toggle" role="button" tabindex="0" aria-expanded="false" style="cursor:pointer;user-select:none;font-size:var(--text-xs);color:#8b949e;display:flex;align-items:center;gap:4px"><span class="efield-offset-arrow" style="display:inline-block;transition:transform .15s">▸</span><span>Arrow offset (nm)</span></div><div class="efield-offset-body" style="display:none;margin-top:4px;align-items:center;gap:4px"><span style="font-size:10px;color:#6a737d">X</span><input id="${prefix}offset-x" aria-label="Arrow X offset in nm" type="number" value="0" step="2"><span style="font-size:10px;color:#6a737d">Y</span><input id="${prefix}offset-y" aria-label="Arrow Y offset in nm" type="number" value="0" step="2"><span style="font-size:10px;color:#6a737d">Z</span><input id="${prefix}offset-z" aria-label="Arrow Z offset in nm" type="number" value="0" step="2"></div>`
+      insertAfterDirection(section)
+      offsetInputs = [...section.querySelectorAll('input')]
+      for (const input of offsetInputs) input.style.cssText = 'width:52px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)'
+      const toggleOffset = () => {
+        const body = section.querySelector('.efield-offset-body')
+        const open = body.style.display !== 'none'
+        body.style.display = open ? 'none' : 'flex'
+        section.querySelector('.efield-offset-arrow').style.transform = open ? '' : 'rotate(90deg)'
+        section.querySelector('.efield-offset-toggle').setAttribute('aria-expanded', String(!open))
+      }
+      section.querySelector('.efield-offset-toggle').addEventListener('click', toggleOffset)
+      section.querySelector('.efield-offset-toggle').addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOffset() }
+      })
+    }
+  }
+
   // ── State (canonical values; the gizmo mirrors them) ───────────────────────
   let _open    = false
   let _pN      = 0
   let _qEff    = DEFAULT_Q_EFF
   let _enabled = false
+  let _offset = [0, 0, 0]
+  let _showGizmoControls = true
   // oxDNA/CanDo/NAMD: stays true while a selected job applied a field, so the arrow
   // (oxDNA) or the enabled state persists with the card collapsed.
   let _jobFieldActive = false
 
   if (qeffInput) qeffInput.value = String(DEFAULT_Q_EFF)
-  const [dx0, dy0, dz0] = V.defaultDir
-  if (dirX) dirX.value = String(dx0)
-  if (dirY) dirY.value = String(dy0)
-  if (dirZ) dirZ.value = String(dz0)
+  function _anglesFromDir(d) {
+    const n = normalize(d)
+    return [Math.atan2(n[2], n[0]) * 180 / Math.PI, Math.asin(Math.max(-1, Math.min(1, n[1]))) * 180 / Math.PI]
+  }
+  function _dirFromAngles(azimuth, elevation) {
+    const az = azimuth * Math.PI / 180, el = elevation * Math.PI / 180
+    const c = Math.cos(el)
+    return normalize([c * Math.cos(az), Math.sin(el), c * Math.sin(az)])
+      .map(v => Math.abs(v) < 1e-12 ? 0 : v)
+  }
+  const [az0, el0] = _anglesFromDir(V.defaultDir)
+  if (dirX) dirX.value = String(+az0.toFixed(1))
+  if (dirY) dirY.value = String(+el0.toFixed(1))
+  if (dirZ) dirZ.value = '0'
 
   // ── Direction helpers ──────────────────────────────────────────────────────
   function _dirFromInputs() {
-    return normalize([
-      parseFloat(dirX?.value || String(dx0)),
-      parseFloat(dirY?.value || String(dy0)),
-      parseFloat(dirZ?.value || String(dz0)),
-    ])
+    return _dirFromAngles(
+      parseFloat(dirX?.value ?? String(az0)) || 0,
+      Math.max(-90, Math.min(90, parseFloat(dirY?.value ?? String(el0)) || 0)),
+    )
   }
   function _currentDir() {
     if (gizmo?.isActive?.()) {
@@ -157,18 +223,25 @@ export function initForcesCard({
   // nm-per-pN grows ∝ base count → the arrow encodes total force; a given drag is a
   // smaller per-nt force on a big origami (finer control). Flat fallback w/o geometry.
   function _nmPerPn() { return nmPerPnForN(getBaseCount?.() ?? 0) }
+  function _gizmoOrigin() { return _offset.slice() }
 
   function _pushToGizmo() {
     if (!gizmo) return
-    gizmo.setVector(scaleVec(_dirFromInputs(), arrowLenForPn(_pN, _nmPerPn())))
+    const direction = _dirFromInputs()
+    const arrowLength = arrowLenForPn(_pN, _nmPerPn())
+    if (gizmo.setDirection) {
+      gizmo.setDirection(direction)
+      gizmo.setArrowLength?.(arrowLength)
+      gizmo.setOffset?.(_gizmoOrigin())
+    } else gizmo.setVector(scaleVec(direction, arrowLength))
     gizmo.setColor?.(fieldColorHex(_pN))
   }
   function _syncInputsFromGizmo() {
     if (magInput) magInput.value = _fmtPn(_pN)
     const d = _currentDir()
-    if (dirX) dirX.value = String(+d[0].toFixed(3))
-    if (dirY) dirY.value = String(+d[1].toFixed(3))
-    if (dirZ) dirZ.value = String(+d[2].toFixed(3))
+    const [az, el] = _anglesFromDir(d)
+    if (dirX) dirX.value = String(+az.toFixed(1))
+    if (dirY) dirY.value = String(+el.toFixed(1))
   }
 
   // ── Spec (the identical payload across every engine) ────────────────────────
@@ -223,6 +296,14 @@ export function initForcesCard({
   enableChk?.addEventListener('change', () => { _enabled = !!enableChk.checked; _renderReady() })
   magInput?.addEventListener('input', () => { _pN = Math.max(0, parseFloat(magInput.value || '0') || 0); _renderReady(); _syncVpm() })
   for (const d of [dirX, dirY, dirZ]) d?.addEventListener('input', () => { _renderReady() })
+  for (const [i, input] of offsetInputs.entries()) input.addEventListener('input', () => {
+    _offset[i] = parseFloat(input.value || '0') || 0
+    gizmo?.setOffset?.(_gizmoOrigin())
+  })
+  gizmoControlsToggle?.addEventListener('change', () => {
+    _showGizmoControls = !!gizmoControlsToggle.checked
+    gizmo?.setControlsVisible?.(_showGizmoControls)
+  })
   qeffInput?.addEventListener('input', () => { _qEff = parseFloat(qeffInput.value || String(DEFAULT_Q_EFF)) || DEFAULT_Q_EFF; _syncVpm() })
   vpmApply?.addEventListener('click', () => {
     const e = parseFloat(vpmInput?.value || '0') || 0
@@ -239,10 +320,9 @@ export function initForcesCard({
     if (!o) _syncVpm()
   })
 
-  // Gizmo drag → update magnitude (length) + direction inputs live.
+  // Ring drag changes direction only. Magnitude remains exclusively controlled by
+  // the force input and therefore still controls the rendered arrow length.
   gizmo?.setOnChange?.((vec) => {
-    _pN = pnForArrowLen(vecLen(vec), _nmPerPn())
-    gizmo.setColor?.(fieldColorHex(_pN))
     _syncInputsFromGizmo(); _syncVpm(); _renderReady()
   })
 
@@ -252,8 +332,9 @@ export function initForcesCard({
     const show = V.gizmoGate === 'open-and-enabled'
       ? (_open && _enabled)
       : (_open || _jobFieldActive)
-    if (show) { gizmo.attach?.([0, 0, 0]); _pushToGizmo() }
+    if (show) { gizmo.attach?.(_gizmoOrigin()); _pushToGizmo() }
     else gizmo.detach?.()
+    if (show) gizmo.setControlsVisible?.(_showGizmoControls)
   }
 
   // ── Section open/close ────────────────────────────────────────────────────--
@@ -301,9 +382,9 @@ export function initForcesCard({
       _pN = Math.max(0, parseFloat(field.field_pN) || 0)
       if (magInput) magInput.value = _fmtPn(_pN)
       const d = normalize(Array.isArray(field.dir) && field.dir.length === 3 ? field.dir : V.defaultDir)
-      if (dirX) dirX.value = String(+d[0].toFixed(3))
-      if (dirY) dirY.value = String(+d[1].toFixed(3))
-      if (dirZ) dirZ.value = String(+d[2].toFixed(3))
+      const [az, el] = _anglesFromDir(d)
+      if (dirX) dirX.value = String(+az.toFixed(1))
+      if (dirY) dirY.value = String(+el.toFixed(1))
     }
     if (open && field && !_open) _open_()
     else { _syncGizmo(); _renderReady() }

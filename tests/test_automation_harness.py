@@ -465,7 +465,9 @@ def test_oxdna_coverage_report_separate_from_design_assembly():
     # relax_overhang_binding now covers both direct types (54→53).
     # Proposal-B duplex graph: connect_duplex (53→54) + add_strand_extension (54→55)
     # + relax_duplex (55→56).
-    assert headless_coverage_report()["covered"] == 56  # /oxdna audit is separate
+    # AF-37 direct-binding CREATION: create/patch/delete_overhang_binding +
+    # split_sub_domain + patch_sub_domain (56→61).
+    assert headless_coverage_report()["covered"] == 61  # /oxdna audit is separate
     ox = oxdna_coverage_report()
     assert ox["total"] == ox["covered"] + ox["uncovered"]
     covered = {r["endpoint"] for r in ox["covered_routes"]}
@@ -1018,11 +1020,16 @@ def test_linker_relaxed_pose_oracle_passes_on_real_relax():
 
 
 def test_linker_relaxed_pose_oracle_fires_on_degenerate_noop():
-    """Red-test: a degenerate hinge (moving overhang on the joint axis) cannot
-    change the chord — strain is not reduced, so the oracle fires."""
+    """Red-test: a degenerate hinge (the moving linker ANCHOR on the joint axis)
+    cannot change the chord — strain is not reduced, so the oracle fires.
+
+    Origin [2.0,0,0] is derived from the real complement anchor [2.0,0.866,0]
+    (AF-42); the old [2.5,0,0] was the *fallback* backbone anchor's x and stopped
+    being degenerate once the fixture resolved the real one.
+    """
     from tests.automation_harness import assert_linker_relaxed_pose
 
-    before, after, cid = _relaxed_linker_pair(joint_origin=[2.5, 0.0, 0.0])
+    before, after, cid = _relaxed_linker_pair(joint_origin=[2.0, 0.0, 0.0])
     with pytest.raises(AssertionError, match="reduce strain"):
         assert_linker_relaxed_pose(before, after, cid)
 

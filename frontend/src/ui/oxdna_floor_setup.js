@@ -18,7 +18,10 @@
  *   with zero behaviour change — default ids are the oxDNA panel's.
  */
 
-import { floorSurfaceSpec, formatOffsetNm, axisForNormal } from '../scene/oxdna_floor_math.js'
+import {
+  floorSurfaceSpec, formatOffsetNm, axisForNormal,
+  floorContactCoordinate, floorClearanceFromAbsolute, floorAbsoluteFromClearance,
+} from '../scene/oxdna_floor_math.js'
 
 // Default DOM ids (the oxDNA "Hard surface" card). A sibling panel passes its own
 // `ids` bag (e.g. mrdna-surface-*) to mount an identical card — same math, same
@@ -30,7 +33,7 @@ const DEFAULT_IDS = {
   stiff: 'oxdna-floor-stiff', ready: 'oxdna-floor-ready',
 }
 
-export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, ids = null } = {}) {
+export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, getStructureBounds = null, ids = null } = {}) {
   const id = { ...DEFAULT_IDS, ...(ids || {}) }
   const toggle = document.getElementById(id.toggle)
   const arrow  = document.getElementById(id.arrow)
@@ -48,11 +51,20 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, id
 
   let _open    = false
   let _enabled = false
+  const _bounds = () => getStructureBounds?.() || null
+
+  function _absolutePosition() { return parseFloat(offsetIn?.value || '0') || 0 }
+  function _setAbsolutePosition(value) {
+    if (offsetIn) {
+      offsetIn.value = String(value)
+    }
+    if (offsetLbl) offsetLbl.textContent = formatOffsetNm(value)
+  }
 
   function getSurfaceSpec() {
     const spec = floorSurfaceSpec({
       axis: axisSel?.value || '-y',
-      offsetNm: parseFloat(offsetIn?.value || '0'),
+      offsetNm: floorClearanceFromAbsolute(axisSel?.value || '-y', _absolutePosition(), _bounds()),
       stiff: parseFloat(stiffIn?.value || '0'),
     })
     return spec ? { ...spec, enabled: _enabled } : null
@@ -70,7 +82,8 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, id
     setSurfaceGrid?.({
       enabled: _enabled,
       axis: axisSel?.value || '-y',
-      offsetNm: parseFloat(offsetIn?.value || '0'),
+      offsetNm: 0,
+      positionNm: _absolutePosition(),
     })
   }
 
@@ -81,7 +94,7 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, id
     const spec = getSurfaceSpec()
     if (!spec || !(spec.stiff > 0)) { _setStatus('Set a stiffness > 0.'); return }
     const side = axisSel?.options?.[axisSel.selectedIndex]?.textContent?.trim() || ''
-    _setStatus(`Surface on · ${side} · ${formatOffsetNm(spec.offsetNm)} clearance.`, '#e0a800')
+    _setStatus(`Surface on · ${side} · absolute ${formatOffsetNm(_absolutePosition())}.`, '#e0a800')
   }
 
   // ── Section open/close ───────────────────────────────────────────────────────
@@ -103,7 +116,11 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, id
   enableChk?.addEventListener('change', () => {
     _enabled = !!enableChk.checked; _syncControlsVisibility(); _renderStatus()
   })
-  axisSel?.addEventListener('change', _renderStatus)
+  axisSel?.addEventListener('change', () => {
+    const contact = floorContactCoordinate(axisSel.value, _bounds())
+    if (contact != null) _setAbsolutePosition(contact)
+    _renderStatus()
+  })
   offsetIn?.addEventListener('input', () => {
     if (offsetLbl) offsetLbl.textContent = formatOffsetNm(offsetIn.value)
     _renderStatus()
@@ -119,8 +136,10 @@ export function initOxdnaFloorSetup({ onChange = null, setSurfaceGrid = null, id
     if (surface) {
       const axis = axisForNormal(surface.dir)
       if (axis && axisSel) axisSel.value = axis
-      if (offsetIn && surface.offset_nm != null) offsetIn.value = String(surface.offset_nm)
-      if (offsetLbl && surface.offset_nm != null) offsetLbl.textContent = formatOffsetNm(surface.offset_nm)
+      const absolute = surface.position_nm != null && Number.isFinite(Number(surface.position_nm))
+        ? Number(surface.position_nm)
+        : floorAbsoluteFromClearance(axis || '-y', surface.offset_nm, _bounds())
+      _setAbsolutePosition(absolute)
       if (stiffIn && surface.stiff != null) stiffIn.value = String(surface.stiff)
     }
     _syncControlsVisibility()

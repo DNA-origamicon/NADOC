@@ -228,7 +228,7 @@ def _traj_inputs(job_id: str):
 
 
 @router.get("/lammps/jobs/{job_id}/trajectory")
-async def get_lammps_trajectory(job_id: str) -> dict:
+async def get_lammps_trajectory(job_id: str, align: bool = True) -> dict:
     """Scrub-able trajectory of a LAMMPS run, in the SAME payload shape as the oxDNA
     trajectory (``keys``/``frames``/``stages``/``markers``) so the viewer is reused.
     Each frame is PBC-unwrapped + Kabsch-aligned to the design pose."""
@@ -238,7 +238,7 @@ async def get_lammps_trajectory(job_id: str) -> dict:
         return not_ready
     design, dat, ref = inputs
     stages = [("lammps", "production", dat)]
-    result = await run_in_threadpool(composite_trajectory, design, stages, ref)
+    result = await run_in_threadpool(composite_trajectory, design, stages, ref, align=align)
     return {"ready": result["n_frames"] > 0, **result}
 
 
@@ -251,7 +251,7 @@ async def get_lammps_display(job_id: str, align: bool = True) -> dict:
     if inputs is None:
         return not_ready
     design, dat, ref = inputs
-    result = await run_in_threadpool(composite_trajectory, design, [("lammps", "production", dat)], ref)
+    result = await run_in_threadpool(composite_trajectory, design, [("lammps", "production", dat)], ref, align=align)
     if not result["n_frames"]:
         return {"ready": False, "positions": [], "stage_name": None}
     keys, last = result["keys"], result["frames"][-1]
@@ -267,7 +267,7 @@ async def get_lammps_display(job_id: str, align: bool = True) -> dict:
 
 
 @router.get("/lammps/jobs/{job_id}/rmsf")
-async def get_lammps_rmsf(job_id: str) -> dict:
+async def get_lammps_rmsf(job_id: str, align: bool = True) -> dict:
     """Per-nucleotide average position + RMSF over the run (the flexibility map) —
     reuses oxDNA's ``production_rmsf`` verbatim on the transcoded trajectory."""
     from backend.core.oxdna_health import production_rmsf, rmsf_confidence
@@ -275,14 +275,14 @@ async def get_lammps_rmsf(job_id: str) -> dict:
     if inputs is None:
         return not_ready
     design, dat, ref = inputs
-    result = await run_in_threadpool(production_rmsf, design, [dat], ref, copies=True)
+    result = await run_in_threadpool(production_rmsf, design, [dat], ref, copies=True, align=align)
     result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
     result["production_running"] = False
     return result
 
 
 @router.get("/lammps/jobs/{job_id}/deviation")
-async def get_lammps_deviation(job_id: str) -> dict:
+async def get_lammps_deviation(job_id: str, align: bool = True) -> dict:
     """Per-nucleotide deviation (nm) of the mean structure from the design pose —
     reuses oxDNA's ``production_rmsf`` + ``geometry_deviation_map`` verbatim."""
     from backend.api.skip_twist_tuning import core_reference_geometry
@@ -295,10 +295,11 @@ async def get_lammps_deviation(job_id: str) -> dict:
     design, dat, ref = inputs
 
     def _compute():
-        mean = production_rmsf(design, [dat], ref, copies=True)
+        mean = production_rmsf(design, [dat], ref, copies=True, align=align)
         if not mean.get("ready") or not mean.get("positions"):
             return None, mean
-        return geometry_deviation_map(mean["positions"], core_reference_geometry(design)), mean
+        return geometry_deviation_map(
+            mean["positions"], core_reference_geometry(design), align_output=align), mean
 
     dev, mean = await run_in_threadpool(_compute)
     if dev is None:

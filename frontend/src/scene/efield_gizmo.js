@@ -1,10 +1,10 @@
 /**
  * Electric-field direction/magnitude gizmo.
  *
- * A single draggable arrow in the scene: it points along the field direction and
- * its length encodes magnitude.  Dragging the tip handle reorients + resizes the
- * arrow (raycast the handle, then intersect a camera-facing plane through the
- * origin — see efield_math.rayPlaneVector); OrbitControls are disabled mid-drag
+ * Three fixed-radius great-circle controls surround a field arrow. Dragging any
+ * ring rotates direction in that axis plane without changing field magnitude.
+ * The separate arrow still points down-field and its length encodes magnitude.
+ * OrbitControls are disabled mid-drag
  * (mirrors overhang_gizmo.js).  Direction + magnitude are also fully settable
  * programmatically (setVector / getVector) so automated tests drive it without a
  * mouse — that is the "make testing automatable" requirement.
@@ -22,15 +22,17 @@
  */
 
 import * as THREE from 'three'
-import { rayPlaneVector } from './efield_math.js'
+import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 const _ARROW_COLOR  = 0x4a9eff
-const _HANDLE_COLOR = 0x9ad1ff
 
 // Thick-arrow geometry (nm).  A solid cylinder shaft + cone head reads as a real
 // 3D arrow, unlike THREE.ArrowHelper's 1-px line shaft.
 const _SHAFT_R = 0.45
 const _HEAD_R  = 1.15
+const _MAX_ARROW_LENGTH_NM = 25
+const _CONTROL_SIZE = 0.7
+const _MAX_CONTROL_DIAMETER_NM = 25
 const _UP      = new THREE.Vector3(0, 1, 0)
 
 export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-gizmo') {
@@ -39,12 +41,15 @@ export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-
   let _shaft   = null
   let _head    = null
   let _arrowMat = null
-  let _handle  = null               // tip sphere (drag target)
+  let _dummy   = null               // TransformControls orientation target
+  let _tc      = null
+  let _helper  = null
   let _onChange = null
   let _dragging = false
+  let _controlsVisible = true
   const _origin = new THREE.Vector3(0, 0, 0)
   const _vec    = new THREE.Vector3(0, 1, 0)   // world field vector (dir * length)
-  const _ray    = new THREE.Raycaster()
+  let _arrowLength = 1
 
   function _build() {
     _group = new THREE.Group()
@@ -57,24 +62,62 @@ export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-
     // Both primitives are unit-height along +Y, centred at their own origin; _sync
     // scales/positions them so the shaft ends where the head begins.
     _shaft = new THREE.Mesh(new THREE.CylinderGeometry(_SHAFT_R, _SHAFT_R, 1, 16), _arrowMat)
+    _shaft.name = 'efield-gizmo-arrow-shaft'
     _head  = new THREE.Mesh(new THREE.ConeGeometry(_HEAD_R, 1, 20), _arrowMat)
     _arrow = new THREE.Group()
     _arrow.name = 'efield-gizmo-arrow'
     _arrow.add(_shaft, _head)
-    _handle = new THREE.Mesh(
-      new THREE.SphereGeometry(0.7, 16, 12),
-      new THREE.MeshBasicMaterial({ color: _HANDLE_COLOR, depthTest: false }),
-    )
-    _handle.name = 'efield-gizmo-handle'
-    _handle.renderOrder = 999
-    _group.add(_arrow, _handle)
+    _group.add(_arrow)
     scene.add(_group)
+
+    // Match the cluster rotation tool exactly: Three.js TransformControls in
+    // rotate-only, world-space mode, attached to a dummy at the field origin.
+    _dummy = new THREE.Object3D()
+    _dummy.name = 'efield-gizmo-rotation-target'
+    scene.add(_dummy)
+    _tc = new TransformControls(camera, canvas)
+    _tc.attach(_dummy)
+    _tc.setMode('rotate')
+    _tc.setSpace('world')
+    _tc.setSize(_CONTROL_SIZE)
+    _helper = _tc.getHelper()
+    _helper.name = 'efield-gizmo-rotation-controls'
+    // TransformControls normally keeps its rings a constant screen size.  At a
+    // large camera distance that makes them enormous in world units, so reduce
+    // its screen-size setting only once a ring would exceed 25 nm in diameter.
+    // The gizmo geometry has unit radius and TransformControls scales it by
+    // `factor * size / 4`, hence diameter = `factor * size / 2`.
+    const updateHelperMatrixWorld = _helper.updateMatrixWorld.bind(_helper)
+    _helper.updateMatrixWorld = force => {
+      let factor
+      if (camera.isOrthographicCamera) {
+        factor = (camera.top - camera.bottom) / camera.zoom
+      } else {
+        factor = camera.position.distanceTo(_dummy.position)
+          * Math.min(1.9 * Math.tan(Math.PI * camera.fov / 360) / camera.zoom, 7)
+      }
+      const cappedSize = factor > 0
+        ? Math.min(_CONTROL_SIZE, 2 * _MAX_CONTROL_DIAMETER_NM / factor)
+        : _CONTROL_SIZE
+      _tc.setSize(cappedSize)
+      updateHelperMatrixWorld(force)
+    }
+    scene.add(_helper)
+    _tc.addEventListener('dragging-changed', e => {
+      _dragging = !!e.value
+      if (controls) controls.enabled = !e.value
+    })
+    _tc.addEventListener('objectChange', () => {
+      _vec.copy(_UP).applyQuaternion(_dummy.quaternion).normalize()
+      _syncArrow()
+      _onChange?.(getVector())
+    })
   }
 
-  /** Re-position the arrow + handle from the current origin/vector. */
-  function _sync() {
+  /** Re-position the field arrow from the current origin/direction/magnitude. */
+  function _syncArrow() {
     if (!_group) return
-    const len = Math.max(_vec.length(), 1e-3)
+    const len = Math.min(Math.max(_arrowLength, 1e-3), _MAX_ARROW_LENGTH_NM)
     const dir = _vec.clone().normalize()
     const headLen  = Math.min(Math.max(len * 0.28, 1.2), 4.0)
     const shaftLen = Math.max(len - headLen, 0.01)
@@ -85,58 +128,6 @@ export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-
     _shaft.position.set(0, shaftLen / 2, 0)
     _head.scale.set(1, headLen, 1)
     _head.position.set(0, shaftLen + headLen / 2, 0)
-    _handle.position.copy(_origin).addScaledVector(dir, len)
-  }
-
-  // ── Pointer drag ───────────────────────────────────────────────────────────
-  function _ndc(e) {
-    const r = canvas.getBoundingClientRect()
-    return new THREE.Vector2(
-      ((e.clientX - r.left) / r.width) * 2 - 1,
-      -((e.clientY - r.top) / r.height) * 2 + 1,
-    )
-  }
-
-  function _onDown(e) {
-    if (!_group || !_group.visible) return
-    _ray.setFromCamera(_ndc(e), camera)
-    if (_ray.intersectObject(_handle, false).length) {
-      _dragging = true
-      if (controls) controls.enabled = false
-      e.stopPropagation()
-    }
-  }
-
-  function _onMove(e) {
-    if (!_dragging) return
-    _ray.setFromCamera(_ndc(e), camera)
-    const ro = _ray.ray.origin, rd = _ray.ray.direction
-    const n = camera.getWorldDirection(new THREE.Vector3())   // camera-facing drag plane
-    const v = rayPlaneVector([ro.x, ro.y, ro.z], [rd.x, rd.y, rd.z],
-                             [n.x, n.y, n.z], [_origin.x, _origin.y, _origin.z])
-    if (v) { setVector(v); _onChange?.(getVector()) }
-  }
-
-  function _onUp() {
-    if (!_dragging) return
-    _dragging = false
-    if (controls) controls.enabled = true
-  }
-
-  let _bound = false
-  function _bind() {
-    if (_bound || !canvas?.addEventListener) return
-    canvas.addEventListener('pointerdown', _onDown, true)
-    window.addEventListener('pointermove', _onMove)
-    window.addEventListener('pointerup', _onUp)
-    _bound = true
-  }
-  function _unbind() {
-    if (!_bound) return
-    canvas?.removeEventListener?.('pointerdown', _onDown, true)
-    window.removeEventListener('pointermove', _onMove)
-    window.removeEventListener('pointerup', _onUp)
-    _bound = false
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -145,34 +136,59 @@ export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-
     _origin.set(origin[0] || 0, origin[1] || 0, origin[2] || 0)
     if (!_group) _build()
     _group.visible = true
-    _sync()
-    _bind()
+    _dummy.position.copy(_origin)
+    _helper.visible = _controlsVisible
+    _tc.enabled = _controlsVisible
+    _syncArrow()
   }
 
   /** Hide the gizmo and stop listening (kept around for cheap re-attach). */
   function detach() {
     _dragging = false
     if (controls) controls.enabled = true
-    _unbind()
     if (_group) _group.visible = false
+    if (_helper) _helper.visible = false
+    if (_tc) _tc.enabled = false
   }
 
   /** Set the world field vector (direction * length). */
   function setVector(v) {
     _vec.set(v[0] || 0, v[1] || 0, v[2] || 0)
-    _sync()
+    _arrowLength = Math.max(_vec.length(), 1e-3)
+    _vec.normalize()
+    if (_dummy) _dummy.quaternion.setFromUnitVectors(_UP, _vec)
+    _syncArrow()
   }
-  /** Current world field vector as a plain [x,y,z]. */
+  function setDirection(v) {
+    const next = new THREE.Vector3(v[0] || 0, v[1] || 0, v[2] || 0)
+    if (next.lengthSq() > 1e-8) _vec.copy(next.normalize())
+    if (_dummy) _dummy.quaternion.setFromUnitVectors(_UP, _vec)
+    _syncArrow()
+  }
+  function setArrowLength(length) {
+    _arrowLength = Math.min(Math.max(Number(length) || 0, 1e-3), _MAX_ARROW_LENGTH_NM)
+    _syncArrow()
+  }
+  function setControlsVisible(visible) {
+    _controlsVisible = !!visible
+    if (_helper) _helper.visible = _controlsVisible && !!_group?.visible
+    if (_tc) _tc.enabled = _controlsVisible && !!_group?.visible
+  }
+  function setOffset(offset) {
+    _origin.set(Number(offset?.[0]) || 0, Number(offset?.[1]) || 0, Number(offset?.[2]) || 0)
+    if (_dummy) _dummy.position.copy(_origin)
+    _syncArrow()
+  }
+  /** Current direction as a unit plain [x,y,z]. */
   function getVector() { return [_vec.x, _vec.y, _vec.z] }
 
-  function setCamera(cam) { camera = cam }
+  function setCamera(cam) { camera = cam; if (_tc) _tc.camera = cam }
   function setOnChange(cb) { _onChange = cb }
 
-  /** Recolour the arrow + tip handle (e.g. magnitude-graded blue→green→red). */
+  /** Recolour the field arrow (the rotation handles keep cluster-tool axis colours). */
   function setColor(hex) {
     _arrowMat?.color?.set(hex)
     _arrowMat?.emissive?.set(hex)
-    _handle?.material?.color?.set(hex)
   }
 
   /** Full teardown (remove from scene). */
@@ -180,12 +196,14 @@ export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-
     detach()
     if (_group) {
       _group.parent?.remove(_group)
+      _tc?.detach?.()
+      _tc?.dispose?.()
+      _helper?.parent?.remove(_helper)
+      _dummy?.parent?.remove(_dummy)
       _shaft?.geometry?.dispose?.()
       _head?.geometry?.dispose?.()
       _arrowMat?.dispose?.()
-      _handle?.geometry?.dispose?.()
-      _handle?.material?.dispose?.()
-      _group = _arrow = _shaft = _head = _arrowMat = _handle = null
+      _group = _arrow = _shaft = _head = _arrowMat = _dummy = _tc = _helper = null
     }
   }
 
@@ -193,6 +211,10 @@ export function initEfieldGizmo(scene, camera, canvas, controls, name = 'efield-
     attach,
     detach,
     setVector,
+    setDirection,
+    setArrowLength,
+    setControlsVisible,
+    setOffset,
     getVector,
     setOnChange,
     setColor,

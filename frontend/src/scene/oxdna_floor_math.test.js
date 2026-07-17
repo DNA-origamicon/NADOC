@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   floorNormal, floorSurfaceSpec, floorSpecReady, formatOffsetNm, FLOOR_AXIS_NORMALS,
-  axisForNormal,
+  axisForNormal, floorContactCoordinate, floorClearanceFromAbsolute, floorAbsoluteFromClearance,
 } from './oxdna_floor_math.js'
 
 describe('axisForNormal', () => {
@@ -87,5 +87,21 @@ describe('formatOffsetNm', () => {
   })
   it('coerces junk to 0.0', () => {
     expect(formatOffsetNm('x')).toBe('0.0 nm')
+  })
+})
+
+describe('absolute surface positioning', () => {
+  const bounds = { min: [-8, -3, -5], max: [12, 7, 9] }
+  it('selects the contact face for each side', () => {
+    expect(floorContactCoordinate('-x', bounds)).toBe(-8)
+    expect(floorContactCoordinate('+x', bounds)).toBe(12)
+    expect(floorContactCoordinate('-y', bounds)).toBe(-3)
+    expect(floorContactCoordinate('+z', bounds)).toBe(9)
+  })
+  it('round-trips absolute coordinates through backend clearance semantics', () => {
+    expect(floorClearanceFromAbsolute('-y', -5, bounds)).toBe(2)
+    expect(floorAbsoluteFromClearance('-y', 2, bounds)).toBe(-5)
+    expect(floorClearanceFromAbsolute('+y', 10, bounds)).toBe(3)
+    expect(floorAbsoluteFromClearance('+y', 3, bounds)).toBe(10)
   })
 })

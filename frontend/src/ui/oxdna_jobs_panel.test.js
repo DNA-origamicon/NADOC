@@ -633,7 +633,8 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-health': 'div', 'oxdna-jobs-show-all': 'input',
     'oxdna-jobs-run-btn': 'button', 'oxdna-jobs-prod-btn': 'button', 'oxdna-jobs-prod-steps': 'input',
     'oxdna-jobs-stop-btn': 'button',   // production-phase Stop (Archive/Delete consolidated into the master card)
-    'oxdna-jobs-display-toggle': 'input', 'oxdna-jobs-display-status': 'div',
+    'oxdna-jobs-display-toggle': 'input', 'oxdna-jobs-align-toggle': 'input',
+    'oxdna-jobs-display-status': 'div',
     'oxdna-jobs-flex-toggle': 'input', 'oxdna-jobs-flex-status': 'div',
     'oxdna-jobs-flex-bar': 'div', 'oxdna-jobs-flex-legend': 'div',
     'oxdna-jobs-export-btn': 'button',
@@ -680,6 +681,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
 
   beforeEach(() => {
     clearDom(); mountIds(SPEC)
+    $('oxdna-jobs-align-toggle').checked = true
     api.oxdnaAvailable.mockResolvedValue({ available: true, oxdna_bin: 'x' })
   })
   afterEach(() => clearDom())
@@ -899,7 +901,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     $('oxdna-jobs-traj-toggle').checked = true
     $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
-    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt')
+    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt', true)
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
     expect($('oxdna-jobs-traj-slider').max).toBe('5')                           // 6 frames → max idx 5
   })
@@ -921,7 +923,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     $('oxdna-jobs-traj-toggle').checked = true
     $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
-    expect(lammps.loadTrajectory).toHaveBeenCalledWith('lm7')
+    expect(lammps.loadTrajectory).toHaveBeenCalledWith('lm7', true)
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
   })
 
@@ -961,7 +963,11 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     flex.dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
 
-    expect(disp.displayRmsf).toHaveBeenCalledWith('j3')
+    expect(disp.displayRmsf).toHaveBeenCalledWith('j3', { align: true })
+    $('oxdna-jobs-align-toggle').checked = false
+    $('oxdna-jobs-align-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    expect(disp.displayRmsf).toHaveBeenLastCalledWith('j3', { align: false })
     expect($('oxdna-jobs-flex-bar').innerHTML.toLowerCase()).toContain('ready')   // ✓ check
     expect($('oxdna-jobs-flex-legend').innerHTML.toLowerCase()).toContain('flexible')
     const status = $('oxdna-jobs-flex-status').textContent.toLowerCase()
@@ -1000,7 +1006,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     flex.dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
 
-    expect(disp.displayRmsf).toHaveBeenCalledWith('jMid')
+    expect(disp.displayRmsf).toHaveBeenCalledWith('jMid', { align: true })
     const status = $('oxdna-jobs-flex-status').textContent.toLowerCase()
     expect(status).toContain('7 frames pooled')
     expect(status).toContain('preliminary')

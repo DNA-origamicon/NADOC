@@ -25,6 +25,7 @@ vi.mock('./md_jobs_panel.js', () => ({
 import {
   initSimulateJobs, nodeIsActive, nodeIsResumable, verbForNode,
   masterProgressPct, masterProgressColor, masterProgressTooltip, masterStatusText, nodeDetailText, formatEta,
+  masterStepText,
 } from './simulate_jobs.js'
 
 // ── pure helpers ──────────────────────────────────────────────────────────────
@@ -104,6 +105,22 @@ describe('pure helpers', () => {
     expect(masterStatusText({ engine: 'mrdna', status: 'running' })).toMatch(/^mrDNA · running/)
     expect(masterStatusText({ engine: 'cando', status: 'queued' })).toMatch(/^CanDo · queued/)
     expect(masterStatusText(null)).toMatch(/Select a run/)
+  })
+  it('masterStepText shows percent, completed/total steps, and remaining steps for every engine shape', () => {
+    expect(masterStepText(lmNode({ status: 'running', current_step: 250, steps: 1000 })))
+      .toBe('25% · 250 / 1,000 steps · 750 left')
+    expect(masterStepText(oxNode({ status: 'running', progress_fraction: 0.5,
+      stages: [{ status: 'running', steps: 2000 }] })))
+      .toBe('50% · 1,000 / 2,000 steps · 1,000 left')
+    expect(masterStepText({ engine: 'mrdna', status: 'running', progress_fraction: 0.25,
+      coarse_steps: 1000, fine_steps: 1000 })).toBe('25% · 500 / 2,000 steps · 1,500 left')
+    expect(masterStepText({ engine: 'cando', status: 'running', progress_fraction: 0.4, n_steps: 20 }))
+      .toBe('40% · 8 / 20 steps · 12 left')
+    expect(masterStepText({ engine: 'snupi', status: 'running', progress_fraction: 0.5, n_steps: 20 }))
+      .toBe('50% · 10 / 20 steps · 10 left')
+    expect(masterStepText({ engine: 'namd', status: 'running', progress_fraction: 0.5,
+      segments: [{ status: 'running', num_steps: 4000 }] }))
+      .toBe('50% · 2,000 / 4,000 steps · 2,000 left')
   })
   it('masterStatusText carries the SNUPI %, ETA and phase under the one master bar', () => {
     // SNUPI has a SINGLE stage, so the stage-count fallback would read 0% for the whole solve —

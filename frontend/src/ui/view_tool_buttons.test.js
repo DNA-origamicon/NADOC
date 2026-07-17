@@ -195,6 +195,33 @@ describe('initViewToolButtons', () => {
     expect(buttons.grid.classList.contains('active')).toBe(false)
   })
 
+  it('surface remains fixed when trajectory entries move in place', () => {
+    mountVtDom()
+    const deps = makeDeps()
+    let entries = [{ pos: { x: 0, y: 0, z: 0 } }, { pos: { x: 4, y: 4, z: 4 } }]
+    deps.designRenderer.getBackboneEntries = vi.fn(() => entries)
+    const api = initViewToolButtons(deps)
+    const grid = deps.scene.add.mock.calls[0][0]
+    api.setSurfaceGrid({ enabled: true, axis: '+z', offsetNm: 2 })
+    expect(grid.position.z).toBeCloseTo(6)
+    entries = [{ pos: { x: 10, y: 10, z: 10 } }, { pos: { x: 20, y: 20, z: 30 } }]
+    // No per-frame refresh: the physical simulation wall is fixed in world space.
+    expect(grid.position.z).toBeCloseTo(6)
+    expect(grid.position.x).toBeCloseTo(2)
+  })
+
+  it('uses the simulator-resolved absolute plane coordinate when provided', () => {
+    mountVtDom()
+    const deps = makeDeps()
+    deps.designRenderer.getBackboneEntries = vi.fn(() => [
+      { pos: { x: -100, y: -100, z: -100 } }, { pos: { x: 100, y: 100, z: 100 } },
+    ])
+    const api = initViewToolButtons(deps)
+    const grid = deps.scene.add.mock.calls[0][0]
+    api.setSurfaceGrid({ enabled: true, axis: '-y', offsetNm: 9, positionNm: -3.25 })
+    expect(grid.position.y).toBeCloseTo(-3.25)
+  })
+
   it('overhangNames click flips the store flag and sets the menu pill', () => {
     const { buttons } = mountVtDom()
     const deps = makeDeps({ showOverhangNames: false })

@@ -70,7 +70,7 @@ describe('initOxdnaFloorSetup', () => {
     els['oxdna-floor-offset'].value = '4'
     els['oxdna-floor-offset'].dispatchEvent(new Event('input'))
     expect(setSurfaceGrid).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: true, offsetNm: 4 }))
+      expect.objectContaining({ enabled: true, positionNm: 4 }))
     expect(a.isEnabled()).toBe(true)
   })
 
@@ -84,6 +84,41 @@ describe('initOxdnaFloorSetup', () => {
     const spec = api.getSurfaceSpec()
     expect(spec.enabled).toBe(true)
     expect(spec.dir).toEqual([0, -1, 0])
+  })
+
+  it('forwards the persisted physical plane coordinate and edits it absolutely', () => {
+    const setSurfaceGrid = vi.fn()
+    const a = initOxdnaFloorSetup({ setSurfaceGrid })
+    a.applyConfig({ dir: [0, 1, 0], offset_nm: 2, stiff: 5, position_nm: -7.5 })
+    expect(setSurfaceGrid).toHaveBeenLastCalledWith(expect.objectContaining({ positionNm: -7.5 }))
+    els['oxdna-floor-offset'].value = '3'
+    els['oxdna-floor-offset'].dispatchEvent(new Event('input'))
+    expect(setSurfaceGrid).toHaveBeenLastCalledWith(expect.objectContaining({ positionNm: 3 }))
+  })
+
+  it('changing side snaps the absolute offset to structure contact', () => {
+    const setSurfaceGrid = vi.fn()
+    const bounds = { min: [-8, -3, -5], max: [12, 7, 9] }
+    const a = initOxdnaFloorSetup({ setSurfaceGrid, getStructureBounds: () => bounds })
+    els['oxdna-floor-enable'].checked = true
+    els['oxdna-floor-enable'].dispatchEvent(new Event('change'))
+    els['oxdna-floor-axis'].value = '+y'
+    els['oxdna-floor-axis'].dispatchEvent(new Event('change'))
+    expect(els['oxdna-floor-offset'].value).toBe('7')
+    expect(setSurfaceGrid).toHaveBeenLastCalledWith(expect.objectContaining({ positionNm: 7 }))
+    expect(a.getSurfaceSpec().offsetNm).toBe(0)
+  })
+
+  it('accepts an exact manually entered absolute position', () => {
+    const setSurfaceGrid = vi.fn()
+    const bounds = { min: [-8, -3, -5], max: [12, 7, 9] }
+    const a = initOxdnaFloorSetup({ setSurfaceGrid, getStructureBounds: () => bounds })
+    els['oxdna-floor-enable'].checked = true
+    els['oxdna-floor-enable'].dispatchEvent(new Event('change'))
+    els['oxdna-floor-offset'].value = '-4.37'
+    els['oxdna-floor-offset'].dispatchEvent(new Event('input'))
+    expect(setSurfaceGrid).toHaveBeenLastCalledWith(expect.objectContaining({ positionNm: -4.37 }))
+    expect(a.getSurfaceSpec().offsetNm).toBeCloseTo(1.37)
   })
 
   it('applyConfig(null) turns the surface off', () => {

@@ -75,6 +75,7 @@ from backend.physics.oxdna_interface import (
     write_field_forces,
     write_run_forces,
 )
+from backend.core.constants import NM_TO_OXDNA
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,14 @@ router = APIRouter(tags=["oxdna"])
 # /trajectory-progress is served while it computes.  A plain dict assignment is
 # GIL-atomic; the entry is created when the build starts and removed when it ends.
 _TRAJ_PROGRESS: dict[str, dict] = {}
+
+
+def _wall_axis_position_nm(wall_meta: dict) -> float:
+    """World-axis coordinate of the resolved axis-aligned oxDNA plane."""
+    direction = [float(x) for x in wall_meta.get("dir", (0, 1, 0))]
+    axis_component = max(direction, key=abs)
+    plane_scalar_nm = -float(wall_meta["position"]) / NM_TO_OXDNA
+    return axis_component * plane_scalar_nm
 
 # Minimum fraction of designed Watson-Crick pairs that must be sequence-complementary
 # for an oxDNA relaxation to be worth starting.  A correctly-sequenced design reads
@@ -629,9 +638,15 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             effective_feature_log_position, oxdna_design_fingerprint)
         job.design_fingerprint = oxdna_design_fingerprint(design)
         job.feature_log_position = effective_feature_log_position(design)
-        await run_in_threadpool(
+        forces_info = await run_in_threadpool(
             prepare_oxdna_job, design, geometry, job, _workspace(), specs,
             surface=surface_in, anchors=anchors_in, anchor_stiff=body.anchor_stiff)
+        # Persist the writer-resolved ABSOLUTE plane coordinate. The descriptor's
+        # offset alone is insufficient after the structure moves or a trajectory is
+        # scrubbed; visualization must render the exact plane oxDNA used at run start.
+        wall_meta = (forces_info or {}).get("wall")
+        if wall_meta and job.run_config.get("surface"):
+            job.run_config["surface"]["position_nm"] = _wall_axis_position_nm(wall_meta)
     except Exception as exc:  # noqa: BLE001
         logger.error("create_oxdna_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
         job.status = OxdnaStatus.failed
@@ -1009,6 +1024,8 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         child.efield["n_anchored"] = info["n_anchored"]
         child.efield["anchor_keys"] = info["anchor_keys"]
     child.n_nucleotides = info["n_total"]
+    if info.get("wall") and child.run_config.get("surface"):
+        child.run_config["surface"]["position_nm"] = _wall_axis_position_nm(info["wall"])
     (cjd / "stages_spec.json").write_text(json.dumps([asdict(stage)], indent=2))
     child.status = OxdnaStatus.queued
     child.save(ws)
@@ -1173,7 +1190,7 @@ async def get_oxdna_rmsd(job_id: str) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/rmsf")
-async def get_oxdna_rmsf(job_id: str) -> dict:
+async def get_oxdna_rmsf(job_id: str, align: bool = True) -> dict:
     """Per-nucleotide average position + RMSF over the production run — the
     flexibility map.  Each production frame is PBC-unwrapped + Kabsch-aligned to
     the SAME reference the OxDNA display uses (the job's ``conf.dat`` = the design
@@ -1222,7 +1239,7 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
 
     # copies=True → a per-loop-copy flexibility value so every loop bead recolours.
     cached = await run_in_threadpool(
-        production_rmsf_cached, design, trajs, ref_conf, copies=True)
+        production_rmsf_cached, design, trajs, ref_conf, copies=True, align=align)
     # average_frame contains NumPy arrays for server-side reconstruction and is
     # intentionally retained only in the cache, not sent in the CG map payload.
     result = {k: v for k, v in cached.items() if k != "average_frame"}
@@ -1234,7 +1251,7 @@ async def get_oxdna_rmsf(job_id: str) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/deviation")
-async def get_oxdna_deviation(job_id: str) -> dict:
+async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
     """Per-nucleotide DEVIATION map: the production mean structure recoloured by each
     base's distance (nm) from its DESIGNED position, after Kabsch superposition — the
     deviation counterpart of GET /oxdna/jobs/{id}/rmsf.  Available for ANY job with a
@@ -1262,10 +1279,11 @@ async def get_oxdna_deviation(job_id: str) -> dict:
     ref_conf = _design_ref_conf(jd, design)
 
     def _compute():
-        mean = production_rmsf_cached(design, trajs, ref_conf, copies=True)
+        mean = production_rmsf_cached(design, trajs, ref_conf, copies=True, align=align)
         if not mean.get("ready") or not mean.get("positions"):
             return None, mean
-        return geometry_deviation_map(mean["positions"], core_reference_geometry(design)), mean
+        return geometry_deviation_map(
+            mean["positions"], core_reference_geometry(design), align_output=align), mean
 
     dev, mean = await run_in_threadpool(_compute)
     if dev is None:
@@ -1339,7 +1357,7 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory")
-async def get_oxdna_trajectory(job_id: str, request: Request) -> dict:
+async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True) -> dict:
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
     selected job AND all of its ancestors (relax → field1 → field2 → …), each
     frame PBC-unwrapped + Kabsch-aligned to the design reference, downsampled,
@@ -1367,7 +1385,7 @@ async def get_oxdna_trajectory(job_id: str, request: Request) -> dict:
     _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
     try:
         task = asyncio.create_task(run_in_threadpool(
-            composite_trajectory, design, stages, ref, 200, _prog))
+            composite_trajectory, design, stages, ref, 200, _prog, align))
         while not task.done():
             if await request.is_disconnected():
                 cancelled.set()
@@ -1425,7 +1443,8 @@ class OxdnaFramesSurfaceBody(BaseModel):
 
 
 @router.post("/oxdna/jobs/{job_id}/frames-atomistic")
-async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody) -> dict:
+async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody,
+                                  align: bool = True) -> dict:
     """Per-frame ATOMISTIC coordinates for the given composite-trajectory frame
     indices (same wire format as /design/features/atomistic-batch). Used by the
     animation player to make the atomistic rep follow a trajectory keyframe.
@@ -1438,11 +1457,13 @@ async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody) ->
     if not stages:
         return {}
     return await run_in_threadpool(
-        composite_trajectory_atomistic, design, stages, ref, body.frame_indices)
+        composite_trajectory_atomistic, design, stages, ref, body.frame_indices,
+        align=align)
 
 
 @router.post("/oxdna/jobs/{job_id}/frames-surface")
-async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody) -> dict:
+async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody,
+                               align: bool = True) -> dict:
     """Per-frame molecular SURFACE meshes for the given composite-trajectory frame
     indices (same wire format as /design/features/surface-batch). Heaviest path
     (all-atom rebuild + marching cubes per frame) — callers downsample hard."""
@@ -1455,7 +1476,7 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody) -> dic
     return await run_in_threadpool(
         composite_trajectory_surface, design, stages, ref, body.frame_indices,
         body.color_mode, body.probe_radius, body.grid_spacing,
-        body.radius_inflate, body.smooth)
+        body.radius_inflate, body.smooth, align=align)
 
 
 def _relaxed_full_map(job, align: bool, *, copies: bool = False,
@@ -1862,7 +1883,7 @@ async def get_oxdna_trajectory_audit(
     return report
 
 
-def _rmsf_average_frame(job):
+def _rmsf_average_frame(job, align: bool = True):
     """Shared average-structure reader for the rmsf-atomistic/surface routes.
     Returns ``(design, average_frame, rmsf_by_key)`` where ``average_frame`` is the
     per-nuc ``{key:{backbone_position(mean CM), a1, a3}}`` dict and ``rmsf_by_key``
@@ -1884,7 +1905,7 @@ def _rmsf_average_frame(job):
         return (None, None, None)
     design = Design.model_validate_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
-    result = production_rmsf_cached(design, trajs, ref_conf, copies=True)
+    result = production_rmsf_cached(design, trajs, ref_conf, copies=True, align=align)
     if not result.get("ready"):
         return (design, None, None)
     rmsf_by_key = {
@@ -1895,14 +1916,14 @@ def _rmsf_average_frame(job):
 
 
 @router.post("/oxdna/jobs/{job_id}/rmsf-atomistic")
-async def get_oxdna_rmsf_atomistic(job_id: str) -> dict:
+async def get_oxdna_rmsf_atomistic(job_id: str, align: bool = True) -> dict:
     """All-atom coordinates for the flexibility-map AVERAGE structure — the
     atomistic counterpart of GET /oxdna/jobs/{id}/rmsf. Lets the flexibility-map
     toggle drive the atomistic rep."""
     from backend.core.oxdna_health import frame_atomistic_flat
 
     job = _load_job(job_id)
-    design, frame, _ = await run_in_threadpool(_rmsf_average_frame, job)
+    design, frame, _ = await run_in_threadpool(_rmsf_average_frame, job, align)
     if frame is None:
         return {"job_id": job.job_id, "ready": False}
     data = await run_in_threadpool(frame_atomistic_flat, design, frame)
@@ -1910,14 +1931,15 @@ async def get_oxdna_rmsf_atomistic(job_id: str) -> dict:
 
 
 @router.post("/oxdna/jobs/{job_id}/rmsf-surface")
-async def get_oxdna_rmsf_surface(job_id: str, body: OxdnaSurfaceBody) -> dict:
+async def get_oxdna_rmsf_surface(job_id: str, body: OxdnaSurfaceBody,
+                                 align: bool = True) -> dict:
     """Molecular surface for the flexibility-map AVERAGE structure — the surface
     counterpart of GET /oxdna/jobs/{id}/rmsf.  Always coloured by per-vertex RMSF
     (``vertex_rmsf``) so the mesh shows the same rigid→flexible ramp as the beads."""
     from backend.core.oxdna_health import frame_surface_json
 
     job = _load_job(job_id)
-    design, frame, rmsf_by_key = await run_in_threadpool(_rmsf_average_frame, job)
+    design, frame, rmsf_by_key = await run_in_threadpool(_rmsf_average_frame, job, align)
     if frame is None:
         return {"job_id": job.job_id, "ready": False}
     data = await run_in_threadpool(

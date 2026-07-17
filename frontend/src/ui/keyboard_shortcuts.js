@@ -26,7 +26,7 @@
  * @param {Function} deps.isUnfoldActive / deps.isDeformActive
  * @param {Function} deps.captureCurrentCamera / deps.frameSelectionOrAll
  * @param {Function} deps.setMenuToggle
- * @param {Function} deps.toggleUnfold / deps.toggleCadnano
+ * @param {Function} deps.toggleUnfold / deps.toggleCadnano / deps.toggleHelicalAxisLines
  * @param {Function} deps.savePartToAssembly / deps.saveAssemblyAsGuarded / deps.setAssemblyWorkspacePath
  * @param {Function} deps.showWelcome / deps.ooClose / deps.cancelTranslateRotateTool
  * @param {Function} deps.watchDeformState / deps.deformEscape / deps.popGroupUndo
@@ -51,7 +51,7 @@ export function initKeyboardShortcuts(deps) {
     isUnfoldActive, isDeformActive,
     captureCurrentCamera, frameSelectionOrAll,
     setMenuToggle,
-    toggleUnfold, toggleCadnano,
+    toggleUnfold, toggleCadnano, toggleHelicalAxisLines,
     savePartToAssembly, saveAssemblyAsGuarded, setAssemblyWorkspacePath,
     showWelcome, ooClose, cancelTranslateRotateTool,
     watchDeformState, deformEscape, popGroupUndo,
@@ -268,6 +268,13 @@ export function initKeyboardShortcuts(deps) {
     description: 'Toggle cadnano mode',
     blockedInInput: true,
     handler() { toggleCadnano() },
+  })
+
+  registerShortcut({
+    key: '/', ctrl: false,
+    description: 'Toggle helical axis lines',
+    blockedInInput: true,
+    handler() { toggleHelicalAxisLines() },
   })
 
   // Tab — cycle the unified selectionLevel: cluster → strand → domain → end →

@@ -224,6 +224,7 @@ def production_rmsf(
     reference_conf_path,
     include_average_frame: bool = False,
     copies: bool = False,
+    align: bool = True,
 ) -> dict:
     """Per-NUCLEOTIDE average position + RMSF (root-mean-square fluctuation, nm)
     over a production trajectory — the flexibility map.
@@ -271,7 +272,7 @@ def production_rmsf(
         frames = read_trajectory_frames_full(path, design, copies=copies)
         box = _parse_box_nm(path)
         for fr in frames:
-            aligned = (unwrap_align_to_reference(fr, ref, design, box)
+            aligned = (unwrap_align_to_reference(fr, ref, design, box, align=align)
                        if box is not None and np.all(box > 0) else fr)
             n_frames += 1
             for k, v in aligned.items():
@@ -331,7 +332,7 @@ _PRODUCTION_RMSF_CACHE_MAX = 4
 
 
 def production_rmsf_cached(design, production_traj_path, reference_conf_path,
-                           *, copies: bool = False) -> dict:
+                           *, copies: bool = False, align: bool = True) -> dict:
     """LRU-cached :func:`production_rmsf` including its average reconstruction frame.
 
     File size+mtime signatures naturally invalidate running trajectories as they
@@ -345,14 +346,15 @@ def production_rmsf_cached(design, production_traj_path, reference_conf_path,
              if isinstance(production_traj_path, (list, tuple))
              else [production_traj_path])
     key = (tuple(_traj_file_sig(p) for p in paths), _traj_file_sig(reference_conf_path),
-           bool(copies))
+           bool(copies), bool(align))
     if _PRODUCTION_RMSF_CACHE is not None:
         cached = _PRODUCTION_RMSF_CACHE.get(key)
         if cached is not None:
             _PRODUCTION_RMSF_CACHE.move_to_end(key)
             return cached
     result = production_rmsf(
-        design, paths, reference_conf_path, include_average_frame=True, copies=copies)
+        design, paths, reference_conf_path, include_average_frame=True, copies=copies,
+        align=align)
     if _PRODUCTION_RMSF_CACHE is None:
         _PRODUCTION_RMSF_CACHE = OrderedDict()
     _PRODUCTION_RMSF_CACHE[key] = result
@@ -1040,7 +1042,7 @@ def _kabsch_superpose(P, Q):
     return R, Pc @ R.T, Qc, Qmean
 
 
-def geometry_deviation_map(positions, reference_positions) -> dict:
+def geometry_deviation_map(positions, reference_positions, *, align_output: bool = True) -> dict:
     """PER-NUCLEOTIDE deviation of a relaxed/mean structure from the analytic design,
     after Kabsch superposition — the spatial breakdown of :func:`measure_geometry_rmsd`.
 
@@ -1075,9 +1077,11 @@ def geometry_deviation_map(positions, reference_positions) -> dict:
     aligned = Pa + Qmean                         # aligned mean positions in design frame
     out = []
     for i, k in enumerate(shared):
-        a1 = R @ cur_a1.get(k, np.zeros(3))      # rotate a1 into the aligned frame
+        a1 = (R @ cur_a1.get(k, np.zeros(3)) if align_output
+              else cur_a1.get(k, np.zeros(3)))
+        shown = aligned[i] if align_output else cur_pos[k]
         out.append({"helix_id": k[0], "bp_index": k[1], "direction": k[2], "copy": k[3],
-                    "backbone_position": aligned[i].tolist(),
+                    "backbone_position": shown.tolist(),
                     "nx": float(a1[0]), "ny": float(a1[1]), "nz": float(a1[2]),
                     "deviation": float(dev[i])})
     return {"positions": out, "min_deviation": float(dev.min()),
@@ -2318,7 +2322,7 @@ def _frame_cache_put(key, frame):
 
 
 def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200,
-                                *, copies: bool = False, progress=None):
+                                *, copies: bool = False, progress=None, align: bool = True):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
     Kabsch-align only the surviving frames to the design reference.  The seed
@@ -2339,7 +2343,7 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     from collections import OrderedDict
     if _ALIGNED_CACHE is None:
         _ALIGNED_CACHE = OrderedDict()
-    cache_key = _aligned_cache_key(stages, reference_conf_path, max_frames, copies)
+    cache_key = (_aligned_cache_key(stages, reference_conf_path, max_frames, copies), bool(align))
     hit = _ALIGNED_CACHE.get(cache_key)
     if hit is not None:
         try:
@@ -2444,7 +2448,7 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         aligned = {}
         missing = []
         for idx in needed:
-            hit = _frame_cache_get((tsig, ref_sig, copies, idx)) if ref_sig is not None else None
+            hit = _frame_cache_get((tsig, ref_sig, copies, bool(align), idx)) if ref_sig is not None else None
             if hit is not None:
                 aligned[idx] = hit
                 done += 1
@@ -2457,11 +2461,11 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
             box = _parse_box_nm(path)
             do_align = box is not None and np.all(box > 0)
             for idx, fr in parsed.items():   # the per-frame align is the load's heavy work
-                af = (unwrap_align_to_reference(fr, ref, design, box, plan=_plan_for(fr))
+                af = (unwrap_align_to_reference(fr, ref, design, box, plan=_plan_for(fr), align=align)
                       if do_align else fr)
                 aligned[idx] = af
                 if ref_sig is not None:
-                    _frame_cache_put((tsig, ref_sig, copies, idx), af)
+                    _frame_cache_put((tsig, ref_sig, copies, bool(align), idx), af)
                 done += 1
                 if progress:
                     progress(done, total_kept)
@@ -2521,6 +2525,7 @@ def composite_trajectory(
     reference_conf_path,
     max_frames: int = 200,
     progress=None,
+    align: bool = True,
 ) -> dict:
     """Build the composite scrub-able trajectory for the View-trajectory player.
 
@@ -2547,7 +2552,8 @@ def composite_trajectory(
     """
     # copies=True → loop-insertion copies stay distinct so every loop bead scrubs.
     key_list, ordered, out_stages, markers = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True, progress=progress)
+        design, stages, reference_conf_path, max_frames, copies=True, progress=progress,
+        align=align)
     if not ordered:
         return {"n_frames": 0, "n_nucleotides": len(key_list),
                 "keys": [list(k) for k in key_list], "frames": [],
@@ -3040,14 +3046,15 @@ def pack_surface_bin(data: dict) -> bytes:
 
 
 def composite_trajectory_atomistic(design, stages, reference_conf_path,
-                                   frame_indices, max_frames: int = 200) -> dict:
+                                   frame_indices, max_frames: int = 200,
+                                   align: bool = True) -> dict:
     """Per-frame atomistic flat-XYZ for the requested composite-frame indices.
     Returns ``{ "<idx>": [x0,y0,z0, …] }`` — the SAME wire format as
     ``/design/features/atomistic-batch`` (atom-serial order, nm). Frame indices
     match ``composite_trajectory``'s ``frames`` ordering exactly."""
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True)
-    akey = _aligned_cache_key(stages, reference_conf_path, max_frames, True)
+        design, stages, reference_conf_path, max_frames, copies=True, align=align)
+    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True), bool(align))
     out: dict[str, list] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(ordered):
@@ -3064,14 +3071,15 @@ def composite_trajectory_atomistic(design, stages, reference_conf_path,
 def composite_trajectory_surface(design, stages, reference_conf_path, frame_indices,
                                  color_mode: str = "strand", probe_radius: float = 0.28,
                                  grid_spacing: float = 0.20, radius_inflate: float = 1.30,
-                                 smooth: int = 15, max_frames: int = 200) -> dict:
+                                 smooth: int = 15, max_frames: int = 200,
+                                 align: bool = True) -> dict:
     """Per-frame molecular surface for the requested composite-frame indices.
     Returns ``{ "<idx>": {vertices, faces, vertex_colors?} }`` — the SAME wire
     format as ``/design/features/surface-batch``. Topology can vary per frame
     (marching cubes); the frontend rebuilds the buffer on a count change."""
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True)
-    akey = _aligned_cache_key(stages, reference_conf_path, max_frames, True)
+        design, stages, reference_conf_path, max_frames, copies=True, align=align)
+    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True), bool(align))
     sparams = (color_mode, round(probe_radius, 4), round(grid_spacing, 4),
                round(radius_inflate, 4), int(smooth))
     out: dict[str, dict] = {}

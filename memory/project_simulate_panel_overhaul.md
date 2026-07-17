@@ -9,6 +9,24 @@ metadata:
 
 # Simulate panel UX overhaul (2026-07-08, in progress)
 
+## ⚡ Step counts in the master Jobs line + Stop moved under Launch — 2026-07-16 (out-of-session work)
+
+- **`simulate_jobs.js` gained exported `masterStepText`** (+ private `_stepTotal`): the unified Jobs
+  status now reads e.g. `25% · 250 / 1,000 steps · 750 left` for EVERY engine, plus a stage/segment
+  count (`2/5 stages`; NAMD says `segments`). Per-engine total resolution order: direct
+  `steps|total_steps|n_steps` → sum over `segments` (NAMD) / `stages` (others) → mrDNA
+  `coarse_steps + fine_steps` → fallback 1 ("linear FEM solves are one solve step; nonlinear
+  CanDo/SNUPI normally expose n_steps"). Completed steps take an explicit
+  `current_step|completed_steps|steps_completed` when finite, else `total * pct/100`; both clamped to
+  `[0, total]`.
+- **CanDo + mrDNA job LISTS now carry live progress inline** (`list_cando_jobs`, `list_mrdna_jobs`):
+  a `status == "running"` job gains `progress_fraction` (4dp, 0.0 when unknown) and `eta_seconds`, so
+  the panel needs no per-job progress poll. **Non-running jobs do NOT carry these keys at all** —
+  don't assume presence.
+- **Stop buttons relocated** (`main.js` `_moveStopBelowLaunch`): oxDNA/mrDNA/CanDo Stop now sits
+  full-width directly under that engine's launch controls, above the unified Jobs card. **NAMD is
+  deliberately excluded** — its Relax/Production buttons already morph into Stop in place.
+
 ## ⚡ Anchors: multi-select Add + halo no longer waits on the E-field + highlight-all toggle + click-a-chip focus — SHIPPED 2026-07-16
 User: "add multi-selected entries, and added entries keep a purple glow — today an anchor doesn't
 glow until the sim starts and you click the job entry."

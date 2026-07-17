@@ -9,6 +9,20 @@ metadata:
 
 # UX Overhaul — Approved Deferred Work (2026-05-16)
 
+## Shipped 2026-07-16 — workspace list hygiene (out-of-session work)
+
+- **Engine job folders hidden from the file lists.** `ui/sim_folders.js` (new, pure + tested):
+  `SIM_FOLDER_NAMES` + `isSimFolderPath(path)` + `visibleWorkspaceEntries(entries, showSimFolders)`.
+  `file_browser.js` and `library_panel.js` filter through it; each toolbar gained a **"show sim
+  folders"** checkbox, OFF by default. Matching is **root-segment only** — `Projects/md_jobs/x.nadoc`
+  stays VISIBLE (pinned by test); and it is a heuristic, not just the literal set:
+  `root.endsWith('_jobs')` means a future engine's `*_jobs` folder auto-hides with no code change.
+  Backslashes are normalised first.
+- **Left sidebar width is now per design file.** `sidebar_resize.js` `leftWidthStorageKey(path)` →
+  `nadoc.leftPanel.width.file:<encodeURIComponent(path)>`; re-read on the existing
+  `nadoc:workspace-path-change`. **An unsaved design (null path) reuses the legacy global key**
+  `nadoc.leftPanel.width` (pinned). The RIGHT panel width stays global — deliberate.
+
 Audit session 2026-05-16 produced ~25 UX flow-change proposals across the
 codebase. The user reviewed and decided each one. The smaller items were
 implemented in that session (see "Shipped" below). The rest are queued here

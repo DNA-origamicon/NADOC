@@ -1261,6 +1261,7 @@ export function exportPdb(positions = null, visualization = null) {
         mode: visualization.mode,
         job_id: visualization.jobId,
         frame: visualization.trajectory?.frame ?? null,
+        align: visualization.align ?? true,
       } : null,
       coloring: visualization?.coloring || null,
     }),
@@ -2113,13 +2114,13 @@ export const listLammpsJobs      = ()            => _oxdnaJSON('GET',  '/lammps/
 export const getLammpsJob        = (id)          => _oxdnaJSON('GET',  `/lammps/jobs/${id}`)
 export const stopLammpsJob       = (id)          => _oxdnaJSON('POST', `/lammps/jobs/${id}/stop`)
 /** Scrub-able trajectory ({ready, keys, frames, stages, markers}) — same shape as the oxDNA one. */
-export const getLammpsTrajectory = (id, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/trajectory`, undefined, { signal })
+export const getLammpsTrajectory = (id, align=true, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
 /** Final structure as applyFemPositions positions (the display view); align superposes onto design pose. */
 export const getLammpsDisplay    = (id, align=true, signal) => _oxdnaJSON('GET', `/lammps/jobs/${id}/display?align=${align}`, undefined, { signal })
 /** Per-base average position + RMSF (flexibility map) — same shape as the oxDNA one. */
-export const getLammpsRmsf       = (id, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/rmsf`, undefined, { signal })
+export const getLammpsRmsf       = (id, align=true, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
 /** Per-base deviation (nm) from the design pose (deviation map) — same shape as the oxDNA one. */
-export const getLammpsDeviation  = (id, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/deviation`, undefined, { signal })
+export const getLammpsDeviation  = (id, align=true, signal)  => _oxdnaJSON('GET',  `/lammps/jobs/${id}/deviation?align=${align}`, undefined, { signal })
 
 /** Forecast free-disk-after for an oxDNA relaxation run (same body as createOxdnaJob). */
 export const estimateOxdnaDisk   = (body)        => _oxdnaJSON('POST', '/oxdna/jobs/estimate-disk', body)
@@ -2151,7 +2152,7 @@ export const stopAutorefine      = (id)          => _oxdnaJSON('POST', `/design/
 export const applyAutorefineSkips = (id, period) => _oxdnaJSON('POST',
   `/design/oxdna/autorefine/${id}/apply${period != null ? `?period=${period}` : ''}`)
 /** Per-nucleotide deviation map of a job's production mean structure vs its design. */
-export const getOxdnaDeviation   = (id, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/deviation`, undefined, { signal })
+export const getOxdnaDeviation   = (id, align=true, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/deviation?align=${align}`, undefined, { signal })
 /** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a
  *  job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getOxdnaMetricsRun`. */
 export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)
@@ -2169,19 +2170,19 @@ export const getOxdnaHealth      = (id)          => _oxdnaJSON('GET',  `/oxdna/j
 export const getOxdnaMetrics     = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/metrics`)
 export const getOxdnaDisplay     = (id, align = true, signal) => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/display?align=${align ? 'true' : 'false'}`, undefined, { signal })
 export const getOxdnaRmsd        = (id)          => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsd`)
-export const getOxdnaRmsf        = (id, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf`, undefined, { signal })
-export const getOxdnaTrajectory  = (id, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory`, undefined, { signal })
+export const getOxdnaRmsf        = (id, align=true, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
+export const getOxdnaTrajectory  = (id, align=true, signal)  => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
 /** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast. */
 export const getOxdnaTrajectoryMeta = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-meta`)
 /** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
 export const getOxdnaTrajectoryProgress = (id)   => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-progress`)
 /** Per-frame ATOMISTIC coords for trajectory frame indices (atomistic-batch wire
  *  format). Heavy — pass a downsampled index set. */
-export const getOxdnaFramesAtomistic = (id, frameIndices) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic`, { frame_indices: frameIndices })
+export const getOxdnaFramesAtomistic = (id, frameIndices, align=true) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic?align=${align}`, { frame_indices: frameIndices })
 /** Per-frame SURFACE meshes for trajectory frame indices (surface-batch wire format). */
-export const getOxdnaFramesSurface = (id, frameIndices, params = {}) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface`, { frame_indices: frameIndices, ...params })
+export const getOxdnaFramesSurface = (id, frameIndices, params = {}, align=true) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface?align=${align}`, { frame_indices: frameIndices, ...params })
 /** All-atom flat-XYZ for the relaxed-display structure ({ready, atomistic:[x,y,z,…]}) —
  *  lets the OxDNA-display toggle drive the atomistic rep, not just CG beads. */
 export const getOxdnaDisplayAtomistic = (id, align = true) =>
@@ -2217,11 +2218,11 @@ export const getDesignSurfaceBin = ({ color_mode = 'strand', probe_radius = 0.28
   _oxdnaBin('GET', `/design/surface-bin?color_mode=${color_mode}`
                    + `&probe_radius=${probe_radius}&detail=${detail}`)
 /** All-atom flat-XYZ for the flexibility-map AVERAGE structure ({ready, atomistic:[…]}). */
-export const getOxdnaRmsfAtomistic = (id) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-atomistic`)
+export const getOxdnaRmsfAtomistic = (id, align=true) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-atomistic?align=${align}`)
 /** Molecular surface for the flexibility-map AVERAGE structure ({ready, surface:{…}}). */
-export const getOxdnaRmsfSurface = (id, params = {}) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-surface`, params)
+export const getOxdnaRmsfSurface = (id, params = {}, align=true) =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/rmsf-surface?align=${align}`, params)
 
 // ── Ephemeral LIVE oxDNA field session (routes_oxdna_live.py) ────────────────
 // An in-process oxpy run that stores NO job — seeded from a completed relaxed

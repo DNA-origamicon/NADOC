@@ -75,6 +75,8 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Feature log / anim:** feature_log_overhaul · animation_fade · animation_all_reprs · assembly_configurations
 
+**Workspace / UX:** ux_overhaul (file browser, library panel, sidebar widths, sim-folder hiding)
+
 **Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · mixed_representation · strand_animations ·
 reference_geometry · protein_attachment · headless_build · sphere_impostors
 

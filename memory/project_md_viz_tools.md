@@ -79,3 +79,35 @@ at DISTINCT positions (was 1212 distinct = 32 colliding). The specific `fc6a9157
 cleaned up before this session, so the synthesized-but-real DCD stands in for the live job.
 
 **Verification gotchas (cost real time).** The dev backend uses uvicorn `--reload`; editing backend files under load WEDGES it on WSL2 (the smoke config runs WITHOUT --reload for this reason). The single-worker dev backend SERIALIZES requests, so concurrent heavy trajectory/RMSF reads + a Playwright run starve each other. Headless Playwright boot can CLEAR the active design (the trajectory/RMSF routes need it via get_or_404 → 404 "no trajectory yet" is really "no design"). The stable e2e (e2e/md_viz_tools.spec.js) asserts the toggle FIRES the right endpoint (page.waitForRequest) rather than waiting for the multi-minute compute — proves DOM→handler→mdViz→adapter→endpoint without the flaky slow path. See also [[md-job-system]] and [[md-panel-implementation-status-and-algorithm-details]].
+
+
+## "Align to design pose" now governs EVERY visualization (2026-07-16, out-of-session work)
+
+The Align checkbox moved out from under the oxDNA-display radio to the top of the Visualizations card
+and now applies to **trajectory, flexibility (RMSF) and deviation** too, not just the relaxed display.
+Flipping it live re-fetches whichever viz is active; the PDB export honours it
+(`align: active[0].alignment?.() ?? true`). Both display controllers expose `alignment: () => _align`.
+
+**HAZARD — `align` was inserted BEFORE `signal` in the client signatures:**
+`getOxdnaTrajectory(id, align = true, signal)`, and likewise `getOxdnaRmsf` / `getOxdnaDeviation` /
+`getLammpsTrajectory` / `getLammpsRmsf` / `getLammpsDeviation`. **Any caller not updated silently
+passes an AbortSignal as `align`** — it will not throw. Check the arg order before adding a caller.
+
+**Caches are keyed on align** (frontend `_rmsfCache = {jobId, align, resp}`; backend
+`_PRODUCTION_RMSF_CACHE`, `_ALIGNED_CACHE`, per-frame `_frame_cache`) — without this, toggling served
+stale cross-mode frames.
+
+**`align=False` does NOT change deviation NUMBERS.** In `geometry_deviation_map`, `dev` is always
+computed after Kabsch; `align_output=False` only changes the EMITTED `backbone_position` (raw
+`cur_pos`) and leaves `a1`/`nx,ny,nz` unrotated. Unaligned coords still carry alignment-based
+magnitudes — do not read it as "deviation in the raw frame".
+
+Backend: every oxDNA/LAMMPS trajectory/rmsf/deviation route + `frames-atomistic|surface`,
+`rmsf-atomistic|surface` gained `align: bool = True` (back-compatible). `PdbVisualizationSource` gained
+`align`. **Bug fixed:** `GET /lammps/jobs/{id}/display` already accepted `align` but never forwarded it
+to `composite_trajectory` — it was silently ignored. NB `composite_trajectory` is called POSITIONALLY
+in `routes_oxdna.py` (`…, ref, 200, _prog, align`).
+
+Also: `design_renderer.js` sim-frame path now calls `refreshAllGlow()` — "simulation frames mutate the
+existing backbone entry positions rather than replacing currentGeometry", so the store subscriber
+cannot observe playback/scrub mutations and position-backed overlays must be refreshed per frame.

@@ -166,31 +166,61 @@ export function engineLabel(node) {
   }
 }
 
+function _stepTotal(node) {
+  const direct = Number(node?.steps ?? node?.total_steps ?? node?.n_steps)
+  if (Number.isFinite(direct) && direct > 0) return direct
+  const parts = node?.engine === 'namd' ? (node.segments || []) : (node.stages || [])
+  const values = parts.map(p => Number(p.steps ?? p.total_steps ?? p.num_steps ?? p.n_steps) || 0)
+  const sum = values.reduce((a, b) => a + b, 0)
+  if (sum > 0) return sum
+  if (node?.engine === 'mrdna') return (Number(node.coarse_steps) || 0) + (Number(node.fine_steps) || 0)
+  // Linear FEM solves are one solve step; nonlinear CanDo/SNUPI normally expose n_steps.
+  if (node?.engine === 'cando' || node?.engine === 'snupi') return 1
+  return 0
+}
+
+/** Engine-symmetric numeric progress appended beneath the unified Jobs bar. */
+export function masterStepText(node) {
+  if (!node) return ''
+  const pct = masterProgressPct(node)
+  const total = _stepTotal(node)
+  if (!(total > 0)) return `${pct}%`
+  const explicit = Number(node.current_step ?? node.completed_steps ?? node.steps_completed)
+  const completed = Number.isFinite(explicit)
+    ? Math.max(0, Math.min(total, Math.round(explicit)))
+    : Math.max(0, Math.min(total, Math.round(total * pct / 100)))
+  const left = Math.max(0, total - completed)
+  return `${pct}% · ${completed.toLocaleString()} / ${total.toLocaleString()} steps · ${left.toLocaleString()} left`
+}
+
 /** One-line master status text for the selected node (engine-symmetric). */
 export function masterStatusText(node) {
   if (!node) return 'Select a run above, or press ▶ Relax to start one.'
   const eng = engineLabel(node)
   if (node.engine === 'lammps') {
-    if (node.status === 'running') return `${eng} · running · ${masterProgressPct(node)}%`
-    return `${eng} · ${node.status}`
+    return `${eng} · ${node.status} · ${masterStepText(node)}`
   }
-  if (node.production_state === 'running') return `${eng} · production running`
-  if (node.production_state === 'done') return `${eng} · production done`
-  if (node.production_state === 'failed') return `${eng} · production failed`
+  if (node.production_state === 'running') return `${eng} · production running · ${masterStepText(node)}`
+  if (node.production_state === 'done') return `${eng} · production done · ${masterStepText(node)}`
+  if (node.production_state === 'failed') return `${eng} · production failed · ${masterStepText(node)}`
   // NAMD (and any engine with a live/segment fraction) shows overall % while running so a
   // single-segment production reads as progress, not a bare "running".
-  if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterProgressPct(node)}%`
+  if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterStepText(node)}`
   // SNUPI reports a REAL fraction (a fixed GJF step count) + an ETA measured from the observed rate,
   // plus the current phase — building the hydrodynamic friction is a slow, step-less phase, so name it
   // or the bar looks stuck. This line sits directly under the master bar.
   if (node.engine === 'snupi' && node.status === 'running') {
-    const parts = [`${eng} · running · ${masterProgressPct(node)}%`]
+    const parts = [`${eng} · running · ${masterStepText(node)}`]
     const eta = Number(node.eta_seconds)
     if (Number.isFinite(eta) && eta > 0) parts.push(`~${formatEta(eta)} left`)
     if (node.phase) parts.push(node.phase)
     return parts.join(' · ')
   }
-  return `${eng} · ${node.status}`
+  const stages = node.stages || node.segments || []
+  const stageText = stages.length
+    ? `${stages.filter(s => s.status === 'done').length}/${stages.length} ${node.engine === 'namd' ? 'segments' : 'stages'}`
+    : ''
+  return [`${eng} · ${node.status}`, stageText, masterStepText(node)].filter(Boolean).join(' · ')
 }
 
 /** Compact ETA: seconds under a minute, else m:ss — a multi-minute RPY solve reads badly as "412s". */

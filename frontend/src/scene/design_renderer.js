@@ -1009,6 +1009,10 @@ export function initDesignRenderer(scene, storeRef) {
       // frame when present, else re-interpolate from the now-live endpoint
       // positions (reverted-to-geometry when updates===null).
       this.applyClusterCrossoverUpdate([])
+      // Simulation frames mutate the existing backbone entry positions rather than
+      // replacing currentGeometry. Refresh position-backed overlays on every frame;
+      // the store subscriber cannot observe these playback/scrub mutations.
+      this.refreshAllGlow()
     },
 
     /** Snapshot of the simulation/FEM positions currently driving the model. */

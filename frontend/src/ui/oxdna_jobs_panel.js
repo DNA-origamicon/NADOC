@@ -769,7 +769,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _devAbort = abort
     _devBusy = true; _updateButtons(_selectedJob())
     _setDevStatus('Loading deviation map…')
-    const resp = await api.getOxdnaDeviation(_selectedId, abort.signal)
+    const resp = await api.getOxdnaDeviation(
+      _selectedId, alignToggle ? alignToggle.checked : true, abort.signal)
     if (abort.signal.aborted) return
     if (_devAbort === abort) _devAbort = null
     _devBusy = false; _updateButtons(_selectedJob())
@@ -1698,7 +1699,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _flexBusy = true
     _setFlexStatus('Computing average structure + RMSF…', _C.accent)
     _setFlexBar('computing')
-    const r = await oxdnaDisplay.displayRmsf(_selectedId)
+    const r = await oxdnaDisplay.displayRmsf(
+      _selectedId, { align: alignToggle ? alignToggle.checked : true })
     _flexBusy = false
     if (r.ok) {
       _setFlexBar('done')
@@ -1800,7 +1802,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }, 250)
     let r
     try {
-      r = await oxdnaDisplay.loadTrajectory(_selectedId)
+      r = await oxdnaDisplay.loadTrajectory(
+        _selectedId, alignToggle ? alignToggle.checked : true)
     } finally {
       clearInterval(poll)
     }
@@ -1953,11 +1956,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }
     _setDisplayStatus(text, color)
   }
-  // Re-fetch with the new alignment whenever the Align toggle flips (only while the
-  // relaxed display is on).
-  alignToggle?.addEventListener('change', () => {
-    if (_lammpsMode) { if (displayToggle?.checked) _lammpsViz('display'); return }
-    if (displayToggle?.checked && oxdnaDisplay?.mode() === 'relaxed') _refreshDisplay()
+  // Re-fetch whichever visualization is active whenever alignment changes.
+  alignToggle?.addEventListener('change', async () => {
+    if (_lammpsMode) {
+      const kind = displayToggle?.checked ? 'display' : flexToggle?.checked ? 'flex'
+        : autorefineDevToggle?.checked ? 'deviation' : trajToggle?.checked ? 'traj' : null
+      if (kind) await _lammpsViz(kind)
+      return
+    }
+    if (displayToggle?.checked) await _refreshDisplay()
+    else if (flexToggle?.checked) await _refreshFlex()
+    else if (autorefineDevToggle?.checked) await _refreshDeviation()
+    else if (trajToggle?.checked) await _refreshTraj()
   })
   function _setDisplayOff() {
     // Always restore (and bump the controller's epoch) so an in-flight relaxed
@@ -2030,21 +2040,21 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       _setDisplayStatus(r.ok ? `Showing the final structure (${r.n} beads)` : (r.reason || 'not ready'),
                         r.ok ? _C.ok : _C.warn)
     } else if (kind === 'flex') {
-      const r = await lammpsDisplay.displayRmsf(id)
+      const r = await lammpsDisplay.displayRmsf(id, alignToggle ? alignToggle.checked : true)
       if (r.ok) {
         _setFlexStatus(`Avg structure · RMSF ${_fmtNm(r.min)} → ${_fmtNm(r.max)} · ${r.nFrames ?? '?'} frames`, _C.ok)
         _flexScale.show({ title: 'RMSF (nm)', min: r.min, max: r.max, mapType: 'flex',
           onRecolor: (lo, hi, cmap) => lammpsDisplay.recolorRmsf(lo, hi, cmap) })
       } else { _setFlexStatus(r.reason || 'not ready', _C.warn); if (flexToggle) flexToggle.checked = false; _syncVizOffRadio() }
     } else if (kind === 'deviation') {
-      const r = await lammpsDisplay.displayDeviation(id)
+      const r = await lammpsDisplay.displayDeviation(id, alignToggle ? alignToggle.checked : true)
       if (r.ok) {
         _setDevStatus(`Mean vs design — ${_fmtNm(r.min)} (green) → ${_fmtNm(r.max)} (red), mean ${_fmtNm(r.mean)}`, '#3fb950')
         _flexScale.show({ title: 'Deviation (nm)', min: r.min, max: r.max, mapType: 'deviation',
           onRecolor: (lo, hi, cmap) => lammpsDisplay.recolorDeviation(lo, hi, cmap) })
       } else { _setDevStatus(r.reason || 'not ready', _C.warn); if (autorefineDevToggle) autorefineDevToggle.checked = false; _syncVizOffRadio() }
     } else if (kind === 'traj') {
-      const r = await lammpsDisplay.loadTrajectory(id)
+      const r = await lammpsDisplay.loadTrajectory(id, alignToggle ? alignToggle.checked : true)
       if (r.ok) { if (trajControls) trajControls.style.display = ''; trajPlayer.setTrajectory(r.n_frames, r.markers)
         _setTrajStatus(`${r.n_frames} frames — play or scrub`, _C.ok) }
       else { _setTrajStatus(r.reason || 'no trajectory', _C.warn); if (trajToggle) trajToggle.checked = false; _syncVizOffRadio() }

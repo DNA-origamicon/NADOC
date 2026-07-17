@@ -2108,6 +2108,13 @@ async function main() {
     // the grid button on).  _viewToolButtons is created later in main(); this only
     // fires on user interaction, so the lazy reference is safe.
     setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
+    getStructureBounds: () => {
+      const box = new THREE.Box3()
+      for (const entry of designRenderer.getBackboneEntries?.() || []) if (entry.pos) box.expandByPoint(entry.pos)
+      return box.isEmpty() ? null : {
+        min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z],
+      }
+    },
     // Toggling the hard floor while Live is running recomposes the live engine.
     onChange: () => oxdnaLive?.onElementsChanged?.(),
   })
@@ -2149,6 +2156,23 @@ async function main() {
   // run is in flight) — otherwise it would be stranded in the panel below.
   _moveRunControls(runControlEls.snupi, 'snupi-launch-row', 'snupi-stop-row')
   _moveRunControls(runControlEls.namd, 'md-launch-row')
+
+  // Explicit Stop buttons used to live deep inside selected-job detail cards. Keep
+  // them directly below the launch controls and above the unified Jobs card. NAMD's
+  // Relax/Production buttons already morph into Stop buttons in place.
+  const _moveStopBelowLaunch = (host, buttonId) => {
+    const button = document.getElementById(buttonId)
+    if (!host || !button) return
+    const row = document.createElement('div')
+    row.className = 'simulate-engine-stop-row'
+    row.style.cssText = 'display:flex;gap:5px;margin-bottom:6px'
+    button.style.width = '100%'
+    row.appendChild(button)
+    host.appendChild(row)
+  }
+  _moveStopBelowLaunch(runControlEls.oxdna, 'oxdna-jobs-stop-btn')
+  _moveStopBelowLaunch(runControlEls.mrdna, 'mrdna-jobs-stop-btn')
+  _moveStopBelowLaunch(runControlEls.cando, 'cando-jobs-stop-btn')
 
   // NAMD: tuck the launch CONFIG (Protocol, Run-on, production steps / total time / note)
   // into the Advanced card — only the Relax/Production buttons (extracted above) stay out.
@@ -4050,6 +4074,14 @@ async function main() {
     _setMenuToggle('menu-view-axes', originAxes.visible)
   })
 
+  let _helicalAxisLinesVisible = true
+  function _toggleHelicalAxisLines() {
+    _helicalAxisLinesVisible = !_helicalAxisLinesVisible
+    designRenderer.setAxisArrowsVisible(_helicalAxisLinesVisible)
+    _setMenuToggle('menu-view-helical-axes', _helicalAxisLinesVisible)
+  }
+  document.getElementById('menu-view-helical-axes')?.addEventListener('click', _toggleHelicalAxisLines)
+
   // ── Orbit mode submenu (Multiscale / Turntable / Trackball) ─────────────────
   let _orbitMode = 'multiscale'
   function _setOrbitMode(mode) {
@@ -4400,6 +4432,7 @@ async function main() {
     setMenuToggle:            _setMenuToggle,
     toggleUnfold:             _toggleUnfold,
     toggleCadnano:            _toggleCadnano,
+    toggleHelicalAxisLines:   _toggleHelicalAxisLines,
     savePartToAssembly:       (opts) => _fileIo.savePartToAssembly(opts),
     saveAssemblyAsGuarded:    () => _fileSave.saveAssemblyAsGuarded(),
     setAssemblyWorkspacePath: _setAssemblyWorkspacePath,
@@ -6581,7 +6614,7 @@ async function main() {
   }
 
   // ── Sidebar resize handles ───────────────────────────────────────────────────
-  initSidebarResize()
+  initSidebarResize({ getWorkspacePath: () => _workspacePath })
 
   // ── Scene inspector (debug overlay) ──────────────────────────────────────────
   // Ctrl+Shift+I to toggle. Click any 3D object → console table + toast with
@@ -6897,6 +6930,7 @@ async function main() {
         name: `${active[1]}${modeName ? ` ${modeName}` : ''}`,
         engine: active[2], mode, jobId: active[0].activeJobId?.() ?? active[0].deformJobId?.() ?? null,
         positions, trajectory: active[0].trajectoryInfo?.() ?? null, coloring,
+        align: active[0].alignment?.() ?? true,
       }
     },
   })

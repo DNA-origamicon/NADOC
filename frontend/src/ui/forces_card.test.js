@@ -22,6 +22,8 @@ function makeGizmo() {
     getVector: () => vec.slice(),
     setOnChange: (cb) => { onChange = cb },
     setColor: vi.fn(),
+    setControlsVisible: vi.fn(),
+    setOffset: vi.fn(),
     isActive: () => active,
     _fireDrag: (v) => { vec = v.slice(); onChange?.(v) },   // a real drag also moves the gizmo vector
   }
@@ -56,7 +58,6 @@ function drive(bag, { enable = true, mag = null, dir = null } = {}) {
   if (dir) {
     setInput(document.getElementById(bag.dirX), dir[0])
     setInput(document.getElementById(bag.dirY), dir[1])
-    setInput(document.getElementById(bag.dirZ), dir[2])
   }
 }
 
@@ -74,21 +75,21 @@ describe('initForcesCard — per-engine field payload (parity pins)', () => {
   it('oxDNA: numeric magnitude + normalized dir', () => {
     mountIds(idTags('oxdna'))
     const api = initForcesCard({ engine: 'oxdna', gizmo: makeGizmo() })
-    drive(FORCES_FIELD_IDS.oxdna, { mag: 2.5, dir: [0, 0, 5] })
+    drive(FORCES_FIELD_IDS.oxdna, { mag: 2.5, dir: [90, 0] })
     expect(specOf(api)).toEqual({ field_pN: 2.5, dir: [0, 0, 1], enabled: true })
   })
 
   it('CanDo: numeric card (no gizmo), 45° dir normalized', () => {
     mountIds(idTags('cando'))
     const api = initForcesCard({ engine: 'cando' })
-    drive(FORCES_FIELD_IDS.cando, { mag: 3.1, dir: [1, 1, 0] })
+    drive(FORCES_FIELD_IDS.cando, { mag: 3.1, dir: [0, 45] })
     expect(specOf(api)).toEqual({ field_pN: 3.1, dir: [R2, R2, 0], enabled: true })
   })
 
   it('NAMD: default (md-*) ids, dir [0,2,1] normalized', () => {
     mountIds(idTags('namd'))
     const api = initForcesCard({ engine: 'namd' })
-    drive(FORCES_FIELD_IDS.namd, { mag: 1.7, dir: [0, 2, 1] })
+    drive(FORCES_FIELD_IDS.namd, { mag: 1.7, dir: [90, 63.434949] })
     const s = specOf(api)
     expect(s.field_pN).toBe(1.7)
     expect(s.enabled).toBe(true)
@@ -99,7 +100,7 @@ describe('initForcesCard — per-engine field payload (parity pins)', () => {
   it('LAMMPS: enabled field → derived getForces()-style payload; disabled → null', () => {
     mountIds(idTags('lammps'))
     const api = initForcesCard({ engine: 'lammps', gizmo: makeGizmo(), getAnchorCount: () => 0 })
-    drive(FORCES_FIELD_IDS.lammps, { mag: 4.2, dir: [0, 1, 0] })
+    drive(FORCES_FIELD_IDS.lammps, { mag: 4.2, dir: [0, 90] })
     const s = api.getFieldSpec()
     expect(s).toEqual({ field_pN: 4.2, dir: [0, 1, 0], enabled: true })
     clearDom()
@@ -110,17 +111,51 @@ describe('initForcesCard — per-engine field payload (parity pins)', () => {
     expect((s2.enabled && s2.field_pN > 0) ? 'on' : null).toBeNull()
   })
 
-  it('oxDNA gizmo drag: magnitude from arrow length, dir from the gizmo vector', () => {
+  it('oxDNA ring drag changes direction without changing magnitude', () => {
     mountIds(idTags('oxdna'))
     const g = makeGizmo()
     const api = initForcesCard({ engine: 'oxdna', gizmo: g })
     document.getElementById(FORCES_FIELD_IDS.oxdna.toggle).click()   // open → attach → active
-    drive(FORCES_FIELD_IDS.oxdna, { mag: null })                     // enable only
-    g._fireDrag([3, 0, 0])                                           // len 3 → (3-2)/4 = 0.25 pN
+    drive(FORCES_FIELD_IDS.oxdna, { mag: 2 })
+    g._fireDrag([1, 0, 0])
     const s = specOf(api)
-    expect(s.field_pN).toBeCloseTo(0.25, 6)
+    expect(s.field_pN).toBe(2)
     expect(s.dir).toEqual([1, 0, 0])
     expect(s.enabled).toBe(true)
+  })
+
+  it('angle spinners step by 5° and arrow offsets step by 2 nm without entering the field payload', () => {
+    mountIds(idTags('oxdna'))
+    const g = makeGizmo()
+    const api = initForcesCard({ engine: 'oxdna', gizmo: g })
+    const bag = FORCES_FIELD_IDS.oxdna
+    expect(document.getElementById(bag.dirX).step).toBe('5')
+    expect(document.getElementById(bag.dirY).step).toBe('5')
+    const offset = document.getElementById('efield-offset-x')
+    expect(offset.step).toBe('2')
+    setInput(offset, 6)
+    drive(bag, { mag: 3, dir: [90, 0] })
+    expect(specOf(api)).toEqual({ field_pN: 3, dir: [0, 0, 1], enabled: true })
+  })
+
+  it('rotation-control visibility toggle defaults on and hides only the controls', () => {
+    mountIds(idTags('oxdna'))
+    const g = makeGizmo()
+    initForcesCard({ engine: 'oxdna', gizmo: g })
+    const toggle = document.querySelector('.efield-controls-toggle input')
+    expect(toggle.checked).toBe(true)
+    toggle.checked = false
+    toggle.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(g.setControlsVisible).toHaveBeenLastCalledWith(false)
+  })
+
+  it('arrow stays world-origin based and its display offset never enters the payload', () => {
+    mountIds(idTags('oxdna'))
+    const g = makeGizmo()
+    const api = initForcesCard({ engine: 'oxdna', gizmo: g })
+    setInput(document.getElementById('efield-offset-x'), 6)
+    expect(g.setOffset).toHaveBeenLastCalledWith([6, 0, 0])
+    expect(api.getFieldSpec()).not.toHaveProperty('offset')
   })
 
   it('applyConfig repopulates magnitude + direction and enables the field', () => {

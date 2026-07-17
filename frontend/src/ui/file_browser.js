@@ -13,6 +13,7 @@
 
 import { showConfirm } from './primitives/confirm.js'
 import { confirmAndDeleteFile } from './file_deletion.js'
+import { visibleWorkspaceEntries } from './sim_folders.js'
 
 const S = {
   bg:       '#161b22',
@@ -67,6 +68,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     let _done    = false
     let _sortKey = 'modified'
     let _sortDir = 'desc'
+    let _showSimFolders = false
 
     // Track autodetection toggle state
     const _adState = { includeClusters: true, includeOverhangs: true }
@@ -118,7 +120,20 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
     newFolderBtn.addEventListener('mouseleave', () => { newFolderBtn.style.color = S.muted })
     newFolderBtn.addEventListener('click', () => { _newFolderActive = true; _renderList() })
 
-    toolbarEl.append(breadcrumbEl, newFolderBtn)
+    const simToggleLabel = document.createElement('label')
+    simToggleLabel.style.cssText = `display:flex;align-items:center;gap:4px;color:${S.muted};font-size:11px;white-space:nowrap;cursor:pointer`
+    const simToggle = document.createElement('input')
+    simToggle.type = 'checkbox'
+    simToggle.checked = false
+    simToggle.dataset.role = 'show-sim-folders'
+    simToggle.style.cssText = 'margin:0;accent-color:#58a6ff;cursor:pointer'
+    simToggle.addEventListener('change', () => {
+      _showSimFolders = simToggle.checked
+      _renderList()
+    })
+    simToggleLabel.append(simToggle, document.createTextNode('show sim folders'))
+
+    toolbarEl.append(breadcrumbEl, simToggleLabel, newFolderBtn)
 
     // ── Sort bar ─────────────────────────────────────────────────────────────
     const sortBarEl = document.createElement('div')
@@ -363,7 +378,7 @@ export function openFileBrowser({ title, mode, fileType = 'all', suggestedName =
       const folderSet = new Map()  // folderName → entry
       const files     = []
 
-      for (const e of _entries) {
+      for (const e of visibleWorkspaceEntries(_entries, _showSimFolders)) {
         if (prefix && !e.path.startsWith(prefix)) continue
         const rel = e.path.slice(prefix.length)
         if (!rel) continue

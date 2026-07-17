@@ -334,12 +334,16 @@ def test_pdb_atom_serials_unique_and_match_conect():
 
 def test_pdb_serials_hybrid36_past_9999():
     """Above 9999 atoms the serial field stays 5 chars and stays unique (hybrid-36)."""
-    # A design comfortably over the 9999 wrap point.
-    design = make_bundle_design(cells=[(0, 0), (0, 1), (1, 0)], length_bp=336, plane="XY")
+    # A design comfortably over the 9999 wrap point: 3 helices x 120 bp = 14400 atoms
+    # (~44% past the wrap), which is all this pin needs — the assert below fails loudly
+    # if the atom count per bp ever drops far enough to stop crossing it.
+    design = make_bundle_design(cells=[(0, 0), (0, 1), (1, 0)], length_bp=120, plane="XY")
     model = build_atomistic_model(design)
     assert len(model.atoms) > 9999, "fixture not large enough to cross the wrap point"
 
-    pdb = export_pdb(design)
+    # Reuse the model just built: export_pdb() would otherwise run a second, identical
+    # all-atom reconstruction of the same design.  Byte-identical output either way.
+    pdb = export_pdb(design, model=model)
     serials = _atom_serial_fields(pdb)
     assert len(serials) == len(set(serials))
     dangling = _conect_tokens(pdb) - set(serials)

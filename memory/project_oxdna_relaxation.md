@@ -1,5 +1,28 @@
 # Project: Local oxDNA Relaxation Runner + Display
 
+## ⚡ Hard surface: absolute world POSITION replaces the clearance offset — 2026-07-16 (out-of-session work)
+
+The Offset slider became a **"Position" number box in nm** — you type the plane's absolute world-axis
+coordinate; changing **Side snaps it to structure contact**; the scene grid renders exactly there.
+- New pure fns (tested) in `scene/oxdna_floor_math.js`: `floorContactCoordinate`,
+  `floorClearanceFromAbsolute`, `floorAbsoluteFromClearance`. `ui/oxdna_floor_setup.js` gained a
+  `getStructureBounds` dep (main.js builds a `THREE.Box3` from `designRenderer.getBackboneEntries()`).
+- **THE BACKEND STILL SPEAKS CLEARANCE — the UI is the conversion boundary.** `getSurfaceSpec()`
+  converts on the way out; sign convention is `const sign = axis[0] === '-' ? 1 : -1`. `applyConfig`
+  PREFERS a persisted `surface.position_nm` and only derives from `offset_nm` + bounds as a fallback.
+  No bounds available → conversions degrade to identity.
+- `view_tool_buttons.setSurfaceGrid({…, positionNm})` now drives grid placement purely from the
+  absolute coordinate (`offsetNm: 0`); the legacy bbox±offset path survives only when `positionNm` is
+  null/non-finite. **No per-frame refresh — the simulation wall is fixed in world space** and must not
+  follow trajectory entries as they move.
+- **Backend persists where the wall actually landed.** `routes_oxdna._wall_axis_position_nm(wall_meta)`
+  converts oxDNA's plane form (`dir·r + position = 0`, oxDNA units) → world nm; `create_oxdna_job` and
+  `append_oxdna_run` write `job.run_config["surface"]["position_nm"]` (response-shape addition).
+  Why: "the descriptor's offset alone is insufficient after the structure moves or a trajectory is
+  scrubbed; visualization must render the exact plane oxDNA used at run start."
+  Unit test in `tests/test_oxdna_surface.py` pins the sign convention (a `-Y` normal ⇒ world Y has the
+  opposite sign from the scalar along the normal).
+
 **Status:** PHASE 1 SHIPPED + USER-VALIDATED 2026-06-14. Full relax→production→analyze loop: staged CUDA
 relaxation + mutual traps + production, oxDNA-HBList base-pair health, PBC-unwrap + Kabsch-aligned +
 true-backbone display with following crossover arcs, per-design job filtering, production "ready" + button

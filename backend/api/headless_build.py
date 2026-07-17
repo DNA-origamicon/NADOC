@@ -41,6 +41,8 @@ from backend.api.crud import (
     ForcedLigationRequest,
     HalfCrossoverRequest,
     NickRequest,
+    OverhangBindingCreateRequest,
+    OverhangBindingPatchRequest,
     OverhangConnectionCreateRequest,
     OverhangExtrudeRequest,
     PlaceCrossoverRequest,
@@ -49,6 +51,8 @@ from backend.api.crud import (
     RelaxLinkerRequest,
     StrandEndResizeEntry,
     StrandEndResizeRequest,
+    SubDomainPatchRequest,
+    SubDomainSplitRequest,
     add_bundle_continuation as _route_extrude,
     add_bundle_deformed_continuation as _route_deformed_continuation,
     add_bundle_segment as _route_extrude_segment,
@@ -63,20 +67,25 @@ from backend.api.crud import (
     apply_connection_version as _route_apply_connection_version,
     create_bundle as _route_create_bundle,
     create_connection_version as _route_create_connection_version,
+    create_overhang_binding as _route_create_overhang_binding,
     create_overhang_connection as _route_create_overhang_connection,
     delete_crossover as _route_delete_crossover,
     delete_forced_ligation as _route_delete_forced_ligation,
+    delete_overhang_binding as _route_delete_overhang_binding,
     delete_strand as _route_delete_strand,
     forced_ligation as _route_forced_ligation,
     get_deformed_frame as _route_deformed_frame,
     ligate_strand as _route_ligate,
     overhang_extrude as _route_overhang_extrude,
     patch_crossover_extra_bases as _route_set_xo_extra_bases,
+    patch_overhang_binding as _route_patch_overhang_binding,
+    patch_sub_domain as _route_patch_sub_domain,
     place_crossover as _route_place_crossover,
     relax_bond_endpoint as _route_relax_bond,
     relax_overhang_binding as _route_relax_overhang_binding,
     relax_overhang_connection as _route_relax_overhang_connection,
     select_loadout as _route_select_loadout,
+    split_sub_domain as _route_split_sub_domain,
     strand_end_resize as _route_strand_end_resize,
 )
 from backend.api.routes_duplex import (
@@ -135,6 +144,11 @@ from backend.core.flexible_relax import compute_relax_transforms
 from backend.core.models import Design, Direction, LatticeType, StrandType
 
 _scratch_counter = itertools.count()
+
+# Sentinel for "the caller did not supply this field". The PATCH routes branch on
+# ``model_fields_set``/``exclude_unset``, so a field must reach the request model
+# ONLY when explicitly passed — sending ``bound=None`` would read as an unbind.
+_UNSET = object()
 
 
 @contextlib.contextmanager
@@ -1177,6 +1191,161 @@ def relax_overhang_binding(binding_id: str) -> Design:
     Pin with :func:`tests.automation_harness.assert_binding_relaxed_pose`.
     """
     _route_relax_overhang_binding(binding_id)
+    return design_state.get_or_404()
+
+
+# ── direct overhang BINDINGS: sub-domain prep + create / bind / delete ─────────
+#
+# The creation half of the direct root-to-root binding path (the relax half is
+# ``relax_overhang_binding`` above).  Before these wrappers a script could only
+# RELAX a binding headlessly — building one meant hand-constructing the
+# ``OverhangBinding`` model (or reaching into the private ``_cv_create_bound_binding``
+# helper), which bypasses the create route's whole validation gate (equal
+# sub-domain lengths, resolvable + Watson-Crick-complementary sequences, the
+# pair mutex, joint existence) AND the feature log.  These drive the same routes
+# the GUI's overhang panels call.
+
+
+def split_sub_domain(
+    overhang_id: str,
+    sub_domain_id: str,
+    split_at_offset: int,
+) -> Design:
+    """Split an overhang's sub-domain in two at an interior offset
+    (POST /design/overhang/{overhang_id}/sub-domains/split).
+
+    Sub-domains tile their parent overhang gap-lessly; a freshly extruded
+    overhang carries a single whole-overhang sub-domain, so this is the op that
+    makes *partial* (sub-domain) bindings addressable — bind only the tip 8 bases
+    of a 16-base overhang rather than the whole thing.  ``split_at_offset`` is
+    measured from the overhang's 5' end and must be strictly interior.  The 5'
+    half retains ``sub_domain_id``; the 3' half is a new record.
+    """
+    _route_split_sub_domain(overhang_id, SubDomainSplitRequest(
+        sub_domain_id=sub_domain_id,
+        split_at_offset=split_at_offset,
+    ))
+    return design_state.get_or_404()
+
+
+def patch_sub_domain(
+    overhang_id: str,
+    sub_domain_id: str,
+    *,
+    name=_UNSET,
+    color=_UNSET,
+    sequence_override=_UNSET,
+    notes=_UNSET,
+) -> Design:
+    """Patch a sub-domain's fields (PATCH
+    /design/overhang/{overhang_id}/sub-domains/{sub_domain_id}).
+
+    Chiefly the way a script sets ``sequence_override`` — the create-binding
+    route refuses a pair whose sequences don't *resolve* (override, else the
+    parent ``OverhangSpec.sequence`` slice), so this is how a headless build
+    makes two overhangs bindable.  The override must be ACGTN of length exactly
+    ``length_bp``; ``""``/``None`` clears it back to the parent slice.
+
+    Only fields you actually pass are sent — the route branches on
+    ``model_fields_set``, so an omitted field is left untouched rather than
+    cleared.
+    """
+    fields = {
+        k: v for k, v in (
+            ("name", name), ("color", color),
+            ("sequence_override", sequence_override), ("notes", notes),
+        ) if v is not _UNSET
+    }
+    _route_patch_sub_domain(overhang_id, sub_domain_id, SubDomainPatchRequest(**fields))
+    return design_state.get_or_404()
+
+
+def create_overhang_binding(
+    sub_domain_a_id: str,
+    sub_domain_b_id: str,
+    *,
+    binding_mode: str = "duplex",
+    target_joint_id: str | None = None,
+    allow_n_wildcard: bool = True,
+) -> Design:
+    """Create a DIRECT overhang binding between two sub-domains
+    (POST /design/overhang-bindings).
+
+    The direct (root-to-root) sibling of :func:`connect_overhangs` (the LINKER
+    path): where a linker ties two overhangs with a *bridge strand*, a binding
+    declares that the two sub-domains hybridise with **each other**.  The route
+    enforces the pairing's chemistry before it will record anything — the
+    sub-domains must differ, have equal ``length_bp``, have resolvable sequences
+    (override or parent slice), and be Watson-Crick complementary (422 otherwise);
+    the pair must not already be claimed by another linker or binding (409); and
+    ``target_joint_id``, when given, must name a real joint (404).
+
+    **Starts UNBOUND** — creation only records the pairing.  The topological
+    relocation happens on :func:`patch_overhang_binding` with ``bound=True``.
+    The new binding is the LAST entry of the returned design's
+    ``overhang_bindings``.
+
+    Pin the create→bind→unbind cycle with
+    :func:`tests.automation_harness.assert_bind_unbind_inverse`.
+    """
+    _route_create_overhang_binding(OverhangBindingCreateRequest(
+        sub_domain_a_id=sub_domain_a_id,
+        sub_domain_b_id=sub_domain_b_id,
+        binding_mode=binding_mode,
+        target_joint_id=target_joint_id,
+        allow_n_wildcard=allow_n_wildcard,
+    ))
+    return design_state.get_or_404()
+
+
+def patch_overhang_binding(
+    binding_id: str,
+    *,
+    name=_UNSET,
+    bound=_UNSET,
+    binding_mode=_UNSET,
+    target_joint_id=_UNSET,
+    allow_n_wildcard=_UNSET,
+) -> Design:
+    """Patch a binding — chiefly the ``bound`` toggle (PATCH
+    /design/overhang-bindings/{binding_id}).
+
+    ``bound=True`` is the **topological** half of the direct-binding path: the
+    driven overhang's strand domain is relocated onto the driver's helix
+    (antiparallel, at the driver's bp range), crossovers on the driven helix are
+    rewritten to the driver helix, and the now-empty driven helix is deleted —
+    with a pre-bind snapshot stashed on the record so ``bound=False`` restores it.
+    Binding does relocation ONLY; per the 2026-05-14 user decision it does *not*
+    auto-rotate the joint, so ``locked_angle_deg`` stays ``None`` and the joint
+    window is left for an explicit :func:`relax_overhang_binding`.
+
+    Only fields you actually pass are sent — the route branches on
+    ``exclude_unset``, so passing ``bound=None`` would read as an *unbind* rather
+    than "leave alone".
+
+    Pin the round trip with
+    :func:`tests.automation_harness.assert_bind_unbind_inverse`.
+    """
+    fields = {
+        k: v for k, v in (
+            ("name", name), ("bound", bound), ("binding_mode", binding_mode),
+            ("target_joint_id", target_joint_id),
+            ("allow_n_wildcard", allow_n_wildcard),
+        ) if v is not _UNSET
+    }
+    _route_patch_overhang_binding(binding_id, OverhangBindingPatchRequest(**fields))
+    return design_state.get_or_404()
+
+
+def delete_overhang_binding(binding_id: str) -> Design:
+    """Remove a binding record (DELETE /design/overhang-bindings/{binding_id}).
+
+    The inverse of :func:`create_overhang_binding`.  Deleting a *bound* binding
+    releases its claim on the target joint, restoring the joint's prior angle
+    window when it was the last claimant (the snapshot migrates to the
+    next-earliest claimant when others remain).
+    """
+    _route_delete_overhang_binding(binding_id)
     return design_state.get_or_404()
 
 

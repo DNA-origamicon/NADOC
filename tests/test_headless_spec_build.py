@@ -1448,4 +1448,6 @@ def test_spec_build_adds_no_coverage():
     # Proposal-B duplex graph (2026-06-30): connect_duplex added /design/duplexes/connect: 53 → 54.
     # add_strand_extension added /design/extensions (fluorophore/modification): 54 → 55.
     # relax_duplex added /design/duplexes/{id}/relax (bound-duplex relax): 55 → 56.
-    assert headless_coverage_report()["covered"] == 56
+    # AF-37's direct-binding CREATION added create/patch/delete_overhang_binding
+    # + split_sub_domain + patch_sub_domain: 56 → 61.
+    assert headless_coverage_report()["covered"] == 61

@@ -265,6 +265,57 @@ All four are the single-strand TARGET (`scaffold_strands == 1`). The "yields 5/1
 on a CORRUPT fixture (see below); on the clean fixture the standard routers route teeth to 1 strand. Clean
 pre-routing input fixture: `tests/fixtures/teeth.nadoc` (replaced 2026-06-08 with `workspace/preroute_teeth.nadoc`).
 
+## ISSUE-20 — The fast-suite guard's per-test budget measures CONTENDED time, so it flags healthy sub-2s tests and ratchets them out of the fast suite
+
+- **Status:** `[ ]` OPEN — found 2026-07-16 during the AF-39 loop (`/automate-feature`). Diagnosed + evidenced,
+  **not fixed**: the fix changes the test guard itself (a risky-action / infra file), so it wants a decision first.
+  User decision 2026-07-16: **stop and file it; do NOT relegate the healthy tests.**
+- **Symptom.** `just test-smart` prints `HEAVY TEST IN THE FAST SUITE — N unmarked test(s) over the per-test
+  budget` for tests that are **not heavy**. Triaging them "fixes" the run, and then the *next* run flags a fresh
+  batch of equally-healthy tests. An infinite ratchet: each round silently removes real coverage from the fast suite.
+- **Evidence (same session, no code change to any of these tests between the two runs):**
+
+  | test | run A | run B | **standalone** |
+  |---|---|---|---|
+  | `test_snupi_hydro_coarse::test_generalized_rpy_min_eigenvalue_is_stable_in_N` | 4.28s | **6.21s** | **1.28s** |
+  | `test_simple_router::test_full_autostaple_splits_oversize_seam_bridge` | 4.11s | **5.95s** | **1.21s** |
+  | `test_atomistic_validation::test_backbone_closure_connects_and_preserves_rigid` | 3.61s | **5.27s** | **0.74s** |
+  | `test_overhang_geometry::test_cadnano_overhang_axes_use_trimmed_physical_span` | 4.26s | **5.20s** | **1.54s** |
+
+  All four are **0.74–1.54s uncontended** (`pytest -p no:xdist -p no:randomly --durations`), i.e. 3–7× UNDER the
+  5s budget, yet all four crossed it in run B purely from scheduling noise. The 3 tests triaged in run A
+  (`test_model_nt_grows_by_exactly_the_insert_total`, `test_voltroncore_model_grows_by_334_beads`,
+  `test_pdb_serials_hybrid36_past_9999`) were likewise 1.2–1.6s standalone.
+- **Root cause (5-Whys).** The guard reads per-test `seconds` from a pytest run executed under `-n auto`
+  (12 workers) at `nice -n 10`. That number is wall-clock **under contention**, not the test's intrinsic cost, and
+  it inflates ~4–5×. So `NADOC_PER_TEST_BUDGET_SEC=5.0` is in practice a **~1.2s standalone bar** — low enough that
+  a large fraction of the suite's legitimate mid-weight tests sit within noise of it. Whichever tests happen to
+  land on a contended worker that run become "violators".
+- **Why this matters / why it's not just cosmetic.** `CLAUDE.md` makes triage *mandatory* on a per-test violation
+  and forbids raising the budget — both correct **given the premise that an over-budget test is genuinely heavy**.
+  That premise is false here, so following the letter of the rule relegates healthy tests forever. Note the
+  guard already reasons this way about the *aggregate* backstop ("it grows with test count and CPU load, so a
+  fixed ceiling just ratchets healthy tests out") — the per-test budget has the same disease and no such caveat.
+  The next tier is already queued at the line: 4.95s / 4.50s / 4.48s / 4.32s.
+- **Suspected location (lead, verify before investing).** `scripts/test_guard.sh` — the per-test budget check and
+  the `.nadoc-slow-candidates.json` writer; `NADOC_PER_TEST_BUDGET_SEC`, `NADOC_TEST_NICE`.
+- **Candidate fixes (decide first — do NOT just raise the budget, which is explicitly forbidden and would also
+  mask real regressions):**
+  1. **Re-time before flagging** — when a candidate exceeds the budget under `-n auto`, re-run *just that test*
+     serially and only flag it if it's still over. Costs a few seconds on the rare violating run; makes the
+     number mean what the rule assumes it means. Most faithful to the existing policy's intent.
+  2. **Budget on standalone CPU time**, not wall-clock (e.g. per-test `user+sys` rather than elapsed), which is
+     contention-invariant — then re-derive an honest threshold from the current distribution.
+  3. **Scale the budget by observed contention** (e.g. `budget × (total_test_seconds / wall_clock)`), cheapest
+     but still an estimate.
+- **Do NOT (banked so a future session doesn't relearn it):** relegate an under-2s-standalone test just because
+  the guard flagged it; raise `NADOC_PER_TEST_BUDGET_SEC`; set `NADOC_TEST_FORCE=1`. The 2026-07-16 triage round
+  *was* sound on its own merits and stays (two real mrDNA/16k-nt builds relegated per existing precedent, one
+  genuine redundancy removed — `export_pdb` was rebuilding an all-atom model the test had already built,
+  verified byte-identical), but it was fixing the symptom, not this.
+
+---
+
 ## ISSUE-19 — The scaffold router EXTENDS ITS DOMAIN THROUGH a linker/staple (double occupancy), and the validator doesn't notice
 
 - **Status:** `[ ]` OPEN — found 2026-07-13 while fixing ISSUE-18 (its sibling: same rule, different verb).

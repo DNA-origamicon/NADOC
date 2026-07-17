@@ -107,6 +107,7 @@ FIX (both layers): (A) write side — `build_replica_package` now copies `parent
 - **G1** — Advanced staple router is disabled — falls back to nicks; don't delete `staple_routing.py` as dead code. [detail](LESSONS_archive.md#g1)
 
 ## H. Anti-patterns I've fallen into
+- **H11** — Don't reflexively relegate a test the fast-suite guard flags — **check its STANDALONE time first.** The guard's per-test `seconds` is measured under `-n auto` at nice-10, so it's contended wall-clock, ~4–5× the test's intrinsic cost; the 5s budget is really a ~1.2s standalone bar. Tests oscillate across the line run-to-run with no code change, so triage-on-sight is an infinite ratchet that quietly strips real coverage. `pytest <nodeid> -p no:xdist -p no:randomly --durations=5` settles it in seconds. Under ~2s standalone → it's the guard, not the test → see **ISSUE-20** in `issues_ledger.md`. (Never raise the budget or force the guard — those stay forbidden.) Found 2026-07-16.
 - **H1** — Guessing user intent without asking — on an ambiguous request, ask one question, don't implement. [detail](LESSONS_archive.md#h1)
 - **H5** — Don't screenshot-guess camera angles for render bugs — use Help→Debug toggles + Copy Camera, not blind orbiting. [detail](LESSONS_archive.md#h5)
 - **H2** — Searching the codebase for ages instead of asking — breadth-first exploration burns context, misses the cause. [detail](LESSONS_archive.md#h2)

@@ -91,7 +91,10 @@ bins: [{count, rep_r_ee_nm, rep_rg_nm, rep_positions, rg_subcounts}] × HIST_BIN
 - [frontend/src/scene/overhang_link_arcs.js](frontend/src/scene/overhang_link_arcs.js) — Bezier pre-relax, FJC bead chain post-relax
 - [frontend/src/scene/selection_manager.js](frontend/src/scene/selection_manager.js) — `_showSsLinkerConfigPicker` lazy-imports the modal
 - [frontend/src/main.js](frontend/src/main.js) — Help → "FJC sim" lazy-import
-- [tests/test_ssdna_fjc.py](tests/test_ssdna_fjc.py) — 17 schema-aware tests
+- [tests/test_ssdna_fjc.py](tests/test_ssdna_fjc.py) — 17 schema-aware tests; the `relax_ss_linker` ones call the **core fn directly** and assert only bin *bookkeeping* (`fjc_bin_index`, `bridge_relaxed`, `bridge_r_ee_*`)
+- [tests/test_headless_build.py](tests/test_headless_build.py) — **the ss relax's HEADLESS + geometric pins (AF-39, 2026-07-16)**: `_two_overhang_leaves_ss_linker` + 4 tests driving `hb.relax_overhang_connection(bin_index=…)`. Pins **bin → chord**: relaxing at bins 23 vs 39 (n_bp=20) lands the chord on each bin's own R_ee ±0.05 nm, 1.34 nm apart — the bin is not bookkeeping, it *chooses the geometry*. Also proves by contradiction that the ss target is NOT the ds duplex span (same relax is green vs R_ee, RED vs ds).
+  - **Fixture gotcha:** `generate_linker_topology` is load-bearing — without it geometry emits no `__lnk__` bridge and `_anchor_pos_and_normal` silently falls back to the overhang's own backbone nuc ([linker_relax.py:712](backend/core/linker_relax.py#L712)). Real complement anchor is `[2.0, 0.866, 0]` → degenerate joint origin `[2.0,0,0]`.
+  - **Pick reachable bins:** the moving anchor rides a radius-2.0 circle → chord confined to [2.773, 6.759] nm. n_bp=20's *default* bin 27 (R_ee 3.179) sits 0.007 nm from the start chord — under the oracle's eps → near-vacuous. Use bins 23/39.
 
 ## Tuning knobs
 

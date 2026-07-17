@@ -487,6 +487,15 @@ _SLOW_TESTS = {
     # scale check, so it is per-test relegated (area "oxdna") rather than whole-module —
     # the rest of test_oxdna_extensions.py is the fast per-change FENE/arc oracle.
     "test_voltroncore_extensions_do_not_disturb_the_rest_of_the_design",
+    # Strand extensions → mrDNA: the exact twin of the oxDNA scale check above, on the
+    # same full-scale real artifact (VoltronCoreScad, 16150 nt / 334 tails read from
+    # workspace/).  It walks _build_nt_arrays over the whole design TWICE (with tails,
+    # then with extensions stripped) because the pin IS the +334 delta — ~1.4 s
+    # uncontended, 6.3 s under `-n auto`.  The tails-are-beads invariant itself stays
+    # in the fast suite on the 6hb fixture; this one only adds the cross-engine scale
+    # number, so it is per-test relegated (area "mrdna"), not whole-module — the other
+    # 14 tests in test_mrdna_extensions.py are the fast sub-second bridge oracle.
+    "test_voltroncore_model_grows_by_334_beads",
     # extra-base heavy reps
     "test_heavy_rep_extra_bases_follow_sim_positions",
     "test_md_chain_map_keys_extra_bases_uniquely",
@@ -623,6 +632,13 @@ _SLOW_TESTS = {
     "test_check_relaxed_constraint_inconclusive_on_low_frames",
     # test_mrdna_extra_bases.py / test_mrdna_linkers.py (real mrDNA model builds)
     "test_model_builds_with_ssdna_segments",
+    # Same family, same file: _model_seg_stats() runs mrDNA's real coarse-grainer
+    # (model_from_basepair_stack_3prime) TWICE per test — once for the base routed 6hb
+    # and once for the extra-base variant — and both builds are the pin (the assertion
+    # is the DELTA), so neither can be dropped or cached away.  ~1.2 s uncontended,
+    # 6.6 s under `-n auto` at nice-10.  Registered by bare name, so both
+    # all_crossovers params are relegated (area "mrdna").
+    "test_model_nt_grows_by_exactly_the_insert_total",
     "test_overhangs_hybridize_into_duplex_in_the_model",
     "test_bridge_mechanical_class_ds_duplex_vs_ss_tether_in_the_model",
     "test_bridge_beads_scale_with_bridge_length",

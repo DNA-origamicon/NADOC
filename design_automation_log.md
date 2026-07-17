@@ -47,6 +47,56 @@ That archive holds one metrics row per shipped AF item (+ data fits). Append new
 
 ## Lessons (anti-patterns banked — read before building)
 
+- **The handoff's named oracle is a HYPOTHESIS, not a spec — check it isn't already covered (AF-37).** The handoff
+  had specified AF-37's augment as `assert_binding_locks_joint`. Building it would have been a passthrough: bind
+  does topology relocation ONLY (the auto-relax was reverted **2026-05-14 at the user's request**, so
+  `locked_angle_deg` stays `None` and `_apply_driver_to_joint` leaves the window alone), and what joint behaviour
+  there is was already pinned at route level by three `test_overhang_bindings.py` tests. The oracle would have
+  asserted a property the product deliberately doesn't have, over code already covered — a wrapper plus a redundant
+  oracle, which is exactly what the anti-shovel contract forbids. **A handoff names the oracle its author expected
+  to be missing; that expectation ages.** Before building the named augment, spend 60 seconds on `rg` in the area's
+  existing test file and read the route's own comments for a reverted/locked decision — then ask what is *actually*
+  unpinned. Here it was the **topological inverse** (bind relocates a domain + rewrites crossovers + deletes a
+  helix; one test spot-checked 3 fields, a *separate* test proved the crossover rewrite, and NOTHING asserted the
+  rewrite was reverted). Deviating from the handoff was the point, not a detour — but say so loudly in the row.
+- **Fixtures: build on the REAL op, not a hand-built model (AF-37, applying AF-39/42).** The ds relax fixture spent
+  ~3 weeks silently on a fallback path because it hand-built its inputs. AF-37's fixture instead drives the actual
+  chain (`create_bundle → auto_scaffold → auto_break → overhang_extrude ×2 → add_cluster ×2 → patch_sub_domain →
+  create_overhang_binding → bind`), and **probing it first paid twice**: (1) a hand-built `OverhangSpec` with
+  `sequence=None` backfills a **`length_bp=1`** sub-domain (`models.py:303` — `len(seq) if seq else 1`; the model
+  can't see the backing domain), so every `sequence_override` 422s — while a real `overhang_extrude` writes
+  `sub_domains` explicitly and is fine, i.e. the hand-built shortcut would have *invented* a problem the app
+  doesn't have; (2) extruding into an **occupied** neighbour cell silently *shares* that helix, landing both
+  overhangs on one rigid body, which bind refuses (422) — caught only because the fixture asserted distinct
+  helices instead of assuming. **Assert your fixture's preconditions; a fixture that can quietly build the wrong
+  shape will.**
+- **Check a derived-facts block against its OWN numbers before trusting it (AF-42).** AF-39 banked, in a fixture-facts
+  comment, both "the reachable chord range is [2.773, 6.759] nm" and "the ds span (6.346 nm) is out of reach entirely"
+  — two sentences apart, and the second is refuted by the first by inspection. It survived because a derived-facts block
+  *reads* as authority: it cites a method, so the arithmetic goes unaudited. No test caught it (the ss tests use
+  reachable bins either way) and it under-sold a real pin — the "ss target ≠ ds span" proof looked vacuous when it isn't.
+  **The fix is 10 seconds of arithmetic, not a probe.** When you inherit a facts block, re-check its conclusions against
+  its own stated premises *first*; only then reach for the expensive empirical re-derivation. Corollary to the AF-39
+  "chase the number" lesson: a contradiction *inside* one comment is the cheapest tell there is.
+- **A "synthetic fixture" fallback can silently downgrade the path your test thinks it pins (AF-39).** Production code
+  that degrades gracefully for test fixtures will do so *silently*, and a green test cannot tell you which branch it
+  took. `_anchor_pos_and_normal` resolves the linker anchor from the `__lnk__` bridge strand, but falls back to the
+  overhang's own backbone nuc when no bridge exists (`linker_relax.py:712`, comment: "Fallback for synthetic fixtures").
+  The ds relax fixture never calls `generate_linker_topology`, so for ~3 weeks the ds pin was exercising the *fallback*
+  anchor — not the complement anchor the app uses — and the harness had banked the inverse claim as fact ("the geometry
+  layer emits the `__lnk__` bridge from the connection metadata"; it does not). The tell was cheap and I nearly missed
+  it: the two fixtures reported *different starting chords* (4.327 vs 3.186 nm) for what was supposedly the same
+  geometry. **When a fixture and the app disagree on a number that should match, chase it — don't normalize it.** Probe
+  which branch your fixture actually takes (print the resolved anchor / assert the bridge exists) before trusting a pin,
+  and be suspicious of any banked "X is a valid fixture shortcut" that you did not personally verify.
+- **Derive the degenerate, don't fish for it (AF-39).** The can-go-red for a 1-DOF relax has a *closed form*: the
+  moving anchor must lie ON the joint axis. Solve for it (anchor `[2.0,0.866,0]`, axis dir `[0,1,0]` → origin
+  `[2.0,0,0]`) rather than trying origins until one goes red — a fished value is indistinguishable from a false
+  degenerate (see the AF-38 lesson below) and rots the moment the anchor moves. Corollary: **compute the reachable
+  range before picking a target.** The moving anchor rides a circle, so the chord is bounded
+  `[|r_fix − r_move|, r_fix + r_move]` (⊕ the axial offset); a target outside it is unsatisfiable and one within
+  ~eps of the *start* chord is vacuous — n_bp=20's default FJC bin sat 0.007 nm from the start chord, under the
+  oracle's own eps=1e-3 margin, and would have shipped a near-meaningless "pass".
 - **1-DOF relax fixtures can be FALSE-DEGENERATE (AF-38).** A strain-reduction relax test only proves anything if
   the joint can actually reduce the chord. A single revolute joint sweeps the moving anchor on a circle in the plane
   ⊥ to its axis; if that plane is orthogonal to the chord's reducible direction (or the chord is already at the
@@ -137,7 +187,7 @@ md_relax stage.* Investigated on CUDA (RTX 2080 SUPER) with oxDNA's OWN `HBList`
 
 ## Oracle catalog — index (MIRROR THESE; don't reinvent)
 
-60 proven oracles. Full table (Pins / File(s) / Reuse for) is in the archive's
+61 proven oracles. Full table (Pins / File(s) / Reuse for) is in the archive's
 `## Oracle catalog` section.
 
 - `_canonical_topology(design)` — id/order-independent design fingerprint (helices by grid_pos; strands by grid_p…
@@ -200,10 +250,14 @@ md_relax stage.* Investigated on CUDA (RTX 2080 SUPER) with oxDNA's OWN `HBList`
 - `assert_duplex_relocated` (Phase 4b — different-length duplex relocation) — a DIFFERENT-length Duplex (no equal-length binding) relocated the DRIVEN overha…
 - `assert_end_to_root_binder` (end-to-root direct binding — regenerate B as A's RC binder) — applying an end-to-root ConnectionVersion is a TOPOLOGICAL splice, not a metada…
 - `assert_corner_folded` (CORNER — mitred-corner primitive + phase-aware optimizer, 2026-07-08) — a headless mitred 90° corner is correct across ALL THREE layers — the FIRST ora…
+- `assert_bind_unbind_inverse` (AF-37 root-to-root half — direct-binding create/bind/unbind) — the FIRST oracle over the direct binding's TOPOLOGICAL half (every prior binding oracle — `assert_binding_relaxed_pose`, `assert_direct_binding_applied` — is pose-layer or apply-only): a bind→unbind cycle is a clean inverse pair. 4 clauses — non-vacuous (bind MOVED `canonical_topology`, guarding the AF-38/39 false-degenerate trap) / inverse (unbind restored it exactly) / overhang mounts moved-then-restored (`_overhang_placement_set` — `canonical_topology` is BLIND to `OverhangSpec` records, the same load-bearing-complement role `_fl_endpoint_set` plays for FLs) / record lifecycle (`bound` T→F, `prior_driven_topology` set→cleared). Reuse for: any op that RELOCATES a strand domain between helices under a snapshot+revert contract, and as the regression net for `synthesize_duplexes_from_bindings` when Proposal-B Phase 6 retires `OverhangBinding`. File: `tests/automation_harness.py`.
 
 ## Lessons (anti-patterns banked) — index
 
 29 banked lesson blocks; full text in the archive's matching `### Banked from …` heading.
+(The two AF-39 lessons — silent synthetic-fixture fallbacks + derive-don't-fish the degenerate — and the two
+AF-37 lessons — the handoff's named oracle is a hypothesis + build fixtures on the real op — are in the
+`## Lessons` section above, not the archive.)
 
 - Banked from AF-2
 - Banked from AF-3

@@ -28,6 +28,16 @@ def _pos(hid, bp, direction, xyz):
             "backbone_position": list(xyz)}
 
 
+def test_resolved_wall_position_converts_to_world_axis_coordinate():
+    from backend.api.routes_oxdna import _wall_axis_position_nm
+    from backend.core.constants import NM_TO_OXDNA
+
+    # oxDNA plane: dir·r + position = 0. For a -Y normal, the world Y
+    # coordinate has the opposite sign from the scalar along the normal.
+    meta = {"dir": [0, -1, 0], "position": 4 * NM_TO_OXDNA}
+    assert _wall_axis_position_nm(meta) == pytest.approx(4.0)
+
+
 # ── Force-block + plane-placement primitives ──────────────────────────────────
 
 def test_repulsion_plane_block_format():

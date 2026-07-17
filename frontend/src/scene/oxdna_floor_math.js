@@ -61,6 +61,34 @@ export function floorSurfaceSpec({ axis, offsetNm, stiff } = {}) {
   return { dir, offsetNm: _num(offsetNm), stiff: Math.max(0, _num(stiff)) }
 }
 
+/** World-axis coordinate where a side first contacts an axis-aligned bounds box. */
+export function floorContactCoordinate(axis, bounds) {
+  const lo = bounds?.min, hi = bounds?.max
+  if (!lo || !hi) return null
+  const component = axis?.slice(-1)
+  const i = component === 'x' ? 0 : component === 'y' ? 1 : component === 'z' ? 2 : -1
+  if (i < 0) return null
+  const value = axis[0] === '-' ? lo[i] : hi[i]
+  return Number.isFinite(Number(value)) ? Number(value) : null
+}
+
+/** Convert an absolute world-axis plane coordinate to backend clearance. */
+export function floorClearanceFromAbsolute(axis, positionNm, bounds) {
+  const contact = floorContactCoordinate(axis, bounds)
+  if (contact == null) return _num(positionNm)
+  const sign = axis[0] === '-' ? 1 : -1
+  const clearance = sign * (contact - _num(positionNm))
+  return Math.abs(clearance) < 1e-12 ? 0 : clearance
+}
+
+/** Convert a stored backend clearance back to an absolute world-axis coordinate. */
+export function floorAbsoluteFromClearance(axis, clearanceNm, bounds) {
+  const contact = floorContactCoordinate(axis, bounds)
+  if (contact == null) return _num(clearanceNm)
+  const sign = axis[0] === '-' ? 1 : -1
+  return contact - sign * _num(clearanceNm)
+}
+
 /**
  * Is the surface spec runnable?  Needs a real normal + a positive stiffness.  No
  * anchor requirement — a bare repulsion plane is a valid steric surface (anchors

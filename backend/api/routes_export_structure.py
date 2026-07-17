@@ -66,6 +66,7 @@ class PdbVisualizationSource(BaseModel):
     mode: str | None = None
     job_id: str | None = None
     frame: int | None = None  # one-based UI frame number
+    align: bool = True
 
 
 class PdbVisualizationColorValue(BaseModel):
@@ -340,17 +341,18 @@ def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
 
         job = _load_job(src.job_id)
         if src.mode == "rmsf":
-            design, frame_map, _ = _rmsf_average_frame(job)
+            design, frame_map, _ = _rmsf_average_frame(job, src.align)
             model = build_display_model(design, frame_map) if frame_map is not None else None
             flat = None
         elif src.mode == "trajectory" and src.frame is not None:
             design, stages, ref = _composite_inputs(job)
             idx = max(0, src.frame - 1)
-            frames = composite_trajectory_atomistic(design, stages, ref, [idx]) if stages else {}
+            frames = composite_trajectory_atomistic(
+                design, stages, ref, [idx], align=src.align) if stages else {}
             flat = frames.get(str(idx))
         else:
             design, frame_map, _, _, _ = _relaxed_full_map(
-                job, True, copies=True, include_extra_bases=True, include_extensions=True)
+                job, src.align, copies=True, include_extra_bases=True, include_extensions=True)
             model = build_display_model(design, frame_map) if frame_map is not None else None
             flat = None
 

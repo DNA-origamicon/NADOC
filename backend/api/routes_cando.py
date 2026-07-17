@@ -187,6 +187,10 @@ async def list_cando_jobs() -> list[dict]:
         d = j.to_dict()
         d["out_of_date"] = _is_out_of_date(j, current_fp)
         d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+        if d.get("status") == "running":
+            p = job_progress(j, ws)
+            d["progress_fraction"] = round(float(p.get("overall") or 0.0), 4)
+            d["eta_seconds"] = p.get("eta_seconds")
         out.append(d)
     return out
 

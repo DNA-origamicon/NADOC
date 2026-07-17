@@ -172,9 +172,8 @@ describe('mrDNA launch payload — card → body PARITY', () => {
     const chk = document.getElementById(bag.enable)
     chk.checked = true; chk.dispatchEvent(new Event('change', { bubbles: true }))
     setInput(document.getElementById(bag.mag), 1.8)
-    setInput(document.getElementById(bag.dirX), 0)
+    setInput(document.getElementById(bag.dirX), 90)     // azimuth
     setInput(document.getElementById(bag.dirY), 0)
-    setInput(document.getElementById(bag.dirZ), 3)       // normalizes to [0,0,1]
 
     const spec = card.getFieldSpec()
     const body = buildMrdnaLaunchBody({

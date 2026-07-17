@@ -2129,3 +2129,154 @@ none of which any prior pin asserted for the direct-bind relax."
 - **Coverage:** wraps NO new route (all via existing `create_bundle`/`resize_strand_end`/`transform_cluster`/`force_ligate`) → coverage count unchanged.
 - **Metrics (n=6, base=56):** uniform baseline total posed FL stretch **5.51 nm** (max 1.36); optimized **1.87 nm** (max 0.69, all bonds <0.7) — beats the human-tuned reference **3.43 nm**. Corner angle 91.2° (target 90). Genuine steric clashes (FL-excluded): uniform 26 → optimized 24 (guardrail: not worse). Optimizer cost ~5 builds / 1.3 s (path-B analytic search; naive per-candidate rebuild = 451 builds / 59 s).
 - **Validation gained, not just a passthrough:** `assert_corner_folded` proves — across all three layers — that the fold landed at 90°, every one of the N seam forced ligations is a short (<1 nm) posed backbone bond, the phase-aware optimizer's total stretch is ≤ the uniform baseline (so the search is not a no-op), the optimizer introduced no new genuine steric clashes (via the design-layer `clash_report`, seam bonds excluded), the fold is logged as a replayable `cluster_op`, and every FL record survives a `.nadoc` round-trip. This is the FIRST oracle to use the clash detector as a build-time metric, and it banks the calibration insight that a designed forced-ligation bond registers as a sub-0.65 nm "clash" and must be excluded (`steric_clash_count`). Nothing before could build a folded corner headlessly OR prove its seam ligations are physical.
+
+---
+
+### AF-39 — ss-linker relax headless test (AF-38 gap G1) (2026-07-16)
+
+- **Shape:** TEST + FIXTURE ONLY — no new wrapper, no new oracle, no product code. `tests/test_headless_build.py`
+  gains `_two_overhang_leaves_ss_linker` (the ss sibling of `_two_overhang_leaves_with_joint`) + 4 tests, reusing
+  `hb.relax_overhang_connection` and `assert_linker_relaxed_pose(natural_span_nm=R_ee)` UNCHANGED.
+- **God-file LOC Δ:** `crud.py` / `assembly.py` / `main.js` **0** (no product code touched at all).
+- **Coverage:** FLAT — the `/design/overhang-connections/{conn_id}/relax` route was already headless-covered by
+  the ds pin. This loop closes a *path* gap inside that route, not a route gap.
+- **Cohesion:** one reason to change — how the ss (FJC-bin) branch of the linker relax is pinned.
+- **Fixture (all values DERIVED, not fished):** n_bp=20; moving complement anchor `[2.0, 0.866, 0]`, fixed anchor
+  `[4.133, 0.499, 2.338]`, start chord 3.186 nm. The moving anchor rides a radius-2.0 circle about the hinge axis
+  → reachable chord range **[2.773, 6.759] nm** → bins 23..39 (R_ee 2.843..4.187 nm) reachable; the ds span this
+  conn *would* have had (19 × 0.332 = **6.346 nm**) is out of reach entirely. Degenerate origin is **[2.0,0,0]**
+  (axis runs through the anchor), NOT the ds fixture's [2.5,0,0].
+- **Can-go-red proven (all 4 verified by probe, not assumed):** degenerate → chord frozen 3.1861→3.1861, strain
+  flat 1.0010→1.0010 (fires on the *strain* clause, not an incidental error); SHORT-bin relax measured against
+  the ds span → strain 3.1599→**3.5029** (moves AWAY, RED); mutation "relax at SHORT, oracle expects LONG" →
+  strain 1.0010→1.3441 RED (the oracle genuinely catches a wrong-bin relax); same-bin-twice → separation 0.0000
+  so the >1.0 nm separation clause correctly fails.
+- **Validation gained, not just a passthrough:** the ss relax targets the chosen FJC histogram bin's R_ee — a
+  *different* target than the ds duplex span — and until now **nothing exercised that**: the ds pin has no bin,
+  and `tests/test_ssdna_fjc.py` asserts only bin *bookkeeping* (`fjc_bin_index`, `bridge_relaxed`,
+  `bridge_r_ee_*`) via the core fn, never that the bin reaches the *geometry*. The new
+  `test_relax_ss_linker_bin_selection_drives_the_chord` pins bin → chord: relaxing the same fixture at bins 23 vs
+  39 lands the chord on each bin's own R_ee (±0.05 nm), 1.34 nm apart. And
+  `test_relax_ss_linker_targets_fjc_r_ee_not_the_duplex_span` proves the ss target is genuinely not the ds one *by
+  contradiction* — the identical relax is green under the R_ee yardstick and RED under the ds yardstick — which is
+  what makes `natural_span_nm` mandatory for ss rather than cosmetic.
+- **FINDING (banked as a lesson + harness correction):** the harness's claim that "a metadata-only
+  `OverhangConnection` (no real bridge strands) is a valid relax fixture — the geometry layer emits the `__lnk__`
+  bridge from the connection metadata" is **FALSE**. Verified: strip the bridge strands and geometry emits NO
+  `__lnk__` at all; `_anchor_pos_and_normal` then silently takes its *synthetic-fixture fallback* branch
+  (`linker_relax.py:712`) and anchors on the overhang's own backbone nuc. So the **ds relax pin has been
+  exercising the fallback anchor, not the real complement anchor** — weaker than advertised. `generate_linker_topology`
+  is what emits the bridge. (`canonical_topology` tolerates the resulting `__lnk__` virtual helix fine, so the
+  oracle's Three-Layer clause still holds.)
+
+### AF-42 — ds linker-relax pin re-anchored to the REAL complement (2026-07-16)
+
+- **Item / shape:** intake from AF-39. **Fixture-only** — no new wrapper, no new oracle, no new module.
+  `headless_build.py` / `crud.py` / `assembly.py` / `main.js` all **untouched** (LOC Δ = 0). Coverage **FLAT 54**.
+- **Files:** `tests/test_headless_build.py` (`_two_overhang_leaves_with_joint` + `_ds_anchor_chord_nm` helper +
+  2 new tests), `tests/test_automation_harness.py` (degenerate origin).
+- **The defect:** `_two_overhang_leaves_with_joint` never called `generate_linker_topology`, so no
+  `__lnk__<conn>__a`/`__b` bridge strands existed, so `_anchor_pos_and_normal` silently took its
+  *synthetic-fixture fallback* (`linker_relax.py:712`) and anchored on the overhang's own backbone nuc. Measured:
+  **0 complement nucs on the real helices → anchor [2.5, −1.0, 0], chord 4.327 nm.** Wired in, the same fixture
+  resolves **16 complement nucs → anchor [2.0, 0.866, 0], chord 3.186 nm** — i.e. for ~3 weeks the ds pin exercised
+  a path the app never takes. Green the whole time; the fallback is a *graceful degradation*, so nothing said so.
+- **Derived, not fished (all closed-form, then confirmed empirically):**
+  - Degenerate origin = `[anchor.x, 0, anchor.z]` = **[2.0, 0, 0]** (axis dir `[0,1,0]` must pass THROUGH the anchor).
+    The old `[2.5,0,0]` was the *fallback* anchor's x and **stops being degenerate** once the real anchor resolves —
+    measured strain 1.824 → 1.638 (a real reduction), so both old can-go-red tests would have failed loudly.
+  - Reachable chord range about `[0,0,0]` = **[2.773, 6.759] nm** (r_move 2.0, r_fix 4.749, dy 0.367). A brute-force
+    360° sweep returns min 2.7731 @ 331° / max 6.7585 @ 151° — **matches the closed form to 2e-4**.
+  - Anchors are **independent of `length_bp`** (complements sit on the real OH helices; only the bridge is virtual).
+  - ⇒ default `length_bp` **24 → 16** (`_DS_LINKER_BP`): span 7.682 nm was **out of reach**, so the relax saturated at
+    the 6.759 nm boundary and never reached its target. Span 5.010 nm sits inside the range and 1.824 nm off the start
+    chord → the relax lands **exactly** on it (strain 1.824 → **0.0000**).
+- **Can-go-red PROVEN by un-wiring the fixture and re-running (not assumed) — 3 of 4 pins fire:**
+  `test_relax_ds_linker_anchors_on_the_real_complement_not_the_fallback` → no bridge strands;
+  `test_relax_overhang_connection_saturates_when_span_is_out_of_reach` → chord 7.682 not 6.759 (the fallback's *wider*
+  reach makes the span reachable, so the saturation pin inverts); `test_relax_overhang_connection_degenerate_hinge_is_a_noop`
+  → DID NOT RAISE. (`..._pulls_linker_toward_natural_span` does **not** discriminate — span 5.010 is reachable under the
+  fallback too. Recorded so nobody mistakes it for the load-bearing pin.)
+- **CORRECTION shipped — a banked AF-39 claim was FALSE and self-contradictory.** The ss fixture-facts block asserted
+  "the ds span this connection WOULD have had (19 × 0.332 = 6.346 nm) is out of reach entirely" — but **6.346 < 6.759**,
+  its own stated max, in the same comment. Settled two ways: the 360° sweep, and an actual bp=20 relax **landing on
+  6.346** (strain → 0.0000). The ds span only leaves reach above `length_bp=21`. Consequence worth noting: this makes
+  AF-39's `test_relax_ss_linker_targets_fjc_r_ee_not_the_duplex_span` **stronger** than its comment implied — the ds
+  yardstick it contradicts is reachable, so the by-contradiction proof is non-vacuous rather than trivially true.
+- **Gate:** `just test-smart` **FAST**, **5153 passed / 41 skipped**, 77.5s (no drop; +2 net tests). `ruff` clean on both
+  touched files. (`just lint` reports 2 pre-existing F401s in `tests/test_atomistic_display_split.py` — untouched by
+  this loop, another session's file, left alone.) Guard printed `HEAVY TEST IN THE FAST SUITE` on 4 tests measuring
+  **0.42–1.70s standalone** → ISSUE-20/LESSONS H11 oscillation, **not triaged** (none are this loop's).
+- **Validation gained, not just a passthrough:** the ds linker-relax pin now measures the **real
+  `__lnk__<conn>__a`/`__b` complement anchor the app resolves** instead of a synthetic fallback the app never reaches,
+  and the branch is asserted *directly* (`..._anchors_on_the_real_complement_not_the_fallback`) rather than left to be
+  inferred from a green strain number — so the fixture can no longer silently downgrade its own path. On top of that
+  the relax is now pinned to **settle exactly ON the natural span** (strain → 0) rather than merely move toward it,
+  which the old unreachable-span default made impossible, and the previously-untested **saturation** boundary
+  (span > max reach → open to 6.759 nm, no error) is pinned for the first time.
+
+### AF-37 (root-to-root half) — direct overhang-BINDING creation + bind/unbind inverse (2026-07-16)
+
+- **Item / shape:** AF-38 gap **G2** ("direct-binding CREATION still unwrapped"). **5 headless wrappers** in
+  `backend/api/headless_build.py` + **1 new reusable oracle**. `crud.py` / `assembly.py` / `main.js`
+  **untouched — LOC Δ = 0** (the module convention is alias-importing the route handler, so no logic moved into
+  a god-file and no `backend/core` service push was needed). Headless coverage **56 → 61**.
+  - ⚠ The handoff said coverage was **54**; the live pin said **56** (`connect_duplex`/`add_strand_extension`/
+    `relax_duplex` landed after the handoff line was written). Corrected here and in the handoff — the
+    function-identity report is the truth, the prose was stale.
+- **Wrappers (all wrap the SAME route the GUI's overhang panels call):** `create_overhang_binding(sd_a, sd_b, *,
+  binding_mode='duplex', target_joint_id=None, allow_n_wildcard=True)` · `patch_overhang_binding(binding_id, *,
+  name/bound/binding_mode/target_joint_id/allow_n_wildcard)` · `delete_overhang_binding(binding_id)` ·
+  `split_sub_domain(overhang_id, sub_domain_id, split_at_offset)` · `patch_sub_domain(overhang_id, sub_domain_id,
+  *, name/color/sequence_override/notes)`.
+- **Oracle — `assert_bind_unbind_inverse(before, bound, restored, *, binding_id)`** (+ helper
+  `_overhang_placement_set`). 4 clauses: (1) **non-vacuous** — bind actually moved `canonical_topology`;
+  (2) **inverse** — unbind restored it exactly; (3) **overhang mounts** moved then restored
+  (`canonical_topology` is BLIND to `OverhangSpec` records, which is precisely what a bind relocates —
+  the same load-bearing-complement role `_fl_endpoint_set` plays for forced ligations); (4) **record
+  lifecycle** — `bound` True→False with `prior_driven_topology` set→cleared (a leaked snapshot silently breaks
+  the *next* unbind).
+- **Fixture is the REAL path, not a hand-built model** (the AF-39/42 lesson applied up-front): routed 6hb bundle →
+  2 real `overhang_extrude`d overhangs → `add_cluster` each → WC sequences via `patch_sub_domain` →
+  `create_overhang_binding` → bind → unbind. Probed before trusting: bind re-mounts OH-B `h_XY_2_0 → h_XY_1_0`
+  (the driver), topology differs on bind, matches on unbind, snapshot set→cleared — every clause observed live,
+  none vacuous.
+- **Deliberate deviation — the handoff's named oracle `assert_binding_locks_joint` was NOT built, on purpose.**
+  Bind does topology relocation ONLY: per the **2026-05-14 user decision** the auto-relax was reverted, so
+  `locked_angle_deg` stays `None` and `_apply_driver_to_joint` leaves the window alone. The joint-window behaviour
+  is already pinned at route level by `test_overhang_bindings.py`
+  (`test_bound_true_leaves_joint_window_for_user_to_relax`, `test_patch_bound_false_restores_joint`,
+  `test_delete_binding_restores_joint_when_last_bound`). Building it would have duplicated existing coverage —
+  i.e. a wrapper + a redundant oracle = the passthrough the contract forbids. The genuinely unpinned property was
+  the **topological inverse**, so that is what shipped.
+- **Gotchas banked:** (1) both PATCH routes branch on `model_fields_set`/`exclude_unset`, so the wrappers send
+  **only** explicitly-passed fields via an `_UNSET` sentinel — passing `bound=None` would read as an *unbind*, not
+  "leave alone". (2) `OverhangSpec._backfill_whole_overhang_sub_domain` sizes the whole-overhang sub-domain from
+  `len(sequence)`, falling back to **`length_bp=1`** when `sequence is None` — so a hand-built spec with no
+  sequence yields a 1-bp sub-domain and every `sequence_override` 422s on the length check. A **real
+  `overhang_extrude` is fine** (it writes `sub_domains` explicitly → `length_bp=8`); this is a hand-fixture
+  artifact, NOT a product bug (checked). (3) Extruding into an **already-occupied** neighbour cell silently
+  *shares* that cell's helix → both overhangs land on one helix → one rigid body → bind refuses (422). Re-read the
+  design between placements; the fixture asserts distinct helices so this can't pass silently.
+- **Gate:** `just test-smart` **FAST**, **5159 passed / 41 skipped**, 69s (no drop; +10 net tests). No guard banner
+  (my tests are 0.13–0.14s each). `ruff` clean on all touched files (the 2 pre-existing F401s in
+  `tests/test_atomistic_display_split.py` are another session's file — untouched, left alone). Three hard-coded
+  coverage pins moved 56→61 (`test_automation_harness.py`, `test_cluster_obb.py`, `test_headless_spec_build.py`).
+- **Steering note (read before doing AF-37's remaining half).** `project_overhang_duplex_foundation.md` **Phase 6 =
+  "Demote sub-domains to overlay; retire `OverhangBinding` after migration proven"** — pending, not done. The route
+  is still live + UI-wired (3 callers) and `design.overhang_bindings` DATA is explicitly still load-bearing (it
+  drives duplex derivation + `prior_driven_topology`), so wrapping it was correct **and** the oracle outlives the
+  retirement: `synthesize_duplexes_from_bindings` needs exactly a bind/unbind topology-inverse regression net to
+  prove the migration preserves behaviour. **But** AF-37's remaining blocker is *sub-domain* bindings — the thing
+  Phase 6 explicitly demotes — so further investment there should be a user decision, not an automatic pickup.
+- **Validation gained, not just a passthrough:** a binding built the way the **GUI** builds one — through the create
+  route's full chemistry gate (equal lengths, resolvable sequences, WC-complementarity, pair mutex, joint
+  existence) and the feature log — is now reachable from Python at all, and its bind→unbind cycle is pinned as a
+  **topological inverse** for the first time. Every prior test reached a bound binding via the private
+  `_cv_create_bound_binding` backdoor, which skips that entire gate; and the one existing restore test
+  (`test_bound_then_unbound_restores_driven_topology`) spot-checks **three fields** (helix present, `helix_id`,
+  `domains[0].helix_id`) while a *separate* test proves bind **rewrites crossovers** — with nothing anywhere
+  asserting the rewrite is reverted. `canonical_topology` covers that rewrite, plus bp ranges, domain order,
+  direction, axis floats and orphaned helices, in one comparison; the mount-set covers its `OverhangSpec` blind
+  spot. Non-vacuity is asserted, not assumed (clause 1), so the pin cannot rot into a green no-op the way the ds
+  relax fixture silently did for ~3 weeks.

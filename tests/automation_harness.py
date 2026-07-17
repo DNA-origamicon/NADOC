@@ -1607,6 +1607,109 @@ def assert_binding_relaxed_pose(
     )
 
 
+def _overhang_placement_set(design: Design):
+    """Order-independent fingerprint of where each overhang is *mounted*.
+
+    ``canonical_topology`` fingerprints helices + strand domains, but is blind to
+    the ``OverhangSpec`` records themselves — and a bind relocates an overhang's
+    ``helix_id`` onto the driver.  So this set is the load-bearing complement to a
+    topology-equality check across a bind/unbind cycle, the same role
+    :func:`_fl_endpoint_set` plays for forced ligations.
+    """
+    return frozenset(
+        (o.id, o.helix_id, o.strand_id) for o in design.overhangs
+    )
+
+
+def assert_bind_unbind_inverse(
+    before: Design,
+    bound: Design,
+    restored: Design,
+    *,
+    binding_id: str,
+):
+    """A direct overhang binding's **bind → unbind** cycle is a clean topological
+    inverse pair.
+
+    Binding is the one *topological* op on the direct-binding path
+    (:func:`~backend.api.headless_build.patch_overhang_binding` with
+    ``bound=True``): the driven overhang's strand domain is relocated onto the
+    driver's helix, crossovers on the driven helix are rewritten to the driver
+    helix, and the emptied driven helix is deleted — all reversible from a
+    snapshot stashed on the record.  This oracle pins that the whole relocation
+    round-trips *exactly*, which per-field spot checks cannot: the fingerprints
+    below cover bp ranges, domain order, strand direction, crossover rewiring,
+    helix axis geometry and orphaned helices in one comparison.
+
+    Four clauses:
+
+      1. **Non-vacuous** — the bind actually MOVED topology
+         (``canonical_topology(before) != canonical_topology(bound)``).  Without
+         this the inverse clause passes trivially on a bind that silently no-ops
+         (the false-degenerate trap banked from AF-38/AF-39).
+      2. **Inverse** — the unbind restored the strand graph exactly
+         (``canonical_topology(before) == canonical_topology(restored)``).
+      3. **Overhang mounts restored** — the bind re-mounted an overhang onto the
+         driver helix and the unbind put it back
+         (:func:`_overhang_placement_set`), covering ``canonical_topology``'s
+         blind spot for ``OverhangSpec`` records.
+      4. **Record lifecycle** — the binding reads ``bound=True`` with a
+         pre-bind snapshot while bound, and ``bound=False`` with the snapshot
+         cleared once restored (a leaked snapshot would silently break the next
+         unbind).
+
+    Can-go-red: a bind that no-ops fails 1; an incomplete revert (a crossover left
+    on the driver, a driven helix not restored, a bp range off by one) fails 2; an
+    overhang left mounted on the driver fails 3; a leaked snapshot fails 4.
+    """
+
+    def _binding(d: Design, label: str):
+        b = next((b for b in d.overhang_bindings if b.id == binding_id), None)
+        assert b is not None, f"no overhang binding {binding_id!r} in {label} design"
+        return b
+
+    b_bound = _binding(bound, "bound")
+    b_restored = _binding(restored, "restored")
+
+    # 1. Non-vacuous: the bind moved topology.
+    assert canonical_topology(before) != canonical_topology(bound), (
+        f"binding {binding_id!r}: bind did not change canonical_topology — the "
+        "relocation no-opped, so the inverse check below would be vacuous"
+    )
+
+    # 2. Inverse: unbind restored the strand graph exactly.
+    assert canonical_topology(before) == canonical_topology(restored), (
+        f"binding {binding_id!r}: unbind did not restore canonical_topology — "
+        "the bind relocation is not cleanly reversible"
+    )
+
+    # 3. Overhang mounts moved and came back (canonical_topology is blind here).
+    assert _overhang_placement_set(before) != _overhang_placement_set(bound), (
+        f"binding {binding_id!r}: bind left every overhang on its original helix "
+        "— expected the driven overhang to re-mount onto the driver"
+    )
+    assert _overhang_placement_set(before) == _overhang_placement_set(restored), (
+        f"binding {binding_id!r}: unbind did not restore the overhang mounts "
+        f"(before={sorted(_overhang_placement_set(before))!r}, "
+        f"restored={sorted(_overhang_placement_set(restored))!r})"
+    )
+
+    # 4. Record lifecycle: bound + snapshot present, then cleared.
+    assert b_bound.bound is True, (
+        f"binding {binding_id!r}: expected bound=True after the bind patch"
+    )
+    assert b_bound.prior_driven_topology is not None, (
+        f"binding {binding_id!r}: bound with no pre-bind snapshot — the unbind "
+        "would have nothing to restore from"
+    )
+    assert b_restored.bound is False, (
+        f"binding {binding_id!r}: expected bound=False after the unbind patch"
+    )
+    assert b_restored.prior_driven_topology is None, (
+        f"binding {binding_id!r}: pre-bind snapshot leaked past the unbind"
+    )
+
+
 def _overhang_rotation_changed(before: Design, after: Design, overhang_id: str) -> bool:
     """True iff *overhang_id*'s ball-joint rotation quaternion differs — the
     pose-moved guard for the end-to-root relax, whose 2-DOF duplex swing is

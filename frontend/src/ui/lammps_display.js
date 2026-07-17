@@ -24,6 +24,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   let _traj = null          // { keys, frames } while in trajectory mode
   let _trajIdx = 0
   let _jobId = null
+  let _align = true
   let _rmsfResp = null      // cached payloads so the scale widget can recolour without a re-fetch
   let _devResp = null
   let _rmsfCmap = 'viridis'
@@ -54,13 +55,14 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     designRenderer.clearScalarColors?.()          // plain positions, no per-base colour
     designRenderer.applyFemPositions(updates)
     _mode = 'display'; _traj = null; _jobId = jobId
+    _align = align
     return { ok: true, n: updates.length }
   }
 
-  async function displayRmsf(jobId) {
+  async function displayRmsf(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const resp = await api.getLammpsRmsf(jobId, signal)
+    const resp = await api.getLammpsRmsf(jobId, align, signal)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
@@ -69,14 +71,15 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _mode = 'rmsf'; _traj = null; _jobId = jobId
+    _align = align
     return { ok: true, min: map.min, max: map.max, mean: resp.mean_rmsf,
              nFrames: resp.n_frames, confidence: resp.confidence }
   }
 
-  async function displayDeviation(jobId) {
+  async function displayDeviation(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const resp = await api.getLammpsDeviation(jobId, signal)
+    const resp = await api.getLammpsDeviation(jobId, align, signal)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     const map = deviationColorMap(resp, undefined, undefined, _devCmap)
     if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
@@ -85,6 +88,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     designRenderer.applyFemPositions(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _mode = 'deviation'; _traj = null; _jobId = jobId
+    _align = align
     return { ok: true, min: map.min, max: map.max, mean: resp.mean_deviation, nFrames: resp.n_frames }
   }
 
@@ -110,14 +114,15 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
     return true
   }
 
-  async function loadTrajectory(jobId) {
+  async function loadTrajectory(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const { epoch, signal } = _beginLoad()
-    const t = await api.getLammpsTrajectory(jobId, signal)
+    const t = await api.getLammpsTrajectory(jobId, align, signal)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!t || !t.ready) { _traj = null; return { ok: false, reason: t?.reason || 'not ready' } }
     _traj = { keys: t.keys, frames: t.frames }
     _mode = 'trajectory'; _jobId = jobId
+    _align = align
     designRenderer.clearScalarColors?.()
     showFrame(0)
     return { ok: true, n_frames: t.n_frames, markers: t.markers || [] }
@@ -149,6 +154,7 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   return {
     displayJob, displayRmsf, displayDeviation, recolorRmsf, recolorDeviation, loadTrajectory, showFrame, stopAndRestore,
     mode: () => _mode, activeJobId: () => _jobId, isActive: () => _mode !== null,
+    alignment: () => _align,
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       ? { frame: _trajIdx + 1, total: _traj.frames.length }
       : null,

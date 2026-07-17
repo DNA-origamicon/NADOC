@@ -397,8 +397,8 @@ export function initOxdnaDisplay({
     const bake = kind === 'atomistic' ? _bakedAtom : _bakedSurf
     if (bake.byIdx.has(gridIdx)) return bake.byIdx.get(gridIdx)
     const resp = kind === 'atomistic'
-      ? await api.getOxdnaFramesAtomistic(_jobId, [gridIdx])
-      : await api.getOxdnaFramesSurface(_jobId, [gridIdx])
+      ? await api.getOxdnaFramesAtomistic(_jobId, [gridIdx], _align)
+      : await api.getOxdnaFramesSurface(_jobId, [gridIdx], {}, _align)
     if (epoch !== _epoch) return null
     const data = resp?.[String(gridIdx)] || null
     if (data) bake.byIdx.set(gridIdx, data)
@@ -480,24 +480,24 @@ export function initOxdnaDisplay({
         }
       } else if (_mode === 'rmsf') {
         if (kind === 'atomistic') {
-          const r = await api.getOxdnaRmsfAtomistic(_jobId)
+          const r = await api.getOxdnaRmsfAtomistic(_jobId, _align)
           if (live() && r?.ready) {
             const { lo, hi } = _activeBounds()
             const m = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)   // same ramp/scale as the beads
             await _pushAtomistic(r.atomistic, epoch, live, m?.colorByKey || null)
           }
         } else {
-          const r = await api.getOxdnaRmsfSurface(_jobId)
+          const r = await api.getOxdnaRmsfSurface(_jobId, {}, _align)
           if (live() && r?.ready) _pushSurface(r.surface, true)   // colour by per-vertex RMSF
         }
       } else if (_mode === 'trajectory') {
         const idx = _frameIdx
         if (useFine) {
           if (kind === 'atomistic') {
-            const r = await api.getOxdnaFramesAtomistic(_jobId, [idx])
+            const r = await api.getOxdnaFramesAtomistic(_jobId, [idx], _align)
             if (live()) await _pushAtomistic(r?.[String(idx)], epoch, live)
           } else {
-            const r = await api.getOxdnaFramesSurface(_jobId, [idx])
+            const r = await api.getOxdnaFramesSurface(_jobId, [idx], {}, _align)
             if (live()) _pushSurface(r?.[String(idx)])
           }
         } else {
@@ -598,24 +598,24 @@ export function initOxdnaDisplay({
    * Fetch the production flexibility map for jobId, deform the model to the
    * average structure, and recolour beads by RMSF (rigid→flexible).
    */
-  async function displayRmsf(jobId, { refetch = false } = {}) {
+  async function displayRmsf(jobId, { refetch = false, align = true } = {}) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     // Re-use the cached flex map for this job (instant re-toggle) unless a refetch
     // is forced (e.g. refresh after more production frames accumulated).
     let resp
-    if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId) {
+    if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId && _rmsfCache.align === align) {
       resp = _rmsfCache.resp
     } else {
       const signal = _beginLoad()
-      resp = await api.getOxdnaRmsf(jobId, signal)
+      resp = await api.getOxdnaRmsf(jobId, align, signal)
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
     const map = rmsfColorMap(resp, undefined, undefined, _rmsfCmap)
     if (!map) {
       return { ok: false, reason: resp?.reason || 'not ready' }
     }
-    _rmsfCache = { jobId, resp }   // keep across toggle-off
+    _rmsfCache = { jobId, align, resp }   // keep across toggle-off
     _rmsfResp = resp
     _rmsfBounds = null             // fresh display → default data-range scale
     _applyFem(map.updates)
@@ -623,6 +623,7 @@ export function initOxdnaDisplay({
     _active = true
     _mode = 'rmsf'
     _jobId = jobId
+    _align = align
     _applyHeavy()   // atomistic/surface follow when the scene is in a heavy rep
     return {
       ok: true, n: map.updates.length, min: map.min, max: map.max, mean: resp.mean_rmsf,
@@ -703,11 +704,11 @@ export function initOxdnaDisplay({
    * cache it, and show the first frame.  Returns metadata for the player
    * (n_frames + stage markers).  The actual scrubbing is driven by showFrame().
    */
-  async function loadTrajectory(jobId) {
+  async function loadTrajectory(jobId, align = true) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     const signal = _beginLoad()
-    const resp = await api.getOxdnaTrajectory(jobId, signal)
+    const resp = await api.getOxdnaTrajectory(jobId, align, signal)
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
@@ -719,6 +720,7 @@ export function initOxdnaDisplay({
     _active = true
     _mode = 'trajectory'
     _jobId = jobId
+    _align = align
     showFrame(0)
     return { ok: true, n_frames: resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
   }
@@ -805,6 +807,7 @@ export function initOxdnaDisplay({
     isActive: () => _active,
     mode: () => _mode,
     activeJobId: () => _jobId,
+    alignment: () => _align,
     cancelPendingLoad: _cancelLoad,
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
       ? { frame: _frameIdx + 1, total: _traj.frames.length }
