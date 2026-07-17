@@ -69,6 +69,7 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         build_chain_map,
         centroid_offset,
         md_rigid_reference,
+        md_snap_mask,
     )
 
     model = build_atomistic_model(design)
@@ -97,6 +98,13 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
     # Equilibrium P-atom reference + rigid mask for the Kabsch alignment (shared with
     # the live-display ws handler; handles crossover extra-base "__xb__" inserts).
     eq_positions, eq_valid, rigid_mask = md_rigid_reference(model, p_order)
+    # snap_mask = rigid dsDNA PLUS crossover extra-base (__xb__) + extension (__ext_) inserts:
+    # the atoms that get the design-eq nearest-image PBC snap so a strand-boundary reset in the
+    # sequential unwrap can't strand one a full box away (the "few bases wrapped" bug — visible on
+    # extra-crossover-base designs whose 676 unpaired ssDNA inserts hang out one side of the box).
+    # Mirrors ws.py's live path (:849); for a plain dsDNA run it EQUALS rigid_mask (no synthetics),
+    # so the trajectory output is byte-identical for standard designs.
+    snap_mask = md_snap_mask(p_order, eq_valid, rigid_mask)
     if int(rigid_mask.sum()) < 3:
         eq_centroid = np.zeros(3)
         eq_centered = None
@@ -159,7 +167,8 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
     return {
         "universe": u, "p_order": p_order, "n_frames": n_frames,
         "centroid_T": T, "eq_positions": eq_positions, "eq_valid": eq_valid,
-        "rigid_mask": rigid_mask, "eq_centroid": eq_centroid, "eq_centered": eq_centered,
+        "rigid_mask": rigid_mask, "snap_mask": snap_mask,
+        "eq_centroid": eq_centroid, "eq_centered": eq_centered,
         "c1p_idx": c1p_idx, "heavy_idx": heavy_idx, "atom_meta": atom_meta,
         "R_prev": None, "prev_frame_idx": -999,
         "n_dna_p": n_dna_p, "p_order_source": p_order_source,
@@ -178,7 +187,8 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     as a native Watson-Crick base-pairing proxy (C1'…C1' distance) by
     :func:`md_metric_series`.  It is the P position plus the (min-imaged, Kabsch-rotated)
     P→C1' vector already computed for the base normal, so it costs nothing extra."""
-    from backend.core.atomistic_to_nadoc import _GRO_DNA_RESNAMES, _unwrap_min_image
+    from backend.core.atomistic_to_nadoc import (
+        _GRO_DNA_RESNAMES, _unwrap_min_image, reassemble_to_posed_reference)
 
     u = ctx["universe"]
     p_order = ctx["p_order"]
@@ -186,6 +196,9 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     eq_pos = ctx["eq_positions"]
     eq_valid = ctx["eq_valid"]
     rigid_mask = ctx["rigid_mask"]
+    snap_mask = ctx.get("snap_mask")
+    if snap_mask is None:      # older ctx (pre-snap-mask) → fall back to rigid-only restore
+        snap_mask = rigid_mask
     eq_centered = ctx["eq_centered"]
     eq_centroid = ctx["eq_centroid"]
 
@@ -197,22 +210,27 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     if dims is not None and dims[0] > 0:
         box_nm = dims[:3] / 10.0
         p_box = _unwrap_min_image(p_raw, box_nm)
-        if rigid_mask is not None and rigid_mask.any():
-            _c_box = np.median(p_box[rigid_mask], axis=0)
-        else:
-            _c_box = p_box.mean(axis=0)
-        _T_dyn = eq_centroid - _c_box
+        # POSE-FIRST PBC reassembly — mirror ws.py's live path (:657).  The old translation-
+        # only design-eq snap placed the reference by shifting the design centroid to the box
+        # centroid, WITHOUT rotating it, then nearest-image-snapped every atom.  When the box
+        # frame differs from the design frame by a rotation (this 24hb run sits ~180° flipped
+        # in its solvation box) the rod ends land > L/2 from their un-rotated reference and the
+        # snap grabs the WRONG periodic image → the whole structure streaks a full box across
+        # the viewer.  reassemble_to_posed_reference estimates the rigid pose FIRST, poses the
+        # design reference into the box frame, then snaps — so every bead's reference sits
+        # beside its true position.  Free ssDNA (~snap_mask) keeps its sequential-unwrap spot.
         if (eq_pos is not None and eq_centroid is not None
-                and rigid_mask is not None and len(eq_pos) == len(p_box)):
-            _eq_box = eq_pos - _T_dyn
-            _dc = p_box - _eq_box
-            for _d in range(3):
-                if box_nm[_d] > 0:
-                    _dc[:, _d] -= np.round(_dc[:, _d] / box_nm[_d]) * box_nm[_d]
-            p_box_corr = _eq_box + _dc
-            p_box_corr[~rigid_mask] = p_box[~rigid_mask]
+                and snap_mask is not None and len(eq_pos) == len(p_box)):
+            p_box_corr, _c_box = reassemble_to_posed_reference(
+                p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask)
+            _T_dyn = eq_centroid - _c_box
             p_nm = p_box_corr + _T_dyn
         else:
+            if rigid_mask is not None and rigid_mask.any():
+                _c_box = np.median(p_box[rigid_mask], axis=0)
+            else:
+                _c_box = p_box.mean(axis=0)
+            _T_dyn = eq_centroid - _c_box if eq_centroid is not None else T
             p_nm = p_box + _T_dyn
     else:
         p_nm = p_raw + T
@@ -307,7 +325,8 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
     path): residue-local reconstruction of each heavy atom relative to its corrected
     P atom, then the same Kabsch alignment as the bead path so the all-atom and CG
     views coincide. Requires a ctx built with ``with_atoms=True``."""
-    from backend.core.atomistic_to_nadoc import _GRO_DNA_RESNAMES, _unwrap_min_image
+    from backend.core.atomistic_to_nadoc import (
+        _GRO_DNA_RESNAMES, _unwrap_min_image, reassemble_to_posed_reference)
 
     u = ctx["universe"]
     p_order = ctx["p_order"]
@@ -316,6 +335,9 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
     atom_meta = ctx["atom_meta"]
     eq_pos = ctx["eq_positions"]
     rigid_mask = ctx["rigid_mask"]
+    snap_mask = ctx.get("snap_mask")
+    if snap_mask is None:      # older ctx (pre-snap-mask) → fall back to rigid-only restore
+        snap_mask = rigid_mask
     eq_centroid = ctx["eq_centroid"]
     eq_centered = ctx["eq_centered"]
 
@@ -331,22 +353,22 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
         if dims is not None and dims[0] > 0 and len(p_raw) == len(p_order):
             box_nm = dims[:3] / 10.0
             p_box = _unwrap_min_image(p_raw, box_nm)
-            if rigid_mask is not None and rigid_mask.any():
-                c_box = np.median(p_box[rigid_mask], axis=0)
-            else:
-                c_box = p_box.mean(axis=0)
-            T_dyn = eq_centroid - c_box if eq_centroid is not None else T
+            # POSE-FIRST PBC reassembly — same fix as the bead path (mirror ws.py :657): pose
+            # the design reference into the (possibly ~180°-rotated) box frame BEFORE the
+            # nearest-image snap, else a large rotated bundle's rod ends get mis-imaged a full
+            # box away.  Free ssDNA (~snap_mask) keeps its sequential-unwrap position.
             if (eq_pos is not None and eq_centroid is not None
-                    and rigid_mask is not None and len(eq_pos) == len(p_box)):
-                eq_box = eq_pos - T_dyn
-                dc = p_box - eq_box
-                for d in range(3):
-                    if box_nm[d] > 0:
-                        dc[:, d] -= np.round(dc[:, d] / box_nm[d]) * box_nm[d]
-                p_box_corr = eq_box + dc
-                p_box_corr[~rigid_mask] = p_box[~rigid_mask]
+                    and snap_mask is not None and len(eq_pos) == len(p_box)):
+                p_box_corr, c_box = reassemble_to_posed_reference(
+                    p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask)
+                T_dyn = eq_centroid - c_box
                 p_pre = p_box_corr + T_dyn
             else:
+                if rigid_mask is not None and rigid_mask.any():
+                    c_box = np.median(p_box[rigid_mask], axis=0)
+                else:
+                    c_box = p_box.mean(axis=0)
+                T_dyn = eq_centroid - c_box if eq_centroid is not None else T
                 p_pre = p_box + T_dyn
 
             # Residue-local reconstruction: heavy atom = corrected P +

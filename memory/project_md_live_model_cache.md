@@ -57,6 +57,35 @@ GPUresident, ~16 ns/day for 1 M atoms), NOT 1 fs. 1 fs only for the first
 strain-relief segment and for declash (extra_bases) designs. See
 [[md-job-system]], [[md-panel-status]]. Stage length 4 × 4.8 ns is the real cost.
 
+**Parsed-Universe cache + load progress/timeout — "Display never loads" (2026-07-16):**
+The atomistic-model cache above fixed the DESIGN-model rebuild, but `_load_sync` still
+re-parsed the **solvated MDAnalysis Universe** (the 100–200 MB, 1.3–1.4 M-atom PSF of a
+24hb explicit-water run) on EVERY display open — ~8 s pure-Python parse, uncached. On the
+archive drive (cold cache) that stretched to tens of seconds, and since the frontend spinner
+clears ONLY on a `ready`/`error` WS frame with **no load timeout**, a slow parse read as an
+eternal "loading" hang. Confirmed it's a SIZE problem, not the archive drive (drive stat 0.001s,
+16% full) — a non-archived job this size hangs identically. Fixes in [ws.py](backend/api/ws.py):
+- **Module-level Universe cache** (`_UNIVERSE_CACHE`, LRU cap 2, lock-guarded) keyed by FILE
+  IDENTITY (`_file_identity` = path+mtime+size) of topology+trajectory. `_load_sync` reuses a
+  cached parse → re-opens are instant. A growing DCD (live job) changes size/mtime → cache miss
+  → fresh parse (live correctness kept). **Only cached when `n_atoms > _UNWRAP_MAX_ATOMS`** so a
+  reused Universe never re-stacks `_try_unwrap`'s in-place transformation (small systems parse
+  fast anyway). Evicted Universe's trajectory handle is closed. Single-user assumption: a cached
+  Universe is shared across connections; the app never scrubs two displays at once.
+- **Load timeout backstop** `asyncio.wait_for(..., _LOAD_TIMEOUT_S=240, env NADOC_MD_LOAD_TIMEOUT_S)`
+  → an `error` frame (spinner clears + message) instead of an infinite spinner. The parse thread
+  isn't cancellable, so it runs on and populates the cache → the user's retry is fast.
+- **Progress note** `_preload_size_note` (cheap PSF `!NATOM` header read + file size) → a new
+  `{type:"loading"}` WS frame BEFORE the blocking parse; md_panel.js `_handleMessage` turns it
+  into `nadoc:md-display-state {state:'loading', message}` so the spinner shows "Parsing
+  1,320,174-atom solvated topology (172 MB) — first open ~10–60 s, re-opens cached" instead of a
+  bare spinner. Only fires for PSF > `_UNWRAP_MAX_ATOMS`.
+- Tests: `tests/test_ws_helpers.py::TestUniverseCacheHelpers` (6 — file-identity mtime/size
+  sensitivity, cache key, put/get/LRU-evict+close, PSF NATOM header read, size-note gating).
+  Backend `just test-smart` green (5097; 3 unrelated pre-existing failures). Frontend 2864 vitest
+  green. **NOT verified in a live app session** (needs a large archived MD job loaded; the
+  frontend `loading` branch is logic-reviewed only).
+
 **Host-RAM reclaim before NAMD spawn (2026-07-07):** `atomistic_cache.reclaim_cache_if_low(min_free_mb)`
 drops the cached models (the largest discretionary host allocation, up to `_CACHE_MAX`
 ~1 GB models) when `md_vram.detect_host_ram_mb()` < floor. `namd_runner._free_host_ram_for_namd`

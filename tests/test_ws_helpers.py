@@ -590,3 +590,82 @@ def test_md_run_ws_load_seek_ballstick(client, md_fixture_dir):
             a0 = f0["atoms"][0]
             for k in ("serial", "element", "x", "y", "z"):
                 assert k in a0
+
+
+# ── Parsed-Universe cache + load-progress helpers (module-level, 2026-07-16) ──
+# These back the "MD Display never loads" fix: cache the ~8 s solvated-PSF parse so
+# re-opens are instant, and emit a size note so a slow first-open reads as working.
+
+
+class TestUniverseCacheHelpers:
+    def _reset_cache(self):
+        from backend.api import ws
+        with ws._UNIVERSE_CACHE_LOCK:
+            ws._UNIVERSE_CACHE.clear()
+
+    def test_file_identity_changes_with_mtime_and_size(self, tmp_path):
+        from backend.api import ws
+
+        p = tmp_path / "f.psf"
+        p.write_text("a")
+        id1 = ws._file_identity(p)
+        p.write_text("aa")  # size + mtime change
+        id2 = ws._file_identity(p)
+        assert id1 != id2
+        # A growing DCD (live job) therefore misses the cache → fresh parse.
+        assert ws._file_identity(tmp_path / "missing") .endswith(":missing")
+
+    def test_cache_key_combines_both_files(self, tmp_path):
+        from backend.api import ws
+
+        psf = tmp_path / "t.psf"; psf.write_text("x")
+        dcd = tmp_path / "t.dcd"; dcd.write_text("y")
+        key = ws._universe_cache_key(psf, dcd)
+        assert str(psf) in key and str(dcd) in key and "||" in key
+
+    def test_put_get_roundtrip_and_lru_eviction(self):
+        self._reset_cache()
+        from backend.api import ws
+
+        class _FakeUniverse:
+            def __init__(self, name):
+                self.name = name
+                self.closed = False
+                self.trajectory = self  # .trajectory.close() lands here
+
+            def close(self):
+                self.closed = True
+
+        us = [_FakeUniverse(i) for i in range(3)]
+        ws._cache_put_universe("k0", us[0])
+        ws._cache_put_universe("k1", us[1])
+        assert ws._cache_get_universe("k0") is us[0]   # also LRU-touches k0
+        ws._cache_put_universe("k2", us[2])            # cap=2 → evict LRU (k1)
+        assert ws._cache_get_universe("k1") is None
+        assert us[1].closed is True                    # evicted handle was closed
+        assert ws._cache_get_universe("k0") is us[0]
+        assert ws._cache_get_universe("k2") is us[2]
+        self._reset_cache()
+
+    def test_psf_natom_reads_header_only(self, tmp_path):
+        from backend.api import ws
+
+        psf = tmp_path / "t.psf"
+        psf.write_text("PSF EXT CMAP\n\n       2 !NTITLE\n\n 1320174 !NATOM\n...rest...\n")
+        assert ws._psf_natom(psf) == 1320174
+        assert ws._psf_natom(tmp_path / "nope.psf") is None
+
+    def test_preload_size_note_only_for_large_psf(self, tmp_path):
+        from backend.api import ws
+
+        # small PSF → no note (parses fast, don't nag)
+        small = tmp_path / "s.psf"
+        small.write_text("PSF\n\n 100 !NATOM\n")
+        assert ws._preload_size_note("", str(small)) is None
+        # non-PSF topology → no note
+        assert ws._preload_size_note("", str(tmp_path / "t.gro")) is None
+        # large PSF → informative note mentioning the atom count
+        big = tmp_path / "b.psf"
+        big.write_text(f"PSF\n\n {ws._UNWRAP_MAX_ATOMS + 1} !NATOM\n" + "x" * 4096)
+        note = ws._preload_size_note("", str(big))
+        assert note is not None and f"{ws._UNWRAP_MAX_ATOMS + 1:,}" in note

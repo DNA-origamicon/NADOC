@@ -49,6 +49,10 @@ from backend.core.atomistic_to_nadoc import (
     _map_positions,
     _parse_gro_p_positions,
     _unwrap_min_image,
+    _pbc_circular_centroid,
+    _nearest_image_to,
+    _kabsch_rotation,
+    reassemble_to_posed_reference,
     build_chain_map,
     build_p_gro_order,
     centroid_offset,
@@ -1112,3 +1116,113 @@ class TestMdSnapMask:
         # rescale), so a whole-box snap against it can only remove periodic-image
         # errors, not real displacement.
         np.testing.assert_allclose(eq_positions[2], [3.5, 1.0, 0.0])
+
+
+# ── Pose-first PBC reassembly (2026-07-16) ───────────────────────────────────
+# Fixes the "Display doesn't wrap" streaks: an origami larger than half the box that
+# has rotated in the cell was snapped to a translation-only reference → wrong-image.
+
+
+def _rot_axis_angle(axis, deg):
+    """Rodrigues rotation matrix (no scipy)."""
+    axis = np.asarray(axis, float); axis = axis / np.linalg.norm(axis)
+    th = np.radians(deg)
+    K = np.array([[0, -axis[2], axis[1]],
+                  [axis[2], 0, -axis[0]],
+                  [-axis[1], axis[0], 0]])
+    return np.eye(3) + np.sin(th) * K + (1 - np.cos(th)) * (K @ K)
+
+
+class TestPbcCircularCentroid:
+    def test_recovers_center_of_split_cluster(self):
+        # A cluster centred at z=1.0 in a 10 nm box, but half its atoms wrapped to the
+        # far side (z≈9.x).  Plain mean lands in the empty middle (~5); circular mean
+        # recovers the true centre near 1.0.
+        box = np.array([10.0, 10.0, 10.0])
+        z = np.concatenate([np.full(50, 0.5), np.full(50, 9.5)])  # ±0.5 around wrap point 0
+        pts = np.column_stack([np.zeros(100), np.zeros(100), z])
+        c = _pbc_circular_centroid(pts, box)
+        # true centre is the wrap boundary (0 ≡ 10); circular mean → ~0 (mod 10)
+        assert min(c[2], box[2] - c[2]) < 0.1
+        assert abs(np.mean(z) - 5.0) < 0.1   # plain mean is the WRONG (gap) answer
+
+    def test_box_zero_dim_uses_plain_mean(self):
+        pts = np.array([[1.0, 0, 0], [3.0, 0, 0]])
+        c = _pbc_circular_centroid(pts, np.array([0.0, 5.0, 5.0]))
+        assert c[0] == pytest.approx(2.0)
+
+
+class TestNearestImageAndKabsch:
+    def test_nearest_image_pulls_across_boundary(self):
+        box = np.array([10.0, 10.0, 10.0])
+        pts = np.array([[9.5, 0.0, 0.0]])          # really at -0.5, wrapped to 9.5
+        out = _nearest_image_to(pts, np.array([0.0, 0.0, 0.0]), box)
+        assert np.allclose(out, [[-0.5, 0.0, 0.0]])
+
+    def test_kabsch_recovers_known_rotation(self):
+        rng = np.random.default_rng(1)
+        pts = rng.normal(size=(50, 3))
+        pts -= pts.mean(0)
+        R_true = _rot_axis_angle([0.3, 1.0, 0.2], 37.0)
+        rotated = pts @ R_true.T          # rotated = R_true @ ptsᵀ, so maps pts→rotated
+        R = _kabsch_rotation(pts, rotated)  # mobile=pts, target=rotated
+        assert np.allclose(R, R_true, atol=1e-9)
+
+
+class TestReassembleToPosedReference:
+    def _rod(self, n=200):
+        """A long thin 'bundle': gentle helical rod ~40 nm long, small transverse spread."""
+        z = np.linspace(0.0, 40.0, n)
+        return np.column_stack([0.6 * np.sin(z), 0.6 * np.cos(z), z])
+
+    def test_recovers_rotated_split_bundle(self):
+        eq = self._rod()
+        eq_c = eq.mean(0)
+        N = len(eq)
+        rigid = np.ones(N, bool); snap = np.ones(N, bool)
+        # box only slightly bigger than the 40 nm structure → structure > half-box (the
+        # real 24hb-in-tight-water regime): half-box-z = 21 nm vs ~20 nm radius.
+        box = np.array([15.0, 15.0, 42.0])
+        # True MD pose: design rotated about an oblique axis + centred in the box.
+        R_true = _rot_axis_angle([0.2, 0.3, 1.0], 25.0)
+        md_true = (eq - eq_c) @ R_true.T + box / 2.0
+        # Simulate NAMD wrapping HALF the atoms a full box away in z (split cluster).
+        p_box = md_true.copy()
+        p_box[N // 2:, 2] += box[2]
+        eq_box = eq - eq_c + box / 2.0   # design expressed with centroid at box centre
+        p_corr, c_box = reassemble_to_posed_reference(
+            p_box, box, eq_box, (eq_box).mean(0), rigid, snap,
+        )
+        # Reassembled to a SINGLE image matching the true MD structure (up to a global
+        # box offset, which the display's downstream centroid/T handles).
+        off = np.round((p_corr - md_true) / box) * box
+        assert np.allclose(p_corr - off, md_true, atol=1e-6)
+        # And the structure is whole: no consecutive-atom jump near a full box.
+        assert (np.abs(np.diff(p_corr, axis=0)) < box / 2.0).all()
+
+    def test_no_rotation_no_split_matches_translation_only(self):
+        # Regression: when R≈I and the structure isn't split, the pose-first result
+        # equals the old translation-only snap (design + nearest-imaged displacement).
+        eq = self._rod(120)
+        eq_c = eq.mean(0)
+        N = len(eq); rigid = np.ones(N, bool); snap = np.ones(N, bool)
+        box = np.array([15.0, 15.0, 42.0])
+        rng = np.random.default_rng(2)
+        md_true = eq - eq_c + box / 2.0 + rng.normal(scale=0.05, size=(N, 3))  # thermal jitter
+        p_box = md_true.copy()
+        eq_box = eq - eq_c + box / 2.0
+        p_corr, _ = reassemble_to_posed_reference(p_box, box, eq_box, eq_box.mean(0), rigid, snap)
+        assert np.allclose(p_corr, md_true, atol=1e-6)
+
+    def test_free_ssdna_keeps_sequential_unwrap_position(self):
+        eq = self._rod(60)
+        eq_c = eq.mean(0)
+        N = len(eq); box = np.array([15.0, 15.0, 42.0])
+        rigid = np.ones(N, bool)
+        snap = np.ones(N, bool); snap[-10:] = False   # last 10 are free ssDNA
+        md_true = eq - eq_c + box / 2.0
+        p_box = md_true.copy()
+        p_corr, _ = reassemble_to_posed_reference(p_box, box, eq - eq_c + box / 2.0,
+                                                  (eq - eq_c + box / 2.0).mean(0), rigid, snap)
+        # free-ssDNA rows are returned verbatim from p_box (no design snap)
+        assert np.allclose(p_corr[~snap], p_box[~snap])

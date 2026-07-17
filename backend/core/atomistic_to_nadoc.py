@@ -544,6 +544,124 @@ def _unwrap_min_image(positions: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
     return out.astype(dtype, copy=False)
 
 
+def _pbc_circular_centroid(pts: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
+    """PBC-robust centroid (per-dimension circular mean).
+
+    A plain mean/median of a structure that NAMD wrapped into TWO clusters a box
+    apart lands in the empty gap between them — useless as a center.  The circular
+    mean maps each coordinate onto a circle (θ = 2π·x/L), averages the unit vectors,
+    and reads the angle back: the true center of a contiguous cluster regardless of
+    where the periodic boundary cuts it.  Falls back to the plain mean for a
+    non-periodic (box≤0) dimension."""
+    pts = np.asarray(pts, dtype=np.float64)
+    box = np.asarray(box_nm, dtype=np.float64)
+    c = np.zeros(3)
+    for d in range(3):
+        col = pts[:, d] if pts.ndim == 2 else pts
+        L = float(box[d])
+        if L <= 0 or len(col) == 0:
+            c[d] = float(col.mean()) if len(col) else 0.0
+            continue
+        ang = col * (2.0 * np.pi / L)
+        theta = np.arctan2(np.sin(ang).mean(), np.cos(ang).mean())
+        c[d] = (theta % (2.0 * np.pi)) * (L / (2.0 * np.pi))
+    return c
+
+
+def _nearest_image_to(pts: np.ndarray, center: np.ndarray, box_nm: np.ndarray) -> np.ndarray:
+    """Shift each point by whole box vectors to its periodic image nearest ``center``."""
+    pts = np.asarray(pts, dtype=np.float64)
+    box = np.asarray(box_nm, dtype=np.float64)
+    d = pts - center
+    for k in range(3):
+        if box[k] > 0:
+            d[:, k] -= np.round(d[:, k] / box[k]) * box[k]
+    return center + d
+
+
+def _kabsch_rotation(mobile_centered: np.ndarray, target_centered: np.ndarray) -> np.ndarray:
+    """Optimal proper rotation R (det +1) with R @ mobileᵀ ≈ targetᵀ — i.e. R maps
+    mobile→target.  Both inputs must already be centroid-subtracted (row vectors)."""
+    H = np.asarray(mobile_centered).T @ np.asarray(target_centered)
+    U, _, Vt = np.linalg.svd(H)
+    d = float(np.sign(np.linalg.det(Vt.T @ U.T)) or 1.0)
+    return Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
+
+
+def reassemble_to_posed_reference(
+    p_box: np.ndarray,
+    box_nm: np.ndarray,
+    eq_pos: np.ndarray,
+    eq_centroid: np.ndarray,
+    rigid_mask: "np.ndarray | None",
+    snap_mask: "np.ndarray | None",
+) -> "tuple[np.ndarray, np.ndarray]":
+    """Pose-first PBC reassembly of a structure onto its design reference.
+
+    The plain translation-only nearest-image snap breaks once the origami has ROTATED
+    in the box AND is comparable to / larger than half the box: a distant atom's
+    (un-rotated) design reference is then > L/2 from its true position, so
+    nearest-image rounding grabs the WRONG periodic image and the atom flies a full
+    box across the scene (the "streaks" artefact).  This estimates the rigid-body pose
+    (rotation + translation) FIRST, poses the design reference into the box frame, and
+    only then nearest-image-snaps — so every atom's reference sits right beside its
+    true position and the image is unambiguous even at the ends.
+
+    Steps, all in box coordinates (nm):
+      1. PBC-robust centroid ``c_box`` of the rigid backbone (survives a split cluster).
+      2. Image all rigid atoms to that centroid — correct for every atom whose radius
+         is < L/2 (true for a snugly-solvated bundle; the few beyond are handled next).
+      3. Seed Kabsch from all rigid atoms, then ONE inlier refinement dropping any atom
+         whose fit residual exceeds ¼·min(box) — exactly the atoms step 2 mis-imaged —
+         so the pose is estimated only from reliably-placed atoms.
+      4. Pose the FULL design reference into the box frame with that rotation.
+      5. Nearest-image-snap every ``snap_mask`` atom to its posed reference; a
+         previously-mis-imaged end atom is now RECOVERED because its reference is close.
+      6. Free ssDNA (~snap_mask) keeps its sequential-unwrap position (no design snap).
+
+    Returns ``(p_corr_box, c_box)``.  When the structure is un-rotated and un-split the
+    result is identical to the old translation-only snap (R≈I, circular≈plain centroid).
+    """
+    p_box = np.asarray(p_box, dtype=np.float64)
+    box = np.asarray(box_nm, dtype=np.float64)
+    N = len(p_box)
+    rigid = rigid_mask if (rigid_mask is not None and np.any(rigid_mask)) else np.ones(N, bool)
+
+    # 1. robust centroid of the rigid backbone
+    c_box = _pbc_circular_centroid(p_box[rigid], box)
+
+    # 2. image rigid atoms to that centroid (correct where radius < half-box)
+    p_rigid_c = _nearest_image_to(p_box[rigid], c_box, box)
+    eq_rigid = np.asarray(eq_pos, dtype=np.float64)[rigid]
+
+    # 3. seed pose from all rigid, then one inlier refinement (drop mis-imaged ends)
+    mob = p_rigid_c - c_box
+    tgt = eq_rigid - eq_centroid
+    R = _kabsch_rotation(mob, tgt)
+    box_pos = box[box > 0]
+    if len(box_pos):
+        resid = np.linalg.norm(p_rigid_c - ((tgt @ R) + c_box), axis=1)
+        inlier = resid < 0.25 * float(np.min(box_pos))
+        if 10 <= int(inlier.sum()) < len(resid):
+            R = _kabsch_rotation(mob[inlier], tgt[inlier])
+
+    # 4. pose the full design reference into the box frame (design→box is Rᵀ)
+    ref_box = (np.asarray(eq_pos, dtype=np.float64) - eq_centroid) @ R + c_box
+
+    # 5. nearest-image snap every atom to its posed reference (small, correct offset)
+    dc = p_box - ref_box
+    for k in range(3):
+        if box[k] > 0:
+            dc[:, k] -= np.round(dc[:, k] / box[k]) * box[k]
+    p_corr = ref_box + dc
+
+    # 6. free ssDNA keeps its sequential-unwrap position
+    if snap_mask is not None:
+        keep = ~np.asarray(snap_mask, dtype=bool)
+        p_corr[keep] = p_box[keep]
+    return p_corr, c_box
+
+
 def _extract_universe(
     u: "mda.Universe",
     frame: int,

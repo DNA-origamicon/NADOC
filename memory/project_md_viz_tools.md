@@ -78,6 +78,50 @@ PDB+PSF+DCD from the 90deg design (MDAnalysis DCD, frame 1 = a per-atom relax) a
 at DISTINCT positions (was 1212 distinct = 32 colliding). The specific `fc6a91577151` NAMD job dir was
 cleaned up before this session, so the synthesized-but-real DCD stands in for the live job.
 
+**"DISPLAY DOESN'T WRAP" STREAKS = A DESIGN MISMATCH, fixed by design-aware live Display (2026-07-16).**
+Reported on a current 24hb_2xT k=0 production run: live Display (nadoc/beads) drew long straight lines
+shooting across the whole box. **Root cause is NOT PBC** (initially mis-hypothesized — see the pose-first
+note below). Confirmed on REAL production frames: with the run's OWN design loaded the reconstruction is
+already perfect (`build_p_order_from_universe` n_unmapped=**0**/7320, 6524 intra-helix bp adjacencies, 0
+gaps >2 nm). The streaks come from the live `ws.py` `_load_sync` building its P-atom→(helix,bp) map from
+**`store.currentDesign`** — whatever design is open in the editor — NOT the run's design. With a different
+design open, the segid map (design-independent) can't resolve the atoms against that design's chain map
+(measured: 10hb open → **7089/7320 unmapped**) → falls back to the collision-prone single-char-chainID PDB
+path → beads land in the WRONG slots → cross-structure streaks. (The trajectory/flex-map paths were already
+fixed to use the frozen snapshot in 2026-07-02; the LIVE path was missed.) FIX:
+- Frontend sends `job_id` in the WS `load` message (`md_panel.js` `displayLatest`/`prewarmLatest` gained a
+  `jobId` opt; `md_jobs_panel` passes `job.job_id`).
+- Backend `ws.py` load handler resolves the RUN's own design via new `routes_md.md_display_design_for_job(job_id)`
+  → `_md_run_design(job)` = frozen `design.json` snapshot (walks parent chain) ELSE the recorded
+  `design_source_path` `.nadoc` — **no active-session fallback** (that fallback IS the bug). The open-design
+  payload is now only a last resort when job resolution fails.
+- **Mismatch guard** in `_load_sync`: when the segid map is present and >25 % of DNA-P atoms are unmapped,
+  it RAISES a clear error ("This trajectory doesn't match the design being displayed … built from
+  '<name>'. Load that design …") → the WS sends it as an `error` frame (spinner clears) instead of drawing
+  garbage. A correct design gives 0 unmapped; a wrong one ~97 % → the 25 % threshold cleanly separates.
+- **Validated end-to-end on the real run** (7935f0749701): `md_display_design_for_job` → design + name
+  '24hb_2xT'; correct design → 0 unmapped (guard silent, clean display); wrong design (10hb) → 7089 unmapped
+  → guard fires. Tests: `test_md_draft.py` (4 — source-path resolution, None-when-unresolvable, id→(design,name),
+  unknown id). **NOT click-verified in the browser** (the job_id-threaded WS load is logic-reviewed).
+
+**POSE-FIRST PBC REASSEMBLY — separate latent-bug hardening, NOT the streak fix (2026-07-16).** While
+chasing the streaks I first (wrongly) blamed PBC: for a 1.3 M-atom system the whole-system make-whole is
+skipped (`_UNWRAP_MAX_ATOMS`), and `_seek_sync` Step 2 placed the design reference by TRANSLATION ONLY then
+nearest-image-snapped — which WOULD stream once an origami larger than half the box rotates (24hb_2xT DNA
+137×133×**517 Å** in a 157×153×528 Å box; long axis 517 vs half-box 264). But real production frames showed
+the OLD code already reassembles correctly there (the structure hadn't drifted past half-box in ~2 ns), so
+this was not the cause. Kept anyway as regression-safe hardening for a LONG unrestrained production that
+eventually tumbles past that thin ~12 Å-shell half-box. FIX = pose-first: new pure
+`atomistic_to_nadoc.reassemble_to_posed_reference` (+ `_pbc_circular_centroid`, `_nearest_image_to`,
+`_kabsch_rotation`) estimates the rigid-body pose (PBC-robust circular centroid → image rigid atoms to it →
+seed Kabsch → one inlier refinement dropping atoms >¼·min(box) off) and poses the design reference
+(rotation+translation) into the box frame BEFORE snapping, so even end atoms image correctly. `_seek_sync`
+Step 2 now calls it (free ssDNA keeps its sequential-unwrap position; downstream dynamic-T + display Kabsch
+unchanged). **Strict generalization** — un-rotated/un-split ⇒ R≈I, circular≈plain centroid ⇒ byte-identical
+to the old snap (pinned). Tests: `test_atomistic_to_nadoc.py::{TestPbcCircularCentroid,TestNearestImageAndKabsch,
+TestReassembleToPosedReference}` (7). e2e `test_md_run_ws_dcd_alignment_matches_design_eq` green. See
+[[md-live-model-cache]].
+
 **Verification gotchas (cost real time).** The dev backend uses uvicorn `--reload`; editing backend files under load WEDGES it on WSL2 (the smoke config runs WITHOUT --reload for this reason). The single-worker dev backend SERIALIZES requests, so concurrent heavy trajectory/RMSF reads + a Playwright run starve each other. Headless Playwright boot can CLEAR the active design (the trajectory/RMSF routes need it via get_or_404 → 404 "no trajectory yet" is really "no design"). The stable e2e (e2e/md_viz_tools.spec.js) asserts the toggle FIRES the right endpoint (page.waitForRequest) rather than waiting for the multi-minute compute — proves DOM→handler→mdViz→adapter→endpoint without the flaky slow path. See also [[md-job-system]] and [[md-panel-implementation-status-and-algorithm-details]].
 
 

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
+from collections import OrderedDict
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -35,6 +37,97 @@ _MD_SEEK_DIAG = os.environ.get("NADOC_MD_SEEK_QUIET", "") not in ("1", "true", "
 # this only drops redundant, pathologically-slow work.  Small (validated) systems
 # keep the transformation unchanged.
 _UNWRAP_MAX_ATOMS = 200_000
+
+# ── Parsed-Universe cache ─────────────────────────────────────────────────────
+# A solvated origami PSF is 100–200 MB and MDAnalysis parses it in ~8 s (pure-Python,
+# O(atoms)); the DCD frame table adds more.  That parse is identical across re-opens
+# of the SAME topology+trajectory, so cache the Universe keyed by FILE IDENTITY
+# (path + mtime + size).  A growing DCD (live job) changes size/mtime → cache miss →
+# fresh parse, so live correctness is preserved.  ONLY systems above the unwrap
+# threshold are cached: below it `_try_unwrap` adds an in-place trajectory
+# transformation that must NOT be stacked on reuse (and small systems parse fast
+# anyway).  Bounded LRU — an evicted Universe's trajectory handle is closed.
+# NOTE: single-user tool — a cached Universe is shared across connections; concurrent
+# scrub from two displays would race the file position, which the app never does.
+_UNIVERSE_CACHE: "OrderedDict[str, object]" = OrderedDict()
+_UNIVERSE_CACHE_MAX = 2
+_UNIVERSE_CACHE_LOCK = threading.Lock()
+
+# Backstop so a genuinely stuck/pathological load surfaces an error instead of an
+# eternal "loading" spinner.  The parse thread is not cancellable, so on timeout it
+# keeps running and populates the cache — the user's retry is then fast.
+_LOAD_TIMEOUT_S = float(os.environ.get("NADOC_MD_LOAD_TIMEOUT_S", "240"))
+
+
+def _file_identity(path) -> str:
+    """path + mtime + size — changes the instant a file is regenerated or grows."""
+    try:
+        st = os.stat(path)
+        return f"{os.fspath(path)}:{st.st_mtime_ns}:{st.st_size}"
+    except OSError:
+        return f"{os.fspath(path)}:missing"
+
+
+def _universe_cache_key(topology_path, xtc_path) -> str:
+    return _file_identity(topology_path) + "||" + _file_identity(xtc_path)
+
+
+def _cache_get_universe(key: str):
+    with _UNIVERSE_CACHE_LOCK:
+        u = _UNIVERSE_CACHE.get(key)
+        if u is not None:
+            _UNIVERSE_CACHE.move_to_end(key)   # LRU touch
+        return u
+
+
+def _cache_put_universe(key: str, universe) -> None:
+    with _UNIVERSE_CACHE_LOCK:
+        _UNIVERSE_CACHE[key] = universe
+        _UNIVERSE_CACHE.move_to_end(key)
+        while len(_UNIVERSE_CACHE) > _UNIVERSE_CACHE_MAX:
+            _k, _u = _UNIVERSE_CACHE.popitem(last=False)
+            try:
+                _u.trajectory.close()
+            except Exception:  # noqa: BLE001 — best-effort handle release
+                pass
+
+
+def _psf_natom(path) -> "int | None":
+    """Atom count from a PSF header — reads only the first lines up to `!NATOM`,
+    so it's ~free even for a 200 MB PSF (used only for a progress message)."""
+    try:
+        with open(path, "r", errors="replace") as fh:
+            for _ in range(50):
+                line = fh.readline()
+                if not line:
+                    break
+                if "!NATOM" in line:
+                    return int(line.split()[0])
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _preload_size_note(config_str: str, topology_str: str) -> "str | None":
+    """A cheap 'what we're about to parse' message so a large first-open reads as
+    working (with its size), not a bare spinner.  Best-effort — returns None (no
+    message) for small systems or on any error; never raises into the load path."""
+    try:
+        from pathlib import Path
+
+        from backend.core.md_import import resolve_md_config
+
+        top = resolve_md_config(config_str).topology_path if config_str else Path(topology_str)
+        if not top or top.suffix.lower() != ".psf" or not top.exists():
+            return None
+        natom = _psf_natom(top)
+        if not natom or natom <= _UNWRAP_MAX_ATOMS:
+            return None
+        size_mb = top.stat().st_size / (1024 * 1024)
+        return (f"Parsing {natom:,}-atom solvated topology ({size_mb:.0f} MB) — "
+                "first open of a large run takes ~10–60 s; re-opens are cached and instant.")
+    except Exception:  # noqa: BLE001
+        return None
 
 
 # ── MD trajectory streaming WebSocket ─────────────────────────────────────────
@@ -146,6 +239,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
         design,
         coordinate_str: str | None = None,
         config_str: str | None = None,
+        expected_design_name: str | None = None,
     ) -> dict:
         """Synchronous load — runs inside asyncio.to_thread."""
         from pathlib import Path
@@ -216,9 +310,23 @@ async def md_run_ws(websocket: WebSocket) -> None:
         cm       = build_chain_map(model)
 
         # Open the Universe up front — for NAMD we build p_order from the PSF's own
-        # segids (below), which needs the topology.
-        logs.append("Opening MDAnalysis Universe…")
-        u        = mda.Universe(str(topology_path), str(xtc_path))
+        # segids (below), which needs the topology.  Reuse a cached parse when the
+        # topology+trajectory files are byte-identical (completed/archived run) — this
+        # is the ~8 s solvated-PSF parse we skip on every re-open.  Only large systems
+        # (which skip _try_unwrap) are cached, so no transformation is ever stacked.
+        _u_key = _universe_cache_key(topology_path, xtc_path)
+        u = _cache_get_universe(_u_key)
+        if u is not None:
+            logs.append("Opening MDAnalysis Universe… (cached — re-parse skipped)")
+            try:
+                u.trajectory[0]   # shared object may be mid-scrub → reset to frame 0
+            except Exception:  # noqa: BLE001
+                pass
+        else:
+            logs.append("Opening MDAnalysis Universe…")
+            u = mda.Universe(str(topology_path), str(xtc_path))
+            if len(u.atoms) > _UNWRAP_MAX_ATOMS:
+                _cache_put_universe(_u_key, u)
         n_frames = len(u.trajectory)
         logs.append(f"Frames    : {n_frames}")
 
@@ -240,6 +348,22 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     p_order = cand
                     logs.append(f"P-order   : segid-mapped ({len(p_order)} DNA P atoms)")
                 else:
+                    # MISMATCH GUARD.  The segid map is design-INDEPENDENT, so a large
+                    # unmapped fraction means the design driving this display isn't the
+                    # run's design — mapping the trajectory onto it would put beads in the
+                    # wrong (helix,bp) slots and streak lines across the structure.  Refuse
+                    # with a clear message instead of drawing garbage.  (A SMALL unmapped
+                    # count still falls back to the reference-PDB path, as before.)
+                    n_dna_p = len(u.select_atoms(
+                        "name P and resname " + " ".join(_GRO_DNA_RESNAMES)))
+                    if n_unmapped > 0.25 * max(n_dna_p, 1):
+                        _which = f" It was built from '{expected_design_name}'." if expected_design_name else ""
+                        raise ValueError(
+                            f"This trajectory doesn't match the design being displayed "
+                            f"({n_unmapped} of {n_dna_p} atoms couldn't be mapped)."
+                            f"{_which} Load that design (or reopen this run from its job) "
+                            "and try again."
+                        )
                     logs.append(
                         f"P-order   : segid map incomplete ({n_unmapped} unmapped) "
                         "— falling back to reference PDB"
@@ -473,7 +597,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
         When None, the frame is read from the Universe as before (full-trajectory
         scrub / ballstick path)."""
         import numpy as _np
-        from backend.core.atomistic_to_nadoc import _GRO_DNA_RESNAMES, _unwrap_min_image
+        from backend.core.atomistic_to_nadoc import (
+            _GRO_DNA_RESNAMES,
+            _unwrap_min_image,
+            reassemble_to_posed_reference,
+        )
 
         u        = _ctx["universe"]
         p_order  = _ctx["p_order"]
@@ -513,39 +641,31 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 # Step 1 — sequential nearest-image (fixes intra-strand PBC splits).
                 p_box = _unwrap_min_image(p_raw, box_nm)
 
-                # Dynamic T: use the CURRENT centroid from sequential-unwrapped atoms.
-                # Use the MEDIAN of rigid (dsDNA, bp≥0) atoms rather than the mean so
-                # that a minority of wrongly-relocated atoms (sequential unwrap errors at
-                # strand boundaries / extreme frames) do not bias the centroid estimate.
-                if rigid_mask is not None and rigid_mask.any():
-                    _c_box = _np.median(p_box[rigid_mask], axis=0)
-                else:
-                    _c_box = p_box.mean(axis=0)
-
-                # Step 2 — hybrid PBC correction:
-                #   Snapped atoms (snap_mask = rigid dsDNA bp≥0 + crossover extra
-                #     bases): per-atom nearest-image to design eq (in dynamic-T box
-                #     frame).  Their MD positions stay within ~5 nm of design
-                #     (thermal + FF), safely < half-box, so the whole-box snap only
-                #     removes periodic-image errors.
-                #   Free ssDNA tails (bp<0 integer): raw sequential-unwrap + T_dyn.
-                #     ssDNA can be anywhere in the box; comparing to ideal B-DNA
-                #     design positions gives unreliable DC that the nearest-image
-                #     step may snap to the wrong periodic image.
-                _T_dyn = eq_centroid - _c_box   # current box → NADOC frame (dynamic)
+                # Step 2 — POSE-FIRST PBC reassembly onto the design reference.
+                #   The old code placed the design reference by TRANSLATION only, then
+                #   nearest-image-snapped.  For an origami larger than half the box that
+                #   has rotated in the cell, a distant atom's un-rotated reference is
+                #   > L/2 away → the snap grabbed the wrong periodic image and the atom
+                #   streaked a full box across the scene.  reassemble_to_posed_reference
+                #   estimates the rigid-body pose (rotation+translation) FIRST, poses the
+                #   design reference into the box frame, and only then snaps — so every
+                #   atom's reference sits beside its true position.  Free ssDNA
+                #   (~snap_mask) keeps its raw sequential-unwrap position, as before.
+                #   c_box is the PBC-robust (circular-mean) centroid, used for T_dyn.
                 if (eq_pos is not None and eq_centroid is not None
                         and snap_mask is not None and len(eq_pos) == len(p_box)):
-                    _eq_box = eq_pos - _T_dyn          # design eq in current box frame
-                    _dc     = p_box - _eq_box
-                    for _d in range(3):
-                        if box_nm[_d] > 0:
-                            _dc[:, _d] -= _np.round(_dc[:, _d] / box_nm[_d]) * box_nm[_d]
-                    # Start from design position + nearest-imaged displacement
-                    p_box_corr = _eq_box + _dc          # corrected box-frame positions
-                    # Overwrite free-ssDNA atoms: keep sequential-unwrap position (no snap)
-                    p_box_corr[~snap_mask] = p_box[~snap_mask]
-                    p_nm = p_box_corr + _T_dyn          # NADOC frame
+                    p_box_corr, _c_box = reassemble_to_posed_reference(
+                        p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask,
+                    )
+                    _T_dyn = eq_centroid - _c_box       # current box → NADOC frame
+                    p_nm   = p_box_corr + _T_dyn        # NADOC frame
                 else:
+                    # No design reference — median-centroid translation only (median is
+                    # robust to a minority of strand-boundary unwrap errors).
+                    if rigid_mask is not None and rigid_mask.any():
+                        _c_box = _np.median(p_box[rigid_mask], axis=0)
+                    else:
+                        _c_box = p_box.mean(axis=0)
                     _T_dyn = eq_centroid - _c_box if (eq_centroid is not None) else T
                     p_nm = p_box + _T_dyn
             else:
@@ -946,9 +1066,21 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 xtc_str      = msg.get("xtc_path", "")
                 coordinate_str = msg.get("coordinate_path") or None
                 mode         = msg.get("mode", "nadoc")
+                job_id_msg   = msg.get("job_id") or None
                 design_payload = msg.get("design")
+                # Prefer the RUN's OWN design (resolved from job_id) over whatever design
+                # is open in the editor.  Mapping a trajectory onto a mismatched design
+                # scrambles the P-atom→(helix,bp) assignment into cross-structure streaks,
+                # so the open design is only a last-resort fallback.
                 design = None
-                if design_payload:
+                expected_design_name = None
+                if job_id_msg:
+                    try:
+                        from backend.api.routes_md import md_display_design_for_job
+                        design, expected_design_name = md_display_design_for_job(job_id_msg)
+                    except Exception:  # noqa: BLE001 — fall back to the payload design
+                        design = None
+                if design is None and design_payload:
                     try:
                         design = Design.model_validate(design_payload)
                     except Exception as exc:
@@ -962,16 +1094,36 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 if not config_str and (not topology_str or not xtc_str):
                     await websocket.send_json({"type": "error", "message": "config_path or topology_path and xtc_path are required."})
                     continue
+                # Progress: a large first-open re-parse is ~tens of seconds — surface the
+                # system size up front so the spinner reads as "working", not "hung".
+                _note = _preload_size_note(config_str, topology_str)
+                if _note:
+                    await websocket.send_json({"type": "loading", "message": _note})
                 try:
-                    loaded = await asyncio.to_thread(
-                        _load_sync,
-                        topology_str,
-                        xtc_str,
-                        mode,
-                        design,
-                        coordinate_str,
-                        config_str or None,
+                    loaded = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            _load_sync,
+                            topology_str,
+                            xtc_str,
+                            mode,
+                            design,
+                            coordinate_str,
+                            config_str or None,
+                            expected_design_name,
+                        ),
+                        timeout=_LOAD_TIMEOUT_S,
                     )
+                except asyncio.TimeoutError:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": (
+                            f"Loading timed out after {int(_LOAD_TIMEOUT_S)}s — this is "
+                            "usually a very large solvated system still parsing. The parse "
+                            "continues in the background, so try again in a moment (re-opens "
+                            "are cached and load fast)."
+                        ),
+                    })
+                    continue
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
