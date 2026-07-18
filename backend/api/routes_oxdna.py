@@ -1310,7 +1310,9 @@ async def get_oxdna_rmsf(job_id: str, align: bool = True) -> dict:
 
     # copies=True → a per-loop-copy flexibility value so every loop bead recolours.
     cached = await run_in_threadpool(
-        production_rmsf_cached, design, trajs, ref_conf, copies=True, align=align)
+        production_rmsf_cached, design, trajs, ref_conf, copies=True, align=align,
+        n_trailing_extra=_capture_bead_count(job),
+        trailing_extra_strand_length=_capture_strand_length(job))
     # average_frame contains NumPy arrays for server-side reconstruction and is
     # intentionally retained only in the cache, not sent in the CG map payload.
     result = {k: v for k, v in cached.items() if k != "average_frame"}
@@ -1350,7 +1352,10 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
     ref_conf = _design_ref_conf(jd, design)
 
     def _compute():
-        mean = production_rmsf_cached(design, trajs, ref_conf, copies=True, align=align)
+        mean = production_rmsf_cached(
+            design, trajs, ref_conf, copies=True, align=align,
+            n_trailing_extra=_capture_bead_count(job),
+            trailing_extra_strand_length=_capture_strand_length(job))
         if not mean.get("ready") or not mean.get("positions"):
             return None, mean
         return geometry_deviation_map(
@@ -1416,7 +1421,10 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
         if trajs:
             break
     if trajs:
-        res = await run_in_threadpool(production_rmsf_cached, design, trajs, ref_conf)
+        res = await run_in_threadpool(
+            production_rmsf_cached, design, trajs, ref_conf,
+            n_trailing_extra=_capture_bead_count(job),
+            trailing_extra_strand_length=_capture_strand_length(job))
         if res.get("ready"):
             rmsf_positions = res["positions"]
             n_frames = res.get("n_frames")
@@ -1456,7 +1464,8 @@ async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True
     _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
     try:
         task = asyncio.create_task(run_in_threadpool(
-            composite_trajectory, design, stages, ref, 200, _prog, align))
+            composite_trajectory, design, stages, ref, 200, _prog, align,
+            _capture_bead_count(job), _capture_strand_length(job)))
         while not task.done():
             if await request.is_disconnected():
                 cancelled.set()
@@ -1529,7 +1538,8 @@ async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody,
         return {}
     return await run_in_threadpool(
         composite_trajectory_atomistic, design, stages, ref, body.frame_indices,
-        align=align)
+        align=align, n_trailing_extra=_capture_bead_count(job),
+        trailing_extra_strand_length=_capture_strand_length(job))
 
 
 @router.post("/oxdna/jobs/{job_id}/frames-surface")
@@ -1547,7 +1557,9 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody,
     return await run_in_threadpool(
         composite_trajectory_surface, design, stages, ref, body.frame_indices,
         body.color_mode, body.probe_radius, body.grid_spacing,
-        body.radius_inflate, body.smooth, align=align)
+        body.radius_inflate, body.smooth, align=align,
+        n_trailing_extra=_capture_bead_count(job),
+        trailing_extra_strand_length=_capture_strand_length(job))
 
 
 def _job_has_surface(job) -> bool:
@@ -1555,6 +1567,17 @@ def _job_has_surface(job) -> bool:
     field/run child that inherited/added one).  Alignment is disallowed for these."""
     rc = job.run_config or {}
     return bool(rc.get("surface") or rc.get("surface_strands"))
+
+
+def _capture_bead_count(job) -> int:
+    """Number of non-design capture particles appended to every oxDNA frame."""
+    built = (((job.run_config or {}).get("surface_strands") or {}).get("built") or {})
+    return int(built.get("n_beads") or 0)
+
+
+def _capture_strand_length(job) -> int:
+    sequence = ((job.run_config or {}).get("surface_strands") or {}).get("sequence") or ""
+    return len("".join(base for base in sequence.upper() if base in "ACGT"))
 
 
 def _relaxed_full_map(job, align: bool, *, copies: bool = False,
@@ -1614,8 +1637,7 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
     # Surface capture strands are appended after the origami particles — a legitimate,
     # job-specific surplus that isn't in the design walk.  Allow it in the guard and skip
     # it in the reader so the origami particles still line up.
-    cap_beads = int((((job.run_config or {}).get("surface_strands") or {}).get("built") or {})
-                    .get("n_beads", 0))
+    cap_beads = _capture_bead_count(job)
     try:
         assert_topology_matches_design(jd / "topology.top", design, extra_trailing=cap_beads)
     except StaleJobTopologyError as exc:
@@ -2045,7 +2067,10 @@ def _rmsf_average_frame(job, align: bool = True):
         return (None, None, None)
     design = Design.model_validate_json((jd / "design.json").read_text())
     ref_conf = _design_ref_conf(jd, design)
-    result = production_rmsf_cached(design, trajs, ref_conf, copies=True, align=align)
+    result = production_rmsf_cached(
+        design, trajs, ref_conf, copies=True, align=align,
+        n_trailing_extra=_capture_bead_count(job),
+        trailing_extra_strand_length=_capture_strand_length(job))
     if not result.get("ready"):
         return (design, None, None)
     rmsf_by_key = {

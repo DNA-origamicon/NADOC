@@ -225,6 +225,8 @@ def production_rmsf(
     include_average_frame: bool = False,
     copies: bool = False,
     align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
 ) -> dict:
     """Per-NUCLEOTIDE average position + RMSF (root-mean-square fluctuation, nm)
     over a production trajectory — the flexibility map.
@@ -261,7 +263,9 @@ def production_rmsf(
     )
     # copies=True keeps each loop-insertion copy under its own 4-tuple key so the
     # flexibility/deviation maps carry a per-copy value instead of collapsing them.
-    ref = read_configuration_full(reference_conf_path, design, copies=copies)
+    ref = read_configuration_full(
+        reference_conf_path, design, copies=copies, n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
     paths = (list(production_traj_path)
              if isinstance(production_traj_path, (list, tuple))
              else [production_traj_path])
@@ -269,7 +273,9 @@ def production_rmsf(
     acc: dict[tuple, dict] = {}   # key → {"pos": [bb xyz...], "a1": [a1...]}
     n_frames = 0
     for path in paths:
-        frames = read_trajectory_frames_full(path, design, copies=copies)
+        frames = read_trajectory_frames_full(
+            path, design, copies=copies, n_trailing_extra=n_trailing_extra,
+            trailing_extra_strand_length=trailing_extra_strand_length)
         box = _parse_box_nm(path)
         for fr in frames:
             aligned = (unwrap_align_to_reference(fr, ref, design, box, align=align)
@@ -332,7 +338,9 @@ _PRODUCTION_RMSF_CACHE_MAX = 4
 
 
 def production_rmsf_cached(design, production_traj_path, reference_conf_path,
-                           *, copies: bool = False, align: bool = True) -> dict:
+                           *, copies: bool = False, align: bool = True,
+                           n_trailing_extra: int = 0,
+                           trailing_extra_strand_length: int = 0) -> dict:
     """LRU-cached :func:`production_rmsf` including its average reconstruction frame.
 
     File size+mtime signatures naturally invalidate running trajectories as they
@@ -346,7 +354,8 @@ def production_rmsf_cached(design, production_traj_path, reference_conf_path,
              if isinstance(production_traj_path, (list, tuple))
              else [production_traj_path])
     key = (tuple(_traj_file_sig(p) for p in paths), _traj_file_sig(reference_conf_path),
-           bool(copies), bool(align))
+           bool(copies), bool(align), int(n_trailing_extra),
+           int(trailing_extra_strand_length))
     if _PRODUCTION_RMSF_CACHE is not None:
         cached = _PRODUCTION_RMSF_CACHE.get(key)
         if cached is not None:
@@ -354,7 +363,8 @@ def production_rmsf_cached(design, production_traj_path, reference_conf_path,
             return cached
     result = production_rmsf(
         design, paths, reference_conf_path, include_average_frame=True, copies=copies,
-        align=align)
+        align=align, n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
     if _PRODUCTION_RMSF_CACHE is None:
         _PRODUCTION_RMSF_CACHE = OrderedDict()
     _PRODUCTION_RMSF_CACHE[key] = result
@@ -2322,7 +2332,9 @@ def _frame_cache_put(key, frame):
 
 
 def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames: int = 200,
-                                *, copies: bool = False, progress=None, align: bool = True):
+                                *, copies: bool = False, progress=None, align: bool = True,
+                                n_trailing_extra: int = 0,
+                                trailing_extra_strand_length: int = 0):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
     Kabsch-align only the surviving frames to the design reference.  The seed
@@ -2343,7 +2355,8 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     from collections import OrderedDict
     if _ALIGNED_CACHE is None:
         _ALIGNED_CACHE = OrderedDict()
-    cache_key = (_aligned_cache_key(stages, reference_conf_path, max_frames, copies), bool(align))
+    cache_key = (_aligned_cache_key(stages, reference_conf_path, max_frames, copies),
+                 bool(align), int(n_trailing_extra), int(trailing_extra_strand_length))
     hit = _ALIGNED_CACHE.get(cache_key)
     if hit is not None:
         try:
@@ -2355,17 +2368,22 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     from backend.physics.oxdna_interface import (
         _build_unwrap_plan,
         _parse_box_nm,
-        _strand_nucleotide_order,
+        _capture_particle_key, _strand_nucleotide_order,
         read_configuration_full,
         read_trajectory_frames_at,
         unwrap_align_to_reference,
     )
-    ref = read_configuration_full(reference_conf_path, design, copies=copies)
+    ref = read_configuration_full(reference_conf_path, design, copies=copies,
+                                  n_trailing_extra=n_trailing_extra,
+                                  trailing_extra_strand_length=trailing_extra_strand_length)
     ref_sig = _ref_content_sig(reference_conf_path)   # content hash → siblings share frames
     # copies=True keeps loop-insertion copies distinct (full 4-tuple key); else collapse
     # to the 3-tuple so the CG trajectory key list is one entry per (helix,bp,dir).
     key_list = list(dict.fromkeys(
         (k if copies else k[:3]) for k in _strand_nucleotide_order(design)))
+    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+        key_list.extend(_capture_particle_key(i, trailing_extra_strand_length)
+                        for i in range(int(n_trailing_extra)))
 
     def _store(result):
         _ALIGNED_CACHE[cache_key] = result
@@ -2417,6 +2435,8 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
     def _keep_for(e):
         return max(1, round(e * max_frames / total)) if total > max_frames else e
     total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)   # progress denominator
+    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+        total_kept += 1  # raw frame 0 supplies capture coordinates for the design seed
     done = 0
     if progress:
         progress(0, total_kept)
@@ -2440,6 +2460,8 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         seed_here = (i == first_nonempty)
         needed = sorted({(p - 1 if seed_here else p) for p in picked
                          if not (seed_here and p == 0)})
+        if seed_here and n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+            needed = sorted(set(needed) | {0})
 
         # Reuse any aligned frame already cached from a previously-viewed lineage that
         # shares this ancestor stage (a common-parent sibling), so only the frames unique
@@ -2448,7 +2470,9 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         aligned = {}
         missing = []
         for idx in needed:
-            hit = _frame_cache_get((tsig, ref_sig, copies, bool(align), idx)) if ref_sig is not None else None
+            frame_key = (tsig, ref_sig, copies, bool(align), int(n_trailing_extra),
+                         int(trailing_extra_strand_length), idx)
+            hit = _frame_cache_get(frame_key) if ref_sig is not None else None
             if hit is not None:
                 aligned[idx] = hit
                 done += 1
@@ -2457,7 +2481,10 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
             else:
                 missing.append(idx)
         if missing:
-            parsed = read_trajectory_frames_at(path, design, missing, copies=copies)
+            parsed = read_trajectory_frames_at(
+                path, design, missing, copies=copies,
+                n_trailing_extra=n_trailing_extra,
+                trailing_extra_strand_length=trailing_extra_strand_length)
             box = _parse_box_nm(path)
             do_align = box is not None and np.all(box > 0)
             for idx, fr in parsed.items():   # the per-frame align is the load's heavy work
@@ -2465,7 +2492,9 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
                       if do_align else fr)
                 aligned[idx] = af
                 if ref_sig is not None:
-                    _frame_cache_put((tsig, ref_sig, copies, bool(align), idx), af)
+                    _frame_cache_put((tsig, ref_sig, copies, bool(align),
+                                      int(n_trailing_extra),
+                                      int(trailing_extra_strand_length), idx), af)
                 done += 1
                 if progress:
                     progress(done, total_kept)
@@ -2473,7 +2502,14 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         stage_frames: list[dict] = []
         for p in picked:
             if seed_here and p == 0:
-                stage_frames.append(ref)
+                # The design-origin reference has no appended particles. Seed their
+                # renderer identities from the first physical trajectory frame so
+                # playback never starts with every capture bead at [0,0,0].
+                seed = dict(ref)
+                first = aligned.get(0) or {}
+                seed.update({k: v for k, v in first.items()
+                             if isinstance(k[0], str) and k[0].startswith("cap")})
+                stage_frames.append(seed)
                 continue
             fr = aligned.get((p - 1) if seed_here else p)
             if fr is not None:          # a malformed / half-written frame drops out (as before)
@@ -2526,6 +2562,8 @@ def composite_trajectory(
     max_frames: int = 200,
     progress=None,
     align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
 ) -> dict:
     """Build the composite scrub-able trajectory for the View-trajectory player.
 
@@ -2553,7 +2591,8 @@ def composite_trajectory(
     # copies=True → loop-insertion copies stay distinct so every loop bead scrubs.
     key_list, ordered, out_stages, markers = _aligned_downsampled_frames(
         design, stages, reference_conf_path, max_frames, copies=True, progress=progress,
-        align=align)
+        align=align, n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
     if not ordered:
         return {"n_frames": 0, "n_nucleotides": len(key_list),
                 "keys": [list(k) for k in key_list], "frames": [],
@@ -3047,14 +3086,19 @@ def pack_surface_bin(data: dict) -> bytes:
 
 def composite_trajectory_atomistic(design, stages, reference_conf_path,
                                    frame_indices, max_frames: int = 200,
-                                   align: bool = True) -> dict:
+                                   align: bool = True,
+                                   n_trailing_extra: int = 0,
+                                   trailing_extra_strand_length: int = 0) -> dict:
     """Per-frame atomistic flat-XYZ for the requested composite-frame indices.
     Returns ``{ "<idx>": [x0,y0,z0, …] }`` — the SAME wire format as
     ``/design/features/atomistic-batch`` (atom-serial order, nm). Frame indices
     match ``composite_trajectory``'s ``frames`` ordering exactly."""
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True, align=align)
-    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True), bool(align))
+        design, stages, reference_conf_path, max_frames, copies=True, align=align,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
+    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
+            bool(align), int(n_trailing_extra), int(trailing_extra_strand_length))
     out: dict[str, list] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= len(ordered):
@@ -3072,14 +3116,19 @@ def composite_trajectory_surface(design, stages, reference_conf_path, frame_indi
                                  color_mode: str = "strand", probe_radius: float = 0.28,
                                  grid_spacing: float = 0.20, radius_inflate: float = 1.30,
                                  smooth: int = 15, max_frames: int = 200,
-                                 align: bool = True) -> dict:
+                                 align: bool = True,
+                                 n_trailing_extra: int = 0,
+                                 trailing_extra_strand_length: int = 0) -> dict:
     """Per-frame molecular surface for the requested composite-frame indices.
     Returns ``{ "<idx>": {vertices, faces, vertex_colors?} }`` — the SAME wire
     format as ``/design/features/surface-batch``. Topology can vary per frame
     (marching cubes); the frontend rebuilds the buffer on a count change."""
     _, ordered, _, _ = _aligned_downsampled_frames(
-        design, stages, reference_conf_path, max_frames, copies=True, align=align)
-    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True), bool(align))
+        design, stages, reference_conf_path, max_frames, copies=True, align=align,
+        n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
+    akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
+            bool(align), int(n_trailing_extra), int(trailing_extra_strand_length))
     sparams = (color_mode, round(probe_radius, 4), round(grid_spacing, 4),
                round(radius_inflate, 4), int(smooth))
     out: dict[str, dict] = {}

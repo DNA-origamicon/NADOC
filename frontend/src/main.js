@@ -1936,6 +1936,9 @@ async function main() {
     // The overlay surface honours the Surface-options sidebar (probe radius / colour mode).
     getSurfaceParams: () => _atomSurface?.getSurfaceParams?.() ?? {},
   })
+  // Renderer-level regression diagnostics: lets automated app tests activate the exact
+  // saved job/mode, then query __nadocDR.debugRenderedAudit() without brittle sidebar clicks.
+  if (import.meta.env.DEV) window.__nadocOxdnaDisplay = oxdnaDisplay
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
   window.addEventListener('nadoc:representation-change', () => oxdnaDisplay.reapplyForRepr())

@@ -329,6 +329,31 @@ describe('initOxdnaDisplay controller', () => {
       [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', copy: 0, backbone_position: [2, 2, 2], nx: 1, ny: 0, nz: 0 }])
   })
 
+  it('trajectory replaces surface-strand preview before applying the first frame', async () => {
+    const calls = []
+    const designRenderer = {
+      applyFemPositions: vi.fn(() => calls.push('positions')),
+      applyScalarColors: vi.fn(), clearScalarColors: vi.fn(),
+    }
+    const strands = [[[10, 20, 30], [11, 20, 30]]]
+    const api = {
+      getOxdnaTrajectory: vi.fn().mockResolvedValue({
+        ready: true, n_frames: 1, keys: [['h0', 0, 'FORWARD']],
+        frames: [[1, 2, 3, 1, 0, 0]], markers: [], stages: [],
+      }),
+      getOxdnaDisplay: vi.fn().mockResolvedValue({ ready: true, surface_strands: strands }),
+    }
+    const onSurfaceStrands = vi.fn((value) => calls.push(value === strands ? 'strands' : 'wrong'))
+    const ctrl = initOxdnaDisplay({ designRenderer, api, onSurfaceStrands })
+
+    await ctrl.loadTrajectory('surface-job')
+
+    expect(onSurfaceStrands).toHaveBeenCalledWith(strands)
+    expect(calls).toEqual(['strands', 'positions'])
+    ctrl.showFrame(0)
+    expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1) // scrubbing never rebuilds/refetches caps
+  })
+
   it('aborts an in-flight trajectory request when toggled off before it loads', async () => {
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     let signal, release
@@ -378,6 +403,32 @@ describe('initOxdnaDisplay controller', () => {
     await ctrl.displayJob('jobF')
     expect(designRenderer.clearScalarColors).toHaveBeenCalled()
     expect(ctrl.mode()).toBe('relaxed')
+  })
+
+  it('flexibility map replaces surface-strand preview before applying mean positions', async () => {
+    const calls = []
+    const designRenderer = {
+      applyFemPositions: vi.fn(() => calls.push('positions')),
+      applyScalarColors: vi.fn(), clearScalarColors: vi.fn(),
+    }
+    const strands = [[[4, 5, 6], [5, 5, 6]]]
+    const api = {
+      getOxdnaRmsf: vi.fn().mockResolvedValue({
+        ready: true, min_rmsf: 0, max_rmsf: 1,
+        positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD',
+          backbone_position: [1, 2, 3], nx: 1, ny: 0, nz: 0, rmsf: 0.2 }],
+      }),
+      getOxdnaDisplay: vi.fn().mockResolvedValue({ ready: true, surface_strands: strands }),
+    }
+    const onSurfaceStrands = vi.fn((value) => calls.push(value === strands ? 'strands' : 'wrong'))
+    const ctrl = initOxdnaDisplay({ designRenderer, api, onSurfaceStrands })
+
+    await ctrl.displayRmsf('surface-job')
+
+    expect(onSurfaceStrands).toHaveBeenCalledWith(strands)
+    expect(calls).toEqual(['strands', 'positions'])
+    await ctrl.displayRmsf('surface-job')
+    expect(api.getOxdnaDisplay).toHaveBeenCalledTimes(1) // cached with the RMSF payload
   })
 
   it('recolorRmsf re-applies colours from the cached payload with custom bounds, without moving positions', async () => {

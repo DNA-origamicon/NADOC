@@ -183,6 +183,9 @@ export function captureNucleotidesFromChains(chains) {
       out.push({
         helix_id: 'cap' + si, strand_id: 'cap' + si,
         bp_index: _CAP_BP_BASE + si * 1000 + k, direction: 'FORWARD',
+        // Explicit non-design identity: selection/filter/connector code must never infer
+        // that these physical auxiliary strands belong to the scaffold topology.
+        strand_type: 'surface_capture', domain_index: 0, is_surface_capture: true,
         backbone_position: [p[0], p[1], p[2]],
         base_normal: [a1[0], a1[1], a1[2]], axis_tangent: [a3[0], a3[1], a3[2]],
         is_five_prime: k === 0, is_three_prime: k === L - 1,

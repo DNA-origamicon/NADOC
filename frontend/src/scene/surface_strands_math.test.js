@@ -126,6 +126,7 @@ describe('captureNucleotidesFromChains', () => {
     const nucs = captureNucleotidesFromChains(chains)
     expect(nucs).toHaveLength(5)   // 3 + 2
     expect(nucs[0]).toMatchObject({ helix_id: 'cap0', strand_id: 'cap0', direction: 'FORWARD',
+      strand_type: 'surface_capture', domain_index: 0, is_surface_capture: true,
       is_five_prime: true, is_three_prime: false, backbone_position: [0, 0, 0] })
     expect(nucs[2]).toMatchObject({ is_three_prime: true })   // last of strand 0
     expect(nucs[3]).toMatchObject({ helix_id: 'cap1', is_five_prime: true })

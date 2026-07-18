@@ -603,6 +603,13 @@ def _strand_nucleotide_order(design: Design) -> list[tuple]:
     return [step.key for step in _walk_strand_nucleotides(design)]
 
 
+def _capture_particle_key(index: int, strand_length: int) -> tuple[str, int, str]:
+    """Stable identity shared with the CG renderer for an appended capture bead."""
+    length = max(1, int(strand_length))
+    strand, bead = divmod(int(index), length)
+    return (f"cap{strand}", 1_000_000 + strand * 1000 + bead, "FORWARD")
+
+
 def count_undefined_bases(
     design: Design, exclude_reference: bool = True
 ) -> tuple[int, int]:
@@ -1307,6 +1314,7 @@ def read_configuration_full(
     include_extra_bases: bool = False,
     include_extensions:  bool = False,
     n_trailing_extra:    int = 0,
+    trailing_extra_strand_length: int = 0,
 ) -> dict[tuple, dict]:
     """
     Read an oxDNA configuration (.dat) and return position + orientation per nuc.
@@ -1365,6 +1373,21 @@ def read_configuration_full(
             "a3": a3 / (np.linalg.norm(a3) + 1e-14),
         }
 
+    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+        start = offset + len(order)
+        for i in range(int(n_trailing_extra)):
+            if start + i >= len(data_lines):
+                break
+            parts = data_lines[start + i].split()
+            if len(parts) < 9:
+                continue
+            vals = [float(x) for x in parts[:9]]
+            a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
+            result[_capture_particle_key(i, trailing_extra_strand_length)] = {
+                "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
+                "a1": a1 / (np.linalg.norm(a1) + 1e-14),
+                "a3": a3 / (np.linalg.norm(a3) + 1e-14),
+            }
     return result
 
 
@@ -1829,6 +1852,8 @@ def _parse_trajectory_frame_lines(
     order: list[tuple],
     *,
     copies: bool = False,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
 ) -> dict[tuple, dict]:
     """Parse one oxDNA trajectory frame's nucleotide rows.
 
@@ -1836,28 +1861,37 @@ def _parse_trajectory_frame_lines(
     half-written frame; callers can detect that by comparing the returned map size
     to the nucleotide order length.
     """
-    offset = _protein_lead_offset(data, order)   # skip leading protein beads (hybrid)
+    offset = _protein_lead_offset(data, order, n_trailing_extra)
     rows = data[offset:offset + len(order)]
+    extra_count = (int(n_trailing_extra)
+                   if trailing_extra_strand_length > 0 else 0)
+    parse_rows = data[offset:offset + len(order) + extra_count]
 
     # FAST PATH: a complete, well-formed frame parses in one vectorized shot — split
     # every row into a single (N, 9+) float array, then normalize a1/a3 for the whole
     # frame at once (one np.linalg.norm instead of one per nucleotide).  This is the
     # common case (any finished stage) and the dominant cost of the composite build.
-    if len(rows) == len(order) and rows:
+    if len(rows) == len(order) and len(parse_rows) == len(order) + extra_count and rows:
         try:
-            ncol = len(rows[0].split())
+            ncol = len(parse_rows[0].split())
             # One C-level parse of the whole frame block (each oxDNA conf row is a fixed
             # column count) beats 14k Python str.split()+float() calls.
-            flat = np.fromstring(" ".join(rows), sep=" ", dtype=float)
-            if ncol >= 9 and flat.size == len(rows) * ncol:
-                arr = flat.reshape(len(rows), ncol)
+            flat = np.fromstring(" ".join(parse_rows), sep=" ", dtype=float)
+            if ncol >= 9 and flat.size == len(parse_rows) * ncol:
+                arr = flat.reshape(len(parse_rows), ncol)
                 pos = arr[:, 0:3] * OXDNA_LENGTH_UNIT
                 a1 = arr[:, 3:6]; a3 = arr[:, 6:9]
                 a1n = a1 / (np.linalg.norm(a1, axis=1, keepdims=True) + 1e-14)
                 a3n = a3 / (np.linalg.norm(a3, axis=1, keepdims=True) + 1e-14)
-                return {(key if copies else key[:3]):
-                        {"backbone_position": pos[i], "a1": a1n[i], "a3": a3n[i]}
-                        for i, key in enumerate(order)}
+                parsed = {(key if copies else key[:3]):
+                          {"backbone_position": pos[i], "a1": a1n[i], "a3": a3n[i]}
+                          for i, key in enumerate(order)}
+                for i in range(extra_count):
+                    j = len(order) + i
+                    parsed[_capture_particle_key(i, trailing_extra_strand_length)] = {
+                        "backbone_position": pos[j], "a1": a1n[j], "a3": a3n[j],
+                    }
+                return parsed
         except (ValueError, TypeError):
             pass   # ragged / half-written row → fall through to the tolerant per-row path
 
@@ -1880,6 +1914,24 @@ def _parse_trajectory_frame_lines(
             "a1": a1 / (np.linalg.norm(a1) + 1e-14),
             "a3": a3 / (np.linalg.norm(a3) + 1e-14),
         }
+    if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
+        start = offset + len(order)
+        for i in range(int(n_trailing_extra)):
+            if start + i >= len(data):
+                break
+            parts = data[start + i].split()
+            if len(parts) < 9:
+                continue
+            try:
+                vals = [float(x) for x in parts[:9]]
+            except ValueError:
+                continue
+            a1 = np.array(vals[3:6]); a3 = np.array(vals[6:9])
+            m[_capture_particle_key(i, trailing_extra_strand_length)] = {
+                "backbone_position": np.array(vals[0:3]) * OXDNA_LENGTH_UNIT,
+                "a1": a1 / (np.linalg.norm(a1) + 1e-14),
+                "a3": a3 / (np.linalg.norm(a3) + 1e-14),
+            }
     return m
 
 
@@ -1888,6 +1940,8 @@ def read_trajectory_frames_full(
     design:    Design,
     *,
     copies:    bool = False,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
 ) -> list[dict[tuple, dict]]:
     """Parse every frame of an oxDNA trajectory (.dat) into a list of per-nucleotide
     maps (same shape as read_configuration_full: position nm + a1 + a3).  Frames are
@@ -1900,7 +1954,9 @@ def read_trajectory_frames_full(
     for fi, s in enumerate(starts):
         e = starts[fi + 1] if fi + 1 < len(starts) else len(lines)
         data = [l for l in lines[s:e] if l.strip() and not l.startswith(("t ", "b ", "E "))]
-        m = _parse_trajectory_frame_lines(data, order, copies=copies)
+        m = _parse_trajectory_frame_lines(
+            data, order, copies=copies, n_trailing_extra=n_trailing_extra,
+            trailing_extra_strand_length=trailing_extra_strand_length)
         if m:
             frames.append(m)
     return frames
@@ -1912,6 +1968,8 @@ def read_trajectory_frames_at(
     indices,
     *,
     copies:    bool = False,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
 ) -> dict[int, dict[tuple, dict]]:
     """Parse ONLY the frames at ``indices`` (0-based positions in the sequence of
     ``t = …`` headers), streaming the file so unwanted frames are never held in memory
@@ -1936,7 +1994,9 @@ def read_trajectory_frames_at(
         for line in fh:
             if line.startswith("t "):
                 if buf is not None:
-                    m = _parse_trajectory_frame_lines(buf, order, copies=copies)
+                    m = _parse_trajectory_frame_lines(
+                        buf, order, copies=copies, n_trailing_extra=n_trailing_extra,
+                        trailing_extra_strand_length=trailing_extra_strand_length)
                     if m:
                         out[cur_idx] = m
                     buf = None
@@ -1947,7 +2007,9 @@ def read_trajectory_frames_at(
             if buf is not None and line.strip() and not line.startswith(("b ", "E ")):
                 buf.append(line)
         if buf is not None:              # flush the final wanted frame (no trailing header)
-            m = _parse_trajectory_frame_lines(buf, order, copies=copies)
+            m = _parse_trajectory_frame_lines(
+                buf, order, copies=copies, n_trailing_extra=n_trailing_extra,
+                trailing_extra_strand_length=trailing_extra_strand_length)
             if m:
                 out[cur_idx] = m
     return out

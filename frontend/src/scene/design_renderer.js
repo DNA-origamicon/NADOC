@@ -15,6 +15,7 @@ import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { resolveRepOverrides } from './representation_overrides.js'
 import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors } from './crossover_connections.js'
+import { auditRenderedBonds, inventoryRenderedElements } from './render_bond_audit.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
 /**
@@ -402,6 +403,8 @@ export function initDesignRenderer(scene, storeRef) {
   let _extraNucs = []          // plain nucleotide dicts (unique high bp_index; cap<i> ids)
   let _extraColor = null       // hex int applied to the capture strands
   let _captureHighlight = false // "Highlight strands" toggle → additive glow (not visibility)
+  let _rebuildSerial = 0
+  let _lastRebuildStack = null
 
   // Re-apply the capture-strand highlight glow after a rebuild (glow layers are cleared on
   // every rebuild).  Glows the injected cap<i> backbone beads; a no-op when off/absent.
@@ -415,6 +418,8 @@ export function initDesignRenderer(scene, storeRef) {
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
+    _rebuildSerial++
+    _lastRebuildStack = new Error('design renderer rebuild').stack
     // Merge capture strands into the geometry so every CG consumer renders them.
     if (_extraNucs.length && geometry && geometry.length) geometry = geometry.concat(_extraNucs)
     // Dispose previous scene objects (or freeze the committed design as the
@@ -1085,12 +1090,53 @@ export function initDesignRenderer(scene, storeRef) {
       const entries = _helixCtrl?.backboneEntries || []
       const caps = entries.filter(e => e.nuc && typeof e.nuc.strand_id === 'string' && e.nuc.strand_id.startsWith('cap'))
       const slabs = (_helixCtrl?.slabEntries || []).filter(e => e.nuc && String(e.nuc.strand_id).startsWith('cap'))
+      const cones = (_helixCtrl?.coneEntries || []).filter(e => String(e.strandId).startsWith('cap'))
       const hex = (c) => c == null ? null : '#' + ((c >>> 0) & 0xffffff).toString(16).padStart(6, '0')
       return {
         extraNucs: _extraNucs.length, extraColor: hex(_extraColor),
         capBeads: caps.length, capBeadColor: caps.length ? hex(caps[0].defaultColor) : null,
         capSlabs: slabs.length, capSlabAxis: slabs.length ? slabs[0].nuc.axis_tangent : null,
+        capCones: cones.length,
+        capCrossCones: cones.filter(e => e.isCrossHelix).length,
         highlight: _captureHighlight, glowCount: _captureGlowLayer.count(),
+      }
+    },
+    /** Exact live Three.js inventory + connector-length audit for RMSF/trajectory debugging. */
+    debugRenderedAudit(thresholdNm = 2) {
+      const bb = _helixCtrl?.backboneEntries || []
+      const slabs = _helixCtrl?.slabEntries || []
+      const cones = _helixCtrl?.coneEntries || []
+      const color = new THREE.Color()
+      const coneMatrix = new THREE.Matrix4()
+      const conePos = new THREE.Vector3(), coneQuat = new THREE.Quaternion(), coneScale = new THREE.Vector3()
+      const drawnConeLength = (e) => {
+        e.instMesh.getMatrixAt(e.id, coneMatrix)
+        coneMatrix.decompose(conePos, coneQuat, coneScale)
+        return Math.abs(coneScale.y)
+      }
+      let scalarChanged = 0, scalarChangedScaffold = 0, scalarChangedCapture = 0
+      const currentColors = new Set()
+      for (const e of bb) {
+        e.instMesh.getColorAt?.(e.id, color)
+        const hex = color.getHex()
+        currentColors.add(hex)
+        if (hex !== e.defaultColor) {
+          scalarChanged++
+          if (e.nuc?.strand_type === 'scaffold') scalarChangedScaffold++
+          if (e.nuc?.is_surface_capture) scalarChangedCapture++
+        }
+      }
+      return {
+        inventory: inventoryRenderedElements(bb, slabs, cones),
+        bond_audit: auditRenderedBonds(bb, cones, thresholdNm, drawnConeLength),
+        fem_updates: _activeFemUpdates?.length ?? 0,
+        colors: {
+          distinct_bead_colors: currentColors.size,
+          changed_from_default: scalarChanged,
+          changed_scaffold: scalarChangedScaffold,
+          changed_surface_capture: scalarChangedCapture,
+        },
+        rebuild: { serial: _rebuildSerial, stack: _lastRebuildStack },
       }
     },
     clearScalarColors() {

@@ -215,6 +215,12 @@ export function initOxdnaDisplay({
   let _devCmap  = 'devramp'    // active deviation-map colormap (widget-driven)
   let _devBounds = null
   let _traj = null     // cached /trajectory payload {keys, frames, markers, n_frames, stages}
+  // The surface-strand coordinates currently exposed by the backend are the job's latest
+  // simulated result.  RMSF + trajectory payloads contain only design-keyed origami beads,
+  // so cache the companion /display result and inject those real strands before either mode
+  // applies its CG positions.  This replaces a stale setup preview without refetching on every
+  // trajectory scrub or flex-map re-toggle.
+  const _surfaceStrandsByJob = new Map()
   // Monotonic token: bumped by every display call AND by stopAndRestore, so an
   // async fetch (live-follow poll / job-switch) that resolves AFTER the overlay
   // was turned off or superseded by a newer call bails instead of re-applying
@@ -609,6 +615,7 @@ export function initOxdnaDisplay({
     // resets origami beads to design positions), so it must run BEFORE the origami FEM move
     // (applyFemPositions moves beads in-place, no rebuild) or the overlay would be clobbered.
     onSurfaceStrands?.(resp.surface_strands || null)   // real strands replace the seed preview
+    _surfaceStrandsByJob.set(jobId, resp.surface_strands || null)
     _applyFem(updates)
     // Hybrid (protein) jobs: move each protein to its relaxed pose (design→relaxed
     // rigid 4×4 from the backend); DNA-only jobs send no proteins → clears to design.
@@ -620,6 +627,22 @@ export function initOxdnaDisplay({
     _warmAtomisticBundle(jobId)   // prebuild the atomistic bundle off the click path
     _applyHeavy()   // atomistic/surface follow when the scene is in a heavy rep
     return { ok: true, n: updates.length, stage: resp.stage_name }
+  }
+
+  /** Ensure non-relaxed display modes use the REAL job strands, never the setup preview.
+   *  setExtraNucleotides rebuilds the CG geometry, so callers MUST await this before _applyFem. */
+  async function _applyJobSurfaceStrands(jobId, align, epoch, signal) {
+    if (!onSurfaceStrands) return true
+    if (_surfaceStrandsByJob.has(jobId)) {
+      onSurfaceStrands(_surfaceStrandsByJob.get(jobId))
+      return epoch === _epoch
+    }
+    const display = await api.getOxdnaDisplay(jobId, { align, signal })
+    if (epoch !== _epoch) return false
+    const strands = display?.surface_strands || null
+    _surfaceStrandsByJob.set(jobId, strands)
+    onSurfaceStrands(strands)
+    return true
   }
 
   /**
@@ -656,13 +679,15 @@ export function initOxdnaDisplay({
   async function displayRmsf(jobId, { refetch = false, align = true } = {}) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
+    if (refetch) _surfaceStrandsByJob.delete(jobId) // running job may have moved its caps too
     // Re-use the cached flex map for this job (instant re-toggle) unless a refetch
     // is forced (e.g. refresh after more production frames accumulated).
     let resp
+    let signal = null
     if (!refetch && _rmsfCache && _rmsfCache.jobId === jobId && _rmsfCache.align === align) {
       resp = _rmsfCache.resp
     } else {
-      const signal = _beginLoad()
+      signal = _beginLoad()
       resp = await api.getOxdnaRmsf(jobId, { align, signal })
       if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     }
@@ -673,6 +698,11 @@ export function initOxdnaDisplay({
     _rmsfCache = { jobId, align, resp }   // keep across toggle-off
     _rmsfResp = resp
     _rmsfBounds = null             // fresh display → default data-range scale
+    // This may rebuild the CG renderer. It therefore belongs immediately before the FEM
+    // move, matching displayJob's surface-strand integration order.
+    if (!await _applyJobSurfaceStrands(jobId, align, epoch, signal)) {
+      return { ok: false, reason: 'superseded' }
+    }
     _applyFem(map.updates)
     designRenderer.applyScalarColors(map.colorByKey)
     _active = true
@@ -776,6 +806,11 @@ export function initOxdnaDisplay({
     _mode = 'trajectory'
     _jobId = jobId
     _align = align
+    // Replace setup-preview strands before showFrame's FEM move; otherwise the rebuild
+    // leaves the origami at design coordinates and the preview caps at seed coordinates.
+    if (!await _applyJobSurfaceStrands(jobId, align, epoch, signal)) {
+      return { ok: false, reason: 'superseded' }
+    }
     showFrame(0)
     return { ok: true, n_frames: resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
   }
@@ -821,9 +856,14 @@ export function initOxdnaDisplay({
   /** Re-fetch the current job's frame (e.g. after a stage completes). */
   async function refresh() {
     if (!_active || !_jobId) return { ok: false, reason: 'not active' }
-    if (_mode === 'trajectory') return loadTrajectory(_jobId)
+    if (_mode === 'trajectory') {
+      _surfaceStrandsByJob.delete(_jobId) // refresh both origami frames and latest real caps
+      return loadTrajectory(_jobId, _align)
+    }
     // refresh re-fetches: more production frames may have accumulated → bypass cache.
-    return _mode === 'rmsf' ? displayRmsf(_jobId, { refetch: true }) : displayJob(_jobId)
+    return _mode === 'rmsf'
+      ? displayRmsf(_jobId, { refetch: true, align: _align })
+      : displayJob(_jobId, _align)
   }
 
   /** Clear the overlay (positions + colours) and restore the design. */

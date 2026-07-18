@@ -332,7 +332,8 @@ def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
     model = None
     if src and src.engine == "oxdna" and src.job_id:
         from backend.api.routes_oxdna import (
-            _composite_inputs, _load_job, _relaxed_full_map, _rmsf_average_frame,
+            _capture_bead_count, _capture_strand_length, _composite_inputs, _load_job,
+            _relaxed_full_map, _rmsf_average_frame,
         )
         from backend.core.atomistic import build_atomistic_model
         from backend.core.oxdna_health import (
@@ -348,7 +349,9 @@ def export_visualized_pdb_file(payload: PdbVisualizationExport) -> Response:
             design, stages, ref = _composite_inputs(job)
             idx = max(0, src.frame - 1)
             frames = composite_trajectory_atomistic(
-                design, stages, ref, [idx], align=src.align) if stages else {}
+                design, stages, ref, [idx], align=src.align,
+                n_trailing_extra=_capture_bead_count(job),
+                trailing_extra_strand_length=_capture_strand_length(job)) if stages else {}
             flat = frames.get(str(idx))
         else:
             design, frame_map, _, _, _ = _relaxed_full_map(

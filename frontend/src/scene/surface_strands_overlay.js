@@ -26,6 +26,18 @@ const MAX_BEADS = 24000            // total emitted beads cap (strands × beads/
 const PREVIEW_BEADS_DEFAULT = 8    // strand length used when no sequence is entered yet
 const DEFAULT_COLOR = 0x00ffff     // cyan — the surface-strand colour (user-controllable)
 
+/** Idempotent bridge into designRenderer.setExtraNucleotides. Full renderer rebuilds are
+ * expensive and destructive to active physical overlays, so identical results are a no-op. */
+export function createSurfaceStrandEmitter(onStrands) {
+  let lastChains = null, lastHighlight = null
+  return (chains, highlight) => {
+    if (chains === lastChains && highlight === lastHighlight) return false
+    lastChains = chains; lastHighlight = highlight
+    onStrands?.(chains, highlight)
+    return true
+  }
+}
+
 // Replicate backend plane_basis(normal): d = normal; ref = X unless d≈±X, then Y.
 function _planeBasis(axis) {
   const n = floorNormal(axis) || [0, 1, 0]
@@ -93,6 +105,7 @@ export function initSurfaceStrandsOverlay({
   let _results = null   // real simulated strands (world nm bead lists) — set once a job is displayed
   let _highlight = true      // strand beads/chains visible
   let _shapePreview = true   // coverage patch visible
+  const _emitStrands = createSurfaceStrandEmitter(onStrands)
   _constrainGizmoToPlane()   // default (-y) → in-plane (X,Z) only
 
   // Bbox centre with the normal-axis coordinate replaced by the plane's absolute position
@@ -188,11 +201,18 @@ export function initSurfaceStrandsOverlay({
       patchMesh.visible = _shapePreview
     } else if (patchMesh) { patchMesh.visible = false }
 
-    // Strands render NATIVELY in the reps and are ALWAYS shown; `_highlight` only toggles the
-    // emphasis glow (passed through), it does not gate visibility.
+    // Strands render NATIVELY in the reps and are ALWAYS shown. The setup "Highlight"
+    // emphasis belongs to the seed PREVIEW only: carrying that duplicate glow geometry into
+    // results mode makes every real cap look selected, creates an apparent second strand at
+    // each site, and obscures which bead the selection ray actually hit.
     let chains = []
     if (active) chains = inResults ? _results : (haveSpec ? _previewChains(spec) : [])
-    onStrands?.(chains, _highlight)
+    const emittedHighlight = !inResults && _highlight
+    // setExtraNucleotides is a full renderer rebuild. Plane/patch/setup refreshes can call
+    // _draw repeatedly while the SAME simulation-result array is active; rebuilding again
+    // after RMSF applies its positions/colors wipes that overlay. Results keep stable array
+    // identity, so emit only when chains or effective highlight actually changed.
+    _emitStrands(chains, emittedHighlight)
 
     // Centre gizmo — only while setting up (preview) with the coverage shape shown.
     helper.visible = active && !inResults && _lastEnabled && haveSpec && _shapePreview

@@ -1108,6 +1108,65 @@ def test_production_rmsf(design, geometry, tmp_path):
     assert r["max_rmsf"] > r["min_rmsf"] + 0.4
 
 
+def test_production_rmsf_ignores_trailing_surface_capture_particles(
+        design, geometry, tmp_path):
+    """Capture beads appended after the origami must not be mistaken for leading
+    protein particles, which shifts every RMSF identity and draws scaffold bonds
+    between unrelated coordinates."""
+    from backend.physics.oxdna_interface import (
+        read_trajectory_frames_at, write_configuration,
+    )
+    from backend.core.oxdna_health import production_rmsf
+
+    base = tmp_path / "base.dat"
+    write_configuration(design, geometry, base, box_nm=80.0)
+    lines = base.read_text().splitlines()
+    header, dna = lines[:3], [line for line in lines[3:] if line.strip()]
+    capture = "999 998 997 1 0 0 0 0 1 0 0 0 0 0 0"
+    moved_capture = "1001 998 997 1 0 0 0 0 1 0 0 0 0 0 0"
+
+    ref = tmp_path / "ref_with_capture.dat"
+    ref.write_text("\n".join(header + dna + [capture]) + "\n")
+    traj = tmp_path / "traj_with_capture.dat"
+    traj.write_text(
+        "\n".join(header + dna + [capture] + header + dna + [moved_capture]) + "\n")
+
+    result = production_rmsf(
+        design, traj, ref, include_average_frame=True, align=False,
+        n_trailing_extra=1, trailing_extra_strand_length=1)
+    assert result["ready"] is True
+    assert result["n_frames"] == 2
+    first_key = next(iter(result["average_frame"]))
+    expected = [float(x) for x in dna[0].split()[:3]]
+    actual = result["average_frame"][first_key]["backbone_position"]
+    from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT
+    assert actual.tolist() == pytest.approx(
+        [x * OXDNA_LENGTH_UNIT for x in expected], abs=1e-6)
+    cap = next(p for p in result["positions"] if p["helix_id"] == "cap0")
+    assert cap["bp_index"] == 1_000_000
+    assert cap["rmsf"] == pytest.approx(OXDNA_LENGTH_UNIT, rel=1e-6)
+
+    # The composite trajectory uses the streaming indexed reader rather than the
+    # full RMSF reader; pin that path independently against the same offset bug.
+    streamed = read_trajectory_frames_at(
+        traj, design, [0, 1], n_trailing_extra=1,
+        trailing_extra_strand_length=1)
+    assert len(streamed) == 2
+    streamed_first = streamed[0][next(iter(streamed[0]))]["backbone_position"]
+    assert streamed_first.tolist() == pytest.approx(
+        [x * OXDNA_LENGTH_UNIT for x in expected], abs=1e-6)
+    assert streamed[0][("cap0", 1_000_000, "FORWARD")]["backbone_position"][0] \
+        != streamed[1][("cap0", 1_000_000, "FORWARD")]["backbone_position"][0]
+
+    from backend.core.oxdna_health import composite_trajectory
+    composite = composite_trajectory(
+        design, [("production", "production", traj)], ref, align=False,
+        n_trailing_extra=1, trailing_extra_strand_length=1)
+    cap_index = composite["keys"].index(["cap0", 1_000_000, "FORWARD"])
+    cap_x = [frame[cap_index * 6] for frame in composite["frames"]]
+    assert len(set(cap_x)) > 1
+
+
 def _write_traj(design, geometry, path, n_frames, box_nm=80.0):
     """Write a tiny oxDNA trajectory of n_frames identical frames at *path*."""
     from backend.physics.oxdna_interface import write_configuration

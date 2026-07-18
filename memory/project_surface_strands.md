@@ -163,9 +163,11 @@ beads exist AND a field is applied, it passes `field_exclude_trailing = n_beads`
   (routes_oxdna) reads `cap_beads` from `run_config.surface_strands.built.n_beads` and threads both.
   Verified on the LIVE job: guard OK, 14774 origami keys read correctly (first nuc [1.98,4.97,43.45]
   vs buggy [20.1,4.2,34.49]). Regression test `test_display_reader_skips_trailing_capture_beads`.
-- Downstream consumers (oxdna_health `_cg_beads_from_frame`, shape_source `_rmsf_profile`) are
-  safe-by-omission: they iterate the (now-correct) design-keyed frame, so capture beads are simply
-  absent, not misindexed. No §4 guard edits needed.
+- Correction (2026-07-18): only the relaxed configuration reader received that trailing count.
+  Production RMSF and composite-trajectory readers independently inferred a leading protein offset,
+  so their origami identities were still shifted by all 948 capture particles. Those paths now accept
+  and cache by `n_trailing_extra`, and every RMSF/trajectory route (including atomistic/surface frames)
+  supplies the job's built capture-bead count.
 - **First live job verdict:** capture strands FENE-safe throughout relax (bonds 0.513–0.769 nm, 0
   over cliff); md_relax auto-retry was normal ORIGAMI escalation, not capture-caused. GPU confirmed
   (MC=CPU-only by design; md_relax/equil=CUDA).
@@ -223,6 +225,59 @@ the CG reps (capBeads==extraNucs), selection works (filters apply). FIXES from u
   browser landing page has no geometry, so `capBeads==0` there is expected, not a bug.
 **Heavy reps (surface, vdw/ballstick) STILL NOT covered** — backend meshes (`/design/surface`,
 `/design/atomistic` + oxDNA job reconstruction) must emit capture strands (next, larger piece).
+
+**Flexibility-map + trajectory CG integration fix (2026-07-18):** those two display modes
+previously applied only their design-keyed origami positions and never performed relaxed display's
+`surface_strands` mode switch. Entering either mode directly from setup therefore left the B-form
+seed preview injected as native `cap<i>` nucleotides; its rebuild also reset the origami before the
+physical frame was applied, producing displaced caps and apparent false connectors. Both modes now
+fetch/cache the job's real `/display.surface_strands`, inject them **before** the first FEM-position
+update (the same ordering invariant as relaxed display), and reuse them across trajectory scrubs and
+map re-toggles. Explicit Refresh invalidates the strand cache so a running job's latest caps are read,
+and preserves the mode's current alignment setting. Focused Vitest regressions assert strands-before-
+positions ordering and no per-scrub/ref-toggle refetch.
+
+**Result selection/duplicate-glow follow-up (2026-07-18):** the setup card's checked-by-default
+“Highlight strands” emphasis was also applied to real simulation results. Its separate glow geometry
+made every cap look selected and like a second coincident strand; clicking through that emphasis could
+select/highlight the scaffold beneath. Results mode now renders exactly the native cap geometry with no
+setup glow (ordinary click selection remains available); preview mode retains the checkbox behavior.
+Injected cap nucleotides also carry explicit `strand_type: surface_capture` / `is_surface_capture`
+metadata, and the crossover-arc collector defensively rejects them because appended capture chains have
+no design-topology crossover or ligation to the origami.
+
+**Run-6 renderer audit + RMSF rebuild root cause (2026-07-18):** added a live Three.js audit
+(`window.__nadocDR.debugRenderedAudit(2)`, pure core in `scene/render_bond_audit.js`) that inventories
+beads/slabs/connectors, reads current instance positions/colors, and reports every rendered connector
+over a threshold with both endpoint identities. The exact `VoltronCoreScad.nadoc` Run 6 job is
+`fa9473f11b05`. Evidence: relaxed result = 15,984 beads (948 caps), 15,699 bonds (869 cap bonds), zero
+bonds >2 nm, max 1.939 nm. The broken post-RMSF state had 0 caps, 0 FEM updates, 0 scaffold beads
+changed from default color, and one unrelated 3.936 nm scaffold crossover (`sc_strand_205`,
+`h_sc_49:64:REVERSE` → `h_sc_48:65:FORWARD`). Root cause: `surface_strands_overlay._draw` re-emitted
+the same results into `setExtraNucleotides` on later plane/card/highlight redraws; that full rebuild
+wiped already-applied RMSF positions/colors. Result-chain emission is now identity-idempotent, pinned by
+`surface_strands_overlay.test.js`; actual chain/highlight changes still rebuild.
+
+**Run-6 actual-cone follow-up (2026-07-18):** the user screenshot proved the endpoint-only audit had
+missed drawn cone transforms. `debugRenderedAudit` now decomposes every live cone instance matrix and
+measures its Y scale (the actual rendered length), reporting matrix length, logical endpoint length,
+delta, and endpoint origins. Screenshot diagnosis: the cyan islands were misindexed scaffold segments,
+not duplicate capture strands; their normal scaffold bonds became the giant dark cones. Cause was the
+production reader's 948-particle shift described above. Exact clean RMSF audit on
+`VoltronCoreScad.nadoc`, Run 6 `fa9473f11b05`: 15,984 beads, 15,699 cones, 948 capture beads, 869 capture
+cones, 0 capture cross-cones, 16,168 FEM updates, 7,249 RMSF-coloured scaffold beads, and **0 rendered
+cones >2 nm** (maximum actual matrix length 1.684847 nm). The Playwright assertion passed on all counts.
+
+**Capture dynamics integration (2026-07-18):** trailing capture particles are no longer merely
+excluded from origami parsing. When a job supplies the sequence length, configuration and trajectory
+readers expose every appended particle under the renderer's existing stable synthetic identity
+(`cap<i>`, high bp index). RMSF accumulation therefore includes their average positions/orientations
+and RMSF scalars; composite trajectory keys/frames include them too. The ordinary FEM/scalar renderer
+paths consequently move beads, slabs, and cones and recolour them without a second overlay or rebuild.
+The trajectory design seed takes capture coordinates from raw frame 0 (never zero placeholders).
+Exact Run 6 evidence: RMSF payload 17,116 positions = 16,168 design + 948 capture; capture RMSF range
+0.3984–3.6525 nm (mean 1.8939); live scene reports all 948 capture beads scalar-coloured and 0 cones
+over 2 nm. A four-frame exact composite sample moved `cap0:1000000` by 0.3687 nm first→last.
 
 **Bbox feedback-loop fix (2026-07-17):** native injection put cap beads into `getBackboneEntries()`,
 and BOTH `main._oxdnaStructureBounds` (patch centre) and `view_tool_buttons._designBBox` (surface grid)

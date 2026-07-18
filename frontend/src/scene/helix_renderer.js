@@ -4290,6 +4290,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         if (!cone.isCrossHelix) continue
         const fn = cone.fromNuc
         const tn = cone.toNuc
+        // Surface-capture strands are standalone appended oxDNA chains. They have no
+        // design-topology crossover/ligation to the origami; never promote one of their
+        // connector cones into the shared crossover-arc layer.
+        if (fn?.is_surface_capture || tn?.is_surface_capture) continue
         if (_isLinkerHelix(fn.helix_id) || _isLinkerHelix(tn.helix_id)) continue
         // Also skip linker bridge strands themselves (`__lnk__*__a` / `__b` / `__s`).
         // For ss linkers we already filter the bridge nucs from byStrand, which
