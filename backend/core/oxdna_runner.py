@@ -421,15 +421,16 @@ def oxdna_available() -> dict:
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
 
 def prepare_oxdna_job(
-    design:        Design,
-    geometry:      list[dict],
-    job:           OxdnaJob,
-    workspace_dir: Path,
-    specs:         list[OxdnaStageSpec],
+    design:          Design,
+    geometry:        list[dict],
+    job:             OxdnaJob,
+    workspace_dir:   Path,
+    specs:           list[OxdnaStageSpec],
     *,
-    surface:       dict | None = None,
-    anchors:       list[dict] | None = None,
-    anchor_stiff:  float = 1000.0,
+    surface:         dict | None = None,
+    anchors:         list[dict] | None = None,
+    anchor_stiff:    float = 1000.0,
+    surface_strands: dict | None = None,
 ) -> dict:
     """Write topology.top, conf.dat, design.json, and stages_spec.json into job dir.
 
@@ -478,16 +479,41 @@ def prepare_oxdna_job(
         write_configuration(design, geometry, jd / "conf.dat", oxdna_native_seed=True)
 
     # Optional hard surface + anchors held throughout the relax (a structure relaxed
-    # on a surface differs from one relaxed free).
+    # on a surface differs from one relaxed free).  Computed from the ORIGAMI-ONLY conf
+    # (before capture strands are appended) so the wall plane sits at the origami extent,
+    # not below the capture beads (which we then place exactly on that plane).
     sa_text, info = "", {}
     if surface or anchors:
         sa_text, info = surface_anchor_forces_text(
             design, jd / "conf.dat", wall=surface, anchors=anchors, anchor_stiff=anchor_stiff)
-    # The equil stage drops the DNA mutual traps but keeps surface/anchors AND the
-    # protein tethers (so proteins don't drift off the structure during the unbiased
-    # settle).  Write it whenever either is present (the spec references it).
-    equil_extra = "\n".join(t for t in (sa_text, prot_traps) if t)
-    if surface or anchors or protein:
+
+    # Surface capture strands: sim-only ssDNA strands (complementary to the overhangs)
+    # standing as a B-form helix on the hard surface, held throughout the relax by stiff
+    # attach-end traps.  Appended AFTER the origami particles so the origami topology/config
+    # are byte-for-byte untouched; requires a surface (they attach to its plane).  Not
+    # supported on protein hybrids (leading-index bookkeeping).  See
+    # backend/physics/oxdna_surface_strands.py.
+    cap_text, cap_info = "", {}
+    if surface_strands and surface and not protein:
+        from backend.physics.oxdna_surface_strands import CaptureSpec, append_capture_strands
+        cspec = (surface_strands if isinstance(surface_strands, CaptureSpec)
+                 else CaptureSpec.from_payload(surface_strands))
+        if cspec:
+            cap_info = append_capture_strands(
+                jd / "topology.top", jd / "conf.dat", cspec, surface)
+            cap_text = cap_info.get("trap_text", "")
+            info = {**info, "capture": {
+                "n_strands": cap_info.get("n_strands", 0),
+                "n_beads": cap_info.get("n_beads", 0),
+                "min_dist_to_origami_nm": cap_info.get("min_dist_to_origami_nm"),
+                "box_nm_grown": cap_info.get("box_nm_grown"),
+                "trap_particles": [p for p, _pos in cap_info.get("trap_anchors", [])],
+            }}
+
+    # The equil stage drops the DNA mutual traps but keeps surface/anchors/capture-strand
+    # traps AND the protein tethers (so nothing drifts during the unbiased settle).
+    equil_extra = "\n".join(t for t in (sa_text, cap_text, prot_traps) if t)
+    if surface or anchors or protein or cap_text:
         (jd / "equil_forces.txt").write_text(equil_extra, encoding="utf-8")
     # Mutual-trap external forces (hold designed WC pairs during the relax stages —
     # NADOC geometry starts the pairs outside oxDNA's H-bond range, so without this

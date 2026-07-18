@@ -782,9 +782,14 @@ class StaleJobTopologyError(RuntimeError):
     design's CURRENT nucleotide order — the job was run by an older build."""
 
 
-def assert_topology_matches_design(top_path: str | Path, design: Design) -> None:
+def assert_topology_matches_design(top_path: str | Path, design: Design,
+                                   *, extra_trailing: int = 0) -> None:
     """Raise :class:`StaleJobTopologyError` if *top_path* was written by a build
     whose nucleotide walk differs from today's.
+
+    ``extra_trailing`` is the count of particles the build appended AFTER the design
+    walk (surface capture strands) — a legitimate, job-specific surplus that must not
+    be read as staleness.  The guard then requires ``n_top == n_walk + extra_trailing``.
 
     Why this has to exist: adding strand extensions GREW ``_strand_nucleotide_order``
     for any design that has them.  A job run before that has fewer particle lines in
@@ -807,7 +812,7 @@ def assert_topology_matches_design(top_path: str | Path, design: Design) -> None
         n_top = int(first[0].split()[0])
     except (ValueError, IndexError):
         return
-    n_now = len(_strand_nucleotide_order(design))
+    n_now = len(_strand_nucleotide_order(design)) + int(extra_trailing)
     if n_top != n_now:
         raise StaleJobTopologyError(
             f"This oxDNA job's topology has {n_top} particles but the design now "
@@ -1214,15 +1219,20 @@ def _conf_center_fallback(box: float) -> str:
 # ── Configuration reader ──────────────────────────────────────────────────────
 
 
-def _protein_lead_offset(data_lines: list, order: list) -> int:
+def _protein_lead_offset(data_lines: list, order: list, n_trailing_extra: int = 0) -> int:
     """Number of leading non-DNA particle lines in a configuration.
 
     A hybrid ANM-oxDNA (DNANM) conf writes the protein beads FIRST, then the DNA
     nucleotides, so it has ``N_protein + len(order)`` data lines.  A DNA-only conf
     has exactly ``len(order)``.  The difference is the count of leading protein
     lines to skip so the DNA keys line up with the trailing DNA lines.  Robust to
-    a truncated mid-write frame (clamped at 0)."""
-    return max(0, len(data_lines) - len(order))
+    a truncated mid-write frame (clamped at 0).
+
+    ``n_trailing_extra`` accounts for particles appended AFTER the DNA (surface
+    capture strands): those are NOT leading, so they must be subtracted before
+    inferring the leading count — otherwise a trailing-only extra would be mistaken
+    for a leading protein block and shift every DNA key onto the wrong line."""
+    return max(0, len(data_lines) - len(order) - int(n_trailing_extra))
 
 
 def read_protein_bead_positions(conf_path: str | Path, n_dna: int) -> list:
@@ -1296,6 +1306,7 @@ def read_configuration_full(
     copies:    bool = False,
     include_extra_bases: bool = False,
     include_extensions:  bool = False,
+    n_trailing_extra:    int = 0,
 ) -> dict[tuple, dict]:
     """
     Read an oxDNA configuration (.dat) and return position + orientation per nuc.
@@ -1332,7 +1343,8 @@ def read_configuration_full(
     order = _strand_nucleotide_order(design)
     lines = Path(conf_path).read_text(encoding="utf-8").splitlines()
     data_lines = [l for l in lines if l.strip() and not l.startswith(('t ', 'b ', 'E '))]
-    offset = _protein_lead_offset(data_lines, order)   # skip leading protein beads (hybrid)
+    # skip leading protein beads (hybrid); n_trailing_extra excludes appended capture beads
+    offset = _protein_lead_offset(data_lines, order, n_trailing_extra)
 
     result: dict[tuple[str, int, str], dict] = {}
     for i, key in enumerate(order):
@@ -1461,6 +1473,7 @@ def read_configuration_unwrapped(
     copies:     bool = False,
     include_extra_bases: bool = False,
     include_extensions:  bool = False,
+    n_trailing_extra:    int = 0,
 ) -> dict[tuple, dict]:
     """Read a relaxed oxDNA config and undo periodic-boundary wrapping for display.
 
@@ -1489,7 +1502,8 @@ def read_configuration_unwrapped(
     """
     relax = read_configuration_full(conf_path, design, copies=copies,
                                     include_extra_bases=include_extra_bases,
-                                    include_extensions=include_extensions)
+                                    include_extensions=include_extensions,
+                                    n_trailing_extra=n_trailing_extra)
     # Reference stays design-keyed (no extra bases, no extension tails) so the Kabsch
     # fit aligns on the rigid duplex, not the floppy single-stranded inserts/tails;
     # those are still carried through the transform via their backbone-bond connection

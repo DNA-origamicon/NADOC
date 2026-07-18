@@ -101,6 +101,10 @@ def _wall_axis_position_nm(wall_meta: dict) -> float:
 # 0.80 cleanly separates the two — nothing legitimate sits in between.
 _MIN_PAIR_COMPLEMENTARITY = 0.80
 
+# Non-blocking warning threshold: a capture-strand bead seeding this close to an origami
+# bead (nm) means the user's hard-surface offset is too small for the strand height.
+_CAPTURE_CLASH_WARN_NM = 1.0
+
 # A skip-gap closing (compact_skips) is preferred UNLESS it lengthens the worst
 # cross-helix backbone bond by more than this many oxDNA units versus the deformed
 # geometry — i.e. it has desynced crossovers.  Skip gaps are intra-helix so they
@@ -169,6 +173,11 @@ class CreateOxdnaJobRequest(BaseModel):
     surface:            Optional[dict]     = Field(None)
     anchors:            list[dict]         = Field(default_factory=list)
     anchor_stiff:       float              = Field(DEFAULT_ANCHOR_STIFF, gt=0.0)
+    # Surface capture strands (immobilization): sim-only ssDNA strands complementary to the
+    # overhangs, dispersed on the hard surface and built into the relaxed system.  Requires
+    # `surface`.  Shape: surfaceStrandsSpec (sequence, attachEnd, shape, sizeNm, densityPerUm2,
+    # offsetXNm/Y, seed, subjectToField).  See backend/physics/oxdna_surface_strands.py.
+    surface_strands:    Optional[dict]     = Field(None)
     design_source_path: Optional[str] = Field(None, description="Workspace path of the active design")
 
 
@@ -558,7 +567,10 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     # Relax-on-a-surface elements (field excluded by design).
     surface_in = body.surface if (body.surface and float(body.surface.get("stiff", 0)) > 0) else None
     anchors_in = body.anchors or []
-    relax_has_forces = bool(surface_in or anchors_in)
+    # Capture strands attach to the plane, so they require a hard surface; ignored without one.
+    surface_strands_in = body.surface_strands if (surface_in and body.surface_strands
+                                                  and body.surface_strands.get("enabled", True)) else None
+    relax_has_forces = bool(surface_in or anchors_in or surface_strands_in)
 
     # Proteins present → an ANM-oxDNA (DNANM) hybrid run on the fork binary.
     from backend.physics.oxdna_protein import has_proteins
@@ -616,6 +628,7 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "max_relax_retries":  body.max_relax_retries,
             "surface":            surface_in,
             "anchors":            anchors_in,
+            "surface_strands":    surface_strands_in,
         },
     )
     job.status = OxdnaStatus.preparing
@@ -643,13 +656,27 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
         job.feature_log_position = effective_feature_log_position(design)
         forces_info = await run_in_threadpool(
             prepare_oxdna_job, design, geometry, job, _workspace(), specs,
-            surface=surface_in, anchors=anchors_in, anchor_stiff=body.anchor_stiff)
+            surface=surface_in, anchors=anchors_in, anchor_stiff=body.anchor_stiff,
+            surface_strands=surface_strands_in)
         # Persist the writer-resolved ABSOLUTE plane coordinate. The descriptor's
         # offset alone is insufficient after the structure moves or a trajectory is
         # scrubbed; visualization must render the exact plane oxDNA used at run start.
         wall_meta = (forces_info or {}).get("wall")
         if wall_meta and job.run_config.get("surface"):
             job.run_config["surface"]["position_nm"] = _wall_axis_position_nm(wall_meta)
+        # Capture-strand build summary → run_config (for echo-back + production trap re-emission)
+        # and a non-blocking clash warning if a capture bead seeds too close to the origami.
+        cap = (forces_info or {}).get("capture")
+        if cap and job.run_config.get("surface_strands") is not None:
+            job.run_config["surface_strands"]["built"] = cap
+            # The built system now has origami + capture particles; keep the job's count in
+            # sync so trajectory frame parsing (and the stale-topology guard) see the real N.
+            job.n_nucleotides += int(cap.get("n_beads", 0))
+            md = cap.get("min_dist_to_origami_nm")
+            if md is not None and md < _CAPTURE_CLASH_WARN_NM:
+                cap["clash_warning"] = (
+                    f"Surface capture strands seed as close as {md:.1f} nm to the origami — "
+                    f"raise the hard-surface offset to avoid a t=0 clash.")
     except Exception as exc:  # noqa: BLE001
         logger.error("create_oxdna_job: prepare FAILED for %s: %s", job.job_id, exc, exc_info=True)
         job.status = OxdnaStatus.failed
@@ -966,7 +993,11 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         wall_in = {"dir": body.surface.dir, "offset_nm": body.surface.offset_nm,
                    "position_nm": body.surface.position_nm, "stiff": body.surface.stiff}
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
-    has_forces = bool(field_in or wall_in or anchors)
+    # Surface capture strands built into the relaxed parent are inherited via the copied
+    # topology/conf; re-pin their attach ends so they stay tethered through production too.
+    cap_built = ((parent.run_config or {}).get("surface_strands") or {}).get("built") or {}
+    cap_particles = cap_built.get("trap_particles") or []
+    has_forces = bool(field_in or wall_in or anchors or cap_particles)
 
     stage = build_run_stage(
         name="1_production", steps=body.steps,
@@ -974,9 +1005,9 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         forces_file="run_forces.txt" if has_forces else None,
         efield=efield_rec,
         forces_meta={"has_field": bool(field_in), "has_surface": bool(wall_in)},
-        # repulsion plane / anchor traps are absolute-coordinate forces → disable
-        # oxDNA's COM diffusion-fix so it doesn't shift them into the structure.
-        absolute_forces=bool(wall_in or anchors),
+        # repulsion plane / anchor / capture-strand traps are absolute-coordinate forces →
+        # disable oxDNA's COM diffusion-fix so it doesn't shift them into the structure.
+        absolute_forces=bool(wall_in or anchors or cap_particles),
         backend=parent.backend, device=parent.device,
         salt_concentration=parent.salt_concentration,
     )
@@ -1001,6 +1032,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
                         "position_nm": body.surface.position_nm,
                         "stiff": body.surface.stiff} if body.surface else None,
             "anchors": [a.model_dump(by_alias=True, exclude_none=True) for a in body.anchors],
+            "surface_strands": (parent.run_config or {}).get("surface_strands"),
         },
     )
 
@@ -1024,6 +1056,17 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         except ValueError as exc:
             shutil.rmtree(cjd, ignore_errors=True)
             raise HTTPException(400, str(exc))
+        # Re-pin inherited capture strands at their (relaxed) attach positions, at the
+        # covalent-stiff tether.  Appended to the same forces file the run reads.
+        if cap_particles:
+            from backend.physics.oxdna_interface import read_cm_positions_oxdna, anchor_trap_block
+            from backend.physics.oxdna_surface_strands import CAPTURE_TRAP_STIFF
+            cm = read_cm_positions_oxdna(cjd / "conf.dat")
+            blocks = [anchor_trap_block(p, cm[p], CAPTURE_TRAP_STIFF)
+                      for p in cap_particles if 0 <= p < len(cm)]
+            if blocks:
+                with open(cjd / "run_forces.txt", "a", encoding="utf-8") as f:
+                    f.write("\n" + "\n".join(blocks))
     if efield_rec is not None:
         child.efield["n_anchored"] = info["n_anchored"]
         child.efield["anchor_keys"] = info["anchor_keys"]
@@ -1483,6 +1526,13 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody,
         body.radius_inflate, body.smooth, align=align)
 
 
+def _job_has_surface(job) -> bool:
+    """Whether the job was run against a hard surface (relax surface, capture strands, or a
+    field/run child that inherited/added one).  Alignment is disallowed for these."""
+    rc = job.run_config or {}
+    return bool(rc.get("surface") or rc.get("surface_strands"))
+
+
 def _relaxed_full_map(job, align: bool, *, copies: bool = False,
                       include_extra_bases: bool = False,
                       include_extensions: bool = False):
@@ -1516,6 +1566,14 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
     if conf_path is None:
         return (None, None, None, None, None)
 
+    # Alignment is DISALLOWED for surface jobs: Kabsch-superposing the relaxed structure back
+    # onto the design origin undoes the settling that keeps it above the plane, so it renders
+    # as if clipping through the surface.  Forcing it off also spares aligning the extra
+    # capture-strand beads.  (The PBC unwrap + box-shift to the reference still run, so the
+    # structure stays whole and near the plane — only the misleading superpose is dropped.)
+    if _job_has_surface(job):
+        align = False
+
     from backend.core.models import Design
     snap = jd / "design.json"
     if not snap.exists():
@@ -1529,8 +1587,13 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
     from backend.physics.oxdna_interface import (
         assert_topology_matches_design, StaleJobTopologyError,
     )
+    # Surface capture strands are appended after the origami particles — a legitimate,
+    # job-specific surplus that isn't in the design walk.  Allow it in the guard and skip
+    # it in the reader so the origami particles still line up.
+    cap_beads = int((((job.run_config or {}).get("surface_strands") or {}).get("built") or {})
+                    .get("n_beads", 0))
     try:
-        assert_topology_matches_design(jd / "topology.top", design)
+        assert_topology_matches_design(jd / "topology.top", design, extra_trailing=cap_beads)
     except StaleJobTopologyError as exc:
         raise HTTPException(409, str(exc)) from exc
 
@@ -1551,13 +1614,44 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
             conf_path, design, ref_conf,
             align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align,
             copies=copies, include_extra_bases=include_extra_bases,
-            include_extensions=include_extensions)
+            include_extensions=include_extensions, n_trailing_extra=cap_beads)
     else:
         full_map = read_configuration_unwrapped(conf_path, design, ref_conf,
                                                 align=align, copies=copies,
                                                 include_extra_bases=include_extra_bases,
-                                                include_extensions=include_extensions)
+                                                include_extensions=include_extensions,
+                                                n_trailing_extra=cap_beads)
     return (design, full_map, stage_name, conf_path, ref_conf)
+
+
+def _capture_display_strands(job, conf_path, full_map) -> list:
+    """Real relaxed capture-strand bead positions (nm), grouped per strand, for the display.
+
+    Capture beads are the trailing particles [N_orig..N_total) — NOT design nucleotides, so
+    they ride a separate render channel.  Alignment is forced off for surface jobs, so the
+    frame is the raw simulation frame (how it settled on the surface); the only correction is
+    a single box-shift of the whole capture group onto the origami's display box-image.
+    Returns [] for non-capture jobs."""
+    import numpy as np
+    ss = (job.run_config or {}).get("surface_strands") or {}
+    built = ss.get("built") or {}
+    n_cap = int(built.get("n_beads", 0))
+    if n_cap <= 0 or not full_map:
+        return []
+    seq = "".join(c for c in (ss.get("sequence") or "").upper() if c in "ACGT")
+    L = len(seq) or 8
+    from backend.physics.oxdna_interface import OXDNA_LENGTH_UNIT, _parse_box_nm
+    lines = [l for l in Path(conf_path).read_text().splitlines()
+             if l.strip() and not l.startswith(("t ", "b ", "E "))]
+    n_orig = len(lines) - n_cap
+    if n_orig < 0 or n_cap % L != 0:
+        return []
+    cap = np.array([[float(x) for x in lines[n_orig + i].split()[:3]] for i in range(n_cap)]) * OXDNA_LENGTH_UNIT
+    box = _parse_box_nm(conf_path)
+    origami_c = np.mean([v["backbone_position"] for v in full_map.values()], axis=0)
+    if box is not None and np.all(box > 0):
+        cap = cap + box * np.round((origami_c - cap.mean(axis=0)) / box)
+    return [cap[s * L:(s + 1) * L].tolist() for s in range(n_cap // L)]
 
 
 @router.get("/oxdna/jobs/{job_id}/display")
@@ -1616,6 +1710,9 @@ async def get_oxdna_display(job_id: str, align: bool = True) -> dict:
         "n_positions": len(positions),
         "positions": positions,
         "proteins": proteins,
+        # Real relaxed surface capture strands (per-strand bead position lists, nm) — a
+        # separate render channel; [] for non-capture jobs.
+        "surface_strands": _capture_display_strands(job, conf_path, full_map),
     }
 
 
