@@ -105,7 +105,9 @@ oxdna_relaxation · benchmark_tuning · md_engines_panel
 **MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel ·
 mrdna_extensions (DONE: 5′/3′ tails are CG beads; guard `__ext_`, NOT `__` — `__lnk__` is real duplex)
 
-**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · **strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD;
+**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · **surface_strands** (immobilization: capture
+strands dispersed on the hard surface + E-field-exclusion toggle; Phase 1 UI+math DONE, topology build
+DEFERRED to Phase 2 — read before touching) · **strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD;
 read before touching the nucleotide walk, the native seed, or any `__xb__`-style key filter) ·
 skip_twist_selfconsistency · regional_autorefine · skip_twist_curvature_sweep · md_twist_validation
 
