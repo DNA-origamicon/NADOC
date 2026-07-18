@@ -487,6 +487,15 @@ _SLOW_TESTS = {
     # scale check, so it is per-test relegated (area "oxdna") rather than whole-module —
     # the rest of test_oxdna_extensions.py is the fast per-change FENE/arc oracle.
     "test_voltroncore_extensions_do_not_disturb_the_rest_of_the_design",
+    # Same file / same real artifact: loads VoltronCoreScad (206 strands / ~15020
+    # particles / 334 single-T tails) and runs a full _geometry_for_design +
+    # native-seed write_configuration ONCE to assert every tail bond is FENE-safe.
+    # That single full-scale seed build is ~5.4 s (half of the ~9.6 s twin above,
+    # which builds the config twice) — inherently over the 5 s per-test budget, not
+    # machine-load noise.  The scale-free FENE-window invariant itself stays fast on
+    # the 6hb fixture (test_extension_seed_bonds_sit_inside_the_fene_window); this
+    # only adds the 334-tail real-design check, so per-test relegated (area "oxdna").
+    "test_voltroncore_334_tails_are_all_fene_safe",
     # Strand extensions → mrDNA: the exact twin of the oxDNA scale check above, on the
     # same full-scale real artifact (VoltronCoreScad, 16150 nt / 334 tails read from
     # workspace/).  It walks _build_nt_arrays over the whole design TWICE (with tails,

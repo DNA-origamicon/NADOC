@@ -1689,6 +1689,7 @@ def build_atomistic_model(
         exclude_helix_ids  = exclude_helix_ids,
         xb_pos_override    = xb_pos_override,
         bridge_fn          = _bridge_fn,
+        fast_bridges       = fast_bridges,
     )
 
     # ── Strand-extension tail atoms (5′/3′ terminal tails) ────────────────────
@@ -2527,6 +2528,7 @@ def _build_extra_base_atoms(
     exclude_helix_ids:  "set[str] | None",
     xb_pos_override:    "dict[tuple[str, int], _np.ndarray] | None" = None,
     bridge_fn=_minimize_backbone_bridge,
+    fast_bridges: bool = False,
 ) -> int:
     """
     Place atomistic atoms for all extra crossover bases in the design.
@@ -2900,6 +2902,16 @@ def _build_extra_base_atoms(
                 bridge_fn(atoms, prev_s_item, next_s_item)
         elif _xb_overridden:
             pass  # legacy position-only override remains strictly authoritative
+        elif fast_bridges and src_s is not None and dst_s is not None:
+            # DISPLAY speed (fast_bridges): skip the per-insert L-BFGS-B glycosidic +
+            # steric-repulsion solve.  The base already sits at its rigid arc pose; a
+            # viewer only needs the phosphodiester linker CLOSED, exactly what the
+            # crossover bridges and the >3-base fallback already do with the cheap
+            # interpolation.  This is the dominant cost on a crossover-dense design —
+            # ~566 solves ≈ 4.8 min on VoltronCore, all discarded for a relaxed frame.
+            # MD seeds / PDB / NAMD (fast_bridges=False) still take the exact minimiser.
+            for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
+                bridge_fn(atoms, prev_s_item, next_s_item)
         elif n == 1 and src_s is not None and dst_s is not None:
             _mini_jobs.append(_functools.partial(
                 _minimize_1_extra_base,

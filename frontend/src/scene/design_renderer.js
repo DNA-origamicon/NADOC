@@ -1377,6 +1377,24 @@ export function initDesignRenderer(scene, storeRef) {
       if (_hiddenCrossoverIds.has(crossoverId)) return
       const ad = _xoverArcDataMap.get(crossoverId)
       if (!ad) return
+      // Simulation overlay active: pin the extra-base beads to their REAL relaxed
+      // positions, NOT this arc's (native/geometric) Bezier.  Without this, any arc-layout
+      // pass that drives a native Bezier — refreshArcVisibility on a rep switch, unfold,
+      // deform — snaps the __xb__ beads back to native while the rest of the structure
+      // stays simulated.  Mirrors applyClusterCrossoverUpdate's sim branch.
+      const sim = _simXbByCrossover?.get(ad.xoId)
+      if (sim) {
+        for (let k = 0; k < ad.beadCount; k++) {
+          const s = sim.get(k)
+          if (!s) continue
+          setExtraBaseInstanceFromSim(
+            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + k, s.pos, s.normal, ad.avgAx)
+          for (const g of _xoverGlowLive) {
+            if (g.arcData === ad && g.localIdx === k) g.pos.copy(s.pos)
+          }
+        }
+        return
+      }
       updateExtraBaseInstances(
         _xoverBeadsMesh, _xoverSlabsMesh,
         ad.beadStartIdx, ad.beadCount,

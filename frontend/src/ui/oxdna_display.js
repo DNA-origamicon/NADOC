@@ -198,7 +198,11 @@ export function initOxdnaDisplay({
   // design mesh AND forwards it to any per-frame consumer (onFrame) — e.g. flexible
   // ssDNA arcs, whose beads are excluded from the rigid mesh and must be redrawn at
   // simulated positions.  Pass null to restore the design (both revert).
+  // Last relaxed CG overlay applied — re-applied when a CG rep is restored so the switch's
+  // arc-layout pass can't leave extra-base / extension beads stranded at native positions.
+  let _lastCgUpdates = null
   const _applyFem = (updates) => {
+    _lastCgUpdates = updates
     designRenderer?.applyFemPositions(updates)
     onFrame?.(updates)
   }
@@ -253,6 +257,10 @@ export function initOxdnaDisplay({
   // colours/bonds/positions).  So before overlaying any oxDNA atomistic frame we
   // REBUILD the renderer from the job's own atomistic model (once per job).
   let _atomTopoJob = null
+  // Topology fetched (bundle atoms+bonds) but NOT yet painted — held so the native mesh
+  // rebuild and the relaxed applyPositionLerp happen in one tick (no native-position flash).
+  let _pendingTopoModel = null
+  let _pendingTopoJob = null   // job _pendingTopoModel was fetched for (legacy path sets no descriptor)
   // Fast CG→atomistic path: the design-fixed stamp descriptor (atom_nuc / atom_local /
   // nonrigid_serials), fetched once per job.  Lets the relaxed atomistic frame ship as
   // per-nucleotide (origin,R) + a small non-rigid set and be expanded client-side
@@ -279,14 +287,22 @@ export function initOxdnaDisplay({
     return { lo, hi }
   }
 
-  /** Ensure the atomistic renderer holds the JOB's topology (atoms+bonds), so the
+  /** FETCH (not render) the JOB's topology (atoms+bonds) + stamp descriptor so the
    *  relaxed positions line up serial-for-serial.  Prefers the COMBINED display bundle
    *  (topology + stamp descriptor, ONE disk-cached build) and caches the descriptor as
    *  a side effect; falls back to the legacy atomistic-model route (and, for the MD
    *  adapter which has neither, becomes a no-op → heavy rep stays off as before).
-   *  Returns false if it could not. */
+   *  Returns false if it could not.
+   *
+   *  IMPORTANT: this NO LONGER calls ar.update().  Painting the renderer at the bundle's
+   *  NATIVE positions here — then awaiting the multi-second relaxed-frame build before
+   *  moving the atoms — is exactly the "atomistic redraws at native, extra bases jump to
+   *  their original spots, THEN the sim positions load" flash.  The render is deferred to
+   *  `_applyJobTopology`, which the caller runs in the SAME synchronous tick as
+   *  applyPositionLerp, so the native rebuild is overwritten before the browser paints. */
   async function _ensureJobAtomistic(ar, epoch) {
-    if (_atomTopoJob === _jobId) return true            // already rebuilt for this job
+    if (_atomTopoJob === _jobId) return true            // already applied for this job
+    if (_pendingTopoModel && _pendingTopoJob === _jobId) return true   // already fetched
     let model = null
     if (typeof api.getOxdnaAtomisticDisplayBundle === 'function') {
       const b = await api.getOxdnaAtomisticDisplayBundle(_jobId).catch(() => null)
@@ -301,7 +317,19 @@ export function initOxdnaDisplay({
       if (epoch !== _epoch) return false
     }
     if (!model?.atoms?.length) return false
-    ar.update({ atoms: model.atoms, bonds: model.bonds || [] })
+    _pendingTopoModel = { atoms: model.atoms, bonds: model.bonds || [] }   // hold, don't paint
+    _pendingTopoJob = _jobId
+    return true
+  }
+
+  /** Apply the fetched topology to the renderer (ar.update = native mesh rebuild).
+   *  SYNCHRONOUS by contract: the caller MUST run ar.applyPositionLerp immediately after,
+   *  in the same tick with no await between, so the native positions this rebuild lays
+   *  down are overwritten before the browser paints a frame (no native flash). */
+  function _applyJobTopology(ar) {
+    if (_atomTopoJob === _jobId) return true            // renderer already holds this job
+    if (!_pendingTopoModel) return false
+    ar.update(_pendingTopoModel)
     _atomTopoJob = _jobId
     _heavyActive = true                                 // restore design reps on stop
     return true
@@ -334,8 +362,11 @@ export function initOxdnaDisplay({
     // arr may be a plain Array (legacy flat route) OR a Float32Array (fast stamp
     // expansion) — accept both array-likes, reject only null/empty.
     if (!ar || ar.getMode?.() === 'off' || !arr || !arr.length) return
-    if (!(await _ensureJobAtomistic(ar, epoch))) return
+    if (!(await _ensureJobAtomistic(ar, epoch))) return   // FETCH topology (no paint)
     if (live && !live()) return
+    // Render native + relax in ONE synchronous tick — the native rebuild is overwritten
+    // before the browser paints, so the atoms appear directly at their simulated positions.
+    _applyJobTopology(ar)
     ar.applyPositionLerp(arr, arr, 0, null, [], null)
     // Flexibility map → recolour atoms by RMSF; any other mode → drop the overlay.
     if (colorByKey) ar.applyScalarColors?.(colorByKey)
@@ -532,8 +563,23 @@ export function initOxdnaDisplay({
     _bakedAtom = null
     _bakedSurf = null
     _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
+    _pendingTopoModel = null   // drop the held (native) model so the next job re-fetches
+    _pendingTopoJob = null
     _stampDescJob = null  // and re-fetches the stamp descriptor for that job
     _lastSurfRmsf = null
+  }
+
+  // Warm-ahead: while the user views the CG relaxed structure, build + disk-cache the
+  // atomistic topology bundle in the background so a later switch to an atomistic rep is
+  // instant instead of paying the cold build on the click. Fire-and-forget, once per job;
+  // the server route is idempotent + single-flighted so this never duplicates a real fetch.
+  let _warmedBundleJob = null
+  function _warmAtomisticBundle(jobId) {
+    if (!jobId || jobId === _warmedBundleJob) return
+    if (typeof api.getOxdnaAtomisticDisplayBundle !== 'function') return
+    _warmedBundleJob = jobId
+    Promise.resolve(api.getOxdnaAtomisticDisplayBundle(jobId).catch(() => null))
+      .then((r) => { if (!r) _warmedBundleJob = null })   // failed → allow a retry later
   }
 
   /** Fetch the latest relaxed frame for jobId and deform the model to it.
@@ -571,6 +617,7 @@ export function initOxdnaDisplay({
     _mode = 'relaxed'
     _jobId = jobId
     _align = align
+    _warmAtomisticBundle(jobId)   // prebuild the atomistic bundle off the click path
     _applyHeavy()   // atomistic/surface follow when the scene is in a heavy rep
     return { ok: true, n: updates.length, stage: resp.stage_name }
   }
@@ -759,7 +806,16 @@ export function initOxdnaDisplay({
    *  changed (the new atomistic/surface mesh is built from the design — overlay it
    *  with the active oxDNA frame). No-op when nothing is displayed. */
   function reapplyForRepr() {
-    if (_active) _applyHeavy()
+    if (!_active) return
+    // Restoring a CG rep: setCGVisible → refreshArcVisibility may have re-driven the
+    // extra-base / connector arcs from NATIVE geometry.  Re-apply the last relaxed overlay
+    // so __xb__ extra-base beads and __ext_ extension tails return to their simulated
+    // positions with the rest of the structure (idempotent for the already-relaxed duplex).
+    if (_repKind() === 'cg') {
+      if (_lastCgUpdates) _applyFem(_lastCgUpdates)
+      return
+    }
+    _applyHeavy()
   }
 
   /** Re-fetch the current job's frame (e.g. after a stage completes). */

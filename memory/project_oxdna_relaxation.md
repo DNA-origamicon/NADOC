@@ -465,6 +465,49 @@ Fixes (user-approved; all display-only, never touch MD seeds / PDB export / topo
   the shared classifier.
 - Net VoltronCore: first switch **~5 min → ~25 s** (`/design/atomistic` ~6 s + bundle ~13 s cold/~4 s
   disk + frames ~6.5 s); repeat switches near-instant (bundle cached frontend-side, frames memoised).
+  **STALE as of 2026-07-18** — see §26b-follow-up below; the extensions/extra-bases sim work
+  regressed the cold bundle to ~290 s and this fix restores it to ~9.5 s.
+
+### §26b-follow-up. Extra-base minimiser now respects `fast_bridges` (2026-07-18) — cold bundle 290 s → 9.5 s
+
+§26b threaded `fast_bridges` through the crossover/skip phosphate **bridge_fn**, but the per-insert
+solvers `_minimize_{1,2,3}_extra_base` (glycosidic + steric-repulsion L-BFGS-B, `atomistic_helpers.py`)
+were NOT gated by it. After the extra-bases/extensions SIM work landed, VoltronCore carries **566
+extra-base crossovers** → 566 scipy solves → the cold `atomistic_display_bundle` build measured **290 s**
+(profiled: `_minimize_lbfgsb` cumulative == whole build; `_cos_angle_grad`/`_repulsion_cost_grad`
+dominate). Those native-geometry positions are then **discarded** for a relaxed frame (the `_xb_overridden`
+path already rigidly stamps inserts from their oxDNA a1/a3 and skips the minimiser at `atomistic.py:2901`).
+Fix: `_build_extra_base_atoms` takes `fast_bridges`; when True and both anchors exist it closes the
+phosphodiester linker with the cheap `bridge_fn` interpolation instead of the minimiser (same as the
+already-shipped `n>3` fallback). `build_atomistic_model` passes it through. **Bundle 290 s → 9.5 s**,
+atom+bond counts byte-identical (330622/369756), 0 new long bonds on inserts (verified). MD seeds / PDB /
+NAMD keep the exact minimiser (`fast_bridges=False`). Regenerated the Con4 + 2hb_xover_val geometry-lock
+goldens (they were already stale from committed `91a8eed`, unrelated to this fast-path change).
+Plus: **single-flight** on `GET .../atomistic-display-bundle` (`_bundle_build_lock`, per topology hash —
+concurrent first-clicks/warm race collapse to one build) and **warm-ahead** — `oxdna_display.displayJob`
+fires a fire-and-forget bundle prefetch so the build happens while the user views the CG relaxed structure.
+Tests: `test_oxdna_bundle_single_flight.py` (3).
+
+**Atomistic-switch render-ordering (2026-07-18):** the fast path painted the renderer at the bundle's
+NATIVE positions (`ar.update`) and THEN awaited the multi-second relaxed-frame build — so native atoms
+(extra bases/extensions on their straight arcs) sat on screen for seconds before jumping to sim positions.
+Fixed by splitting fetch from render: `_ensureJobAtomistic` fetches topology only (holds it in
+`_pendingTopoModel`), and `_applyJobTopology` + `applyPositionLerp` run in ONE synchronous tick inside
+`_pushAtomistic` so native never paints. Pin: `oxdna_display.test.js` "does NOT paint … before the
+relaxed frame arrives".
+
+**Extra-base / extension CG snap (2026-07-18):** switching atomistic→FULL left `__xb__` extra-base beads
+(and `__ext_` tails) stuck at NATIVE while the duplex stayed relaxed — PERSISTENT. Root cause (NOT a
+`_rebuild`): `setCGVisible(true)` → `unfold_view.refreshArcVisibility()` → `_updateArcPositions(0,…,null)`
+→ `design_renderer.updateExtraBaseArc(...)`, which drove the `__xb__` beads onto the NATIVE Bezier and —
+unlike `applyClusterCrossoverUpdate` — never consulted `_simXbByCrossover`. Backend is clean (the frame
+serves relaxed positions for all 102608 non-rigid atoms; verified). Two-part frontend fix, both display-only:
+(1) `updateExtraBaseArc` now short-circuits to `setExtraBaseInstanceFromSim` when `_simXbByCrossover` has the
+crossover (mirrors `applyClusterCrossoverUpdate`) — pins `__xb__` under any arc driver (rep switch, unfold,
+deform); (2) `oxdna_display.reapplyForRepr` re-applies the cached relaxed overlay (`_lastCgUpdates`) when a
+CG rep is restored, re-pinning `__ext_` tails (helix-mesh beads) and any other overlay-dropped bead.
+Pin: `oxdna_display.test.js` "re-applies the relaxed CG overlay when a CG rep is restored". Frontend 3018
+green. NOT yet visually confirmed in the running app.
 - **Native-flash skip (2026-07-14, DONE):** switching full→atomistic while an oxDNA overlay is active
   in a mode that reconstructs atomistic (relaxed/rmsf/trajectory — NOT live/deviation, which are
   CG-only) no longer builds+shows the DESIGN atoms first. `atom_surface_display._applyAtomisticMode`

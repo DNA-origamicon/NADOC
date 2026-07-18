@@ -502,6 +502,47 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(Array.from(arg)).toEqual([1, 0, 0, 0, 1, 0])
   })
 
+  it('does NOT paint the renderer at native positions before the relaxed frame arrives (no flash)', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('ballstick')
+    // Fast bundle path, but hold the relaxed FRAMES pending so we can observe the window
+    // that used to show native atoms (ar.update ran, then this fetch was awaited).
+    let resolveFrames
+    const framesP = new Promise((res) => { resolveFrames = res })
+    api.getOxdnaAtomisticDisplayBundle = vi.fn().mockResolvedValue({
+      topology_hash: 'jobtopo', n_nuc: 1, n_atoms: 2,
+      atoms: [{ serial: 0, element: 'C', strand_id: 's', residue: 'DT' }, { serial: 1, element: 'O', strand_id: 's', residue: 'DT' }],
+      bonds: [[0, 1]],
+      atom_nuc: [0, 0], atom_local: [1, 0, 0, 0, 1, 0], nonrigid_serials: [],
+    })
+    api.getOxdnaDisplayAtomisticFrames = vi.fn().mockReturnValue(framesP)
+
+    const p = ctrl.displayJob('job1')
+    await tick(); await tick()   // bundle resolves; frames still pending
+    // The renderer must NOT have been rebuilt (painted at native) while frames are pending.
+    expect(atom.update).not.toHaveBeenCalled()
+    expect(atom.applyPositionLerp).not.toHaveBeenCalled()
+
+    resolveFrames({ ready: true, topology_hash: 'jobtopo', n_nuc: 1,
+      frames: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], nonrigid_xyz: [] })
+    await p; await tick()
+    // Painted AND relaxed together: update once, immediately followed by the position apply.
+    expect(atom.update).toHaveBeenCalledTimes(1)
+    expect(atom.applyPositionLerp).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-applies the relaxed CG overlay when a CG rep is restored (re-pins __xb__/__ext_)', async () => {
+    const { ctrl, designRenderer } = makeHeavyDeps('full')   // CG target rep
+    await ctrl.displayJob('job1'); await tick()
+    const updates = designRenderer.applyFemPositions.mock.calls.at(-1)[0]
+    expect(updates?.length).toBeTruthy()
+    designRenderer.applyFemPositions.mockClear()
+    // Switching back to a CG rep fires reapplyForRepr — it must re-apply the last relaxed
+    // overlay so extra-base / extension beads aren't left stranded at native by the
+    // arc-layout pass that runs on setCGVisible.
+    ctrl.reapplyForRepr()
+    expect(designRenderer.applyFemPositions).toHaveBeenCalledWith(updates)
+  })
+
   it('rebuilds the job topology only ONCE per job (cached across frames)', async () => {
     const { ctrl, api } = makeHeavyDeps('ballstick')
     await ctrl.displayJob('job1'); await tick()

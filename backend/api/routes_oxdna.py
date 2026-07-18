@@ -272,6 +272,23 @@ def _design_ref_conf(job_dir: Path, design) -> Path:
     return ref
 
 
+# Single-flight for the atomistic display-bundle build: N concurrent first-clicks
+# (or a warm-ahead racing a real click) for the SAME topology collapse to ONE build
+# instead of stacking ~10 s / multi-GB builds.  Keyed by topology hash; the guard
+# lock only protects the tiny per-key lookup, never the build itself.
+_BUNDLE_BUILD_LOCKS: dict[str, asyncio.Lock] = {}
+_BUNDLE_LOCKS_GUARD = asyncio.Lock()
+
+
+async def _bundle_build_lock(thash: str) -> asyncio.Lock:
+    async with _BUNDLE_LOCKS_GUARD:
+        lk = _BUNDLE_BUILD_LOCKS.get(thash)
+        if lk is None:
+            lk = asyncio.Lock()
+            _BUNDLE_BUILD_LOCKS[thash] = lk
+        return lk
+
+
 def _load_job(job_id: str) -> OxdnaJob:
     try:
         job = OxdnaJob.load(job_id, _workspace())
@@ -1845,19 +1862,34 @@ async def get_oxdna_atomistic_display_bundle(job_id: str) -> dict:
     design = Design.model_validate_json(snap.read_text())
     thash = atomistic_reference_topology_hash(design)
     cache_f = jd / "atomistic_display_bundle.json"
-    if cache_f.exists():
+
+    def _read_cache():
+        if cache_f.exists():
+            try:
+                cached = json.loads(cache_f.read_text())
+                if cached.get("topology_hash") == thash:
+                    return cached
+            except Exception:
+                pass   # corrupt/stale cache → rebuild
+        return None
+
+    hit = _read_cache()
+    if hit is not None:
+        return hit
+    # Single-flight: hold the per-topology lock across the build so a second request
+    # (a real click racing the warm-ahead prefetch) blocks and then takes the cached
+    # result instead of launching its own build.
+    lock = await _bundle_build_lock(thash)
+    async with lock:
+        hit = _read_cache()          # another request may have just built + cached it
+        if hit is not None:
+            return hit
+        out = await run_in_threadpool(atomistic_display_bundle, design)
         try:
-            cached = json.loads(cache_f.read_text())
-            if cached.get("topology_hash") == thash:
-                return cached
+            cache_f.write_text(json.dumps(out))
         except Exception:
-            pass   # corrupt/stale cache → rebuild
-    out = await run_in_threadpool(atomistic_display_bundle, design)
-    try:
-        cache_f.write_text(json.dumps(out))
-    except Exception:
-        pass       # cache write best-effort; correctness doesn't depend on it
-    return out
+            pass       # cache write best-effort; correctness doesn't depend on it
+        return out
 
 
 @router.post("/oxdna/jobs/{job_id}/display-atomistic-frames")

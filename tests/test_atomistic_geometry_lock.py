@@ -41,8 +41,11 @@ _FAST_GOLDEN = {
     # deterministically shifted the crossover backbone-bridge minimiser for these two designs;
     # the goldens were never updated in those commits.  6hb_test is unchanged, confirming this
     # is a design-specific geometry change, not wholesale stamp/platform drift.
-    "Con4":          "1c2f22b9d164e88add0ade366ae5e416",
-    "2hb_xover_val": "77b38f80cde66f179fb03b2ff88f35ba",
+    # Regenerated again 2026-07-18: commit 91a8eed (phosphate 4fs-safe on position-only override
+    # inserts) shifted the same two extra-base designs without updating the goldens.  6hb_test
+    # (no such inserts) still matches, again confirming a design-specific change, not drift.
+    "Con4":          "dbaee5ae201a4c422c7ed85f32777a2f",
+    "2hb_xover_val": "e69b20ba99d7d97562807ff06c78d411",
 }
 
 # Slow: large designs that additionally exercise the SKIP-site bridge and the
