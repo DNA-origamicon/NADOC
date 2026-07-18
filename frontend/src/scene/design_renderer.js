@@ -393,9 +393,17 @@ export function initDesignRenderer(scene, storeRef) {
     _helixCtrl.applyRepOverrides(columnRep)
   }
 
+  // Extra (non-design) nucleotides injected into every CG rep — oxDNA surface capture
+  // strands.  They render exactly like origami strands (beads/slab/cylinders/hull) and
+  // move with applyFemPositions, following the __ext_/__lnk__ synthetic-nuc precedent.
+  let _extraNucs = []          // plain nucleotide dicts (unique high bp_index; cap<i> ids)
+  let _extraColor = null       // hex string applied to the capture strands
+
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
+    // Merge capture strands into the geometry so every CG consumer renders them.
+    if (_extraNucs.length && geometry && geometry.length) geometry = geometry.concat(_extraNucs)
     // Dispose previous scene objects (or freeze the committed design as the
     // solid deform-preview reference).  Extra-base beads+slabs are children of
     // root — disposed with it automatically.
@@ -445,6 +453,8 @@ export function initDesignRenderer(scene, storeRef) {
 
     const { strandColors, strandGroups, loopStrandIds, staplesHidden, isolatedStrandId, coloringMode } = storeRef.getState()
     const _eff = _effectiveColors(strandColors, strandGroups)
+    // Colour the capture strands (cyan by default) so they read as a distinct set.
+    if (_extraNucs.length && _extraColor) for (const n of _extraNucs) _eff[n.strand_id] = _extraColor
     _helixCtrl = buildHelixObjects(geometry, design, scene, _eff, loopStrandIds ?? [], helixAxes)
     _helixCtrl.setMode(_currentMode)
     if (coloringMode && coloringMode !== 'strand') {
@@ -1036,6 +1046,34 @@ export function initDesignRenderer(scene, storeRef) {
       _helixCtrl?.applyScalarColors(colorByKey)
       _scalarArcUpdater?.(colorByKey)
       _applyExtraBaseScalarColors(colorByKey)
+    },
+    /** Inject non-design nucleotides (oxDNA surface capture strands) into every CG rep.
+     *  `nucs` = plain nucleotide dicts (unique high bp_index, `cap<i>` helix/strand ids);
+     *  `colorHex` colours them.  Pass [] to remove them.  Triggers a rebuild. */
+    setExtraNucleotides(nucs, colorHex = null) {
+      _extraNucs = Array.isArray(nucs) ? nucs : []
+      // nucColor → setColorAt(setHex(color)) needs an INTEGER; the store's strand colours are
+      // ints too, so parse a '#rrggbb' string to an int.
+      if (colorHex != null) {
+        _extraColor = (typeof colorHex === 'string')
+          ? parseInt(colorHex.replace(/^#/, ''), 16)
+          : colorHex
+      }
+      const { currentGeometry, currentDesign, currentHelixAxes } = storeRef.getState()
+      if (currentGeometry && currentDesign) _rebuild(currentGeometry, currentDesign, currentHelixAxes)
+    },
+    /** DEV diagnostics for the capture-strand injection: how many cap beads rendered and
+     *  the colour they actually got (read back from the built entries). */
+    debugCaptureRender() {
+      const entries = _helixCtrl?.backboneEntries || []
+      const caps = entries.filter(e => e.nuc && typeof e.nuc.strand_id === 'string' && e.nuc.strand_id.startsWith('cap'))
+      const slabs = (_helixCtrl?.slabEntries || []).filter(e => e.nuc && String(e.nuc.strand_id).startsWith('cap'))
+      const hex = (c) => c == null ? null : '#' + ((c >>> 0) & 0xffffff).toString(16).padStart(6, '0')
+      return {
+        extraNucs: _extraNucs.length, extraColor: hex(_extraColor),
+        capBeads: caps.length, capBeadColor: caps.length ? hex(caps[0].defaultColor) : null,
+        capSlabs: slabs.length, capSlabAxis: slabs.length ? slabs[0].nuc.axis_tangent : null,
+      }
     },
     clearScalarColors() {
       _helixCtrl?.clearScalarColors()

@@ -336,6 +336,7 @@ export function runConfigForJob(job) {
     advanced,
     field,
     surface:   rc.surface ?? null,
+    surfaceStrands: rc.surface_strands ?? null,
     anchors:   rc.anchors ?? [],
     prodSteps: rc.steps ?? stepOf('production') ?? null,
   }
@@ -1101,6 +1102,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
         dir: el.surface.dir, offset_nm: el.surface.offsetNm,
         position_nm: el.surface.positionNm, stiff: el.surface.stiff,
       }
+      // Capture strands are built into the relaxed system (they must be present through
+      // relax to hybridise the origami) — sent only alongside an enabled hard surface.
+      if (el.surfaceStrands?.enabled) body.surface_strands = el.surfaceStrands
     }
     if (el.anchors?.length) body.anchors = el.anchors
     try {
@@ -1241,6 +1245,17 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (bpGateInput && a.bpGate != null) bpGateInput.value = String(a.bpGate)
     }
     if (prodStepsInput && cfg.prodSteps != null) prodStepsInput.value = String(cfg.prodSteps)
+    // Alignment is disallowed for surface jobs — the backend forces it off (a Kabsch
+    // superpose onto the design pose makes the relaxed structure look like it clips through
+    // the surface). Reflect that in the toggle so the user isn't misled.
+    const hasSurface = !!(cfg.surface || cfg.surfaceStrands)
+    if (alignToggle) {
+      alignToggle.disabled = hasSurface
+      if (hasSurface) alignToggle.checked = false
+      alignToggle.title = hasSurface
+        ? 'Off for surface jobs — aligning to the design pose would look like the structure clips through the surface.'
+        : ''
+    }
     applyRunConfig?.(cfg, job)
   }
 
@@ -1248,6 +1263,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // anchor glow) don't linger from a previously-selected field run.  The arrow is
   // only shown when a field has been applied to the *current* job.
   function _clearRunCards() {
+    if (alignToggle) { alignToggle.disabled = false; alignToggle.title = '' }
     applyRunConfig?.({ advanced: null, field: null, surface: null, anchors: [] }, null)
   }
 

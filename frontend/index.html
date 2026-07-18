@@ -3862,6 +3862,73 @@
                     </div>
                   </div>
                   <div id="oxdna-floor-ready" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
+
+                  <!-- ── Surface capture strands (oxDNA only; Phase 1 UI — build lands in Phase 2) ── -->
+                  <div id="oxdna-surfstrand-wrap" style="border-top:1px solid #21262d;margin-top:9px;padding-top:8px">
+                    <div style="font-size:11px;color:#6a737d;margin-bottom:6px;line-height:1.35">Disperse ssDNA capture strands (complementary to the origami overhangs) across the surface so the origami hybridises and immobilises.</div>
+                    <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-bottom:6px">
+                      <input type="checkbox" id="oxdna-surfstrand-enable"> Add surface strands
+                    </label>
+                    <div id="oxdna-surfstrand-controls" style="display:none;flex-direction:column;gap:5px">
+                      <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                        <span style="min-width:70px" title="Capture-strand sequence 5′→3′ (A/C/G/T). Complementary to the origami overhang.">Sequence</span>
+                        <input id="oxdna-surfstrand-seq" type="text" placeholder="e.g. TTTTGCTAGC" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs);font-family:monospace">
+                        <button id="oxdna-surfstrand-gen" type="button" title="Generate a sequence (Johnson et al. algorithm)" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 7px;font-size:var(--text-xs);cursor:pointer">Gen</button>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                        <span style="min-width:70px" title="Which end tethers to the surface. The opposite (free) end presents the binding region.">Attach end</span>
+                        <select id="oxdna-surfstrand-end" style="flex:1;background:#161b22;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                          <option value="5'" selected>5′ (free 3′)</option>
+                          <option value="3'">3′ (free 5′)</option>
+                        </select>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                        <span style="min-width:70px" title="Average surface density of capture strands.">Density</span>
+                        <input id="oxdna-surfstrand-density" type="number" min="0" step="100" value="0" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                        <span style="color:#6a737d;font-size:var(--text-xs)">/µm²</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                        <span style="min-width:70px" title="Coverage-patch shape, centred on the surface (offset below).">Shape</span>
+                        <select id="oxdna-surfstrand-shape" style="flex:1;background:#161b22;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                          <option value="circle" selected>Circle</option>
+                          <option value="square">Square</option>
+                        </select>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                        <span id="oxdna-surfstrand-size-label" style="min-width:70px" title="Circle diameter / square width, in nm.">Diameter</span>
+                        <input id="oxdna-surfstrand-size" type="number" min="0" step="1" value="100" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                        <span style="color:#6a737d;font-size:var(--text-xs)">nm</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                        <span style="min-width:70px" title="Patch-centre offset from the surface centre, in the surface plane.">Offset X,Y</span>
+                        <input id="oxdna-surfstrand-offx" type="number" step="1" value="0" title="X offset (nm)" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                        <input id="oxdna-surfstrand-offy" type="number" step="1" value="0" title="Y offset (nm)" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                        <span style="color:#6a737d;font-size:var(--text-xs)">nm</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
+                        <span style="min-width:70px" title="Fixes the random dispersion so a run is reproducible by others.">Seed</span>
+                        <input id="oxdna-surfstrand-seed" type="number" min="0" step="1" value="1" style="flex:1;min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                        <button id="oxdna-surfstrand-seed-new" type="button" title="Pick a new random seed and re-scatter the preview" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 7px;font-size:var(--text-xs);cursor:pointer;white-space:nowrap">New</button>
+                      </div>
+                      <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-top:2px" title="When off, the E-field skips these strands so a drift field toward the surface doesn't press them flat against the plane.">
+                        <input type="checkbox" id="oxdna-surfstrand-field" checked> Subject surface strands to the E-field
+                      </label>
+                      <!-- Display controls: on while setting up, default off when a job is selected -->
+                      <div style="display:flex;align-items:center;gap:10px;color:#8b949e;font-size:var(--text-xs);margin-top:4px;flex-wrap:wrap">
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Show the standing capture strands in 3D (highlight for figures).">
+                          <input type="checkbox" id="oxdna-surfstrand-highlight" checked> Highlight strands
+                        </label>
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="Show the translucent coverage-area shape.">
+                          <input type="checkbox" id="oxdna-surfstrand-showshape" checked> Coverage shape
+                        </label>
+                        <span style="display:flex;align-items:center;gap:4px" title="Surface-strand colour — hex code or the wheel.">
+                          <input type="color" id="oxdna-surfstrand-color" value="#00ffff" style="width:26px;height:18px;padding:0;border:1px solid #30363d;background:#161b22;border-radius:3px;cursor:pointer">
+                          <input type="text" id="oxdna-surfstrand-color-hex" value="#00ffff" spellcheck="false" maxlength="7" aria-label="Surface-strand colour hex" style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs);font-family:monospace"> Colour
+                        </span>
+                      </div>
+                    </div>
+                    <div id="oxdna-surfstrand-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;min-height:14px"></div>
+                  </div>
                 </div>
               </div>
 

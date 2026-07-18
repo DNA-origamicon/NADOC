@@ -97,7 +97,11 @@ export function initViewToolButtons({
     const box = new THREE.Box3()
     let any = false
     for (const e of designRenderer.getBackboneEntries?.() ?? []) {
-      if (e.pos) { box.expandByPoint(new THREE.Vector3(e.pos.x, e.pos.y, e.pos.z)); any = true }
+      // Exclude injected surface capture strands ('cap<i>') — the surface grid must sit at
+      // the design's extent, not follow the strands that are placed relative to it.
+      if (e.pos && !String(e.nuc?.strand_id).startsWith('cap')) {
+        box.expandByPoint(new THREE.Vector3(e.pos.x, e.pos.y, e.pos.z)); any = true
+      }
     }
     return any ? box : null
   }

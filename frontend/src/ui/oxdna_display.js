@@ -183,6 +183,9 @@ export function initOxdnaDisplay({
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
   onFrame = null,
+  // Real relaxed surface capture strands (per-strand world-nm bead lists) from a displayed
+  // job → drives the results overlay (replaces the seed preview). Null clears it.
+  onSurfaceStrands = null,
   // Live surface params (probe radius / colour mode) from the Surface-options sidebar, so
   // the overlay surface honours them instead of the backend defaults.  () => ({...}).
   getSurfaceParams = () => ({}),
@@ -552,9 +555,14 @@ export function initOxdnaDisplay({
         proteinRenderer?.clearOxdnaTransforms?.()
         _active = false; _mode = null; _jobId = null
       }
+      onSurfaceStrands?.(null)
       return { ok: false, reason: resp?.ready === false ? 'no relaxed frame yet' : 'empty' }
     }
     designRenderer.clearScalarColors?.()   // leaving a flexibility map → restore bead colours
+    // Inject the capture strands FIRST — setExtraNucleotides rebuilds the geometry (which
+    // resets origami beads to design positions), so it must run BEFORE the origami FEM move
+    // (applyFemPositions moves beads in-place, no rebuild) or the overlay would be clobbered.
+    onSurfaceStrands?.(resp.surface_strands || null)   // real strands replace the seed preview
     _applyFem(updates)
     // Hybrid (protein) jobs: move each protein to its relaxed pose (design→relaxed
     // rigid 4×4 from the backend); DNA-only jobs send no proteins → clears to design.
@@ -782,6 +790,7 @@ export function initOxdnaDisplay({
     _jobId = null
     designRenderer?.clearScalarColors?.()
     _applyFem(null)
+    onSurfaceStrands?.(null)   // drop the real strands → seed preview resumes
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
     _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
     _rmsfResp = null

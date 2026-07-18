@@ -221,6 +221,9 @@ import { initMdEngines }   from './ui/md_engines.js'
 import { initEfieldGizmo } from './scene/efield_gizmo.js'
 import { initForcesCard } from './ui/forces_card.js'
 import { initOxdnaFloorSetup } from './ui/oxdna_floor_setup.js'
+import { initOxdnaSurfaceStrandsSetup } from './ui/oxdna_surface_strands_setup.js'
+import { initSurfaceStrandsOverlay } from './scene/surface_strands_overlay.js'
+import { captureNucleotidesFromChains } from './scene/surface_strands_math.js'
 import { initOxdnaAnchorsSetup } from './ui/oxdna_anchors_setup.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
@@ -1924,6 +1927,9 @@ async function main() {
     // never moves them — redraw them at the frame's simulated positions instead of
     // leaving a stale geometric arc floating over the sim (null reverts to the arc).
     onFrame: (u) => flexibleArcs.applySimPositions(u),
+    // A displayed job's real relaxed capture strands replace the seed preview overlay
+    // (surfaceStrandsOverlay declared below; fires only on user display → lazy ref safe).
+    onSurfaceStrands: (strands) => surfaceStrandsOverlay?.setResults?.(strands),
     // When switching full→atomistic with this overlay active, the design "native flash"
     // is suppressed (CG stays up) until the reconstructed atoms land — hide CG now.
     onHeavyApplied: () => _atomSurface?.setCGVisible(false),
@@ -1944,6 +1950,9 @@ async function main() {
   const _oxdnaRunElements = () => ({
     field: efieldSetup?.getFieldSpec?.(),
     surface: oxdnaFloorSetup?.getSurfaceSpec?.(),
+    // Phase 1: carried alongside the run elements but not yet injected into the submit
+    // payload (the oxdna_jobs_panel builders still read only surface dir/offset/stiff).
+    surfaceStrands: oxdnaSurfaceStrandsSetup?.getStrandsSpec?.(),
     anchors: oxdnaAnchorsSetup?.getAnchors?.() || [],
   })
   // Echo a run's conditions back into the oxDNA cards (used by both the panel's
@@ -1951,6 +1960,7 @@ async function main() {
   const _oxdnaApplyConfig = (cfg = {}) => {
     efieldSetup?.applyConfig?.(cfg.field)
     oxdnaFloorSetup?.applyConfig?.(cfg.surface)
+    oxdnaSurfaceStrandsSetup?.applyConfig?.(cfg.surfaceStrands)   // null until Phase 2 persists it
     oxdnaAnchorsSetup?.applyConfig?.(cfg.anchors)
   }
   const oxdnaLive = initOxdnaLive({
@@ -2103,21 +2113,62 @@ async function main() {
   })
   if (import.meta.env.DEV) window.__nadocEfield = { setup: efieldSetup, gizmo: efieldGizmo }
 
+  // Design bounding box (nm) — the surface plane + capture-strand overlay share it.
+  const _oxdnaStructureBounds = () => {
+    const box = new THREE.Box3()
+    for (const entry of designRenderer.getBackboneEntries?.() || []) {
+      // EXCLUDE the injected capture strands (strand_id 'cap<i>') — they render through
+      // getBackboneEntries now, but must NOT feed the surface plane / patch centre they're
+      // placed relative to, or changing them (sequence/seed) moves their own frame.
+      if (entry.pos && !String(entry.nuc?.strand_id).startsWith('cap')) box.expandByPoint(entry.pos)
+    }
+    return box.isEmpty() ? null : {
+      min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z],
+    }
+  }
+  let surfaceStrandsOverlay = null   // 3D coverage-patch/strand/centre-gizmo overlay (assigned below)
+  const _refreshStrandsOverlay = () => {
+    if (!surfaceStrandsOverlay) return
+    surfaceStrandsOverlay.setColor?.(oxdnaSurfaceStrandsSetup?.getColor?.())
+    surfaceStrandsOverlay.setHighlight?.(oxdnaSurfaceStrandsSetup?.getHighlight?.())
+    surfaceStrandsOverlay.setShapePreview?.(oxdnaSurfaceStrandsSetup?.getShapePreview?.())
+    surfaceStrandsOverlay.update(oxdnaSurfaceStrandsSetup?.getStrandsSpec?.(), oxdnaSurfaceStrandsSetup?.isEnabled?.())
+  }
+
   const oxdnaFloorSetup = initOxdnaFloorSetup({
     // The hard-surface card drives the shared View grid (renders the wall + flips
-    // the grid button on).  _viewToolButtons is created later in main(); this only
-    // fires on user interaction, so the lazy reference is safe.
-    setSurfaceGrid: (cfg) => _viewToolButtons?.setSurfaceGrid?.(cfg),
-    getStructureBounds: () => {
-      const box = new THREE.Box3()
-      for (const entry of designRenderer.getBackboneEntries?.() || []) if (entry.pos) box.expandByPoint(entry.pos)
-      return box.isEmpty() ? null : {
-        min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z],
-      }
+    // the grid button on) AND positions the capture-strand overlay's plane.
+    // _viewToolButtons is created later in main(); this only fires on user
+    // interaction, so the lazy reference is safe.
+    setSurfaceGrid: (cfg) => {
+      _viewToolButtons?.setSurfaceGrid?.(cfg)
+      surfaceStrandsOverlay?.setPlane?.({ axis: cfg.axis, positionNm: cfg.positionNm })
     },
-    // Toggling the hard floor while Live is running recomposes the live engine.
-    onChange: () => oxdnaLive?.onElementsChanged?.(),
+    getStructureBounds: _oxdnaStructureBounds,
+    // Toggling the hard floor while Live is running recomposes the live engine, and
+    // gates the capture-strands sub-section (they attach to the surface plane).
+    onChange: () => {
+      oxdnaLive?.onElementsChanged?.()
+      oxdnaSurfaceStrandsSetup?.setSurfaceEnabled?.(oxdnaFloorSetup?.isEnabled?.())
+    },
   })
+  // Surface capture strands — sub-section of the Hard-surface card (immobilization).
+  // See memory/project_surface_strands.md.
+  const oxdnaSurfaceStrandsSetup = initOxdnaSurfaceStrandsSetup({
+    onChange: () => { oxdnaLive?.onElementsChanged?.(); _refreshStrandsOverlay() },
+    generateSequence: (len) => api.generateRandomSequence(len),
+  })
+  oxdnaSurfaceStrandsSetup.setSurfaceEnabled(oxdnaFloorSetup.isEnabled())   // initial gate
+  surfaceStrandsOverlay = initSurfaceStrandsOverlay({
+    scene, camera, canvas, controls,
+    getStructureBounds: _oxdnaStructureBounds,
+    onCenterMove: (x, y) => oxdnaSurfaceStrandsSetup.setOffset(x, y),
+    // Render the capture strands NATIVELY in every CG rep: convert the emitted world-nm
+    // bead chains to nucleotides and inject them into the geometry the renderer consumes.
+    onStrands: (chains) => designRenderer.setExtraNucleotides(
+      captureNucleotidesFromChains(chains), oxdnaSurfaceStrandsSetup?.getColor?.() || '#00ffff'),
+  })
+  if (import.meta.env.DEV) { window.__nadocSurfStrands = surfaceStrandsOverlay; window.__nadocDR = designRenderer }
   const oxdnaAnchorsSetup = initOxdnaAnchorsSetup({
     engine: 'oxdna',
     getSelection: _anchorSelectionState,
