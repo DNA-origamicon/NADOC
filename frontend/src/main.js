@@ -2165,8 +2165,8 @@ async function main() {
     onCenterMove: (x, y) => oxdnaSurfaceStrandsSetup.setOffset(x, y),
     // Render the capture strands NATIVELY in every CG rep: convert the emitted world-nm
     // bead chains to nucleotides and inject them into the geometry the renderer consumes.
-    onStrands: (chains) => designRenderer.setExtraNucleotides(
-      captureNucleotidesFromChains(chains), oxdnaSurfaceStrandsSetup?.getColor?.() || '#00ffff'),
+    onStrands: (chains, highlight) => designRenderer.setExtraNucleotides(
+      captureNucleotidesFromChains(chains), oxdnaSurfaceStrandsSetup?.getColor?.() || '#00ffff', highlight),
   })
   if (import.meta.env.DEV) { window.__nadocSurfStrands = surfaceStrandsOverlay; window.__nadocDR = designRenderer }
   const oxdnaAnchorsSetup = initOxdnaAnchorsSetup({

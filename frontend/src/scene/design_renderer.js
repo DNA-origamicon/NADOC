@@ -65,6 +65,9 @@ export function initDesignRenderer(scene, storeRef) {
   // Steric-clash highlight: bright red, marks backbone beads that collide once the
   // design is posed (clash_overlay drives it). Named so gesture e2e can detect it.
   const _clashGlowLayer     = createGlowLayer(scene, 0xff2b2b, 5.6, 'clashGlow')
+  // Surface capture-strand emphasis: a bright additive halo (brightens any strand colour)
+  // when the "Highlight strands" toggle is on. The strands ALWAYS render; this only emphasises.
+  const _captureGlowLayer   = createGlowLayer(scene, 0xffffff, 4.4, 'captureGlow')
   // Drill-v2 hover preview: yellow glow on the would-be-selected leaf (vs the green
   // selection glow). Larger than the green so its halo reads yellow over a selected
   // (green-glowing) strand. Named so gesture e2e can detect it.
@@ -397,7 +400,17 @@ export function initDesignRenderer(scene, storeRef) {
   // strands.  They render exactly like origami strands (beads/slab/cylinders/hull) and
   // move with applyFemPositions, following the __ext_/__lnk__ synthetic-nuc precedent.
   let _extraNucs = []          // plain nucleotide dicts (unique high bp_index; cap<i> ids)
-  let _extraColor = null       // hex string applied to the capture strands
+  let _extraColor = null       // hex int applied to the capture strands
+  let _captureHighlight = false // "Highlight strands" toggle → additive glow (not visibility)
+
+  // Re-apply the capture-strand highlight glow after a rebuild (glow layers are cleared on
+  // every rebuild).  Glows the injected cap<i> backbone beads; a no-op when off/absent.
+  function _applyCaptureGlow() {
+    if (!_captureHighlight || !_extraNucs.length) { _captureGlowLayer.clear(); return }
+    const caps = (_helixCtrl?.backboneEntries || [])
+      .filter(e => e.nuc && typeof e.nuc.strand_id === 'string' && e.nuc.strand_id.startsWith('cap'))
+    _captureGlowLayer.setEntries(caps)
+  }
 
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
@@ -430,6 +443,7 @@ export function initDesignRenderer(scene, storeRef) {
     _undefinedGlowLayer.clear() // caller must re-apply undefined highlight after rebuild
     _anchorGlowLayer.clear()    // caller (anchor_glow) re-applies after a rebuild
     _clashGlowLayer.clear()     // caller (clash_overlay) re-applies after a rebuild
+    _captureGlowLayer.clear()   // re-applied below via _applyCaptureGlow after the build
     _previewGlowLayer.clear()   // hover preview is transient; never survives a rebuild
     if (_previewArcTube) _previewArcTube.visible = false
     if (_selectionArcTube) _selectionArcTube.visible = false
@@ -460,6 +474,7 @@ export function initDesignRenderer(scene, storeRef) {
     if (coloringMode && coloringMode !== 'strand') {
       _helixCtrl.applyColoring(coloringMode, design, _eff, new Set(loopStrandIds ?? []))
     }
+    _applyCaptureGlow()   // re-emphasise the capture strands if "Highlight" is on
 
     // Draw explicit crossover connections from design.crossovers.
     // Each connection is a line between the backbone beads of the two linked nucleotides.
@@ -1050,7 +1065,7 @@ export function initDesignRenderer(scene, storeRef) {
     /** Inject non-design nucleotides (oxDNA surface capture strands) into every CG rep.
      *  `nucs` = plain nucleotide dicts (unique high bp_index, `cap<i>` helix/strand ids);
      *  `colorHex` colours them.  Pass [] to remove them.  Triggers a rebuild. */
-    setExtraNucleotides(nucs, colorHex = null) {
+    setExtraNucleotides(nucs, colorHex = null, highlight = undefined) {
       _extraNucs = Array.isArray(nucs) ? nucs : []
       // nucColor → setColorAt(setHex(color)) needs an INTEGER; the store's strand colours are
       // ints too, so parse a '#rrggbb' string to an int.
@@ -1059,8 +1074,10 @@ export function initDesignRenderer(scene, storeRef) {
           ? parseInt(colorHex.replace(/^#/, ''), 16)
           : colorHex
       }
+      if (highlight !== undefined) _captureHighlight = !!highlight
       const { currentGeometry, currentDesign, currentHelixAxes } = storeRef.getState()
       if (currentGeometry && currentDesign) _rebuild(currentGeometry, currentDesign, currentHelixAxes)
+      else _applyCaptureGlow()   // no geometry to rebuild (setup w/o design) — still sync glow
     },
     /** DEV diagnostics for the capture-strand injection: how many cap beads rendered and
      *  the colour they actually got (read back from the built entries). */
@@ -1073,6 +1090,7 @@ export function initDesignRenderer(scene, storeRef) {
         extraNucs: _extraNucs.length, extraColor: hex(_extraColor),
         capBeads: caps.length, capBeadColor: caps.length ? hex(caps[0].defaultColor) : null,
         capSlabs: slabs.length, capSlabAxis: slabs.length ? slabs[0].nuc.axis_tangent : null,
+        highlight: _captureHighlight, glowCount: _captureGlowLayer.count(),
       }
     },
     clearScalarColors() {

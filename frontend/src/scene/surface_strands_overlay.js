@@ -188,10 +188,11 @@ export function initSurfaceStrandsOverlay({
       patchMesh.visible = _shapePreview
     } else if (patchMesh) { patchMesh.visible = false }
 
-    // Strands render NATIVELY in the reps: emit the current bead lists (or [] when hidden).
+    // Strands render NATIVELY in the reps and are ALWAYS shown; `_highlight` only toggles the
+    // emphasis glow (passed through), it does not gate visibility.
     let chains = []
-    if (active && _highlight) chains = inResults ? _results : (haveSpec ? _previewChains(spec) : [])
-    onStrands?.(chains)
+    if (active) chains = inResults ? _results : (haveSpec ? _previewChains(spec) : [])
+    onStrands?.(chains, _highlight)
 
     // Centre gizmo — only while setting up (preview) with the coverage shape shown.
     helper.visible = active && !inResults && _lastEnabled && haveSpec && _shapePreview
