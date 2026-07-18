@@ -112,6 +112,7 @@ async def main() -> int:
          f"poll {args.poll_sec:.0f}s. Guards campaign pods {CAMPAIGN_PREFIXES}.")
     last_beat = 0.0
     last_sig = None
+    warned_unknown: set[str] = set()
     try:
         while True:
             now = time.time()
@@ -150,10 +151,13 @@ async def main() -> int:
                     await kill(client, ledger, clog, p,
                                f"age {age_min:.0f} min > {args.max_pod_min:.0f} (stuck?)")
 
-            # 3. ORPHAN warn (never auto-kill unknowns)
+            # 3. ORPHAN warn (never auto-kill unknowns) — warn ONCE per pod id, not every poll,
+            #    so a concurrent production run (e.g. nadoc-24hb_*) doesn't spam the stream.
             for p in unknown:
-                emit(f"WARN unknown pod {p.id} ({p.raw.get('name')}) ${p.cost_per_hr}/hr — "
-                     f"NOT a campaign pod; left alone (use reap.py --kill if it is stray)")
+                if p.id not in warned_unknown:
+                    warned_unknown.add(p.id)
+                    emit(f"WARN unknown pod {p.id} ({p.raw.get('name')}) ${p.cost_per_hr}/hr — "
+                         f"NOT a campaign pod; LEFT ALONE (likely a concurrent production run)")
 
             sig = (len(camp), round(spent, 2))
             beat_due = (now - last_beat) / 60 >= args.heartbeat_min
