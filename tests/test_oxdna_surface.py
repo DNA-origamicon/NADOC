@@ -256,6 +256,88 @@ def test_run_surface_only_branches_child(design, monkeypatch, tmp_path):
     assert "type = string" not in forces                # no field requested
 
 
+def _completed_surface_parent(tmp_path, design, *, subject_to_field):
+    """A completed relaxation parent that really has surface capture strands built in
+    (origami + capture beads in its topology/conf), with the 'Subject strands to
+    E-field' toggle stored as ``subject_to_field`` — the state the /run handler reads."""
+    import json
+    from dataclasses import asdict
+    from backend.core.oxdna_protocol import build_relaxation_stages
+    from backend.core.oxdna_runner import prepare_oxdna_job
+    from backend.api.crud import _geometry_for_design
+    from backend.physics.oxdna_interface import _strand_nucleotide_order
+
+    geom = _geometry_for_design(design)
+    n_origami = len(_strand_nucleotide_order(design))
+    specs = build_relaxation_stages(mc_steps=10, md_relax_steps=10, equil_steps=10,
+                                    surface_present=True)
+    job = new_oxdna_job("d", [s.to_status() for s in specs])
+    surface = {"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0}   # generous → no clash
+    strands = {"enabled": True, "sequence": "ACGTACGT", "attachEnd": "5'", "shape": "circle",
+               "sizeNm": 60.0, "densityPerUm2": 4000.0, "seed": 7,
+               "subjectToField": subject_to_field}
+    info = prepare_oxdna_job(design, geom, job, tmp_path, specs,
+                             surface=surface, surface_strands=strands)
+    cap = info["capture"]
+    jd = job.job_dir(tmp_path)
+    # The relaxed seed _latest_relaxed_conf reads = the final stage's last_conf: reuse the
+    # built (origami+caps) conf so the child inherits both the origami and capture beads.
+    sd = job.stage_dir(tmp_path, specs[-1].name); sd.mkdir(parents=True, exist_ok=True)
+    (sd / "last_conf.dat").write_text((jd / "conf.dat").read_text())
+    (jd / "stages_spec.json").write_text(json.dumps([asdict(s) for s in specs], indent=2))
+    job.status = OxdnaStatus.completed
+    job.n_nucleotides = n_origami + cap["n_beads"]
+    job.run_config = {"kind": "relax", "surface": surface,
+                      "surface_strands": {**strands, "built": cap}}
+    job.save(tmp_path)
+    return job, n_origami, cap["n_beads"]
+
+
+def test_run_field_excludes_capture_strands_when_toggle_off(design, monkeypatch, tmp_path):
+    """The 'Subject surface strands to the E-field' toggle OFF → the /run handler writes a
+    field the simulation applies to the ORIGAMI ONLY: the string block names particles
+    [0, n_origami) and omits every trailing capture-strand bead."""
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent, n_origami, n_caps = _completed_surface_parent(tmp_path, design,
+                                                          subject_to_field=False)
+    assert n_caps > 0
+    r = client.post(f"/api/oxdna/jobs/{parent.job_id}/run",
+                    json={"steps": 1000, "field": {"field_pN": 2.0, "dir": [0, 0, 1]},
+                          "surface": {"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0}})
+    assert r.status_code == 200, r.text
+    from backend.core.oxdna_job import OxdnaJob
+    child = OxdnaJob.load(r.json()["job_id"], tmp_path)
+    forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
+
+    import re
+    # Exactly one uniform field; its particle spec is a comma list of the origami indices.
+    assert forces.count("type = string") == 1
+    m = re.search(r"type = string\nparticle = ([^\n]+)", forces)
+    spec = m.group(1)
+    assert spec != "-1"                                    # NOT field-on-all
+    idxs = [int(x) for x in spec.split(",")]
+    assert idxs == list(range(n_origami))                  # origami only
+    n_total = n_origami + n_caps
+    assert all(cap_idx not in idxs for cap_idx in range(n_origami, n_total))  # caps excluded
+
+
+def test_run_field_includes_capture_strands_when_toggle_on(design, monkeypatch, tmp_path):
+    """Toggle ON (default) → the field is applied to every nucleotide (particle = -1),
+    capture strands included — the mirror of the exclusion test."""
+    client, _ = _run_client(monkeypatch, tmp_path)
+    parent, _n_origami, n_caps = _completed_surface_parent(tmp_path, design,
+                                                           subject_to_field=True)
+    assert n_caps > 0
+    r = client.post(f"/api/oxdna/jobs/{parent.job_id}/run",
+                    json={"steps": 1000, "field": {"field_pN": 2.0, "dir": [0, 0, 1]},
+                          "surface": {"dir": [0, -1, 0], "offset_nm": 20.0, "stiff": 5.0}})
+    assert r.status_code == 200, r.text
+    from backend.core.oxdna_job import OxdnaJob
+    child = OxdnaJob.load(r.json()["job_id"], tmp_path)
+    forces = (child.job_dir(tmp_path) / "run_forces.txt").read_text()
+    assert "type = string\nparticle = -1" in forces        # field on all nucleotides
+
+
 def test_run_absolute_surface_position_is_preserved(design, monkeypatch, tmp_path):
     client, _ = _run_client(monkeypatch, tmp_path)
     parent = _completed_parent(tmp_path, design)

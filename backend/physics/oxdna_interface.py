@@ -2302,17 +2302,31 @@ def read_cm_positions_oxdna(conf_path: str | Path) -> list[list[float]]:
     return out
 
 
-def field_string_block(field_oxdna: float, field_dir) -> str:
-    """An oxDNA ``string`` force (constant ``field_oxdna`` along ``field_dir``)
-    applied to EVERY nucleotide (``particle = -1``).  A uniform electric field
-    acts equally on each (uniformly-charged) backbone bead.  Anchored nucleotides
-    feel the field too, but their high-stiffness traps hold them immobile against
-    it (oxDNA's ConstantRateForce rejects range particle-specs, so excluding
-    anchors from the field isn't viable — and the trap dominates regardless)."""
+def field_string_block(field_oxdna: float, field_dir, *, n_particles: int | None = None) -> str:
+    """An oxDNA ``string`` force (constant ``field_oxdna`` along ``field_dir``).
+    A uniform electric field acts equally on each (uniformly-charged) backbone bead.
+
+    ``n_particles`` selects who feels the field:
+      * ``None`` (default) → ``particle = -1`` = EVERY nucleotide.
+      * an int ``K`` → only particles ``[0, K)``, written as an explicit
+        comma-separated index list.  Used to exclude the trailing surface
+        capture-strand beads (always appended last, so origami = ``[0, K)``)
+        when the "Subject surface strands to the E-field" toggle is off.
+
+    A comma LIST is used, never a dash range ``a-b``: for a DNA system oxDNA reads
+    ``a-b`` as a 5'→3' topology walk from ``a`` to ``b`` (and throws "couldn't get
+    from particle a to b" when they aren't strand-connected), whereas a comma list
+    is a plain index set.  The forces file is read with ``getdelim`` (no line-length
+    cap), so a long list is safe.  Anchored nucleotides still feel the field but
+    their high-stiffness traps hold them immobile regardless."""
     dx, dy, dz = _normalize3(field_dir)
+    if n_particles is None:
+        particle = "-1"
+    else:
+        particle = ",".join(str(i) for i in range(int(n_particles)))
     return ("{\n"
             "type = string\n"
-            "particle = -1\n"
+            f"particle = {particle}\n"
             f"F0 = {field_oxdna:.6g}\n"
             "rate = 0\n"
             f"dir = {dx:.6g},{dy:.6g},{dz:.6g}\n"
@@ -2431,16 +2445,23 @@ def write_run_forces(
     wall: dict | None = None,
     anchors: list[dict] | None = None,
     anchor_stiff: float = DEFAULT_ANCHOR_STIFF,
+    field_exclude_trailing: int = 0,
 ) -> dict:
     """Write the external-forces file for a composed production run: any combination
-    of a uniform ``string`` field (all nucleotides), a ``repulsion_plane`` hard
-    surface (all nucleotides), and ``trap`` anchors pinning selected nucleotides.
+    of a uniform ``string`` field, a ``repulsion_plane`` hard surface (all
+    nucleotides), and ``trap`` anchors pinning selected nucleotides.
 
     ``field`` is ``{"force_oxdna": f, "dir": [x,y,z]}`` or None; ``wall`` is
     ``{"dir": [x,y,z], "offset_nm": d, "stiff": s}`` or None; ``anchors`` is the
     anchor-descriptor list.  Each element is independent — pass only the ones the
     user enabled.  Anchor traps pin to each particle's position in ``conf_path``
     (the configuration the run starts from).
+
+    ``field_exclude_trailing`` — number of trailing particles (the appended surface
+    capture-strand beads) to EXCLUDE from the uniform field, so the field acts on the
+    origami only (``[0, n_total - field_exclude_trailing)``).  0 → field on all
+    nucleotides (``particle = -1``).  This is the "Subject surface strands to the
+    E-field" toggle's OFF branch.
 
     Returns ``{n_anchored, n_total, anchor_particles, anchor_keys, field, wall,
     has_forces}`` (``field``/``wall`` are the resolved meta dicts, or None)."""
@@ -2452,8 +2473,15 @@ def write_run_forces(
     if field:
         f_oxdna = float(field.get("force_oxdna", 0.0))
         if f_oxdna > 0:
-            field_text = field_string_block(f_oxdna, field.get("dir"))
-            field_meta = {"force_oxdna": f_oxdna, "dir": _normalize3(field.get("dir"))}
+            # Restrict the field to origami particles [0, K) only when the caller asks
+            # to exclude trailing caps AND that leaves a non-empty, strict subset.
+            n_field = None
+            exclude = int(field_exclude_trailing or 0)
+            if 0 < exclude < info["n_total"]:
+                n_field = info["n_total"] - exclude
+            field_text = field_string_block(f_oxdna, field.get("dir"), n_particles=n_field)
+            field_meta = {"force_oxdna": f_oxdna, "dir": _normalize3(field.get("dir")),
+                          "particle_count": n_field}
 
     parts = [t for t in (field_text, sa_text) if t]   # field first, then wall + anchors
     Path(path).write_text("\n".join(parts), encoding="utf-8")

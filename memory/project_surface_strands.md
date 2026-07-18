@@ -90,6 +90,29 @@ end traps + `fix_diffusion=false`; thread `surface_strands` through the relax/Ru
 + persist in `run_config`; pytest coverage. (2b) 3D viz overlay. (2c — LAST) E-field exclusion
 toggle → per-particle origami-only field blocks. (2d — DONE) the "Gen" sequence button.
 
+**E-field exclusion toggle (Phase 2c, the LAST deferred piece) DONE (2026-07-17).** The
+"Subject surface strands to the E-field" checkbox now actually does something when OFF.
+Before: the flag reached `CaptureSpec.subject_to_field` and was dropped — the field's
+`particle = -1` block always swept the capture beads. Now the production `/run` handler
+reads `run_config.surface_strands.subjectToField` (default true); when false AND capture
+beads exist AND a field is applied, it passes `field_exclude_trailing = n_beads` to
+`write_run_forces`, which fields only origami particles `[0, n_total − n_beads)`.
+- **Mechanism = comma LIST, NOT per-particle blocks and NOT a dash range.** `field_string_block`
+  gained `n_particles=K` → `particle = 0,1,…,K-1`. Capture beads are always appended last so
+  origami is exactly the leading block. **Dash range `0-K` is WRONG for DNA** — oxDNA's
+  `Utils::get_particles_from_string` reads `a-b` as a 5'→3' topology walk and throws "couldn't
+  get from particle a to b" (the old reverted attempt; see [[project_oxdna_efield]]). A comma
+  list is a plain index set and the forces file has no line-length cap (`getdelim`), so ~14k
+  indices on one line is safe. ON (default) keeps `particle = -1`.
+- Only wired on the consolidated `/run` path (the real surface+field production path that also
+  re-pins caps). The legacy `/field`-only child + live paths don't build capture strands, so no
+  exclusion needed there. Relax build has no field.
+- Tests: `test_field_string_block_particle_selection` + `test_write_run_forces_field_excludes_trailing_caps`
+  (ON→`-1`, OFF→origami-only list, degenerate exclude ≥ n_total → falls back to `-1`) in
+  `test_oxdna_relaxation.py`. `just test-smart`: 5241 pass (4 failures pre-existing + unrelated —
+  `/mnt/c` PermissionError in disk_guard/run_dir, atomistic geometry-hash locks). NOT app-verified
+  (needs a GPU surface+field run to eyeball caps staying upright vs pressed flat).
+
 **Status (2026-07-17): build + run path DONE & tested.**
 - Phase 1 UI: `frontend/src/ui/oxdna_surface_strands_setup.js` + pure `scene/surface_strands_math.js`
   (19 vitest). Card in `#oxdna-floor-body`; Gen button reuses `POST /design/random-sequence`.

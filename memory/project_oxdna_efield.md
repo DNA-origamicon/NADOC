@@ -304,10 +304,15 @@ consumes `getFieldSpec()`) waits for the backend stage (was Phase 1).
     swing. Fix is anchor-SELECTION: anchor the duplex/cluster to hold the whole structure.
   - The ~2 nm extra wobble the display adds is the whole-structure Kabsch alignment (it doesn't treat the
     anchor as the fixed frame) — not the dominant effect here.
-  - GOTCHA for future: oxDNA's `ConstantRateForce` (type=string) **rejects dash-range particle specs**
-    ("couldn't get from particle 0 to particle 41"), so excluding anchors from the field via
-    `particle = 0-41,...` is NOT viable — keep `particle = -1` (field on all); the stiff trap holds
-    anchors regardless. (Attempted + reverted.)
+  - GOTCHA for future: oxDNA's `ConstantRateForce` (type=string) **rejects dash-RANGE particle specs**
+    ("couldn't get from particle 0 to particle 41") — for a DNA system `a-b` is a 5'→3' topology
+    walk, not an index span, so it throws when a,b aren't strand-connected. For anchors we keep
+    `particle = -1` (the stiff trap holds them regardless). **UPDATE 2026-07-17: a comma LIST
+    `particle = 0,1,…,K-1` IS viable** — `Utils::get_particles_from_string` splits on commas first
+    and validates each index; the forces file has no line-length cap (`getdelim`), so listing ~14k
+    origami indices on one line works. This is how surface capture-strand exclusion from the field
+    is implemented (`field_string_block(..., n_particles=K)`; see [[project_surface_strands]]). Only
+    the *range* syntax was unviable, not per-index selection.
 - **Field-run display: anchor = positional-only reference (2026-06-18).** Clicking "OxDNA display"
   on a field run flung the structure to distant positions because the display Kabsch-aligned the WHOLE
   structure (rotation+translation, all beads) — the swung duplex dominated the fit, rotating away the

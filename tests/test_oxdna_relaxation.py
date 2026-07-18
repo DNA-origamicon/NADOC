@@ -3967,6 +3967,58 @@ def test_write_field_forces_returns_anchor_keys(design, geometry, tmp_path):
     assert len(k0) == 3 and k0[2] in ("FORWARD", "REVERSE")   # [helix, bp, direction]
 
 
+def test_field_string_block_particle_selection():
+    """The uniform field defaults to every nucleotide (-1); given an explicit count K
+    it fields only [0, K) via a comma LIST (never a dash range, which oxDNA reads as a
+    DNA topology walk) — the mechanism that excludes trailing surface capture beads."""
+    from backend.physics.oxdna_interface import field_string_block
+    assert "particle = -1" in field_string_block(0.04, [0, 0, 1])
+    blk = field_string_block(0.04, [0, 0, 1], n_particles=5)
+    assert "particle = 0,1,2,3,4" in blk
+    assert "particle = -1" not in blk
+    # the particle line must be a plain index list — no dash range would throw for DNA
+    particle_line = [ln for ln in blk.splitlines() if ln.startswith("particle")][0]
+    assert "-" not in particle_line
+
+
+def test_write_run_forces_field_excludes_trailing_caps(design, geometry, tmp_path):
+    """When the surface-strands toggle is OFF, write_run_forces restricts the field to
+    the origami particles and drops the trailing capture beads; ON fields everything."""
+    import re
+    from backend.physics.oxdna_interface import (
+        write_run_forces, write_configuration, pn_to_oxdna_force,
+        read_cm_positions_oxdna)
+    conf = tmp_path / "conf.dat"
+    write_configuration(design, geometry, conf)
+    n_total = len(read_cm_positions_oxdna(conf))
+    assert n_total > 4
+    field = {"force_oxdna": pn_to_oxdna_force(2.0), "dir": [0, 0, 1]}
+
+    # Toggle ON (exclude 0) → field on every particle.
+    on = tmp_path / "on.txt"
+    m_on = write_run_forces(on, design, conf, field=field, field_exclude_trailing=0)
+    assert "particle = -1" in on.read_text()
+    assert m_on["field"]["particle_count"] is None
+
+    # Toggle OFF (3 trailing "capture" beads excluded) → field on origami [0, n_total-3).
+    off = tmp_path / "off.txt"
+    m_off = write_run_forces(off, design, conf, field=field, field_exclude_trailing=3)
+    text = off.read_text()
+    assert "particle = -1" not in text
+    K = n_total - 3
+    assert m_off["field"]["particle_count"] == K
+    idxs = [int(x) for x in re.search(r"particle = ([0-9,]+)", text).group(1).split(",")]
+    assert idxs == list(range(K))                        # origami only
+    assert all(c not in idxs for c in (n_total - 1, n_total - 2, n_total - 3))
+
+    # Degenerate excludes (>= n_total) fall back to field-on-all rather than an empty spec.
+    allx = tmp_path / "all.txt"
+    m_all = write_run_forces(allx, design, conf, field=field,
+                             field_exclude_trailing=n_total)
+    assert "particle = -1" in allx.read_text()
+    assert m_all["field"]["particle_count"] is None
+
+
 def test_unwrap_anchor_positional_no_rotation():
     """Field-run display alignment: anchored beads are a POSITIONAL reference
     (translated onto their design spot) but NOT a rotational one — a swing of the

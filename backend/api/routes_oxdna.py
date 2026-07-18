@@ -995,8 +995,15 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
     anchors = [a.model_dump(by_alias=False) for a in body.anchors]
     # Surface capture strands built into the relaxed parent are inherited via the copied
     # topology/conf; re-pin their attach ends so they stay tethered through production too.
-    cap_built = ((parent.run_config or {}).get("surface_strands") or {}).get("built") or {}
+    ss_spec = (parent.run_config or {}).get("surface_strands") or {}
+    cap_built = ss_spec.get("built") or {}
     cap_particles = cap_built.get("trap_particles") or []
+    cap_n_beads = int(cap_built.get("n_beads") or 0)
+    # "Subject surface strands to the E-field" toggle (default on): when OFF, exclude
+    # the trailing capture-strand beads from the uniform field so a down-field doesn't
+    # press them flat against the plane. Only meaningful with a field AND capture beads.
+    subject_caps = ss_spec.get("subjectToField", ss_spec.get("subject_to_field", True))
+    field_exclude = cap_n_beads if (field_in and cap_n_beads > 0 and not subject_caps) else 0
     has_forces = bool(field_in or wall_in or anchors or cap_particles)
 
     stage = build_run_stage(
@@ -1051,7 +1058,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
             info = write_run_forces(
                 cjd / "run_forces.txt", design, cjd / "conf.dat",
                 field=field_in, wall=wall_in, anchors=anchors,
-                anchor_stiff=body.anchor_stiff,
+                anchor_stiff=body.anchor_stiff, field_exclude_trailing=field_exclude,
             )
         except ValueError as exc:
             shutil.rmtree(cjd, ignore_errors=True)
