@@ -24,6 +24,7 @@ import { metricSpecs, openMetricGraphPopup } from './metric_graph_popup.js'
 import {
   openMetricExportModal, exportChoiceFiles, downloadText, downloadHref,
 } from './metric_export_modal.js'
+import { initResourceMonitor } from './resource_monitor.js'
 
 // Card metric key ↔ short DOM-id token.
 const METRICS = [
@@ -47,6 +48,9 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
     card.style.display = _open ? '' : 'none'
     if (arrow) arrow.style.transform = _open ? 'rotate(90deg)' : ''
   })
+
+  // Live whole-machine CPU/GPU/RAM sparklines (own toggle + poll loop inside the card).
+  const _resources = initResourceMonitor({ idPrefix })
 
   const scopeLatest = document.getElementById(`${idPrefix}-scope-latest`)
   const scopeChain = document.getElementById(`${idPrefix}-scope-chain`)
@@ -221,7 +225,7 @@ export function initMetricsCard({ idPrefix, api, getSelectedJob = null, getJobs 
     _updateButtons()
   }
 
-  return { refresh, _generate, _display, _export }   // last three exposed for tests
+  return { refresh, _generate, _display, _export, _resources }   // last four exposed for tests
 }
 
 function _fmtEta(s) {

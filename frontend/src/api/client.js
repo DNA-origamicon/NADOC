@@ -3590,6 +3590,16 @@ export async function gpuStatus(devices = '0') {
   return _request('GET', `/md/gpu-status?devices=${encodeURIComponent(devices)}`)
 }
 
+/** Whole-machine utilisation snapshot for the live "System monitor" sparklines
+ *  (CPU %, GPU %, host RAM + VRAM). Polled a few times a second while a card's
+ *  monitor is open; the card buffers samples into rolling minigraphs. Returns
+ *  { cpu_pct, ram_pct, ram_used_mb, ram_total_mb, gpu_present, gpu_pct, vram_pct,
+ *  vram_used_mb, vram_total_mb } (percent fields null when unavailable). See
+ *  routes_system.py system_resources. */
+export async function getSystemResources(devices = '0') {
+  return _request('GET', `/system/resources?devices=${encodeURIComponent(devices)}`)
+}
+
 /** Recommended NAMD Advanced settings for the active design on THIS machine
  *  (backs the Advanced card's ⚡ Optimize button). Read-only — it proposes, the
  *  panel applies only after the user confirms. Returns

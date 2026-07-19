@@ -101,6 +101,28 @@ base-pairing metric differ.
   `tests/test_md_metrics.py` (faked reader — one-pass all-metrics, C1' pairing drop, chain resolver,
   404, count); vitest `md_metrics_card.test.js` (3, mirrors oxDNA). NOT yet run on a real NAMD DCD.
 
+## System monitor sub-section — live CPU/GPU/RAM sparklines (shipped 2026-07-18)
+A **"System monitor"** collapsible sits at the TOP of the card body in ALL FOUR engine
+cards (oxDNA, NAMD, CanDo, SNUPI). Toggle it open → three minigraphs (CPU / GPU / RAM
+utilisation, 0–100%) that poll a whole-machine snapshot ~every 1.5 s and buffer it
+client-side into rolling sparklines. **Live-only** (nothing persisted), **whole-machine**,
+**local host** (RunPod-remote deferred) — user-chosen scope. Purely display-layer.
+- Backend: `backend/core/system_resources.py` — pure `build_resource_sample(cpu_pct,
+  ram_total, ram_avail, gpu_activity)` + thin `sample_system_resources()` (psutil for
+  CPU%/RAM, reuses `md_vram.detect_gpu_activity` for GPU util+VRAM; GPU fields None on a
+  CPU-only box). Route `GET /system/resources` in `backend/api/routes_system.py`
+  (registered in main.py). Pins: `tests/test_system_resources.py`.
+- Frontend: `frontend/src/ui/sparkline.js` (pure `sparklinePath` + `drawSparkline` — a
+  bare no-axis minigraph, deliberately NOT metric_graph.js's full chart) and
+  `frontend/src/ui/resource_monitor.js` (factory `initResourceMonitor({idPrefix, poll})`
+  — owns timer + 3 ring buffers, polls ONLY while its toggle is open AND the tab is
+  visible). Client: `getSystemResources()`. Wired from `initMetricsCard` (covers
+  oxDNA+NAMD) + `initCandoMetricsCard` + `initSnupiMetricsCard`; **main.js LOC-Δ = 0**.
+  Pins: `sparkline.test.js`, `resource_monitor.test.js`. Gotcha: `poll` is resolved
+  LAZILY inside the tick (not in the default param) so partial-mock client.js tests don't
+  trip on the added export. Live visual = [[manual_validation_debt]] **MV-SYSMON** (smoke
+  blocked by a running NAMD job).
+
 ## Tests
 Backend pins (test_oxdna_relaxation.py): `production_metric_series` one-pass all-metrics,
 `differential_profile`, `base_pairing_spatial_profile`, `count_trajectory_frames`,

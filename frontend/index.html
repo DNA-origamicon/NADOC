@@ -4078,6 +4078,32 @@
                   <span id="oxdna-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
                 <div id="oxdna-metrics-card" class="ox-card__body" style="display:none">
+                  <!-- System monitor — live CPU / GPU / RAM sparklines (whole machine) -->
+                  <div style="margin-bottom:8px;border-bottom:1px solid #21262d;padding-bottom:8px">
+                    <div id="oxdna-metrics-resources-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none" title="Live whole-machine CPU, GPU and RAM utilisation while a simulation runs (local, not saved).">
+                      <span id="oxdna-metrics-resources-arrow" style="display:inline-block;transition:transform .15s;color:#8b949e">▸</span>
+                      <span style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600">System monitor</span>
+                      <span style="font-size:var(--text-xs);color:#8b949e">— CPU · GPU · RAM</span>
+                    </div>
+                    <div id="oxdna-metrics-resources-body" style="display:none;margin-top:6px">
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">CPU</span>
+                        <canvas id="oxdna-metrics-res-cpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="oxdna-metrics-res-cpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">GPU</span>
+                        <canvas id="oxdna-metrics-res-gpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="oxdna-metrics-res-gpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">RAM</span>
+                        <canvas id="oxdna-metrics-res-ram-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="oxdna-metrics-res-ram-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="font-size:10px;color:#6e7681;margin-top:5px">Whole machine · live · not saved (0–100%).</div>
+                    </div>
+                  </div>
                   <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Twist, curvature &amp; base-pairing over a production run — spatial (vs position) &amp; temporal (vs sim time).</div>
                   <div style="display:flex;gap:12px;margin-bottom:8px;font-size:var(--text-xs);color:#8b949e">
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="oxdna-metrics-scope" id="oxdna-metrics-scope-latest" checked> Latest job</label>
@@ -4499,6 +4525,32 @@
                   <span id="cando-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
                 <div id="cando-metrics-card" class="ox-card__body" style="display:none">
+                  <!-- System monitor — live CPU / GPU / RAM sparklines (whole machine) -->
+                  <div style="margin-bottom:8px;border-bottom:1px solid #21262d;padding-bottom:8px">
+                    <div id="cando-metrics-resources-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none" title="Live whole-machine CPU, GPU and RAM utilisation while a simulation runs (local, not saved).">
+                      <span id="cando-metrics-resources-arrow" style="display:inline-block;transition:transform .15s;color:#8b949e">▸</span>
+                      <span style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600">System monitor</span>
+                      <span style="font-size:var(--text-xs);color:#8b949e">— CPU · GPU · RAM</span>
+                    </div>
+                    <div id="cando-metrics-resources-body" style="display:none;margin-top:6px">
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">CPU</span>
+                        <canvas id="cando-metrics-res-cpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="cando-metrics-res-cpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">GPU</span>
+                        <canvas id="cando-metrics-res-gpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="cando-metrics-res-gpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">RAM</span>
+                        <canvas id="cando-metrics-res-ram-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="cando-metrics-res-ram-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="font-size:10px;color:#6e7681;margin-top:5px">Whole machine · live · not saved (0–100%).</div>
+                    </div>
+                  </div>
                   <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Per-base-pair flexibility (RMSF) &amp; deviation-from-design along each helix, for the selected completed job. Static solve — spatial only.</div>
                   <!-- Flexibility (RMSF) -->
                   <div style="margin-bottom:8px">
@@ -4728,6 +4780,32 @@
                   <span id="snupi-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
                 <div id="snupi-metrics-card" class="ox-card__body" style="display:none">
+                  <!-- System monitor — live CPU / GPU / RAM sparklines (whole machine) -->
+                  <div style="margin-bottom:8px;border-bottom:1px solid #21262d;padding-bottom:8px">
+                    <div id="snupi-metrics-resources-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none" title="Live whole-machine CPU, GPU and RAM utilisation while a simulation runs (local, not saved).">
+                      <span id="snupi-metrics-resources-arrow" style="display:inline-block;transition:transform .15s;color:#8b949e">▸</span>
+                      <span style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600">System monitor</span>
+                      <span style="font-size:var(--text-xs);color:#8b949e">— CPU · GPU · RAM</span>
+                    </div>
+                    <div id="snupi-metrics-resources-body" style="display:none;margin-top:6px">
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">CPU</span>
+                        <canvas id="snupi-metrics-res-cpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="snupi-metrics-res-cpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">GPU</span>
+                        <canvas id="snupi-metrics-res-gpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="snupi-metrics-res-gpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">RAM</span>
+                        <canvas id="snupi-metrics-res-ram-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="snupi-metrics-res-ram-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="font-size:10px;color:#6e7681;margin-top:5px">Whole machine · live · not saved (0–100%).</div>
+                    </div>
+                  </div>
                   <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Per-base-pair flexibility (RMSF) &amp; deviation-from-design along each helix, for the selected completed job. Static solve — spatial only.</div>
                   <div style="margin-bottom:8px">
                     <div style="display:flex;align-items:center;gap:5px">
@@ -5028,6 +5106,32 @@
                   <span id="md-metrics-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Graphs and Metrics</span>
                 </div>
                 <div id="md-metrics-card" class="ox-card__body" style="display:none">
+                  <!-- System monitor — live CPU / GPU / RAM sparklines (whole machine) -->
+                  <div style="margin-bottom:8px;border-bottom:1px solid #21262d;padding-bottom:8px">
+                    <div id="md-metrics-resources-toggle" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none" title="Live whole-machine CPU, GPU and RAM utilisation while a simulation runs (local, not saved).">
+                      <span id="md-metrics-resources-arrow" style="display:inline-block;transition:transform .15s;color:#8b949e">▸</span>
+                      <span style="font-size:var(--text-xs);color:#c9d1d9;font-weight:600">System monitor</span>
+                      <span style="font-size:var(--text-xs);color:#8b949e">— CPU · GPU · RAM</span>
+                    </div>
+                    <div id="md-metrics-resources-body" style="display:none;margin-top:6px">
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">CPU</span>
+                        <canvas id="md-metrics-res-cpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="md-metrics-res-cpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">GPU</span>
+                        <canvas id="md-metrics-res-gpu-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="md-metrics-res-gpu-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                        <span style="width:30px;flex:none;color:#8b949e;font-size:var(--text-xs)">RAM</span>
+                        <canvas id="md-metrics-res-ram-spark" height="26" style="flex:1;min-width:0;height:26px;background:#0d1117;border:1px solid #21262d;border-radius:3px"></canvas>
+                        <span id="md-metrics-res-ram-val" style="width:92px;flex:none;text-align:right;color:#c9d1d9;font-size:var(--text-xs);font-variant-numeric:tabular-nums"></span>
+                      </div>
+                      <div style="font-size:10px;color:#6e7681;margin-top:5px">Whole machine · live · not saved (0–100%).</div>
+                    </div>
+                  </div>
                   <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">Twist, curvature &amp; base-pairing over a NAMD run — spatial (vs position) &amp; temporal (vs frame). Base pairing = fraction of designed pairs with C1'…C1' &lt; 12&nbsp;Å.</div>
                   <div style="display:flex;gap:12px;margin-bottom:8px;font-size:var(--text-xs);color:#8b949e">
                     <label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="md-metrics-scope" id="md-metrics-scope-latest" checked> Latest job</label>

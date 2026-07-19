@@ -17,6 +17,7 @@
 
 import { getCandoRmsf, getCandoDeviation } from '../api/client.js'
 import { drawChart, renderToDataURL } from './metric_graph.js'
+import { initResourceMonitor } from './resource_monitor.js'
 import { CANDO_METRIC_META, rmsfRows, deviationRows, candoMetricCSV, buildCandoSpec } from './cando_metrics.js'
 import {
   openMetricExportModal, exportChoiceFiles, downloadText, downloadHref,
@@ -42,6 +43,9 @@ export function initCandoMetricsCard({ getSelectedJob = null } = {}) {
     if (arrow) arrow.style.transform = _open ? 'rotate(90deg)' : ''
     if (_open) sync()
   })
+
+  // Live whole-machine CPU/GPU/RAM sparklines (own toggle + poll loop inside the card).
+  initResourceMonitor({ idPrefix: 'cando-metrics' })
 
   const rows = {}
   for (const { key, tok } of METRICS) {
