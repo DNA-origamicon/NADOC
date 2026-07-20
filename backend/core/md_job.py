@@ -99,6 +99,9 @@ class MdJob:
     seed_mrdna_job_id: Optional[str] = (
         None  # provenance: mrDNA fine-stage job whose relaxed coords seeded this run
     )
+    seed_blade_job_id: Optional[str] = (
+        None  # provenance: BLADE relax job whose relaxed all-atom coords seeded this run
+    )
     # Provenance link to a prior MD job this one was derived from (a refit/retry
     # spawns a fresh job from a failed one).  Drives the indented job-list
     # hierarchy: a derived job renders nested under its parent, mirroring oxDNA.
@@ -244,6 +247,7 @@ class MdJob:
         data.setdefault("design_source_path", None)
         data.setdefault("seed_oxdna_job_id", None)
         data.setdefault("seed_mrdna_job_id", None)
+        data.setdefault("seed_blade_job_id", None)
         data.setdefault("parent_job_id", None)
         data.setdefault("ensemble_seed", None)
         data.setdefault("ensemble_index", None)
@@ -315,6 +319,7 @@ def new_job(
     design_source_path: Optional[str] = None,
     seed_oxdna_job_id: Optional[str] = None,
     seed_mrdna_job_id: Optional[str] = None,
+    seed_blade_job_id: Optional[str] = None,
     parent_job_id: Optional[str] = None,
     ensemble_seed: Optional[int] = None,
     ensemble_index: Optional[int] = None,
@@ -333,6 +338,7 @@ def new_job(
         design_source_path = design_source_path,
         seed_oxdna_job_id = seed_oxdna_job_id,
         seed_mrdna_job_id = seed_mrdna_job_id,
+        seed_blade_job_id = seed_blade_job_id,
         parent_job_id  = parent_job_id,
         ensemble_seed  = ensemble_seed,
         ensemble_index = ensemble_index,

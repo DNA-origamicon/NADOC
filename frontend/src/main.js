@@ -206,12 +206,14 @@ import { initSimulateJobs } from './ui/simulate_jobs.js'
 import { buildCreatePayload as buildLammpsPayload } from './ui/lammps_jobs_logic.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initSnupiJobsPanel } from './ui/snupi_jobs_panel.js'
+import { initBladeJobsPanel } from './ui/blade_jobs_panel.js'
 import { initEngineSelector } from './ui/engine_selector.js'
 import { initSimulateLaunch } from './ui/simulate_launch.js'
 import { fetchActiveJobs, runningEngineForPath } from './ui/job_activity.js'
 import { initJobsPanelBase } from './ui/jobs_panel_base.js'
 import { initCandoDisplay } from './ui/cando_display.js'
 import { initSnupiDisplay } from './ui/snupi_display.js'
+import { initBladeDisplay } from './ui/blade_display.js'
 import { initFlexScale } from './ui/flex_scale.js'
 import { initEngineActivityHeaders } from './ui/engine_activity_headers.js'
 import { initCandoCylinders } from './scene/cando_cylinders.js'
@@ -2065,6 +2067,14 @@ async function main() {
     flexScale,
   })
   const snupiPanel = initSnupiJobsPanel({ snupiDisplay, getWorkspacePath: () => _workspacePath, getSelection: _anchorSelectionState })
+  // BLADE — box-free implicit-solvent atomistic relax (OpenMM in the gpu env via a detached
+  // worker). No cylinder overlay and no flex scale: it drives no scalar-colour channel, only
+  // bead positions (relaxed shape + trajectory playback). Display-only (Three-Layer Law).
+  const bladeDisplay = initBladeDisplay({
+    designRenderer, api,
+    setDesignVisible: (v) => _setDesignGeometryVisible(v),
+  })
+  const bladePanel = initBladeJobsPanel({ bladeDisplay, getWorkspacePath: () => _workspacePath })
   // (Editing OR seeking the design refetches the oxDNA/MD job lists so the out-of-date
   // ⚠ markers update immediately — driven by the client's `nadoc:design-changed` event
   // on every design sync; both panels self-listen, so no store subscription here.)
@@ -2196,6 +2206,7 @@ async function main() {
     oxdna: document.getElementById('oxdna-run-controls'),
     mrdna: document.getElementById('mrdna-run-controls'),
     cando: document.getElementById('cando-run-controls'),
+    blade: document.getElementById('blade-run-controls'),
     snupi: document.getElementById('snupi-run-controls'),
     namd:  document.getElementById('namd-run-controls'),
   }
@@ -2208,6 +2219,7 @@ async function main() {
   _moveRunControls(runControlEls.cando, 'cando-launch-row', 'cando-autorefine-row')
   // Stop travels WITH the run buttons (it sits directly under them, always present, greyed until a
   // run is in flight) — otherwise it would be stranded in the panel below.
+  _moveRunControls(runControlEls.blade, 'blade-launch-row', 'blade-stop-row')
   _moveRunControls(runControlEls.snupi, 'snupi-launch-row', 'snupi-stop-row')
   _moveRunControls(runControlEls.namd, 'md-launch-row')
 
@@ -2258,7 +2270,7 @@ async function main() {
   // only the selected engine's + hides the block otherwise).
   {
     const host = document.getElementById('simulate-jobs-timeline-host')
-    if (host) for (const id of ['md-jobs-timeline', 'oxdna-jobs-timeline', 'mrdna-jobs-timeline', 'cando-jobs-timeline', 'snupi-jobs-timeline']) {
+    if (host) for (const id of ['md-jobs-timeline', 'oxdna-jobs-timeline', 'mrdna-jobs-timeline', 'cando-jobs-timeline', 'snupi-jobs-timeline', 'blade-jobs-timeline']) {
       const el = document.getElementById(id)
       if (el) { el.style.display = 'none'; host.appendChild(el) }
     }
@@ -2275,6 +2287,7 @@ async function main() {
       oxdna:  document.getElementById('oxdna-jobs-panel'),
       mrdna:  document.getElementById('mrdna-jobs-panel'),
       cando:  document.getElementById('cando-jobs-panel'),
+      blade:  document.getElementById('blade-jobs-panel'),
       snupi:  document.getElementById('snupi-jobs-panel'),
       namd:   document.getElementById('md-jobs-panel'),
     },
@@ -2318,6 +2331,7 @@ async function main() {
     mrdnaPanel,
     candoPanel,
     snupiPanel,
+    bladePanel,
     mdPanel,
     engineSelector,
   })
@@ -3507,6 +3521,7 @@ async function main() {
     // otherwise lingered on the welcome screen after closing a session.
     candoDisplay.stopAndRestore()
     snupiDisplay.stopAndRestore()
+    bladeDisplay.stopAndRestore()
     // Reset representation to Full — deactivates atomistic/surface renderers,
     // resets the representation radio, and hides mode-specific option rows.
     _setRepresentation('full')
@@ -3556,7 +3571,8 @@ async function main() {
     'selection-filter-section', 'properties-section',
     'blunt-panel', 'deform-panel', 'strand-hist-section',
     'groups-panel', 'overhang-panel',
-    'oxdna-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'snupi-jobs-panel', 'md-panel',
+    'oxdna-jobs-panel', 'mrdna-jobs-panel', 'cando-jobs-panel', 'snupi-jobs-panel',
+    'blade-jobs-panel', 'md-panel',
     'repr-options-section', 'reset-btn',
   ]
   let _savedDesignPanelDisplay = {}
@@ -6968,7 +6984,8 @@ async function main() {
       if (!positions?.length) return null
       const active = [
         [mdViz, 'NAMD', 'namd'], [mdDisplayController, 'NAMD', 'namd'], [oxdnaDisplay, 'oxDNA', 'oxdna'], [lammpsDisplay, 'LAMMPS', 'lammps'],
-        [snupiDisplay, 'SNUPI', 'snupi'], [candoDisplay, 'CanDo', 'cando'], [mrdnaDisplay, 'mrDNA', 'mrdna'],
+        [snupiDisplay, 'SNUPI', 'snupi'], [bladeDisplay, 'BLADE', 'blade'],
+        [candoDisplay, 'CanDo', 'cando'], [mrdnaDisplay, 'mrDNA', 'mrdna'],
       ].find(([controller]) => controller?.isActive?.() || controller?.deformActive?.() || controller?.mode?.() != null)
       if (!active) return null
       const mode = active[0].mode?.()

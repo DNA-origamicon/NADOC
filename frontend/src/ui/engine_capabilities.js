@@ -29,12 +29,21 @@
 // unified Simulate job list with an [L] badge instead of behind a tab (Phase C).
 // SNUPI is the SAME in-process FEM as CanDo, run with the anisotropic SNUPI material law
 // (validated ≥ CanDo vs MD at $0), so it sits next to CanDo on the fast→accurate axis.
+//
+// BLADE is ARCHIVED (2026-07-20): removed from the selectable tabs. The box-free atomistic
+// relax + "Use as NAMD seed" flow shipped and works, but the origami we currently care about
+// have too many unconventional features for the seeding to be useful, and the whole line was
+// consuming disproportionate effort. The code is intentionally KEPT — its label + capability
+// block below, the panel/display/backend modules, and the NAMD seed_blade_job_id plumbing all
+// remain dormant. To revive: put 'blade' back in ENGINE_KEYS (between 'cando' and 'snupi') and
+// restore the parity test + #blade-jobs-panel display. See memory/project_blade_frontend.md.
 export const ENGINE_KEYS = ['cando', 'snupi', 'mrdna', 'oxdna', 'namd']
 
 export const ENGINE_LABELS = {
   oxdna: 'oxDNA',
   mrdna: 'mrDNA',
   cando: 'CanDo',
+  blade: 'BLADE',
   snupi: 'SNUPI',
   namd: 'NAMD',
 }
@@ -122,6 +131,29 @@ export const ENGINE_CAPABILITIES = {
     },
     protocols: ['coarse', 'fine', 'autorefine'],
     advancedParams: ['cando-jobs-n-steps', 'cando-jobs-with-rmsf'],
+  },
+  // ARCHIVED (2026-07-20) — 'blade' is no longer in ENGINE_KEYS, so nothing reads this block;
+  // kept intact so reviving the tab is a one-line change (re-add 'blade' to ENGINE_KEYS).
+  blade: {
+    label: ENGINE_LABELS.blade,
+    cards: {
+      run: on('blade-jobs-run-btn'),
+      // A relax is a free (unrestrained) implicit-solvent run: there is no body-force term and
+      // no Dirichlet BC in the OpenMM system we build, so an E-field or an anchor would be
+      // silently ignored rather than applied. Say so instead of offering a dead control.
+      efield: off('BLADE relax applies no external body force — the OpenMM system has no E-field term.'),
+      anchors: off('BLADE relax is unrestrained; no positional restraints are applied to the OpenMM system.'),
+      surface: off('BLADE is box-free implicit solvent — there is no wall or surface boundary.'),
+      advanced: on('blade-jobs-adv-toggle'),
+      viz: on('blade-display-toggle'),
+      metrics: on('blade-metrics-toggle'),
+      joblist: on('blade-jobs-list-toggle'),
+    },
+    protocols: ['relax'],
+    advancedParams: [
+      'blade-jobs-correction', 'blade-jobs-minimize-iters', 'blade-jobs-langevin-ps',
+      'blade-jobs-cutoff', 'blade-jobs-temp', 'blade-jobs-traj-frames', 'blade-jobs-platform',
+    ],
   },
   snupi: {
     label: ENGINE_LABELS.snupi,

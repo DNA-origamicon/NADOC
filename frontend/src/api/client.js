@@ -2380,6 +2380,27 @@ export const getSnupiCylinders   = (id, signal)  => _oxdnaJSON('GET',  `/snupi/j
 /** SNUPI source bundle for the cross-engine comparison card: shared descriptors + RMSF. */
 export const getSnupiShapeSource = (id)          => _oxdnaJSON('GET',  `/snupi/jobs/${id}/shape-source`)
 
+// ── BLADE implicit-solvent relax jobs (routes_blade.py) ────────────────────
+// Box-free CHARMM36 + OBC2 atomistic relax — no explicit water, no periodic cell.  Unlike
+// CanDo/SNUPI the compute is EXTERNAL (OpenMM in the micromamba gpu env via a detached
+// worker), so `bladeAvailable` is a real probe that can say no, and Stop actually kills.
+// Output is Physical-layer / display-only; never mutates topology.
+export const bladeAvailable      = ()            => _oxdnaJSON('GET',  '/blade/available')
+export const createBladeJob      = (body)        => _oxdnaJSON('POST', '/blade/jobs', body)
+export const listBladeJobs       = ()            => _oxdnaJSON('GET',  '/blade/jobs')
+export const getBladeJob         = (id)          => _oxdnaJSON('GET',  `/blade/jobs/${id}`)
+export const getBladeProgress    = (id)          => _oxdnaJSON('GET',  `/blade/jobs/${id}/progress`)
+export const getBladeErrorLog    = (id)          => _oxdnaJSON('GET',  `/blade/jobs/${id}/error-log`)
+export const startBladeJob       = (id)          => _oxdnaJSON('POST', `/blade/jobs/${id}/start`)
+export const stopBladeJob        = (id)          => _oxdnaJSON('POST', `/blade/jobs/${id}/stop`)
+export const deleteBladeJob      = (id)          => _oxdnaJSON('DELETE', `/blade/jobs/${id}`)
+/** The settled shape as {keys, frame} (same encoding as /trajectory) + the run summary. */
+export const getBladeDisplay     = (id, signal)  => _oxdnaJSON('GET',  `/blade/jobs/${id}/display`, undefined, { signal })
+/** Full geometry of the job's OWN design snapshot (topology at relax time). */
+export const getBladeSnapshotGeometry = (id, signal) => _oxdnaJSON('GET',  `/blade/jobs/${id}/snapshot-geometry`, undefined, { signal })
+/** The relaxation trajectory for the scrubber — oxDNA/SNUPI wire shape, reuses framesToUpdates. */
+export const getBladeTrajectory  = (id, signal)  => _oxdnaJSON('GET',  `/blade/jobs/${id}/trajectory`, undefined, { signal })
+
 // ── CanDo-FEM autorefine (Phase-5 Item 4): greedy loop/skip tuning driven by the FEM shape oracle.
 /** Start a CanDo-FEM autorefine run on the active design → {autorefine_id, state}. */
 export const startCandoAutorefine = (body)        => _oxdnaJSON('POST', '/design/cando/autorefine/start', body)
@@ -2390,10 +2411,11 @@ export const stopCandoAutorefine  = (id)          => _oxdnaJSON('POST', `/design
 /** Apply a completed CanDo autorefine's converged loop/skip marks to the active design. */
 export const applyCandoAutorefine = (id)          => _oxdnaJSON('POST', `/design/cando/autorefine/${id}/apply`)
 
-/** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} to seed the run
- *  from a completed oxDNA job's relaxed coordinates instead of ideal B-DNA.
- *  Pass {draft:true} (seeded only) to create an unprepared draft — solvation is
- *  deferred to prepareMdDraft ("Relax from oxDNA"). */
+/** Create a NAMD MD job (routes_md.py).  Pass {oxdna_job_id} / {mrdna_job_id} /
+ *  {blade_job_id} to seed the run from that completed job's relaxed coordinates
+ *  instead of ideal B-DNA (BLADE seeds the EXACT all-atom conformation).  Pass
+ *  {draft:true} (seeded only) to create an unprepared draft — solvation is
+ *  deferred to prepareMdDraft ("Relax from oxDNA/BLADE"). */
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
 /** Prepare (solvate) + start a DRAFT NAMD job with the given advanced settings
  *  (same body shape as createMdJob). Seeds from the draft's recorded oxDNA/mrDNA

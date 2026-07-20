@@ -117,10 +117,12 @@ export function newestCompletedForPart(jobs, partPath) {
   return done[0] ?? null
 }
 
-/** Pure: list badge for a job seeded from a CG relaxation (oxDNA or mrDNA), else ''. */
+/** Pure: list badge for a job seeded from another engine's relaxation, else ''.
+ *  oxDNA/mrDNA seed from a coarse-grained frame; BLADE seeds from an exact all-atom relax. */
 export function seededBadge(job) {
   if (job?.seed_oxdna_job_id) return 'oxDNA seeded'
   if (job?.seed_mrdna_job_id) return 'mrDNA seeded'
+  if (job?.seed_blade_job_id) return 'BLADE seeded'
   return ''
 }
 
@@ -235,7 +237,9 @@ export function mdJobIsDraft(job) {
 /** Pure: the run-button label for a selected draft — names the seed engine so the
  *  user knows the run starts from those relaxed coordinates. */
 export function mdDraftRunLabel(job) {
-  return job?.seed_mrdna_job_id ? '▶ Relax from mrDNA' : '▶ Relax from oxDNA'
+  if (job?.seed_blade_job_id) return '▶ Relax from BLADE'
+  if (job?.seed_mrdna_job_id) return '▶ Relax from mrDNA'
+  return '▶ Relax from oxDNA'
 }
 
 /** Pure: is any Alpine job submitted-and-in-flight (so the panel should keep polling
@@ -564,7 +568,8 @@ export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [],
       if (seeded) out.push({
         text: seeded,
         title: job.seed_oxdna_job_id ? `Seeded from oxDNA job ${job.seed_oxdna_job_id}`
-                                     : `Seeded from mrDNA job ${job.seed_mrdna_job_id}`,
+             : job.seed_mrdna_job_id ? `Seeded from mrDNA job ${job.seed_mrdna_job_id}`
+                                     : `Seeded from BLADE job ${job.seed_blade_job_id}`,
         css: 'font-size:9px;color:#4a9eff;border:1px solid #2a4a6a;border-radius:3px;padding:0 4px;flex-shrink:0;margin-right:4px',
       })
       const remote = remoteJobBadge(job)

@@ -68,9 +68,10 @@ describe('jobProductionTimestepFs — what dt a prepared job will actually run',
 })
 
 describe('seededBadge', () => {
-  it('labels oxDNA- and mrDNA-seeded jobs and nothing else', () => {
+  it('labels oxDNA-, mrDNA-, and BLADE-seeded jobs and nothing else', () => {
     expect(seededBadge({ seed_oxdna_job_id: 'abc123' })).toBe('oxDNA seeded')
     expect(seededBadge({ seed_mrdna_job_id: 'def456' })).toBe('mrDNA seeded')
+    expect(seededBadge({ seed_blade_job_id: 'bla789' })).toBe('BLADE seeded')
     expect(seededBadge({ seed_oxdna_job_id: null })).toBe('')
     expect(seededBadge({})).toBe('')
     expect(seededBadge(null)).toBe('')
@@ -171,6 +172,7 @@ describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdDraftRunLabel names the seed engine', () => {
     expect(mdDraftRunLabel({ status: 'draft', seed_oxdna_job_id: 'ox1' })).toBe('▶ Relax from oxDNA')
     expect(mdDraftRunLabel({ status: 'draft', seed_mrdna_job_id: 'mr1' })).toBe('▶ Relax from mrDNA')
+    expect(mdDraftRunLabel({ status: 'draft', seed_blade_job_id: 'bl1' })).toBe('▶ Relax from BLADE')
     expect(mdDraftRunLabel({ status: 'draft' })).toBe('▶ Relax from oxDNA')  // default
   })
 })

@@ -31,6 +31,7 @@ import { jobDisplayName as oxDisplayName, runRowLabel, runChildTitle } from './o
 import { jobDisplayName as mrdnaDisplayName } from './mrdna_jobs_panel.js'
 import { jobDisplayName as candoDisplayName } from './cando_jobs_panel.js'
 import { jobDisplayName as snupiDisplayName } from './snupi_jobs_panel.js'
+import { jobDisplayName as bladeDisplayName } from './blade_jobs_panel.js'
 import { mdJobRowCtx } from './md_jobs_panel.js'
 import { buildCreatePayload } from './lammps_jobs_logic.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
@@ -50,6 +51,7 @@ const _ENGINE_BADGE = {
   mrdna: { text: '[mr]', color: '#9e6bff', title: 'mrDNA' },
   cando: { text: '[CD]', color: '#39c5cf', title: 'CanDo FEM' },
   snupi: { text: '[SN]', color: '#d29bff', title: 'SNUPI FEM' },
+  blade: { text: '[BL]', color: '#58a6ff', title: 'BLADE implicit-solvent relax' },
   namd:  { text: '[MD]', color: '#3fb950', title: 'NAMD (Molecular Dynamics)' },
 }
 
@@ -162,6 +164,7 @@ export function engineLabel(node) {
     case 'mrdna':  return 'mrDNA'
     case 'cando':  return 'CanDo'
     case 'snupi':  return 'SNUPI'
+    case 'blade':  return 'BLADE'
     case 'oxdna':  return 'oxDNA'
     default:       return node?.engine || 'run'
   }
@@ -176,7 +179,7 @@ function _stepTotal(node) {
   if (sum > 0) return sum
   if (node?.engine === 'mrdna') return (Number(node.coarse_steps) || 0) + (Number(node.fine_steps) || 0)
   // Linear FEM solves are one solve step; nonlinear CanDo/SNUPI normally expose n_steps.
-  if (node?.engine === 'cando' || node?.engine === 'snupi') return 1
+  if (node?.engine === 'cando' || node?.engine === 'snupi' || node?.engine === 'blade') return 1
   return 0
 }
 
@@ -207,6 +210,16 @@ export function masterStatusText(node) {
   // NAMD (and any engine with a live/segment fraction) shows overall % while running so a
   // single-segment production reads as progress, not a bare "running".
   if (node.engine === 'namd' && node.status === 'running') return `${eng} · running · ${masterStepText(node)}`
+  // BLADE reports a REAL fraction streamed out of the OpenMM process, plus its phase. Naming the
+  // phase matters here: `build` is psfgen constructing the CHARMM topology, which on a large design
+  // is a minute of legitimately step-less work that would otherwise read as a stuck bar.
+  if (node.engine === 'blade' && node.status === 'running') {
+    const parts = [`${eng} · running · ${masterStepText(node)}`]
+    const eta = Number(node.eta_seconds)
+    if (Number.isFinite(eta) && eta > 0) parts.push(`~${formatEta(eta)} left`)
+    if (node.phase) parts.push(node.phase)
+    return parts.join(' · ')
+  }
   // SNUPI reports a REAL fraction (a fixed GJF step count) + an ETA measured from the observed rate,
   // plus the current phase — building the hydrodynamic friction is a slow, step-less phase, so name it
   // or the bar looks stuck. This line sits directly under the master bar.
@@ -268,6 +281,7 @@ export function initSimulateJobs({
   mrdnaPanel = null,
   candoPanel = null,
   snupiPanel = null,
+  bladePanel = null,
   mdPanel = null,
   engineSelector = null,
 } = {}) {
@@ -286,6 +300,7 @@ export function initSimulateJobs({
     oxdna: $('oxdna-jobs-timeline'), namd: $('md-jobs-timeline'),
     mrdna: $('mrdna-jobs-timeline'), cando: $('cando-jobs-timeline'),
     snupi: $('snupi-jobs-timeline'),
+    blade: $('blade-jobs-timeline'),
   }
   if (!root || !listEl) return { refresh: () => {}, selectJob: () => {}, getSelected: () => null, setActiveEngine: () => {} }
 
@@ -330,7 +345,8 @@ export function initSimulateJobs({
   // The engine panel owning a node's Archive/Delete (LAMMPS has no panel — its runs are
   // oxDNA's CPU fallback and carry no per-job delete UI).
   const _panelFor = (node) =>
-    ({ oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel, namd: mdPanel }[node?.engine]) || null
+    ({ oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel,
+       blade: bladePanel, namd: mdPanel }[node?.engine]) || null
 
   // ── list ─────────────────────────────────────────────────────────────────
   // Per-engine row labels: each engine's own display/child-label fns render its rows
@@ -347,6 +363,7 @@ export function initSimulateJobs({
       case 'mrdna': return mrdnaDisplayName(n)
       case 'cando': return candoDisplayName(n)
       case 'snupi': return snupiDisplayName(n)
+      case 'blade': return bladeDisplayName(n)
       case 'namd':  return md.displayName(n)
       default:      return n.job_id
     }
@@ -551,7 +568,8 @@ export function initSimulateJobs({
       oxdnaPanel?.selectLammpsJob?.(node)
       return
     }
-    const panel = { oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel, namd: mdPanel }[node.engine]
+    const panel = { oxdna: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel, snupi: snupiPanel,
+                    blade: bladePanel, namd: mdPanel }[node.engine]
     if (!panel) return
     engineSelector?.select?.(node.engine)     // reveal that engine's detail host
     panel?.selectJob?.(node.job_id)
@@ -637,7 +655,8 @@ export function initSimulateJobs({
 
   // ── engine scope: filter to the active tab + "Show all job types" toggle ───
   function _engineTabName() {
-    return { oxdna: 'oxDNA', mrdna: 'mrDNA', cando: 'CanDo', snupi: 'SNUPI', namd: 'NAMD' }[_activeEngine] || _activeEngine
+    return { oxdna: 'oxDNA', mrdna: 'mrDNA', cando: 'CanDo', snupi: 'SNUPI', blade: 'BLADE',
+             namd: 'NAMD' }[_activeEngine] || _activeEngine
   }
   function _updateEngineLabel() {
     if (engineLabel) engineLabel.textContent = _showAllTypes ? '· all engines' : `· ${_engineTabName()}`

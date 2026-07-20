@@ -113,11 +113,12 @@ skip_twist_selfconsistency · regional_autorefine · skip_twist_curvature_sweep 
 
 **Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE: base SNUPI recreated for $0 — snupi≥cando vs MD; `material="snupi"` in fem_solver; +electrostatics) · snupi_frontend_tab (frontend SNUPI engine tab, SHIPPED) · **snupi_gaps** (gap analysis vs full published SNUPI; A–D DONE + refinements) · **snupi_reference_compare** (REAL SNUPI installed on this machine at `~/SNUPI`; NADOC→caDNAno→SNUPI→mimic comparator loop plan) · **snupi_dynamics** (Langevin time-integration / Nat Commun 2023 — friction+noise+GJF+stacking; Phase 1 = equilibrium-dynamics validator vs NMA) · **snupi_ssdna** (PLAN SS-0…SS-5: bridging-ssDNA element = G9, + FREE tails/overhangs/scaffold-ends = a NADOC extension SNUPI structurally can't represent; target VoltronCore + hydrodynamics)
 
-**BLADE (box-free atomistic engine):** **atomistic_propagator** (the science: CHARMM+GBSA baseline +
-learned solvent correction; unified duplex+ssDNA correction, seeding verdict = baseline seeds NAMD/NN is a
-wash, time-to-equilibrate benchmark harness, curved-6hb stable relax) · **project_blade_frontend**
-(★ NEXT-SESSION PRIORITY — build the BLADE sim tab between CanDo & SNUPI: clone SNUPI + the unified job
-manager + collapsible card + run/stop/delete; file:line clone recipe inside — read this to resume)
+**BLADE (box-free atomistic engine) — ARCHIVED 2026-07-20:** **project_blade_frontend** (tab was
+built + shipped, then REMOVED from the simulate tabs by user decision — current origami have too many
+odd features for seeding to be useful; code KEPT dormant, one-line revive; read its ARCHIVED block) ·
+**atomistic_propagator** (the science: CHARMM+GBSA + learned correction. Strategic verdict: pure
+propagator ~60× too slow, BLADE speed edge modest + ensemble-only + erodes at origami scale; if
+revisited the lever is uncertainty-gated local NAMD fallback, not raw speed)
 
 **Multi-resolution / CG bridge:** multiresolution_roadmap · crossover_parameterization · bundle_stiffness_params ·
 pipeline_validation_log · session_handoff

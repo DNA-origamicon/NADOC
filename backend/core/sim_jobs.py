@@ -133,6 +133,21 @@ def normalize_snupi_job(d: dict) -> dict:
     }
 
 
+def normalize_blade_job(d: dict) -> dict:
+    """A BLADE job dict → a unified node.  Flat root like CanDo/SNUPI (one relax per run),
+    but unlike them BLADE's compute is an external OpenMM subprocess in the gpu env, not an
+    in-process solve — that difference is the runner's problem, not the job list's."""
+    return {
+        **d,
+        "engine": "blade",
+        "kind": "relax",
+        "is_child": False,
+        "production_state": None,
+        "n_units": d.get("n_nucleotides", 0),
+        "viewable": d.get("status") == "completed",
+    }
+
+
 def normalize_md_job(d: dict) -> dict:
     """A NAMD (MD) job dict → a unified node.  Like oxDNA, a relaxation is a root and a
     production/refit child (``parent_job_id``) renders indented under it.  ``engine`` is

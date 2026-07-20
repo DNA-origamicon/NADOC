@@ -51,6 +51,7 @@ from backend.core.oxdna_runner import (
 from backend.core.namd_runner import find_gmx, find_namd
 from backend.core.namd_topology import find_psfgen
 from backend.core.mrdna_bridge import find_arbd, find_arbd_build, find_mrdna
+from backend.core.blade_runner import find_blade_python
 
 
 # ── simulation switch ─────────────────────────────────────────────────────────
@@ -577,6 +578,24 @@ def _arbd_plan(
     return plan
 
 
+def _blade_plan() -> dict:
+    """Install plan for BLADE's compute env.  Deliberately NOT auto-installable: OpenMM ships
+    as a conda/micromamba package, and creating an env is a machine-level decision (CUDA build
+    variant, disk, an existing env the user may already curate) — not something a CAD app should
+    do behind the user's back.  So this is instructions only."""
+    return {
+        "auto": False,
+        "name": "BLADE (OpenMM)",
+        "note": ("BLADE runs OpenMM, which is not in the NADOC Python environment. Create a "
+                 "conda/micromamba env with openmm + parmed, or point $BLADE_OPENMM_ENV at one "
+                 "you already have."),
+        "commands": [
+            "micromamba create -n gpu -c conda-forge python=3.12 openmm parmed cudatoolkit",
+            "# then either name it 'gpu' (auto-detected) or export BLADE_OPENMM_ENV=<prefix>",
+        ],
+    }
+
+
 def _cuda_plan(gpu: dict, tools: dict) -> dict:
     """CUDA toolkit (nvcc): guided install — needs the admin password, can't auto-run.
 
@@ -708,6 +727,7 @@ def engines_status() -> dict:
     psfgen_path = _try_find(find_psfgen)
     dnanalysis_path = find_dnanalysis()
     mrdna_path = _try_find(find_mrdna)
+    blade_python = _try_find(find_blade_python)
     arbd_path = _try_find(find_arbd)
     arbd_built = None if arbd_path else _try_find(find_arbd_build)
     wsl = is_wsl()
@@ -759,6 +779,16 @@ def engines_status() -> dict:
             gmx_path,
             _gromacs_plan(gpu, tools),
             forced=_f("gromacs"),
+        ),
+        "blade": _engine(
+            "blade",
+            "BLADE (OpenMM)",
+            "Box-free implicit-solvent atomistic relax — no explicit water, no periodic cell.",
+            blade_python,
+            _blade_plan(),
+            required_note="Only needed for the BLADE tab; ships as a conda/micromamba env, "
+                          "not a NADOC build.",
+            forced=_f("blade"),
         ),
         # These ship *inside* another engine's install — reported, never installed
         # on their own.

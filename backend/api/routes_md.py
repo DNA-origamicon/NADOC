@@ -150,6 +150,15 @@ class CreateJobRequest(BaseModel):
                     "job's relaxed CG structure (its OWN design.json snapshot) instead "
                     "of ideal B-DNA.  Mutually exclusive with oxdna_job_id.",
     )
+    blade_job_id: Optional[str] = Field(
+        None,
+        description="If set, seed the NAMD run from this completed BLADE relax job's "
+                    "EXACT all-atom relaxed coordinates (its OWN design.json snapshot). "
+                    "Unlike the oxDNA/mrDNA seeds (reconstructed from a coarse-grained "
+                    "frame), BLADE is already atomistic, so the exact conformation is fed "
+                    "straight into solvation via solute_coords=. Forces full-topology "
+                    "(psfgen, with hydrogens) prep. Mutually exclusive with the others.",
+    )
     execution_target: str = Field(
         "local",
         description="'local' runs NAMD as a local subprocess (default); 'alpine' "
@@ -1104,13 +1113,21 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     except RuntimeError as exc:
         raise HTTPException(400, str(exc))
 
-    if body.oxdna_job_id and body.mrdna_job_id:
-        raise HTTPException(400, "Seed from oxDNA OR mrDNA, not both.")
-    seeded = bool(body.oxdna_job_id or body.mrdna_job_id)
+    if sum(bool(x) for x in (body.oxdna_job_id, body.mrdna_job_id, body.blade_job_id)) > 1:
+        raise HTTPException(400, "Seed from ONE of oxDNA / mrDNA / BLADE, not several.")
+    # A BLADE seed carries the exact all-atom conformation via solute_coords, which only
+    # lines up under the full psfgen topology (with hydrogens); GBIS is itself implicit
+    # solvent and re-solvating a BLADE-implicit relax under GBIS defeats the purpose.
+    if body.blade_job_id and body.protocol == IMPLICIT_GBIS_PROTOCOL:
+        raise HTTPException(
+            400, "A BLADE seed feeds an EXPLICIT-solvent NAMD run — the implicit-GBIS "
+                 "protocol re-solvates implicitly and cannot use the exact all-atom seed. "
+                 "Choose an explicit-solvent protocol.")
+    seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
     if body.draft and not seeded:
-        raise HTTPException(400, "A draft job must be seeded from an oxDNA or mrDNA job.")
+        raise HTTPException(400, "A draft job must be seeded from an oxDNA / mrDNA / BLADE job.")
     if seeded:
-        # The seed's design lives on disk (the CG job's snapshot); it is resolved in
+        # The seed's design lives on disk (the source job's snapshot); it is resolved in
         # the background worker so its (slow) reconstruction shows on the progress
         # bar.  A cheap up-front existence check still rejects a bad job id with a
         # fast 400 before any work is queued.
@@ -1118,9 +1135,12 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             if body.oxdna_job_id:
                 from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
                 await run_in_threadpool(assert_namd_seed_available, body.oxdna_job_id, _workspace())
-            else:
+            elif body.mrdna_job_id:
                 from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
                 await run_in_threadpool(assert_mrdna_namd_seed_available, body.mrdna_job_id, _workspace())
+            else:
+                from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
+                await run_in_threadpool(assert_blade_namd_seed_available, body.blade_job_id, _workspace())
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
         design = None
@@ -1169,27 +1189,32 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     params = body.model_dump()
     params["oxdna_job_id"] = job.seed_oxdna_job_id
     params["mrdna_job_id"] = job.seed_mrdna_job_id
+    params["blade_job_id"] = job.seed_blade_job_id
     params["draft"] = False
     params.setdefault("design_source_path", job.design_source_path)
     new_body = CreateJobRequest(**params)
 
-    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id)
+    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id or new_body.blade_job_id)
     if not seeded:
         raise HTTPException(400, "Draft has no seed source; cannot prepare.")
     try:
         if new_body.oxdna_job_id:
             from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
             await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
-        else:
+        elif new_body.mrdna_job_id:
             from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
             await run_in_threadpool(assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace())
+        else:
+            from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
+            await run_in_threadpool(assert_blade_namd_seed_available, new_body.blade_job_id, _workspace())
     except FileNotFoundError as exc:
         raise HTTPException(400, str(exc))
 
     _spawn_prep_job(new_body, design=None, seeded=True, name=job.design_name or "design",
                     size_factor=1.0, existing_job=job)
-    logger.info("prepare draft %s (seed_oxdna=%s seed_mrdna=%s autostart=%s)",
-                job_id, job.seed_oxdna_job_id, job.seed_mrdna_job_id, new_body.autostart)
+    logger.info("prepare draft %s (seed_oxdna=%s seed_mrdna=%s seed_blade=%s autostart=%s)",
+                job_id, job.seed_oxdna_job_id, job.seed_mrdna_job_id, job.seed_blade_job_id,
+                new_body.autostart)
     return MdJob.load(job_id, _workspace()).to_dict()
 
 
@@ -1206,7 +1231,9 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     from backend.core.md_protocols import design_has_extra_bases, mgh_slow_release_segments
     from backend.core.md_vram import estimate_profile_from_design
 
-    if body.oxdna_job_id:
+    if body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id:
+        # A seeded job's design is resolved later from the source job's snapshot, not the
+        # live design — so we can't forecast here; never block the launch on it.
         return {**forecast(_workspace(), 0), "skipped": True}
     try:
         design = design_state.get_or_404()
@@ -1274,6 +1301,9 @@ def _seed_design_name(body: CreateJobRequest) -> str:
         if body.mrdna_job_id:
             from backend.core.mrdna_job import MrdnaJob  # noqa: PLC0415
             return MrdnaJob.load(body.mrdna_job_id, ws).design_name or "design"
+        if body.blade_job_id:
+            from backend.core.blade_job import BladeJob  # noqa: PLC0415
+            return BladeJob.load(body.blade_job_id, ws).design_name or "design"
     except Exception:  # noqa: BLE001 — a label lookup must never block job creation
         pass
     return "design"
@@ -1321,6 +1351,7 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
         design_source_path = body.design_source_path,
         seed_oxdna_job_id  = body.oxdna_job_id,
         seed_mrdna_job_id  = body.mrdna_job_id,
+        seed_blade_job_id  = body.blade_job_id,
     )
     job.execution_target = body.execution_target
     job.cluster_name = body.cluster_name or ("alpine" if body.execution_target == "alpine" else None)
@@ -1384,6 +1415,7 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
             design_source_path = body.design_source_path,
             seed_oxdna_job_id  = body.oxdna_job_id if seeded else None,
             seed_mrdna_job_id  = body.mrdna_job_id if seeded else None,
+            seed_blade_job_id  = body.blade_job_id if seeded else None,
             parent_job_id      = parent_job_id,
         )
         # Archive a fresh (non-draft) job at the requested run_dir BEFORE prep runs, so the
@@ -1459,24 +1491,36 @@ async def _prepare_job_bg(
 
     try:
         seed_model = None
+        blade_solute_coords = None
         if seeded:
-            tracker.report("seed", None, "Reconstructing relaxed atomic model…")
             if body.oxdna_job_id:
+                tracker.report("seed", None, "Reconstructing relaxed atomic model…")
                 from backend.core.oxdna_runner import build_namd_seed  # noqa: PLC0415
                 seed = await run_in_threadpool(build_namd_seed, body.oxdna_job_id, ws)
-                _seed_src = f"oxDNA job {body.oxdna_job_id}"
-            else:
+                local_design = seed.design
+                seed_model = seed.atomistic_model
+                _seed_src = f"oxDNA job {body.oxdna_job_id} (stage {seed.stage_name})"
+            elif body.mrdna_job_id:
+                tracker.report("seed", None, "Reconstructing relaxed atomic model…")
                 from backend.core.mrdna_runner import build_namd_seed_from_mrdna  # noqa: PLC0415
                 seed = await run_in_threadpool(build_namd_seed_from_mrdna, body.mrdna_job_id, ws)
-                _seed_src = f"mrDNA job {body.mrdna_job_id}"
-            local_design = seed.design
-            seed_model = seed.atomistic_model
+                local_design = seed.design
+                seed_model = seed.atomistic_model
+                _seed_src = f"mrDNA job {body.mrdna_job_id} (stage {seed.stage_name})"
+            else:
+                # BLADE is already atomistic: no reconstruction, just read the exact relaxed
+                # coordinates and feed them to solvation via solute_coords (below).
+                tracker.report("seed", None, "Reading BLADE relaxed coordinates…")
+                from backend.core.blade_runner import build_namd_seed_from_blade  # noqa: PLC0415
+                seed = await run_in_threadpool(build_namd_seed_from_blade, body.blade_job_id, ws)
+                local_design = seed.design
+                blade_solute_coords = seed.solute_coords
+                _seed_src = f"BLADE job {body.blade_job_id} ({seed.n_atoms} atoms)"
             seed_name = (local_design.metadata.name or "design").replace(" ", "_")
             job = MdJob.load(job_id, ws)
             job.design_name = seed_name
             job.save(ws)
-            logger.info("prep %s: seeded from %s (stage %s)",
-                        job_id, _seed_src, seed.stage_name)
+            logger.info("prep %s: seeded from %s", job_id, _seed_src)
         else:
             local_design = design
 
@@ -1531,6 +1575,17 @@ async def _prepare_job_bg(
             prepare = prepare_equilibrium_aware_namd
         else:
             prepare = prepare_mgh_slow_release
+        # A BLADE seed feeds the EXACT all-atom conformation straight into solvation via
+        # solute_coords — which only aligns under the full psfgen topology (with hydrogens),
+        # so force it.  The equilibrium-aware protocol ALREADY pins require_full_topology=True
+        # internally, so passing it again there would be a duplicate-kwarg collision; only add
+        # it for the legacy path (which defaults False).  GBIS is rejected up front for a
+        # BLADE seed, so it never reaches here with solute_coords.
+        seed_kwargs: dict = {}
+        if blade_solute_coords is not None:
+            seed_kwargs["solute_coords"] = blade_solute_coords
+            if body.protocol != EQUILIBRIUM_AWARE_PROTOCOL:
+                seed_kwargs["require_full_topology"] = True
         package_subdir, name_stem, segments = await run_in_threadpool(
             prepare,
             local_design,
@@ -1549,6 +1604,7 @@ async def _prepare_job_bg(
             anchors         = body.anchors,
             field           = body.field,
             progress        = tracker.report,
+            **seed_kwargs,
         )
         logger.info("prep %s: done; package=%s name_stem=%s segments=%d",
                     job_id, package_subdir, name_stem, len(segments))
@@ -2595,7 +2651,7 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
     """
     old = _load_job(job_id)
     if not (old.prep_params or old.design_source_path
-            or old.seed_oxdna_job_id or old.seed_mrdna_job_id):
+            or old.seed_oxdna_job_id or old.seed_mrdna_job_id or old.seed_blade_job_id):
         raise HTTPException(400, "Cannot refit: original job has no design provenance.")
 
     try:
@@ -2617,18 +2673,22 @@ async def refit_md_job(job_id: str, body: RefitRequest) -> dict:
     params.setdefault("design_source_path", old.design_source_path)
     params.setdefault("oxdna_job_id", old.seed_oxdna_job_id)
     params.setdefault("mrdna_job_id", old.seed_mrdna_job_id)
+    params.setdefault("blade_job_id", old.seed_blade_job_id)
     valid = {k: v for k, v in params.items() if k in CreateJobRequest.model_fields}
     new_body = CreateJobRequest(**valid)
 
-    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id)
+    seeded = bool(new_body.oxdna_job_id or new_body.mrdna_job_id or new_body.blade_job_id)
     if seeded:
         try:
             if new_body.oxdna_job_id:
                 from backend.core.oxdna_runner import assert_namd_seed_available  # noqa: PLC0415
                 await run_in_threadpool(assert_namd_seed_available, new_body.oxdna_job_id, _workspace())
-            else:
+            elif new_body.mrdna_job_id:
                 from backend.core.mrdna_runner import assert_mrdna_namd_seed_available  # noqa: PLC0415
                 await run_in_threadpool(assert_mrdna_namd_seed_available, new_body.mrdna_job_id, _workspace())
+            else:
+                from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
+                await run_in_threadpool(assert_blade_namd_seed_available, new_body.blade_job_id, _workspace())
         except FileNotFoundError as exc:
             raise HTTPException(400, str(exc))
         design = None

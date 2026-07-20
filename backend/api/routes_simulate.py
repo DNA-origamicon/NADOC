@@ -180,6 +180,12 @@ async def list_simulate_jobs(design_source_path: str | None = None,
     except Exception:  # noqa: BLE001
         pass
     try:
+        from backend.api.routes_blade import list_blade_jobs
+        for d in await list_blade_jobs():
+            nodes.append(sim_jobs.normalize_blade_job(d))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         from backend.api.routes_md import list_md_jobs
         for d in await list_md_jobs():
             nodes.append(sim_jobs.normalize_md_job(d))

@@ -69,6 +69,18 @@ const CENSUS = {
     metrics:    { on: 'cando-metrics-toggle' },
     joblist:    { on: 'cando-jobs-list-toggle' },
   },
+  // ARCHIVED (2026-07-20): 'blade' is no longer in ENGINE_KEYS, so this census row is never
+  // iterated. Kept for a one-line revive (re-add 'blade' to ENGINE_KEYS + the array below).
+  blade: {
+    run:        { on: 'blade-jobs-run-btn' },
+    efield:     { off: 'blade-efield-toggle' },
+    anchors:    { off: 'blade-anchors-toggle' },
+    surface:    { off: 'blade-surface-toggle' },
+    advanced:   { on: 'blade-jobs-adv-toggle' },
+    viz:        { on: 'blade-display-toggle' },
+    metrics:    { on: 'blade-metrics-toggle' },
+    joblist:    { on: 'blade-jobs-list-toggle' },
+  },
   snupi: {
     run:        { on: 'snupi-jobs-coarse-btn' },
     efield:     { on: 'snupi-efield-toggle' },
@@ -93,10 +105,11 @@ const CENSUS = {
 
 describe('engine capability descriptor — shape + completeness', () => {
   it('covers exactly the five selectable simulation engines, fast→accurate tab order', () => {
-    // Tab order runs fast→accurate: CanDo (FEM) · SNUPI (FEM) · mrDNA · oxDNA · NAMD.
+    // Tab order: CanDo (FEM) · SNUPI (FEM) · mrDNA · oxDNA · NAMD.
     // SNUPI is the same in-process FEM as CanDo, run with the anisotropic SNUPI material.
-    // LAMMPS is deliberately NOT a selectable engine — it's the auto-policy CPU fallback
-    // and its runs appear in the unified Simulate job list with an [L] badge (Phase C).
+    // BLADE was ARCHIVED 2026-07-20 (removed from ENGINE_KEYS — its capability/census entries
+    // stay dormant; see engine_capabilities.js). LAMMPS is deliberately NOT a selectable engine
+    // — it's the auto-policy CPU fallback, shown in the unified job list with an [L] badge.
     expect(ENGINE_KEYS).toEqual(['cando', 'snupi', 'mrdna', 'oxdna', 'namd'])
   })
 
