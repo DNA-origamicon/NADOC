@@ -11,6 +11,12 @@ metadata:
 Detailed design lives in the plan `~/.claude/plans/minimum-viable-atomistic-mellow-manatee.md`
 (machine-local, not committed) + the full spec the user pasted. This head is the shared, tracked state.
 
+> **★ NEXT-SESSION PRIORITY (user directive, 2026-07-20): build the BLADE frontend tab.** The science/
+> compute is at a good checkpoint (unify + seeding verdict + equilibration benchmark + curved-6hb stable
+> relax, all committed). The user wants an in-app BLADE simulation tab between CanDo and SNUPI (unified job
+> manager, collapsible card, run/stop/delete). **The build spec is [[project_blade_frontend]] — start there.**
+> The remaining SCIENCE task (deferred, not next): the full curved-6hb seed-NAMD showcase on RunPod.
+
 ## OVERARCHING GOAL (user spec, 2026-07-18) — the north star
 A **machine-learned atomistic simulation engine for DNA origami**: generate FULL atomistic trajectories
 (DNA + water + ions) substantially faster than conventional MD, **while explicitly reporting where its
