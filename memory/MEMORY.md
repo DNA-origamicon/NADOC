@@ -120,7 +120,10 @@ pipeline_validation_log · session_handoff
 [architecture_decisions](architecture_decisions.md)) · btube_benchmark · periodic_cell · namd_solvate ·
 water_shell_carve · 3x4sq_md_run · exp30_18hb_production ·
 **extra_base_4fs_geometric_fixb** (24hb extra-base 4 fs: winning seed = GEOMETRIC build + Fix B heavy bases,
-NOT the oxDNA position-seed — that was the blocker; supersedes PIPELINE_4FS_EXTRA_BASES.md)
+NOT the oxDNA position-seed — that was the blocker; supersedes PIPELINE_4FS_EXTRA_BASES.md) ·
+**blade_force_training** (relaxed 6hbx100_90deg → BLADE force-capture on the OTHER computer: send restart-bundle
+via runpodctl, production MUST capture forces (capture_vel_force), return only DNA-force .npz to Archive, verify
+carved 197,107-atom/1264-nt PSF first — full box is 770k)
 
 **Atomistic skip-site / GROMACS:** atomistic_skip_backbone · skip_site_gromacs_fix · langevin_heating ·
 gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export · sequence_clear_fix
