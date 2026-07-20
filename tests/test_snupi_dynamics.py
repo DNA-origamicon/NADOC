@@ -503,17 +503,25 @@ def test_generalized_rpy_pair_is_spd_at_all_overlaps():
         assert np.linalg.eigvalsh(Xi).min() > 0, f"non-PD pair at r/a={frac}"
 
 
-def test_generalized_rpy_not_pd_at_origami_overlap_raises():
-    """The finding: many-body superposition RPY with rotational coupling loses positive-definiteness
-    at DNA-origami bead density (σ=1.1 nm beads 0.34 nm apart, ~10 near-concentric neighbours). So
-    friction_matrix(generalized=True) REFUSES (raises) rather than return a non-PD friction, while the
-    translational-only production friction stays SPD on the very same configuration."""
+def test_generalized_rpy_pd_at_origami_overlap():
+    """RETRACTION PIN (commit 289aa6d): an earlier version stored the μ^rt cross-block as the
+    transpose of μ^tr, flipping a sign; reciprocity forces the two blocks EQUAL, and that sign
+    error made the many-body superposition appear to lose positive-definiteness at DNA-origami
+    bead density (σ=1.1 nm beads 0.34 nm apart, ~10 near-concentric neighbours). With the parity
+    corrected the generalized mobility is genuinely SPD on this dense config — so friction_matrix(
+    generalized=True) SUCCEEDS (no longer refuses) and returns an SPD friction, and the
+    translational-only production path stays SPD on the very same configuration. This is the one
+    test covering the dense-overlap many-body case (test_generalized_rpy_spd_for_separated_beads
+    covers r≥2a; test_generalized_rpy_pair_is_spd_at_all_overlaps covers a single pair)."""
     a = dyn.HYDRO_RADIUS_NM
     xs = np.arange(8) * 0.34                            # a dense helix-like run at the real bp spacing
     pos = np.array([[x, 0.0, 0.0] for x in xs] + [[x, 1.0, 0.0] for x in xs])
-    assert np.linalg.eigvalsh(hd.rpy_mobility_generalized(pos, a)).min() < 0   # not PD
-    with pytest.raises(ValueError, match="positive-definite"):
-        hd.friction_matrix(pos, a, generalized=True)
+    Xi = hd.rpy_mobility_generalized(pos, a)
+    assert np.allclose(Xi, Xi.T)
+    assert np.linalg.eigvalsh(Xi).min() > 0                                     # PD after parity fix
+    Z = hd.friction_matrix(pos, a, generalized=True)                           # no longer raises
+    assert np.allclose(Z, Z.T)
+    assert np.linalg.eigvalsh(Z).min() > 0
     Zt = hd.friction_matrix(pos, a, generalized=False)                         # production path
     assert np.linalg.eigvalsh(Zt).min() > 0
 

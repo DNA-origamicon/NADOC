@@ -430,9 +430,21 @@ def test_real_arbd_runs_with_extensions(tmp_path, routed_6hb):
     # The tail beads join the simulated CG cloud — real particles, not bookkeeping.
     assert res_with["n_beads"] >= res_base["n_beads"]
 
-    # Relaxed tails stay attached: no bead is flung away from the relaxed body.
+    # Relaxed tails stay attached.  A tail is its OWN flexible ssDNA strand (~0.68 nm contour
+    # spacing), so a multi-bead tail's TIP legitimately hangs several contour lengths off the
+    # body — the 5-base GCTAG tail reaches ~3.4 nm out by construction and relaxes to ~2.1 nm.
+    # "Attached" therefore is NOT "every bead within 2 nm of the body" (that would force the tip
+    # to fold flush onto the duplex).  It is: (a) no bead is flung off — each tail bead has a
+    # neighbour (body OR same-tail) within a bond length, and (b) each tail stays rooted — at
+    # least one of its beads sits on the duplex body.
+    all_pos = np.array([p["backbone_position"] for p in res_with["positions"]])
     body = np.array([p["backbone_position"] for p in res_with["positions"]
                      if p["helix_id"] not in ids])
-    for p in tails:
-        dmin = np.linalg.norm(body - np.array(p["backbone_position"]), axis=1).min()
-        assert dmin < 2.0                              # nm — still on the structure
+    for p in tails:                                    # (a) bonded to the structure somewhere
+        pos = np.array(p["backbone_position"])
+        nn = np.sort(np.linalg.norm(all_pos - pos, axis=1))[1]   # nearest OTHER bead (skip self)
+        assert nn < 2.0, (p["helix_id"], p["bp_index"], nn)      # nm — not isolated
+    for e_id in ids:                                   # (b) tail rooted to the duplex body
+        tail_pos = np.array([p["backbone_position"] for p in tails if p["helix_id"] == e_id])
+        root_dmin = np.linalg.norm(body[:, None, :] - tail_pos[None, :, :], axis=2).min()
+        assert root_dmin < 2.0, (e_id, root_dmin)      # nm — at least one bead on the structure

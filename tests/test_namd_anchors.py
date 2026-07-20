@@ -339,13 +339,22 @@ def test_export_pdb_residue_order_is_natural_not_sorted_on_many_strands():
     assert chains != sorted(chains)  # >26 strands: the orders genuinely diverge
 
     def _model_seq(order):
+        # Mirror export_pdb's reused-PDB-char resid continuation (commit 381da86): with >62
+        # strands the single-char PDB chain IDs recycle, so residue numbering CONTINUES across
+        # internal chains that map to the same char (2nd chain on 'A' prints 21..40, not 1..20)
+        # to avoid merging unrelated residues under an identical (chain, resSeq) in ChimeraX.
+        # The oracle must apply the same per-char offset, or it asserts pre-381da86 raw resids.
         out = []
         by_chain = {}
         for a in model.atoms:
             by_chain.setdefault(a.chain_id, []).append(a)
+        char_offset: dict[str, int] = {}
         for cid in (sorted(by_chain) if order == "sorted" else list(by_chain)):
+            ch = _chain_char(cid)
+            off = char_offset.get(ch, 0)
             seqs = sorted({a.seq_num for a in by_chain[cid]})
-            out.extend((_chain_char(cid), _h36(s, 4).strip()) for s in seqs)
+            out.extend((ch, _h36(off + s, 4).strip()) for s in seqs)
+            char_offset[ch] = off + max(seqs)
         return out
 
     pdb_seq = _pdb_residue_sequence(export_pdb(design, model=model))
