@@ -1831,10 +1831,13 @@ def _render_solvated_fast_namd_conf(
     n_hmr: int = 0,
     nvt_only: bool = False,
     run_steps: int = 250000,
+    capture_vel_force: bool = False,
 ) -> str:
+    from backend.core.namd_helpers import vel_force_dcd_block
     bx, by, bz = box_nm
     bx_a, by_a, bz_a = bx * 10, by * 10, bz * 10
     cx, cy, cz = bx_a / 2, by_a / 2, bz_a / 2
+    vf_block = vel_force_dcd_block(f"output/{name}_fast", 9600, capture=capture_vel_force)
     # ``nvt_only`` is set exactly when the package was built with a water-shell carve,
     # and a carved cell contains vacuum.  NAMD 3 GPU-resident sizes its GPU tile /
     # exclusion buffers from the cell-average density, so it under-counts exclusions in
@@ -1922,7 +1925,7 @@ langevinHydrogen   off
 outputEnergies     9600
 dcdFreq            9600
 dcdFile            output/{name}_fast.dcd
-xstFreq            9600
+{vf_block}xstFreq            9600
 xstFile            output/{name}_fast.xst
 restartfreq        9600
 binaryrestart      yes

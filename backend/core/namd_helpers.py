@@ -197,13 +197,42 @@ def get_ai_prompt(design: Design) -> str:
 
 # ── NAMD configuration template ───────────────────────────────────────────────
 
-def _render_namd_conf(name: str, has_protein: bool = False) -> str:
+def vel_force_dcd_block(out_prefix: str, freq: int, *, capture: bool) -> str:
+    """NAMD velocity + force DCD output directives (ML-propagator training data).
+
+    Off by default: when ``capture`` is False this returns ``""`` so every
+    ordinary job is byte-identical to before.  Only the propagator-reference
+    protocol (``prepare_propagator_reference`` / ``capture_vel_force=True``)
+    turns it on.
+
+    ``out_prefix`` is the SAME stem used for the position ``dcdFile`` (e.g.
+    ``output/{name}``) and ``freq`` is the SAME cadence as ``dcdFreq`` — so the
+    ``.veldcd`` / ``.forcedcd`` frames line up 1:1 with the position ``.dcd``
+    frames.  NAMD writes each as its own DCD; MDAnalysis reads them as separate
+    trajectories over the run's PSF.  velDCD ~= DCD bytes, forceDCD ~= DCD bytes,
+    so capture roughly triples trajectory size — route these jobs to the Archive
+    drive.
+    """
+    if not capture:
+        return ""
+    return (
+        f"velDCDfile         {out_prefix}.veldcd\n"
+        f"velDCDfreq         {freq}\n"
+        f"forceDCDfile       {out_prefix}.forcedcd\n"
+        f"forceDCDfreq       {freq}\n"
+    )
+
+
+def _render_namd_conf(
+    name: str, has_protein: bool = False, *, capture_vel_force: bool = False
+) -> str:
     # When proteins are attached, layer the CHARMM36m protein parameters on top
     # of the NA set and turn on extraBonds (the Cα elastic network + click linker
     # emitted by protein_enm.py keep the protein folded + tethered to the DNA).
     protein_params = (
         "parameters         forcefield/par_all36m_prot.prm\n" if has_protein else ""
     )
+    vf_block = vel_force_dcd_block(f"output/{name}", 500, capture=capture_vel_force)
     extrabonds_block = (
         "\n# ── Protein Cα elastic network + DNA-handle click linker ─────────────────────\n"
         "# extrabonds.txt holds harmonic Cα–Cα restraints (fold-locking, salt-robust)\n"
@@ -257,7 +286,7 @@ stepspercycle      10
 outputEnergies     500
 dcdFreq            500
 dcdFile            output/{name}.dcd
-xstFreq            500
+{vf_block}xstFreq            500
 xstFile            output/{name}.xst
 
 # ── Run ───────────────────────────────────────────────────────────────────────

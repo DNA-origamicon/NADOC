@@ -40,7 +40,12 @@ EQUILIBRIUM_AWARE_PROTOCOL = "equilibrium_aware_namd"
 # Implicit-solvent (Generalised Born) relaxation — no water box, fits small GPUs.
 # Builder lives in backend.core.namd_gbis (kept out of this god-file).
 IMPLICIT_GBIS_PROTOCOL = "implicit_gbis_namd"
-SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBIS_PROTOCOL}
+# ML-propagator reference dataset: the equilibrium-aware ladder run at 2 fs with
+# NO HMR (unperturbed microscopic dynamics) and per-frame velocity+force capture.
+# The learned atomistic propagator (backend/ml/propagator) trains on these.
+PROPAGATOR_REFERENCE_PROTOCOL = "propagator_reference"
+SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBIS_PROTOCOL,
+                       PROPAGATOR_REFERENCE_PROTOCOL}
 # MUST match _common_header's "stepspercycle" — NAMD FATALs at startup if a
 # minimize/run count is not a multiple of it.  (benchmark_runner.NAMD_STEPS_PER_CYCLE too.)
 AKSIMENTIEV_STEPS_PER_CYCLE = 20
@@ -707,7 +712,9 @@ def _segment_conf(
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
     gbis: bool = False,
+    capture_vel_force: bool = False,
 ) -> str:
+    from backend.core.namd_helpers import vel_force_dcd_block  # noqa: PLC0415
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
     # designs whose residual single-stranded contacts crash rigid-bond RATTLE.
     # Fast mode (HMR + 4 fs) applies only to hard segments — it is incompatible
@@ -745,6 +752,10 @@ def _segment_conf(
     lines.append(f"outputName         output/{spec.name}\n")
     lines.append(f"dcdFile            output/{spec.name}.dcd\n")
     lines.append(f"dcdFreq            {spec.dcd_freq}\n")
+    # velDCD/forceDCD sampled at the SAME cadence as the position DCD so training
+    # frames line up 1:1.  Empty string (no-op) unless capture_vel_force is set.
+    lines.append(vel_force_dcd_block(f"output/{spec.name}", spec.dcd_freq,
+                                     capture=capture_vel_force))
     lines.append(f"xstFile            output/{spec.name}.xst\n")
 
     if spec.reinit or not spec.previous:
@@ -1687,8 +1698,15 @@ def prepare_mgh_slow_release(
     pre_declashed: bool = False,
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
+    capture_vel_force: bool = False,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
+
+    ``capture_vel_force`` (default False) additionally writes per-frame velocity
+    and force DCDs (``output/{segment}.veldcd`` / ``.forcedcd``) alongside each
+    production segment's position DCD, at the same cadence.  Off for every
+    ordinary job; the ML-propagator reference dataset
+    (``prepare_propagator_reference``) turns it on.  ~3x trajectory bytes.
 
     ``atomistic_model`` (optional) is a pre-built heavy-atom model supplying the
     DNA starting coordinates — pass an oxDNA-relaxed model (Phase-2 NAMD seed)
@@ -1896,7 +1914,8 @@ def prepare_mgh_slow_release(
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
                           fast=fast, carved=carve_shell, structure_psf=structure_psf,
-                          anchors_file=anchors_file, field=field)
+                          anchors_file=anchors_file, field=field,
+                          capture_vel_force=capture_vel_force)
         )
 
     charge_audit = {}
@@ -1940,7 +1959,13 @@ def prepare_mgh_slow_release(
             "charge_audit": "charge_audit.json",
             "restraints": "restraints_dna_heavy.pdb",
             **({"anchors": anchors_file} if anchors_file else {}),
+            # ML-propagator training data: per-frame velocity/force DCDs written
+            # per production segment when capture is on (glob hints; discovered by
+            # backend/ml/propagator/windows.py).  Absent when capture is off.
+            **({"velocities": "output/*.veldcd", "forces": "output/*.forcedcd"}
+               if capture_vel_force else {}),
         },
+        "capture_vel_force": capture_vel_force,
         "box_ang":     list(box),
         "mgh_extrabonds": mgh_extrabonds,
         "anchors": {
@@ -2060,6 +2085,42 @@ def prepare_equilibrium_aware_namd(
         job_dir,
         protocol=EQUILIBRIUM_AWARE_PROTOCOL,
         require_full_topology=True,
+        **kwargs,
+    )
+
+
+def prepare_propagator_reference(
+    design: Design,
+    job_dir: Path,
+    **kwargs,
+) -> tuple[str, str, list[SegmentSpec]]:
+    """Prepare a reference NAMD run for the ML-propagator training dataset.
+
+    Same solvated equilibrium-aware ladder, but pinned to the settings that make
+    the trajectory a faithful ground-truth for a learned propagator:
+
+    - ``capture_vel_force=True`` — writes per-frame velocity + force DCDs
+      (``output/{segment}.veldcd`` / ``.forcedcd``) so the model has the full
+      microstate + a force-supervision signal, not positions alone.
+    - ``production_timestep_fs=2.0`` and ``fast=False`` (no hydrogen-mass
+      repartitioning) — HMR redistributes H mass and the 4 fs/rigidBonds path
+      constrains H velocities; both distort the microscopic dynamics the model
+      is asked to learn.  2 fs unconstrained keeps them intact.
+    - ``require_full_topology=True`` — all-atom (with hydrogens) CHARMM topology,
+      so every atom the propagator sees is a real force-field atom.
+
+    Callers wanting DENSE training windows should pass a small production-segment
+    ``dcd_freq`` (velDCD/forceDCD inherit that cadence, keeping the three DCDs
+    frame-aligned).  Any of the pinned kwargs may still be overridden explicitly.
+    """
+    kwargs.setdefault("production_timestep_fs", 2.0)
+    kwargs.setdefault("fast", False)
+    kwargs.setdefault("require_full_topology", True)
+    kwargs.setdefault("capture_vel_force", True)
+    return prepare_mgh_slow_release(
+        design,
+        job_dir,
+        protocol=PROPAGATOR_REFERENCE_PROTOCOL,
         **kwargs,
     )
 
