@@ -157,19 +157,30 @@ def _safe_iterdir(p: Path) -> list[Path]:
         return []
 
 
+def _is_dir_safe(p: Path) -> bool:
+    """``Path.is_dir()`` that never raises. ``is_dir()` swallows ENOENT/ENOTDIR/ELOOP but
+    NOT EACCES — on WSL a Windows-locked file like ``/mnt/c/DumpStack.log.tmp`` raises
+    PermissionError, which would crash the whole disk forecast. An unreadable candidate
+    path is simply not a usable volume, so treat any OSError as 'not a directory'."""
+    try:
+        return p.is_dir()
+    except OSError:
+        return False
+
+
 def _candidate_volumes() -> list[Path]:
     """Mounted volumes a big run could be redirected to: external/removable drives under
     /media/<user>/<drive> and /mnt/<drive>, plus the home directory."""
     out: list[Path] = []
     for base in ("/media", "/mnt"):
         b = Path(base)
-        if not b.is_dir():
+        if not _is_dir_safe(b):
             continue
         for lvl1 in _safe_iterdir(b):        # /media/<user>  or  /mnt/<drive>
-            if lvl1.is_dir():
+            if _is_dir_safe(lvl1):
                 out.append(lvl1)
                 for lvl2 in _safe_iterdir(lvl1):   # /media/<user>/<drive>
-                    if lvl2.is_dir():
+                    if _is_dir_safe(lvl2):
                         out.append(lvl2)
     out.append(Path.home())
     return out
