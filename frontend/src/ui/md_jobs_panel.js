@@ -32,7 +32,7 @@ import { initMdMetricsCard } from './md_metrics_card.js'
 import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import { runExclusive } from './primitives/button_busy.js'
-import { runControlState, RUN_ACTION } from './job_run_control.js'
+import { RUN_ACTION } from './job_run_control.js'
 import { initAdvancedOptimize, renderRunPath, productionTimestepWarning } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
@@ -126,11 +126,14 @@ export function seededBadge(job) {
   return ''
 }
 
-/** Pure: an Alpine job that finished local prep but was never handed to SLURM
- *  (no slurm id) — "prepared, awaiting remote submit".  NOT actually running, even
- *  though its status is `queued`; a failed submit leaves it here (with an error). */
+/** Pure: a REMOTE job (Alpine OR RunPod) that finished local prep but was never handed
+ *  to its scheduler/pod — "prepared, awaiting remote submit".  NOT actually running, even
+ *  though its status is `queued`; a failed submit leaves it here (with an error).  RunPod
+ *  MUST be included: a never-launched RunPod job carries no slurm id AND no pod id, and
+ *  treating its `queued` status as "active" made it hijack the Relax button into "■ Stop". */
 export function mdRemoteAwaitingSubmit(job) {
-  return job?.execution_target === 'alpine' && !job?.slurm_job_id && job?.status === 'queued'
+  const remote = job?.execution_target === 'alpine' || job?.execution_target === 'runpod'
+  return remote && !job?.slurm_job_id && !job?.runpod_pod_id && job?.status === 'queued'
 }
 
 /** Pure: text for the detail error box, or null to hide it.  A user-`stopped` job is
@@ -154,34 +157,35 @@ export function mdJobIsActive(job) {
   return true
 }
 
-/** Pure: the primary run-control state (▶ Relax ⇄ ■ Stop ⇄ ↻ Resume) for a selected
- *  NAMD job. `isActive` = mdJobIsActive (queued/preparing/running, minus awaiting-submit).
- *  A LOCAL stopped/failed job resumes via this control; an Alpine job's cluster-gated
- *  resume stays on its dedicated resume button, so Alpine jobs are never "Resume" here
- *  (but an active Alpine job still shows Stop).
- *
- *  This control governs the RELAXATION lifecycle only.  A PRODUCTION child is driven by
- *  the separate Production button (Start/Stop/Resume Production), so when one is selected
- *  the Relax button is inert — "▶ Relax" but DISABLED — rather than mislabeling a running
- *  production as "■ Stop Relax". */
-export function mdRunControl(selectedJob, { busy = false, runTarget = 'local' } = {}) {
-  if (mdIsProductionChild(selectedJob)) {
-    return { action: RUN_ACTION.RUN, label: '▶ Relax', disabled: true }
+/** Pure: the primary Relax button's state.  DECOUPLED (2026-07-20): the button ALWAYS
+ *  launches a FRESH relaxation of the loaded design, independent of which past job is
+ *  selected — so an auto-selected completed / production-child / failed / remote-queued
+ *  job can no longer disable it or turn it into "■ Stop" / "↻ Resume" (the "can't click
+ *  Relax" bug).  Stop/Resume of the SELECTED job now live on the contextual job-control
+ *  button (see mdSelectedJobControl); production children stay on the Production button
+ *  (mdProductionAction).  An Alpine launch only PREPARES + queues locally, so it relabels. */
+export function mdRunControl(_selectedJob, { busy = false, runTarget = 'local' } = {}) {
+  const label = runTarget === 'alpine' ? '▶ Prepare for Alpine' : '▶ Relax'
+  return { action: RUN_ACTION.RUN, label, disabled: busy }
+}
+
+/** Pure: the CONTEXTUAL Stop/Resume control for the SELECTED relaxation job, shown beside
+ *  the always-fresh Relax button (this is where Stop/Resume moved when Relax was decoupled).
+ *    - active (running/preparing, minus awaiting-submit) → ■ Stop
+ *    - a LOCAL stopped/failed job → ↻ Resume (from its last checkpoint)
+ *    - a PRODUCTION child → hidden (the Production button drives it)
+ *    - an Alpine job's cluster-gated resume stays on its dedicated resume button
+ *  Returns { show:false } when there is nothing to act on. */
+export function mdSelectedJobControl(job) {
+  if (!job || mdIsProductionChild(job)) return { show: false }
+  if (mdJobIsActive(job)) {
+    return { show: true, action: 'stop', label: '■ Stop', title: 'Stop this relaxation.' }
   }
-  const isAlpine = selectedJob?.execution_target === 'alpine'
-  const rc = runControlState(selectedJob, {
-    verb: 'Relax',
-    isActive: mdJobIsActive,
-    isResumable: (j) => !isAlpine && ['stopped', 'failed'].includes(j?.status),
-    busy,
-  })
-  // A fresh launch (RUN) targeting Alpine does NOT run remotely — it PREPARES + queues
-  // the job locally, then a separate Submit-to-Alpine step follows.  Relabel so "Relax"
-  // doesn't imply it started a cluster run.
-  if (rc.action === RUN_ACTION.RUN && runTarget === 'alpine') {
-    return { ...rc, label: '▶ Prepare for Alpine' }
+  const isAlpine = job?.execution_target === 'alpine'
+  if (!isAlpine && ['stopped', 'failed'].includes(job?.status)) {
+    return { show: true, action: 'resume', label: '↻ Resume', title: 'Resume from the last checkpoint.' }
   }
-  return rc
+  return { show: false }
 }
 
 /** Pure: what the Production button does for the selected job.
@@ -634,6 +638,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const namdStatusEl  = document.getElementById('md-jobs-namd-status')
   const presetSel     = document.getElementById('md-jobs-preset')
   const runBtn        = document.getElementById('md-jobs-run-btn')
+  const jobCtlBtn     = document.getElementById('md-jobs-job-ctl-btn')   // contextual Stop/Resume for the SELECTED job
   const runTargetLocal  = document.getElementById('md-run-target-local')
   const runTargetAlpine = document.getElementById('md-run-target-alpine')
   const runTargetRunpod = document.getElementById('md-run-target-runpod')
@@ -2101,13 +2106,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const rc = _runControl()
     runBtn.textContent = rc.label
     runBtn.dataset.runAction = rc.action
-    // A stopped/failed job resumes from its last checkpoint — say so on hover.
-    runBtn.title = rc.action === RUN_ACTION.RESUME
-      ? 'Stopped jobs can be resumed from their last checkpoint.' : ''
-    // RUN needs the engines present; STOP/RESUME act on an already-created job. Chain mode
-    // only queues a plan, so it's always enabled (engines need only be present at Launch).
-    // `rc.disabled` covers the inert Relax button while a production child is selected.
-    runBtn.disabled = getChainMode?.() ? false : (rc.disabled || _launching || (rc.action === RUN_ACTION.RUN && !_enginesOk))
+    runBtn.title = ''
+    // The Relax button is now ALWAYS a fresh launch (RUN), so it just needs the engines
+    // present. Chain mode only queues a plan → always enabled (engines checked at Launch).
+    runBtn.disabled = getChainMode?.() ? false : (rc.disabled || _launching || !_enginesOk)
+    _paintJobControl()
+  }
+  /** Paint the contextual Stop/Resume button for the SELECTED job (decoupled from Relax). */
+  function _paintJobControl() {
+    if (!jobCtlBtn) return
+    const ctl = mdSelectedJobControl(_selectedJob())
+    jobCtlBtn.style.display = ctl.show ? '' : 'none'
+    if (!ctl.show) return
+    jobCtlBtn.textContent = ctl.label
+    jobCtlBtn.dataset.jobAction = ctl.action
+    jobCtlBtn.title = ctl.title || ''
+    jobCtlBtn.disabled = _launching
   }
   function _stopSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
@@ -2138,15 +2152,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       }
     }, { label: 'Resuming…' })
   }
+  // The Relax button ALWAYS launches a fresh relaxation (or queues one in chain mode, or
+  // runs a selected seed draft). Stop/Resume of the selected job live on jobCtlBtn below.
   runBtn?.addEventListener('click', () => {
     if (getChainMode?.()) return enqueueChainStage?.('relax')
     const sel = _selectedJob()
-    const action = _runControl().action
-    if (action === RUN_ACTION.STOP) return _stopSelected()
-    if (action === RUN_ACTION.RESUME) return _resumeSelected()
     // Draft → prepare-from-seed + start THIS job; else launch a fresh relax.
     if (mdJobIsDraft(sel)) return _launchRelax(sel.job_id)
     return _launchRelax()
+  })
+  // Contextual per-job control: Stop a running selected job / Resume a stopped-or-failed one.
+  jobCtlBtn?.addEventListener('click', () => {
+    const act = jobCtlBtn.dataset.jobAction
+    if (act === 'stop') return _stopSelected(jobCtlBtn)
+    if (act === 'resume') return _resumeSelected(jobCtlBtn)
   })
   // Repaint the Relax/Production controls when chain mode is toggled.
   window.addEventListener('nadoc:chain-mode-change', () => {

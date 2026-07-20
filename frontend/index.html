@@ -5097,6 +5097,13 @@
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#1a4a1a;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
                     ▶ Relax
                   </button>
+                  <!-- Contextual Stop/Resume for the SELECTED job (Relax is decoupled: it always
+                       launches a fresh relaxation). Hidden unless the selected job is stoppable
+                       or resumable; painted by _paintJobControl. -->
+                  <button id="md-jobs-job-ctl-btn"
+                          style="display:none;flex:1;font-size:var(--text-xs);padding:5px;background:#2d2119;border:1px solid #d29922;color:#e3b341;border-radius:3px;cursor:pointer;font-weight:600">
+                    ■ Stop
+                  </button>
                   <button id="md-jobs-prod-btn"
                           disabled
                           style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #30363d;color:#484f58;border-radius:3px;cursor:not-allowed;font-weight:600">

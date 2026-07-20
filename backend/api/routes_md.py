@@ -1152,6 +1152,16 @@ async def create_md_job(body: CreateJobRequest) -> dict:
         design = design_state.get_or_404()
         if _sequenced_base_count(design) == 0:
             raise HTTPException(400, _NO_SEQUENCE_MSG)
+        # Scaffold-specific: sequenced STAPLES with a None SCAFFOLD slip past the
+        # count check above but still build as poly-T (the 6hbx100_90deg incident).
+        # Block up front so the user gets an immediate, actionable message rather than
+        # a job that spawns "preparing" then dies in background prep.  The build-time
+        # guard in prepare_mgh_slow_release stays as the backstop for seeded/RunPod paths.
+        from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
+        try:
+            require_sequenced_scaffold(design)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
         name = (design.metadata.name or "design").replace(" ", "_")
         size_factor = design_size_factor(design)
 

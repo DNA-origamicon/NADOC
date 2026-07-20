@@ -9,6 +9,36 @@ metadata:
 
 # Simulate panel UX overhaul (2026-07-08, in progress)
 
+## ⚡ Relax button DECOUPLED — "can't click Relax" audit fix — 2026-07-20
+User: "I open 6hbx100_90deg and can't click Relax; several issues with limited repeatability."
+**Root cause (proven live + vitest):** the NAMD panel auto-selects a design's NEWEST job
+(`_selectBestJob` → `jobs[0]`) and the Relax button's behavior was a function of that selection,
+so the SAME button had four behaviors depending on what auto-selected — the "limited repeatability":
+- completed **production child** (`run_kind='production'`) → "▶ Relax" **DISABLED** (the literal bug;
+  6hbx100_90deg's newest job `b76aebe36523` is a production child)
+- **runpod** `queued` → "■ Stop Relax" (hijack — `mdRemoteAwaitingSubmit` only excluded `alpine`)
+- failed → "↻ Resume Relax"; completed relaxation / none → enabled "▶ Relax"
+
+**Fix (user chose "decouple fully"):** `mdRunControl` now ALWAYS returns a fresh-launch RUN
+(`▶ Relax`, or `▶ Prepare for Alpine`), independent of the selected job — never Stop/Resume/disabled.
+Stop/Resume of the SELECTED job moved to a NEW contextual button `#md-jobs-job-ctl-btn`
+(pure `mdSelectedJobControl`: active→■ Stop, local stopped/failed→↻ Resume, production child / completed /
+awaiting-submit → hidden; Alpine resume stays on its dedicated button). The button sits in `#md-launch-row`
+between Relax and Production, hidden until relevant; painted by `_paintJobControl()` (called from
+`_paintRunControl`). Click handler routes stop/resume to the existing `_stopSelected`/`_resumeSelected`.
+**`mdRemoteAwaitingSubmit` generalized to runpod** (never-launched = no `slurm_job_id` AND no
+`runpod_pod_id`) so a runpod `queued` job is no longer "active" (fixes the hijack + false spinners).
+**SUPERSEDES** the Phase-C block below (mdRunControl morphing to Stop/Resume + the "production child →
+DISABLED Relax" regression note) — that behavior is gone by design.
+- **Also:** `Examples/6hbx100_90deg.nadoc` shipped with a `None` scaffold (staples sequenced) → built as
+  poly-T. Deleted (user's call). Backend `create_md_job` now calls `require_sequenced_scaffold` up front →
+  immediate **400** (not a born-then-`failed` job); `prepare_mgh_slow_release`'s guard stays as the backstop.
+- **Tests:** `md_jobs_panel.test.js` — mdRunControl "always ▶ Relax" matrix, new `mdSelectedJobControl` block,
+  `mdRemoteAwaitingSubmit`/`mdJobIsActive` runpod cases. `test_md_sequence_guard.py::test_route_blocks_
+  unsequenced_scaffold_up_front`. vitest 3036 pass, smoke 23/23, `test-smart` FAST (2 pre-existing atomistic
+  golden-drift failures, unrelated). **main.js LOC Δ = 0** (all in md_jobs_panel.js + index.html + routes_md.py).
+  Live-verified on isolated servers: open 6hbx100_90deg → Relax ENABLED (was disabled), contextual Stop hidden.
+
 ## ⚡ Step counts in the master Jobs line + Stop moved under Launch — 2026-07-16 (out-of-session work)
 
 - **`simulate_jobs.js` gained exported `masterStepText`** (+ private `_stepTotal`): the unified Jobs
