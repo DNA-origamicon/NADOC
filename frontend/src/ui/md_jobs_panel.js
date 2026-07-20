@@ -657,6 +657,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const paddingInput  = document.getElementById('md-jobs-padding')
   const watershellInput = document.getElementById('md-jobs-watershell')
   const minstepsInput = document.getElementById('md-jobs-minsteps')
+  const dcdFreqInput  = document.getElementById('md-jobs-dcd-freq')
   const autostartChk  = document.getElementById('md-jobs-autostart')
   const prodTimestepSel = document.getElementById('md-jobs-prod-timestep')
   const timestepWarnEl  = document.getElementById('md-jobs-timestep-warn')
@@ -1972,6 +1973,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         autostart: isLocalRun,
         execution_target: runTarget,
         cluster_name: runTarget === 'alpine' ? 'alpine' : null,
+        dcd_freq: parseInt(dcdFreqInput?.value ?? '2500', 10) || 2500,
       })
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       const childId = d.job?.job_id

@@ -43,6 +43,7 @@ from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,
+    PRODUCTION_DCD_FREQ,
     SUPPORTED_PROTOCOLS,
     SegmentSpec,
     build_production_conf,
@@ -600,10 +601,6 @@ async def md_cancel_analysis(job_id: str, kind: Optional[str] = None) -> dict:
     return {"cancelled": md_analysis_runner.cancel(job_id, kind)}
 
 
-def _display_dcd_freq(steps: int) -> int:
-    return max(100, min(10_000, int(steps) // 50))
-
-
 def _production_checkpoint_warning(job: MdJob, spec: SegmentSpec, *, fallback_reason: str = "") -> str:
     warnings: list[str] = []
     if fallback_reason:
@@ -973,7 +970,7 @@ def _append_production_segments(
             npt=True,
             previous=previous,
             reinit=False,
-            dcd_freq=_display_dcd_freq(steps),
+            dcd_freq=PRODUCTION_DCD_FREQ,
             min_c1_paired=0.90,
             min_wc_ref_relative=0.25,
         )
@@ -1256,8 +1253,7 @@ async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> d
     n_atoms = _psf_atom_count(package_dir / f"{job.name_stem}.psf")
     total_steps = _production_fast_plan(job, body)["total_steps"]
     segments = [
-        (max(100, int(round(total_steps * frac))),
-         _display_dcd_freq(max(100, int(round(total_steps * frac)))))
+        (max(100, int(round(total_steps * frac))), PRODUCTION_DCD_FREQ)
         for frac in (0.10, 0.40, 0.50)
     ]
     predicted = namd_run_output_bytes(segments, n_atoms)
@@ -1826,6 +1822,11 @@ class ProductionRunRequest(BaseModel):
         None, description="'local' or 'alpine'; defaults to the parent's target. An "
                           "'alpine' child is left queued for the submit-review card.")
     cluster_name: Optional[str] = Field(None, description="Cluster for an alpine target")
+    dcd_freq: Optional[int] = Field(
+        None, ge=100, le=1_000_000,
+        description="DCD trajectory output interval (steps). Defaults to PRODUCTION_DCD_FREQ "
+                    "(2500 = every 10 ps at 4 fs). Lower it for denser sampling when the "
+                    "trajectory feeds fluctuation-based parameter extraction (FEM/SNUPI/mrdna).")
 
 
 def _production_seed_checkpoint(parent: MdJob) -> tuple[Optional[SegmentSpec], str, str]:
@@ -1923,6 +1924,7 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         total_steps=plan["total_steps"], length_ns=plan["length_ns"],
         timestep_fs=plan["timestep_fs"], fast=plan["fast"],
         ready_checkpoint=spec.name, workspace=_workspace(),
+        dcd_freq=(body.dcd_freq or PRODUCTION_DCD_FREQ),
     )
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left

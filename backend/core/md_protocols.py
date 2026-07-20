@@ -509,8 +509,16 @@ def build_reseed_conf(
     seed: int,
     equil_base: str = "equilibrated",
     structure_psf: Optional[str] = None,
+    preserve_velocities: bool = False,
 ) -> str:
     """Velocity-reseed bridge conf for an ensemble replica (pure).
+
+    ``preserve_velocities`` switches this from a replica SPAWN to a true CONTINUATION:
+    instead of ``reinitvels`` (fresh Maxwell-Boltzmann velocities, which on a warm
+    NPT-endpoint frame inject force-uncorrelated velocities that overflow the startup
+    RATTLE constraint -> KINETIC=NaN), it reads ``{equil_base}.vel`` so the parent's own
+    constraint-consistent endpoint velocities carry through the zero-step bridge. This is
+    the CPU/conservative path (no GPUresident), so the ``run 0`` warm-up is safe.
 
     Reads the shared equilibrated coordinates + box from PACKAGE-ROOT files
     (``{equil_base}.coor`` / ``{equil_base}.xsc`` — staged, unlike ``output/``),
@@ -524,6 +532,11 @@ def build_reseed_conf(
     cx, cy, cz = bx / 2, by / 2, bz / 2
     extras = "extraBonds         on\nextraBondsFile     mgh_extrabonds.txt\n" if mgh_extrabonds else ""
     psf = structure_psf or f"{name_stem}.psf"
+    vel_block = (
+        f"binVelocities      {equil_base}.vel\n"
+        if preserve_velocities
+        else "temperature        300\nreinitvels         300\n"
+    )
     return f"""\
 structure          {psf}
 coordinates        {name_stem}.pdb
@@ -575,9 +588,7 @@ constraints        off
 outputName         output/{reseed_name}
 binCoordinates     {equil_base}.coor
 extendedSystem     {equil_base}.xsc
-temperature        300
-reinitvels         300
-run                0
+{vel_block}run                0
 """
 
 
@@ -1464,6 +1475,14 @@ def _scale_label(scale: Optional[float]) -> str:
 # ``CutoffParams.min_frames`` (20) ENERGY frames — "insufficient data" fails SAFE to
 # "run the whole thing". Aim comfortably above that.
 _ENERGY_FRAMES_PER_CHUNK = 30
+
+# PRODUCTION runs write a DENSE trajectory: FEM/SNUPI/CanDo elastic-parameter extraction
+# reads the equilibrium FLUCTUATIONS (coordinate covariance -> stiffness via equipartition),
+# which needs many decorrelated coordinate frames. Production previously (mis)inherited the
+# relaxation ladder's sparse ~30-frame display cadence (``_display_dcd_freq``), which silently
+# discarded the sampling — a 50 ns run kept only 30 snapshots. 2500 steps = 10 ps at 4 fs.
+# Larger DCDs are the deliberate tradeoff; the network volume was sized up to hold them.
+PRODUCTION_DCD_FREQ = 2500
 
 
 # A restart write is ~90 MB (coor+vel, 1.9M atoms) pushed SYNCHRONOUSLY to the network

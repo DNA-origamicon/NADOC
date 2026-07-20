@@ -27,8 +27,8 @@ from pathlib import Path
 
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus
 from backend.core.md_protocols import (
+    PRODUCTION_DCD_FREQ,
     SegmentSpec,
-    _display_dcd_freq,
     build_production_conf,
     build_reseed_conf,
 )
@@ -82,6 +82,7 @@ def build_replica_package(
     fast: bool,
     ready_checkpoint: str,
     workspace: Path,
+    dcd_freq: int = PRODUCTION_DCD_FREQ,
 ) -> Path:
     """Build a production-only package for one ensemble replica; returns its package dir.
 
@@ -148,19 +149,33 @@ def build_replica_package(
                 _link_or_copy(f, child_pkg / "forcefield" / f.relative_to(ff))
 
     # ── Equilibrated start (root-level so it stages) ────────────────────────────
-    for ext, dst_name in (("coor", "equilibrated.coor"), ("xsc", "equilibrated.xsc")):
+    # A production PARENT is a true CONTINUATION, not a fresh replica: carry its OWN
+    # paired restart set (coor+vel+xsc) so production resumes with the endpoint's
+    # constraint-consistent velocities. reinitvels on a warm NPT endpoint injects
+    # force-uncorrelated velocities that overflow the startup RATTLE solve -> KINETIC=NaN
+    # at step 0 (validated: the reseed also read the clashed final .coor; the paired
+    # .restart.coor is clean). A relaxation parent stays a replica SPAWN (coords+box only).
+    continuation = getattr(parent, "run_kind", "") == "production"
+    if continuation:
+        stage = (("restart.coor", "equilibrated.coor"),
+                 ("restart.vel", "equilibrated.vel"),
+                 ("restart.xsc", "equilibrated.xsc"))
+    else:
+        stage = (("coor", "equilibrated.coor"), ("xsc", "equilibrated.xsc"))
+    for ext, dst_name in stage:
         src = parent_pkg / "output" / f"{ready_checkpoint}.{ext}"
         if not src.exists():
             raise FileNotFoundError(f"parent equilibrated checkpoint missing: {src}")
         # Copy (not link): the reseed reads these; keep them independent of the parent.
         shutil.copy2(src, child_pkg / dst_name)
 
-    # ── Reseed (velocity reinit) + production confs ─────────────────────────────
+    # ── Reseed (velocity reinit for a replica; velocity-PRESERVING for a continuation) ──
     reseed_name = f"{name_stem}_00_reseed"
     (child_pkg / f"{reseed_name}.conf").write_text(
         build_reseed_conf(
             reseed_name, name_stem, box, mgh_extrabonds,
             seed=seed, equil_base="equilibrated", structure_psf=structure_psf,
+            preserve_velocities=continuation,
         )
     )
 
@@ -186,7 +201,7 @@ def build_replica_package(
         npt=True,
         previous=reseed_name,
         reinit=False,
-        dcd_freq=_display_dcd_freq(steps),
+        dcd_freq=dcd_freq,
         min_c1_paired=0.90,
         min_wc_ref_relative=0.25,
     )
