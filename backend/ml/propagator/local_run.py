@@ -94,11 +94,16 @@ def prepare_local_reference(
     restrained_steps: int = 2000,
     production_steps: int = 6000,
     production_dcd_freq: int = 10,
+    solute_coords=None,
 ) -> tuple[str, str, list]:
     """Solvate the design + build the trimmed short-pilot ladder in ``job_dir``.
 
     Returns ``(package_subdir, name_stem, trimmed_segments)``. Runs GROMACS
     solvation + psfgen full topology (~1-3 min); does NOT run NAMD.
+
+    ``solute_coords`` (optional (N_solute, 3) Å array in psfgen atom order) seeds
+    the solute conformation before water is placed — the BLADE-relaxed NAMD seed
+    arm of the equilibration benchmark.  Default None = idealized B-DNA build.
     """
     from backend.core.md_protocols import prepare_propagator_reference  # noqa: PLC0415
 
@@ -106,7 +111,7 @@ def prepare_local_reference(
     subdir, name_stem, _segments = prepare_propagator_reference(
         design, job_dir,
         ion_conc_mM=ion_conc_mM, mg_conc_mM=mg_conc_mM, salt_mode="custom",
-        minimize_steps=minimize_steps,
+        minimize_steps=minimize_steps, solute_coords=solute_coords,
     )
     trimmed = trim_ladder_for_pilot(
         job_dir / subdir, name_stem,

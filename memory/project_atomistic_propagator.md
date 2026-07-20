@@ -482,6 +482,125 @@ the RESIDUAL (F_true_solvated − F_baseline). Baseline via OpenMM+ParmEd (`dupl
   BAOAB force-caching 2×, (b) NN opt (torch.compile/fp16/fused-scatter of the memory-bound
   [E,3,H] tensor). OpenMM stays CPU. torch, openmm, parmed all now installed in the venv.
 
+## UNCERTAINTY TRACK (dev #6) STARTED — deep-ensemble uncertainty is CALIBRATED (2026-07-19)
+The 2nd co-equal MVP capability. BLADE's baseline (CHARMM+GBSA) is EXACT → all epistemic
+uncertainty lives in the ~6% ForceNet correction. A DEEP ENSEMBLE of K independently-seeded
+ForceNets gives per-atom uncertainty = RMS spread of members' force vectors. Machinery:
+`backend/ml/propagator/uncertainty.py` (`EnsembleForceNet` → (mean, per-atom unc);
+`calibration_score`, `reliability_curve`), `test_propagator_uncertainty.py` (4, slow-marked).
+- **RESULT (K=5, duplex): uncertainty IS calibrated.** Per-atom Pearson(unc,err) **0.45**,
+  Spearman 0.36, reliability curve MONOTONE (0.78 per-atom / 1.0 pooled): uncertainty bins
+  0.41→0.95 map to error 1.8→4.8 (**2.6× error spread** low→high uncertainty). Ensemble-std
+  genuinely predicts where the correction is wrong. Ensembling barely improves accuracy (+2%)
+  — the value is the SIGNAL, not accuracy. Driver `scratchpad/ens_calib.py`.
+- HONEST: moderate (0.45) because the duplex is HOMOGENEOUS = the hard case (no novel sites to
+  disagree about; signal from ends/rare configs only). The MVP payoff is LOCALIZATION on
+  HETEROGENEOUS structures — uncertainty should spike at crossovers / skip-junctions, not smear.
+  NEXT: 6hb localization (uncertainty at crossovers vs interior), then the curved-6hb skip sites
+  (the demo: BLADE says "I don't trust the junctions" and is right → propose local-MD region, dev #9-11).
+- **NOVELTY DETECTION works (2026-07-19):** duplex-trained ensemble evaluated on the 6hb is
+  **1.55× more uncertain** (mean 0.86 vs 0.55; p95 1.73 vs 1.06; max 5.7× median) → it correctly
+  flags the crossover structure as out-of-distribution. Driver `scratchpad/localize.py`.
+  NUANCE: my spatial-COMPACTNESS metric said "not clustered" — but that's the WRONG test for the
+  6hb: its 15 crossovers are DISTRIBUTED along the ~100 bp length, so the uncertainty is correctly
+  spread to them, not compact. A "localize to a COMPACT region" demo needs a structure whose
+  novelty is compact = the CURVED 6hb skip-junction bend (localized + has a real reference). The
+  straight 6hb was never the right localization target. Proper crossover-atom localization (map
+  crossovers→atoms, unc at crossover vs interior) deferred — the curved case is the real payoff.
+- **STATUS of uncertainty track: machinery built+tested, calibration proven, novelty-detection
+  proven.** Awaiting the curved-6hb force dataset (other computer / RunPod) for the localization
+  demo + dev #9 (propose local-MD region at the uncertain junction).
+
+## TIME-TO-EQUILIBRATE BENCHMARK — harness BUILT + validated on duplex (2026-07-20)
+The definitive seeding test: does a BLADE-relaxed solute, solvated + handed to NAMD, reach
+equilibrium in fewer NAMD ps than a cold idealized build? Two arms, IDENTICAL solvation+NAMD,
+differ ONLY in solute start coords: (cold) ideal B-DNA vs (seed) BLADE-implicit-relaxed.
+- **New reusable infra (committed to core — BLADE-seeds-NAMD is a stated goal):**
+  `build_namd_solvated_package(..., solute_coords=(N,3))` overwrites the built solute PDB's x/y/z
+  in psfgen atom order before water is placed (fresh water around the seeded conformation), leaving
+  topology columns untouched — `namd_solvate._overwrite_solute_coords`. Threaded through
+  `prepare_mgh_slow_release` → `prepare_propagator_reference` (**kwargs) → `local_run.prepare_local_
+  reference(solute_coords=)`. Pins: exact all-atom order == the `export_windows` npz order, so a
+  BLADE-relaxed seed indexes 1:1 against the same PSF. Tested: `tests/test_namd_solute_coords.py` (5).
+- **Harness** (`scratchpad/blade_equil_benchmark.py`, dry|full): builds design →
+  `build_charmm_psfgen_topology` (ideal all-atom) → BLADE relax in the gpu env (`blade_relax.py`,
+  subprocess: OpenMM CHARMM+OBC2 minimize + short constrained Langevin) → solvate both arms → run
+  both NAMD ladders local → slice solute DCD → `equil_metric.benchmark`. Metric (`equil_metric.py`,
+  self-tested): solute Kabsch-RMSD to a COMMON equilibrium (pooled last-third of both arms); τ = last
+  time still outside the plateau band. Runs in uv env, shells to gpu env for OpenMM (two-env split).
+- **Duplex result (20 bp, smoke — expected ~0 savings, CONFIRMED): τ_cold = τ_seed = 0 ps.** Both
+  arms at plateau from frame 0 (rmsd0 1.00/0.91, plateau 0.929/0.928 — same equilibrium). A duplex
+  equilibrates instantly and its ideal build is already ~1 Å from eq → nothing to save. BLADE relax
+  moved the solute 1.25 Å; injection verified (seed arm solvates with a different solute Rg 20.72 vs
+  cold 20.22). **The harness is proven end-to-end; the duplex simply has no settling time to detect.**
+- **CURVED 6hb WIRED + BLADE-relax STABLE (2026-07-20).** Harness now takes a `.nadoc` path (arg1)
+  → `Design.model_validate_json` → same build→relax→(solvate→NAMD) path; new `relax` mode does
+  build + BLADE relax + trajectory capture ONLY (no heavy solvate/NAMD — the local stability gate
+  before the RunPod arms). `workspace/6hbx100_90deg.nadoc` = 6 helices, 40,087 solute atoms; the
+  90° curve is a DEFORMATION (+1 cluster_transform) and `build_atomistic_model` APPLIES it, so the
+  idealized all-atom build is already curved (correct cold-seed geometry). **BLADE relax verdict:
+  STABLE** — finite, rmsd_moved 1.78 Å, Rg 100.37→100.49, bbox-diag 385→389 Å (curve HELD, no
+  straighten/collapse), 72 s on CUDA. **Perf fix (important):** OBC2 GBSA must use
+  `CutoffNonPeriodic` (18 Å) not `NoCutoff` at origami scale — NoCutoff is O(N²) and silently fell
+  to the CPU platform → glacial; `blade_relax.py` now sets the cutoff + logs the platform (raises
+  the CUDA error instead of silent CPU). Artifacts in `workspace/propagator_pilot/blade_view/`
+  (`6hbx100_90deg_solute.psf` + `_relax.dcd` (~60 frames) + `_relaxed.pdb`) — viewable in Windows
+  VMD via `\\wsl.localhost\Ubuntu\...` UNC paths (harness `emit_vmd`).
+- **NEXT = the FULL curved showcase (RunPod).** Solvating the curved 6hb at 1.2 nm padding around a
+  ~385 Å bbox → ~1.5-3 M atoms — RunPod-bound. Run `blade_equil_benchmark.py <nadoc> full` with a
+  showcase trim: production ~100-500k steps (200 ps-1 ns @ 2 fs), `production_dcd_freq` ~1000-2000
+  (matches real dcdfreq), so the metric can watch the solute settle. That is where τ_cold >> τ_seed
+  should appear (idealized curve vs MD-equilibrium curve). Metric discrimination already proven on
+  synthetic data (cold 70 ps vs seed 39 ps); the duplex proved the pipeline; the curved-6hb relax
+  proves BLADE can produce the seed. Only the RunPod NAMD arms remain.
+
+## UNIFIED duplex+ssDNA correction + SEEDING verdict (2026-07-20)
+- **ONE ForceNet handles BOTH duplex + ssDNA — no negative transfer.** Trained a single ForceNet on
+  the POOLED residuals of both systems (each residual = its own captured F_true − its own CHARMM+GBSA
+  baseline; system-homogeneous batches, epoch mixes both). Unified R²: **duplex 0.711 (vs 0.72 separate),
+  ssDNA 0.668 (vs 0.66 separate)** — matches the specialists, slight positive transfer on ssDNA. ⇒ BLADE
+  does NOT need a per-motif model zoo; one correction spans paired + single-stranded environments. Model
+  `energy/forcenet_unified.pt`; driver `scratchpad/unify_train.py`. This is the general recipe: pool any
+  new motif's residual into the same net.
+- **SEEDING verdict: the BASELINE seeds NAMD; the NN correction does NOT help (and doesn't need to).**
+  Test (`scratchpad/seed_test.py`): perturb the duplex explicit-mean by ~1 Å, OpenMM-minimize (both start
+  identical), then Langevin-relax under (a) baseline-only vs (b) baseline+unified-correction; measure
+  tail RMSD to the explicit-MD mean. Result over 2 seeds: baseline 1.075/0.977 Å, corrected 1.107/0.942 Å
+  — **Δ = −0.03/+0.03, a wash** (both within ~2× the explicit ensemble's own 0.53 Å thermal spread; Rg
+  matched to <1%). WHY: the delta-force net reproduces 71% of a correction that is only ~6% of the total
+  force, and it is NON-conservative (not a gradient) → it cannot cleanly relocate an equilibrium; its 29%
+  residual error injects ≈ the tiny systematic shift it could offer. ⇒ **BLADE's seeding value is the
+  training-free CHARMM+GBSA baseline alone** — it lands the solute ~1 Å from the explicit basin with NO
+  training data, a STRONGER result for arbitrary standard structures (no per-design training to seed NAMD).
+  The learned correction's payoff is elsewhere: dynamics / invariant-measure fidelity (the 6% solvent-PMF
+  that shifts *fluctuation* statistics), not the mean structure. NEXT (heavy, needs a run): the full
+  BLADE-baseline→solvate→NAMD leg to time the equilibration actually saved vs a cold water ladder.
+
+**NOTE (stability):** the custom BAOAB `langevin_rollout` has NO H-bond constraints → dt=2 fs blows up
+(X–H stretch ~10 fs); use **dt ≤ 0.5 fs** for unconstrained all-atom rollouts (or add RATTLE). The NAMD
+reference used HMR+RATTLE at 2 fs; our implicit rollout does not.
+
+## ssDNA basic training + the BLADE-relaxer both VALIDATED (2026-07-20)
+- **BLADE-baseline as a RELAXER (training-free) — WORKS + robust.** Perturbed 6hb (σ=0.3-0.6 Å,
+  even E=5.6e13 clashes) → OpenMM minimize + short implicit Langevin → stable, folded (Rg within
+  0.7%), ~1 Å RMSD to the explicit reference (the GBSA-vs-explicit gap the NN correction would
+  tighten). Confirms the SEED path: BLADE relaxes rough/clashing structures fast → can seed NAMD
+  (skip the water-equilibration ladder) AND accept oxDNA/SNUPI backmaps as starts. Driver
+  `scratchpad/relaxer_test.py`. NEXT: full BLADE→solvate→NAMD leg to measure equilibration saved.
+- **Basic ssDNA reference RAN + correction TRAINED (local, ~15 min end-to-end).** Built a lone
+  ssDNA strand via `create_bundle([[0,0]], N, strand_filter="scaffold")` + `assign_scaffold_
+  sequence(custom_sequence=…)` (no staples) — a sanctioned single-strand build (green regression
+  test `test_namd_topology.py:63`). 24 nt → solvated 20,220 atoms (job 67fa301eade0) → propagator-
+  reference capture (2 fs, capture_vel_force, 3 unrestrained MGHH chunks) → 6000 frames / 761 DNA
+  atoms (`ssdna24_dna_forces.npz`). RESULTS: **baseline explains 0.949 (== duplex 0.94 — bonded-
+  dominated, pairing-independent), ForceNet residual R² 0.66 (vs duplex 0.72 — modestly harder:
+  the solvent residual is less predictable when the conformation is floppier), total ~98% force
+  accuracy.** Model `energy/forcenet_ssdna.pt`. ⇒ REVISES the earlier caveat: ssDNA is NOT harder
+  at the per-frame FORCE level (baseline fine); the real ssDNA challenge is CONFORMATIONAL SAMPLING
+  (floppy ensemble — this short-production reference samples ideal-B→partially-coiled only) + the
+  modestly-lower correction learnability. The build→capture→export→baseline→train loop is now the
+  general recipe for ANY new motif. [DONE: unified duplex+ssDNA correction — see section above.]
+
 ## BLADE — the method has a name + the curved-origami test case (2026-07-19)
 **BLADE = Box-Less Atomistic Dynamics Engine.** The A2 + delta-learning + Langevin + CUDA
 propagator: `E = CHARMM+GBSA(DNA-only) baseline + learned solvent correction (ForceNet)`,
@@ -493,8 +612,12 @@ INDEPENDENT. Speedup ≈ water:DNA ratio, which grows from ~10× (compact) to 20
 Plain implicit solvent (GBIS) failed before (artificial damping) — BLADE differs by LEARNING the
 correction to GBSA from explicit-solvent forces = implicit COST, explicit-corrected ACCURACY.
 - **Test case: `workspace/6hbx100_90deg.nadoc`** — a 6hb bent 90° via Dietz insertion/deletion
-  `loop_skips` (+32 inserts / −22 deletions). 1264 nt, **~42,125 DNA atoms** (per the CURRENT
-  build; my earlier 40,087 was a stale Jul-12 build).
+  `loop_skips` (+32 inserts / −22 deletions). **CORRECTED counts (other computer, authoritative
+  from PSF):** 1244 nt / **39,661 DNA atoms**; the relaxed box's 42,125 "DNA" = 39,661 DNA +
+  2,464 explicit ions (1225 Na + 118 Cl + 1121 Mg-hexahydrate). My earlier 1264/42,125 folded
+  ions into DNA + over-counted nt by 20 (subagent/stale report.json). Design has NO overhangs/
+  extensions (arrays empty) → no newer revision; BLADE trains against this design as-is. NOTE:
+  `workspace/` is GITIGNORED → the `.nadoc` does NOT sync across machines; each uses its local copy.
   **CORRECTION (from other computer's disk, commit 0073923):** the CURRENT relaxed FULL box =
   job `6d3b1a440ace` = **770,219 atoms** (DNA 42,125 + 728,094 bulk water), at
   `/media/jojo/Archive/NADOC_archive/6d3b1a440ace/package/6hbx100_90deg_namd_solvated/`. This

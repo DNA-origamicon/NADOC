@@ -1690,6 +1690,7 @@ def prepare_mgh_slow_release(
     require_full_topology: bool = False,
     seed: int = 42,
     atomistic_model=None,
+    solute_coords=None,
     progress=None,
     declash: bool = False,
     force_soft: bool = False,
@@ -1744,6 +1745,7 @@ def prepare_mgh_slow_release(
         require_full_topology = require_full_topology,
         seed            = seed,
         atomistic_model = atomistic_model,
+        solute_coords   = solute_coords,
         water_shell_nm  = water_shell_nm if carve_shell else None,
         progress        = progress,
     )

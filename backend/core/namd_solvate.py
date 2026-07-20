@@ -2058,6 +2058,44 @@ while True:
 # §8  PUBLIC API
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _overwrite_solute_coords(pdb_text: str, coords) -> str:
+    """Rewrite the x/y/z columns of the solute PDB's ATOM/HETATM records in order.
+
+    ``coords`` is an (N, 3) array in Å, one row per ATOM/HETATM line, in the SAME
+    order the topology builder emitted them (the row count must match exactly).
+    Only columns 31-54 (PDB fixed-width x/y/z) are touched; every other column
+    (serial, atom name, resname, chain, element, occupancy/beta) is preserved, so
+    the connectivity/PSF mapping is untouched — this seeds a conformation, not a
+    topology.  Coordinates outside the PDB ±9999.999 Å field would corrupt the
+    fixed-width layout, so they are rejected."""
+    import numpy as np  # noqa: PLC0415
+
+    xyz = np.asarray(coords, dtype=float)
+    if xyz.ndim != 2 or xyz.shape[1] != 3:
+        raise ValueError(f"solute_coords must be (N, 3); got {xyz.shape}")
+    if not np.isfinite(xyz).all():
+        raise ValueError("solute_coords contains non-finite values")
+    if (np.abs(xyz) > 9999.999).any():
+        raise ValueError("solute_coords exceed the PDB ±9999.999 Å column width")
+    out, i = [], 0
+    for line in pdb_text.splitlines(keepends=True):
+        if line.startswith(("ATOM", "HETATM")):
+            if i >= len(xyz):
+                raise ValueError(
+                    f"solute_coords has {len(xyz)} rows but the built PDB has more atoms")
+            x, y, z = xyz[i]
+            nl = line.rstrip("\n").rstrip("\r")
+            nl = f"{nl[:30]}{x:8.3f}{y:8.3f}{z:8.3f}{nl[54:]}"
+            out.append(nl + ("\n" if line.endswith("\n") else ""))
+            i += 1
+        else:
+            out.append(line)
+    if i != len(xyz):
+        raise ValueError(
+            f"solute_coords has {len(xyz)} rows but the built PDB has {i} atoms")
+    return "".join(out)
+
+
 def build_namd_solvated_package(
     design: Design,
     *,
@@ -2068,6 +2106,7 @@ def build_namd_solvated_package(
     require_full_topology: bool = False,
     seed: int = 42,
     atomistic_model: "AtomisticModel | None" = None,
+    solute_coords: "np.ndarray | None" = None,
     water_shell_nm: Optional[float] = None,
     progress: Optional[ProgressCb] = None,
 ) -> bytes:
@@ -2083,6 +2122,14 @@ def build_namd_solvated_package(
         solvated PDB starts from relaxed backbone positions instead of ideal
         B-DNA; the PSF (topology/connectivity) is unaffected.  Default: build
         ideal B-DNA internally.
+    solute_coords:
+        Optional (N_solute, 3) array of ALL-ATOM solute coordinates (Å) that
+        overwrite the built DNA PDB's x/y/z, in the SAME atom order the topology
+        builder emits (psfgen order when ``require_full_topology``).  Unlike
+        ``atomistic_model`` (heavy atoms only, hydrogens re-guessed), this seeds
+        the exact all-atom conformation — the hook for a BLADE-relaxed NAMD seed.
+        Water is then placed fresh around the seeded conformation.  Row count must
+        equal the built solute atom count or a ValueError is raised.
     padding_nm:
         Water padding around the DNA bounding box (nm). Default 1.2 nm.
     ion_conc_mM:
@@ -2126,6 +2173,8 @@ def build_namd_solvated_package(
     else:
         dna_pdb = export_pdb(design, box_margin_nm=padding_nm, model=atomistic_model)
         dna_psf = complete_psf(design)
+    if solute_coords is not None:
+        dna_pdb = _overwrite_solute_coords(dna_pdb, solute_coords)
     dry_audit = audit_psf(
         dna_psf,
         require_dna_hydrogens=require_full_topology,
