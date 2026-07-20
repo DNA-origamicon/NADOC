@@ -28,7 +28,9 @@ production_timestep_fs=4.0, gpu_resident=True`, Fix-B applied to 48 extra-base r
 clean. This is the sanctioned rescue for any design RunPod would otherwise force to 1 fs (see
 `REFERENCE_RUNPOD_RUNBOOK` §0). Small-bundle designs still carry the *separate* exp29 cohesion risk
 (`project_md_prep_relaxation`) — geometric+Fix-B fixes the 4 fs integrator, not bundle cohesion; probe
-unrestrained-MGHH before committing a production run.
+unrestrained-MGHH before committing a production run. **CONFIRMED 2026-07-19:** the 6hb_2xT ladder
+ran 4 fs stably to completion (no crash/NaN) but melted at k=0 (C1' → 84 %, delocalized) — 4 fs fix ✓,
+bundle cohesion ✗. A valid 4fs build, but NOT a usable free-dynamics validation target.
 
 ## The two causes (both must be fixed)
 1. **Ring clashes.** The oxDNA POSITION seed (`xb_pos_override`) drops each extra base's CM into

@@ -15,6 +15,27 @@ published per-motif parameters (`Literature/SNUPI_SI.pdf`, Tables S1–S5) into 
 then validating against on-disk full-atomistic MD (6hbx100_noT). If it holds, the
 extra-crossover-base extension (the only part needing GPU MD) plugs into the same param DB.
 
+## STATUS — extra-base extension SHIPPED (2026-07-19)
+The `extra_base_co` motif (unpaired extra bases at a crossover → compliant CO-beam) is **derived,
+wired, and shipped**: `snupi_material.MOTIF_FAMILIES` (74→75) + `snupi_params.json` + `fem_solver`
+classifier / CO-beam diversion. Replaces the old k_rot=0 WLC-spring placeholder.
+- **Parameters** (atomistically MEASURED, 24hb_2xT 6 ns, Curves+-calibrated Kabsch cross-helix 6×6):
+  rotational hinge **GJ≈27, EIy≈27, EIz≈13** pN·nm² (robust, converged, replicate-confirmed); **EA≈965
+  is an UPPER BOUND** (translational is the slow DOF); the **15 couplings are 0** (measured small/noisy).
+- **Validation (held-out 24hb_1xT, 9 ns): MODEST positive.** SNUPI-`extra_base_co` beats the k_rot=0
+  placeholder in the correct direction — per-bp RMSF MAE **1.41 vs 1.77 Å** at the extra-base junctions —
+  but the match is loose: correlation flat (~0.52), both over-predict ~1.7×. Confounds: (a) 2-insert
+  motif on a 1-insert structure (too soft), (b) 9 ns under-samples the slow global modes → atomistic
+  RMSF biased low. Harness: `experiments/exp43_runpod_bench` (scratchpad `validate_24hb_1xT.py`).
+- **A clean SMALL-structure size-independence test is BLOCKED.** 6hb_2xT rebuilt 4fs-safe
+  ([[extra-base-4fs-geometric-fixb]]) ran 4 fs stably, but the small bundle **melts at k=0** (C1'→84 %,
+  delocalized — exp29 [[project_md_prep_relaxation]] cohesion, reconfirmed). No clean free-dynamics
+  window (k=0 melts, k=0.01 suppresses the fluctuation). Size-independence therefore rests on SNUPI's
+  verified motif-locality, not a direct small-bundle run.
+- **Bottom line:** a mechanistically-grounded improvement over the placeholder, shipped with honest
+  caveats — NOT a tight quantitative validation. Strengthening needs a longer 24hb reference (converge
+  slow modes) or a cohesively-stable small extra-base design (bigger bundle, or +salt per exp29).
+
 ## Why this is cheap (established 2026-07-11)
 - SNUPI (Lee/Kim, ACS Nano 2021) ran **almost no new MD**: regular+nicked BP steps = published
   3DNA values (SI Tables S1–S2); CO motifs = **reused** Bathe-2012 trajectories (the 32-hb
