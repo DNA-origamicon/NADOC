@@ -142,6 +142,25 @@ def main() -> int:
 
     manifest = json.loads((pkg / "manifest.json").read_text())
 
+    # ── 1b. DNA sequences assigned (no poly-T scaffold) ─────────────────────
+    # The 6hbx100_90deg incident: an unassigned scaffold builds as 100% thymine (atomistic
+    # 'N'->'DT' default) and a full GPU run is wasted on a physically meaningless reference.
+    # The build-time guard (backend.core.md_sequence_guard, in prepare_mgh_slow_release)
+    # blocks NEW builds; this re-inspects the SHIPPED psf so a stale/pre-guard package can
+    # never rent.
+    print("\nsequences")
+    psf_seq = pkg / f"{job.name_stem}.psf"
+    if g.check(psf_seq.exists(), "psf present for sequence check", str(psf_seq.name)):
+        import sys as _sys
+        _root = str(Path(__file__).resolve().parents[2])
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from backend.core.md_sequence_guard import psf_polyt_problems  # noqa: PLC0415
+        polyt = psf_polyt_problems(psf_seq)
+        g.check(not polyt, "no poly-T DNA segment (scaffold sequenced)",
+                "; ".join(polyt) + " — UNSEQUENCED SCAFFOLD; assign the sequence + rebuild",
+                on_pass="DNA segments mixed-sequence")
+
     # ── 2. The fast path is actually ON ─────────────────────────────────────
     # `fast` is a PREP-TIME flag. Without it the confs are 2 fs + offload and the HMR PSF
     # is written but referenced by NOTHING: ~4x the money for identical science.

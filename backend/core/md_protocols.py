@@ -1731,6 +1731,15 @@ def prepare_mgh_slow_release(
     """
     from backend.core.namd_solvate import build_namd_solvated_package  # noqa: PLC0415
 
+    # Refuse to build an all-atom MD package whose SCAFFOLD sequence is unassigned: every
+    # unassigned base is silently built as thymine (poly-T) — a physically meaningless
+    # reference (the 6hbx100_90deg poly-T incident). Shared choke point for BOTH the local
+    # (create_md_job) and RunPod (prep_*) paths. Only for full-topology MD builds; display
+    # / coarse paths legitimately render poly-T as a placeholder.
+    if require_full_topology:
+        from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
+        require_sequenced_scaffold(design)
+
     minimize_steps = _round_up_to_cycle(minimize_steps)
 
     water_shell_nm = water_shell_nm or 0.0
