@@ -1711,25 +1711,45 @@ def _namd_running_fraction(job: MdJob, ws) -> float | None:
     return overall_fraction(done, total, ts, steps)
 
 
+# Strong refs to in-flight background dir-size walks so the event loop can't GC them
+# mid-walk (asyncio.create_task only holds a weak ref).
+_SIZE_WARM_TASKS: set = set()
+
+
 @router.get("/md/jobs")
 async def list_md_jobs() -> list[dict]:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
-    from backend.core.design_disk_usage import dir_size_bytes_cached
+    from backend.core.design_disk_usage import dir_size_bytes_cached_only, warm_dir_sizes
     ws = _workspace()
     jobs = MdJob.list_jobs(ws)
     jobs = [reconcile_job_status(j, ws) for j in jobs]
     current_fp = current_active_design_fingerprint()
     out: list[dict] = []
+    to_warm: list = []
     for j in jobs:
         _backfill_failure_kind(j)
         d = j.to_dict()
         d["out_of_date"] = _md_job_out_of_date(j, current_fp)
-        d["size_bytes"] = dir_size_bytes_cached(j.job_dir(ws))
+        # Cache-only: never block the poll on a multi-GB archived-run stat-walk.  An
+        # uncached size comes back None (frontend renders it blank) and is filled in by
+        # the background warm below, appearing on the next poll.
+        job_dir = j.job_dir(ws)
+        size = dir_size_bytes_cached_only(job_dir)
+        d["size_bytes"] = size
+        if size is None:
+            to_warm.append(job_dir)
         d["early_stop_pending"] = pending_early_stop(j.job_id)
         frac = _namd_running_fraction(j, ws)
         if frac is not None:
             d["progress_fraction"] = frac
         out.append(d)
+    if to_warm:
+        # Fire-and-forget: walk the uncached dirs in a threadpool AFTER returning, keeping
+        # a task ref so the loop doesn't GC it mid-walk.  warm_dir_sizes dedups, so
+        # overlapping polls never stampede the same directory.
+        task = asyncio.create_task(run_in_threadpool(warm_dir_sizes, to_warm))
+        _SIZE_WARM_TASKS.add(task)
+        task.add_done_callback(_SIZE_WARM_TASKS.discard)
     return out
 
 

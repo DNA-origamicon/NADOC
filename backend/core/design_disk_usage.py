@@ -13,6 +13,7 @@ One reason to change: how a design's on-disk footprint is measured and grouped.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -48,6 +49,11 @@ def dir_size_bytes(path: Path) -> int:
 # server during an 18hb archive.
 _SIZE_TTL_S = 60.0
 _size_cache: dict[str, tuple[float, int]] = {}
+# Paths whose size is being walked right now, so overlapping polls of the same job
+# list don't stampede a multi-GB directory. Guarded by _warm_lock (background walks
+# run in a threadpool → real parallelism).
+_warming: set[str] = set()
+_warm_lock = threading.Lock()
 
 
 def dir_size_bytes_cached(path: Path, ttl: float = _SIZE_TTL_S) -> int:
@@ -60,6 +66,44 @@ def dir_size_bytes_cached(path: Path, ttl: float = _SIZE_TTL_S) -> int:
     val = dir_size_bytes(path)
     _size_cache[key] = (now, val)
     return val
+
+
+def dir_size_bytes_cached_only(path: Path, ttl: float = _SIZE_TTL_S) -> int | None:
+    """The cached size if it is fresh, else ``None`` — NEVER walks the directory.
+
+    For the polled job-list endpoints: returning ``None`` immediately (instead of
+    blocking on a multi-GB archived-trajectory walk on a slow external drive) keeps the
+    panel responsive. The caller schedules :func:`warm_dir_sizes` in the background and
+    the real size fills in on the next poll; the frontend renders a ``None`` size as
+    blank until then.
+    """
+    hit = _size_cache.get(str(path))
+    if hit is not None and time.time() - hit[0] < ttl:
+        return hit[1]
+    return None
+
+
+def warm_dir_sizes(paths, ttl: float = _SIZE_TTL_S) -> None:
+    """Walk + cache the size of each of ``paths`` that isn't already cached-fresh.
+
+    Blocking (stat-walk I/O) — call from a threadpool / background task so the response
+    isn't held. Deduped under ``_warm_lock`` so overlapping polls of the same list never
+    launch two walks of the same directory (the check-and-claim of ``_warming`` is atomic).
+    """
+    for p in paths:
+        key = str(p)
+        with _warm_lock:
+            hit = _size_cache.get(key)
+            if key in _warming or (hit is not None and time.time() - hit[0] < ttl):
+                continue
+            _warming.add(key)          # claim it before releasing the lock
+        try:
+            size = dir_size_bytes(Path(p))
+            with _warm_lock:
+                _size_cache[key] = (time.time(), size)
+        finally:
+            with _warm_lock:
+                _warming.discard(key)
 
 
 def _status_str(job) -> str | None:

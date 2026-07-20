@@ -90,3 +90,30 @@ def test_md_stale_message_names_a_different_loaded_design(monkeypatch, tmp_path)
     assert "different design is loaded" in detail
     assert f"{len(other.helices)} helices" in detail        # names the loaded design's size
     assert f"{len(prepared.helices)} helices" in detail      # and the job's design's size
+
+
+def test_list_md_jobs_size_is_cache_only_then_warms(monkeypatch, tmp_path):
+    """/md/jobs must not block on a multi-GB archived-run stat-walk: an uncached job's size
+    comes back None (the frontend renders it blank), and the background warm fills in the
+    real size so it appears on the next poll."""
+    import asyncio
+
+    from backend.core.design_disk_usage import _size_cache, dir_size_bytes, warm_dir_sizes
+
+    monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
+    job = new_job("6hb", "equilibrium_aware", "", "")
+    job.design_source_path = "6hb.nadoc"
+    job.save(tmp_path)
+    (job.job_dir(tmp_path) / "blob.bin").write_bytes(b"\0" * 2048)
+    _size_cache.pop(str(job.job_dir(tmp_path)), None)          # ensure a cold cache
+    expected = dir_size_bytes(job.job_dir(tmp_path))          # blob + job.json metadata
+    assert expected >= 2048
+
+    rows = asyncio.run(routes_md.list_md_jobs())
+    row = next(r for r in rows if r["job_id"] == job.job_id)
+    assert row["size_bytes"] is None                          # cold → the response never walked
+
+    warm_dir_sizes([job.job_dir(tmp_path)])                   # what the scheduled bg task does
+    rows2 = asyncio.run(routes_md.list_md_jobs())
+    row2 = next(r for r in rows2 if r["job_id"] == job.job_id)
+    assert row2["size_bytes"] == expected                     # filled in on the next poll

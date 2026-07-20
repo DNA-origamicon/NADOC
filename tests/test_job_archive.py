@@ -152,15 +152,22 @@ class TestRoutes:
         return TestClient(app), tmp_path
 
     def test_md_list_includes_size(self, client) -> None:
+        from backend.core.design_disk_usage import warm_dir_sizes
+
         c, ws = client
         job = new_md_job("A", "mgh_slow_release", "A", "pkg", design_source_path="a.nadoc")
         job.save(ws)
         (job.job_dir(ws) / "blob.bin").write_bytes(b"\0" * 2048)
+        # Size is warmed lazily OFF the poll hot path: a cold list reports None (never blocks
+        # on a multi-GB stat-walk), then the background walk fills it in for the next poll.
         r = c.get("/api/md/jobs")
         assert r.status_code == 200
         entry = next(e for e in r.json() if e["job_id"] == job.job_id)
-        assert entry["size_bytes"] >= 2048
+        assert entry["size_bytes"] is None or entry["size_bytes"] >= 2048
         assert entry["archived"] is False
+        warm_dir_sizes([job.job_dir(ws)])   # what the scheduled background task does
+        entry2 = next(e for e in c.get("/api/md/jobs").json() if e["job_id"] == job.job_id)
+        assert entry2["size_bytes"] >= 2048
 
     def test_oxdna_archive_unarchive_via_api(self, client, tmp_path) -> None:
         c, ws = client

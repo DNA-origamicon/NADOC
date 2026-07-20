@@ -12,8 +12,10 @@ import pytest
 from backend.core.design_disk_usage import (
     assemblies_referencing,
     dir_size_bytes,
+    dir_size_bytes_cached_only,
     jobs_for_source_path,
     sim_bytes_by_source_path,
+    warm_dir_sizes,
 )
 from backend.core.md_job import new_job as new_md_job
 from backend.core.oxdna_job import new_oxdna_job
@@ -176,3 +178,41 @@ class TestRoutes:
         r = c.get("/api/design/about")
         assert r.status_code == 200
         assert r.json()["empty"] is True
+
+
+class TestAsyncSizeWarm:
+    """Cache-only reads + background warming — so a polled job list never blocks on a
+    multi-GB archived-run stat-walk (24hb-scale designs used to wedge the panel for
+    tens of seconds on the first /md/jobs after a server start)."""
+
+    def test_cached_only_is_none_until_warmed(self, tmp_path: Path) -> None:
+        (tmp_path / "blob.bin").write_bytes(b"z" * 4096)
+        # Cold: never walks the dir → None (the poll returns immediately).
+        assert dir_size_bytes_cached_only(tmp_path) is None
+        # The background warm (what list_md_jobs schedules) populates the cache.
+        warm_dir_sizes([tmp_path])
+        assert dir_size_bytes_cached_only(tmp_path) == 4096
+
+    def test_warm_does_not_rewalk_a_fresh_entry(self, tmp_path: Path) -> None:
+        (tmp_path / "a.bin").write_bytes(b"x" * 1000)
+        warm_dir_sizes([tmp_path])
+        assert dir_size_bytes_cached_only(tmp_path) == 1000
+        # Within the TTL a second warm is a no-op even though the dir grew — proves the
+        # dedup/skip (informational size; a short TTL refresh is enough).
+        (tmp_path / "b.bin").write_bytes(b"y" * 2000)
+        warm_dir_sizes([tmp_path])
+        assert dir_size_bytes_cached_only(tmp_path) == 1000
+
+    def test_warm_recomputes_a_stale_entry(self, tmp_path: Path) -> None:
+        (tmp_path / "a.bin").write_bytes(b"x" * 1000)
+        warm_dir_sizes([tmp_path], ttl=0.0)                       # ttl 0 → always stale
+        assert dir_size_bytes_cached_only(tmp_path, ttl=1e9) == 1000
+        (tmp_path / "b.bin").write_bytes(b"y" * 500)
+        warm_dir_sizes([tmp_path], ttl=0.0)                       # recomputes
+        assert dir_size_bytes_cached_only(tmp_path, ttl=1e9) == 1500
+
+    def test_cached_only_expires_with_ttl(self, tmp_path: Path) -> None:
+        (tmp_path / "a.bin").write_bytes(b"x" * 100)
+        warm_dir_sizes([tmp_path])
+        assert dir_size_bytes_cached_only(tmp_path, ttl=1e9) == 100   # fresh under a huge ttl
+        assert dir_size_bytes_cached_only(tmp_path, ttl=0.0) is None  # stale under a zero ttl
