@@ -3152,6 +3152,25 @@
           "g_Dz_Tz": 11.212
         }
       }
+    },
+    "extra_base_co": {
+      "mean": {
+        "geometry": {
+          "dx1": -1.145, "dx2": 1.145, "dy1": 0.0, "dy2": 0.0, "dz1": 0.0, "dz2": 0.0,
+          "theta_x1": 0.0, "theta_x2": 0.0, "theta_y1": 0.0, "theta_y2": 0.0,
+          "theta_z1": 0.0, "theta_z2": 0.0
+        },
+        "rigidity": {
+          "EA": 964.8, "GAy": 699.5, "GAz": 378.4, "GJ": 26.7, "EIy": 27.1, "EIz": 12.9
+        },
+        "coupling": {
+          "g_Tx_Ty": 0.0, "g_Tx_Tz": 0.0, "g_Ty_Tz": 0.0,
+          "g_Dx_Dy": 0.0, "g_Dx_Dz": 0.0, "g_Dy_Dz": 0.0,
+          "g_Dx_Tx": 0.0, "g_Dx_Ty": 0.0, "g_Dx_Tz": 0.0,
+          "g_Dy_Tx": 0.0, "g_Dy_Ty": 0.0, "g_Dy_Tz": 0.0,
+          "g_Dz_Tx": 0.0, "g_Dz_Ty": 0.0, "g_Dz_Tz": 0.0
+        }
+      }
     }
   }
 }

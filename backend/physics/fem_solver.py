@@ -332,10 +332,13 @@ def _classify_crossovers(design: Design) -> Dict[str, str]:
     """
     from collections import defaultdict
     groups: Dict[frozenset, List[Tuple[int, str]]] = defaultdict(list)
+    out: Dict[str, str] = {}
     for xo in design.crossovers:
+        if xo.extra_bases:
+            out[xo.id] = "extra_base_co"   # extra-base CO → compliant SNUPI CO-beam (soft rotational hinge)
+            continue
         pair = frozenset((xo.half_a.helix_id, xo.half_b.helix_id))
         groups[pair].append((xo.half_a.index, xo.id))
-    out: Dict[str, str] = {}
     for members in groups.values():
         members.sort()
         run: List[str] = []
@@ -489,10 +492,19 @@ def build_fem_mesh(design: Design, material: str = "cando") -> FEMMesh:
 
         n_extra = len(xo.extra_bases) if xo.extra_bases else 0
         if n_extra > 0:
-            # ssDNA WLC spring — translational only, no rotational stiffness.
-            L_c     = n_extra * RISE_SS
-            k_trans = 3.0 * KBT / (2.0 * L_c * L_P_SS)
-            mesh.springs.append(FEMSpring(node_i=ni, node_j=nj, k_trans=k_trans, k_rot=0.0))
+            if snupi_ss:
+                # extra-base CO → compliant SNUPI CO-beam (family_mean_D('extra_base_co'): stretch/shear
+                # crossover-typical, torsion+bending ~5-10x softer = the unpaired-insert rotational hinge,
+                # MD-derived — replaces the old translational-only k_rot=0 guess). See project_extra_base_4fs.
+                offset = mesh.nodes[nj].position - mesh.nodes[ni].position
+                mesh.rigid_links.append(FEMRigidLink(
+                    node_i=ni, node_j=nj, offset=offset,
+                    co_type=co_class.get(xo.id, "extra_base_co")))
+            else:
+                # cando: ssDNA WLC spring — translational only, no rotational stiffness.
+                L_c     = n_extra * RISE_SS
+                k_trans = 3.0 * KBT / (2.0 * L_c * L_P_SS)
+                mesh.springs.append(FEMSpring(node_i=ni, node_j=nj, k_trans=k_trans, k_rot=0.0))
             continue
 
         # Standard DX crossover — rigid zero-length link (exact constraint, no compliance).
@@ -1436,7 +1448,7 @@ def build_corotational_elements(mesh: "FEMMesh", X0: Optional[np.ndarray] = None
         D = _sm.motif_D(el.motif_family, el.motif) if el.motif else _sm.family_mean_D(el.motif_family)
         ref = cr.element_reference(X0[el.node_i], X0[el.node_j], np.eye(3), np.eye(3))
         elements.append((el.node_i, el.node_j, ref, _snupi_element_stiffness(L, D)))
-    _co_D = {ct: _sm.family_mean_D(ct) for ct in ("double_co", "single_co")}
+    _co_D = {ct: _sm.family_mean_D(ct) for ct in ("double_co", "single_co", "extra_base_co")}
     for lk in mesh.rigid_links:
         L = float(np.linalg.norm(lk.offset))
         if L < 1e-6:

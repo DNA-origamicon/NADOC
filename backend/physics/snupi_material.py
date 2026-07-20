@@ -56,7 +56,7 @@ _COUPLING_MAP = {
     "g_Dz_Tx": ("dz", "theta_x"), "g_Dz_Ty": ("dz", "theta_y"), "g_Dz_Tz": ("dz", "theta_z"),
 }
 
-MOTIF_FAMILIES = ("regular_bp", "nicked_bp", "co_nick", "double_co", "single_co")
+MOTIF_FAMILIES = ("regular_bp", "nicked_bp", "co_nick", "double_co", "single_co", "extra_base_co")
 
 
 @lru_cache(maxsize=1)

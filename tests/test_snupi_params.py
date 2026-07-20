@@ -26,7 +26,7 @@ COUP_KEYS = ["g_Tx_Ty", "g_Tx_Tz", "g_Ty_Tz",
              "g_Dy_Tx", "g_Dy_Ty", "g_Dy_Tz",
              "g_Dz_Tx", "g_Dz_Ty", "g_Dz_Tz"]
 FAMILY_COUNTS = {"regular_bp": 10, "nicked_bp": 16, "co_nick": 16,
-                 "double_co": 16, "single_co": 16}
+                 "double_co": 16, "single_co": 16, "extra_base_co": 1}
 DOF = ["dx", "dy", "dz", "theta_x", "theta_y", "theta_z"]
 
 
@@ -43,13 +43,13 @@ def test_loads_and_metadata(db):
     assert "Euler" not in db["convention"] or "NOT Euler" in db["convention"]
 
 
-def test_all_74_motifs_present(db):
+def test_all_75_motifs_present(db):
     motifs = db["motifs"]
     assert set(motifs) == set(FAMILY_COUNTS)
     for fam, n in FAMILY_COUNTS.items():
         assert len(motifs[fam]) == n, f"{fam}: {len(motifs[fam])} != {n}"
     total = sum(len(motifs[fam]) for fam in motifs)
-    assert total == 74
+    assert total == 75   # 74 transcribed SNUPI motifs + 1 MD-derived extra_base_co (NADOC extension)
 
 
 def _iter_motifs(db):

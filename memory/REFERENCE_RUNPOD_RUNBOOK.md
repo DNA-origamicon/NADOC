@@ -52,6 +52,18 @@ from its 1xT/2xT variants** — confounding the very difference you are paying t
 costing 4x on the variants that carry it. `preflight.py` catches the cost half; only a conf
 diff catches the confound. See LESSONS **L8**.
 
+⚠️ **`launch_production.py` sizes cost at `TIMESTEP_FS`=4 fs but does NOT verify the conf it
+emits.** A **declash parent** (any design with extra crossover bases / unpaired runs) silently
+yields a **1 fs, offload, no-GPUresident** child, so the launcher's dry-run ETA and $ are **~4×
+optimistic** — the run dies at the kill-switch having produced ~¼ the ns you paid for, at **<20 %
+GPU util** the whole time (a ~180 k-atom system in offload mode never fills a 4090; measured
+2026-07-19: 6hb_2xT + 6hbx100_2xT both ran 1 fs at 12–17 % util, killed for $0-net after
+diagnosis). Before the pod bills, confirm the PARENT manifest has `fast_relaxation.enabled=True`
+(or `preflight.py` the child on its `fast=True` gate). **Fix a declash parent by rebuilding it
+4fs-safe:** `prep_24hb_seeded.py <stem> --geometric` (geometric build + Fix-B heavy bases) →
+`declash=False`, 4 fs, GPUresident. Proven to generalize beyond the 24hb (6hb_2xT: `declash=False,
+timestep_fs=4.0, gpu_resident=True`). See `project_extra_base_4fs_geometric_fixb`.
+
 Then run the gate. It mechanically checks everything that has bitten us:
 
 ```bash

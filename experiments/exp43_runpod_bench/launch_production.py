@@ -116,7 +116,15 @@ async def main() -> int:
                     help="production length; default = whatever the remaining budget buys")
     ap.add_argument("--s-per-step", type=float, default=None,
                     help="MEASURED s/step. Default: read it from the relaxation's own logs.")
+    ap.add_argument("--dcd-freq", type=int, default=None,
+                    help="DCD output interval (steps) for the production run. Default = "
+                         "PRODUCTION_DCD_FREQ (2500 = every 10 ps at 4 fs). Lower for denser "
+                         "sampling to feed fluctuation-based parameter extraction (FEM/SNUPI).")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--budget", type=float, default=None,
+                    help="override the per-parent ledger's remaining $ (fit check + on-pod "
+                         "kill-switch). Use when the stale campaign cap reads $0 but the run "
+                         "is separately authorised.")
     ap.add_argument("--parent-stem", default=DEFAULT_PARENT_STEM,
                     help="relaxation job to seed production from; reads JOB_ID_<stem> "
                          "(e.g. 24hb_0xT, 24hb_1xT_seeded). Default: the 3x6x400 bench.")
@@ -198,7 +206,12 @@ async def main() -> int:
         s_per_step = relax * PRODUCTION_PENALTY
         src = f"relaxation {relax*1000:.1f} ms/step x {PRODUCTION_PENALTY} production penalty"
 
-    remaining = ledger.remaining()      # already nets off the $1.50 teardown reserve
+    # ``--budget`` overrides the per-parent ledger's remaining. The original campaign ledger
+    # carries a stale $120 cap that reads $0 remaining after two full 50 ns runs; a
+    # user-directed continuation with its own budget must not be blocked by that. When set,
+    # this value is BOTH the fit check below AND the on-pod kill-switch (budget_usd) — a real
+    # bound, just a fresh one.
+    remaining = args.budget if args.budget is not None else ledger.remaining()
     ns = args.ns if args.ns is not None else size_production_ns(remaining, rate, s_per_step)
     steps = int(ns * 1e6 / TIMESTEP_FS)
     hours = steps * s_per_step / 3600.0
@@ -227,6 +240,7 @@ async def main() -> int:
         parent.job_id,
         routes_md.ProductionRunRequest(
             length_ns=ns, autostart=False, execution_target="runpod",
+            dcd_freq=args.dcd_freq,
         ),
     )
     child = MdJob.load(result["job"]["job_id"], WORKSPACE)
