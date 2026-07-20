@@ -1,0 +1,24 @@
+{
+  "checked_at": 1784493149.5254724,
+  "conditions": {
+    "no_crossover": {
+      "job_id": "d163b098341d",
+      "status": "stopped",
+      "issues": [],
+      "ok": true
+    },
+    "left_crossover": {
+      "job_id": "c4789083783f",
+      "status": "queued",
+      "issues": [],
+      "ok": true
+    },
+    "bracketed_crossovers": {
+      "job_id": "95f45d69ca31",
+      "status": "queued",
+      "issues": [],
+      "ok": true
+    }
+  },
+  "ok": true
+}

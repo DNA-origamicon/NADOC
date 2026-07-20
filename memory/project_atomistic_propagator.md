@@ -552,6 +552,24 @@ differ ONLY in solute start coords: (cold) ideal B-DNA vs (seed) BLADE-implicit-
   the CUDA error instead of silent CPU). Artifacts in `workspace/propagator_pilot/blade_view/`
   (`6hbx100_90deg_solute.psf` + `_relax.dcd` (~60 frames) + `_relaxed.pdb`) — viewable in Windows
   VMD via `\\wsl.localhost\Ubuntu\...` UNC paths (harness `emit_vmd`).
+- **CURVED 6hb REFERENCE DATA PULLED (2026-07-20).** The other computer's MD capture is now local
+  (rented a brief EU-RO-1 pod on network volume `77pnhye88p`, SFTP'd off, reaped — ~$0.62; script
+  `scratchpad/fetch_curved6hb.py`, EU-RO-1 has NO 4090s → use `RTX 4000 Ada / L4 / RTX PRO 4500` on
+  SECURE). In `workspace/propagator_pilot/blade_capture/` (gitignored):
+  - `6hbx100_90deg_06_capture.dna.npz` (3.27 GB) — **2500 frames × 39,661 DNA atoms**, full
+    pos+vel+force + z/mass/charge/resid/bonds/segment_starts/box_ang (the `export_windows` schema).
+    This is the curved-6hb ground truth for baseline + correction training and the seed-NAMD benchmark.
+  - `..._dna_chelated_mg.npz` (1.4 KB) — Mg²⁺ chelation analysis: 59 ions, `mg_atom_index`/`mg_resid`/
+    `persistence`/`chelated`/`cutoff_A`=4.0 (which Mg are site-bound — curved stability is Mg-dependent).
+  - ✅ **Atom-count delta RESOLVED (2026-07-20):** the 39,661 (capture) vs 40,087 (my earlier local
+    build) gap is purely SCAFFOLD SEQUENCING, not topology. The other computer's source design is now
+    on git at **`Examples/6hbx100_90deg.nadoc`** (105 KB) — topologically identical to `workspace/
+    6hbx100_90deg.nadoc` (174 KB; 6 helices, 19 strands, same routing) but with the **scaffold left
+    UNSEQUENCED** (588 staple nt only, vs the workspace copy's 588+676 = 1264 with the M13 scaffold).
+    Unsequenced scaffold → default bases → different purine/pyrimidine count → −426 atoms. **VERIFIED:
+    `build_charmm_psfgen_topology(Examples) = 39,661` (== capture), `(workspace) = 40,087`.** ⇒ For the
+    curved benchmark USE `Examples/6hbx100_90deg.nadoc` — it is the exact capture source; the workspace
+    copy's sequenced scaffold would mismatch the ground-truth atom ordering AND base identities.
 - **NEXT = the FULL curved showcase (RunPod).** Solvating the curved 6hb at 1.2 nm padding around a
   ~385 Å bbox → ~1.5-3 M atoms — RunPod-bound. Run `blade_equil_benchmark.py <nadoc> full` with a
   showcase trim: production ~100-500k steps (200 ps-1 ns @ 2 fs), `production_dcd_freq` ~1000-2000

@@ -1,0 +1,30 @@
+{
+  "condition": "no_crossover",
+  "lattice": "honeycomb",
+  "cells": [
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ]
+  ],
+  "length_bp": 21,
+  "prediction_token": {
+    "start_bp": 7,
+    "end_bp_exclusive": 14,
+    "length_bp": 7
+  },
+  "crossover_bp": [],
+  "temperature_K": 300.0,
+  "NaCl_mM": 150.0,
+  "MgCl2_mM": 0.0,
+  "sequence_source": "M13mp18 prefix per scaffold strand",
+  "dataset_role": "matched_crossover_mechanics_pilot"
+}
