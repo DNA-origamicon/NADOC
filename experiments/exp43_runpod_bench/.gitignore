@@ -1,0 +1,3 @@
+# Transient, hash-keyed SNUPI benchmark state (resumable series data, rewritten
+# across runs — a per-run cache, not a result to version).
+.snupi*_state_*.json
