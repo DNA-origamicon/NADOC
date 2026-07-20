@@ -33,7 +33,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -86,6 +86,10 @@ router = APIRouter(tags=["oxdna"])
 # /trajectory-progress is served while it computes.  A plain dict assignment is
 # GIL-atomic; the entry is created when the build starts and removed when it ends.
 _TRAJ_PROGRESS: dict[str, dict] = {}
+# Same idea for a trajectory-RANGE export build (POST /export-trajectory); kept separate from
+# the view-trajectory build so an export and a scrub can't clobber each other's progress. Each
+# entry carries a "phase" ('align' | 'write') the export card renders.
+_EXPORT_PROGRESS: dict[str, dict] = {}
 
 
 def _wall_axis_position_nm(wall_meta: dict) -> float:
@@ -1435,6 +1439,85 @@ async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
             "stage_name": stage_name, "n_frames": n_frames, **source}
 
 
+# ── Trajectory-range export helpers (POST /oxdna/jobs/{id}/export-trajectory) ──
+# Pure, unit-tested in tests/test_oxdna_export_trajectory.py — kept small + format-critical.
+
+def _strided_indices(lo: int, hi: int, cap: int) -> list[int]:
+    """Evenly-spaced indices from the half-open range [lo, hi), capped at ``cap``.
+
+    Returns every index when the range fits under the cap; otherwise strides down to
+    exactly ``cap`` monotonic indices that always include ``lo`` and never reach ``hi``
+    (so an exported frame index is always in range). Empty when lo >= hi.
+    """
+    if lo >= hi:
+        return []
+    n = hi - lo
+    if n <= cap:
+        return list(range(lo, hi))
+    return [lo + (i * n) // cap for i in range(cap)]
+
+
+def _dat_particle_line(pos, a1, a3) -> str:
+    """One oxDNA ``.dat`` configuration line: 15 floats — position, a1, a3, then zero
+    velocity and angular velocity — group-separated by a double space, each ``%.6f``."""
+    def _g(t):
+        return " ".join(f"{v:.6f}" for v in t)
+    zero = (0.0, 0.0, 0.0)
+    return "  ".join([_g(pos), _g(a1), _g(a3), _g(zero), _g(zero)])
+
+
+def _assemble_multiframe_pdb(design, model, flats, indices, export_pdb_fn, progress=None) -> str:
+    """Stamp each composite frame's atom coordinates onto ``model`` and emit a multi-MODEL PDB.
+
+    ``flats`` maps ``str(frame_index) -> [x0,y0,z0, x1,y1,z1, …]`` (3 floats per model atom).
+    For each index in ``indices`` we overwrite the model's atom xyz from its flat and render
+    one PDB via ``export_pdb_fn(design, model=model, viewer_terminals=False)``, wrapping its
+    ATOM/TER lines in a MODEL/ENDMDL block. Bonds are constant across frames, so the CONECT
+    records are emitted ONCE (from the first surviving frame), after all models, before END.
+
+    A frame whose flat is missing or the wrong length (topology changed) is skipped, but still
+    advances ``progress(done, total)`` so a partly-invalid range's bar never stalls. Returns
+    "" when no frame survives.
+    """
+    expect = 3 * len(model.atoms)
+    total = len(indices)
+    out: list[str] = []
+    conect: list[str] | None = None
+    model_no = 0
+    for done, idx in enumerate(indices, start=1):
+        flat = flats.get(str(idx))
+        if flat is not None and len(flat) == expect:
+            for i, atom in enumerate(model.atoms):
+                atom.x, atom.y, atom.z = flat[3 * i], flat[3 * i + 1], flat[3 * i + 2]
+            pdb = export_pdb_fn(design, model=model, viewer_terminals=False)
+            body = [ln for ln in pdb.splitlines()
+                    if ln.startswith(("ATOM", "HETATM", "ANISOU", "TER"))]
+            if conect is None:
+                conect = [ln for ln in pdb.splitlines() if ln.startswith("CONECT")]
+            model_no += 1
+            out.append(f"MODEL     {model_no:>4d}")
+            out.extend(body)
+            out.append("ENDMDL")
+        if progress:
+            progress(done, total)
+    if not out:
+        return ""
+    if conect:
+        out.extend(conect)
+    out.append("END")
+    return "\n".join(out) + "\n"
+
+
+def _export_stem(job, design) -> str:
+    """A safe filename stem: the design name with non-alphanumerics replaced by ``_``,
+    falling back to the job id when there is no name."""
+    import re
+    name = getattr(getattr(design, "metadata", None), "name", None)
+    if name:
+        return re.sub(r"[^A-Za-z0-9]", "_", name)
+    return getattr(job, "job_id", "export")
+
+
 @router.get("/oxdna/jobs/{job_id}/trajectory")
 async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True) -> dict:
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
@@ -1560,6 +1643,97 @@ async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody,
         body.radius_inflate, body.smooth, align=align,
         n_trailing_extra=_capture_bead_count(job),
         trailing_extra_strand_length=_capture_strand_length(job))
+
+
+class OxdnaExportTrajectoryBody(BaseModel):
+    lo: int
+    hi: int
+    format: str = "pdb"      # 'pdb' (multi-MODEL, ChimeraX) | 'oxdna' (.top+.dat, oxView)
+
+
+# Each exported frame is a full all-atom rebuild, so cap the count regardless of the range —
+# the composite frame space is already downsampled (≤200), so this only bites a huge request.
+_EXPORT_FRAME_CAP = 240
+
+
+@router.post("/oxdna/jobs/{job_id}/export-trajectory")
+async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) -> Response:
+    """Export a FRAME RANGE of the composite trajectory for offline rendering.
+
+    ``format='pdb'`` → one multi-MODEL PDB (ChimeraX ``open … coordsets true``); the frame
+    indices match GET /oxdna/jobs/{id}/trajectory exactly, so the range the export card's slider
+    shows is the range emitted. Heavy (one all-atom rebuild per frame) — progress streams to
+    ``/export-progress``. ``format='oxdna'`` (oxView .top+.dat) is not wired yet.
+    """
+    from backend.core.oxdna_health import (
+        composite_trajectory_atomistic, composite_trajectory_meta)
+
+    if body.format not in ("pdb", "oxdna"):
+        raise HTTPException(400, f"Unknown export format {body.format!r}.")
+    job = _load_job(job_id)
+    design, stages, ref = _composite_inputs(job)
+    if not stages:
+        raise HTTPException(404, "This job has no trajectory to export yet — run a production job.")
+
+    meta = await run_in_threadpool(composite_trajectory_meta, design, stages)
+    n_frames = int(meta.get("n_frames") or 0)
+    lo = max(0, min(int(body.lo), n_frames))
+    hi = max(0, min(int(body.hi), n_frames))
+    indices = _strided_indices(lo, hi, _EXPORT_FRAME_CAP)
+    if not indices:
+        raise HTTPException(400, "The selected frame range is empty.")
+
+    if body.format == "oxdna":
+        # A faithful multi-frame oxDNA .dat needs each particle's a1 AND a3 versors in TOPOLOGY
+        # order; the composite frames carry pos+a1 in a different key order, so the .top/.dat
+        # correspondence isn't wired yet. PDB is the supported path (ChimeraX).
+        raise HTTPException(
+            501, "oxView (.top + .dat) trajectory export isn't wired yet — export as a "
+                 "multi-frame PDB (the PDB option) for ChimeraX for now.")
+
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.pdb_export import export_pdb
+
+    stem = _export_stem(job, design)
+    _EXPORT_PROGRESS[job_id] = {"done": 0, "total": len(indices), "phase": "align"}
+
+    def _build() -> str:
+        # One model = constant topology/bonds; per-frame we only overwrite atom coordinates.
+        model = build_atomistic_model(design)
+        flats = composite_trajectory_atomistic(
+            design, stages, ref, indices,
+            n_trailing_extra=_capture_bead_count(job),
+            trailing_extra_strand_length=_capture_strand_length(job))
+
+        def _prog(done: int, total: int) -> None:
+            _EXPORT_PROGRESS[job_id] = {"done": done, "total": total, "phase": "write"}
+
+        return _assemble_multiframe_pdb(design, model, flats, indices, export_pdb, progress=_prog)
+
+    try:
+        pdb = await run_in_threadpool(_build)
+    finally:
+        _EXPORT_PROGRESS.pop(job_id, None)
+
+    if not pdb:
+        # Every frame's atom count mismatched the model — happens on capture/surface jobs whose
+        # trailing beads aren't in the base atomistic model. Fail with a clear reason.
+        raise HTTPException(
+            500, "No frames could be rendered — this can happen for hard-surface / capture-strand "
+                 "jobs whose extra beads aren't in the atomistic model.")
+    filename = f"{stem}_frames{lo}-{hi}.pdb"
+    return Response(content=pdb, media_type="chemical/x-pdb",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/oxdna/jobs/{job_id}/export-progress")
+async def get_oxdna_export_progress(job_id: str) -> dict:
+    """Live frames-processed progress for an in-flight trajectory-range export build.
+    ``{active:false}`` when nothing is exporting. Polled by the export card's progress bar."""
+    p = _EXPORT_PROGRESS.get(job_id)
+    if not p:
+        return {"active": False}
+    return {"active": True, **p}
 
 
 def _job_has_surface(job) -> bool:

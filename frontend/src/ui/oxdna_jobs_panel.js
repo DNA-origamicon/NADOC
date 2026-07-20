@@ -23,6 +23,7 @@ import { filterJobsForPart, newestCompletedForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
 import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
+import { initOxdnaExportCard } from './oxdna_export_card.js'
 import { initShapeCompareCard } from './shape_compare_card.js'
 import { showConfirm } from './primitives/confirm.js'
 import { createModal } from './primitives/modal.js'
@@ -2172,6 +2173,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const _metricsCard = initOxdnaMetricsCard({
     getSelectedJob: _selectedJob,
     getJobs: () => _jobs,
+  })
+
+  // Export-trajectory card — pick a composite frame range → multi-frame PDB (ChimeraX) or
+  // oxDNA .top+.dat (oxView). Reads the panel's selection + job list directly (like the metrics
+  // card); it self-rebuilds on the `nadoc:oxdna-job-selected` event this panel already fires.
+  initOxdnaExportCard({
+    getSelectedJob: _selectedJob,
+    getJobs: () => _jobs,
+    runConfig: runConfigForJob,
+    getTrajectoryMeta: api.getOxdnaTrajectoryMeta,
+    onExport: ({ jobId, lo, hi, format }) => api.exportOxdnaTrajectory(jobId, { lo, hi, format }),
+    getExportProgress: api.getOxdnaExportProgress,
   })
 
   // Cross-engine Shape comparison card (S5) — engine-agnostic, hosted here.  `getSources`

@@ -2373,6 +2373,37 @@
       cursor: not-allowed;
     }
 
+    /* ── oxDNA Export-trajectory dual-range slider ───────────────────────
+       Two <input type=range> overlap the segment timeline. Their tracks are
+       transparent (the segment bar shows through); only the thumbs are visible +
+       clickable, so the two thumbs don't block each other. z-index is swapped in
+       JS (pointermove) to raise whichever thumb is nearer the cursor. */
+    .oxdna-export-range {
+      position: absolute;
+      left: 0; right: 0; bottom: -7px;
+      width: 100%;
+      margin: 0;
+      height: 24px;
+      background: transparent;
+      -webkit-appearance: none;
+      appearance: none;
+      pointer-events: none;            /* only the thumb takes events */
+    }
+    .oxdna-export-range::-webkit-slider-runnable-track { background: transparent; height: 24px; }
+    .oxdna-export-range::-moz-range-track { background: transparent; height: 24px; }
+    .oxdna-export-range::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      pointer-events: auto; cursor: ew-resize;
+      width: 10px; height: 24px; border-radius: 3px;
+      background: #cdd9e5; border: 1px solid #0d1117;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.4);
+    }
+    .oxdna-export-range::-moz-range-thumb {
+      pointer-events: auto; cursor: ew-resize;
+      width: 10px; height: 24px; border-radius: 3px;
+      background: #cdd9e5; border: 1px solid #0d1117;
+    }
+
     /* ── Autostaple progress popup ───────────────────────────────────── */
     #op-progress {
       display: none;
@@ -4146,6 +4177,49 @@
                     <div id="oxdna-metrics-bp-bar" style="display:none;height:4px;background:#21262d;border-radius:2px;margin-top:4px;overflow:hidden"><div id="oxdna-metrics-bp-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
                     <div id="oxdna-metrics-bp-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:12px"></div>
                   </div>
+                </div>
+              </div>
+
+              <!-- ── Export trajectory (frame-range → ChimeraX PDB / oxView) ───────────
+                   Pick a range of the composite trajectory (relax + every production run in
+                   the lineage) and export just that slice for offline rendering. Driven by
+                   initOxdnaExportCard (oxdna_export_card.js), wired in oxdna_jobs_panel.js. -->
+              <div class="ox-card">
+                <div id="oxdna-export-toggle" class="ox-card__header" style="color:#c9d1d9;cursor:pointer">
+                  <span id="oxdna-export-arrow" style="display:inline-block;transition:transform .15s">▸</span><span class="ox-card__title">Export trajectory</span>
+                </div>
+                <div id="oxdna-export-card" class="ox-card__body" style="display:none">
+                  <!-- timeline: segment bar + boundary ticks + dim overlays + two overlapping range thumbs -->
+                  <div id="oxdna-export-timeline-wrap" style="position:relative;height:24px;margin:2px 0 10px">
+                    <div id="oxdna-export-segments" style="position:absolute;inset:0;display:flex;border-radius:3px;overflow:hidden"></div>
+                    <div id="oxdna-export-dim-lo" style="position:absolute;top:0;left:0;height:100%;width:0;background:rgba(1,4,9,.62);pointer-events:none"></div>
+                    <div id="oxdna-export-dim-hi" style="position:absolute;top:0;right:0;height:100%;width:0;background:rgba(1,4,9,.62);pointer-events:none"></div>
+                    <div id="oxdna-export-markers" style="position:absolute;inset:0;pointer-events:none"></div>
+                    <input id="oxdna-export-range-lo" class="oxdna-export-range" type="range" min="0" max="0" value="0">
+                    <input id="oxdna-export-range-hi" class="oxdna-export-range" type="range" min="0" max="0" value="0">
+                  </div>
+                  <div id="oxdna-export-readout" style="font-size:var(--text-xs);color:#8b949e;margin:2px 0 6px;min-height:14px"></div>
+                  <!-- output format -->
+                  <div style="display:flex;gap:14px;font-size:var(--text-xs);color:#c9d1d9;margin:2px 0 6px">
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input id="oxdna-export-fmt-pdb" type="radio" name="oxdna-export-fmt" checked> multi-frame PDB (ChimeraX)</label>
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="oxView .top+.dat — coming soon"><input type="radio" name="oxdna-export-fmt"> oxDNA (.top+.dat)</label>
+                  </div>
+                  <div style="display:flex;gap:5px;margin:2px 0">
+                    <button id="oxdna-export-run-btn"
+                            style="flex:1;font-size:var(--text-xs);padding:5px;background:#122117;border:1px solid #3fb950;color:#3fb950;border-radius:3px;cursor:pointer;font-weight:600">
+                      Export selected range
+                    </button>
+                    <button id="oxdna-chimerax-btn" title="Show the ChimeraX command to open the exported PDB as a trajectory"
+                            style="font-size:var(--text-xs);padding:5px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">
+                      Direct to ChimeraX
+                    </button>
+                  </div>
+                  <div id="oxdna-export-progress" style="display:none;margin:5px 0 2px">
+                    <div style="height:5px;background:#21262d;border-radius:3px;overflow:hidden"><div id="oxdna-export-progress-fill" style="height:100%;width:0;background:#3fb950;transition:width .2s"></div></div>
+                    <div id="oxdna-export-progress-label" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px"></div>
+                  </div>
+                  <div id="oxdna-export-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px"></div>
+                  <div id="oxdna-export-detail" style="font-size:var(--text-xs);color:#8b949e;margin-top:6px;border-top:1px solid #21262d;padding-top:6px"></div>
                 </div>
               </div>
 

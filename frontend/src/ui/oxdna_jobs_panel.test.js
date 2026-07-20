@@ -26,6 +26,10 @@ vi.mock('../api/client.js', () => ({
   // Shape comparison card (initShapeCompareCard) is wired from the panel with these.
   startShapeCompare: vi.fn().mockResolvedValue({ metrics_id: 's1' }),
   getShapeCompareRun: vi.fn().mockResolvedValue({ state: 'done', result: { ready: false } }),
+  // Export-trajectory card (initOxdnaExportCard) is wired from the panel with these.
+  getOxdnaTrajectoryMeta: vi.fn().mockResolvedValue({ ready: false, n_frames: 0, stages: [] }),
+  exportOxdnaTrajectory: vi.fn().mockResolvedValue('design_frames0-0.pdb'),
+  getOxdnaExportProgress: vi.fn().mockResolvedValue({ active: false }),
   lastErrorMessage: () => null,
 }))
 

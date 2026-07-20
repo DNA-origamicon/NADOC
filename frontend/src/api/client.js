@@ -2242,6 +2242,35 @@ export const getOxdnaTrajectory = (id, opts) => {
 export const getOxdnaTrajectoryMeta = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-meta`)
 /** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
 export const getOxdnaTrajectoryProgress = (id)   => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-progress`)
+/** Live progress for an in-flight trajectory-RANGE export ({active,done,total,phase}). */
+export const getOxdnaExportProgress = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/export-progress`)
+
+/** Export a FRAME RANGE of an oxDNA job's composite trajectory and trigger a browser
+ *  download. Returns the saved FILENAME (string) on success — the export card keeps it to
+ *  name the ChimeraX `open` command — or false on failure (message in store.lastError). */
+export async function exportOxdnaTrajectory(jobId, { lo, hi, format = 'pdb' } = {}) {
+  const r = await fetch(`${BASE}/oxdna/jobs/${jobId}/export-trajectory`, {
+    method: 'POST',
+    headers: { ...docHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lo, hi, format }),
+  })
+  if (!r.ok) {
+    const json = await r.json().catch(() => null)
+    const message = typeof json?.detail === 'string'
+      ? json.detail : (json?.detail ? JSON.stringify(json.detail) : r.statusText)
+    store.setState({ lastError: { status: r.status, message } })
+    return false
+  }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="?([^"]+)"?/)
+  const filename = match ? match[1] : `${jobId}_frames${lo}-${hi}.${format === 'pdb' ? 'pdb' : 'zip'}`
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+  return filename
+}
 /** Per-frame ATOMISTIC coords for trajectory frame indices (atomistic-batch wire
  *  format). Heavy — pass a downsampled index set. */
 export const getOxdnaFramesAtomistic = (id, frameIndices, align=true) =>
