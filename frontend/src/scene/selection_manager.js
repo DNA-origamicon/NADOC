@@ -34,6 +34,7 @@ import * as THREE from 'three'
 import { store, pushGroupUndo } from '../state/store.js'
 import * as api from '../api/client.js'
 import { ensureLoaded as _ensureFjcLookup } from './ssdna_fjc.js'
+import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_gizmo.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
@@ -3692,8 +3693,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (e.button === 2 && !isDisabled?.()) _rightDownPos = { x: e.clientX, y: e.clientY }
   })
 
-  canvas.addEventListener('contextmenu', e => {
-    e.preventDefault()
+  // Deferred to pointer-up so a right-drag-pan isn't mistaken for a click on Linux,
+  // where the browser fires `contextmenu` on press before any movement (see
+  // right_click_menu.js). `_rightDownPos` (set on pointerdown) still holds the press
+  // position; the move check below measures against the release position.
+  canvas.addEventListener('contextmenu', deferrableContextMenu(canvas, e => {
     if (!_rightDownPos) return
     const moved = Math.hypot(e.clientX - _rightDownPos.x, e.clientY - _rightDownPos.y)
     _rightDownPos = null
@@ -3945,7 +3949,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
     _showColorMenu(e.clientX, e.clientY, _strandId, designRenderer, _multiStrandIds, _ovhgOpts, _ovhgMultiIds, onOpenOverhangsManager, _domainRef)
-  })
+  }))
 
   // ── Re-apply highlights after scene rebuild ──────────────────────────────
 

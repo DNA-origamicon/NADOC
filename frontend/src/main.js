@@ -17,6 +17,7 @@ import * as THREE from 'three'
 import { initScene }                 from './scene/scene.js'
 import { createGlowLayer }           from './scene/glow_layer.js'
 import { initDesignRenderer }        from './scene/design_renderer.js'
+import { deferrableContextMenu }      from './scene/right_click_menu.js'
 import { buildStapleColorMap } from './scene/helix_renderer.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
@@ -1740,7 +1741,10 @@ async function main() {
 
 
   // Right-click a rendered protein → "Conjugate protein to ssDNA…" → Conjugate Manager.
-  canvas.addEventListener('contextmenu', (e) => {
+  // Deferred to pointer-up on Linux (press-time contextmenu) so a right-drag-pan
+  // isn't mistaken for a click; capture phase so a protein hit still preempts the
+  // strand menu. See right_click_menu.js.
+  canvas.addEventListener('contextmenu', deferrableContextMenu(canvas, (e) => {
     const rect = canvas.getBoundingClientRect()
     const ndc = {
       x:  ((e.clientX - rect.left) / rect.width)  * 2 - 1,
@@ -1756,7 +1760,7 @@ async function main() {
     e.preventDefault()
     e.stopPropagation()
     conjugateManager.showConjugateMenu({ x: e.clientX, y: e.clientY, assetId })
-  }, { capture: true })
+  }, { capture: true }), { capture: true })
 
   // ── Unligated crossover markers (⚠ at midpoint of would-circularize crossovers) ─
   const unligatedCrossoverMarkers = initUnligatedCrossoverMarkers(scene)
@@ -6204,7 +6208,9 @@ async function main() {
   // Right-click context-menu router (linker Relax / belt attach / part menu)
   // lifted into scene/assembly_pointer.js (sub-part c). Registered as the
   // canvas `contextmenu` listener in the assembly-mode subscriber above.
-  const _onAssemblyContextMenu = _assemblyPointer.onAssemblyContextMenu
+  // Deferred to pointer-up so a right-drag-pan isn't mistaken for a click on Linux
+  // (press-time contextmenu). See right_click_menu.js.
+  const _onAssemblyContextMenu = deferrableContextMenu(canvas, _assemblyPointer.onAssemblyContextMenu)
 
   let clusterPanel = null
   clusterPanel = initClusterPanel(store, {

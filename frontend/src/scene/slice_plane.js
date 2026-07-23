@@ -24,6 +24,7 @@ import {
 } from '../constants.js'
 import { store } from '../state/store.js'
 import { showToast } from '../ui/toast.js'
+import { deferrableContextMenu } from './right_click_menu.js'
 import {
   _mod,
   isForwardCell,
@@ -1837,7 +1838,9 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   canvas.addEventListener('pointerdown',  _onPointerDown, { capture: true })
   canvas.addEventListener('pointermove',  _onPointerMove)
   canvas.addEventListener('pointerup',    _onPointerUp)
-  canvas.addEventListener('contextmenu',  _onContextMenu)
+  // Deferred to pointer-up so a right-drag-pan isn't mistaken for a per-cell click
+  // on Linux (press-time contextmenu). See right_click_menu.js.
+  canvas.addEventListener('contextmenu',  deferrableContextMenu(canvas, _onContextMenu))
   canvas.addEventListener('pointerleave', () => {
     if (!_visible || !_latticeMode) return
     _cursorPx  = null
