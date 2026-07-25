@@ -74,14 +74,19 @@ def test_displaced_nucleotide_flags_backbone_and_hidden(design, tmp_path):
 
 
 def test_overlapping_nucleotides_clash(design, tmp_path):
-    """Collapsing two distant nucleotides onto the same point overlaps their atoms →
-    the clash detector fires."""
+    """Collapsing one distant base PAIR onto another overlaps their atoms →
+    the clash detector fires.  The whole pair (both strand directions) is copied so
+    the overlap is self-consistent under orientation-aware reconstruction — the
+    duplex base frame is derived from the pair's a3, so copying only one strand's
+    a1/a3 would leave the partner's a3 mismatched and spread the atoms back apart."""
     frame = _ideal_frame(design, tmp_path)
     keys = [k for k in frame if k[2] == "FORWARD"]
     a, b = keys[0], keys[len(keys) // 2]               # two well-separated nucleotides
-    frame[b]["backbone_position"] = frame[a]["backbone_position"].copy()
-    frame[b]["a1"] = frame[a]["a1"].copy()
-    frame[b]["a3"] = frame[a]["a3"].copy()
+    a_rev, b_rev = (a[0], a[1], "REVERSE"), (b[0], b[1], "REVERSE")
+    for src, dst in [(a, b), (a_rev, b_rev)]:
+        if src in frame and dst in frame:
+            for fld in ("backbone_position", "a1", "a3"):
+                frame[dst][fld] = frame[src][fld].copy()
     r = audit_bonds(design, frame)
     assert len(r["clashes"]) > 0
     assert not r["ok"]

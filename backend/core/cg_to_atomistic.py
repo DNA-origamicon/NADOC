@@ -124,11 +124,13 @@ def deformed_helix_axes(
     design: Design,
     full_map: dict[tuple[str, int, str], dict],
     sigma: float = 2.0,
+    base_orient: str = "design_axis",
 ) -> dict[tuple[str, int], tuple[np.ndarray, np.ndarray]]:
     """Per-(helix, bp) deformed centerline point + local tangent from a relaxed CG map.
 
     The atomistic placer derives each nucleotide's radial direction (hence its
-    helical phase) from ``backbone - axis_point``.  By default ``axis_point`` is the
+    helical phase) from ``backbone - axis_point``, and uses the returned tangent as
+    the base slab-face normal (``e_z``).  By default ``axis_point`` is the
     helix's IDEAL straight axis; once a helix has bent/shifted in the relaxed CG
     structure, that straight reference makes the global displacement swamp the true
     radial — the twist collapses and adjacent nucleotides pile up (the seed-clash
@@ -141,6 +143,24 @@ def deformed_helix_axes(
     to the helix's original axis direction so FORWARD/REVERSE polarity is preserved.
     Helices with fewer than two paired bps are omitted (fall back to the straight
     axis).  Physical-layer only — never written back into topology.
+
+    ``base_orient`` selects the source of the returned TANGENT (the base stacking
+    axis, ``e_z``); the centerline POINT is unchanged either way:
+      - ``"design_axis"`` (default): tangent = d(centerline)/dbp.  The centerline is
+        the midpoint of two backbone sites that spiral slightly off-axis (strands are
+        ~208° apart, not 180°), so this tangent sits ~12° off the true helix axis even
+        for a perfectly straight, unrelaxed duplex — a construction artifact that tilts
+        every base ~5–6° past the correct B-form baseline (measured: 15.7° vs the
+        validated ideal build's 10.0°) AND rotates WC pairs OPEN (primary H-bond 4.12 Å
+        vs 2.89 Å).  The legacy default; no live caller uses it — both the display and
+        the NAMD seed pass ``"oxdna_a3"``.
+      - ``"oxdna_a3"``: tangent = the SHARED stacking axis of each WC pair,
+        ``normalize(a3_fwd − a3_rev)`` (oxDNA's own base normals; on a straight ideal
+        duplex a3 is exactly on-axis).  Restores the display base orientation to the
+        ideal-build value while preserving WC pairing — a per-base a3 rigid stamp would
+        instead collapse pairs (FWD/REV a3 are only ~157° apart, real propeller), so the
+        SHARED axis is used, not each base's own.  Falls back to ``design_axis`` per
+        helix when a3 is missing.
     """
     axis_dir = {}
     for h in design.helices:
@@ -150,20 +170,38 @@ def deformed_helix_axes(
         n = np.linalg.norm(d)
         axis_dir[h.id] = d / n if n > 1e-9 else np.array([0.0, 0.0, 1.0])
 
-    by_helix: dict[str, dict[int, dict[str, np.ndarray]]] = {}
+    by_helix: dict[str, dict[int, dict[str, dict]]] = {}
     for (h_id, bp, dr), rec in full_map.items():
-        by_helix.setdefault(h_id, {}).setdefault(bp, {})[dr] = np.asarray(
-            rec["backbone_position"], dtype=float)
+        a3 = rec.get("a3")
+        by_helix.setdefault(h_id, {}).setdefault(bp, {})[dr] = {
+            "pt": np.asarray(rec["backbone_position"], dtype=float),
+            "a3": None if a3 is None else np.asarray(a3, dtype=float),
+        }
 
     out: dict[tuple[str, int], tuple[np.ndarray, np.ndarray]] = {}
     for h_id, bpmap in by_helix.items():
+        adir = axis_dir.get(h_id)
         paired_bp: list[int] = []
         paired_pt: list[np.ndarray] = []
+        paired_s: list[np.ndarray | None] = []   # per-pair shared a3 stacking axis
         for bp in sorted(bpmap):
             dd = bpmap[bp]
             if "FORWARD" in dd and "REVERSE" in dd:
                 paired_bp.append(bp)
-                paired_pt.append(0.5 * (dd["FORWARD"] + dd["REVERSE"]))
+                paired_pt.append(0.5 * (dd["FORWARD"]["pt"] + dd["REVERSE"]["pt"]))
+                a3f, a3r = dd["FORWARD"]["a3"], dd["REVERSE"]["a3"]
+                if a3f is None or a3r is None:
+                    paired_s.append(None)
+                else:
+                    # Shared stacking axis of the WC pair: FWD/REV a3 point ~antiparallel,
+                    # so a3f − a3r is their common normal.  Sign-align to the helix axis up
+                    # front (so opposite-signed rows never cancel when interpolated/smoothed).
+                    s = a3f - a3r
+                    n = float(np.linalg.norm(s))
+                    s = s / n if n > 1e-9 else (adir if adir is not None else np.array([0.0, 0.0, 1.0]))
+                    if adir is not None and float(np.dot(s, adir)) < 0:
+                        s = -s
+                    paired_s.append(s)
         if len(paired_bp) < 2:
             continue
         kb = np.array(paired_bp)
@@ -172,11 +210,25 @@ def deformed_helix_axes(
         axis = np.stack([np.interp(core_bps, kb, kp[:, c]) for c in range(3)], axis=1)
         if sigma > 0 and len(core_bps) >= 3:
             axis = gaussian_filter1d(axis, sigma=sigma, axis=0, mode="nearest")
-        tang = np.gradient(axis, axis=0)
-        tn = np.linalg.norm(tang, axis=1, keepdims=True)
-        tang = tang / np.where(tn < 1e-9, 1.0, tn)
+
+        use_a3 = base_orient == "oxdna_a3" and all(s is not None for s in paired_s)
+        if use_a3:
+            # Tangent (base stacking axis, e_z) from oxDNA's own a3 — interpolated +
+            # smoothed across the bp span exactly like the centerline point, then
+            # renormalised.  a3 is on-axis on an ideal duplex, so this removes the
+            # ~12° off-axis tilt the d(centerline)/dbp tangent carries.
+            ks = np.array(paired_s)
+            s_axis = np.stack([np.interp(core_bps, kb, ks[:, c]) for c in range(3)], axis=1)
+            if sigma > 0 and len(core_bps) >= 3:
+                s_axis = gaussian_filter1d(s_axis, sigma=sigma, axis=0, mode="nearest")
+            sn = np.linalg.norm(s_axis, axis=1, keepdims=True)
+            tang = s_axis / np.where(sn < 1e-9, 1.0, sn)
+        else:
+            tang = np.gradient(axis, axis=0)
+            tn = np.linalg.norm(tang, axis=1, keepdims=True)
+            tang = tang / np.where(tn < 1e-9, 1.0, tn)
         # Sign-align to the helix's original axis direction (no FWD/REV flip).
-        if axis_dir.get(h_id) is not None and float(np.dot(tang.mean(axis=0), axis_dir[h_id])) < 0:
+        if adir is not None and float(np.dot(tang.mean(axis=0), adir)) < 0:
             tang = -tang
 
         # Cover EVERY bp present on the helix — single-stranded overhang ends sit
@@ -248,7 +300,12 @@ def build_atomistic_model_from_cg_spline(
     # Deformed centerline so the placer measures each nucleotide's radial (helical
     # phase) against the BENT axis, not the ideal straight one — without this a
     # displaced helix collapses the twist and piles atoms together (seed clashes).
-    axis_override = deformed_helix_axes(design, full_map, sigma=sigma)
+    # base_orient="oxdna_a3": derive the base stacking axis (e_z) from oxDNA's own a3,
+    # not the ~12°-off-axis centerline tangent — the tangent rotates WC pairs OPEN
+    # (primary H-bond 3.35 Å, 55% closed on VoltronCore) whereas a3 seats them at the
+    # native duplex geometry (2.85 Å, 77% closed).  Same fix the display path uses.
+    axis_override = deformed_helix_axes(design, full_map, sigma=sigma,
+                                        base_orient="oxdna_a3")
     # UNPAIRED ssDNA (overhangs / tails / unpaired scaffold loops) has no helix axis to
     # fit, so the axis-derived placement above collapses distinct ssDNA nucleotides —
     # 0.5-1.1 nm apart in the relaxed conf — onto near-coincident atoms.  NAMD then can't
@@ -266,9 +323,15 @@ def build_atomistic_model_from_cg_spline(
     # build_atomistic_model re-apply the design's deformations/cluster transforms on top
     # would DOUBLE them — the ~N× explosion when seeding copy-pasted, rotated clusters.
     # The seed is a pure function of the oxDNA positions; pre-oxDNA transforms don't apply.
+    # relaxed_oxdna_phase=True: this is a RELAXED oxDNA structure, so a REVERSE helix has
+    # no well-defined lattice direction for the REV-strand P azimuthal correction — apply
+    # the FORWARD-convention (+58.2°) uniformly, matching the display reconstruction.
+    # Without it, REVERSE helices keep the wrong correction and pairs stay open
+    # (2.85 Å vs 3.08 Å primary H-bond on VoltronCore).
     model = build_atomistic_model(
         design, nuc_pos_override=pos_override, axis_override=axis_override,
-        frame_override=ssdna_override, apply_design_geometry=False)
+        frame_override=ssdna_override, apply_design_geometry=False,
+        relaxed_oxdna_phase=True)
 
     # Safety net: the reconstruction must preserve the CG structure's extent.  If a
     # future seed still blows up (e.g. an unwrapped/torn conf), fail with an actionable
