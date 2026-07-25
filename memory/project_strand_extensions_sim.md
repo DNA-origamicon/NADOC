@@ -116,8 +116,25 @@ a terminus and becomes an internal DEOX.
   It already handles crossover `extra_bases`, so the pattern is there; `snupi_tails.py` already
   models free ssDNA tails via `classify_ssdna_runs` — surfacing extensions to it may be most of
   the work. See [project_snupi_ssdna](project_snupi_ssdna.md).
-- Fluorophore beads don't follow a relaxed overlay (`iFluoros` is a separate mesh
-  `applyFemPositions` never touches) — cosmetic, only visible on a modification extension.
+- **DONE (2026-07-24) — deform toggle repositions tails.** Two gaps closed so the deform
+  (straight↔deformed) toggle moves 5′/3′ extension beads with their anchor strand:
+  - **Backend:** the *compact* straight-geometry path `_positions_for_design`
+    (`design_geometry.py`) emitted real helices + ss-loop overflow + ds-linker bridges but
+    NOT `_strand_extension_geometry`, so the auto-embedded `straight_positions_by_helix` (the
+    deform toggle's t=0 anchor, and the `positions_only` diff payload) carried zero `__ext_`
+    beads. With no straight anchor, `helix_renderer.applyDeformLerp` fell to its `else if (dp)`
+    branch and pinned each tail bead at its *deformed* position for all t → tails detached from
+    the now-straight strand when the toggle went OFF. Fixed: `_positions_for_design` now folds
+    `_strand_extension_geometry` beads into `positions` (anchor map built from the compact
+    buckets), matching the full per-nuc path bead-for-bead. Pinned by
+    `test_positions_for_design_includes_extension_tail_beads` +
+    `..._extension_survives_deformation_strip` (both go red without the fix).
+  - **Frontend:** modification/fluorophore tip beads live in `fluoroEntries` (not
+    `backboneEntries`), and `applyDeformLerp` had no loop over them → the tip bead never lerped.
+    Added a fluoro loop mirroring the backbone one (same `__ext_{id}:bp:dir` key).
+- Fluorophore beads still don't follow the mrDNA-**relax** overlay (`iFluoros` is a separate
+  mesh `applyFemPositions` never touches) — that is a DIFFERENT overlay from the deform lerp
+  (now fixed above); cosmetic, only visible on a modification extension.
 - `orderStrandNucleotides` (helix_renderer) sorts 5′-tail beads ascending when the chain
   order is descending — invisible at n=1 (all of VoltronCore), would mis-order a cone chain
   at n≥2.

@@ -859,4 +859,43 @@ def _positions_for_design(design: 'Design') -> tuple[dict, list[dict]]:
             dir_bucket["bn"].append(n.get("base_normal"))
             dir_bucket["at"].append(n.get("axis_tangent"))
 
+    # Strand extension tails (5′/3′ ssDNA). The full-geometry path appends these
+    # via _strand_extension_geometry in full_mode; the compact path must too, or
+    # the __ext_ beads are absent from straight_positions_by_helix and the deform
+    # toggle has no straight anchor for them — they stay pinned at their deformed
+    # position when the user toggles deform OFF (they detach from the now-straight
+    # anchor strand). Build the anchor lookup the helper needs from the compact
+    # buckets, then fold the resulting arc beads into positions_by_helix.
+    if design.extensions:
+        import numpy as np
+        from types import SimpleNamespace
+        ext_anchor_map: dict = {}
+        for hid, by_dir in positions.items():
+            for dir_name, bucket in by_dir.items():
+                d_enum = Direction.FORWARD if dir_name == "FORWARD" else Direction.REVERSE
+                bp_arr = bucket["bp"]; bb_arr = bucket["bb"]
+                bn_arr = bucket["bn"]; at_arr = bucket["at"]
+                for i in range(len(bp_arr)):
+                    ext_anchor_map[(hid, bp_arr[i], d_enum)] = SimpleNamespace(
+                        position     = np.array(bb_arr[i], dtype=float),
+                        base_normal  = np.array(bn_arr[i], dtype=float),
+                        axis_tangent = np.array(at_arr[i], dtype=float),
+                    )
+        for bead in _strand_extension_geometry(design, ext_anchor_map):
+            hid = bead["helix_id"]
+            dir_name = bead["direction"]   # "FORWARD" / "REVERSE" (Direction.value)
+            helix_bucket = positions.get(hid)
+            if helix_bucket is None:
+                helix_bucket = {}
+                positions[hid] = helix_bucket
+            dir_bucket = helix_bucket.get(dir_name)
+            if dir_bucket is None:
+                dir_bucket = {"bp": [], "bb": [], "bs": [], "bn": [], "at": []}
+                helix_bucket[dir_name] = dir_bucket
+            dir_bucket["bp"].append(bead["bp_index"])
+            dir_bucket["bb"].append(bead["backbone_position"])
+            dir_bucket["bs"].append(bead["base_position"])
+            dir_bucket["bn"].append(bead["base_normal"])
+            dir_bucket["at"].append(bead["axis_tangent"])
+
     return positions, axes

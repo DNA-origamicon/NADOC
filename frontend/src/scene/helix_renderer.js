@@ -3584,6 +3584,33 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       iSpheres.instanceMatrix.needsUpdate = true
       iCubes.instanceMatrix.needsUpdate   = true
 
+      // 1b. Fluorophore / modification tip beads — the free end of a strand
+      //     extension. These live in fluoroEntries (not backboneEntries), so
+      //     without this loop they stay pinned at their deformed position and
+      //     detach from the extension arc when the deform toggle is OFF (t=0).
+      //     Same straight↔deformed lerp as the backbone beads, keyed identically
+      //     (`__ext_{id}:bp_index:direction`).
+      if (!_skipFluoros) {
+        for (const entry of fluoroEntries) {
+          const nuc = entry.nuc
+          const key = `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}`
+          const sp  = straightPosMap.get(key)
+          const dp  = nuc.backbone_position
+          if (sp && dp) {
+            entry.pos.set(
+              sp.x + (dp[0] - sp.x) * t,
+              sp.y + (dp[1] - sp.y) * t,
+              sp.z + (dp[2] - sp.z) * t,
+            )
+          } else if (dp) {
+            entry.pos.set(dp[0], dp[1], dp[2])
+          }
+          _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(1, 1, 1))
+          entry.instMesh.setMatrixAt(entry.id, _tMatrix)
+        }
+        iFluoros.instanceMatrix.needsUpdate = true
+      }
+
       // 2. Cones — direction from the current lerped bead positions (already updated in step 1).
       //    Using fe.pos/te.pos is correct for both cluster rotations (rigid body — all beads
       //    moved together, so bead-to-bead direction is accurate) and bend deformations

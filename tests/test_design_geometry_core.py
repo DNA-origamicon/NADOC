@@ -228,3 +228,60 @@ def test_positions_for_design_matches_dict_path_backbone():
     assert _bb_by_key(direct) == _bb_by_key(fallback)
     # Axes come back alongside positions, one per real helix.
     assert [ax["helix_id"] for ax in axes] == ["h0"]
+
+
+def test_positions_for_design_includes_extension_tail_beads():
+    """The compact positions path must emit the __ext_ tail beads too, or the
+    auto-embedded straight_positions_by_helix (which feeds the deform toggle's
+    straight anchor) has no entry for them — the extension beads then stay
+    pinned at their deformed position when the toggle goes OFF. The compact
+    path must match the full per-nuc path bead-for-bead, extensions included."""
+    ext3 = StrandExtension(strand_id="s0", end="three_prime", sequence="TT")
+    d = _single_helix_design(direction=Direction.FORWARD, length_bp=10,
+                             extensions=[ext3])
+    direct, _ = _positions_for_design(d)
+    fallback = _positions_by_helix(_geometry_for_design(d))
+
+    ext_hid = f"__ext_{ext3.id}"
+    # The synthetic extension helix is present in the compact payload.
+    assert ext_hid in direct, "extension tail beads dropped from compact path"
+
+    def _bb_by_key(payload):
+        out = {}
+        for hid, by_dir in payload.items():
+            for dir_name, bucket in by_dir.items():
+                for i, bp in enumerate(bucket["bp"]):
+                    out[(hid, dir_name, bp)] = bucket["bb"][i]
+        return out
+
+    # Compact path == full path everywhere, including the __ext_ beads. If the
+    # tail beads were missing (the bug), the two key sets would differ.
+    assert _bb_by_key(direct) == _bb_by_key(fallback)
+
+
+def test_positions_for_design_extension_survives_deformation_strip():
+    """Straight anchor path: with a deformation present, the straight payload is
+    computed on a deformations-stripped copy. Extension tail beads must still be
+    emitted (and at the STRAIGHT anchor position), so the deform lerp has a t=0
+    target for them."""
+    from backend.core.models import DeformationOp, TwistParams
+    ext = StrandExtension(strand_id="s0", end="three_prime", sequence="TTT")
+    d = _single_helix_design(direction=Direction.FORWARD, length_bp=12,
+                             extensions=[ext])
+    d.deformations = [
+        DeformationOp(type="twist", plane_a_bp=2, plane_b_bp=9,
+                      params=TwistParams(total_degrees=90.0)),
+    ]
+    # Mirror crud.py's straight-anchor build: strip deformations, then compact.
+    straight = d.model_copy(update={"deformations": [], "cluster_transforms": []})
+    direct, _ = _positions_for_design(straight)
+    full_straight = _positions_by_helix(_geometry_for_design(straight))
+
+    ext_hid = f"__ext_{ext.id}"
+    assert ext_hid in direct
+    # Straight compact == straight full for the tail beads.
+    d_ext = direct[ext_hid]
+    f_ext = full_straight[ext_hid]
+    assert d_ext.keys() == f_ext.keys()
+    for dir_name in d_ext:
+        assert d_ext[dir_name]["bb"] == f_ext[dir_name]["bb"]
