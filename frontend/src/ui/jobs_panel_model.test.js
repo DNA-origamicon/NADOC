@@ -416,3 +416,21 @@ describe('U3 — legend memoization hook', () => {
     void makeStatusLegend
   })
 })
+
+describe('buildJobRowModel — staleTitle as a per-job function', () => {
+  const ctx = {
+    isStale: () => true,
+    // per-job hover: two different messages from the same ⚠ marker
+    staleTitle: (job) => job.decision ? 'GPU decision needed' : 'Design changed',
+  }
+  it('calls staleTitle(job) when it is a function', () => {
+    expect(buildJobRowModel({ job_id: 'a', status: 'paused', decision: {} }, ctx).staleTitle)
+      .toBe('GPU decision needed')
+    expect(buildJobRowModel({ job_id: 'b', status: 'failed' }, ctx).staleTitle)
+      .toBe('Design changed')
+  })
+  it('still accepts a static string (backward compatible)', () => {
+    expect(buildJobRowModel({ job_id: 'c', status: 'failed' },
+      { isStale: () => true, staleTitle: 'static' }).staleTitle).toBe('static')
+  })
+})

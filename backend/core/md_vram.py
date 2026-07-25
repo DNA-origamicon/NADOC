@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -161,6 +162,88 @@ def extract_error_line(text: str) -> Optional[str]:
 def extract_error_line_from_file(path: Path) -> Optional[str]:
     """:func:`extract_error_line` over a log *file* (tail only)."""
     return extract_error_line(_read_log_tail(path))
+
+
+# ── Failure → UX description (drives the Relax decision gates) ─────────────────
+
+@dataclass(frozen=True)
+class FailureUX:
+    """UX-layer description of a NAMD failure: what to tell the user, and how to act.
+
+    ``severity`` picks the surface the Relax flow shows:
+      ``"auto"``      NADOC handles it (auto-resume) — show an info note, no modal.
+      ``"decision"``  a real trade-off — ask the user (a proceed/cancel modal).
+      ``"hard_stop"`` a limit — the user must change something to proceed.
+
+    ``retry_other_binary`` is True ONLY for the CUDA tile-list kernel bug
+    (``gpu_error``), which a resident-capable NAMD build fixes — a host-pinned-memory
+    limit or a device-VRAM OOM does not, so those stay False. ``degrade_target`` is the
+    slower fallback to OFFER (never auto-take): ``"offload"`` (GPU, ~3× slower) or
+    ``"cpu"``. ``message`` is jargon-free and safe to show; the raw NAMD cause line is
+    kept in ``technical_reason`` for logs/tooltips only — never as the headline.
+    """
+    kind: str
+    severity: str
+    title: str
+    message: str
+    retry_other_binary: bool
+    degrade_target: Optional[str]
+    technical_reason: str
+
+
+# kind → (severity, title, message, retry_other_binary, degrade_target). Copy is a
+# sensible backend default; the frontend may enrich it (e.g. exact time estimates).
+_FAILURE_UX: dict[str, dict] = {
+    FAILURE_VRAM_OOM: dict(
+        severity="hard_stop", retry_other_binary=False, degrade_target=None,
+        title="Too large for this GPU",
+        message="This structure needs more GPU memory than your card has. Reduce the "
+                "design, or run it on a GPU with more memory."),
+    FAILURE_HOST_OOM: dict(
+        severity="decision", retry_other_binary=False, degrade_target="offload",
+        title="Couldn't use the fastest GPU mode",
+        message="Your system can't hold the extra memory the fastest GPU mode needs. "
+                "The run can still finish in a slower GPU mode — same result, about "
+                "3× longer."),
+    FAILURE_GPU_ERROR: dict(
+        severity="decision", retry_other_binary=True, degrade_target="offload",
+        title="Couldn't use the fastest GPU mode",
+        message="The fastest GPU mode didn't start on this structure. A newer NAMD build "
+                "usually fixes this; otherwise the run can finish in a slower GPU mode "
+                "— same result, about 3× longer."),
+    FAILURE_INSTABILITY: dict(
+        severity="auto", retry_other_binary=False, degrade_target=None,
+        title="Restarting more gently",
+        message="The start was too strained. NADOC is retrying with a gentler warm-up "
+                "— no action needed."),
+    FAILURE_CELL_SHRINK: dict(
+        severity="auto", retry_other_binary=False, degrade_target=None,
+        title="Continuing from the last checkpoint",
+        message="The simulation box settled to a smaller size. NADOC is continuing from "
+                "the last checkpoint — no action needed."),
+    FAILURE_OTHER: dict(
+        severity="decision", retry_other_binary=False, degrade_target=None,
+        title="The run hit an unexpected error",
+        message="The run stopped with an error NADOC doesn't recognize. See the run log "
+                "for details."),
+}
+
+
+def describe_failure(text: str) -> FailureUX:
+    """Classify a NAMD failure log and describe it for the Relax UX layer.
+
+    Pairs :func:`classify_failure_log` with the presentation metadata the decision
+    gates need (severity, jargon-free message, retry-other-binary, degrade target).
+    The raw NAMD cause line is carried in ``technical_reason`` (logs/tooltips only).
+    """
+    kind = classify_failure_log(text)
+    spec = _FAILURE_UX.get(kind, _FAILURE_UX[FAILURE_OTHER])
+    return FailureUX(kind=kind, technical_reason=extract_error_line(text) or "", **spec)
+
+
+def describe_failure_file(path: Path) -> FailureUX:
+    """:func:`describe_failure` over a NAMD log *file* (tail only)."""
+    return describe_failure(_read_log_tail(path))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -392,6 +475,26 @@ def estimate_total_atoms(
     frac = min(1.0, shell_vol / box_vol) if box_vol > 0 else 1.0
     carved_water = int(round(full_water * frac))
     return dna_atoms + carved_water * 3 + ion_atoms
+
+
+def carve_fill_fraction(dna_xyz_nm, box_nm: tuple[float, float, float],
+                        shell_nm: float) -> float:
+    """Fraction of the periodic cell volume filled by a ``shell_nm`` water carve around
+    the DNA (0..1). GPU-resident needs a well-filled cell — a *tight* box the structure
+    fills runs resident, a *big* box with a concave water-shell carve leaves vacuum
+    corners and dies at step 0 ("Low global CUDA exclusion count!"). This lets the
+    conf builder tell those apart instead of blanket-disabling resident on any carve.
+    A shell of 0 (no carve / full box) is fully filled → 1.0.
+    """
+    if not shell_nm or shell_nm <= 0:
+        return 1.0
+    bx, by, bz = box_nm
+    box_vol = bx * by * bz
+    if box_vol <= 0:
+        return 1.0
+    dist, cell_vol = _grid_nearest_dna_dist(dna_xyz_nm, shell_nm)
+    shell_vol = float((dist <= shell_nm).sum()) * cell_vol
+    return min(1.0, shell_vol / box_vol)
 
 
 def recommend_downsize(
@@ -667,3 +770,67 @@ def auto_water_shell(design, *, padding_nm: float = 1.2, devices: str = "0",
     note = (f"Warning: even a {round(s * 10)} Å shell (≈{rec['tightest_atoms']:,} atoms) "
             f"may exceed this {limit} — running anyway; consider a larger GPU or more RAM.")
     return {"shell_nm": s, "note": note, "fits": False, "vram_mb": vram_mb}
+
+
+# ── Pre-flight size gate (Gate A: A1 auto-notice / A2 tight-shell / A3 too-large) ──
+
+_SAFE_SHELL_NM = 1.5   # a ≥15 Å water shell is "comfortable" (A1); tighter is a trade-off (A2)
+
+
+def classify_vram_fit(rec: Optional[dict]) -> str:
+    """Pre-flight size-gate tier from a :func:`recommend_downsize` advice:
+      ``"ok"`` full box fits (or data missing — never gate on the unknown);
+      ``"a1"`` a comfortable thinner shell (≥15 Å) fits → auto-apply + a friendly notice;
+      ``"a2"`` only a TIGHT shell (<15 Å) fits → an accuracy trade-off, so ask;
+      ``"a3"`` won't fit even at the tightest shell → hard stop.
+    """
+    if not rec:
+        return "ok"
+    max_atoms = rec.get("max_atoms") or 0
+    if max_atoms <= 0 or rec.get("current_atoms", 0) <= max_atoms:
+        return "ok"
+    if not rec.get("feasible"):
+        return "a3"
+    return "a1" if (rec.get("recommended_shell_nm") or 0) >= _SAFE_SHELL_NM else "a2"
+
+
+def preflight_vram_advice(design, *, padding_nm: float = 1.2, devices: str = "0",
+                          atomistic_model=None) -> dict:
+    """Pre-flight size verdict for the Relax launch gate — computed from the DRY design
+    (no build). Returns the :func:`recommend_downsize` advice enriched with ``tier``
+    (ok/a1/a2/a3), ``bound`` ("GPU"/"host RAM") and ``host_mb``; or ``{"skipped": True,
+    "tier": "ok"}`` whenever sizing can't run (no GPU read / no profile / any error) so
+    the launch proceeds unchanged. Shares auto_water_shell's detect chain but surfaces
+    the full advice for the UI instead of only the chosen shell.
+    """
+    skipped = {"skipped": True, "tier": "ok"}
+    host_mb = detect_host_ram_mb()
+    cpu = (devices or "").strip().lower() in ("cpu", "none")
+    if cpu:
+        if not host_mb:
+            return skipped
+        vram_mb, effective_cap, bound = None, max_atoms_for_host_ram(host_mb), "host RAM"
+    else:
+        vram_mb = detect_vram_mb(devices)
+        if vram_mb is None:
+            return skipped
+        vram_cap = max_atoms_for_vram(vram_mb)
+        host_cap = max_atoms_for_host_ram(host_mb) if host_mb else None
+        effective_cap = min(vram_cap, host_cap) if host_cap is not None else vram_cap
+        bound = "host RAM" if host_cap is not None and host_cap < vram_cap else "GPU"
+    try:
+        profile = estimate_profile_from_design(
+            design, padding_nm=padding_nm, atomistic_model=atomistic_model)
+        if profile is None:
+            return skipped
+        rec = recommend_downsize(
+            dna_xyz_nm=profile["dna_xyz_nm"], box_nm=profile["box_nm"],
+            full_water=profile["full_water"], dna_atoms=profile["dna_atoms"],
+            ion_atoms=profile["ion_atoms"],
+            vram_mb=vram_mb if vram_mb is not None else 10**9,
+            max_atoms=effective_cap,
+        )
+    except Exception:  # noqa: BLE001 — a preflight must never block a launch
+        return skipped
+    return {**rec, "skipped": False, "tier": classify_vram_fit(rec),
+            "bound": bound, "host_mb": host_mb}

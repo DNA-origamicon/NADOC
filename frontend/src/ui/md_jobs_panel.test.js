@@ -156,7 +156,7 @@ describe('newestCompletedForPart (cross-engine compare fallback)', () => {
   })
 })
 
-import { mdJobIsActive, mdRunControl, mdSelectedJobControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdProductionAction, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel } from './md_jobs_panel.js'
+import { mdJobIsActive, mdRunControl, mdSelectedJobControl, mdRemoteAwaitingSubmit, makeSpinner, mdHasMetrics, mdListSignature, mdChildRowLabel, hasActiveRemoteJob, mdWatchdogDecision, mdProductionAction, mdRemoteReconnectPrompt, mdJobIsDraft, mdDraftRunLabel, mdJobRowSig, mdJobRowCtx, gpuFallbackFromToggle } from './md_jobs_panel.js'
 
 describe('mdJobIsDraft / mdDraftRunLabel (deferred-prep seed)', () => {
   it('mdJobIsDraft is true only for status "draft"', () => {
@@ -298,11 +298,41 @@ describe('mdSelectedJobControl (contextual Stop/Resume for the SELECTED job — 
   it('a stopped ALPINE job → hidden here (its resume is the cluster-gated button)', () => {
     expect(mdSelectedJobControl({ status: 'stopped', execution_target: 'alpine' }).show).toBe(false)
   })
+  it('a job PAUSED on a GPU-resident decision → ↻ Resume (re-opens the gate)', () => {
+    const job = { status: 'paused', execution_target: 'local', decision: { gate: 'gpu_resident' } }
+    expect(mdSelectedJobControl(job)).toMatchObject({ show: true, action: 'resume' })
+    expect(mdSelectedJobControl(job).title).toMatch(/fastest GPU mode/i)
+    // a plain paused job with no decision stays hidden here
+    expect(mdSelectedJobControl({ status: 'paused', execution_target: 'local' }).show).toBe(false)
+  })
   it('an in-flight Alpine job (SLURM id) → ■ Stop (scancel)', () => {
     expect(mdSelectedJobControl({ status: 'running', execution_target: 'alpine', slurm_job_id: '9' })).toMatchObject({ show: true, action: 'stop' })
   })
   it('a never-launched RunPod queued job → hidden (awaiting submit, not active)', () => {
     expect(mdSelectedJobControl({ status: 'queued', execution_target: 'runpod' }).show).toBe(false)
+  })
+})
+
+describe('gpuFallbackFromToggle (the "Prefer fastest GPU mode" launch setting)', () => {
+  it('checked → ask (require resident, pause & ask); unchecked → auto_offload', () => {
+    expect(gpuFallbackFromToggle(true)).toBe('ask')
+    expect(gpuFallbackFromToggle(false)).toBe('auto_offload')
+  })
+})
+
+describe('GPU-decision surfacing in the job list (⚠ + row signature)', () => {
+  const decided = { job_id: 'j1', status: 'paused', decision: { gate: 'gpu_resident' } }
+  const clean = { job_id: 'j1', status: 'paused' }
+
+  it('the row signature changes when a decision appears/clears (so ⚠ re-renders)', () => {
+    expect(mdJobRowSig(decided)).not.toBe(mdJobRowSig(clean))
+  })
+  it('mdJobRowCtx marks a decision job stale with the GPU hover message', () => {
+    const ctx = mdJobRowCtx({})
+    expect(ctx.isStale(decided)).toBe(true)
+    expect(ctx.staleTitle(decided)).toMatch(/fastest GPU mode/i)
+    // a plain paused job (no decision, design current) is not marked
+    expect(ctx.isStale(clean)).toBe(false)
   })
 })
 

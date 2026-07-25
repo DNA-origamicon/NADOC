@@ -115,6 +115,29 @@ def test_default_path_unchanged():
     assert "structure          S.psf" in conf
 
 
+def test_segment_conf_carved_but_wellfilled_keeps_gpu_resident():
+    # A carved cell that is still WELL-FILLED (tight box the structure fills) runs
+    # GPU-resident — the old blanket "carved -> no resident" was over-broad. The
+    # one-cycle resident probe is the runtime backstop for a wrong fill estimate.
+    _, segs = M.mgh_slow_release_segments("S", timestep_fs=4.0)
+    hard = next(s for s in segs if not s.soft)
+    conf = M._segment_conf(hard, "S", (100.0, 90.0, 80.0), mgh_extrabonds=True,
+                           fast=True, carved=True, fill_fraction=0.95,
+                           structure_psf="S_hmr.psf")
+    assert "GPUresident        on" in conf
+
+
+def test_segment_conf_carved_sparse_cell_stays_offload():
+    # A big-box concave carve (vacuum corners, low fill) must NOT attempt resident —
+    # it would die at step 0 on the exclusion count. Preserves the old offload path.
+    _, segs = M.mgh_slow_release_segments("S", timestep_fs=4.0)
+    hard = next(s for s in segs if not s.soft)
+    conf = M._segment_conf(hard, "S", (100.0, 90.0, 80.0), mgh_extrabonds=True,
+                           fast=True, carved=True, fill_fraction=0.30,
+                           structure_psf="S_hmr.psf")
+    assert "GPUresident" not in conf
+
+
 def test_fast_mode_halves_steps_to_hold_ns_per_stage():
     _, slow = M.mgh_slow_release_segments("S", timestep_fs=2.0)
     _, fast = M.mgh_slow_release_segments("S", timestep_fs=4.0)

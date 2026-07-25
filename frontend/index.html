@@ -5285,6 +5285,11 @@
                     Fast relaxation (HMR + GPU-resident, 4&nbsp;fs)
                   </label>
                   <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
+                         title="If the fastest GPU mode can't start on this structure, PAUSE and ask (default) rather than silently dropping to a ~3x slower mode. Uncheck to auto-accept the slower GPU mode for unattended runs. Remembered between runs.">
+                    <input id="md-jobs-gpu-ask" type="checkbox" checked style="accent-color:#3fb950">
+                    Prefer fastest GPU mode (ask before running slower)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
                          title="Relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. Off by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages. Also editable mid-relax: changing it while a running local relaxation is selected applies at the next stage checkpoint (no relaunch).">
                     <input id="md-jobs-early-stop" type="checkbox" style="accent-color:#3fb950">
                     Early-stop settled stages

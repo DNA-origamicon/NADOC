@@ -49,7 +49,9 @@ from backend.core.md_protocols import segments_from_manifest
 from backend.core.md_vram import (
     FAILURE_CELL_SHRINK,
     FAILURE_HOST_OOM,
+    FAILURE_INSTABILITY,
     classify_failure_log_file,
+    describe_failure_file,
     extract_error_line_from_file,
 )
 
@@ -66,6 +68,15 @@ MAX_CELL_SHRINK_RESUMES = 4
 # an invisible hiccup. A genuinely under-RAM machine exhausts the cap and then fails
 # normally (with the host-OOM Fix popup), so it never loops forever.
 MAX_HOST_OOM_RESUMES = 3
+
+# A RATTLE / "atoms moving too fast" blow-up (FAILURE_INSTABILITY) is a STRAINED-SEED
+# problem, not a transient — re-running the same rigidBonds-all + 4 fs conf from the same
+# coordinates just re-crashes. The automatic remedy is to SOFTEN the integrator (drop
+# rigidBonds + 4 fs → the proven-stable rigidBonds-none + 1 fs the ladder's gentle first
+# chunk uses), so one auto-resume is enough. If the softened 1 fs run STILL blows up the
+# seed is genuinely un-relaxable and the job dead-ends (instability Fix popup) rather than
+# looping — belt-and-braces with the "conf already soft → not re-softened" guard below.
+MAX_INSTABILITY_RESUMES = 1
 
 # Before spawning a NAMD segment, if free host RAM is below this floor, release
 # NADOC's own live-viewer atomistic model cache so the run has headroom to pin its
@@ -939,6 +950,139 @@ def downgrade_gpu_resident_confs(package_dir: Path, job_id: str = "") -> list[st
     return rewritten
 
 
+# ── GPU-resident fallback: ask the user instead of silently downgrading ────────
+#
+# Default policy is "ask": a capable GPU is assumed wanted, so if the fastest mode
+# can't run we PAUSE and present a decision rather than quietly halving throughput.
+# NADOC_GPU_FALLBACK=auto_offload restores the old silent-downgrade for unattended
+# runs. (With a resident-capable NAMD build pinned, this path rarely fires at all.)
+
+def gpu_fallback_policy() -> str:
+    """"ask" (default — pause + decision) or "auto_offload" (silent downgrade)."""
+    val = os.environ.get("NADOC_GPU_FALLBACK", "").strip().lower()
+    return "auto_offload" if val == "auto_offload" else "ask"
+
+
+def build_gpu_fallback_decision(fux) -> dict:
+    """Build the serialisable Gate-B decision payload the frontend renders as a modal.
+
+    ``fux`` is a :class:`md_vram.FailureUX`. The offer is always "run the slower GPU
+    mode or cancel"; ``retry_hint`` flags the case a newer NAMD build would fix (so the
+    UI can add "…or install a newer NAMD build"). Wall-clock estimates are left to the
+    frontend (it has the job's ns/day) — the backend does not guess time here.
+    """
+    return {
+        "gate": "gpu_resident",
+        "severity": fux.severity,                      # "decision"
+        "title": fux.title,
+        "message": fux.message,
+        "technical_reason": fux.technical_reason,      # logs/tooltip only, never headline
+        "retry_hint": bool(fux.retry_other_binary),
+        "degrade_target": fux.degrade_target,          # "offload"
+        "checks": [
+            {"label": "GPU found", "ok": True},
+            {"label": "System fits in memory", "ok": True},
+            {"label": "Structure minimized cleanly", "ok": True},
+            {"label": "Fastest GPU mode started", "ok": False},
+        ],
+        "options": [
+            {"id": "offload", "label": "Run in slower GPU mode", "primary": True},
+            {"id": "cancel", "label": "Cancel", "primary": False},
+        ],
+    }
+
+
+def handle_resident_probe_failure(
+    job: MdJob, package_dir: Path, workspace_dir: Path
+) -> bool:
+    """React to a failed GPU-resident pre-flight. Returns True to PROCEED with the run,
+    False to PAUSE it awaiting the user's decision (caller must then exit cleanly).
+
+    "ask" (default): classify the probe log, stash a Gate-B decision on the job, set
+    status=paused, and return False. "auto_offload": downgrade the confs and proceed
+    (the legacy silent behaviour), returning True.
+    """
+    # Per-job policy (from the launch toggle, stored in prep_params) overrides the env
+    # default — so "Prefer fastest GPU mode" is a real per-run setting, not just global.
+    policy = (job.prep_params or {}).get("gpu_fallback_policy") or gpu_fallback_policy()
+    if policy == "auto_offload":
+        downgrade_gpu_resident_confs(package_dir, job.job_id)
+        return True
+    fux = describe_failure_file(package_dir / "_gpures_probe.log")
+    job.decision = build_gpu_fallback_decision(fux)
+    job.status = MdStatus.paused
+    job.save(workspace_dir)
+    logger.info(
+        "[%s] GPU-resident unavailable (%s) — paused for user decision (Gate B).",
+        job.job_id, fux.kind,
+    )
+    return False
+
+
+def resolve_gpu_decision(job: MdJob, choice: str, workspace_dir: Path) -> MdJob:
+    """Apply the user's Gate-B choice to a paused job (caller then starts it if resumed).
+
+    ``"offload"`` — downgrade the resident confs to the slower GPU mode and re-queue the
+    job (resume then SKIPS the probe, since no conf still asks for GPU-resident).
+    ``"cancel"`` — clean-stop the job. Any other choice is rejected. Clears ``decision``.
+    """
+    if choice == "offload":
+        downgrade_gpu_resident_confs(job.package_dir(workspace_dir), job.job_id)
+        job.decision = None
+        job.status = MdStatus.running   # runner flips it on relaunch; resume skips probe
+        job.error = None
+    elif choice == "cancel":
+        apply_user_stop(job)
+        job.decision = None
+    else:
+        raise ValueError(f"unknown gpu-decision choice: {choice!r}")
+    job.save(workspace_dir)
+    return job
+
+
+def soften_stability_confs(
+    package_dir: Path, segments: list, from_idx: int, job_id: str = ""
+) -> list[str]:
+    """Rewrite the failing segment + every LATER hard (``rigidBonds all``) segment to the
+    soft integrator (``rigidBonds none`` + 1 fs), so a RATTLE / instability blow-up on a
+    strained seed is rescued by re-running the rest of the ladder gently instead of
+    dead-ending.  The original is kept as ``<name>.conf.hard``.  Returns the segment names
+    actually rewritten (a conf already soft is left untouched → not in the list)."""
+    from backend.core.md_protocols import soften_conf_for_stability  # noqa: PLC0415
+
+    rewritten: list[str] = []
+    for seg in segments[from_idx:]:
+        conf = package_dir / f"{seg.name}.conf"
+        if not conf.exists():
+            continue
+        original = conf.read_text()
+        softened = soften_conf_for_stability(original)
+        if softened == original:
+            continue  # already soft (rigidBonds none) — nothing to do
+        conf.with_suffix(".conf.hard").write_text(original)
+        conf.write_text(softened)
+        rewritten.append(seg.name)
+    if rewritten:
+        logger.warning(
+            "[%s] instability rescue — softened %d segment(s) to rigidBonds none + 1 fs: %s",
+            job_id, len(rewritten), ", ".join(rewritten),
+        )
+    return rewritten
+
+
+def _clear_segment_restart_files(output_dir: Path, segment_name: str) -> None:
+    """Remove a crashed segment's partial NAMD checkpoint so it restarts FRESH from the
+    previous stage's coordinates (via its conf's ``binCoordinates``) instead of resuming
+    mid-segment from the blown-up state.  ``_resume_step`` keys off ``.restart.xsc``, so
+    clearing the ``.restart.*`` set forces a clean re-run."""
+    for pat in (f"{segment_name}.restart.*", f"{segment_name}.cont*.dcd"):
+        for p in output_dir.glob(pat):
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+
 def find_gmx() -> str:
     """Return the first usable GROMACS binary path."""
     for candidate in _GMX_CANDIDATES:
@@ -1319,7 +1463,14 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 min_name,
             )
             if not ok:
-                await asyncio.to_thread(downgrade_gpu_resident_confs, package_dir, job.job_id)
+                # Default policy "ask": pause and present a Gate-B decision instead of
+                # silently halving throughput. Returns False → exit cleanly; the paused
+                # job is not auto-resumed (resume_interrupted_jobs only touches running).
+                proceed = await asyncio.to_thread(
+                    handle_resident_probe_failure, job, package_dir, workspace_dir,
+                )
+                if not proceed:
+                    return
 
     # ── Segments ──────────────────────────────────────────────────────────────
 
@@ -1498,6 +1649,44 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                         job.job_id, spec.name, seg.auto_resumes, MAX_HOST_OOM_RESUMES,
                     )
                     return
+                # A RATTLE / "atoms moving too fast" blow-up is a strained-seed problem,
+                # not a transient — the same rigidBonds-all + 4 fs conf from the same
+                # coordinates would just re-crash. SOFTEN the failing segment AND every
+                # later hard segment to the 1 fs soft integrator (the config the ladder's
+                # gentle first chunk already uses), clear the crashed segment's partial
+                # checkpoint so it restarts FRESH from the last stable stage endpoint, and
+                # let the supervisor relaunch. This is the AUTOMATIC form of the manual
+                # force_soft "Fix". Bounded, and a conf already soft is NOT re-softened
+                # (rewritten==[]), so a genuinely un-relaxable seed dead-ends instead of
+                # looping.
+                if (
+                    failure_kind == FAILURE_INSTABILITY
+                    and seg is not None
+                    and seg.auto_resumes < MAX_INSTABILITY_RESUMES
+                ):
+                    rewritten = soften_stability_confs(
+                        package_dir, job.segments, idx, job.job_id
+                    )
+                    if rewritten:
+                        _clear_segment_restart_files(output_dir, spec.name)
+                        seg.auto_resumes += 1
+                        seg.status = "running"
+                        job.status = MdStatus.running
+                        job.failure_kind = None
+                        job.error = (
+                            f"{spec.name}: RATTLE/instability on a strained seed — "
+                            f"auto-softened the remaining ladder to the 1 fs soft "
+                            f"integrator and resuming from the last stable checkpoint "
+                            f"(attempt {seg.auto_resumes}/{MAX_INSTABILITY_RESUMES})."
+                        )
+                        job.save(workspace_dir)
+                        logger.warning(
+                            "[%s] %s hit a RATTLE/instability; auto-softened %d "
+                            "segment(s) and resuming (attempt %d/%d)",
+                            job.job_id, spec.name, len(rewritten),
+                            seg.auto_resumes, MAX_INSTABILITY_RESUMES,
+                        )
+                        return
                 if seg is not None:
                     seg.status = "failed"
                 job.status = MdStatus.failed

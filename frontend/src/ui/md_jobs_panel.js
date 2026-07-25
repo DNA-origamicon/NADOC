@@ -15,7 +15,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
-import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk } from '../api/client.js'
+import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram } from '../api/client.js'
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
@@ -26,6 +26,8 @@ import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
+import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
+import { gateAMessage, openGateAModal } from './md_gate_a.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
 import { initMdMetricsCard } from './md_metrics_card.js'
@@ -70,6 +72,12 @@ export function jobProductionTimestepFs(job) {
   return DEFAULT_PRODUCTION_TIMESTEP_FS
 }
 const _SHOW_ALL_KEY = 'nadoc:md-jobs-show-all'
+const _GPU_ASK_KEY  = 'nadoc:md-jobs-gpu-ask'
+
+/** Pure: the launch policy value from the "Prefer fastest GPU mode" toggle. */
+export function gpuFallbackFromToggle(checked) {
+  return checked ? 'ask' : 'auto_offload'
+}
 const _WORKSPACE_PATH_KEY = 'nadoc:workspace-path'
 const _MD_PREWARM_INTERVAL_MS = 30000
 // Remote (Alpine) jobs have no live WebSocket push — the backend supervisor polls
@@ -182,8 +190,12 @@ export function mdSelectedJobControl(job) {
     return { show: true, action: 'stop', label: '■ Stop', title: 'Stop this relaxation.' }
   }
   const isAlpine = job?.execution_target === 'alpine'
-  if (!isAlpine && ['stopped', 'failed'].includes(job?.status)) {
-    return { show: true, action: 'resume', label: '↻ Resume', title: 'Resume from the last checkpoint.' }
+  // A job paused on a GPU-resident decision is resumable too — Resume re-opens the
+  // decision (or reassesses if the design changed), so the modal isn't the sole surface.
+  if (!isAlpine && (['stopped', 'failed'].includes(job?.status) || hasPendingGpuDecision(job))) {
+    return hasPendingGpuDecision(job)
+      ? { show: true, action: 'resume', label: '↻ Resume', title: "The fastest GPU mode couldn't start — resume to choose how to proceed." }
+      : { show: true, action: 'resume', label: '↻ Resume', title: 'Resume from the last checkpoint.' }
   }
   return { show: false }
 }
@@ -526,6 +538,7 @@ export function mdJobRowSig(j) {
   return `${j.job_id}:${j.status}:${j.current_segment_idx ?? ''}:${j.failure_kind ?? ''}`
     + `:${j.out_of_date ? 1 : 0}:${j.archived ? 1 : 0}:${j.size_bytes ?? ''}`
     + `:${j.execution_target ?? ''}:${j.slurm_job_id ?? ''}:${j.ensemble_seed ?? ''}`
+    + `:${j.decision ? 1 : 0}`   // GPU-decision pending → ⚠ appears/clears with it
 }
 
 /** Pure: a stable signature of the job list so _renderList can skip a rebuild when
@@ -557,8 +570,12 @@ export function mdJobRowCtx({ selectedId = null, collapsedIds = null, jobs = [],
       : mdIsEnsembleReplica(job) ? 'Ensemble production replica (independent seed)'
       : 'Refit / retry derived from the parent run',
     isActive: mdJobIsActive,
-    isStale: jobOutOfDate,
-    staleTitle: 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.',
+    // ⚠ marks a job that needs attention: the design changed since it was prepared,
+    // OR it's paused on a GPU-resident fallback decision. Same glyph, message per job.
+    isStale: (job) => jobOutOfDate(job) || hasPendingGpuDecision(job),
+    staleTitle: (job) => hasPendingGpuDecision(job)
+      ? "The fastest GPU mode couldn't start — open this job to choose how to proceed."
+      : 'Design changed since this MD job was prepared — roll the design back, or prepare a new run.',
     formatTime,
     formatSize: formatBytes,
     chevron: true,
@@ -672,6 +689,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const prodTimestepSel = document.getElementById('md-jobs-prod-timestep')
   const timestepWarnEl  = document.getElementById('md-jobs-timestep-warn')
   const fastChk       = document.getElementById('md-jobs-fast')
+  const gpuAskChk     = document.getElementById('md-jobs-gpu-ask')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
   const optimizeBtn   = document.getElementById('md-jobs-optimize')
   const runPathEl     = document.getElementById('md-jobs-path')
@@ -900,6 +918,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   })
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
+
+  // "Prefer fastest GPU mode" (ask-before-slower) is remembered between runs. Default
+  // ON (ask) — only an explicit '0' unchecks it.
+  if (gpuAskChk) {
+    gpuAskChk.checked = localStorage.getItem(_GPU_ASK_KEY) !== '0'
+    gpuAskChk.addEventListener('change',
+      () => localStorage.setItem(_GPU_ASK_KEY, gpuAskChk.checked ? '1' : '0'))
+  }
 
   // ── Section collapse + advanced drawer — shared jobs-panel base (U3 slice 2c-3b) ──
   // md accommodations: the section arrow is the `is-collapsed` class idiom
@@ -2140,6 +2166,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   function _resumeSelected(btn = runBtn) {
     return runExclusive(btn, async () => {
       if (!_selectedId) return
+      // Resuming a GPU-decision job: reassess if the design changed (roll back / rebuild
+      // via the shared stale-guard), and clear the dismiss so the gate re-appears. If
+      // nothing changed, the resume re-hits the cached probe → the same gate pops.
+      if (hasPendingGpuDecision(_selectedJob())) {
+        const proceed = await ensureJobCurrent({
+          job: _selectedJob(), rollFn: rollMdJobDesign, refetch: _fetchJobs,
+          isStale: () => jobOutOfDate(_selectedJob()), actionLabel: 'this run',
+        })
+        if (!proceed) return
+        _gateBDismissed = null
+      }
       if (!(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
       try {
         const d = await api.startMdJob(_selectedId)
@@ -2216,6 +2253,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       minimize_steps: parseInt(minstepsInput?.value  ?? '10000', 10),
       autostart:      autostartChk?.checked ?? true,
       fast:           fastChk?.checked ?? true,
+      gpu_fallback_policy: gpuFallbackFromToggle(gpuAskChk?.checked ?? true),
       production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
       early_stop_relax: earlyStopChk?.checked ?? false,
       design_source_path: _currentPartPath() || null,
@@ -2234,6 +2272,25 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // half a minute ("I click Relax and nothing happens"), because the only feedback
     // came afterwards.  Feedback first, work second.
     showOpProgress('Relax', 'Sizing the solvated system…', { indeterminate: true })
+
+    // Gate A — pre-flight water-box SIZE check, BEFORE the build. Runs ahead of the disk
+    // forecast so a chosen shell feeds that estimate. Only when sizing is auto (shell 0)
+    // on a local GPU run; a seeded draft / CPU / manual shell skips it (the backend
+    // returns skipped for those too). Best-effort — never blocks a launch on an error.
+    if (isLocalRun && !draftId && runsOnGpu && payload.water_shell_nm === 0) {
+      try {
+        const adv = await preflightMdVram(payload)
+        const gate = gateAMessage(adv)
+        if (gate?.isNotice) {                       // A1 — auto-fit a comfortable shell
+          payload.water_shell_nm = adv.recommended_shell_nm
+          showToast(gate.notice, { severity: 'info' })
+        } else if (gate) {                          // A2 (decision) / A3 (hard stop)
+          const proceed = await openGateAModal(adv)
+          if (!proceed) { hideOpProgress(); _launching = false; runBtn.disabled = false; return }
+          if (adv.tier === 'a2') payload.water_shell_nm = adv.recommended_shell_nm
+        }
+      } catch { /* preflight is best-effort — never block a launch */ }
+    }
 
     // Local-disk forecast only applies to a local run; an Alpine run writes its
     // trajectory on the cluster's scratch, not this machine's disk.  A seeded draft's
@@ -2492,9 +2549,89 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     })
   }
 
+  // ── Gate B: GPU-resident fallback decision modal ──────────────────────────
+  // A paused job with job.decision (gate:'gpu_resident') auto-opens the modal from
+  // _applyJobState (which fires on every WS push / poll for the selected job). Track
+  // the open modal + a dismissed jobId so an Escape doesn't get re-opened on the next
+  // 3 s tick; reselecting the job (or the decision clearing) resets that.
+  let _gateBModal = null       // { close, jobId } while a modal is open
+  let _gateBDismissed = null   // jobId the user dismissed without choosing
+
+  function _maybeOpenGpuDecision(job) {
+    if (!hasPendingGpuDecision(job)) {
+      if (_gateBModal?.jobId === job.job_id) { _gateBModal.close(); _gateBModal = null }
+      if (_gateBDismissed === job.job_id) _gateBDismissed = null   // resolved/left paused
+      return
+    }
+    if (_gateBModal?.jobId === job.job_id) return       // already showing for this job
+    if (_gateBDismissed === job.job_id) return          // user dismissed; wait for reselect
+    _gateBModal?.close()
+    const close = openGpuDecisionModal({
+      decision: job.decision,
+      onChoose: async (choice) => {
+        const d = await api.resolveMdGpuDecision(job.job_id, choice)
+        if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
+        _gateBModal = null
+        await _fetchJobs()
+        _reselectJob(job.job_id)   // same id → re-subscribe WS on the now-running job
+      },
+      onDismiss: () => { _gateBDismissed = job.job_id; _gateBModal = null },
+    })
+    _gateBModal = { close, jobId: job.job_id }
+  }
+
+  // Dev-only: force the modal to appear on the selected job for visual validation
+  // (the real path is dormant when a resident-capable NAMD build is pinned). In the
+  // console: __NADOC_DBG__.mdForceGpuDecision(). Buttons will 400 on a job that isn't
+  // actually paused server-side — that's expected; it validates layout + wiring.
+  function _forceGpuDecisionDemo() {
+    const job = _jobs.find(j => j.job_id === _selectedId)
+    if (!job) { console.warn('md-jobs: select a job first'); return }
+    _gateBDismissed = null
+    job.status = 'paused'
+    job.decision = {
+      gate: 'gpu_resident', severity: 'decision',
+      title: "Couldn't use the fastest GPU mode",
+      message: 'The fastest GPU mode didn’t start on this structure. It can still finish '
+        + 'in a slower GPU mode — same result, about 3× longer.',
+      technical_reason: 'FATAL ERROR: CUDA error … buildTileLists … illegal memory access',
+      retry_hint: true, degrade_target: 'offload',
+      checks: [
+        { label: 'GPU found', ok: true },
+        { label: 'System fits in memory', ok: true },
+        { label: 'Structure minimized cleanly', ok: true },
+        { label: 'Fastest GPU mode started', ok: false },
+      ],
+      options: [
+        { id: 'offload', label: 'Run in slower GPU mode', primary: true },
+        { id: 'cancel', label: 'Cancel', primary: false },
+      ],
+    }
+    _renderList()        // list ⚠ marker (rowSig now includes decision)
+    _applyJobState(job)  // detail modal + Resume control
+  }
+  // Dev-only: preview a Gate A size decision. __NADOC_DBG__.mdForceGateA('a1'|'a2'|'a3').
+  function _forceGateADemo(tier = 'a2') {
+    const adv = {
+      a1: { skipped: false, tier: 'a1', vram_mb: 12288, recommended_shell_nm: 1.5 },
+      a2: { skipped: false, tier: 'a2', vram_mb: 12288, recommended_shell_nm: 1.1, estimated_atoms: 1_800_000 },
+      a3: { skipped: false, tier: 'a3', vram_mb: 12288, tightest_shell_nm: 0.8, tightest_atoms: 9_000_000, required_vram_mb: 34_000 },
+    }[tier] || null
+    const g = gateAMessage(adv)
+    if (!g) { console.warn('md-jobs: tier must be a1 | a2 | a3'); return }
+    if (g.isNotice) { showToast(g.notice, { severity: 'info' }); return }
+    openGateAModal(adv).then((v) => console.log('Gate A resolved (proceed=%s)', v))
+  }
+  if (typeof window !== 'undefined') {
+    window.__NADOC_DBG__ = window.__NADOC_DBG__ || {}
+    window.__NADOC_DBG__.mdForceGpuDecision = _forceGpuDecisionDemo
+    window.__NADOC_DBG__.mdForceGateA = _forceGateADemo
+  }
+
   // ── Job selection + WS subscription ───────────────────────────────────────
   function _selectJob(jobId) {
     if (_selectedId === jobId) return
+    _gateBDismissed = null   // a fresh selection may re-show a pending decision
     console.log(`[${_ts()}] md-jobs: selecting job ${jobId}`)
     _setFlexOff()   // the loaded trajectory / flex map belonged to the previous job
     _setTrajOff()
@@ -2780,6 +2917,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _renderMetrics(job, liveMetrics)
     _renderProductionControls(job)
     _updateVizToggles(job)
+    _maybeOpenGpuDecision(job)   // Gate B: auto-open/close the GPU fallback modal
     if (_TERMINAL_STATUSES.has(job.status) && _displayMeta?.job_id !== job.job_id) {
       _fetchDisplayMeta(job.job_id)
     }

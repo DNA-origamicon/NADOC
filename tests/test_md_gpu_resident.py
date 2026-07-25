@@ -86,6 +86,35 @@ def test_downgrade_is_a_noop_without_gpu_resident():
     assert downgrade_gpu_resident(SLOW_CONF) == SLOW_CONF
 
 
+# ── soften-for-stability (the automatic instability remedy) ─────────────────────
+
+def test_soften_drops_rigidbonds_and_timestep_to_the_soft_integrator():
+    """A RATTLE blow-up needs rigidBonds none + 1 fs (the proven-stable soft config the
+    ladder's first chunk uses).  Softening flips exactly those two knobs + drops
+    GPUresident, and leaves the ensemble (PSF/PME/thermostat/step count) alone."""
+    from backend.core.md_protocols import soften_conf_for_stability
+    out = soften_conf_for_stability(FAST_CONF)
+    assert _val(out, "rigidBonds") == "none"     # the RATTLE constraint is removed
+    assert _val(out, "timestep") == "1"          # 4 → 1 fs
+    assert "GPUresident" not in out              # soft integrator is not GPU-resident
+    # ensemble untouched — HMR PSF kept (checkpoint velocities were made under it),
+    # step count unchanged (same convention as the ladder's built-in soft segments).
+    assert _val(out, "structure") == "d_hmr.psf"
+    assert _val(out, "langevinTemp") == "300"
+    assert _val(out, "run") == "480000"
+
+
+def test_soften_is_idempotent_and_a_noop_when_already_soft():
+    """Applying twice == once; a conf already at rigidBonds none is returned UNCHANGED —
+    the runner uses 'unchanged' as the signal that a still-crashing soft segment can't be
+    rescued further (so it dead-ends instead of looping)."""
+    from backend.core.md_protocols import soften_conf_for_stability
+    once = soften_conf_for_stability(FAST_CONF)
+    assert soften_conf_for_stability(once) == once
+    already_soft = FAST_CONF.replace("rigidBonds         all", "rigidBonds         none")
+    assert soften_conf_for_stability(already_soft) == already_soft
+
+
 def test_downgrade_run_stays_a_multiple_of_stepspercycle():
     """NAMD rejects a step count that isn't a multiple of stepspercycle."""
     out = downgrade_gpu_resident(FAST_CONF)

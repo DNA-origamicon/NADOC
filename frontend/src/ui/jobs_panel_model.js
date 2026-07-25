@@ -93,7 +93,11 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     archivePath,
     stale: ctx.isStale ? !!ctx.isStale(job) : false,
     staleClass: ctx.staleClass || null,
-    staleTitle: ctx.staleTitle || '',
+    // staleTitle may be a static string (shared by all rows) or a per-job function
+    // (e.g. NAMD's ⚠ carries a design-changed message OR a GPU-decision message).
+    staleTitle: typeof ctx.staleTitle === 'function'
+      ? (ctx.staleTitle(job) || '')
+      : (ctx.staleTitle || ''),
     tags: ctx.tags ? (ctx.tags(job) || []) : [],
     action: ctx.rowAction ? (ctx.rowAction(job) || null) : null,
     chevron: ctx.chevron

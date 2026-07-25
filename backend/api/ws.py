@@ -1441,6 +1441,21 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
                     except Exception:
                         pass
 
+            # Overall progress fraction (0..1) for the master job card's bar.  This is
+            # stamped by list_md_jobs on REST polls, but the bar reads progress_fraction
+            # from the live WS state too — without it a running job whose master card
+            # isn't self-polling (e.g. an oxDNA-SEEDED run that first appeared as a draft,
+            # so the master never adopted it as its active node) shows a frozen / "hung"
+            # bar even though the detail timeline advances.  Same helper the REST list
+            # uses, so the two channels never disagree.
+            from backend.api.routes_md import _namd_running_fraction  # lazy: avoids a router import cycle
+            try:
+                frac = _namd_running_fraction(job, _WORKSPACE_DIR)
+                if frac is not None:
+                    payload["progress_fraction"] = frac
+            except Exception:
+                pass
+
             await websocket.send_json({"type": "state", "job": payload})
 
             if job.status in (MdStatus.completed, MdStatus.failed, MdStatus.stopped):

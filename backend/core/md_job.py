@@ -84,6 +84,11 @@ class MdJob:
     # Structured failure category, set alongside ``error`` so the UI can offer a
     # targeted fix (e.g. "vram_oom" → the downsize/refit popup).  None = generic.
     failure_kind: Optional[str] = None
+    # A pending user decision the run is PAUSED on (e.g. the GPU-resident fallback
+    # gate): a serialisable payload {gate, severity, title, message, options, ...}
+    # the frontend renders as a modal. Set with status=paused; cleared when resolved
+    # via POST /md/jobs/{id}/gpu-decision. None = no decision outstanding.
+    decision: Optional[dict] = None
     # CreateJobRequest params captured at creation so a "refit" can rebuild the
     # job with one setting changed (e.g. add a water-shell carve). None for jobs
     # created before this was recorded.
@@ -255,6 +260,7 @@ class MdJob:
         data.setdefault("early_stop_relax", False)
         data.setdefault("early_stop_tier", "B")
         data.setdefault("failure_kind", None)
+        data.setdefault("decision", None)
         data.setdefault("prep_params", None)
         data.setdefault("design_fingerprint", None)
         data.setdefault("feature_log_position", None)

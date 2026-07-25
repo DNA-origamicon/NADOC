@@ -218,6 +218,40 @@ def strip_gpu_resident(conf_text: str) -> str:
 # the segment covers the SAME simulated time and writes the same frames-per-ns.
 _STEP_SCALED_KEYS = ("run", "outputEnergies", "xstFreq", "restartfreq", "dcdFreq")
 _TIMESTEP_RE = re.compile(r"^([ \t]*timestep[ \t]+)([0-9.]+)", re.IGNORECASE | re.MULTILINE)
+# A `rigidBonds all` directive (the fast ladder's rigid-H constraint that a RATTLE
+# blow-up fails on).  Softening flips it to `none`.
+_RIGID_BONDS_ALL_RE = re.compile(r"^([ \t]*rigidBonds[ \t]+)all\b", re.IGNORECASE | re.MULTILINE)
+
+
+def soften_conf_for_stability(conf_text: str) -> str:
+    """Rewrite a fast (HMR + ``rigidBonds all`` + 4 fs) segment conf to the SOFT
+    integrator — ``rigidBonds none`` + a 1 fs timestep — the proven-stable config the
+    ladder's gentle first chunk already uses.
+
+    This is the AUTOMATIC form of the manual ``force_soft`` instability remedy.  A RATTLE
+    ("Constraint failure") / "atoms moving too fast" blow-up on a strained seed is a
+    rigid-constraint failure: as the restraint ladder loosens (k0.5 → k0.1), a locally
+    strained atom snaps far enough in one 4 fs step that the constraint solver can't keep
+    its rigid X-H bond, and NAMD aborts.  Dropping ``rigidBonds`` (and the 4 fs that rides
+    on it) lets the SAME coordinates relax without the solver failing.
+
+    PSF, PME, cutoffs and the barostat are untouched, so the ensemble is unchanged — only
+    the integrator softens.  Keeping the HMR PSF is safe under ``rigidBonds none`` at 1 fs:
+    repartitioning only makes the X-H stretch (the mode that sets the no-rigid-bonds dt
+    limit) SLOWER, and the checkpoint velocities were generated under those same masses so
+    the restart stays consistent.  Step counts are left as-is (same convention as the
+    ladder's built-in soft segments): the segment covers 1/4 the ns at 1 fs, ample for a
+    restraint-relaxation stage.
+
+    Pure + idempotent: a conf already at ``rigidBonds none`` (or with no rigidBonds line)
+    comes back unchanged, so a soft segment that still crashes is NOT re-softened (the
+    caller uses "unchanged" as the signal to stop retrying)."""
+    if not _RIGID_BONDS_ALL_RE.search(conf_text):
+        return conf_text
+    text = strip_gpu_resident(conf_text)                                  # soft ≠ GPU-resident
+    text = _RIGID_BONDS_ALL_RE.sub(lambda m: f"{m.group(1)}none", text)
+    text = _TIMESTEP_RE.sub(lambda m: f"{m.group(1)}1", text, count=1)    # 4 → 1 fs
+    return text
 
 
 def downgrade_gpu_resident(conf_text: str, factor: int = 2) -> str:
@@ -698,6 +732,11 @@ binaryrestart      yes
 """
 
 
+# Minimum carved-cell water fill for GPU-resident to be attempted (below this the
+# sparse-cell exclusion count fails at step 0). See _segment_conf's gpu_resident gate.
+_RESIDENT_MIN_FILL = 0.90
+
+
 def _segment_conf(
     spec: SegmentSpec,
     name_stem: str,
@@ -707,6 +746,7 @@ def _segment_conf(
     minimize_steps: int = 0,
     fast: bool = False,
     carved: bool = False,
+    fill_fraction: float = 1.0,
     structure_psf: Optional[str] = None,
     colvars_file: Optional[str] = None,
     anchors_file: Optional[str] = None,
@@ -727,14 +767,16 @@ def _segment_conf(
     # The HMR PSF (heavy hydrogens) is valid ONLY with rigid bonds, so soft
     # segments fall back to the unmodified PSF; only the hard, fast segments use it.
     eff_psf = structure_psf if fast else None
-    # GPU-resident is a SEPARATE axis from fast.  A water-shell carve leaves vacuum
-    # in the cell, and NAMD 3 GPU-resident under-counts exclusions in a sparse cell
-    # ("Low global CUDA exclusion count!", fatal at step 0 — measured: it needs
-    # >=~90% water fill; even an 80%-filled cell dies).  A carved package therefore
-    # keeps HMR + rigidBonds all + 4 fs but runs the standard CUDA-offload path
-    # (nonbonded + PME still on the GPU), which is unaffected and, because the carve
-    # removes ~4x the atoms, is still the faster of the two.
-    gpu_resident = fast and not carved
+    # GPU-resident is a SEPARATE axis from fast.  NAMD 3 GPU-resident under-counts
+    # exclusions in a SPARSE cell ("Low global CUDA exclusion count!", fatal at step 0
+    # — measured: it needs >=~90% water fill; even an 80%-filled cell dies).  The old
+    # rule blanket-disabled resident on ANY water-shell carve, but that's over-broad: a
+    # TIGHT box the structure fills stays well-filled and runs resident even when carved,
+    # while only a BIG box with a concave shell (vacuum corners) fails.  So attempt
+    # resident when the carved cell is still well-filled (fill_fraction >= threshold) —
+    # the one-cycle GPU-resident pre-flight probe is the backstop that catches a wrong
+    # guess and downgrades to the standard CUDA-offload path.
+    gpu_resident = fast and (not carved or fill_fraction >= _RESIDENT_MIN_FILL)
     lines = [
         _common_header(
             name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
@@ -1243,6 +1285,25 @@ def _base_name_stem(package_dir: Path) -> str:
     return base[0].stem
 
 
+def _iter_packed_psf_pairs(lines: list[str], start_i: int, n_pairs: int, width: int):
+    """Yield ``n_pairs`` ``(a, b)`` index pairs from a PACKED fixed-width PSF section
+    (``!NBOND`` = (8I8) standard / (8I10) EXT, no separators).
+
+    Must NOT be parsed with ``str.split()``: a whitespace split only survives while every
+    index is narrower than its column (a leading space remains).  At >= 10M atoms an 8-digit
+    index fills an I8 column and two adjacent numbers merge into one token, so ``split()``
+    drops half of them and IndexErrors (the 2.85M shell never hit this; the ~11.8M full box
+    does).  Fixed-width slicing parses both small and large systems identically."""
+    read, li = 0, start_i
+    while read < n_pairs:
+        row = lines[li].rstrip()
+        nums = [int(row[c:c + width]) for c in range(0, len(row), width) if row[c:c + width].strip()]
+        for j in range(0, len(nums) - 1, 2):
+            yield nums[j], nums[j + 1]
+            read += 1
+        li += 1
+
+
 def write_hmr_psf(
     src_psf: Path,
     dst_psf: Path,
@@ -1310,16 +1371,11 @@ def write_hmr_psf(
         mass[aid] = float(m.group())
         span[aid] = (li, m.start(), m.end(), m.end() - m.start())
 
+    bond_w = 10 if "EXT" in lines[0].upper() else 8
     neigh: list[list[int]] = [[] for _ in range(n_atoms + 1)]
-    read, li = 0, nbond_i + 1
-    while read < n_bonds:
-        nums = lines[li].split()
-        for j in range(0, len(nums), 2):
-            a, b = int(nums[j]), int(nums[j + 1])
-            neigh[a].append(b)
-            neigh[b].append(a)
-            read += 1
-        li += 1
+    for a, b in _iter_packed_psf_pairs(lines, nbond_i + 1, n_bonds, bond_w):
+        neigh[a].append(b)
+        neigh[b].append(a)
 
     def _is_h(aid: int) -> bool:
         return 0.9 <= mass[aid] <= 1.5
@@ -1744,6 +1800,22 @@ def prepare_mgh_slow_release(
 
     water_shell_nm = water_shell_nm or 0.0
     carve_shell = water_shell_nm > 0
+    # Carved-cell fill fraction — a well-filled carve (tight box) can still run GPU-resident
+    # (see _segment_conf's gpu_resident gate). Uses the memoised dry profile (already built
+    # by the pre-flight sizing), so this adds no real cost. Best-effort → 1.0 on any miss.
+    resident_fill = 1.0                 # non-carved: irrelevant (gate uses `not carved`)
+    if carve_shell:
+        resident_fill = 0.0             # carved default = OLD behaviour (offload) unless
+        try:                            # we can positively prove the cell is well-filled
+            from backend.core.md_vram import (  # noqa: PLC0415
+                carve_fill_fraction, estimate_profile_from_design)
+            _prof = estimate_profile_from_design(
+                design, padding_nm=padding_nm, atomistic_model=atomistic_model)
+            if _prof:
+                resident_fill = carve_fill_fraction(
+                    _prof["dna_xyz_nm"], _prof["box_nm"], water_shell_nm)
+        except Exception:  # noqa: BLE001 — never fail prep on a fill estimate
+            resident_fill = 0.0
 
     zip_bytes = build_namd_solvated_package(
         design,
@@ -1924,7 +1996,8 @@ def prepare_mgh_slow_release(
     for spec in segments:
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
-                          fast=fast, carved=carve_shell, structure_psf=structure_psf,
+                          fast=fast, carved=carve_shell, fill_fraction=resident_fill,
+                          structure_psf=structure_psf,
                           anchors_file=anchors_file, field=field,
                           capture_vel_force=capture_vel_force)
         )

@@ -410,6 +410,112 @@ def test_host_oom_gives_up_after_resume_cap(
     assert final.failure_kind == "host_oom"
 
 
+# ── instability (RATTLE) auto-soften-and-resume ────────────────────────────────
+
+def _make_confs_hard(job: MdJob, tmp_path: Path) -> None:
+    """Give every segment conf the fast ladder's rigidBonds all + 4 fs, so the softener
+    has something to flip (the base _seg_conf_text has neither)."""
+    pkg = job.package_dir(tmp_path)
+    for seg in job.segments:
+        conf = pkg / f"{seg.name}.conf"
+        conf.write_text(conf.read_text() + "rigidBonds         all\ntimestep           4\n")
+
+
+def _install_instability_fake(
+    monkeypatch: pytest.MonkeyPatch, recorder: list[str] | None = None
+) -> None:
+    """Stub NAMD to blow up with a RATTLE constraint failure (rigid-bond instability),
+    the way a strained seed aborts when the restraint ladder loosens."""
+    monkeypatch.setattr(nr, "find_namd", lambda: "/fake/namd3")
+
+    async def fake_namd(
+        namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
+        on_spawn=None,
+    ):
+        if recorder is not None:
+            recorder.append(conf_name)
+        if on_spawn is not None:
+            on_spawn(4242)
+        (package_dir / "output").mkdir(exist_ok=True)  # step-0 death: no checkpoint
+        log_path.write_text(
+            "ENERGY: 0 300 300 1 1 100 1 1\n"
+            "ERROR: Constraint failure in RATTLE algorithm for atom 9409!\n"
+            "ERROR: Constraint failure; simulation has become unstable.\n"
+            "FATAL ERROR: Exiting prematurely; see error messages above.\n"
+        )
+        return 1, 4242
+
+    monkeypatch.setattr(nr, "_run_namd_async", fake_namd)
+
+
+def test_instability_softens_ladder_and_resumes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A RATTLE blow-up on the hard (rigidBonds all + 4 fs) ladder must SOFTEN every
+    remaining segment to rigidBonds none + 1 fs, keep a .conf.hard backup, and leave the
+    job RUNNING (resumable) so the supervisor relaunches it gently — not fail."""
+    job = _setup_package(tmp_path)
+    _mark_min_done(job, tmp_path)
+    _make_confs_hard(job, tmp_path)
+    job.save(tmp_path)
+    _install_instability_fake(monkeypatch)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    final = MdJob.load(job.job_id, tmp_path)
+    assert final.status == MdStatus.running
+    assert final.segments[0].status == "running"
+    assert final.segments[0].auto_resumes == 1
+    assert final.failure_kind is None
+    assert "soft" in (final.error or "").lower()
+
+    pkg = job.package_dir(tmp_path)
+    for seg in job.segments:               # failing + every later segment softened
+        text = (pkg / f"{seg.name}.conf").read_text()
+        assert "rigidBonds         none" in text
+        assert "timestep           1" in text
+        assert (pkg / f"{seg.name}.conf.hard").exists()
+
+
+def test_instability_gives_up_after_resume_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the (single) instability auto-resume is spent, a repeat RATTLE fails the job
+    (classified 'instability' → the gentler-relaxation Fix popup) instead of looping."""
+    job = _setup_package(tmp_path)
+    _mark_min_done(job, tmp_path)
+    _make_confs_hard(job, tmp_path)
+    job.segments[0].auto_resumes = nr.MAX_INSTABILITY_RESUMES
+    job.save(tmp_path)
+    _install_instability_fake(monkeypatch)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    final = MdJob.load(job.job_id, tmp_path)
+    assert final.status == MdStatus.failed
+    assert final.segments[0].status == "failed"
+    assert final.failure_kind == "instability"
+
+
+def test_instability_on_an_already_soft_segment_fails_without_looping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If a conf is ALREADY soft (no rigidBonds all) and STILL blows up, there is nothing
+    to soften → the job fails (seed genuinely un-relaxable) rather than resuming forever.
+    The resume counter is never bumped (softening rewrote nothing)."""
+    job = _setup_package(tmp_path)          # base confs have no rigidBonds all
+    _mark_min_done(job, tmp_path)
+    job.save(tmp_path)
+    _install_instability_fake(monkeypatch)
+
+    asyncio.run(nr.run_job(job, tmp_path))
+
+    final = MdJob.load(job.job_id, tmp_path)
+    assert final.status == MdStatus.failed
+    assert final.failure_kind == "instability"
+    assert final.segments[0].auto_resumes == 0
+
+
 def test_rerun_on_completed_job_is_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -61,7 +61,7 @@ from backend.core.md_prep_progress import (
     design_size_factor,
     write_prep_progress,
 )
-from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, pending_early_stop, reconcile_job_status, set_early_stop, start_job, stop_job
+from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, pending_early_stop, reconcile_job_status, resolve_gpu_decision, set_early_stop, start_job, stop_job
 from backend.core.md_vram import (
     detect_vram_mb,
     package_solvation_profile,
@@ -117,6 +117,15 @@ class CreateJobRequest(BaseModel):
                     "simulated ns per stage (step count halved), wall-clock ~4x shorter. "
                     "Set false (or untick in the UI) if a very large design fails the "
                     "first hard segment with a GPU out-of-memory error.",
+    )
+    gpu_fallback_policy: Optional[str] = Field(
+        None,
+        description="What to do if the fastest GPU (resident) mode can't start on this "
+                    "structure: 'ask' (DEFAULT — pause and ask the user, so an unattended "
+                    "run stops & notifies rather than silently slowing) or 'auto_offload' "
+                    "(auto-accept the ~3x slower GPU mode). None → the NADOC_GPU_FALLBACK "
+                    "env default ('ask'). Stored on the job; the UI remembers it in "
+                    "localStorage.",
     )
     production_timestep_fs: float = Field(
         4.0,
@@ -1262,6 +1271,31 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     return forecast(_workspace(), predicted)
 
 
+@router.post("/md/jobs/preflight-vram")
+async def preflight_md_vram(body: CreateJobRequest) -> dict:
+    """Pre-flight water-box SIZE verdict for a Relax launch, before any build (Gate A).
+
+    The panel calls this before ``POST /md/jobs`` (when the water shell is on auto) so it
+    can show the size gate: A1 (auto-fit a comfortable shell), A2 (only a tight shell
+    fits — ask), A3 (too large for this GPU — stop). Returns the ``recommend_downsize``
+    advice + ``tier``. Best-effort: a seeded job (design resolved later, at prep) or any
+    error returns ``{skipped:true, tier:"ok"}`` so the launch is never blocked.
+    """
+    from backend.core.md_vram import preflight_vram_advice
+
+    if body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id:
+        # Seeded job: the atomistic model is resolved later from the source job's
+        # snapshot, so pre-flight can't size it — prep's auto_water_shell still carves.
+        return {"skipped": True, "tier": "ok"}
+    try:
+        design = design_state.get_or_404()
+        return await run_in_threadpool(
+            preflight_vram_advice, design, padding_nm=body.padding_nm, devices=body.devices)
+    except Exception as exc:  # noqa: BLE001 — a preflight must never block a launch
+        logger.warning("preflight_md_vram failed (allowing launch): %s", exc)
+        return {"skipped": True, "tier": "ok"}
+
+
 def _psf_atom_count(psf_path: Path) -> int:
     """Total atom count from a PSF ``!NATOM`` header (0 if unreadable)."""
     if not psf_path.exists():
@@ -2250,6 +2284,29 @@ async def start_md_job(job_id: str) -> dict:
 
     start_job(job, _workspace())
     return {"ok": True, "job_id": job_id, "status": "running"}
+
+
+@router.post("/md/jobs/{job_id}/gpu-decision")
+async def resolve_md_gpu_decision(job_id: str, body: dict) -> dict:
+    """Resolve a Gate-B GPU-resident fallback decision on a paused job.
+
+    ``choice`` "offload" downgrades to the slower GPU mode and resumes; "cancel"
+    stops the job. The resume skips the resident probe (no conf still requests it).
+    """
+    choice = str((body or {}).get("choice", "")).strip()
+    if choice not in ("offload", "cancel"):
+        raise HTTPException(400, "choice must be 'offload' or 'cancel'")
+    job = _load_job(job_id)
+    if not job.decision:
+        raise HTTPException(400, "Job has no pending GPU decision")
+    try:
+        resolve_gpu_decision(job, choice, _workspace())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if choice == "offload":
+        start_job(job, _workspace())
+        return {"ok": True, "job_id": job_id, "status": "running"}
+    return {"ok": True, "job_id": job_id, "status": job.status.value}
 
 
 async def _start_runpod_job(job: MdJob) -> dict:

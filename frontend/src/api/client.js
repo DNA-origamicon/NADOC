@@ -2452,6 +2452,9 @@ export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs
 export const prepareMdDraft      = (id, body)    => _oxdnaJSON('POST', `/md/jobs/${id}/prepare`, body)
 /** Forecast free-disk-after for a NAMD relaxation run (same body as createMdJob). */
 export const estimateMdDisk      = (body)        => _oxdnaJSON('POST', '/md/jobs/estimate-disk', body)
+/** Pre-flight water-box size verdict for a Relax launch (Gate A). Returns
+ *  {tier:'ok'|'a1'|'a2'|'a3', ...recommend_downsize advice} or {skipped:true,tier:'ok'}. */
+export const preflightMdVram     = (body)        => _oxdnaJSON('POST', '/md/jobs/preflight-vram', body)
 /** Forecast free-disk-after for a NAMD production stage (same body as appendMdProduction). */
 export const estimateMdProductionDisk = (id, body) => _oxdnaJSON('POST', `/md/jobs/${id}/estimate-production-disk`, body)
 /** List NAMD/MD jobs (for the trajectory-keyframe dropdown). */
@@ -2517,6 +2520,9 @@ export const spawnMdProduction   = (id, body)    => _oxdnaJSON('POST',   `/md/jo
  *  so relax + production become separate entries. */
 export const revertMdProduction  = (id)          => _oxdnaJSON('POST',   `/md/jobs/${id}/revert-production`)
 export const refitMdJob          = (id, body)    => _oxdnaJSON('POST',   `/md/jobs/${id}/refit`, body)
+/** Resolve a paused job's GPU-resident fallback decision (Gate B). choice: "offload"
+ *  (run the slower GPU mode, then resume) or "cancel" (stop the job). */
+export const resolveMdGpuDecision = (id, choice)  => _oxdnaJSON('POST',   `/md/jobs/${id}/gpu-decision`, { choice })
 /** Live-display metadata for a job ({ready, config_path, …}). */
 export const getMdDisplayMeta    = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/display`)
 export const getMdJobMetrics     = (id)          => _oxdnaJSON('GET',    `/md/jobs/${id}/metrics`)

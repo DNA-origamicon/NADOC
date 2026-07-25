@@ -62,6 +62,115 @@ def test_classify_host_pinned_oom_not_vram():
     assert V.classify_failure_log("CUDA error cudaMalloc: out of memory") == "vram_oom"
 
 
+# ── Failure → UX description (Relax decision gates) ───────────────────────────
+
+def test_describe_failure_tile_list_bug_offers_newer_binary():
+    # The resident tile-list crash is the one a newer NAMD build fixes -> the ONLY
+    # kind with retry_other_binary True; it's a decision (offer slower GPU), not a stop.
+    log = (
+        "TCL: Running for 2400 steps\n"
+        "FATAL ERROR: CUDA error cudaStreamSynchronize(stream) in file "
+        "src/CudaTileListKernel.cu, function buildTileLists, line 1141\n"
+        " on Pe 8 device 0: an illegal memory access was encountered\n"
+    )
+    d = V.describe_failure(log)
+    assert d.kind == V.FAILURE_GPU_ERROR
+    assert d.severity == "decision"
+    assert d.retry_other_binary is True
+    assert d.degrade_target == "offload"
+    assert "buildTileLists" in d.technical_reason      # raw cause kept for logs
+    assert "buildTileLists" not in d.message           # never in the user message
+    assert "GPUresident" not in d.message
+
+
+def test_describe_failure_host_pinned_not_binary_fixable():
+    # A pinned-host OOM is a HOST limit — a newer binary can't fix it, so it must NOT
+    # advertise retry_other_binary, but it can still offer the slower GPU mode.
+    log = (
+        "FATAL ERROR: CUDA error cudaHostAlloc(pp, ...) in file src/CudaUtils.C, "
+        "function reallocate_host_T, line 208\n on Pe 2 device 0: out of memory\n"
+    )
+    d = V.describe_failure(log)
+    assert d.kind == V.FAILURE_HOST_OOM
+    assert d.severity == "decision"
+    assert d.retry_other_binary is False
+    assert d.degrade_target == "offload"
+
+
+def test_describe_failure_vram_oom_is_hard_stop():
+    d = V.describe_failure("CUDA error cudaMalloc: out of memory")
+    assert d.kind == V.FAILURE_VRAM_OOM
+    assert d.severity == "hard_stop"
+    assert d.degrade_target is None
+    assert d.retry_other_binary is False
+
+
+def test_describe_failure_instability_and_cellshrink_are_auto():
+    # Both are handled by NADOC's auto-resume — info note, never a modal.
+    assert V.describe_failure("ERROR: Margin is too small for 1 atoms").severity == "auto"
+    assert V.describe_failure(
+        "FATAL ERROR: Periodic cell has become too small").severity == "auto"
+
+
+def test_describe_failure_unknown_is_generic_decision():
+    d = V.describe_failure("MINIMIZER RESTARTING\nEnd of program")
+    assert d.kind == V.FAILURE_OTHER
+    assert d.severity == "decision"
+
+
+def test_describe_failure_file(tmp_path: Path):
+    p = tmp_path / "seg.log"
+    p.write_text("startup\nFATAL ERROR: CUDA error ... buildTileLists ...\n")
+    assert V.describe_failure_file(p).kind == V.FAILURE_GPU_ERROR
+
+
+# ── Pre-flight size gate (Gate A: A1 / A2 / A3) ───────────────────────────────
+
+def test_classify_vram_fit_tiers():
+    # full box fits -> no gate
+    assert V.classify_vram_fit({"current_atoms": 100, "max_atoms": 200}) == "ok"
+    # a comfortable (>=15 A) shell fits -> A1
+    assert V.classify_vram_fit({"current_atoms": 2_000_000, "max_atoms": 1_000_000,
+                                "feasible": True, "recommended_shell_nm": 1.5}) == "a1"
+    # only a tight (<15 A) shell fits -> A2
+    assert V.classify_vram_fit({"current_atoms": 2_000_000, "max_atoms": 1_000_000,
+                                "feasible": True, "recommended_shell_nm": 1.0}) == "a2"
+    # nothing fits -> A3 hard stop
+    assert V.classify_vram_fit({"current_atoms": 5_000_000, "max_atoms": 1_000_000,
+                                "feasible": False}) == "a3"
+
+
+def test_classify_vram_fit_missing_data_never_gates():
+    assert V.classify_vram_fit(None) == "ok"
+    assert V.classify_vram_fit({}) == "ok"
+    assert V.classify_vram_fit({"current_atoms": 9, "max_atoms": 0}) == "ok"  # unknown cap
+
+
+def test_carve_fill_fraction_tight_vs_big_box():
+    # A compact ~4 nm DNA blob; a shell carve fills a TIGHT box but leaves a BIG box
+    # mostly vacuum. This is exactly the resident-capable-vs-not distinction.
+    dna = [(x / 10, y / 10, z / 10)
+           for x in range(0, 40, 4) for y in range(0, 40, 4) for z in range(0, 40, 4)]
+    assert V.carve_fill_fraction(dna, (5.0, 5.0, 5.0), 0.0) == 1.0     # no carve = full
+    tight = V.carve_fill_fraction(dna, (5.5, 5.5, 5.5), 1.5)           # blob fills the box
+    big = V.carve_fill_fraction(dna, (20.0, 20.0, 20.0), 1.5)          # blob lost in vacuum
+    assert tight > 0.8            # well-filled → would attempt resident
+    assert big < 0.3              # sparse → stays offload
+    assert tight > big
+
+
+def test_preflight_vram_advice_skips_when_gpu_unreadable(monkeypatch):
+    monkeypatch.setattr(V, "detect_vram_mb", lambda *a, **k: None)
+    out = V.preflight_vram_advice(object(), devices="0")
+    assert out == {"skipped": True, "tier": "ok"}
+
+
+def test_preflight_vram_advice_skips_cpu_without_host(monkeypatch):
+    monkeypatch.setattr(V, "detect_host_ram_mb", lambda *a, **k: None)
+    out = V.preflight_vram_advice(object(), devices="cpu")
+    assert out["skipped"] is True and out["tier"] == "ok"
+
+
 # ── Error-line extraction (frontend cause surfacing) ──────────────────────────
 
 def test_extract_error_line_namd_fatal():
