@@ -239,6 +239,29 @@ False)` so the reconstruction depends ONLY on the oxDNA conf. Pinned by `tests/t
 (cluster rotation/translation/multi-cluster all reconstruct ~1× with WC intact). Guard in
 `build_atomistic_model_from_cg_spline` still raises on any >2× span blow-up as a safety net. See [[LESSONS]] K3.
 
+### 10.2 Seed backmap must RIGID-STAMP unpaired ssDNA (fixed 2026-07-20 — the VoltronCore seed failure)
+The oxDNA-seeded NAMD run for **VoltronCore** (job `5a90e8ceadc4`, seeded from oxDNA `5ce768ef2acf`)
+died at NAMD startup: `FATAL ERROR: Bad global angle count! (1697578 vs 1697584)` — NAMD's signature
+for **coincident atoms** (it can't distribute bonded terms through degenerate atoms; also showed as a
+32-dihedral deficit + BOND energy 1.6e8 in the k0.5 min log). The `failure_kind:"instability"` tag is a
+MISCLASSIFICATION — it's a structure-integrity abort, not a dynamics blow-up. The oxDNA relax itself
+COMPLETED clean; the damage was in the backmap. Root cause: `build_atomistic_model_from_cg_spline` placed
+every nucleotide by a fitted helix AXIS (`axis_override=deformed_helix_axes`). **Unpaired ssDNA — overhangs
+/ tails / unpaired scaffold loops — has no helix to fit**, so a folded ssDNA run's nucleotides (0.5–1.1 nm
+apart in the conf, e.g. h_XY_3_18 bp47↔bp67 at 1.14 nm) collapsed onto <0.05 Å-coincident atoms.
+VoltronCore carries **962 unpaired ssDNA nt (5.9%, ≈55 overhangs, SQUARE lattice)** → 37–55 coincident
+pairs → abort. This is the SAME root cause the DISPLAY path already fixed (§26c `_ssdna_frame_override`);
+the SEED path never got it. **Fix:** `build_atomistic_model_from_cg_spline` now also passes
+`frame_override=_ssdna_frame_override(design, full_map)` (lazy import — breaks the cg_to_atomistic↔oxdna_health
+cycle) so unpaired ssDNA is stamped from its oxDNA a1/a3 RIGID frame; duplex stays on the axis path (the
+rigid stamp collapses WC pairs, ssDNA has none). Duplex atoms byte-identical (fix strictly scoped to ssDNA).
+**Verified (CPU backmap, no sim): VoltronCore coincident 37→0**; 2hb_noT / 6hb_validated (295k atoms) /
+6hbx100_noT / 6hbx100_1xT (extra-base) all seed 0 coincident with AND without the fix — the workflow already
+worked for duplex-dominated designs; only substantial floppy ssDNA tripped it. Pin:
+`tests/test_cg_seed_ssdna_collapse.py` (hairpin-folds a plain 20-nt overhang; no-fix ~115 near-coincident,
+fix ~18; can-go-red in-process). Full end-to-end NAMD relaunch of VoltronCore still owes a test-dedicated
+session (heavy GPU) — the deterministic CAUSE of the abort is eliminated. See [[md-job-system]].
+
 ---
 
 ## 25. Hard surface + anchors + consolidated run + relax-on-surface (SHIPPED 2026-06-18, commit 0dcb838)

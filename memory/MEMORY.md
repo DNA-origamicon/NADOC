@@ -99,7 +99,9 @@ scaffold_router · seamless_router · dumbbell_autoscaffold · advanced_staple_d
 
 **Cluster submission (Alpine):** **alpine_cluster_submission** (read its "Resume model" block before touching resume)
 
-**MD (NAMD+oxDNA):** lammps_oxdna · oxpy_binding_patch · proteins_in_simulation · oxdna_efield ·
+**MD (NAMD+oxDNA):** **reference_local_namd_build** (USE the Dec-2025 git NAMD build, pinned via
+`NADOC_NAMD_BIN`; the 3.0.2 release crashes GPU-resident — read before any local NAMD run) ·
+lammps_oxdna · oxpy_binding_patch · proteins_in_simulation · oxdna_efield ·
 oxdna_relaxation · benchmark_tuning · md_engines_panel
 
 **MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel ·
@@ -127,7 +129,9 @@ pipeline_validation_log · session_handoff
 [architecture_decisions](architecture_decisions.md)) · btube_benchmark · periodic_cell · namd_solvate ·
 water_shell_carve · 3x4sq_md_run · exp30_18hb_production ·
 **extra_base_4fs_geometric_fixb** (24hb extra-base 4 fs: winning seed = GEOMETRIC build + Fix B heavy bases,
-NOT the oxDNA position-seed — that was the blocker; supersedes PIPELINE_4FS_EXTRA_BASES.md)
+NOT the oxDNA position-seed — that was the blocker; supersedes PIPELINE_4FS_EXTRA_BASES.md) ·
+**voltroncore_fullbox_bench** (11.3M-atom full-box GPU-resident RunPod bench: H100 SXM best value 3.7 ns/day $19/ns;
+4 traps incl. >10M-atom PSF needs EXT format, and minimize ms/step ≠ dynamics by ~2.7×)
 
 **Atomistic skip-site / GROMACS:** atomistic_skip_backbone · skip_site_gromacs_fix · langevin_heating ·
 gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export · sequence_clear_fix

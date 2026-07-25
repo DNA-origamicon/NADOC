@@ -249,6 +249,18 @@ def build_atomistic_model_from_cg_spline(
     # phase) against the BENT axis, not the ideal straight one — without this a
     # displaced helix collapses the twist and piles atoms together (seed clashes).
     axis_override = deformed_helix_axes(design, full_map, sigma=sigma)
+    # UNPAIRED ssDNA (overhangs / tails / unpaired scaffold loops) has no helix axis to
+    # fit, so the axis-derived placement above collapses distinct ssDNA nucleotides —
+    # 0.5-1.1 nm apart in the relaxed conf — onto near-coincident atoms.  NAMD then can't
+    # distribute the bonded terms through those degenerate atoms and aborts at startup with
+    # "Bad global angle count!" (VoltronCore: 962 ssDNA nt → 55 coincident atom pairs).
+    # Stamp each unpaired nucleotide from its oxDNA a1/a3 RIGID frame instead — exactly the
+    # fix the display path already uses (oxdna_health._ssdna_frame_override); the formed
+    # duplex stays on the axis path (the rigid stamp collapses WC pairs, ssDNA has none).
+    # Lazy import breaks the cg_to_atomistic <-> oxdna_health cycle (oxdna_health imports
+    # deformed_helix_axes from this module).
+    from backend.core.oxdna_health import _ssdna_frame_override
+    ssdna_override = _ssdna_frame_override(design, full_map)
     # apply_design_geometry=False: the CG override already gives each nucleotide's FINAL
     # world position (deformed + cluster-transformed, then oxDNA-relaxed).  Letting
     # build_atomistic_model re-apply the design's deformations/cluster transforms on top
@@ -256,7 +268,7 @@ def build_atomistic_model_from_cg_spline(
     # The seed is a pure function of the oxDNA positions; pre-oxDNA transforms don't apply.
     model = build_atomistic_model(
         design, nuc_pos_override=pos_override, axis_override=axis_override,
-        apply_design_geometry=False)
+        frame_override=ssdna_override, apply_design_geometry=False)
 
     # Safety net: the reconstruction must preserve the CG structure's extent.  If a
     # future seed still blows up (e.g. an unwrapped/torn conf), fail with an actionable
