@@ -166,8 +166,19 @@ class TestRoutes:
         assert entry["size_bytes"] is None or entry["size_bytes"] >= 2048
         assert entry["archived"] is False
         warm_dir_sizes([job.job_dir(ws)])   # what the scheduled background task does
-        entry2 = next(e for e in c.get("/api/md/jobs").json() if e["job_id"] == job.job_id)
-        assert entry2["size_bytes"] >= 2048
+        # The list endpoint's own fire-and-forget warm (from the cold GET above) may
+        # still hold the _warming claim on this dir, in which case our warm_dir_sizes()
+        # dedups to a no-op and the size fills in a beat later once that walk finishes.
+        # The feature is eventually-consistent by design, so poll rather than assume a
+        # single call populated the cache synchronously (the source of a full-suite flake).
+        size = None
+        for _ in range(100):
+            size = next(e for e in c.get("/api/md/jobs").json()
+                        if e["job_id"] == job.job_id)["size_bytes"]
+            if size is not None:
+                break
+            time.sleep(0.02)
+        assert size is not None and size >= 2048
 
     def test_oxdna_archive_unarchive_via_api(self, client, tmp_path) -> None:
         c, ws = client
