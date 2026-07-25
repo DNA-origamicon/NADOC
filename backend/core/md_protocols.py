@@ -1371,7 +1371,18 @@ def write_hmr_psf(
         mass[aid] = float(m.group())
         span[aid] = (li, m.start(), m.end(), m.end() - m.start())
 
-    bond_w = 10 if "EXT" in lines[0].upper() else 8
+    # Detect the packed bond-column width from the DATA rather than the "EXT" flag: NADOC
+    # emits BOTH widths — psfgen-built PSFs use CHARMM-standard I10 under EXT, but the
+    # tool-free `namd_helpers._complete_psf_from_stub` packs bonds at I8 even under an EXT
+    # header (and with a variable count per line).  Assuming I10 from the flag mis-slices
+    # the I8 form (two adjacent indices land in one 10-char slice → int() ValueError).
+    # Right-justified fixed-width fields put consecutive integers exactly `width` apart, so
+    # the gap between the first two integer ends IS the column width.  Falls back to the EXT
+    # heuristic only when the row has <2 separable integers — the >=10M-atom I8 case where
+    # digits merge with no separator, which fixed-width slicing at the flagged width handles.
+    _first = lines[nbond_i + 1].rstrip() if nbond_i + 1 < len(lines) else ""
+    _ends = [m.end() for m in re.finditer(r"\d+", _first)]
+    bond_w = (_ends[1] - _ends[0]) if len(_ends) >= 2 else (10 if "EXT" in lines[0].upper() else 8)
     neigh: list[list[int]] = [[] for _ in range(n_atoms + 1)]
     for a, b in _iter_packed_psf_pairs(lines, nbond_i + 1, n_bonds, bond_w):
         neigh[a].append(b)
