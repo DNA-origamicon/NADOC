@@ -18,6 +18,7 @@ topology.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -518,43 +519,88 @@ def production_twist_series(
             "equilibrated": detect_equilibration(per_frame)}
 
 
-_COUNT_CACHE: dict = {}          # (path, size, mtime_ns) -> frame count (bounded below)
+# path -> {size, reported, offset, count, anchor}: an INCREMENTAL frame-count memo.
+#   offset   byte position of the last line boundary already counted
+#   count    frames strictly before `offset`
+#   anchor   the bytes just before `offset` — proves the prefix we counted is unchanged
+#   size     file size when `reported` was last computed (stat-only fast path)
+_COUNT_CACHE: dict = {}
 _COUNT_CACHE_MAX = 512
+_COUNT_CHUNK = 1 << 20           # 1 MiB scan chunk
+_COUNT_ANCHOR = 4096             # bytes of counted-prefix kept to detect a rewrite
+
+
+def _scan_frames(fh, start: int, count: int) -> tuple[int, int, bytes]:
+    """Count ``t `` frame headers from byte *start* to EOF, resuming at *count*.
+
+    Returns ``(frames_before_boundary, boundary_offset, trailing_partial_line)``.
+    The trailing fragment (a line with no terminating newline — the frame oxDNA is
+    still writing) is deliberately left uncounted at the boundary so the next
+    incremental scan can resume on a clean line edge."""
+    fh.seek(start)
+    pos, n, tail = start, count, b""
+    while True:
+        chunk = fh.read(_COUNT_CHUNK)
+        if not chunk:
+            break
+        buf = tail + chunk           # buf begins at byte `pos`
+        lines = buf.split(b"\n")
+        tail = lines.pop()           # possibly-truncated final line
+        n += sum(1 for ln in lines if ln.startswith(b"t "))
+        pos += len(buf) - len(tail)
+    return n, pos, tail
 
 
 def count_trajectory_frames(traj_path) -> int:
     """Fast, memory-light frame count of an oxDNA ``.dat`` trajectory — the number of
     ``t = …`` header lines (frames are split on those, see
-    ``read_trajectory_frames_full``).  Streams the file line by line so a multi-GB
+    ``read_trajectory_frames_full``).  Streams the file in chunks so a multi-GB
     trajectory isn't materialised; used to size the metric-compute progress bar/ETA
     without paying the full per-nucleotide parse twice.
 
-    Memoized by file signature: the composite-trajectory build counts every ancestor
-    stage's frames on EVERY load (to size the per-stage stride), so re-streaming a
-    multi-hundred-MB ancestor file each time a sibling is viewed was a real slice of the
-    load.  A still-writing file's signature changes as it grows → it is recounted."""
+    **Incrementally memoized.**  The composite-trajectory build counts every ancestor
+    stage's frames on EVERY load (to size the per-stage stride), and the export card
+    re-asks whenever the panel re-renders — so re-streaming a multi-hundred-MB file per
+    call was pinning the backend at ~500 MB/s while a job ran (it starved oxDNA's CUDA
+    host thread and pushed every other request past the frontend's slow-request popup).
+    Unchanged size → stat-only hit.  A file that has GROWN is scanned only over its new
+    tail, so the live stage's still-growing trajectory costs one chunk per poll instead
+    of a full re-read.  Truncation, or a rewrite that changed the bytes before the
+    resume point (a restarted stage rewinds to ``t = 0``), falls back to a full recount."""
     from pathlib import Path
     p = Path(traj_path)
     try:
-        st = p.stat()
-        key = (str(p), st.st_size, st.st_mtime_ns)
+        size = p.stat().st_size
     except OSError:
         return 0
-    hit = _COUNT_CACHE.get(key)
-    if hit is not None:
-        return hit
-    n = 0
+    if size <= 0:
+        return 0
+    key = str(p)
+    ent = _COUNT_CACHE.get(key)
+    if ent is not None and ent["size"] == size:
+        return ent["reported"]
     try:
-        with p.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                if line.startswith("t "):
-                    n += 1
+        with p.open("rb") as fh:
+            start, base = 0, 0
+            if ent is not None and 0 < ent["offset"] <= size:
+                # Resume only if the prefix we already counted is byte-identical.
+                a0 = max(0, ent["offset"] - _COUNT_ANCHOR)
+                fh.seek(a0)
+                if fh.read(ent["offset"] - a0) == ent["anchor"]:
+                    start, base = ent["offset"], ent["count"]
+            n, pos, tail = _scan_frames(fh, start, base)
+            # A dangling header with no newline yet is reported (parity with a plain
+            # line-wise count) but NOT committed to the resume point.
+            reported = n + (1 if tail.startswith(b"t ") else 0)
+            fh.seek(max(0, pos - _COUNT_ANCHOR))
+            anchor = fh.read(pos - max(0, pos - _COUNT_ANCHOR))
     except OSError:
         return 0
-    _COUNT_CACHE[key] = n
+    _COUNT_CACHE[key] = {"size": size, "reported": reported,
+                         "offset": pos, "count": n, "anchor": anchor}
     if len(_COUNT_CACHE) > _COUNT_CACHE_MAX:
         _COUNT_CACHE.pop(next(iter(_COUNT_CACHE)), None)   # drop oldest (insertion order)
-    return n
+    return reported
 
 
 def differential_profile(sim_profile, analytic_profile):
@@ -2433,7 +2479,11 @@ def _aligned_downsampled_frames(design, stages, reference_conf_path, max_frames:
         return p
 
     def _keep_for(e):
-        return max(1, round(e * max_frames / total)) if total > max_frames else e
+        # max_frames <= 0 → UNLIMITED (the full-trajectory view): keep every written
+        # frame, no stride.  Otherwise share the budget across stages as before.
+        if max_frames <= 0 or total <= max_frames:
+            return e
+        return max(1, round(e * max_frames / total))
     total_kept = sum(_keep_for(e) for e in eff_lens if e > 0)   # progress denominator
     if n_trailing_extra > 0 and trailing_extra_strand_length > 0:
         total_kept += 1  # raw frame 0 supplies capture coordinates for the design seed
@@ -2605,12 +2655,13 @@ def composite_trajectory(
 
 def _count_dat_frames(path) -> int:
     """Count configurations in an oxDNA trajectory .dat by its frame headers
-    (each frame starts with a ``t = …`` line). Cheap — no coordinate parsing."""
-    try:
-        with open(path) as fh:
-            return sum(1 for line in fh if line.startswith("t "))
-    except OSError:
-        return 0
+    (each frame starts with a ``t = …`` line). Cheap — no coordinate parsing.
+
+    Thin alias for :func:`count_trajectory_frames`: this used to be a second,
+    UN-memoized copy of that scan, so ``composite_trajectory_meta`` re-read every
+    ancestor stage's trajectory (~1.4 GB on a lineage with three relax stages) on
+    every call and bypassed the cache added to stop exactly that."""
+    return count_trajectory_frames(path)
 
 
 def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
@@ -2649,7 +2700,10 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
         c = s["count"]
         if c <= 0:
             continue
-        keep = max(1, round(c * max_frames / total)) if total > max_frames else c
+        # Mirrors _aligned_downsampled_frames._keep_for, including the
+        # max_frames <= 0 → UNLIMITED case, so the slider matches the payload.
+        keep = c if (max_frames <= 0 or total <= max_frames) \
+            else max(1, round(c * max_frames / total))
         if out_n:
             markers.append({"frame": out_n, "label": s.get("marker_label") or f"→ {s['kind']}",
                             "kind": s["kind"], "stage_name": s["name"]})
@@ -2660,8 +2714,12 @@ def composite_trajectory_meta(design, stages, max_frames: int = 200) -> dict:
             "stages": out_stages, "markers": markers}
 
 
-def _frame_atomistic_overrides(design, frame: dict):
+def _frame_atomistic_overrides(design, frame: dict, base_orient: str = "design_axis"):
     """Build (nuc_pos_override, axis_override) for one relaxed/trajectory frame.
+
+    ``base_orient`` is forwarded to ``deformed_helix_axes`` and selects the base
+    stacking-axis source for the DUPLEX path (``"oxdna_a3"`` = oxDNA's own a3, which
+    removes the ~12° off-axis tilt the design-axis tangent carries; see that function).
 
     Positions each nucleotide at its true backbone site reconstructed from the oxDNA
     CM (``oxdna_backbone_site``), and supplies a Gaussian-smoothed DEFORMED helix
@@ -2669,14 +2727,20 @@ def _frame_atomistic_overrides(design, frame: dict):
     (``_atom_frame`` measures the radial vs the centerline) — the validated
     reconstruction the NAMD-seed path uses.
 
-    NOTE — why NOT the per-nucleotide oxDNA a1/a3 rigid-frame placer: that placer
+    NOTE — why NOT the full per-nucleotide oxDNA a1/a3 rigid-frame placer: that placer
     (``build_atomistic_model(frame_override=…)``, the 2026-06-21 first cut) collapsed
     base pairs on real relaxed frames (WC C1'–C1' 0.48 nm vs 0.94 nm here) because
     oxDNA's relaxed a1 does not map onto the all-atom base direction the calibration
-    assumed.  The axis-derived path below reproduces correct B-DNA pairing/stacking,
-    so DISPLAY uses it; the long sequential O3'→P bonds are handled separately by
-    ``close_backbone=True`` (display-only backbone closure), which made the σ
-    per-domain position smoother (a prior band-aid) unnecessary."""
+    assumed, AND each base was stamped to its OWN a3 (FWD/REV a3 are only ~157° apart —
+    real propeller — so per-base stamping tilts the two half-bases inconsistently and
+    folds them together).  The axis-derived path below keeps the radial/position
+    machinery (correct WC pairing) and instead corrects only the base STACKING axis
+    (``e_z``) via ``base_orient`` (see ``deformed_helix_axes``): ``"oxdna_a3"`` (the
+    DISPLAY default) uses the pair's SHARED a3 (``a3_fwd − a3_rev``), which removes the
+    ~12° off-axis tilt of the ``design_axis`` centerline tangent while preserving
+    pairing (measured 0.96 nm, no collapse).  The long sequential O3'→P bonds are
+    handled separately by ``close_backbone=True`` (display-only backbone closure),
+    which made the σ per-domain position smoother (a prior band-aid) unnecessary."""
     from backend.physics.oxdna_interface import (
         oxdna_backbone_site, _XB_SENTINEL, is_extension_key, is_synthetic_nuc_key,
     )
@@ -2725,7 +2789,7 @@ def _frame_atomistic_overrides(design, frame: dict):
         key: oxdna_backbone_site(rec["backbone_position"], rec["a1"], rec["a3"])
         for key, rec in frame3.items()
     }
-    axis_override = deformed_helix_axes(design, frame3, sigma=2.0)
+    axis_override = deformed_helix_axes(design, frame3, sigma=2.0, base_orient=base_orient)
     return nuc_pos_override, axis_override, xb_pos_override, ext_pos_override
 
 
@@ -2861,8 +2925,16 @@ def _ssdna_frame_override(design, frame: dict) -> dict:
     return fo
 
 
+# Base stacking-axis source for the relaxed-frame DISPLAY + trajectory-export
+# reconstruction (NOT the clash-tuned NAMD seed).  "oxdna_a3" uses oxDNA's own a3
+# vectors for e_z, removing the ~12° off-axis tilt the design-axis tangent injects
+# (which pushed the displayed base inclination into the A-form range).  Override with
+# NADOC_ATOMISTIC_BASE_ORIENT=design_axis (+ server restart) to revert to the old look.
+_DISPLAY_BASE_ORIENT = os.environ.get("NADOC_ATOMISTIC_BASE_ORIENT", "oxdna_a3")
+
+
 def build_display_model(design, frame: dict, frame_sink: dict | None = None,
-                        close_backbone: bool = True):
+                        close_backbone: bool = True, base_orient: str | None = None):
     """The canonical relaxed-frame DISPLAY reconstruction — ONE builder shared by the
     atomistic/surface display sinks AND the validation audit, so what's measured is
     exactly what's drawn.  Axis-derived base placement (correct WC pairing/stacking)
@@ -2870,12 +2942,16 @@ def build_display_model(design, frame: dict, frame_sink: dict | None = None,
     identical to ``build_atomistic_model(design)`` (overrides change positions, never
     topology), so the renderer's serial-keyed bond list stays valid.
 
-    ``frame_sink`` (out-param): if given, receives ``{(h,bp,dir,copy): (origin, R)}``
-    — the per-nucleotide UNDEFORMED rigid frame — for the fast display path
-    (``display_frames_payload``)."""
+    ``base_orient`` (default ``_DISPLAY_BASE_ORIENT``) picks the duplex base
+    stacking-axis source — ``"oxdna_a3"`` restores the ideal-build base orientation
+    from oxDNA's a3 (fixes the A-form-range display tilt); ``"design_axis"`` is the
+    legacy off-axis tangent.  ``frame_sink`` (out-param): if given, receives
+    ``{(h,bp,dir,copy): (origin, R)}`` — the per-nucleotide UNDEFORMED rigid frame —
+    for the fast display path (``display_frames_payload``)."""
     from backend.core.atomistic import build_atomistic_model
+    orient = base_orient if base_orient is not None else _DISPLAY_BASE_ORIENT
     (nuc_pos_override, axis_override,
-     xb_pos_override, ext_pos_override) = _frame_atomistic_overrides(design, frame)
+     xb_pos_override, ext_pos_override) = _frame_atomistic_overrides(design, frame, base_orient=orient)
     # Anchor floppy UNPAIRED ssDNA (overhangs/tails/loops) at its true relaxed pose via the
     # a1/a3 rigid stamp — the axis-derived path has no helix to fit there and flings it tens
     # of nm off.  Paired duplex stays on the axis path (correct WC pairing).
@@ -3088,28 +3164,63 @@ def composite_trajectory_atomistic(design, stages, reference_conf_path,
                                    frame_indices, max_frames: int = 200,
                                    align: bool = True,
                                    n_trailing_extra: int = 0,
-                                   trailing_extra_strand_length: int = 0) -> dict:
+                                   trailing_extra_strand_length: int = 0,
+                                   progress=None) -> dict:
     """Per-frame atomistic flat-XYZ for the requested composite-frame indices.
     Returns ``{ "<idx>": [x0,y0,z0, …] }`` — the SAME wire format as
     ``/design/features/atomistic-batch`` (atom-serial order, nm). Frame indices
-    match ``composite_trajectory``'s ``frames`` ordering exactly."""
+    match ``composite_trajectory``'s ``frames`` ordering exactly.
+
+    ``progress(done, total)`` (optional) fires after each frame's rebuild. The rebuild
+    is the long pole for a big export — without a callback the caller's progress bar
+    has nothing to report for minutes and reads as a hung job. It is NOT called for
+    the alignment pass below, which is a single opaque unwrap+fit with no frame loop.
+
+    Materialises EVERY requested frame at once (~4 MB per 100k atoms), so a large range
+    is a large dict. Callers that consume frames one at a time — the trajectory-range
+    export — should use ``iter_composite_trajectory_atomistic`` instead."""
+    return {str(idx): flat for idx, flat in iter_composite_trajectory_atomistic(
+        design, stages, reference_conf_path, frame_indices, max_frames=max_frames,
+        align=align, n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length, progress=progress)}
+
+
+def iter_composite_trajectory_atomistic(design, stages, reference_conf_path,
+                                        frame_indices, max_frames: int = 200,
+                                        align: bool = True,
+                                        n_trailing_extra: int = 0,
+                                        trailing_extra_strand_length: int = 0,
+                                        progress=None, cache: bool = True):
+    """Streaming sibling of ``composite_trajectory_atomistic``: yields ``(idx, flat)`` one
+    frame at a time, in ascending index order, so a consumer can write each frame out and
+    drop it instead of holding the whole range in memory.
+
+    ``cache=False`` skips the shared display-output cache. A 51-frame export of a 330k-atom
+    design is ~50 M elements against a 6 M budget, so caching it evicts the entire live
+    display cache to retain ~6 export frames nobody will request again — all cost, no hit.
+    Interactive callers (which re-request the frames they just scrubbed) keep ``cache=True``.
+    """
     _, ordered, _, _ = _aligned_downsampled_frames(
         design, stages, reference_conf_path, max_frames, copies=True, align=align,
         n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length)
     akey = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
             bool(align), int(n_trailing_extra), int(trailing_extra_strand_length))
-    out: dict[str, list] = {}
-    for idx in sorted(set(int(i) for i in frame_indices)):
-        if idx < 0 or idx >= len(ordered):
-            continue
-        ck = ("cta", akey, idx)
-        payload = _display_out_get(ck)
-        if payload is None:
-            payload = frame_atomistic_flat(design, ordered[idx])
-            _display_out_put(ck, payload)
-        out[str(idx)] = payload
-    return out
+    wanted = sorted(set(int(i) for i in frame_indices))
+    # Count against every requested index (not just the in-range ones) so a range that
+    # overruns the trajectory still walks the bar to 100% instead of stopping short.
+    for done, idx in enumerate(wanted, start=1):
+        if 0 <= idx < len(ordered):
+            ck = ("cta", akey, idx)
+            payload = _display_out_get(ck) if cache else None
+            if payload is None:
+                payload = frame_atomistic_flat(design, ordered[idx])
+                if cache:
+                    _display_out_put(ck, payload)
+            yield idx, payload
+        # Fires as the consumer asks for the next frame, i.e. once frame `idx` is written.
+        if progress:
+            progress(done, len(wanted))
 
 
 def composite_trajectory_surface(design, stages, reference_conf_path, frame_indices,

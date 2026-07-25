@@ -5,6 +5,7 @@ import {
   frameToPct, pctToFrame, segmentsSpanned, rangeSummary,
   runBoundaries, snapValue, chimeraxOpenCommand,
   exportPhaseLabel, exportProgressView,
+  chimeraxOpenDcdCommand, dcdStemFromZipName, FORMAT_LABEL,
 } from './oxdna_export_card.js'
 
 // A stub runConfigForJob: reads test-friendly fields off the job.
@@ -245,20 +246,71 @@ describe('chimeraxOpenCommand (Direct-to-ChimeraX popup command)', () => {
 })
 
 describe('exportPhaseLabel / exportProgressView (live export bar)', () => {
-  it('labels the two backend phases and falls back for anything else', () => {
+  it('labels the backend phases and falls back for anything else', () => {
     expect(exportPhaseLabel('align')).toBe('Aligning frames')
+    expect(exportPhaseLabel('frames')).toBe('Building frames')
+    expect(exportPhaseLabel('atoms')).toBe('Rebuilding atoms')
     expect(exportPhaseLabel('write')).toBe('Writing PDB')
     expect(exportPhaseLabel(undefined)).toBe('Building')
   })
-  it('computes pct + label from a progress payload', () => {
-    expect(exportProgressView({ done: 45, total: 200, phase: 'align' }))
-      .toEqual({ pct: 23, text: 'Aligning frames — 45/200 frames · 23%' })
+  it('computes pct + label from a counting progress payload', () => {
+    expect(exportProgressView({ done: 45, total: 200, phase: 'atoms' }))
+      .toEqual({ pct: 23, indeterminate: false, text: 'Rebuilding atoms — 45/200 frames · 23%' })
     expect(exportProgressView({ done: 120, total: 120, phase: 'write' }))
-      .toEqual({ pct: 100, text: 'Writing PDB — 120/120 frames · 100%' })
+      .toEqual({ pct: 100, indeterminate: false, text: 'Writing PDB — 120/120 frames · 100%' })
+  })
+  // The align pass never advances `done` — a percentage there is a frozen 0% that reads as a
+  // hung export, so it must come back indeterminate (full-width barber-pole) instead.
+  it('reports the align phase as indeterminate, never as a stalled 0%', () => {
+    const v = exportProgressView({ done: 0, total: 51, phase: 'align' })
+    expect(v.indeterminate).toBe(true)
+    expect(v.pct).toBe(100)
+    expect(v.text).toContain('Aligning 51 frames')
+    expect(v.text).not.toContain('0%')
+  })
+  it('still describes the align phase when the frame total is unknown', () => {
+    const v = exportProgressView({ done: 0, total: 0, phase: 'align' })
+    expect(v.indeterminate).toBe(true)
+    expect(v.text).toContain('Aligning the trajectory')
   })
   it('clamps and handles a zero/empty total gracefully', () => {
-    expect(exportProgressView({ done: 0, total: 0 })).toEqual({ pct: 0, text: 'Preparing…' })
-    expect(exportProgressView(null)).toEqual({ pct: 0, text: 'Preparing…' })
+    expect(exportProgressView({ done: 0, total: 0 }))
+      .toEqual({ pct: 0, indeterminate: false, text: 'Preparing…' })
+    expect(exportProgressView(null))
+      .toEqual({ pct: 0, indeterminate: false, text: 'Preparing…' })
     expect(exportProgressView({ done: 999, total: 100, phase: 'write' }).pct).toBe(100)
+  })
+})
+
+describe('PDB+DCD export format (ChimeraX two-file flow)', () => {
+  // A DCD carries coordinates with NO bonding, so the topology PDB must be opened first and
+  // the trajectory attached to it. Emitting the multi-frame PDB one-liner for a DCD would
+  // load a structure with no frames — silently wrong, not an error.
+  it('opens the topology first, then attaches the trajectory to it', () => {
+    expect(chimeraxOpenDcdCommand('run_frames0-50')).toBe(
+      'open "run_frames0-50.pdb"\nopen "run_frames0-50.dcd" structureModel #1')
+  })
+  it('emits an editable placeholder before any export has run', () => {
+    expect(chimeraxOpenDcdCommand(null)).toContain('PATH_TO_YOUR_EXPORT.pdb')
+    expect(chimeraxOpenDcdCommand('')).toContain('PATH_TO_YOUR_EXPORT.dcd')
+  })
+  it('escapes embedded quotes so a pasted path survives', () => {
+    expect(chimeraxOpenDcdCommand('a b/x"y')).toBe(
+      'open "a b/x\\"y.pdb"\nopen "a b/x\\"y.dcd" structureModel #1')
+  })
+
+  it('recovers the shared basename from the downloaded archive name', () => {
+    expect(dcdStemFromZipName('VoltronCore_frames0-50_chimerax.zip')).toBe('VoltronCore_frames0-50')
+    expect(dcdStemFromZipName('plain.zip')).toBe('plain')
+    expect(dcdStemFromZipName('no_suffix')).toBe('no_suffix')
+    expect(dcdStemFromZipName(null)).toBe(null)
+  })
+  it('is case-insensitive about the archive suffix', () => {
+    expect(dcdStemFromZipName('Run_frames1-9_CHIMERAX.ZIP')).toBe('Run_frames1-9')
+  })
+
+  it('names every format the card can request', () => {
+    expect(Object.keys(FORMAT_LABEL).sort()).toEqual(['dcd', 'oxdna', 'pdb'])
+    expect(FORMAT_LABEL.dcd).toContain('DCD')
   })
 })

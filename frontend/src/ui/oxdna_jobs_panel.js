@@ -61,6 +61,26 @@ export function formatProgress(job, progress) {
   return { pct: Math.round(frac * 100), done, total }
 }
 
+// One oxDNA trajectory config is ~130 text bytes per nucleotide plus a 3-line header.
+// MUST track backend/core/disk_guard.py's _OXDNA_CONF_BYTES_PER_NT / _HEADER_BYTES —
+// this hint and the pre-launch disk forecast should quote the same number.
+const OXDNA_CONF_BYTES_PER_NT = 130
+const OXDNA_CONF_HEADER_BYTES = 80
+
+/**
+ * Pure: what a production run's trajectory will cost, given total steps, the
+ * steps-per-frame (oxDNA's print_conf_interval) and the design's nucleotide count.
+ * Returns { frames, bytes } — bytes is 0 when the nucleotide count is unknown, which
+ * the caller renders as "size unknown" rather than a confident 0 B.
+ */
+export function trajectoryFrameEstimate(steps, stepsPerFrame, nNucleotides) {
+  const s = Number(steps), spf = Number(stepsPerFrame), nt = Number(nNucleotides)
+  if (!isFinite(s) || !isFinite(spf) || s <= 0 || spf < 1) return { frames: 0, bytes: 0 }
+  const frames = Math.floor(s / spf)
+  if (!isFinite(nt) || nt <= 0) return { frames, bytes: 0 }
+  return { frames, bytes: frames * (nt * OXDNA_CONF_BYTES_PER_NT + OXDNA_CONF_HEADER_BYTES) }
+}
+
 /** Pure: human ETA from seconds ("45s" / "2m 30s" / "1h 5m"); '' when unknown. */
 export function formatEta(seconds) {
   if (seconds == null || !isFinite(seconds) || seconds < 0) return ''
@@ -119,6 +139,16 @@ const _STAGE_GLYPH = { done: '●', failed: '✗', running: '○', pending: '·'
 export function jobHasFailure(job) {
   if (!job) return false
   return job.status === 'failed' || (job.stages || []).some(s => s.status === 'failed')
+}
+
+/** Pure: the identity+state fingerprint that decides whether the panel re-announces
+ *  its selection (`nadoc:oxdna-job-selected`).  Listeners of that event do real work
+ *  — the export card counts frames across the whole job lineage — so it must be
+ *  EDGE-triggered, not fired on every 1.5 s poll re-render.  Empty string for "no
+ *  job": a deselect always announces. */
+export function jobSelectionSignature(job) {
+  if (!job) return ''
+  return `${job.job_id}|${job.status}|${(job.stages || []).map(s => s.status).join(',')}`
 }
 
 /** Pure: build the text shown in the error-log popup from the /error-log payload.
@@ -405,6 +435,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const runBtn        = document.getElementById('oxdna-jobs-run-btn')
   const prodBtn       = document.getElementById('oxdna-jobs-prod-btn')
   const prodStepsInput = document.getElementById('oxdna-jobs-prod-steps')
+  const prodSpfInput   = document.getElementById('oxdna-jobs-prod-steps-per-frame')
+  const prodFramesHint = document.getElementById('oxdna-jobs-prod-frames-hint')
   const prodStatus    = document.getElementById('oxdna-jobs-prod-status')
   const autorefineBtn     = document.getElementById('oxdna-jobs-autorefine-btn')
   const autorefineStopBtn = document.getElementById('oxdna-jobs-autorefine-stop-btn')
@@ -458,6 +490,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const seedBtn       = document.getElementById('oxdna-jobs-seed-btn')
   const seedStatus    = document.getElementById('oxdna-jobs-seed-status')
   const trajToggle    = document.getElementById('oxdna-jobs-traj-toggle')
+  const trajFullToggle = document.getElementById('oxdna-jobs-traj-full-toggle')
   const trajStatus    = document.getElementById('oxdna-jobs-traj-status')
   const trajControls  = document.getElementById('oxdna-jobs-traj-controls')
   const trajPlay      = document.getElementById('oxdna-jobs-traj-play')
@@ -475,7 +508,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // lost trajectory, live-mode takeover, design edit).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, trajToggle, autorefineDevToggle].some(t => t?.checked)
+    const anyOn = [displayToggle, flexToggle, trajToggle, trajFullToggle, autorefineDevToggle]
+      .some(t => t?.checked)
     if (!anyOn) vizOffRadio.checked = true
   }
 
@@ -1246,6 +1280,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (bpGateInput && a.bpGate != null) bpGateInput.value = String(a.bpGate)
     }
     if (prodStepsInput && cfg.prodSteps != null) prodStepsInput.value = String(cfg.prodSteps)
+    _renderFramesHint()   // steps changed → re-derive the frame count / size line
     // Alignment is disallowed for surface jobs — the backend forces it off (a Kabsch
     // superpose onto the design pose makes the relaxed structure look like it clips through
     // the surface). Reflect that in the toggle so the user isn't misled.
@@ -1268,6 +1303,34 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     applyRunConfig?.({ advanced: null, field: null, surface: null, anchors: [] }, null)
   }
 
+  // ── Trajectory-density hint (Advanced card) ────────────────────────────────
+  // "Steps / frame" is oxDNA's print_conf_interval: how often the run writes a
+  // trajectory frame.  It is ABSOLUTE, so doubling the run doubles the frames rather
+  // than halving the resolution — which also means the disk cost scales with run
+  // length.  The hint line makes both consequences visible BEFORE launching.
+  function _stepsPerFrame() {
+    const v = parseInt(prodSpfInput?.value || '10000', 10)
+    return Number.isFinite(v) && v >= 1 ? v : 10000
+  }
+  function _renderFramesHint() {
+    if (!prodFramesHint) return
+    const steps = parseInt(prodStepsInput?.value || '0', 10)
+    // n_nucleotides comes from the selected job (the run branches off it, so it has
+    // the same structure). Unknown → report frames only, never a bogus size.
+    const { frames, bytes } = trajectoryFrameEstimate(
+      steps, _stepsPerFrame(), _selectedJob()?.n_nucleotides)
+    if (!frames) { prodFramesHint.textContent = ''; return }
+    // The shared formatBytes returns '0 B' (not '') for an unknown size, so gate on
+    // the byte count itself — an unknown nucleotide count shows frames only.
+    prodFramesHint.textContent =
+      `→ ${frames.toLocaleString()} frames${bytes > 0 ? ` · ~${formatBytes(bytes)} trajectory` : ''}`
+    // Flag a run that will write a lot: the disk forecast still gates the launch, but
+    // a warning here lets the number be tuned before the modal appears.
+    prodFramesHint.style.color = bytes > 5e9 ? _C.warn : _C.dim
+  }
+  prodSpfInput?.addEventListener('input', _renderFramesHint)
+  prodStepsInput?.addEventListener('input', _renderFramesHint)
+
   // Reset every relaxation/production INPUT back to its index.html default — used
   // when a design is closed or a different one is opened, so the panel doesn't
   // carry the previous design's (or last-selected job's) settings.  Also clears
@@ -1276,8 +1339,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   function _resetControlsToDefaults() {
     resetControlsToDefaults([
       backendSel, deviceInput, saltInput, mcStepsInput, mdStepsInput,
-      equilStepsInput, bpGateInput, prodStepsInput,
+      equilStepsInput, bpGateInput, prodStepsInput, prodSpfInput,
     ])
+    _renderFramesHint()
     if (deviceInput) delete deviceInput.dataset.userSet
     _clearRunCards()
     _checkAvailable()   // re-apply the recommended device into the now-default field
@@ -1323,13 +1387,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _renderProgress(job)
     _renderTimeline(job)
     _renderHealth(job)
-    _emitJobSelected()   // let the E-field section re-evaluate its Run button
+    _emitJobSelected(job)   // let the E-field section re-evaluate its Run button
   }
 
   // Notify the E-field setup section that the selected job (or its status)
   // changed, so its "Run field" button enables the moment a completed relaxed
   // job is selected — without the user having to hover the button.
-  function _emitJobSelected() {
+  //
+  // EDGE-TRIGGERED (identity + status, not every render).  `_renderDetail` runs on
+  // every 1.5 s poll tick, and the export card rebuilds its timeline off this event
+  // — which costs a composite-trajectory frame count over the whole job lineage.
+  // Firing it unconditionally meant a multi-hundred-MB re-scan every poll for the
+  // life of a run.  Deselection (no job) always fires: its signature is empty.
+  let _lastSelSig = null
+  function _emitJobSelected(job = null) {
+    const sig = jobSelectionSignature(job)
+    if (sig && sig === _lastSelSig) return
+    _lastSelSig = sig
     window.dispatchEvent(new CustomEvent('nadoc:oxdna-job-selected'))
   }
 
@@ -1447,6 +1521,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   }
 
   function _updateButtons(job) {
+    // Selecting a different job can change n_nucleotides, which the size estimate
+    // depends on — refresh it here since this runs on every selection/state change.
+    _renderFramesHint()
     const ps = productionState(job)
     const prodRunning = job?.status === 'running' && ps === 'running'
     // Production is allowed whenever the job is completed — the first run starts
@@ -1547,17 +1624,25 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       seedBtn.style.color = ok ? '#c9d1d9' : '#484f58'
     }
 
-    // View trajectory — unlocks once the job has any trajectory data (≥1 stage
-    // started); shows the composite relaxation + all production runs.  Locked while
-    // a live session is running (shared overlay).
-    if (trajToggle && !_trajBusy) {
+    // View trajectory (sparse + full) — unlock once the job has any trajectory data
+    // (≥1 stage started).  Sparse shows the composite relaxation + all production runs;
+    // full shows only this job's own frames, unstrided.  Both are locked while a live
+    // session is running (shared overlay).
+    if (!_trajBusy) {
       const ok = !liveOn && hasTrajectory(job)
-      trajToggle.disabled = !ok
-      const lab = trajToggle.closest('label')
-      if (lab) {
-        lab.style.opacity = ok ? '1' : '0.5'
-        lab.style.cursor = ok ? 'pointer' : 'not-allowed'
-        lab.title = liveOn ? 'Stop Live to view a trajectory' : ''
+      for (const t of [trajToggle, trajFullToggle]) {
+        if (!t) continue
+        t.disabled = !ok
+        const lab = t.closest('label')
+        if (lab) {
+          // Stash the markup's explanatory tooltip once — the live-session lock
+          // overwrites `title`, and without this the sparse-vs-full explanation
+          // would be lost the first time a live session starts and stops.
+          if (lab.dataset.baseTitle === undefined) lab.dataset.baseTitle = lab.title || ''
+          lab.style.opacity = ok ? '1' : '0.5'
+          lab.style.cursor = ok ? 'pointer' : 'not-allowed'
+          lab.title = liveOn ? 'Stop Live to view a trajectory' : lab.dataset.baseTitle
+        }
       }
     }
 
@@ -1608,11 +1693,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }))) return
     oxdnaLive?.stop()   // a production run supersedes any live session (shared overlay)
     const steps = parseInt(prodStepsInput?.value || '5000000', 10)
+    const stepsPerFrame = _stepsPerFrame()
 
     // Compose the run from the independently-enabled elements (field / surface /
     // anchors).  Each is optional — with none enabled this is a plain production.
     const el = getRunElements?.() || {}
-    const body = { steps }
+    const body = { steps, steps_per_frame: stepsPerFrame }
     if (el.field?.enabled && el.field.field_pN > 0) {
       body.field = { field_pN: el.field.field_pN, dir: el.field.dir }
     }
@@ -1627,7 +1713,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // card shows a warning notice, but the run is allowed (no longer blocked here).
 
     try {
-      const fc = await api.estimateOxdnaRunDisk(_selectedId, { steps })
+      const fc = await api.estimateOxdnaRunDisk(_selectedId, { steps, steps_per_frame: stepsPerFrame })
       if (!(await confirmDiskSpaceOk(fc))) return
     } catch { /* forecast is best-effort — never block a launch on it */ }
 
@@ -1788,6 +1874,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     oxdnaDisplay?.cancelPendingLoad?.()
     if (oxdnaDisplay?.mode() === 'trajectory') oxdnaDisplay.stopAndRestore()
     if (trajToggle) trajToggle.checked = false
+    if (trajFullToggle) trajFullToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
     _heavyBuildKind = null
     _trajPrep = null
@@ -1808,10 +1895,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _renderTrajStatus()
     _renderFlexStatus()
   })
-  async function _refreshTraj() {
+  // scope: 'lineage' = sparse (whole ancestor chain, strided to ~200 frames — the fast
+  // view) | 'job' = full (this job's own stages only, every frame written, no stride).
+  async function _refreshTraj(scope = 'lineage') {
     if (!_selectedId || !oxdnaDisplay) return
+    const full = scope === 'job'
     _trajBusy = true
-    _setTrajStatus('Loading trajectory…', _C.accent)
+    _setTrajStatus(full ? 'Loading full trajectory… (no downsampling — this can take a while)'
+                        : 'Loading trajectory…', _C.accent)
     // Poll the backend build for accurate frames-processed progress (the align pass
     // over a large structure runs for seconds) and render it into the status line.
     const jobId = _selectedId
@@ -1826,7 +1917,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     let r
     try {
       r = await oxdnaDisplay.loadTrajectory(
-        _selectedId, alignToggle ? alignToggle.checked : true)
+        _selectedId, alignToggle ? alignToggle.checked : true, scope)
     } finally {
       clearInterval(poll)
     }
@@ -1840,31 +1931,43 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       _lastTrajField = undefined
       _applyTrajField(0)
       const nProd = (r.stages || []).filter(s => s.kind === 'production').length
-      _setTrajStatus(`${r.n_frames} frames · relaxation + ${nProd} production run${nProd === 1 ? '' : 's'}`, _C.ok)
+      _setTrajStatus(full
+        ? `${r.n_frames} frames · this job only, every frame (no downsampling)`
+        : `${r.n_frames} frames · relaxation + ${nProd} production run${nProd === 1 ? '' : 's'}`,
+        _C.ok)
     } else {
       if (trajToggle) trajToggle.checked = false
+      if (trajFullToggle) trajFullToggle.checked = false
       if (trajControls) trajControls.style.display = 'none'
       _setTrajStatus(r.reason || 'no trajectory', _C.warn)
     }
     _updateButtons(_selectedJob())
   }
-  trajToggle?.addEventListener('change', async () => {
+  // Both trajectory radios run the same path and differ only in composite scope.
+  // They are peers in the `oxdna-viz` radio group, so switching between them fires
+  // this twice — once unchecked (→ _setTrajOff) and once checked (→ reload).
+  async function _onTrajToggle(toggle, scope) {
     if (_lammpsMode) { _lammpsViz('traj'); return }
-    if (trajToggle.checked) {
-      if (!_selectedId) { trajToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
-      if (!hasTrajectory(_selectedJob())) {
-        trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
-      }
-      oxdnaLive?.stop()   // mutually exclusive with the live overlay
-      // Tear down by ACTIVE mode (radios already cleared the peer checkboxes).
-      if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
-      if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
-      if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
-      await _refreshTraj()
-    } else {
-      _setTrajOff()
+    if (!toggle.checked) { _setTrajOff(); return }
+    if (!_selectedId) {
+      toggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return
     }
-  })
+    if (!hasTrajectory(_selectedJob())) {
+      toggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
+    }
+    oxdnaLive?.stop()   // mutually exclusive with the live overlay
+    // Tear down by ACTIVE mode (radios already cleared the peer checkboxes).
+    if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
+    if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+    if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+    // Switching sparse↔full leaves the OTHER trajectory mode still active (both are
+    // mode 'trajectory', so the teardowns above don't fire) — stop playback and clear
+    // the stale frame cache before reloading at the new scope.
+    if (oxdnaDisplay?.mode() === 'trajectory') { trajPlayer.stop(); oxdnaDisplay.stopAndRestore() }
+    await _refreshTraj(scope)
+  }
+  trajToggle?.addEventListener('change', () => _onTrajToggle(trajToggle, 'lineage'))
+  trajFullToggle?.addEventListener('change', () => _onTrajToggle(trajFullToggle, 'job'))
 
   // ── Use as NAMD seed (Phase 2 — feed relaxed coords into a NAMD MD run) ─────
   function _setSeedStatus(text, color = _C.dim) {
@@ -2017,6 +2120,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (displayToggle) displayToggle.checked = false
     if (flexToggle) flexToggle.checked = false
     if (trajToggle) trajToggle.checked = false
+    if (trajFullToggle) trajFullToggle.checked = false
     if (autorefineDevToggle) autorefineDevToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
   }

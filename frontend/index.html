@@ -2404,6 +2404,24 @@
       background: #cdd9e5; border: 1px solid #0d1117;
     }
 
+    /* Export progress bar, INDETERMINATE state. The backend's align pass (PBC-unwrap +
+       Kabsch over the whole composite trajectory) reports no per-frame counter, so a
+       percentage bar would sit frozen at 0% and read as a hung export. A full-width
+       barber-pole says "working, duration unknown" instead. */
+    .ox-export-bar--indeterminate {
+      background-image: repeating-linear-gradient(
+        -45deg, #3fb950 0 8px, #2ea043 8px 16px);
+      background-size: 22.7px 100%;   /* 16px stripe pitch / sin(45°) — seamless scroll */
+      animation: ox-export-barberpole .9s linear infinite;
+    }
+    @keyframes ox-export-barberpole {
+      from { background-position: 0 0; }
+      to   { background-position: 22.7px 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ox-export-bar--indeterminate { animation: none; }
+    }
+
     /* ── Autostaple progress popup ───────────────────────────────────── */
     #op-progress {
       display: none;
@@ -3797,6 +3815,11 @@
                 <label for="oxdna-jobs-prod-steps" style="font-size:var(--text-xs);color:#8b949e">Production steps</label>
                 <input id="oxdna-jobs-prod-steps" type="number" value="5000000" min="1000" max="200000000" step="1000000"
                        style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                <label for="oxdna-jobs-prod-steps-per-frame" style="font-size:var(--text-xs);color:#8b949e"
+                       title="oxDNA print_conf_interval — simulation steps between saved trajectory frames. Smaller = denser trajectory and more disk.">Steps / frame</label>
+                <input id="oxdna-jobs-prod-steps-per-frame" type="number" value="10000" min="1" max="200000000" step="1000"
+                       style="min-width:0;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                <div id="oxdna-jobs-prod-frames-hint" style="grid-column:1 / -1;font-size:10px;color:#8b949e;min-height:13px"></div>
               </div>
               <div id="oxdna-jobs-prod-status" style="font-size:var(--text-xs);color:#8b949e;margin-bottom:6px;min-height:14px"></div>
 
@@ -4041,10 +4064,15 @@
                     <input id="oxdna-jobs-deviation-toggle" name="oxdna-viz" type="radio" value="deviation" disabled> Deviation map (autorefine)
                   </label>
                   <div id="oxdna-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
-                  <!-- View trajectory: scrub the composite relaxation + all production runs -->
+                  <!-- Sparse trajectory: the whole lineage, strided to ~200 frames -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
-                         title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition">
-                    <input id="oxdna-jobs-traj-toggle" name="oxdna-viz" type="radio" value="traj" disabled> View trajectory
+                         title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition. Evenly strided to ~200 frames across the whole chain, so it loads quickly.">
+                    <input id="oxdna-jobs-traj-toggle" name="oxdna-viz" type="radio" value="traj" disabled> View trajectories from job chain
+                  </label>
+                  <!-- Full trajectory: THIS job only, every frame oxDNA wrote, no stride -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:6px;cursor:not-allowed;opacity:0.5"
+                         title="Every frame this job's own run wrote — no downsampling, ancestors excluded. Frame count is set by the run's steps-per-frame; large runs take a while to build and use a lot of memory.">
+                    <input id="oxdna-jobs-traj-full-toggle" name="oxdna-viz" type="radio" value="traj-full" disabled> View full trajectory (this job)
                   </label>
                   <div id="oxdna-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="oxdna-jobs-traj-controls" style="display:none;margin-top:4px">
@@ -4201,7 +4229,8 @@
                   <div id="oxdna-export-readout" style="font-size:var(--text-xs);color:#8b949e;margin:2px 0 6px;min-height:14px"></div>
                   <!-- output format -->
                   <div style="display:flex;gap:14px;font-size:var(--text-xs);color:#c9d1d9;margin:2px 0 6px">
-                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input id="oxdna-export-fmt-pdb" type="radio" name="oxdna-export-fmt" checked> multi-frame PDB (ChimeraX)</label>
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="PDB topology + binary DCD coordinates, zipped. Measured on a 330k-atom design: ~6x smaller than the multi-frame PDB (28 MB vs 168 MB for 6 frames). Build time is the same for both — the saving is download size and load time, not export time."><input id="oxdna-export-fmt-dcd" type="radio" name="oxdna-export-fmt" checked> PDB + DCD, zipped (ChimeraX) — ~6&times; smaller</label>
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="One multi-MODEL PDB. Human-readable and opens anywhere, but ~6x larger. Takes the same time to build as PDB+DCD."><input id="oxdna-export-fmt-pdb" type="radio" name="oxdna-export-fmt"> multi-frame PDB (ChimeraX)</label>
                     <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="oxView .top+.dat — coming soon"><input type="radio" name="oxdna-export-fmt"> oxDNA (.top+.dat)</label>
                   </div>
                   <div style="display:flex;gap:5px;margin:2px 0">

@@ -332,8 +332,13 @@ export function initAtomSurfaceDisplay({
   }
 
   function _setCGVisible(visible) {
-    const root = designRenderer.getHelixCtrl()?.root
-    if (root) root.visible = visible   // extra-base beads/slabs are children of root
+    // Go through setDesignVisible, NOT root.visible directly: the renderer re-applies
+    // `_designVisible` after every rebuild, so poking the root left the flag stale at
+    // `true` and any later rebuild (e.g. setExtraNucleotides from the oxDNA capture
+    // strands) resurrected the CG model on top of the atomistic rep.
+    // Extra-base beads/slabs are children of root, so they follow automatically.
+    if (typeof designRenderer.setDesignVisible === 'function') designRenderer.setDesignVisible(visible)
+    else { const root = designRenderer.getHelixCtrl()?.root; if (root) root.visible = visible }
     // Arc lines track design visibility; the coarse cylinders/sticks LOD no longer
     // hides the whole group — instead each arc is collapsed per-region by the
     // mixed-representation rep gate (unfold_view._arcRepHidden), so a region pinned

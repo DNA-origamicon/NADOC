@@ -47,8 +47,30 @@ import {
   productionRunCount, hasTrajectory, isResumable, startButtonLabel, flexConfidenceText,
   resumeNote, flattenJobTree, descendantIds, fieldChildTitle, deleteConfirmMessage, samplingState,
   runConfigForJob, healthForDisplay, runElements, runIndicatorTags, runRowLabel, runChildTitle,
-  jobHasFailure, errorLogText, jobOutOfDate,
+  jobHasFailure, errorLogText, jobOutOfDate, jobSelectionSignature,
+  trajectoryFrameEstimate,
 } from './oxdna_jobs_panel.js'
+
+describe('jobSelectionSignature (edge-triggered job-selected event)', () => {
+  const job = (over = {}) => ({
+    job_id: 'J1', status: 'running', stages: [{ status: 'running' }], ...over,
+  })
+  it('is stable across re-renders of an unchanged job', () => {
+    expect(jobSelectionSignature(job())).toBe(jobSelectionSignature(job()))
+  })
+  it('changes when the job, its status, or a stage status changes', () => {
+    const base = jobSelectionSignature(job())
+    expect(jobSelectionSignature(job({ job_id: 'J2' }))).not.toBe(base)
+    expect(jobSelectionSignature(job({ status: 'completed' }))).not.toBe(base)
+    expect(jobSelectionSignature(job({ stages: [{ status: 'done' }] }))).not.toBe(base)
+  })
+  it('is empty for no job, so a deselect always re-announces', () => {
+    expect(jobSelectionSignature(null)).toBe('')
+  })
+  it('tolerates a job with no stages array', () => {
+    expect(jobSelectionSignature({ job_id: 'J1', status: 'queued' })).toBe('J1|queued|')
+  })
+})
 
 describe('jobHasFailure', () => {
   it('true when the job status is failed', () => {
@@ -306,6 +328,30 @@ describe('runElements / runIndicatorTags / runRowLabel (run job-name indicators)
     expect(runChildTitle(surfaceOnly)).toBe('Production run · hard surface')
     expect(runChildTitle(anchorsOnly)).toBe('Production run · 1 anchored')
     expect(runChildTitle(plain)).toBe('Production run')
+  })
+})
+
+describe('trajectoryFrameEstimate', () => {
+  it('divides steps by steps-per-frame (floor), like oxDNA print_conf_interval', () => {
+    expect(trajectoryFrameEstimate(5_000_000, 10_000, 0).frames).toBe(500)
+    expect(trajectoryFrameEstimate(1_000_000, 100_000, 0).frames).toBe(10)
+    // Partial trailing interval writes no frame.
+    expect(trajectoryFrameEstimate(15_000, 10_000, 0).frames).toBe(1)
+  })
+  it('sizes the trajectory at ~130 B/nt/frame + an 80 B header', () => {
+    // Matches disk_guard.oxdna_run_output_bytes' per-frame term exactly (pre-safety).
+    const { frames, bytes } = trajectoryFrameEstimate(100_000, 10_000, 1000)
+    expect(frames).toBe(10)
+    expect(bytes).toBe(10 * (1000 * 130 + 80))
+  })
+  it('reports frames but zero bytes when the nucleotide count is unknown', () => {
+    expect(trajectoryFrameEstimate(100_000, 10_000, undefined)).toEqual({ frames: 10, bytes: 0 })
+    expect(trajectoryFrameEstimate(100_000, 10_000, 0).bytes).toBe(0)
+  })
+  it('returns nothing for invalid input rather than NaN/Infinity', () => {
+    expect(trajectoryFrameEstimate(0, 10_000, 100)).toEqual({ frames: 0, bytes: 0 })
+    expect(trajectoryFrameEstimate(1000, 0, 100)).toEqual({ frames: 0, bytes: 0 })
+    expect(trajectoryFrameEstimate(NaN, 10_000, 100)).toEqual({ frames: 0, bytes: 0 })
   })
 })
 
@@ -636,6 +682,7 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-progress': 'div', 'oxdna-jobs-timeline': 'div',
     'oxdna-jobs-health': 'div', 'oxdna-jobs-show-all': 'input',
     'oxdna-jobs-run-btn': 'button', 'oxdna-jobs-prod-btn': 'button', 'oxdna-jobs-prod-steps': 'input',
+    'oxdna-jobs-prod-steps-per-frame': 'input', 'oxdna-jobs-prod-frames-hint': 'div',
     'oxdna-jobs-stop-btn': 'button',   // production-phase Stop (Archive/Delete consolidated into the master card)
     'oxdna-jobs-display-toggle': 'input', 'oxdna-jobs-align-toggle': 'input',
     'oxdna-jobs-display-status': 'div',
@@ -643,7 +690,8 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     'oxdna-jobs-flex-bar': 'div', 'oxdna-jobs-flex-legend': 'div',
     'oxdna-jobs-export-btn': 'button',
     'oxdna-jobs-seed-btn': 'button', 'oxdna-jobs-seed-status': 'div',
-    'oxdna-jobs-traj-toggle': 'input', 'oxdna-jobs-traj-status': 'div',
+    'oxdna-jobs-traj-toggle': 'input', 'oxdna-jobs-traj-full-toggle': 'input',
+    'oxdna-jobs-traj-status': 'div',
     'oxdna-jobs-traj-controls': 'div', 'oxdna-jobs-traj-play': 'button',
     'oxdna-jobs-traj-slider': 'input', 'oxdna-jobs-traj-markers': 'div', 'oxdna-jobs-traj-label': 'div',
     // workspace colour-scale widget (middle-right)
@@ -905,9 +953,24 @@ describe('initOxdnaJobsPanel — production buttons + flexibility map', () => {
     $('oxdna-jobs-traj-toggle').checked = true
     $('oxdna-jobs-traj-toggle').dispatchEvent(new Event('change'))
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
-    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt', true)
+    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt', true, 'lineage')     // sparse = whole lineage
     expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
     expect($('oxdna-jobs-traj-slider').max).toBe('5')                           // 6 frames → max idx 5
+  })
+
+  it('View FULL trajectory toggle loads this job only, unstrided', async () => {
+    const disp = fakeDisplay()
+    api.listOxdnaJobs.mockResolvedValue([{ job_id: 'jt', design_source_path: 'A.nadoc', status: 'completed',
+      created_at: 1, current_stage_idx: 5, stages: relaxStages({ kind: 'production', status: 'done', steps: 5000000 }) }])
+    const panel = initOxdnaJobsPanel({ getWorkspacePath: () => 'A.nadoc', oxdnaDisplay: disp })
+    await selectFirstJob(panel)
+    expect($('oxdna-jobs-traj-full-toggle').disabled).toBe(false)               // same gate as sparse
+    $('oxdna-jobs-traj-full-toggle').checked = true
+    $('oxdna-jobs-traj-full-toggle').dispatchEvent(new Event('change'))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    // scope 'job' = drop the ancestors, keep every frame written (no stride).
+    expect(disp.loadTrajectory).toHaveBeenCalledWith('jt', true, 'job')
+    expect($('oxdna-jobs-traj-controls').style.display).not.toBe('none')
   })
 
   it('a LAMMPS run shows in the SAME viz card — the radios drive the LAMMPS loader', async () => {

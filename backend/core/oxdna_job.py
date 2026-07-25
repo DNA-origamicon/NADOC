@@ -55,6 +55,10 @@ class OxdnaStageStatus:
     status: str = "pending"   # pending / running / done / failed
     started_at: Optional[float] = None   # wall time the stage began running (for ETA)
     resumed: bool = False     # this stage was resumed from its own checkpoint (relabel)
+    # Steps already simulated by PREVIOUS attempts when this one was resumed. The
+    # resumed run's own energy.dat starts from zero (oxDNA always restarts its step
+    # counter), so without this the banked work is invisible and the stage looks 0 %.
+    completed_steps: int = 0
 
 
 @dataclass

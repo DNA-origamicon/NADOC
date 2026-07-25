@@ -761,11 +761,22 @@ def job_overall_fraction(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaSt
     done = sum(1 for s in job.stages if s.status == "done")
     idx = job.current_stage_idx
     stage_frac = 0.0
-    if 0 <= idx < n and idx < len(specs) and job.stages[idx].status == "running":
-        # Advisory master-bar fraction on the hot poll path — a size-based estimate
-        # avoids re-reading the whole growing energy.dat each poll (see helper docstring).
-        lines = _stage_energy_lines_fast(job.stage_dir(workspace_dir, job.stages[idx].name))
-        stage_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
+    if 0 <= idx < n and idx < len(specs):
+        st = job.stages[idx]
+        if st.status == "running":
+            # Advisory master-bar fraction on the hot poll path — a size-based estimate
+            # avoids re-reading the whole growing energy.dat each poll (see helper).
+            stage_dir = job.stage_dir(workspace_dir, st.name)
+            lines = _stage_energy_lines_fast(stage_dir)
+            live = lines / max(1, expected_energy_lines(specs[idx]))
+            # …plus whatever earlier attempts banked, which this attempt's energy.dat
+            # knows nothing about.
+            banked = (st.completed_steps or 0) / max(1, specs[idx].steps)
+            stage_frac = min(1.0, banked + live * (1.0 - banked))
+        elif st.status in ("failed", "stopped"):
+            # A crashed/stopped stage still did real work. Reading it off disk (rather
+            # than reporting 0 %) is what tells you a run is worth resuming.
+            stage_frac = stage_fraction(job.stage_dir(workspace_dir, st.name), specs[idx])
     return (done + stage_frac) / n
 
 
@@ -785,15 +796,20 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
         if st.status == "running":
             stage_dir = job.stage_dir(workspace_dir, st.name)
             lines = _stage_energy_lines(stage_dir)
-            stage_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
+            # THIS attempt's fraction — the ETA rate must be derived from it alone,
+            # since started_at is this attempt's start.
+            attempt_frac = min(1.0, lines / max(1, expected_energy_lines(specs[idx])))
+            banked = (st.completed_steps or 0) / max(1, specs[idx].steps)
+            stage_frac = min(1.0, banked + attempt_frac * (1.0 - banked))
 
             # ── ETA: sum each remaining stage estimated with ITS OWN rate class ───
             # Mixing the slow MC rate with the (1e6-step) MD stages is the bug that
             # showed ">100 h" during MC — estimate per class (MC vs MD-family) instead.
             steps_done = stage_frac * specs[idx].steps
+            attempt_steps = attempt_frac * (specs[idx].steps - (st.completed_steps or 0))
             live_rate = None
-            if st.started_at and steps_done > 0:
-                live_rate = steps_done / max(1e-6, time.time() - st.started_at)
+            if st.started_at and attempt_steps > 0:
+                live_rate = attempt_steps / max(1e-6, time.time() - st.started_at)
 
             # Observed steps/s by rate-class from finished stages' health samples …
             kind_by_name = {s.name: s.kind for s in specs}
@@ -835,6 +851,11 @@ def job_progress(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]
             if design is not None:
                 live_health = _live_health_snapshot(
                     design, stage_dir, live_rate or rate_by_class.get(_rate_class(specs[idx].kind)))
+        elif st.status in ("failed", "stopped"):
+            # A crashed/stopped stage still banked real simulated time. Report it (read
+            # off disk, across every attempt) instead of 0 % — that number is what tells
+            # you whether the run is worth resuming rather than restarting.
+            stage_frac = stage_fraction(job.stage_dir(workspace_dir, st.name), specs[idx])
     overall = (done + stage_frac) / n if n else 0.0
     return {
         "overall": overall,
@@ -956,6 +977,222 @@ def _starting_conf(
     if idx == 0:
         return (job.job_dir(workspace_dir) / "conf.dat").resolve()
     return (job.stage_dir(workspace_dir, specs[idx - 1].name) / "last_conf.dat").resolve()
+
+
+# ── Crash recovery ────────────────────────────────────────────────────────────
+#
+# A host crash / power loss kills oxDNA mid-write.  `last_conf.dat` is rewritten in
+# place every print_conf_interval, so a crash during that write leaves a TORN
+# checkpoint: right size, wrong contents (some particle records from step N, some
+# from N-1, or a half-written final line).  oxDNA will happily load it, and the
+# physically inconsistent frame then blows up thousands of steps later —
+# "Invalid cell -2147483648 for particle NNN (pos: inf -inf inf)".
+#
+# The trajectory file is append-only, so its frames are individually trustworthy:
+# a crash can only truncate the LAST one.  It is therefore the reliable fallback.
+
+_CONF_HEADER_LINES = 3          # t = … / b = … / E = …
+_CONF_MIN_COLUMNS = 15          # r[3] b[3] n[3] v[3] L[3]
+
+
+def _conf_body_is_valid(lines: list[str], n_particles: int) -> bool:
+    """True when `lines` (the particle records after the 3 header lines) is a complete,
+    finite configuration for `n_particles`.  Rejects the torn-checkpoint case that a
+    size check alone lets through."""
+    if len(lines) < n_particles:
+        return False
+    for ln in lines[:n_particles]:
+        parts = ln.split()
+        if len(parts) < _CONF_MIN_COLUMNS:
+            return False
+        try:
+            if not all(math.isfinite(float(v)) for v in parts[:_CONF_MIN_COLUMNS]):
+                return False
+        except ValueError:
+            return False
+    return True
+
+
+def conf_is_restartable(path: Path, n_particles: int) -> bool:
+    """Can oxDNA safely restart from this configuration file?"""
+    try:
+        if not path.exists() or path.stat().st_size == 0:
+            return False
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError:
+        return False
+    if len(lines) < _CONF_HEADER_LINES + n_particles or not lines[0].startswith("t ="):
+        return False
+    return _conf_body_is_valid(lines[_CONF_HEADER_LINES:], n_particles)
+
+
+def last_complete_trajectory_frame(path: Path, n_particles: int) -> tuple[str, int] | None:
+    """Last COMPLETE frame of an append-only oxDNA trajectory, as ``(text, step)``.
+
+    Reads backwards from the end rather than parsing the whole file — these are
+    routinely >1 GB and only the tail is needed.  Returns None if no complete frame
+    is present.
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    if size == 0:
+        return None
+    # A frame is 3 header lines + n_particles records of ~90-130 bytes.  Read a
+    # generous two-frame window so a complete frame is present even when the final
+    # one is truncated, growing the window if the file turns out to be denser.
+    window = min(size, (n_particles + _CONF_HEADER_LINES) * 160 * 2 + 4096)
+    try:
+        with path.open("rb") as fh:
+            while True:
+                fh.seek(size - window)
+                blob = fh.read(window).decode(errors="replace")
+                # Drop a partial leading frame — we only trust headers we found whole.
+                starts = [i for i in range(len(blob)) if blob.startswith("t =", i)
+                          and (i == 0 or blob[i - 1] == "\n")]
+                if starts and (len(starts) >= 2 or window >= size):
+                    break
+                if window >= size:
+                    break
+                window = min(size, window * 2)
+    except OSError:
+        return None
+    for s in reversed(starts):
+        frame = blob[s:]
+        lines = frame.splitlines()
+        if len(lines) < _CONF_HEADER_LINES + n_particles:
+            continue
+        if not _conf_body_is_valid(lines[_CONF_HEADER_LINES:], n_particles):
+            continue
+        try:
+            step = int(float(lines[0].split("=", 1)[1]))
+        except (ValueError, IndexError):
+            continue
+        body = "\n".join(lines[:_CONF_HEADER_LINES + n_particles])
+        return body + "\n", step
+    return None
+
+
+def _attempt_energy_files(stage_dir: Path) -> list[Path]:
+    """Every attempt's energy file for this stage, OLDEST first — the archived
+    ``energy.rN.dat`` from interrupted runs plus the current ``energy.dat``."""
+    return sorted(stage_dir.glob("energy.r*.dat"), key=lambda p: p.name) + \
+        [stage_dir / "energy.dat"]
+
+
+def _attempt_steps(path: Path, every: int) -> int:
+    """Steps an attempt simulated, from its energy file. The first row is the starting
+    state, not a simulated interval, so it is not counted."""
+    if not path.exists():
+        return 0
+    try:
+        lines = sum(1 for ln in path.read_text(errors="replace").splitlines() if ln.strip())
+    except OSError:
+        return 0
+    return max(0, lines - 1) * every
+
+
+def _exploded(stage_dir: Path) -> bool:
+    """oxDNA writes ``error_conf.dat`` only when it aborts on a diverged configuration
+    ("Invalid cell … pos: inf").  Its presence means the CURRENT attempt's checkpoint is
+    from a structure already on its way to blowing up, so resuming from that checkpoint
+    just reproduces the blow-up — the previous attempt's tail is the safe restart point."""
+    p = stage_dir / "error_conf.dat"
+    try:
+        return p.exists() and p.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def resume_point(stage_dir: Path, spec: OxdnaStageSpec,
+                 n_particles: int) -> tuple[Path | None, int, str]:
+    """Resolve where to resume this stage from, and how much of its step budget that
+    point has already consumed.  Returns ``(conf_path, consumed_steps, note)``.
+
+    The restart configuration and the step count MUST come from the same place — a
+    blind sum over attempts would credit work that the chosen restart point does not
+    actually contain.
+
+    Preference order:
+      1. the current attempt's ``last_conf.dat``, if it validates AND the attempt did
+         not end in a divergence (``error_conf.dat``);
+      2. the newest COMPLETE frame in the current attempt's trajectory;
+      3. the same, walking back through the archived ``trajectory.rN.dat`` attempts.
+
+    A recovered frame is written to ``restart_conf.dat`` — a SEPARATE file, so the
+    resumed run's own ``lastconf_file`` cannot overwrite the point it started from
+    (that overwrite is what previously made a second crash unrecoverable).
+    """
+    every = spec.print_energy_every_override or max(1, spec.steps // 100)
+    energies = _attempt_energy_files(stage_dir)
+    # Cumulative steps banked by every attempt STRICTLY BEFORE index i.
+    prior = [0]
+    for p in energies:
+        prior.append(prior[-1] + _attempt_steps(p, every))
+    n_attempts = len(energies)                      # last entry is the current attempt
+    diverged = _exploded(stage_dir)
+
+    last_conf = stage_dir / "last_conf.dat"
+    if not diverged and conf_is_restartable(last_conf, n_particles):
+        return last_conf.resolve(), prior[n_attempts], "last_conf.dat (checkpoint intact)"
+
+    if diverged:
+        reason = "the attempt DIVERGED (error_conf.dat present)"
+    elif not last_conf.exists():
+        reason = "last_conf.dat missing"
+    else:
+        reason = "last_conf.dat TORN (incomplete/non-finite)"
+
+    # Walk attempts newest-first: current trajectory.dat, then trajectory.rN.dat.
+    trajectories = [(stage_dir / "trajectory.dat", n_attempts - 1)]
+    archived = sorted(stage_dir.glob("trajectory.r*.dat"), key=lambda p: p.name, reverse=True)
+    for k, traj in enumerate(archived):
+        trajectories.append((traj, n_attempts - 2 - k))
+    for traj, attempt_idx in trajectories:
+        if not traj.exists() or attempt_idx < 0:
+            continue
+        # A diverged attempt's own tail frames are already blowing up — skip it entirely
+        # and fall back to the previous attempt, which ended cleanly.
+        if diverged and attempt_idx == n_attempts - 1:
+            continue
+        found = last_complete_trajectory_frame(traj, n_particles)
+        if found is None:
+            continue
+        text, step = found
+        consumed = prior[attempt_idx] + step
+        out = stage_dir / "restart_conf.dat"
+        try:
+            out.write_text(text)
+        except OSError:
+            return None, 0, f"{reason}; recovered frame could not be written"
+        return out.resolve(), consumed, (
+            f"{reason} — restarting from step {step:,} of {traj.name} "
+            f"({consumed:,} steps of the stage budget banked)")
+    return None, 0, f"{reason} and no complete trajectory frame to fall back on"
+
+
+def stage_completed_steps(stage_dir: Path, spec: OxdnaStageSpec) -> int:
+    """Steps of this stage's budget a resume would keep — CHEAP estimate for display.
+
+    Energy-file arithmetic only: no trajectory scan and no writes, because this runs on
+    the job-list poll path.  An attempt that ended in a divergence is excluded, since
+    :func:`resume_point` will discard it — counting it would overstate progress.
+    :func:`resume_point` is the authoritative version and agrees with this to within one
+    ``print_conf_interval``.
+    """
+    every = spec.print_energy_every_override or max(1, spec.steps // 100)
+    files = _attempt_energy_files(stage_dir)
+    if _exploded(stage_dir) and files:
+        files = files[:-1]          # the current (diverged) attempt is thrown away
+    return sum(_attempt_steps(p, every) for p in files)
+
+
+def stage_fraction(stage_dir: Path, spec: OxdnaStageSpec) -> float:
+    """Fraction of this stage's step budget a resume would keep (0..1)."""
+    if spec.steps <= 0:
+        return 0.0
+    return min(1.0, stage_completed_steps(stage_dir, spec) / spec.steps)
 
 
 def _archive_partial_outputs(stage_dir: Path) -> list[str]:
@@ -1130,6 +1367,10 @@ def _halve_dt_and_restart(
     job.stages[idx].status     = "pending"
     job.stages[idx].started_at = None
     job.stages[idx].resumed    = False
+    # This restarts the stage FROM SCRATCH at the relaxed seed, so nothing is banked.
+    # Leaving a resume's completed_steps behind would add phantom progress on top of a
+    # run that begins at step 0 (a 53 %-banked value made a 20 %-done rerun read 63 %).
+    job.stages[idx].completed_steps = 0
     _reset_stage_outputs(job.stage_dir(workspace_dir, specs[idx].name))
     job.current_stage_idx = idx
     _persist_specs(job, workspace_dir, specs)
@@ -1196,11 +1437,45 @@ async def run_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec
         conf = _starting_conf(job, workspace_dir, specs, idx, start_idx)
         is_resume = conf == (stage_dir / "last_conf.dat").resolve()
         if is_resume:
+            # A host crash can leave last_conf.dat torn — validate it, and fall back to
+            # the newest COMPLETE trajectory frame if it fails. Resuming from a torn
+            # checkpoint loads without complaint and then explodes a few million steps
+            # later with "Invalid cell … (pos: inf)", which reads as a sim instability.
+            recovered, already, note = resume_point(stage_dir, spec, job.n_nucleotides or 0)
+            if recovered is None:
+                job.status = OxdnaStatus.failed
+                job.error = f"cannot resume {spec.name}: {note}"
+                job.save(workspace_dir)
+                return
+            conf = recovered
             archived = _archive_partial_outputs(stage_dir)
             job.stages[idx].resumed = True
-            logger.info("[%s] resuming stage %s from its own checkpoint last_conf.dat "
-                        "(archived partial outputs: %s)",
-                        job.job_id, spec.name, ", ".join(archived) or "none")
+            # Continue the STEP BUDGET too, not just the structure. oxDNA always runs
+            # with restart_step_counter, so without this the resumed run redoes the
+            # stage's full step count and the work already banked is silently repeated.
+            remaining = max(1, spec.steps - already)
+            if already > 0:
+                # Pin the output cadence to the ORIGINAL stage's, so energy/trajectory
+                # intervals stay comparable across attempts (they default to steps//100,
+                # which a shortened remaining budget would otherwise change mid-stage
+                # and desynchronise the cross-attempt progress accounting).
+                spec = replace(
+                    spec, steps=remaining,
+                    print_energy_every_override=(spec.print_energy_every_override
+                                                 or max(1, specs[idx].steps // 100)),
+                    print_conf_interval_override=(spec.print_conf_interval_override
+                                                  or print_conf_interval(specs[idx])),
+                )
+            job.stages[idx].completed_steps = already
+            logger.info("[%s] resuming stage %s from %s; %s steps already done, "
+                        "%s remaining (archived partial outputs: %s)",
+                        job.job_id, spec.name, note, f"{already:,}", f"{remaining:,}",
+                        ", ".join(archived) or "none")
+        else:
+            # Not a resume — this stage starts at step 0, so nothing is banked. Clearing
+            # is load-bearing, not hygiene: a retry (or a re-run after an escalation) of a
+            # stage that HAD been resumed would otherwise keep crediting the old attempt.
+            job.stages[idx].completed_steps = 0
 
         input_path = stage_dir / "input.txt"
         # Relax stages use the default mutual-trap forces.txt; a field stage points

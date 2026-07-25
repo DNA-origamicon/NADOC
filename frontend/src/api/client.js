@@ -2140,14 +2140,17 @@ function _vizOpts(opts, fn) {
       + `${typeof opts === 'boolean' ? 'boolean (the old (id, align, signal) form)' : 'AbortSignal (the old (id, signal) form)'}. `
       + 'Update the call — the old form silently dropped the AbortSignal.')
   }
-  const { align = true, signal } = opts
+  const { align = true, signal, scope = 'lineage' } = opts
   if (typeof align !== 'boolean') {
     throw new TypeError(`${fn}: opts.align must be a boolean, got ${typeof align}.`)
   }
   if (signal != null && !(signal instanceof AbortSignal)) {
     throw new TypeError(`${fn}: opts.signal must be an AbortSignal, got ${typeof signal}.`)
   }
-  return { align, signal }
+  if (scope !== 'lineage' && scope !== 'job') {
+    throw new TypeError(`${fn}: opts.scope must be 'lineage' or 'job', got ${JSON.stringify(scope)}.`)
+  }
+  return { align, signal, scope }
 }
 
 /** Launch a LAMMPS oxDNA2 run on the active design ({steps, dump_every, temperature, salt_molar, ranks}). */
@@ -2234,12 +2237,18 @@ export const getOxdnaRmsf = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getOxdnaRmsf')
   return _oxdnaJSON('GET', `/oxdna/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
 }
+/** Composite trajectory. `opts.scope`: 'lineage' (default, whole ancestor chain strided to
+ *  ~200 frames — the fast view) or 'job' (this job's own stages only, EVERY written frame,
+ *  no stride — the slow view). Scope must match whatever getOxdnaTrajectoryMeta was given. */
 export const getOxdnaTrajectory = (id, opts) => {
-  const { align, signal } = _vizOpts(opts, 'getOxdnaTrajectory')
-  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory?align=${align}`, undefined, { signal })
+  const { align, signal, scope } = _vizOpts(opts, 'getOxdnaTrajectory')
+  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory?align=${align}&scope=${scope}`,
+                    undefined, { signal })
 }
-/** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast. */
-export const getOxdnaTrajectoryMeta = (id)       => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-meta`)
+/** Frame count + stage markers only (no coordinates) — sizes the trajectory slider fast.
+ *  Pass the SAME scope as getOxdnaTrajectory or the slider length won't match the payload. */
+export const getOxdnaTrajectoryMeta = (id, scope = 'lineage') =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/trajectory-meta?scope=${scope}`)
 /** Live frames-processed progress for an in-flight trajectory build ({active,done,total}). */
 export const getOxdnaTrajectoryProgress = (id)   => _oxdnaJSON('GET',  `/oxdna/jobs/${id}/trajectory-progress`)
 /** Live progress for an in-flight trajectory-RANGE export ({active,done,total,phase}). */
@@ -2272,12 +2281,13 @@ export async function exportOxdnaTrajectory(jobId, { lo, hi, format = 'pdb' } = 
   return filename
 }
 /** Per-frame ATOMISTIC coords for trajectory frame indices (atomistic-batch wire
- *  format). Heavy — pass a downsampled index set. */
-export const getOxdnaFramesAtomistic = (id, frameIndices, align=true) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic?align=${align}`, { frame_indices: frameIndices })
+ *  format). Heavy — pass a downsampled index set. `scope` must match the scope the
+ *  trajectory itself was loaded with, or the indices address different frames. */
+export const getOxdnaFramesAtomistic = (id, frameIndices, align=true, scope='lineage') =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-atomistic?align=${align}&scope=${scope}`, { frame_indices: frameIndices })
 /** Per-frame SURFACE meshes for trajectory frame indices (surface-batch wire format). */
-export const getOxdnaFramesSurface = (id, frameIndices, params = {}, align=true) =>
-  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface?align=${align}`, { frame_indices: frameIndices, ...params })
+export const getOxdnaFramesSurface = (id, frameIndices, params = {}, align=true, scope='lineage') =>
+  _oxdnaJSON('POST', `/oxdna/jobs/${id}/frames-surface?align=${align}&scope=${scope}`, { frame_indices: frameIndices, ...params })
 /** All-atom flat-XYZ for the relaxed-display structure ({ready, atomistic:[x,y,z,…]}) —
  *  lets the OxDNA-display toggle drive the atomistic rep, not just CG beads. */
 export const getOxdnaDisplayAtomistic = (id, align = true) =>
@@ -2292,8 +2302,17 @@ export const getOxdnaAtomisticStamp = (id) =>
   _oxdnaJSON('GET', `/oxdna/jobs/${id}/atomistic-stamp`)
 /** COMBINED renderer topology (atoms+bonds) + stamp descriptor in one disk-cached build
  *  — fetched once per job; the fast path's single setup fetch (replaces model + stamp). */
-export const getOxdnaAtomisticDisplayBundle = (id) =>
-  _oxdnaJSON('GET', `/oxdna/jobs/${id}/atomistic-display-bundle`)
+/** Renderer topology (atoms [+bonds]) + stamp descriptor for a job, one disk-cached build.
+ *  `bonds:false` omits the ~370k-pair bond list — the VDW rep draws no cylinders, so it
+ *  would parse megabytes it never uses. */
+export const getOxdnaAtomisticDisplayBundle = (id, { bonds = true } = {}) =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/atomistic-display-bundle${bonds ? '' : '?bonds=false'}`)
+/** BINARY/columnar sibling of the above (ArrayBuffer) — ~7× smaller AND no 330k-object
+ *  JSON.parse; decode with scene/atomistic_bundle_bin.js. Null on error/absence, which is
+ *  the signal to fall back to the JSON route. Carries bonds unconditionally: they are only
+ *  ~3 MB of the packed blob, so a separate bond-less variant isn't worth the cache split. */
+export const getOxdnaAtomisticDisplayBundleBin = (id) =>
+  _oxdnaBin('GET', `/oxdna/jobs/${id}/atomistic-display-bundle-bin`)
 /** Compact per-frame atomistic payload ({ready, frames:[12·nNuc], nonrigid_xyz, topology_hash})
  *  — per-nucleotide (origin,R) + non-rigid XYZ; expand with scene/atomistic_stamp.js. */
 export const getOxdnaDisplayAtomisticFrames = (id, align = true) =>

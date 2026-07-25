@@ -196,24 +196,37 @@ export function segmentTooltip(seg, unit = 'frame') {
 }
 
 /** Pure: human label for an export progress phase from the backend
- *  (`_TRAJ_PROGRESS.phase`): "align" = PBC-unwrap/Kabsch pass, "write" = per-frame PDB
- *  build. Anything else falls back to a neutral "Building". */
+ *  (`_TRAJ_PROGRESS.phase`): "align" = PBC-unwrap/Kabsch pass, "atoms" = per-frame all-atom
+ *  rebuild, "write" = per-frame PDB build. Anything else falls back to a neutral "Building". */
 export function exportPhaseLabel(phase) {
   if (phase === 'align') return 'Aligning frames'
+  if (phase === 'frames') return 'Building frames'
+  if (phase === 'atoms') return 'Rebuilding atoms'
   if (phase === 'write') return 'Writing PDB'
   return 'Building'
 }
 
-/** Pure: "45%" style + label text for the export bar from a progress payload
- *  ({done,total,phase}). Returns { pct, text } — pct clamped to [0,100]. */
+/** Pure: bar state for the export progress bar from a progress payload ({done,total,phase}).
+ *  Returns { pct, text, indeterminate } — pct clamped to [0,100].
+ *
+ *  The "align" phase (PBC-unwrap + Kabsch fit over the whole composite trajectory) reports NO
+ *  per-frame counter — `done` sits at 0 for its entire duration, which used to render as a bar
+ *  frozen at "0/51 frames · 0%" and read as a hung export. So align is reported as
+ *  INDETERMINATE: the caller shows a moving barber-pole instead of a stalled 0%, and the label
+ *  says what the pass is doing rather than quoting a counter that cannot move. */
 export function exportProgressView(p) {
   const total = p && p.total > 0 ? p.total : 0
   const done = p ? (p.done || 0) : 0
   const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((100 * done) / total))) : 0
+  if (p && p.phase === 'align') {
+    const scope = total > 0 ? `${_fmt(total)} frames` : 'the trajectory'
+    return { pct: 100, indeterminate: true,
+             text: `Aligning ${scope} — unwrapping + fitting, no per-frame count (can take several minutes)` }
+  }
   const text = total > 0
     ? `${exportPhaseLabel(p.phase)} — ${_fmt(done)}/${_fmt(total)} frames · ${pct}%`
     : 'Preparing…'
-  return { pct, text }
+  return { pct, text, indeterminate: false }
 }
 
 /** Pure: the ChimeraX command that opens a multi-MODEL PDB as a trajectory.
@@ -224,6 +237,29 @@ export function exportProgressView(p) {
 export function chimeraxOpenCommand(filename) {
   const f = String(filename || 'PATH_TO_YOUR_EXPORT.pdb').replace(/"/g, '\\"')
   return `open "${f}" coordsets true slider true`
+}
+
+/** Pure: the two-line ChimeraX command for a PDB+DCD pair (the `dcd` export format).
+ *  A DCD holds coordinates only — no bonding — so the topology PDB must be opened FIRST and
+ *  the trajectory attached to it via `structureModel #1`. `stem` is the shared basename of
+ *  the two unzipped files; unknown until an export has run, so we emit an editable placeholder. */
+export function chimeraxOpenDcdCommand(stem) {
+  const s = String(stem || 'PATH_TO_YOUR_EXPORT').replace(/"/g, '\\"')
+  return `open "${s}.pdb"\nopen "${s}.dcd" structureModel #1`
+}
+
+/** Pure: strip the archive suffix an export download carries, giving the shared basename of
+ *  the .pdb/.dcd inside it. `foo_frames0-50_chimerax.zip` -> `foo_frames0-50`. */
+export function dcdStemFromZipName(filename) {
+  if (!filename) return null
+  return String(filename).replace(/\.zip$/i, '').replace(/_chimerax$/i, '')
+}
+
+/** Human names for the export formats, shared by the status line and the ChimeraX popup. */
+export const FORMAT_LABEL = {
+  dcd: 'PDB + DCD zip (ChimeraX)',
+  pdb: 'multi-frame PDB (ChimeraX)',
+  oxdna: 'oxDNA .top + .dat (oxView)',
 }
 
 /** Pure: order + clamp a [lo,hi] frame range into [0,total]. */
@@ -297,6 +333,7 @@ export function initOxdnaExportCard({
   const runBtn  = document.getElementById('oxdna-export-run-btn')
   const statusEl = document.getElementById('oxdna-export-status')
   const fmtPdb  = document.getElementById('oxdna-export-fmt-pdb')
+  const fmtDcd  = document.getElementById('oxdna-export-fmt-dcd')
   const cxBtn   = document.getElementById('oxdna-chimerax-btn')
   const progWrap  = document.getElementById('oxdna-export-progress')
   const progFill  = document.getElementById('oxdna-export-progress-fill')
@@ -459,21 +496,34 @@ export function initOxdnaExportCard({
   // loader polls. Self-hides when there's no active build (e.g. the oxDNA .zip path,
   // which doesn't report frames).
   let _exportPoll = null
+  function _paintProgress(p) {
+    const { pct, text, indeterminate } = exportProgressView(p)
+    if (progWrap) progWrap.style.display = ''
+    if (progFill) {
+      progFill.style.width = `${pct}%`
+      progFill.classList.toggle('ox-export-bar--indeterminate', !!indeterminate)
+    }
+    if (progLabel) progLabel.textContent = text
+  }
   function _stopExportPoll() {
     if (_exportPoll) { clearInterval(_exportPoll); _exportPoll = null }
     if (progWrap) progWrap.style.display = 'none'
+    if (progFill) progFill.classList.remove('ox-export-bar--indeterminate')
   }
   function _startExportPoll(jobId) {
     _stopExportPoll()
     if (typeof getExportProgress !== 'function' || !jobId) return
+    // Paint immediately: the first poll is 250 ms away and the backend's first phase can run
+    // for minutes, so an un-painted bar here is exactly the "nothing is happening" symptom.
+    _paintProgress(null)
     _exportPoll = setInterval(async () => {
       let p = null
       try { p = await getExportProgress(jobId) } catch { p = null }
-      if (!p || !p.active || !(p.total > 0)) return
-      const { pct, text } = exportProgressView(p)
-      if (progWrap) progWrap.style.display = ''
-      if (progFill) progFill.style.width = `${pct}%`
-      if (progLabel) progLabel.textContent = text
+      // An inactive/absent payload means the build hasn't registered yet (or reports no
+      // frames at all, e.g. the oxDNA .zip path) — hold the last painted state rather than
+      // blanking the bar; _stopExportPoll hides it when the POST resolves.
+      if (!p || !p.active) return
+      _paintProgress(p)
     }, 250)
   }
 
@@ -482,17 +532,19 @@ export function initOxdnaExportCard({
     if (_model.total <= 0 || runBtn.disabled) return
     const jobId = getSelectedJob?.()?.job_id
     if (!jobId) return
-    const format = fmtPdb?.checked ? 'pdb' : 'oxdna'
+    const format = fmtDcd?.checked ? 'dcd' : (fmtPdb?.checked ? 'pdb' : 'oxdna')
     const sel = { jobId, lo: _lo, hi: _hi, format }
     if (typeof onExport !== 'function') { if (statusEl) statusEl.textContent = 'Export unavailable.'; return }
-    const fmtName = format === 'pdb' ? 'multi-frame PDB (ChimeraX)' : 'oxDNA .top + .dat (oxView)'
+    const fmtName = FORMAT_LABEL[format] || format
     runBtn.disabled = true
     if (statusEl) statusEl.textContent = `Exporting frames ${_fmt(_lo)}–${_fmt(_hi)} as ${fmtName}…${format === 'pdb' ? ' (PDB rebuild can take a while)' : ''}`
     _startExportPoll(jobId)
     let result = false
     try { result = await onExport(sel) } catch { result = false } finally { _stopExportPoll() }
-    // Remember the exact PDB filename (from the download) so the ChimeraX popup can name it.
-    if (result && format === 'pdb') _lastPdb = { filename: typeof result === 'string' ? result : null, lo: _lo, hi: _hi }
+    // Remember the exact download name so the ChimeraX popup can name the file(s).
+    if (result && (format === 'pdb' || format === 'dcd')) {
+      _lastPdb = { filename: typeof result === 'string' ? result : null, lo: _lo, hi: _hi, format }
+    }
     if (statusEl) statusEl.textContent = result ? `Downloaded ${fmtName}, frames ${_fmt(_lo)}–${_fmt(_hi)}.` : 'Export failed — see console.'
     runBtn.disabled = false
   })
@@ -507,6 +559,10 @@ export function initOxdnaExportCard({
 
   function _showChimeraxModal() {
     const filename = _pdbFilenameForRange()
+    // A DCD export downloads a zip holding <stem>.pdb + <stem>.dcd, which need the two-line
+    // open (topology first, trajectory attached to it). A multi-frame PDB is the one-liner.
+    const isDcd = !!(_lastPdb && _lastPdb.format === 'dcd' && filename)
+    const stem = isDcd ? dcdStemFromZipName(filename) : null
     const overlay = document.createElement('div')
     overlay.className = 'modal-overlay'
     overlay.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px'
@@ -515,15 +571,19 @@ export function initOxdnaExportCard({
     const h = document.createElement('h2'); h.textContent = 'Open trajectory in ChimeraX'
     h.style.cssText = 'font-size:16px;margin:0 0 10px;color:#eceff1'
     const p = document.createElement('p')
-    p.innerHTML = filename
-      ? `Paste into the ChimeraX command line. Point it at where your browser saved <b>${filename}</b> — give the full path, or <code>cd</code> to that folder first.`
-      : 'Export the range as a PDB first (PDB radio → “Export selected range”), then paste this into ChimeraX with the path to your saved file.'
+    p.innerHTML = isDcd
+      ? `Unzip <b>${filename}</b> first, then paste this into the ChimeraX command line. Both files must sit in the same folder — give full paths, or <code>cd</code> there first.`
+      : (filename
+        ? `Paste into the ChimeraX command line. Point it at where your browser saved <b>${filename}</b> — give the full path, or <code>cd</code> to that folder first.`
+        : 'Export the range first (“Export selected range”), then paste this into ChimeraX with the path to your saved file.')
     p.style.cssText = 'font-size:13px;line-height:1.45;margin:0 0 10px'
     const pre = document.createElement('textarea'); pre.readOnly = true; pre.spellcheck = false
-    pre.value = chimeraxOpenCommand(filename)
-    pre.style.cssText = 'box-sizing:border-box;width:100%;height:52px;padding:10px;background:#111c24;color:#b0bec5;border:1px solid #37474f;border-radius:5px;font:12px monospace;resize:none'
+    pre.value = isDcd ? chimeraxOpenDcdCommand(stem) : chimeraxOpenCommand(filename)
+    pre.style.cssText = `box-sizing:border-box;width:100%;height:${isDcd ? 68 : 52}px;padding:10px;background:#111c24;color:#b0bec5;border:1px solid #37474f;border-radius:5px;font:12px monospace;resize:none`
     const note = document.createElement('div')
-    note.textContent = 'coordsets true = read the models as one trajectory · slider true = open the frame player'
+    note.textContent = isDcd
+      ? 'The PDB carries the topology (bonds); the DCD carries every frame · structureModel #1 attaches the trajectory to it'
+      : 'coordsets true = read the models as one trajectory · slider true = open the frame player'
     note.style.cssText = 'font-size:11px;color:#78909c;margin-top:6px'
     const row = document.createElement('div'); row.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:12px'
     const copy = document.createElement('button'); copy.textContent = 'Copy'

@@ -61,16 +61,27 @@ const DOM = [
 
 function makeDeps(overrides = {}) {
   const root = { visible: true }
+  // Mirrors design_renderer: setDesignVisible records the intent in _designVisible AND
+  // applies it, and every _rebuild re-applies that flag to the freshly-allocated root.
+  const dr = {
+    _designVisible: true,
+    getHelixCtrl: () => ({ root }),
+    setDesignVisible(v) { dr._designVisible = v; root.visible = v },
+    /** Stand-in for any _rebuild path (e.g. setExtraNucleotides): new root, visible=true,
+     *  then the hidden state is re-applied. */
+    _simulateRebuild() { root.visible = true; if (!dr._designVisible) root.visible = false },
+  }
   return {
     scene: {},
     store: overrides.store ?? createMockStore({ currentDesign: null, currentGeometry: null }),
     api: { getRegionSurface: vi.fn(async () => ({})) },
-    designRenderer: { getHelixCtrl: () => ({ root }) },
+    designRenderer: dr,
     atomisticRenderer: makeAtomStub(),
     surfaceRenderer: makeSurfaceStub(),
     unfoldView: { setArcsVisible: vi.fn(), refreshArcVisibility: vi.fn() },
     overhangLinkArcs: { setVisible: vi.fn() },
     _root: root,
+    _dr: dr,
     ...overrides,
   }
 }
@@ -189,6 +200,21 @@ describe('initAtomSurfaceDisplay', () => {
     expect(deps.overhangLinkArcs.setVisible).toHaveBeenCalledWith(false)
     api.setCGVisible(true)
     expect(deps._root.visible).toBe(true)
+  })
+
+  // Regression: setCGVisible used to poke root.visible directly, leaving the renderer's
+  // _designVisible stale at true. Any later rebuild (the oxDNA capture-strand injection
+  // calls setExtraNucleotides → _rebuild) then resurrected the CG model on top of the
+  // atomistic rep, and it stayed up until the multi-second atom build landed — which
+  // reads to the user as "the Full rep came back / NADOC is broken".
+  it('a rebuild after setCGVisible(false) leaves the CG hidden', () => {
+    mountIds(DOM)
+    const deps = makeDeps()
+    const api = initAtomSurfaceDisplay(deps)
+    api.setCGVisible(false)
+    expect(deps._dr._designVisible).toBe(false)   // intent recorded, not just the root poked
+    deps._dr._simulateRebuild()
+    expect(deps._root.visible).toBe(false)
   })
 
   it('applyAtomisticMode(off) sets renderer off, restores CG, hides sliders', async () => {

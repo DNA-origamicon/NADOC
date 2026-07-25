@@ -34,6 +34,7 @@ import {
   makeSphereMaterial, makeBondMaterial,
 } from './atomistic_renderer/geometry_builder.js'
 import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
+import { makeAtomTable } from './atom_table.js'
 
 let _colorMode    = 'cpk'    // 'cpk' | 'strand' | 'base'
 let _vdwScale     = 1.0      // multiplier on VdW / ball radii
@@ -60,13 +61,18 @@ export function initAtomisticRenderer(scene) {
   // closure-capture decomposition. The `geom` field holds THREE scratch
   // buffers + shared axis constants so geometry_builder.js helpers can reuse
   // them (allocation-avoidance contract intact).
+  // NB `elementAtoms` / `bondAtomIdx` hold ATOM ROW INDICES, not atom objects. The oxDNA
+  // display bundle is ~330k atoms; keeping object references here meant ~330k atoms plus
+  // ~740k bond-endpoint refs alive per rebuild. Rows are resolved through `_state.atoms`
+  // (an AtomTable) which reads columnar typed arrays or a legacy object array alike.
   const _state = {
     scene,
     elementMeshes:  {},   // { P: InstancedMesh, C: …, N: …, O: … }
-    elementAtoms:   {},   // { P: atom[], … } — instance order
+    elementAtoms:   {},   // { P: Int32Array of atom rows, … } — instance order
     elementRadius:  {},   // { P: r, … } — sphere radius at t=0
     bondMesh:       null,
-    bondAtomPairs:  [],   // [{a, b}] matching bond instance order
+    bondAtomIdx:    null, // Int32Array [a0,b0,a1,b1,…] atom rows, bond instance order
+    atoms:          makeAtomTable(null),
     mode:           'off',
     lastData:       null,
     // Last highlight params — re-applied after rebuild so mode-switch preserves colour.
@@ -90,39 +96,56 @@ export function initAtomisticRenderer(scene) {
       _state.bondMesh.material.dispose()
       _state.bondMesh = null
     }
-    _state.bondAtomPairs = []
+    _state.bondAtomIdx = null
   }
 
   // ── Rebuild geometry ──────────────────────────────────────────────────────
 
+  /** Bonds arrive either as `[[i,j], …]` (JSON producers) or as a flat Uint32Array of
+   *  serial pairs (the columnar bundle). Normalise the access, not the storage. */
+  function _bondCount(bonds) {
+    if (!bonds) return 0
+    return ArrayBuffer.isView(bonds) ? (bonds.length >> 1) : bonds.length
+  }
+  function _bondEnds(bonds, k, out) {
+    if (ArrayBuffer.isView(bonds)) { out[0] = bonds[k * 2]; out[1] = bonds[k * 2 + 1] }
+    else { const p = bonds[k]; out[0] = p[0]; out[1] = p[1] }
+    return out
+  }
+
   function _rebuild(data) {
     _clearScene()
-    if (_state.mode === 'off' || !data?.atoms?.length) return
+    const table = _state.atoms = makeAtomTable(data)
+    if (_state.mode === 'off' || !table.count) return
 
-    const atoms = data.atoms
     const bonds = data.bonds ?? []
     const isVdw = _state.mode === 'vdw'
+    const n = table.count
 
-    // Bucket atoms by element, preserving order for instance mapping. A bucket
+    // Bucket atom ROWS by element, preserving order for instance mapping. A bucket
     // is created lazily for any element present (including protein elements like
     // S not in the base DNA catalogue); unknown elements fall back to a grey
     // default rather than being silently dropped.
     const buckets = {}
-    for (const atom of atoms) {
-      (buckets[atom.element] ??= []).push(atom)
+    for (let i = 0; i < n; i++) {
+      (buckets[table.element(i)] ??= []).push(i)
     }
 
-    for (const [el, group] of Object.entries(buckets)) {
-      if (!group.length) continue
+    for (const [el, rows] of Object.entries(buckets)) {
+      if (!rows.length) continue
       const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
       const radius = (isVdw ? meta.vdw : BALL_RADIUS) * _vdwScale
-      const mesh   = new THREE.InstancedMesh(SPHERE_GEO, makeSphereMaterial(), group.length)
+      const mesh   = new THREE.InstancedMesh(SPHERE_GEO, makeSphereMaterial(), rows.length)
       mesh.frustumCulled = false
       // Enable per-instance colour (initialised to white; _applyColors sets them)
       mesh.instanceColor = new THREE.InstancedBufferAttribute(
-        new Float32Array(group.length * 3), 3
+        new Float32Array(rows.length * 3), 3
       )
-      group.forEach((atom, i) => mesh.setMatrixAt(i, sphereMatrix(_state.geom, atom.x, atom.y, atom.z, radius)))
+      const group = Int32Array.from(rows)
+      for (let i = 0; i < group.length; i++) {
+        const a = group[i]
+        mesh.setMatrixAt(i, sphereMatrix(_state.geom, table.x(a), table.y(a), table.z(a), radius))
+      }
       mesh.instanceMatrix.needsUpdate = true
       _state.scene.add(mesh)
       _state.elementMeshes[el] = mesh
@@ -131,28 +154,41 @@ export function initAtomisticRenderer(scene) {
     }
 
     // Bond cylinders
-    if (!isVdw && bonds.length) {
-      const bySerial = []
-      for (const atom of atoms) bySerial[atom.serial] = atom
-      const pairs    = []
-      const matrices = []
-      for (const [i, j] of bonds) {
-        const a = bySerial[i]; const b = bySerial[j]
-        if (!a || !b) continue
-        const m = bondMatrix(_state.geom, a.x, a.y, a.z, b.x, b.y, b.z, BOND_RADIUS)
-        if (m) { matrices.push(m); pairs.push({ a, b }) }
+    const nBonds = _bondCount(bonds)
+    if (!isVdw && nBonds) {
+      // Bonds reference atom SERIALS. In the columnar format serial IS the row, but a
+      // legacy object array can be sparse/reordered, so map serial → row.
+      let rowOfSerial = null
+      if (!table.columnar) {
+        rowOfSerial = new Map()
+        for (let i = 0; i < n; i++) rowOfSerial.set(table.serial(i), i)
       }
-      if (matrices.length) {
-        const bm = new THREE.InstancedMesh(CYLINDER_GEO, makeBondMaterial(), matrices.length)
+      const ends = [0, 0]
+      const idx = new Int32Array(nBonds * 2)
+      const matrices = []
+      let kept = 0
+      for (let k = 0; k < nBonds; k++) {
+        _bondEnds(bonds, k, ends)
+        const ra = rowOfSerial ? rowOfSerial.get(ends[0]) : ends[0]
+        const rb = rowOfSerial ? rowOfSerial.get(ends[1]) : ends[1]
+        if (ra === undefined || rb === undefined || ra >= n || rb >= n) continue
+        const m = bondMatrix(_state.geom,
+          table.x(ra), table.y(ra), table.z(ra),
+          table.x(rb), table.y(rb), table.z(rb), BOND_RADIUS)
+        if (!m) continue
+        matrices.push(m)
+        idx[kept * 2] = ra; idx[kept * 2 + 1] = rb
+        kept++
+      }
+      if (kept) {
+        const bm = new THREE.InstancedMesh(CYLINDER_GEO, makeBondMaterial(), kept)
         bm.frustumCulled = false
-        bm.instanceColor = new THREE.InstancedBufferAttribute(
-          new Float32Array(matrices.length * 3), 3,
-        )
-        matrices.forEach((m, i) => bm.setMatrixAt(i, m))
+        bm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(kept * 3), 3)
+        for (let i = 0; i < kept; i++) bm.setMatrixAt(i, matrices[i])
         bm.instanceMatrix.needsUpdate = true
         _state.scene.add(bm)
-        _state.bondMesh      = bm
-        _state.bondAtomPairs = pairs
+        _state.bondMesh    = bm
+        _state.bondAtomIdx = idx.subarray(0, kept * 2)
       }
     }
 
@@ -176,11 +212,14 @@ export function initAtomisticRenderer(scene) {
     const hasSelection = sel != null || multiIds.length > 0
     const tColor = _state.geom.tColor
     const ctx    = _colorCtx()
+    const table  = _state.atoms
     for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
       const group = _state.elementAtoms[el]
       let dirty   = false
       for (let i = 0; i < group.length; i++) {
-        const hex = resolveAtomColor(ctx, group[i], sel, multiIds, hasSelection)
+        // table.get() may be a shared flyweight — resolveAtomColor reads it and returns
+        // a number, so it never outlives this call. See atom_table.js.
+        const hex = resolveAtomColor(ctx, table.get(group[i]), sel, multiIds, hasSelection)
         tColor.setHex(hex)
         mesh.setColorAt(i, tColor)
         dirty = true
@@ -191,10 +230,10 @@ export function initAtomisticRenderer(scene) {
     // a single instance, so just paint each bond with its first atom's colour.
     // For intra-strand / intra-residue bonds (the common case) the two atoms
     // share strand_id and bp_index, so the result matches the connecting balls.
-    if (_state.bondMesh && _state.bondAtomPairs.length) {
-      for (let i = 0; i < _state.bondAtomPairs.length; i++) {
-        const { a } = _state.bondAtomPairs[i]
-        const hex = resolveAtomColor(ctx, a, sel, multiIds, hasSelection)
+    const bidx = _state.bondAtomIdx
+    if (_state.bondMesh && bidx?.length) {
+      for (let i = 0; i < bidx.length / 2; i++) {
+        const hex = resolveAtomColor(ctx, table.get(bidx[i * 2]), sel, multiIds, hasSelection)
         tColor.setHex(hex)
         _state.bondMesh.setColorAt(i, tColor)
       }
@@ -225,8 +264,11 @@ export function initAtomisticRenderer(scene) {
       // Find which element bucket this mesh is, then map instanceId → atom.
       for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
         if (mesh === hit.object) {
-          const atom = _state.elementAtoms[el]?.[hit.instanceId]
-          return atom ? { atom, distance: hit.distance } : null
+          const row = _state.elementAtoms[el]?.[hit.instanceId]
+          // materialize (not get) — this reference escapes to selection_manager/main.js
+          // and must not be a flyweight that the next iteration re-points.
+          return row === undefined ? null
+            : { atom: _state.atoms.materialize(row), distance: hit.distance }
         }
       }
       return null
@@ -235,10 +277,12 @@ export function initAtomisticRenderer(scene) {
     /** Centroid of all currently-rendered atoms (world nm), or null. */
     centroidOf(predicate = null) {
       let n = 0; let x = 0; let y = 0; let z = 0
+      const table = _state.atoms
       for (const [, group] of Object.entries(_state.elementAtoms)) {
-        for (const a of group) {
-          if (predicate && !predicate(a)) continue
-          x += a.x; y += a.y; z += a.z; n++
+        for (let i = 0; i < group.length; i++) {
+          const r = group[i]
+          if (predicate && !predicate(table.get(r))) continue
+          x += table.x(r); y += table.y(r); z += table.z(r); n++
         }
       }
       return n ? { x: x / n, y: y / n, z: z / n } : null
@@ -250,11 +294,12 @@ export function initAtomisticRenderer(scene) {
      */
     beginLiveTransform(predicate) {
       const items = []
+      const table = _state.atoms
       for (const [el, group] of Object.entries(_state.elementAtoms)) {
         for (let i = 0; i < group.length; i++) {
-          if (predicate(group[i])) {
-            const a = group[i]
-            items.push({ el, idx: i, x: a.x, y: a.y, z: a.z })
+          const r = group[i]
+          if (predicate(table.get(r))) {
+            items.push({ el, idx: i, x: table.x(r), y: table.y(r), z: table.z(r) })
           }
         }
       }
@@ -295,15 +340,17 @@ export function initAtomisticRenderer(scene) {
       }
       const v = new THREE.Vector3()
       const touched = new Set()
+      const table = _state.atoms
       for (const [el, group] of Object.entries(_state.elementAtoms)) {
         const mesh = _state.elementMeshes[el]
         if (!mesh) continue
         for (let i = 0; i < group.length; i++) {
-          const a = group[i]
-          const sid = (typeof a.helix_id === 'string' && a.helix_id.startsWith(PFX))
-            ? a.helix_id.slice(PFX.length) : null
+          const r = group[i]
+          const hid = table.helixId(r)
+          const sid = (typeof hid === 'string' && hid.startsWith(PFX))
+            ? hid.slice(PFX.length) : null
           const m = sid ? mats[sid] : null
-          v.set(a.x, a.y, a.z)
+          v.set(table.x(r), table.y(r), table.z(r))
           if (m) v.applyMatrix4(m)
           mesh.setMatrixAt(i, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementRadius[el]))
           touched.add(mesh)
@@ -406,15 +453,17 @@ export function initAtomisticRenderer(scene) {
       const _tmpP = new THREE.Vector3()
       const tmpMat = _state.geom.tmpMat
 
+      const table = _state.atoms
+
       // Spheres
       for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
         const group  = _state.elementAtoms[el]
         const radius = _state.elementRadius[el] ?? BALL_RADIUS
         let dirty = false
         for (let i = 0; i < group.length; i++) {
-          const atom = group[i]
-          const off  = atomOffset(_state.geom, atom, offsets, t)
-          _tmpP.set(atom.x + off.x, atom.y + off.y, atom.z + off.z)
+          const r = group[i]
+          const off = atomOffset(_state.geom, table.get(r), offsets, t)
+          _tmpP.set(table.x(r) + off.x, table.y(r) + off.y, table.z(r) + off.z)
           tmpMat.identity()
           tmpMat.makeScale(radius, radius, radius)
           tmpMat.setPosition(_tmpP.x, _tmpP.y, _tmpP.z)
@@ -425,15 +474,19 @@ export function initAtomisticRenderer(scene) {
       }
 
       // Bond cylinders
-      if (_state.bondMesh && _state.bondAtomPairs.length) {
-        for (let i = 0; i < _state.bondAtomPairs.length; i++) {
-          const { a, b } = _state.bondAtomPairs[i]
-          const offA = atomOffset(_state.geom, a, offsets, t)
-          const offB = atomOffset(_state.geom, b, offsets, t)
+      const bidx = _state.bondAtomIdx
+      if (_state.bondMesh && bidx?.length) {
+        for (let i = 0; i < bidx.length / 2; i++) {
+          const ra = bidx[i * 2], rb = bidx[i * 2 + 1]
+          // atomOffset returns a fresh Vector3, so reading it after the next get() is
+          // safe — but read each row's offset while its flyweight is current.
+          const offA = atomOffset(_state.geom, table.get(ra), offsets, t)
+          const ax = table.x(ra) + offA.x, ay = table.y(ra) + offA.y, az = table.z(ra) + offA.z
+          const offB = atomOffset(_state.geom, table.get(rb), offsets, t)
           const m = bondMatrix(
             _state.geom,
-            a.x + offA.x, a.y + offA.y, a.z + offA.z,
-            b.x + offB.x, b.y + offB.y, b.z + offB.z,
+            ax, ay, az,
+            table.x(rb) + offB.x, table.y(rb) + offB.y, table.z(rb) + offB.z,
             BOND_RADIUS,
           )
           if (m) _state.bondMesh.setMatrixAt(i, m)
@@ -494,13 +547,15 @@ export function initAtomisticRenderer(scene) {
         ]
       }
 
+      const table = _state.atoms
+
       for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
         const group  = _state.elementAtoms[el]
         const radius = _state.elementRadius[el] ?? BALL_RADIUS
         let dirty = false
         for (let i = 0; i < group.length; i++) {
-          const atom    = group[i]
-          const [x, y, z] = _atomXYZ(atom.helix_id, atom.serial)
+          const r = group[i]
+          const [x, y, z] = _atomXYZ(table.helixId(r), table.serial(r))
           tmpMat.identity()
           tmpMat.makeScale(radius, radius, radius)
           tmpMat.setPosition(x, y, z)
@@ -510,11 +565,12 @@ export function initAtomisticRenderer(scene) {
         if (dirty) mesh.instanceMatrix.needsUpdate = true
       }
 
-      if (_state.bondMesh && _state.bondAtomPairs.length) {
-        for (let i = 0; i < _state.bondAtomPairs.length; i++) {
-          const { a, b } = _state.bondAtomPairs[i]
-          const [ax, ay, az] = _atomXYZ(a.helix_id, a.serial)
-          const [bx, by, bz] = _atomXYZ(b.helix_id, b.serial)
+      const bidx = _state.bondAtomIdx
+      if (_state.bondMesh && bidx?.length) {
+        for (let i = 0; i < bidx.length / 2; i++) {
+          const ra = bidx[i * 2], rb = bidx[i * 2 + 1]
+          const [ax, ay, az] = _atomXYZ(table.helixId(ra), table.serial(ra))
+          const [bx, by, bz] = _atomXYZ(table.helixId(rb), table.serial(rb))
           const dx = bx - ax, dy = by - ay, dz = bz - az
           if (dx * dx + dy * dy + dz * dz > _MAX_BOND_NM * _MAX_BOND_NM) {
             _state.bondMesh.setMatrixAt(i, _HIDDEN_BOND)   // over-stretched → hide, don't span the model

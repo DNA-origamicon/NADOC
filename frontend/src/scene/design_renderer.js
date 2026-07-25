@@ -1081,8 +1081,15 @@ export function initDesignRenderer(scene, storeRef) {
       }
       if (highlight !== undefined) _captureHighlight = !!highlight
       const { currentGeometry, currentDesign, currentHelixAxes } = storeRef.getState()
-      if (currentGeometry && currentDesign) _rebuild(currentGeometry, currentDesign, currentHelixAxes)
-      else _applyCaptureGlow()   // no geometry to rebuild (setup w/o design) — still sync glow
+      if (currentGeometry && currentDesign) {
+        _rebuild(currentGeometry, currentDesign, currentHelixAxes)
+        // _rebuild allocates a FRESH root with visible=true. Without this the CG model pops
+        // back on under an active atomistic/surface rep — and stays up until the oxDNA
+        // overlay's (multi-second) atom build lands, which reads as "NADOC is broken".
+        if (!_designVisible && _helixCtrl?.root) _helixCtrl.root.visible = false
+      } else {
+        _applyCaptureGlow()   // no geometry to rebuild (setup w/o design) — still sync glow
+      }
     },
     /** DEV diagnostics for the capture-strand injection: how many cap beads rendered and
      *  the colour they actually got (read back from the built entries). */

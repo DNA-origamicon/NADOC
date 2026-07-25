@@ -48,6 +48,32 @@ picked colormap — candidate to remove or sync.
 
 **PERFORMANCE round 3 — sibling frame reuse (common-parent recycling) 2026-07-11.** Switching to a job that shares a parent with the previously-viewed one re-did the WHOLE lineage (the whole-composite `_ALIGNED_CACHE` misses on a different stages tuple), even though siblings share every ancestor stage (root relaxation + shared production runs). New **per-FRAME aligned cache** `_FRAME_CACHE` in `oxdna_health` keyed by `(traj-file sig, reference CONTENT hash, copies, raw frame index)` → a sibling reuses the shared ancestor frames and re-parses/re-aligns ONLY its own leaf run. Keyed by reference *content* (`_ref_content_sig`, blake2b of the small `design_ref.dat`) because sibling jobs write byte-identical refs at different PATHS — a path key would never hit. Correct unconditionally (aligning frame *j* of a file to a given reference is deterministic, independent of the lineage/stride); reuse is best when the siblings have the same structure (identical stride → identical `needed` indices) and partial otherwise (per-frame, not per-stage). Bounded by cumulative nucleotide-frames (`_FRAME_CACHE_MAX_NT=3M`, memory-proportional; a growing file's sig changes → its frames re-align, stays live-correct). Also added a **frame-COUNT cache** (`_COUNT_CACHE` in `count_trajectory_frames`, keyed by file sig) so the per-load header-count of every ancestor file (needed to size the stride) doesn't re-stream hundreds of MB each time. Object-shared with `_ALIGNED_CACHE`/`ordered_frames` (consumers are read-only — the existing whole-composite cache already relies on that). Benchmarked on real siblings `979202023882`↔`2cd4a4211f2b` (both children of `734d7dd0491d`, GT_corner_v2 ~14 k nt): cold first view **30 s → sibling 9.2 s (3.3×) → re-view 4.3 s** (residual floor = the still-uncached flatten of all 200 frames; caching flat CG per frame is a possible round 4). Golden byte-identical (7e-15). Pin: `test_composite_trajectory_reuses_sibling_ancestor_frames` (spies `read_trajectory_frames_at`: sibling parses fewer frames, root NOT re-parsed, own leaf IS).
 
+**SPARSE vs FULL trajectory + user-set frame density — 2026-07-21.** Two decimations existed and only
+the second was recoverable. (1) WRITE side: `oxdna_protocol.print_conf_interval` was `steps//100`, i.e.
+~100 frames per stage *regardless of run length* — a longer run got a COARSER trajectory, and what wasn't
+written was gone. (2) READ side: the composite route strided the whole lineage down to a hardcoded 200.
+Both are now user-visible/controllable:
+
+- **`steps_per_frame`** (`RunRequest`, default `oxdna_protocol.DEFAULT_STEPS_PER_FRAME = 10_000`, from
+  oxDNA's own `examples/NEW_RELAX_PROCEDURE/input_relax`). ABSOLUTE, not a fraction of `steps`, so a longer
+  run yields a longer trajectory instead of a coarser one — and disk scales with run length, hence the hint
+  line. Lands in the existing `OxdnaStageSpec.print_conf_interval_override` via `build_run_stage/
+  build_production_stage(steps_per_frame=)`. **`print_conf_interval(spec)` now honours that override** — it
+  didn't before, so the disk forecast + progress ETA would have described frames oxDNA wasn't writing.
+  UI: `#oxdna-jobs-prod-steps-per-frame` in the Advanced card + `#oxdna-jobs-prod-frames-hint`
+  ("→ 500 frames · ~1.1 GB trajectory", amber over 5 GB), from pure `trajectoryFrameEstimate` +
+  `formatBytes` in oxdna_jobs_panel.js (130 B/nt/frame — MUST track `disk_guard._OXDNA_CONF_BYTES_PER_NT`).
+- **`scope` query param** on `/trajectory`, `/trajectory-meta`, `/frames-atomistic`, `/frames-surface`.
+  `lineage` (default) = old behaviour, whole ancestor chain strided to `routes_oxdna._SPARSE_FRAME_CAP=200`.
+  `job` = THIS job's stages only, `max_frames=0` → **stride disabled** (`_keep_for` and
+  `composite_trajectory_meta` both treat `max_frames <= 0` as unlimited). Radios: "View sparse trajectory
+  (fast)" / "View full trajectory (slow)" — peers in the `oxdna-viz` group, one shared `_onTrajToggle`
+  handler; switching between them needs an explicit `stopAndRestore` because BOTH are mode `'trajectory'`
+  so the peer teardowns don't fire. Measured on real jobs: `0bb9742bae7e` (7-stage lineage) 29 own-frames
+  sparse → 101 full. **`_trajScope` in oxdna_display must be repeated on every heavy per-frame fetch** —
+  a frame index only means the same thing within one scope. **`_EXPORT_FRAME_CAP=240` is the real ceiling
+  for exporting a full-scope trajectory** (it used to be slack because the composite was always ≤200).
+
 **LOADING BAR (accurate frames-processed).** `composite_trajectory(..., progress=cb)` → `_aligned_downsampled_frames` calls `cb(done, total_kept)` per aligned frame (total = the downsampled budget, snaps to 100% at end). Route `GET /oxdna/jobs/{id}/trajectory` writes an in-memory `routes_oxdna._TRAJ_PROGRESS[job_id]={done,total}` via the callback (build runs in `run_in_threadpool` so the poll is served concurrently on the single worker), cleared in `finally`. New `GET /oxdna/jobs/{id}/trajectory-progress` → `{active,done,total}`. Frontend `oxdna_jobs_panel._refreshTraj` polls it every 250 ms while `_trajBusy` and renders `Loading trajectory… NN% (done/total frames)` into the existing `#oxdna-jobs-traj-status` line (no new DOM/CSS — a graphical bar is a follow-up; **NOT exercised in-app**, doc-context per-design-selection limit). `client.getOxdnaTrajectoryProgress`. **NAMD path (`md_composite_trajectory`) has NO progress callback yet** — mirror there if the NAMD trajectory load is reported slow.
 
 Pins (tests/test_oxdna_relaxation.py): `test_read_trajectory_frames_at_matches_full_reader` (selective==full), `_empty_request`, `_composite_trajectory_downsamples_across_stages` (9+8, budget 10→5+5+one marker), `_keeps_all_when_under_budget`, `test_oxdna_backbone_sites_batched_matches_scalar`, `test_unwrap_plan_matches_bfs` (vectorized==BFS on a rotated+translated+wrapped structure — the equivalence pin), `test_composite_trajectory_reports_progress` (0→100% monotonic), `test_oxdna_trajectory_progress_endpoint_idle`. `_ALIGNED_CACHE` still memoizes the 2nd load; a still-growing trajectory re-strides each poll (bounded now). Remaining floor for the 14774-nt/1.5 GB extreme (~31 s): text parse (~6 s) + file streaming + array (re)builds — would need frame byte-offset indexing / threading arrays instead of dicts to push further.

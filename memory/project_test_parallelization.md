@@ -68,6 +68,24 @@ several mutate `helices[].loop_skips`) shared by ~6 call sites incl. `test_clust
 (3.7s isolated, not O(n²) — the 14s reading was CPU contention); (b) split `test_oxdna_relaxation.py`
 so `loadfile` can spread it.
 
+**Backstop triage 2026-07-22 — `FAST SUITE TOO SLOW` (93–95s) was mostly CPU CONTENTION, not fat.**
+Zero per-test violators; 5393 tests. Re-measured on an idle box: **76.8s pytest / 81s guard** — under
+the 90s backstop. Lessons for the next time this banner fires:
+- **This box is 6 physical cores / 12 threads (Ryzen 5 3600), so `-n auto` = 12 workers oversubscribes
+  SMT and inflates every per-test reading 2–6×.** `test_fem_solver` / `test_snupi_hydro_coarse` tests that
+  the report showed at 2–3.1s are **0.3–0.7s in isolation**; `test_headless_oxdna_build` is 22.7s isolated
+  vs 32.7s in-suite. **Never relegate off the in-suite number alone — re-time the file in isolation first.**
+  Measured: `-n 8` is a wash (76.3s), so worker count is not a lever.
+- **~9–15s of the wall is collection** (5742 items, 8.7s per worker, all 12 doing it at once) plus 6-core
+  execution of ~336 in-suite test-seconds. That floor is suite SIZE — not a defect, not triage-able.
+- **Fixed (accidental, no coverage moved):** `test_engines_ws.py` still paid the full app lifespan per test
+  (trap #3 below) in 4 tests → module-scoped `lifespan_client` fixture. **7.6s → 3.6s**, file left the top-15.
+- **Nothing was relegated** (correct for the aggregate case — the mandatory gate is per-test). The one file
+  that is heavy *by mechanism* is `test_headless_oxdna_build.py` (45 tests × a mock-oxDNA subprocess ×3 stages,
+  22.7s isolated, top `loadfile` bin): ignoring it is worth **~7s of wall**. That is the standing lever if the
+  backstop ever fires on a genuinely idle box — `_SLOW_MODULES` + area `oxdna` — but it costs 45 fast oxDNA
+  orchestration tests, so it was left fast.
+
 **Setup (shipped 2026-06-28):**
 - `just test` / `just test-all` use `pytest -n auto --dist loadfile` → ~2.5-3 min *when the heavy sims are skipped/guarded*; **real wall-clock with the full slow sim/FEM tail is ~16 min** (`--dist loadfile` pins the slowest heavy FILE to one core — see the scoping protocol below). A green run bumps the machine-local `.nadoc-test-watermark`. This is the PRE-PUSH gate, not the per-change loop.
 - `just test-fast` adds `-m "not slow"` → **~50s** after the 2026-07-10 registry re-refresh (4453 passed, 38 skipped, 12 cores). It had crept back to ~117s as ~50 new heavy sim/FEM/routing tests landed unregistered (one 75 s `test_cando_autorefine` FEM loop alone pinned a worker); the 2026-07-10 pass folded them all in. Use for the tight dev loop; run full `just test` before pushing.

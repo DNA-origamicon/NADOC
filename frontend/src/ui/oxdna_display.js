@@ -21,6 +21,7 @@ import { strideIndices, nearestOf } from '../scene/trajectory_range.js'
 import { colormapHex } from './colormaps.js'
 import { expandStampFrames, stampTopologyMatches } from '../scene/atomistic_stamp.js'
 import { parseSurfaceBin } from '../scene/surface_bin.js'
+import { parseAtomisticBundleBin } from '../scene/atomistic_bundle_bin.js'
 
 /**
  * Pure mapping: a /oxdna/jobs/{id}/display response → applyFemPositions updates.
@@ -244,6 +245,10 @@ export function initOxdnaDisplay({
   // heavy geometry from the same relaxed/rmsf/trajectory frame and push it into
   // the atomistic/surface renderer (display-state only, never topology).
   let _align = true          // last align flag from displayJob (relaxed only)
+  // Composite scope of the loaded trajectory: 'lineage' (sparse, whole ancestor chain)
+  // or 'job' (full, this job's own frames only).  Every heavy per-frame fetch must repeat
+  // it — frame indices only mean the same thing within one scope.
+  let _trajScope = 'lineage'
   let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
   let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
   let _playing = false       // play loop running → force coarse (every frame must be instant)
@@ -267,6 +272,9 @@ export function initOxdnaDisplay({
   // rebuild and the relaxed applyPositionLerp happen in one tick (no native-position flash).
   let _pendingTopoModel = null
   let _pendingTopoJob = null   // job _pendingTopoModel was fetched for (legacy path sets no descriptor)
+  // Whether the held/applied topology carries its bond list. VDW fetches without bonds;
+  // a later flip to ball-and-stick must re-fetch rather than draw sticks-less atoms.
+  let _atomTopoBonds = false
   // Fast CG→atomistic path: the design-fixed stamp descriptor (atom_nuc / atom_local /
   // nonrigid_serials), fetched once per job.  Lets the relaxed atomistic frame ship as
   // per-nucleotide (origin,R) + a small non-rigid set and be expanded client-side
@@ -307,11 +315,34 @@ export function initOxdnaDisplay({
    *  `_applyJobTopology`, which the caller runs in the SAME synchronous tick as
    *  applyPositionLerp, so the native rebuild is overwritten before the browser paints. */
   async function _ensureJobAtomistic(ar, epoch) {
-    if (_atomTopoJob === _jobId) return true            // already applied for this job
-    if (_pendingTopoModel && _pendingTopoJob === _jobId) return true   // already fetched
+    // VDW draws spheres only — skip the bond list (megabytes of pairs it never reads).
+    // If the user later flips vdw→ballstick we DO need them, so a bond-less hold does
+    // not satisfy a bonds-needed call: re-fetch and re-apply rather than render
+    // ball-and-stick with no sticks.
+    const needBonds = ar?.getMode?.() !== 'vdw'
+    const haveBonds = !needBonds || _atomTopoBonds
+    if (_atomTopoJob === _jobId && haveBonds) return true   // already applied for this job
+    if (_pendingTopoModel && _pendingTopoJob === _jobId && haveBonds) return true   // already fetched
+    // FASTEST: the columnar/binary bundle — ~7× smaller than the JSON one AND it decodes
+    // into typed-array views instead of ~330k JavaScript objects, which is where the
+    // multi-second stall actually lived. Carries bonds unconditionally (only ~3 MB packed),
+    // so it satisfies both reps in one fetch. Null → older server / unpackable → JSON below.
+    if (typeof api.getOxdnaAtomisticDisplayBundleBin === 'function') {
+      const buf = await api.getOxdnaAtomisticDisplayBundleBin(_jobId).catch(() => null)
+      if (epoch !== _epoch) return false
+      const c = parseAtomisticBundleBin(buf)
+      if (c) {
+        _pendingTopoModel = c        // the renderer AND the stamp expansion read it directly
+        _pendingTopoJob = _jobId
+        _stampDesc = c; _stampDescJob = _jobId
+        _atomTopoBonds = true
+        _atomTopoJob = null          // differs from whatever the renderer holds → re-apply
+        return true
+      }
+    }
     let model = null
     if (typeof api.getOxdnaAtomisticDisplayBundle === 'function') {
-      const b = await api.getOxdnaAtomisticDisplayBundle(_jobId).catch(() => null)
+      const b = await api.getOxdnaAtomisticDisplayBundle(_jobId, { bonds: needBonds }).catch(() => null)
       if (epoch !== _epoch) return false
       if (b?.atoms?.length) {
         model = b
@@ -325,6 +356,8 @@ export function initOxdnaDisplay({
     if (!model?.atoms?.length) return false
     _pendingTopoModel = { atoms: model.atoms, bonds: model.bonds || [] }   // hold, don't paint
     _pendingTopoJob = _jobId
+    _atomTopoBonds = needBonds
+    _atomTopoJob = null    // this model differs from whatever the renderer holds → re-apply it
     return true
   }
 
@@ -379,7 +412,27 @@ export function initOxdnaDisplay({
     else ar.clearScalarColors?.()
     _heavyActive = true
     onHeavyApplied()   // atoms are live → the caller can now hide the CG model (no flash)
+    _warmBonds()       // VDW skipped the bonds → fetch them off the critical path
   }
+
+  /** VDW painted without bonds. Pull them in the background so a later flip to
+   *  ball-and-stick repaints from the held model instead of stalling on a re-fetch.
+   *  Fire-and-forget; the renderer is NOT touched (VDW ignores bonds anyway) — clearing
+   *  _atomTopoJob just tells _applyJobTopology to repaint on the next push. */
+  let _bondWarmJob = null
+  function _warmBonds() {
+    if (_atomTopoBonds || !_jobId || _bondWarmJob === _jobId) return
+    if (typeof api.getOxdnaAtomisticDisplayBundle !== 'function') return
+    const jobId = _bondWarmJob = _jobId
+    api.getOxdnaAtomisticDisplayBundle(jobId, { bonds: true }).then((b) => {
+      if (jobId !== _jobId || !b?.atoms?.length) return
+      _pendingTopoModel = { atoms: b.atoms, bonds: b.bonds || [] }
+      _pendingTopoJob = jobId
+      _atomTopoBonds = true
+      _atomTopoJob = null      // next push repaints (with bonds) in its usual single tick
+    }).catch(() => { if (_bondWarmJob === jobId) _bondWarmJob = null })   // allow a retry
+  }
+
   function _pushSurface(data, rmsf = false) {
     const sr = getSurfaceRenderer?.()
     if (!sr || sr.getMode?.() === 'off' || !data?.vertices?.length) return
@@ -437,8 +490,8 @@ export function initOxdnaDisplay({
     const bake = kind === 'atomistic' ? _bakedAtom : _bakedSurf
     if (bake.byIdx.has(gridIdx)) return bake.byIdx.get(gridIdx)
     const resp = kind === 'atomistic'
-      ? await api.getOxdnaFramesAtomistic(_jobId, [gridIdx], _align)
-      : await api.getOxdnaFramesSurface(_jobId, [gridIdx], {}, _align)
+      ? await api.getOxdnaFramesAtomistic(_jobId, [gridIdx], _align, _trajScope)
+      : await api.getOxdnaFramesSurface(_jobId, [gridIdx], {}, _align, _trajScope)
     if (epoch !== _epoch) return null
     const data = resp?.[String(gridIdx)] || null
     if (data) bake.byIdx.set(gridIdx, data)
@@ -534,10 +587,10 @@ export function initOxdnaDisplay({
         const idx = _frameIdx
         if (useFine) {
           if (kind === 'atomistic') {
-            const r = await api.getOxdnaFramesAtomistic(_jobId, [idx], _align)
+            const r = await api.getOxdnaFramesAtomistic(_jobId, [idx], _align, _trajScope)
             if (live()) await _pushAtomistic(r?.[String(idx)], epoch, live)
           } else {
-            const r = await api.getOxdnaFramesSurface(_jobId, [idx], {}, _align)
+            const r = await api.getOxdnaFramesSurface(_jobId, [idx], {}, _align, _trajScope)
             if (live()) _pushSurface(r?.[String(idx)])
           }
         } else {
@@ -571,6 +624,8 @@ export function initOxdnaDisplay({
     _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
     _pendingTopoModel = null   // drop the held (native) model so the next job re-fetches
     _pendingTopoJob = null
+    _atomTopoBonds = false
+    _bondWarmJob = null
     _stampDescJob = null  // and re-fetches the stamp descriptor for that job
     _lastSurfRmsf = null
   }
@@ -584,7 +639,13 @@ export function initOxdnaDisplay({
     if (!jobId || jobId === _warmedBundleJob) return
     if (typeof api.getOxdnaAtomisticDisplayBundle !== 'function') return
     _warmedBundleJob = jobId
-    Promise.resolve(api.getOxdnaAtomisticDisplayBundle(jobId).catch(() => null))
+    // Warm the BINARY route: it builds + disk-caches the JSON bundle AND the packed blob,
+    // so the real click pays neither. (The warm's own response is discarded — that's why
+    // it's worth warming the cheaper of the two.)
+    const warm = (typeof api.getOxdnaAtomisticDisplayBundleBin === 'function')
+      ? api.getOxdnaAtomisticDisplayBundleBin(jobId)
+      : api.getOxdnaAtomisticDisplayBundle(jobId, { bonds: false })
+    Promise.resolve(warm).catch(() => null)
       .then((r) => { if (!r) _warmedBundleJob = null })   // failed → allow a retry later
   }
 
@@ -789,11 +850,11 @@ export function initOxdnaDisplay({
    * cache it, and show the first frame.  Returns metadata for the player
    * (n_frames + stage markers).  The actual scrubbing is driven by showFrame().
    */
-  async function loadTrajectory(jobId, align = true) {
+  async function loadTrajectory(jobId, align = true, scope = 'lineage') {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     const signal = _beginLoad()
-    const resp = await api.getOxdnaTrajectory(jobId, { align, signal })
+    const resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
@@ -806,6 +867,7 @@ export function initOxdnaDisplay({
     _mode = 'trajectory'
     _jobId = jobId
     _align = align
+    _trajScope = scope
     // Replace setup-preview strands before showFrame's FEM move; otherwise the rebuild
     // leaves the origami at design coordinates and the preview caps at seed coordinates.
     if (!await _applyJobSurfaceStrands(jobId, align, epoch, signal)) {
@@ -858,7 +920,7 @@ export function initOxdnaDisplay({
     if (!_active || !_jobId) return { ok: false, reason: 'not active' }
     if (_mode === 'trajectory') {
       _surfaceStrandsByJob.delete(_jobId) // refresh both origami frames and latest real caps
-      return loadTrajectory(_jobId, _align)
+      return loadTrajectory(_jobId, _align, _trajScope)
     }
     // refresh re-fetches: more production frames may have accumulated → bypass cache.
     return _mode === 'rmsf'

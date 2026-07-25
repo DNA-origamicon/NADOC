@@ -1264,6 +1264,61 @@ def test_count_trajectory_frames(tmp_path):
     assert count_trajectory_frames(tmp_path / "missing.dat") == 0
 
 
+def _frames(times) -> str:
+    return "".join(f"t = {t}\nb = 1 1 1\nE = 0 0 0\n1 0 0\n" for t in times)
+
+
+def test_count_trajectory_frames_incremental(tmp_path):
+    """A GROWING trajectory is counted over its new tail only, and a rewrite that
+    invalidates the counted prefix falls back to a full recount.  The live stage's
+    file is re-counted on every panel poll; re-streaming it whole was starving the
+    oxDNA process of CPU."""
+    from backend.core.oxdna_health import count_trajectory_frames as count
+
+    p = tmp_path / "traj.dat"
+    p.write_text(_frames([0, 100]))
+    assert count(p) == 2
+    assert count(p) == 2                       # stat-only cache hit, same answer
+
+    with p.open("a") as fh:                    # append (the live-stage case)
+        fh.write(_frames([200, 300]))
+    assert count(p) == 4
+
+    # Half-written final header (no newline yet) counts, but doesn't corrupt the
+    # resume point: the frame completing later must not be double-counted.
+    with p.open("a") as fh:
+        fh.write("t = 400")
+    assert count(p) == 5
+    with p.open("a") as fh:
+        fh.write("\nb = 1 1 1\nE = 0 0 0\n1 0 0\n")
+    assert count(p) == 5
+
+    p.write_text(_frames([0]))                 # truncated in place → recount
+    assert count(p) == 1
+
+    # Rewritten LARGER with an identical head (a restarted stage rewinds to t = 0)
+    # but different body — the anchor check must reject the stale resume point.
+    p.write_text(_frames([0, 100, 200]).replace("1 0 0", "2 0 0"))
+    assert count(p) == 3
+
+
+def test_count_dat_frames_is_memoized(tmp_path, monkeypatch):
+    """composite_trajectory_meta's counter must go through the memo — it used to be a
+    private un-cached duplicate, so every meta call re-read the whole lineage."""
+    from backend.core import oxdna_health as H
+
+    p = tmp_path / "traj.dat"
+    p.write_text(_frames([0, 100]))
+    assert H._count_dat_frames(p) == 2
+
+    calls: list = []
+    real = H._scan_frames
+    monkeypatch.setattr(H, "_scan_frames",
+                        lambda *a, **k: (calls.append(1), real(*a, **k))[1])
+    assert H._count_dat_frames(p) == 2
+    assert calls == []                         # served from cache, no re-scan
+
+
 def test_production_metric_series_one_pass_all_metrics(design, geometry, tmp_path):
     """Single pass over a trajectory yields twist, curvature AND base-pairing — temporal
     (per-frame) + spatial (profile) sections — and calls the progress hook per frame."""
@@ -4525,6 +4580,50 @@ def test_composite_trajectory_keeps_all_when_under_budget(tmp_path, design, geom
     assert out["n_frames"] == 5          # 4 stage frames + prepended seed
     assert out["stages"][0]["n_frames"] == 5
     assert out["markers"] == []
+
+
+def test_composite_trajectory_unlimited_budget_keeps_every_frame(tmp_path, design, geometry):
+    """max_frames <= 0 disables the stride entirely — the full-trajectory view's
+    contract.  Same stages that a budget of 10 strides down to 10 frames must come
+    back complete (17 = 8 + seed + 8), and the meta helper must agree, or the slider
+    would size itself to a different length than the payload it scrubs."""
+    from backend.core.oxdna_health import composite_trajectory, composite_trajectory_meta
+
+    ref = tmp_path / "ref.dat"
+    write_configuration(design, geometry, ref, box_nm=80.0)
+    s0 = tmp_path / "s0.dat"
+    s1 = tmp_path / "s1.dat"
+    _write_trajectory(s0, design, geometry, n_frames=8)
+    _write_trajectory(s1, design, geometry, n_frames=8)
+    stages = [("relax", "mc", str(s0)), ("prod", "production", str(s1))]
+
+    out = composite_trajectory(design, stages, str(ref), max_frames=0)
+    assert out["n_frames"] == 17
+    assert [s["n_frames"] for s in out["stages"]] == [9, 8]
+    assert len(out["frames"]) == 17
+    meta = composite_trajectory_meta(design, stages, 0)
+    assert meta["n_frames"] == out["n_frames"]
+    assert [s["n_frames"] for s in meta["stages"]] == [s["n_frames"] for s in out["stages"]]
+
+
+def test_print_conf_interval_honours_steps_per_frame_override():
+    """The disk forecast and the progress ETA both read print_conf_interval(), so it
+    must report the user's steps-per-frame — not the legacy steps//100 rule — or a run
+    launched with a dense trajectory would be forecast at a fraction of its real size."""
+    from backend.core.disk_guard import oxdna_run_output_bytes
+    from backend.core.oxdna_protocol import (
+        DEFAULT_STEPS_PER_FRAME, build_run_stage, print_conf_interval)
+
+    spec = build_run_stage(name="1_production", steps=5_000_000,
+                           steps_per_frame=DEFAULT_STEPS_PER_FRAME)
+    assert print_conf_interval(spec) == DEFAULT_STEPS_PER_FRAME
+    assert spec.steps // print_conf_interval(spec) == 500
+    # No override → the legacy ~100-frames-per-stage rule still applies.
+    assert print_conf_interval(build_run_stage(name="x", steps=5_000_000)) == 50_000
+    # A denser trajectory must forecast proportionally more disk (500 vs 100 frames).
+    dense = oxdna_run_output_bytes([(5_000_000, DEFAULT_STEPS_PER_FRAME)], 1000)
+    sparse = oxdna_run_output_bytes([(5_000_000, 50_000)], 1000)
+    assert dense == pytest.approx(5 * sparse, rel=0.01)
 
 
 # ── Composite-trajectory LOAD performance: vectorized parse/align/flatten ──────

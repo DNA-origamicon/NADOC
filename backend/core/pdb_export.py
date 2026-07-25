@@ -1408,3 +1408,94 @@ def export_psf(
         lines.append("")
 
     return "\n".join(lines) + "\n"
+
+
+# ── Multi-frame (trajectory) PDB ──────────────────────────────────────────────
+#
+# A trajectory export writes the SAME structure N times with only the coordinates
+# changing.  Re-running export_pdb() per frame regenerates every frame-invariant byte:
+# hybrid-36 serials, atom names, chain/resid columns, TER records, and the entire CONECT
+# block (~330k records on a 16k-nt design) — the caller then discards all but the first
+# frame's CONECT.  Measured at ~6 s per frame.
+#
+# Instead: render ONCE, cut each ATOM line at the coordinate columns, and per frame emit
+# prefix + 3 formatted floats + suffix.  Columns 31-54 are the only bytes that move.
+
+_PDB_COORD_START = 30   # 0-based slice bounds of the x/y/z columns (PDB cols 31-54)
+_PDB_COORD_END = 54
+
+
+class MultiframePdbTemplate:
+    """One export_pdb() render, split into frame-invariant text + coordinate slots.
+
+    ``body`` entries are either a literal line (TER/ANISOU) or an ``(prefix, serial,
+    suffix)`` triple whose coordinates get re-filled per frame from a flat XYZ array.
+    ``atom_serials`` is the emit-order serial list, used to validate the flat's length.
+    """
+
+    __slots__ = ("header", "body", "conect", "atom_serials")
+
+    def __init__(self, header, body, conect, atom_serials):
+        self.header = header
+        self.body = body
+        self.conect = conect
+        self.atom_serials = atom_serials
+
+    def model_block(self, flat, model_no: int) -> str:
+        """One MODEL…ENDMDL block with `flat` ([x0,y0,z0,…] in nm, indexed by serial)."""
+        out = [f"MODEL     {model_no:>4d}"]
+        for seg in self.body:
+            if seg.__class__ is str:
+                out.append(seg)
+                continue
+            prefix, serial, suffix = seg
+            i = serial * 3
+            # nm -> Å, same 8.3f fields _pdb_atom_record writes.
+            out.append(f"{prefix}{flat[i] * 10.0:8.3f}{flat[i + 1] * 10.0:8.3f}"
+                       f"{flat[i + 2] * 10.0:8.3f}{suffix}")
+        out.append("ENDMDL")
+        return "\n".join(out) + "\n"
+
+
+def build_multiframe_pdb_template(design, model, export_pdb_fn=None) -> MultiframePdbTemplate | None:
+    """Render the model once and split it into a reusable multi-frame template.
+
+    Returns None when the render can't be split safely — the ATOM-line count not matching
+    the model's atom count means export_pdb applied a filter or reordering this splitter
+    doesn't model (viewer_terminals omissions, >62-chain MODEL splitting). Callers MUST
+    treat None as "fall back to per-frame export_pdb", never as an error: the point of the
+    guard is that a silently mis-mapped splice would corrupt every exported coordinate.
+    """
+    fn = export_pdb_fn or export_pdb
+    text = fn(design, model=model, viewer_terminals=False)
+    atoms = model.atoms
+
+    header: list[str] = []
+    body: list = []
+    conect: list[str] = []
+    atom_serials: list[int] = []
+    seen_atom = False
+
+    for line in text.splitlines():
+        if line.startswith(("ATOM", "HETATM")):
+            k = len(atom_serials)
+            if k >= len(atoms):
+                return None                       # more ATOM lines than atoms
+            serial = atoms[k].serial
+            body.append((line[:_PDB_COORD_START], serial, line[_PDB_COORD_END:]))
+            atom_serials.append(serial)
+            seen_atom = True
+        elif line.startswith("CONECT"):
+            conect.append(line)
+        elif line.startswith("END") and not line.startswith("ENDMDL"):
+            continue                              # re-emitted after the last model
+        elif line.startswith(("MODEL", "ENDMDL")):
+            return None                           # multi-MODEL source; we add our own
+        elif seen_atom:
+            body.append(line)                     # TER / ANISOU between atom records
+        else:
+            header.append(line)                   # REMARK / CRYST1 preamble
+
+    if len(atom_serials) != len(atoms):
+        return None                               # fewer ATOM lines than atoms
+    return MultiframePdbTemplate(header, body, conect, atom_serials)

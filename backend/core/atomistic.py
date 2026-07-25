@@ -551,6 +551,29 @@ _ATOMISTIC_PHASE_OFFSET_RAD: float = _math.radians(-32.0)
 
 _PHOSPHODIESTER_LINKER_CONTOUR_NM: float = 0.606  # C3'-O3'-P-O5'-C5' contour length
 
+
+def _cross3(a, b):
+    """Cross product of two 3-vectors — the SAME arithmetic ``np.cross`` performs, without
+    its generic-axis dispatch.
+
+    ``np.cross`` is written for arbitrary shapes/axes: every call runs ``moveaxis`` and
+    ``normalize_axis_tuple`` before doing three multiplies. On (3,) inputs that overhead
+    dwarfs the arithmetic. Profiling one export frame of a 16k-nt design (330k atoms) showed
+    57,500 such calls costing ~3.0 s of the 7 s frame — ~2.1 s of it inside moveaxis and
+    normalize_axis_tuple alone.
+
+    Bit-identical to ``np.cross`` for 3-vectors (identical IEEE ops in the same order), so it
+    is a drop-in for the SCALAR call sites only. The batched ``(N,3)`` sites in this module
+    (``_rot``'s Rodrigues term and the vectorised frame builder) still use ``np.cross``, where
+    the dispatch cost is amortised across the whole array and the semantics differ.
+    """
+    a0, a1, a2 = a[0], a[1], a[2]
+    b0, b1, b2 = b[0], b[1], b[2]
+    return _np.array((a1 * b2 - a2 * b1,
+                      a2 * b0 - a0 * b2,
+                      a0 * b1 - a1 * b0))
+
+
 # ── Frame builder ─────────────────────────────────────────────────────────────
 
 
@@ -613,7 +636,7 @@ def _atom_frame(
             ax = nuc_pos.axis_tangent
             cd, sd = _math.cos(delta), _math.sin(delta)
             bb_axial = bb - _ATOMISTIC_P_RADIUS * e_radial
-            e_radial = cd * e_radial + sd * _np.cross(ax, e_radial)
+            e_radial = cd * e_radial + sd * _cross3(ax, e_radial)
             bb = bb_axial + _ATOMISTIC_P_RADIUS * e_radial
 
     # Phase offset: rotate e_radial around the helix axis by _ATOMISTIC_PHASE_OFFSET_RAD.
@@ -623,7 +646,7 @@ def _atom_frame(
         ax = nuc_pos.axis_tangent
         cc, ss = _math.cos(_ATOMISTIC_PHASE_OFFSET_RAD), _math.sin(_ATOMISTIC_PHASE_OFFSET_RAD)
         bb_axial = bb - _ATOMISTIC_P_RADIUS * e_radial
-        e_radial = cc * e_radial + ss * _np.cross(ax, e_radial)
+        e_radial = cc * e_radial + ss * _cross3(ax, e_radial)
         bb = bb_axial + _ATOMISTIC_P_RADIUS * e_radial
 
     # e_n: inward radial (toward helix axis).  e_radial-based is parity-symmetric
@@ -633,13 +656,13 @@ def _atom_frame(
     # preserves D-deoxyribose chirality when the same template is used for both
     # strand directions.
     e_z = -nuc_pos.axis_tangent if direction == Direction.FORWARD else nuc_pos.axis_tangent
-    e_y = _np.cross(e_z, e_n)
+    e_y = _cross3(e_z, e_n)
     norm = _np.linalg.norm(e_y)
     if norm < 1e-9:
         fallback = _np.array([0.0, 0.0, 1.0])
         if abs(_np.dot(e_n, fallback)) > 0.9:
             fallback = _np.array([1.0, 0.0, 0.0])
-        e_y = _np.cross(e_z, fallback)
+        e_y = _cross3(e_z, fallback)
         norm = _np.linalg.norm(e_y)
     e_y /= norm
 
@@ -764,7 +787,7 @@ def _oxdna_frame_basis(
     a3 = a3 / (_np.linalg.norm(a3) + 1e-14)
     a1 = a1 - _np.dot(a1, a3) * a3
     a1 = a1 / (_np.linalg.norm(a1) + 1e-14)
-    a2 = _np.cross(a3, a1)
+    a2 = _cross3(a3, a1)
     F = _np.column_stack([a1, a2, a3])
     return F, oxdna_backbone_site(cm_nm, a1, a3)
 
@@ -2197,6 +2220,144 @@ def atomistic_display_bundle(design: Design) -> dict:
     return out
 
 
+_BUNDLE_BIN_MAGIC = 0x4E414231      # "NAB1"
+_BUNDLE_BIN_VERSION = 1
+
+# Fields the FRONTEND actually reads off an atom.  The other seven the JSON bundle
+# carries (name, residue, chain_id, seq_num, is_modified, crossover_id, extra_base_k)
+# are not read anywhere in frontend/src — they were ~40% of the atom payload.
+# Keep in sync with ATOM_FIELDS in frontend/src/scene/atom_table.js.
+
+
+class BundleNotPackable(ValueError):
+    """The bundle violates an invariant the columnar format depends on, so the caller
+    must fall back to the JSON route rather than ship a subtly-wrong payload."""
+
+
+def pack_bundle_bin(bundle: dict) -> bytes:
+    """Pack a JSON display bundle into the compact columnar/binary wire format.
+
+    Pure function over the dict `atomistic_display_bundle` already produces (and that the
+    per-job disk cache already holds), so the cache stays the single source of truth and
+    this stays trivially testable.
+
+    Why: 330k atoms as JSON dicts is ~112 MB and `JSON.parse` builds 330k objects before
+    anything renders.  Here every atom column is a typed array and the five string fields
+    become an index + a small interned table (a whole origami has ~200 strands, ~60
+    helices, 2 directions, 4 elements), so the same information is ~7× smaller AND costs
+    no per-atom allocation on the client.  See frontend/src/scene/atomistic_bundle_bin.js
+    for the layout, which this function is the only producer of.
+
+    Raises BundleNotPackable when an invariant the format relies on does not hold.
+    """
+    import json
+    import struct
+
+    import numpy as np
+
+    atoms = bundle.get("atoms") or []
+    n = len(atoms)
+    if n == 0:
+        raise BundleNotPackable("empty bundle")
+    # A bundle missing any column the format carries is a fallback case, not a crash:
+    # the route turns BundleNotPackable into a 409 and the client re-fetches the JSON.
+    required = ("serial", "element", "x", "y", "z", "strand_id", "helix_id",
+                "bp_index", "direction")
+    missing = [k for k in required if k not in atoms[0]]
+    if missing:
+        raise BundleNotPackable(f"atoms are missing required field(s): {', '.join(missing)}")
+    # serial IS the row index in this format (that is what lets us drop the column
+    # entirely AND index the serial-keyed relaxed-frame arrays directly).
+    for i, a in enumerate(atoms):
+        if a["serial"] != i:
+            raise BundleNotPackable(f"atom serials are not dense 0..n-1 (row {i} has serial {a['serial']})")
+
+    def _intern(field: str, width: int) -> tuple[list[str], np.ndarray]:
+        table: list[str] = []
+        index: dict[str, int] = {}
+        out = np.empty(n, dtype=np.uint16 if width == 16 else np.uint8)
+        for i, a in enumerate(atoms):
+            v = a.get(field)
+            v = "" if v is None else str(v)
+            k = index.get(v)
+            if k is None:
+                k = index[v] = len(table)
+                table.append(v)
+            out[i] = k
+        limit = 65536 if width == 16 else 256
+        if len(table) > limit:
+            raise BundleNotPackable(f"{field} has {len(table)} distinct values, exceeds u{width}")
+        return table, out
+
+    strand_table, strand_idx = _intern("strand_id", 16)
+    helix_table, helix_idx = _intern("helix_id", 16)
+    aux_table, aux_idx = _intern("aux_helix_id", 16)
+    element_table, element_idx = _intern("element", 8)
+    dir_table, dir_idx = _intern("direction", 8)
+
+    x = np.fromiter((a["x"] for a in atoms), dtype=np.float32, count=n)
+    y = np.fromiter((a["y"] for a in atoms), dtype=np.float32, count=n)
+    z = np.fromiter((a["z"] for a in atoms), dtype=np.float32, count=n)
+    bp = np.fromiter((a["bp_index"] for a in atoms), dtype=np.int32, count=n)
+    aux_t = np.fromiter((a.get("aux_t") or 0.0 for a in atoms), dtype=np.float32, count=n)
+
+    bonds = bundle.get("bonds") or []
+    bonds_arr = np.asarray(bonds, dtype=np.uint32).reshape(-1) if bonds else np.empty(0, np.uint32)
+
+    atom_nuc = np.asarray(bundle.get("atom_nuc") or [], dtype=np.int32)     # -1 = non-rigid
+    atom_local = np.asarray(bundle.get("atom_local") or [], dtype=np.float32)
+    nonrigid = np.asarray(bundle.get("nonrigid_serials") or [], dtype=np.uint32)
+    if atom_nuc.size != n or atom_local.size != n * 3:
+        raise BundleNotPackable("stamp descriptor length does not match the atom count")
+
+    header = json.dumps({
+        "strand_table": strand_table,
+        "helix_table": helix_table,
+        "aux_helix_table": aux_table,
+        "element_table": element_table,
+        "dir_table": dir_table,
+        "element_meta": bundle.get("element_meta") or {},
+        "topology_hash": bundle.get("topology_hash"),
+    }).encode()
+
+    parts: list[bytes] = [
+        struct.pack("<IIIII", _BUNDLE_BIN_MAGIC, _BUNDLE_BIN_VERSION,
+                    n, len(bonds), len(header)),
+        header,
+    ]
+    written = 20 + len(header)
+
+    def _pad(to: int = 4) -> None:
+        nonlocal written
+        gap = (-written) % to
+        if gap:
+            parts.append(b"\x00" * gap)
+            written += gap
+
+    def _put(arr: np.ndarray) -> None:
+        nonlocal written
+        b = arr.tobytes()
+        parts.append(b)
+        written += len(b)
+
+    # Widest-first so every typed-array view on the client lands naturally aligned.
+    _pad()
+    for col in (x, y, z, bp, aux_t):
+        _put(col)
+    for col in (strand_idx, helix_idx, aux_idx):
+        _put(col)
+    for col in (element_idx, dir_idx):
+        _put(col)
+    _pad()                                   # the two u8 columns can leave an odd offset
+    _put(bonds_arr)
+    parts.append(struct.pack("<II", int(bundle.get("n_nuc") or 0), nonrigid.size))
+    written += 8
+    _put(atom_nuc)
+    _put(atom_local)
+    _put(nonrigid)
+    return b"".join(parts)
+
+
 def _thread_inserts_inline(atoms: list[Atom], design: "Design") -> None:
     """Re-number per-chain ``seq_num`` so crossover extra-base inserts AND
     strand-extension tail bases sit at their true chain positions, in place.
@@ -2479,13 +2640,13 @@ def _extra_base_frame(
         bow_n = float(_np.linalg.norm(bow_proj))
     e_n = bow_proj / bow_n
 
-    e_y = _np.cross(e_z, e_n)
+    e_y = _cross3(e_z, e_n)
     norm_y = float(_np.linalg.norm(e_y))
     if norm_y < 1e-9:
         fallback = _np.array([0.0, 0.0, 1.0])
         if abs(float(_np.dot(e_n, fallback))) > 0.9:
             fallback = _np.array([1.0, 0.0, 0.0])
-        e_y = _np.cross(e_z, fallback)
+        e_y = _cross3(e_z, fallback)
         norm_y = float(_np.linalg.norm(e_y))
     e_y = e_y / norm_y
 
@@ -3238,12 +3399,23 @@ def atomistic_positions_flat(model: AtomisticModel) -> list[float]:
     Used by the animation batch endpoint to send compact per-frame position data
     without re-sending all atom metadata.  The frontend lerps between two such
     arrays and applies them via atomistic_renderer.applyPositionLerp().
+
+    Vectorised: the per-atom ``round()`` loop cost ~997k builtin calls (~0.6 s) per frame
+    on a 330k-atom design, which a trajectory export pays once per frame. Both Python's
+    ``round`` and ``np.round`` round half-to-even on float64; any residual disagreement is
+    a sub-ULP tie at the 5th decimal (1e-5 nm = 1e-4 Å), far below the model's precision.
+    Pinned against the original loop by ``TestAtomisticPositionsFlat``.
     """
-    atom_count = len(model.atoms)
-    result = [0.0] * (atom_count * 3)
-    for a in model.atoms:
-        idx = a.serial * 3
-        result[idx]     = round(a.x, 5)
-        result[idx + 1] = round(a.y, 5)
-        result[idx + 2] = round(a.z, 5)
-    return result
+    atoms = model.atoms
+    if not atoms:
+        return []
+    atom_count = len(atoms)
+    # Atom serials are dense and 0-based but not necessarily in list order — scatter by
+    # serial exactly as the old loop did, rather than assuming atoms[i].serial == i.
+    # zeros (not empty): a gap in the serials must read 0.0, as it did in the loop.
+    xyz = _np.zeros((atom_count, 3), dtype=float)
+    serials = _np.fromiter((a.serial for a in atoms), dtype=_np.intp, count=atom_count)
+    xyz[serials, 0] = _np.fromiter((a.x for a in atoms), dtype=float, count=atom_count)
+    xyz[serials, 1] = _np.fromiter((a.y for a in atoms), dtype=float, count=atom_count)
+    xyz[serials, 2] = _np.fromiter((a.z for a in atoms), dtype=float, count=atom_count)
+    return _np.round(xyz, 5).reshape(-1).tolist()

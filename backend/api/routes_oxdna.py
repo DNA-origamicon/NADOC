@@ -35,6 +35,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.api import state as design_state
@@ -45,6 +46,7 @@ from backend.core.oxdna_protocol import (
     build_production_stage,
     build_relaxation_stages,
     build_run_stage,
+    DEFAULT_STEPS_PER_FRAME,
 )
 from backend.core.oxdna_runner import (
     _latest_relaxed_conf,
@@ -243,6 +245,11 @@ class RunRequest(BaseModel):
     field, a hard surface, and anchor traps (each independent/optional).  Branches a
     child job seeded from the relaxed parent so runs can be fanned out + compared."""
     steps:        int = Field(2_000_000, ge=1000, le=200_000_000)
+    # Steps between trajectory frames (oxDNA's print_conf_interval).  Absolute, not a
+    # fraction of `steps`, so a longer run gives a LONGER trajectory rather than a
+    # coarser one.  The submit card shows the resulting frame count + disk before launch.
+    steps_per_frame: int = Field(DEFAULT_STEPS_PER_FRAME, ge=1, le=200_000_000,
+                                 description="Simulation steps between saved trajectory frames")
     field:        Optional[FieldElement] = None
     surface:      Optional[SurfaceElement] = None
     anchors:      list[AnchorRef] = Field(default_factory=list)
@@ -424,9 +431,13 @@ def _job_field(job: OxdnaJob) -> dict | None:
     return None
 
 
-def _composite_inputs(job: OxdnaJob):
+def _composite_inputs(job: OxdnaJob, scope: str = "lineage"):
     """Assemble (design, stages, ref) for a job's WHOLE-LINEAGE composite trajectory
     (root → … → selected, every stage in time order, numbered boundary labels).
+
+    ``scope='job'`` restricts the stages to THIS job's own trajectories, dropping every
+    ancestor — what the full-trajectory view uses so an uncapped frame budget covers one
+    run rather than the whole chain.
     Shared by the trajectory + per-frame atomistic/surface routes. Returns
     (design, [], None) when no stage has written a trajectory yet.
 
@@ -441,7 +452,7 @@ def _composite_inputs(job: OxdnaJob):
 
     jd = job.job_dir(_workspace())
     ws = _workspace()
-    chain = _lineage_jobs(job)
+    chain = [job] if scope == "job" else _lineage_jobs(job)
     stages: list = []
     run_no = 0
     for j in chain:
@@ -517,8 +528,8 @@ async def estimate_oxdna_run_disk(job_id: str, body: RunRequest) -> dict:
     from backend.core.disk_guard import forecast, oxdna_run_output_bytes
 
     job = _load_job(job_id)
-    interval = max(1, int(body.steps) // 100)
-    predicted = oxdna_run_output_bytes([(body.steps, interval)], job.n_nucleotides)
+    predicted = oxdna_run_output_bytes(
+        [(body.steps, max(1, int(body.steps_per_frame)))], job.n_nucleotides)
     return forecast(job.job_dir(_workspace()), predicted)
 
 
@@ -1038,6 +1049,7 @@ async def append_oxdna_run(job_id: str, body: RunRequest) -> dict:
         absolute_forces=bool(wall_in or anchors or cap_particles),
         backend=parent.backend, device=parent.device,
         salt_concentration=parent.salt_concentration,
+        steps_per_frame=body.steps_per_frame,
     )
 
     label = " · ".join(
@@ -1487,25 +1499,37 @@ def _assemble_multiframe_pdb(design, model, flats, indices, export_pdb_fn, progr
     for done, idx in enumerate(indices, start=1):
         flat = flats.get(str(idx))
         if flat is not None and len(flat) == expect:
-            for i, atom in enumerate(model.atoms):
-                atom.x, atom.y, atom.z = flat[3 * i], flat[3 * i + 1], flat[3 * i + 2]
-            pdb = export_pdb_fn(design, model=model, viewer_terminals=False)
-            body = [ln for ln in pdb.splitlines()
-                    if ln.startswith(("ATOM", "HETATM", "ANISOU", "TER"))]
-            if conect is None:
-                conect = [ln for ln in pdb.splitlines() if ln.startswith("CONECT")]
             model_no += 1
-            out.append(f"MODEL     {model_no:>4d}")
-            out.extend(body)
-            out.append("ENDMDL")
+            block, frame_conect = _render_model_block(
+                design, model, flat, export_pdb_fn, model_no)
+            if conect is None:
+                conect = frame_conect
+            out.append(block)
         if progress:
             progress(done, total)
     if not out:
         return ""
-    if conect:
-        out.extend(conect)
-    out.append("END")
-    return "\n".join(out) + "\n"
+    tail = list(conect or [])
+    tail.append("END")
+    return "".join(out) + "\n".join(tail) + "\n"
+
+
+def _render_model_block(design, model, flat, export_pdb_fn, model_no: int):
+    """Stamp ONE frame's coordinates onto ``model`` and render its MODEL…ENDMDL block.
+
+    Returns ``(block_text, conect_lines)``. The block is self-contained and newline-terminated;
+    CONECT is returned separately because it is frame-invariant and belongs after the last
+    model. This is the authoritative (slow) renderer — one full ``export_pdb`` per frame — and
+    it is what ``pdb_export.build_multiframe_pdb_template`` is validated against.
+    """
+    for i, atom in enumerate(model.atoms):
+        atom.x, atom.y, atom.z = flat[3 * i], flat[3 * i + 1], flat[3 * i + 2]
+    pdb = export_pdb_fn(design, model=model, viewer_terminals=False)
+    lines = pdb.splitlines()
+    body = [ln for ln in lines if ln.startswith(("ATOM", "HETATM", "ANISOU", "TER"))]
+    conect = [ln for ln in lines if ln.startswith("CONECT")]
+    block = [f"MODEL     {model_no:>4d}", *body, "ENDMDL"]
+    return "\n".join(block) + "\n", conect
 
 
 def _export_stem(job, design) -> str:
@@ -1518,21 +1542,36 @@ def _export_stem(job, design) -> str:
     return getattr(job, "job_id", "export")
 
 
+# Frame budget for the SPARSE (whole-lineage) trajectory view — the whole chain is strided
+# down to this many frames so a long lineage stays quick to build and small to ship.  The
+# FULL view (scope='job') bypasses it entirely; see get_oxdna_trajectory.
+_SPARSE_FRAME_CAP = 200
+
+
 @router.get("/oxdna/jobs/{job_id}/trajectory")
-async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True) -> dict:
+async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True,
+                               scope: str = "lineage") -> dict:
     """Composite scrub-able trajectory for the WHOLE lineage: every stage of the
     selected job AND all of its ancestors (relax → field1 → field2 → …), each
     frame PBC-unwrapped + Kabsch-aligned to the design reference, downsampled,
     with a labelled tick at every stage/run boundary.  A field/production child is
     seeded from its parent's end state, so the ancestor chain plays as one
     continuous trajectory.  Feeds the View-trajectory play/pause + slider.
+
+    ``scope='lineage'`` (default) is the SPARSE view: the whole ancestor chain strided
+    down to ``_SPARSE_FRAME_CAP`` frames — quick to build and to ship.  ``scope='job'``
+    is the FULL view: only THIS job's own stages, but EVERY frame oxDNA wrote, no stride.
+    The full view's size scales with the run's steps-per-frame setting and can be very
+    large, so the UI labels it "(slow)" and the caller opts in explicitly.
     """
     from backend.core.oxdna_health import composite_trajectory
 
     job = _load_job(job_id)
-    design, stages, ref = _composite_inputs(job)
+    design, stages, ref = _composite_inputs(job, scope)
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
+    # <= 0 disables the stride entirely — see _aligned_downsampled_frames._keep_for.
+    budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
 
     cancelled = threading.Event()
 
@@ -1547,7 +1586,7 @@ async def get_oxdna_trajectory(job_id: str, request: Request, align: bool = True
     _TRAJ_PROGRESS[job_id] = {"done": 0, "total": 0}
     try:
         task = asyncio.create_task(run_in_threadpool(
-            composite_trajectory, design, stages, ref, 200, _prog, align,
+            composite_trajectory, design, stages, ref, budget, _prog, align,
             _capture_bead_count(job), _capture_strand_length(job)))
         while not task.done():
             if await request.is_disconnected():
@@ -1578,17 +1617,20 @@ async def get_oxdna_trajectory_progress(job_id: str) -> dict:
 
 
 @router.get("/oxdna/jobs/{job_id}/trajectory-meta")
-async def get_oxdna_trajectory_meta(job_id: str) -> dict:
+async def get_oxdna_trajectory_meta(job_id: str, scope: str = "lineage") -> dict:
     """Frame count + stage markers for the composite trajectory WITHOUT downloading
     coordinates — lets the trajectory-keyframe slider size itself instantly. Indices
-    match GET /oxdna/jobs/{id}/trajectory exactly."""
+    match GET /oxdna/jobs/{id}/trajectory exactly, ``scope`` included — pass the SAME
+    scope both places or the slider will size to a different frame count than the
+    payload it scrubs."""
     from backend.core.oxdna_health import composite_trajectory_meta
 
     job = _load_job(job_id)
-    design, stages, _ = _composite_inputs(job)
+    design, stages, _ = _composite_inputs(job, scope)
     if not stages:
         return {"ready": False, "reason": "no trajectory yet"}
-    result = await run_in_threadpool(composite_trajectory_meta, design, stages)
+    budget = 0 if scope == "job" else _SPARSE_FRAME_CAP
+    result = await run_in_threadpool(composite_trajectory_meta, design, stages, budget)
     return {"ready": result["n_frames"] > 0, **result}
 
 
@@ -1607,40 +1649,44 @@ class OxdnaFramesSurfaceBody(BaseModel):
 
 @router.post("/oxdna/jobs/{job_id}/frames-atomistic")
 async def oxdna_frames_atomistic(job_id: str, body: OxdnaFramesAtomisticBody,
-                                  align: bool = True) -> dict:
+                                  align: bool = True, scope: str = "lineage") -> dict:
     """Per-frame ATOMISTIC coordinates for the given composite-trajectory frame
     indices (same wire format as /design/features/atomistic-batch). Used by the
     animation player to make the atomistic rep follow a trajectory keyframe.
     Heavy — one full all-atom rebuild per frame — so callers pass a downsampled
-    index set. Indices match GET /oxdna/jobs/{id}/trajectory frame ordering."""
+    index set. Indices match GET /oxdna/jobs/{id}/trajectory frame ordering — pass the
+    SAME ``scope`` the trajectory was loaded with, or the indices address other frames."""
     from backend.core.oxdna_health import composite_trajectory_atomistic
 
     job = _load_job(job_id)
-    design, stages, ref = _composite_inputs(job)
+    design, stages, ref = _composite_inputs(job, scope)
     if not stages:
         return {}
     return await run_in_threadpool(
         composite_trajectory_atomistic, design, stages, ref, body.frame_indices,
+        max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP),
         align=align, n_trailing_extra=_capture_bead_count(job),
         trailing_extra_strand_length=_capture_strand_length(job))
 
 
 @router.post("/oxdna/jobs/{job_id}/frames-surface")
 async def oxdna_frames_surface(job_id: str, body: OxdnaFramesSurfaceBody,
-                               align: bool = True) -> dict:
+                               align: bool = True, scope: str = "lineage") -> dict:
     """Per-frame molecular SURFACE meshes for the given composite-trajectory frame
     indices (same wire format as /design/features/surface-batch). Heaviest path
-    (all-atom rebuild + marching cubes per frame) — callers downsample hard."""
+    (all-atom rebuild + marching cubes per frame) — callers downsample hard. Pass the
+    SAME ``scope`` the trajectory was loaded with so the indices address the same frames."""
     from backend.core.oxdna_health import composite_trajectory_surface
 
     job = _load_job(job_id)
-    design, stages, ref = _composite_inputs(job)
+    design, stages, ref = _composite_inputs(job, scope)
     if not stages:
         return {}
     return await run_in_threadpool(
         composite_trajectory_surface, design, stages, ref, body.frame_indices,
         body.color_mode, body.probe_radius, body.grid_spacing,
-        body.radius_inflate, body.smooth, align=align,
+        body.radius_inflate, body.smooth,
+        max_frames=(0 if scope == "job" else _SPARSE_FRAME_CAP), align=align,
         n_trailing_extra=_capture_bead_count(job),
         trailing_extra_strand_length=_capture_strand_length(job))
 
@@ -1652,8 +1698,103 @@ class OxdnaExportTrajectoryBody(BaseModel):
 
 
 # Each exported frame is a full all-atom rebuild, so cap the count regardless of the range —
-# the composite frame space is already downsampled (≤200), so this only bites a huge request.
+# the SPARSE composite frame space is already downsampled (≤_SPARSE_FRAME_CAP), so this only
+# bites a huge request there.  It is the real limit for a full-scope (unstrided) trajectory.
 _EXPORT_FRAME_CAP = 240
+
+
+async def _export_dcd_bundle(job_id: str, job, design, stages, ref, indices, stem: str):
+    """Export a frame range as a ChimeraX-ready **topology PDB + binary DCD** pair, zipped.
+
+    Why this beats the multi-MODEL PDB: coordinates are 12 binary bytes per atom per frame
+    instead of ~80 ASCII, and the topology (atom names, chains, CONECT) is serialised ONCE
+    rather than re-emitted every frame. For a 51-frame, 330k-atom range that is ~1.35 GB of
+    text down to ~200 MB — and the per-frame text formatting disappears entirely.
+
+    Both files are written to a temp dir a frame at a time, so peak memory is one frame no
+    matter how long the trajectory is; the zip is then streamed from disk and the temp dir
+    removed in a background task once the response completes.
+    """
+    import shutil
+    import tempfile
+    import zipfile
+
+    import numpy as np
+    from starlette.background import BackgroundTask
+
+    from backend.core import dcd_fast
+    from backend.core.atomistic import build_atomistic_model
+    from backend.core.oxdna_health import iter_composite_trajectory_atomistic
+    from backend.core.pdb_export import export_pdb
+
+    def _frame_prog(done: int, total: int) -> None:
+        _EXPORT_PROGRESS[job_id] = {"done": done, "total": total, "phase": "frames"}
+
+    tmpdir = tempfile.mkdtemp(prefix="nadoc_export_")
+
+    def _build() -> tuple[str, int]:
+        model = build_atomistic_model(design)
+        expect = 3 * len(model.atoms)
+        frames = iter_composite_trajectory_atomistic(
+            design, stages, ref, indices,
+            n_trailing_extra=_capture_bead_count(job),
+            trailing_extra_strand_length=_capture_strand_length(job),
+            progress=_frame_prog, cache=False)
+
+        wrote_topology = False
+        n_written = 0
+
+        def _coords():
+            """Yield each frame as (n_atoms, 3) Angstroms, writing the topology PDB from
+            the first surviving frame so the two files describe the same coordinates."""
+            nonlocal wrote_topology, n_written
+            for _idx, flat in frames:
+                if len(flat) != expect:
+                    continue          # topology changed mid-range; skip, as the PDB path does
+                arr = np.asarray(flat, dtype=np.float64).reshape(-1, 3)
+                if not wrote_topology:
+                    for i, atom in enumerate(model.atoms):
+                        atom.x, atom.y, atom.z = arr[i, 0], arr[i, 1], arr[i, 2]
+                    (Path(tmpdir) / f"{stem}.pdb").write_text(
+                        export_pdb(design, model=model, viewer_terminals=False))
+                    wrote_topology = True
+                n_written += 1
+                yield arr * 10.0      # nm -> Angstrom (DCD's unit)
+
+        dcd_fast.write_trajectory(
+            Path(tmpdir) / f"{stem}.dcd", len(model.atoms), _coords(), len(indices))
+        if not wrote_topology:
+            return "", 0
+
+        zip_path = Path(tmpdir) / f"{stem}.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+            zf.write(Path(tmpdir) / f"{stem}.pdb", f"{stem}.pdb")
+            zf.write(Path(tmpdir) / f"{stem}.dcd", f"{stem}.dcd")
+            zf.writestr(f"{stem}_README.txt",
+                        "Open in ChimeraX:\n"
+                        f"    open {stem}.pdb\n"
+                        f"    open {stem}.dcd structureModel #1\n\n"
+                        "The PDB carries the topology (one frame); the DCD carries every\n"
+                        "frame's coordinates. Both files must be in the same folder.\n")
+        return str(zip_path), n_written
+
+    try:
+        zip_path, n_written = await run_in_threadpool(_build)
+    except Exception:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise
+    finally:
+        _EXPORT_PROGRESS.pop(job_id, None)
+
+    if not zip_path:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise HTTPException(
+            500, "No frames could be rendered — this can happen for hard-surface / capture-strand "
+                 "jobs whose extra beads aren't in the atomistic model.")
+
+    return FileResponse(
+        zip_path, media_type="application/zip", filename=f"{stem}_chimerax.zip",
+        background=BackgroundTask(shutil.rmtree, tmpdir, True))
 
 
 @router.post("/oxdna/jobs/{job_id}/export-trajectory")
@@ -1668,7 +1809,7 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
     from backend.core.oxdna_health import (
         composite_trajectory_atomistic, composite_trajectory_meta)
 
-    if body.format not in ("pdb", "oxdna"):
+    if body.format not in ("pdb", "dcd", "oxdna"):
         raise HTTPException(400, f"Unknown export format {body.format!r}.")
     job = _load_job(job_id)
     design, stages, ref = _composite_inputs(job)
@@ -1692,38 +1833,101 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
                  "multi-frame PDB (the PDB option) for ChimeraX for now.")
 
     from backend.core.atomistic import build_atomistic_model
-    from backend.core.pdb_export import export_pdb
+    from backend.core.oxdna_health import iter_composite_trajectory_atomistic
+    from backend.core.pdb_export import build_multiframe_pdb_template, export_pdb
 
     stem = _export_stem(job, design)
+    filename = f"{stem}_frames{lo}-{hi}.pdb"
     _EXPORT_PROGRESS[job_id] = {"done": 0, "total": len(indices), "phase": "align"}
 
-    def _build() -> str:
-        # One model = constant topology/bonds; per-frame we only overwrite atom coordinates.
+    if body.format == "dcd":
+        return await _export_dcd_bundle(
+            job_id, job, design, stages, ref, indices, f"{stem}_frames{lo}-{hi}")
+
+    def _frame_prog(done: int, total: int) -> None:
+        # One counting phase now: each frame is rebuilt AND written before the next starts.
+        _EXPORT_PROGRESS[job_id] = {"done": done, "total": total, "phase": "frames"}
+
+    # ── Prepare BEFORE the response starts ────────────────────────────────────
+    # Streaming means the status line is committed with the first byte, so anything that
+    # should surface as a clean HTTP error (no renderable frames) has to be discovered
+    # here, not mid-stream where the only failure mode is a truncated download.
+    def _prepare():
         model = build_atomistic_model(design)
-        flats = composite_trajectory_atomistic(
+        template = build_multiframe_pdb_template(design, model)
+        frames = iter_composite_trajectory_atomistic(
             design, stages, ref, indices,
             n_trailing_extra=_capture_bead_count(job),
-            trailing_extra_strand_length=_capture_strand_length(job))
-
-        def _prog(done: int, total: int) -> None:
-            _EXPORT_PROGRESS[job_id] = {"done": done, "total": total, "phase": "write"}
-
-        return _assemble_multiframe_pdb(design, model, flats, indices, export_pdb, progress=_prog)
+            trailing_extra_strand_length=_capture_strand_length(job),
+            progress=_frame_prog,
+            # An export's frames are write-once; caching them would evict the live
+            # display cache (6 M-element budget) for entries nobody re-requests.
+            cache=False)
+        expect = 3 * len(model.atoms)
+        first = None
+        for _idx, flat in frames:
+            if len(flat) == expect:
+                first = flat
+                break
+        if first is None:
+            return model, None, frames, None, None, None
+        # Prove the splice against the authoritative renderer on REAL frame data before
+        # trusting it for the remaining frames. build_multiframe_pdb_template assumes the
+        # k-th ATOM line belongs to model.atoms[k]; if export_pdb ever reorders or filters,
+        # a silent splice would corrupt every exported coordinate. One extra render is cheap
+        # next to that failure mode — and it doubles as frame 1's own reference rendering.
+        first_block, conect = _render_model_block(design, model, first, export_pdb, 1)
+        if template is not None and template.model_block(first, 1) != first_block:
+            template = None
+        return model, template, frames, first, first_block, conect
 
     try:
-        pdb = await run_in_threadpool(_build)
-    finally:
+        model, template, frames, first, first_block, conect = await run_in_threadpool(_prepare)
+    except Exception:
         _EXPORT_PROGRESS.pop(job_id, None)
+        raise
 
-    if not pdb:
+    if first is None:
         # Every frame's atom count mismatched the model — happens on capture/surface jobs whose
         # trailing beads aren't in the base atomistic model. Fail with a clear reason.
+        _EXPORT_PROGRESS.pop(job_id, None)
         raise HTTPException(
             500, "No frames could be rendered — this can happen for hard-surface / capture-strand "
                  "jobs whose extra beads aren't in the atomistic model.")
-    filename = f"{stem}_frames{lo}-{hi}.pdb"
-    return Response(content=pdb, media_type="chemical/x-pdb",
-                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+    expect = 3 * len(model.atoms)
+
+    def _stream():
+        """Emit MODEL blocks as they are built. Peak memory is ONE frame instead of the whole
+        range, and the browser starts saving immediately rather than after the last frame.
+
+        Byte-for-byte the same document the non-streaming builder produced: MODEL blocks, then
+        the single frame-invariant CONECT block, then END. No REMARK/CRYST1 preamble — the
+        multi-frame format never carried one.
+        """
+        try:
+            yield first_block
+            model_no = 1
+            for _idx, flat in frames:
+                if len(flat) != expect:
+                    continue                      # topology changed mid-range; skip it
+                model_no += 1
+                if template is not None:
+                    yield template.model_block(flat, model_no)
+                else:
+                    # Defensive fallback: the splice couldn't be validated, so pay the full
+                    # per-frame render. Correct, just slow — never silently wrong.
+                    block, _ = _render_model_block(design, model, flat, export_pdb, model_no)
+                    yield block
+            tail = list(conect or [])
+            tail.append("END")
+            yield "\n".join(tail) + "\n"
+        finally:
+            _EXPORT_PROGRESS.pop(job_id, None)
+
+    return StreamingResponse(
+        _stream(), media_type="chemical/x-pdb",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.get("/oxdna/jobs/{job_id}/export-progress")
@@ -2040,15 +2244,10 @@ async def get_oxdna_atomistic_stamp(job_id: str) -> dict:
     }
 
 
-@router.get("/oxdna/jobs/{job_id}/atomistic-display-bundle")
-async def get_oxdna_atomistic_display_bundle(job_id: str) -> dict:
-    """Combined renderer topology (atoms+bonds) + stamp descriptor in ONE build
-    (fast interpolated bridges), DISK-CACHED per job by topology hash — so the whole
-    display-atomistic setup for a job is built once ever, not per switch/session.
-    Replaces the separate atomistic-model + atomistic-stamp fetches on the fast path."""
-    import json
-    from backend.core.atomistic import (atomistic_display_bundle,
-                                         atomistic_reference_topology_hash)
+def _atomistic_bundle_ctx(job_id: str):
+    """(design, topology_hash, job_dir) for a job's display bundle — the bit both bundle
+    routes need before they can decide whether their cache is warm."""
+    from backend.core.atomistic import atomistic_reference_topology_hash
     from backend.core.models import Design
     job = _load_job(job_id)
     jd = job.job_dir(_workspace())
@@ -2056,13 +2255,40 @@ async def get_oxdna_atomistic_display_bundle(job_id: str) -> dict:
     if not snap.exists():
         raise HTTPException(500, "design.json snapshot missing for this job")
     design = Design.model_validate_json(snap.read_text())
-    thash = atomistic_reference_topology_hash(design)
+    return design, atomistic_reference_topology_hash(design), jd
+
+
+def _atomistic_bin_cache_path(jd, thash: str):
+    """Packed-blob cache path. The topology hash is in the FILENAME so it self-invalidates
+    (no need to parse the blob to decide whether it is stale)."""
+    return jd / f"atomistic_display_bundle_{thash[:16]}.bin"
+
+
+def _write_atomistic_bin_cache(bundle: dict, jd, thash: str) -> None:
+    """Pack + persist the binary bundle.  Best-effort: a failure here only costs the next
+    request a repack, never correctness, and an unpackable bundle is a legitimate outcome
+    (the bin route 409s and the client falls back to JSON)."""
+    from backend.core.atomistic import pack_bundle_bin
+    try:
+        _atomistic_bin_cache_path(jd, thash).write_bytes(pack_bundle_bin(bundle))
+    except Exception:
+        pass
+
+
+async def _atomistic_bundle_cached(job_id: str, ctx=None) -> dict:
+    """The job's full display bundle, built once ever and held on disk (keyed by topology
+    hash).  Shared by the JSON and binary routes so there is exactly ONE build path and
+    one cache; the routes only differ in how they serialise the result."""
+    import orjson
+    from backend.core.atomistic import atomistic_display_bundle
+    design, thash, jd = ctx if ctx is not None else _atomistic_bundle_ctx(job_id)
     cache_f = jd / "atomistic_display_bundle.json"
 
     def _read_cache():
         if cache_f.exists():
             try:
-                cached = json.loads(cache_f.read_text())
+                # orjson: the cache is ~129 MB and stdlib json.loads costs ~1.4 s on it.
+                cached = orjson.loads(cache_f.read_bytes())
                 if cached.get("topology_hash") == thash:
                     return cached
             except Exception:
@@ -2081,11 +2307,77 @@ async def get_oxdna_atomistic_display_bundle(job_id: str) -> dict:
         if hit is not None:
             return hit
         out = await run_in_threadpool(atomistic_display_bundle, design)
-        try:
-            cache_f.write_text(json.dumps(out))
-        except Exception:
-            pass       # cache write best-effort; correctness doesn't depend on it
+
+        def _persist():
+            try:
+                cache_f.write_bytes(orjson.dumps(out))
+            except Exception:
+                pass   # cache write best-effort; correctness doesn't depend on it
+            # Pack the binary form NOW, off the in-memory bundle. Deriving it lazily on
+            # the first bin request instead would mean re-reading and re-parsing the
+            # 129 MB JSON cache just to throw it away — the build already has the dict.
+            _write_atomistic_bin_cache(out, jd, thash)
+
+        await run_in_threadpool(_persist)
         return out
+
+
+@router.get("/oxdna/jobs/{job_id}/atomistic-display-bundle")
+async def get_oxdna_atomistic_display_bundle(job_id: str, bonds: bool = True) -> dict:
+    """Combined renderer topology (atoms+bonds) + stamp descriptor in ONE build
+    (fast interpolated bridges), DISK-CACHED per job by topology hash — so the whole
+    display-atomistic setup for a job is built once ever, not per switch/session.
+
+    ``bonds=false`` omits the bond list from the RESPONSE (the disk cache always holds
+    the full bundle).  The VDW rep draws no cylinders, so shipping ~370k bond pairs to
+    it is pure wire + JSON.parse cost; the client asks for them back when it needs
+    ball-and-stick.
+
+    LEGACY/FALLBACK: prefer ``atomistic-display-bundle-bin`` — this JSON form is ~7×
+    larger and costs the client 330k object allocations out of ``JSON.parse``."""
+    bundle = await _atomistic_bundle_cached(job_id)
+    if bonds:
+        return bundle
+    # Shallow-copy so neither the freshly parsed cache dict nor the just-built bundle
+    # is mutated for other callers.
+    return {k: v for k, v in bundle.items() if k != "bonds"}
+
+
+@router.get("/oxdna/jobs/{job_id}/atomistic-display-bundle-bin")
+async def get_oxdna_atomistic_display_bundle_bin(job_id: str):
+    """Binary counterpart of atomistic-display-bundle: the SAME cached bundle packed
+    columnar (typed-array columns + interned string tables for the five string fields,
+    and the seven fields no frontend code reads dropped entirely).
+
+    ~124 MB → ~18 MB on a VoltronCore-size design, and — the point — the client builds
+    typed-array views instead of 330k JavaScript objects.  See
+    frontend/src/scene/atomistic_bundle_bin.js for the layout.
+
+    409 when the bundle violates a format invariant (non-dense serials, an interned
+    field wider than its index type); the client falls back to the JSON route."""
+    from fastapi import Response
+    from backend.core.atomistic import BundleNotPackable, pack_bundle_bin
+    ctx = _atomistic_bundle_ctx(job_id)
+    _design, thash, jd = ctx
+    # The blob has its own disk cache, written at BUILD time (_atomistic_bundle_cached) so
+    # the normal path never touches the 129 MB JSON at all.  Falling through to a repack
+    # here is the one-time migration for a job whose JSON cache predates this format.
+    bin_f = _atomistic_bin_cache_path(jd, thash)
+    if bin_f.exists():
+        try:
+            return Response(content=bin_f.read_bytes(), media_type="application/octet-stream")
+        except OSError:
+            pass       # unreadable/truncated → fall through and repack
+    bundle = await _atomistic_bundle_cached(job_id, ctx)
+    try:
+        buf = await run_in_threadpool(pack_bundle_bin, bundle)
+    except BundleNotPackable as e:
+        raise HTTPException(409, f"bundle not packable, use the JSON route: {e}")
+    try:
+        bin_f.write_bytes(buf)     # so the migration happens at most once per job
+    except OSError:
+        pass           # cache write best-effort; correctness doesn't depend on it
+    return Response(content=buf, media_type="application/octet-stream")
 
 
 @router.post("/oxdna/jobs/{job_id}/display-atomistic-frames")

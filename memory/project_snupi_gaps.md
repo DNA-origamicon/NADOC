@@ -197,6 +197,12 @@ snupi-corotational. CI-safe building-block pins in `tests/test_snupi_visual_comp
   ≈ flat disk R≈1 nm) so **M is NOT ∝ I** (r_g²=1 would make it ∝I → a literal no-op). `compute_rmsf_nma`
   takes `M=None` (cando, K-only) or `M` (snupi, generalized `eigsh(K, M=M, sigma=…)`, M-orthonormal φ).
   Pins `test_g6_*`.
+  - **DETERMINISM (2026-07-24): every `eigsh` in `fem_solver.py` now passes a FIXED `v0=_eigsh_v0(n)`**
+    (seeded `default_rng(0)` normal draw). Was flaky: no `v0` → ARPACK drew its Lanczos start from
+    numpy's global RNG, so identical K gave different eigenvectors inside near-degenerate soft-mode
+    subspaces, and RMSF/DCCM/L_p (=Σ φ²/λ over the softest modes) jittered ~1e-2 nm run-to-run.
+    `test_g12_salt_ignored_by_cando` failed intermittently (cando cross-salt drift 0.0137 > 0.01 bound);
+    now cando drift is exactly 0.0. Don't remove `v0` — it makes the whole NMA family reproducible.
 - **G12 salt param.** `mgcl2_M` (default 0.02) threaded request→job→runner→`predict_shape`→both the
   shape solve (`_solve_snupi_nonlinear`) and the NMA ES tangent; `_snupi_es_params(mgcl2_M)` cached per
   molarity. Pins `test_g12_*`. `CreateSnupiJobRequest.mgcl2_M` (0≤·≤1), `SnupiJob.mgcl2_M`.

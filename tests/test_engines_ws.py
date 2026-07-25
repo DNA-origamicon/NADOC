@@ -20,6 +20,21 @@ import backend.core.fs_browse as fs_browse
 from backend.api.main import app
 
 
+@pytest.fixture(scope="module")
+def lifespan_client():
+    """One lifespan-started ``TestClient`` for the whole module.
+
+    ``with TestClient(app)`` runs the *entire* app lifespan (workspace scan,
+    session-cache restore, MD-supervisor task) — ~0.5–1.5 s.  Function-scoped it
+    multiplies by test count for no isolation benefit: these tests read
+    ``/api/engines/status`` and ``/api/engines/browse``, which hold no per-client
+    state (their inputs come from monkeypatched probes / env vars, applied
+    per-test).  Module-scoped, the lifespan is paid once.
+    """
+    with TestClient(app) as client:
+        yield client
+
+
 @pytest.fixture
 def stub_host_probes(monkeypatch):
     """Pin the host probes so ``engines_status()`` runs entirely in-process.
@@ -71,10 +86,9 @@ def _make_namd_tar(dirpath, filename="NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar
     return tar_path
 
 
-def test_status_endpoint_reflects_simulation(monkeypatch, stub_host_probes):
+def test_status_endpoint_reflects_simulation(monkeypatch, stub_host_probes, lifespan_client):
     monkeypatch.setenv("NADOC_ENGINES_FORCE_MISSING", "oxdna,namd")
-    with TestClient(app) as client:
-        st = client.get("/api/engines/status").json()
+    st = lifespan_client.get("/api/engines/status").json()
     assert st["engines"]["oxdna"]["installed"] is False
     assert st["engines"]["oxdna"]["simulated"] is True
     assert st["sections"]["oxdna"]["ready"] is False
@@ -107,12 +121,13 @@ def test_install_ws_rejects_non_installable_engine():
     assert "auto-install" in msg["message"]
 
 
-def test_browse_endpoint_lists_a_directory(tmp_path):
+def test_browse_endpoint_lists_a_directory(tmp_path, lifespan_client):
     # a folder with a subdir and a file → the navigator shape
     (tmp_path / "sub").mkdir()
     (tmp_path / "NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar.gz").write_text("x")
-    with TestClient(app) as client:
-        body = client.get("/api/engines/browse", params={"path": str(tmp_path), "kind": "namd"}).json()
+    body = lifespan_client.get(
+        "/api/engines/browse", params={"path": str(tmp_path), "kind": "namd"}
+    ).json()
     assert body["cwd"] == str(tmp_path)
     names = [e["name"] for e in body["entries"]]
     assert "sub" in names and "NAMD_3.0.2_Linux-x86_64-multicore-CUDA.tar.gz" in names
@@ -120,15 +135,14 @@ def test_browse_endpoint_lists_a_directory(tmp_path):
     assert namd["is_dir"] is False and namd["matches"] is True
 
 
-def test_browse_endpoint_defaults_to_downloads(tmp_path, monkeypatch):
+def test_browse_endpoint_defaults_to_downloads(tmp_path, monkeypatch, lifespan_client):
     # Point the default at a tmp folder instead of the *real* Downloads: on WSL that
     # is the Windows one (`/mnt/c/Users/<you>/Downloads`, 2000+ files) and scandir+stat
     # over the drvfs mount costs ~4 s.  Redirecting it also lets us assert the actual
     # landing folder rather than merely "cwd is truthy".
     (tmp_path / "arbd-may24.tar.gz").write_text("x")
     monkeypatch.setattr(fs_browse, "default_downloads_dir", lambda: str(tmp_path))
-    with TestClient(app) as client:
-        body = client.get("/api/engines/browse").json()
+    body = lifespan_client.get("/api/engines/browse").json()
     assert body["cwd"] == str(tmp_path)                        # opened at the Downloads default
     assert [e["name"] for e in body["entries"]] == ["arbd-may24.tar.gz"]
 
@@ -181,9 +195,8 @@ def _make_arbd_tar(dirpath, filename="arbd-may24-beta.tar.gz"):
     return tar_path
 
 
-def test_status_lists_mrdna_arbd_cuda_rows(stub_host_probes):
-    with TestClient(app) as client:
-        st = client.get("/api/engines/status").json()
+def test_status_lists_mrdna_arbd_cuda_rows(stub_host_probes, lifespan_client):
+    st = lifespan_client.get("/api/engines/status").json()
     for key in ("mrdna", "arbd", "cuda"):
         assert key in st["engines"], key
 

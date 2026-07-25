@@ -46,7 +46,7 @@ def _stub_bundle(tmp_path, monkeypatch):
         # Simulate a slow build so concurrent requests overlap inside the lock window.
         import time
         time.sleep(0.3)
-        return {"topology_hash": "THASH", "atoms": [], "bonds": []}
+        return {"topology_hash": "THASH", "atoms": [{"serial": 0}], "bonds": [[0, 1]]}
 
     import backend.core.atomistic as A
     monkeypatch.setattr(A, "atomistic_reference_topology_hash", lambda d: "THASH")
@@ -83,6 +83,62 @@ def test_second_request_after_build_is_cached(_stub_bundle):
 
     asyncio.run(_run())
     assert calls["n"] == 1, "second request must hit the disk cache, not rebuild"
+
+
+def test_build_also_writes_the_packed_bin_cache(_stub_bundle, monkeypatch):
+    """The binary blob is packed off the IN-MEMORY bundle at build time.  Deriving it
+    lazily on the first bin request instead would re-read and re-parse the ~129 MB JSON
+    cache (~1.4 s) just to throw the dict away again."""
+    jd, calls = _stub_bundle
+
+    # A stub that is actually packable (the shared fixture's is deliberately minimal).
+    def _packable_build(design):
+        return {
+            "topology_hash": "THASH",
+            "atoms": [{"serial": i, "element": "P", "x": 0.0, "y": 0.0, "z": 0.0,
+                       "strand_id": "s", "helix_id": "h", "bp_index": i,
+                       "direction": "FORWARD", "aux_helix_id": "", "aux_t": 0.0}
+                      for i in range(3)],
+            "bonds": [[0, 1], [1, 2]],
+            "element_meta": {},
+            "n_nuc": 1,
+            "atom_nuc": [0, 0, 0],
+            "atom_local": [0.0] * 9,
+            "nonrigid_serials": [],
+        }
+
+    import backend.core.atomistic as A
+    monkeypatch.setattr(A, "atomistic_display_bundle", _packable_build)
+
+    asyncio.run(R.get_oxdna_atomistic_display_bundle("fake"))
+    bins = list(jd.glob("atomistic_display_bundle_*.bin"))
+    assert len(bins) == 1, f"expected one packed blob, found {bins}"
+    assert bins[0].read_bytes()[:4] == b"1BAN", "not the NAB1 magic"
+    # …and the bin route then serves it without touching the JSON cache at all.
+    (jd / "atomistic_display_bundle.json").unlink()
+    resp = asyncio.run(R.get_oxdna_atomistic_display_bundle_bin("fake"))
+    assert resp.body == bins[0].read_bytes()
+
+
+def test_bonds_false_omits_bonds_but_still_caches_them(_stub_bundle):
+    """The VDW rep draws no cylinders, so it asks for the bundle without the (huge) bond
+    list.  The DISK CACHE must still hold the full bundle — a later ball-and-stick request
+    has to get bonds back without triggering a rebuild."""
+    jd, calls = _stub_bundle
+
+    async def _run():
+        lean = await R.get_oxdna_atomistic_display_bundle("fake", bonds=False)
+        full = await R.get_oxdna_atomistic_display_bundle("fake")
+        return lean, full
+
+    lean, full = asyncio.run(_run())
+    assert "bonds" not in lean, "bonds=False must not ship the bond list"
+    assert lean["atoms"] == [{"serial": 0}], "everything else is unchanged"
+    assert full["bonds"] == [[0, 1]], "the cached bundle still carries bonds"
+    assert calls["n"] == 1, "bonds=False must not cause a second build"
+
+    cached = json.loads((jd / "atomistic_display_bundle.json").read_text())
+    assert cached["bonds"] == [[0, 1]], "the disk cache holds the FULL bundle"
 
 
 def test_distinct_topologies_get_distinct_locks(_stub_bundle):

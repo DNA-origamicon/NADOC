@@ -1564,6 +1564,19 @@ def solve_equilibrium(
 
 # ── RMSF computation ───────────────────────────────────────────────────────────
 
+
+def _eigsh_v0(n: int) -> np.ndarray:
+    """A FIXED ARPACK start vector for :func:`scipy.sparse.linalg.eigsh`.
+
+    Without ``v0``, eigsh draws its Lanczos start from numpy's global RNG, so two calls
+    on an IDENTICAL matrix can return different eigenvectors inside a (near-)degenerate
+    subspace. RMSF/DCCM/L_p sum ``φ²/λ`` over the softest modes — exactly where that
+    degeneracy lives — so the result jittered run-to-run (~1e-2 nm on a 6hb). Seeding the
+    start vector makes the whole NMA family deterministic: identical K → identical output.
+    A seeded normal draw (not ``ones``, which can be orthogonal to a symmetric mode and
+    stall ARPACK) is a generic, well-conditioned start."""
+    return np.random.default_rng(0).standard_normal(n)
+
 def compute_rmsf(
     K_free,
     free_dofs: np.ndarray,
@@ -1588,7 +1601,8 @@ def compute_rmsf(
         # Shift-invert mode (sigma=0): factorises K_free once via SuperLU, then
         # extracts the k smallest eigenvalues with fast Krylov convergence.
         # Typically 10-100× faster than which='SM' for sparse structural matrices.
-        eigenvalues, eigenvectors = eigsh(K_free, k=k, sigma=0, which='LM')
+        eigenvalues, eigenvectors = eigsh(K_free, k=k, sigma=0, which='LM',
+                                          v0=_eigsh_v0(K_free.shape[0]))
     except Exception:
         return np.zeros(n_nodes, dtype=float)
 
@@ -1653,9 +1667,10 @@ def compute_rmsf_nma(
         if M is not None:
             # Generalized: shift-invert about ~0 → lowest generalized frequencies. eigsh
             # returns M-orthonormal eigenvectors, so the equipartition sum below is exact.
-            vals, vecs = eigsh(Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM")
+            vals, vecs = eigsh(Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM",
+                               v0=_eigsh_v0(n_dof))
         else:
-            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM")
+            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM", v0=_eigsh_v0(n_dof))
     except Exception:
         return np.zeros(n_nodes, dtype=float)
 
@@ -1687,9 +1702,10 @@ def _nma_modes(K, n_modes: int = N_RMSF_MODES, n_rigid: int = 6, M=None):
         return None, None
     try:
         if M is not None:
-            vals, vecs = eigsh(Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM")
+            vals, vecs = eigsh(Kc, k=k, M=M.tocsr(), sigma=1e-6, which="LM",
+                               v0=_eigsh_v0(n_dof))
         else:
-            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM")
+            vals, vecs = eigsh(Kc, k=k, sigma=1e-6, which="LM", v0=_eigsh_v0(n_dof))
     except Exception:  # noqa: BLE001
         return None, None
     order = np.argsort(vals)

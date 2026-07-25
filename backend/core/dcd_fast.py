@@ -162,3 +162,88 @@ def cell_to_dimensions(cell: Optional[np.ndarray]) -> Optional[np.ndarray]:
         return float(np.degrees(np.arccos(max(-1.0, min(1.0, cos_v)))))
 
     return np.array([a, b, c, _ang(ca), _ang(cb), _ang(cg)], dtype=np.float64)
+
+
+# ── Writer ────────────────────────────────────────────────────────────────────
+#
+# A trajectory export writes the same structure N times.  As multi-MODEL PDB that is ~80
+# ASCII bytes per atom per frame; as DCD it is 12 binary bytes — plus the topology travels
+# once, in a companion single-frame PDB, instead of being re-serialised every frame.
+# ChimeraX reads the pair with:  open s.pdb   then   open t.dcd structureModel #1
+#
+# Emits the plain fixed-record CHARMM layout `read_layout` above accepts: no fixed atoms,
+# no 4D, unit cell optional.  Frames are appended one at a time, so a writer's peak memory
+# is one frame regardless of trajectory length.
+
+_DCD_TITLE = b"NADOC composite trajectory export".ljust(80)[:80]
+
+
+def write_header(fh, n_atoms: int, n_frames: int, *, istart: int = 0,
+                 nsavc: int = 1, delta: float = 1.0, title: bytes = _DCD_TITLE) -> None:
+    """Write the three DCD header records to a binary file object.
+
+    ``n_frames`` goes in the NSET field. A composite NADOC trajectory splices stages with
+    different integrator settings, so there is no single meaningful timestep: DELTA is
+    written as 1.0 and NSAVC as 1, i.e. "frame index", not physical time. Viewers use these
+    only to label the frame slider.
+    """
+    if n_atoms <= 0:
+        raise ValueError(f"n_atoms must be positive, got {n_atoms}")
+    icntrl = [0] * 20
+    icntrl[0] = int(n_frames)                 # NSET
+    icntrl[1] = int(istart)                   # ISTART
+    icntrl[2] = int(nsavc)                    # NSAVC
+    icntrl[3] = int(n_frames) * int(nsavc)    # NSTEP
+    icntrl[8] = 0                             # NFIXED — none, so frames are fixed-size
+    icntrl[9] = struct.unpack("<i", struct.pack("<f", float(delta)))[0]
+    icntrl[10] = 0                            # no unit-cell record
+    icntrl[11] = 0                            # not 4D
+    icntrl[19] = 24                           # CHARMM version marker (>0 = CHARMM-style)
+
+    fh.write(struct.pack("<i", 84))
+    fh.write(b"CORD")
+    fh.write(struct.pack("<20i", *icntrl))
+    fh.write(struct.pack("<i", 84))
+
+    block = title.ljust(80)[:80]
+    fh.write(struct.pack("<i", 4 + len(block)))
+    fh.write(struct.pack("<i", 1))            # NTITLE
+    fh.write(block)
+    fh.write(struct.pack("<i", 4 + len(block)))
+
+    fh.write(struct.pack("<i", 4))
+    fh.write(struct.pack("<i", int(n_atoms)))
+    fh.write(struct.pack("<i", 4))
+
+
+def append_frame(fh, xyz) -> None:
+    """Append one frame. ``xyz`` is ``(n_atoms, 3)`` in ANGSTROMS (DCD's unit — callers
+    holding nm must scale). Written as three separate x/y/z blocks, as the format requires."""
+    arr = np.ascontiguousarray(xyz, dtype="<f4")
+    if arr.ndim != 2 or arr.shape[1] != 3:
+        raise ValueError(f"expected an (n_atoms, 3) array, got {arr.shape}")
+    marker = struct.pack("<i", 4 * arr.shape[0])
+    for axis in range(3):
+        fh.write(marker)
+        fh.write(np.ascontiguousarray(arr[:, axis]).tobytes())
+        fh.write(marker)
+
+
+def write_trajectory(path, n_atoms: int, frames_iter, n_frames: int, **header_kw) -> int:
+    """Write a whole DCD from an iterable of ``(n_atoms, 3)`` Angstrom arrays.
+
+    ``n_frames`` is the COUNT DECLARED IN THE HEADER, written before any frame is seen (the
+    header is fixed-size and comes first). If the iterable turns out shorter — a frame
+    skipped for a topology mismatch — the header is rewritten with the true count on close,
+    so NSET never overstates the file. Returns the number of frames actually written.
+    """
+    written = 0
+    with open(path, "wb") as fh:
+        write_header(fh, n_atoms, n_frames, **header_kw)
+        for xyz in frames_iter:
+            append_frame(fh, xyz)
+            written += 1
+        if written != n_frames:
+            fh.seek(0)
+            write_header(fh, n_atoms, written, **header_kw)
+    return written

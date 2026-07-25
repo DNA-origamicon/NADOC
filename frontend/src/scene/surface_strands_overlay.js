@@ -27,11 +27,16 @@ const PREVIEW_BEADS_DEFAULT = 8    // strand length used when no sequence is ent
 const DEFAULT_COLOR = 0x00ffff     // cyan — the surface-strand colour (user-controllable)
 
 /** Idempotent bridge into designRenderer.setExtraNucleotides. Full renderer rebuilds are
- * expensive and destructive to active physical overlays, so identical results are a no-op. */
+ * expensive and destructive to active physical overlays, so identical results are a no-op.
+ * Results arrays keep stable identity, so identity is the right test for them — but _draw
+ * builds a FRESH `[]` on every call for the no-strands case, which identity never matches.
+ * Empty→empty is therefore compared by emptiness, so a job with no capture strands doesn't
+ * trigger a full CG rebuild (and un-hide the CG root) on every displayJob. */
 export function createSurfaceStrandEmitter(onStrands) {
   let lastChains = null, lastHighlight = null
   return (chains, highlight) => {
-    if (chains === lastChains && highlight === lastHighlight) return false
+    const bothEmpty = !chains?.length && !lastChains?.length && lastChains !== null
+    if ((chains === lastChains || bothEmpty) && highlight === lastHighlight) return false
     lastChains = chains; lastHighlight = highlight
     onStrands?.(chains, highlight)
     return true

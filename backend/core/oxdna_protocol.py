@@ -346,6 +346,14 @@ def render_stage_input(
 
 DEFAULT_PRODUCTION_STEPS: int = 5_000_000
 
+# Steps between trajectory frames for a user-launched production run.  oxDNA ships no
+# single "default" — its examples span 1 to 1e8 — so this follows the origami-relevant
+# one, ``examples/NEW_RELAX_PROCEDURE/input_relax`` (print_conf_interval = 10000).
+# Unlike the legacy steps//100 rule this is ABSOLUTE, so a longer run yields a longer
+# trajectory instead of a coarser one; the submit card surfaces the resulting frame
+# count + disk cost before launch.
+DEFAULT_STEPS_PER_FRAME: int = 10_000
+
 
 def build_production_stage(
     *,
@@ -354,6 +362,7 @@ def build_production_stage(
     backend:            str = "CUDA",
     device:             str = "0",
     salt_concentration: float = 0.5,
+    steps_per_frame:    int | None = None,
 ) -> OxdnaStageSpec:
     """Return an unbiased MD production stage (standard backbone potential, no
     traps, no force cap) — the real dynamics run, appended after relaxation passes.
@@ -369,6 +378,7 @@ def build_production_stage(
         external_forces=False,
         salt_concentration=salt_concentration, device=device,
         min_bp_retained=0.0,
+        print_conf_interval_override=steps_per_frame,
     )
 
 
@@ -419,6 +429,7 @@ def build_run_stage(
     backend:            str = "CUDA",
     device:             str = "0",
     salt_concentration: float = 0.5,
+    steps_per_frame:    int | None = None,
 ) -> OxdnaStageSpec:
     """A consolidated production MD stage that may carry any combination of external
     elements (uniform field, hard-surface repulsion plane, anchor traps) via
@@ -437,6 +448,7 @@ def build_run_stage(
         efield=efield, forces_meta=forces_meta, absolute_forces=absolute_forces,
         salt_concentration=salt_concentration, device=device,
         min_bp_retained=0.0,
+        print_conf_interval_override=steps_per_frame,
     )
 
 
@@ -448,8 +460,9 @@ def expected_energy_lines(spec: OxdnaStageSpec) -> int:
 
 def print_conf_interval(spec: OxdnaStageSpec) -> int:
     """Steps between trajectory / last_conf writes — i.e. how often the relaxed
-    display gets a fresh frame.  Mirrors ``render_stage_input`` (~100 frames/stage,
-    matching the energy-sample cadence) so the View-trajectory player has a dense
-    scrub track; the composite endpoint downsamples across stages to its own cap.
+    display gets a fresh frame.  Mirrors ``render_stage_input`` EXACTLY — including
+    ``print_conf_interval_override`` (what a user-set "steps per frame" lands in), so
+    the disk forecast and the progress ETA describe the frames oxDNA will really write.
+    Absent an override it falls back to the legacy ~100 frames/stage rule.
     Used by the progress endpoint to estimate time to the next frame update."""
-    return max(1, spec.steps // 100)
+    return spec.print_conf_interval_override or max(1, spec.steps // 100)

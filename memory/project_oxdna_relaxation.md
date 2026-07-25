@@ -1,5 +1,163 @@
 # Project: Local oxDNA Relaxation Runner + Display
 
+## 📤 Trajectory-range export: 3-phase progress + a measured cost profile — 2026-07-23
+
+Symptom: an export ran ~20 min with **nothing** in the UI, so it read as broken. It wasn't — the
+build reported one opaque `phase:"align"` with `done` pinned at 0 for its entire duration, and the
+bar only renders on a counter. Two fixes, and one measurement worth keeping.
+
+- **Backend now reports three phases** (`_EXPORT_PROGRESS`): `align` (PBC-unwrap + Kabsch, one
+  opaque pass, no counter) → `atoms` (per-frame all-atom rebuild, counts) → `write` (per-frame PDB,
+  counts). `composite_trajectory_atomistic` gained an optional `progress(done, total)`; it ticks per
+  *requested* index, so a range overrunning the trajectory still reaches 100 % instead of stalling.
+- **Frontend treats `align` as INDETERMINATE** — barber-pole + "can take several minutes", never a
+  frozen 0 %. `exportProgressView` returns `{pct, text, indeterminate}`. The bar also paints on
+  click instead of waiting for the first 250 ms poll.
+
+**Measured on VoltronCoreScad (16,168 nt ≈ 330k atoms, 51 frames), 2026-07-23:**
+`align`+`atoms` ≈ **17 s/frame** (≥14 min), `write` ≈ **6 s/frame** (~5 min), peak RSS **14.5 GB**.
+So **~75 % of an export is the all-atom rebuild**, not PDB writing — optimise there first.
+
+### All four levers SHIPPED — 2026-07-23
+
+1. **New `dcd` export format, now the default radio.** Topology PDB + binary DCD, zipped with a
+   README carrying the ChimeraX lines (`open s.pdb` / `open s.dcd structureModel #1`). Writer added
+   to [dcd_fast.py] (`write_header`/`append_frame`/`write_trajectory`) next to the reader that
+   already owned the format — round-tripped through that independent reader in
+   `tests/test_dcd_writer.py`. Frames are written one at a time, so peak memory is one frame.
+   **DCD is NOT faster to build — don't claim it is.** Fresh-process head-to-head, 6 frames of the
+   330k-atom design: pdb 419.6 s / 168.4 MB vs dcd 420.5 s / 28.1 MB. Identical build time (0.2 %
+   apart), **~6× smaller file**. Both formats pay the same per-frame atomistic rebuild, which
+   dominates; the format only changes how each frame is serialised. The UI radio was briefly
+   mislabelled "fastest" on the strength of an unfair measurement — the size win is the real one.
+2. **`_cross3`** in `atomistic.py` — `np.cross`'s generic-axis dispatch (`moveaxis` +
+   `normalize_axis_tuple`) dominated the arithmetic on (3,) inputs. Applied to the hot sites only
+   (`_atom_frame`, `_oxdna_frame_basis`, `_extra_base_frame` ≈ 57k of 57.5k calls); batched `(N,3)`
+   sites still use `np.cross`. Plus `atomistic_positions_flat` vectorised (997k `round()` → `np.round`).
+   **A/B'd on the real 330k-atom design: output bit-identical, 6.62 s → 5.24 s per frame.**
+3. **`MultiframePdbTemplate`** (`pdb_export.py`) — one `export_pdb` render split into frame-invariant
+   text + coordinate slots; per frame only PDB cols 31–54 are spliced. **Self-validating**: the route
+   renders frame 1 the slow authoritative way and falls back to per-frame `export_pdb` unless the
+   splice reproduces it byte-for-byte, because a silently mis-mapped splice would corrupt every
+   exported coordinate. `build_multiframe_pdb_template` returns None (⇒ fall back) if the ATOM-line
+   count disagrees with the model or the source is multi-MODEL.
+4. **`StreamingResponse`** + `iter_composite_trajectory_atomistic` (generator sibling of the dict
+   version) — frames are emitted as built, never accumulated. The export also passes `cache=False`:
+   51 large frames are ~50 M elements against a 6 M budget, so caching evicted the whole live
+   display cache to keep ~6 frames nobody re-requests.
+
+**Progress phases are now `align` → `frames`** (rebuild+write merged, since streaming does both per
+frame). `atoms`/`write` labels are kept for the fallback path.
+
+**Lesson: cProfile lied about the size of the win.** It attributed ~3.0 s/frame to `np.cross`; the
+real A/B saved 1.38 s. Per-call profiling overhead inflates call-heavy code (57.5k calls) far more
+than it inflates a few big loops. Always A/B the actual change before quoting a speedup.
+
+### OPEN: ~4× of a big export's wall-clock is still unaccounted for
+
+Measured components on 13bb7151f234 (330k atoms), fresh process:
+`composite_trajectory_meta` cold **7.9 s** (warm 0.03 s) · align pass **34.9 s** / 198 frames ·
+per-frame atomistic rebuild **5.2–5.6 s** · `export_pdb` full render **~3.6 s** · template splice
+**~1.2 s/frame**.
+
+Those sum to **~95 s** for a 6-frame export. The full path measured **420 s** for the same 6 frames,
+BOTH formats (419.6 / 420.5 — so it is format-independent and sits in the shared rebuild pipeline,
+not in serialisation). **The ~325 s gap is not explained.** A cold-`composite_trajectory_meta`
+hypothesis was tested and REJECTED (7.9 s). Prime suspect not yet tested: GC/allocator pressure from
+`_aligned_downsampled_frames(copies=True)` holding 198 frames × 16,168 nucleotides of per-nucleotide
+dicts + numpy triples (this is what drove the server to 14.5 GB RSS). Next step if anyone picks this
+up: profile the ROUTE path end-to-end (not `frame_atomistic_flat` in isolation) and watch RSS/GC —
+don't trust the component sum, it under-predicts by 4×.
+
+## 💥 Crash recovery: a host restart cost 53 % of a run and reported 0 % — 2026-07-22
+
+Real loss (`fb83ff00287a`, VoltronCoreScad · production, 50 M steps). Host restarted at ~26.6 M
+steps; NADOC resumed; the resumed run **diverged** ("Invalid cell -2147483648 … pos: inf -inf inf")
+at 3.9 M steps; the job then displayed **0 %**. THREE independent defects, all in
+[oxdna_runner.py](../backend/core/oxdna_runner.py):
+
+1. **Progress counted only the current attempt.** `_archive_partial_outputs` renames an interrupted
+   run's outputs to `energy.rN.dat` / `trajectory.rN.dat`, but `_stage_energy_lines` reads only
+   `energy.dat` — and `stage_frac` was computed **only when `status == "running"`**. A crashed stage
+   therefore reported 0 % no matter how much it had banked. Now `stage_completed_steps` /
+   `stage_fraction` sum every attempt's energy file and are reported for `failed`/`stopped` stages
+   too. **Kept CHEAP** (energy arithmetic only, no trajectory scan, no writes — 0.3 ms) because it
+   runs on the job-list poll path.
+2. **Resume restarted the step BUDGET.** oxDNA always runs with `restart_step_counter = true`, so
+   the resumed run re-ran the stage's *full* `steps`. The structure continued but the banked work
+   was silently repeated. Resume now sets `steps = remaining` and pins
+   `print_energy_every_override` / `print_conf_interval_override` to the ORIGINAL cadence, so the
+   output intervals stay comparable across attempts (they default to `steps//100`, which a
+   shortened budget would otherwise change mid-stage and desynchronise the accounting).
+3. **Resume trusted a torn checkpoint.** `_starting_conf` accepted `last_conf.dat` on `size > 0`
+   alone. oxDNA rewrites that file IN PLACE every `print_conf_interval`, so a crash mid-write leaves
+   a plausible-sized file with inconsistent contents; oxDNA loads it happily and diverges millions of
+   steps later — which reads as a sim instability, not a corrupt restart. New `resume_point()`
+   validates it (complete particle count + all-finite), and otherwise walks back through the
+   append-only trajectories for the newest COMPLETE frame (tail-seek, not a full parse — these are
+   >1 GB). **`error_conf.dat` present ⇒ that attempt DIVERGED and is skipped entirely**, falling
+   back to the attempt that ended cleanly. The recovered frame is written to **`restart_conf.dat`,
+   a separate file** — `conf_file` and `lastconf_file` were both `last_conf.dat`, so a resumed run
+   overwrote the very point it started from, which is what made the second crash unrecoverable.
+
+**Invariant:** the restart configuration and the consumed-step count MUST come from the same source.
+A blind sum over attempts credits work the chosen restart point doesn't contain (here: 30 M summed
+vs 26.6 M actually recoverable, because the diverged 3.5 M tail is discarded).
+
+**Second invariant (regression, found the hard way):** `completed_steps` must be cleared by EVERY
+from-scratch start. `_halve_dt_and_restart` reset `resumed`/outputs but not the banked count, so a
+retry that begins at step 0 kept crediting a previous resume's 26.6 M — a 20 %-done rerun reported
+63 %. Cleared there AND on the runner loop's non-resume branch.
+
+### ⚠️ What this did NOT fix — Run 6's divergence was NOT file corruption
+
+The resume ran correctly (verified in `input.txt`: `conf_file=restart_conf.dat`, `steps=23400000`,
+original cadence pinned) and **diverged again 27 min in** — matching the previous failure's 26 min.
+So resuming from a byte-verified complete frame reproduced the blow-up: the instability is real, at
+`dt = 0.005`, most plausibly because the structure at ~26 M steps is already strained, so ANY late
+run-1 frame diverges. Do not read the recovery work as a cure for that.
+
+What actually salvaged Run 6 was the pre-existing **`_halve_dt_and_restart`** retry: dt 0.005 →
+0.0025, restart from the relaxed seed, full 50 M steps. Completed cleanly (final E_pot −1.3709 from
+−1.3419, 2.23 GB trajectory, `production_retries: 1`). **Lesson: when a resume diverges on the same
+timescale as the crash it was recovering from, suspect the physics, not the file.** The earlier
+in-session conclusion ("cleared the previous divergence point ⇒ torn checkpoint confirmed") was
+wrong twice over — the run being watched had restarted from zero, and its progress was inflated by
+the stale `completed_steps` above.
+
+Tests: `tests/test_oxdna_crash_recovery.py` (17, fast). Verified against the real job: reports
+**53.2 %**, recovers step 26,600,000 from `trajectory.r1.dat`, 23.4 M remaining.
+
+## 🐌→⚡ The panel poll was re-reading the whole job lineage every 1.5 s — 2026-07-21
+
+Symptom: while a production run was live, the "Working…" popup fired on nearly every poll AND the
+sim ran ~35 % slow (GPU 61 % util). Backend was reading **498 MB/s sustained** (10.7 TB lifetime)
+from a 1.4 GB working set. Three compounding causes, all fixed:
+
+1. **`_count_dat_frames` was an un-memoized DUPLICATE of `count_trajectory_frames`** — so
+   `composite_trajectory_meta` bypassed the very cache added to stop lineage re-scans. It's now a
+   thin alias (`oxdna_health.py`).
+2. **`count_trajectory_frames` recounted a GROWING file from byte 0** (its old key included size +
+   mtime, so a live trajectory never hit). Now **incremental**: cache holds `{size, reported,
+   offset, count, anchor}`; unchanged size → stat-only hit; grown → scan the new tail only;
+   truncation, or an anchor mismatch (a restarted stage rewinds to `t = 0` with an identical head),
+   → full recount. A dangling final header with no newline is *reported* but not committed to the
+   resume point. Tests: `test_count_trajectory_frames_incremental`, `test_count_dat_frames_is_memoized`.
+3. **`nadoc:oxdna-job-selected` was level-triggered** — `_renderDetail` fires it on every 1.5 s poll
+   tick, and `oxdna_export_card` rebuilds its timeline (→ a full-lineage frame count) on it. Now
+   edge-triggered via pure `jobSelectionSignature(job)` = `job_id|status|stage statuses`; deselect
+   (empty signature) always announces. **Consequence:** the export card's frame timeline no longer
+   grows live mid-run — it re-syncs on any status change or re-selection. Fine for the fringe case
+   of exporting a partial run; revisit only if that becomes a real workflow.
+
+Measured after: `trajectory-meta` 26.9 s → **0.06 s**, `progress` 10.5 s → **0.3 s** (the 5 s busy-popup
+threshold is no longer reachable), backend read rate 498 MB/s → **0.3 MB/s**.
+
+**Lesson worth keeping:** a slow endpoint here was NOT slow work — profiling the handler's own
+functions showed 0.3 s. It was queue contention from overlapping copies of a 27 s scan launched
+every 1.5 s. Measure `/proc/<pid>/io` `rchar` and sample `fdinfo` offsets before optimizing the code
+you *think* is hot.
+
 ## ⚡ Hard surface: absolute world POSITION replaces the clearance offset — 2026-07-16 (out-of-session work)
 
 The Offset slider became a **"Position" number box in nm** — you type the plane's absolute world-axis
@@ -518,6 +676,79 @@ Fixed by splitting fetch from render: `_ensureJobAtomistic` fetches topology onl
 `_pendingTopoModel`), and `_applyJobTopology` + `applyPositionLerp` run in ONE synchronous tick inside
 `_pushAtomistic` so native never paints. Pin: `oxdna_display.test.js` "does NOT paint … before the
 relaxed frame arrives".
+
+**"Full rep flashes back while VDW loads" + VDW skips bonds (2026-07-21).** Symptom: with VDW already
+active, turning on an oxDNA display showed the CG Full model for the whole (multi-second) atom build —
+users read it as NADOC breaking. Nothing was VDW-specific in the slow path: `repKind` maps `vdw` and
+`ballstick` to the same `'atomistic'` branch, so VDW already gets every §26/§26b speedup (and skips bond
+cylinders entirely). Two independent causes, both fixed:
+- **Visibility.** `atom_surface_display._setCGVisible` poked `getHelixCtrl().root.visible` DIRECTLY,
+  leaving design_renderer's `_designVisible` stale at `true`. `displayJob` → `onSurfaceStrands` →
+  `setExtraNucleotides` → `_rebuild` then allocated a fresh root (visible by default) and — uniquely
+  among `_rebuild` call sites — never re-applied the hidden state, so the CG popped back until
+  `onHeavyApplied` fired at the END of `_pushAtomistic`. `_setCGVisible` now goes through
+  `designRenderer.setDesignVisible` (single source of truth) and `setExtraNucleotides` re-applies
+  `_designVisible` after its rebuild, like every other call site. Pin: `atom_surface_display.test.js`
+  "a rebuild after setCGVisible(false) leaves the CG hidden" (verified failing against the old code).
+- **Spurious rebuild.** `surface_strands_overlay._draw` builds a fresh `let chains = []` each call and
+  `createSurfaceStrandEmitter` compared by IDENTITY, so a job with NO capture strands triggered a full
+  CG rebuild on every `displayJob`/`stopAndRestore`. Empty→empty is now compared by emptiness.
+- **`bonds=false` on the bundle route.** VDW draws no cylinders; the bond list is ~370k pairs / 6 MB of
+  the 124 MB bundle. The blocking fetch now asks for `bonds=false`, the warm-ahead prefetch too (the
+  DISK cache always stores the full bundle, so nothing rebuilds). `_atomTopoBonds` tracks whether the
+  held topology carries bonds; `_warmBonds()` pulls them in the background after a VDW push so a later
+  vdw→ballstick flip repaints from the held model instead of stalling — without it the flip would show
+  stickless ball-and-stick for seconds.
+
+### §26c. Columnar/binary atomistic bundle — SHIPPED 2026-07-21. 129 MB → 17.9 MB, parse 899 ms → 13 ms
+
+The measured remaining stall was the payload, not the GPU: `atomistic_display_bundle.json` is **129 MB**
+for VoltronCore (330,622 atoms as verbose per-atom dicts = **112 MB**, ~340 B/atom; bonds only 6 MB), and
+`JSON.parse` materialises 330k JS objects before anything draws. The surface mesh had already gone binary
+(`display-surface-bin`) and the frames compact (§26 stamp); the atom topology was the last holdout.
+
+- **`pack_bundle_bin(bundle)`** ([atomistic.py](../backend/core/atomistic.py)) — pure function over the
+  dict the disk cache already holds, so there is still exactly ONE build path. Drops `serial` (asserted
+  dense 0..n-1 → it IS the row index, which is also what lets the serial-keyed relaxed frames be indexed
+  directly), drops the **seven fields no frontend code reads** (`name`, `residue`, `chain_id`, `seq_num`,
+  `is_modified`, `crossover_id`, `extra_base_k` — ~40% of the atom payload), and interns the five string
+  fields (a whole origami has ~200 strands / ~60 helices / 2 directions / 4 elements) to u8/u16 indices +
+  tables in a small JSON header. Raises `BundleNotPackable` on any invariant break → route 409s → client
+  falls back to JSON. **`atom_nuc` is i32, not u32** — `-1` is expandStampFrames' non-rigid sentinel.
+- **`GET .../atomistic-display-bundle-bin`** ([routes_oxdna.py](../backend/api/routes_oxdna.py)) with its
+  OWN disk cache `atomistic_display_bundle_{thash[:16]}.bin` (hash in the filename → self-invalidating).
+  Both bundle routes now share `_atomistic_bundle_ctx` / `_atomistic_bundle_cached`.
+- **The blob is packed at BUILD time**, off the in-memory bundle (`_write_atomistic_bin_cache`, called from
+  `_atomistic_bundle_cached`'s persist step) — so the normal path NEVER reads the 129 MB JSON cache. Packing
+  lazily on the first bin request instead cost ~1.4 s reparsing that JSON just to throw the dict away.
+  Falling through to a repack in the bin route is now only the one-time migration for a job whose JSON cache
+  predates this format; it writes the blob so it happens at most once per job. The 9 existing jobs were
+  pre-packed by hand, so nothing pays it interactively. Cache reads/writes also moved to **orjson** (a
+  declared dep; 1.39 s → 0.91 s on the 129 MB file) for the paths that still touch JSON.
+  Measured after: **~50 ms** for every job's bin request on a cold server.
+- `pack_bundle_bin` validates the required atom fields up front and raises `BundleNotPackable` rather than
+  letting a `KeyError` escape — a malformed bundle must degrade to the JSON fallback, never a 500.
+- **Frontend**: [scene/atomistic_bundle_bin.js](../frontend/src/scene/atomistic_bundle_bin.js) decodes to
+  typed-array views (mirrors `surface_bin.js`); [scene/atom_table.js](../frontend/src/scene/atom_table.js)
+  is the new seam — **`makeAtomTable(data)` accepts EITHER the columnar payload or a legacy object array**,
+  so the six other `atomisticRenderer.update()` producers (design atomistic, protein, instance, filtered
+  subsets, baked NAMD frames, live MD websocket) needed no change at all.
+- **`atomistic_renderer` now stores atom ROW INDICES, not objects** — `elementAtoms[el]` is an `Int32Array`
+  and `bondAtomPairs` (370k `{a,b}` object pairs) became a flat `bondAtomIdx` `Int32Array`.
+  ⚠️ **Flyweight contract**: for a columnar table `table.get(i)` returns a SHARED mutable view, valid only
+  until the next `get()`. `raycastPick` therefore uses `materialize(i)` — its result escapes to
+  `selection_manager`/`main.js`. On the object-array path `get()` returns the real record, so a violation
+  of this is INVISIBLE on the design/protein/MD paths and only corrupts the oxDNA bundle. Read the header
+  comment in `atom_table.js` before touching any renderer loop.
+- **Validated at full scale** (not just unit fixtures): decoded the real 17.9 MB blob for job
+  `fb83ff00287a` and cross-checked all 330,622 atoms against the JSON bundle → **0 field mismatches**,
+  max |Δxyz| **3.8e-6 nm** (f32 rounding, below §26's already-accepted 5.5e-6 nm stamp parity), all
+  369,756 bonds identical, all 102,608 non-rigid sentinels preserved. Live route: **129 MB / 3.7 s →
+  17.9 MB / 0.06 s** warm (2.9 s cold repack, then cached). Client-side **decode 13 ms vs JSON.parse
+  899 ms**.
+- Tests: `tests/test_atomistic_bundle_bin.py` (10, fast — includes an independent re-implementation of the
+  decoder so a layout drift on either side fails) + `frontend/src/scene/atomistic_bundle_bin.test.js` (7,
+  pinned against a **real backend-encoded blob** so the two languages are checked against each other).
 
 **Extra-base / extension CG snap (2026-07-18):** switching atomistic→FULL left `__xb__` extra-base beads
 (and `__ext_` tails) stuck at NATIVE while the duplex stayed relaxed — PERSISTENT. Root cause (NOT a

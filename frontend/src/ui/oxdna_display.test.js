@@ -480,7 +480,7 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
   function makeHeavyDeps(repr = 'ballstick') {
     const state = { repr }
     const designRenderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
-    const atom = { getMode: () => 'ballstick', applyPositionLerp: vi.fn(), update: vi.fn(),
+    const atom = { getMode: () => (state.repr === 'vdw' ? 'vdw' : 'ballstick'), applyPositionLerp: vi.fn(), update: vi.fn(),
                    applyScalarColors: vi.fn(), clearScalarColors: vi.fn() }
     const surf = { getMode: () => (state.repr === 'surface' ? 'on' : 'off'), applyPositionLerp: vi.fn(),
                    applyScalarVertexColors: vi.fn() }
@@ -544,13 +544,60 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     await ctrl.displayJob('job1')
     await tick()
     // Fast path: bundle + frames fetched; the SLOW full-flat + separate model NOT called.
-    expect(api.getOxdnaAtomisticDisplayBundle).toHaveBeenCalledWith('job1')
+    expect(api.getOxdnaAtomisticDisplayBundle).toHaveBeenCalledWith('job1', { bonds: true })
     expect(api.getOxdnaDisplayAtomisticFrames).toHaveBeenCalledWith('job1', true)
     expect(api.getOxdnaDisplayAtomistic).not.toHaveBeenCalled()
     expect(api.getOxdnaAtomisticModel).not.toHaveBeenCalled()
     // Expanded client-side: atom0 = origin+R·(1,0,0)=(1,0,0), atom1 = (0,1,0).
     const arg = atom.applyPositionLerp.mock.calls.at(-1)[0]
     expect(Array.from(arg)).toEqual([1, 0, 0, 0, 1, 0])
+  })
+
+  // VDW draws spheres only — the ~370k-pair bond list is pure wire + JSON.parse cost there.
+  function _bundleStub() {
+    return vi.fn().mockImplementation((id, { bonds = true } = {}) => Promise.resolve({
+      topology_hash: 'jobtopo', n_nuc: 1, n_atoms: 2,
+      atoms: [{ serial: 0, element: 'C', strand_id: 's', residue: 'DT' }, { serial: 1, element: 'O', strand_id: 's', residue: 'DT' }],
+      ...(bonds ? { bonds: [[0, 1]] } : {}),
+      atom_nuc: [0, 0], atom_local: [1, 0, 0, 0, 1, 0], nonrigid_serials: [],
+    }))
+  }
+  function _framesStub() {
+    return vi.fn().mockResolvedValue({ ready: true, topology_hash: 'jobtopo', n_nuc: 1,
+      frames: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], nonrigid_xyz: [] })
+  }
+
+  it('VDW fetches the bundle WITHOUT bonds (and paints bond-less topology)', async () => {
+    const { ctrl, api, atom } = makeHeavyDeps('vdw')
+    api.getOxdnaAtomisticDisplayBundle = _bundleStub()
+    api.getOxdnaDisplayAtomisticFrames = _framesStub()
+    await ctrl.displayJob('job1')
+    await tick()
+    // The blocking fetch on the critical path asks for no bonds.
+    expect(api.getOxdnaAtomisticDisplayBundle).toHaveBeenCalledWith('job1', { bonds: false })
+    expect(atom.update).toHaveBeenCalledWith(expect.objectContaining({ bonds: [] }))
+    expect(Array.from(atom.applyPositionLerp.mock.calls.at(-1)[0])).toEqual([1, 0, 0, 0, 1, 0])
+  })
+
+  it('VDW warms the bonds in the background so a later ball-and-stick flip repaints them', async () => {
+    const { ctrl, api, atom, state } = makeHeavyDeps('vdw')
+    api.getOxdnaAtomisticDisplayBundle = _bundleStub()
+    api.getOxdnaDisplayAtomisticFrames = _framesStub()
+    await ctrl.displayJob('job1')
+    await tick(); await tick()
+    // Background upgrade fetched the bonds without touching the (VDW) renderer.
+    expect(api.getOxdnaAtomisticDisplayBundle).toHaveBeenCalledWith('job1', { bonds: true })
+    expect(atom.update).toHaveBeenCalledTimes(1)
+    expect(atom.update.mock.calls[0][0].bonds).toEqual([])
+
+    // Flip to ball-and-stick: repaints from the warmed model — no second bundle fetch.
+    api.getOxdnaAtomisticDisplayBundle.mockClear()
+    state.repr = 'ballstick'
+    await ctrl.reapplyForRepr()
+    await tick()
+    expect(api.getOxdnaAtomisticDisplayBundle).not.toHaveBeenCalled()
+    expect(atom.update).toHaveBeenCalledTimes(2)
+    expect(atom.update.mock.calls[1][0].bonds).toEqual([[0, 1]])
   })
 
   it('does NOT paint the renderer at native positions before the relaxed frame arrives (no flash)', async () => {
@@ -748,7 +795,9 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     api.getOxdnaFramesAtomistic.mockClear()
     ctrl.showFrame(2)
     await tick()
-    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledWith('jobT', [2], true)
+    // 4th arg = the loaded trajectory's composite scope — a heavy per-frame fetch
+    // MUST repeat it, or the index would address a frame from the other scope.
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledWith('jobT', [2], true, 'lineage')
   })
 
   it('stopAndRestore rebuilds the design heavy reps; a late reconstruction does not re-apply', async () => {
