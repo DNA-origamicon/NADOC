@@ -285,6 +285,46 @@ killer takes the biggest process — the user's editor. Two responses, both ship
      Caveat: the τ estimator is only ~±20% at these trajectory lengths (≈5τ of data), so read k≥8 as
      "recovers the hydrodynamic speedup that Stokes lacks", not as a 3%-accurate claim.
 
+## E-field in the Langevin loop (2026-07-25) — DONE
+The static solver's E-field body load is now wired into `simulate_equilibrium`, so the dynamics
+engine gives the field response with **correct overdamped damping** (no oxDNA thermostat ringing) —
+the point of the exercise (see `project_oxdna_efield`; oxDNA's per-nucleotide field force + Bussi
+thermostat leave a whole-arm mode under-damped → artefactual oscillation about the field vector).
+- **Wiring:** `predict_shape(dynamics=True, field=, anchors=)` → `_predict_shape_dynamics` →
+  `simulate_equilibrium(field=, anchors=)`. Two pure helpers in `snupi_dynamics.py`:
+  `field_body_load(mesh, block, n_tot, field)` (core bp node = **2·field_pN**, free ssDNA tail bead =
+  **1·field_pN** — the user chose core+tails; reuses `fem_solver.assemble_field_force` for the core)
+  and `anchor_trap_diag(n_tot, n_core, fixed_nodes, k)`.
+- **Anchors = stiff harmonic trap** (user decision, mirrors oxDNA's `trap`, not the static solver's
+  hard Dirichlet clamp): `k_anchor = ANCHOR_TRAP_FACTOR(=2)·max|diag(K)|` on anchor translational DOF,
+  added as `−k_anchor_diag·q` INSIDE `force_fn` (kept out of K/core_int, so the validated no-anchor
+  equilibrium path is byte-for-byte unchanged — gated on `has_anchor`) and folded into the plain-GJF
+  `dt` eigensolve so the stiff spring doesn't just surface as a divergence retry. **A field needs ≥1
+  anchor** — uniform force with no clamp = pure COM drift, zero internal deflection.
+- **Why it's correct:** the field is a constant dead load, so the overdamped mean satisfies
+  `K_eff·mean_u = f_ext` = the SAME static field response; the trajectory adds the correctly-damped
+  thermal motion about it. `mean_u` = the deflection; `out["anchor_keys"]` reported.
+- **Verified (direct exercise, `_routed_2hb`, field ⟂ axis, one anchored end):** free-end deflection
+  **+0.62 nm along +field** > anchored-end, bounded ~1.2 nm (trap holds — no runaway); field-off = pure
+  thermal noise, no systematic deflection. Tests: 2 fast pure pins (`field_body_load`, `anchor_trap_diag`)
+  + 1 slow integration pin (`test_field_with_anchor_deflects_free_region_along_field`) in
+  `test_snupi_dynamics.py`. `just test-smart` FAST 5496 passed. Backend-only, `main.js` LOC Δ = 0.
+- **End-to-end via the API already:** the create request (`routes_cando` CandoJobRequest), `SnupiJob`,
+  and `snupi_runner` already carry+forward `field`/`anchors` to `predict_shape`; the ONLY thing my change
+  fixed was `predict_shape(dynamics=True)` → `_predict_shape_dynamics` dropping them. So a POST predict job
+  with `dynamics=true` + `field` + `anchors` now runs the field response with correct damping, no further
+  plumbing. **Frontend (2026-07-25):** the SNUPI panel's E-field + Anchors cards ALREADY existed
+  (byte-for-byte clones of the oxDNA markup, reusing the shared `forces_card`/`oxdna_anchors_setup`
+  factories; `_launch()` already sends `field`/`anchors`). The one behavioral parity gap — repopulating
+  the cards on job-select (oxDNA does this via `_applyRunControls`→`applyConfig`) — is now closed: pure
+  `snupiRunConfig(job)` + `_applyRunConfig` in `snupi_jobs_panel.js` call `_efieldCard.applyConfig` /
+  `_anchorsCard.applyConfig` on `_selectJob` (explicit-select only, never on poll → no mid-edit clobber).
+  `main.js` LOC Δ = 0; `just test-frontend` 3167 pass; `just smoke` 23 pass. **NOT hand-verified in app:**
+  clicking a completed SNUPI field job to watch the cards repopulate (needs a live completed field job;
+  can't POST to the shared server) — logged as manual-validation debt.
+  **Open:** trap stiffness at 2× the stiffest CanDo crossover rigid-link shrinks `dt` (~1/√2); origami-scale
+  field runs will want the Phase-2 modified-GJF/constrained-Langevin step widening.
+
 ## Decisions / open
 - Frame value proposition honestly: for **static shape + equilibrium flexibility** our NMA already
   matches MD cheaply (the paper itself: NMA↔dynamics RMSF overlap 0.97). Dynamics' unique value =

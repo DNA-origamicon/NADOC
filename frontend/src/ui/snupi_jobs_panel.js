@@ -93,6 +93,17 @@ export function runningJob(jobs) {
   return (Array.isArray(jobs) ? jobs : []).find(snupiJobIsActive) || null
 }
 
+/** The E-field + anchor conditions a selected job ran with, for repopulating the cards on select
+ *  (the SNUPI analog of oxDNA's `runConfigForJob`). SNUPI stores both directly on the job (asdict),
+ *  not nested in a run_config, so this just normalizes them: `field` → the {field_pN, dir} object or
+ *  null (→ the E-field card disables), `anchors` → the descriptor array or [] (→ the card clears). */
+export function snupiRunConfig(job) {
+  return {
+    field: job?.field ?? null,
+    anchors: Array.isArray(job?.anchors) ? job.anchors : [],
+  }
+}
+
 /** Human name for the material law of a job. */
 export function materialLabel(job) {
   return job?.material === 'cando' ? 'CanDo (isotropic)' : 'SNUPI'
@@ -486,10 +497,22 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   async function _selectJob(jobId) {
     _selectedId = jobId
     _progress = await api.getSnupiProgress(jobId)
+    _applyRunConfig(_selectedJob())   // echo this run's field + anchors into the cards (oxDNA parity)
     _renderList()
     _renderDetail()
     await _retargetDisplayToSelection()
     _base.schedulePoll()
+  }
+
+  /** Repopulate the E-field + Anchors cards with the conditions the selected job ran with, so
+   *  clicking a job shows exactly what it used — mirrors the oxDNA panel's `_applyRunControls` →
+   *  `applyConfig`. `_selectJob` fires only on an explicit selection (never on a status poll), so
+   *  this can't clobber the user mid-edit. A job with no field/anchors resets the cards (off/empty). */
+  function _applyRunConfig(job) {
+    if (!job) return
+    const cfg = snupiRunConfig(job)
+    _efieldCard?.applyConfig?.(cfg.field)
+    _anchorsCard?.applyConfig?.(cfg.anchors)
   }
 
   /** When a display mode is active and the user selects a DIFFERENT job, retarget the

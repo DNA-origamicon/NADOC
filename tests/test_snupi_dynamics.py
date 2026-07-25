@@ -704,3 +704,72 @@ def test_modified_gjf_extends_stable_step_on_real_bundle():
     assert np.isfinite(r).all()
     assert pearson > 0.9
     assert 0.6 <= r.mean() / nma.mean() <= 1.2
+
+
+# ── E-field body load + anchor traps (project_oxdna_efield in the Langevin loop) ─────
+
+def test_field_body_load_core_is_two_x_and_tails_are_one_x():
+    """field_body_load applies the shared oxDNA per-nucleotide force: a core bp node carries two
+    backbones → 2·field_pN, a free ssDNA tail bead is one nucleotide → 1·field_pN, translational
+    DOF only (a pure body force, no couple). None / zero magnitude → an exact zero vector."""
+    from types import SimpleNamespace
+    from backend.physics.fem_solver import build_fem_mesh
+    mesh = build_fem_mesh(_routed_2hb())
+    n = len(mesh.nodes)
+    field = {"field_pN": 0.5, "dir": [0.0, 1.0, 0.0]}
+
+    fr = dyn.field_body_load(mesh, None, n, field).reshape(n, 6)
+    assert np.allclose(fr[:, :3], [0.0, 1.0, 0.0])       # 2·0.5 = 1.0 along +y on every core node
+    assert np.allclose(fr[:, 3:], 0.0)                   # no couple on rotational DOF
+
+    block = SimpleNamespace(n_tail=2)                    # two ssDNA tail beads appended after the core
+    fr2 = dyn.field_body_load(mesh, block, n + 2, field).reshape(n + 2, 6)
+    assert np.allclose(fr2[:n, :3], [0.0, 1.0, 0.0])     # core unchanged (2×)
+    assert np.allclose(fr2[n:, :3], [0.0, 0.5, 0.0])     # tail beads 1× = 0.5
+    assert np.allclose(fr2[n:, 3:], 0.0)
+
+    assert not dyn.field_body_load(mesh, None, n, None).any()
+    assert not dyn.field_body_load(mesh, None, n, {"field_pN": 0.0, "dir": [0, 1, 0]}).any()
+
+
+def test_anchor_trap_diag_places_stiffness_on_anchor_translational_dof_only():
+    """anchor_trap_diag puts the trap stiffness on the 3 translational DOF of each anchor node and
+    nowhere else — rotational DOF, non-anchor nodes, and out-of-core indices all stay 0."""
+    diag = dyn.anchor_trap_diag(5, 5, [1, 3], 7.0).reshape(5, 6)
+    assert np.allclose(diag[1, :3], 7.0) and np.allclose(diag[1, 3:], 0.0)
+    assert np.allclose(diag[3, :3], 7.0)
+    for i in (0, 2, 4):
+        assert np.allclose(diag[i], 0.0)
+    # a tail / out-of-core node index (≥ n_core_nodes) is ignored — only core bp nodes can anchor
+    assert not dyn.anchor_trap_diag(6, 5, [7], 7.0).any()
+    assert not dyn.anchor_trap_diag(5, 5, [], 7.0).any()
+
+
+@pytest.mark.slow
+def test_field_with_anchor_deflects_free_region_along_field():
+    """End-to-end: a uniform E-field + one anchored end deflects the FREE end along the field, and
+    the deflection is BOUNDED (the anchor absorbs the net thrust). Without the anchor the same field
+    would only drift the COM. Proves the field body load + stiff harmonic trap are wired into the
+    Langevin loop and produce the static field response as the trajectory mean (project_snupi_dynamics)."""
+    from backend.core.models import Direction
+    from backend.physics.fem_solver import build_fem_mesh
+    design = _routed_2hb()
+    mesh = build_fem_mesh(design)
+    bps = [n.global_bp for n in mesh.nodes]
+    bp_min, bp_max = min(bps), max(bps)
+    end = next(n for n in mesh.nodes if n.global_bp == bp_min)
+    anchor = {"kind": "base", "helix_id": end.helix_id, "bp": end.global_bp,
+              "direction": Direction.FORWARD.value}
+    fdir = np.array([1.0, 0.0, 0.0])                     # transverse to the z-stacked helix axis
+    out = dyn.simulate_equilibrium(
+        design, material="snupi", field={"field_pN": 5.0, "dir": fdir.tolist()},
+        anchors=[anchor], n_steps=24000, n_equil=6000, sample_every=20, seed=0)
+
+    proj = (out["mean_u"].reshape(len(mesh.nodes), 6)[:, :3]) @ fdir
+    assert np.isfinite(proj).all()
+    anchor_idx = [i for i, n in enumerate(mesh.nodes) if n.global_bp == bp_min]
+    free_idx = [i for i, n in enumerate(mesh.nodes) if n.global_bp == bp_max]
+    assert abs(proj[anchor_idx].mean()) < proj[free_idx].mean()   # anchored end held, free end moves
+    assert proj[free_idx].mean() > 0                              # …along +field
+    assert np.abs(proj).max() < 50.0                              # bounded — no runaway COM drift
+    assert out["anchor_keys"] == [[end.helix_id, end.global_bp]]

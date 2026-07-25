@@ -37,7 +37,7 @@ Three-Layer Law: trajectories are PHYSICAL/display state only — never written 
 from __future__ import annotations
 
 import math
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import numpy as np
 
@@ -603,6 +603,58 @@ def simulate_reconfiguration(
     return {"segments": segments, "q_final": q}
 
 
+# ── E-field body load + anchor traps (project_oxdna_efield, project_snupi_dynamics) ──
+
+#: Anchor-trap stiffness is set to this multiple of the largest diagonal stiffness in K, so the
+#: restraint is reliably rigid relative to the SOFT arm-deflection mode (orders of magnitude below
+#: the stiffest local mode) while barely moving the step-size ceiling (dt ~ 1/√k of the stiffest
+#: mode, which the trap only matches to within √FACTOR). A stiff harmonic trap mirrors oxDNA's
+#: `trap` anchor (stiff=1000), so the two engines are driven by comparable anchoring.
+ANCHOR_TRAP_FACTOR = 2.0
+
+
+def field_body_load(mesh, block, n_tot: int, field: Optional[dict]) -> np.ndarray:
+    """Per-DOF uniform-E-field body load (pN, global) over the FULL core+tail DOF vector.
+
+    The same per-nucleotide force oxDNA applies (``project_oxdna_efield``): a core duplex bp node
+    carries two backbones → ``2·field_pN·dir_hat`` (via :func:`fem_solver.assemble_field_force`,
+    ``FEM_FIELD_CHARGES_PER_NODE=2``); each FREE ssDNA tail bead is ONE nucleotide → ``1·field_pN``.
+    Translational DOF only (a pure body force, no couple). ``None`` / zero magnitude → a zero vector.
+
+    Returns a length-``6*n_tot`` vector; the caller adds it to ``f_ext``. Pure (no integration).
+    """
+    from backend.physics.fem_solver import assemble_field_force
+    f = np.zeros(6 * n_tot, dtype=float)
+    core = assemble_field_force(mesh, field)            # 6*n_core, already 2·field_pN·dir_hat
+    f[: core.shape[0]] = core
+    if block is not None and field:
+        mag = float(field.get("field_pN", 0.0) or 0.0)
+        direction = np.asarray(field.get("dir") or (0.0, 0.0, 0.0), dtype=float)
+        dnorm = float(np.linalg.norm(direction))
+        if mag != 0.0 and dnorm > 1e-12:
+            tvec = mag * (direction / dnorm)           # one nucleotide → 1× per tail bead
+            n = len(mesh.nodes)
+            for j in range(block.n_tail):
+                f[6 * (n + j): 6 * (n + j) + 3] += tvec
+    return f
+
+
+def anchor_trap_diag(n_tot: int, n_core_nodes: int, fixed_nodes, k_anchor: float) -> np.ndarray:
+    """Diagonal harmonic-trap stiffness (pN/nm) on the translational DOF of each anchor node.
+
+    A stiff restraint that holds the anchor nodes near rest (∼ oxDNA ``trap``): without it a uniform
+    field applies the SAME force to every node → pure rigid COM drift and ZERO internal deflection.
+    The trap lets the free region deflect while the anchor absorbs the net thrust. Rotational DOF and
+    every non-anchor DOF get 0 (a single anchor node still leaves the arm free to pivot about it —
+    the joint). Only core nodes can be anchored (tails have no anchor scope). Pure (no integration).
+    """
+    diag = np.zeros(6 * n_tot, dtype=float)
+    for node in (fixed_nodes or ()):
+        if 0 <= node < n_core_nodes:
+            diag[6 * node: 6 * node + 3] = k_anchor
+    return diag
+
+
 # ── High-level: equilibrium dynamics of a design (linear force, Phase 1a) ────────
 
 def simulate_equilibrium(
@@ -611,6 +663,8 @@ def simulate_equilibrium(
     material: str = "snupi",
     with_electrostatics: bool = False,
     hydrodynamics: bool = False,
+    field: Optional[dict] = None,
+    anchors: Optional[List[dict]] = None,
     mgcl2_M: Optional[float] = None,
     temperature_K: float = 300.0,
     dt: Optional[float] = None,
@@ -660,6 +714,15 @@ def simulate_equilibrium(
       coupling, SI Note 3.2) instead of translational-only. Paper-faithful; costs the 4× memory of a
       dense 6N×6N Z in the exact path (free in the coarse path, where the dense object is 6B×6B).
 
+    ``field`` (the shared ``{"field_pN", "dir"}`` E-field descriptor, ``project_oxdna_efield``) adds
+    the same uniform per-nucleotide force oxDNA applies as a constant dead body load — core bp nodes
+    2×, free tail beads 1× (:func:`field_body_load`). The overdamped mean then satisfies
+    ``K_eff·mean_u = f_ext``, i.e. the SAME static field response, so ``mean_u`` is the field deflection
+    and the trajectory adds its (now correctly damped) thermal motion about it. ``anchors`` (the shared
+    oxDNA anchor scopes, resolved by :func:`fem_solver.resolve_anchor_nodes`) hold the anchored nodes
+    with a stiff harmonic trap (∼ oxDNA ``trap``). **A field needs ≥1 anchor** — without one the uniform
+    force only drifts the COM and produces zero internal deflection (:func:`anchor_trap_diag`).
+
     ``tails`` (SS-2, ``material="snupi"`` only) adds the FREE ssDNA tails — overhangs, toeholds,
     dangling scaffold ends — as explicit one-bead-per-nucleotide Langevin chains hanging off their
     anchor base pairs (:mod:`snupi_tails`). **A documented NADOC extension: published SNUPI cannot
@@ -674,7 +737,7 @@ def simulate_equilibrium(
     ``tail_frames``/``tail_positions0``/``tail_nodes``. Downstream Kabsch fits therefore keep
     fitting on the core, which is what they must do. ``tail_max_nt`` optionally truncates each tail.
 
-    Returns ``{positions0, frames, rmsf, helix_ids, bp_indices, n_frame, dt_ns, friction, stiffness, mass_diag}``
+    Returns ``{positions0, frames, rmsf, helix_ids, bp_indices, n_frame, dt_ns, anchor_keys, friction, stiffness, mass_diag}``
     (positions in nm; frames are absolute node positions, rigid-body drift retained —
     :func:`trajectory_rmsf` removes it), plus the ``tail_*`` keys above when ``tails=True``.
     """
@@ -683,6 +746,7 @@ def simulate_equilibrium(
         assemble_global_stiffness,
         assemble_mass_matrix,
         assemble_prestress_force,
+        resolve_anchor_nodes,
         SNUPI_DEFAULT_MGCL2_M,
     )
 
@@ -745,6 +809,19 @@ def simulate_equilibrium(
         # — collapsing a rod into a coil is precisely the slow long-wavelength mode.
         q_start[6 * n:] = block.q0
 
+    # ── E-field body load + anchor traps (project_oxdna_efield) ────────────────────────
+    # The field is a constant DEAD load added to f_ext (like the prestress): the overdamped mean
+    # then satisfies K_eff·mean_u = f_ext, i.e. the SAME static field response, but with a stiff
+    # harmonic trap standing in for the static solver's hard Dirichlet clamp. A field WITHOUT an
+    # anchor only drifts the COM (uniform force ⇒ no internal strain); resolve anchors so the free
+    # region actually deflects. Only core bp nodes can be anchored (tails have no anchor scope).
+    f_ext = f_ext + field_body_load(mesh, block, n_tot, field)
+    fixed_nodes, anchor_keys = (
+        resolve_anchor_nodes(design, mesh, anchors) if anchors else ([], []))
+    k_anchor = ANCHOR_TRAP_FACTOR * (float(np.max(np.abs(Kcsr.diagonal()))) or 1.0)
+    k_anchor_diag = anchor_trap_diag(n_tot, n, fixed_nodes, k_anchor)
+    has_anchor = bool(np.any(k_anchor_diag))
+
     if dt is None:
         if modified_gjf:
             # The modified GJF (Simpson midpoint force) has a much wider stable region than plain GJF,
@@ -757,7 +834,10 @@ def simulate_equilibrium(
             from scipy.sparse import diags
             from scipy.sparse.linalg import eigsh
             Md = diags(m_diag[:6 * n]).tocsr()          # K is core-only; so is its mass metric
-            lam_g = float(eigsh(Kcsr, k=1, M=Md, which="LM", return_eigenvectors=False)[0])
+            # Include the anchor trap: it is a stiff diagonal spring, so it can be the stiffest core
+            # mode and must enter ω_max or the step overshoots it (surfacing only as a divergence retry).
+            K_dt = (Kcsr + diags(k_anchor_diag[:6 * n])).tocsr() if has_anchor else Kcsr
+            lam_g = float(eigsh(K_dt, k=1, M=Md, which="LM", return_eigenvectors=False)[0])
             omega_max = math.sqrt(max(lam_g, 1e-30))
             if block is not None:
                 # The tails are not in K, so their stiffest mode is invisible to that eigensolve. A
@@ -782,18 +862,32 @@ def simulate_equilibrium(
         def core_int(q):
             return Kcsr @ q[:6 * n]
 
+    # The anchor trap is an extra diagonal spring −k_anchor_diag·q (a stiff harmonic restraint toward
+    # rest). It is kept OUT of core_int / K so the elastic model is untouched, and out of the force_fn
+    # entirely when no anchors are set — so the validated equilibrium path stays byte-for-byte as before.
     if block is None:
-        def force_fn(q):
-            return f_ext - core_int(q)
+        if has_anchor:
+            def force_fn(q):
+                return f_ext - core_int(q) - k_anchor_diag * q
+        else:
+            def force_fn(q):
+                return f_ext - core_int(q)
     else:
         # Hybrid force: the duplex core keeps its validated model (the linear K, or the
         # corotational element set), and the tails add their COROTATIONAL chain force on top. The
         # two overlap only at the anchor nodes, where the forces simply add — which is exactly how
         # the core comes to feel each tail's mass and drag.
-        def force_fn(q):
-            f = f_ext - st.tail_internal_force(q, X0, block, _touched)
-            f[:6 * n] -= core_int(q)
-            return f
+        if has_anchor:
+            def force_fn(q):
+                f = f_ext - st.tail_internal_force(q, X0, block, _touched)
+                f[:6 * n] -= core_int(q)
+                f -= k_anchor_diag * q
+                return f
+        else:
+            def force_fn(q):
+                f = f_ext - st.tail_internal_force(q, X0, block, _touched)
+                f[:6 * n] -= core_int(q)
+                return f
 
     # Progress: the friction build is a real, non-trivial phase (a dense O((6N)³) factorisation, or
     # ~11 s even coarse at M13 scale), so give it its own slice of the bar rather than letting the
@@ -902,6 +996,7 @@ def simulate_equilibrium(
         "bp_indices": [node.global_bp for node in mesh.nodes],
         "n_frame": int(len(samples)),
         "dt_ns": float(dt),
+        "anchor_keys": [[hid, bp] for (hid, bp) in anchor_keys],
         "friction": (
             f"rpy-coarse{hydro_coarse_bp}" if coarse_fric is not None
             else "rpy" if hydrodynamics else "stokes"

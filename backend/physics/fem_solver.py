@@ -2395,6 +2395,8 @@ def _predict_shape_dynamics(
     mgcl2_M: float = SNUPI_DEFAULT_MGCL2_M,
     hydrodynamics: bool = False,
     hydro_coarse_bp: Optional[int] = None,
+    field: Optional[dict] = None,
+    anchors: Optional[List[dict]] = None,
     tails: bool = False,
     tail_max_nt: Optional[int] = None,
     n_steps: int = 60000,
@@ -2421,7 +2423,8 @@ def _predict_shape_dynamics(
 
     out = dyn.simulate_equilibrium(
         design, material=material, hydrodynamics=hydrodynamics,
-        hydro_coarse_bp=hydro_coarse_bp, tails=tails, tail_max_nt=tail_max_nt,
+        hydro_coarse_bp=hydro_coarse_bp, field=field, anchors=anchors,
+        tails=tails, tail_max_nt=tail_max_nt,
         with_electrostatics=(material == "snupi"), mgcl2_M=mgcl2_M,
         n_steps=n_steps, n_equil=max(1, n_steps // 5), sample_every=40, seed=0,
         progress_cb=progress_cb,
@@ -2450,7 +2453,7 @@ def _predict_shape_dynamics(
         "n_tail_nodes": int(out.get("n_tail_nodes", 0)),
         "positions": positions,
         "axis": axis,
-        "anchor_keys": [],
+        "anchor_keys": out.get("anchor_keys", []),
         "n_frame": out["n_frame"],
         "dt_ns": out["dt_ns"],
         # Downsampled thermal TRAJECTORY for the animation toggle — the new visualizable feature
@@ -2557,6 +2560,7 @@ def predict_shape(
         return _predict_shape_dynamics(
             design, mesh, material=material, mgcl2_M=mgcl2_M,
             hydrodynamics=hydrodynamics, hydro_coarse_bp=hydro_coarse_bp,
+            field=field, anchors=anchors,
             tails=tails, tail_max_nt=tail_max_nt,
             n_steps=dynamics_steps, with_rmsf=with_rmsf, progress_cb=progress_cb)
 

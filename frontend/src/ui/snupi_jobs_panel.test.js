@@ -13,6 +13,7 @@ import {
   detailStatusText,
   stageChip,
   formatSummary,
+  snupiRunConfig,
 } from './snupi_jobs_panel.js'
 
 describe('formatProgress', () => {
@@ -195,6 +196,25 @@ describe('stageChip', () => {
       .toBe('● nonlinear')
     // no stages → synthesizes from the nonlinear flag
     expect(stageChip({ nonlinear: false })).toBe('○ linear')
+  })
+})
+
+describe('snupiRunConfig', () => {
+  it('reads the field + anchors a job ran with (for repopulating the cards on select)', () => {
+    const job = {
+      field: { field_pN: 5, dir: [0, 1, 0] },
+      anchors: [{ kind: 'base', helixId: 'h0', bp: 0, direction: 0 }],
+    }
+    const cfg = snupiRunConfig(job)
+    expect(cfg.field).toEqual({ field_pN: 5, dir: [0, 1, 0] })
+    expect(cfg.anchors).toHaveLength(1)
+  })
+  it('normalizes a no-field / no-anchor job to null + [] so the cards reset (off/empty)', () => {
+    expect(snupiRunConfig({}).field).toBeNull()
+    expect(snupiRunConfig({}).anchors).toEqual([])
+    expect(snupiRunConfig(null)).toEqual({ field: null, anchors: [] })
+    // a stray non-array anchors value never reaches applyConfig as a non-array
+    expect(snupiRunConfig({ anchors: 'oops' }).anchors).toEqual([])
   })
 })
 
