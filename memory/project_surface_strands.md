@@ -1,5 +1,15 @@
 # Surface capture strands (oxDNA immobilization) — plan + status
 
+**Rank:** P3 — SHIPPED & tested end-to-end (build → relax/run → E-field exclusion → display →
+UI/overlay/math + pytest/vitest, live-job verified 2026-07-17). Only residuals: (1) `oxdna_design_fingerprint`
+does **not** include capture-strand state → toggling capture strands won't invalidate a cached job
+(Phase-2 item 7, never wired — low impact, staleness only); (2) `validate_capture_build` oracle is
+called from tests only, not the production `append_capture_strands` build path. Do both when convenient.
+
+**Audit note (2026-07-25):** codebase probe confirmed anchors 1–9 EXISTS+WIRED. The
+"topology build DEFERRED to Phase 2" framing in older indexes is **STALE** — Phase 2a–2d all shipped.
+Doc-path nit: `prepare_oxdna_job` lives in `backend/core/oxdna_runner.py` (not `backend/physics/`).
+
 **Goal.** Simulate immobilization of a DNA origami on a functionalized surface: the hard
 surface (repulsion plane) carries a random dispersion of ssDNA **capture strands**
 complementary to the origami's overhangs. The origami's overhangs hybridize to these,

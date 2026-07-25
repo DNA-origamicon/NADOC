@@ -27,6 +27,7 @@ prompt prefix, so every change to it invalidates the prompt cache for all sessio
 | Manual-validation debt | `manual_validation_debt.md` | — |
 | Design automation | `design_automation_{backlog,log}.md`; `{harness,metrics}` on demand | `/automate-feature` |
 | Sim/feature coverage | `SIM_COVERAGE_PLAN.md` + `sim_coverage_plan.json` + `sim_coverage_log.md` | `/continue-coverage` |
+| Stale-plan audit | `plan_audit_ledger.md` | `/audit-plan` |
 
 ## Path-scoped architecture maps
 
@@ -86,7 +87,7 @@ reference_geometry · protein_attachment · headless_build · sphere_impostors
 
 **Overhangs / linkers:** **overhang_duplex_foundation** (before any overhang pairing) · overhang_duplex_cluster ·
 overhang_subdomains · overhang_connections · overhang_binding_extensions · assembly_overhang_bindings ·
-assembly_linker_relax · bond_relax · ball_joint · ct_tab · overhang_connections_panel · ssdna_linker_relax ·
+assembly_linker_relax · bond_relax · ct_tab · overhang_connections_panel · ssdna_linker_relax ·
 oh_binder · overhang_lookup_infra · overhang_generation · mate_connectors · domain_ends_refactor ·
 overhang_sequence_display
 
@@ -95,7 +96,7 @@ overhang_sequence_display
 **Cadnano editor:** periodic_boundary · cadnano_overhaul · cadnano_resize · domain_shift_feature · xover_base_lerp
 
 **Scaffold / seam / autostaple:** **hinge_autoscaffold** (regression gate) · autoscaffold_single_strand ·
-scaffold_router · seamless_router · dumbbell_autoscaffold · advanced_staple_disabled
+scaffold_router · seamless_router · dumbbell_autoscaffold
 
 **Cluster submission (Alpine):** **alpine_cluster_submission** (read its "Resume model" block before touching resume)
 
@@ -107,9 +108,9 @@ oxdna_relaxation · benchmark_tuning · md_engines_panel
 **MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel ·
 mrdna_extensions (DONE: 5′/3′ tails are CG beads; guard `__ext_`, NOT `__` — `__lnk__` is real duplex)
 
-**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · **surface_strands** (immobilization: capture
-strands dispersed on the hard surface + E-field-exclusion toggle; Phase 1 UI+math DONE, topology build
-DEFERRED to Phase 2 — read before touching) · **strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD;
+**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · surface_strands (immobilization: capture
+strands on the hard surface + E-field-exclusion toggle — Phase 2 SHIPPED & tested 2026-07-17; P3 residual:
+wire capture state into oxdna_design_fingerprint) · **strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD;
 read before touching the nucleotide walk, the native seed, or any `__xb__`-style key filter) ·
 skip_twist_selfconsistency · regional_autorefine · skip_twist_curvature_sweep · md_twist_validation
 
@@ -134,7 +135,7 @@ NOT the oxDNA position-seed — that was the blocker; supersedes PIPELINE_4FS_EX
 4 traps incl. >10M-atom PSF needs EXT format, and minimize ms/step ≠ dynamics by ~2.7×)
 
 **Atomistic skip-site / GROMACS:** atomistic_skip_backbone · skip_site_gromacs_fix · langevin_heating ·
-gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export · sequence_clear_fix
+gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export
 
 **MD job system / runners:** md_job_system · md_prep_relaxation · oxdna_metrics_card
 
@@ -150,7 +151,7 @@ gromacs_package_structure · atomistic_calibration · o3prime_investigation · g
 **Imports / validation:** sq_importer_fix · crossover_distance_script · clash_detector · corner_primitive
 
 **Assembly overhaul:** **path_to_thousands** (shared renderer DEFAULT; read before touching assembly) ·
-assembly_overhaul · assembly_part_context · assembly_groups · gear_relations · belt_paths ·
+assembly_part_context · assembly_groups · gear_relations · belt_paths ·
 route_for_polymerization · polymerize_origami · session_recovery
 
 ## Maintenance
