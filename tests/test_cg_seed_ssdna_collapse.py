@@ -120,13 +120,26 @@ def _near_coincident(model, r_nm=_NEAR_NM) -> int:
 
 
 def _build_no_fix(design, conf):
-    """Replicate the PRE-FIX seed build (axis path, no ssDNA rigid override)."""
+    """The ORIGINAL pre-fix seed build (legacy design_axis tangent, no ssDNA rigid
+    override) — the fully-broken baseline that piled folded ssDNA into coincidence."""
     full = read_configuration_full_unwrapped(conf, design)
     pos = {k: oxdna_backbone_site(r["backbone_position"], r["a1"], r["a3"])
            for k, r in full.items()}
     axis = deformed_helix_axes(design, full, sigma=2.0)
     return build_atomistic_model(design, nuc_pos_override=pos, axis_override=axis,
                                  apply_design_geometry=False)
+
+
+def _build_a3_no_ssdna(design, conf):
+    """Production seed MINUS only the ssDNA ``frame_override`` — same a3 base
+    orientation + relaxed phase.  Used to isolate the ssDNA fix's scope: base
+    orientation moves duplex atoms too, so it must be held identical to production."""
+    full = read_configuration_full_unwrapped(conf, design)
+    pos = {k: oxdna_backbone_site(r["backbone_position"], r["a1"], r["a3"])
+           for k, r in full.items()}
+    axis = deformed_helix_axes(design, full, sigma=2.0, base_orient="oxdna_a3")
+    return build_atomistic_model(design, nuc_pos_override=pos, axis_override=axis,
+                                 apply_design_geometry=False, relaxed_oxdna_phase=True)
 
 
 def test_ssdna_fold_does_not_collapse_seed_atoms():
@@ -151,12 +164,12 @@ def test_ssdna_fold_does_not_collapse_seed_atoms():
 
 def test_fix_is_scoped_to_ssdna_duplex_atoms_unchanged():
     """The rigid-frame override moves ONLY unpaired ssDNA — every duplex atom is
-    byte-identical between the pre-fix and fixed builds."""
+    byte-identical between the a3 build with and without the ssDNA override."""
     with tempfile.TemporaryDirectory() as td:
         conf = Path(td) / "folded.dat"
         design, ss = _write_folded_conf(conf)
         prod = build_atomistic_model_from_cg_spline(design, conf)
-        nofix = _build_no_fix(design, conf)
+        nofix = _build_a3_no_ssdna(design, conf)
 
     def amap(m):
         return {(a.helix_id, a.bp_index, a.direction, a.name): np.array([a.x, a.y, a.z])
