@@ -61,6 +61,34 @@ new items; strike through (and date) when resolved.
   (b) rebuild the assertion synthetically (no workspace file), or (c) delete the
   test as redundant. Until then it silently skips when the local fixture has drifted.
 
+### Unimported frontend modules — 5 held, 2 deleted (dead-file sweep 2026-07-25)
+A repo-wide sweep found 7 `frontend/src` modules with **zero references** anywhere (no import, no
+dynamic/glob import, no `index.html` id, no e2e). Two were deleted; the other five were HELD because
+each has a documented reason to exist. Re-check this list before assuming any of them is dead.
+
+- **DELETED 2026-07-25** (git history retains both): `scene/seam_plane.js` (283 ln — was wired, then
+  deliberately unwired in `7c5039c` when the Autoscaffold UI was reworked; seam routing lives in the
+  backend `seamed_router` now) and `ui/lattice_editor.js` (185 ln — `git log -S` shows main.js NEVER
+  imported it in any commit; orphaned by the 2026-04-11 cadnano 2D-editor overhaul that replaced it).
+- **HELD — `physics/mrdna_relax_client.js`** (64 ln). Extraction log #63 (2026-06-05) deleted the CG
+  Relax panel but *explicitly* left this client intact for later re-wiring; backend `/ws/mrdna-relax`
+  still exists. Half-built feature (working backend, never-wired frontend) — see [[project_mrdna_panel]].
+- **HELD — `ui/validation_report_panel.js`** (41 ln). NOT dead: `store.validationReport` is populated
+  live by every mutation response (`client.js` `_syncFromDesignResponse`), and this is its intended
+  renderer. It is item #15 on the [[project_ux_overhaul]] roadmap (clickable rows + severity + jump-to-locate).
+- **HELD — `ui/presets_panel.js`** (121 ln). [[project_ux_overhaul]] lists "Preset thumbnails in
+  presets_panel.js" under *Deferred indefinitely* — parked by user decision, not abandoned.
+- **HELD — `ui/validation_panel.js`** (165 ln). The "dead handedness checkpoint walkthrough";
+  [[project_ux_overhaul]] item #15 floats reviving it as "Renderer Checkpoints". Weakest of the holds —
+  the one to revisit first if this list is swept again.
+- **NOT DEAD — `scene/joint_panel_experiments.js`** (456 ln). A DevTools *console* harness (self-
+  documented "Usage (browser DevTools console)") validating `_computeExteriorPanels`, which is **still
+  live** at `scene/joint_renderer.js:251`. Unreferenced by design, like `src/debug_snippet.js` (which
+  main.js points at in a comment). Do not sweep it as dead code.
+
+**Why this is debt at all:** unreferenced modules read as dead to every future sweep, so each one costs
+a fresh investigation. The fix is a decision per file (revive or delete), not another audit.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`
