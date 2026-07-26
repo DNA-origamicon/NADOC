@@ -19,7 +19,7 @@
 // Display-layer only — never touches topology.  Factory:
 //   initAnchorGlow({ designRenderer, store }) → { setAnchors, clear, refresh }
 
-import { clusterMemberFilter } from './cluster_gizmo.js'
+import { clusterMemberFilter } from './cluster_entries.js'
 
 /**
  * Resolve anchor descriptors to the backbone entries they cover.

@@ -32,36 +32,15 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
 import { relaxToConvergence } from './flexible_relax_solver.js'
+// Cluster membership: one definition in cluster_entries.js, shared with the
+// assembly renderers, selection_manager and anchor_glow.
+import { clusterMemberFilter } from './cluster_entries.js'
 
 const _incrQuat  = new THREE.Quaternion()   // scratch for incremental rotation
 const _scratchV  = new THREE.Vector3()
 const _scratchQ  = new THREE.Quaternion()
 const _Y_HAT     = new THREE.Vector3(0, 1, 0)
 const _Z_HAT     = new THREE.Vector3(0, 0, 1)
-
-export function clusterMemberFilter(cluster, currentDesign) {
-  if (!cluster?.helix_ids?.length) return null
-
-  if (cluster.domain_ids?.length) {
-    // Mixed cluster: sample bridge domains + exclusive helices (those in helix_ids
-    // with no domain_ids coverage). Mirrors the glow-highlight split in main.js.
-    const domainKeySet = new Set(cluster.domain_ids.map(d => `${d.strand_id}:${d.domain_index}`))
-    const strands   = currentDesign?.strands ?? []
-    const strandMap = new Map(strands.map(s => [s.id, s]))
-    const bridgeHelixIds = new Set()
-    for (const dr of cluster.domain_ids) {
-      const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
-      if (dom) bridgeHelixIds.add(dom.helix_id)
-    }
-    const exclusiveHelixSet = new Set(cluster.helix_ids.filter(hid => !bridgeHelixIds.has(hid)))
-    return nuc =>
-      domainKeySet.has(`${nuc.strand_id}:${nuc.domain_index}`) ||
-      exclusiveHelixSet.has(nuc.helix_id)
-  }
-
-  const helixSet = new Set(cluster.helix_ids)
-  return nuc => helixSet.has(nuc.helix_id)
-}
 
 function _pivotFromVisualCentroid(cluster, visualCentroid) {
   // Geometry / rendered entries may already be transformed by the stored
