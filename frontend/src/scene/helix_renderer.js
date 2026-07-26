@@ -57,6 +57,12 @@ export { buildNucLetterMap, buildStapleColorMap }
 export const BEAD_RADIUS  = 0.10
 export const CONE_RADIUS  = 0.075
 
+// Representation name → `setDetailLevel()` argument for the CG representations.
+// Lower = more detail (full=0 > beads=1 > cylinders=2). Lives here because
+// `setDetailLevel` is part of the control surface buildHelixObjects returns;
+// the assembly renderers pass these values straight back into it.
+export const CG_LOD = { full: 0, beads: 1, cylinders: 2 }
+
 const Y_HAT       = new THREE.Vector3(0, 1, 0)
 const ID_QUAT     = new THREE.Quaternion()
 

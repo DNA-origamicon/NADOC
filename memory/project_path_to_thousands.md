@@ -16,6 +16,25 @@ metadata:
 
 This file is the single source of truth for all subagents working on this refactor. Subagents must read this entire file before starting and update the relevant phase section when their chunk is done.
 
+## WHERE THE CODE LIVES (2026-07-25 — assembly_renderer.js was split; paths below are current)
+`scene/assembly_renderer.js` used to hold BOTH renderers (6,261 lines). It was split — behavior
+unchanged, no logic edits, both paths verified in-app A/B on `gears_test.nass` + a 500-instance
+polymer. Current homes:
+
+| what | file |
+|---|---|
+| **shared-instancing renderer** (`_createSharedInstancingRenderer`, the DEFAULT path, stub table, bp-texture consts, LOD ladder) | `scene/assembly_renderer_shared.js` |
+| legacy per-instance renderer (`initAssemblyRenderer`) + the `createAssemblyRenderer({useShared})` factory + the interface docblock | `scene/assembly_renderer.js` |
+| far-LOD hull solids (`_hullGeoForSource`, `_bboxSolidFromNucs`, `HULL_*`) | `scene/assembly_hull_geometry.js` |
+| cross-part linker helices + connector arcs (`_rebuildLinkerHelices`) | `scene/assembly_linker_render.js` |
+| overhang-name sprites (`_overhangLabelAnchorsLocal`, `_makeOverhangNameTexture`) | `scene/assembly_overhang_labels.js` |
+| mate connectors incl. bend centers (`computeInstanceBluntEnds`, `bendCenterRecordToWorld`) | `scene/blunt_end_connectors.js` |
+| cluster membership (`clusterMemberFilter`) — was THREE byte-identical copies, now one | `scene/cluster_entries.js` |
+| repr → `setDetailLevel` map, was `_CG_LOD` | exported as `CG_LOD` from `scene/helix_renderer.js` |
+
+The **stub-list audit rule below still applies** — `_SHARED_RENDERER_STUB_DEFAULTS` now lives in
+`assembly_renderer_shared.js`, so grep there when checking what is stubbed vs implemented.
+
 ## `getAssembly()` returns the RAW v2 wire shape — NEVER read `.instances` off it (2026-05-27)
 `api.getAssembly()` (and every `_syncFromAssemblyResponse`-backed call) RETURNS the raw backend
 JSON. The backend's `_assembly_response` ([assembly.py](../../NADOC/backend/api/assembly.py) ~L186)

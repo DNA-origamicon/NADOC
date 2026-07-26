@@ -33,7 +33,7 @@ import {
   SURFACE_COLOUR, SURFACE_OPACITY,
   PREV_HALF_LEN,
 } from './joint_renderer.js'
-import { _hullGeoForSource } from './assembly_renderer.js'
+import { _hullGeoForSource } from './assembly_hull_geometry.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
 import { createBeltPreviewLayer } from './belt_preview_layer.js'
 import { beltCurvePoints, nearestArcParam, seatTransform, beltFrameAt } from './belt_geometry.js'
