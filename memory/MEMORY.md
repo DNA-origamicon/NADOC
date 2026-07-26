@@ -11,12 +11,12 @@ prompt prefix, so every change to it invalidates the prompt cache for all sessio
 
 - **[LESSONS](LESSONS.md)** — anti-patterns by failure mode. Now an index: scan it, open only the matching entry.
 - **[REFERENCE_DNA_TOPOLOGY](REFERENCE_DNA_TOPOLOGY.md)** — strand/scaffold/polarity rules. Always.
-- **[architecture_decisions](architecture_decisions.md)** — binding cross-cutting laws (DTP-PMD-1/2: periodic MD is physical-layer-only; axial period is a hard constraint). Don't drift without sign-off.
+- **[architecture_decisions](architecture_decisions.md)** — binding cross-cutting laws (DTP-PMD-1/2). Don't drift without sign-off.
 - **`FEATURE_DEVELOPMENT.md`** (root) — module-first guardrails. READ BEFORE ADDING ANY FEATURE.
 - **[tech_debt](project_tech_debt.md)** — code flagged for review/removal.
 - **[reference_assembly_test_fixture](reference_assembly_test_fixture.md)** — `workspace/Belt_test1.nass`, any assembly test.
 - **[reference_efield_crossval_fixture](reference_efield_crossval_fixture.md)** — `workspace/6hb_e_test.nadoc`, E-field cross-val.
-- [test_parallelization](project_test_parallelization.md) — **`just test-smart` is the DEFAULT per-change loop** (scopes to areas changed since the last full pass via a machine-local watermark); full `just test` = pre-push gate only.
+- [test_parallelization](project_test_parallelization.md) — **`just test-smart` is the DEFAULT per-change loop**; full `just test` = pre-push gate only.
 
 ## Session loops (root files; each head is lean, read its handoff first)
 
@@ -50,27 +50,22 @@ and shared across both computers (see `CLAUDE.md` → Memory layout).
 [SQUARE_LATTICE](REFERENCE_SQUARE_LATTICE.md) DTP-SQ ·
 [CROSSOVER_AUTOBREAK](REFERENCE_CROSSOVER_AUTOBREAK.md) ligation, circular ·
 [PLAYWRIGHT](REFERENCE_PLAYWRIGHT.md) troubleshooting only, never routine ·
-**[RUNPOD_RUNBOOK](REFERENCE_RUNPOD_RUNBOOK.md)** — hardened protocol for a rented-GPU NAMD run. READ + run `preflight.py` BEFORE renting anything
+**[RUNPOD_RUNBOOK](REFERENCE_RUNPOD_RUNBOOK.md)** — READ + run `preflight.py` BEFORE renting any GPU
 
 ## User feedback (open the one matching your area)
 
 Files are `feedback_<name>.md`. Match the name against what you're editing; each is short.
 
-**General:** **runpod_downloads_to_archive** (RunPod fetches + big local test scratch go on `/media/jojo/Archive`, NOT the ~92%-full system disk) ·
-**concurrent_sessions** (another Claude session may share this worktree — never `git stash`/`reset`/`restore`;
-**no_live_server_mutation_for_verify** (never POST/DELETE/reset the shared running server to verify — clobbers concurrent work; verify via pytest scratch_session) ·
-**use_completion_triggers** (wait on long sims with a background completion trigger that notifies on finish — never foreground sleep/poll loops) ·
-**runpod_babysitter_must_act** (a RunPod monitor must KILL the pod / alert on failure, not just log; launcher's fetch_outputs has no timeout → hung fetch bills idle) ·
-forbid git in subagent prompts) · aksel_abandoned · crossover_no_reasoning · phase_constants_locked · native_files_preserve_positions ·
-**staples_are_user_intent** (unstapled scaffold = intentional ssDNA loop; routers never touch staples) ·
-design_renderer_visibility_rule · overhang_definition · interrupt_before_doubting_user · busy_popup_threshold ·
-user_todo_smoke_tests · **gpu_value_is_two_axes** (rented GPUs: judge on $/ns AND ns/day — cheap+slow is not a deal) · playwright_fixtures_location · display_toggle_visual_verify · no_bulk_reformat ·
+**General:** **runpod_downloads_to_archive** (big downloads → `/media/jojo/Archive`, not the full system disk) ·
+**concurrent_sessions** (shared worktree — never `git stash`/`reset`/`restore`; forbid git in subagent prompts) ·
+**no_live_server_mutation_for_verify** · **use_completion_triggers** (never foreground sleep/poll) ·
+**runpod_babysitter_must_act** (must KILL the pod on failure, not just log) · aksel_abandoned · crossover_no_reasoning · phase_constants_locked · native_files_preserve_positions ·
+**staples_are_user_intent** (unstapled scaffold = intentional ssDNA loop) · design_renderer_visibility_rule · overhang_definition · interrupt_before_doubting_user · busy_popup_threshold ·
+user_todo_smoke_tests · **gpu_value_is_two_axes** ($/ns AND ns/day) · playwright_fixtures_location · display_toggle_visual_verify · no_bulk_reformat ·
 loopskip_no_crossover_ends · browser_console_debugging
 
-**MD / simulation:** c1_pair_builder · wc_calibration · cg_pipeline_lessons · gromacs_debugging · sd_em_constraints ·
-no_parallel_gromacs · mrdna_gromacs_atomistic · mdanalysis_live_reload · pbc_trajectory_alignment ·
-bundle_param_extraction · namd_pdb_serial_limit · namd_cufix_oc_stub · namd_anisotropic_barostat ·
-**namd_4fs_production_only** (4.0 fs is the ONLY acceptable production dt; never lower it to dodge RATTLE — fix the clash)
+**MD / simulation:** c1_pair_builder · wc_calibration · cg_pipeline_lessons · gromacs_debugging · sd_em_constraints · no_parallel_gromacs · mrdna_gromacs_atomistic · mdanalysis_live_reload · pbc_trajectory_alignment · bundle_param_extraction · namd_pdb_serial_limit · namd_cufix_oc_stub · namd_anisotropic_barostat ·
+**namd_4fs_production_only** (4.0 fs is the ONLY production dt — fix the clash, never lower dt)
 
 ## Active topic files
 
@@ -82,77 +77,54 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Workspace / UX:** ux_overhaul (file browser, library panel, sidebar widths, sim-folder hiding)
 
-**Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · mixed_representation · strand_animations ·
-reference_geometry · protein_attachment · headless_build · sphere_impostors
+**Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · mixed_representation · strand_animations · reference_geometry · protein_attachment · headless_build · sphere_impostors
 
-**Overhangs / linkers:** **overhang_duplex_foundation** (before any overhang pairing) · overhang_duplex_cluster ·
-overhang_subdomains · overhang_connections · overhang_binding_extensions · assembly_overhang_bindings ·
-assembly_linker_relax · bond_relax · ct_tab · overhang_connections_panel · ssdna_linker_relax ·
-oh_binder · overhang_lookup_infra · overhang_generation · mate_connectors · domain_ends_refactor ·
-overhang_sequence_display
+**Overhangs / linkers:** **overhang_duplex_foundation** (before any overhang pairing) · overhang_duplex_cluster · overhang_subdomains · overhang_connections · overhang_binding_extensions · assembly_overhang_bindings · assembly_linker_relax · bond_relax · ct_tab · overhang_connections_panel · ssdna_linker_relax · oh_binder · overhang_lookup_infra · overhang_generation · **mate_connectors** (blunt-end connector geometry — read before touching overhang tips) · domain_ends_refactor · overhang_sequence_display
 
 **Primitives / export:** plates_and_tubes · extrude_preview · primitive_library · stl_export
 
 **Cadnano editor:** periodic_boundary · cadnano_overhaul · cadnano_resize · domain_shift_feature · xover_base_lerp
 
-**Scaffold / seam / autostaple:** **hinge_autoscaffold** (regression gate) · autoscaffold_single_strand ·
-scaffold_router · seamless_router · dumbbell_autoscaffold
+**Scaffold / seam / autostaple:** **hinge_autoscaffold** (regression gate) · autoscaffold_single_strand · scaffold_router · seamless_router · dumbbell_autoscaffold
 
 **Cluster submission (Alpine):** **alpine_cluster_submission** (read its "Resume model" block before touching resume)
 
-**MD (NAMD+oxDNA):** **reference_local_namd_build** (USE the Dec-2025 git NAMD build, pinned via
-`NADOC_NAMD_BIN`; the 3.0.2 release crashes GPU-resident — read before any local NAMD run) ·
-lammps_oxdna · oxpy_binding_patch · proteins_in_simulation · oxdna_efield ·
-oxdna_relaxation · benchmark_tuning · md_engines_panel
+**MD (NAMD+oxDNA):** **reference_local_namd_build** (use the Dec-2025 git build via `NADOC_NAMD_BIN`; 3.0.2 crashes GPU-resident — read before any local NAMD run) · lammps_oxdna · oxpy_binding_patch · proteins_in_simulation · oxdna_efield · oxdna_relaxation · benchmark_tuning · md_engines_panel
 
-**MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel ·
-mrdna_extensions (DONE: 5′/3′ tails are CG beads; guard `__ext_`, NOT `__` — `__lnk__` is real duplex)
+**MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel · mrdna_extensions (guard `__ext_`, NOT `__` — `__lnk__` is real duplex)
 
-**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · surface_strands (immobilization: capture
-strands on the hard surface + E-field-exclusion toggle — Phase 2 SHIPPED & tested 2026-07-17; P3 residual:
-wire capture state into oxdna_design_fingerprint) · **strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD;
-read before touching the nucleotide walk, the native seed, or any `__xb__`-style key filter) ·
+**oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · surface_strands (immobilization; P3 residual) ·
+**strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD — read before touching the nucleotide walk
+or the native seed) ·
 skip_twist_selfconsistency · regional_autorefine · skip_twist_curvature_sweep · md_twist_validation
 
-**Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE: base SNUPI recreated for $0 — snupi≥cando vs MD; `material="snupi"` in fem_solver; +electrostatics) · snupi_frontend_tab (frontend SNUPI engine tab, SHIPPED) · **snupi_gaps** (gap analysis vs full published SNUPI; A–D DONE + refinements) · **snupi_reference_compare** (REAL SNUPI installed on this machine at `~/SNUPI`; NADOC→caDNAno→SNUPI→mimic comparator loop plan) · **snupi_dynamics** (Langevin time-integration / Nat Commun 2023 — friction+noise+GJF+stacking; Phase 1 = equilibrium-dynamics validator vs NMA) · **snupi_ssdna** (PLAN SS-0…SS-5: bridging-ssDNA element = G9, + FREE tails/overhangs/scaffold-ends = a NADOC extension SNUPI structurally can't represent; target VoltronCore + hydrodynamics)
+**Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE, `material="snupi"`) · snupi_frontend_tab (SHIPPED) · **snupi_gaps** (A–D DONE) · **snupi_reference_compare** (real SNUPI at `~/SNUPI`; comparator loop) · **snupi_dynamics** (Langevin / Nat Commun 2023) ·
+**snupi_ssdna** (PLAN SS-0…SS-5: bridging ssDNA + free tails)
 
-**BLADE (box-free atomistic engine) — ARCHIVED 2026-07-20:** **project_blade_frontend** (tab was
-built + shipped, then REMOVED from the simulate tabs by user decision — current origami have too many
-odd features for seeding to be useful; code KEPT dormant, one-line revive; read its ARCHIVED block) ·
-**atomistic_propagator** (the science: CHARMM+GBSA + learned correction. Strategic verdict: pure
-propagator ~60× too slow, BLADE speed edge modest + ensemble-only + erodes at origami scale; if
-revisited the lever is uncertainty-gated local NAMD fallback, not raw speed)
+**BLADE — ARCHIVED 2026-07-20:** **project_blade_frontend** (shipped then removed by user decision; code dormant, one-line revive) · **atomistic_propagator** (the science + why it's shelved: ~60× too slow)
 
-**Multi-resolution / CG bridge:** multiresolution_roadmap · crossover_parameterization · bundle_stiffness_params ·
-pipeline_validation_log · session_handoff
+**Multi-resolution / CG bridge:** multiresolution_roadmap · crossover_parameterization · bundle_stiffness_params · pipeline_validation_log · session_handoff
 
-**NAMD production / solvation:** **periodic_md** (the durable "why" behind periodic-cell MD — governed by
-[architecture_decisions](architecture_decisions.md)) · btube_benchmark · periodic_cell · namd_solvate ·
-water_shell_carve · 3x4sq_md_run · exp30_18hb_production ·
-**extra_base_4fs_geometric_fixb** (24hb extra-base 4 fs: winning seed = GEOMETRIC build + Fix B heavy bases,
-NOT the oxDNA position-seed — that was the blocker; supersedes PIPELINE_4FS_EXTRA_BASES.md) ·
-**voltroncore_fullbox_bench** (11.3M-atom full-box GPU-resident RunPod bench: H100 SXM best value 3.7 ns/day $19/ns;
-4 traps incl. >10M-atom PSF needs EXT format, and minimize ms/step ≠ dynamics by ~2.7×)
+**NAMD production / solvation:** **periodic_md** (governed by [architecture_decisions](architecture_decisions.md)) · btube_benchmark · periodic_cell · namd_solvate · water_shell_carve · 3x4sq_md_run · exp30_18hb_production ·
+**extra_base_4fs_geometric_fixb** (winning seed = GEOMETRIC build + Fix B, NOT the oxDNA position-seed) ·
+**voltroncore_fullbox_bench** (11.3M-atom RunPod bench; >10M-atom PSF needs EXT format)
 
-**Atomistic skip-site / GROMACS:** atomistic_skip_backbone · skip_site_gromacs_fix · langevin_heating ·
-gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export
+**Atomistic skip-site / GROMACS:** atomistic_skip_backbone · skip_site_gromacs_fix · langevin_heating · gromacs_package_structure · atomistic_calibration · o3prime_investigation · gromacs_export
 
 **MD job system / runners:** md_job_system · md_prep_relaxation · oxdna_metrics_card
 
 **Simulate-panel overhaul (IN PROGRESS):** simulate_panel_overhaul
 
 **MD visualization / overlay:** md_viz_tools · md_panel_status · md_sidebar_audit · md_live_model_cache ·
-**atomistic_base_orient** (oxDNA relaxed atomistic DISPLAY base tilt = A-form-look artifact; `base_orient="oxdna_a3"` fix, default-on, pending in-app visual check)
+**atomistic_base_orient** (`base_orient="oxdna_a3"`, default-on; pending in-app visual check)
 
 **Automation / jobs infra:** staleness_diagnostics · job_activity_spinner · job_disk_usage · job_archive
 
-**Dev infra:** dev_server_shutdown_hang · nadoc_overview · **context_economy_split** (head/archive rule; why sessions were slow)
+**Dev infra:** dev_server_shutdown_hang · nadoc_overview · **context_economy_split** (head/archive rule)
 
 **Imports / validation:** sq_importer_fix · crossover_distance_script · clash_detector · corner_primitive
 
-**Assembly overhaul:** **path_to_thousands** (shared renderer DEFAULT; read before touching assembly) ·
-assembly_part_context · assembly_groups · gear_relations · belt_paths ·
-route_for_polymerization · polymerize_origami · session_recovery
+**Assembly overhaul:** **path_to_thousands** (shared renderer DEFAULT; read before touching assembly) · assembly_part_context · assembly_groups · gear_relations · belt_paths · route_for_polymerization · polymerize_origami · session_recovery
 
 ## Maintenance
 

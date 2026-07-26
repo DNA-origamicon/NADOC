@@ -59,6 +59,7 @@ unless a migration touches code.
 | 07-24 | project_assembly_overhaul | "Planning — no implementation started" (2026-04-17); superseded by the shipped assembly system (`path_to_thousands`, `assembly_part_context`) | SUPERSEDED-DOCUMENTED | Deleted + pointer scrubbed (successors documented) |
 | 07-24 | project_ball_joint | "Scoped only; no code yet" Phase-2 UX; `ClusterJoint.joint_type` still `Literal['revolute']` — never widened | DERELICT | Deleted + pointer scrubbed |
 | 07-24 | project_blade_frontend | Already ARCHIVED 2026-07-20; modules kept dormant, one-line revive | DORMANT-REVIVABLE | Kept; banner firmed up |
+| 07-25 | project_mate_connectors | Probe: create-mate route + router registered (`routes_assembly_joints.py:326`), `createMate`→`_alignAndAddJoint` single round-trip, `_defineAssemblyMate` wired to UI, blunt ends live on BOTH renderer paths. Of 4 listed defects: cache-invalidation MITIGATED (`invalidateInstance` now called after `patchOverhangRotationsBatch`, though `_sourceKey` still blind to ovhg rotation); other 3 unchanged in code. Head's "extracted, shared by both" claim STALE — legacy keeps its own ~270-line inline copy | UNFINISHED-ACTIVE | Kept; **rank P1**; head status banner + open-items rewritten against the probe; stale extraction claim corrected; no-test-pin gap recorded |
 | 07-25 | project_surface_strands | Probe: anchors 1–9 EXISTS+WIRED (builder→runner→route→field-exclusion→display→UI/overlay+tests). Feature shipped 2026-07-17, not deferred. Gaps: `oxdna_design_fingerprint` omits capture state; `validate_capture_build` tests-only | UNFINISHED-ACTIVE | Kept; **rank P3**; head banner + open-items rewritten; **fixed stale MEMORY.md hook** (said "DEFERRED to Phase 2" — was shipped) |
 
 ## HOLD — flagged to user, decision pending
@@ -75,7 +76,6 @@ unless a migration touches code.
 ## Audit queue (unaudited — rough priority top-first)
 
 Genuinely-unfinished-with-intent candidates (likely UNFINISHED-ACTIVE, need rank):
-- project_mate_connectors — known-broken, undiagnosed (may be DERELICT if not wanted)
 - project_mixed_representation — PATH A in progress, unverified in app
 - project_simulate_panel_overhaul — in progress
 - project_dumbbell_autoscaffold — "tests pass, visual still wrong"
@@ -96,12 +96,16 @@ manual_validation_debt, SIM_COVERAGE_PLAN, project_cando_fem, project_atomistic_
 
 ## Next-session handoff
 
-▶ **NEXT:** `project_mate_connectors` — head says "user confirmed unspecified issues remain,
-suspected structural problems, not yet diagnosed." Probe: does `mate_connectors` code exist and
-is it wired into any live path (grep `mate_connector` in `backend/`, `frontend/src/`)? Decide
-DERELICT (broken + abandoned, no live callers) vs UNFINISHED-ACTIVE (wired but buggy → rank +
-record the known breakage as the open item). This one likely needs a user call on whether the
-feature is still wanted.
+▶ **NEXT:** `project_mixed_representation` — head says "PATH A in progress, unverified in app."
+Probe the PATH-A anchors (per-strand / per-cluster representation switching: grep the renderer for
+the mixed-representation entry points and any `repr`-per-cluster state) and decide whether PATH A
+actually shipped (→ LIVE-REFERENCE, trim the in-progress framing) or is genuinely half-wired
+(→ UNFINISHED-ACTIVE + rank). Watch for supersession by `project_animation_all_reprs` /
+`project_ssdna_ball_joints`, which cover neighbouring ground.
+
+*Pattern worth carrying:* two passes running (`surface_strands`, `mate_connectors`) both found the
+plan's *own* status text stale in the optimistic direction as well as the pessimistic one — always
+diff the head's claims against the probe line-by-line, not just its top-line verdict.
 
 **Standing HOLDs (user-owned decision, do not touch):** `project_bundle_stiffness_params`,
 `project_periodic_md` — both LIVE-REFERENCE, parked in the HOLD block above.
