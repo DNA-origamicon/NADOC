@@ -5319,7 +5319,15 @@
                       <option value="2">2 fs (medium)</option>
                       <option value="1">1 fs (conservative)</option>
                     </select>
+                    <label style="color:#8b949e;align-self:center" title="NAMD GPU-resident mode: integration + bonded forces stay on the GPU instead of round-tripping to the CPU each step. Its advantage scales UP with system size — measured on an RTX 3080 Ti: 3.2x at 3.14M atoms, 2.0x at 770k, 1.3x at 181k, 1.1x at 111k, but a LOSS below ~100k (0.88-0.97x at 32.5k), where both paths hit the same fixed per-step kernel-launch floor and resident's setup is pure overhead. Auto picks by solvated atom count. On/Off force it. Resident is refused regardless for GBIS (no implicit-solvent path) and for a sparsely-filled water-shell carve (it aborts at step 0 on the exclusion count).">GPU-resident</label>
+                    <select id="md-jobs-gpu-resident"
+                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                      <option value="auto" selected>Auto (by system size)</option>
+                      <option value="on">On (force)</option>
+                      <option value="off">Off (CUDA offload)</option>
+                    </select>
                   </div>
+                  <div id="md-jobs-resident-warn" style="display:none;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4"></div>
                   <div id="md-jobs-timestep-warn" style="display:none;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4"></div>
                   <!-- Derived, read-only: which NAMD code path the settings above actually
                        select.  GPU-resident is ~2.6x faster per atom but is silently

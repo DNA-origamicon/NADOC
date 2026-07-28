@@ -19,7 +19,17 @@ const FIELDS = [
   { key: 'padding_nm',     label: 'Padding',     unit: ' nm' },
   { key: 'minimize_steps', label: 'Min. steps' },
   { key: 'fast',           label: 'Fast (HMR 4 fs)' },
+  // The backend has always computed this (it is what the carve trade-off turns on) but
+  // the card never showed or applied it, so ⚡ silently left the user's GPU-resident
+  // choice untouched while claiming to have optimised the run path.
+  { key: 'gpu_resident',   label: 'GPU-resident' },
 ]
+
+/** The recommender speaks booleans for gpu_resident; the control is an auto/on/off
+ *  select. Optimize expresses an OPINION, so it maps to the explicit on/off — never
+ *  back to 'auto', which would mean "no opinion" and discard the recommendation. */
+export const residentModeFromRecommendation = (v) =>
+  (v === null || v === undefined) ? null : (v ? 'on' : 'off')
 
 const _fmt = (v, unit = '') => {
   if (v === null || v === undefined || v === '') return '—'
@@ -140,6 +150,45 @@ export function productionTimestepWarning({ timestepFs = 4, fastLadder = true } 
     }
   }
   return null                                     // 1 fs conservative reference → always safe
+}
+
+/** Atom count below which GPU-resident is a measured LOSS (mirrors the backend's
+ *  md_protocols._RESIDENT_MIN_ATOMS, which gates the emitted confs). */
+export const RESIDENT_MIN_ATOMS = 100_000
+
+/**
+ * Warn when a FORCED GPU-resident choice disagrees with what the system size supports.
+ * PURE.  `null` = nothing to say.
+ *
+ * Resident is not a "faster" switch — its advantage scales with N.  Measured on an
+ * RTX 3080 Ti (offload → resident ms/step): 32.5k 1.116→1.266 (0.88x, a LOSS), 111k
+ * 1.749→1.544, 181k 3.338→2.507, 770k 32.10→16.16, 3.14M 125.6→39.0 (3.2x).  Forcing it
+ * on a small design costs throughput; forcing it off on a large one costs much more.
+ *
+ * @param {{mode:'auto'|'on'|'off', nAtoms:number|null}} opts
+ */
+export function gpuResidentWarning({ mode = 'auto', nAtoms = null } = {}) {
+  if (mode === 'auto' || nAtoms == null || !(nAtoms > 0)) return null
+  const n = Math.round(nAtoms)
+  const pretty = n.toLocaleString('en-US')
+  if (mode === 'on' && n < RESIDENT_MIN_ATOMS) {
+    return {
+      tone: 'warn',
+      message: `Forcing GPU-resident on ~${pretty} atoms will be SLOWER than CUDA offload `
+             + `(measured 0.88–0.97× below ~${RESIDENT_MIN_ATOMS.toLocaleString('en-US')} `
+             + `atoms — both paths hit the same per-step floor and resident's setup is pure `
+             + `overhead). Auto would pick offload here.`,
+    }
+  }
+  if (mode === 'off' && n >= RESIDENT_MIN_ATOMS) {
+    return {
+      tone: 'warn',
+      message: `Forcing CUDA offload on ~${pretty} atoms gives up a real speed-up — `
+             + `GPU-resident measured 1.1× at 111k, 2.0× at 770k and 3.2× at 3.14M atoms. `
+             + `Auto would pick resident here.`,
+    }
+  }
+  return null
 }
 
 /** Escape text before it goes into innerHTML. */

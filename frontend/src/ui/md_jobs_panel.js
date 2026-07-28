@@ -35,7 +35,8 @@ import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from '.
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import { runExclusive } from './primitives/button_busy.js'
 import { RUN_ACTION } from './job_run_control.js'
-import { initAdvancedOptimize, renderRunPath, productionTimestepWarning } from './md_advanced_optimize.js'
+import { initAdvancedOptimize, renderRunPath, productionTimestepWarning,
+         gpuResidentWarning, residentModeFromRecommendation } from './md_advanced_optimize.js'
 import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
 import { initRunpodSetup } from './runpod_setup.js'
@@ -709,6 +710,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const autostartChk  = document.getElementById('md-jobs-autostart')
   const prodTimestepSel = document.getElementById('md-jobs-prod-timestep')
   const timestepWarnEl  = document.getElementById('md-jobs-timestep-warn')
+  const residentSel     = document.getElementById('md-jobs-gpu-resident')
+  const residentWarnEl  = document.getElementById('md-jobs-resident-warn')
   const fastChk       = document.getElementById('md-jobs-fast')
   const gpuAskChk     = document.getElementById('md-jobs-gpu-ask')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
@@ -988,6 +991,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     minimize_steps: Number(minstepsInput?.value) || undefined,
     fast:           !!fastChk?.checked,
     production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
+    gpu_resident:   residentSel?.value ?? 'auto',
   })
   const _paintRunPath = () => renderRunPath(runPathEl, _advValues())
 
@@ -1004,6 +1008,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     warn:  'border:1px solid #9e6a03;background:#2d2000;color:#d0b184',
     error: 'border:1px solid #a1332a;background:#2b0f0d;color:#f0b4ad',
   }
+  // Warn when a FORCED GPU-resident choice fights the system size.  The atom count comes
+  // from the optimiser's own facts (its `full_atoms`/`chosen_atoms` are the solvated
+  // estimate the backend gate will use), so the warning only appears once ⚡ has sized
+  // this design — before that there is no honest number to compare against.
+  let _lastSizedAtoms = null
+  const _paintResidentWarning = () => {
+    if (!residentWarnEl) return
+    const w = gpuResidentWarning({
+      mode: residentSel?.value ?? 'auto',
+      nAtoms: _lastSizedAtoms,
+    })
+    if (!w) { residentWarnEl.style.display = 'none'; residentWarnEl.textContent = ''; return }
+    residentWarnEl.style.cssText =
+      `display:block;margin-top:6px;padding:5px 7px;border-radius:3px;font-size:11px;line-height:1.4;${_TS_WARN_STYLE[w.tone]}`
+    residentWarnEl.textContent = `⚠ ${w.message}`
+  }
+
   const _paintTimestepWarning = () => {
     if (!timestepWarnEl) return
     const w = productionTimestepWarning({
@@ -1022,11 +1043,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     progressEl: document.getElementById('md-jobs-optimize-progress'),
     getCurrent: _advValues,
     fetchHardware: () => api.optimizeMdHardware(_optDevices()),
-    fetchRecommendation: () => api.optimizeMdAdvanced({
-      devices: _optDevices(),
-      padding_nm: Number(paddingInput?.value) || 1.2,
-      minimize_steps: Number(minstepsInput?.value) || 10000,
-    }),
+    fetchRecommendation: async () => {
+      const r = await api.optimizeMdAdvanced({
+        devices: _optDevices(),
+        padding_nm: Number(paddingInput?.value) || 1.2,
+        minimize_steps: Number(minstepsInput?.value) || 10000,
+      })
+      // Remember the sized atom count so the GPU-resident warning has a real number to
+      // judge a forced choice against (the optimiser is the only thing that solvates).
+      const f = r?.facts
+      if (f) _lastSizedAtoms = Number(f.chosen_atoms ?? f.full_atoms) || _lastSizedAtoms
+      return r
+    },
     apply: (rec) => {
       if (rec.threads        != null && threadsInput)    threadsInput.value    = rec.threads
       if (rec.compute        != null && computeSel)      computeSel.value      = rec.compute
@@ -1034,14 +1062,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (rec.padding_nm     != null && paddingInput)    paddingInput.value    = rec.padding_nm
       if (rec.minimize_steps != null && minstepsInput)   minstepsInput.value   = rec.minimize_steps
       if (rec.fast           != null && fastChk)         fastChk.checked       = !!rec.fast
+      // The recommender speaks booleans; the control is auto/on/off. ⚡ has an OPINION,
+      // so it lands on an explicit on/off rather than resetting the box to 'auto'.
+      if (rec.gpu_resident   != null && residentSel) {
+        residentSel.value = residentModeFromRecommendation(rec.gpu_resident)
+      }
       _paintRunPath()
+      _paintResidentWarning()
     },
     notify: (msg, kind) => showToast(msg, kind === 'error' ? 'error' : 'info'),
   })
   for (const el of [computeSel, watershellInput, fastChk]) {
     el?.addEventListener('change', _paintRunPath)
   }
+  residentSel?.addEventListener('change', () => { _paintRunPath(); _paintResidentWarning() })
   _paintRunPath()
+  _paintResidentWarning()
 
   // Production-timestep dropdown + the Fast checkbox drive the ETA (fast runs cover 4x
   // the ns per step) and the "you changed dt without the fast ladder" warning.
@@ -2288,6 +2324,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       fast:           fastChk?.checked ?? true,
       gpu_fallback_policy: gpuFallbackFromToggle(gpuAskChk?.checked ?? true),
       production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
+      gpu_resident:   residentSel?.value ?? 'auto',
       early_stop_relax: earlyStopChk?.checked ?? false,
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
@@ -2704,6 +2741,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (prodTimestepSel && p.production_timestep_fs != null) {
       prodTimestepSel.value = String(p.production_timestep_fs)
       _paintTimestepWarning()
+    }
+    if (residentSel && p.gpu_resident != null) {
+      residentSel.value = String(p.gpu_resident)
+      _paintResidentWarning()
     }
     if (earlyStopChk) earlyStopChk.checked = p.early_stop_relax ?? false
     _syncSolventFields()   // gray explicit-solvent knobs if the draft is GBIS

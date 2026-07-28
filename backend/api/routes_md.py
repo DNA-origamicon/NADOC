@@ -119,6 +119,28 @@ class CreateJobRequest(BaseModel):
                     "Set false (or untick in the UI) if a very large design fails the "
                     "first hard segment with a GPU out-of-memory error.",
     )
+    gpu_resident: Optional[str] = Field(
+        None,
+        description="NAMD GPU-resident mode for this run: 'auto' (DEFAULT — decided by "
+                    "solvated atom count against the measured crossover), 'on' (force it) "
+                    "or 'off' (force CUDA offload). Resident keeps integration + bonded "
+                    "forces on the GPU and is a LARGE-system win (3.2x at 3.14M atoms), "
+                    "but a LOSS below ~100k (both paths hit the same per-step floor and "
+                    "resident's setup is pure overhead — measured 0.88-0.97x at 32.5k). "
+                    "'on' is still refused for GBIS and for a sparsely-filled carved cell, "
+                    "where it cannot run at all.",
+    )
+
+    @field_validator("gpu_resident")
+    @classmethod
+    def _sanctioned_gpu_resident(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in ("auto", "on", "off"):
+            raise ValueError("gpu_resident must be 'auto', 'on', or 'off'")
+        return s
+
     gpu_fallback_policy: Optional[str] = Field(
         None,
         description="What to do if the fastest GPU (resident) mode can't start on this "
@@ -1712,6 +1734,7 @@ async def _prepare_job_bg(
             declash         = body.declash,
             force_soft      = body.force_soft,
             fast            = body.fast,
+            gpu_resident_mode = body.gpu_resident or "auto",
             production_timestep_fs = body.production_timestep_fs,
             anchors         = body.anchors,
             field           = body.field,

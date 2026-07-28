@@ -803,6 +803,7 @@ def _segment_conf(
     gbis: bool = False,
     capture_vel_force: bool = False,
     n_atoms: Optional[int] = None,
+    force_resident: Optional[bool] = None,
 ) -> str:
     from backend.core.namd_helpers import vel_force_dcd_block  # noqa: PLC0415
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
@@ -864,9 +865,17 @@ def _segment_conf(
     #     fill_fraction rather than on `carved` alone.
     # The one-cycle pre-flight probe (namd_runner.gpu_resident_probe) remains the backstop
     # for anything host-specific that slips through, e.g. a small pinned pool.
+    #
+    # ``force_resident`` is the user's explicit Advanced-card choice (True/False); None =
+    # "auto", i.e. decide from the atom count.  It overrides only the SIZE heuristic — the
+    # two hard incompatibilities below still win, because they are cases where resident
+    # cannot run at all rather than cases where it is merely slower.
+    by_size = n_atoms is None or n_atoms >= _RESIDENT_MIN_ATOMS
+    if force_resident is not None:
+        by_size = bool(force_resident)
     gpu_resident = (
         (not gbis)
-        and (n_atoms is None or n_atoms >= _RESIDENT_MIN_ATOMS)
+        and by_size
         and (not carved or fill_fraction >= _RESIDENT_MIN_FILL)
     )
     lines = [
@@ -1845,6 +1854,7 @@ def prepare_mgh_slow_release(
     padding_nm: float = 1.2,
     water_shell_nm: float = 0.0,
     minimize_steps: int = 4_800,
+    gpu_resident_mode: str = "auto",
     min_scale: float = 0.5,
     require_full_topology: bool = False,
     seed: int = 42,
@@ -2097,8 +2107,15 @@ def prepare_mgh_slow_release(
     # resident is a measured loss).  (Minimisation always stays offload: the resident
     # pre-flight probe seeds from its output, so it has to run first.)
     solvated_atoms = psf_atom_count(package_dir / f"{name_stem}.psf")
+    # "auto" applies the measured size crossover; an explicit user choice overrides it.
+    # "on" still cannot defeat the two HARD incompatibilities (GBIS, a sparsely-filled
+    # carved cell) — those are enforced in _segment_conf, which refuses regardless.
+    _resident_override = {"on": True, "off": False}.get(str(gpu_resident_mode).lower())
+    resident_by_size = solvated_atoms is None or solvated_atoms >= _RESIDENT_MIN_ATOMS
+    if _resident_override is not None:
+        resident_by_size = _resident_override
     resident_on = (
-        (solvated_atoms is None or solvated_atoms >= _RESIDENT_MIN_ATOMS)
+        resident_by_size
         and (not carve_shell or resident_fill >= _RESIDENT_MIN_FILL)
     )
 
@@ -2126,7 +2143,8 @@ def prepare_mgh_slow_release(
                           structure_psf=structure_psf,
                           anchors_file=anchors_file, field=field,
                           capture_vel_force=capture_vel_force,
-                          n_atoms=solvated_atoms)
+                          n_atoms=solvated_atoms,
+                          force_resident=_resident_override)
         )
 
     charge_audit = {}

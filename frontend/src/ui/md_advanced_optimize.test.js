@@ -11,9 +11,72 @@ import {
   initAdvancedOptimize,
   planHasChanges,
   productionTimestepWarning,
+  gpuResidentWarning,
+  residentModeFromRecommendation,
+  RESIDENT_MIN_ATOMS,
   renderRunPath,
   stagePercent,
 } from './md_advanced_optimize.js'
+
+describe('gpu_resident is part of the ⚡ plan', () => {
+  it('appears as a diff row, so Optimize can no longer silently skip it', () => {
+    // The backend always computed rec.gpu_resident; the card just never listed it, so
+    // ⚡ claimed to optimise the run path while leaving this control untouched.
+    const plan = buildPlan({ gpu_resident: true }, { gpu_resident: 'auto' })
+    const row = plan.find(r => r.key === 'gpu_resident')
+    expect(row).toBeTruthy()
+    expect(row.label).toBe('GPU-resident')
+    expect(row.from).toBe('auto')
+    expect(row.to).toBe('on')
+    expect(row.changed).toBe(true)
+  })
+
+  it('is not in the plan when the backend has no opinion (null)', () => {
+    expect(buildPlan({ gpu_resident: null }, { gpu_resident: 'auto' })
+      .some(r => r.key === 'gpu_resident')).toBe(false)
+  })
+
+  it('maps the recommender\'s boolean onto the select, never back to auto', () => {
+    // 'auto' would mean "no opinion" and would throw the recommendation away.
+    expect(residentModeFromRecommendation(true)).toBe('on')
+    expect(residentModeFromRecommendation(false)).toBe('off')
+    expect(residentModeFromRecommendation(null)).toBeNull()
+    expect(residentModeFromRecommendation(undefined)).toBeNull()
+  })
+})
+
+describe('gpuResidentWarning — forcing a mode against the system size', () => {
+  it('warns that forcing ON below the crossover is SLOWER, not faster', () => {
+    const w = gpuResidentWarning({ mode: 'on', nAtoms: 32_566 })
+    expect(w?.tone).toBe('warn')
+    expect(w.message).toMatch(/SLOWER/)
+    expect(w.message).toMatch(/32,566/)
+  })
+
+  it('warns that forcing OFF above the crossover gives up a real speed-up', () => {
+    const w = gpuResidentWarning({ mode: 'off', nAtoms: 3_139_238 })
+    expect(w?.tone).toBe('warn')
+    expect(w.message).toMatch(/3\.2×|3\.2x/)
+  })
+
+  it('says nothing when a forced mode agrees with the size', () => {
+    expect(gpuResidentWarning({ mode: 'on', nAtoms: 3_139_238 })).toBeNull()
+    expect(gpuResidentWarning({ mode: 'off', nAtoms: 32_566 })).toBeNull()
+  })
+
+  it('says nothing on auto, or before the design has been sized', () => {
+    expect(gpuResidentWarning({ mode: 'auto', nAtoms: 32_566 })).toBeNull()
+    expect(gpuResidentWarning({ mode: 'on', nAtoms: null })).toBeNull()
+    expect(gpuResidentWarning({ mode: 'on' })).toBeNull()
+    expect(gpuResidentWarning()).toBeNull()
+  })
+
+  it('uses the same crossover the backend gate uses', () => {
+    expect(RESIDENT_MIN_ATOMS).toBe(100_000)
+    expect(gpuResidentWarning({ mode: 'on', nAtoms: RESIDENT_MIN_ATOMS })).toBeNull()
+    expect(gpuResidentWarning({ mode: 'on', nAtoms: RESIDENT_MIN_ATOMS - 1 })).toBeTruthy()
+  })
+})
 
 describe('buildPlan', () => {
   it('diffs recommended against current and flags what changes', () => {
