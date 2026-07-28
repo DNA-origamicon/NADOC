@@ -77,11 +77,24 @@ export function colorForAtom(ctx, atom, sel, multiIds) {
     return atom.helix_id === `__protein__${sel.id}` ? cpk : dimCpk
   }
 
-  // base colour by mode; extra-base atoms always use their strand colour
-  if (ctx.colorMode === 'strand' || atom.aux_helix_id) {
-    return ctx.strandColors.get(atom.strand_id) ?? cpk
-  }
+  return _colorByMode(ctx, atom, cpk)
+}
+
+/**
+ * Unselected colouring: the current mode applied to one atom.
+ *
+ * Crossover extra bases (`aux_helix_id` set) and strand-extension tails carry the
+ * ANCHOR/SOURCE nucleotide's helix/bp/direction, so they have no base-letter key of
+ * their own — 'base' mode would paint them with a neighbouring base's letter, and
+ * falls back to their strand colour instead.  CPK is per-ELEMENT and needs no key, so
+ * these atoms follow it exactly like every other atom.  (They used to be pinned to
+ * strand colour in EVERY mode, which made them the one thing on screen that ignored
+ * the colouring buttons.)
+ */
+function _colorByMode(ctx, atom, cpk) {
+  if (ctx.colorMode === 'strand') return ctx.strandColors.get(atom.strand_id) ?? cpk
   if (ctx.colorMode === 'base') {
+    if (atom.aux_helix_id) return ctx.strandColors.get(atom.strand_id) ?? cpk
     const k = `${atom.strand_id}:${atom.bp_index}:${atom.direction}`
     return ctx.baseColors.get(k) ?? ctx.strandColors.get(atom.strand_id) ?? cpk
   }
@@ -100,13 +113,5 @@ export function resolveAtomColor(ctx, atom, sel, multiIds, hasSelection) {
     const c = ctx.scalarColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
     if (c != null) return c
   }
-  const isXb = !!atom.aux_helix_id  // extra-base: always strand-coloured
-  if (ctx.colorMode === 'strand' || isXb) {
-    return ctx.strandColors.get(atom.strand_id) ?? cpk
-  }
-  if (ctx.colorMode === 'base') {
-    const k = `${atom.strand_id}:${atom.bp_index}:${atom.direction}`
-    return ctx.baseColors.get(k) ?? ctx.strandColors.get(atom.strand_id) ?? cpk
-  }
-  return cpk
+  return _colorByMode(ctx, atom, cpk)
 }

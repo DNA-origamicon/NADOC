@@ -155,7 +155,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
       {"type": "ready",   "n_frames": int, "n_p_atoms": int,
                           "ns_per_day": float|null, "temperature_k": float|null,
                           "total_ns": float|null, "dt_ps": float|null,
-                          "nstxout_comp": int|null}
+                          "nstxout_comp": int|null,
+                          "atom_ident": {strands, helices, dirs, strand_idx, helix_idx,
+                                         dir_idx, bp}|null}
+        (ballstick only) atom_ident is the STATIC per-heavy-atom design identity, in
+        interned parallel arrays — sent once here, not per frame, because the frames
+        are hundreds of thousands of atoms.  The client zips it onto each frame's
+        atoms so they colour by strand / base / cluster like the design's own atoms.
       {"type": "frame",   "frame_idx": int, "n_frames": int, "time_ps": float,
                           "positions": [{helix_id, bp_index, direction, x, y, z}, ...]}
         (ballstick) same but "atoms": [{serial, element, x, y, z}, ...]
@@ -333,6 +339,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
         # Build p_order: the design (helix,bp,dir) key per trajectory DNA P atom, in
         # trajectory atom order (the index-based frame extraction relies on this).
         term_specs: list = []   # 5'-terminal bases (no P) recovered via O5' — NAMD only
+        seg2chain: dict = {}    # segid→chain_id (NAMD/PSF only; also feeds atom identity)
         if is_namd:
             # Prefer mapping via the PSF segids + the package's charge_audit
             # segid→chain_id table.  psfgen collapses NADOC's multi-char chain ids
@@ -541,6 +548,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "temperature_k": resolved.temperature_k if resolved else (metrics.temperature_k if metrics else None),
             "total_ns":      total_ns,
             "atom_meta":     None,
+            "atom_ident":    None,
             "heavy_idx":     None,
             "c1p_idx":       c1p_idx,
             "term_specs":    term_specs,          # 5'-terminal bases recovered via O5'
@@ -585,6 +593,25 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 {"serial": int(a.index), "element": _element(a)}
                 for a in dna_heavy
             ]
+            # Per-atom design identity (strand/helix/bp/direction), sent ONCE in the
+            # 'ready' message rather than per frame — it is static across frames and a
+            # ball-and-stick frame is hundreds of thousands of atoms.  Without it the
+            # frontend colour resolver has no strand to look up and every MD atom is
+            # stuck on CPK, deaf to the strand/base/cluster colouring buttons.
+            from backend.core.atomistic_to_nadoc import (  # noqa: PLC0415
+                build_atom_design_meta,
+                intern_atom_design_meta,
+            )
+            try:
+                result["atom_ident"] = intern_atom_design_meta(
+                    build_atom_design_meta(u, dna_heavy, p_order, model, cm, seg2chain))
+                logs.append(f"Atom ident: {len(result['atom_ident']['strands'])} strands "
+                            f"over {len(dna_heavy)} heavy atoms")
+            except Exception as exc:  # noqa: BLE001
+                # Colouring is cosmetic — never fail a display over it.
+                result["atom_ident"] = None
+                logs.append(f"Atom ident: unavailable ({type(exc).__name__}: {exc}) "
+                            "— atoms will render CPK")
 
         return result
 
@@ -1149,6 +1176,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     "trajectory_path": loaded["xtc_path"],
                     "coordinate_path": loaded.get("coordinate_path"),
                     "warnings":      loaded.get("warnings", []),
+                    # Ball-and-stick only: static per-atom design identity so the
+                    # frontend can colour MD atoms by strand/base/cluster (null in
+                    # bead modes, and when the mapping was unavailable).
+                    "atom_ident":    loaded.get("atom_ident"),
                 })
 
             elif action == "seek":

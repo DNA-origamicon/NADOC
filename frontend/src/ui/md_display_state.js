@@ -29,6 +29,40 @@ export function sceneUsesNativeCg(sceneRepr) {
 }
 
 /**
+ * Stamp each streamed ball-and-stick atom with its design identity, IN PLACE.
+ *
+ * MD frames carry coordinates only; the identity the colour resolver keys on
+ * (strand_id / helix_id / bp_index / direction) is static across frames, so the backend
+ * sends it once at load as interned parallel arrays (`ws.py` → 'ready' → `atom_ident`).
+ * Without it every MD atom misses the strand lookup and is stuck on CPK, deaf to the
+ * strand/base/cluster colouring buttons.
+ *
+ * Mutates rather than maps: a frame is up to hundreds of thousands of atoms, and the
+ * objects are freshly parsed per frame and owned by the caller.
+ *
+ * Leaves the atoms untouched when there is no identity or the counts disagree — a
+ * mismatched map would paint atoms with some OTHER atom's strand, which is worse than
+ * the CPK fallback.
+ *
+ * @param {Array<object>|null|undefined} atoms
+ * @param {{strands:string[],helices:string[],dirs:string[],strand_idx:number[],
+ *          helix_idx:number[],dir_idx:number[],bp:number[]}|null} ident
+ * @returns {Array<object>|null|undefined} the same `atoms` reference
+ */
+export function zipAtomIdentity(atoms, ident) {
+  if (!atoms || !ident || ident.strand_idx?.length !== atoms.length) return atoms
+  const { strands, helices, dirs, strand_idx, helix_idx, dir_idx, bp } = ident
+  for (let i = 0; i < atoms.length; i++) {
+    const a = atoms[i]
+    a.strand_id = strands[strand_idx[i]] ?? ''
+    a.helix_id  = helices[helix_idx[i]] ?? ''
+    a.direction = dirs[dir_idx[i]] ?? ''
+    a.bp_index  = bp[i]
+  }
+  return atoms
+}
+
+/**
  * Is the scene drawn by a HEAVY renderer (atomistic or molecular surface) rather
  * than the design's own CG geometry?  The heavy set is exactly {vdw, ballstick,
  * surface}; every other repr (full / beads / cylinders / hull-prism) is drawn by

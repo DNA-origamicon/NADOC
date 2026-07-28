@@ -68,6 +68,7 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
         _extract_universe,
         build_chain_map,
         centroid_offset,
+        load_segid_chain_map,
         md_rigid_reference,
         md_snap_mask,
     )
@@ -147,7 +148,19 @@ def _build_md_nadoc_ctx(topology_path, trajectory_paths, coordinate_path, design
             return name[0].upper() if name else "C"
 
         heavy_idx = dna_heavy.indices
-        atom_meta = [{"serial": int(a.index), "element": _element(a)} for a in dna_heavy]
+        # Design identity (strand/helix/bp/direction) rides along with each atom so the
+        # trajectory-frame and surface views colour by strand like the design's own
+        # atoms do; without it they are stuck on CPK.  Cosmetic — never fail a frame
+        # extraction over it.
+        from backend.core.atomistic_to_nadoc import build_atom_design_meta
+        try:
+            ident = build_atom_design_meta(
+                u, dna_heavy, p_order, model, cm, load_segid_chain_map(Path(topology_path).parent))
+        except Exception:  # noqa: BLE001
+            ident = None
+        atom_meta = [{"serial": int(a.index), "element": _element(a),
+                      **(ident[i] if ident else {})}
+                     for i, a in enumerate(dna_heavy)]
 
     # 5'-terminal nucleotides (one per strand) have NO phosphate — pdb2gmx strips the
     # 5' P — so they are absent from the P-indexed p_order and go un-positioned/un-coloured
@@ -321,7 +334,8 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
 
 def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
     """DNA heavy-atom coordinates (nm, NADOC frame) for one DCD frame, as
-    ``[{serial, element, x, y, z}, …]``. Ported from ws.py ``_seek_sync`` (ballstick
+    ``[{serial, element, strand_id, helix_id, bp_index, direction, x, y, z}, …]``.
+    Ported from ws.py ``_seek_sync`` (ballstick
     path): residue-local reconstruction of each heavy atom relative to its corrected
     P atom, then the same Kabsch alignment as the bead path so the all-atom and CG
     views coincide. Requires a ctx built with ``with_atoms=True``."""
@@ -431,8 +445,12 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
     except Exception:
         pass
 
+    # strand_id/helix_id/bp_index/direction come from the ctx's atom_meta (static across
+    # frames) — the frontend colours by them exactly as it does the design's own atoms.
     return [
         {"serial": m["serial"], "element": m["element"],
+         "strand_id": m.get("strand_id", ""), "helix_id": m.get("helix_id", ""),
+         "bp_index": m.get("bp_index", -1), "direction": m.get("direction", ""),
          "x": float(pos_nm[i, 0]), "y": float(pos_nm[i, 1]), "z": float(pos_nm[i, 2])}
         for i, m in enumerate(atom_meta)
     ]
@@ -442,15 +460,16 @@ class _SurfAtom:
     """Minimal atom for compute_surface (reads .x/.y/.z/.element + .strand_id)."""
     __slots__ = ("x", "y", "z", "element", "strand_id")
 
-    def __init__(self, x, y, z, element):
+    def __init__(self, x, y, z, element, strand_id=""):
         self.x = x; self.y = y; self.z = z; self.element = element
-        self.strand_id = ""
+        self.strand_id = strand_id
 
 
 def md_frames_atomistic(topology_path, segments, coordinate_path, design,
                         frame_indices) -> dict:
     """Per-frame DNA heavy atoms for the given composite-frame indices →
-    ``{ "<idx>": {atoms:[{serial,element,x,y,z}], bonds:[]} }``. The atom set is the
+    ``{ "<idx>": {atoms:[{serial,element,strand_id,helix_id,bp_index,direction,x,y,z}],
+    bonds:[]} }``. The atom set is the
     NAMD model's own DNA heavy atoms (Phase 2b renders these directly rather than
     mapping onto the design's idealized template)."""
     seg_paths = [s[2] for s in segments]
@@ -480,7 +499,7 @@ def md_frames_surface(topology_path, segments, coordinate_path, design, frame_in
     for idx in sorted(set(int(i) for i in frame_indices)):
         if idx < 0 or idx >= n:
             continue
-        atoms = [_SurfAtom(a["x"], a["y"], a["z"], a["element"])
+        atoms = [_SurfAtom(a["x"], a["y"], a["z"], a["element"], a.get("strand_id", ""))
                  for a in _extract_md_atoms_frame(ctx, idx)]
         mesh = compute_surface(atoms, grid_spacing=grid_spacing,
                                probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)

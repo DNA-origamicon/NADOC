@@ -295,9 +295,10 @@ export function initAtomSurfaceDisplay({
   }
 
   // Dispatch atomistic colouring based on the global coloringMode.
-  // Extra-base atoms always use the strand colour map (handled inside
-  // atomistic_renderer); the strand map we send mirrors coloringMode
-  // ('strand' uses palette/groups, 'cluster' uses cluster-mapped colours).
+  // The strand map we send mirrors coloringMode ('strand' uses palette/groups,
+  // 'cluster' uses cluster-mapped colours).  It is still needed under 'base' as the
+  // fallback for atoms with no base-letter key of their own — crossover extra bases
+  // and extension tails, which carry their anchor nucleotide's key.
   function _refreshAtomColors() {
     const { coloringMode } = store.getState()
     const strandMap = _getAtomStrandColors()

@@ -36,6 +36,40 @@ overridden. The old static `#cando-legend` + `cando_legend.js` were retired (del
 in-panel static viridis mini-strips (`_setFlexLegend` in oxdna/md panels) still draw viridis regardless of the
 picked colormap — candidate to remove or sync.
 
+**MD ALL-ATOM VIEWS WERE COLOUR-BLIND — fixed 2026-07-28.** In a ball-and-stick / VDW scene the
+"Display MD" toggle rendered every atom CPK and ignored the colouring buttons. Cause: the MD
+all-atom payload is the SIMULATION's own atoms (`{serial, element, x, y, z}`) — unlike the design's
+atomistic model, whose atoms carry `strand_id`/`helix_id`/`bp_index`/`direction`, which is what
+`scene/atomistic_renderer/color_resolver.js` keys on. `strandColors.get(undefined)` missed for every
+atom → CPK, and no colouring mode could reach it. The CG/`nadoc` path was never affected (it only
+moves the design renderer's own beads, which keep their colours). New shared
+`atomistic_to_nadoc.build_atom_design_meta(u, heavy_ag, p_order, model, chain_map, seg2chain)`
+recovers identity per RESIDUE: residue's P atom → `p_order` key → the design model's own P atoms
+(`md_pkey` → `strand_id`), so synthetic keys (`__xb__` extra bases, `__ext_` tails, loop copies)
+resolve too; 5'-terminal residues (no P — pdb2gmx strips it) come back through `chain_map`, the same
+route `build_termini_specs` uses for their positions. Wire: the identity is STATIC across frames and
+a frame is ~10⁵ atoms, so the live WS sends it ONCE in `ready` as `atom_ident` — interned parallel
+arrays (`intern_atom_design_meta`, mirroring the columnar bundle's intern tables) — and
+`md_display_state.zipAtomIdentity` stamps it onto each frame's atoms in place. The batch trajectory /
+surface path (`md_trajectory._extract_md_atoms_frame`, `_SurfAtom`) inlines the same fields per atom
+instead (no streaming pressure there). md_panel also calls `refreshAtomColors()` once per load: MD
+calls `atomisticRenderer.setMode()` itself, bypassing the representation switcher that normally
+primes the mode + palette. Fails soft — an unmappable topology yields `atom_ident: null` and the old
+CPK render, never a failed display. Pins: `tests/test_md_atom_design_meta.py` (5 fast),
+`md_display_state.test.js` → `zipAtomIdentity` (4).
+
+Follow-on the same day: **CPK now applies to crossover extra bases too** (ALL atomistic views,
+not just MD). `color_resolver.js` had `if (colorMode === 'strand' || atom.aux_helix_id)` — the
+`aux_helix_id` disjunct pinned extra-base atoms to their strand colour in EVERY mode, so they were
+the one thing on screen that ignored the colouring buttons. Split into `_colorByMode`: CPK is
+per-ELEMENT and needs no design key, so extra bases follow it like any other atom; 'base' still
+falls back to strand colour for them because their stored key is the SOURCE nucleotide's and a
+letter lookup would paint them with a neighbour's base. **Extension tails were never affected** —
+they carry no `aux_helix_id` (verified against the pre-change resolver), though they do inherit
+their ANCHOR nucleotide's `(helix, bp, dir)`, so 'base' mode shows them the anchor's letter. Fixing
+that would mean changing extension atom identity in `atomistic.py` — not done, deliberately.
+Pins: `color_resolver.test.js` (+5, CPK case proven to fail against the pre-change resolver).
+
 **PERFORMANCE — per-frame extraction fixed 2026-07-02.** The old bottleneck was NOT the select/Kabsch (measured <0.03s/frame) — it was the whole-system `mda_unwrap` PBC make-whole transformation added in `_build_md_nadoc_ctx`: it make-wholes ALL ~1M solvated atoms on EVERY frame seek → **~180 s/frame** for the 3x6x200 (RMSF max_frames=2 took 24 min). FIX: removed the transformation entirely. Both per-frame extractors already reconstruct DNA from RAW wrapped coords — the bead path via the vectorised `_unwrap_min_image` + design-eq min-image correction, the heavy path via residue-local `minimum_image(atom−its P)`. The only thing the global unwrap affected was the P→C1' base-normal for a nucleotide split across PBC, now handled by a direct min-image on that 7229-vector. Verified numerically identical to the unwrapped reference to ~1.5e-8 nm (float32 noise) on real 3x6x200 frames. Result: **186 s → 0.01 s per frame** (~15000×); full 3x6x200 ctx build ~13s; a 150-frame flex map goes from hours to ~20s. Equivalence pin: `test_md_extraction_matches_unwrap_reference` (env-gated NADOC_RUN_HEAVY_MD_FIXTURE=1, reference side pays the slow unwrap). ws.py's live-display path still adds its own unwrap for interactive single-frame seeks — untouched, and the fast path's output matches it. Remaining v1 gaps unchanged: cache built ctx across requests; the "Loading…/Computing…" overlays still show.
 
 **PERFORMANCE — oxDNA View-trajectory LOAD fixed 2026-07-10 (downsample-FIRST).** Distinct from the NAMD per-frame fix above: the *initial* "View trajectory" load for oxDNA runs was slow because `oxdna_health._aligned_downsampled_frames` read the ENTIRE `.dat` and PBC-unwrap+Kabsch-aligned EVERY frame, THEN `_stride_pick`ed down to ≤200 — a 5000-frame run aligned 5000 frames to keep 200 (~25× wasted). FIX: reordered to downsample first. `count_trajectory_frames` (cheap header scan) gives per-stage counts → compute the per-stage stride → new `oxdna_interface.read_trajectory_frames_at(path, design, indices, copies=)` (streams the file, parses ONLY the wanted header indices, returns `{header_idx: map}`) → align only those. Output is byte-identical (same stride math, seed still prepended at eff-position 0 of the first non-empty stage as a stride candidate; malformed/half-written frames drop out as before). `read_trajectory_frames_full` is UNCHANGED (default callers untouched); only the composite builder switched to the selective reader. **NAMD's `md_composite_trajectory` was already downsample-first** — this only closed the oxDNA gap.

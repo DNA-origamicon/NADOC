@@ -406,6 +406,105 @@ def build_termini_specs(u, chain_map: ChainMap, seg2chain: dict[str, str], p_ord
     return specs
 
 
+# Placeholder identity for a heavy atom whose residue has no design key (a residue the
+# chain map doesn't cover).  strand_id "" misses every colour lookup → the atom keeps its
+# CPK element colour, which is the right fallback for an unidentifiable atom.
+_NO_DESIGN_IDENT = {"strand_id": "", "helix_id": "", "bp_index": -1, "direction": ""}
+
+
+def build_atom_design_meta(u, heavy_ag, p_order, model,
+                           chain_map: ChainMap | None = None,
+                           seg2chain: dict[str, str] | None = None) -> list[dict]:
+    """Design identity — ``{strand_id, helix_id, bp_index, direction}`` — per atom of
+    *heavy_ag*, in that atom group's order.
+
+    The MD all-atom views (live Display-MD ball-and-stick, trajectory frames, the
+    molecular surface) render the SIMULATION's own atoms, which carry no design keys —
+    unlike the design's own atomistic model, whose atoms do.  Without this the frontend
+    atom colour resolver has nothing to look up, so every MD atom falls back to CPK and
+    the strand / base / cluster colouring buttons do nothing.
+
+    Identity is per RESIDUE: each residue's P atom indexes ``p_order`` (the design key
+    per trajectory DNA P atom), and the design *model*'s own P atoms carry the strand
+    ids under the same ``md_pkey``, so synthetic keys (crossover extra bases,
+    strand-extension tails, loop copies) resolve too.  5'-terminal residues have no P
+    (pdb2gmx strips it) and so are absent from ``p_order``; they are recovered through
+    ``chain_map`` when the segid→chain map is available — the same route
+    ``build_termini_specs`` uses for their positions.
+    """
+    sid_by_key: dict[tuple, str] = {}
+    for a in getattr(model, "atoms", ()) or ():
+        if a.name == "P":
+            sid_by_key.setdefault(md_pkey(a), getattr(a, "strand_id", "") or "")
+
+    key_by_res: dict[int, tuple] = {}
+    dna_p = u.select_atoms("name P and resname " + " ".join(_GRO_DNA_RESNAMES))
+    p_res = np.asarray(dna_p.resindices)
+    for i in range(min(len(p_res), len(p_order))):
+        key_by_res[int(p_res[i])] = tuple(p_order[i])
+
+    if chain_map and seg2chain:
+        dna = u.select_atoms("resname " + " ".join(_GRO_DNA_RESNAMES))
+        for res in dna.residues:
+            rix = int(res.ix)
+            if rix in key_by_res:
+                continue
+            cid = seg2chain.get(str(getattr(res.atoms[0], "segid", "") or ""))
+            if cid is None:
+                continue
+            key = chain_map.get((cid, int(res.resid)))
+            if key is not None:
+                key_by_res[rix] = tuple(key)
+
+    rows: list[dict] = []
+    for rix in np.asarray(heavy_ag.resindices):
+        key = key_by_res.get(int(rix))
+        if key is None:
+            rows.append(dict(_NO_DESIGN_IDENT))
+            continue
+        # A synthetic key's slot 1/2 are not (bp_index, direction) — ("__xb__",
+        # crossover_id, extra_base_k) puts a str in slot 1 and an int in slot 2.  Type-
+        # check rather than positionally trust, so an extra base still gets its strand
+        # colour and simply falls back from the base-letter lookup.
+        bp  = key[1] if len(key) > 1 and isinstance(key[1], (int, np.integer)) else -1
+        dr  = key[2] if len(key) > 2 and isinstance(key[2], str) else ""
+        rows.append({"strand_id": sid_by_key.get(key, ""), "helix_id": str(key[0]),
+                     "bp_index": int(bp), "direction": dr})
+    return rows
+
+
+def intern_atom_design_meta(rows: list[dict]) -> dict:
+    """Compress ``build_atom_design_meta`` rows into interned parallel arrays.
+
+    A ball-and-stick frame is hundreds of thousands of atoms, and the identity is
+    STATIC across frames — repeating four fields per atom per frame would multiply an
+    already-large live stream.  The live WebSocket sends this once at load instead:
+    three small string tables plus one index (and one bp) per atom.
+
+    ``{strands, helices, dirs, strand_idx, helix_idx, dir_idx, bp}`` — the ``*_idx``
+    arrays index their table; every index is valid (the empty string is interned like
+    any other value) so the consumer needs no bounds handling.
+    """
+    strands: list[str] = []; s_at: dict[str, int] = {}
+    helices: list[str] = []; h_at: dict[str, int] = {}
+    dirs:    list[str] = []; d_at: dict[str, int] = {}
+
+    def _idx(val: str, table: list[str], at: dict[str, int]) -> int:
+        i = at.get(val)
+        if i is None:
+            i = len(table); table.append(val); at[val] = i
+        return i
+
+    s_idx: list[int] = []; h_idx: list[int] = []; d_idx: list[int] = []; bp: list[int] = []
+    for r in rows:
+        s_idx.append(_idx(r["strand_id"], strands, s_at))
+        h_idx.append(_idx(r["helix_id"], helices, h_at))
+        d_idx.append(_idx(r["direction"], dirs, d_at))
+        bp.append(int(r["bp_index"]))
+    return {"strands": strands, "helices": helices, "dirs": dirs,
+            "strand_idx": s_idx, "helix_idx": h_idx, "dir_idx": d_idx, "bp": bp}
+
+
 def recover_termini(u, term_specs, p_raw, p_nm, R_align, box_nm, all_pos_A=None):
     """Aligned NADOC-frame positions + base normals for the 5'-terminal nucleotides.
 

@@ -11,6 +11,7 @@ import {
   shouldForceDisplayReload,
   sceneUsesHeavy,
   restorePlan,
+  zipAtomIdentity,
 } from './md_display_state.js'
 
 describe('targetStreamMode', () => {
@@ -220,5 +221,50 @@ describe('mdReadinessIndicator', () => {
   it('hides for off/unknown/undefined', () => {
     for (const s of ['off', 'idle', undefined, null, 'whatever'])
       expect(mdReadinessIndicator(s).show).toBe(false)
+  })
+})
+
+describe('zipAtomIdentity', () => {
+  // Three atoms: two on the scaffold (same residue), one on a staple.
+  const IDENT = {
+    strands:    ['scaf', 'stap7'],
+    helices:    ['h0', 'h1'],
+    dirs:       ['FORWARD', 'REVERSE'],
+    strand_idx: [0, 0, 1],
+    helix_idx:  [0, 0, 1],
+    dir_idx:    [0, 0, 1],
+    bp:         [5, 5, 9],
+  }
+  const frame = () => [
+    { serial: 0, element: 'P', x: 0, y: 0, z: 0 },
+    { serial: 1, element: 'O', x: 1, y: 0, z: 0 },
+    { serial: 2, element: 'C', x: 2, y: 0, z: 0 },
+  ]
+
+  it('gives every atom the identity the colour resolver keys on', () => {
+    const atoms = zipAtomIdentity(frame(), IDENT)
+    expect(atoms.map(a => a.strand_id)).toEqual(['scaf', 'scaf', 'stap7'])
+    expect(atoms.map(a => a.helix_id)).toEqual(['h0', 'h0', 'h1'])
+    expect(atoms.map(a => a.direction)).toEqual(['FORWARD', 'FORWARD', 'REVERSE'])
+    expect(atoms.map(a => a.bp_index)).toEqual([5, 5, 9])
+  })
+
+  it('mutates in place and keeps the coordinates', () => {
+    const atoms = frame()
+    expect(zipAtomIdentity(atoms, IDENT)).toBe(atoms)
+    expect(atoms[2]).toMatchObject({ serial: 2, element: 'C', x: 2 })
+  })
+
+  it('leaves atoms alone on a count mismatch rather than mis-assigning strands', () => {
+    const atoms = zipAtomIdentity(frame().slice(0, 2), IDENT)
+    expect(atoms.every(a => a.strand_id === undefined)).toBe(true)
+  })
+
+  it('is a no-op without identity (bead modes, or an unmappable topology)', () => {
+    for (const id of [null, undefined, {}]) {
+      const atoms = zipAtomIdentity(frame(), id)
+      expect(atoms.every(a => a.strand_id === undefined)).toBe(true)
+    }
+    expect(zipAtomIdentity(null, IDENT)).toBe(null)
   })
 })

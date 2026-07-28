@@ -402,8 +402,8 @@ export function initAtomisticRenderer(scene) {
     /**
      * Set atom colouring mode.
      *
-     *   'cpk'    — per-element CPK.  Strand colours still apply to extra-base
-     *              atoms (aux_helix_id), so always pass the strand map.
+     *   'cpk'    — per-element CPK, for EVERY atom including crossover extra bases
+     *              and extension tails (they used to be pinned to strand colour).
      *   'strand' — strandColors is the primary lookup (also used for 'cluster',
      *              just with a cluster-keyed map).
      *   'base'   — baseColors keyed by "strand_id:bp_index:direction"; atoms

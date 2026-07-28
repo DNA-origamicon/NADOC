@@ -9,6 +9,10 @@
  *   "nadoc"     → designRenderer.applyFemPositions(updates)
  *   "beads"     → mdOverlay.update(positions, beadRadius, opacity)
  *   "ballstick" → atomisticRenderer.update({atoms, bonds:[]})
+ *
+ * The streamed frames carry coordinates only.  Atom IDENTITY (strand/helix/bp/direction
+ * — what the colour resolver keys on) is static, so it arrives once in the 'ready'
+ * message as interned parallel arrays and is zipped onto each frame's atoms here.
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
@@ -20,6 +24,7 @@ import {
   decideReload,
   nextLivePollAction,
   restorePlan,
+  zipAtomIdentity,
 } from './md_display_state.js'
 
 const _WS_URL  = `ws://${location.host}/ws/md-run`
@@ -66,7 +71,8 @@ function _activeSceneRepresentation() {
   return 'full'
 }
 
-export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer, onRestoreDesignHeavy }) {
+export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer,
+                                     onRestoreDesignHeavy, refreshAtomColors }) {
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const panel          = document.getElementById('md-panel')
   const heading        = document.getElementById('md-panel-heading')
@@ -151,6 +157,11 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _speed     = 1.0
   let _amp       = 1.0   // displacement amplification factor (1 = no amp)
   let _showNadoc = true   // mirrors #md-show-nadoc checkbox
+  // Static per-heavy-atom design identity for ball-and-stick, interned into parallel
+  // arrays and sent ONCE in 'ready' (see ws.py) — zipped onto every frame's atoms so
+  // MD atoms colour by strand/base/cluster instead of falling back to CPK.
+  let _atomIdent = null
+  let _atomColorsPrimed = false   // reset per load: pull the colouring mode onto MD atoms once
   let _latestOnReady = false
   let _latestOnceOnReady = false
   let _autoDisplayActive = false
@@ -512,6 +523,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
     if (msg.type === 'ready') {
       _loadInFlight = false
+      _atomIdent = msg.atom_ident ?? null
+      _atomColorsPrimed = false
       _nFrames = msg.n_frames
       _dtPs    = msg.dt_ps
       _nstComp = msg.nstxout_comp
@@ -617,7 +630,16 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     } else if (_repr === 'ballstick') {
       if (!msg.atoms) return
       atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : 'ballstick')
-      atomisticRenderer?.update({ atoms: msg.atoms, bonds: msg.bonds ?? [] })
+      atomisticRenderer?.update({
+        atoms: zipAtomIdentity(msg.atoms, _atomIdent), bonds: msg.bonds ?? [],
+      })
+      // The renderer resolves colours against whatever mode was last set on it, and MD
+      // drives setMode() directly (bypassing the representation switcher that normally
+      // primes it) — so pull the live coloringMode + strand palette across, or the MD
+      // atoms render CPK.  Once only: update() recolours every later frame from the
+      // now-correct mode, and a mid-playback palette/mode change is already picked up
+      // by atom_surface_display's own store subscription.
+      if (!_atomColorsPrimed) { _atomColorsPrimed = true; refreshAtomColors?.() }
     }
   }
 

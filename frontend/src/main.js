@@ -1870,6 +1870,9 @@ async function main() {
   const mdDisplayController = initMdPanel(store, {
     designRenderer, mdOverlay, atomisticRenderer,
     onRestoreDesignHeavy: _restoreDesignHeavy,
+    // Lazy: _atomSurface is assigned further below.  MD sets the atomistic mode itself,
+    // so it needs this to pull the live coloring mode + strand palette onto its atoms.
+    refreshAtomColors: () => _atomSurface?.refreshAtomColors?.(),
   })
   // getOxdnaDisplay is a lazy getter (oxdnaDisplay is declared below at ~1808): a
   // seeded MD run with no MD frame yet shows the inherited oxDNA-seed positions via it.

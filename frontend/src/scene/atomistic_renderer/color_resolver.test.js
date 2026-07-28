@@ -32,3 +32,46 @@ describe('resolveAtomColor — scalar overlay (oxDNA flexibility map)', () => {
     expect(resolveAtomColor(ctx, atom(), null, [], false)).toBe(ELEMENTS.C.color)
   })
 })
+
+describe('resolveAtomColor — crossover extra bases and extension tails', () => {
+  // A crossover extra base is marked by aux_helix_id (its lerp destination helix).  An
+  // extension tail has no aux_helix_id but carries its ANCHOR nucleotide's helix/bp/dir —
+  // so neither has a base-letter key of its own.
+  const XB  = atom({ element: 'N', aux_helix_id: 'h1', aux_t: 0.5 })
+  const EXT = atom({ element: 'N' })          // anchor's key, no aux
+  const STRAND_MAP = new Map([['s0', 0xff0000]])
+  const ctxFor = (colorMode, baseColors = new Map()) =>
+    ({ colorMode, strandColors: STRAND_MAP, baseColors, scalarColors: null })
+
+  it('CPK paints extra bases and tails by ELEMENT, not by strand', () => {
+    // The reported bug: these two were the only atoms on screen that ignored CPK.
+    for (const a of [XB, EXT]) {
+      expect(resolveAtomColor(ctxFor('cpk'), a, null, [], false)).toBe(ELEMENTS.N.color)
+    }
+  })
+
+  it('strand mode still gives them their strand colour', () => {
+    for (const a of [XB, EXT]) {
+      expect(resolveAtomColor(ctxFor('strand'), a, null, [], false)).toBe(0xff0000)
+    }
+  })
+
+  it('base mode keeps an extra base on its strand colour — it has no letter key', () => {
+    // Its stored key is the SOURCE nucleotide's, so a base lookup would paint it with a
+    // neighbouring base's letter.  Strand colour is the honest fallback.
+    const base = new Map([['s0:3:FORWARD', 0x00ff00]])
+    expect(resolveAtomColor(ctxFor('base', base), XB, null, [], false)).toBe(0xff0000)
+  })
+
+  it('the scalar (flexibility) overlay still wins over every mode', () => {
+    const ctx = { ...ctxFor('cpk'), scalarColors: new Map([['h0:3:FORWARD', 0x123456]]) }
+    expect(resolveAtomColor(ctx, XB, null, [], false)).toBe(0x123456)
+  })
+
+  it('an ordinary atom is unaffected in every mode', () => {
+    const base = new Map([['s0:3:FORWARD', 0x00ff00]])
+    expect(resolveAtomColor(ctxFor('cpk'), atom(), null, [], false)).toBe(ELEMENTS.C.color)
+    expect(resolveAtomColor(ctxFor('strand'), atom(), null, [], false)).toBe(0xff0000)
+    expect(resolveAtomColor(ctxFor('base', base), atom(), null, [], false)).toBe(0x00ff00)
+  })
+})
