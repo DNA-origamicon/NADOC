@@ -27,15 +27,19 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
+from backend.api import state as design_state
 from backend.core import runpod_preflight
+from backend.core.md_vram import estimate_profile_from_design
 from backend.core.runpod_api import RunpodClient, RunpodError
 from backend.core.runpod_script import (
     GPU_TYPES,
     plan_execution,
     required_vram_mb,
 )
+from backend.core.runpod_select import gpu_options as _rank_gpu_options, load_rate_registry
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +268,50 @@ async def preflight(body: PreflightRequest | None = None):
         n_atoms=(body.n_atoms if body else None),
     )
     return pre.to_dict()
+
+
+class GpuOptionsRequest(BaseModel):
+    n_atoms: Optional[int] = Field(
+        None, gt=0, description="System size; if omitted, sized from the active design")
+
+
+@router.post("/runpod/gpu-options")
+async def gpu_options(body: GpuOptionsRequest | None = None):
+    """Ranked list of currently-available GPUs for the active design's RELAXATION — each with
+    live price, estimated wall-clock, and estimated cost. Fuses live RunPod stock/prices with the
+    learned per-arch throughput (runpod_select). Creates no pod; feeds the cluster-card
+    "Check RunPod GPUs" picker.
+    """
+    n_atoms = body.n_atoms if body else None
+    if not n_atoms:
+        try:
+            design = design_state.get_or_404()
+            profile = await run_in_threadpool(estimate_profile_from_design, design)
+            if profile:
+                n_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
+        except Exception:  # noqa: BLE001 — no design / sizing failure => soft "load a design"
+            logger.warning("runpod gpu-options: could not size active design", exc_info=True)
+    if not n_atoms:
+        return {"ok": False, "gpus": [], "n_atoms": None, "connected": _SESSION.is_connected(),
+                "note": "Load a design first — couldn't size the system."}
+
+    stock = None
+    if _SESSION.is_connected() and _SESSION.api_key:
+        try:
+            stock = await runpod_preflight.fetch_gpu_stock(_SESSION.api_key)
+        except Exception:  # noqa: BLE001 — a stock failure means indicative prices, not a 500
+            logger.warning("runpod gpu-options: GPU stock lookup failed", exc_info=True)
+
+    rows = _rank_gpu_options(n_atoms, build="release", stock=stock, registry=load_rate_registry())
+    return {
+        "ok": True,
+        "n_atoms": n_atoms,
+        "relax_ns": 19.2,
+        "connected": _SESSION.is_connected(),
+        "gpus": rows,
+        "note": (None if stock else
+                 "Prices/availability indicative — connect RunPod for live stock."),
+    }
 
 
 def _ssh_key_present() -> bool:

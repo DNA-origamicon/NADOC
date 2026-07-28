@@ -270,6 +270,11 @@ async def main() -> int:
         return 2
 
     key = os.environ.get("RUNPOD_API_KEY") or (Path.home() / ".runpod_key").read_text().strip()
+    # Kill key for the pod-side deadman self-terminate: the pod's auto-injected RUNPOD_API_KEY
+    # 403s the pod DELETE, so hand the deadman a key that CAN terminate (scoped
+    # ~/.runpod_key_kill if present, else the account key) via the pod's PID-1 env.
+    _kk = Path.home() / ".runpod_key_kill"
+    kill_key = _kk.read_text().strip() if _kk.exists() else key
     if args.dry_run:
         print(f"dry run [{spec.name}]: {n_atoms:,} atoms, {spec.build} build, {args.ns} ns, "
               f"cap ${args.budget:.0f}, reroll<{args.reroll_floor:g}x expected (max {args.max_reroll})")
@@ -299,7 +304,8 @@ async def main() -> int:
     if not gpu_prefs:
         gpu_prefs = ["NVIDIA GeForce RTX 4090"]        # static degrade
 
-    payload = container_payload(f"{spec.pod_prefix}-{spec.name}", gpu_prefs, disk_gb=spec.disk_gb)
+    payload = container_payload(f"{spec.pod_prefix}-{spec.name}", gpu_prefs, disk_gb=spec.disk_gb,
+                                env={"RUNPOD_KILL_KEY": kill_key})
     status, attempts, rerolls, accept_any = "unknown", 0, 0, False
     try:
         while attempts < args.max_attempts:

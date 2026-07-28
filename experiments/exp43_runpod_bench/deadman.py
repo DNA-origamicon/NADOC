@@ -94,7 +94,15 @@ def main():
             age = TOL + 1  # missing heartbeat = stale
         if age > TOL:
             log(f"HEARTBEAT STALE age={age:.0f}s > {TOL}s -> kill NAMD + self-terminate")
-            os.system("pkill -9 namd3 2>/dev/null; pkill -9 -f nadoc_chain 2>/dev/null")
+            # NAMD renames its process to "NAMD masterPe" (Charm++ setproctitle), so a
+            # by-NAME `pkill namd3` matches NOTHING (runbook §3) — the reason a fired deadman
+            # left NAMD running. Match the renamed cmdline AND the binary path AND -SIGKILL
+            # the whole process group as a backstop.
+            os.system("pkill -9 -f 'NAMD masterPe' 2>/dev/null; "
+                      "pkill -9 -f namd3 2>/dev/null; "
+                      "pkill -9 -f nadoc_chain 2>/dev/null")
+            killed = os.popen("pgrep -f 'NAMD|namd3' 2>/dev/null").read().strip()
+            log(f"post-kill NAMD pids still alive: {killed or 'none'}")
             m = try_terminate()
             log(f"terminate method={m}")
             sys.exit(0)

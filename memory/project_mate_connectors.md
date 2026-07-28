@@ -86,6 +86,34 @@ diffed on six real designs with the true backend `ovhg_axes` payload.
    outright (contiguous overhangs on one stub flank each other). Real effect: +7 to +23 genuine
    staple termini recovered per design. **UX note:** Define Mate now shows noticeably more gold
    dots on staple-dense designs — they were always real, just hidden.
+   coincident with another helix's endpoint; a stub attaches via a crossover at an *interior* bp
+   one lattice cell away, so its root looked free. Now `_overhangJunctionBps()` collects the
+   overhang-side foot of each overhang↔main junction from the strand walk and the free-endpoint
+   loop skips it. Real effect: 9 phantom connectors gone on `Ultimate Polymer Hinge`.
+   - **Topology trap found while fixing this** — a foot is not always *only* a foot.
+     `2x2_OH_test` h_XY_2_0 carries two **antiparallel** overhangs both spanning bp 40–55: each
+     staple 5'-ends where the other crosses off, so bp 40 and bp 55 are each simultaneously one
+     staple's foot and the other's free tip. Suppressing on foot-ness alone deleted both real
+     tips. `_strandTerminusBps()` now overrides: **a strand terminus is never merely a foot.**
+2. **Connectors sat one full bp past the terminal base.** `ovhg_axes.end` is a duplex *extent* —
+   the position of `bp_max + 1`, ~0.334 nm beyond the last base (deliberate: `domain_ends.js` and
+   `helix_renderer.js` both divide by `bp_max - bp_min + 1` and depend on it). This file alone
+   read it as bp_max's position. `_tipAtBpMax()` interpolates back to the base. **The backend was
+   not changed** — three other renderer sites rely on the extent convention.
+3. **Wrong normals on stubs patched by two domains.** When two overhang domains overwrote the two
+   ends of one stub, `end - start` was the line between two independently-rotated domains (and the
+   samples branch read the shared, un-rotated axis). Each patched endpoint now takes the direction
+   of the domain that positioned it.
+4. **Overlapping overhangs stole each other's position.** `ovhgBpToPos` was keyed `helixId:bp`, so
+   with two overhangs at identical bp ranges the second silently overwrote the first and a
+   connector landed on the wrong shaft. Now keyed by overhang id too, resolved at the lookup site
+   from `domain.overhang_id`; the bare key survives as a first-wins fallback.
+5. **Nick suppression ate real termini.** `_cov.has(bp-1) && _cov.has(bp+1)` ran off a helix-wide
+   union of *all* domains, so the antiparallel scaffold beneath a staple made its free 5' end look
+   mid-duplex. Coverage is now keyed `helixId:direction`, and an overhang free tip is exempt
+   outright (contiguous overhangs on one stub flank each other). Real effect: +7 to +23 genuine
+   staple termini recovered per design. **UX note:** Define Mate now shows noticeably more gold
+   dots on staple-dense designs — they were always real, just hidden.
 
 ## Open items
 

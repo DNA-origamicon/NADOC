@@ -2105,6 +2105,10 @@ async function _oxdnaBin(method, path, body = undefined) {
 export const lastErrorMessage    = ()            => store.getState().lastError?.message ?? null
 
 export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/available')
+/** Ranked available RunPod GPUs for the active design's relaxation — each with live price,
+ *  estimated relax wall-clock, and estimated cost. nAtoms omitted → backend sizes the design. */
+export const getRunpodGpuOptions = (nAtoms)      =>
+  _oxdnaJSON('POST', '/runpod/gpu-options', nAtoms ? { n_atoms: nAtoms } : {})
 /** MD-engine status report (oxDNA/NAMD/GROMACS/… availability + GPU + toolchain). */
 export const enginesStatus       = ()            => _oxdnaJSON('GET',  '/engines/status')
 /** List a directory for the "pick a downloaded file" navigator ({cwd, parent, entries}).

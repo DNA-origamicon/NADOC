@@ -39,6 +39,7 @@ import { initAdvancedOptimize, renderRunPath, productionTimestepWarning } from '
 import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
 import { initRunpodSetup } from './runpod_setup.js'
+import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
@@ -661,6 +662,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const runTargetRunpod = document.getElementById('md-run-target-runpod')
   const runpodStatusEl  = document.getElementById('md-jobs-runpod-status')
   const runpodSetupEl   = document.getElementById('md-runpod-setup-mount')
+  const runpodPickerEl  = document.getElementById('md-jobs-runpod-picker')
   const runTargetAlpineLabel = document.getElementById('md-run-target-alpine-label')
   const runTargetHint   = document.getElementById('md-run-target-hint')
   const submitAlpineBtn = document.getElementById('md-jobs-submit-alpine-btn')
@@ -878,9 +880,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     onConnected: () => _runpod.refresh(),
   })
 
+  // GPU picker: "Check RunPod GPUs" → scrollable list of available cards with live price,
+  // estimated relax wall-clock, and estimated cost; the chosen card is remembered for launch.
+  let _selectedRunpodGpu = null
+  initRunpodGpuPicker({
+    mount: runpodPickerEl,
+    onSelect: (row) => { _selectedRunpodGpu = row },
+  })
+
   function _paintRunpodGate() {
     const isRunpod = _currentRunTarget() === 'runpod'
     if (runpodStatusEl) runpodStatusEl.style.display = isRunpod ? 'block' : 'none'
+    if (runpodPickerEl) runpodPickerEl.style.display = isRunpod ? 'block' : 'none'
     if (!isRunpod || !runBtn) return
     const pre = _runpod.preflight
     const ready = runpodCanLaunch(pre)
@@ -2009,6 +2020,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         autostart: isLocalRun,
         execution_target: runTarget,
         cluster_name: runTarget === 'alpine' ? 'alpine' : null,
+        runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
         dcd_freq: parseInt(dcdFreqInput?.value ?? '2500', 10) || 2500,
       })
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
@@ -2259,6 +2271,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
+      runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
       anchors:        anchors.length ? anchors : null,
       field:          fieldOn ? { field_pN: fieldSpec.field_pN, dir: fieldSpec.dir } : null,
       run_dir:        getRunDir(),   // shared run-location: write this run into the chosen folder

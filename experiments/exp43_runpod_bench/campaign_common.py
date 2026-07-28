@@ -42,9 +42,14 @@ def campaign_log() -> ConfirmationLog:
     return ConfirmationLog(CAMPAIGN_DIR)
 
 
-def container_payload(name: str, gpu_type_ids: list[str], *, disk_gb: int = 40) -> dict:
-    """A container-disk-only, on-demand, SECURE pod. No networkVolumeId -> not region-pinned."""
-    return {
+def container_payload(name: str, gpu_type_ids: list[str], *, disk_gb: int = 40,
+                      env: dict = None) -> dict:
+    """A container-disk-only, on-demand, SECURE pod. No networkVolumeId -> not region-pinned.
+
+    ``env`` is injected into the pod's PID-1 environment (readable by the deadman via
+    /proc/1/environ) — used to hand it a RUNPOD_KILL_KEY authorised to self-terminate the pod,
+    since the pod's auto-injected RUNPOD_API_KEY is NOT (it 403s the DELETE)."""
+    payload = {
         "name": name,
         "imageName": DEFAULT_IMAGE,
         "computeType": "GPU",
@@ -56,6 +61,9 @@ def container_payload(name: str, gpu_type_ids: list[str], *, disk_gb: int = 40) 
         "interruptible": False,          # on-demand: a reclaim mid-benchmark just wastes money
         "allowedCudaVersions": list(DEFAULT_ALLOWED_CUDA),
     }
+    if env:
+        payload["env"] = dict(env)
+    return payload
 
 
 @contextlib.asynccontextmanager

@@ -5,7 +5,7 @@ the git build has no sm_120, small boxes want a cheap-but-not-glacial card, out-
 must drop, and live prices override the pinned table.
 """
 from backend.core.runpod_select import (
-    Candidate, estimate_rate, load_rate_registry, ms_per_matom, pick_cards,
+    estimate_rate, gpu_options, load_rate_registry, ms_per_matom,
     record_rate, same_tier, select_cards,
 )
 
@@ -152,6 +152,38 @@ def test_record_rate_resilient_to_bad_inputs(tmp_path):
     record_rate("sm_89", -1, 5, path=p)
     record_rate("sm_89", SMALL, 0, path=p)
     assert load_rate_registry(p) == {}              # nothing written
+
+
+# ── gpu_options (cluster-card picker rows: price + relax time + cost) ─────────────
+def test_gpu_options_rows_have_price_time_cost():
+    rows = gpu_options(SMALL, build="release", relax_ns=19.2)
+    assert rows
+    r = rows[0]
+    for k in ("label", "vram_gb", "usd_per_hour", "available", "ns_day", "relax_hours", "est_cost"):
+        assert k in r, f"missing {k}"
+    assert r["relax_hours"] > 0 and r["est_cost"] > 0
+
+
+def test_gpu_options_cost_equals_hours_times_price():
+    r = gpu_options(SMALL, build="release", relax_ns=19.2)[0]
+    assert abs(r["est_cost"] - r["relax_hours"] * r["usd_per_hour"]) < 0.5
+
+
+def test_gpu_options_longer_ladder_costs_more():
+    short = gpu_options(SMALL, build="release", relax_ns=10.0)[0]
+    long = gpu_options(SMALL, build="release", relax_ns=20.0)[0]
+    assert long["est_cost"] > short["est_cost"]
+    assert long["relax_hours"] > short["relax_hours"]
+
+
+def test_gpu_options_git_build_excludes_sm120():
+    assert all(r["sm"] != "sm_120" for r in gpu_options(SMALL, build="git"))
+
+
+def test_gpu_options_out_of_stock_dropped():
+    stock = {"NVIDIA GeForce RTX 4090": {"stock": "High", "on_demand": 0.5}}
+    labels = [r["label"] for r in gpu_options(SMALL, build="release", stock=stock)]
+    assert labels == ["RTX 4090"]   # only the in-stock card survives when live stock is given
 
 
 # ── same_tier fallback bounding ──────────────────────────────────────────────────

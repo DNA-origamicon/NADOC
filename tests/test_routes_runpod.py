@@ -222,3 +222,32 @@ class TestPodLeakCheck:
         r = client.post("/api/runpod/pods/p1/terminate")
         assert r.status_code == 200
         assert r.json()["ok"] is True
+
+
+class TestGpuOptions:
+    """The cluster-card GPU picker feed: ranked cards with price, relax time, and cost."""
+
+    def test_lists_cards_with_price_time_cost(self, client):
+        r = client.post("/api/runpod/gpu-options", json={"n_atoms": 1_310_154})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["ok"] and d["gpus"], d
+        assert d["n_atoms"] == 1_310_154 and d["relax_ns"] == 19.2
+        row = d["gpus"][0]
+        for k in ("label", "usd_per_hour", "vram_gb", "available", "ns_day",
+                  "relax_hours", "est_cost"):
+            assert k in row, f"missing {k}"
+        assert row["relax_hours"] > 0 and row["est_cost"] > 0
+
+    def test_not_connected_prices_are_indicative(self, client):
+        # no session -> stock unknown -> available None + an indicative-price note
+        d = client.post("/api/runpod/gpu-options", json={"n_atoms": 1_000_000}).json()
+        assert d["connected"] is False
+        assert d["note"] and "indicative" in d["note"].lower()
+        assert all(row["available"] is None for row in d["gpus"])
+
+    def test_no_size_returns_200_shape(self, client):
+        # no n_atoms: sizes the active design if any, else soft-fails — never 500
+        r = client.post("/api/runpod/gpu-options", json={})
+        assert r.status_code == 200
+        assert "gpus" in r.json()

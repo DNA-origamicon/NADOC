@@ -256,3 +256,34 @@ async def pick_cards(api_key: str, n_atoms: int, *, build: str, resident: bool =
                           stock=stock, max_usd_per_hour=max_usd_per_hour, prefer="balanced",
                           registry=load_rate_registry())
     return ranked[:max_fallbacks]
+
+
+def gpu_options(n_atoms: int, *, build: str = "release", relax_ns: float = 19.2,
+                resident: bool = True, timestep_fs: float = 4.0, stock: Optional[dict] = None,
+                registry: Optional[dict] = None, prefer: str = "balanced") -> list[dict]:
+    """Ranked, JSON-ready GPU options for the cluster-card picker: each row carries price,
+    estimated **relax wall-clock**, and **estimated cost** for a job's relaxation ladder.
+
+    Fuses ``select_cards`` (arch/VRAM/value ranking with live stock + learned rates) with the
+    relax ladder length ``relax_ns`` (default the 4×4.8 = 19.2 ns mgh/aksimentiev ladder):
+      relax_hours = relax_ns / ns_day * 24 ;  est_cost = relax_ns * $/ns.
+    Pure given ``stock`` + ``registry`` — the route supplies live stock (fetch_gpu_stock) and
+    the learned registry. Best-value in-stock card first."""
+    cards = select_cards(n_atoms, build=build, resident=resident, timestep_fs=timestep_fs,
+                         stock=stock, prefer=prefer, registry=registry)
+    rows: list[dict] = []
+    for c in cards:
+        relax_h = (relax_ns / c.ns_day_est * 24.0) if c.ns_day_est > 0 else None
+        cost = (relax_ns * c.usd_per_ns_est
+                if c.usd_per_ns_est not in (0.0, float("inf")) else None)
+        rows.append({
+            "key": c.key, "label": c.label, "sm": c.sm,
+            "vram_gb": round(c.vram_mb / 1024),
+            "usd_per_hour": round(c.usd_per_hour, 2),
+            "live_price": c.live_price,
+            "available": c.available,          # True / False / None (stock unknown)
+            "ns_day": round(c.ns_day_est, 1),
+            "relax_hours": round(relax_h, 1) if relax_h else None,
+            "est_cost": round(cost, 2) if cost else None,
+        })
+    return rows
