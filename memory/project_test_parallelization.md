@@ -64,6 +64,17 @@ an ordinary coding session**. Three new pieces, all machine-local + gitignored:
   touch the repo's lock; proven to fail against the pre-change guard).
   This complements the older rule that `slow`-marked tests *skip themselves* during a sim — that one
   never covered the fast suite's timings.
+- **⚠️ A "violator" that MOVES between runs is a shared cache warming, not a heavy test.**
+  Learned the hard way 2026-07-28: the junction topology/winding tests were relegated on readings of
+  41 s / 28.8 s / 11.4 s, then un-relegated the same day when a serial idle-machine measurement put the
+  slowest at **2.32 s** (both files together ~10 s). Two compounding artifacts:
+  `atomistic_minimisers._XB_CACHE` is a **module-level in-memory** cache, so under `-n auto` every xdist
+  worker starts cold and whichever test lands first pays the whole one-time minimisation — and the
+  sweep also ran under a +p16 NAMD job. The tell was the violator naming a **different test each run**.
+  **Diagnostic before relegating anything: re-run the file alone, serially
+  (`uv run pytest <file> -m "" --durations=0 -p no:randomly`), on an idle box.** A first-test-pays-the-
+  cache cost is not test weight, and relegating for it is precisely the ratchet the scale-free per-test
+  gate exists to avoid.
 
 **First run of the guard immediately caught a 3-minute lie:** the "fast" suite was documented as
 ~50s but was actually **176s**. The whole SNUPI FEM family was unregistered — `test_snupi_element`

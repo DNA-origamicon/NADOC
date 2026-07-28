@@ -693,20 +693,22 @@ _SLOW_TESTS = {
     # relegated `test_make_18hb_routed_design_is_deterministic`.  The file's three other
     # cluster tests (6hb / no-op paths) stay fast.
     "test_autodetect_produces_scaffold_and_geometry_clusters",
-    # test_junction_topology.py: each parametrisation builds the atomistic model and
-    # computes the Gauss linking number over every reciprocal junction, then REPAIRS and
-    # rebuilds — 41 s for [T-12], 6.6 s for [TT-12].  The file's pure winding/geometry
-    # unit tests stay fast.  Area: atomistic (already mapped in _slow_area_for), so an
-    # atomistic-placement change re-runs them.
-    "test_known_catenating_phases_are_repaired",
-    # Same file, same cost driver (build the model, then walk every reciprocal junction):
-    # 28.8 s and 11.4 s respectively.
-    "test_report_carries_schema_and_counts",
-    "test_positions_with_wrong_atom_count_is_rejected",
-    # test_junction_winding.py: sweeps the clamp across a phase grid, building a model per
-    # sample to separate wound from clean junctions — 41 s.
-    "test_clamp_converges_and_separates_wound_from_clean",
 }
+
+# ⚠️ DO NOT relegate the tests in test_junction_topology.py / test_junction_winding.py.
+# They were added here on 2026-07-28 and REMOVED the same day — the timings that justified
+# it were an artifact, twice over:
+#   * measured while a +p16 NAMD production job owned all 16 cores (pytest is niced below
+#     it), and
+#   * `atomistic_minimisers._XB_CACHE` is a MODULE-LEVEL in-memory cache of the extra-base
+#     minimisation.  Under `-n auto` every xdist worker starts cold, so whichever junction
+#     test lands first on a worker is charged the entire one-time warm-up and every sibling
+#     after it is nearly free.  That is why the "violator" moved to a DIFFERENT test on
+#     every run (T-12 → TT → repaired_build_is_deterministic → repair_does_not_degrade…).
+# Measured serially on an idle machine, the slowest test in EITHER file is 2.32 s and the
+# two files together are ~10 s — comfortably inside the budget.  A first-test-pays-the-cache
+# cost is not test weight, and relegating for it is exactly the ratchet that quietly moves
+# healthy coverage out of the fast suite.
 
 
 # ---------------------------------------------------------------------------
