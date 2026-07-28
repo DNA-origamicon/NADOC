@@ -6500,6 +6500,98 @@
 
         </div><!-- /#tab-content-photo -->
 
+        <!-- ── Experimental photo mode ──────────────────────────────────────
+             A small testbed for rendering ideas before they earn a place in
+             the Photo tab. Currently: flat figure materials + an ambient rig +
+             VIEW-INDEPENDENT 64-DIRECTION AMBIENT OCCLUSION. Deliberately has
+             no HDRI / bloom / path tracer / floor / export — those live in
+             Photo and would bury the thing being tested. -->
+        <div id="tab-content-photo-exp" class="tab-content" hidden>
+
+          <div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid #21262d">
+            <button id="photoexp-exit-btn" style="flex:1;padding:4px 0;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">Exit experimental mode</button>
+          </div>
+
+          <div id="photoexp-status" style="padding:6px 14px;border-bottom:1px solid #21262d;font-size:11px;color:#6a737d;line-height:1.4">
+            inactive
+          </div>
+
+          <!-- Lighting -->
+          <div class="panel-section">
+            <h2>Lighting</h2>
+            <select id="photoexp-lighting" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:3px 4px;font-size:var(--text-xs)">
+              <option value="full" selected>Full (key shadow + occlusion)</option>
+              <option value="ambient">Ambient (occlusion-only, figure)</option>
+              <option value="flat">Flat (ambient only, no fill)</option>
+              <option value="scientific">Scientific (single key)</option>
+              <option value="softbox">Soft Box (two diffuse)</option>
+            </select>
+
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:var(--text-xs);color:#8b949e">
+              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer"
+                     title="ChimeraX stores light directions in CAMERA coordinates (move_lights_with_camera). The rig is pinned to the viewer, so reorienting the structure sweeps the light — and its shadow — across it. Off = the rig is welded to the world and orbiting just walks you into the dark side.">
+                <input id="photoexp-pin-lights" type="checkbox" checked> Pin lights to camera
+              </label>
+
+              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer"
+                     title="A real shadow map cast by the key light — the SECOND shadow system in ChimeraX's `lighting full`, layered on top of ambient occlusion and re-rendered every frame. No floor required.">
+                <input id="photoexp-key-shadow" type="checkbox" checked> Key light casts a shadow
+              </label>
+
+              <div id="photoexp-key-shadow-controls" style="display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:66px" title="Resolution of the key light's single shadow map. This is what decides whether an arm casts a crisp shadow onto a platform behind it.">Shadow map</span>
+                  <select id="photoexp-key-shadow-mapsize" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                    <option value="1024">1024</option>
+                    <option value="2048" selected>2048 (ChimeraX default)</option>
+                    <option value="4096">4096</option>
+                    <option value="8192">8192</option>
+                  </select>
+                </div>
+                <div id="photoexp-key-shadow-res" style="color:#6a737d;font-size:11px;line-height:1.35"></div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:66px" title="Scales the normal-offset bias, in shadow-map texels. Raise until surface self-shadowing (acne / moiré on beads) disappears; too high and contact shadows detach from what casts them.">Shadow bias</span>
+                  <input id="photoexp-key-shadow-bias" type="range" min="0" max="5" step="0.1" value="1"
+                         style="flex:1;accent-color:#f0b429">
+                  <span id="photoexp-key-shadow-bias-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.0×</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="min-width:66px" title="How dark the cast shadow is drawn (three.js LightShadow.intensity). 1 = physically correct; lower only fades it.">Shadow dark</span>
+                  <input id="photoexp-shadow-strength" type="range" min="0" max="1" step="0.05" value="1"
+                         style="flex:1;accent-color:#f0b429">
+                  <span id="photoexp-shadow-strength-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.00</span>
+                </div>
+              </div>
+
+            </div>
+            </div>
+
+            <div style="color:#6a737d;font-size:11px;line-height:1.35;margin-top:8px">
+              <b>Full</b> mirrors ChimeraX: key 0.7 / fill 0.3 / ambient 0.8, key shadow ON, and
+              occlusion applied to the ambient term only — two independent shadow systems.
+              The occlusion bake is cached and view-independent; the key shadow re-renders every
+              frame, which is why it moves as you reorient.
+              With <b>Ambient</b> or <b>Flat</b> there is no key light at all, so occlusion does
+              all the shading — the ChimeraX <code style="color:#8b949e">lighting soft</code>
+              arrangement.
+            </div>
+          </div>
+
+          <!-- Background -->
+          <div class="panel-section">
+            <h2>Background</h2>
+            <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e">
+              <select id="photoexp-bg-type" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+                <option value="color" selected>Solid colour</option>
+                <option value="transparent">Transparent</option>
+              </select>
+              <input id="photoexp-bg-color" type="color" value="#0b0d10"
+                     style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:20px;padding:0;cursor:pointer">
+            </div>
+          </div>
+
+        </div><!-- /#tab-content-photo-exp -->
+
         <!-- Plates and tubes — 96-well plate layout + IDT tube list -->
         <div id="tab-content-plates" class="tab-content" hidden>
           <div id="plate-toolbar" style="border-bottom:1px solid #21262d;flex:0 0 auto"></div>
@@ -6521,6 +6613,7 @@
         <button class="left-tab-btn"        data-tab="dynamics"     title="Simulations">Simulations</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
         <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — high-resolution export" id="photo-tab-btn" data-test="photo-tab-btn">Photo</button>
+        <button class="left-tab-btn"        data-tab="photo-exp"    title="Experimental photo mode — rendering features under evaluation (multishadow ambient occlusion)" id="photo-exp-tab-btn" data-test="photo-exp-tab-btn">Exp. Photomode</button>
         <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
         <!-- Drag-to-resize the sidebar; lives on the tab strip's outer edge
              (the border with the 3D viewport) so it's easy to find. -->

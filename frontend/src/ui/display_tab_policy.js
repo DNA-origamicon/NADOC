@@ -16,8 +16,10 @@
 /** The tab that OWNS the engine panels; displays start and resume here. */
 export const DISPLAY_HOME_TAB = 'dynamics'
 
-/** View-only tabs that render the scene as-is and must not disturb a display. */
-export const DISPLAY_PRESERVING_TABS = Object.freeze(['photo'])
+/** View-only tabs that render the scene as-is and must not disturb a display.
+ *  `photo-exp` is the experimental render testbed — same rationale as `photo`:
+ *  you photograph what is on screen, including a simulated frame. */
+export const DISPLAY_PRESERVING_TABS = Object.freeze(['photo', 'photo-exp'])
 
 /** True if `tabId` may keep a running simulation display on screen. */
 export function preservesDisplays(tabId) {

@@ -231,6 +231,7 @@ import { captureNucleotidesFromChains } from './scene/surface_strands_math.js'
 import { initOxdnaAnchorsSetup } from './ui/oxdna_anchors_setup.js'
 import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
+import { initPhotoExpMode }   from './scene/photo_exp_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 
@@ -3493,6 +3494,7 @@ async function main() {
     // "in photo mode" (no-op if not active). Runs first so deactivate() can
     // restore the live materials/lights while the meshes still exist.
     _photoMode.exit()
+    _photoExpMode.exit()
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
@@ -3607,6 +3609,7 @@ async function main() {
     // A photo-mode session belongs to the design/assembly it was opened in;
     // entering an assembly (open/new) must drop it (no-op if not active).
     _photoMode.exit()
+    _photoExpMode.exit()
     _setDesignGeometryVisible(false)
     // Close any open Extrude tool and hide the world-origin triad — both are
     // design-only affordances that shouldn't leak into the assembly view.
@@ -6389,7 +6392,9 @@ async function main() {
   // sidebar restores its prior state across reloads.
   let _leftSidebar = null
   {
-    const TABS = ['feature-log', 'dynamics', 'scene', 'photo', 'plates']
+    const TABS = ['feature-log', 'dynamics', 'scene', 'photo', 'photo-exp', 'plates']
+    // Tabs that install a render override and must be torn down when you leave.
+    const RENDER_OVERRIDE_TABS = ['photo', 'photo-exp']
     const STORAGE_KEY = 'nadoc.leftSidebar.v1'
     const leftPanel = document.getElementById('left-panel')
     const tabStrip  = document.getElementById('left-tab-strip')
@@ -6409,7 +6414,7 @@ async function main() {
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null')
         if (saved) {
-          if (TABS.includes(saved.activeTab) && saved.activeTab !== 'photo') {
+          if (TABS.includes(saved.activeTab) && !RENDER_OVERRIDE_TABS.includes(saved.activeTab)) {
             activeTab = saved.activeTab
           }
           if (typeof saved.collapsed === 'boolean') collapsed = saved.collapsed
@@ -6486,6 +6491,9 @@ async function main() {
             if (tabId !== 'scene') _leaveAnimationsTab()
           }
         }
+        // Experimental photo mode installs its own render override, so exactly
+        // one of the two render-override tabs may be live at a time.
+        if (tabId !== 'photo-exp') _photoExpMode.exit()
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         if (collapsed) {
           collapsed = false
@@ -6500,6 +6508,10 @@ async function main() {
           _leaveAnimationsTabUnlessPhoto(collapsed ? null : activeTab)
         }
         _render()
+        // Idempotent — a second click on an active render-override tab only
+        // collapses the sidebar, deliberately leaving the render mode running
+        // so the user gets the full viewport.
+        if (activeTab === 'photo-exp') _photoExpMode.enter()
         window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
           detail: { activeTab, collapsed },
         }))
@@ -6514,6 +6526,7 @@ async function main() {
       function selectTab(tabId) {
         if (!TABS.includes(tabId)) return
         if (activeTab === tabId) { _render(); return }
+        if (tabId !== 'photo-exp') _photoExpMode.exit()
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         activeTab = tabId
         if (wasOnAnimations) _leaveAnimationsTab()
@@ -6746,6 +6759,16 @@ async function main() {
     store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
     bluntEnds, assemblyJointRenderer, player: animPlayer, originAxes,
   })
+
+  // Experimental photo mode (the "Exp. Photomode" tab) — a stripped-down render
+  // testbed for features under evaluation, currently view-independent
+  // multishadow ambient occlusion. Independent of `_photoMode`: only one of the
+  // two may be active, enforced by the tab strip below.
+  const _photoExpMode = initPhotoExpMode({
+    store, sceneCtx, designRenderer, assemblyRenderer,
+    assemblyJointRenderer, bluntEnds, originAxes,
+  })
+  window.__photoExpMode = _photoExpMode.mode   // console seam for tuning
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Placed here — not at the menu listeners (~3924) — because its deps span the

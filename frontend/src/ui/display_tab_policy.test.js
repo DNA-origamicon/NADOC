@@ -34,6 +34,13 @@ describe('display_tab_policy', () => {
   })
 
   it('lists every tab a display may be shown on', () => {
-    expect(displayTabIds()).toEqual(['dynamics', 'photo'])
+    // Both render-override tabs preserve displays: you photograph what is on
+    // screen, which includes an oxDNA/NAMD frame.
+    expect(displayTabIds()).toEqual(['dynamics', 'photo', 'photo-exp'])
+  })
+
+  it('preserves a running display on the experimental photo tab', () => {
+    expect(shouldTearDownDisplays('photo-exp')).toBe(false)
+    expect(shouldResumeDisplays('photo-exp')).toBe(false)
   })
 })

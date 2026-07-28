@@ -11,6 +11,55 @@ Photo mode lives at [frontend/src/scene/photo_renderer.js](frontend/src/scene/ph
 
 **Why:** publication-grade rendering for figures and animations. Activate/deactivate must restore the live scene exactly (lights, materials, scene.environment, scene.background) — the live editor still has to work after exit. **How to apply:** never mutate scene state from photo-mode code outside the saved-state pattern (`_savedMaterials`, `_savedSceneEnv`, `_savedSceneBackground`, `_savedLightState`). Adding a new visual feature means adding a save slot and a restore step in `deactivate()`.
 
+## Exp. Photomode tab — camera-pinned key shadow (AO removed) — 2026-07-28
+
+A SECOND, deliberately minimal photo tab (`data-tab="photo-exp"`) as a testbed for
+render features before they earn a place in the Photo tab. Modules:
+[photo_exp_mode.js](frontend/src/scene/photo_exp_mode.js) (renderer + tab orchestration),
+[ui/photo_exp_panel.js](frontend/src/ui/photo_exp_panel.js),
+[photo_renderer/shadow_bounds.js](frontend/src/scene/photo_renderer/shadow_bounds.js).
+`main.js` gains only an import + factory init + a `TABS` entry.
+
+**What it does:** flat figure materials, a CAMERA-PINNED light rig (ChimeraX
+`move_lights_with_camera` — the rig's quaternion tracks the camera, so the shadow
+sweeps as you reorient), and a real key-light shadow map **not gated on a floor**
+(the shipping mode gates its rig behind `floor !== 'off'`, which makes
+helix-on-helix shadow impossible there).
+
+**`full` preset is tuned AWAY from ChimeraX's numbers on purpose.** ChimeraX
+`lighting full` is key 0.7 / fill 0.3 / ambient 0.8, but a cast shadow only
+subtracts the KEY light, so fill+ambient are a floor: the deepest possible shadow
+removes just 39% of the light and reads as a grey smudge. `full` here is one key
+at 2.0, no fill, ambient 0.15 → ~93%. That is what made it legible.
+
+**THE parameter is shadow-map resolution, in nm/texel.** ChimeraX's map-size
+defaults are sized for a ~5 nm protein. On a 150 nm origami a 1024 map at 64
+directions gives 2.34 nm/texel — wider than a 2.0 nm duplex, so a thin arm cannot
+cast a readable shadow at all. The panel prints live nm/texel vs a duplex and
+warns when it is too coarse. Key shadow map size is selectable 1024–8192.
+
+**Multishadow ambient occlusion: built, evaluated, REMOVED (same day).** A faithful
+64-direction port of ChimeraX's ambient shadows (tiled depth atlas, cosine-weighted
+accumulation, cached view-independent transforms, material-side consumption on the
+indirect term). Cut because of the resolution arithmetic above — it never produced
+long-range shadowing at origami scale, only a wash. Findings kept in
+`photo_mode_ao_and_lowpoly_spec.md`; do not re-attempt without solving nm/texel first.
+
+**Three bugs found here that no headless test could reach** — all cost real time:
+1. `renderer.shadowMap.enabled` is a PROGRAM parameter (`WebGLPrograms.js`) and
+   `setProgram` never re-checks it. Any internal scene render that flips it off
+   compiles every material without `USE_SHADOWMAP`, permanently. Use
+   `shadowMap.autoUpdate = false` to skip shadow rendering instead.
+2. Shadow bias must scale with the shadow-map TEXEL, not the scene radius. A
+   radius-proportional bias reaches 2–8 bead diameters on a real design and
+   ERASES the shadow rather than de-acneing it.
+3. Editor overlay geometry (~100 µm) silently sets the frustum and puts the whole
+   design inside one texel. `shadow_bounds.js` rejects contributors >8× the median
+   extent and names them in a console warning; they are also barred from casting.
+
+`window.__photoExpMode.getDiagnostics()` reports the whole chain (renderer flag,
+light pose, map rendered, fitted frustum, bounds contributors, cast/receive counts).
+
 ## Render-speed: idle gate + interactive preview + backend frame cache — 2026-07-14
 
 Testing "oxDNA display → Photo → switch to surface/atomistic" was painfully slow. Two
