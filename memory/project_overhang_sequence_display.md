@@ -53,6 +53,21 @@ doc [.claude/rules/cadnano-2d.md](.claude/rules/cadnano-2d.md) updated.
   test didn't reframe the ortho camera (`f`).
 
 ## 3. Auto-assign on connect/set (simulation-real)
+
+> **Update 2026-07-27 — the three hooks below are now TARGETED, not design-wide.**
+> `reassign_if_sequenced` re-derived EVERY non-scaffold strand, so a sequence the
+> user typed by hand on an unrelated staple was silently destroyed by any overhang
+> patch / connection create / version apply. All three call sites now use
+> `sequences.reassign_strands(design, ids)` over
+> `sequences.overhang_dependent_strand_ids(design, [oh_ids], extra_helix_ids=[__lnk__…])`
+> — the overhang's own strand, its binders/linker complements, and the new bridge
+> helix's strands, and nothing else. The propagation guarantee this section
+> describes is unchanged and pinned by `tests/test_targeted_reassign.py`.
+> `reassign_if_sequenced` still exists for headless/ML callers.
+> The EXPLICIT bulk commands (`assign-staple-sequences`, `full-autostaple`) are
+> deliberately still design-wide and DO overwrite a manual sequence — both push an
+> undo snapshot. See [[project_strand_sequence_edit]].
+
 Overhang bases are real immediately, but the **linker-complement** and
 **end-to-root binder** strands (`Domain.binds_overhang_id`, set by
 `_make_complement_domain(dom, overhang_id)` at lattice.py:4526-27 — so the old

@@ -20,6 +20,7 @@ import {
   scaffoldDomainPaint,
   paintStapleDomain, deleteStrand, deleteStrandsBatch, deleteDomain, nickStrand, ligateStrand, forcedLigation,
   deleteForcedLigation, batchDeleteForcedLigations,
+  patchStrand, getStrandSequenceContext,
   patchStrandsColor, patchStrandsReference, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
   upsertStrandExtensionsBatch, deleteStrandExtensionsBatch, savePlateLayout, convertStrandToBinder, generateBinderForOverhang, convertBinderToScaffold,
@@ -43,6 +44,9 @@ import { initLigationDebug } from './ligation_debug.js'
 import { initStrandsSpreadsheet } from './strands_spreadsheet.js'
 import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
 import { initPlateView } from '../ui/plate_view.js'
+import { initStrandSequenceDialog } from '../ui/strand_sequence_dialog.js'
+import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
+import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
 import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey } from './element_keys.js'
 import { SCAFFOLD_LENGTHS, ascWarningText, countScaffoldNt } from '../scene/scaffold_assign.js'
@@ -463,9 +467,17 @@ async function _pickOpenFile() {
   })
 }
 
+// ── Hand-edit one strand's sequence ──────────────────────────────────────────
+// Same dialog module the 3D editor uses; the api wrapper differs (this editor's
+// ./api.js drives editorStore), so it is injected rather than imported by the module.
+const _strandSequenceDialog = initStrandSequenceDialog({
+  api: { getStrandSequenceContext, patchStrand },
+  showToast,
+})
+
 // ── Assign scaffold sequence modal ───────────────────────────────────────────
 // Opened either from the Sequencing menu (whole design → first scaffold) or from
-// a scaffold strand's right-click "Assign sequence…" (one specific strand), which
+// a scaffold strand's right-click "Edit sequence…" (one specific strand), which
 // mirrors the 3D viewport's scaffold context menu.
 
 // Which strand the currently-open modal targets (null = first scaffold), and the
@@ -1549,12 +1561,20 @@ const _ovhgNameDialog = (() => {
 
 // Latest strand selection emitted by pathview (for multi-select "Make Reference").
 let _lastSelectedStrandIds = []
-let _strandCtxMenuEl = null
+let _strandCtxMenu = null   // { root, close } from createContextMenu
 
 function _hideStrandCtxMenu() {
-  if (_strandCtxMenuEl) { _strandCtxMenuEl.remove(); _strandCtxMenuEl = null }
+  _strandCtxMenu?.close()
+  _strandCtxMenu = null
 }
 
+/**
+ * Strand right-click menu. The items themselves come from the SHARED
+ * ui/strand_menu_items.js (the 3D viewport builds the same list from the same
+ * module), and rendering/placement/dismissal come from the shared
+ * ui/primitives/context_menu.js — so neither the labels nor the visibility rules
+ * can drift between the two editors any more.
+ */
 function _showStrandCtxMenu(strand, clientX, clientY) {
   _hideStrandCtxMenu()
   const design = editorStore.getState().design
@@ -1565,75 +1585,23 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
   const allRef = sel.length > 0 &&
     sel.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
 
-  const menu = document.createElement('div')
-  menu.id = 'strand-context-menu'
-  menu.style.cssText =
-    'position:fixed;z-index:1000;background:#161b22;border:1px solid #30363d;' +
-    'border-radius:6px;padding:4px 0;min-width:160px;box-shadow:var(--shadow-md);font-size:12px'
-
-  const mkItem = (label, title, fn) => {
-    const b = document.createElement('button')
-    b.className = 'xover-menu-item'
-    b.textContent = label
-    if (title) b.title = title
-    b.addEventListener('click', () => { _hideStrandCtxMenu(); fn() })
-    menu.appendChild(b)
-  }
-
-  mkItem(
-    allRef ? 'Make Active' : 'Make Reference',
-    'Reference geometry is an inactive backdrop: ignored by all automatic features '
-      + '(bend/twist, sequence assignment, scaffold routing, autostaple, crossovers) and '
-      + 'excluded from exports/validation, but still visible (translucent) and manually editable.',
-    () => patchStrandsReference(sel, !allRef),
+  const items = buildStrandMenuItems(
+    { strandIds: sel, strandType: strand.strand_type, allReference: allRef },
+    {
+      onSetReference: (ids, makeRef) => patchStrandsReference(ids, makeRef),
+      onConvertToBinder: (id) => convertStrandToBinder(id),
+      onConvertToScaffold: (id) => convertBinderToScaffold(id),
+      onAssignScaffoldSequence: (id) => _openScaffoldModal(id),
+      onEditSequence: (id) => _strandSequenceDialog.open(id),
+      onEditExtensions: () => _openStrandExtDialog(strand, clientX, clientY),
+    },
   )
-  // Assign a scaffold sequence to just this strand (mirrors the 3D viewport's
-  // scaffold context menu — opens the same modal, targeted at one strand).
-  if (sel.length === 1 && strand.strand_type === 'scaffold' && !strand.is_reference) {
-    mkItem(
-      'Assign sequence…',
-      'Assign a scaffold sequence (M13mp18 / p7560 / p8064 / custom) to this '
-        + 'scaffold strand only, leaving other scaffold strands untouched.',
-      () => _openScaffoldModal(strand.id),
-    )
-  }
-  // Convert a single scaffold-like strand into an OH binding strand.
-  if (sel.length === 1 && strand.strand_type === 'scaffold') {
-    mkItem(
-      'Convert to OH binding strand',
-      'Re-designate this strand as an overhang-binding oligo: link each domain to the '
-        + 'overhang it antiparallel-pairs with (tagging the partner as an overhang if '
-        + 'needed) and recolor it. Add a fluorophore afterward via "Edit extensions".',
-      () => convertStrandToBinder(strand.id),
-    )
-  }
-  // Inverse: revert an OH binder back to scaffold.
-  if (sel.length === 1 && strand.strand_type === 'oh_binder') {
-    mkItem(
-      'Convert to scaffold',
-      'Revert this overhang-binding oligo back to a scaffold strand: clear its binder '
-        + 'links and remove any overhang the original conversion auto-created.',
-      () => convertBinderToScaffold(strand.id),
-    )
-  }
-  const sep = document.createElement('div')
-  sep.className = 'xover-menu-separator'
-  menu.appendChild(sep)
-  mkItem('Edit extensions…', '', () => _openStrandExtDialog(strand, clientX, clientY))
-
-  document.body.appendChild(menu)
-  _strandCtxMenuEl = menu
-  const mw = menu.offsetWidth, mh = menu.offsetHeight
-  menu.style.left = `${Math.min(clientX, window.innerWidth  - mw - 4)}px`
-  menu.style.top  = `${Math.min(clientY, window.innerHeight - mh - 4)}px`
+  if (!items.length) return
+  _strandCtxMenu = createContextMenu({
+    x: clientX, y: clientY, items,
+    onClose: () => { _strandCtxMenu = null },
+  })
 }
-
-document.addEventListener('mousedown', (e) => {
-  if (_strandCtxMenuEl && !_strandCtxMenuEl.contains(e.target)) _hideStrandCtxMenu()
-})
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && _strandCtxMenuEl) _hideStrandCtxMenu()
-})
 
 // ── Strand extension dialog (cadnano editor) ──────────────────────────────────
 
@@ -2260,6 +2228,7 @@ _spreadsheet = initStrandsSpreadsheet({
       nadocBroadcast.emit('selection-changed', { strandIds: [strandId] })
     }
   },
+  onEditSequence: (strandId) => _strandSequenceDialog.open(strandId),
 })
 
 // ── Store subscriptions ──────────────────────────────────────────────────────

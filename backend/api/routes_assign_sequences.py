@@ -105,6 +105,60 @@ def assign_scaffold_sequence_endpoint(body: _ScaffoldSeqBody = _ScaffoldSeqBody(
     return resp
 
 
+@router.get("/design/strand/{strand_id}/sequence-context", status_code=200)
+def strand_sequence_context(strand_id: str) -> dict:
+    """Everything a sequence editor needs to show one strand, 5'→3'.
+
+    Response fields (all sequence strings are index-aligned and have length
+    ``length``):
+
+    * ``sequence`` — the strand's current ``sequence``, or null if unassigned.
+    * ``derived``  — what "Assign staple sequences" WOULD produce right now, or
+      null when the scaffold has no sequence yet.  Powers the editor's
+      "Reset to derived" button.
+    * ``partner``  — the base each position PAIRS WITH: the scaffold base at the
+      antiparallel (helix, bp) for a duplex domain, the overhang base for a
+      binder domain, and ``'-'`` where there is no partner (an overhang tip is
+      single-stranded, and the scaffold does not cover every staple position).
+      Note this reads **3'→5'** left-to-right, because it is laid out in the
+      edited strand's 5'→3' index order and pairs antiparallel to it.
+    * ``segments`` — per-domain spans ``{start,length,kind,overhang_id,editable}``
+      so the editor can shade overhang regions and lock the ones whose bases are
+      owned by sub-domain ``sequence_override``s.
+
+    Read-only; never mutates the design.
+    """
+    from backend.core.sequences import (
+        assign_staple_sequences, strand_partner_bases, strand_sequence_length,
+        strand_sequence_segments,
+    )
+
+    design = design_state.get_or_404()
+    strand = design.find_strand(strand_id)
+    if strand is None:
+        raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
+
+    partners = strand_partner_bases(design, strand)
+    try:
+        derived = next(
+            (s.sequence for s in assign_staple_sequences(design).strands if s.id == strand_id),
+            None,
+        )
+    except ValueError:
+        derived = None      # scaffold not sequenced yet — nothing to derive from
+
+    return {
+        "strand_id":   strand.id,
+        "strand_type": strand.strand_type.value,
+        "is_scaffold": strand.is_scaffold,
+        "length":      strand_sequence_length(design, strand),
+        "sequence":    strand.sequence,
+        "derived":     derived,
+        "partner":     "".join(p if p else "-" for p in partners),
+        "segments":    strand_sequence_segments(design, strand),
+    }
+
+
 def _manual_connection_positions(design: Design) -> set[tuple[str, int, Direction]]:
     """Endpoints of user-issued connections that LOCK the staple carrying them.
 

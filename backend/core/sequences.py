@@ -122,19 +122,51 @@ def domain_bp_range(domain):
         yield from range(domain.start_bp, domain.end_bp - 1, -1)
 
 
-def _strand_nt_with_skips(strand: Strand, ls_map: dict[tuple[str, int], int]) -> int:
-    """Count nucleotides for a strand, accounting for loop/skip modifications.
+def _domain_nt_count(domain, ls_map: dict[tuple[str, int], int]) -> int:
+    """Nucleotides contributed by one domain, accounting for loop/skip mods.
 
     Skips (delta=-1) contribute 0 nt; loops (delta=+1) contribute 2 nt.
     """
     total = 0
-    for domain in strand.domains:
-        for bp in domain_bp_range(domain):
-            delta = ls_map.get((domain.helix_id, bp), 0)
-            if delta <= -1:
-                continue       # skip -- no nucleotide at this position
-            total += delta + 1  # 1 for normal bp, 2 for a loop (+1), etc.
+    for bp in domain_bp_range(domain):
+        delta = ls_map.get((domain.helix_id, bp), 0)
+        if delta <= -1:
+            continue       # skip -- no nucleotide at this position
+        total += delta + 1  # 1 for normal bp, 2 for a loop (+1), etc.
     return total
+
+
+def _strand_nt_with_skips(strand: Strand, ls_map: dict[tuple[str, int], int]) -> int:
+    """Count nucleotides for a strand, accounting for loop/skip modifications."""
+    return sum(_domain_nt_count(d, ls_map) for d in strand.domains)
+
+
+def _domain_seq_span(domain, ls_map: dict[tuple[str, int], int]) -> int:
+    """Characters *this domain* contributes to ``strand.sequence``.
+
+    Duplex domains are loop/skip aware.  Overhang (``overhang_id``) and binder
+    (``binds_overhang_id``) domains use the raw bp span, because that is what
+    ``assign_staple_sequences`` has always emitted for them — an overhang tip
+    is assembled to its bp length and a binder walks its bp range directly.
+    Used by both :func:`strand_partner_bases` and :func:`assign_staple_sequences`
+    so the two can never drift out of alignment.
+    """
+    if domain.overhang_id is not None or domain.binds_overhang_id is not None:
+        return abs(domain.end_bp - domain.start_bp) + 1
+    return _domain_nt_count(domain, ls_map)
+
+
+def strand_sequence_length(design: "Design", strand: Strand) -> int:
+    """Length ``strand.sequence`` must have for *strand*.
+
+    Equals :func:`strand_nucleotide_count` for every ordinary strand; they differ
+    only if a loop/skip sits under an overhang or binder domain, where the
+    derivation uses the raw bp span (see :func:`_domain_seq_span`).  Sequence
+    *editors* must validate against THIS, or a hand-typed sequence could be
+    rejected at exactly the length the derivation itself produces.
+    """
+    ls_map = _build_loop_skip_map(design)
+    return sum(_domain_seq_span(d, ls_map) for d in strand.domains)
 
 
 def strand_nucleotide_count(strand: Strand, design: "Design") -> int:
@@ -411,6 +443,99 @@ def _assemble_overhang_5to3(spec: object, domain_len: int) -> list[str]:
     return assembled + ["N"] * (domain_len - len(assembled))
 
 
+def build_overhang_bp_bases(design: Design) -> dict[str, dict[int, str]]:
+    """Map ``overhang_id -> {bp_index: overhang base}`` for every overhang domain.
+
+    A binder base at bp X is the Watson-Crick complement of the overhang base at
+    the same (helix, bp) — antiparallel pairing, identical to the scaffold
+    complement path but sourced from the overhang sequence.
+    """
+    overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
+    overhang_bp_bases: dict[str, dict[int, str]] = {}
+    for s in design.strands:
+        for d in s.domains:
+            if d.overhang_id is None:
+                continue
+            spec = overhang_map.get(d.overhang_id)
+            oh_len = abs(d.end_bp - d.start_bp) + 1
+            oh_bases = _assemble_overhang_5to3(spec, oh_len)
+            step = 1 if d.end_bp >= d.start_bp else -1
+            bp_map: dict[int, str] = {}
+            for i, base in enumerate(oh_bases):
+                bp_map[d.start_bp + i * step] = base
+            overhang_bp_bases[d.overhang_id] = bp_map
+    return overhang_bp_bases
+
+
+def strand_partner_bases(
+    design: Design,
+    strand: Strand,
+    *,
+    scaf_map: dict[tuple[str, int, str], list[str]] | None = None,
+    ls_map: dict[tuple[str, int], int] | None = None,
+    overhang_bp_bases: dict[str, dict[int, str]] | None = None,
+) -> list[str | None]:
+    """Per-nucleotide partner base for *strand*, 5'→3'.
+
+    Returns one entry per character of ``strand.sequence`` — i.e.
+    ``len(result) == strand_sequence_length(design, strand)``:
+
+    * **duplex domain** — the scaffold base at the antiparallel ``(helix_id, bp)``.
+      If the staple domain is FORWARD at (helix, bp) the scaffold must be REVERSE
+      there, and vice versa.  ``None`` where the scaffold does not cover it.
+    * **binder domain** (``binds_overhang_id``) — the overhang base at the same
+      ``(helix, bp)``; ``None`` where the overhang has no base there.
+    * **overhang domain** (``overhang_id``) — ``None`` throughout: an overhang tip
+      is single-stranded and has no partner.
+
+    This is the ONE implementation of the pairing walk.  ``assign_staple_sequences``
+    derives each base as ``complement_base(partner)`` from it, and the strand-sequence
+    editor shows the same partners above the input so the user can see mismatches.
+    The optional maps let a caller building many strands hoist the shared work.
+    """
+    if scaf_map is None:
+        scaf_map = build_scaffold_base_map(design)
+    if ls_map is None:
+        ls_map = _build_loop_skip_map(design)
+    if overhang_bp_bases is None:
+        overhang_bp_bases = build_overhang_bp_bases(design)
+
+    partners: list[str | None] = []
+    for domain in strand.domains:
+        # Overhang domains are single-stranded — no partner anywhere along them.
+        if domain.overhang_id is not None:
+            partners.extend([None] * _domain_seq_span(domain, ls_map))
+            continue
+
+        # OH-binder domain: partner is the overhang base at the same (helix, bp).
+        if domain.binds_overhang_id is not None:
+            bp_map = overhang_bp_bases.get(domain.binds_overhang_id, {})
+            step = 1 if domain.end_bp >= domain.start_bp else -1
+            for bp in range(domain.start_bp, domain.end_bp + step, step):
+                partners.append(bp_map.get(bp))
+            continue
+
+        h = domain.helix_id
+        # Antiparallel: staple FORWARD pairs with scaffold REVERSE, and vice versa
+        scaf_dir_val = (
+            Direction.REVERSE.value
+            if domain.direction == Direction.FORWARD
+            else Direction.FORWARD.value
+        )
+        for bp in domain_bp_range(domain):
+            delta = ls_map.get((h, bp), 0)
+            if delta <= -1:
+                continue  # skip -- no nucleotide in the staple at this position
+            scaf_bases = scaf_map.get((h, bp, scaf_dir_val))
+            n_copies   = delta + 1  # 1 for normal, 2 for loop
+            if scaf_bases is not None:
+                partners.extend(scaf_bases)
+            else:
+                partners.extend([None] * n_copies)
+
+    return partners
+
+
 def assign_staple_sequences(design: Design) -> Design:
     """Assign complementary sequences to all staple strands.
 
@@ -447,24 +572,7 @@ def assign_staple_sequences(design: Design) -> Design:
 
     # Build lookup: overhang_id -> OverhangSpec (for user-specified sequences)
     overhang_map: dict[str, object] = {o.id: o for o in design.overhangs}
-
-    # For OH-binder domains: map overhang_id -> {bp_index: overhang base}. A
-    # binder base at bp X is the Watson-Crick complement of the overhang base at
-    # the same (helix, bp) — antiparallel pairing, identical to the scaffold
-    # complement path below but sourced from the overhang sequence.
-    overhang_bp_bases: dict[str, dict[int, str]] = {}
-    for s in design.strands:
-        for d in s.domains:
-            if d.overhang_id is None:
-                continue
-            spec = overhang_map.get(d.overhang_id)
-            oh_len = abs(d.end_bp - d.start_bp) + 1
-            oh_bases = _assemble_overhang_5to3(spec, oh_len)
-            step = 1 if d.end_bp >= d.start_bp else -1
-            bp_map: dict[int, str] = {}
-            for i, base in enumerate(oh_bases):
-                bp_map[d.start_bp + i * step] = base
-            overhang_bp_bases[d.overhang_id] = bp_map
+    overhang_bp_bases = build_overhang_bp_bases(design)
 
     new_strands: list[Strand] = []
     for strand in design.strands:
@@ -476,53 +584,158 @@ def assign_staple_sequences(design: Design) -> Design:
             new_strands.append(strand)
             continue
 
+        partners = strand_partner_bases(
+            design, strand,
+            scaf_map=scaf_map, ls_map=ls_map, overhang_bp_bases=overhang_bp_bases,
+        )
+
         bases: list[str] = []
+        idx = 0
         for domain in strand.domains:
-            domain_len = abs(domain.end_bp - domain.start_bp) + 1
+            span = _domain_seq_span(domain, ls_map)
 
             # Overhang domains are single-stranded — assemble from sub-domain
             # overrides where present, falling back to the parent OverhangSpec
             # sequence (or 'N' if neither is set). Sub-domains tile the
             # overhang gap-lessly 5'→3'; a freshly-created OverhangSpec is
             # guaranteed to have at least one whole-overhang sub-domain
-            # (model validator backfill).
+            # (model validator backfill). partners is None across this span.
             if domain.overhang_id is not None:
                 spec = overhang_map.get(domain.overhang_id)
-                bases.extend(_assemble_overhang_5to3(spec, domain_len))
+                bases.extend(_assemble_overhang_5to3(spec, span))
+                idx += span
                 continue
 
-            # OH-binder domain: each base is the Watson-Crick complement of the
-            # overhang base at the same (helix, bp). Traverse 5'→3' along the
-            # binder domain; bp positions with no overhang base get 'N'.
-            if domain.binds_overhang_id is not None:
-                bp_map = overhang_bp_bases.get(domain.binds_overhang_id, {})
-                step = 1 if domain.end_bp >= domain.start_bp else -1
-                for bp in range(domain.start_bp, domain.end_bp + step, step):
-                    oh_base = bp_map.get(bp)
-                    bases.append(complement_base(oh_base) if oh_base is not None else "N")
-                continue
-
-            h = domain.helix_id
-            # Antiparallel: staple FORWARD pairs with scaffold REVERSE, and vice versa
-            scaf_dir_val = (
-                Direction.REVERSE.value
-                if domain.direction == Direction.FORWARD
-                else Direction.FORWARD.value
-            )
-            for bp in domain_bp_range(domain):
-                delta = ls_map.get((h, bp), 0)
-                if delta <= -1:
-                    continue  # skip -- no nucleotide in staple at this position
-                scaf_bases = scaf_map.get((h, bp, scaf_dir_val))
-                n_copies   = delta + 1  # 1 for normal, 2 for loop
-                if scaf_bases is not None:
-                    for scaf_base in scaf_bases:
-                        bases.append(complement_base(scaf_base))
-                else:
-                    bases.extend(["N"] * n_copies)
+            # Duplex + binder domains: base = complement of the partner base.
+            for p in partners[idx: idx + span]:
+                bases.append(complement_base(p) if p is not None else "N")
+            idx += span
 
         new_strands.append(strand.model_copy(update={"sequence": "".join(bases)}))
 
+    return design.model_copy(update={"strands": new_strands})
+
+
+def normalize_sequence_input(raw: str) -> str:
+    """Clean a user-typed DNA sequence: strip all whitespace, uppercase.
+
+    Raises ``ValueError`` naming the offending characters if anything outside
+    A/T/G/C/N survives.  Shared by every hand-entry path so they all accept the
+    same thing (a pasted sequence with line breaks, spaces or lowercase is fine).
+    """
+    cleaned = "".join(raw.split()).upper()
+    bad = sorted({c for c in cleaned if c not in _VALID_BASES})
+    if bad:
+        raise ValueError(
+            f"Invalid characters in sequence: {', '.join(bad)}. "
+            "Only A, T, G, C, N are allowed."
+        )
+    return cleaned
+
+
+def strand_sequence_segments(design: "Design", strand: Strand) -> list[dict]:
+    """Per-domain spans of ``strand.sequence``, for a sequence editor's UI.
+
+    Each entry is ``{start, length, kind, overhang_id, editable}`` where ``kind``
+    is ``'overhang'`` / ``'binder'`` / ``'duplex'``.  Offsets index directly into
+    ``strand.sequence`` (they use the same :func:`_domain_seq_span` the derivation
+    does), so a caller can slice an overhang's bases straight out of a submitted
+    sequence.
+
+    ``editable`` is False for an overhang whose ``OverhangSpec`` carries sub-domain
+    ``sequence_override``s — a whole-overhang write is rejected in that case
+    (the sub-domains own those bases; edit them in the Domain Designer), mirroring
+    the 409 guard in ``crud._build_overhang_patch``.
+    """
+    ls_map = _build_loop_skip_map(design)
+    spec_by_id = {o.id: o for o in design.overhangs}
+    out: list[dict] = []
+    start = 0
+    for d in strand.domains:
+        span = _domain_seq_span(d, ls_map)
+        if d.overhang_id is not None:
+            spec = spec_by_id.get(d.overhang_id)
+            has_override = any(
+                sd.sequence_override for sd in (getattr(spec, "sub_domains", None) or [])
+            )
+            kind, oid, editable = "overhang", d.overhang_id, not has_override
+        elif d.binds_overhang_id is not None:
+            kind, oid, editable = "binder", None, True
+        else:
+            kind, oid, editable = "duplex", None, True
+        out.append({
+            "start": start, "length": span, "kind": kind,
+            "overhang_id": oid, "editable": editable,
+        })
+        start += span
+    return out
+
+
+def overhang_dependent_strand_ids(
+    design: Design,
+    overhang_ids,
+    *,
+    extra_helix_ids=(),
+) -> set[str]:
+    """Every strand whose bases are derived from one of *overhang_ids*.
+
+    That is: the strand carrying the overhang tip itself (``Domain.overhang_id``)
+    and any strand that pairs against it (``Domain.binds_overhang_id`` — a linker
+    complement or a standalone OH binder).  ``extra_helix_ids`` additionally pulls
+    in every strand with a domain on those helices, used to catch the strands
+    ``generate_linker_topology`` puts on the virtual ``__lnk__<conn_id>`` bridge
+    helix.
+
+    This is the affected set for the implicit auto-assign hooks — passing it to
+    :func:`reassign_strands` re-derives exactly the strands the operation touched,
+    instead of rewriting every staple in the design.
+    """
+    oh = {o for o in overhang_ids if o}
+    helices = {h for h in extra_helix_ids if h}
+    out: set[str] = set()
+    for s in design.strands:
+        for d in s.domains:
+            if (d.overhang_id in oh
+                    or d.binds_overhang_id in oh
+                    or d.helix_id in helices):
+                out.add(s.id)
+                break
+    return out
+
+
+def reassign_strands(design: Design, strand_ids: set[str] | list[str]) -> Design:
+    """Re-derive sequences for ONLY *strand_ids*, leaving every other strand alone.
+
+    ``assign_staple_sequences`` rewrites the sequence on every non-scaffold strand
+    in the design.  That is right for the explicit "Assign staple sequences" /
+    "Full autostaple" commands, but wrong for the implicit auto-assign hooks that
+    fire when an overhang is patched or a connection is created/applied — those
+    only ever change a handful of strands, and a whole-design rewrite silently
+    destroys sequences the user typed by hand elsewhere.
+
+    Runs the full derivation (it needs global scaffold/overhang context) and then
+    copies back only the requested strands.  No-op when the scaffold carries no
+    sequence, or on any derivation error — same tolerance as
+    :func:`reassign_if_sequenced`.
+    """
+    wanted = set(strand_ids)
+    if not wanted:
+        return design
+    scaffold = _active_scaffold(design)
+    if scaffold is None or not scaffold.sequence:
+        return design
+    try:
+        re_derived = assign_staple_sequences(design)
+    except Exception:
+        return design
+
+    new_seqs = {s.id: s.sequence for s in re_derived.strands if s.id in wanted}
+    if not new_seqs:
+        return design
+    new_strands = [
+        s.model_copy(update={"sequence": new_seqs[s.id]}) if s.id in new_seqs else s
+        for s in design.strands
+    ]
     return design.model_copy(update={"strands": new_strands})
 
 

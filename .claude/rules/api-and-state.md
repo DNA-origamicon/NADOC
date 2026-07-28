@@ -173,7 +173,9 @@ design, report = state.mutate_and_validate(step3)  # step 3 — validate
 
 ## Sequences & Export
 - `POST /design/assign-scaffold-sequence` — assign M13/p7560/p8064
-- `POST /design/assign-staple-sequences` — Watson-Crick complements
+- `POST /design/assign-staple-sequences` — Watson-Crick complements (design-wide; DOES overwrite hand-set sequences, undoable)
+- `GET /design/strand/{id}/sequence-context` — `{length, sequence, derived, partner, segments}` for the Edit-sequence dialog (read-only)
+- `PATCH /design/strand/{id}` `{sequence}` — set a strand's bases by hand (or `null` to clear); 422 on bad chars / wrong length; overhang spans written back to the OverhangSpec
 - `POST /design/import` — import design from JSON/NADOC
 - `POST /design/import/cadnano` — import caDNAno v2 JSON
 - `GET /design/export/cadnano` — export to caDNAno v2 JSON

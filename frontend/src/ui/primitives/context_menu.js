@@ -26,6 +26,42 @@
 import { el, detach } from './dom.js'
 
 /**
+ * Pure: fit a menu of `width`×`height` inside the viewport, anchored at (x, y).
+ *
+ * Rules (ported from the 3D viewport's `_placeMenu`, which had them and this
+ * primitive did not — the tall strand menu was clipped without them):
+ *   • Overflows the right edge → shift left so it ends `margin` from the edge.
+ *   • Overflows the bottom → **grow upward**: anchor the bottom near the cursor
+ *     instead of clipping. A menu right-clicked low on screen stays fully visible.
+ *   • Taller than the whole viewport even when flipped → cap it at the viewport
+ *     height and let it scroll (`maxHeight` non-null), pinned to the top margin.
+ *   • Never lands closer than `margin` to the top or left edge.
+ *
+ * @returns {{left: number, top: number, maxHeight: number|null}}
+ */
+export function placeMenu({
+  x, y, width, height, viewportW, viewportH, margin = 8,
+}) {
+  const maxH = viewportH - margin * 2
+
+  let left = x
+  if (left + width > viewportW) left = viewportW - width - margin
+  if (left < margin) left = margin
+
+  let top = y
+  let maxHeight = null
+  if (height > maxH) {
+    maxHeight = maxH
+    top = margin
+  } else if (top + height > viewportH) {
+    top = viewportH - height - margin
+  }
+  if (top < margin) top = margin
+
+  return { left, top, maxHeight }
+}
+
+/**
  * @param {object} opts
  * @param {number} opts.x — viewport-relative pixel coords for top-left
  * @param {number} opts.y
@@ -92,14 +128,16 @@ export function createContextMenu(opts = {}) {
   // ── Position (after attach so we can measure) ──────────────────────
   function _position() {
     const rect = menuEl.getBoundingClientRect()
-    let posX = x
-    let posY = y
-    if (posX + rect.width  > window.innerWidth)  posX = window.innerWidth  - rect.width  - 8
-    if (posY + rect.height > window.innerHeight) posY = window.innerHeight - rect.height - 8
-    if (posX < 0) posX = 8
-    if (posY < 0) posY = 8
-    menuEl.style.left = posX + 'px'
-    menuEl.style.top  = posY + 'px'
+    const { left, top, maxHeight } = placeMenu({
+      x, y, width: rect.width, height: rect.height,
+      viewportW: window.innerWidth, viewportH: window.innerHeight,
+    })
+    if (maxHeight != null) {
+      menuEl.style.maxHeight = `${maxHeight}px`
+      menuEl.style.overflowY = 'auto'
+    }
+    menuEl.style.left = left + 'px'
+    menuEl.style.top  = top + 'px'
   }
 
   // ── Outside-click / escape handlers ────────────────────────────────

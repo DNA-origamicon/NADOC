@@ -55,6 +55,7 @@ import { initAssemblyLasso, toggleInstanceSelection } from './scene/assembly_las
 import { initOverhangHoverPicker } from './scene/overhang_hover_picker.js'
 import { preservesDisplays } from './ui/display_tab_policy.js'
 import { initScaffoldModal } from './ui/scaffold_modal.js'
+import { initStrandSequenceDialog } from './ui/strand_sequence_dialog.js'
 import { initAutoscaffoldPicker } from './ui/autoscaffold_picker.js'
 import { initNewDesignModal } from './ui/new_design_modal.js'
 import { initSliceHighlighter } from './scene/slice_highlighter.js'
@@ -854,9 +855,10 @@ async function main() {
       _showOverhangLengthDialog(entry, clientX, clientY)
     },
     onScaffoldAssignSequence: (strandId) => {
-      // "Assign sequence…" in the unified scaffold context menu (selection_manager).
+      // "Edit sequence…" on a scaffold → the preset/custom modal (selection_manager).
       _scaffoldModal.openModal(strandId)
     },
+    onEditStrandSequence: (strandId) => _strandSequenceDialog.open(strandId),
     onCrossoverRightClick: async (xo, action) => {
       // Distinguish forced ligations (have three_prime_helix_id) from regular crossovers.
       const isForcedLigation = !!xo.three_prime_helix_id
@@ -3976,6 +3978,9 @@ async function main() {
     refreshUndefinedHighlight: () => _undefinedHighlight.refresh(),
   })
 
+  // Hand-edit one strand's bases (strand right-click / spreadsheet Sequence cell).
+  const _strandSequenceDialog = initStrandSequenceDialog({ api, showToast })
+
   document.getElementById('menu-seq-assign-staples')?.addEventListener('click', async () => {
     const { currentDesign } = store.getState()
     if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
@@ -4570,6 +4575,7 @@ async function main() {
   const spreadsheet = initSpreadsheet(store, {
     designRenderer,
     selectionManager,
+    onEditSequence: (strandId) => _strandSequenceDialog.open(strandId),
     goToStrand(strandId) {
       const geom = store.getState().currentGeometry
       if (!geom?.length) return

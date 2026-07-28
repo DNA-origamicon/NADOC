@@ -10,6 +10,7 @@
 
 import { patchStrand, patchOverhang, generateOverhangRandomSequence } from './api.js'
 import { showToast } from '../ui/toast.js'
+import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf } from './pathview/palette.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
@@ -194,7 +195,7 @@ function _removeCtxMenu() {
  * @param {function} opts.onSelectStrand  — (strandId) => void; select strand in pathview
  * @param {function} opts.onSelectionChange — (strandIds) => void; broadcast selection
  */
-export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {}) {
+export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange, onEditSequence = null } = {}) {
   const panel       = document.getElementById('spreadsheet-panel')
   const body        = document.getElementById('spreadsheet-body')
   const theadRow    = document.getElementById('spreadsheet-thead-row')
@@ -392,6 +393,24 @@ export function initStrandsSpreadsheet({ onSelectStrand, onSelectionChange } = {
               span.textContent = `N\xd7${len}`
               td.appendChild(span)
             }
+            // Right-click → hand-edit / clear the strand's own sequence. Mirrors
+            // the 3D spreadsheet's Sequence-cell menu.
+            td.addEventListener('contextmenu', e => {
+              e.preventDefault()
+              e.stopPropagation()
+              const items = []
+              if (onEditSequence) {
+                items.push({ label: 'Edit sequence…', onClick: () => onEditSequence(strand.id) })
+              }
+              if (strand.sequence != null) {
+                if (items.length) items.push({ type: 'separator' })
+                items.push({
+                  label: 'Clear sequence',
+                  onClick: () => patchStrand(strand.id, { sequence: null }),
+                })
+              }
+              if (items.length) createContextMenu({ x: e.clientX, y: e.clientY, items })
+            })
             break
           }
           case 'ovhg_3p': {

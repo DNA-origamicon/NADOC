@@ -39,6 +39,7 @@ import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection } from './selection_level.js'
+import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -674,6 +675,10 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
   })
 }
 
+// Set once by initSelectionManager. Held module-level rather than threaded as a
+// 10th positional through _showColorMenu's six call sites.
+let _onEditStrandSequence = null
+
 function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null, domainRef = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -737,58 +742,50 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
   const design = store.getState().currentDesign
   const _stype = design?.strands?.find(s => s.id === strandId)?.strand_type
   const isScaffold = _stype === 'scaffold'
-  const isOhBinder = _stype === 'oh_binder'
 
-  // Convert a scaffold-like strand into an OH binding strand (overhang-binding
-  // oligo). Single strand only — links each domain to the overhang it pairs with.
-  if (isScaffold && multiStrandIds.length === 0) {
-    menu.appendChild(_menuItem(
-      'Convert to OH binding strand',
-      async () => { try { await api.convertStrandToBinder(strandId) } catch { /* lastError */ } },
-      { title: 'Re-designate this strand as an overhang-binding oligo: link each domain to '
-             + 'the overhang it antiparallel-pairs with (tagging the partner as an overhang '
-             + 'if needed) and recolor it. Add a fluorophore afterward via "Add extension".' },
-    ))
-    menu.appendChild(_menuSep())
-  }
-
-  // Inverse: revert an OH binder back to scaffold.
-  if (isOhBinder && multiStrandIds.length === 0) {
-    menu.appendChild(_menuItem(
-      'Convert to scaffold',
-      async () => { try { await api.convertBinderToScaffold(strandId) } catch { /* lastError */ } },
-      { title: 'Revert this overhang-binding oligo back to a scaffold strand: clear its '
-             + 'binder links and remove any overhang the original conversion auto-created '
-             + '(once nothing else binds it).' },
-    ))
-    menu.appendChild(_menuSep())
-  }
-
-  // Isolate / Un-isolate (only for non-scaffold strands)
-  if (!isScaffold) {
-    const { isolatedStrandId } = store.getState()
-    const isIsolated = isolatedStrandId === strandId
-    menu.appendChild(_menuItem(
-      isIsolated ? 'Un-isolate' : 'Isolate',
-      () => store.setState({ isolatedStrandId: isIsolated ? null : strandId }),
-    ))
-    menu.appendChild(_menuSep())
-  }
-
-  // Make Reference / Make Active — applies to any strand (incl. scaffold).
+  // Items shared with the cadnano editor's strand menu — Make Reference/Active,
+  // the scaffold ⇄ OH-binder conversions, and Edit sequence… — come from ONE
+  // definition (ui/strand_menu_items.js) so their labels and visibility rules
+  // cannot drift between the two editors. They are rendered with this menu's own
+  // _menuItem so the 3D look and the _dismissMenu bookkeeping are unchanged.
+  // Extensions stay 3D-local: this menu has a richer pair of items (Add vs Edit
+  // by whether any extension exists, plus Remove) built further down.
   {
     const refEffIds = multiStrandIds.length > 0
       ? [...new Set([...multiStrandIds, ...singleEffectiveIds])]
       : singleEffectiveIds
     const allRef = refEffIds.length > 0 &&
       refEffIds.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
+    const shared = buildStrandMenuItems(
+      { strandIds: refEffIds, strandType: _stype, allReference: allRef },
+      {
+        onSetReference: (ids, makeRef) => api.patchStrandsReference(ids, makeRef),
+        onConvertToBinder: async () => {
+          try { await api.convertStrandToBinder(strandId) } catch { /* lastError */ }
+        },
+        onConvertToScaffold: async () => {
+          try { await api.convertBinderToScaffold(strandId) } catch { /* lastError */ }
+        },
+        // A scaffold's "Edit sequence…" lives in _showScaffoldMenu (that menu owns
+        // the whole scaffold branch), so only the hand-edit variant is wired here.
+        onEditSequence: _onEditStrandSequence ?? undefined,
+      },
+    )
+    for (const item of shared) {
+      menu.appendChild(item.type === 'separator'
+        ? _menuSep()
+        : _menuItem(item.label, item.onClick, { title: item.title }))
+    }
+    if (shared.length) menu.appendChild(_menuSep())
+  }
+
+  // Isolate / Un-isolate (3D-only — the cadnano editor has no isolate mode).
+  if (!isScaffold) {
+    const { isolatedStrandId } = store.getState()
+    const isIsolated = isolatedStrandId === strandId
     menu.appendChild(_menuItem(
-      allRef ? 'Make Active' : 'Make Reference',
-      () => { api.patchStrandsReference(refEffIds, !allRef) },
-      { title: 'Reference geometry is an inactive backdrop: ignored by all automatic '
-             + 'features (bend/twist, sequence assignment, scaffold routing, autostaple, '
-             + 'crossovers) and excluded from exports/validation, but still visible '
-             + '(translucent) and manually editable. Use it to build off an existing part.' },
+      isIsolated ? 'Un-isolate' : 'Isolate',
+      () => store.setState({ isolatedStrandId: isIsolated ? null : strandId }),
     ))
     menu.appendChild(_menuSep())
   }
@@ -1479,7 +1476,9 @@ function _showScaffoldMenu(x, y, ctx, cbs) {
   })))
 
   // 2 — Assign scaffold sequence (opens the scaffold modal for the whole strand).
-  menu.appendChild(_menuItem('Assign sequence…', () => onScaffoldAssignSequence?.(strandId)))
+  // Named "Edit sequence…" to match the staple item; a scaffold keeps the
+  // preset/custom modal (which already accepts a freehand sequence).
+  menu.appendChild(_menuItem('Edit sequence…', () => onScaffoldAssignSequence?.(strandId)))
 
   // 3 — Flexible segments. Always shown; "Mark" is greyed on paired (dsDNA)
   // regions since only an unpaired run can become a flexible tether.
@@ -1648,7 +1647,8 @@ function _showCrossoverMenu(x, y, xo, onCrossoverRightClick) {
  * @param {{ onNick?: Function, onLoopSkip?: Function, onOverhangArrow?: Function, onScaffoldAssignSequence?: Function, getUnfoldView?: () => object, getOverhangLocations?: () => object, getLoopSkipHighlight?: () => object, controls?: object }} [opts]
  */
 export function initSelectionManager(canvas, camera, designRenderer, opts = {}) {
-  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
+  const { onNick, onLoopSkip, onOverhangArrow, onScaffoldAssignSequence, onEditStrandSequence, onCrossoverRightClick, onFlexibleSegmentRightClick, onSetOverhangName, onOverhangRightClick, onOpenOverhangsManager, onEmptyContextMenu, onClusterMoveRotate, getUnfoldView, getOverhangLocations, getOverhangLinkArcs, getFlexibleArcs, getLoopSkipHighlight, controls, getHoverEntry, getCamera, isDisabled, getProteinRenderer, getRegionVdwRenderer, getRegionBallstickRenderer, getRegionSurfaceRenderer, onDrillLevel } = opts
+  _onEditStrandSequence = onEditStrandSequence ?? null
 
   // Use the active render camera (ortho in cadnano mode, perspective otherwise).
   const _cam = () => getCamera?.() ?? camera

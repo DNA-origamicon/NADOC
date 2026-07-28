@@ -854,6 +854,34 @@ Symptom: a relaxation ladder runs the gentle `_p10` warmup for 8 hours, then the
 
 **This-box note (2026-07-12, the 3080 Ti computer).** Independently re-hit K2 on `6hbx100_90deg` (a 90° bent 6hb, carved 1.2 nm shell → vacuum corners) and re-derived the same conclusion the harder way (the `+p1` tell converts the illegal-access into `Low global CUDA exclusion count! (209304 vs 241531)`; structure was healthy — bonds ≤1.73 Å, all 1-2/1-3/1-4 exclusions ≤4.24 Å; mgh restraints correct). The canonical fix (patched `NAMD_3.0.2p1_*` build) is **not yet compiled on this machine** — as a stopgap `~/.local/bin/namd3` symlinks to the CUDA-12.0 git build (`~/Applications/NAMD_Git-2025-12-04_Source/Linux-x86_64-g++/namd3`), which runs the failing conf clean because that Dec-2025 source post-dates the fix. NOTE this symlink shadows `find_namd()`'s auto-prefer of `NAMD_3.0.2p1_*` (PATH `namd3` is checked before the install-dir glob) — **once the patched build is compiled here, remove the symlink** so the probes + canonical build take over. It works *not* because of CUDA 12 (see K2: unpatched CUDA-12.6 rebuild still crashes) but because the git source already has the one-line fix.
 
+<a id="k10"></a>
+### K10. A containment-less outside-click dismissal makes every menu item dead to a real mouse (2026-07-27)
+`frontend/src/ui/spreadsheet.js` armed its context menu with
+`setTimeout(() => document.addEventListener('pointerdown', _removeCtxMenu, { once: true }), 0)`
+— **no check for whether the press landed inside the menu**. A real mouse click is
+pointerdown → mouseup → click. The pointerdown on an *item* therefore removed the menu
+from the DOM, and because `click` only fires on a node still connected at mouseup, the
+item's handler never ran. Every item in that menu had been dead since it was written
+("Clear sequence", "Set binder sequence…", "Go to strand").
+
+**Why nothing caught it.** jsdom dispatches `click` to a detached node without complaint,
+and `element.click()` skips pointerdown entirely — so both a unit test and a hand-written
+synthetic-click probe pass. It reproduces only under a real browser driver. I hit it while
+verifying a new "Edit sequence…" item in Playwright: the menu opened, the item was visible,
+Playwright clicked it, and nothing happened — with no console error, no network request,
+and no toast (my own error path swallowed a no-op). The tell was that a `page.evaluate`
+`target.click()` DID work while `locator.click()` did not: **that asymmetry means the real
+event sequence is being interrupted, not that the handler is wrong.**
+
+**How to avoid**: any dismiss-on-outside-click handler must be
+`if (!menuEl.contains(e.target)) close()` — the rule `ui/primitives/context_menu.js`
+already implements; prefer that primitive over a bespoke menu. And do not use
+`{once: true}` for it: an inside press consumes the listener and the menu can then never
+be dismissed by a later outside click (that half IS jsdom-testable, and is what
+`spreadsheet.test.js` pins). Generally: when a UI element does nothing on click and the
+console is clean, suspect the element was detached between mousedown and mouseup before
+suspecting the handler.
+
 <a id="k7"></a>
 ### K7. Right-drag-to-pan pops the app context menu on native Linux but not on Windows/WSL — the browser fires `contextmenu` on button PRESS, not release (2026-07-23)
 Symptom: on the native-Linux machine every right-click-drag opened the app's own context menu instead of panning; identical build on the WSL/Windows machine panned fine.

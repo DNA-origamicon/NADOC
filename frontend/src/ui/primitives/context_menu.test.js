@@ -8,7 +8,7 @@
  * (the flyout is a DOM child of the menu).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { createContextMenu } from './context_menu.js'
+import { createContextMenu, placeMenu } from './context_menu.js'
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
@@ -54,5 +54,49 @@ describe('createContextMenu — custom item passthrough', () => {
     await flush()
     document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
     expect(document.querySelector('.context-menu')).toBeFalsy()
+  })
+})
+
+// ── placeMenu (pure viewport fitting) ────────────────────────────────────────
+// Ported from the 3D viewport's _placeMenu when the two strand menus were folded
+// onto this primitive; without these rules the tall strand menu was clipped.
+describe('placeMenu', () => {
+  const VP = { viewportW: 1000, viewportH: 800 }
+
+  it('leaves a menu that already fits exactly where it was anchored', () => {
+    expect(placeMenu({ x: 100, y: 100, width: 200, height: 300, ...VP }))
+      .toEqual({ left: 100, top: 100, maxHeight: null })
+  })
+
+  it('shifts left when it would overflow the right edge', () => {
+    const { left } = placeMenu({ x: 950, y: 100, width: 200, height: 300, ...VP })
+    expect(left).toBe(1000 - 200 - 8)
+  })
+
+  it('grows upward instead of clipping at the bottom edge', () => {
+    const { top } = placeMenu({ x: 100, y: 700, width: 200, height: 300, ...VP })
+    expect(top).toBe(800 - 300 - 8)
+  })
+
+  it('caps and scrolls a menu taller than the viewport', () => {
+    const r = placeMenu({ x: 100, y: 400, width: 200, height: 2000, ...VP })
+    expect(r.maxHeight).toBe(800 - 16)
+    expect(r.top).toBe(8)
+  })
+
+  it('never lands closer than the margin to the top or left edge', () => {
+    const r = placeMenu({ x: -50, y: -50, width: 200, height: 100, ...VP })
+    expect(r.left).toBe(8)
+    expect(r.top).toBe(8)
+  })
+
+  it('clamps left to the margin when the menu is wider than the viewport', () => {
+    const { left } = placeMenu({ x: 10, y: 10, width: 2000, height: 100, ...VP })
+    expect(left).toBe(8)
+  })
+
+  it('honours a custom margin', () => {
+    const { left } = placeMenu({ x: 995, y: 10, width: 200, height: 100, margin: 20, ...VP })
+    expect(left).toBe(1000 - 200 - 20)
   })
 })

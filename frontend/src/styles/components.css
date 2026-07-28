@@ -850,3 +850,98 @@ body:has(#right-panel.locked-inactive) .toast {
   font-size: var(--text-sm);
   font-style: italic;
 }
+
+/* ── Edit-sequence dialog (strand_sequence_dialog.js) ──────────────────────
+   Three monospace rows in one horizontally scrollable track: the paired
+   scaffold bases, the editable sequence, and a position ruler. They must share
+   identical font metrics or the character alignment — the whole point of the
+   dialog — breaks. */
+.seqdlg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.seqdlg__meta {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.seqdlg__rowlabel {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.seqdlg__track {
+  overflow: hidden;          /* the textarea owns the scrolling; rows follow it */
+  border: var(--border-thin) solid var(--color-border-default);
+  border-radius: 4px;
+  background: var(--color-bg-raised);
+  padding: var(--space-2);
+}
+
+.seqdlg__row {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  white-space: pre;
+  display: block;
+  min-height: 1.5em;
+}
+
+.seqdlg__row--partner,
+.seqdlg__row--ruler {
+  color: var(--color-text-muted);
+  will-change: transform;
+}
+
+.seqdlg__row--ruler {
+  color: var(--color-text-dim);
+  font-size: 11px;
+}
+
+.seqdlg__input {
+  width: 100%;
+  min-width: 100%;
+  box-sizing: content-box;
+  resize: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  padding: 0;
+  margin: 2px 0;
+}
+
+.seqdlg__ch--mismatch {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  font-weight: 600;
+}
+
+.seqdlg__ch--overhang {
+  background: var(--color-warning-soft);
+}
+
+.seqdlg__status {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.seqdlg__status--warn { color: var(--color-warning); }
+
+.seqdlg__error {
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  min-height: 1em;
+}
+
+.seqdlg__note {
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}

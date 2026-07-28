@@ -389,13 +389,25 @@ export async function batchDeleteForcedLigations(flIds) {
 }
 
 /**
- * Update editable strand metadata (color and/or notes).
+ * Update editable strand metadata (color, notes, and/or sequence).
  * color: '#RRGGBB' hex string, or null to reset to palette.
+ * sequence: a full 5'→3' ATGCN string to set by hand, or null to clear.
  */
-export async function patchStrand(strandId, { color = undefined, notes = undefined } = {}) {
-  return mutate(req =>
-    req('PATCH', `/design/strand/${strandId}`, { color, notes })
-  )
+export async function patchStrand(strandId, { color = undefined, notes = undefined, sequence = undefined } = {}) {
+  const body = {}
+  if (color    !== undefined) body.color    = color
+  if (notes    !== undefined) body.notes    = notes
+  if (sequence !== undefined) body.sequence = sequence
+  return mutate(req => req('PATCH', `/design/strand/${strandId}`, body))
+}
+
+/**
+ * Read everything the "Edit sequence…" dialog needs for one strand:
+ * `{length, sequence, derived, partner, segments}` — see the backend route
+ * GET /design/strand/{id}/sequence-context. Read-only; never mutates the design.
+ */
+export async function getStrandSequenceContext(strandId) {
+  return _request('GET', `/design/strand/${encodeURIComponent(strandId)}/sequence-context`)
 }
 
 export async function patchOverhang(overhangId, { sequence = undefined, label = undefined } = {}) {

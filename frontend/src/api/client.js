@@ -1904,6 +1904,15 @@ export async function patchStrand(strandId, { notes, color, sequence } = {}) {
   return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
+/**
+ * Read everything the "Edit sequence…" dialog needs for one strand:
+ * `{length, sequence, derived, partner, segments}` — see the backend route
+ * GET /design/strand/{id}/sequence-context. Read-only; never mutates the design.
+ */
+export async function getStrandSequenceContext(strandId) {
+  return _request('GET', `/design/strand/${encodeURIComponent(strandId)}/sequence-context`)
+}
+
 /** Apply the same color to multiple strands in one atomic request.
  *  color: '#RRGGBB' hex string, or null to reset to palette.
  */

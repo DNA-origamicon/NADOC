@@ -316,8 +316,13 @@ export function getStapleColorOrder(state) {
 // ── Context menu ──────────────────────────────────────────────────────────
 
 let _activeCtxMenu = null
+let _ctxOutsideHandler = null
 
 function _removeCtxMenu() {
+  if (_ctxOutsideHandler) {
+    document.removeEventListener('pointerdown', _ctxOutsideHandler)
+    _ctxOutsideHandler = null
+  }
   if (_activeCtxMenu) { _activeCtxMenu.remove(); _activeCtxMenu = null }
 }
 
@@ -361,7 +366,18 @@ function _showContextMenu(e, items) {
   menu.style.visibility = ''
 
   _activeCtxMenu = menu
-  setTimeout(() => document.addEventListener('pointerdown', _removeCtxMenu, { once: true }), 0)
+  // Dismiss on an OUTSIDE pointerdown only. Without the containment check, a
+  // pointerdown on an item removed the menu before mouseup, so the node was
+  // detached and its `click` never fired — every item in this menu was dead on a
+  // real mouse click (it only "worked" for a synthetic .click()). Same rule as
+  // ui/primitives/context_menu.js. Deferred so the opening click doesn't dismiss it.
+  setTimeout(() => {
+    if (!_activeCtxMenu) return
+    _ctxOutsideHandler = (ev) => {
+      if (_activeCtxMenu && !_activeCtxMenu.contains(ev.target)) _removeCtxMenu()
+    }
+    document.addEventListener('pointerdown', _ctxOutsideHandler)
+  }, 0)
 }
 
 function _showRowContextMenu(e, strand, goToStrand) {
@@ -377,8 +393,10 @@ function _showRowContextMenu(e, strand, goToStrand) {
  * @param {object} opts
  * @param {function} opts.goToStrand     — goToStrand(strandId): snaps camera to strand bounding box
  * @param {object}   opts.designRenderer — designRenderer with setStrandColor(strandId, hexInt)
+ * @param {function} [opts.onEditSequence] — onEditSequence(strandId): open the hand-edit
+ *   sequence dialog. Omitted → the Sequence cell's "Edit sequence…" item is hidden.
  */
-export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer = null, selectionManager = null } = {}) {
+export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer = null, selectionManager = null, onEditSequence = null } = {}) {
   const panel       = document.getElementById('spreadsheet-panel')
   const body        = document.getElementById('spreadsheet-body')
   const theadRow    = document.getElementById('spreadsheet-thead-row')
@@ -741,6 +759,12 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
             td.addEventListener('contextmenu', e => {
               e.stopPropagation()
               const items = [{ label: 'Go to strand', action: () => goToStrand(strand.id) }]
+              // Hand-edit the whole strand 5'→3' (same dialog as the 3D / cadnano
+              // strand right-click).
+              if (onEditSequence) {
+                items.push(null)
+                items.push({ label: 'Edit sequence…', action: () => onEditSequence(strand.id) })
+              }
               // "Vice versa" path: set a binder's sequence → write the reverse
               // complement onto the single overhang it binds (overhang stays the
               // canonical source of truth).

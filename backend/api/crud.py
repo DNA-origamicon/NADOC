@@ -5002,9 +5002,14 @@ def patch_overhang(overhang_id: str, body: OverhangPatchRequest) -> dict:
     # (binds_overhang_id) that reads this overhang's reverse-complement, so the
     # result is simulation-ready without a manual Assign Staple Sequences. No-op
     # until the scaffold is sequenced.
+    #
+    # TARGETED, not design-wide: only the strands derived from THIS overhang are
+    # re-derived. A whole-design assign_staple_sequences here would silently wipe
+    # any sequence the user typed by hand on an unrelated staple.
     if sequence_was_set and not body.defer_reassign:
-        from backend.core.sequences import reassign_if_sequenced
-        updated = reassign_if_sequenced(updated)
+        from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
+        affected = overhang_dependent_strand_ids(updated, [overhang_id])
+        updated = reassign_strands(updated, affected)
 
     # A sequence (or label) write changes a build-fingerprint field, so it must
     # be a real feature-log step — otherwise seeking the slider back to this
@@ -5502,50 +5507,122 @@ _IDENTITY_QUAT_LIST = [0.0, 0.0, 0.0, 1.0]
 class StrandPatchRequest(BaseModel):
     notes: str | None = None
     color: str | None = None   # "#RRGGBB" hex string, or None to reset to palette
-    sequence: str | None = None  # Only null is accepted (to clear the assembled sequence)
+    # A full 5'→3' ATGCN sequence to SET by hand, or null to CLEAR back to the
+    # unsequenced state. A set must match the strand's nucleotide count exactly.
+    sequence: str | None = None
 
 
 @router.patch("/design/strand/{strand_id}", status_code=200)
 def patch_strand(strand_id: str, body: StrandPatchRequest) -> dict:
     """Update editable metadata on a strand (notes, color, and/or sequence).
 
-    Pass ``sequence: null`` to clear an assembled strand sequence back to
-    the unsequenced state (displayed as N×length in the spreadsheet).
+    ``sequence`` accepts either:
+
+    * **a string** — set the strand's sequence by hand, 5'→3' over the WHOLE
+      strand.  Whitespace is stripped and the input uppercased; only A/T/G/C/N
+      are allowed (422 otherwise) and the length must equal the strand's
+      nucleotide count (422 otherwise).  Bases that fall inside an overhang
+      domain are written back onto that ``OverhangSpec`` so the two stores stay
+      in sync — skipped for an overhang whose sub-domains carry
+      ``sequence_override``s (those bases are owned per sub-domain; edit them in
+      the Domain Designer).  Recorded as a ``strand-sequence`` feature-log step,
+      because a sequence is a build-fingerprint field: a feature-log seek must be
+      able to reproduce it or an oxDNA job's out-of-date ⚠ can never clear.
+    * **null** — clear the assembled sequence back to the unsequenced state
+      (displayed as N×length in the spreadsheet), also clearing the sequence on
+      any overhang the strand carries.
+
+    A hand-set sequence is deliberately NOT protected from the explicit bulk
+    commands: "Assign staple sequences" and "Full autostaple" re-derive it, and
+    both push an undo snapshot so the manual value can be brought back.  The
+    *implicit* auto-assign hooks (overhang patch / connection create / version
+    apply) are targeted and leave unrelated strands alone — see
+    ``sequences.reassign_strands``.
 
     Pushes an undo snapshot before modifying so the change can be reverted.
     """
+    from backend.core.sequences import (
+        normalize_sequence_input, strand_sequence_length, strand_sequence_segments,
+    )
 
     design = design_state.get_or_404()
     strand = design.find_strand(strand_id)
     if strand is None:
         raise HTTPException(404, detail=f"Strand {strand_id!r} not found.")
 
+    setting_sequence = "sequence" in body.model_fields_set and body.sequence is not None
+    clearing_sequence = "sequence" in body.model_fields_set and body.sequence is None
+
     patch: dict = {}
     if body.notes is not None or "notes" in body.model_fields_set:
         patch["notes"] = body.notes
     if body.color is not None or "color" in body.model_fields_set:
         patch["color"] = body.color
-    if "sequence" in body.model_fields_set and body.sequence is None:
+
+    new_seq: str | None = None
+    if setting_sequence:
+        try:
+            new_seq = normalize_sequence_input(body.sequence or "")
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc))
+        expected = strand_sequence_length(design, strand)
+        if len(new_seq) != expected:
+            raise HTTPException(
+                422,
+                detail=(f"Sequence length {len(new_seq)} does not match strand "
+                        f"{strand_id!r}, which has {expected} nucleotides."),
+            )
+        patch["sequence"] = new_seq
+    elif clearing_sequence:
         patch["sequence"] = None
 
     new_strands = [
         s.model_copy(update=patch) if s.id == strand_id else s
         for s in design.strands
     ]
+
     new_overhangs = design.overhangs
-    if "sequence" in patch:
+    if clearing_sequence:
         strand_overhang_ids = {d.overhang_id for d in strand.domains if d.overhang_id is not None}
         if strand_overhang_ids:
             new_overhangs = [
                 o.model_copy(update={"sequence": None}) if o.id in strand_overhang_ids else o
                 for o in design.overhangs
             ]
+    elif setting_sequence:
+        # Write each overhang span back onto its OverhangSpec. Set the field
+        # DIRECTLY rather than via _build_overhang_patch — that helper resizes the
+        # overhang domain to len(sequence), and here the slice is the domain's
+        # existing length by construction, so no resize must happen.
+        oh_slices = {
+            seg["overhang_id"]: new_seq[seg["start"]: seg["start"] + seg["length"]]
+            for seg in strand_sequence_segments(design, strand)
+            if seg["kind"] == "overhang" and seg["editable"] and seg["overhang_id"]
+        }
+        if oh_slices:
+            new_overhangs = [
+                o.model_copy(update={"sequence": oh_slices[o.id]}) if o.id in oh_slices else o
+                for o in design.overhangs
+            ]
+
     updated = design.model_copy(update={"strands": new_strands, "overhangs": new_overhangs})
 
     bits = []
-    if 'color' in patch:    bits.append(f"color={patch['color']}")
-    if 'notes' in patch:    bits.append('notes')
-    if 'sequence' in patch: bits.append('seq cleared')
+    if 'color' in patch:  bits.append(f"color={patch['color']}")
+    if 'notes' in patch:  bits.append('notes')
+    if clearing_sequence: bits.append('seq cleared')
+
+    if setting_sequence:
+        # Feature-log step (not a minor log): a sequence is a build-fingerprint field.
+        preview = new_seq if len(new_seq) <= 24 else f"{new_seq[:21]}…"
+        updated, report, _entry = design_state.mutate_with_feature_log(
+            op_kind='strand-sequence',
+            label=f"Strand sequence: {preview} ({len(new_seq)} nt)",
+            params={'strand_id': strand_id, 'sequence': new_seq},
+            fn=lambda _d: updated,
+        )
+        return _design_response(updated, report)
+
     label = f"Patch strand {strand_id}" + (f" · {', '.join(bits)}" if bits else "")
     updated, report, _entry = design_state.mutate_with_minor_log(
         op_subtype='strand-patch',
@@ -5695,30 +5772,12 @@ def _resplice_overhang_in_strand(design, overhang_id: str, strand_id: str):
     appears in the correct position while the rest of the strand is preserved.
     Silently no-ops when the strand has no sequence or there is no scaffold sequence.
     """
-    from backend.core.sequences import assign_staple_sequences
+    from backend.core.sequences import reassign_strands
 
     strand = design.find_strand(strand_id)
     if strand is None or strand.sequence is None:
         return design
-
-    scaffold = design.scaffold()
-    if scaffold is None or scaffold.sequence is None:
-        return design
-
-    try:
-        re_derived = assign_staple_sequences(design)
-    except Exception:
-        return design
-
-    new_seq = next((s.sequence for s in re_derived.strands if s.id == strand_id), None)
-    if new_seq is None:
-        return design
-
-    new_strands = [
-        s.model_copy(update={"sequence": new_seq}) if s.id == strand_id else s
-        for s in design.strands
-    ]
-    return design.model_copy(update={"strands": new_strands})
+    return reassign_strands(design, {strand_id})
 
 
 @router.delete("/design/overhangs", status_code=200)
@@ -7175,9 +7234,13 @@ def create_overhang_connection(body: OverhangConnectionCreateRequest) -> dict:
         nxt = generate_linker_topology(nxt, conn)
         # Auto-assign so the new linker complement (binds_overhang_id) carries the
         # real reverse-complement of its overhang for simulation — no-op until the
-        # scaffold is sequenced.
-        from backend.core.sequences import reassign_if_sequenced
-        nxt = reassign_if_sequenced(nxt)
+        # scaffold is sequenced. Targeted to the two overhangs' own strands, their
+        # binders, and the strands on the new __lnk__ bridge helix, so a hand-typed
+        # sequence on an unrelated staple survives the connection.
+        from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
+        affected = overhang_dependent_strand_ids(
+            nxt, [conn.overhang_a_id, conn.overhang_b_id], extra_helix_ids=[bridge_id])
+        nxt = reassign_strands(nxt, affected)
         # The virtual __lnk__ bridge helix is invisible to clustering — orphan it
         # so the reconciler doesn't pull it into a cluster via lattice proximity.
         return nxt, MutationReport(new_helix_origins={bridge_id: None})
@@ -7696,6 +7759,7 @@ def apply_connection_version(version_id: str) -> dict:
             b for b in d.overhang_bindings if not _involves(b)]})
         # 3. Create the version's connection type.
         report = None
+        bridge_helix_ids: list[str] = []
         if direct:
             # BOTH root-to-root and end-to-root: one non-consuming bound binding,
             # relocated on apply (duplex forms now; B's embedded-strand bond left
@@ -7713,12 +7777,17 @@ def apply_connection_version(version_id: str) -> dict:
             d = assign_overhang_connection_names(
                 d.model_copy(update={"overhang_connections": [*d.overhang_connections, conn]}))
             d = generate_linker_topology(d, conn)
+            bridge_helix_ids.append(f"__lnk__{conn.id}")
             report = MutationReport(new_helix_origins={f"__lnk__{conn.id}": None})
         # 3b. Auto-assign so the materialized connection's complement / binder
         #     domains (binds_overhang_id) carry real reverse-complement bases for
-        #     simulation — no-op until the scaffold is sequenced.
-        from backend.core.sequences import reassign_if_sequenced
-        d = reassign_if_sequenced(d)
+        #     simulation — no-op until the scaffold is sequenced. Targeted to the
+        #     pair's own strands, their binders and any new __lnk__ bridge helix,
+        #     so hand-typed sequences elsewhere in the design are left alone.
+        from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
+        affected = overhang_dependent_strand_ids(
+            d, [a_id, b_id], extra_helix_ids=bridge_helix_ids)
+        d = reassign_strands(d, affected)
         # 4. Mark this version applied; clear `applied` on every version that
         #    shares either overhang (mirrors the topology teardown in step 2).
         d = d.model_copy(update={"connection_versions": [
