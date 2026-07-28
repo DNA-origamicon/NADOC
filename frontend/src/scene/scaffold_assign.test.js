@@ -74,6 +74,40 @@ describe('countScaffoldNt', () => {
     // bp 0,1,3 → 1 nt each (3); bp 2 skip → 0; bp 4 loop → 2; total 5
     expect(countScaffoldNt(design)).toBe(5)
   })
+  it('targets one scaffold strand by id (right-click "Assign sequence…")', () => {
+    const design = {
+      helices: [],
+      strands: [
+        { id: 'sA', strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 4 }] },   // 5
+        { id: 'sB', strand_type: 'scaffold', domains: [{ helix_id: 1, direction: 'FORWARD', start_bp: 0, end_bp: 99 }] },  // 100
+      ],
+    }
+    expect(countScaffoldNt(design, 'sB')).toBe(100)
+    expect(countScaffoldNt(design, 'sA')).toBe(5)
+    expect(countScaffoldNt(design)).toBe(5)  // no id → first scaffold
+  })
+  it('returns 0 for an unknown or non-scaffold target id', () => {
+    const design = {
+      helices: [],
+      strands: [
+        { id: 'sA', strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 4 }] },
+        { id: 'st1', strand_type: 'staple', domains: [{ helix_id: 0, direction: 'REVERSE', start_bp: 4, end_bp: 0 }] },
+      ],
+    }
+    expect(countScaffoldNt(design, 'nope')).toBe(0)
+    expect(countScaffoldNt(design, 'st1')).toBe(0)
+  })
+  it('honours loop/skip deltas for a targeted strand', () => {
+    const design = {
+      helices: [{ id: 1, loop_skips: [{ bp_index: 2, delta: -1 }, { bp_index: 3, delta: 1 }] }],
+      strands: [
+        { id: 'sA', strand_type: 'scaffold', domains: [{ helix_id: 0, direction: 'FORWARD', start_bp: 0, end_bp: 9 }] },
+        { id: 'sB', strand_type: 'scaffold', domains: [{ helix_id: 1, direction: 'FORWARD', start_bp: 0, end_bp: 4 }] },
+      ],
+    }
+    // sB: bp 0,1,4 → 1 nt each (3); bp 2 skip → 0; bp 3 loop → 2; total 5
+    expect(countScaffoldNt(design, 'sB')).toBe(5)
+  })
   it('loop_skips are keyed per-helix, not applied across helices', () => {
     const design = {
       helices: [{ id: 0, loop_skips: [{ bp_index: 1, delta: -1 }] }],

@@ -132,7 +132,7 @@ export function initScaffoldModal({ store, api, showProgress, hideProgress, getU
 
     // Count scaffold nucleotides, honouring skips (delta=-1 → 0 nt) and
     // loops (delta=+1 → 2 nt), matching the backend _strand_nt_with_skips logic.
-    const totalNt = countScaffoldNt(currentDesign)
+    const totalNt = countScaffoldNt(currentDesign, targetStrandId)
 
     _buildScaffoldModalOnce()
     if (!_ascModalCtrl) return

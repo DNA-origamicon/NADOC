@@ -45,6 +45,7 @@ import { initFeatureLogPanel } from '../ui/feature_log_panel.js'
 import { initPlateView } from '../ui/plate_view.js'
 import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
 import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey } from './element_keys.js'
+import { SCAFFOLD_LENGTHS, ascWarningText, countScaffoldNt } from '../scene/scaffold_assign.js'
 
 // ── Tab identity ─────────────────────────────────────────────────────────────
 // Each editor tab gets a unique, stable window.name so the 3D view (and other
@@ -462,33 +463,28 @@ async function _pickOpenFile() {
   })
 }
 
-// ── Scaffold sequence lengths ─────────────────────────────────────────────────
-const _SCAFFOLD_LENGTHS = { M13mp18: 7249, p7560: 7560, p8064: 8064 }
+// ── Assign scaffold sequence modal ───────────────────────────────────────────
+// Opened either from the Sequencing menu (whole design → first scaffold) or from
+// a scaffold strand's right-click "Assign sequence…" (one specific strand), which
+// mirrors the 3D viewport's scaffold context menu.
 
-function _openScaffoldModal() {
+// Which strand the currently-open modal targets (null = first scaffold), and the
+// nt count for that strand — read by the warning updater and the apply handler.
+let _ascTargetStrandId = null
+let _ascTotalNt = 0
+let _ascListenersWired = false
+
+function _openScaffoldModal(targetStrandId = null) {
   const design = editorStore.getState().design
   if (!design) { showToast('No design loaded.', { severity: 'error' }); return }
+  if (targetStrandId != null) {
+    const st = design.strands?.find(s => s.id === targetStrandId)
+    if (st?.strand_type !== 'scaffold') { showToast('Not a scaffold strand.', { severity: 'error' }); return }
+  }
 
-  // Count scaffold nt (honouring loop/skip deltas)
-  const lsMap = new Map()
-  for (const helix of design.helices ?? []) {
-    for (const ls of helix.loop_skips ?? []) {
-      lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
-    }
-  }
-  const scaffold = design.strands?.find(s => s.strand_type === 'scaffold')
-  let totalNt = 0
-  if (scaffold) {
-    for (const d of scaffold.domains) {
-      const isFwd = d.direction === 'FORWARD'
-      const step  = isFwd ? 1 : -1
-      for (let bp = d.start_bp; isFwd ? bp <= d.end_bp : bp >= d.end_bp; bp += step) {
-        const delta = lsMap.get(`${d.helix_id}:${bp}`) ?? 0
-        if (delta <= -1) continue
-        totalNt += delta + 1
-      }
-    }
-  }
+  _ascTargetStrandId = targetStrandId
+  const totalNt = countScaffoldNt(design, targetStrandId)
+  _ascTotalNt = totalNt
 
   const modal       = document.getElementById('assign-scaffold-modal')
   const lengthEl    = document.getElementById('asc-length-line')
@@ -501,36 +497,17 @@ function _openScaffoldModal() {
   if (charCountEl) charCountEl.textContent = '0 nt'
   if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
 
-  lengthEl.textContent = `Scaffold length: ${totalNt} nt`
+  lengthEl.textContent = targetStrandId != null
+    ? `Scaffold length: ${totalNt} nt (selected strand only)`
+    : `Scaffold length: ${totalNt} nt`
   modal.style.display = 'flex'
 
-  function _updateWarning() {
-    const customRaw = customSeqEl?.value?.replace(/\s/g, '').toUpperCase() ?? ''
-    if (customRaw) {
-      if (customRaw.length < totalNt) {
-        warnEl.textContent = `⚠ Custom sequence (${customRaw.length} nt) is shorter than scaffold (${totalNt} nt). `
-          + `${totalNt - customRaw.length} bases will be assigned 'N'.`
-        warnEl.style.display = 'block'
-      } else {
-        warnEl.style.display = 'none'
-      }
-      return
-    }
-    const sel    = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
-    const seqLen = _SCAFFOLD_LENGTHS[sel] ?? 0
-    if (totalNt > seqLen) {
-      warnEl.textContent = `⚠ Scaffold (${totalNt} nt) exceeds ${sel} (${seqLen} nt). `
-        + `${totalNt - seqLen} bases will be assigned 'N'.`
-      warnEl.style.display = 'block'
-    } else {
-      warnEl.style.display = 'none'
-    }
-  }
-  _updateWarning()
-  modal.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _updateWarning))
-
-  if (customSeqEl) {
-    customSeqEl.addEventListener('input', () => {
+  // Wire the field events once — reopening the modal must not stack duplicate
+  // listeners (they would each close over a stale nt count).
+  if (!_ascListenersWired) {
+    _ascListenersWired = true
+    modal.querySelectorAll('input[name="asc-scaffold"]').forEach(r => r.addEventListener('change', _ascUpdateWarning))
+    customSeqEl?.addEventListener('input', () => {
       const raw = customSeqEl.value.replace(/\s/g, '').toUpperCase()
       if (charCountEl) charCountEl.textContent = `${raw.length} nt`
       const bad = [...new Set(raw.replace(/[ATGCN]/g, ''))]
@@ -539,9 +516,26 @@ function _openScaffoldModal() {
       } else {
         if (customErrEl) { customErrEl.textContent = ''; customErrEl.style.display = 'none' }
       }
-      _updateWarning()
+      _ascUpdateWarning()
     })
   }
+  _ascUpdateWarning()
+}
+
+function _ascUpdateWarning() {
+  const modal  = document.getElementById('assign-scaffold-modal')
+  const warnEl = document.getElementById('asc-warning')
+  if (!modal || !warnEl) return
+  const customRaw    = (document.getElementById('asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
+  const scaffoldName = modal.querySelector('input[name="asc-scaffold"]:checked')?.value ?? 'M13mp18'
+  const text = ascWarningText({
+    customRaw,
+    totalNt: _ascTotalNt,
+    scaffoldName,
+    scaffoldLen: SCAFFOLD_LENGTHS[scaffoldName] ?? 0,
+  })
+  warnEl.textContent = text ?? ''
+  warnEl.style.display = text ? 'block' : 'none'
 }
 
 // ── Slice/path panel resize ──────────────────────────────────────────────────
@@ -1108,13 +1102,17 @@ editorStore.subscribe((state, prev) => {
 })
 
 // ── Menu bar — Sequencing ─────────────────────────────────────────────────────
-document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', _openScaffoldModal)
+document.getElementById('menu-seq-assign-scaffold')?.addEventListener('click', () => _openScaffoldModal(null))
 
 document.getElementById('asc-cancel')?.addEventListener('click', () => {
   document.getElementById('assign-scaffold-modal').style.display = 'none'
+  _ascTargetStrandId = null
 })
 document.getElementById('assign-scaffold-modal')?.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('assign-scaffold-modal').style.display = 'none'
+  if (e.key === 'Escape') {
+    document.getElementById('assign-scaffold-modal').style.display = 'none'
+    _ascTargetStrandId = null
+  }
   if (e.key === 'Enter')  document.getElementById('asc-apply')?.click()
 })
 document.getElementById('asc-apply')?.addEventListener('click', async () => {
@@ -1123,10 +1121,15 @@ document.getElementById('asc-apply')?.addEventListener('click', async () => {
   const customRaw    = (document.getElementById('asc-custom-seq')?.value ?? '').replace(/\s/g, '').toUpperCase()
   const customErrEl  = document.getElementById('asc-custom-error')
   if (customRaw && customErrEl?.textContent) return
+  const targetStrandId = _ascTargetStrandId
   modal.style.display = 'none'
+  _ascTargetStrandId = null   // clear targeting after use
   const label = customRaw ? `custom (${customRaw.length} nt)` : scaffoldName
   _showProgress(`Assigning ${label} sequence…`)
-  const json = await assignScaffoldSequence(scaffoldName, { customSequence: customRaw || null })
+  const json = await assignScaffoldSequence(scaffoldName, {
+    customSequence: customRaw || null,
+    strandId: targetStrandId,
+  })
   _hideProgress()
   if (!json) { showToast('Assign scaffold sequence failed: ' + (editorStore.getState().lastError?.message ?? 'unknown'), { severity: 'error' }); return }
   await syncScaffoldSequenceResponse(json)
@@ -1584,6 +1587,16 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
       + 'excluded from exports/validation, but still visible (translucent) and manually editable.',
     () => patchStrandsReference(sel, !allRef),
   )
+  // Assign a scaffold sequence to just this strand (mirrors the 3D viewport's
+  // scaffold context menu — opens the same modal, targeted at one strand).
+  if (sel.length === 1 && strand.strand_type === 'scaffold' && !strand.is_reference) {
+    mkItem(
+      'Assign sequence…',
+      'Assign a scaffold sequence (M13mp18 / p7560 / p8064 / custom) to this '
+        + 'scaffold strand only, leaving other scaffold strands untouched.',
+      () => _openScaffoldModal(strand.id),
+    )
+  }
   // Convert a single scaffold-like strand into an OH binding strand.
   if (sel.length === 1 && strand.strand_type === 'scaffold') {
     mkItem(

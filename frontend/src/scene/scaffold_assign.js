@@ -32,8 +32,12 @@ export function ascWarningText({ customRaw = '', totalNt = 0, scaffoldName = 'M1
  * skip (delta=-1 → 0 nt) and loop (delta=+1 → 2 nt). Mirrors the backend
  * _strand_nt_with_skips logic. Returns 0 if there is no scaffold strand.
  * (Was the lsMap-build + domain-walk inside _openScaffoldModal.)
+ *
+ * `strandId` targets one specific scaffold strand (the right-click "Assign
+ * sequence…" path); omit it for the first scaffold in the design. A strandId
+ * that is missing or not a scaffold counts 0.
  */
-export function countScaffoldNt(currentDesign) {
+export function countScaffoldNt(currentDesign, strandId = null) {
   // Build (helixId + ':' + bpIndex) → delta map from helix loop_skips.
   const lsMap = new Map()
   for (const helix of currentDesign?.helices ?? []) {
@@ -41,7 +45,9 @@ export function countScaffoldNt(currentDesign) {
       lsMap.set(`${helix.id}:${ls.bp_index}`, ls.delta)
     }
   }
-  const scaffold = currentDesign?.strands?.find(s => s.strand_type === 'scaffold')
+  const scaffold = strandId != null
+    ? currentDesign?.strands?.find(s => s.id === strandId && s.strand_type === 'scaffold')
+    : currentDesign?.strands?.find(s => s.strand_type === 'scaffold')
   let totalNt = 0
   if (scaffold) {
     for (const d of scaffold.domains) {
