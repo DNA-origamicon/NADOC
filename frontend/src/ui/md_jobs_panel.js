@@ -2079,6 +2079,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         // above it.  Without this the timestep could only be chosen at prep time and the
         // dropdown silently had no effect on production.
         production_timestep_fs: _effectiveProdTimestepFs(),
+        // Same reason as the timestep: production hard-coded GPU-resident ON for 2/4 fs,
+        // so ⚡ could report "GPU-resident: off" while the run used it anyway.
+        gpu_resident: residentSel?.value ?? 'auto',
       })
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       const childId = d.job?.job_id

@@ -424,6 +424,8 @@ def build_production_conf(
     start_checkpoint: Optional[str] = None,
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
+    n_atoms: Optional[int] = None,
+    force_resident: Optional[bool] = None,
 ) -> str:
     """Unrestrained NPT production conf, continuing from a prior checkpoint (pure).
 
@@ -466,9 +468,19 @@ def build_production_conf(
     # Resolve the integrator path.  When timestep_fs is None, fall back to the
     # fast-derived binary so existing callers stay byte-identical.
     ts = float(timestep_fs) if timestep_fs is not None else (4.0 if fast else 1.0)
+    # GPU-resident is a SEPARATE axis from the timestep — it changes WHERE the integration
+    # runs, not what it computes.  The 4/2 fs branches used to hard-code it on regardless of
+    # system size, which is the one place the size gate never reached: a 32.5k-atom 2 fs
+    # production ran resident at 1.357 ms/step when offload does ~1.2, and turning the
+    # Advanced-card dropdown to "off" changed nothing because production never read it.
+    # `force_resident` is that dropdown (None = auto → decide from n_atoms); `rigidBonds`
+    # still follows the timestep, since that IS a physics choice.
+    resident_ok = (n_atoms is None or n_atoms >= _RESIDENT_MIN_ATOMS
+                   if force_resident is None else bool(force_resident))
+    _res_line = "GPUresident        on\n" if resident_ok else ""
     if ts == 4.0:
         psf = structure_psf or f"{name_stem}.psf"
-        rigid, gpu_line = "all", "GPUresident        on\n"
+        rigid, gpu_line = "all", _res_line
         # fullElectFrequency 1 at 4 fs → reciprocal PME every 4 fs, matching the
         # Aksimentiev reference (2 fs x 2).  fullElect 2 here would be PME every
         # 8 fs, past the r-RESPA resonance-stability limit (~4 fs) — and it only
@@ -476,12 +488,14 @@ def build_production_conf(
         nbf, fef, spc = 1, 1, 10
     elif ts == 2.0:
         # Manual medium path: standard (non-HMR) masses, rigidBonds all lets 2 fs run
-        # stably, GPUresident stays on (full box, no vacuum wrap).  This is the classic
-        # Aksimentiev 2 fs production config — no repartitioning needed.
+        # stably.  This is the classic Aksimentiev 2 fs production config — no
+        # repartitioning needed.
         psf = structure_psf or f"{name_stem}.psf"
-        rigid, gpu_line = "all", "GPUresident        on\n"
+        rigid, gpu_line = "all", _res_line
         nbf, fef, spc = 1, 1, 10
     else:
+        # 1 fs conservative reference: rigidBonds none, and historically never resident.
+        # Kept that way — at the sizes anyone picks 1 fs for, resident is a measured loss.
         psf = f"{name_stem}.psf"
         rigid, gpu_line = "none", ""
         nbf, fef, spc = 1, 1, 10
@@ -2272,6 +2286,10 @@ def prepare_mgh_slow_release(
         # packages) it falls back to the fast-derived 4/1 fs default.  2.0 fs is only ever
         # here because the user picked it — never an automatic downgrade.
         "production_timestep_fs": float(production_timestep_fs),
+        # The Advanced-card GPU-resident choice, so a later PRODUCTION run inherits it
+        # instead of hard-coding resident on (which ignored both the size gate and the
+        # user's selection).
+        "gpu_resident_mode": str(gpu_resident_mode).lower(),
         "fast_relaxation": {
             "enabled": fast,
             "hydrogens_repartitioned": n_hmr,

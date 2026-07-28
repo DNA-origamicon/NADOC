@@ -260,3 +260,89 @@ class TestCreateJobRequestValidator:
         from backend.api.routes_md import CreateJobRequest
         with pytest.raises(ValidationError):
             CreateJobRequest(production_timestep_fs=3.0)
+
+
+class TestProductionGpuResident:
+    """Production hard-coded ``GPUresident on`` for the 2 fs and 4 fs branches.
+
+    It was the one place the atom-count size gate never reached, and it ignored the
+    Advanced-card dropdown outright — so ⚡ Optimize could report "GPU-resident: off"
+    while the run used it anyway.  Seen on 2hb_1xT: a 32.5k-atom 2 fs production sat at
+    1.357 ms/step with resident engaged, unchanged after optimising.
+    """
+
+    def _spec(self):
+        from backend.core.md_protocols import SegmentSpec
+        return SegmentSpec(name="p", stage="prod", percent=100, steps=1000, temp=300.0,
+                           damping=5.0, scale=None, npt=True, previous="prev")
+
+    def _conf(self, **kw):
+        from backend.core.md_protocols import build_production_conf
+        return build_production_conf(self._spec(), "S", (80.0, 80.0, 200.0), True,
+                                     structure_psf="S_hmr.psf", **kw)
+
+    @pytest.mark.parametrize("ts", [2.0, 4.0])
+    def test_auto_turns_resident_OFF_on_a_small_system(self, ts) -> None:
+        assert "GPUresident" not in self._conf(timestep_fs=ts, n_atoms=32_566)
+
+    @pytest.mark.parametrize("ts", [2.0, 4.0])
+    def test_auto_keeps_resident_on_a_large_system(self, ts) -> None:
+        assert "GPUresident        on" in self._conf(timestep_fs=ts, n_atoms=3_139_238)
+
+    @pytest.mark.parametrize("ts", [2.0, 4.0])
+    def test_force_off_beats_the_size_gate(self, ts) -> None:
+        assert "GPUresident" not in self._conf(
+            timestep_fs=ts, n_atoms=3_139_238, force_resident=False)
+
+    @pytest.mark.parametrize("ts", [2.0, 4.0])
+    def test_force_on_beats_the_size_gate(self, ts) -> None:
+        assert "GPUresident        on" in self._conf(
+            timestep_fs=ts, n_atoms=32_566, force_resident=True)
+
+    def test_unknown_atom_count_keeps_the_old_resident_default(self) -> None:
+        """n_atoms=None means 'unknown', not 'small' — byte-compatible with callers
+        (md_ensemble) that do not size the system."""
+        assert "GPUresident        on" in self._conf(timestep_fs=4.0)
+
+    def test_1fs_conservative_reference_is_never_resident(self) -> None:
+        for kw in ({}, {"n_atoms": 3_139_238}, {"force_resident": True}):
+            assert "GPUresident" not in self._conf(timestep_fs=1.0, **kw)
+
+    def test_rigidbonds_still_follows_the_timestep_not_the_resident_choice(self) -> None:
+        """Resident is WHERE integration runs; rigidBonds is physics. Turning resident
+        off must not quietly soften the integrator."""
+        off = self._conf(timestep_fs=2.0, n_atoms=32_566, force_resident=False)
+        assert "rigidBonds         all" in off
+        assert "timestep           2" in off
+
+
+class TestProductionPlanResolvesResident:
+    def test_request_beats_manifest_beats_auto(self, tmp_path, monkeypatch) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "gpu_resident_mode": "on",
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        # request wins
+        plan = routes_md._production_fast_plan(
+            job, routes_md.ProductionRequest(steps=1000, gpu_resident="off"))
+        assert plan["force_resident"] is False
+        # absent on the request → the package's prep-time mode
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["force_resident"] is True
+
+    def test_auto_leaves_the_decision_to_the_size_gate(self, tmp_path, monkeypatch) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "gpu_resident_mode": "auto",
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["force_resident"] is None      # None = auto = decide from n_atoms
+
+    def test_bad_mode_is_rejected(self) -> None:
+        from backend.api import routes_md
+        with pytest.raises(ValueError):
+            routes_md.ProductionRequest(steps=1000, gpu_resident="yes-please")

@@ -276,12 +276,30 @@ class ProductionRequest(BaseModel):
                     "production had no effect on the run at all.",
     )
 
+    gpu_resident: Optional[str] = Field(
+        None,
+        description="GPU-resident mode for THIS production run: 'auto' (size gate), 'on' "
+                    "or 'off'. Omit to inherit the package's prep-time choice. Production "
+                    "used to hard-code resident ON for 2/4 fs regardless of size or of the "
+                    "Advanced-card dropdown.",
+    )
+
     @field_validator("production_timestep_fs")
     @classmethod
     def _sanctioned_production_timestep(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and v not in (1.0, 2.0, 4.0):
             raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
         return None if v is None else float(v)
+
+    @field_validator("gpu_resident")
+    @classmethod
+    def _sanctioned_prod_gpu_resident(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in ("auto", "on", "off"):
+            raise ValueError("gpu_resident must be 'auto', 'on', or 'off'")
+        return s
 
 
 class JobSummary(BaseModel):
@@ -807,16 +825,21 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   timestep_fs: Optional[float] = None,
                                   structure_psf: Optional[str] = None,
                                   anchors_file: Optional[str] = None,
-                                  field: Optional[dict] = None) -> str:
+                                  field: Optional[dict] = None,
+                                  n_atoms: Optional[int] = None,
+                                  force_resident: Optional[bool] = None) -> str:
     # Thin delegate to the shared, parameterized builder in md_protocols (the ensemble
     # path calls the same builder with a per-replica seed + start_checkpoint).  Defaults
     # here reproduce the original template byte-for-byte; timestep_fs (1/2/4) selects the
     # integrator path for the user's Advanced-card choice; anchors_file/field weave the
-    # external-forces block in for anchored/E-field production runs.
+    # external-forces block in for anchored/E-field production runs.  n_atoms/
+    # force_resident carry the GPU-resident decision (size gate + explicit override) —
+    # without them production hard-coded resident ON and ignored the dropdown entirely.
     return build_production_conf(
         spec, name_stem, box, mgh_extrabonds,
         fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
         anchors_file=anchors_file, field=field,
+        n_atoms=n_atoms, force_resident=force_resident,
     )
 
 
@@ -975,6 +998,12 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
             )
         timestep_fs = 1.0
         fast = False
+    # GPU-resident for production: this request's choice > the package's prep-time mode >
+    # "auto" (the atom-count gate inside build_production_conf).  None here means auto.
+    resident_mode = (body.gpu_resident
+                     or manifest.get("gpu_resident_mode")
+                     or "auto")
+    force_resident = {"on": True, "off": False}.get(str(resident_mode).lower())
     total_steps, length_ns = _production_steps_and_ns(body, timestep_fs)
     return {
         "total_steps": total_steps,
@@ -982,6 +1011,7 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         "timestep_fs": timestep_fs,
         "fast": fast,
         "timestep_conflict": conflict,
+        "force_resident": force_resident,
     }
 
 
@@ -1088,6 +1118,8 @@ def _append_production_segments(
                 spec, name_stem, box, mgh_extrabonds,
                 fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
                 anchors_file=anchors_file, field=field,
+                n_atoms=_psf_atom_count(package_dir / f"{name_stem}.psf") or None,
+                force_resident=plan.get("force_resident"),
             )
         (package_dir / f"{spec.name}.conf").write_text(conf)
         segments.append(spec)
@@ -2062,6 +2094,22 @@ class ProductionRunRequest(BaseModel):
         if v is not None and v not in (1.0, 2.0, 4.0):
             raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
         return None if v is None else float(v)
+
+    gpu_resident: Optional[str] = Field(
+        None,
+        description="GPU-resident mode for this child: 'auto' (size gate), 'on' or 'off'. "
+                    "Omit to inherit the package's prep-time choice.",
+    )
+
+    @field_validator("gpu_resident")
+    @classmethod
+    def _sanctioned_child_gpu_resident(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s not in ("auto", "on", "off"):
+            raise ValueError("gpu_resident must be 'auto', 'on', or 'off'")
+        return s
     execution_target: Optional[str] = Field(
         None, description="'local' or 'alpine'; defaults to the parent's target. An "
                           "'alpine' child is left queued for the submit-review card.")
@@ -2112,6 +2160,7 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
     plan = _production_fast_plan(parent, ProductionRequest(
         steps=body.steps, length_ns=body.length_ns, autostart=False,
         production_timestep_fs=body.production_timestep_fs,
+        gpu_resident=body.gpu_resident,
     ))
     # A pinned timestep this package cannot honour ends the child BEFORE it is created,
     # rather than quietly running a different one (see FAILURE_TIMESTEP_PINNED).
