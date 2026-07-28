@@ -4,6 +4,7 @@ import { normalizeWorkspacePath, filterJobsForPart, newestCompletedForPart, seed
   mdIsRemoteJob,
   productionNsFromSteps,
   jobProductionTimestepFs,
+  effectiveProductionTimestepFs,
   DEFAULT_PRODUCTION_TIMESTEP_FS,
 } from './md_jobs_panel.js'
 
@@ -47,6 +48,35 @@ describe('productionNsFromSteps — the ETA that used to be hard-coded to 1 fs',
   it('guards against a bad/zero timestep by falling back to the default', () => {
     expect(productionNsFromSteps(1_000_000, 0)).toBeCloseTo(4.0, 9)
     expect(productionNsFromSteps(1_000_000, NaN)).toBeCloseTo(4.0, 9)
+  })
+})
+
+describe('effectiveProductionTimestepFs — ETA and the run must agree', () => {
+  const JOB_1FS = { prep_params: { production_timestep_fs: 1, fast: false } }
+
+  it('the dropdown wins over the selected job\'s stored dt', () => {
+    // The regression: the dropdown reached PREP only, so picking 2 fs before Start
+    // Production changed neither the run nor the estimate — 2 fs selected, 1 fs run.
+    expect(effectiveProductionTimestepFs({ selectValue: '2', job: JOB_1FS })).toBe(2)
+    expect(effectiveProductionTimestepFs({ selectValue: '4', job: JOB_1FS })).toBe(4)
+  })
+
+  it('the ETA follows the dropdown, so the "x ns" readout matches the trajectory', () => {
+    const ts = effectiveProductionTimestepFs({ selectValue: '2', job: JOB_1FS })
+    expect(productionNsFromSteps(500_000, ts)).toBeCloseTo(1.0, 9)   // 2 fs → 1.0 ns
+    // ...and NOT the 0.5 ns the old job-derived path would have shown.
+    expect(productionNsFromSteps(500_000, jobProductionTimestepFs(JOB_1FS))).toBeCloseTo(0.5, 9)
+  })
+
+  it('falls back to the job\'s stored dt when the select is unset/garbage', () => {
+    expect(effectiveProductionTimestepFs({ selectValue: '', job: JOB_1FS })).toBe(1)
+    expect(effectiveProductionTimestepFs({ selectValue: '3', job: JOB_1FS })).toBe(1)
+    expect(effectiveProductionTimestepFs({ selectValue: undefined, job: JOB_1FS })).toBe(1)
+  })
+
+  it('falls back to the default with neither a select nor a job', () => {
+    expect(effectiveProductionTimestepFs({})).toBe(DEFAULT_PRODUCTION_TIMESTEP_FS)
+    expect(effectiveProductionTimestepFs()).toBe(DEFAULT_PRODUCTION_TIMESTEP_FS)
   })
 })
 

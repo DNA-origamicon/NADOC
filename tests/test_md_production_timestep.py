@@ -162,19 +162,74 @@ class TestProductionFastPlanHonorsManifest:
         assert plan["timestep_conflict"] is None
         assert plan["timestep_fs"] == 1.0
 
-    @pytest.mark.parametrize("pinned", [1.0, 2.0])
-    def test_a_pinned_timestep_the_package_CAN_run_is_never_a_conflict(
-        self, tmp_path, monkeypatch, pinned,
+    def test_1fs_is_the_only_timestep_a_declash_package_can_run(
+        self, tmp_path, monkeypatch,
     ) -> None:
         from backend.api import routes_md
         monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
         job = _job_with_manifest(tmp_path, {
-            "production_timestep_fs": pinned,
+            "production_timestep_fs": 1.0,
             "fast_relaxation": {"enabled": True}, "declash": True,
         })
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
         assert plan["timestep_conflict"] is None
-        assert plan["timestep_fs"] == pinned
+        assert plan["timestep_fs"] == 1.0
+
+    def test_pinned_2fs_on_declash_also_conflicts_not_just_4fs(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        """2 fs drops the HMR requirement but still needs ``rigidBonds all`` — and rigid
+        constraints are precisely what the declash ladder avoids, because the residual
+        single-stranded contacts crash RATTLE.  So it is no more runnable than 4 fs."""
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 2.0,
+            "fast_relaxation": {"enabled": True}, "declash": True,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_conflict"]
+        assert "2 fs" in plan["timestep_conflict"]
+        assert plan["timestep_fs"] == 1.0
+
+    def test_request_timestep_overrides_the_prep_time_manifest_value(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        """The dropdown is read at PRODUCTION time; the manifest value was baked in at PREP.
+
+        Until the request carried a timestep, changing the dropdown before pressing Start
+        Production moved neither the run nor the estimate — a 2 fs selection produced a
+        1 fs trajectory.  Observed on 2hb_1xT.
+        """
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 1.0,          # baked in at prep
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        plan = routes_md._production_fast_plan(
+            job, routes_md.ProductionRequest(steps=1000, production_timestep_fs=4.0))
+        assert plan["timestep_fs"] == 4.0
+        assert plan["fast"] is True
+
+    def test_absent_request_timestep_still_inherits_the_manifest(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 2.0,
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        plan = routes_md._production_fast_plan(
+            job, routes_md.ProductionRequest(steps=1000))     # no dt on the request
+        assert plan["timestep_fs"] == 2.0
+
+    def test_request_timestep_is_validated_to_the_sanctioned_set(self) -> None:
+        from backend.api import routes_md
+        with pytest.raises(ValueError):
+            routes_md.ProductionRequest(steps=1000, production_timestep_fs=3.0)
+        assert routes_md.ProductionRequest(steps=1000).production_timestep_fs is None
 
     def test_pinned_4fs_without_declash_runs_as_asked(self, tmp_path, monkeypatch) -> None:
         from backend.api import routes_md

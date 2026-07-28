@@ -72,6 +72,25 @@ export function jobProductionTimestepFs(job) {
   if (pp) return pp.fast ? 4.0 : 1.0
   return DEFAULT_PRODUCTION_TIMESTEP_FS
 }
+/** Pure: the production timestep the ETA, the "x ns" readout and the Start-Production
+ *  POST must ALL use.
+ *
+ *  The DROPDOWN wins. It is the control the user operates, and it is now sent with the
+ *  production request, so the estimate is computed from the same number the run uses.
+ *  This used to return the selected JOB's stored dt while the dropdown reached prep only
+ *  — so changing it before starting production moved neither the run nor the estimate,
+ *  and a 2 fs selection produced a 1 fs trajectory under a 1 fs ETA (seen on 2hb_1xT).
+ *
+ *  Falls back to the selected job's stored dt (which also seeds the dropdown on
+ *  selection), then the global default — so the value shown for a prepared job that the
+ *  user has not touched is unchanged. */
+export function effectiveProductionTimestepFs({ selectValue, job } = {}) {
+  const sel = Number(selectValue)
+  if (sel === 1 || sel === 2 || sel === 4) return sel
+  if (job) return jobProductionTimestepFs(job)
+  return DEFAULT_PRODUCTION_TIMESTEP_FS
+}
+
 const _SHOW_ALL_KEY = 'nadoc:md-jobs-show-all'
 const _GPU_ASK_KEY  = 'nadoc:md-jobs-gpu-ask'
 
@@ -972,14 +991,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   })
   const _paintRunPath = () => renderRunPath(runPathEl, _advValues())
 
-  // The production timestep the ETA + Start-Production controls should assume: a
-  // selected prepared job's own dt if one is selected, else the Advanced-card dropdown
-  // (which configures the NEXT relaxation).
-  const _effectiveProdTimestepFs = () => {
-    const job = _jobs.find(j => j.job_id === _selectedId)
-    if (job) return jobProductionTimestepFs(job)
-    return Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS
-  }
+  // Single source of truth for the ETA, the "x ns" readout and the production POST —
+  // see effectiveProductionTimestepFs (pure, unit-tested) for why the dropdown wins.
+  const _effectiveProdTimestepFs = () => effectiveProductionTimestepFs({
+    selectValue: prodTimestepSel?.value,
+    job: _jobs.find(j => j.job_id === _selectedId),
+  })
 
   // Warn (inline, under the Fast checkbox) when the chosen production timestep outruns
   // what the fast relaxation ladder validated for this design.
@@ -2022,6 +2039,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         cluster_name: runTarget === 'alpine' ? 'alpine' : null,
         runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
         dcd_freq: parseInt(dcdFreqInput?.value ?? '2500', 10) || 2500,
+        // Pin the dropdown's dt to THIS run, so the trajectory matches the estimate shown
+        // above it.  Without this the timestep could only be chosen at prep time and the
+        // dropdown silently had no effect on production.
+        production_timestep_fs: _effectiveProdTimestepFs(),
       })
       if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
       const childId = d.job?.job_id

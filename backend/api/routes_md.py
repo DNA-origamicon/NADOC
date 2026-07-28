@@ -242,6 +242,24 @@ class ProductionRequest(BaseModel):
     steps: Optional[int] = Field(None, ge=100, le=50_000_000)
     autostart: bool = Field(True)
     continue_from_production: bool = Field(False)
+    production_timestep_fs: Optional[float] = Field(
+        None,
+        description="Integrator timestep (fs) for THIS production run: 1.0, 2.0 or 4.0. "
+                    "Sending it PINS the choice — if the package cannot honour it the run "
+                    "fails with FAILURE_TIMESTEP_PINNED rather than quietly substituting a "
+                    "different one. Omit to inherit the value baked into the package "
+                    "manifest at prep time, or (absent that) the auto-derived default. "
+                    "Until this existed the timestep could only be chosen when the package "
+                    "was PREPARED, so changing the Advanced-card dropdown before starting "
+                    "production had no effect on the run at all.",
+    )
+
+    @field_validator("production_timestep_fs")
+    @classmethod
+    def _sanctioned_production_timestep(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v not in (1.0, 2.0, 4.0):
+            raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
+        return None if v is None else float(v)
 
 
 class JobSummary(BaseModel):
@@ -888,8 +906,14 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         manifest = {}
     relaxed_fast = bool(manifest.get("fast_relaxation", {}).get("enabled"))
     declash = bool(manifest.get("declash"))
-    # User-selected production dt (Advanced card) wins; fall back to the auto default.
-    requested = manifest.get("production_timestep_fs")
+    # Precedence: THIS request's dt (the panel's dropdown, chosen at production time) >
+    # the value baked into the manifest when the package was PREPARED > the auto default.
+    # The request level exists because the dropdown used to reach prep only: changing it
+    # before pressing Start Production had no effect on the run, so a user could select
+    # 2 fs, watch a "2 fs" estimate, and get a 1 fs trajectory.
+    requested = body.production_timestep_fs
+    if requested not in (1.0, 2.0, 4.0):
+        requested = manifest.get("production_timestep_fs")
     pinned = requested in (1.0, 2.0, 4.0)
     if pinned:
         timestep_fs = float(requested)
@@ -911,15 +935,21 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     # PINNED one is a hard conflict.  The caller turns it into a failed job carrying
     # FAILURE_TIMESTEP_PINNED, so the UI surfaces "NAMD run ended prematurely" with the
     # reason instead of quietly producing a different trajectory.
+    # On a declash package ONLY 1 fs is runnable.  4 fs needs the HMR PSF (never built for
+    # a declash prep) AND `rigidBonds all`; 2 fs drops the HMR requirement but still needs
+    # `rigidBonds all` — and rigid constraints are exactly what the declash ladder exists to
+    # avoid, because the residual single-stranded contacts crash RATTLE.  So both elevated
+    # timesteps are impossible here, not just 4 fs.
     conflict = None
-    if timestep_fs == 4.0 and declash:
+    if declash and timestep_fs != 1.0:
         if pinned:
             conflict = (
-                "4 fs production was pinned in the Advanced card, but this package was "
-                "built with the declash ladder (crossover extra bases / extensions), which "
-                "never builds the hydrogen-mass-repartitioned PSF that rigidBonds-all 4 fs "
-                "requires. Re-prep with the geometric + Fix B path to get a 4 fs-capable "
-                "package, or set the production timestep to 1 fs."
+                f"{timestep_fs:g} fs production was requested, but this package was built "
+                f"with the declash ladder (crossover extra bases / extensions). That build "
+                f"has no hydrogen-mass-repartitioned PSF, and its residual single-stranded "
+                f"contacts crash the rigidBonds constraint solver that any timestep above "
+                f"1 fs requires. Re-prep with the geometric + Fix B path to get a package "
+                f"that can run {timestep_fs:g} fs, or set the production timestep to 1 fs."
             )
         timestep_fs = 1.0
         fast = False
@@ -1995,6 +2025,20 @@ class ProductionRunRequest(BaseModel):
     length_ns: Optional[float] = Field(None, gt=0.0, le=100.0,
                                        description="Simulated ns (used if steps omitted)")
     autostart: bool = Field(True, description="Start the child right away (local target only)")
+    production_timestep_fs: Optional[float] = Field(
+        None,
+        description="Integrator timestep (fs) for this child: 1.0, 2.0 or 4.0. Sending it "
+                    "PINS the choice — an unrunnable one fails the child with "
+                    "FAILURE_TIMESTEP_PINNED instead of silently substituting another. Omit "
+                    "to inherit the package manifest's prep-time value.",
+    )
+
+    @field_validator("production_timestep_fs")
+    @classmethod
+    def _sanctioned_child_timestep(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and v not in (1.0, 2.0, 4.0):
+            raise ValueError("production_timestep_fs must be 1.0, 2.0, or 4.0")
+        return None if v is None else float(v)
     execution_target: Optional[str] = Field(
         None, description="'local' or 'alpine'; defaults to the parent's target. An "
                           "'alpine' child is left queued for the submit-review card.")
@@ -2044,7 +2088,20 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
 
     plan = _production_fast_plan(parent, ProductionRequest(
         steps=body.steps, length_ns=body.length_ns, autostart=False,
+        production_timestep_fs=body.production_timestep_fs,
     ))
+    # A pinned timestep this package cannot honour ends the child BEFORE it is created,
+    # rather than quietly running a different one (see FAILURE_TIMESTEP_PINNED).
+    if plan.get("timestep_conflict"):
+        parent.status = MdStatus.failed
+        parent.failure_kind = FAILURE_TIMESTEP_PINNED
+        parent.error = plan["timestep_conflict"]
+        parent.save(_workspace())
+        return {
+            "ok": False, "job": parent.to_dict(), "child_id": None,
+            "error": plan["timestep_conflict"],
+            "failure_kind": FAILURE_TIMESTEP_PINNED,
+        }
 
     # Distinct velocity seed per production child of this parent, so a fan-out samples
     # independent trajectories from the same equilibrated coords.  Replica 0 uses the
