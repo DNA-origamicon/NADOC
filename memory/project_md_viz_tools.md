@@ -197,3 +197,193 @@ in `routes_oxdna.py` (`…, ref, 200, _prog, align`).
 Also: `design_renderer.js` sim-frame path now calls `refreshAllGlow()` — "simulation frames mutate the
 existing backbone entry positions rather than replacing currentGeometry", so the store subscriber
 cannot observe playback/scrub mutations and position-backed overlays must be refreshed per frame.
+
+**STRAIN MAP — new oxDNA scalar viz, 2026-07-27.** A fourth false-colouring mode alongside
+relaxed / flexibility (RMSF) / deviation: `GET /oxdna/jobs/{id}/strain?metric=backbone|wc&align=`.
+Radio `#oxdna-jobs-strain-toggle` + metric `<select>` `#oxdna-jobs-strain-metric` in the
+Visualizations card; controller methods `displayStrain(resp)` / `recolorStrain(lo,hi,cmap)`,
+`_mode === 'strain'`.
+
+- **What it measures.** SIGNED, DIMENSIONLESS engineering strain `(L − L0)/L0`, per nucleotide.
+  `backbone` → FENE backbone-bond stretch (`L0 = FENE_R0_OXDNA2`), each bond attributed to BOTH
+  endpoints by largest MAGNITUDE (a junction reports its worst bond, not an average that hides it).
+  `wc` → Watson–Crick base-site separation (`L0 = HYDR_R0_OXDNA2 = 0.4` units, new constant); pairs
+  with no designed partner (ssDNA loops, overhangs, ragged ends) are OMITTED, not coloured 0.
+  Deviation asks "is this base where the design put it"; strain asks "is its own local geometry
+  under load" — independent signals, and a rigid-but-misplaced region shows only in deviation.
+
+- **NEVER strain the mean structure — average the FIELD (the load-bearing bug this shipped with,
+  caught in-app).** The obvious build (reuse `production_rmsf_cached(...)["average_frame"]` for the
+  values, like the deviation map does) is WRONG: averaging positions collapses bond lengths
+  (|⟨r_a⟩−⟨r_b⟩| ≤ ⟨|r_a−r_b|⟩). Measured on `workspace/oxdna_jobs/6b775c8acff4` (1hb_efield_test):
+  mean-structure read **−26 % mean backbone / −67 % mean WC**, where any single frame reads
+  **−1.8 % / +0.9 %**. It looks like a totally melted structure. So `production_strain_field(_cached)`
+  does its OWN bounded trajectory walk (`_STRAIN_MAX_FRAMES = 60`, evenly sampled via `_even_indices`,
+  budget split across pooled runs in proportion to length), computes `strain_field` per frame and
+  averages that. `full_map`/`average_frame` supplies ONLY the display positions, so the beads still
+  sit exactly where the RMSF/deviation overlays put them. Frames are PBC-unwrapped
+  (`unwrap_align_to_reference(..., align=False)`) but NOT rotated — strain is rotation-invariant, so
+  the Kabsch step is skipped. Pin: `test_mean_strain_over_frames_is_not_the_strain_of_the_mean_structure`.
+
+- **Signed + diverging + a robust auto-range.** Default colormap `coolwarm`
+  (`DEFAULT_COLORMAP_FOR.strain`); default bounds are SYMMETRIC ±half-width (`strainBounds()` in
+  oxdna_display.js) so the ramp midpoint is exactly 0 = relaxed (blue compressed / white relaxed /
+  red stretched). The half-width is the backend's `display_abs_strain`, NOT the max — and its
+  percentile is PER-METRIC (`_STRAIN_DISPLAY_PERCENTILE = {backbone: 98, wc: 90}`) because the tails
+  differ physically: a FENE bond cannot exceed ~+33 % (measured p50 4 % / p98 7 % / max 8 %) while a
+  melted WC pair is unbounded (same bundle: p90 8 %, p95 81 %, p98 233 %, max 469 %). Ranging WC on
+  p98 flattened the whole intact duplex onto the midpoint colour. Outliers still saturate the ramp's
+  end (colormapHex clamps); the status line says "(outliers clipped)" and quotes both the colour
+  scale and the true data range, since they disagree by design.
+
+- **5′/3′ EXTENSION TAILS + CROSSOVER EXTRA BASES ARE INCLUDED** (backbone metric). The
+  reference in `production_strain_field` is read with `include_extra_bases=True,
+  include_extensions=True`, so `__ext_<id>` tail beads and `__xb__` inserts are measured
+  like any other nucleotide — on VoltronCoreScad that is 334 ext + 1132 xb on top of 14702
+  real (16168 total). This is the point of the map: per
+  [strand_extensions_sim](project_strand_extensions_sim.md) a tail has THREE distinct
+  blow-up modes and a too-SHORT bond kills a run as dead as a too-long one, so a strain map
+  that dropped tails would omit exactly what it exists to find. Three consequences:
+  - They are kept OUT of the Kabsch fit (`align_keys` = non-synthetic keys). Unpaired ssDNA
+    flails; letting it bias the superposition is the same trap `atomistic_to_nadoc` masks
+    against, and it would also land the mean frame in a different pose than the
+    RMSF/deviation overlays.
+  - They are kept OUT of the `wc` metric (`_strain_index` filters `is_synthetic_nuc_key`).
+    A tail key is a 3-tuple carrying a direction string, so it is otherwise *eligible* to
+    pair with anything sharing its synthetic helix id — the exact trap the topic file warns
+    about. Pin: `test_wc_strain_never_pairs_synthetic_particles`.
+  - `strain_map` emits `bp_index` RAW (as `/display` does). An `__xb__` key's bp_index slot
+    holds a crossover id, which may be a STRING — an early version called `int()` on it.
+  Display positions for them come from `production_strain_field`'s own mean frame, merged
+  under `production_rmsf_cached`'s `average_frame` (which drops synthetic keys); real
+  nucleotides still take the RMSF frame so all three overlays coincide exactly.
+  **Where each kind actually draws** (verified against the real design, don't re-derive it):
+  tail beads are ordinary `_geometry_for_design` nucleotides — all 334 of VoltronCoreScad's
+  address a drawn bead under `__ext_<id>:i:DIR:0`, so `helix_renderer.applyScalarColors`
+  colours them with no special casing. Extra bases are NOT in that geometry; they are
+  crossover-ARC beads recoloured separately at `design_renderer.js:210` via
+  `colorByKey["__xb__:<xoId>:<k>"]` — the 3-part alias `strainColorMap` already emits for
+  copy 0. A probe that only checks `_geometry_for_design` will report extra bases as
+  "0 % drawn" and be wrong.
+
+- **TORN-UNWRAP FRAME GATE — the second load-bearing bug, and it was silent.**
+  `unwrap_align_to_reference` box-shifts each bonded component toward its reference image;
+  once the assembly has diffused far from the design reference (late frames of long/RESUMED
+  runs — `trajectory.r1.dat`, `trajectory.r2.dat`) neighbouring components snap to DIFFERENT
+  periodic images and are torn apart, leaving bonds of order the box size. Measured on
+  `fb83ff00287a`: violation fraction 0.0000 for every frame of the first run, then
+  0.0015 → 0.3861 through the resumes; the raw backbone map read **+4669 % max, 38 % of
+  nucleotides FENE-impossible**. Two guards, both physics-derived, no tuned magic numbers:
+  1. `_fene_violation_fraction` + `_STRAIN_FRAME_REJECT_FRAC` (0.001) — a production frame
+     cannot hold a bond outside `r0 ± delta` (oxDNA aborts at config load), so any is proof
+     the frame's *reconstruction* failed. Reject the frame WHOLE, for BOTH metrics. This
+     matters most for `wc`, which has no bound of its own: a torn frame there is
+     indistinguishable from real melting. Before/after on the same job, WC p50 **14 % → 1.8 %**
+     — and the job's own `bp_retained_fraction` is 0.9885, i.e. barely melted, which is what
+     told us 14 % had to be wrong.
+  2. Per-bond FENE-window rejection inside accepted frames for the stragglers.
+  Both surfaced (`rejected_fraction`, `n_rejected`, `n_frames_torn`) and shown in the status
+  line — a map built from a poorly reconstructed trajectory must not look as solid as a clean
+  one. **This tearing is pre-existing and shared with the RMSF/deviation maps**, which just
+  don't expose it (averaging positions hides what bond lengths cannot).
+
+- **The WC display bound scales on the BONDED population only.** A WC field is intrinsically
+  bimodal — every real origami frays at its ends — so ranging over both modes puts the whole
+  intact duplex on the midpoint colour. `_display_strain_bound` cuts at `WC_UNPAIRED_STRAIN`
+  (= `BP_FORMED_CUTOFF_NM` re-expressed in WC-strain units, +134.8 %; derived, not tuned) and
+  takes p90 of what is left. Result: VoltronCoreScad ±22 %, corner_miter ±3.4 % — each scaled
+  to its own intact duplex, with frayed/melted bases saturating the ramp end.
+
+- **Copies.** `backbone_bond_pairs` collapses loop copies to the 3-tuple key, so the physics is
+  indexed by the 3-tuple (copy 0 wins) and broadcast back to every 4-tuple copy — every loop bead
+  still colours.
+
+- **Perf — 16 m 26 s → 16.8 s (59x) on VoltronCoreScad** (15 k nt, 3.6 GB trajectory, 805 frames);
+  corner_miter 9.4 s → 0.6 s. Three rounds, in order of payoff:
+  1. **Do NOT borrow `production_rmsf_cached`'s `average_frame` for display geometry.** That was
+     16 m 26 s of a 16 m 47 s response — it walks EVERY frame — against 21 s for the strain walk
+     itself. `production_strain_field` already computes a mean frame over its own bounded sample,
+     so ONE walk now yields both the values and the positions. Profiled split before this:
+     parse/IO 6.3 s, unwrap+align 13.1 s, strain math 1.8 s, ref read 0.2 s.
+  2. **Reuse the unwrap plan** (`_build_unwrap_plan` cached per key set, passed as `plan=`) —
+     the same fix the composite-trajectory builder already had. Unwrap was the single biggest
+     term; total 21.4 s → 16.8 s.
+  3. Vectorized `strain_field`: `_strain_index` builds the endpoint arrays ONCE per key set,
+     `_strain_values` does one batched `oxdna_backbone_sites` + a magnitude-sorted scatter for
+     the worst-bond attribution instead of a per-bond Python loop (2 m 32 s → 1 m 29 s at the time,
+     byte-identical output).
+  For scale: the FLEXIBILITY map's `production_rmsf` on the same job measures **1079 s**. The
+  strain map is now ~64x faster than its siblings, not merely comparable.
+  Strain VALUES are byte-identical before/after (max |delta| 0.0e+00).
+
+- **The mean frame is NOT the RMSF map's mean frame, and that is deliberate.** Measured on
+  VoltronCoreScad they differ by **3.47 nm median / 7.3 nm max**, and the cause is fully isolated:
+  it is ENTIRELY the torn-frame gate (gate-on vs gate-off over the same 805 frames = 3.468 nm, the
+  identical figure), NOT sampling (60 vs 733 frames = 0.24 nm) and NOT a rigid offset (Kabsch
+  residual == raw). **`production_rmsf` averages 72 of 805 torn frames into its mean structure**, so
+  the flexibility and deviation overlays are displaced by up to 7 nm on long/resumed runs; the strain
+  map's frame is the clean one. Consequence the user sees: the structure shifts slightly when
+  switching between strain and flex/deviation on such a job. Applying the same gate inside
+  `production_rmsf` would fix all three and make them coincide — NOT done here because
+  `average_frame` also feeds PDB export, atomistic reconstruction and the shape descriptors, so it
+  needs sign-off. A side benefit of dropping the merge: positions used to come from TWO different
+  means (real keys from the 805-frame contaminated one, synthetics from the clean 60-frame one), i.e.
+  tails were placed in a different mean structure than the duplex they hang off. Now one source.
+
+- **Scope.** CG beads only (like deviation — excluded from `drivesHeavy`). oxDNA only: no LAMMPS
+  (`strainToggle` force-disabled in `selectLammpsJob` + `_updateButtons`) and no NAMD/MD (`/md/...`
+  has no strain route, so `md_viz_adapter` can't map it). Adding MD = a `md_trajectory.py` mirror of
+  `strain_map` + a route, then the same panel block in `md_jobs_panel.js`.
+
+- **Verified in-app** (corner_miter_optimized / job 48b20e31754c): both metrics render, legend +
+  colormap picker work, mode switching tears down the peers, off restores; zero console errors.
+  Coverage checked numerically — strain/backbone colours the IDENTICAL 1023-nucleotide set as the
+  RMSF map, strain/wc the identical set as the deviation map.
+
+- **`positions` IS THE MOVE LIST, not just the colour list** (third load-bearing bug).
+  `applyFemPositions` deforms only the beads it is given; anything omitted keeps its DESIGN
+  coordinates while its neighbours move. The `wc` metric measures only paired bases, so the
+  original "skip unmeasured" emit left **2260 beads stranded in mid-air** on VoltronCoreScad
+  (794 unpaired real ssDNA — overhangs + unstapled scaffold loops — plus 334 extension tails
+  and 1132 extra bases). `strain_map` now emits EVERY key in `full_map` with `strain: None`
+  where nothing was measurable; the frontend's `strainColorMap` puts all of them in
+  `updates` but only finite-strain ones in `colorByKey`, so they ride along at their
+  simulated positions in their native colour. `n_shared` = measured, `n_positions` = emitted;
+  the status line reports "N bases coloured (M moved)". Pin:
+  `test_wc_map_emits_unpaired_bases_so_they_still_move`.
+
+- **"dsDNA only" display option** (`#oxdna-jobs-strain-dsdna-only`) — colour only what the
+  design intends to be duplex, so a disrupted duplex flares instead of competing with ssDNA
+  that is floppy *by design*. Classification is TOPOLOGICAL (`designed_ssdna_flags`): a
+  `(helix, bp)` column with nucleotides on BOTH directions is duplex, everything else is
+  ssDNA — unstapled scaffold (a deliberate loop, see
+  [staples_are_user_intent](feedback_staples_are_user_intent.md)), overhangs, tails, extra
+  bases. Never inferred from how the simulation ended up. Synthetic keys are forced ssDNA so
+  two tails of one extension on opposite directions can't fake a duplex column.
+  - The flag is a pure DISPLAY choice over the payload already in hand:
+    `oxdnaDisplay.setStrainDsdnaOnly()` recolours from cache — no refetch, no second
+    trajectory walk. It `clearScalarColors()` FIRST, because `applyScalarColors` leaves keys
+    it isn't given alone and the excluded ssDNA would otherwise keep its old colour.
+  - The backend ships a companion `dsdna: {min,max,mean,abs_max,display_abs,n}` block
+    computed over the duplex subset, so the scale rescales with the toggle instead of letting
+    one flailing overhang set the range for the duplex being inspected.
+  - Excluded bases still MOVE — only the colour is withheld.
+  - The quoted mean and data RANGE follow the filter too (`strainStats`), not just the colour
+    scale: reporting the overall mean while colouring only the duplex misdescribes the map.
+    Measured on corner_miter backbone: all = mean −3.8 %, range −8.1…+3.6 %; dsDNA-only =
+    mean −4.0 %, range −8.1…+2.4 % (the most-tensioned bases there were ssDNA).
+  - `wc` + dsDNA-only is a no-op by construction — that metric only ever measures designed
+    pairs — so the two agree exactly. Expected, not a wiring bug.
+
+- **Loading visualizer.** `#oxdna-jobs-strain-bar` + `_setStrainBar('computing'|'done'|'off')`
+  mirrors the flexibility map's indeterminate stripe, with a metric-specific status line
+  ("Averaging backbone bond strain over the trajectory…"). A targeted in-panel bar rather
+  than the global "Working…" popup, per [busy_popup_threshold](feedback_busy_popup_threshold.md).
+
+- Pins: `tests/test_oxdna_strain_map.py` (23, backend) + `strainBounds`/`strainColorMap` blocks in
+  `frontend/src/ui/oxdna_display.test.js`.
+
+**Test-fixture note:** the first version of the backend tests used bond lengths like 2.0 units
+(+164 % strain). Those are physically impossible and the FENE-window guard correctly started
+rejecting them — the fixtures were wrong, not the guard. Keep synthetic bond fixtures inside
+`r0 ± delta` unless the test is specifically about rejection.

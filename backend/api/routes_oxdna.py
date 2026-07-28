@@ -1385,6 +1385,88 @@ async def get_oxdna_deviation(job_id: str, align: bool = True) -> dict:
     return {"ready": True, "n_frames": mean.get("n_frames"), **dev}
 
 
+@router.get("/oxdna/jobs/{job_id}/strain")
+async def get_oxdna_strain(job_id: str, metric: str = "backbone", align: bool = True) -> dict:
+    """Per-nucleotide LOCAL STRAIN map: the production mean structure recoloured by each
+    base's time-averaged signed deviation from oxDNA2's equilibrium geometry, as a
+    dimensionless fraction (0 = relaxed, + = stretched, − = compressed).  The strain
+    sibling of GET /oxdna/jobs/{id}/deviation — deviation asks "is this base where the
+    design put it", strain asks "is this base's own local geometry under load".
+
+    The strain is measured per frame and THEN averaged (over up to
+    ``oxdna_health._STRAIN_MAX_FRAMES`` evenly-sampled frames, reported as
+    ``n_strain_frames``); straining the mean structure instead would collapse every
+    bond.  Only the DISPLAY positions come from the mean structure.
+
+    ``metric=backbone`` (default) — FENE backbone-bond strain: crossovers, skip/loop
+    sites, forced connections and 5′/3′ extension tails the relaxation could not absorb.
+    Covers every simulated particle, INCLUDING extension tails and crossover extra bases
+    (they are the most FENE-fragile bonds in a design, so the map exists to find them).
+    ``metric=wc`` — Watson–Crick base-pair stretch: melted / opening / mis-registered
+    pairs.  Unpaired nucleotides (ssDNA loops, overhangs, extension tails, extra bases,
+    ragged ends) have no designed partner and are omitted.
+
+    Returns ``{ready, positions:[{…, strain}], min/max/mean/abs_max_strain, metric,
+    unit, r0_units, n_frames, confidence, production_running}``.  Read-only over the
+    Physical layer.
+    """
+    from backend.core.models import Design
+    from backend.core.oxdna_health import (
+        production_strain_field_cached, rmsf_confidence, strain_map,
+    )
+
+    if metric not in ("backbone", "wc"):
+        raise HTTPException(400, f"unknown strain metric {metric!r} (expected 'backbone' or 'wc')")
+    job = _load_job(job_id)
+    prod_stages = [s for s in job.stages if s.kind in ("production", "field")]
+    if not prod_stages:
+        return {"ready": False, "reason": "no production or field run yet"}
+    jd = job.job_dir(_workspace())
+    usable = [s for s in prod_stages if s.status in ("done", "running")]
+    trajs: list[Path] = []
+    for s in usable:
+        trajs.extend(_stage_trajectories(job.stage_dir(_workspace(), s.name)))
+    if not trajs:
+        return {"ready": False, "reason": "sampling starting — no frames yet"}
+    design = Design.model_validate_json((jd / "design.json").read_text())
+    ref_conf = _design_ref_conf(jd, design)
+
+    def _compute():
+        # ONE bounded trajectory walk does everything: the per-frame strain average AND the
+        # mean frame the beads are drawn at.  It deliberately does NOT reuse
+        # production_rmsf_cached's `average_frame`: that walks EVERY frame (805 on a real
+        # job) and dominated this route's cost — 16.5 min of a 16.9 min response, against
+        # 21 s for the strain walk itself.  The two mean frames are the same estimator over
+        # the same aligned ensemble, differing only by sampling noise (~RMSF/√60, well under
+        # 0.1 nm even in floppy regions), and the strain walk's is arguably the better one
+        # because it also drops torn-unwrap frames.  Positions therefore still coincide with
+        # the flexibility/deviation overlays to far below anything visible.
+        avg = production_strain_field_cached(
+            design, trajs, ref_conf, metric=metric, copies=True, align=align,
+            n_trailing_extra=_capture_bead_count(job),
+            trailing_extra_strand_length=_capture_strand_length(job))
+        if not avg["field"]:
+            return None, avg
+        return strain_map(design, avg["frame"], metric=metric, field=avg["field"]), avg
+
+    strain, avg = await run_in_threadpool(_compute)
+    n_strain_frames = avg.get("n_frames", 0)
+    rejected = float(avg.get("rejected_fraction", 0.0))
+    n_rejected = int(avg.get("n_rejected", 0))
+    if strain is None:
+        return {"ready": False, "reason": (
+            "no frames yet" if not n_strain_frames
+            else "no paired bases to measure" if metric == "wc"
+            else "no backbone bonds to measure")}
+    strain["confidence"] = rmsf_confidence(n_strain_frames)
+    strain["n_strain_frames"] = n_strain_frames
+    strain["rejected_fraction"] = rejected
+    strain["n_rejected"] = n_rejected
+    strain["n_frames_torn"] = int(avg.get("n_frames_torn", 0))
+    strain["production_running"] = any(s.status == "running" for s in prod_stages)
+    return {"ready": True, "n_frames": n_strain_frames, **strain}
+
+
 @router.get("/oxdna/jobs/{job_id}/shape-source")
 async def get_oxdna_shape_source(job_id: str, align: bool = True) -> dict:
     """oxDNA source bundle for the cross-engine comparison card (S5) — the ``engine=

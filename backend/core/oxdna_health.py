@@ -29,7 +29,9 @@ from backend.core.models import Design
 from backend.physics.oxdna_interface import (
     backbone_bond_pairs,
     count_hbonds,
+    is_synthetic_nuc_key,
     oxdna_backbone_site,
+    oxdna_backbone_sites,
     read_configuration_full,
 )
 
@@ -53,6 +55,13 @@ BP_FORMED_CUTOFF_NM: float = 0.8
 # health metric above because its purpose is geometric reconstruction, not claiming
 # that a hydrogen bond remains formed.
 DUPLEX_AXIS_MAX_BASE_SEPARATION_NM: float = 2.0
+
+# oxDNA's hydrogen-bond equilibrium separation between the two BASE sites of a
+# Watson–Crick pair (model.h HYDR_R0), in oxDNA units.  A relaxed pair sits here;
+# a stretched/opening pair reads longer, an over-compressed one shorter.  This is
+# the WC counterpart of FENE_R0_OXDNA2 below and the reference for the ``wc``
+# strain metric (see :func:`strain_map`).
+HYDR_R0_OXDNA2: float = 0.4
 
 # A backbone bond longer than this (nm) is treated as an unresolved steric
 # clash / over-stretch.  Healthy CG backbone bonds are ~0.6–0.8 nm.
@@ -3351,6 +3360,592 @@ def backbone_strain_field(
         if s > out.get(key, -1.0):
             out[key] = s
     return out
+
+
+def strain_field(
+    design: Design,
+    full_map: dict[tuple, dict],
+    *,
+    metric: str = "backbone",
+    r0_units: float = FENE_R0_OXDNA2,
+    wc_r0_units: float = HYDR_R0_OXDNA2,
+) -> dict[tuple[str, int, str], float]:
+    """PER-NUCLEOTIDE signed strain of ONE configuration, keyed by the 3-tuple
+    ``(helix_id, bp_index, direction)`` — the per-frame kernel behind
+    :func:`strain_map` and :func:`production_strain_field`.
+
+    See :func:`strain_map` for the definition of each ``metric``.  Nucleotides with
+    nothing measurable (no bonded partner in this frame / no designed WC partner) are
+    ABSENT from the result rather than reported as 0.  Pure geometry over ``full_map``
+    (``{key: {backbone_position (CM, nm), a1, a3}}``); loop-copy 4-tuple keys collapse
+    onto their base 3-tuple, since :func:`backbone_bond_pairs` does the same.
+    """
+    if metric not in ("backbone", "wc"):
+        raise ValueError(f"strain_field: unknown metric {metric!r} (expected 'backbone' or 'wc')")
+    base = _strain_base_map(full_map)
+    keys = list(base)
+    ia, ib = _strain_index(design, keys, metric)
+    if not ia.size:
+        return {}
+    arrs = _gather_frame(base, keys)
+    if arrs is None:
+        return {}
+    vals, _att, _rej = _strain_values(*arrs, ia, ib, metric=metric,
+                                      r0_units=r0_units, wc_r0_units=wc_r0_units)
+    return {k: float(v) for k, v in zip(keys, vals) if not np.isnan(v)}
+
+
+def _strain_base_map(full_map: dict[tuple, dict]) -> dict[tuple, dict]:
+    """Copy-collapsed physics index for the strain metrics: prefer copy 0 (the real
+    nucleotide) at each ``(helix, bp, direction)``, else whichever copy is present.
+    :func:`backbone_bond_pairs` collapses loop copies the same way."""
+    base: dict[tuple, dict] = {}
+    for k, v in full_map.items():
+        k3 = (k[0], k[1], k[2])
+        if k3 not in base or (len(k) > 3 and int(k[3]) == 0):
+            base[k3] = v
+    return base
+
+
+def _strain_index(design: Design, keys: list[tuple], metric: str):
+    """Integer endpoint arrays ``(ia, ib)`` into ``keys`` for every measurable strain
+    element: bonded 3′-neighbour pairs (``backbone``) or designed WC partners (``wc``).
+
+    Built ONCE for a key ordering and reused across every frame of a trajectory — the
+    topology it encodes cannot change mid-run, and rebuilding it per frame (a full
+    strand walk) dominated the cost of a trajectory-averaged map."""
+    pos = {k: i for i, k in enumerate(keys)}
+    if metric == "backbone":
+        ia, ib = [], []
+        for a, b in backbone_bond_pairs(design):
+            i, j = pos.get(a), pos.get(b)
+            if i is None or j is None:
+                continue
+            ia.append(i)
+            ib.append(j)
+    else:
+        # WC pairing is defined only for REAL (helix, bp) columns.  Synthetic particles —
+        # crossover extra-base inserts and 5′/3′ strand-extension tail beads — are unpaired
+        # ssDNA; an extension key is a 3-tuple carrying a direction string, so it would
+        # otherwise be eligible to pair with anything sharing its synthetic helix id.
+        fwd = {(k[0], k[1]): i for k, i in pos.items()
+               if k[2] == "FORWARD" and not is_synthetic_nuc_key(k)}
+        rev = {(k[0], k[1]): i for k, i in pos.items()
+               if k[2] == "REVERSE" and not is_synthetic_nuc_key(k)}
+        paired = sorted(fwd.keys() & rev.keys())
+        ia = [fwd[p] for p in paired]
+        ib = [rev[p] for p in paired]
+    return np.asarray(ia, dtype=int), np.asarray(ib, dtype=int)
+
+
+def _gather_frame(base: dict[tuple, dict], keys: list[tuple]):
+    """``(cm, a1, a3)`` arrays aligned to ``keys``, or ``None`` if any key is missing
+    from ``base`` (a ragged/half-written frame — the caller skips it)."""
+    try:
+        cm = np.array([base[k]["backbone_position"] for k in keys], dtype=float)
+        a1 = np.array([base[k]["a1"] for k in keys], dtype=float)
+        a3 = np.array([base[k]["a3"] for k in keys], dtype=float)
+    except KeyError:
+        return None
+    return cm, a1, a3
+
+
+def _fene_violation_fraction(cm, a1, a3, ia, ib, *, r0_units: float = FENE_R0_OXDNA2) -> float:
+    """Fraction of BACKBONE bonds outside oxDNA's FENE window in one reconstructed frame.
+
+    A production frame cannot contain even one such bond — the potential is undefined past
+    ``r0 ± delta`` and oxDNA aborts at config load — so a nonzero fraction means the frame's
+    PBC unwrap TORE the assembly: neighbouring bonded components snapped to different
+    periodic images once the structure diffused far from the design reference.
+
+    This is a per-frame QUALITY GATE for both strain metrics, not a backbone-only concern.
+    ``wc`` has no physical bound of its own (a genuinely melted pair really does drift
+    apart), so without this a torn frame contributes hundreds of percent of phantom pair
+    stretch that is indistinguishable from real melting — measured on a resumed
+    VoltronCoreScad run whose base-pair retention was 98.85 %, i.e. barely melted at all.
+    """
+    if not ia.size:
+        return 0.0
+    sites = oxdna_backbone_sites(cm, a1, a3)
+    d = sites[ia] - sites[ib]
+    s = np.sqrt((d * d).sum(axis=1)) / (OXDNA_LENGTH_UNIT * r0_units) - 1.0
+    return float((np.abs(s) > (FENE_DELTA / r0_units)).mean())
+
+
+def _strain_values(cm, a1, a3, ia, ib, *, metric: str,
+                   r0_units: float = FENE_R0_OXDNA2,
+                   wc_r0_units: float = HYDR_R0_OXDNA2):
+    """Vectorized per-nucleotide strain for ONE gathered configuration, aligned to the
+    same key order.  Returns ``(values, n_attempted, n_rejected)``; ``values`` is ``NaN``
+    where nothing was measurable, and the two counts cover FENE-window rejection (see
+    below; both 0 for ``wc``).
+
+    Backbone strain is attributed to each endpoint by largest MAGNITUDE; that is done
+    with a magnitude-sorted scatter (ascending, so the last write per nucleotide is its
+    worst bond) rather than a per-bond Python loop."""
+    keys_n = len(cm)
+    n_attempted = 0
+    n_rejected = 0
+    if metric == "backbone":
+        sites = oxdna_backbone_sites(cm, a1, a3)
+        l0 = r0_units
+    else:
+        sites = cm + OXDNA_BASE_SITE_NM * a1
+        l0 = wc_r0_units
+    d = sites[ia] - sites[ib]
+    s = np.sqrt((d * d).sum(axis=1)) / (OXDNA_LENGTH_UNIT * l0) - 1.0
+    out = np.full(keys_n, np.nan)
+    if metric == "backbone":
+        # REJECT PHYSICALLY IMPOSSIBLE BONDS.  The FENE potential is only defined on
+        # r0 ± delta; a production frame containing a bond outside that window cannot
+        # exist — oxDNA aborts at config load on the first one.  Such a measurement is
+        # therefore an artifact of FRAME RECONSTRUCTION, not of the simulation: the
+        # PBC unwrap box-shifts each bonded component toward its reference image, and
+        # once the assembly has diffused far from the design reference (late frames of
+        # long/resumed runs) neighbouring components can snap to DIFFERENT images and be
+        # torn apart, which reads as a bond of order the box size.  Averaging those in
+        # poisons the field (measured: 38 % of nucleotides "FENE-impossible" on the last
+        # frame of a resumed VoltronCoreScad run).  Drop the sample instead, so each
+        # nucleotide averages over the frames it was reconstructed sanely in.
+        # No such bound exists for `wc` — a melted pair genuinely does drift apart.
+        keep = np.abs(s) <= (FENE_DELTA / l0)
+        n_attempted = int(s.size)
+        n_rejected = int(n_attempted - keep.sum())
+        ia, ib, s = ia[keep], ib[keep], s[keep]
+        idx = np.concatenate([ia, ib])
+        vv = np.concatenate([s, s])
+        order = np.argsort(np.abs(vv), kind="stable")   # ascending |s| → worst wins
+        out[idx[order]] = vv[order]
+    else:
+        out[ia] = s
+        out[ib] = s
+    return out, n_attempted, n_rejected
+
+
+def strain_map(
+    design: Design,
+    full_map: dict[tuple, dict],
+    *,
+    metric: str = "backbone",
+    r0_units: float = FENE_R0_OXDNA2,
+    wc_r0_units: float = HYDR_R0_OXDNA2,
+    field: dict[tuple[str, int, str], float] | None = None,
+) -> dict:
+    """PER-NUCLEOTIDE LOCAL STRAIN of a relaxed/mean structure — the display feed for
+    the oxDNA "strain map" false-colouring (the strain counterpart of
+    :func:`geometry_deviation_map`).
+
+    Strain is the SIGNED, DIMENSIONLESS engineering strain ``(L − L0) / L0`` about the
+    metric's equilibrium length: ``0`` == relaxed, ``> 0`` == stretched (tension),
+    ``< 0`` == compressed, ``0.1`` == 10 % over-extended.  A diverging colormap centred
+    on 0 therefore reads directly as tension/compression.  Two metrics:
+
+    ``backbone`` — FENE backbone-bond strain, ``L0 = r0_units``.  For every bonded
+      3′-neighbour pair, ``L = |site_a − site_b|`` between the reconstructed BACKBONE SITES (the exact
+      quantity oxDNA's FENE term acts on — the ``.dat`` centre of mass sits ~0.34 units
+      inward and badly under-reads the bond).  Each bond's strain is attributed to BOTH
+      its nucleotides as the value of largest MAGNITUDE over that nucleotide's incident
+      bonds, so a junction reports its worst bond rather than an average that hides it.
+      This is the per-nucleotide form of what :func:`backbone_strain_field` collapses
+      per ``(helix, bp)``.  Highlights crossovers, skip/loop sites and forced
+      connections the relaxation could not fully absorb.
+
+    ``wc`` — Watson–Crick base-pair stretch, ``L0 = wc_r0_units`` (HYDR_R0).  At every
+      designed ``(helix, bp)`` with both strands present, ``L = |base_site_F −
+      base_site_R|`` (base site = ``CM + POS_BASE·a1``), attributed to both partners.
+      Highlights melted, opening or mis-registered pairs — a fully melted pair reads
+      several hundred percent, so the display's bounds are rescalable.  Nucleotides with
+      no designed partner (ssDNA loops, overhangs, ragged ends) carry no WC strain and
+      are OMITTED from the map.
+
+    ``full_map`` is a ``{key: {backbone_position (CM, nm), a1, a3}}`` position map —
+    a relaxed frame from ``read_configuration_full``, or the ``average_frame`` of
+    :func:`production_rmsf`.  Keys may be the 3-tuple ``(helix, bp, direction)`` or the
+    4-tuple loop-copy form; :func:`backbone_bond_pairs` collapses copies, so the physics
+    is indexed by the 3-tuple (copy 0 wins) and the result is broadcast back to every
+    copy at that position, so each loop bead still gets a colour.
+
+    NEVER measure the strain OF a time-averaged structure: averaging positions collapses
+    bond lengths (|⟨r_a⟩ − ⟨r_b⟩| ≤ ⟨|r_a − r_b|⟩), and the effect is not small — on a
+    real 1-helix field run the mean structure reads −26 % mean backbone and −67 % mean WC
+    strain where any single frame reads −1.8 % / +0.9 %.  So a trajectory map must pass
+    the time-averaged FIELD via ``field=`` (see :func:`production_strain_field`) while
+    ``full_map`` supplies only the DISPLAY geometry (the mean structure the RMSF and
+    deviation maps also draw, so all three overlays sit in the same place).  With
+    ``field=None`` the strain is computed from ``full_map`` itself — correct only when
+    ``full_map`` is a single instantaneous configuration.
+
+    Returns ``{positions: [{helix_id, bp_index, direction, copy, backbone_position, nx, ny,
+    nz, strain, ss}], min_strain, max_strain, mean_strain, abs_max_strain,
+    display_abs_strain, dsdna, n_shared, n_positions, metric, unit ("fraction"),
+    r0_units}``.
+
+    EVERY nucleotide in ``full_map`` is emitted — ``positions`` is the overlay's move list,
+    not just its colour list — with ``strain: None`` where nothing was measurable and ``ss``
+    marking designed single-stranded bases (see :func:`designed_ssdna_flags`).  ``n_shared``
+    counts the MEASURED ones; ``dsdna`` repeats the statistics over the designed-duplex
+    subset so the display can exclude ssDNA without a refetch.  Read-only over the Physical
+    layer — never written back into topology.
+    """
+    if metric not in ("backbone", "wc"):
+        raise ValueError(f"strain_map: unknown metric {metric!r} (expected 'backbone' or 'wc')")
+    per3 = field if field is not None else strain_field(
+        design, full_map, metric=metric, r0_units=r0_units, wc_r0_units=wc_r0_units)
+
+    ss_of = designed_ssdna_flags(full_map)
+    out: list[dict] = []
+    vals: list[float] = []
+    ds_vals: list[float] = []
+    for k, v in full_map.items():
+        # EVERY key is emitted, measured or not.  `positions` is the overlay's MOVE list as
+        # well as its colour list: a nucleotide left out of it keeps its DESIGN coordinates
+        # while the rest of the structure deforms to the simulated mean.  For `wc` that is
+        # every unpaired base — ssDNA overhangs, unstapled scaffold loops, extension tails,
+        # extra-base inserts — which would sit stranded in mid-air (measured: 2260 beads on
+        # VoltronCoreScad).  Unmeasured nucleotides carry ``strain: None`` and simply get no
+        # colour, so they ride along at their simulated positions in their native colour.
+        s = per3.get((k[0], k[1], k[2]))
+        a1 = np.asarray(v["a1"], dtype=float)
+        site = oxdna_backbone_site(v["backbone_position"], a1, np.asarray(v["a3"], dtype=float))
+        ss = ss_of(k)
+        out.append({
+            # Emitted RAW, exactly as /display does: a synthetic key's bp_index slot holds
+            # a crossover id (extra bases) or a bead index (extension tails) and must not
+            # be coerced — int() on a string crossover id would throw.
+            "helix_id": k[0], "bp_index": k[1], "direction": k[2],
+            "copy": int(k[3]) if len(k) > 3 else 0,
+            "backbone_position": np.asarray(site, dtype=float).tolist(),
+            "nx": float(a1[0]), "ny": float(a1[1]), "nz": float(a1[2]),
+            "strain": s,
+            "ss": ss,
+        })
+        if s is not None:
+            vals.append(s)
+            if not ss:
+                ds_vals.append(s)
+
+    unit_r0 = r0_units if metric == "backbone" else wc_r0_units
+    if not vals:
+        return {"positions": out, "min_strain": None, "max_strain": None,
+                "mean_strain": None, "abs_max_strain": None, "display_abs_strain": None,
+                "n_shared": 0, "n_positions": len(out), "dsdna": None,
+                "metric": metric, "unit": "fraction", "r0_units": unit_r0}
+    a = np.asarray(vals, dtype=float)
+    return {"positions": out, "min_strain": float(a.min()), "max_strain": float(a.max()),
+            "mean_strain": float(a.mean()), "abs_max_strain": float(np.abs(a).max()),
+            "display_abs_strain": _display_strain_bound(a, metric),
+            # Companion stats over the designed-dsDNA subset alone, so the "exclude ssDNA"
+            # display option can rescale instantly without a refetch — and so a lone flailing
+            # overhang cannot set the colour range for the duplex the user is inspecting.
+            "dsdna": _strain_stats(ds_vals, metric),
+            "n_shared": len(vals), "n_positions": len(out),
+            "metric": metric, "unit": "fraction", "r0_units": unit_r0}
+
+
+def _strain_stats(vals, metric: str) -> dict | None:
+    """``{min,max,mean,abs_max,display_abs,n}`` for a strain subset, or None if empty."""
+    if not len(vals):
+        return None
+    a = np.asarray(vals, dtype=float)
+    return {"min_strain": float(a.min()), "max_strain": float(a.max()),
+            "mean_strain": float(a.mean()), "abs_max_strain": float(np.abs(a).max()),
+            "display_abs_strain": _display_strain_bound(a, metric), "n": int(a.size)}
+
+
+def designed_ssdna_flags(full_map: dict[tuple, dict]):
+    """``key -> True when that nucleotide is DESIGNED single-stranded``.
+
+    Classification is TOPOLOGICAL, from the design's own nucleotide set (``full_map`` is
+    keyed by the design walk, so presence in it *is* presence in the design) — never from
+    how the simulation happened to end up.  A ``(helix, bp)`` column carrying nucleotides
+    on BOTH directions is designed duplex; anything else is designed ssDNA:
+
+      * an unstapled scaffold stretch — a deliberate ssDNA loop, not a defect
+        (see ``memory/feedback_staples_are_user_intent.md``),
+      * a single-stranded overhang,
+      * a 5′/3′ extension tail or a crossover extra-base insert (synthetic keys, never
+        paired by construction).
+
+    Loop-insertion copies inherit their base ``(helix, bp)``'s classification, matching how
+    the strain value itself is broadcast to copies.
+
+    This is what lets the strain map colour ONLY the regions that are supposed to be duplex,
+    so a disrupted one stands out instead of competing with ssDNA that is floppy by design.
+    """
+    fwd = {(k[0], k[1]) for k in full_map if k[2] == "FORWARD" and not is_synthetic_nuc_key(k)}
+    rev = {(k[0], k[1]) for k in full_map if k[2] == "REVERSE" and not is_synthetic_nuc_key(k)}
+    duplex = fwd & rev
+
+    def _ss(k) -> bool:
+        return is_synthetic_nuc_key(k) or (k[0], k[1]) not in duplex
+    return _ss
+
+
+# Robust display half-width per metric — the auto-range the false-colouring opens with.
+# The two metrics have genuinely different tails, so one percentile cannot serve both:
+#   backbone — FENE-BOUNDED.  The potential is only defined out to r0 + delta, so the
+#     strain physically cannot exceed ~+33 %; the distribution is tight (a real bundle
+#     runs p50 ≈ 4 %, p98 ≈ 7 %, max ≈ 8 %).  A high percentile costs almost nothing and
+#     keeps the worst-strained crossovers distinguishable instead of all-saturated.
+#   wc — UNBOUNDED.  A melted pair just drifts apart, so the tail runs to several hundred
+#     percent (measured p90 ≈ 8 %, p95 ≈ 81 %, p98 ≈ 233 % on the same bundle).  Ranging on
+#     that flattens the entire intact duplex onto the midpoint colour.  A lower percentile
+#     spans the intact duplex and lets melted pairs saturate the ramp's end — which is the
+#     signal the user is looking for anyway.
+# backbone can afford a high percentile (tight, FENE-bounded population — p98 sits a hair
+# under the max).  wc cannot: even after restricting to bonded pairs the spread runs
+# p50 ≈ 2 %, p90 ≈ 22 %, p98 ≈ 91 % (measured, VoltronCoreScad), because pairs stretched
+# most of the way to the H-bond cutoff are still "bonded".  p90 keeps the intact duplex
+# across the ramp and saturates the stretched/frayed minority.
+_STRAIN_DISPLAY_PERCENTILE = {"backbone": 98.0, "wc": 90.0}
+
+# WC strain at which a pair stops being hydrogen-bonded: the separation
+# :data:`BP_FORMED_CUTOFF_NM` expressed in the metric's own units.  Past it the pair is
+# simply UNPAIRED and extra distance carries no further information, so it is both the
+# saturation point of the ramp and the cut that separates the bonded population (whose
+# spread the display should resolve) from the melted one.
+WC_UNPAIRED_STRAIN: float = BP_FORMED_CUTOFF_NM / (OXDNA_LENGTH_UNIT * HYDR_R0_OXDNA2) - 1.0
+
+
+def _display_strain_bound(values, metric: str) -> float:
+    """Robust symmetric half-width for false-colouring a signed strain field.
+
+    ``backbone`` — a high percentile of |strain| over everything.  The population is
+    already FENE-bounded (and torn frames are gated out upstream), so there is no runaway
+    tail to defend against and clipping stays minimal.
+
+    ``wc`` — the same percentile, but over the BONDED subpopulation only.  A WC field is
+    intrinsically bimodal: an intact duplex sits near 0 (measured p50 ≈ 2 %) while frayed
+    terminal pairs and melted regions run to several hundred percent, and *every* real
+    origami has some of the latter — end-fraying is universal.  Ranging over both modes
+    puts the entire intact structure on the midpoint colour and shows nothing.  Scaling on
+    the bonded mode resolves it and lets unpaired bases saturate the ramp's end, which is
+    the signal the user is actually looking for.  Falls back to the full population if
+    nothing is bonded (a fully melted structure).
+    """
+    a = np.abs(np.asarray(values, dtype=float))
+    if not a.size:
+        return 0.0
+    pct = _STRAIN_DISPLAY_PERCENTILE.get(metric, 98.0)
+    if metric == "wc":
+        bonded = a[a <= WC_UNPAIRED_STRAIN]
+        if bonded.size:
+            a = bonded
+    return float(np.percentile(a, pct))
+
+
+# The strain map needs its OWN trajectory walk (the RMSF cache keeps only the averaged
+# frame, and strain must be averaged AFTER it is computed per frame — see strain_map).
+# Bounded: a strain field converges on far fewer frames than an RMSF does, and each kept
+# frame costs a parse + unwrap.
+_STRAIN_MAX_FRAMES: int = 60
+# A reconstructed frame is DISCARDED once this fraction of its backbone bonds falls
+# outside the FENE window (see :func:`_fene_violation_fraction`).  Measured on a resumed
+# VoltronCoreScad run: intact frames score exactly 0.0000, torn ones 0.0015 → 0.3861, so
+# anything above a hair of float noise separates them cleanly.
+_STRAIN_FRAME_REJECT_FRAC: float = 0.001
+_PRODUCTION_STRAIN_CACHE = None
+_PRODUCTION_STRAIN_CACHE_MAX = 4
+
+
+def _even_indices(n: int, keep: int) -> list[int]:
+    """``keep`` evenly-spaced 0-based indices spanning ``range(n)`` (all of them when
+    ``keep >= n``).  Deterministic, endpoints included."""
+    if n <= 0:
+        return []
+    if keep >= n or keep <= 1:
+        return list(range(n)) if keep >= n else [n - 1]
+    step = (n - 1) / (keep - 1)
+    return sorted({int(round(i * step)) for i in range(keep)})
+
+
+def production_strain_field(
+    design: Design,
+    production_traj_path,
+    reference_conf_path,
+    *,
+    metric: str = "backbone",
+    max_frames: int = _STRAIN_MAX_FRAMES,
+    copies: bool = True,
+    align: bool = True,
+    n_trailing_extra: int = 0,
+    trailing_extra_strand_length: int = 0,
+) -> dict:
+    """TIME-AVERAGED per-nucleotide strain field over a production trajectory —
+    ``⟨strain⟩``, computed per frame and THEN averaged — plus the mean frame it was
+    averaged over.
+
+    This is the correct time-average for the strain map: measuring the strain OF the
+    mean structure instead collapses every bond (see :func:`strain_map`).  Each sampled
+    frame is PBC-unwrapped against the reference so a bond spanning the periodic boundary
+    isn't read as an enormous stretch.
+
+    SYNTHETIC PARTICLES ARE INCLUDED.  The reference is read with ``include_extra_bases``
+    and ``include_extensions``, so crossover extra-base inserts and 5′/3′ strand-extension
+    tail beads are measured like any other nucleotide.  That is the whole point for a
+    strain map: a tail's bonds are the most FENE-fragile in a design (see
+    ``memory/project_strand_extensions_sim.md`` — three separate blow-up modes, all at
+    tails, and a too-SHORT bond kills a run as dead as a too-long one), so a map that
+    dropped them would omit exactly what it exists to find.  They are excluded from the
+    Kabsch fit via ``align_keys`` (unpaired ssDNA flails and would bias the superposition,
+    the same reason ``atomistic_to_nadoc`` masks them out), so the returned mean frame is
+    in the SAME pose as :func:`production_rmsf`'s.  They are also excluded from the ``wc``
+    metric by :func:`_strain_index` — a tail has no designed partner.
+
+    Frames are sampled EVENLY (up to ``max_frames`` across all pooled trajectories) — a
+    strain field converges far faster than an RMSF does, and each frame costs a parse plus
+    an unwrap.  Returns ``{field: {(helix, bp, direction): mean strain}, frame: {key:
+    {backbone_position (mean CM), a1, a3}}, n_frames, n_rejected, rejected_fraction}``;
+    ``frame`` is the display geometry for keys :func:`production_rmsf`'s ``average_frame``
+    does not carry (it drops the synthetic ones), and the rejection counts report bond
+    samples discarded as outside the FENE window (see :func:`_strain_values` — an unwrap
+    artifact, not physics).  Read-only over the Physical layer.
+    """
+    from backend.physics.oxdna_interface import (
+        _build_unwrap_plan,
+        _parse_box_nm,
+        read_configuration_full,
+        read_trajectory_frames_at,
+        unwrap_align_to_reference,
+    )
+    paths = (list(production_traj_path)
+             if isinstance(production_traj_path, (list, tuple))
+             else [production_traj_path])
+    ref = read_configuration_full(
+        reference_conf_path, design, copies=copies, include_extra_bases=True,
+        include_extensions=True, n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
+
+    counts = [count_trajectory_frames(p) for p in paths]
+    total = sum(counts)
+    if total <= 0:
+        return {"field": {}, "frame": {}, "n_frames": 0,
+                "rejected_fraction": 0.0, "n_rejected": 0, "n_frames_torn": 0}
+
+    # The key ordering + endpoint index are topology, not geometry: build them once from
+    # the reference and reuse for every frame (rebuilding per frame walks every strand).
+    keys = list(_strain_base_map(ref))
+    ia, ib = _strain_index(design, keys, metric)
+    # The backbone index is built for EVERY metric: it drives the per-frame torn-unwrap
+    # gate below, which `wc` needs even more than `backbone` does (it has no bound of its
+    # own).  Reused directly when the requested metric IS backbone.
+    ia_bb, ib_bb = (ia, ib) if metric == "backbone" else _strain_index(design, keys, "backbone")
+    if not ia.size:
+        return {"field": {}, "frame": {}, "n_frames": 0,
+                "rejected_fraction": 0.0, "n_rejected": 0, "n_frames_torn": 0}
+    # Superpose on the REAL nucleotides only — matching production_rmsf, whose reference
+    # drops synthetic keys entirely.  Without this the tails would both bias the fit and
+    # land the mean structure in a different pose than the RMSF/deviation overlays.
+    fit_keys = [k for k in ref if not is_synthetic_nuc_key(k)] if align else None
+    # The unwrap's traversal structure depends only on the KEY SET, so build it once and
+    # hand it to every frame — without this each frame re-walks the bonded graph, which
+    # measured as the single largest cost of this loop (13.1 s of 21.4 s on a 15 k-nt job).
+    _plan_cache: dict = {}
+
+    def _plan_for(fr):
+        ks = frozenset(fr)
+        p = _plan_cache.get(ks)
+        if p is None:
+            p = _build_unwrap_plan(fr, design)
+            _plan_cache[ks] = p
+        return p
+
+    total_s = np.zeros(len(keys))
+    counted = np.zeros(len(keys))
+    n_attempted = 0
+    n_rejected = 0
+    n_frames_torn = 0
+    sum_cm = np.zeros((len(keys), 3))
+    sum_a1 = np.zeros((len(keys), 3))
+    sum_a3 = np.zeros((len(keys), 3))
+    n_frames = 0
+    for path, n in zip(paths, counts):
+        if n <= 0:
+            continue
+        # Share the frame budget across pooled runs in proportion to their length, so a
+        # long production run isn't drowned out by a short field child (or vice versa).
+        keep = max(1, int(round(max_frames * n / total)))
+        frames = read_trajectory_frames_at(
+            path, design, _even_indices(n, keep), copies=copies,
+            n_trailing_extra=n_trailing_extra,
+            trailing_extra_strand_length=trailing_extra_strand_length)
+        box = _parse_box_nm(path)
+        for fr in frames.values():
+            whole = (unwrap_align_to_reference(fr, ref, design, box, align=align,
+                                               align_keys=fit_keys, plan=_plan_for(fr))
+                     if box is not None and np.all(box > 0) else fr)
+            arrs = _gather_frame(_strain_base_map(whole), keys)
+            if arrs is None:
+                continue                 # ragged/short frame — doesn't match the topology
+            cm, a1, a3 = arrs
+            # Torn-unwrap gate FIRST — a frame whose backbone reconstruction is impossible
+            # is unusable for either metric, so discard it whole rather than trying to
+            # salvage individual measurements out of a structure that isn't connected.
+            if _fene_violation_fraction(cm, a1, a3, ia_bb, ib_bb) > _STRAIN_FRAME_REJECT_FRAC:
+                n_frames_torn += 1
+                continue
+            vals, att, rej = _strain_values(cm, a1, a3, ia, ib, metric=metric)
+            n_frames += 1
+            n_attempted += att
+            n_rejected += rej
+            sum_cm += cm
+            sum_a1 += a1
+            sum_a3 += a3
+            ok = ~np.isnan(vals)
+            total_s[ok] += vals[ok]
+            counted[ok] += 1
+
+    if n_frames == 0:
+        return {"field": {}, "frame": {}, "n_frames": 0, "rejected_fraction": 0.0,
+                "n_rejected": 0, "n_frames_torn": n_frames_torn}
+    seen = counted > 0
+    mean = np.divide(total_s, counted, out=np.zeros_like(total_s), where=seen)
+    mcm = sum_cm / n_frames
+    ma1 = sum_a1 / (np.linalg.norm(sum_a1, axis=1, keepdims=True) + 1e-14)
+    ma3 = sum_a3 / (np.linalg.norm(sum_a3, axis=1, keepdims=True) + 1e-14)
+    return {"field": {k: float(mean[i]) for i, k in enumerate(keys) if seen[i]},
+            "frame": {k: {"backbone_position": mcm[i], "a1": ma1[i], "a3": ma3[i]}
+                      for i, k in enumerate(keys)},
+            "n_frames": n_frames, "n_rejected": n_rejected,
+            "n_frames_torn": n_frames_torn,
+            "rejected_fraction": (n_rejected / n_attempted) if n_attempted else 0.0}
+
+
+def production_strain_field_cached(design, production_traj_path, reference_conf_path, *,
+                                   metric: str = "backbone",
+                                   max_frames: int = _STRAIN_MAX_FRAMES,
+                                   copies: bool = True,
+                                   align: bool = True,
+                                   n_trailing_extra: int = 0,
+                                   trailing_extra_strand_length: int = 0) -> dict:
+    """LRU-cached :func:`production_strain_field`.  File size+mtime signatures naturally
+    invalidate a still-growing trajectory; a finished one is reused across metric toggles
+    and re-selections of the same job."""
+    global _PRODUCTION_STRAIN_CACHE
+    from collections import OrderedDict
+
+    paths = (list(production_traj_path)
+             if isinstance(production_traj_path, (list, tuple))
+             else [production_traj_path])
+    key = (tuple(_traj_file_sig(p) for p in paths), _traj_file_sig(reference_conf_path),
+           str(metric), int(max_frames), bool(copies), bool(align), int(n_trailing_extra),
+           int(trailing_extra_strand_length))
+    if _PRODUCTION_STRAIN_CACHE is not None:
+        cached = _PRODUCTION_STRAIN_CACHE.get(key)
+        if cached is not None:
+            _PRODUCTION_STRAIN_CACHE.move_to_end(key)
+            return cached
+    result = production_strain_field(
+        design, paths, reference_conf_path, metric=metric, max_frames=max_frames,
+        copies=copies, align=align, n_trailing_extra=n_trailing_extra,
+        trailing_extra_strand_length=trailing_extra_strand_length)
+    if _PRODUCTION_STRAIN_CACHE is None:
+        _PRODUCTION_STRAIN_CACHE = OrderedDict()
+    _PRODUCTION_STRAIN_CACHE[key] = result
+    _PRODUCTION_STRAIN_CACHE.move_to_end(key)
+    while len(_PRODUCTION_STRAIN_CACHE) > _PRODUCTION_STRAIN_CACHE_MAX:
+        _PRODUCTION_STRAIN_CACHE.popitem(last=False)
+    return result
 
 
 # ── top-level stage health check ──────────────────────────────────────────────

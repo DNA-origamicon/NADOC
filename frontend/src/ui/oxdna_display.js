@@ -10,6 +10,11 @@
  *    position over the production trajectory and recolour each backbone bead by
  *    its RMSF (root-mean-square fluctuation) — rigid = dark, flexible = bright —
  *    via designRenderer.applyScalarColors(...).
+ *  - "Deviation map" (displayDeviation) and "Strain map" (displayStrain): the same
+ *    mean structure recoloured by, respectively, each base's distance from its
+ *    DESIGNED position (green→red) and its SIGNED local strain — backbone-FENE or
+ *    Watson–Crick — on a diverging ramp (blue = compressed, white = relaxed,
+ *    red = stretched).  Both take a pre-fetched payload; CG beads only.
  *
  * Toggling either off restores the model via applyFemPositions(null) +
  * clearScalarColors().
@@ -127,6 +132,82 @@ export function deviationColorMap(resp, loBound, hiBound, cmap = 'devramp') {
 }
 
 /**
+ * Pure: symmetric default colour bounds for a SIGNED strain payload, so a diverging
+ * colormap's midpoint lands exactly on 0 (relaxed) and compression/tension read as
+ * opposite colours rather than both as "low".
+ *
+ * The half-width is the backend's ROBUST `display_abs_strain`, not the max: a handful of
+ * melted WC pairs read several hundred percent and would otherwise flatten the entire
+ * structure onto the midpoint colour.  Those outliers still saturate the ramp's end
+ * (colormapHex clamps).  The percentile behind it is per-metric and lives in
+ * `oxdna_health._STRAIN_DISPLAY_PERCENTILE` — backbone strain is FENE-bounded, WC strain
+ * is not.  Falls back to abs_max_strain, then to |min|/|max|, then to ±1 for a degenerate
+ * (all-zero / missing) payload.
+ */
+/**
+ * Pure: the mean + true data range a strain payload should REPORT, from whichever
+ * population is on screen.  With ssDNA excluded these must come from the `dsdna` block, or
+ * the panel would quote a mean and range for bases it is no longer colouring.
+ */
+export function strainStats(resp, dsOnly = false) {
+  const src = (dsOnly && resp?.dsdna) ? resp.dsdna : resp
+  return { mean: src?.mean_strain, dataMin: src?.min_strain, dataMax: src?.max_strain }
+}
+
+export function strainBounds(resp, dsOnly = false) {
+  // With ssDNA excluded, scale on the duplex subset's own stats — otherwise one flailing
+  // overhang sets the range for the duplex the user is actually inspecting.
+  const src = (dsOnly && resp?.dsdna) ? resp.dsdna : resp
+  const cands = [src?.display_abs_strain, src?.abs_max_strain]
+  let a = cands.find((v) => Number.isFinite(v) && Math.abs(v) > 1e-12)
+  if (!Number.isFinite(a)) {
+    a = Math.max(Math.abs(src?.min_strain ?? 0), Math.abs(src?.max_strain ?? 0))
+  }
+  return Math.abs(a) > 1e-12 ? { lo: -Math.abs(a), hi: Math.abs(a) } : { lo: -1, hi: 1 }
+}
+
+/**
+ * Pure: strain-map response → {updates, colorByKey, min, max, nColored}.  Mirrors
+ * deviationColorMap but reads the SIGNED per-nucleotide `strain` and defaults to symmetric
+ * ± bounds so 0 sits at the diverging colormap's midpoint.  `min`/`max` are the bounds
+ * actually used for colour — the legend must match the beads.
+ *
+ * MOVE LIST vs COLOUR LIST — they are deliberately different sets.  `updates` carries EVERY
+ * position so the whole structure deforms to the simulated mean together; a bead left out
+ * would stay at its DESIGN coordinates while its neighbours move (the `wc` map measures only
+ * paired bases, so that would strand every ssDNA overhang, scaffold loop and extension tail
+ * in mid-air).  `colorByKey` carries only what should be coloured: nucleotides with a finite
+ * strain, and — when `dsOnly` — only those the design intends to be duplex.  Everything else
+ * rides along uncoloured, keeping its native strand colour.
+ */
+export function strainColorMap(resp, loBound, hiBound, cmap = 'coolwarm', { dsOnly = false } = {}) {
+  if (!resp || !resp.ready || !Array.isArray(resp.positions) || !resp.positions.length) {
+    return null
+  }
+  const dflt = strainBounds(resp, dsOnly)
+  const lo = Number.isFinite(loBound) ? loBound : dflt.lo
+  const hi = Number.isFinite(hiBound) ? hiBound : dflt.hi
+  const span = hi - lo
+  const updates = []
+  const colorByKey = {}
+  let nColored = 0
+  for (const p of resp.positions) {
+    updates.push({
+      helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction, copy: p.copy ?? 0,
+      backbone_position: p.backbone_position, nx: p.nx, ny: p.ny, nz: p.nz,
+    })
+    if (!Number.isFinite(p.strain)) continue     // unmeasured — moves, but takes no colour
+    if (dsOnly && p.ss) continue                 // designed ssDNA — excluded by request
+    const t = span > 1e-12 ? (p.strain - lo) / span : 0.5   // colormapHex clamps to [0,1]
+    const hex = colormapHex(cmap, t)
+    colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}:${p.copy ?? 0}`] = hex
+    if ((p.copy ?? 0) === 0) colorByKey[`${p.helix_id}:${p.bp_index}:${p.direction}`] = hex
+    nColored++
+  }
+  return { updates, colorByKey, min: lo, max: hi, nColored }
+}
+
+/**
  * Pure: turn one composite-trajectory frame (flat float list) + the shared key
  * list into applyFemPositions updates.  keys = [[helix,bp,dir], …]; frame holds
  * 6 floats per key (backbone x,y,z then a1 nx,ny,nz).  Kept pure for testing.
@@ -209,12 +290,16 @@ export function initOxdnaDisplay({
   }
   let _active = false
   let _jobId = null
-  let _mode = null     // 'relaxed' | 'rmsf' | 'deviation' | 'trajectory'
+  let _mode = null     // 'relaxed' | 'rmsf' | 'deviation' | 'strain' | 'trajectory'
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
   let _devResp = null  // cached /deviation payload so the scale can recolour without re-fetching
+  let _strainResp = null // cached /strain payload (same reason)
   let _rmsfCmap = 'viridis'    // active flex-map colormap (widget-driven)
   let _devCmap  = 'devramp'    // active deviation-map colormap (widget-driven)
+  let _strainCmap = 'coolwarm' // active strain-map colormap (diverging — 0 at the midpoint)
+  let _strainDsOnly = false    // strain map: colour designed-duplex bases only (ssDNA rides uncoloured)
   let _devBounds = null
+  let _strainBounds = null
   let _traj = null     // cached /trajectory payload {keys, frames, markers, n_frames, stages}
   // The surface-strand coordinates currently exposed by the backend are the job's latest
   // simulated result.  RMSF + trajectory payloads contain only design-keyed origami beads,
@@ -802,6 +887,81 @@ export function initOxdnaDisplay({
   }
 
   /**
+   * Render a STRAIN map: a job's time-averaged mean structure, each bead recoloured by
+   * its SIGNED local strain (blue = compressed, white = relaxed, red = stretched).
+   * Takes a PRE-FETCHED response from GET /oxdna/jobs/{id}/strain.  CG beads only
+   * (mirrors the deviation map — no heavy reps).  Returns {ok, n, min, max, mean,
+   * absMax, metric, nFrames}.
+   */
+  function displayStrain(resp) {
+    if (!designRenderer) return { ok: false, reason: 'no renderer' }
+    _epoch++
+    const map = strainColorMap(resp, undefined, undefined, _strainCmap, { dsOnly: _strainDsOnly })
+    if (!map) return { ok: false, reason: resp?.reason || 'not ready' }
+    _strainResp = resp   // cache so the scale widget can recolour without re-fetching
+    _strainBounds = { lo: map.min, hi: map.max }
+    _applyFem(map.updates)
+    designRenderer.applyScalarColors(map.colorByKey)
+    _active = true
+    _mode = 'strain'
+    _jobId = null   // pre-fetched payload (like deviation) — the panel owns the job id
+    return {
+      ok: true, n: map.nColored, nMoved: map.updates.length, min: map.min, max: map.max,
+      // mean / data range follow whichever population is coloured (see strainStats).
+      ...strainStats(resp, _strainDsOnly),
+      absMax: resp.abs_max_strain, metric: resp.metric,
+      // Fraction of bond samples discarded as outside the FENE window — a PBC-unwrap
+      // artifact in late frames of long/resumed runs, not physics.  Surfaced so a map
+      // built from a poorly-reconstructed trajectory can't look as solid as a clean one.
+      rejectedFraction: resp.rejected_fraction ?? 0,
+      framesTorn: resp.n_frames_torn ?? 0,
+      // n_strain_frames = frames the strain was averaged over (its own bounded walk);
+      // n_frames = frames behind the mean structure the beads are drawn at.
+      nFrames: resp.n_strain_frames ?? resp.n_frames,
+    }
+  }
+
+  /**
+   * Recolour the active STRAIN map to a custom range [lo, hi] on colormap `cmap` —
+   * driven by the workspace scale widget.  CG beads only.  No-op unless the strain
+   * map is active and its data is cached.
+   */
+  function recolorStrain(lo, hi, cmap) {
+    if (_mode !== 'strain' || !_strainResp || !designRenderer) return false
+    if (cmap) _strainCmap = cmap
+    const map = strainColorMap(_strainResp, lo, hi, _strainCmap, { dsOnly: _strainDsOnly })
+    if (!map) return false
+    _strainBounds = { lo: map.min, hi: map.max }
+    designRenderer.applyScalarColors(map.colorByKey)
+    return true
+  }
+
+  /**
+   * Include or exclude DESIGNED ssDNA (overhangs, unstapled scaffold loops, extension tails,
+   * extra-base inserts) from the strain colouring — so only regions meant to be duplex light
+   * up, and a disrupted one is not competing with ssDNA that is floppy by design.  Positions
+   * are untouched: excluded bases still ride to their simulated coordinates, they just keep
+   * their native colour.  Recolours from the cached payload, so the toggle is instant.
+   *
+   * Colours are CLEARED first: applyScalarColors leaves keys it isn't given alone, so
+   * without this the ssDNA beads would keep the colour the previous pass gave them.  Bounds
+   * reset to the new subset's default, since the duplex-only range is usually much tighter.
+   * Returns the new {min, max, n} for the legend, or null when the map isn't active.
+   */
+  function setStrainDsdnaOnly(on) {
+    _strainDsOnly = !!on
+    if (_mode !== 'strain' || !_strainResp || !designRenderer) return null
+    const map = strainColorMap(_strainResp, undefined, undefined, _strainCmap,
+                               { dsOnly: _strainDsOnly })
+    if (!map) return null
+    _strainBounds = { lo: map.min, hi: map.max }
+    designRenderer.clearScalarColors?.()
+    designRenderer.applyScalarColors(map.colorByKey)
+    return { min: map.min, max: map.max, n: map.nColored,
+             ...strainStats(_strainResp, _strainDsOnly) }
+  }
+
+  /**
    * Recolour the active flexibility map to a custom RMSF range [lo, hi] (values
    * outside clamp to the endpoints) — driven by the workspace scale widget.
    * Positions are untouched (only colours change).  No-op unless the RMSF map is
@@ -952,6 +1112,7 @@ export function initOxdnaDisplay({
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
     _restoreHeavy()   // atomistic/surface back to the plain design (rebuild from design)
     _rmsfResp = null
+    _strainResp = null
     _traj = null
   }
 
@@ -960,8 +1121,12 @@ export function initOxdnaDisplay({
     displayLiveFrame,
     displayRmsf,
     displayDeviation,
+    displayStrain,
     recolorRmsf,
     recolorDeviation,
+    recolorStrain,
+    setStrainDsdnaOnly,
+    strainDsdnaOnly: () => _strainDsOnly,
     loadTrajectory,
     showFrame,
     refresh,
@@ -980,27 +1145,46 @@ export function initOxdnaDisplay({
       ? { frame: _frameIdx + 1, total: _traj.frames.length }
       : null,
     coloringInfo: () => {
-      const resp = _mode === 'rmsf' ? _rmsfResp : (_mode === 'deviation' ? _devResp : null)
+      const resp = _mode === 'rmsf' ? _rmsfResp
+        : _mode === 'deviation' ? _devResp
+        : _mode === 'strain' ? _strainResp : null
       if (!resp?.positions?.length) return null
-      const rmsf = _mode === 'rmsf'
-      const bounds = rmsf ? _activeBounds() : (_devBounds || {
-        lo: Number.isFinite(resp.min_deviation) ? resp.min_deviation : 0,
-        hi: Number.isFinite(resp.max_deviation) ? resp.max_deviation : 1,
-      })
+      // Per scalar mode: the attribute name exported to ChimeraX/photo paths, its
+      // colour bounds (the ones the beads actually used), and the per-nucleotide value.
+      const spec = _mode === 'rmsf' ? {
+        attribute: 'rmsf', title: 'RMSF', unit: 'nm', colormap: _rmsfCmap,
+        bounds: _activeBounds(), value: p => p.rmsf,
+      } : _mode === 'deviation' ? {
+        attribute: 'deviation', title: 'Deviation', unit: 'nm', colormap: _devCmap,
+        bounds: _devBounds || {
+          lo: Number.isFinite(resp.min_deviation) ? resp.min_deviation : 0,
+          hi: Number.isFinite(resp.max_deviation) ? resp.max_deviation : 1,
+        },
+        value: p => p.deviation,
+      } : {
+        attribute: 'strain',
+        title: resp.metric === 'wc' ? 'WC pair strain' : 'Backbone strain',
+        // Dimensionless (Δ/L0), not a length — export consumers scale it as a fraction.
+        unit: 'fraction', colormap: _strainCmap,
+        bounds: _strainBounds || strainBounds(resp, _strainDsOnly),
+        value: p => p.strain,
+        // Export exactly what is DRAWN: unmeasured bases and, when the ssDNA filter is on,
+        // designed-ssDNA bases carry no colour, so they carry no exported value either.
+        keep: p => Number.isFinite(p.strain) && !(_strainDsOnly && p.ss),
+      }
+      const keep = spec.keep || (() => true)
       return {
-        attribute: rmsf ? 'rmsf' : 'deviation',
-        title: rmsf ? 'RMSF' : 'Deviation', unit: 'nm',
-        colormap: rmsf ? _rmsfCmap : _devCmap,
-        lo: bounds.lo, hi: bounds.hi,
-        values: resp.positions.map(p => ({
+        attribute: spec.attribute, title: spec.title, unit: spec.unit,
+        colormap: spec.colormap, lo: spec.bounds.lo, hi: spec.bounds.hi,
+        values: resp.positions.filter(keep).map(p => ({
           helix_id: p.helix_id, bp_index: p.bp_index, direction: p.direction,
-          copy: p.copy ?? 0, value: rmsf ? p.rmsf : p.deviation,
+          copy: p.copy ?? 0, value: spec.value(p),
         })),
       }
     },
     // True when this overlay is active in a mode that REBUILDS the atomistic renderer
     // from the job's atoms (relaxed / rmsf / trajectory) — NOT the CG-only modes
-    // (live / deviation), which would leave an atomistic switch with nothing to show.
+    // (live / deviation / strain), which would leave an atomistic switch with nothing to show.
     // Used to suppress the design "native flash" on full→atomistic.
     drivesHeavy: () => _active && (_mode === 'relaxed' || _mode === 'rmsf' || _mode === 'trajectory'),
   }

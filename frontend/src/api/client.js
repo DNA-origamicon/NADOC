@@ -2213,6 +2213,18 @@ export const getOxdnaDeviation = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getOxdnaDeviation')
   return _oxdnaJSON('GET', `/oxdna/jobs/${id}/deviation?align=${align}`, undefined, { signal })
 }
+/** Per-nucleotide LOCAL STRAIN map of a job's production mean structure.
+ *  `opts.metric`: 'backbone' (FENE backbone-bond strain, default) or 'wc' (Watson–Crick
+ *  base-pair stretch).  Values are SIGNED oxDNA length units: + stretched, − compressed. */
+export const getOxdnaStrain = (id, opts) => {
+  const { align, signal } = _vizOpts(opts, 'getOxdnaStrain')
+  const metric = opts?.metric ?? 'backbone'
+  if (metric !== 'backbone' && metric !== 'wc') {
+    throw new TypeError(`getOxdnaStrain: opts.metric must be 'backbone' or 'wc', got ${JSON.stringify(metric)}.`)
+  }
+  return _oxdnaJSON('GET', `/oxdna/jobs/${id}/strain?align=${align}&metric=${metric}`,
+                    undefined, { signal })
+}
 /** Graphs & Metrics card: start a background twist/curvature/base-pairing compute for a
  *  job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getOxdnaMetricsRun`. */
 export const startOxdnaMetrics   = (id, body)    => _oxdnaJSON('POST', `/oxdna/jobs/${id}/metrics/start`, body)

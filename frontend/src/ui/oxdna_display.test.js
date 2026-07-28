@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors, deviationHex, deviationColorMap } from './oxdna_display.js'
+import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors, deviationHex, deviationColorMap, strainBounds, strainColorMap, strainStats } from './oxdna_display.js'
+import { colormapHex } from './colormaps.js'
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
@@ -107,6 +108,137 @@ describe('deviationColorMap', () => {
       positions: [{ helix_id: 'h0', bp_index: 0, direction: 'FORWARD', backbone_position: [0, 0, 0], nx: 1, ny: 0, nz: 0, deviation: 0.8 }] }
     const map = deviationColorMap(resp)
     expect(map.colorByKey['h0:0:FORWARD']).toBe(deviationHex(0))
+  })
+})
+
+describe('strainBounds', () => {
+  it('is symmetric about 0 so a diverging ramp centres on "relaxed"', () => {
+    expect(strainBounds({ display_abs_strain: 0.25, abs_max_strain: 0.25, min_strain: -0.25, max_strain: 0.1 }))
+      .toEqual({ lo: -0.25, hi: 0.25 })
+  })
+  it('prefers the robust display bound over the max so melted-pair outliers cannot flatten the ramp', () => {
+    // a few melted WC pairs at +1400% alongside a structure that lives within ±8%
+    expect(strainBounds({ display_abs_strain: 0.08, abs_max_strain: 14.34, min_strain: -0.02, max_strain: 14.34 }))
+      .toEqual({ lo: -0.08, hi: 0.08 })
+  })
+  it('falls back to abs_max, then to the larger |min|,|max|', () => {
+    expect(strainBounds({ abs_max_strain: 0.4 })).toEqual({ lo: -0.4, hi: 0.4 })
+    expect(strainBounds({ min_strain: -0.4, max_strain: 0.1 })).toEqual({ lo: -0.4, hi: 0.4 })
+    expect(strainBounds({ min_strain: -0.05, max_strain: 0.9 })).toEqual({ lo: -0.9, hi: 0.9 })
+  })
+  it('skips a degenerate display bound of 0 rather than collapsing the span', () => {
+    expect(strainBounds({ display_abs_strain: 0, abs_max_strain: 0.5 })).toEqual({ lo: -0.5, hi: 0.5 })
+  })
+  it('falls back to ±1 for an all-zero / missing payload (never a zero span)', () => {
+    expect(strainBounds({ abs_max_strain: 0 })).toEqual({ lo: -1, hi: 1 })
+    expect(strainBounds(null)).toEqual({ lo: -1, hi: 1 })
+  })
+})
+
+describe('strainColorMap', () => {
+  const _p = (bp, strain) => ({ helix_id: 'h0', bp_index: bp, direction: 'FORWARD',
+    backbone_position: [bp, 0, 0], nx: 1, ny: 0, nz: 0, strain })
+
+  it('returns null for not-ready / empty responses', () => {
+    expect(strainColorMap(null)).toBe(null)
+    expect(strainColorMap({ ready: false, positions: [] })).toBe(null)
+    expect(strainColorMap({ ready: true, positions: [] })).toBe(null)
+  })
+
+  it('puts relaxed (0) at the ramp midpoint, with compression/tension at the ends', () => {
+    const resp = { ready: true, min_strain: -0.2, max_strain: 0.2, abs_max_strain: 0.2,
+      positions: [_p(0, -0.2), _p(1, 0), _p(2, 0.2)] }
+    const map = strainColorMap(resp)
+    expect(map.updates).toHaveLength(3)
+    expect(map.updates[0]).not.toHaveProperty('strain')          // stripped to applyFem shape
+    expect(map.colorByKey['h0:0:FORWARD']).toBe(colormapHex('coolwarm', 0))    // compressed → blue
+    expect(map.colorByKey['h0:1:FORWARD']).toBe(colormapHex('coolwarm', 0.5))  // relaxed → white
+    expect(map.colorByKey['h0:2:FORWARD']).toBe(colormapHex('coolwarm', 1))    // stretched → red
+    expect(map.min).toBe(-0.2)
+    expect(map.max).toBe(0.2)
+  })
+
+  it('keeps 0 at the midpoint even when the data is one-sided', () => {
+    const resp = { ready: true, min_strain: 0.05, max_strain: 0.5, abs_max_strain: 0.5,
+      positions: [_p(0, 0.05), _p(1, 0.5)] }
+    const map = strainColorMap(resp)
+    expect(map.min).toBe(-0.5)                                    // symmetric, not the data min
+    expect(map.colorByKey['h0:1:FORWARD']).toBe(colormapHex('coolwarm', 1))
+    expect(map.colorByKey['h0:0:FORWARD']).toBe(colormapHex('coolwarm', 0.55))
+  })
+
+  it('honours explicit bounds and an explicit colormap', () => {
+    const resp = { ready: true, abs_max_strain: 0.2, positions: [_p(0, 0.1)] }
+    const map = strainColorMap(resp, 0, 0.2, 'turbo')
+    expect(map.colorByKey['h0:0:FORWARD']).toBe(colormapHex('turbo', 0.5))
+    expect(map.min).toBe(0)
+    expect(map.max).toBe(0.2)
+  })
+
+  it('keys every loop copy and aliases copy 0 to the 3-part key', () => {
+    const resp = { ready: true, abs_max_strain: 0.2, positions: [
+      { ..._p(3, 0.2), copy: 0 }, { ..._p(3, 0.2), copy: 1 }] }
+    const map = strainColorMap(resp)
+    expect(map.colorByKey['h0:3:FORWARD:0']).toBeDefined()
+    expect(map.colorByKey['h0:3:FORWARD:1']).toBeDefined()
+    expect(map.colorByKey['h0:3:FORWARD']).toBe(map.colorByKey['h0:3:FORWARD:0'])
+  })
+
+  it('MOVES every position even when only some are coloured', () => {
+    // The `wc` map measures only paired bases; leaving the rest out of `updates` would
+    // strand every ssDNA overhang / scaffold loop / tail at its DESIGN coordinates.
+    const resp = { ready: true, display_abs_strain: 0.2, positions: [
+      _p(0, 0.2), { ..._p(1, null), strain: null }, { ..._p(2, undefined) }] }
+    const map = strainColorMap(resp)
+    expect(map.updates).toHaveLength(3)                       // all three move…
+    expect(map.nColored).toBe(1)                              // …only the measured one colours
+    expect(map.colorByKey['h0:0:FORWARD']).toBeDefined()
+    expect(map.colorByKey['h0:1:FORWARD']).toBeUndefined()
+    expect(map.colorByKey['h0:2:FORWARD']).toBeUndefined()
+  })
+
+  it('dsOnly leaves designed ssDNA uncoloured but still moves it', () => {
+    const resp = { ready: true, display_abs_strain: 0.2,
+      dsdna: { display_abs_strain: 0.05 },
+      positions: [
+        { ..._p(0, 0.05), ss: false },   // duplex
+        { ..._p(1, 0.2), ss: true },     // overhang / scaffold loop / tail
+      ] }
+    const all = strainColorMap(resp)
+    expect(all.nColored).toBe(2)
+    expect(all.colorByKey['h0:1:FORWARD']).toBeDefined()
+
+    const ds = strainColorMap(resp, undefined, undefined, 'coolwarm', { dsOnly: true })
+    expect(ds.updates).toHaveLength(2)                        // ssDNA still deforms
+    expect(ds.nColored).toBe(1)
+    expect(ds.colorByKey['h0:0:FORWARD']).toBeDefined()
+    expect(ds.colorByKey['h0:1:FORWARD']).toBeUndefined()     // …but takes no colour
+    // …and the scale rescales to the duplex subset, so one flailing overhang can't set it.
+    expect(ds.max).toBe(0.05)
+    expect(all.max).toBe(0.2)
+  })
+
+  it('strainStats reports the population that is actually coloured', () => {
+    const resp = { mean_strain: 0.5, min_strain: -0.1, max_strain: 4.0,
+      dsdna: { mean_strain: 0.01, min_strain: -0.03, max_strain: 0.04 } }
+    expect(strainStats(resp, false)).toEqual({ mean: 0.5, dataMin: -0.1, dataMax: 4.0 })
+    expect(strainStats(resp, true)).toEqual({ mean: 0.01, dataMin: -0.03, dataMax: 0.04 })
+    // Quoting the overall mean while colouring only the duplex would misreport the map.
+    expect(strainStats({ mean_strain: 0.5 }, true).mean).toBe(0.5)   // no block → overall
+  })
+
+  it('strainBounds prefers the dsdna stats block only when dsOnly is set', () => {
+    const resp = { display_abs_strain: 0.9, dsdna: { display_abs_strain: 0.04 } }
+    expect(strainBounds(resp, false)).toEqual({ lo: -0.9, hi: 0.9 })
+    expect(strainBounds(resp, true)).toEqual({ lo: -0.04, hi: 0.04 })
+    // No dsdna block (e.g. nothing measured in the duplex) → fall back to the overall stats.
+    expect(strainBounds({ display_abs_strain: 0.9 }, true)).toEqual({ lo: -0.9, hi: 0.9 })
+  })
+
+  it('paints a uniform field mid-ramp instead of dividing by zero', () => {
+    const resp = { ready: true, abs_max_strain: 0, positions: [_p(0, 0)] }
+    const map = strainColorMap(resp, 0.3, 0.3)
+    expect(map.colorByKey['h0:0:FORWARD']).toBe(colormapHex('coolwarm', 0.5))
   })
 })
 

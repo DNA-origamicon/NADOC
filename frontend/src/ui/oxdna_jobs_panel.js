@@ -444,6 +444,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const autorefineResult  = document.getElementById('oxdna-jobs-autorefine-result')
   const autorefineDevToggle = document.getElementById('oxdna-jobs-deviation-toggle')
   const autorefineDevStatus = document.getElementById('oxdna-jobs-deviation-status')
+  const strainToggle  = document.getElementById('oxdna-jobs-strain-toggle')
+  const strainStatus  = document.getElementById('oxdna-jobs-strain-status')
+  const strainBar     = document.getElementById('oxdna-jobs-strain-bar')
+  const strainMetricSel = document.getElementById('oxdna-jobs-strain-metric')
+  const strainDsOnlyToggle = document.getElementById('oxdna-jobs-strain-dsdna-only')
+  let _strainBusy = false
   let _autorefineRunning = false
   let _autorefineRunId = null
   let _autorefineFinalJobId = null    // the run's final oxDNA job (auto-selected on completion)
@@ -501,15 +507,15 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const heavyWarn     = document.getElementById('oxdna-jobs-heavy-warn')
   const vizOffRadio   = document.getElementById('oxdna-jobs-viz-off')
 
-  // The OxDNA display / Flexibility / Deviation / Trajectory views are mutually-
-  // exclusive radios in the "Visualizations & processing" card (they share one bead
-  // overlay).  Keep the "Off" radio checked whenever no view is active, so the group
+  // The OxDNA display / Flexibility / Deviation / Strain / Trajectory views are
+  // mutually-exclusive radios in the "Visualizations & processing" card (they share one
+  // bead overlay).  Keep the "Off" radio checked whenever no view is active, so the group
   // always shows a selection — including after a programmatic turn-off (job switch,
   // lost trajectory, live-mode takeover, design edit).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, trajToggle, trajFullToggle, autorefineDevToggle]
-      .some(t => t?.checked)
+    const anyOn = [displayToggle, flexToggle, trajToggle, trajFullToggle, autorefineDevToggle,
+                   strainToggle].some(t => t?.checked)
     if (!anyOn) vizOffRadio.checked = true
   }
 
@@ -836,10 +842,157 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
       if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
+      if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
       await _refreshDeviation()
     } else {
       _setDeviationOff()
     }
+  })
+
+  // ── Strain map toggle (mean structure false-coloured by SIGNED local strain) ──────
+  // Same per-JOB gate as the flexibility/deviation maps (the selected job must have a
+  // production or field run).  Two metrics, chosen by the sibling <select>: backbone
+  // FENE bond stretch, or Watson–Crick base-pair stretch.  Values are dimensionless
+  // (Δ/L0) and shown as a percentage; the diverging ramp puts 0 (relaxed) at its middle.
+  function _setStrainStatus(text, color = '#8b949e') {
+    if (strainStatus) { strainStatus.textContent = text || ''; strainStatus.style.color = color }
+  }
+  // Same indeterminate-stripe treatment the flexibility map uses.  The strain map pays a
+  // trajectory walk (tens of seconds cold on a large design, sub-second warm), which is
+  // well past the point where a silent panel reads as "nothing happened" — and below the
+  // global "Working…" popup's 5 s threshold on a warm cache, so a targeted in-panel bar is
+  // the right surface (see memory/feedback_busy_popup_threshold.md).
+  function _setStrainBar(state) {
+    // state: 'computing' (indeterminate stripe) | 'done' | 'off'
+    if (!strainBar) return
+    if (state === 'computing') {
+      strainBar.style.display = ''
+      strainBar.innerHTML =
+        `<div style="position:relative;height:6px;border-radius:4px;overflow:hidden;background:#222">` +
+        `<div style="position:absolute;top:0;height:100%;width:35%;background:${_C.accent};` +
+        `animation:gromacs-indeterminate 1.1s linear infinite"></div></div>`
+    } else if (state === 'done') {
+      strainBar.style.display = ''
+      strainBar.innerHTML = `<span style="color:${_C.ok};font-size:11px">✓ Strain map ready</span>`
+    } else {
+      strainBar.style.display = 'none'
+      strainBar.innerHTML = ''
+    }
+  }
+  const _fmtPct = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%` : '—')
+  // Last displayStrain() result, so the ssDNA filter can re-render the status + legend from
+  // cache without re-fetching (only `min`/`max`/`n` change when it flips).
+  let _strainLast = null
+  function _renderStrainResult() {
+    const r = _strainLast
+    if (!r) return
+    const dsOnly = !!strainDsOnlyToggle?.checked
+    const what = (r.metric === 'wc' ? 'WC pair stretch' : 'Backbone stretch')
+      + (dsOnly ? ' (dsDNA only)' : '')
+    // The colour scale is the ROBUST symmetric range, which is NOT the data range when some
+    // pairs are melted — report both, or the legend and the quoted extremes silently disagree.
+    const clipped = Math.abs(r.dataMax) > r.max * 1.001 || Math.abs(r.dataMin) > r.max * 1.001
+    // Bond samples thrown out as outside the FENE window are a trajectory-reconstruction
+    // artifact, not physics — but a map built mostly from discarded samples is weak
+    // evidence, so say so rather than presenting it with the same confidence.
+    const rej = r.rejectedFraction || 0
+    const torn = r.framesTorn || 0
+    const rejNote = (rej > 0.005 ? ` · ${(rej * 100).toFixed(1)}% of bond samples discarded` : '')
+      + (torn ? ` · ${torn} frame${torn === 1 ? '' : 's'} skipped (torn PBC reconstruction)` : '')
+    // `n` = coloured bases; `nMoved` = bases deformed to the simulated mean.  They differ by
+    // the unmeasured/ssDNA ones, which move with the structure but take no colour — worth
+    // stating, or "1023 bases" on a 16168-bead model reads like most of it was dropped.
+    const moved = (r.nMoved && r.nMoved !== r.n) ? ` (${r.nMoved} moved)` : ''
+    _setStrainStatus(`${what} — scale ${_fmtPct(r.min)} (blue) → ${_fmtPct(r.max)} (red), `
+      + `mean ${_fmtPct(r.mean)}, range ${_fmtPct(r.dataMin)}…${_fmtPct(r.dataMax)}`
+      + `${clipped ? ' (outliers clipped)' : ''}, ${r.n} bases coloured${moved}, `
+      + `${r.nFrames ?? '?'} frames${rejNote}`,
+      (rej > 0.05 || torn > (r.nFrames || 0)) ? _C.warn : '#3fb950')
+    // Bounds are the SYMMETRIC range the controller coloured with, so the legend's
+    // midpoint is exactly 0 = relaxed.  Recolour keeps whatever the user drags to.
+    _flexScale.show({
+      title: (r.metric === 'wc' ? 'WC strain (Δ/r₀)' : 'Backbone strain (Δ/r₀)')
+        + (dsOnly ? ' · dsDNA' : ''),
+      min: r.min, max: r.max, mapType: 'strain',
+      onRecolor: (lo, hi, cmap) => oxdnaDisplay?.recolorStrain?.(lo, hi, cmap) })
+  }
+  function _setStrainOff() {
+    _strainAbort?.abort()
+    _strainAbort = null
+    _strainBusy = false
+    if (oxdnaDisplay?.mode() === 'strain') oxdnaDisplay.stopAndRestore()
+    if (strainToggle) strainToggle.checked = false
+    _strainLast = null
+    _flexScale.hide()
+    _setStrainBar('off')
+    _setStrainStatus('')
+    _syncVizOffRadio()
+    _updateButtons(_selectedJob())
+  }
+  let _strainAbort = null
+  async function _refreshStrain() {
+    if (!_selectedId) return
+    _strainAbort?.abort()
+    const abort = new AbortController()
+    _strainAbort = abort
+    _strainBusy = true; _updateButtons(_selectedJob())
+    const metric = strainMetricSel?.value === 'wc' ? 'wc' : 'backbone'
+    _setStrainBar('computing')
+    _setStrainStatus(metric === 'wc'
+      ? 'Averaging Watson–Crick pair stretch over the trajectory…'
+      : 'Averaging backbone bond strain over the trajectory…', _C.accent)
+    const resp = await api.getOxdnaStrain(_selectedId,
+      { align: alignToggle ? alignToggle.checked : true, metric, signal: abort.signal })
+    if (abort.signal.aborted) return
+    if (_strainAbort === abort) _strainAbort = null
+    _strainBusy = false; _updateButtons(_selectedJob())
+    if (!resp || !resp.ready) {
+      if (strainToggle) strainToggle.checked = false
+      _setStrainBar('off')
+      _setStrainStatus('Strain map unavailable: ' + (resp?.reason || api.lastErrorMessage?.() || 'not ready'), '#f85149')
+      _syncVizOffRadio()
+      return
+    }
+    const r = oxdnaDisplay?.displayStrain(resp)
+    if (!r?.ok) {
+      if (strainToggle) strainToggle.checked = false
+      _setStrainBar('off')
+      _setStrainStatus('Could not render strain map (' + (r?.reason || 'error') + ')', '#f85149')
+      _syncVizOffRadio()
+      return
+    }
+    _setStrainBar('done')
+    _strainLast = r
+    _renderStrainResult()
+    _updateButtons(_selectedJob())
+  }
+  strainToggle?.addEventListener('change', async () => {
+    if (_lammpsMode) return   // LAMMPS runs have no strain endpoint — radio stays disabled
+    if (strainToggle.checked) {
+      if (!_selectedId) { strainToggle.checked = false; showToast('Select an oxDNA job first', 'warn'); _syncVizOffRadio(); return }
+      oxdnaLive?.stop()                 // mutually exclusive with relaxed / flex / deviation / traj / live
+      if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
+      if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+      if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
+      if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+      await _refreshStrain()
+    } else {
+      _setStrainOff()
+    }
+  })
+  // Switching metric while the map is up re-fetches it in place (backbone ⇄ WC).
+  strainMetricSel?.addEventListener('change', async () => {
+    if (strainToggle?.checked) await _refreshStrain()
+  })
+  // The ssDNA filter is a pure DISPLAY choice over the payload we already hold — recolour
+  // from cache instead of re-walking the trajectory.  Positions never change: excluded
+  // bases keep riding at their simulated coordinates, they just lose their colour.
+  strainDsOnlyToggle?.addEventListener('change', () => {
+    const r = oxdnaDisplay?.setStrainDsdnaOnly?.(!!strainDsOnlyToggle.checked)
+    if (!r || !_strainLast) return     // map not active — the flag applies on next display
+    // r carries the new bounds AND the new mean/data-range for the coloured population.
+    Object.assign(_strainLast, r)
+    _renderStrainResult()
   })
   // Trajectory status: base summary text, OR a "building…" / "preparing playback…"
   // overlay while a heavy reconstruction is in flight (declared here, before the player
@@ -1615,6 +1768,23 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
     }
 
+    // Strain map — same gate again (any job with sampling), plus: no LAMMPS support
+    // (the LAMMPS controller has no strain endpoint), so it stays locked in that mode.
+    if (strainToggle && !_strainBusy) {
+      const ok = !liveOn && !_lammpsMode
+        && (samplingState(job) === 'done' || samplingState(job) === 'running')
+      strainToggle.disabled = !ok
+      if (strainMetricSel) strainMetricSel.disabled = !ok
+      const lab = strainToggle.closest('label')
+      if (lab) {
+        lab.style.opacity = ok ? '1' : '0.5'
+        lab.style.cursor = ok ? 'pointer' : 'not-allowed'
+        lab.title = ok ? 'Mean structure of this job, false-coloured by local strain: blue = compressed, white = relaxed, red = stretched.'
+          : (_lammpsMode ? 'Strain maps are oxDNA-only (not available for a LAMMPS run)'
+            : liveOn ? 'Stop Live to use the strain map' : 'Select a job with a production run.')
+      }
+    }
+
     // Use as NAMD seed — only once the relaxation has completed.
     if (seedBtn && !_seeding) {
       const ok = seedReady(job)
@@ -1841,6 +2011,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+      if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
       await _refreshFlex()
     } else {
       _setFlexOff()
@@ -1960,6 +2131,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
     if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+    if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
     // Switching sparse↔full leaves the OTHER trajectory mode still active (both are
     // mode 'trajectory', so the teardowns above don't fire) — stop playback and clear
     // the stale frame cache before reloading at the new scope.
@@ -2093,6 +2265,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (displayToggle?.checked) await _refreshDisplay()
     else if (flexToggle?.checked) await _refreshFlex()
     else if (autorefineDevToggle?.checked) await _refreshDeviation()
+    else if (strainToggle?.checked) await _refreshStrain()
     else if (trajToggle?.checked) await _refreshTraj()
   })
   function _setDisplayOff() {
@@ -2113,6 +2286,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
     else if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
     else if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+    else if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
     else _setDisplayOff()
     // Defensive: ensure every checkbox is cleared and the renderer restored.
     trajPlayer.stop()
@@ -2122,6 +2296,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (trajToggle) trajToggle.checked = false
     if (trajFullToggle) trajFullToggle.checked = false
     if (autorefineDevToggle) autorefineDevToggle.checked = false
+    if (strainToggle) strainToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
   }
   displayToggle?.addEventListener('change', async () => {
@@ -2135,6 +2310,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+      if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
       await _refreshDisplay()
     } else {
       _setDisplayOff()
@@ -2208,6 +2384,18 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       const lab = t.closest('label')
       if (lab) { lab.style.opacity = viewable ? '1' : '0.5'; lab.style.cursor = viewable ? 'pointer' : 'not-allowed' }
     }
+    // The strain map is oxDNA-only (the LAMMPS controller has no strain endpoint) —
+    // stays locked for the whole LAMMPS session regardless of `viewable`.
+    if (strainToggle) {
+      strainToggle.checked = false
+      strainToggle.disabled = true
+      if (strainMetricSel) strainMetricSel.disabled = true
+      const lab = strainToggle.closest('label')
+      if (lab) {
+        lab.style.opacity = '0.5'; lab.style.cursor = 'not-allowed'
+        lab.title = 'Strain maps are oxDNA-only (not available for a LAMMPS run)'
+      }
+    }
     if (vizOffRadio) vizOffRadio.checked = true
     _setDisplayStatus(viewable ? '' : 'Run still in progress — viz unlocks when it finishes.', _C.dim)
   }
@@ -2249,11 +2437,12 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // even off the Dynamics tab (where the 1.5 s poll is paused) — e.g. when the user
   // seeks the Feature Log back to a job's run position, clearing its stale flag.
   window.addEventListener('nadoc:design-changed', () => {
-    // A design edit makes a re-run no longer redundant; drop any live deviation overlay
-    // (it no longer matches the edited design).  The deviation DATA stays available for
-    // the run's final job (a historical result) — its toggle re-enables on re-selection.
+    // A design edit makes a re-run no longer redundant; drop any live deviation/strain
+    // overlay (neither matches the edited design any more).  The DATA stays available
+    // for the job (a historical result) — the toggles re-enable on re-selection.
     _autorefineCleanForDesign = false
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+    if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
     _metricsCard?.refresh()      // cached twist/curve/bp graphs no longer match the edited design
     _compareCard?.refresh()      // cached cross-engine comparison no longer matches the edited design
     _fetchJobs()

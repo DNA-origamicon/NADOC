@@ -4064,6 +4064,27 @@
                     <input id="oxdna-jobs-deviation-toggle" name="oxdna-viz" type="radio" value="deviation" disabled> Deviation map (autorefine)
                   </label>
                   <div id="oxdna-jobs-deviation-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <!-- Strain map: mean structure false-coloured by SIGNED local strain
+                       (backbone-FENE bond stretch, or Watson-Crick pair stretch) -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="Average structure of this job, each base false-coloured by its local strain: blue = compressed, white = relaxed, red = stretched. Select a job with a production run to enable.">
+                    <input id="oxdna-jobs-strain-toggle" name="oxdna-viz" type="radio" value="strain" disabled> Strain map (local)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px"
+                         title="Backbone: FENE bond stretch between consecutive nucleotides — crossovers, skips and forced connections. Base pairing: Watson-Crick base-site separation — melted, opening or mis-registered pairs (unpaired bases are left uncoloured).">
+                    Metric:
+                    <select id="oxdna-jobs-strain-metric"
+                            style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                      <option value="backbone">Backbone (FENE bond stretch)</option>
+                      <option value="wc">Base pairing (Watson–Crick stretch)</option>
+                    </select>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px;margin-left:18px;cursor:pointer"
+                         title="Colour only the bases the design intends to be double-stranded, so a disrupted duplex stands out instead of competing with ssDNA that is floppy by design. Single-stranded overhangs, unstapled scaffold loops, 5'/3' extension tails and crossover extra bases still move to their simulated positions — they just keep their normal colour. The colour scale rescales to the duplex.">
+                    <input id="oxdna-jobs-strain-dsdna-only" type="checkbox"> dsDNA only (leave ssDNA uncoloured)
+                  </label>
+                  <div id="oxdna-jobs-strain-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="oxdna-jobs-strain-bar" style="margin-top:3px;display:none"></div>
                   <!-- Sparse trajectory: the whole lineage, strided to ~200 frames -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
                          title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition. Evenly strided to ~200 frames across the whole chain, so it loads quickly.">
