@@ -295,3 +295,67 @@ def test_production_conf_seed_and_start_overrides():
     assert "seed               42" in conf
     assert "binCoordinates     output/reseed.coor" in conf
     assert "output/orig" not in conf                # start_checkpoint overrode previous
+
+
+# ── GPU-resident: the path the panel's Start-Production actually takes ───────────
+#
+# build_replica_package is what /md/jobs/{id}/production-run calls — NOT the
+# _append_production_segments path.  It was the LAST un-threaded build_production_conf
+# call site, so it kept passing n_atoms=None ("unknown" → resident ON) and a 32.5k-atom
+# 2 fs production stayed on GPU-resident at 1.357 ms/step no matter what the Advanced-card
+# dropdown said or what ⚡ Optimize reported.  Unit tests on build_production_conf all
+# passed while the route the UI uses never reached the new arguments.
+
+def _parent_with_sized_psf(ws: Path, n_atoms: int, *, fast=False):
+    parent = _make_parent(ws, fast=fast)
+    # A real !NATOM header so psf_atom_count() sees a size (the base fixture writes "psf").
+    (parent.package_dir(ws) / "demo.psf").write_text(
+        "PSF\n\n       2 !NTITLE\n\n" + f"{n_atoms:8d} !NATOM\n")
+    return parent
+
+
+def _prod_conf(child, ws: Path) -> str:
+    pkg = child.package_dir(ws)
+    return next(p for p in pkg.glob("*production*.conf")).read_text()
+
+
+def test_replica_small_system_drops_gpu_resident(tmp_path):
+    parent = _parent_with_sized_psf(tmp_path, 32_566)
+    child = _build_replica(tmp_path, parent, timestep_fs=2.0)
+    assert "GPUresident" not in _prod_conf(child, tmp_path)
+
+
+def test_replica_large_system_keeps_gpu_resident(tmp_path):
+    parent = _parent_with_sized_psf(tmp_path, 3_139_238)
+    child = _build_replica(tmp_path, parent, timestep_fs=2.0)
+    assert "GPUresident        on" in _prod_conf(child, tmp_path)
+
+
+def test_replica_force_resident_off_overrides_a_large_system(tmp_path):
+    parent = _parent_with_sized_psf(tmp_path, 3_139_238)
+    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
+                    parent_job_id=parent.job_id, ensemble_seed=54321, ensemble_index=0)
+    me.build_replica_package(
+        parent, child, seed=54321, index=0, total_steps=500_000, length_ns=1.0,
+        timestep_fs=2.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+        force_resident=False)
+    assert "GPUresident" not in _prod_conf(child, tmp_path)
+
+
+def test_replica_force_resident_on_overrides_a_small_system(tmp_path):
+    parent = _parent_with_sized_psf(tmp_path, 32_566)
+    child = new_job("demo", "mgh_slow_release", name_stem="", package_subdir="",
+                    parent_job_id=parent.job_id, ensemble_seed=54321, ensemble_index=0)
+    me.build_replica_package(
+        parent, child, seed=54321, index=0, total_steps=500_000, length_ns=1.0,
+        timestep_fs=2.0, fast=False, ready_checkpoint=READY, workspace=tmp_path,
+        force_resident=True)
+    assert "GPUresident        on" in _prod_conf(child, tmp_path)
+
+
+def test_replica_unsized_psf_keeps_the_historical_default(tmp_path):
+    """The base fixture's PSF has no !NATOM — unknown must stay 'resident on', so this
+    change cannot silently alter any package whose size we cannot read."""
+    parent = _make_parent(tmp_path)
+    child = _build_replica(tmp_path, parent, timestep_fs=2.0)
+    assert "GPUresident        on" in _prod_conf(child, tmp_path)

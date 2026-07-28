@@ -24,6 +24,7 @@ import os
 import shutil
 from dataclasses import asdict
 from pathlib import Path
+from typing import Optional
 
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus
 from backend.core.md_protocols import (
@@ -31,6 +32,7 @@ from backend.core.md_protocols import (
     SegmentSpec,
     build_production_conf,
     build_reseed_conf,
+    psf_atom_count,
 )
 
 _DEFAULT_BASE_SEED = 54321
@@ -83,6 +85,7 @@ def build_replica_package(
     ready_checkpoint: str,
     workspace: Path,
     dcd_freq: int = PRODUCTION_DCD_FREQ,
+    force_resident: Optional[bool] = None,
 ) -> Path:
     """Build a production-only package for one ensemble replica; returns its package dir.
 
@@ -205,11 +208,17 @@ def build_replica_package(
         min_c1_paired=0.90,
         min_wc_ref_relative=0.25,
     )
+    # GPU-resident: the replica package is what the panel's Start-Production actually
+    # builds, so it needs the same size gate + explicit override as every other conf
+    # writer.  Without n_atoms this fell to "unknown" and forced resident ON, which is
+    # why turning the Advanced-card dropdown off changed nothing for a production run.
     (child_pkg / f"{prod_name}.conf").write_text(
         build_production_conf(
             prod, name_stem, box, mgh_extrabonds,
             seed=seed, fast=use_fast, timestep_fs=eff_timestep_fs,
             structure_psf=structure_psf,
+            n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
+            force_resident=force_resident,
         )
     )
 

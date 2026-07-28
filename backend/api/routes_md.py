@@ -2231,6 +2231,7 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         timestep_fs=plan["timestep_fs"], fast=plan["fast"],
         ready_checkpoint=spec.name, workspace=_workspace(),
         dcd_freq=(body.dcd_freq or PRODUCTION_DCD_FREQ),
+        force_resident=plan.get("force_resident"),
     )
 
     # Local target autostarts the NAMD run immediately; an Alpine child is left
