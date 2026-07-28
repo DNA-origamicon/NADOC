@@ -1,0 +1,319 @@
+[
+  {
+    "job_id": "9e1a55f74156",
+    "stem": "6hbS42_2xT",
+    "arm": "fixed",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/9e1a55f74156/package/6hbS42_2xT_namd_solvated",
+    "name_stem": "6hbS42_2xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": true,
+      "n_connectors": 8,
+      "n_connectors_measured": 8,
+      "n_pairs_tested": 3,
+      "n_reciprocal_pairs": 3,
+      "n_catenated": 0,
+      "n_closure_ambiguous": 0,
+      "catenated": []
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 8,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 0,
+          "lk": []
+        }
+      ]
+    }
+  },
+  {
+    "job_id": "59dba471a55c",
+    "stem": "6hbS42_2xT",
+    "arm": "catenated",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/59dba471a55c/package/6hbS42_2xT_namd_solvated",
+    "name_stem": "6hbS42_2xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": false,
+      "n_connectors": 8,
+      "n_connectors_measured": 8,
+      "n_pairs_tested": 3,
+      "n_reciprocal_pairs": 3,
+      "n_catenated": 3,
+      "n_closure_ambiguous": 0,
+      "catenated": [
+        {
+          "lk": -1.0,
+          "lk_int": -1,
+          "lk_residual": 0.0,
+          "reciprocal": true,
+          "crossover_ids": [
+            "6d618c5f-fb1c-4de1-91aa-66c9bbb763fb",
+            "3a226068-8db3-4059-aa67-8fae60396305"
+          ],
+          "strand_ids": [
+            "stpl_XY_0_0",
+            "stpl_XY_0_0_h_XY_0_2_28_r"
+          ],
+          "helices": [
+            "h_XY_0_0",
+            "h_XY_0_1"
+          ],
+          "bp": [
+            28,
+            27
+          ],
+          "n_inserts": [
+            2,
+            2
+          ],
+          "min_backbone_dist_nm": 0.0427
+        },
+        {
+          "lk": 1.0,
+          "lk_int": 1,
+          "lk_residual": 0.0,
+          "reciprocal": true,
+          "crossover_ids": [
+            "3908351b-9e0a-41c9-8322-a2d593feecd7",
+            "310319b7-1815-4d59-8f28-bd7f35bf1e17"
+          ],
+          "strand_ids": [
+            "stpl_XY_0_0_h_XY_0_2_28_r",
+            "stpl_XY_0_0_h_XY_0_1_13_r"
+          ],
+          "helices": [
+            "h_XY_0_2",
+            "h_XY_0_1"
+          ],
+          "bp": [
+            21,
+            20
+          ],
+          "n_inserts": [
+            2,
+            2
+          ],
+          "min_backbone_dist_nm": 0.0745
+        },
+        {
+          "lk": -1.0,
+          "lk_int": -1,
+          "lk_residual": 0.0,
+          "reciprocal": true,
+          "crossover_ids": [
+            "37ca16ab-c946-4f7c-81cd-8e31858747f3",
+            "b3da9b68-5d6a-4dc1-a3e6-b73268b80e6c"
+          ],
+          "strand_ids": [
+            "stpl_XY_0_0_h_XY_0_2_28_r",
+            "stpl_XY_0_0_h_XY_0_1_13_r"
+          ],
+          "helices": [
+            "h_XY_0_0",
+            "h_XY_0_1"
+          ],
+          "bp": [
+            7,
+            6
+          ],
+          "n_inserts": [
+            2,
+            2
+          ],
+          "min_backbone_dist_nm": 0.0395
+        }
+      ]
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 8,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 3,
+          "lk": [
+            -1,
+            1,
+            -1
+          ]
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 3,
+          "lk": [
+            -1,
+            1,
+            -1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 2,
+          "lk": [
+            -1,
+            -1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "job_id": "b59f67e77a77",
+    "stem": "6hbS42_1xT",
+    "arm": "fixed",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/b59f67e77a77/package/6hbS42_1xT_namd_solvated",
+    "name_stem": "6hbS42_1xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": true,
+      "n_connectors": 8,
+      "n_connectors_measured": 8,
+      "n_pairs_tested": 3,
+      "n_reciprocal_pairs": 3,
+      "n_catenated": 0,
+      "n_closure_ambiguous": 0,
+      "catenated": []
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 8,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 0,
+          "lk": []
+        }
+      ]
+    }
+  },
+  {
+    "job_id": "569b5ad1ace0",
+    "stem": "6hbS42_1xT",
+    "arm": "catenated",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/569b5ad1ace0/package/6hbS42_1xT_namd_solvated",
+    "name_stem": "6hbS42_1xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": false,
+      "n_connectors": 8,
+      "n_connectors_measured": 8,
+      "n_pairs_tested": 3,
+      "n_reciprocal_pairs": 3,
+      "n_catenated": 1,
+      "n_closure_ambiguous": 0,
+      "catenated": [
+        {
+          "lk": 1.0,
+          "lk_int": 1,
+          "lk_residual": 0.0,
+          "reciprocal": true,
+          "crossover_ids": [
+            "c17c1f06-90a2-4264-8cf4-fc3d51895159",
+            "e080d326-bddb-4de7-9a85-d769d6f1cdee"
+          ],
+          "strand_ids": [
+            "stpl_XY_0_0_h_XY_0_2_28_r",
+            "stpl_XY_0_0_h_XY_0_1_13_r"
+          ],
+          "helices": [
+            "h_XY_0_2",
+            "h_XY_0_1"
+          ],
+          "bp": [
+            21,
+            20
+          ],
+          "n_inserts": [
+            1,
+            1
+          ],
+          "min_backbone_dist_nm": 0.0613
+        }
+      ]
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 8,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        }
+      ]
+    }
+  }
+]

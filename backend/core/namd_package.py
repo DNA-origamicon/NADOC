@@ -69,14 +69,22 @@ _PROTEIN_FF_FILES = [
 # Re-imported above for backward-compat with `from backend.core.namd_package import …`.
 
 
-def build_namd_package(design: Design) -> bytes:
-    """Return raw ZIP bytes of the complete NAMD simulation package."""
+def build_namd_package(design: Design, *, allow_catenated_seed: bool = False) -> bytes:
+    """Return raw ZIP bytes of the complete NAMD simulation package.
+
+    ``allow_catenated_seed`` builds even when a reciprocal crossover pair's backbones
+    are topologically linked.  Off by default — see
+    :func:`backend.core.junction_topology.gate_seed_topology`.
+    """
     _check_ff_files()
 
     name = (design.metadata.name or "design").replace(" ", "_")
     prefix = f"{name}_namd_complete/"
 
     model = build_atomistic_model(design, include_proteins=True)
+    # Same gate as the MD job pipeline — this ZIP path does not go through md_protocols.
+    from backend.core.junction_topology import gate_seed_topology  # noqa: PLC0415
+    gate_seed_topology(design, model=model, allow=allow_catenated_seed)
     pdb_text = export_pdb(design, model=model)
     identity_json = export_identity_json(design, model=model)
     identity_tsv = export_identity_tsv(design, model=model)

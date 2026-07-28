@@ -81,6 +81,8 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Sequences:** **strand_sequence_edit** (hand-edit a strand's bases; targeted vs design-wide re-derive)
 
+**Crossover topology:** **crossover_catenation** (extra bases were built CATENATED, Lk=±1; detector + build gate + repair — read before touching extra-base placement or the joint solve)
+
 **Overhangs / linkers:** **overhang_duplex_foundation** (before any overhang pairing) · overhang_duplex_cluster · overhang_subdomains · overhang_connections · overhang_binding_extensions · assembly_overhang_bindings · assembly_linker_relax · bond_relax · ct_tab · overhang_connections_panel · ssdna_linker_relax · oh_binder · overhang_lookup_infra · overhang_generation · **mate_connectors** (blunt-end connector geometry — read before touching overhang tips) · domain_ends_refactor · overhang_sequence_display
 
 **Primitives / export:** plates_and_tubes · extrude_preview · primitive_library · stl_export

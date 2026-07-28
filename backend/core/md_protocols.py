@@ -1859,6 +1859,7 @@ def prepare_mgh_slow_release(
     anchors: Optional[list] = None,
     field: Optional[dict] = None,
     capture_vel_force: bool = False,
+    allow_catenated_seed: bool = False,
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -1898,6 +1899,17 @@ def prepare_mgh_slow_release(
     if require_full_topology:
         from backend.core.md_sequence_guard import require_sequenced_scaffold  # noqa: PLC0415
         require_sequenced_scaffold(design)
+
+    # Refuse to build a package whose reciprocal crossover connectors are topologically
+    # LINKED (Gauss Lk != 0).  The seed builder can swing the two inserted bases of an
+    # antiparallel pair through one another; because both chain ends are covalently
+    # pinned into the network, that entanglement survives every relaxation stage, so the
+    # trajectory measures an artefact.  Base-pairing health checks do not see it (a
+    # catenated 2hb run reported c1_paired_fraction = 1.0), which is why it needs its own
+    # gate.  Shared choke point for local + RunPod + every experiment script.
+    from backend.core.junction_topology import gate_seed_topology  # noqa: PLC0415
+    topology_check = gate_seed_topology(
+        design, model=atomistic_model, allow=allow_catenated_seed)
 
     minimize_steps = _round_up_to_cycle(minimize_steps)
 
@@ -2198,6 +2210,11 @@ def prepare_mgh_slow_release(
         "declash_min_coor": (
             f"output/{min_name}.coor" if (declash or rebuild_enm_from_min) else None),
         "n_unpaired_excluded": n_unpaired if declash else 0,
+        # Seed strand topology at the reciprocal crossover junctions: "passed",
+        # "overridden" (built anyway via allow_catenated_seed) or
+        # "skipped_no_extra_bases".  Recorded on EVERY build so a trajectory can always
+        # be traced back to whether its seed was entangled.
+        "topology_check": topology_check,
         # Seeded extra-base path: minimise ran WITHOUT the ENM (no_enm) to open the seed
         # backmap's duplex clashes; the runner rebuilds the ENM from the declashed coords
         # so k0.1 no longer releases stored clash energy.  Decoupled from ``declash``

@@ -727,7 +727,9 @@ def _slow_area_for(module: str) -> str:
         return "mrdna"
     # pdb_export builds a full atomistic model then writes the PDB — same heavy
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
-    if "atomistic" in module or "pdb_export" in module:
+    # junction_topology measures the built model's strand topology (crossover
+    # catenation), so an atomistic-placement change is what should re-run it.
+    if "atomistic" in module or "pdb_export" in module or "junction_topology" in module:
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"

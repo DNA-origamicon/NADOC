@@ -226,4 +226,14 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   transfer across GPU architectures (4090 fit predicted 20.9 ms/step; the Blackwell did **26.4**).
   [detail](LESSONS_archive.md#l6)
 
+- **L11** — 🧬 **A "successful" MD run can be measuring a topologically ENTANGLED structure, and every
+  health check will say it is fine.** Crossover extra bases at a reciprocal (antiparallel) pair were
+  built with the two backbones wound around each other (Gauss `Lk = ±1`); because both chain ends are
+  covalently pinned, MD can never undo it — measured unchanged through minimisation and every ENM
+  stage, while `c1_paired_fraction` read **1.0**. Base pairing does not see strand topology. The cause
+  was NOT the pose (arc + glycosidic swing are fine — `fast_bridges=True` never links) but the
+  L-BFGS-B joint solve, whose repulsion term only sees a static snapshot that never contains the
+  PARTNER crossover. Also: it is **helical-phase dependent**, so a fixture pinned to one bp proves
+  nothing — sweep a full turn. [detail](LESSONS_archive.md#l11)
+
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.

@@ -330,6 +330,50 @@ def _apply_phosphate(
 # minimises total backbone strain rather than freezing it at the lerp point.
 
 
+def _apply_spin0(x0: _np.ndarray, n_inserts: int, spin0) -> _np.ndarray:
+    """Seed each insert's spin DOF (``x[k*4+3]``) instead of always starting at 0.
+
+    The spin is about ``target_c1n``, and ``_align_glycosidic`` has already made
+    C1'->N parallel to that axis, so ``_glycosidic_cost_grad`` returns cost 0 and zero
+    gradient for EVERY theta.  The spin is therefore free in the objective: re-seeding it
+    cannot bias the converged geometry, it only changes which local basin L-BFGS-B falls
+    into.  That makes it the right knob for escaping a catenated solution — unlike a
+    bound on the translation, which constrains the optimum itself.
+    """
+    if spin0 is None:
+        return x0
+    out = x0.copy()
+    for k in range(n_inserts):
+        idx = k * 4 + 3
+        if idx < len(out):
+            out[idx] = float(spin0[k % len(spin0)])
+    return out
+
+
+def _delta_bounds(x0: _np.ndarray, n_inserts: int, delta_cap: "float | None"):
+    """L-BFGS-B bounds pinning each insert's rigid-body TRANSLATION near its arc pose.
+
+    DOF layout is uniform across the three solvers: ``x[k*4:k*4+3]`` is insert ``k``'s
+    C2' translation and ``x[k*4+3]`` its spin.  Only the translation is bounded — the
+    spin and every linker coordinate stay free.
+
+    This exists for the catenation repair ladder (see ``_build_extra_base_atoms``).
+    Unbounded, the joint solve is free to walk an insert's whole rigid body across the
+    junction and thread it through the partner crossover's backbone, producing a
+    topologically linked pair (Lk != 0) that no amount of MD can undo.  Tightening the
+    translation is the cheapest repair move that keeps the solve otherwise intact;
+    ``delta_cap=None`` reproduces the original unbounded behaviour exactly.
+    """
+    if delta_cap is None:
+        return None
+    bounds: list = [(None, None)] * len(x0)
+    for k in range(n_inserts):
+        for j in range(3):
+            i = k * 4 + j
+            bounds[i] = (float(x0[i]) - delta_cap, float(x0[i]) + delta_cap)
+    return bounds
+
+
 def _minimize_1_extra_base(
     atoms:      list["Atom"],
     src_s:      dict[str, int],
@@ -339,6 +383,8 @@ def _minimize_1_extra_base(
     target_c1n: _np.ndarray,
     repel_pos:  list[_np.ndarray],
     cache_key:  "tuple | None" = None,
+    delta_cap:  "float | None" = None,
+    spin0:      "tuple | None" = None,
 ) -> None:
     """
     Joint backbone placement for 1 extra crossover base (19 DOF).
@@ -429,7 +475,9 @@ def _minimize_1_extra_base(
         o3_src_x0, p_eb1_x0, o5_eb1_x0,
         p_dst_x0, o5_dst_x0,
     ])
+    x0 = _apply_spin0(x0, 1, spin0)
     res = _scipy_minimize(objective_and_grad, x0, method="L-BFGS-B", jac=True,
+                          bounds=_delta_bounds(x0, 1, delta_cap),
                           options={"ftol": 1e-8, "gtol": 1e-6, "maxiter": 200})
     x = res.x
     if cache_key is not None:
@@ -451,6 +499,8 @@ def _minimize_2_extra_base(
     target_c1n: _np.ndarray,
     repel_pos:  list[_np.ndarray],
     cache_key:  "tuple | None" = None,
+    delta_cap:  "float | None" = None,
+    spin0:      "tuple | None" = None,
 ) -> None:
     """
     Joint backbone placement for 2 extra crossover bases (29 DOF).
@@ -568,7 +618,9 @@ def _minimize_2_extra_base(
         p_eb2_x0, o5_eb2_x0,
         p_dst_x0, o5_dst_x0,
     ])
+    x0 = _apply_spin0(x0, 2, spin0)
     res = _scipy_minimize(objective_and_grad, x0, method="L-BFGS-B", jac=True,
+                          bounds=_delta_bounds(x0, 2, delta_cap),
                           options={"ftol": 1e-8, "gtol": 1e-6, "maxiter": 200})
     x = res.x
     if cache_key is not None:
@@ -592,6 +644,8 @@ def _minimize_3_extra_base(
     target_c1n: _np.ndarray,
     repel_pos:  list[_np.ndarray],
     cache_key:  "tuple | None" = None,
+    delta_cap:  "float | None" = None,
+    spin0:      "tuple | None" = None,
 ) -> None:
     """
     Joint backbone placement for 3 extra crossover bases (39 DOF).
@@ -742,7 +796,9 @@ def _minimize_3_extra_base(
         p_eb3_x0, o5_eb3_x0,
         p_dst_x0, o5_dst_x0,
     ])
+    x0 = _apply_spin0(x0, 3, spin0)
     res = _scipy_minimize(objective_and_grad, x0, method="L-BFGS-B", jac=True,
+                          bounds=_delta_bounds(x0, 3, delta_cap),
                           options={"ftol": 1e-8, "gtol": 1e-6, "maxiter": 200})
     x = res.x
     if cache_key is not None:

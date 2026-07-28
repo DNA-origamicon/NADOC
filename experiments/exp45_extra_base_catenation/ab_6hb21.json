@@ -1,0 +1,178 @@
+[
+  {
+    "job_id": "628b30fba949",
+    "stem": "6hbS21_2xT",
+    "arm": "fixed",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/628b30fba949/package/6hbS21_2xT_namd_solvated",
+    "name_stem": "6hbS21_2xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": true,
+      "n_connectors": 4,
+      "n_connectors_measured": 4,
+      "n_pairs_tested": 1,
+      "n_reciprocal_pairs": 1,
+      "n_catenated": 0,
+      "n_closure_ambiguous": 0,
+      "catenated": []
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 4,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:7|D001:6": -0.1418
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:7|D001:6": -0.1418
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:7|D001:6": -0.2098
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:7|D001:6": -0.2098
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:7|D001:6": -0.2098
+          },
+          "n_changed": 0
+        }
+      ]
+    }
+  },
+  {
+    "job_id": "0902e026d25e",
+    "stem": "6hbS21_2xT",
+    "arm": "catenated",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/0902e026d25e/package/6hbS21_2xT_namd_solvated",
+    "name_stem": "6hbS21_2xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": false,
+      "n_connectors": 4,
+      "n_connectors_measured": 4,
+      "n_pairs_tested": 1,
+      "n_reciprocal_pairs": 1,
+      "n_catenated": 1,
+      "n_closure_ambiguous": 0,
+      "catenated": [
+        {
+          "lk": -1.0,
+          "lk_int": -1,
+          "lk_residual": 0.0,
+          "reciprocal": true,
+          "crossover_ids": [
+            "faa554ae-bafb-4180-9f5b-ead9eb079df7",
+            "485bd819-95cb-4a1e-b815-d2b39ff071e7"
+          ],
+          "strand_ids": [
+            "stpl_XY_0_0",
+            "stpl_XY_0_0_h_XY_0_2_7_r"
+          ],
+          "helices": [
+            "h_XY_0_0",
+            "h_XY_0_1"
+          ],
+          "bp": [
+            7,
+            6
+          ],
+          "n_inserts": [
+            2,
+            2
+          ],
+          "min_backbone_dist_nm": 0.0395
+        }
+      ]
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 4,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ],
+          "g_open": {
+            "D000:7|D001:6": -1.1342
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ],
+          "g_open": {
+            "D000:7|D001:6": -1.1341
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ],
+          "g_open": {
+            "D000:7|D001:6": -0.9885
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ],
+          "g_open": {
+            "D000:7|D001:6": -0.9885
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ],
+          "g_open": {
+            "D000:7|D001:6": -0.9885
+          },
+          "n_changed": 0
+        }
+      ]
+    }
+  }
+]

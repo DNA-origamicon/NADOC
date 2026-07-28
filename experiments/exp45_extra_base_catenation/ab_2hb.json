@@ -1,0 +1,295 @@
+[
+  {
+    "job_id": "e2cafc756fb2",
+    "stem": "2hb_1xT",
+    "arm": "fixed",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/e2cafc756fb2/package/2hb_1xT_namd_solvated",
+    "name_stem": "2hb_1xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": true,
+      "n_connectors": 3,
+      "n_connectors_measured": 3,
+      "n_pairs_tested": 1,
+      "n_reciprocal_pairs": 1,
+      "n_catenated": 0,
+      "n_closure_ambiguous": 0,
+      "catenated": []
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 3,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 0,
+          "lk": []
+        }
+      ]
+    }
+  },
+  {
+    "job_id": "d43d88d9e812",
+    "stem": "2hb_1xT",
+    "arm": "catenated",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/d43d88d9e812/package/2hb_1xT_namd_solvated",
+    "name_stem": "2hb_1xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": false,
+      "n_connectors": 3,
+      "n_connectors_measured": 3,
+      "n_pairs_tested": 1,
+      "n_reciprocal_pairs": 1,
+      "n_catenated": 1,
+      "n_closure_ambiguous": 0,
+      "catenated": [
+        {
+          "lk": 1.0,
+          "lk_int": 1,
+          "lk_residual": 0.0,
+          "reciprocal": true,
+          "crossover_ids": [
+            "54c5689d-127b-4693-bc11-f51121719fad",
+            "4a12dd44-bce2-46be-8296-093ce52d2ec9"
+          ],
+          "strand_ids": [
+            "stpl_XY_0_1",
+            "stpl_XY_1_1"
+          ],
+          "helices": [
+            "h_XY_0_1",
+            "h_XY_1_1"
+          ],
+          "bp": [
+            13,
+            14
+          ],
+          "n_inserts": [
+            1,
+            1
+          ],
+          "min_backbone_dist_nm": 0.0356
+        }
+      ]
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 3,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p10",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p100",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p50",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "job_id": "60e8930a457e",
+    "stem": "2hb_2xT",
+    "arm": "fixed",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/60e8930a457e/package/2hb_noT_namd_solvated",
+    "name_stem": "2hb_noT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": true,
+      "n_connectors": 3,
+      "n_connectors_measured": 3,
+      "n_pairs_tested": 1,
+      "n_reciprocal_pairs": 1,
+      "n_catenated": 0,
+      "n_closure_ambiguous": 0,
+      "catenated": []
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 3,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p10",
+          "n_catenated": 0,
+          "lk": []
+        }
+      ]
+    }
+  },
+  {
+    "job_id": "25c41ddbe77f",
+    "stem": "2hb_2xT",
+    "arm": "catenated",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/25c41ddbe77f/package/2hb_noT_namd_solvated",
+    "name_stem": "2hb_noT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": false,
+      "n_connectors": 3,
+      "n_connectors_measured": 3,
+      "n_pairs_tested": 1,
+      "n_reciprocal_pairs": 1,
+      "n_catenated": 1,
+      "n_closure_ambiguous": 0,
+      "catenated": [
+        {
+          "lk": 1.0,
+          "lk_int": 1,
+          "lk_residual": 0.0,
+          "reciprocal": true,
+          "crossover_ids": [
+            "54c5689d-127b-4693-bc11-f51121719fad",
+            "4a12dd44-bce2-46be-8296-093ce52d2ec9"
+          ],
+          "strand_ids": [
+            "stpl_XY_0_1",
+            "stpl_XY_1_1"
+          ],
+          "helices": [
+            "h_XY_0_1",
+            "h_XY_1_1"
+          ],
+          "bp": [
+            13,
+            14
+          ],
+          "n_inserts": [
+            2,
+            2
+          ],
+          "min_backbone_dist_nm": 0.162
+        }
+      ]
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 3,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 1,
+          "lk": [
+            1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 0,
+          "lk": []
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ]
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ]
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p10",
+          "n_catenated": 1,
+          "lk": [
+            -1
+          ]
+        }
+      ]
+    }
+  }
+]

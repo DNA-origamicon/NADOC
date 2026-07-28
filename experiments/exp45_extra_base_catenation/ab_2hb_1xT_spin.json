@@ -1,0 +1,98 @@
+[
+  {
+    "job_id": "0335fd23ce2a",
+    "stem": "2hb_1xT",
+    "arm": "fixed",
+    "package_dir": "/media/jojo/Archive/NADOC_archive/0335fd23ce2a/package/2hb_1xT_namd_solvated",
+    "name_stem": "2hb_1xT",
+    "seed_catenation": {
+      "schema": "nadoc.junction_catenation.v1",
+      "ok": true,
+      "n_connectors": 3,
+      "n_connectors_measured": 3,
+      "n_pairs_tested": 1,
+      "n_reciprocal_pairs": 1,
+      "n_catenated": 0,
+      "n_closure_ambiguous": 0,
+      "catenated": []
+    },
+    "final_status": "stopped",
+    "catenation": {
+      "n_connectors": 3,
+      "frames": [
+        {
+          "frame": "00_seed_pdb",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.2152
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "00_min_enm_k0p5",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.2152
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p10",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.2244
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p50",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.2224
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "01_300K_NPT_ENM_k0p5_p100",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.2108
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p10",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.2075
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p50",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.1791
+          },
+          "n_changed": 0
+        },
+        {
+          "frame": "02_300K_NPT_ENM_k0p1_p100",
+          "n_catenated": 0,
+          "lk": [],
+          "g_open": {
+            "D000:13|D001:14": -0.1791
+          },
+          "n_changed": 0
+        }
+      ]
+    }
+  }
+]

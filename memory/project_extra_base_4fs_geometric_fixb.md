@@ -32,6 +32,16 @@ unrestrained-MGHH before committing a production run. **CONFIRMED 2026-07-19:** 
 ran 4 fs stably to completion (no crash/NaN) but melted at k=0 (C1' → 84 %, delocalized) — 4 fs fix ✓,
 bundle cohesion ✗. A valid 4fs build, but NOT a usable free-dynamics validation target.
 
+> **2026-07-28 — a THIRD, independent defect was found in the same seed geometry.**
+> Reciprocal crossover pairs carrying extra bases were built **topologically catenated**
+> (Gauss `Lk = ±1`), invisible to every health check here, and unfixable by relaxation.
+> The 4 fs work above is unaffected (it is about masses and ring clashes, not topology) but
+> **any stiffness number extracted from a pre-2026-07-28 extra-base ensemble is suspect** —
+> a pinned junction mimics a soft hinge. See [[crossover-catenation]].
+> Also recorded there: the standard prep path calls `write_hmr_psf` WITHOUT `heavy_residues`,
+> so **Fix B is applied only by `prep_24hb_seeded.py`** — a job prepped through the UI does
+> not get it.
+
 ## The two causes (both must be fixed)
 1. **Ring clashes.** The oxDNA POSITION seed (`xb_pos_override`) drops each extra base's CM into
    an IDEAL-lattice duplex whose neighbours are NOT at oxDNA positions → the ~6 A aromatic ring

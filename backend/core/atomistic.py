@@ -65,6 +65,10 @@ from backend.core.atomistic_minimisers import (
     _minimize_backbone_bridge,
     _set_atom_pos,
 )
+from backend.core.extra_base_repair import (
+    ExtraBaseRecord as _ExtraBaseRecord,
+    repair_catenated_pairs as _repair_catenated_pairs,
+)
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.geometry import (
     NucleotidePosition,
@@ -2735,6 +2739,22 @@ def _build_extra_base_atoms(
 
     # Minimisation jobs collected here; run in parallel after all atoms are placed.
     _mini_jobs: list = []
+    # Per-crossover context for the post-solve catenation repair.  The joint solve can
+    # walk an insert's rigid body through the PARTNER crossover's backbone, leaving the
+    # two topologically linked (Lk != 0) — an entanglement MD can never undo.  We snapshot
+    # the arc pose here so a linked pair can be re-solved under tighter bounds afterwards.
+    # See backend/core/extra_base_repair.py.
+    _xb_records: dict = {}
+
+    def _record_for_repair(xo_id, n_ins, src_sd, dst_sd, eb_sds, glyco_ns,
+                           tgt_c1n, repel, chain_sds):
+        rec = _ExtraBaseRecord(
+            crossover_id=xo_id, n=n_ins, src_s=src_sd, dst_s=dst_sd,
+            eb_s=list(eb_sds), glyco=list(glyco_ns), target_c1n=tgt_c1n,
+            repel_pos=repel, all_s=list(chain_sds),
+        )
+        rec.capture(atoms)
+        _xb_records[xo_id] = rec
 
     for xo in xovers_with_extra:
         ha, hb = xo.half_a, xo.half_b
@@ -3074,6 +3094,8 @@ def _build_extra_base_atoms(
             for prev_s_item, next_s_item in zip(all_s, all_s[1:]):
                 bridge_fn(atoms, prev_s_item, next_s_item)
         elif n == 1 and src_s is not None and dst_s is not None:
+            _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
+                               eb_glycosidic_ns, target_c1n, repel_pos, all_s)
             _mini_jobs.append(_functools.partial(
                 _minimize_1_extra_base,
                 atoms, src_s, dst_s, eb_sugar_serials[0],
@@ -3081,6 +3103,8 @@ def _build_extra_base_atoms(
                 cache_key=_cache_key,
             ))
         elif n == 2 and src_s is not None and dst_s is not None:
+            _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
+                               eb_glycosidic_ns, target_c1n, repel_pos, all_s)
             _mini_jobs.append(_functools.partial(
                 _minimize_2_extra_base,
                 atoms, src_s, dst_s,
@@ -3090,6 +3114,8 @@ def _build_extra_base_atoms(
                 cache_key=_cache_key,
             ))
         elif n == 3 and src_s is not None and dst_s is not None:
+            _record_for_repair(xo.id, n, src_s, dst_s, eb_sugar_serials,
+                               eb_glycosidic_ns, target_c1n, repel_pos, all_s)
             _mini_jobs.append(_functools.partial(
                 _minimize_3_extra_base,
                 atoms, src_s, dst_s,
@@ -3104,10 +3130,12 @@ def _build_extra_base_atoms(
                 bridge_fn(atoms, prev_s_item, next_s_item)
 
     # ── Run all minimisation jobs ─────────────────────────────────────────────
-    # Single crossover: no thread overhead.  Multiple: run in parallel (each job
-    # operates on a disjoint set of atom serials, so no locking is needed on
-    # atom reads/writes).  scipy releases the GIL during BLAS calls, giving true
-    # parallelism on multi-core machines.
+    # Single crossover: no thread overhead.  Multiple: run in parallel.  Each job writes
+    # a DISJOINT set of atom serials, so no locking is needed on atom reads/writes —
+    # but note that disjoint serials do NOT mean disjoint SPACE: two jobs can happily
+    # place their atoms through one another, which is exactly the catenation the repair
+    # pass below measures and fixes.  scipy releases the GIL during BLAS calls, giving
+    # true parallelism on multi-core machines.
     if len(_mini_jobs) == 1:
         _mini_jobs[0]()
     elif len(_mini_jobs) > 1:
@@ -3116,7 +3144,31 @@ def _build_extra_base_atoms(
             for fut in futures:
                 fut.result()   # re-raise any exception from the worker
 
+    # ── Repair catenated reciprocal pairs ─────────────────────────────────────
+    # Only meaningful for the seed/export path: the display path (fast_bridges) and the
+    # oxDNA-override paths never queue a joint solve, so they never create the defect.
+    if _xb_records:
+        _repair_catenated_pairs(
+            atoms, _xb_records, _reciprocal_crossover_id_pairs(design), bridge_fn,
+            {1: _minimize_1_extra_base, 2: _minimize_2_extra_base,
+             3: _minimize_3_extra_base},
+        )
+
     return serial
+
+
+def _reciprocal_crossover_id_pairs(design) -> list:
+    """(crossover_id_a, crossover_id_b) for every antiparallel reciprocal pair."""
+    from backend.core.junction_topology import (  # noqa: PLC0415
+        crossover_connectors, reciprocal_pairs,
+    )
+    conns = crossover_connectors(design)
+    out = []
+    for i, j in reciprocal_pairs(conns):
+        a, b = conns[i].crossover_id, conns[j].crossover_id
+        if a and b:
+            out.append((a, b))
+    return out
 
 
 def _build_extension_atoms(

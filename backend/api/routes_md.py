@@ -226,6 +226,14 @@ class CreateJobRequest(BaseModel):
                     "options first; the deferred solvation runs on POST /md/jobs/{id}/prepare "
                     "(the 'Relax from oxDNA' button).",
     )
+    allow_catenated_seed: bool = Field(
+        False,
+        description="Build even when a reciprocal crossover pair's two backbones are "
+                    "topologically LINKED (Gauss Lk != 0) in the seed. Off by default: "
+                    "both chain ends are covalently pinned into the network, so the "
+                    "entanglement survives every relaxation stage and the trajectory "
+                    "measures an artefact. Recorded in manifest.json either way.",
+    )
 
 
 class ProductionRequest(BaseModel):
@@ -1630,6 +1638,10 @@ async def _prepare_job_bg(
             seed_kwargs["solute_coords"] = blade_solute_coords
             if body.protocol != EQUILIBRIUM_AWARE_PROTOCOL:
                 seed_kwargs["require_full_topology"] = True
+        # The catenated-seed override is an md_protocols concept; the GBIS prep has its
+        # own signature and never sees it.
+        if body.protocol != IMPLICIT_GBIS_PROTOCOL:
+            seed_kwargs["allow_catenated_seed"] = body.allow_catenated_seed
         package_subdir, name_stem, segments = await run_in_threadpool(
             prepare,
             local_design,
