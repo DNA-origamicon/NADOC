@@ -122,7 +122,17 @@ class TestProductionFastPlanHonorsManifest:
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
         assert plan["timestep_fs"] == 4.0
 
-    def test_declash_forces_conservative_even_if_4fs_requested(self, tmp_path, monkeypatch) -> None:
+    def test_pinned_4fs_on_a_declash_package_is_a_CONFLICT_not_a_silent_downgrade(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        """A declash package has no HMR PSF, so rigidBonds-all 4 fs cannot run — but the
+        user PINNED 4 fs, so the answer is to stop, not to substitute 1 fs.
+
+        The old behaviour rewrote timestep_fs to 1.0 and ran: the Advanced card kept
+        displaying 4 fs while the run integrated 4x the steps at a different timestep,
+        with no warning (the card's warning keys off the FAST checkbox, and declash
+        auto-enables from extra bases independently of it).  Observed on 2hb_1xT.
+        """
         from backend.api import routes_md
         monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
         job = _job_with_manifest(tmp_path, {
@@ -130,8 +140,53 @@ class TestProductionFastPlanHonorsManifest:
             "fast_relaxation": {"enabled": True}, "declash": True,
         })
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_conflict"], "pinned 4 fs + declash must report a conflict"
+        assert "declash" in plan["timestep_conflict"].lower()
+        # timestep_fs/fast stay coherent so downstream sizing never sees a 4 fs declash
+        # plan; the CALLER is what refuses to run, keyed on timestep_conflict.
         assert plan["timestep_fs"] == 1.0
         assert plan["fast"] is False
+
+    def test_auto_derived_4fs_on_declash_falls_back_quietly(self, tmp_path, monkeypatch) -> None:
+        """No pin = nothing was promised, so the quiet fallback is still correct.
+
+        This is what keeps the change from breaking every declash design's production
+        launch: only an explicit pin is a conflict.
+        """
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {          # no production_timestep_fs key
+            "fast_relaxation": {"enabled": True}, "declash": True,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_conflict"] is None
+        assert plan["timestep_fs"] == 1.0
+
+    @pytest.mark.parametrize("pinned", [1.0, 2.0])
+    def test_a_pinned_timestep_the_package_CAN_run_is_never_a_conflict(
+        self, tmp_path, monkeypatch, pinned,
+    ) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": pinned,
+            "fast_relaxation": {"enabled": True}, "declash": True,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_conflict"] is None
+        assert plan["timestep_fs"] == pinned
+
+    def test_pinned_4fs_without_declash_runs_as_asked(self, tmp_path, monkeypatch) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 4.0,
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_conflict"] is None
+        assert plan["timestep_fs"] == 4.0
+        assert plan["fast"] is True
 
 
 class TestCreateJobRequestValidator:

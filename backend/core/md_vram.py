@@ -75,6 +75,12 @@ FAILURE_HOST_OOM = "host_oom"
 FAILURE_INSTABILITY = "instability"
 FAILURE_GPU_ERROR = "gpu_error"
 FAILURE_CELL_SHRINK = "cell_shrink"
+# The user PINNED a production timestep the package cannot run (4 fs on a declash build,
+# which has no HMR PSF).  Not detected from a log — it is a config conflict raised before
+# any step is integrated.  It exists as a failure KIND rather than a request rejection so
+# the run appears in the job list and the standard Fix popup can explain it, instead of
+# the old behaviour: silently substituting 1 fs and producing a different trajectory.
+FAILURE_TIMESTEP_PINNED = "timestep_pinned"
 FAILURE_OTHER = "other"
 
 

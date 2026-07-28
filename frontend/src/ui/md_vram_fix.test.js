@@ -18,6 +18,47 @@ const GPU_ERR = {
   error: 'NAMD failed', log_excerpt: 'CUDA error buildTileLists',
 }
 
+const TIMESTEP_PINNED = {
+  failure_kind: 'timestep_pinned', remedy: 'none',
+  error: '4 fs production was pinned in the Advanced card, but this package was built '
+       + 'with the declash ladder (crossover extra bases / extensions), which never '
+       + 'builds the hydrogen-mass-repartitioned PSF that rigidBonds-all 4 fs requires.',
+  log_excerpt: null,
+}
+
+describe('fixMessage — pinned production timestep', () => {
+  it('uses the "ended prematurely" title so a stopped run is unmistakable', () => {
+    expect(fixMessage(TIMESTEP_PINNED).title).toBe('NAMD run ended prematurely')
+  })
+
+  it('leads with the server\'s specific reason, not a generic string', () => {
+    const m = fixMessage(TIMESTEP_PINNED)
+    expect(m.lines[0]).toBe(TIMESTEP_PINNED.error)
+    expect(m.lines.join(' ')).toMatch(/declash/i)
+  })
+
+  it('falls back to a readable line when the server sent no error text', () => {
+    const m = fixMessage({ failure_kind: 'timestep_pinned', remedy: 'none' })
+    expect(m.lines[0]).toMatch(/cannot run on this package/i)
+  })
+
+  it('offers NO one-click apply — a remedy here would recreate the silent downgrade', () => {
+    const m = fixMessage(TIMESTEP_PINNED)
+    expect(m.canApply).toBe(false)
+    expect(m.action).toBeNull()
+  })
+
+  it('names both ways out: re-prep for 4 fs, or pin 1 fs', () => {
+    const body = fixMessage(TIMESTEP_PINNED).lines.join(' ')
+    expect(body).toMatch(/geometric \+ Fix B/i)
+    expect(body).toMatch(/1 fs/)
+  })
+
+  it('still gets a Fix button, so the failure is reachable from the job list', () => {
+    expect(shouldShowFixButton({ status: 'failed', failure_kind: 'timestep_pinned' })).toBe(true)
+  })
+})
+
 describe('shouldShowFixButton', () => {
   it('shows for any failed job that has a classified failure kind', () => {
     expect(shouldShowFixButton({ status: 'failed', failure_kind: 'vram_oom' })).toBe(true)

@@ -73,6 +73,30 @@ export function fixMessage(advice) {
     }
   }
 
+  if (kind === 'timestep_pinned') {
+    // No Apply. A one-click remedy here would have to either change the timestep or
+    // rebuild the package — the first is exactly the silent downgrade this failure
+    // exists to prevent, and the second is a decision about the model, not a retry.
+    return {
+      title: 'NAMD run ended prematurely',
+      lines: [
+        advice?.error
+        || 'The production timestep you pinned cannot run on this package.',
+        'Previously this was silently downgraded to 1 fs: the Advanced card kept '
+        + 'showing your chosen timestep while the run integrated 4× as many steps at a '
+        + 'different one. The run now stops instead, so the trajectory always matches '
+        + 'what you asked for.',
+        'Either re-prep the design through the geometric + Fix B path (which builds the '
+        + 'repartitioned PSF that 4 fs needs), or set the production timestep to 1 fs '
+        + 'and start again.',
+      ],
+      logExcerpt,
+      canApply: false,
+      applyLabel: null,
+      action: null,
+    }
+  }
+
   if (kind === 'gpu_error' && remedy === 'retry') {
     return {
       title: 'GPU / driver error',

@@ -63,6 +63,7 @@ from backend.core.md_prep_progress import (
 )
 from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, pending_early_stop, reconcile_job_status, resolve_gpu_decision, set_early_stop, start_job, stop_job
 from backend.core.md_vram import (
+    FAILURE_TIMESTEP_PINNED,
     detect_vram_mb,
     package_solvation_profile,
     recommend_downsize,
@@ -889,21 +890,46 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     declash = bool(manifest.get("declash"))
     # User-selected production dt (Advanced card) wins; fall back to the auto default.
     requested = manifest.get("production_timestep_fs")
-    if requested in (1.0, 2.0, 4.0):
+    pinned = requested in (1.0, 2.0, 4.0)
+    if pinned:
         timestep_fs = float(requested)
     else:
         timestep_fs = 4.0 if (relaxed_fast and not declash) else 1.0
     # 4 fs implies the HMR/GPUresident fast path; declash designs never get it.
     fast = (timestep_fs == 4.0) and not declash
+    # A declash package has no HMR PSF, so rigidBonds-all 4 fs genuinely cannot run.
+    #
+    # This used to silently rewrite timestep_fs to 1.0 — including when the user had
+    # PINNED 4 fs in the Advanced card.  The card then displayed 4 fs while the run
+    # executed at 1 fs: a 4x step-count difference the user never agreed to and had no
+    # way to see.  Measured consequence on 2hb_1xT: a "4 fs" 25 ns production ran 25M
+    # 1 fs steps.  Note the card's existing warning keys off the FAST checkbox, and
+    # `declash` auto-enables from extra bases independently of it, so that warning does
+    # not fire for this case either — the downgrade was completely invisible.
+    #
+    # Now: an AUTO-derived 4 fs still falls back quietly (nothing was promised), but a
+    # PINNED one is a hard conflict.  The caller turns it into a failed job carrying
+    # FAILURE_TIMESTEP_PINNED, so the UI surfaces "NAMD run ended prematurely" with the
+    # reason instead of quietly producing a different trajectory.
+    conflict = None
     if timestep_fs == 4.0 and declash:
-        # A declash design cannot run rigidBonds-all HMR at 4 fs — fall to the safe ref.
+        if pinned:
+            conflict = (
+                "4 fs production was pinned in the Advanced card, but this package was "
+                "built with the declash ladder (crossover extra bases / extensions), which "
+                "never builds the hydrogen-mass-repartitioned PSF that rigidBonds-all 4 fs "
+                "requires. Re-prep with the geometric + Fix B path to get a 4 fs-capable "
+                "package, or set the production timestep to 1 fs."
+            )
         timestep_fs = 1.0
+        fast = False
     total_steps, length_ns = _production_steps_and_ns(body, timestep_fs)
     return {
         "total_steps": total_steps,
         "length_ns": length_ns,
         "timestep_fs": timestep_fs,
         "fast": fast,
+        "timestep_conflict": conflict,
     }
 
 
@@ -1917,6 +1943,25 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
         raise HTTPException(400, "Cannot append production while the job is running")
     _assert_md_job_current(job)
     plan = _production_fast_plan(job, body)
+    # A pinned timestep this package cannot honour ends the run BEFORE any step is
+    # integrated, rather than quietly substituting a different one.  Recorded as a failed
+    # job (not an HTTP error) so it lands in the job list and the standard Fix popup can
+    # explain it — see FAILURE_TIMESTEP_PINNED.
+    if plan.get("timestep_conflict"):
+        job.status = MdStatus.failed
+        job.failure_kind = FAILURE_TIMESTEP_PINNED
+        job.error = plan["timestep_conflict"]
+        job.save(_workspace())
+        return {
+            "ok": False,
+            "job": job.to_dict(),
+            "segments_added": [],
+            "steps": 0,
+            "length_ns": 0.0,
+            "autostart": False,
+            "error": plan["timestep_conflict"],
+            "failure_kind": FAILURE_TIMESTEP_PINNED,
+        }
     total_steps, length_ns = plan["total_steps"], plan["length_ns"]
     segments = _append_production_segments(
         job,
@@ -2647,6 +2692,10 @@ _REMEDY_BY_KIND = {
     "host_oom": "retry",        # host pinned-RAM alloc failed — free RAM & resume
     "instability": "gentle",    # refit with the soft integrator across the ladder
     "gpu_error": "retry",       # resume — often a transient GPU/driver state
+    # A pinned-timestep conflict is a CONFIG decision, not something the server may
+    # silently repair — offering a one-click remedy here would recreate the downgrade
+    # this failure exists to prevent. The popup explains; the user chooses.
+    "timestep_pinned": "none",
     "other": "none",            # show the log; no automatic remedy
 }
 
