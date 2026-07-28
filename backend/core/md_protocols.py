@@ -254,8 +254,8 @@ def soften_conf_for_stability(conf_text: str) -> str:
     return text
 
 
-def downgrade_gpu_resident(conf_text: str, factor: int = 2) -> str:
-    """Make a fast (HMR + 4 fs + GPUresident) conf runnable WITHOUT GPU-resident mode.
+def downgrade_gpu_resident(conf_text: str, factor: Optional[int] = None) -> str:
+    """Make a GPU-resident conf runnable WITHOUT GPU-resident mode.
 
     GPU-resident pins a large host buffer; on a host with a small pinned-memory pool
     (WSL2 caps it at ~1 GB) ``cudaMallocHost`` fails at startup for big systems —
@@ -279,12 +279,29 @@ def downgrade_gpu_resident(conf_text: str, factor: int = 2) -> str:
     through here.  This path now only serves the pinned-OOM case (K6), where halving is
     cheap insurance on systems large enough to have hit that limit.
 
+    ``factor=None`` (the default) picks the factor from the conf itself:
+
+      * ``rigidBonds all`` (a FAST segment) -> 2, the conservative halving described above.
+      * ``rigidBonds none`` (a SOFT segment) -> 1, i.e. drop GPUresident and change NOTHING
+        else.  A soft segment is already at 1 fs with no rigid constraints, so there is no
+        GPU constraint solver to lose and nothing for halving to protect — dropping resident
+        just returns it to the offload path it ran on before resident was enabled for soft
+        ladders.  Halving would take it to 0.5 fs and DOUBLE the wall clock of the very
+        fallback that is supposed to keep the job moving.
+
+    Pass an explicit *factor* to override.
+
     Pure + idempotent-safe: returns *conf_text* unchanged if it has no GPUresident line.
     """
     if not _GPU_RESIDENT_LINE_RE.search(conf_text):
         return conf_text
 
+    if factor is None:
+        factor = 2 if _RIGID_BONDS_ALL_RE.search(conf_text) else 1
+
     text = strip_gpu_resident(conf_text)
+    if factor == 1:
+        return text
 
     def _scale_ts(m: re.Match[str]) -> str:
         ts = float(m.group(2)) / factor
@@ -736,6 +753,38 @@ binaryrestart      yes
 # sparse-cell exclusion count fails at step 0). See _segment_conf's gpu_resident gate.
 _RESIDENT_MIN_FILL = 0.90
 
+# Minimum solvated atom count for GPU-resident to be a WIN.  Below it resident is a
+# measured LOSS — see the throughput table in _segment_conf.  The crossover is bracketed
+# by measurement (32.5k loses, 111k wins); this sits inside that bracket, near the top, so
+# nothing under-sized regresses and essentially all of the win is still captured (the gain
+# only becomes large well above 111k).
+_RESIDENT_MIN_ATOMS = 100_000
+
+_PSF_NATOM_RE = re.compile(r"^\s*(\d+)\s*!NATOM", re.MULTILINE)
+
+
+def psf_atom_count(psf_path: Path) -> Optional[int]:
+    """Solvated atom count from a PSF's ``!NATOM`` header, or None if unreadable.
+
+    Streams lines instead of slurping: a solvated PSF is hundreds of MB, and ``!NATOM``
+    always precedes the atom records so this stops early.  Do NOT "optimise" it into a
+    fixed-size head read — psfgen emits one REMARKS line per applied patch, so the
+    ``!NTITLE`` block scales with residue count and ``!NATOM`` can sit past 64 KB.  Same
+    caveat, and same reason, as ``runpod_supervisor.n_atoms_for``.
+    """
+    try:
+        with psf_path.open("r", errors="ignore") as fh:
+            for i, line in enumerate(fh):
+                if "!NATOM" in line:
+                    m = _PSF_NATOM_RE.search(line)
+                    if m:
+                        return int(m.group(1))
+                if i > 2_000_000:      # far past any real !NTITLE block
+                    break
+    except OSError:
+        pass
+    return None
+
 
 def _segment_conf(
     spec: SegmentSpec,
@@ -753,6 +802,7 @@ def _segment_conf(
     field: Optional[dict] = None,
     gbis: bool = False,
     capture_vel_force: bool = False,
+    n_atoms: Optional[int] = None,
 ) -> str:
     from backend.core.namd_helpers import vel_force_dcd_block  # noqa: PLC0415
     # Soft integrator: flexible H bonds + 1 fs timestep.  Needed for declashed
@@ -767,16 +817,58 @@ def _segment_conf(
     # The HMR PSF (heavy hydrogens) is valid ONLY with rigid bonds, so soft
     # segments fall back to the unmodified PSF; only the hard, fast segments use it.
     eff_psf = structure_psf if fast else None
-    # GPU-resident is a SEPARATE axis from fast.  NAMD 3 GPU-resident under-counts
-    # exclusions in a SPARSE cell ("Low global CUDA exclusion count!", fatal at step 0
-    # — measured: it needs >=~90% water fill; even an 80%-filled cell dies).  The old
-    # rule blanket-disabled resident on ANY water-shell carve, but that's over-broad: a
-    # TIGHT box the structure fills stays well-filled and runs resident even when carved,
-    # while only a BIG box with a concave shell (vacuum corners) fails.  So attempt
-    # resident when the carved cell is still well-filled (fill_fraction >= threshold) —
-    # the one-cycle GPU-resident pre-flight probe is the backstop that catches a wrong
-    # guess and downgrades to the standard CUDA-offload path.
-    gpu_resident = fast and (not carved or fill_fraction >= _RESIDENT_MIN_FILL)
+    # GPU-resident is a SEPARATE axis from fast, and is now gated INDEPENDENTLY of it.
+    #
+    # It used to be `fast and (...)`, which silently tied it to the 4 fs/HMR/rigid-bond
+    # ladder — so every SOFT (declash / force_soft) package ran the whole relaxation on
+    # the CUDA-offload path, however large.
+    #
+    # The win scales UP with system size (host<->device transfer and CPU-side integration
+    # both scale with N; at small N a fixed per-step kernel-launch cost dominates BOTH
+    # modes, and resident's extra setup makes it a net LOSS).  Measured on this RTX 3080 Ti,
+    # +p16, soft integrator (1 fs, rigidBonds none, NPT), startup excluded via outputTiming:
+    #
+    #   atoms   offload ms/step   resident ms/step   speedup
+    #   32.5k   0.840             0.862              0.97x  <- resident LOSES
+    #   32.5k   1.116 (k=0 prod)  1.266              0.88x  <- resident LOSES
+    #   111k    1.749             1.544              1.13x
+    #   181k    3.338             2.507              1.33x
+    #   770k    32.10             16.16              1.99x
+    #   3.14M   125.6             39.0               3.22x  (0.69 -> 2.21 ns/day)
+    #
+    # Hence the _RESIDENT_MIN_ATOMS gate: resident is NOT a universal default, it is a
+    # large-system optimisation.  Do not expect it to speed up a small design — a
+    # 32.5k-atom ladder already sits at a ~0.84 ms/step floor that neither mode beats.
+    #
+    # Side effect worth knowing: resident throughput is PE-INDEPENDENT (32.5k measured at
+    # 0.838/0.852/0.871/0.862 ms/step for +p2/4/8/16), while offload needs every core to
+    # reach the same floor (1.576/1.132/1.002/0.840).  Resident therefore frees ~14 of 16
+    # cores on a small job.  The +p16 default costs resident ~2.6% at 32.5k; retuning the
+    # thread count per mode is an open, unmeasured lever - see [[project_water_shell_carve]].
+    #
+    # Nothing about the soft integrator forbids resident mode: a one-cycle probe of that
+    # exact conf with `GPUresident on` (rigidBonds none + langevinHydrogen off + NPT +
+    # extraBonds) runs clean on the pinned Dec-2025 git build — "Info: Running with
+    # GPU-resident mode", energies conserved, T flat at 299-301 K, per-step load
+    # balancing gone (2297 LDB lines -> 3).  See [[reference_local_namd_build]].
+    #
+    # ``n_atoms`` None means "unknown" and does NOT block resident — only a known count
+    # below the threshold does.  (The one production caller always passes it.)
+    #
+    # Two REAL incompatibilities remain, and only these:
+    #   * GBIS / implicit solvent — GPU-resident has no implicit-solvent path at all.
+    #   * A SPARSE cell — NAMD sizes its GPU tile/exclusion buffers from the cell-AVERAGE
+    #     density, so a water-shell carve with vacuum corners under-counts exclusions and
+    #     dies at step 0 ("Low global CUDA exclusion count!", measured: needs >=~90% fill;
+    #     even 80% dies).  A TIGHT carved box the structure fills is fine, so this gates on
+    #     fill_fraction rather than on `carved` alone.
+    # The one-cycle pre-flight probe (namd_runner.gpu_resident_probe) remains the backstop
+    # for anything host-specific that slips through, e.g. a small pinned pool.
+    gpu_resident = (
+        (not gbis)
+        and (n_atoms is None or n_atoms >= _RESIDENT_MIN_ATOMS)
+        and (not carved or fill_fraction >= _RESIDENT_MIN_FILL)
+    )
     lines = [
         _common_header(
             name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
@@ -1987,6 +2079,17 @@ def prepare_mgh_slow_release(
         n_hmr = write_hmr_psf(package_dir / f"{name_stem}.psf", hmr_psf)
         structure_psf = hmr_psf.name
 
+    # Mirrors _segment_conf's gate so the manifest reports what the confs ACTUALLY carry.
+    # Independent of `fast` since GPU-resident was decoupled from it — a soft/declash
+    # ladder is resident too, PROVIDED it clears the atom-count threshold (below that
+    # resident is a measured loss).  (Minimisation always stays offload: the resident
+    # pre-flight probe seeds from its output, so it has to run first.)
+    solvated_atoms = psf_atom_count(package_dir / f"{name_stem}.psf")
+    resident_on = (
+        (solvated_atoms is None or solvated_atoms >= _RESIDENT_MIN_ATOMS)
+        and (not carve_shell or resident_fill >= _RESIDENT_MIN_FILL)
+    )
+
     # Write minimization conf
     (package_dir / f"{min_name}.conf").write_text(
         _min_conf(
@@ -2010,7 +2113,8 @@ def prepare_mgh_slow_release(
                           fast=fast, carved=carve_shell, fill_fraction=resident_fill,
                           structure_psf=structure_psf,
                           anchors_file=anchors_file, field=field,
-                          capture_vel_force=capture_vel_force)
+                          capture_vel_force=capture_vel_force,
+                          n_atoms=solvated_atoms)
         )
 
     charge_audit = {}
@@ -2137,10 +2241,12 @@ def prepare_mgh_slow_release(
             "enabled": fast,
             "hydrogens_repartitioned": n_hmr,
             "structure_psf": structure_psf,
-            "gpu_resident": fast,
+            "gpu_resident": resident_on,
             "timestep_fs": 4.0 if fast else 2.0,
-            "note": "HMR (non-water H x3) + GPUresident + 4 fs on the hard ladder; "
-                    "capped box only, ~4x NPT throughput vs standard CUDA 2 fs.",
+            "note": "HMR (non-water H x3) + 4 fs on the hard ladder; capped box only, "
+                    "~4x NPT throughput vs standard CUDA 2 fs.  GPUresident is a SEPARATE "
+                    "axis (see gpu_resident): it is on for soft/declash ladders too, and "
+                    "off only for GBIS or a sparsely-filled carved cell.",
         },
         "relax_protocol_settings": {
             "stage_length_steps": 2_400_000,

@@ -127,6 +127,40 @@ def test_strip_alone_leaves_the_unstable_4fs_timestep():
     assert _val(strip_gpu_resident(FAST_CONF), "timestep") == "4"
 
 
+# ── downgrade of a SOFT resident conf (declash ladder) ─────────────────────────
+#
+# GPU-resident is no longer tied to `fast`, so soft/declash segments carry
+# `GPUresident on` at rigidBonds none + 1 fs.  Halving THOSE would give 0.5 fs and
+# double the wall clock of the fallback that exists to keep the job moving.
+
+SOFT_RESIDENT_CONF = (
+    FAST_CONF.replace("rigidBonds         all", "rigidBonds         none")
+             .replace("timestep           4", "timestep           1")
+             .replace("structure          d_hmr.psf", "structure          d.psf")
+)
+
+
+def test_downgrade_of_a_soft_conf_drops_resident_without_touching_the_timestep():
+    """rigidBonds none has no GPU constraint solver to lose, so 1 fs stays 1 fs."""
+    out = downgrade_gpu_resident(SOFT_RESIDENT_CONF)
+    assert "GPUresident" not in out
+    assert _val(out, "timestep") == "1"
+    assert _val(out, "run") == "480000"          # step count untouched
+    for key in ("dcdFreq", "restartfreq", "xstFreq", "outputEnergies"):
+        assert _val(out, key) == "9600", key     # output cadence untouched
+    # the downgraded soft conf is EXACTLY the pre-resident offload conf
+    assert out == strip_gpu_resident(SOFT_RESIDENT_CONF)
+
+
+def test_downgrade_still_halves_a_rigid_bond_fast_conf():
+    """The auto-factor must not weaken the FAST path's RATTLE insurance (LESSONS K6)."""
+    assert _val(downgrade_gpu_resident(FAST_CONF), "timestep") == "2"
+
+
+def test_downgrade_factor_can_still_be_forced():
+    assert _val(downgrade_gpu_resident(SOFT_RESIDENT_CONF, factor=2), "timestep") == "0.5"
+
+
 # ── the probe ─────────────────────────────────────────────────────────────────
 
 def _package(tmp_path):
