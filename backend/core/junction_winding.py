@@ -25,9 +25,12 @@ module says so in its own output rather than asserting a false invariant.
 ## The two channels
 
 **PCS — projected crossing number (primary, closure-free).**  Project the two open arcs
-along many directions; in each view count SIGNED crossings of one arc over the other; take
-the modal magnitude.  Nothing is closed, nothing is added, so none of the five artefacts
-above can arise.  Measured: clean junctions give 0, wound ones give +/-2.
+along many directions; in each view count SIGNED crossings of one arc over the other.
+Nothing is closed, nothing is added, so none of the five artefacts above can arise.  The
+verdict statistic is ``f_hi``, the fraction of views showing two or more crossings:
+measured 0.000-0.016 clean vs 0.453-0.562 wound, and stable under rotation.  (The modal
+crossing number is NOT used for the verdict — it flips between 1 and 2 on a wound
+junction depending on orientation.)
 
 **Duplex clamp (confirming, canonically closed).**  A crossover strand's two ends sit on
 OPPOSITE helices at the SAME bp, so closing it is a rung across a base pair -- a real
@@ -61,7 +64,13 @@ _WORDING = {
 DEFAULT_VIEWS = 64          # 256 gave identical modes and f_hi within 0.03
 DEFAULT_CLAMP_K = 5         # bp of duplex buffer; the k-sweep checks convergence
 _CLAMP_KS = (2, 3, 4, 5)
-_PCS_WOUND = 2              # a wound junction reads +/-2; clean reads 0
+# The VERDICT uses f_hi, not n_mode.  Measured on real junctions across 6 orientations:
+# a wound pair's modal crossing number flips between 1 and 2 (2,2,1,1,1,2) because the
+# distribution straddles them ({0:1, 1:29, 2:34} over 64 views), so a rule of
+# "|n_mode| >= 2" scores a wound junction CLEAN in half of all orientations.  f_hi — the
+# fraction of views showing |crossings| >= 2 — is stable over the same rotations
+# (0.453-0.562 wound vs 0.000-0.016 clean) and the threshold sits in the empty middle.
+_PCS_F_HI_WOUND = 0.15
 _LK_WOUND = 0.5
 _CONVERGENCE_TOL = 0.25     # |Lk(k_max) - round(Lk(k_max))| above this = not converged
 
@@ -116,9 +125,11 @@ def projected_crossing_number(arc_a: np.ndarray, arc_b: np.ndarray,
                               n_views: int = DEFAULT_VIEWS) -> dict:
     """Closure-free winding signal: modal signed crossing number over many views.
 
-    ``n_mode`` is 0 for a clean junction and +/-2 for a wound one.  ``f_hi`` (fraction of
-    views showing |crossings| >= 2) is the continuous companion — measured ~0.02 clean vs
-    ~0.5 wound — and is what makes a marginal case visible instead of silently rounding.
+    ``f_hi`` — the fraction of views showing |crossings| >= 2 — is the VERDICT statistic:
+    measured 0.000-0.016 on clean junctions and 0.453-0.562 on wound ones, stable under
+    rotation.  ``n_mode`` (the modal signed crossing number) is reported as a diagnostic
+    only: it reads 0 when clean but flips between 1 and 2 when wound, because the
+    distribution straddles those values, so it must not carry the verdict.
     """
     if len(arc_a) < 2 or len(arc_b) < 2:
         return {"n_mode": 0, "f_hi": 0.0, "n_views": 0}
@@ -205,7 +216,7 @@ def clamp_sweep(residue_lookup, positions, conn_a, conn_b, backbone,
 
 def combine(pcs: dict, clamp: dict) -> dict:
     """Fuse the two channels into one verdict, refusing to guess when they disagree."""
-    pcs_wound = abs(pcs["n_mode"]) >= _PCS_WOUND
+    pcs_wound = pcs["f_hi"] >= _PCS_F_HI_WOUND
     clamp_lk = clamp.get("lk")
     clamp_known = clamp.get("converged") and clamp_lk is not None
     clamp_wound = bool(clamp_known and abs(clamp_lk) >= _LK_WOUND)

@@ -130,6 +130,24 @@ Two harness traps worth remembering: segment names sort **alphabetically**, so
 `..._p100` precedes `..._p50` — chronological ordering must be explicit; and running heavy
 Python builds alongside NAMD starves its `+p16` threads badly enough to halve throughput.
 
+## Detection: use f_hi, never the modal crossing number
+
+The closure-free channel (PCS) projects the two arcs along 64 directions and counts signed
+crossings per view. **The verdict statistic is `f_hi`** — the fraction of views showing two
+or more crossings — **not the modal crossing number.** Measured on a real wound junction,
+the crossing distribution straddles 1 and 2 (`{0:1, 1:29, 2:34}` over 64 views), so the
+mode flips with orientation: `2, 2, 1, 1, 1, 2` across six rotations. A rule of
+`|n_mode| >= 2` therefore scores a wound junction **clean in half of all orientations** —
+a false negative on the primary channel. `f_hi` over the same rotations stayed in
+0.453-0.562 (wound) vs 0.000-0.016 (clean), so the threshold sits at 0.15 in the empty
+middle. `n_mode` is still reported, as a diagnostic only.
+
+Symptom that this is wrong again: spurious `ambiguous` verdicts. While the rule used
+`n_mode`, 6hbS42_1xT and 6hbS42_2xT each reported one ambiguous pair — that was the two
+channels disagreeing because of the mode instability, not real ambiguity. Switching to
+`f_hi` removed them and made the unrepaired counts match ground truth exactly
+(6hbx100_1xT 15/28).
+
 ## Invariants to preserve
 
 - All six geometry-lock hashes are **byte-unchanged** by the fix (verified). The repair only
