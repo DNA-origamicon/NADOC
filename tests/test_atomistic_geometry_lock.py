@@ -44,8 +44,14 @@ _FAST_GOLDEN = {
     # Regenerated again 2026-07-18: commit 91a8eed (phosphate 4fs-safe on position-only override
     # inserts) shifted the same two extra-base designs without updating the goldens.  6hb_test
     # (no such inserts) still matches, again confirming a design-specific change, not drift.
-    "Con4":          "dbaee5ae201a4c422c7ed85f32777a2f",
-    "2hb_xover_val": "e69b20ba99d7d97562807ff06c78d411",
+    # Regenerated again 2026-07-28: commit d9bed33 (crossover extra bases were built topologically
+    # CATENATED) necessarily re-places the inserted bases, shifting these two without updating the
+    # goldens.  APPROVED — verified by the fix's own oracle rather than by pattern-match:
+    # `scripts/check_catenation.py` now reports catenated=0 for Con4 (1 reciprocal junction) and
+    # 2hb_xover_val (2).  6hb_test has 0 reciprocal extra-base junctions and its hash is unchanged,
+    # which is exactly why it is the drift control.
+    "Con4":          "1c2f22b9d164e88add0ade366ae5e416",
+    "2hb_xover_val": "77b38f80cde66f179fb03b2ff88f35ba",
 }
 
 # Slow: large designs that additionally exercise the SKIP-site bridge and the
