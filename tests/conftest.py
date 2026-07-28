@@ -693,6 +693,19 @@ _SLOW_TESTS = {
     # relegated `test_make_18hb_routed_design_is_deterministic`.  The file's three other
     # cluster tests (6hb / no-op paths) stay fast.
     "test_autodetect_produces_scaffold_and_geometry_clusters",
+    # test_junction_topology.py: each parametrisation builds the atomistic model and
+    # computes the Gauss linking number over every reciprocal junction, then REPAIRS and
+    # rebuilds — 41 s for [T-12], 6.6 s for [TT-12].  The file's pure winding/geometry
+    # unit tests stay fast.  Area: atomistic (already mapped in _slow_area_for), so an
+    # atomistic-placement change re-runs them.
+    "test_known_catenating_phases_are_repaired",
+    # Same file, same cost driver (build the model, then walk every reciprocal junction):
+    # 28.8 s and 11.4 s respectively.
+    "test_report_carries_schema_and_counts",
+    "test_positions_with_wrong_atom_count_is_rejected",
+    # test_junction_winding.py: sweeps the clamp across a phase grid, building a model per
+    # sample to separate wound from clean junctions — 41 s.
+    "test_clamp_converges_and_separates_wound_from_clean",
 }
 
 
@@ -729,7 +742,10 @@ def _slow_area_for(module: str) -> str:
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
     # junction_topology measures the built model's strand topology (crossover
     # catenation), so an atomistic-placement change is what should re-run it.
-    if "atomistic" in module or "pdb_export" in module or "junction_topology" in module:
+    # junction_winding is the same stack (it builds a model per phase sample to find the
+    # wound/clean boundary), so it shares the group.
+    if ("atomistic" in module or "pdb_export" in module
+            or "junction_topology" in module or "junction_winding" in module):
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"
