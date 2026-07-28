@@ -881,10 +881,21 @@ def pytest_sessionfinish(session, exitstatus):
         f["n"] += 1
         f["n_slow_marked"] += int(d["slow"])
 
+    # Was a production sim eating the machine while these timings were taken?  Read from
+    # the cache primed in pytest_configure, i.e. the CLEAN startup window — a sim spawned
+    # by a test body later can't flip this.  A NAMD job at +p16 on a 16-core box (load
+    # average ~16) inflates every wall-clock number here, and pytest runs at `nice -n 10`
+    # so it is the side that yields.  Under those conditions a 5-11 s "violator" is
+    # indistinguishable from a healthy 2 s test, so the numbers are recorded but the
+    # guard must NOT demand triage on them.  See scripts/test_guard.sh step 5.
+    sim_running, sim_reason = _sim_guard()
+
     payload = {
         "per_test_budget_sec": _PER_TEST_BUDGET_SEC,
         "total_test_seconds": round(sum(d["seconds"] for d in _DURATIONS.values()), 1),
         "n_tests": len(_DURATIONS),
+        "sim_running": sim_running,
+        "sim_reason": sim_reason,
         "slowest_files_15": [
             {"file": f, "seconds": round(v["seconds"], 1), "n_tests": v["n"],
              "n_slow_marked": v["n_slow_marked"]}
@@ -907,10 +918,18 @@ def pytest_sessionfinish(session, exitstatus):
         tr = session.config.pluginmanager.get_plugin("terminalreporter")
         if tr is not None:
             tr.write_sep("=", "SLOW-TEST BUDGET", yellow=True)
-            tr.write_line(
-                f"{len(violators)} unmarked test(s) over the {_PER_TEST_BUDGET_SEC}s "
-                f"per-test budget — they belong in the slow suite:"
-            )
+            if sim_running:
+                tr.write_line(
+                    f"{len(violators)} unmarked test(s) over the {_PER_TEST_BUDGET_SEC}s "
+                    f"budget, but a heavy sim was running ({sim_reason}) — these timings "
+                    f"are NOT trustworthy and no triage is owed. Re-measure on an idle "
+                    f"machine before relegating anything."
+                )
+            else:
+                tr.write_line(
+                    f"{len(violators)} unmarked test(s) over the {_PER_TEST_BUDGET_SEC}s "
+                    f"per-test budget — they belong in the slow suite:"
+                )
             for v in violators[:10]:
                 tr.write_line(f"  {v['seconds']:6.1f}s  {v['nodeid']}")
             tr.write_line(f"full report: {_SLOW_CANDIDATES_FILE}  "

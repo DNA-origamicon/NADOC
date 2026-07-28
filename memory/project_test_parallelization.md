@@ -50,6 +50,20 @@ an ordinary coding session**. Three new pieces, all machine-local + gitignored:
   the mandated subagent when a violator appears. Never raise the budget; relegate the offender.
   The guard reads `violators` out of that JSON — a non-empty list is what triggers triage now,
   ahead of (and independent of) the 90 s total-time backstop.
+- **BOTH budgets are SUPPRESSED while a production sim is running (2026-07-28).** A NAMD job at
+  `+p16` on a 16-core box drives load average to ~16, and pytest is the side that yields because
+  the guard nices it to +10 — so a healthy 2 s test measures 6 s and trips the 5 s per-test gate.
+  Triaging on those numbers relegates innocent tests *permanently*, which is the exact ratchet the
+  scale-free per-test gate was designed to avoid. conftest now records `sim_running` / `sim_reason`
+  in `.nadoc-slow-candidates.json` (from the `_sim_guard()` cache primed in `pytest_configure`, i.e.
+  the clean startup window — a test-spawned sim can't flip it), and `test_guard.sh` swaps the triage
+  banner for `BUDGET CHECK SUPPRESSED: <reason> … no triage owed`. Violators are still recorded, just
+  not treated as debt. A report with `sim_running` **absent** (written before this) reads as idle, so
+  the gate can never be silently lost. Pins: `tests/test_test_guard_budget.py` (6 — they run the real
+  shell script in a tmp cwd with `NADOC_TEST_LOCK`/`NADOC_TEST_SESSION_FILE` redirected, so they never
+  touch the repo's lock; proven to fail against the pre-change guard).
+  This complements the older rule that `slow`-marked tests *skip themselves* during a sim — that one
+  never covered the fast suite's timings.
 
 **First run of the guard immediately caught a 3-minute lie:** the "fast" suite was documented as
 ~50s but was actually **176s**. The whole SNUPI FEM family was unregistered — `test_snupi_element`

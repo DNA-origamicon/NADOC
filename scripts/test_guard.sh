@@ -17,6 +17,10 @@
 #                  a fixed ceiling on a growing suite just ratchets healthy tests out.
 #                  Either trigger prints a loud banner pointing at the slow-candidate
 #                  report. The run's own pass/fail is unchanged.
+#                  BOTH budgets are SUPPRESSED while a production NAMD/oxDNA/mrDNA job
+#                  is running: it owns every core and pytest is niced below it, so the
+#                  timings measure contention, not test weight. Violators are still
+#                  recorded to the report, just not treated as debt.
 #
 # Usage: scripts/test_guard.sh <label> <gate:1|0> <slow:1|0> -- <command...>
 #   gate=1   "is this really necessary?" confirm (non-interactive: NADOC_TEST_CONFIRM=1)
@@ -178,14 +182,22 @@ fi
 
 [[ "$SLOW" == "1" ]] && exit $RC
 
-# Did conftest flag any unmarked test over the per-test budget?
+# Did conftest flag any unmarked test over the per-test budget, and was a heavy sim
+# running while it measured them?  Both come out of $CANDIDATES in one read.
+# `sim_running` is conftest's guard verdict from the CLEAN startup window.
 n_violators=0
+sim_running=0
+sim_reason=""
 if [[ -f "$CANDIDATES" ]] && command -v python3 >/dev/null 2>&1; then
-  n_violators="$(python3 -c 'import json,sys
+  read -r n_violators sim_running sim_reason <<<"$(python3 -c 'import json,sys
 try:
-    print(len(json.load(open(sys.argv[1])).get("violators", [])))
+    d = json.load(open(sys.argv[1]))
+    print(len(d.get("violators", [])), int(bool(d.get("sim_running"))),
+          (d.get("sim_reason") or "a heavy sim").replace("\n", " "))
 except Exception:
-    print(0)' "$CANDIDATES" 2>/dev/null || echo 0)"
+    print(0, 0, "")' "$CANDIDATES" 2>/dev/null || echo "0 0")"
+  n_violators="${n_violators:-0}"
+  sim_running="${sim_running:-0}"
 fi
 
 triage_banner() {
@@ -206,7 +218,21 @@ $hr
 EOF
 }
 
-if [[ "$n_violators" -gt 0 ]]; then
+# A production NAMD/oxDNA/mrDNA job makes BOTH budgets meaningless: it takes every core
+# (a +p16 NAMD run on a 16-core box drives load average to ~16) and pytest is the side
+# that yields, because we nice it to +10.  A healthy 2 s test can then measure 6 s.  So
+# report the numbers, say why they can't be trusted, and demand nothing — raising the
+# budget or triaging on these timings would relegate innocent tests for good.
+# (`slow`-marked tests already skip themselves in this situation; see tests/conftest.py.)
+if [[ "$sim_running" == "1" ]]; then
+  if [[ "$n_violators" -gt 0 || "$ELAPSED" -gt "$SOFT_BUDGET" ]]; then
+    printf '\ntest time: %ss — BUDGET CHECK SUPPRESSED: %s was running, so these timings are unreliable (%s over-budget test(s) recorded in %s, no triage owed).\nRe-run on an idle machine before relegating anything.\n' \
+      "$ELAPSED" "$sim_reason" "$n_violators" "$CANDIDATES" >&2
+  else
+    printf '\ntest time: %ss / %ss ok (measured while %s was running)\n' \
+      "$ELAPSED" "$SOFT_BUDGET" "$sim_reason" >&2
+  fi
+elif [[ "$n_violators" -gt 0 ]]; then
   triage_banner "HEAVY TEST IN THE FAST SUITE — ${n_violators} unmarked test(s) over the per-test budget ('$LABEL', ${ELAPSED}s total)."
 elif [[ "$ELAPSED" -gt "$BUDGET" ]]; then
   triage_banner "FAST SUITE TOO SLOW — '$LABEL' took ${ELAPSED}s (backstop ${BUDGET}s), with no single test over the per-test budget. The suite has gotten fat in aggregate."
