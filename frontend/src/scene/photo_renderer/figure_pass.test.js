@@ -197,4 +197,30 @@ describe('FigurePass pre-pass exclusions', () => {
     expect(impostor.visible).toBe(true)
     expect(glow.visible).toBe(true)
   })
+
+  it('hides the grid and other non-mesh helpers, which are not surfaces', () => {
+    // Regression: `scene.overrideMaterial` applies to Lines too, so a visible
+    // GridHelper wrote depth into the pre-pass and the outline drew a contour
+    // along every grid line. A Line is not `isMesh`, so the old isMesh-only
+    // guard returned before the line-material checks could ever fire.
+    const scene  = new THREE.Scene()
+    const pass   = new FigurePass(scene, new THREE.PerspectiveCamera())
+
+    const grid   = new THREE.GridHelper(500, 50)
+    const axes   = new THREE.AxesHelper(10)
+    const points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial())
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial())
+    const real   = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial())
+    scene.add(grid, axes, points, sprite, real)
+
+    pass._hideNonSurfaces()
+    expect(grid.visible,   'GridHelper').toBe(false)
+    expect(axes.visible,   'AxesHelper').toBe(false)
+    expect(points.visible, 'Points').toBe(false)
+    expect(sprite.visible, 'Sprite').toBe(false)
+    expect(real.visible,   'real geometry must survive').toBe(true)
+
+    pass._restoreHidden()
+    for (const o of [grid, axes, points, sprite]) expect(o.visible).toBe(true)
+  })
 })

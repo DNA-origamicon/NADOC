@@ -321,13 +321,27 @@ export class FigurePass extends Pass {
 
   // Hide objects whose geometry the MeshNormalMaterial override cannot
   // reproduce (custom instancing shaders) or that shouldn't contribute edges
-  // (additive glow sprites, helper lines).
+  // (additive glow sprites, helper lines, the grid).
+  //
+  // NOTE the two-part test. The material checks below are NOT enough on their
+  // own: `scene.overrideMaterial` applies to every renderable, so a Line still
+  // renders — under MeshNormalMaterial — and still writes depth. And a Line is
+  // not `isMesh`, so an `isMesh`-only guard returns before those checks are
+  // ever reached, which is how View → Grid used to stamp a contour along every
+  // grid line and cut spurious depth steps into the structure behind it.
+  // Non-mesh renderables are therefore rejected by TYPE, up front.
   _hideNonSurfaces() {
     this._hidden.length = 0
     this.scene.traverse(obj => {
-      if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.visible) return
+      if (!obj.visible) return
       const m = obj.material
-      const skip = obj.userData?.sharedLodImpostor
+      // Helper geometry: grid, axes, debug lines, point clouds, billboards.
+      // None of these are surfaces, so none should generate a contour.
+      const isHelper = obj.isLine || obj.isLineSegments || obj.isLineLoop
+        || obj.isPoints || obj.isSprite
+      if (!isHelper && !obj.isMesh && !obj.isInstancedMesh) return
+      const skip = isHelper
+        || obj.userData?.sharedLodImpostor
         || m?.isLineBasicMaterial
         || m?.isLineDashedMaterial
         || m?.blending === THREE.AdditiveBlending
