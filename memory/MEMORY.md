@@ -77,7 +77,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Workspace / UX:** ux_overhaul (file browser, library panel, sidebar widths, sim-folder hiding)
 
-**Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · mixed_representation · strand_animations · reference_geometry · protein_attachment · headless_build · sphere_impostors
+**Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · **mixed_representation** (SHIPPED; P1 — deformed cylinders + impostors uncovered, suspected photo-export bead bug) · strand_animations · reference_geometry · protein_attachment · headless_build · sphere_impostors
 
 **Sequences:** **strand_sequence_edit** (hand-edit a strand's bases; targeted vs design-wide re-derive)
 
@@ -117,7 +117,7 @@ skip_twist_selfconsistency · regional_autorefine · skip_twist_curvature_sweep 
 
 **MD job system / runners:** md_job_system · md_prep_relaxation · oxdna_metrics_card
 
-**Simulate-panel overhaul (IN PROGRESS):** simulate_panel_overhaul
+**Simulate-panel overhaul:** simulate_panel_overhaul (P1 — Phases A/B shipped; Phase C half done: mrDNA+CanDo lack the contextual Run/Stop/Resume button and still paint their own progress bars)
 
 **MD visualization / overlay:** md_viz_tools · md_panel_status · md_sidebar_audit · md_live_model_cache ·
 **atomistic_base_orient** (`base_orient="oxdna_a3"`, default-on; pending in-app visual check)

@@ -61,6 +61,8 @@ unless a migration touches code.
 | 07-24 | project_blade_frontend | Already ARCHIVED 2026-07-20; modules kept dormant, one-line revive | DORMANT-REVIVABLE | Kept; banner firmed up |
 | 07-25 | project_mate_connectors | Probe: create-mate route + router registered (`routes_assembly_joints.py:326`), `createMate`→`_alignAndAddJoint` single round-trip, `_defineAssemblyMate` wired to UI, blunt ends live on BOTH renderer paths. Of 4 listed defects: cache-invalidation MITIGATED (`invalidateInstance` now called after `patchOverhangRotationsBatch`, though `_sourceKey` still blind to ovhg rotation); other 3 unchanged in code. Head's "extracted, shared by both" claim STALE — legacy keeps its own ~270-line inline copy | UNFINISHED-ACTIVE | Kept; **rank P1**; head status banner + open-items rewritten against the probe; stale extraction claim corrected; no-test-pin gap recorded |
 | 07-25 | project_surface_strands | Probe: anchors 1–9 EXISTS+WIRED (builder→runner→route→field-exclusion→display→UI/overlay+tests). Feature shipped 2026-07-17, not deferred. Gaps: `oxdna_design_fingerprint` omits capture state; `validate_capture_build` tests-only | UNFINISHED-ACTIVE | Kept; **rank P3**; head banner + open-items rewritten; **fixed stale MEMORY.md hook** (said "DEFERRED to Phase 2" — was shipped) |
+| 07-28 | project_mixed_representation | Probe: PATH A **shipped**, not in-progress — model+`Design.representation_overrides` [models.py:1054,2275], routes moved crud.py→`routes_display_metadata.py:117/142` (registered), 13 backend tests (doc said 9), `resolveRepOverrides`+`editOverridesForSegments`, `_installInstanceAlpha`/`_applyRepOverrides`, `_applyRepresentationOverrides` (setDetailLevel re-sync intact), `_appendRepresentationMenu` ×6 sites, F-key master reset moved main.js→`ui/representation_switcher.js:256`, `initAtomSurfaceDisplay` wired at main.js:2442. UI was listed "pending" — it shipped. `editOverridesForStrands/ForClusters` named as shipped **do not exist** (column pivot replaced them). Real gaps: curved `_curvedCylGroup` + impostor beads uncovered, `iLinkerBindingCylinders` global-LOD only, no `representation_overrides.test.js`, photo mode reads overrides nowhere (+ suspected bead-`discard` bug from `_withHighDetailGeometry` swapping in `hd.bead` with no `instanceAlpha`). No superseding mechanism exists | UNFINISHED-ACTIVE | Kept; **rank P1**; head banner + code-location table rewritten, stale symbol/test-count/path claims corrected, 8-item live open-list appended; MEMORY.md hook updated |
+| 07-28 | project_simulate_panel_overhaul | Probe: Phase A/B **shipped+live** (`#simulate-body`←main.js:2413, `collapsible:false` ×6 panels, `engine_selector` tabs+strip, periodic_md_panel/overlay ABSENT). Phase C **half done**: foundation `job_run_control.js` live (3 importers), oxDNA `_runControl`:1201 + NAMD `mdRunControl`:176 (always-RUN, `#md-jobs-job-ctl-btn` handler:2214) wired — but **mrDNA + CanDo entirely unstarted** (no `job_run_control` import; coarse/fine/stop trio at mrdna:202/cando:268). Master card partial: `#md-jobs-progress` GONE, but `#mrdna-jobs-progress`/`#cando-jobs-progress` still un-hidden+painted (mrdna:416, cando:603) → two bars visible; `masterStepText`:187 exported with no consumer outside its test. Doc's test paths wrong (`tests/`, not `backend/tests/`); anchors event payload richer than documented (halo reads `highlighted`). No supersession — `md_sidebar_audit` owns only NAMD's half | UNFINISHED-ACTIVE | Kept; **rank P1**; 880-line file split → lean head + `_archive.md`; head rewritten as status banner + 15-row code-location table + 7 live open items; MEMORY.md hook updated |
 | 07-25 | project_mate_connectors | Probe: ALL implemented anchors EXIST+WIRED (create_mate→route, _propagate_fk_inplace/_compose_add_joint shared, `assembly-create-mate` in SnapshotOpKind, shared+legacy `getInstanceBluntEnds` both live, no `()=>[]` stub). Feature ships. Locations drifted (routes_assembly_joints/geometry.py, scene/, ui/overhang_orientation_panel.js). 1 of 4 "known issues" (cache invalidation) FIXED — `_ooApplyDelta` now calls `invalidateInstance`+`rebuild`; 3 connector-placement bugs survive | UNFINISHED-ACTIVE | Kept; **rank P2**; head banner + relocations + open-items rewritten (cache issue struck as RESOLVED); MEMORY.md hook updated |
 
 ## HOLD — flagged to user, decision pending
@@ -77,8 +79,6 @@ unless a migration touches code.
 ## Audit queue (unaudited — rough priority top-first)
 
 Genuinely-unfinished-with-intent candidates (likely UNFINISHED-ACTIVE, need rank):
-- project_mixed_representation — PATH A in progress, unverified in app
-- project_simulate_panel_overhaul — in progress
 - project_dumbbell_autoscaffold — "tests pass, visual still wrong"
 - project_protein_attachment — 2 helpers pending
 - project_regional_autorefine, project_deformation_cluster_scope,
@@ -97,16 +97,27 @@ manual_validation_debt, SIM_COVERAGE_PLAN, project_cando_fem, project_atomistic_
 
 ## Next-session handoff
 
-▶ **NEXT:** `project_mixed_representation` — head says "PATH A in progress, unverified in app."
-Probe the PATH-A anchors (per-strand / per-cluster representation switching: grep the renderer for
-the mixed-representation entry points and any `repr`-per-cluster state) and decide whether PATH A
-actually shipped (→ LIVE-REFERENCE, trim the in-progress framing) or is genuinely half-wired
-(→ UNFINISHED-ACTIVE + rank). Watch for supersession by `project_animation_all_reprs` /
-`project_ssdna_ball_joints`, which cover neighbouring ground.
+▶ **NEXT:** `project_dumbbell_autoscaffold` — head says "tests pass, visual still wrong," which is
+the one failure mode this loop hasn't hit yet: green tests over a wrong result. Probe the dumbbell
+routing entry point + whatever oracle its tests assert on, and decide whether the visual defect is
+still reproducible in current code (→ UNFINISHED-ACTIVE, rank by how load-bearing dumbbell routing
+is) or was fixed by later scaffold-router work (→ SUPERSEDED-*; check `project_scaffold_router` and
+`project_seamless_router` for the successor). If the "visual still wrong" claim can't be reproduced
+from the code alone, park the reproduction question under HOLD rather than guessing.
 
-*Pattern worth carrying:* two passes running (`surface_strands`, `mate_connectors`) both found the
-plan's *own* status text stale in the optimistic direction as well as the pessimistic one — always
-diff the head's claims against the probe line-by-line, not just its top-line verdict.
+*Pattern worth carrying (now 4 for 4 — `surface_strands`, `mate_connectors`, `mixed_representation`,
+`simulate_panel_overhaul`):* the plan's own status text is stale in **both** directions.
+`mixed_representation` claimed "UI pending" (it shipped) *and* claimed two shipped helpers that no
+longer exist; `simulate_panel_overhaul`'s newest block claimed four progress bars were all still
+rendered-but-hidden — NAMD's was deleted and mrDNA's/CanDo's are *visible*. Diff every head claim
+against the probe line-by-line; never trust the top-line banner. Corollary: probes keep finding
+**paths** moved by the carve-ups (crud.py → routes_*, main.js → ui/*) and **test paths** that were
+never right — a code-location table in the head is worth more than the prose around it.
+
+*New this pass:* a plan whose head has grown into a reverse-chronological work log (880 lines here)
+should be **split head/archive as part of the audit** — the rank and the live open-items list are
+unreadable buried under 40 dated ⚡ blocks. Splitting is mechanical and is the audit's deliverable
+as much as the verdict is.
 
 **Standing HOLDs (user-owned decision, do not touch):** `project_bundle_stiffness_params`,
 `project_periodic_md` — both LIVE-REFERENCE, parked in the HOLD block above.

@@ -1,17 +1,35 @@
 # Mixed Representation — per-region representation for a single structure
 
-Status: **PATH A IN PROGRESS** (2026-06-02). Backend done + tested; frontend rendering
-wired + syntax-clean but **NOT YET VERIFIED IN APP**; UI + photo-mode pending.
+Status: **SHIPPED — PATH A COMPLETE** (probe-verified 2026-07-28). **Rank: P1** — the core
+feature is live end-to-end and in daily use; what's left is a small set of coverage holes
+(deformed cylinders, impostors) plus one suspected photo-export bug, all of which bite the
+publication-figure use case this feature exists for.
 
-**CODE LOCATION UPDATE (2026-06-06, main.js carve-up #86):** the region-overlay
-renderers + coordinators described below as living in `main.js`
-(`regionVdwRenderer`/`regionBallstickRenderer`/`regionSurfaceRenderer`,
-`_applyRegionAtomisticOverlays`/`_applyRegionSurfaceOverlay`/`_recomputeRegionSurface`,
-`_ensureAtomData`/`_getAtomStrandColors`, the global atomistic+surface controllers,
-and their store subscribers) were extracted **verbatim** into
-`frontend/src/scene/atom_surface_display.js` (`initAtomSurfaceDisplay({deps})`).
-`atomisticRenderer`+`surfaceRenderer` stay constructed in main.js (shared) and are
-injected; the 3 region renderers are owned by the module. Behavior unchanged.
+The 2026-06-02 "PATH A IN PROGRESS / UI + photo-mode pending" banner was **stale**. Codebase
+probe (2026-07-28) found every backend + frontend + UI anchor EXISTS and WIRED: model +
+routes + 13 backend tests, resolution + renderer alpha path, the right-click Representation
+menu, the global-rep master reset, and the region atom/surface overlays. See
+`plan_audit_ledger.md` for the audit row. Open work is the `## Open items` list below —
+everything above it in this file is history.
+
+**CODE LOCATIONS (refreshed 2026-07-28 — the older paths below are pre-carve-up):**
+
+| Thing | Now lives in |
+|---|---|
+| `RepresentationOverride` / `RepresentationSegment`, `Design.representation_overrides` | `backend/core/models.py:1054`, `:1064`, `:2275` |
+| `PUT`/`DELETE /design/representation-overrides` | `backend/api/routes_display_metadata.py:117` / `:142` (registered `backend/api/main.py:55`) — **no longer `crud.py`** |
+| `POST /design/surface/region` | `backend/api/routes_display_geometry.py:301` |
+| Pure resolution + segment helpers | `frontend/src/scene/representation_overrides.js` — `resolveRepOverrides`, `repColumnsByRep`, `strandsToSegments`/`domainsToSegments`/`overhangsToSegments`/`clustersToSegments`, `editOverridesForSegments`, `createRepresentationMenuItem` |
+| Renderer alpha path | `helix_renderer.js` `_installInstanceAlpha:238`, `_ensureRepAlpha:2469`, `_applyRepOverrides:2493`, public `applyRepOverrides:2588` |
+| Rebuild + no-rebuild wiring | `design_renderer.js` `_applyRepresentationOverrides:387` (calls `setDetailLevel` first — bug-A fix intact), `getDetailLevel:1167`, `columnRepAt/isColumnAtomistic/isColumnSurface:1185-1187` |
+| Right-click menu | `selection_manager.js` `_appendRepresentationMenu:411` (6 call sites) |
+| F1–F7 + global-rep master reset | `frontend/src/ui/representation_switcher.js:256` / `:286` — **no longer `main.js`** |
+| Region atom/surface overlays | `frontend/src/scene/atom_surface_display.js` (`initAtomSurfaceDisplay`, called `main.js:2442`); segment extraction moved to `surfaceSegments()` in `design_queries.js` |
+| Photo export | `frontend/src/scene/photo_mode.js` — **no longer `main.js ~12886`** |
+
+**Stale claims corrected 2026-07-28:** `editOverridesForStrands`/`editOverridesForClusters`
+(named as shipped in the 06-02 Progress block) **do not exist** — the column pivot replaced them
+with `*ToSegments` + `editOverridesForSegments`. Backend tests are 13, not 9.
 
 ## BUG: global-cylinders + region override (2026-06-02) — fixed
 
@@ -264,15 +282,7 @@ DONE (2026-06-02) — global rep change is a master reset:
   Edge: F-key pressed on the ALREADY-active rep cycles coloring (`_cycleColoringForRepr`) and does
   NOT clear — only an actual rep switch (or any menu click) clears. Verified via Playwright (removed).
 
-PENDING:
-- Photo-mode must honor overrides ([main.js] ~12886 forces one global export rep) — NOT yet
-  investigated for the single-design path; may "just work" if photo re-skins the live scene
-  meshes (override alpha already applied), or may force a global rep and need a guard. Next step.
-- Still NOT verified by real mouse-click in-app (headless raycast can't hit); needs user click test.
-- In-app verification on **6hb_test** (6 helices, 1 cluster, undeformed — the chosen test design;
-  `Examples/teeth.nadoc` cited in CLAUDE.md does NOT exist). 26hb_platform_v3 = big bulk look.
-- KNOWN LIMITATION: only straight (undeformed) cylinders handled via alpha; curved/deformed
-  cylinder tube-groups (`_curvedCylGroup`) + impostor beads (`?impostors=1`) not yet covered.
+PENDING (as written 2026-06-02 — superseded by `## Open items` at the end of this file).
 
 Verify construction for the figure: keep global rep = full, override the BULK strands→'cylinders'
 (focal stays full). Works without needing global-LOD-preserved-across-rebuild.
@@ -438,3 +448,51 @@ bases are affected; standard crossovers (the arc) are fully covered. Follow-up i
 Verified via Playwright on the hinge: global cylinders → 0 axis lines / 0 arcs; pin one
 staple to full → only that region's axis + arcs reappear. NOT visually confirmed in the app.
 Debug handles added: `__NADOC_DBG__.designRenderer`, `__NADOC_DBG__.unfoldView` (getter).
+
+---
+
+## Open items (rewritten 2026-07-28 against a codebase probe — this is the live list)
+
+**Rank: P1.** Feature ships; these are the holes. Ordered worst-first.
+
+1. **SUSPECTED BUG — photo export may blank all beads once an override has been used.**
+   `_installInstanceAlpha` permanently patches the shared bead/fluoro material with
+   `diffuseColor.a *= vInstanceAlpha; if (a < 0.02) discard` and puts the `instanceAlpha`
+   attribute on a **cloned per-mesh geometry** [helix_renderer.js:238-260]. On every export
+   (assembly or not) `_withHighDetailGeometry` swaps `backboneSpheres`/`extensionFluorophores`
+   to `hd.bead`/`hd.fluoro` [photo_mode.js:126-128], which carry **no** `instanceAlpha` → the
+   attribute reads 0 → every bead and fluorophore should `discard`. **Not yet confirmed in
+   app.** Repro to try: apply any per-region override, then photo-export a design with beads
+   visible. Fix if real: copy the `instanceAlpha` attribute onto the HD geometry in the swap
+   (or skip the swap while overrides are active).
+2. **Photo mode does not read `representation_overrides` at all** (zero hits across
+   photo_mode / photo_exp_mode / photo_renderer / photo_panel / photo_exp_panel /
+   photo_figure_panel). The old fear — that export force-flattens to one global rep — turns out
+   to be **assembly-gated only** (`inAssembly && exportRep !== 'working'`, photo_mode.js:31-37),
+   so in single-design mode overrides survive the export by accident, not by design. Worth an
+   explicit guard + a note, since the publication-figure use case is exactly this path.
+3. **Deformed/curved cylinders are not covered.** `_applyRepOverrides` touches only
+   `_domainCylData` / `_overhangCylData` / `_bridgeCylData`; `_curvedCylGroup` visibility is
+   still pure global-LOD [helix_renderer.js:2489, 3531], and `_curvedDomainCylData` entries
+   still lack `domainIndex` [:1458]. So on a **deformed** design a per-region cylinder override
+   silently does nothing, and per-domain glow / cylinder-hit drill stay straight+overhang only.
+   This is the biggest real-usage hole — most interesting figures are of deformed structures.
+4. **Impostor beads bypass the alpha path.** `_installInstanceAlpha` is explicitly skipped when
+   `_useImpostors` [:2420-2422, :2471-2474], so with `?impostors=1` bead alpha-hiding is a
+   silent no-op.
+5. **`iLinkerBindingCylinders` still global-LOD only** — no `_installInstanceAlpha`, no alpha
+   write in `_applyRepOverrides`, only `.visible = coarse` [:2491, 3535]. (Bridge cylinders ARE
+   column-driven; only the binding cylinders were deferred — "dsDNA only for now".)
+6. **Extra-base beads not per-region** — `_applyXoverExtrasLod` hides ALL inserted-base markers
+   at LOD≥2 (see the section above). Only crossovers *with* inserted bases affected.
+7. **Test gap: no `representation_overrides.test.js`.** The pure helpers (`resolveRepOverrides`,
+   `*ToSegments`, `editOverridesForSegments`) have no direct vitest; they're only exercised
+   indirectly by `ui/overhang_orientation_menu.test.js` and mocked out in
+   `atom_surface_display.test.js`. These are pure input→output functions — cheap to pin.
+8. **Never verified by a real mouse click in-app** (headless raycast can't hit). Suggested test
+   design: **6hb_test** (6 helices, 1 cluster, undeformed); `Examples/teeth.nadoc` does not exist.
+
+**Not superseded by anything.** Probe found no competing per-region rep mechanism —
+`_ALL_REPRS` in `representation_switcher.js` is the *global* rep list, `animation_player.js`
+has no representation state, and ssDNA ball-joint code has none. `unfold_view.js:308` *consumes*
+`columnRepAt` rather than duplicating it.
