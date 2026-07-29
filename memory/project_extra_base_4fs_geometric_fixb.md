@@ -32,6 +32,33 @@ unrestrained-MGHH before committing a production run. **CONFIRMED 2026-07-19:** 
 ran 4 fs stably to completion (no crash/NaN) but melted at k=0 (C1' → 84 %, delocalized) — 4 fs fix ✓,
 bundle cohesion ✗. A valid 4fs build, but NOT a usable free-dynamics validation target.
 
+## ✅ 2026-07-29 — 4 fs runs STABLY on a 1xT design straight off the DECLASH relax (no Fix B, no re-prep)
+
+`2hb_1xT` (32,566 atoms solvated, ONE extra T per crossover), produced directly from the ordinary
+**declash** relaxation — no geometric+Fix-B re-prep:
+
+| | ms/step | ns/day |
+|---|---|---|
+| 1 fs, `rigidBonds none`, offload | 1.086 | 79.6 |
+| 2 fs, `rigidBonds all`, GPUresident | 1.365 | 126.6 |
+| **4 fs, `rigidBonds all` + HMR, resident OFF** | **0.960** | **~360** |
+
+**22.5M of 50M steps (90 of 200 ns) with ZERO RATTLE / constraint / fast-atom failures**, T flat
+297.4 → 296.9 K, total-energy drift 0.41% over 90 ns (NPT + Langevin, so not conserved anyway).
+The HMR PSF was **built on demand at production time** from the declash package's own PSF (1086
+hydrogens repartitioned) — the relax never made one.
+
+**What this does and does not say.** It does NOT overturn the Fix-B finding above: that was
+established on **24hb_1xT (338 extra T)** and **6hb_2xT (48 extra-base residues)**, where HMR
+lightening C5' on unpaired inserts broke 4 fs. It BOUNDS it — at *one* extra T per crossover the
+unpaired population is too sparse to destabilise the constraint solver, so a small 1xT design needs
+no Fix B. Treat Fix B as required above some extra-base density, not for extra bases per se; the
+threshold between 1xT/2hb and 2xT/6hb is unmeasured.
+
+**Also note the 4 fs win here is larger than the naive 2×** over 2 fs (2.8×), because the 4 fs conf
+also dropped GPU-resident — which is a LOSS below ~100k atoms (see [[project_water_shell_carve]]).
+Per-step cost actually fell (1.365 → 0.960 ms) while the step doubled.
+
 > **2026-07-28 — a THIRD, independent defect was found in the same seed geometry.**
 > Reciprocal crossover pairs carrying extra bases were built **topologically catenated**
 > (Gauss `Lk = ±1`), invisible to every health check here, and unfixable by relaxation.
