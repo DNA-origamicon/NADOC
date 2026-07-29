@@ -260,6 +260,78 @@ export function repKind(repr) {
 const _COARSE_ATOM_CAP = 12
 const _COARSE_SURF_CAP = 8
 
+// When the backend can stream COORDINATES ONLY against a topology fetched once (the MD
+// path — see md_viz_adapter), a whole all-atom trajectory can be held in memory and the
+// grid stops being a compromise. What it cannot be is unbounded: a frame costs
+// n_serials x 3 x 4 bytes as a Float32Array, which on a 300 k-atom origami (serials run
+// to ~469 k) is 5.4 MB. This budget is the ceiling on ALL cached frames together;
+// past it the grid falls back to evenly-spaced sampling and says so.
+// A 64-bit browser tab will not hand out an unbounded JS heap however much RAM the box
+// has — the ceiling is typically a couple of GB, and hitting it is an unrecoverable tab
+// crash, not a slowdown. So free RAM is necessary but never sufficient, and this is the
+// ceiling that applies even on a machine with memory to spare (and the fallback budget
+// when the host's free memory can't be read at all).
+export const BROWSER_HEAP_CEILING_BYTES = 1536 * 1024 * 1024
+const _ATOM_PREBUILD_BUDGET_BYTES = BROWSER_HEAP_CEILING_BYTES
+// Never take more than this share of what the OS says is available: the browser also
+// needs room for the scene and the rest of the page, and pushing a machine into swap is
+// worse than a coarser trajectory.
+export const FREE_RAM_SAFE_FRACTION = 0.5
+// Serial span per nucleotide, measured on VoltronCore (469 350 serials / 14 774 nt).
+// Lets the panel price a prebuild from the trajectory payload alone, BEFORE the ~30 s
+// topology fetch reveals the exact span.
+export const SERIALS_PER_NUCLEOTIDE_EST = 32
+/** Pure: bytes one cached coordinate frame costs (Float32 xyz per serial). Falls back to
+ *  the per-nucleotide estimate when the exact serial span isn't known yet. */
+export function atomFrameBytes({ nSerials = 0, nNucleotides = 0 } = {}) {
+  const serials = Number(nSerials) > 0
+    ? Number(nSerials)
+    : Math.max(0, Number(nNucleotides) || 0) * SERIALS_PER_NUCLEOTIDE_EST
+  return Math.max(0, Math.round(serials)) * 3 * 4
+}
+/** Pure: how many frames of an `nSerials`-serial structure fit the prebuild budget.
+ *  ≥1 always — one frame is what "show me this frame" needs at minimum. */
+export function affordableAtomFrames(nSerials, nFrames,
+                                     budgetBytes = _ATOM_PREBUILD_BUDGET_BYTES) {
+  const per = Math.max(1, Number(nSerials) || 0) * 3 * 4      // Float32 xyz per serial
+  const n = Math.max(0, Math.floor(Number(nFrames)) || 0)
+  if (!n) return 0
+  return Math.max(1, Math.min(n, Math.floor(budgetBytes / per)))
+}
+/**
+ * Pure: what an all-atom prebuild would cost, what this machine can actually spare, and
+ * which limit binds. `availableBytes` is the host's MemAvailable (null = unknown, in
+ * which case only the fixed budget and the heap ceiling apply — an unknown machine is
+ * not assumed to be a large one).
+ *
+ * Returns `{ wantBytes, budgetBytes, frames, capped, limitedBy, frameBytes }`;
+ * `limitedBy` is 'ram' | 'heap' | 'budget' | null and is what the warning names.
+ */
+export function prebuildMemoryPlan({
+  nFrames, nSerials = 0, nNucleotides = 0, availableBytes = null,
+  fixedBudget = _ATOM_PREBUILD_BUDGET_BYTES,
+  heapCeiling = BROWSER_HEAP_CEILING_BYTES,
+  safeFraction = FREE_RAM_SAFE_FRACTION,
+} = {}) {
+  const frameBytes = atomFrameBytes({ nSerials, nNucleotides })
+  const total = Math.max(0, Math.floor(Number(nFrames)) || 0)
+  const wantBytes = total * frameBytes
+  const limits = [['heap', Math.min(fixedBudget, heapCeiling)]]
+  const avail = Number(availableBytes)
+  if (Number.isFinite(avail) && avail > 0) limits.push(['ram', avail * safeFraction])
+  let limitedBy = null
+  let budgetBytes = Infinity
+  for (const [name, v] of limits) {
+    if (v < budgetBytes) { budgetBytes = v; limitedBy = name }
+  }
+  const frames = frameBytes > 0 && total > 0
+    ? affordableAtomFrames(frameBytes / 12, total, budgetBytes)
+    : total
+  const capped = frames < total
+  return { wantBytes, budgetBytes, frames, capped, frameBytes,
+           limitedBy: capped ? limitedBy : null }
+}
+
 export function initOxdnaDisplay({
   designRenderer, api, proteinRenderer = null,
   getAtomisticRenderer = null, getSurfaceRenderer = null,
@@ -334,6 +406,20 @@ export function initOxdnaDisplay({
   // or 'job' (full, this job's own frames only).  Every heavy per-frame fetch must repeat
   // it — frame indices only mean the same thing within one scope.
   let _trajScope = 'lineage'
+  // Frame INTERVAL the loaded trajectory was built with (MD only — every Nth frame of each
+  // segment).  undefined = the backend's own default budget.  Same rule as _trajScope: a
+  // frame index only means the same thing within one interval.
+  let _trajStride
+  // Serial span of the job's heavy-atom set (from the topology fetch) — sizes one cached
+  // coordinate frame, hence how many the prebuild budget affords. 0 = not known yet.
+  let _atomSerials = 0
+  // Byte ceiling for ALL cached atomistic frames. Narrowed by the panel to what this
+  // machine can actually spare (free RAM / browser heap); the constant is the fallback.
+  let _atomBudget = _ATOM_PREBUILD_BUDGET_BYTES
+  // Does this backend amortize its per-request setup across a batch of frame indices?
+  // MD does (one context build serves the whole call); oxDNA rebuilds each frame
+  // independently and is deliberately fetched one at a time.
+  const _heavyBatch = api?.heavyBatch === true
   let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
   let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
   let _playing = false       // play loop running → force coarse (every frame must be instant)
@@ -439,9 +525,19 @@ export function initOxdnaDisplay({
       if (epoch !== _epoch) return false
     }
     if (!model?.atoms?.length) return false
+    // Serial span sizes one cached coordinate frame → how many the prebuild can afford.
+    // Only re-grid when it actually changed: an engine that reports none (oxDNA) must not
+    // have its already-cached frames thrown away by a topology re-fetch.
+    const nSer = Number(model.n_serials) || 0
+    if (nSer !== _atomSerials) { _atomSerials = nSer; _bakedAtom = null }
     _pendingTopoModel = { atoms: model.atoms, bonds: model.bonds || [] }   // hold, don't paint
     _pendingTopoJob = _jobId
-    _atomTopoBonds = needBonds
+    // A source that DECLARES it has no bonds (NAMD renders its atoms unbonded) already
+    // gave us everything there is, so a later vdw→ballstick flip must not trigger a
+    // "fetch the bonds" round trip that would re-do a ~30 s reconstruction for nothing.
+    // Note this is an explicit declaration, NOT an empty bond list: oxDNA's VDW fetch
+    // also comes back bondless, and there the warm-ahead re-fetch is exactly right.
+    _atomTopoBonds = needBonds || model.bonds_available === false
     _atomTopoJob = null    // this model differs from whatever the renderer holds → re-apply it
     return true
   }
@@ -562,7 +658,18 @@ export function initOxdnaDisplay({
     const n = _traj?.n_frames || _traj?.frames?.length || 0
     if (n <= 0) return null
     if (kind === 'atomistic') {
-      if (!_bakedAtom) _bakedAtom = { grid: strideIndices(0, n - 1, _COARSE_ATOM_CAP), byIdx: new Map() }
+      if (!_bakedAtom) {
+        // With a coordinates-only stream the grid is bounded by MEMORY, not by how long
+        // one reconstruction takes — so ask for every frame the budget allows instead of
+        // the fixed 12-cell compromise. `capped` drives the panel's honesty about it.
+        const cap = _atomSerials > 0
+          ? affordableAtomFrames(_atomSerials, n, _atomBudget)
+          : _COARSE_ATOM_CAP
+        _bakedAtom = {
+          grid: strideIndices(0, n - 1, cap), byIdx: new Map(),
+          cap, capped: cap < n, total: n,
+        }
+      }
       return _bakedAtom
     }
     if (!_bakedSurf) _bakedSurf = { grid: strideIndices(0, n - 1, _COARSE_SURF_CAP), byIdx: new Map() }
@@ -571,16 +678,42 @@ export function initOxdnaDisplay({
 
   /** Lazily fetch + cache ONE coarse-grid frame's heavy data. One network rebuild per
    *  distinct grid cell (then served from cache on revisits). Epoch-guarded. */
+  /** Flat coordinate arrays arrive as plain JS number arrays (8 B/element). Holding a
+   *  whole trajectory that way costs twice what it needs to, so narrow to Float32 —
+   *  ~5e-5 nm resolution at origami scale, far below anything drawable. Meshes/objects
+   *  pass through untouched. */
+  function _narrowFrame(data) {
+    if (!Array.isArray(data)) return data
+    return Float32Array.from(data)
+  }
+
+  /** Fetch + cache heavy data for MANY grid cells in ONE request.
+   *
+   *  One request per frame is what made this slow: the MD analysis rebuilds its context
+   *  (PSF parse + model) per CALL — ~32 s on a 300 k-atom system against ~2.8 s per
+   *  extra frame — so N separate fetches paid that N times. Epoch-guarded. */
+  async function _coarseFrames(kind, gridIdxs, epoch) {
+    const bake = kind === 'atomistic' ? _bakedAtom : _bakedSurf
+    const want = gridIdxs.filter((g) => !bake.byIdx.has(g))
+    if (!want.length) return
+    // _trajStride is repeated on every heavy fetch for the same reason _trajScope is:
+    // a composite frame index only addresses the same frame within one interval.
+    const resp = kind === 'atomistic'
+      ? await api.getOxdnaFramesAtomistic(_jobId, want, _align, _trajScope, _trajStride)
+      : await api.getOxdnaFramesSurface(_jobId, want, { stride: _trajStride }, _align, _trajScope)
+    if (epoch !== _epoch) return
+    for (const g of want) {
+      const data = resp?.[String(g)]
+      if (data) bake.byIdx.set(g, _narrowFrame(data))
+    }
+  }
+
   async function _coarseFrame(kind, gridIdx, epoch) {
     const bake = kind === 'atomistic' ? _bakedAtom : _bakedSurf
     if (bake.byIdx.has(gridIdx)) return bake.byIdx.get(gridIdx)
-    const resp = kind === 'atomistic'
-      ? await api.getOxdnaFramesAtomistic(_jobId, [gridIdx], _align, _trajScope)
-      : await api.getOxdnaFramesSurface(_jobId, [gridIdx], {}, _align, _trajScope)
+    await _coarseFrames(kind, [gridIdx], epoch)
     if (epoch !== _epoch) return null
-    const data = resp?.[String(gridIdx)] || null
-    if (data) bake.byIdx.set(gridIdx, data)
-    return data
+    return bake.byIdx.get(gridIdx) || null
   }
 
   /** Mark playback on/off. While on, the heavy path forces coarse (every played frame
@@ -595,10 +728,23 @@ export function initOxdnaDisplay({
    *  are instant). Reports progress via onProgress(done, total). The first cell is built
    *  alone (warms the server-side alignment cache), then the rest a few at a time so a
    *  dozen all-atom rebuilds overlap. Returns {ok, n}; ok=false if cancelled. */
-  async function prebuildHeavy(onProgress) {
+  async function prebuildHeavy(onProgress, { budgetBytes = null } = {}) {
     if (_mode !== 'trajectory') return { ok: true, n: 0 }
+    // The caller may narrow the budget to what THIS machine can spare (it is the one
+    // that talks to the user about it); the built-in constant is the fallback ceiling.
+    if (Number.isFinite(budgetBytes) && budgetBytes > 0 && budgetBytes !== _atomBudget) {
+      _atomBudget = budgetBytes
+      _bakedAtom = null                // re-grid against the new ceiling
+    }
     const kind = _repKind()
     if (kind === 'cg') return { ok: true, n: 0 }   // CG plays instantly — nothing to bake
+    // Size the grid BEFORE building it: how many frames fit the budget depends on the
+    // structure's serial span, which only the topology fetch knows. Without this the
+    // grid would be built at the fallback 12 and the prebuild would silently under-fill.
+    if (kind === 'atomistic') {
+      const ar = getAtomisticRenderer?.()
+      if (ar && ar.getMode?.() !== 'off') await _ensureJobAtomistic(ar, _epoch)
+    }
     const bake = _ensureGrid(kind)
     if (!bake || !bake.grid.length) return { ok: false, n: 0 }
     const epoch = _epoch
@@ -608,22 +754,50 @@ export function initOxdnaDisplay({
     let done = bake.grid.filter((g) => bake.byIdx.has(g)).length
     onProgress?.(done, total)
     const todo = bake.grid.filter((g) => !bake.byIdx.has(g))
-    if (todo.length) {                       // first cell alone → warms the alignment cache
+    // Warming one cell alone first pays off only when the per-request setup is CACHED
+    // server-side for the requests that follow (oxDNA's alignment cache). On the batching
+    // backend that setup is per-call and not cached, so a lone warm-up frame is a whole
+    // extra context build — precisely the cost this is meant to avoid.
+    if (todo.length && !_heavyBatch) {
       await _coarseFrame(kind, todo[0], epoch)
       if (!live()) return { ok: false, n: total }
       done++; onProgress?.(done, total)
     }
-    const rest = todo.slice(1)
-    let next = 0
-    const worker = async () => {
-      while (next < rest.length && live()) {
-        const g = rest[next++]
-        await _coarseFrame(kind, g, epoch)
-        if (live()) { done++; onProgress?.(done, total) }
+    const rest = _heavyBatch ? todo : todo.slice(1)
+    if (_heavyBatch) {
+      // Only where the backend amortizes its per-CALL setup across the batch (MD: the
+      // analysis context is a ~30 s PSF parse + model build, against ~0.2 s per extra
+      // frame in the same call). oxDNA reconstructs each frame independently, so
+      // batching there would just trade many short waits for one long one — hence the
+      // capability flag rather than a blanket change.
+      //
+      // Chunks are ordered by distance from the PLAYHEAD and re-sorted between chunks,
+      // so the frames around where the user is actually looking arrive first and a seek
+      // mid-build redirects the remaining work — the "buffer from here" behaviour, as
+      // close as this backend allows. The fixed per-request cost is why the chunk is
+      // large: every extra chunk is another whole context build.
+      const CHUNK = 32
+      let queue = rest.slice()
+      while (queue.length && live()) {
+        queue.sort((a, b) => Math.abs(a - _frameIdx) - Math.abs(b - _frameIdx))
+        const chunk = queue.slice(0, CHUNK)
+        queue = queue.slice(CHUNK)
+        await _coarseFrames(kind, chunk, epoch)
+        if (live()) { done += chunk.length; onProgress?.(done, total) }
       }
+    } else {
+      let next = 0
+      const worker = async () => {
+        while (next < rest.length && live()) {
+          const g = rest[next++]
+          await _coarseFrame(kind, g, epoch)
+          if (live()) { done++; onProgress?.(done, total) }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(3, rest.length) }, worker))
     }
-    await Promise.all(Array.from({ length: Math.min(3, rest.length) }, worker))
-    return { ok: live(), n: total }
+    return { ok: live(), n: total, capped: !!bake.capped, cap: bake.cap,
+             frames: bake.grid.length, trajFrames: bake.total ?? total }
   }
 
   /** Reconstruct + apply the heavy rep for the CURRENT mode/frame (no-op in CG).
@@ -672,10 +846,10 @@ export function initOxdnaDisplay({
         const idx = _frameIdx
         if (useFine) {
           if (kind === 'atomistic') {
-            const r = await api.getOxdnaFramesAtomistic(_jobId, [idx], _align, _trajScope)
+            const r = await api.getOxdnaFramesAtomistic(_jobId, [idx], _align, _trajScope, _trajStride)
             if (live()) await _pushAtomistic(r?.[String(idx)], epoch, live)
           } else {
-            const r = await api.getOxdnaFramesSurface(_jobId, [idx], {}, _align, _trajScope)
+            const r = await api.getOxdnaFramesSurface(_jobId, [idx], { stride: _trajStride }, _align, _trajScope)
             if (live()) _pushSurface(r?.[String(idx)])
           }
         } else {
@@ -706,6 +880,8 @@ export function initOxdnaDisplay({
     _heavyActive = false
     _bakedAtom = null
     _bakedSurf = null
+    _atomSerials = 0      // next job re-measures its own per-frame cost
+    _atomBudget = _ATOM_PREBUILD_BUDGET_BYTES
     _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
     _pendingTopoModel = null   // drop the held (native) model so the next job re-fetches
     _pendingTopoJob = null
@@ -1010,11 +1186,11 @@ export function initOxdnaDisplay({
    * cache it, and show the first frame.  Returns metadata for the player
    * (n_frames + stage markers).  The actual scrubbing is driven by showFrame().
    */
-  async function loadTrajectory(jobId, align = true, scope = 'lineage') {
+  async function loadTrajectory(jobId, align = true, scope = 'lineage', stride = undefined) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
     const signal = _beginLoad()
-    const resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope })
+    const resp = await api.getOxdnaTrajectory(jobId, { align, signal, scope, stride })
     if (epoch !== _epoch) return { ok: false, reason: 'superseded' }
     if (!resp?.ready || !Array.isArray(resp.frames) || !resp.frames.length) {
       return { ok: false, reason: resp?.reason || 'no trajectory yet' }
@@ -1028,6 +1204,7 @@ export function initOxdnaDisplay({
     _jobId = jobId
     _align = align
     _trajScope = scope
+    _trajStride = stride
     // Replace setup-preview strands before showFrame's FEM move; otherwise the rebuild
     // leaves the origami at design coordinates and the preview caps at seed coordinates.
     if (!await _applyJobSurfaceStrands(jobId, align, epoch, signal)) {
@@ -1080,7 +1257,7 @@ export function initOxdnaDisplay({
     if (!_active || !_jobId) return { ok: false, reason: 'not active' }
     if (_mode === 'trajectory') {
       _surfaceStrandsByJob.delete(_jobId) // refresh both origami frames and latest real caps
-      return loadTrajectory(_jobId, _align, _trajScope)
+      return loadTrajectory(_jobId, _align, _trajScope, _trajStride)
     }
     // refresh re-fetches: more production frames may have accumulated → bypass cache.
     return _mode === 'rmsf'
@@ -1142,7 +1319,11 @@ export function initOxdnaDisplay({
     alignment: () => _align,
     cancelPendingLoad: _cancelLoad,
     trajectoryInfo: () => (_mode === 'trajectory' && _traj?.frames?.length)
-      ? { frame: _frameIdx + 1, total: _traj.frames.length }
+      // atomSerials/nNucleotides let a caller price an all-atom prebuild: the exact
+      // serial span once the topology has been fetched, the nucleotide count (which the
+      // trajectory payload always carries) as the estimate before that.
+      ? { frame: _frameIdx + 1, total: _traj.frames.length,
+          atomSerials: _atomSerials, nNucleotides: _traj.n_nucleotides || 0 }
       : null,
     coloringInfo: () => {
       const resp = _mode === 'rmsf' ? _rmsfResp

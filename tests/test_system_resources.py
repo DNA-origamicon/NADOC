@@ -65,3 +65,22 @@ def test_route_returns_sampled_shape(monkeypatch):
     assert r.status_code == 200
     assert r.json() == fake
     assert seen["devices"] == "1"                       # query param threaded through
+
+
+def test_ram_available_is_reported_not_left_to_be_derived():
+    """The all-atom trajectory prebuild asks "will this fit in memory?", and the answer
+    is MemAvailable — the kernel's estimate of what a NEW allocation can get, which
+    counts reclaimable cache and is therefore NOT total-minus-used-as-displayed."""
+    s = build_resource_sample(10.0, 32 * 1024**3, 24 * 1024**3, None)
+    assert s["ram_available_mb"] == round(24 * 1024**3 / (1024 * 1024))
+    assert s["ram_total_mb"] == round(32 * 1024**3 / (1024 * 1024))
+    # used + available == total, so a consumer can trust either without cross-checking.
+    assert s["ram_used_mb"] + s["ram_available_mb"] == s["ram_total_mb"]
+
+
+def test_ram_available_is_none_when_the_host_reading_failed():
+    """A failed probe must degrade to None, not to 0 — "no memory free" would make the
+    prebuild refuse everything on a machine that is actually fine."""
+    s = build_resource_sample(None, None, None, None)
+    assert s["ram_available_mb"] is None
+    assert s["ram_total_mb"] is None

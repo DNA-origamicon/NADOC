@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors, deviationHex, deviationColorMap, strainBounds, strainColorMap, strainStats } from './oxdna_display.js'
+import { toFemUpdates, viridisHex, rmsfColorMap, framesToUpdates, initOxdnaDisplay, repKind, rmsfToVertexColors, deviationHex, deviationColorMap, strainBounds, strainColorMap, strainStats, affordableAtomFrames, prebuildMemoryPlan, atomFrameBytes,
+  BROWSER_HEAP_CEILING_BYTES, SERIALS_PER_NUCLEOTIDE_EST } from './oxdna_display.js'
 import { colormapHex } from './colormaps.js'
 
 const tick = () => new Promise((r) => setTimeout(r, 0))
@@ -927,9 +928,11 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     api.getOxdnaFramesAtomistic.mockClear()
     ctrl.showFrame(2)
     await tick()
-    // 4th arg = the loaded trajectory's composite scope — a heavy per-frame fetch
-    // MUST repeat it, or the index would address a frame from the other scope.
-    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledWith('jobT', [2], true, 'lineage')
+    // Args 4 and 5 are the loaded trajectory's composite scope and frame interval — a
+    // heavy per-frame fetch MUST repeat both, or the index addresses a frame from a
+    // different downsample. oxDNA has no interval (that control is MD's), so it stays
+    // undefined here and the oxDNA client ignores it.
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenCalledWith('jobT', [2], true, 'lineage', undefined)
   })
 
   it('stopAndRestore rebuilds the design heavy reps; a late reconstruction does not re-apply', async () => {
@@ -1017,5 +1020,124 @@ describe('proteinTransformMap', () => {
     expect(proteinTransformMap({})).toEqual({})
     expect(proteinTransformMap({ proteins: [{ attachment_id: 'a', transform: [1, 2, 3] }] })).toEqual({})
     expect(proteinTransformMap({ proteins: [{ transform: Array(16).fill(0) }] })).toEqual({})
+  })
+})
+
+
+// ── Prebuild memory budget ────────────────────────────────────────────────────
+// Holding a whole all-atom trajectory is only possible because a frame is coordinates
+// only. It is still bounded: this is the arithmetic the panel reports "memory limit"
+// from, so it has to be honest about a large origami rather than optimistic.
+describe('affordableAtomFrames', () => {
+  const MB = 1024 * 1024
+
+  it('lets a small structure hold every frame', () => {
+    // 20k serials -> 0.23 MB/frame; 500 frames is nothing.
+    expect(affordableAtomFrames(20_000, 500, 600 * MB)).toBe(500)
+  })
+
+  it('caps a large origami below its frame count', () => {
+    // Real numbers: VoltronCore's heavy atoms span ~469k serials = 5.4 MB/frame.
+    const n = affordableAtomFrames(469_350, 991, 600 * MB)
+    expect(n).toBeGreaterThan(50)
+    expect(n).toBeLessThan(991)                 // 991 frames would be ~5.3 GB
+    expect(n * 469_350 * 12).toBeLessThanOrEqual(600 * MB)
+  })
+
+  it('never returns zero for a structure that has frames', () => {
+    // One frame is the minimum "show me this frame" needs; refusing to draw anything
+    // would be worse than exceeding the budget by a single frame.
+    expect(affordableAtomFrames(50_000_000, 10, 1 * MB)).toBe(1)
+  })
+
+  it('is zero only when there are no frames', () => {
+    expect(affordableAtomFrames(1000, 0)).toBe(0)
+  })
+
+  it('tolerates an unknown serial span rather than dividing by zero', () => {
+    expect(affordableAtomFrames(0, 10, 600 * MB)).toBe(10)
+    expect(Number.isFinite(affordableAtomFrames(NaN, 10, 600 * MB))).toBe(true)
+  })
+})
+
+
+// ── Does an all-atom prebuild fit THIS machine? ───────────────────────────────
+// Free RAM is necessary but not sufficient: a browser tab has its own heap ceiling and
+// hitting it kills the tab outright. These pin which limit binds, because the panel
+// names it to the user ("free RAM" vs "browser memory limit").
+describe('prebuildMemoryPlan', () => {
+  const MB = 1024 * 1024
+  const GB = 1024 * MB
+  const VOLTRON = { nSerials: 469_350, nFrames: 991 }     // measured: 5.4 MB/frame
+
+  it('prices a frame from the exact serial span when known', () => {
+    expect(atomFrameBytes({ nSerials: 469_350 })).toBe(469_350 * 12)
+  })
+
+  it('falls back to a per-nucleotide estimate before the topology is fetched', () => {
+    // The estimate has to be usable on the FIRST load, when only the trajectory payload
+    // (which carries n_nucleotides) is in hand. Measured span was 31.8 serials/nt.
+    const est = atomFrameBytes({ nNucleotides: 14_774 })
+    const real = atomFrameBytes({ nSerials: 469_350 })
+    expect(est / real).toBeGreaterThan(0.9)
+    expect(est / real).toBeLessThan(1.15)
+    expect(SERIALS_PER_NUCLEOTIDE_EST).toBe(32)
+  })
+
+  it('prefers the exact span over the estimate when both are given', () => {
+    const p = prebuildMemoryPlan({ ...VOLTRON, nNucleotides: 999_999 })
+    expect(p.frameBytes).toBe(469_350 * 12)
+  })
+
+  it('names FREE RAM as the limit on a machine that is short of it', () => {
+    // 1 GB free -> only 512 MB may be taken -> below both other ceilings.
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    expect(p.limitedBy).toBe('ram')
+    expect(p.capped).toBe(true)
+    expect(p.frames * p.frameBytes).toBeLessThanOrEqual(0.5 * GB)
+  })
+
+  it('names the BROWSER heap when RAM is plentiful — free RAM alone is not permission', () => {
+    // 64 GB free would "allow" 5.3 GB of frames; the tab would die first.
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 64 * GB })
+    expect(p.limitedBy).toBe('heap')
+    expect(p.budgetBytes).toBe(BROWSER_HEAP_CEILING_BYTES)
+  })
+
+  it('does not assume a big machine when free RAM is unknown', () => {
+    // Reading unavailable -> null. The heap ceiling still binds; nothing is waved
+    // through on the basis of "probably fine".
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: null })
+    expect(p.capped).toBe(true)
+    expect(p.limitedBy).toBe('heap')
+    expect(p.budgetBytes).toBe(BROWSER_HEAP_CEILING_BYTES)
+  })
+
+  it('takes the LOWER of free RAM and the heap ceiling, never the higher', () => {
+    // The two limits are independent: a huge machine is still bounded by the tab, and a
+    // small one by its RAM. Picking either alone would be wrong half the time.
+    const tight = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    const roomy = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 64 * GB })
+    expect(tight.budgetBytes).toBeLessThan(roomy.budgetBytes)
+    expect(roomy.budgetBytes).toBe(BROWSER_HEAP_CEILING_BYTES)
+  })
+
+  it('reports no cap, and no limiting reason, when everything fits', () => {
+    const p = prebuildMemoryPlan({ nSerials: 20_000, nFrames: 50, availableBytes: 32 * GB })
+    expect(p.capped).toBe(false)
+    expect(p.limitedBy).toBeNull()
+    expect(p.frames).toBe(50)
+  })
+
+  it('reports the true total cost even when it cannot be afforded', () => {
+    // wantBytes is what the panel quotes in the warning — it must be the REAL figure,
+    // not the affordable one, or the warning understates the problem it is warning about.
+    const p = prebuildMemoryPlan({ ...VOLTRON, availableBytes: 1 * GB })
+    expect(p.wantBytes).toBe(991 * 469_350 * 12)
+    expect(p.wantBytes).toBeGreaterThan(p.budgetBytes)
+  })
+
+  it('survives a trajectory with no frames', () => {
+    expect(prebuildMemoryPlan({ nFrames: 0, nSerials: 100 }).frames).toBe(0)
   })
 })

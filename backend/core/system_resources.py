@@ -50,12 +50,18 @@ def build_resource_sample(
     Percentages are clamped to 0–100 and rounded to one decimal; MB values are ints.
     Any field that cannot be computed is ``None`` (the card renders "n/a").
     """
-    ram_used_mb = ram_total_mb = ram_pct = None
+    ram_used_mb = ram_total_mb = ram_pct = ram_available_mb = None
     if ram_total_bytes:
         ram_total_mb = round(ram_total_bytes / _MB)
         used = ram_total_bytes - (ram_available_bytes or 0)
         ram_used_mb = round(used / _MB)
         ram_pct = _clamp_pct(100.0 * used / ram_total_bytes)
+        # Surfaced explicitly rather than left as total-minus-used: MemAvailable is the
+        # kernel's estimate of what a NEW allocation can actually get (it counts
+        # reclaimable cache), which is the number a "will this fit in memory?" check
+        # needs.  Callers deriving it by subtraction would be re-deriving it wrongly the
+        # moment either field gains its own clamping.
+        ram_available_mb = round((ram_available_bytes or 0) / _MB)
 
     gpu_present = bool(gpu_activity) and bool(gpu_activity.get("total_mb"))
     gpu_pct = vram_used_mb = vram_total_mb = vram_pct = None
@@ -71,6 +77,7 @@ def build_resource_sample(
         "ram_pct": ram_pct,
         "ram_used_mb": ram_used_mb,
         "ram_total_mb": ram_total_mb,
+        "ram_available_mb": ram_available_mb,
         "gpu_present": gpu_present,
         "gpu_pct": gpu_pct,
         "vram_pct": vram_pct,
