@@ -63,7 +63,6 @@ from backend.core.md_prep_progress import (
 )
 from backend.core.namd_runner import apply_user_stop, default_threads, find_gmx, find_namd, is_running, pending_early_stop, reconcile_job_status, resolve_gpu_decision, set_early_stop, start_job, stop_job
 from backend.core.md_vram import (
-    FAILURE_TIMESTEP_PINNED,
     detect_vram_mb,
     package_solvation_profile,
     recommend_downsize,
@@ -2028,25 +2027,15 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
         raise HTTPException(400, "Cannot append production while the job is running")
     _assert_md_job_current(job)
     plan = _production_fast_plan(job, body)
-    # A pinned timestep this package cannot honour ends the run BEFORE any step is
-    # integrated, rather than quietly substituting a different one.  Recorded as a failed
-    # job (not an HTTP error) so it lands in the job list and the standard Fix popup can
-    # explain it — see FAILURE_TIMESTEP_PINNED.
+    # A pinned timestep this package cannot honour must not start a run.
+    #
+    # ⚠️ `job` here is the COMPLETED RELAXATION that production would be appended to.
+    # An earlier version set job.status = failed, which flipped a finished 12/12 ladder
+    # to "failed" in the job list — destroying the record of hours of successful work
+    # because a production request was rejected.  Reject the REQUEST instead; the
+    # relaxation is read-only from here.
     if plan.get("timestep_conflict"):
-        job.status = MdStatus.failed
-        job.failure_kind = FAILURE_TIMESTEP_PINNED
-        job.error = plan["timestep_conflict"]
-        job.save(_workspace())
-        return {
-            "ok": False,
-            "job": job.to_dict(),
-            "segments_added": [],
-            "steps": 0,
-            "length_ns": 0.0,
-            "autostart": False,
-            "error": plan["timestep_conflict"],
-            "failure_kind": FAILURE_TIMESTEP_PINNED,
-        }
+        raise HTTPException(400, plan["timestep_conflict"])
     total_steps, length_ns = plan["total_steps"], plan["length_ns"]
     segments = _append_production_segments(
         job,
@@ -2162,18 +2151,17 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         production_timestep_fs=body.production_timestep_fs,
         gpu_resident=body.gpu_resident,
     ))
-    # A pinned timestep this package cannot honour ends the child BEFORE it is created,
-    # rather than quietly running a different one (see FAILURE_TIMESTEP_PINNED).
+    # A pinned timestep this package cannot honour must not start a run.
+    #
+    # ⚠️ NEVER touch `parent` here.  The parent is the COMPLETED RELAXATION — an earlier
+    # version of this block set parent.status = failed, which flipped a finished 12/12
+    # ladder to "failed" in the job list and threw away hours of successful work over a
+    # rejected production request.  The conflict belongs to the production attempt, so it
+    # is reported on its own row (below) or as a plain rejection; the relaxation is
+    # read-only from here.
     if plan.get("timestep_conflict"):
-        parent.status = MdStatus.failed
-        parent.failure_kind = FAILURE_TIMESTEP_PINNED
-        parent.error = plan["timestep_conflict"]
-        parent.save(_workspace())
-        return {
-            "ok": False, "job": parent.to_dict(), "child_id": None,
-            "error": plan["timestep_conflict"],
-            "failure_kind": FAILURE_TIMESTEP_PINNED,
-        }
+        conflict = plan["timestep_conflict"]
+        raise HTTPException(400, conflict)
 
     # Distinct velocity seed per production child of this parent, so a fan-out samples
     # independent trajectories from the same equilibrated coords.  Replica 0 uses the

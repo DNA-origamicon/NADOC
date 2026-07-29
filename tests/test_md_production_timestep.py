@@ -346,3 +346,52 @@ class TestProductionPlanResolvesResident:
         from backend.api import routes_md
         with pytest.raises(ValueError):
             routes_md.ProductionRequest(steps=1000, gpu_resident="yes-please")
+
+
+class TestRejectedProductionNeverTouchesTheRelaxation:
+    """A rejected production request must not mutate the job it was launched from.
+
+    Regression: the timestep-conflict handler set ``job.status = failed`` on the PARENT.
+    The parent is the completed relaxation, so refusing a 2 fs production flipped a
+    finished 12/12 ladder to "failed" in the job list — the UI showed
+    "NAMD · failed · 12/12 segments · 100% · 9,600,000 / 9,600,000 steps" — throwing away
+    the record of hours of successful work over a rejected request.
+    """
+
+    def _completed_declash_job(self, tmp_path):
+        from backend.core.md_job import MdStatus
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 2.0,          # pinned + declash = conflict
+            "fast_relaxation": {"enabled": True}, "declash": True,
+        })
+        job.status = MdStatus.completed
+        job.save(tmp_path)
+        return job
+
+    def test_append_production_rejects_without_failing_the_relaxation(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        import asyncio
+
+        from fastapi import HTTPException
+
+        from backend.api import routes_md
+        from backend.core.md_job import MdStatus
+        job = self._completed_declash_job(tmp_path)
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        monkeypatch.setattr(routes_md, "_load_job", lambda _id: job)
+        monkeypatch.setattr(routes_md, "is_running", lambda _id: False)
+        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda _j: None)
+
+        with pytest.raises(HTTPException) as ei:
+            asyncio.run(routes_md.append_md_production(
+                job.job_id, routes_md.ProductionRequest(steps=1000)))
+        assert ei.value.status_code == 400
+        assert "declash" in str(ei.value.detail).lower()
+
+        # THE INVARIANT: the relaxation is untouched, in memory AND on disk.
+        assert job.status == MdStatus.completed
+        assert job.failure_kind is None
+        reloaded = json.loads((job.job_dir(tmp_path) / "job.json").read_text())
+        assert reloaded["status"] == "completed"
+        assert reloaded.get("failure_kind") is None
