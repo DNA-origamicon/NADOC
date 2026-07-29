@@ -76,8 +76,15 @@ contiguity by construction — a lattice translation cannot change an intra-run 
 bead, and all-atom trajectory), so one fix covers every view. **Oracle worth reusing: audit BOND
 LENGTHS against the PSF topology.** Distance-from-centroid does not work — this bundle is
 legitimately 4.5 nm from its centroid in a 9.94 nm box, so it flags real structure; a broken
-covalent bond is unambiguous. Pins: `test_atomistic_to_nadoc.py` (+3, the torn-backbone case
+covalent bond is unambiguous. Pins: `test_atomistic_to_nadoc.py` (+4, the torn-backbone case
 proven to fail against the pre-change per-atom snap at 3.91 nm).
+**⚠️ The fix did not land the first time.** `ws.py`'s ballstick (all-atom LIVE display) branch
+carried its OWN inlined copy of the older translation-only per-atom snap and never called the
+shared function — so fixing `reassemble_to_posed_reference` changed nothing on screen. It now
+delegates, and a guard test fails if any file under `backend/` outside `atomistic_to_nadoc.py`
+re-implements the snap (matches `eq_box=`/`ref_box=`/`round(dc[`). Verified to flag the pre-fix
+`ws.py`. Lesson, third time this session: **fix the path in use, not the leaf** — a shared
+helper is only shared if every caller actually calls it.
 
 Follow-on the same day: **CPK now applies to crossover extra bases too** (ALL atomistic views,
 not just MD). `color_resolver.js` had `if (colorMode === 'strand' || atom.aux_helix_id)` — the

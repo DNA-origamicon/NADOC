@@ -1301,3 +1301,34 @@ def test_strand_runs_splits_on_backbone_gaps_only():
     assert _strand_runs(p, box) == [(0, 5), (5, 9)]
     assert _strand_runs(_straight_strand(6), box) == [(0, 6)]
     assert _strand_runs(np.zeros((1, 3)), box) == [(0, 1)]
+
+
+def test_no_display_path_reimplements_the_pbc_snap():
+    """Every PBC image correction must go through reassemble_to_posed_reference.
+
+    This bug was fixed once in the shared function and STILL appeared on screen,
+    because backend/api/ws.py's ballstick (all-atom live display) branch carried its own
+    inlined copy of the older translation-only, per-atom snap. Fixing the leaf does
+    nothing when the path in use has its own implementation.
+
+    Guards the shape, not the text: a `np.round(<something>/box)` applied to a
+    design-reference difference outside atomistic_to_nadoc.py is a re-implementation.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    owner = root / "backend" / "core" / "atomistic_to_nadoc.py"
+    # `eq_box`/`ref_box` = a design-reference array; rounding a difference from one by the
+    # box is the snap. Only the owning module may do it.
+    pat = re.compile(r"(eq_box|ref_box)\s*=|round\(\s*dc\[", re.I)
+    offenders = []
+    for py in sorted((root / "backend").rglob("*.py")):
+        if py == owner:
+            continue
+        if pat.search(py.read_text()):
+            offenders.append(str(py.relative_to(root)))
+    assert not offenders, (
+        "PBC snap re-implemented outside atomistic_to_nadoc.py: " + ", ".join(offenders)
+        + " — call reassemble_to_posed_reference instead."
+    )

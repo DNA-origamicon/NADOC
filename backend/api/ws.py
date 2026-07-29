@@ -867,13 +867,21 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     T_dyn = eq_centroid - c_box if eq_centroid is not None else T
                     if (eq_pos is not None and eq_centroid is not None
                             and snap_mask is not None and len(eq_pos) == len(p_box)):
-                        eq_box = eq_pos - T_dyn
-                        dc = p_box - eq_box
-                        for d in range(3):
-                            if box_nm[d] > 0:
-                                dc[:, d] -= _np.round(dc[:, d] / box_nm[d]) * box_nm[d]
-                        p_box_corr = eq_box + dc
-                        p_box_corr[~snap_mask] = p_box[~snap_mask]
+                        # Use the SHARED reassembly, not a local copy.  This branch used
+                        # to inline its own translation-only, PER-ATOM nearest-image snap
+                        # — which both (a) predated the pose-first fix the bead path above
+                        # already uses, and (b) tore the backbone: an atom whose ideal
+                        # design reference is >L/2 from its simulated position rounds to a
+                        # different periodic image than its chain neighbours and jumps a
+                        # full box alone.  That is the "a few bases dislocated from their
+                        # strands" artefact, and because the copy lived here it survived
+                        # fixing the shared function.  reassemble_to_posed_reference poses
+                        # the reference first and snaps per STRAND RUN, so contiguity
+                        # holds by construction.
+                        p_box_corr, c_box = reassemble_to_posed_reference(
+                            p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask,
+                        )
+                        T_dyn = eq_centroid - c_box
                         p_pre = p_box_corr + T_dyn
                     else:
                         p_pre = p_box + T_dyn
