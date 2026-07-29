@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import * as THREE from 'three'
-import { FigurePass } from './figure_pass.js'
+import { FigurePass, FigureShader } from './figure_pass.js'
 
 // The pass is constructible without a GL context (render targets and materials
 // are descriptors until something renders them), so its parameter mapping and
@@ -86,6 +86,87 @@ describe('FigurePass.setCueRange', () => {
     expect(pass.uniforms.uCueFar.value).toBeGreaterThan(pass.uniforms.uCueNear.value)
     pass.setCueRange(10, 2)      // degenerate: far behind near
     expect(pass.uniforms.uCueFar.value).toBeGreaterThan(10)
+  })
+})
+
+describe('FigurePass silhouette mode', () => {
+  it('defaults to the Roberts cross — the shipping Photo tab must not change', () => {
+    const pass = makePass()
+    expect(pass.uniforms.uSilhouette.value).toBe(0)
+    // and stays there when the shipping tab pushes its usual params
+    pass.setParams({ outline: true, outlineDepthSensitivity: 0.35, outlineCreaseSensitivity: 0.85 })
+    expect(pass.uniforms.uSilhouette.value).toBe(0)
+  })
+
+  it("selects the ChimeraX depth-outline on 'chimerax' and back on anything else", () => {
+    const pass = makePass()
+    pass.setParams({ silhouette: 'chimerax' })
+    expect(pass.uniforms.uSilhouette.value).toBe(1)
+    pass.setParams({ silhouette: 'roberts' })
+    expect(pass.uniforms.uSilhouette.value).toBe(0)
+  })
+
+  it("carries ChimeraX's depth_jump default and accepts an override", () => {
+    const pass = makePass()
+    expect(pass.uniforms.uDepthJump.value).toBeCloseTo(0.03)
+    pass.setParams({ outlineDepthJump: 0.08 })
+    expect(pass.uniforms.uDepthJump.value).toBeCloseTo(0.08)
+  })
+})
+
+describe('FigurePass.setSceneDepth', () => {
+  it('stores a positive span, and treats non-positive as "fall back to far-near"', () => {
+    const pass = makePass()
+    pass.setSceneDepth(137.5)
+    expect(pass.uniforms.uSceneDepth.value).toBe(137.5)
+    pass.setSceneDepth(0)
+    expect(pass.uniforms.uSceneDepth.value).toBe(0)
+    pass.setSceneDepth(-4)
+    expect(pass.uniforms.uSceneDepth.value).toBe(0)
+  })
+})
+
+describe('FigureShader ChimeraX depth-outline', () => {
+  // ChimeraX's test `nf*(d0-ds) < jump*(1-nf1*ds)*(1-nf1*d0) → discard` is a
+  // perspective linearization of the depth buffer. Pinning the algebra here
+  // (rather than only in a comment) is what justifies applying the threshold
+  // directly in linear eye depth in the shader.
+  const chimeraxDiscards = (d0, ds, jump, near, far) => {
+    const nf = near / far
+    const nf1 = 1 - nf
+    return nf * (d0 - ds) < jump * (1 - nf1 * ds) * (1 - nf1 * d0)
+  }
+  // Window depth for an eye distance under a standard GL perspective projection.
+  const windowDepth = (z, near, far) => (far * (z - near)) / (z * (far - near))
+
+  it('reduces to a constant world-space gap of depth_jump * (far - near)', () => {
+    const near = 1, far = 101, jump = 0.03
+    const gap = jump * (far - near)   // 3 nm
+    for (const zFar of [5, 20, 60, 95]) {
+      // A gap just under the threshold is discarded, just over it draws — at
+      // every distance from the camera, which is the whole point.
+      const dNear = windowDepth(zFar - gap * 0.9, near, far)
+      const dFar  = windowDepth(zFar, near, far)
+      expect(chimeraxDiscards(dFar, dNear, jump, near, far)).toBe(true)
+
+      const dNear2 = windowDepth(zFar - gap * 1.1, near, far)
+      expect(chimeraxDiscards(dFar, dNear2, jump, near, far)).toBe(false)
+    }
+  })
+
+  it('the shader carries the ChimeraX branch and its disc min-filter', () => {
+    // Guards against the branch being lost in a future edit of the shader string.
+    expect(FigureShader.fragmentShader).toContain('uSilhouette > 0.5')
+    expect(FigureShader.fragmentShader).toMatch(/rr < 0\.5 \|\| rr > r2/)
+    expect(FigureShader.fragmentShader).toContain('dsEye = min(dsEye')
+  })
+
+  it('paints the contour onto background pixels only in ChimeraX mode', () => {
+    // Roberts mode early-returns on background (keeps an alpha export clean);
+    // the ChimeraX contour lands on the FARTHER surface, so it must not.
+    expect(FigureShader.fragmentShader)
+      .toContain('if (isBackground && !(uOutline > 0.5 && uSilhouette > 0.5))')
+    expect(FigureShader.fragmentShader).toContain('alpha = max(alpha, edge)')
   })
 })
 

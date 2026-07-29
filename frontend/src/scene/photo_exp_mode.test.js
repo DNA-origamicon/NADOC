@@ -4,6 +4,7 @@ import { createMockStore } from '../test-helpers/mock_store.js'
 import { clearDom } from '../test-helpers/factory_dom.js'
 import { LIGHTING_PRESETS } from './photo_renderer/lighting_presets.js'
 import {
+  keyLightDirection,
   swapToFlatMaterials,
   createExpPhotoMode,
   initPhotoExpMode,
@@ -26,6 +27,32 @@ describe('swapToFlatMaterials', () => {
     expect(mesh.material.specularIntensity).toBe(0)
     expect(mesh.material.roughness).toBe(1)
     expect(mesh.material.metalness).toBe(0)
+  })
+
+  it('applies the preset for each mesh\'s OWN representation', () => {
+    const scene = new THREE.Scene()
+    const beads = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshPhongMaterial(), 4)
+    beads.name = 'backboneSpheres'
+    const cyls = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6), new THREE.MeshPhongMaterial(), 4)
+    cyls.name = 'helixCylinders'
+    const surf = new THREE.Mesh(box(), new THREE.MeshPhongMaterial({ side: THREE.DoubleSide }))
+    surf.name = 'dna-surface'
+    scene.add(beads, cyls, surf)
+
+    swapToFlatMaterials(scene, { full: 'metallic', cylinders: 'glossy', surface: 'matte', atomistic: 'cpk-flat' })
+
+    expect(beads.material.metalness).toBe(1.0)          // full → metallic
+    expect(cyls.material.clearcoat).toBeCloseTo(0.5)     // cylinders → glossy
+    expect(surf.material.roughness).toBeCloseTo(0.85)    // surface → matte
+  })
+
+  it('defaults to the flat FIGURE materials when no presets are given', () => {
+    const scene = new THREE.Scene()
+    const m = new THREE.Mesh(box(), new THREE.MeshPhongMaterial())
+    m.name = 'backboneSpheres'
+    scene.add(m)
+    swapToFlatMaterials(scene)
+    expect(m.material.specularIntensity).toBe(0)
   })
 
   it('covers every representation, keyed off the material — not a name table', () => {
@@ -121,6 +148,47 @@ describe('swapToFlatMaterials', () => {
     handle.restore()
     expect(a.material).toBe(before[0])
     expect(b.material).toBe(before[1])
+  })
+})
+
+describe('keyLightDirection', () => {
+  it('reproduces ChimeraX\'s own key direction at the defaults', () => {
+    // (135°, 35.264°) → (-0.577, 0.577, 0.577): 45° up-and-left, 54.7° off axis.
+    const [x, y, z] = keyLightDirection(135, 35.264)
+    expect(x).toBeCloseTo(-0.5774, 3)
+    expect(y).toBeCloseTo( 0.5774, 3)
+    expect(z).toBeCloseTo( 0.5774, 3)
+    // …and it is the DEFAULT, so the rig comes up on ChimeraX's key direction.
+    expect(DEFAULT_EXP_SETTINGS.keyAzimuth).toBe(135)
+    expect(DEFAULT_EXP_SETTINGS.keyElevation).toBeCloseTo(35.264, 3)
+  })
+
+  it('always returns a unit vector', () => {
+    for (const [a, e] of [[0, 0], [135, 35], [-90, 80], [180, -60], [37, -12]]) {
+      const [x, y, z] = keyLightDirection(a, e)
+      expect(Math.hypot(x, y, z)).toBeCloseTo(1, 9)
+    }
+  })
+
+  it('azimuth sweeps the screen: 0 = right, 90 = above, 180 = left', () => {
+    expect(keyLightDirection(0,   0)[0]).toBeCloseTo( 1, 6)   // +x = right
+    expect(keyLightDirection(90,  0)[1]).toBeCloseTo( 1, 6)   // +y = up
+    expect(keyLightDirection(180, 0)[0]).toBeCloseTo(-1, 6)   // -x = left
+  })
+
+  it('elevation tilts toward the viewer; 90° sits on the camera axis', () => {
+    // At 90° the light is straight down the barrel — nothing can shadow, which
+    // is why the panel warns about it rather than allowing it silently.
+    expect(keyLightDirection(135, 90)[2]).toBeCloseTo(1, 6)
+    // Negative elevation puts it BEHIND the subject: a rim light.
+    expect(keyLightDirection(135, -40)[2]).toBeLessThan(0)
+  })
+
+  it('the angle off the camera axis is exactly 90 - elevation', () => {
+    for (const el of [0, 20, 35.264, 60]) {
+      const z = keyLightDirection(0, el)[2]              // dot with the view axis
+      expect((Math.acos(z) * 180) / Math.PI).toBeCloseTo(90 - el, 4)
+    }
   })
 })
 
@@ -255,6 +323,49 @@ describe('createExpPhotoMode', () => {
     for (const d of dirs) expect(d.target.parent).toBe(rig)
   })
 
+  it('resetKeyDirection restores ChimeraX\'s own key direction', () => {
+    mode.activate()
+    mode.setKeyAzimuth(-90)
+    mode.setKeyElevation(-30)
+    mode.resetKeyDirection()
+    const s = mode.getSettings()
+    expect(s.keyAzimuth).toBe(DEFAULT_EXP_SETTINGS.keyAzimuth)
+    expect(s.keyElevation).toBeCloseTo(DEFAULT_EXP_SETTINGS.keyElevation, 9)
+    // …and the light actually moved back, not just the settings.
+    const want = new THREE.Vector3(...keyLightDirection(s.keyAzimuth, s.keyElevation))
+    expect(mode._getKeyLight().position.clone().normalize().angleTo(want)).toBeCloseTo(0, 6)
+  })
+
+  it('steers the key light by azimuth/elevation', () => {
+    mode.activate()
+    const key = mode._getKeyLight()
+    const before = key.position.clone().normalize()
+    // Default is up-left; sweep it to the opposite side of the screen.
+    mode.setKeyAzimuth(-45)
+    const after = mode._getKeyLight().position.clone().normalize()
+    expect(after.x).toBeGreaterThan(0)          // now from the right
+    expect(before.angleTo(after)).toBeGreaterThan(0.5)
+  })
+
+  it('the key direction matches keyLightDirection for the current settings', () => {
+    mode.activate()
+    mode.setKeyAzimuth(20)
+    mode.setKeyElevation(50)
+    const want = new THREE.Vector3(...keyLightDirection(20, 50))
+    const got = mode._getKeyLight().position.clone().normalize()
+    expect(got.angleTo(want)).toBeCloseTo(0, 6)
+  })
+
+  it('steering leaves the FILL light where the preset put it', () => {
+    mode.activate()
+    const rig = mode._getLightGroup()
+    const fill = rig.children.filter(c => c.isDirectionalLight)[1]
+    const before = fill.position.clone().normalize()
+    mode.setKeyAzimuth(-90)
+    const after = rig.children.filter(c => c.isDirectionalLight)[1].position.clone().normalize()
+    expect(before.angleTo(after)).toBeCloseTo(0, 6)
+  })
+
   it('pins the rig to the camera — the orientation-dependence ChimeraX has', () => {
     mode.activate()
     const rig = mode._getLightGroup()
@@ -368,6 +479,114 @@ describe('createExpPhotoMode', () => {
 
     mode.setKeyShadowBias(3)
     expect(key.shadow.normalBias).toBeCloseTo(texel * 3, 9)
+  })
+
+  // ── Figure effects ────────────────────────────────────────────────────────
+
+  it('the figure pass is OFF until an effect is switched on', () => {
+    // EffectComposer skips a disabled pass entirely, so both effects off means
+    // no depth/normal pre-pass at all.
+    mode.activate()
+    expect(mode._getFigurePass().enabled).toBe(false)
+    mode.setOutline(true)
+    expect(mode._getFigurePass().enabled).toBe(true)
+    mode.setOutline(false)
+    expect(mode._getFigurePass().enabled).toBe(false)
+  })
+
+  it('drives the real outline uniforms, not just the settings', () => {
+    mode.activate()
+    mode.setOutline(true)
+    mode.setOutlineColor('#ff0000')
+    mode.setOutlineStrength(0.4)
+    mode.setOutlineThickness(2.5)
+    mode.setOutlineSensitivity({ depth: 0.2, crease: 1.3 })
+    const u = mode._getFigurePass().uniforms
+    expect(u.uOutline.value).toBe(1)
+    expect(u.uOutlineColor.value.getHexString()).toBe('ff0000')
+    expect(u.uOutlineStrength.value).toBeCloseTo(0.4, 6)
+    expect(u.uOutlineThickness.value).toBeCloseTo(2.5, 6)
+    expect(u.uDepthSens.value).toBeCloseTo(0.2, 6)
+    expect(u.uNormalSens.value).toBeCloseTo(1.3, 6)
+  })
+
+  it('drives the real depth-cue uniforms', () => {
+    mode.activate()
+    mode.setDepthCue(true)
+    mode.setDepthCueColor('#00ff00')
+    mode.setDepthCueStrength(0.6)
+    const u = mode._getFigurePass().uniforms
+    expect(u.uCue.value).toBe(1)
+    expect(u.uCueColor.value.getHexString()).toBe('00ff00')
+    expect(u.uCueStrength.value).toBeCloseTo(0.6, 6)
+  })
+
+  it('anchors the depth-cue window to the bbox DIAGONAL, not the view extent', () => {
+    // Scaling the window to the current view's depth extent normalises every
+    // view to a full 0..1 fade, washing out a thin helix seen side-on.
+    mode.activate()
+    mode.setDepthCue(true)
+    const u = mode._getFigurePass().uniforms
+    const span = u.uCueFar.value - u.uCueNear.value
+    expect(span).toBeCloseTo(2 * Math.sqrt(3), 3)   // seeded 2x2x2 box
+
+    ctx.camera.position.set(0, 0, 60)
+    ctx.camera.lookAt(0, 0, 0)
+    ctx.camera.updateMatrixWorld()
+    mode._syncFrame()
+    expect(u.uCueFar.value - u.uCueNear.value).toBeCloseTo(span, 6)
+  })
+
+  // ── Camera + export ───────────────────────────────────────────────────────
+
+  it('setFOV dollies to preserve framing, not just changes the lens', () => {
+    // Narrowing the FOV without dollying would zoom in; the point of the long
+    // lens is to flatten perspective while keeping the subject the same size.
+    ctx.controls = { target: new THREE.Vector3(0, 0, 0), update: vi.fn() }
+    const m2 = createExpPhotoMode(ctx)
+    ctx.camera.position.set(0, 0, 40)
+    m2.activate()
+    const before = ctx.camera.position.length()
+    m2.setFOV(20)
+    expect(ctx.camera.fov).toBe(20)
+    expect(ctx.camera.position.length()).toBeGreaterThan(before)   // dollied OUT
+    m2.deactivate()
+  })
+
+  it('setParallel snaps to the 8 degree long lens and keeps the flag honest', () => {
+    ctx.controls = { target: new THREE.Vector3(0, 0, 0), update: vi.fn() }
+    const m2 = createExpPhotoMode(ctx)
+    m2.activate()
+    m2.setParallel(true)
+    expect(m2.getSettings().fov).toBe(8)
+    expect(ctx.camera.fov).toBe(8)
+    // Driving the FOV back up must clear the flag, or the checkbox lies.
+    m2.setFOV(55)
+    expect(m2.getSettings().parallel).toBe(false)
+    m2.deactivate()
+  })
+
+  it('deactivate restores the editor lens', () => {
+    ctx.controls = { target: new THREE.Vector3(0, 0, 0), update: vi.fn() }
+    ctx.camera.fov = 55
+    const m2 = createExpPhotoMode(ctx)
+    m2.activate()
+    m2.setParallel(true)
+    expect(ctx.camera.fov).toBe(8)
+    m2.deactivate()
+    expect(ctx.camera.fov).toBe(55)
+  })
+
+  it('setExportSize stores a sane size and ignores garbage', () => {
+    mode.setExportSize(8400, 5940)
+    expect(mode.getSettings().exportWidth).toBe(8400)
+    expect(mode.getSettings().exportHeight).toBe(5940)
+    mode.setExportSize(0, -5)
+    expect(mode.getSettings().exportWidth).toBe(8400)   // unchanged
+  })
+
+  it('renderToBlob refuses when the mode is not active', async () => {
+    await expect(mode.renderToBlob(100, 100)).rejects.toThrow(/active/)
   })
 
   it('a transparent background clears scene.background so exports stay transparent', () => {

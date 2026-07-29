@@ -92,8 +92,17 @@ export function sceneSignature(root) {
  * looking like an outlier.
  *
  * @param {THREE.Object3D} root
- * @returns {{center: THREE.Vector3, radius: number, contributors: object[],
- *            rejected: object[], medianExtent: number} | null}
+ * `box` and `corners` are returned alongside the sphere because the depth cue
+ * needs an ORIENTATION-AWARE extent: a sphere is orientation-blind, so a long
+ * thin bundle seen side-on reports its LENGTH as the depth extent when the real
+ * depth is its diameter — an order of magnitude too wide. The corners get the
+ * same outlier rejection as the sphere, so a stray 100 µm overlay cannot blow
+ * out the cue window either.
+ *
+ * @returns {{center: THREE.Vector3, radius: number, box: THREE.Box3,
+ *            corners: THREE.Vector3[], diagonal: number,
+ *            contributors: object[], rejected: object[],
+ *            medianExtent: number} | null}
  */
 export function computeShadowBounds(root, { rejectOutliers = true } = {}) {
   const box = new THREE.Box3()
@@ -144,9 +153,21 @@ export function computeShadowBounds(root, { rejectOutliers = true } = {}) {
 
   contributors.sort((a, b) => b.extent - a.extent)
   rejected.sort((a, b) => b.extent - a.extent)
+
+  const mn = box.min, mx = box.max
+  const corners = [
+    new THREE.Vector3(mn.x, mn.y, mn.z), new THREE.Vector3(mx.x, mn.y, mn.z),
+    new THREE.Vector3(mn.x, mx.y, mn.z), new THREE.Vector3(mx.x, mx.y, mn.z),
+    new THREE.Vector3(mn.x, mn.y, mx.z), new THREE.Vector3(mx.x, mn.y, mx.z),
+    new THREE.Vector3(mn.x, mx.y, mx.z), new THREE.Vector3(mx.x, mx.y, mx.z),
+  ]
+
   return {
     center: sphere.center.clone(),
     radius: sphere.radius,
+    box: box.clone(),
+    corners,
+    diagonal: box.getSize(new THREE.Vector3()).length(),
     contributors,
     rejected,
     medianExtent: median,

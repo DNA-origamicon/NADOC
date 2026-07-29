@@ -24,6 +24,17 @@ and a key-light shadow map **not gated on a floor** (the shipping mode gates its
 rig behind `floor !== 'off'`, which makes helix-on-helix shadow impossible there).
 No preset selector — the Key/Fill/Ambient sliders ARE the preset.
 
+**The key light is steered in the SCREEN frame, not the Sun's floor-normal
+frame.** `keyLightDirection(azimuth, elevation)` (pure, exported): azimuth sweeps
+around the screen (0 = from the right, 90 = above, 180 = left), elevation tilts
+toward the viewer (0 = grazing/longest shadow, 90 = down the camera barrel where
+the shadow hides behind the object, negative = rim light from behind). The angle
+off the camera axis is exactly `90 - elevation`. Defaults (135°, 35.264°)
+reproduce ChimeraX's own key direction `(-0.577, 0.577, 0.577)` exactly. Only the
+KEY light is steered; the fill keeps the preset's direction. This replaces the
+shipping mode's Sun, whose polar frame is the floor normal — there is no floor
+here and the rig is pinned to the camera, so the screen is the natural frame.
+
 **The rig ships at MAX CONTRAST, not ChimeraX's numbers.** ChimeraX `full` is key
 0.7 / fill 0.3 / ambient 0.8, but a cast shadow only subtracts the KEY light, so
 fill+ambient are a floor: the deepest shadow removes just 39% of the light. Key
@@ -35,6 +46,97 @@ preset, so a mismatch silently overrides it. Pinned by a test.
 are sized for a ~5 nm protein; on a 150 nm origami a 1024 map at 64 directions is
 2.34 nm/texel, wider than a duplex, so a thin arm cannot cast a readable shadow.
 The panel prints live nm/texel vs a duplex and warns when it is too coarse.
+
+**Panel cards use the `.ox-card` component** (`src/styles/components.css`), the
+same one the Simulations tab uses — NOT a bare `.panel-section`, which has no
+card look at all. That was the first attempt and it rendered flat. The pop-out
+comes from a double background on a transparent border: a faint fill on
+padding-box plus a top→bottom `#3f464f → #20252b` gradient on border-box, which
+keeps rounded corners that `border-image` would square off. Markup:
+
+    <div class="ox-card" id="X-panel">
+      <div id="X-heading" class="ox-card__header" style="color:#c9d1d9">
+        <span id="X-arrow" class="ox-card__chevron icon icon--xs icon--rotates"
+              data-icon="chevron-down"></span><span class="ox-card__title">Title</span>
+      </div>
+      <div id="X-body" class="ox-card__body"> … </div>
+    </div>
+
+Chevron sits LEFT of the title. Collapse persists via
+`getSectionCollapsed/setSectionCollapsed('photo-exp', …)`. Verified by comparing
+computed styles against a live `#simulate-jobs` card — copy that shape for any
+new card here rather than inventing one.
+
+**Figure card** — silhouette outline + depth cue, reusing `FigurePass` directly
+(no fork). Both share ONE depth+normal pre-pass and the pass is `enabled` only
+when an effect is on, so both-off costs nothing.
+
+*Silhouette: two algorithms, one uniform.* `uSilhouette` selects between the
+original Roberts cross (0 — still what the shipping Photo tab uses, unchanged)
+and a **ChimeraX mimic** (1 — the exp tab's default, `silhouette: 'chimerax'`).
+Ported from `graphics/opengl.py` `Silhouette` + `fragmentShader.txt`
+`USE_DEPTH_OUTLINE`. Four things the mimic does differently, all deliberate:
+1. **Depth only — no normals.** ChimeraX has no crease term at all. That single
+   fact is the fix for the "zoomed out → black line-art" caveat below.
+2. **Circular disc min-filter**, radius = thickness px (`i²+j² ≤ r²`), vs a 4-tap
+   Roberts cross. Thickness becomes a true pixel radius with round caps.
+   `MAX_DISC_R = 4` (GLSL ES 1.00 needs constant loop bounds; slider caps at 4).
+3. **The contour lands on the FARTHER pixel**, so it sits *outside* the near
+   object instead of eroding it — including on empty background, which is why
+   the mode does NOT early-return on background pixels and why it raises alpha
+   (`alpha = max(alpha, edge)`) so an alpha export keeps the line it drew.
+4. **Threshold is a constant world-space gap.** ChimeraX's
+   `nf*(d0-ds) < jump*(1-nf1*ds)*(1-nf1*d0) → discard` reduces exactly to
+   `Δz_eye ≥ depth_jump × (far − near)` — algebra pinned in `figure_pass.test.js`.
+   ChimeraX gets a tight `(far − near)` free by refitting clip planes to the bbox
+   each frame; we don't, so the orchestrator pushes the **bbox diagonal** via
+   `setSceneDepth()` and the shader uses that as the span. Consequence: **the
+   depth-jump slider only affects INTERNAL contours** — the outer silhouette runs
+   against background depth clamped to the far plane and clears any threshold.
+Panel: the old Silhouette/Creases pair was replaced by one **Depth jump** slider
+(0.005–0.15, ChimeraX default 0.03). `outlineDepthSensitivity`/`…CreaseSensitivity`
+survive in the settings for the Roberts path only.
+
+The depth-cue window is
+`[nearest bbox corner along the view axis, that + bbox DIAGONAL]` — the diagonal
+is a CONSTANT for the design, not the current view's depth extent; scaling to the
+view normalises every angle to a full 0→1 fade and washes out a thin helix seen
+side-on. `computeShadowBounds` now also returns `box`/`corners`/`diagonal` so the
+cue gets the same outlier rejection as the shadow frustum.
+
+**Camera card** — FOV + parallel projection. "Parallel" is an 8° LONG LENS +
+dolly, not an `OrthographicCamera`: a real ortho swap means touching every
+consumer of the shared perspective camera (the `PERSPECTIVE_CAMERA` shader
+defines baked into the post passes at construction, OrbitControls' distance-based
+zoom, main.js's per-frame near/far rewrite). `setFOV` dollies via
+`dollyDistanceForFov` so framing is preserved, and `deactivate` restores the
+editor's lens WITH a dolly. A FOV at or below 8° sets the `parallel` flag, so the
+checkbox can't lie.
+
+**Export card** — tiled PNG at any resolution. TILING IS NOT OPTIONAL: a render
+target above `MAX_TEXTURE_SIZE` silently clamps and yields a black image, and 300
+DPI (4200×2970) already exceeds the 4096 limit common on WSL/integrated GPUs.
+The offscreen renderer is a SEPARATE GL CONTEXT, so it needs its own composer,
+its own FigurePass params, its own cue range per tile, and its own
+`shadowMap.enabled` — none of the live renderer's GPU state carries over. That is
+the rule that keeps preview and export in sync. Export representation is NOT
+wired (it needs the assembly rep-upgrade machinery + an `api` dep).
+
+**Materials card** — one preset per representation (full / cylinders / surface /
+atomistic), dropdowns built from `PRESET_LABELS`, so adding a preset in
+`material_presets.js` appears with no markup change. Defaults are the FIGURE
+materials (`flat` / `cpk-flat`, `specularIntensity: 0`).
+
+**`photo_renderer/mesh_repr.js`** — `MESH_NAME_TO_REPR` + `inferRepr` + `reprOf`,
+lifted verbatim out of photo_renderer.js so both photo modes share one name table.
+The exp mode reads the repr from the mesh's ORIGINAL material, before the swap:
+`MeshPhysicalMaterial` extends `MeshStandardMaterial`, so inferring after a swap
+makes every unnamed mesh look 'atomistic' — the latent bug photo_renderer's own
+`setMaterialPreset` still has.
+
+**`resetKeyDirection()` lives on the MODE, not the panel.** The panel importing
+the default constants would close an import cycle (the mode already imports the
+panel), so the defaults have exactly one home.
 
 **Ambient occlusion: built, evaluated, retired** — `archive/multishadow_ao/` has
 the code and rationale. Occlusion modulates the AMBIENT term, so at ambient 0.15
@@ -245,10 +347,12 @@ the photoreal garnish and is a separate control.
 
 ### Known caveats
 
-- **Zoomed far out, the outline swallows small features.** The contour is a pixel-space
-  effect; when a bead is 2–3 px across, the crease term fires over the whole sphere and the
-  strand renders as black line-art with no fill. At normal framing and at export resolution
-  it is correct. The Thickness / Creases sliders are the mitigation.
+- **Zoomed far out, the outline swallows small features — Roberts mode only.** The contour is
+  a pixel-space effect; when a bead is 2–3 px across, the crease term fires over the whole
+  sphere and the strand renders as black line-art with no fill. At normal framing and at export
+  resolution it is correct. The Thickness / Creases sliders are the mitigation. **The exp tab's
+  ChimeraX mode is immune** — it reads no normals, so there is no crease term to fire; this was
+  the specific reason for porting it.
 - Path-traced mode bypasses the EffectComposer, so **outline + depth cue do not apply in PT**
   (same limitation as mist). The panel says so.
 - GTAO + the figure pre-pass add two full-scene renders per frame; on software GL (headless)

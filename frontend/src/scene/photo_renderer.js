@@ -33,6 +33,9 @@ import { PRESETS, makeMaterial, makeFluorophoreEmissive } from './photo_renderer
 import { LIGHTING_PRESETS, applyLighting } from './photo_renderer/lighting_presets.js'
 import { createComposer }                  from './photo_renderer/post_processing.js'
 import { createFloor }                     from './photo_renderer/floor.js'
+// Repr detection lifted to its own module so the experimental photo mode can
+// reuse it without duplicating the mesh-name table.
+import { MESH_NAME_TO_REPR, inferRepr as _inferRepr } from './photo_renderer/mesh_repr.js'
 import { dollyDistanceForFov, PARALLEL_FOV, PERSPECTIVE_FOV } from './photo_renderer/figure_camera.js'
 import { showToast }                       from '../ui/toast.js'
 import { RoomEnvironment }                 from 'three/addons/environments/RoomEnvironment.js'
@@ -41,28 +44,6 @@ import { RGBELoader }                      from 'three/addons/loaders/RGBELoader
 const FLUORO_MESH_NAME = 'extensionFluorophores'
 
 // ── Mesh name → representation mapping ───────────────────────────────────────
-
-const MESH_NAME_TO_REPR = {
-  backboneSpheres:           'full',
-  backboneCubes:             'full',
-  strandCones:               'full',
-  baseSlabs:                 'full',
-  extensionFluorophores:     'full',
-  helixCylinders:            'cylinders',
-  overhangCylinders:         'cylinders',
-  overhangFullCylinders:     'cylinders',
-  curvedHelixCylindersProxy: 'cylinders',
-  curvedOverhangFullCylindersProxy: 'cylinders',
-  curvedOvhgGroup:           'cylinders',
-  'dna-surface':             'surface',
-}
-
-// Detect surface mesh by DoubleSide material when name doesn't match
-function _inferRepr(obj) {
-  if (obj.material?.side === THREE.DoubleSide) return 'surface'
-  if (obj.material instanceof THREE.MeshStandardMaterial) return 'atomistic'
-  return 'full'
-}
 
 // ── Factory-default settings ─────────────────────────────────────────────────
 // The single source of truth for "what photo mode looks like out of the box".

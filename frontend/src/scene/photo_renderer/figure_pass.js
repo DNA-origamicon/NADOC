@@ -36,6 +36,12 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js'
 // Raw depth at/above this is the far plane → background, not geometry.
 const BACKGROUND_DEPTH = 0.9999
 
+// Largest disc radius the ChimeraX-style min-filter will sample, in pixels.
+// Fixed because GLSL ES 1.00 requires constant loop bounds; the thickness
+// slider tops out at 4, and (2*4+1)^2 = 81 taps is already the cost ceiling
+// for a full-screen pass at export resolution.
+const MAX_DISC_R = 4
+
 export const FigureShader = {
   uniforms: {
     tDiffuse:   { value: null },
@@ -52,6 +58,12 @@ export const FigureShader = {
     uOutlineThickness: { value: 1.4 },                     // px
     uDepthSens:        { value: 0.35 },                    // silhouette sensitivity (relative depth step)
     uNormalSens:       { value: 0.85 },                    // crease sensitivity (normal step)
+
+    // Silhouette algorithm: 0 = Roberts cross on depth+normals (the original,
+    // still what the shipping Photo tab uses), 1 = ChimeraX depth-outline.
+    uSilhouette:  { value: 0 },
+    uDepthJump:   { value: 0.03 },                         // ChimeraX depth_jump: fraction of scene depth
+    uSceneDepth:  { value: 0 },                            // world-space depth span; <=0 falls back to far-near
 
     // Depth cue
     uCue:         { value: 0 },                            // 0/1
@@ -85,6 +97,9 @@ export const FigureShader = {
     uniform float uOutlineThickness;
     uniform float uDepthSens;
     uniform float uNormalSens;
+    uniform float uSilhouette;
+    uniform float uDepthJump;
+    uniform float uSceneDepth;
 
     uniform float uCue;
     uniform vec3  uCueColor;
@@ -116,17 +131,21 @@ export const FigureShader = {
     void main() {
       vec4 diffuse = texture2D(tDiffuse, vUv);
       float dCenter = rawDepth(vUv);
+      bool  isBackground = dCenter >= ${BACKGROUND_DEPTH};
 
-      // Background pixels are left completely untouched — no contour, no cue.
-      // This is what keeps a transparent-background export transparent: the
-      // silhouette is drawn just INSIDE the object, never onto empty pixels.
-      if (dCenter >= ${BACKGROUND_DEPTH}) {
+      // In Roberts mode background pixels are left completely untouched — no
+      // contour, no cue. That is what keeps a transparent-background export
+      // transparent: the silhouette is drawn just INSIDE the object.
+      // The ChimeraX mode deliberately DOES paint background pixels (see below),
+      // so it only short-circuits the cue.
+      if (isBackground && !(uOutline > 0.5 && uSilhouette > 0.5)) {
         gl_FragColor = diffuse;
         return;
       }
 
-      vec3 color = diffuse.rgb;
-      float eye  = eyeDepth(vUv);
+      vec3  color = diffuse.rgb;
+      float alpha = diffuse.a;
+      float eye   = eyeDepth(vUv);
 
       // ── Depth cue ─────────────────────────────────────────────────────────
       // Linear fade toward uCueColor between uCueNear and uCueFar (both pushed
@@ -134,40 +153,82 @@ export const FigureShader = {
       // the structure's own depth rather than the camera's absolute distance —
       // this is what keeps it working at any FOV, including the near-parallel
       // long-lens projection where camera distance balloons).
-      if (uCue > 0.5) {
+      if (uCue > 0.5 && !isBackground) {
         float t = clamp((eye - uCueNear) / max(uCueFar - uCueNear, 1e-4), 0.0, 1.0);
         color = mix(color, uCueColor, t * uCueStrength);
       }
 
-      // ── Outline (silhouette + creases) ────────────────────────────────────
-      // Roberts cross on BOTH linearized depth and view-space normals:
-      //  - the depth term catches silhouettes (one surface in front of another)
-      //  - the normal term catches creases (a sharp fold within one surface)
-      // Depth differences are normalized by the centre depth so a contour on a
-      // distant helix is as strong as one on a near helix.
+      // ── Outline ───────────────────────────────────────────────────────────
       if (uOutline > 0.5) {
-        vec2 o = uOutlineThickness / resolution;
+        float edge = 0.0;
 
-        float da = eyeDepth(vUv + vec2( o.x,  o.y));
-        float db = eyeDepth(vUv + vec2(-o.x, -o.y));
-        float dc = eyeDepth(vUv + vec2( o.x, -o.y));
-        float dd = eyeDepth(vUv + vec2(-o.x,  o.y));
-        float depthDiff = length(vec2(da - db, dc - dd)) / max(eye, 1e-3);
+        if (uSilhouette > 0.5) {
+          // ChimeraX depth-outline (graphics/opengl.py Silhouette +
+          // fragmentShader.txt USE_DEPTH_OUTLINE). Depth ONLY — no normals, so
+          // it never turns a field of beads into line-art the way a crease term
+          // does at low zoom.
+          //
+          // Take the MINIMUM depth over a circular disc of radius = thickness
+          // and draw where the centre pixel is FARTHER than that minimum. The
+          // contour therefore lands on the surface BEHIND the edge (including
+          // empty background), leaving the near object's silhouette intact
+          // rather than eroding it.
+          //
+          // ChimeraX's test  nf*(d0-ds) < jump*(1-nf1*ds)*(1-nf1*d0)  is a
+          // perspective linearization of the depth buffer; it reduces exactly to
+          //     Δz_eye  >=  depth_jump * (far - near)
+          // i.e. one constant WORLD-space gap everywhere in the frame. We already
+          // hold linear eye depth, so we apply that form directly — and use the
+          // structure's own depth span (pushed from the scene bbox) instead of
+          // the camera's far-near, which is far looser than ChimeraX's per-frame
+          // bbox-fitted clip planes.
+          float dsEye = eye;
+          float r2 = uOutlineThickness * uOutlineThickness;
+          for (int i = -${MAX_DISC_R}; i <= ${MAX_DISC_R}; ++i) {
+            for (int j = -${MAX_DISC_R}; j <= ${MAX_DISC_R}; ++j) {
+              float rr = float(i * i + j * j);
+              if (rr < 0.5 || rr > r2) continue;   // skip centre + outside disc
+              dsEye = min(dsEye, eyeDepth(vUv + vec2(float(i), float(j)) / resolution));
+            }
+          }
+          float span   = uSceneDepth > 0.0 ? uSceneDepth : max(cameraFar - cameraNear, 1e-4);
+          float thresh = max(uDepthJump * span, 1e-5);
+          // ChimeraX hard-discards and leans on supersampling for AA; the
+          // smoothstep costs nothing and gives a clean edge in the live preview.
+          edge = smoothstep(thresh, thresh * 2.0, eye - dsEye) * uOutlineStrength;
+        } else {
+          // Roberts cross on BOTH linearized depth and view-space normals:
+          //  - the depth term catches silhouettes (one surface in front of another)
+          //  - the normal term catches creases (a sharp fold within one surface)
+          // Depth differences are normalized by the centre depth so a contour on a
+          // distant helix is as strong as one on a near helix.
+          vec2 o = uOutlineThickness / resolution;
 
-        vec3 na = viewNormal(vUv + vec2( o.x,  o.y));
-        vec3 nb = viewNormal(vUv + vec2(-o.x, -o.y));
-        vec3 nc = viewNormal(vUv + vec2( o.x, -o.y));
-        vec3 nd = viewNormal(vUv + vec2(-o.x,  o.y));
-        float normalDiff = length(na - nb) + length(nc - nd);
+          float da = eyeDepth(vUv + vec2( o.x,  o.y));
+          float db = eyeDepth(vUv + vec2(-o.x, -o.y));
+          float dc = eyeDepth(vUv + vec2( o.x, -o.y));
+          float dd = eyeDepth(vUv + vec2(-o.x,  o.y));
+          float depthDiff = length(vec2(da - db, dc - dd)) / max(eye, 1e-3);
 
-        float edgeD = smoothstep(uDepthSens  * 0.5, uDepthSens,  depthDiff);
-        float edgeN = smoothstep(uNormalSens * 0.5, uNormalSens, normalDiff);
-        float edge  = clamp(max(edgeD, edgeN) * uOutlineStrength, 0.0, 1.0);
+          vec3 na = viewNormal(vUv + vec2( o.x,  o.y));
+          vec3 nb = viewNormal(vUv + vec2(-o.x, -o.y));
+          vec3 nc = viewNormal(vUv + vec2( o.x, -o.y));
+          vec3 nd = viewNormal(vUv + vec2(-o.x,  o.y));
+          float normalDiff = length(na - nb) + length(nc - nd);
 
+          float edgeD = smoothstep(uDepthSens  * 0.5, uDepthSens,  depthDiff);
+          float edgeN = smoothstep(uNormalSens * 0.5, uNormalSens, normalDiff);
+          edge = max(edgeD, edgeN) * uOutlineStrength;
+        }
+
+        edge  = clamp(edge, 0.0, 1.0);
         color = mix(color, uOutlineColor, edge);
+        // A contour painted onto transparent background must become visible, or
+        // an alpha export would drop the very line we just drew.
+        alpha = max(alpha, edge);
       }
 
-      gl_FragColor = vec4(color, diffuse.a);
+      gl_FragColor = vec4(color, alpha);
     }
   `,
 }
@@ -224,6 +285,8 @@ export class FigurePass extends Pass {
     if (p.outlineThickness !== undefined) u.uOutlineThickness.value = p.outlineThickness
     if (p.outlineDepthSensitivity  !== undefined) u.uDepthSens.value  = p.outlineDepthSensitivity
     if (p.outlineCreaseSensitivity !== undefined) u.uNormalSens.value = p.outlineCreaseSensitivity
+    if (p.silhouette   !== undefined) u.uSilhouette.value = p.silhouette === 'chimerax' ? 1 : 0
+    if (p.outlineDepthJump !== undefined) u.uDepthJump.value = p.outlineDepthJump
     if (p.depthCue         !== undefined) u.uCue.value          = p.depthCue ? 1 : 0
     if (p.depthCueColor    !== undefined) u.uCueColor.value.set(p.depthCueColor)
     if (p.depthCueStrength !== undefined) u.uCueStrength.value  = p.depthCueStrength
@@ -238,6 +301,16 @@ export class FigurePass extends Pass {
     const u = this._material.uniforms
     u.uCueNear.value = near
     u.uCueFar.value  = Math.max(far, near + 1e-4)
+  }
+
+  /**
+   * World-space depth span of the structure, in nm — the denominator ChimeraX's
+   * `depth_jump` is a fraction OF. ChimeraX gets this for free because it refits
+   * the clip planes to the scene bbox every frame; we don't, so the orchestrator
+   * pushes the bbox diagonal here. 0 falls back to (far - near).
+   */
+  setSceneDepth(span) {
+    this._material.uniforms.uSceneDepth.value = span > 0 ? span : 0
   }
 
   /** True when this pass would change any pixel — used to drive `enabled`. */

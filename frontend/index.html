@@ -543,6 +543,7 @@
                  cursor: pointer; font-size: var(--text-xs); }
     .pxr-note { color: #6a737d; font-size: 11px; line-height: 1.35;
                 overflow-wrap: anywhere; }
+    .pxr-cards { padding: 8px 10px; }
     #tab-content-photo-exp { overflow-x: hidden; }
     #tab-content-photo-exp .panel-section { min-width: 0; }
     #left-panel #tab-content-plates:not([hidden]) { display: flex; flex-direction: column; height: 100%; min-height: 0; }
@@ -6571,8 +6572,17 @@
             inactive
           </div>
 
-          <div class="panel-section">
-            <h2>Lighting</h2>
+          <!-- Cards use the SAME .ox-card component as the Simulations tab
+               (styles/components.css): a transparent border with a double
+               background — a faint fill on padding-box plus a top→bottom
+               #3f464f→#20252b gradient on border-box — which is what makes them
+               pop out even when packed flush. Chevron sits LEFT of the title. -->
+          <div class="pxr-cards">
+          <div class="ox-card" id="photoexp-lighting-panel">
+            <div id="photoexp-lighting-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photoexp-lighting-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Lighting</span>
+            </div>
+            <div id="photoexp-lighting-body" class="ox-card__body">
             <div class="pxr-col">
               <label class="pxr-check"
                      title="ChimeraX move_lights_with_camera: light directions live in camera coordinates, so the shadow sweeps across the structure as you reorient it.">
@@ -6609,6 +6619,28 @@
                 </div>
               </div>
 
+              <!-- Key-light direction, in the SCREEN frame (the rig is pinned to
+                   the camera, so azimuth/elevation read as screen directions).
+                   Replaces the old floor-normal Sun: there is no floor here. -->
+              <div class="pxr-col" style="border-top:1px solid #21262d;padding-top:6px">
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Sweeps the light around the screen: 0° = from the right, 90° = from directly above, 180° = from the left, -90° = from below. The shadow falls the opposite way.">Azimuth</span>
+                  <input id="photoexp-key-azimuth" type="range" min="-180" max="180" step="1" value="135" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photoexp-key-azimuth-label" class="pxr-val">135°</span>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Tilts the light toward the viewer. 0° = grazing, in the screen plane (longest shadows); 90° = straight down the barrel from the camera, which flattens the shadow away; negative = from behind the subject, a rim light.">Elevation</span>
+                  <input id="photoexp-key-elevation" type="range" min="-80" max="85" step="1" value="35" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photoexp-key-elevation-label" class="pxr-val">35°</span>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl"></span>
+                  <button id="photoexp-key-dir-reset" class="pxr-btn" style="flex:1 1 auto;min-width:0"
+                          title="Back to 135° / 35.3° — ChimeraX's own key direction: 45° up-and-left, 54.7° off the camera axis.">Reset direction</button>
+                </div>
+                <div id="photoexp-key-dir" class="pxr-note"></div>
+              </div>
+
               <!-- Per-light intensities. A cast shadow only subtracts the key
                    light, so its depth is key/(key+fill+ambient). -->
               <div class="pxr-col" style="border-top:1px solid #21262d;padding-top:6px">
@@ -6642,10 +6674,159 @@
               removing 39% of the light to ~93%. The shadow map re-renders every frame,
               which is why it sweeps as you reorient.
             </div>
+            </div>
           </div>
 
-          <div class="panel-section">
-            <h2>Background</h2>
+          <div class="ox-card" id="photoexp-figure-panel">
+            <div id="photoexp-figure-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photoexp-figure-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Figure</span>
+            </div>
+            <div id="photoexp-figure-body" class="ox-card__body">
+              <div class="pxr-col">
+                <label class="pxr-check"
+                       title="A dark contour drawn where depth or surface normal jumps. This is what separates overlapping helices without relying on lighting to do it — the single biggest contributor to the publication look.">
+                  <input id="photoexp-outline" type="checkbox"> Silhouette outline
+                </label>
+                <div id="photoexp-outline-controls" class="pxr-col">
+                  <div class="pxr-row">
+                    <span class="pxr-lbl">Colour</span>
+                    <input id="photoexp-outline-color" type="color" value="#1b1f24"
+                           style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
+                  </div>
+                  <div class="pxr-row">
+                    <span class="pxr-lbl">Strength</span>
+                    <input id="photoexp-outline-strength" type="range" min="0" max="1" step="0.05" value="1" class="pxr-rng">
+                    <span id="photoexp-outline-strength-label" class="pxr-val">1.00</span>
+                  </div>
+                  <div class="pxr-row">
+                    <span class="pxr-lbl" title="Contour width in PIXELS — it does not scale with export resolution, so a print-size render gets a proportionally finer line.">Thickness</span>
+                    <input id="photoexp-outline-thickness" type="range" min="0.5" max="4" step="0.1" value="1.4" class="pxr-rng">
+                    <span id="photoexp-outline-thickness-label" class="pxr-val">1.4</span>
+                  </div>
+                  <div class="pxr-row">
+                    <span class="pxr-lbl" title="ChimeraX 'depth_jump': how big a depth step counts as an edge, as a fraction of the structure's own depth. 0.03 is the ChimeraX default. Lower draws more contours; raise it if a dense bundle fills with lines.">Depth jump</span>
+                    <input id="photoexp-outline-jump" type="range" min="0.005" max="0.15" step="0.005" value="0.03" class="pxr-rng">
+                    <span id="photoexp-outline-jump-label" class="pxr-val">0.03</span>
+                  </div>
+                </div>
+
+                <label class="pxr-check"
+                       title="Fades distance toward a flat colour so the back of a thick bundle recedes. The window is anchored to the design's bounding-box diagonal, not the current view, so a thin helix seen side-on is not washed out.">
+                  <input id="photoexp-depthcue" type="checkbox"> Depth cue
+                </label>
+                <div id="photoexp-depthcue-controls" class="pxr-col">
+                  <div class="pxr-row">
+                    <span class="pxr-lbl">Colour</span>
+                    <input id="photoexp-depthcue-color" type="color" value="#ffffff"
+                           style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
+                  </div>
+                  <div class="pxr-row">
+                    <span class="pxr-lbl">Strength</span>
+                    <input id="photoexp-depthcue-strength" type="range" min="0" max="1" step="0.05" value="0.35" class="pxr-rng">
+                    <span id="photoexp-depthcue-strength-label" class="pxr-val">0.35</span>
+                  </div>
+                </div>
+
+                <div class="pxr-note">
+                  Both effects share ONE depth+normal pre-pass, and the pass is skipped
+                  entirely when both are off. Sphere impostors and shared-LOD instancing are
+                  excluded from that pre-pass (their custom vertex shaders collapse under an
+                  override material), so they get no contour.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ox-card" id="photoexp-materials-panel">
+            <div id="photoexp-materials-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photoexp-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Materials</span>
+            </div>
+            <div id="photoexp-materials-body" class="ox-card__body">
+              <div class="pxr-col">
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Backbone beads, base slabs, 5′ cones and fluorophores.">Full</span>
+                  <select id="photoexp-mat-full" class="pxr-sel"></select>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Helix and overhang cylinders.">Cylinders</span>
+                  <select id="photoexp-mat-cylinders" class="pxr-sel"></select>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="The marching-cubes molecular surface. Its SSS presets (wax, skin, gummy) only read below full opacity.">Surface</span>
+                  <select id="photoexp-mat-surface" class="pxr-sel"></select>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Atoms and bonds in the VDW / ball-and-stick representations.">Atomistic</span>
+                  <select id="photoexp-mat-atomistic" class="pxr-sel"></select>
+                </div>
+                <div class="pxr-note">
+                  The <b>Flat</b> presets kill the specular lobe entirely
+                  (<code style="color:#8b949e">specularIntensity: 0</code>) — no highlight
+                  anywhere, so shape is read from the cast shadow rather than from a glint.
+                  That is the molecular-figure convention; the glossy/metallic presets are
+                  the product-render look.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ox-card" id="photoexp-camera-panel">
+            <div id="photoexp-camera-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photoexp-camera-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Camera</span>
+            </div>
+            <div id="photoexp-camera-body" class="ox-card__body">
+              <div class="pxr-col">
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Changing the lens DOLLIES the camera to keep the subject the same size, so the framing you set is preserved.">FOV</span>
+                  <input id="photoexp-fov" type="range" min="4" max="90" step="1" value="55" class="pxr-rng">
+                  <span id="photoexp-fov-label" class="pxr-val">55°</span>
+                </div>
+                <label class="pxr-check"
+                       title="Snaps to an 8° long lens and dollies back to keep the framing — it removes the vanishing point without swapping in a real OrthographicCamera. Visually parallel; at 8° the residual convergence over a 60 nm object is sub-pixel at print size.">
+                  <input id="photoexp-parallel" type="checkbox"> Parallel projection (long lens)
+                </label>
+                <div class="pxr-note">
+                  Perspective distortion across a small object is a video-game tell — a
+                  near-parallel lens is the third leg of the figure look, alongside the flat
+                  materials and the silhouette outline. Exiting restores the editor's lens.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ox-card" id="photoexp-export-panel">
+            <div id="photoexp-export-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photoexp-export-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Export</span>
+            </div>
+            <div id="photoexp-export-body" class="ox-card__body">
+              <div class="pxr-col">
+                <div class="pxr-row">
+                  <span class="pxr-lbl">Preset</span>
+                  <select id="photoexp-res-preset" class="pxr-sel">
+                    <option value="screen">Screen (1×)</option>
+                    <option value="x2">2× (slides)</option>
+                    <option value="p300" selected>Print 300 DPI</option>
+                    <option value="p600">Print 600 DPI</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl">Size</span>
+                  <input id="photoexp-res-w" type="number" min="16" step="1" value="4200" class="pxr-sel" style="text-align:right">
+                  <span style="color:#6a737d;font-size:11px">×</span>
+                  <input id="photoexp-res-h" type="number" min="16" step="1" value="2970" class="pxr-sel" style="text-align:right">
+                </div>
+                <div id="photoexp-export-note" class="pxr-note"></div>
+                <button id="photoexp-export-btn" class="pxr-btn">↓ Export PNG</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ox-card" id="photoexp-bg-panel">
+            <div id="photoexp-bg-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photoexp-bg-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Background</span>
+            </div>
+            <div id="photoexp-bg-body" class="ox-card__body">
             <div class="pxr-row">
               <select id="photoexp-bg-type" class="pxr-sel">
                 <option value="color" selected>Solid colour</option>
@@ -6654,6 +6835,8 @@
               <input id="photoexp-bg-color" type="color" value="#0b0d10"
                      style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
             </div>
+            </div>
+          </div>
           </div>
 
         </div><!-- /#tab-content-photo-exp -->

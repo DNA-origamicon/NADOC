@@ -35,10 +35,45 @@ import { SMAAPass }       from 'three/addons/postprocessing/SMAAPass.js'
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js'
 
 import { makeMaterial }               from './photo_renderer/material_presets.js'
+import { reprOf }                     from './photo_renderer/mesh_repr.js'
+import { FigurePass }                 from './photo_renderer/figure_pass.js'
+import { dollyDistanceForFov, PARALLEL_FOV, PERSPECTIVE_FOV }
+  from './photo_renderer/figure_camera.js'
 import { applyLighting, LIGHTING_PRESETS } from './photo_renderer/lighting_presets.js'
 import { computeShadowBounds, isShadowExcluded, findBoundsOutlier, rejectedObjects,
          sceneSignature } from './photo_renderer/shadow_bounds.js'
 import { initPhotoExpPanel }          from '../ui/photo_exp_panel.js'
+
+/**
+ * Direction the key light shines FROM, in RIG-LOCAL space — which is camera
+ * space while the rig is pinned, so these read as screen directions.
+ *
+ * The Sun in the shipping photo mode steers in polar coordinates around the
+ * FLOOR normal. There is no floor here and the rig is pinned to the viewer, so
+ * the natural frame is the screen: azimuth sweeps around it (0 = from the right,
+ * 90 = from directly above, 180 = from the left) and elevation tilts the light
+ * toward the viewer (0 = grazing, in the screen plane; 90 = straight down the
+ * barrel from the camera, which flattens the shadow away; negative = from behind
+ * the subject, a rim light).
+ *
+ * The angle off the camera axis is simply `90 - elevation`.
+ *
+ * Defaults (135°, 35.264°) reproduce ChimeraX's own key direction exactly:
+ * (-0.577, 0.577, 0.577), i.e. 45° up-and-left and 54.7° off the view axis.
+ *
+ * @returns {[number,number,number]} unit vector
+ */
+export function keyLightDirection(azimuthDeg, elevationDeg) {
+  const az = (azimuthDeg   * Math.PI) / 180
+  const el = (elevationDeg * Math.PI) / 180
+  const c  = Math.cos(el)
+  return [c * Math.cos(az), c * Math.sin(az), Math.sin(el)]
+}
+
+/** ChimeraX's own key direction, in the screen frame: 45° up-and-left, 54.7°
+ *  off the camera axis. Exported so the panel's Reset button cannot drift. */
+export const DEFAULT_KEY_AZIMUTH   = 135
+export const DEFAULT_KEY_ELEVATION = 35.264
 
 /** The fixed rig this tab uses. See LIGHTING_PRESETS.full for its geometry. */
 const RIG_PRESET = 'full'
@@ -46,6 +81,49 @@ const RIG_PRESET = 'full'
 /** Factory defaults — the single source of truth for "what the experiment looks
  *  like out of the box". */
 export const DEFAULT_EXP_SETTINGS = Object.freeze({
+  // Material preset per representation, keyed exactly like
+  // material_presets.js PRESETS/PRESET_LABELS. Defaults are the FIGURE
+  // materials (specularIntensity 0 — no highlight anywhere), which is what this
+  // tab looked like before materials were selectable.
+  full:       'flat',
+  cylinders:  'flat',
+  surface:    'flat',
+  atomistic:  'cpk-flat',
+
+  // ── Figure effects (the publication look) ─────────────────────────────────
+  // Silhouette outline: a dark contour at depth + normal discontinuities, so
+  // overlapping helices separate without lighting having to do it.
+  outline:                  false,
+  outlineColor:             '#1b1f24',
+  outlineStrength:          1.0,
+  outlineThickness:         1.4,    // px
+  outlineDepthSensitivity:  0.35,   // silhouettes (lower = more contours)  [Roberts mode only]
+  outlineCreaseSensitivity: 0.85,   // creases within one surface           [Roberts mode only]
+  // ChimeraX's depth-only silhouette. See figure_pass.js for the algorithm and
+  // why the crease term above is deliberately unused here: normals are what make
+  // a zoomed-out bead field collapse into black line-art, and ChimeraX has none.
+  silhouette:               'chimerax',
+  outlineDepthJump:         0.03,   // ChimeraX depth_jump default: 3% of the structure's depth
+  // Depth cue: a distance fade toward a flat colour so the back of a thick
+  // bundle recedes instead of turning to mush.
+  depthCue:         false,
+  depthCueColor:    '#ffffff',
+  depthCueStrength: 0.35,
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  // "Parallel" is an 8° LONG LENS + dolly, not a real OrthographicCamera. A true
+  // ortho swap would mean touching every consumer of the shared perspective
+  // camera (the PERSPECTIVE_CAMERA shader defines baked into the post passes at
+  // construction, OrbitControls' distance-based zoom, main.js's per-frame
+  // near/far rewrite). At 8° the residual convergence over a 60 nm object is
+  // sub-pixel at print resolution.
+  parallel:   false,
+  fov:        null,           // null = adopt the editor's lens on entry
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  exportWidth:  4200,         // 300 DPI at 14 in wide
+  exportHeight: 2970,
+
   bgType:     'color',        // 'color' | 'transparent'
   bgColor:    '#0b0d10',
 
@@ -67,6 +145,11 @@ export const DEFAULT_EXP_SETTINGS = Object.freeze({
   //
   // MUST match LIGHTING_PRESETS.full: _rebuildRig applies these OVER the preset's
   // own values, so a mismatch silently overrides it. Pinned by a test.
+  // Key-light direction in the screen frame (see keyLightDirection). Defaults
+  // reproduce ChimeraX's own key: 45° up-left, 54.7° off the camera axis.
+  keyAzimuth:       DEFAULT_KEY_AZIMUTH,
+  keyElevation:     DEFAULT_KEY_ELEVATION,
+
   keyIntensity:     2.0,
   fillIntensity:    0.0,
   ambientIntensity: 0.15,
@@ -75,11 +158,13 @@ export const DEFAULT_EXP_SETTINGS = Object.freeze({
 
 
 /**
- * Swap every eligible mesh to the flat figure material, returning a restore
- * handle. Deliberately representation-AGNOSTIC: it keys off what the material
- * *is*, never off mesh names, so beads, slabs, cones, cylinders, atoms, bonds,
- * the marching-cubes surface and hull prisms are all covered without a lookup
- * table to keep in sync.
+ * Swap every eligible mesh to its representation's photo material, returning a
+ * restore handle. `presets` maps representation → preset name (see
+ * material_presets.js); omit it for the flat figure materials.
+ *
+ * The mesh→representation decision is shared with the shipping photo mode via
+ * mesh_repr.js rather than duplicated, so a renderer adding a mesh name only has
+ * to be taught about it once.
  *
  * Preserved from the source material: `side` (the surface mesh is DoubleSide
  * because its junction edges are non-manifold), `vertexColors`, sub-1 opacity,
@@ -97,7 +182,7 @@ export const DEFAULT_EXP_SETTINGS = Object.freeze({
 /** How often (in rendered frames) to re-fingerprint the geometry. ~0.5 s at 60 fps. */
 const SIGNATURE_CHECK_FRAMES = 30
 
-export function swapToFlatMaterials(root) {
+export function swapToFlatMaterials(root, presets = null) {
   const saved = new Map()
   root.traverse(obj => {
     if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.material) return
@@ -110,7 +195,12 @@ export function swapToFlatMaterials(root) {
     if (obj.userData?.photoFloor) return
 
     const vc = Boolean(src.vertexColors)
-    const mat = makeMaterial('full', 'flat', vc, 1.0)
+    // Representation is read from the ORIGINAL material, before any swap —
+    // MeshPhysicalMaterial extends MeshStandardMaterial, so inferring after a
+    // swap makes every unnamed mesh look 'atomistic' (see mesh_repr.js).
+    const repr   = reprOf(obj)
+    const preset = presets?.[repr] ?? (repr === 'atomistic' ? 'cpk-flat' : 'flat')
+    const mat = makeMaterial(repr, preset, vc, 1.0)
     mat.side = src.side
     // Preserve the depth contract. Overlay geometry (ghost planes, hit targets,
     // immobilisation surfaces) is drawn depthWrite:false precisely so it cannot
@@ -148,7 +238,7 @@ export function swapToFlatMaterials(root) {
  * @returns experimental photo-mode controller
  */
 export function createExpPhotoMode(sceneCtx) {
-  const { scene, camera, renderer, setRenderFn, resetRenderFn,
+  const { scene, camera, renderer, controls, setRenderFn, resetRenderFn,
           setResizeCallback, clearResizeCallback } = sceneCtx
 
   const _settings = { ...DEFAULT_EXP_SETTINGS }
@@ -170,6 +260,11 @@ export function createExpPhotoMode(sceneCtx) {
   let _savedShadowType    = null
   const _savedMeshShadows = new Map()   // mesh → {cast, receive}
   let _bounds = null                    // {center, radius} the rig is fitted to
+  let _figurePass = null
+  let _savedFov   = null
+  const _dollyScratch = new THREE.Vector3()
+  const _camForward   = new THREE.Vector3()
+  const _cueScratch   = new THREE.Vector3()
   let _rejected = new Set()             // objects too large to be part of the structure
   let _signature = null                 // geometry fingerprint the rig is fitted to
   let _sigFrame  = 0
@@ -260,11 +355,14 @@ export function createExpPhotoMode(sceneCtx) {
       child.intensity = (seenDirectional++ === 0)
         ? _settings.keyIntensity
         : _settings.fillIntensity
-      // Preset positions are DIRECTIONS here; push them onto the 2R sphere so
-      // the geometry of the rig is scene-scale-independent.
-      const dir = child.position.lengthSq() > 0
-        ? child.position.clone().normalize()
-        : new THREE.Vector3(0, 1, 0)
+      // The KEY light is steered by azimuth/elevation; the fill keeps the
+      // preset's own direction. Both are pushed onto the 2R sphere so the rig's
+      // geometry is scene-scale-independent.
+      const dir = (seenDirectional === 1)
+        ? new THREE.Vector3(...keyLightDirection(_settings.keyAzimuth, _settings.keyElevation))
+        : (child.position.lengthSq() > 0
+            ? child.position.clone().normalize()
+            : new THREE.Vector3(0, 1, 0))
       child.position.copy(dir.multiplyScalar(2 * R))
       child.target = _lightTarget
       child.castShadow = false
@@ -389,6 +487,9 @@ export function createExpPhotoMode(sceneCtx) {
     const size = renderer.getDrawingBufferSize(new THREE.Vector2())
     const composer = new EffectComposer(renderer)
     composer.addPass(new RenderPass(scene, camera))
+    // Before SMAA so the contour gets antialiased with everything else.
+    _figurePass = new FigurePass(scene, camera)
+    composer.addPass(_figurePass)
     composer.addPass(new SMAAPass(size.x, size.y))
     composer.addPass(new OutputPass())
     // AFTER every addPass — composer.setSize forwards to each pass it holds, so
@@ -412,6 +513,7 @@ export function createExpPhotoMode(sceneCtx) {
     _savedClearAlpha = renderer.getClearAlpha()
 
     // Scene state.
+    _savedFov = camera.fov
     _savedEnv = scene.environment
     _savedBg  = scene.background
     scene.environment = null          // ambient occlusion IS the ambient light here
@@ -421,7 +523,7 @@ export function createExpPhotoMode(sceneCtx) {
     scene.add(_lightGroup)
     _hideEditorLights()
 
-    _matSwap = swapToFlatMaterials(scene)
+    _matSwap = swapToFlatMaterials(scene, _materialPresets())
     _applyBackground()
 
     _buildComposer()
@@ -429,11 +531,14 @@ export function createExpPhotoMode(sceneCtx) {
     // Rig last: it fits itself to the scene bounds, and the material swap above
     // does not move geometry, so the bounds are already final.
     _rebuildRig()
+    _applyFigure()
+    if (_settings.fov != null) _applyFovWithDolly(_settings.fov)
     if (_settings.pinLights) _syncRigToCamera()
 
     setResizeCallback?.(() => {
       const s = renderer.getDrawingBufferSize(new THREE.Vector2())
       _composer?.setSize(s.x, s.y)
+      _figurePass?.setSize(s.x, s.y)
     })
 
     setRenderFn(() => {
@@ -453,6 +558,9 @@ export function createExpPhotoMode(sceneCtx) {
    */
   function _perFrameSync() {
     if (_settings.pinLights) _syncRigToCamera()
+    // The cue window's START tracks the camera, so it is pushed every frame.
+    // The outline needs the same push for its scene-depth span.
+    if (_settings.depthCue || _settings.outline) _pushCueRange()
     // Periodically re-fingerprint the geometry. A representation switch replaces
     // every mesh while writing NO store field, so without this the shadow
     // frustum stays fitted to geometry that is no longer on screen.
@@ -471,6 +579,7 @@ export function createExpPhotoMode(sceneCtx) {
 
     _composer?.dispose?.()
     _composer = null
+    _figurePass = null
     _matSwap?.restore()
     _matSwap = null
 
@@ -500,6 +609,10 @@ export function createExpPhotoMode(sceneCtx) {
     _savedEnv = undefined
     _savedBg  = undefined
     renderer.setClearColor(_savedClearColor, _savedClearAlpha)
+    // Restore the editor's lens WITH a dolly, so the user keeps the framing
+    // they orbited to rather than snapping back to the old distance.
+    if (_savedFov != null && camera.fov !== _savedFov) _applyFovWithDolly(_savedFov)
+    _savedFov = null
     if (_savedToneMapping !== null) renderer.toneMapping = _savedToneMapping
     if (_savedExposure    !== null) renderer.toneMappingExposure = _savedExposure
     _savedToneMapping = null
@@ -507,6 +620,247 @@ export function createExpPhotoMode(sceneCtx) {
   }
 
   // ── Settings ───────────────────────────────────────────────────────────────
+
+  /**
+   * Depth-cue window for the CURRENT camera pose. START = the nearest bbox
+   * corner along the view axis, so the fade always begins at the front of the
+   * object. LENGTH = the bbox DIAGONAL, a CONSTANT for the design — not the
+   * current view's depth extent. Scaling to the current extent normalises every
+   * view to a full 0→1 fade, which washes out a thin helix seen side-on for no
+   * reason; against a fixed length the cue is near-nothing on a shallow view and
+   * strong only when you are genuinely looking down the depth of a bundle.
+   */
+  function _pushCueRange() {
+    if (!_figurePass || !_bounds?.corners) return
+    camera.getWorldDirection(_camForward)
+    let near = Infinity
+    for (const c of _bounds.corners) {
+      const d = _cueScratch.subVectors(c, camera.position).dot(_camForward)
+      if (d < near) near = d
+    }
+    // The camera can sit inside the box on a close-up, putting corners behind
+    // it — clamp so the fade never starts behind the viewer.
+    near = Math.max(near, camera.near)
+    _figurePass.setCueRange(near, near + (_bounds.diagonal || 1))
+    // Same span feeds ChimeraX's depth_jump — it is a fraction OF the structure's
+    // depth, so a 3% jump means the same nm gap whether you framed a 20 nm tile
+    // or a 400 nm origami.
+    _figurePass.setSceneDepth(_bounds.diagonal || 0)
+  }
+
+  function _applyFigure() {
+    if (!_figurePass) return
+    _figurePass.setParams({
+      outline:                  _settings.outline,
+      outlineColor:             _settings.outlineColor,
+      outlineStrength:          _settings.outlineStrength,
+      outlineThickness:         _settings.outlineThickness,
+      outlineDepthSensitivity:  _settings.outlineDepthSensitivity,
+      outlineCreaseSensitivity: _settings.outlineCreaseSensitivity,
+      silhouette:               _settings.silhouette,
+      outlineDepthJump:         _settings.outlineDepthJump,
+      depthCue:                 _settings.depthCue,
+      depthCueColor:            _settings.depthCueColor,
+      depthCueStrength:         _settings.depthCueStrength,
+    })
+    _pushCueRange()
+    // EffectComposer skips a disabled pass entirely, so both effects off costs
+    // nothing — no depth/normal pre-pass at all.
+    _figurePass.enabled = _figurePass.hasEffect()
+  }
+
+  function setOutline(on)          { _settings.outline = !!on; _applyFigure() }
+  function setOutlineColor(hex)    { _settings.outlineColor = hex; _applyFigure() }
+  function setOutlineStrength(v)   { _settings.outlineStrength = v; _applyFigure() }
+  function setOutlineThickness(v)  { _settings.outlineThickness = v; _applyFigure() }
+  function setOutlineSensitivity({ depth, crease } = {}) {
+    if (depth  !== undefined) _settings.outlineDepthSensitivity  = depth
+    if (crease !== undefined) _settings.outlineCreaseSensitivity = crease
+    _applyFigure()
+  }
+  function setOutlineDepthJump(v)  { _settings.outlineDepthJump = v; _applyFigure() }
+  function setDepthCue(on)         { _settings.depthCue = !!on; _applyFigure() }
+  function setDepthCueColor(hex)   { _settings.depthCueColor = hex; _applyFigure() }
+  function setDepthCueStrength(v)  { _settings.depthCueStrength = v; _applyFigure() }
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+
+  /** Change the lens AND dolly to preserve framing, so narrowing the FOV
+   *  flattens perspective instead of zooming in. */
+  function _applyFovWithDolly(newFov) {
+    const target = controls?.target
+    const oldFov = camera.fov
+    if (target && Number.isFinite(oldFov) && oldFov > 0) {
+      const dist = camera.position.distanceTo(target)
+      const newDist = dollyDistanceForFov(dist, oldFov, newFov)
+      if (dist > 1e-6 && Number.isFinite(newDist)) {
+        _dollyScratch.subVectors(camera.position, target).normalize().multiplyScalar(newDist)
+        camera.position.copy(target).add(_dollyScratch)
+      }
+    }
+    camera.fov = newFov
+    camera.updateProjectionMatrix()
+    controls?.update?.()
+  }
+
+  function setFOV(fov) {
+    _settings.fov = fov
+    // A FOV at or below the threshold IS the parallel projection — keep the
+    // flag (and the checkbox) honest either way.
+    _settings.parallel = fov <= PARALLEL_FOV
+    if (_active) _applyFovWithDolly(fov)
+  }
+
+  function setParallel(on) {
+    _settings.parallel = !!on
+    _settings.fov = on ? PARALLEL_FOV : PERSPECTIVE_FOV
+    if (_active) _applyFovWithDolly(_settings.fov)
+  }
+
+  // ── Export ────────────────────────────────────────────────────────────────
+
+  function setExportSize(w, h) {
+    if (Number.isFinite(w) && w > 0) _settings.exportWidth  = Math.round(w)
+    if (Number.isFinite(h) && h > 0) _settings.exportHeight = Math.round(h)
+  }
+
+  /**
+   * Render at an arbitrary resolution and return a PNG Blob.
+   *
+   * TILED, because a render target above the GPU's MAX_TEXTURE_SIZE silently
+   * clamps and produces a black image — 300 DPI (4200×2970) already exceeds the
+   * 4096 limit common on WSL/integrated GPUs. `camera.setViewOffset` renders a
+   * sub-rectangle of the full frame per tile; the CPU-side 2D canvas has no such
+   * limit, so the stitch is safe.
+   *
+   * The offscreen renderer is a SEPARATE GL context, so it needs its own
+   * composer, its own figure-pass parameters and its own shadowMap flag — none
+   * of the live renderer's GPU state carries over. That is the rule that keeps
+   * preview and export in sync.
+   */
+  async function renderToBlob(width, height) {
+    if (!_active) throw new Error('photo-exp: renderToBlob requires the mode to be active')
+
+    const probeCanvas = document.createElement('canvas')
+    const probeR = new THREE.WebGLRenderer({ canvas: probeCanvas, alpha: true })
+    const maxTex = probeR.capabilities.maxTextureSize
+    probeR.dispose()
+
+    const tileMax = Math.min(maxTex, 4096)
+    const tilesX  = Math.max(1, Math.ceil(width  / tileMax))
+    const tilesY  = Math.max(1, Math.ceil(height / tileMax))
+    const tileW   = Math.ceil(width  / tilesX)
+    const tileH   = Math.ceil(height / tilesY)
+
+    const finalCanvas  = document.createElement('canvas')
+    finalCanvas.width  = width
+    finalCanvas.height = height
+    const finalCtx     = finalCanvas.getContext('2d')
+
+    const offCanvas = document.createElement('canvas')
+    offCanvas.width  = tileW
+    offCanvas.height = tileH
+    const offRenderer = new THREE.WebGLRenderer({
+      canvas: offCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true,
+    })
+    offRenderer.setPixelRatio(1)
+    offRenderer.toneMapping         = THREE.ACESFilmicToneMapping
+    offRenderer.toneMappingExposure = 1.0
+    offRenderer.setSize(tileW, tileH, false)
+    // The offscreen renderer is a separate GL context — it needs the shadow flag
+    // set explicitly, or the export comes back without the cast shadow.
+    const wantShadow = !!(_settings.keyShadow && _keyLight?.castShadow)
+    offRenderer.shadowMap.enabled = wantShadow
+    if (wantShadow) offRenderer.shadowMap.type = THREE.PCFSoftShadowMap
+    if (_settings.bgType === 'transparent') offRenderer.setClearColor(0x000000, 0)
+    else offRenderer.setClearColor(new THREE.Color(_settings.bgColor), 1)
+
+    const composer = new EffectComposer(offRenderer)
+    composer.addPass(new RenderPass(scene, camera))
+    const figure = new FigurePass(scene, camera)
+    composer.addPass(figure)
+    composer.addPass(new SMAAPass(tileW, tileH))
+    composer.addPass(new OutputPass())
+    composer.setSize(tileW, tileH)
+
+    const savedAspect = camera.aspect
+    try {
+      camera.aspect = width / height
+      for (let ty = 0; ty < tilesY; ty++) {
+        for (let tx = 0; tx < tilesX; tx++) {
+          camera.setViewOffset(width, height, tx * tileW, ty * tileH, tileW, tileH)
+          camera.updateProjectionMatrix()
+          // Per-tile: the cue window's near corner depends on the projection.
+          figure.setParams({
+            outline:                  _settings.outline,
+            outlineColor:             _settings.outlineColor,
+            outlineStrength:          _settings.outlineStrength,
+            outlineThickness:         _settings.outlineThickness,
+            outlineDepthSensitivity:  _settings.outlineDepthSensitivity,
+            outlineCreaseSensitivity: _settings.outlineCreaseSensitivity,
+            silhouette:               _settings.silhouette,
+            outlineDepthJump:         _settings.outlineDepthJump,
+            depthCue:                 _settings.depthCue,
+            depthCueColor:            _settings.depthCueColor,
+            depthCueStrength:         _settings.depthCueStrength,
+          })
+          if (_bounds?.corners) {
+            camera.getWorldDirection(_camForward)
+            let near = Infinity
+            for (const c of _bounds.corners) {
+              const d = _cueScratch.subVectors(c, camera.position).dot(_camForward)
+              if (d < near) near = d
+            }
+            figure.setCueRange(Math.max(near, camera.near), Math.max(near, camera.near) + (_bounds.diagonal || 1))
+            figure.setSceneDepth(_bounds.diagonal || 0)
+          }
+          figure.enabled = figure.hasEffect()
+          composer.render()
+          finalCtx.drawImage(offCanvas, tx * tileW, ty * tileH)
+        }
+      }
+    } finally {
+      camera.clearViewOffset()
+      camera.aspect = savedAspect
+      camera.updateProjectionMatrix()
+      composer.dispose?.()
+      figure.dispose?.()
+      offRenderer.dispose()
+    }
+
+    return new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'))
+  }
+
+  /** The four preset names, in the shape swapToFlatMaterials expects. */
+  function _materialPresets() {
+    const { full, cylinders, surface, atomistic } = _settings
+    return { full, cylinders, surface, atomistic }
+  }
+
+  /** Change one representation's material. Re-swaps in place — cheap, and it
+   *  keeps the shadow flags/bounds valid because no geometry moved. */
+  function setMaterialPreset(repr, preset) {
+    if (!(repr in _materialPresets())) return
+    _settings[repr] = preset
+    if (!_active) return
+    _matSwap?.restore()
+    _matSwap = swapToFlatMaterials(scene, _materialPresets())
+    _restoreMeshShadowFlags()
+    _applyKeyShadow()
+  }
+
+  /** Steer the key light (and therefore its shadow) around the screen. */
+  function setKeyAzimuth(deg)   { _settings.keyAzimuth = deg;   if (_active) _rebuildRig() }
+  function setKeyElevation(deg) { _settings.keyElevation = deg; if (_active) _rebuildRig() }
+
+  /** Back to ChimeraX's own key direction. Lives here, not in the panel, so the
+   *  defaults have exactly one home and the panel needs no import of them
+   *  (which would close an import cycle: the mode already imports the panel). */
+  function resetKeyDirection() {
+    _settings.keyAzimuth   = DEFAULT_KEY_AZIMUTH
+    _settings.keyElevation = DEFAULT_KEY_ELEVATION
+    if (_active) _rebuildRig()
+  }
 
   /** Absolute per-light intensities — the real shadow-contrast controls. */
   function setKeyIntensity(v)     { _settings.keyIntensity = Math.max(0, v);     if (_active) _rebuildRig() }
@@ -561,11 +915,12 @@ export function createExpPhotoMode(sceneCtx) {
   function resync() {
     if (!_active) return
     _matSwap?.restore()
-    _matSwap = swapToFlatMaterials(scene)
+    _matSwap = swapToFlatMaterials(scene, _materialPresets())
     // Fresh meshes arrive with the editor's shadow flags and the bounds may have
     // moved, so the rig has to refit and the flags be re-applied.
     _restoreMeshShadowFlags()
     _rebuildRig()
+    _applyFigure()          // bounds moved → the cue window has to be refitted
     if (_settings.pinLights) _syncRigToCamera()
   }
 
@@ -650,8 +1005,13 @@ export function createExpPhotoMode(sceneCtx) {
     activate, deactivate,
     getDiagnostics,
     isActive: () => _active,
-    setBackground,
+    setBackground, setMaterialPreset,
+    setFOV, setParallel, setExportSize, renderToBlob,
+    setOutline, setOutlineColor, setOutlineStrength, setOutlineThickness,
+    setOutlineSensitivity, setOutlineDepthJump,
+    setDepthCue, setDepthCueColor, setDepthCueStrength,
     setPinLights, setKeyShadow, setKeyShadowBias, setKeyShadowMapSize,
+    setKeyAzimuth, setKeyElevation, resetKeyDirection,
     setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
     setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
     resync,
@@ -659,6 +1019,7 @@ export function createExpPhotoMode(sceneCtx) {
     // Test/console seams.
     _syncFrame:    _perFrameSync,
     _getKeyLight:  () => _keyLight,
+    _getFigurePass: () => _figurePass,
     _getLightGroup: () => _lightGroup,
   }
 }

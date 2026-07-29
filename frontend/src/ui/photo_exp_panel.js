@@ -7,6 +7,9 @@
  * thrown away without touching the renderer.
  */
 
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { PRESET_LABELS } from '../scene/photo_renderer/material_presets.js'
+
 /** B-DNA duplex diameter — the feature a shadow map has to resolve to be useful. */
 export const DUPLEX_NM = 2.0
 
@@ -80,6 +83,12 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
     keyShadowRes:       $('photoexp-key-shadow-res'),
     keyShadowBias:      $('photoexp-key-shadow-bias'),
     keyShadowBiasLabel: $('photoexp-key-shadow-bias-label'),
+    keyAzimuth:        $('photoexp-key-azimuth'),
+    keyAzimuthLabel:   $('photoexp-key-azimuth-label'),
+    keyElevation:      $('photoexp-key-elevation'),
+    keyElevationLabel: $('photoexp-key-elevation-label'),
+    keyDir:            $('photoexp-key-dir'),
+    keyDirReset:       $('photoexp-key-dir-reset'),
     shadowStrength:      $('photoexp-shadow-strength'),
     shadowStrengthLabel: $('photoexp-shadow-strength-label'),
     shadowStrength:      $('photoexp-shadow-strength'),
@@ -92,6 +101,32 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
     ambientIntensityLabel: $('photoexp-ambient-intensity-label'),
     maxContrast: $('photoexp-max-contrast'),
     shadowDepth: $('photoexp-shadow-depth'),
+    outline:            $('photoexp-outline'),
+    outlineControls:    $('photoexp-outline-controls'),
+    outlineColor:       $('photoexp-outline-color'),
+    outlineStrength:    $('photoexp-outline-strength'),
+    outlineStrengthLab: $('photoexp-outline-strength-label'),
+    outlineThickness:   $('photoexp-outline-thickness'),
+    outlineThicknessLab:$('photoexp-outline-thickness-label'),
+    outlineJump:        $('photoexp-outline-jump'),
+    outlineJumpLab:     $('photoexp-outline-jump-label'),
+    depthCue:           $('photoexp-depthcue'),
+    depthCueControls:   $('photoexp-depthcue-controls'),
+    depthCueColor:      $('photoexp-depthcue-color'),
+    depthCueStrength:   $('photoexp-depthcue-strength'),
+    depthCueStrengthLab:$('photoexp-depthcue-strength-label'),
+    matFull:      $('photoexp-mat-full'),
+    matCylinders: $('photoexp-mat-cylinders'),
+    matSurface:   $('photoexp-mat-surface'),
+    matAtomistic: $('photoexp-mat-atomistic'),
+    fov:        $('photoexp-fov'),
+    fovLabel:   $('photoexp-fov-label'),
+    parallel:   $('photoexp-parallel'),
+    resPreset:  $('photoexp-res-preset'),
+    resW:       $('photoexp-res-w'),
+    resH:       $('photoexp-res-h'),
+    exportNote: $('photoexp-export-note'),
+    exportBtn:  $('photoexp-export-btn'),
     bgType:  $('photoexp-bg-type'),
     bgColor: $('photoexp-bg-color'),
   }
@@ -147,11 +182,62 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
       if (el)  el.value = String(s[k])
       if (lab) lab.textContent = s[k].toFixed(2)
     }
+    if (els.keyAzimuth)        els.keyAzimuth.value = String(s.keyAzimuth)
+    if (els.keyAzimuthLabel)   els.keyAzimuthLabel.textContent = `${s.keyAzimuth.toFixed(0)}°`
+    if (els.keyElevation)      els.keyElevation.value = String(s.keyElevation)
+    if (els.keyElevationLabel) els.keyElevationLabel.textContent = `${s.keyElevation.toFixed(0)}°`
+    _refreshKeyDir()
     _refreshShadowDepth()
+    if (els.outline)  els.outline.checked = s.outline
+    if (els.depthCue) els.depthCue.checked = s.depthCue
+    if (els.outlineControls)  els.outlineControls.style.display  = s.outline  ? 'flex' : 'none'
+    if (els.depthCueControls) els.depthCueControls.style.display = s.depthCue ? 'flex' : 'none'
+    if (els.outlineColor)  els.outlineColor.value  = s.outlineColor
+    if (els.depthCueColor) els.depthCueColor.value = s.depthCueColor
+    for (const [k, el, lab, dp] of [
+      ['outlineStrength',          els.outlineStrength,  els.outlineStrengthLab,  2],
+      ['outlineThickness',         els.outlineThickness, els.outlineThicknessLab, 1],
+      ['outlineDepthJump',         els.outlineJump,      els.outlineJumpLab,      3],
+      ['depthCueStrength',         els.depthCueStrength, els.depthCueStrengthLab, 2],
+    ]) {
+      if (!Number.isFinite(s[k])) continue   // a settings blob predating this control
+      if (el)  el.value = String(s[k])
+      if (lab) lab.textContent = s[k].toFixed(dp)
+    }
+    for (const [repr, sel] of MAT_ROWS) if (sel) sel.value = s[repr]
+    if (els.fov && s.fov != null) {
+      els.fov.value = String(Math.round(s.fov))
+      if (els.fovLabel) els.fovLabel.textContent = `${Math.round(s.fov)}°`
+    }
+    if (els.parallel) els.parallel.checked = s.parallel
+    if (els.resW) els.resW.value = String(s.exportWidth)
+    if (els.resH) els.resH.value = String(s.exportHeight)
+    _refreshExportNote()
     if (els.bgType)  els.bgType.value = s.bgType
     if (els.bgColor) els.bgColor.value = s.bgColor
     _refreshResolution()
     _refreshStatus()
+  }
+
+  /** Where the light is, in words, plus the angle off the camera axis — which
+   *  is what decides whether the shadow reads as offset or hides behind the
+   *  object. It is exactly `90 - elevation`. */
+  function _refreshKeyDir() {
+    if (!els.keyDir) return
+    const s = expMode.getSettings()
+    const az = ((s.keyAzimuth % 360) + 360) % 360
+    const side =
+      az < 22.5 || az >= 337.5 ? 'right' :
+      az < 67.5   ? 'upper-right' :
+      az < 112.5  ? 'above' :
+      az < 157.5  ? 'upper-left' :
+      az < 202.5  ? 'left' :
+      az < 247.5  ? 'lower-left' :
+      az < 292.5  ? 'below' : 'lower-right'
+    const off = 90 - s.keyElevation
+    els.keyDir.textContent = s.keyElevation >= 0
+      ? `Lit from the ${side}, ${off.toFixed(0)}° off the camera axis.`
+      : `Lit from behind (${side}), ${off.toFixed(0)}° off the camera axis — rim light.`
   }
 
   function _refreshShadowDepth() {
@@ -206,6 +292,18 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
     if (els.shadowStrengthLabel) els.shadowStrengthLabel.textContent = v.toFixed(2)
   })
 
+  for (const [el, lab, setter, unit] of [
+    [els.keyAzimuth,   els.keyAzimuthLabel,   v => expMode.setKeyAzimuth(v),   '°'],
+    [els.keyElevation, els.keyElevationLabel, v => expMode.setKeyElevation(v), '°'],
+  ]) {
+    el?.addEventListener('input', () => {
+      const v = Number(el.value)
+      setter(v)
+      if (lab) lab.textContent = `${v.toFixed(0)}${unit}`
+      _refreshKeyDir()
+    })
+  }
+
   _bindIntensity(els.keyIntensity,     els.keyIntensityLabel,     v => expMode.setKeyIntensity(v))
   _bindIntensity(els.fillIntensity,    els.fillIntensityLabel,    v => expMode.setFillIntensity(v))
   _bindIntensity(els.ambientIntensity, els.ambientIntensityLabel, v => expMode.setAmbientIntensity(v))
@@ -224,6 +322,159 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
   })
 
   els.bgColor?.addEventListener('input', () => expMode.setBackground(undefined, els.bgColor.value))
+
+  // ── Collapsible cards ──────────────────────────────────────────────────────
+  // Same markup, classes and persistence as the Simulations-tab cards
+  // (see ui/chain_sim_panel.js): a clickable <h2> with a rotating chevron and a
+  // sibling body div, with per-tab collapse state in localStorage.
+  function _initCard(id) {
+    const heading = $(`photoexp-${id}-heading`)
+    const body    = $(`photoexp-${id}-body`)
+    const arrow   = $(`photoexp-${id}-arrow`)
+    if (!heading || !body) return
+    let collapsed = getSectionCollapsed('photo-exp', `photoexp-${id}-panel`, false)
+    body.style.display = collapsed ? 'none' : ''
+    arrow?.classList.toggle('is-collapsed', collapsed)
+    heading.addEventListener('click', () => {
+      collapsed = !collapsed
+      body.style.display = collapsed ? 'none' : ''
+      arrow?.classList.toggle('is-collapsed', collapsed)
+      setSectionCollapsed('photo-exp', `photoexp-${id}-panel`, collapsed)
+    })
+  }
+  // Material dropdowns are built from PRESET_LABELS so adding a preset to
+  // material_presets.js shows up here with no markup change.
+  const MAT_ROWS = [
+    ['full',      els.matFull],
+    ['cylinders', els.matCylinders],
+    ['surface',   els.matSurface],
+    ['atomistic', els.matAtomistic],
+  ]
+  for (const [repr, sel] of MAT_ROWS) {
+    if (!sel) continue
+    sel.innerHTML = ''
+    for (const [value, label] of Object.entries(PRESET_LABELS[repr] ?? {})) {
+      const o = document.createElement('option')
+      o.value = value
+      o.textContent = label
+      sel.appendChild(o)
+    }
+    sel.addEventListener('change', () => expMode.setMaterialPreset(repr, sel.value))
+  }
+
+  els.outline?.addEventListener('change', () => {
+    expMode.setOutline(els.outline.checked)
+    if (els.outlineControls) els.outlineControls.style.display = els.outline.checked ? 'flex' : 'none'
+  })
+  els.depthCue?.addEventListener('change', () => {
+    expMode.setDepthCue(els.depthCue.checked)
+    if (els.depthCueControls) els.depthCueControls.style.display = els.depthCue.checked ? 'flex' : 'none'
+  })
+  els.outlineColor?.addEventListener('input', () => expMode.setOutlineColor(els.outlineColor.value))
+  els.depthCueColor?.addEventListener('input', () => expMode.setDepthCueColor(els.depthCueColor.value))
+
+  /** slider → setter → label, with a fixed number of decimals. */
+  function _bindRange(el, lab, setter, dp = 2) {
+    el?.addEventListener('input', () => {
+      const v = Number(el.value)
+      setter(v)
+      if (lab) lab.textContent = v.toFixed(dp)
+    })
+  }
+  _bindRange(els.outlineStrength,  els.outlineStrengthLab,  v => expMode.setOutlineStrength(v))
+  _bindRange(els.outlineThickness, els.outlineThicknessLab, v => expMode.setOutlineThickness(v), 1)
+  _bindRange(els.outlineJump,      els.outlineJumpLab,      v => expMode.setOutlineDepthJump(v), 3)
+  _bindRange(els.depthCueStrength, els.depthCueStrengthLab, v => expMode.setDepthCueStrength(v))
+
+  // ── Camera ─────────────────────────────────────────────────────────────────
+  els.fov?.addEventListener('input', () => {
+    const v = Number(els.fov.value)
+    expMode.setFOV(v)
+    if (els.fovLabel) els.fovLabel.textContent = `${v}°`
+    if (els.parallel) els.parallel.checked = expMode.getSettings().parallel
+  })
+  els.parallel?.addEventListener('change', () => {
+    expMode.setParallel(els.parallel.checked)
+    syncToState()
+  })
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+  // A 14×9.9 in figure at the named DPI. 300 DPI already exceeds the 4096
+  // MAX_TEXTURE_SIZE common on WSL/integrated GPUs, which is why the export is
+  // tiled rather than one oversized render target.
+  const RES_PRESETS = {
+    screen: () => [window.innerWidth, window.innerHeight],
+    x2:     () => [window.innerWidth * 2, window.innerHeight * 2],
+    p300:   () => [4200, 2970],
+    p600:   () => [8400, 5940],
+  }
+
+  function _refreshExportNote() {
+    if (!els.exportNote) return
+    const w = Number(els.resW?.value ?? 0)
+    const h = Number(els.resH?.value ?? 0)
+    if (!(w > 0 && h > 0)) { els.exportNote.textContent = ''; return }
+    const tiles = Math.max(1, Math.ceil(w / 4096)) * Math.max(1, Math.ceil(h / 4096))
+    const inches = (w / 300).toFixed(1)
+    els.exportNote.textContent =
+      `${w}×${h} px — ${inches} in wide at 300 DPI, rendered in ${tiles} tile${tiles === 1 ? '' : 's'}.`
+  }
+
+  function _applyResPreset(key) {
+    const fn = RES_PRESETS[key]
+    if (!fn) { _refreshExportNote(); return }
+    const [w, h] = fn().map(Math.round)
+    if (els.resW) els.resW.value = String(w)
+    if (els.resH) els.resH.value = String(h)
+    expMode.setExportSize(w, h)
+    _refreshExportNote()
+  }
+
+  els.resPreset?.addEventListener('change', () => _applyResPreset(els.resPreset.value))
+  for (const el of [els.resW, els.resH]) {
+    el?.addEventListener('change', () => {
+      if (els.resPreset) els.resPreset.value = 'custom'
+      expMode.setExportSize(Number(els.resW.value), Number(els.resH.value))
+      _refreshExportNote()
+    })
+  }
+
+  els.exportBtn?.addEventListener('click', async () => {
+    if (!els.exportBtn) return
+    const label = els.exportBtn.textContent
+    els.exportBtn.disabled = true
+    els.exportBtn.textContent = 'Rendering…'
+    try {
+      const s = expMode.getSettings()
+      const blob = await expMode.renderToBlob(s.exportWidth, s.exportHeight)
+      if (blob) {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `nadoc-figure-${s.exportWidth}x${s.exportHeight}.png`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      console.error('[photo-exp] export failed:', err)
+      if (els.exportNote) els.exportNote.textContent = `Export failed: ${err.message}`
+    } finally {
+      els.exportBtn.disabled = false
+      els.exportBtn.textContent = label
+    }
+  })
+
+  _initCard('lighting')
+  _initCard('camera')
+  _initCard('export')
+  _initCard('figure')
+  _initCard('materials')
+  _initCard('bg')
+
+  els.keyDirReset?.addEventListener('click', () => {
+    expMode.resetKeyDirection()
+    syncToState()
+  })
 
   return {
     syncToState,
