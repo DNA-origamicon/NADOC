@@ -19,6 +19,131 @@ The MD jobs panel got oxDNA-parity visualization tools (trajectory scrub + flexi
 
 **v1 scope = CG/nadoc representation only.** Deliberate follow-ons: (1) heavy-rep (atomistic/surface) RMSF colouring — the per-frame atomistic data shapes differ between oxDNA (template) and NAMD (real DCD atoms), needs its own mapping, so the adapter intentionally omits the heavy methods (controller heavy path is a no-op for CG, fails closed for atomistic/surface scenes); ~~(2) the draggable colour-rescale widget~~ **DONE 2026-07-10** — see below.
 
+**⚠️ (1) IS NOW HALF-DONE — the per-frame TRAJECTORY heavy reps work; the FLEX-MAP ones still
+don't (2026-07-29).** Reported as "switching to atomistic during View trajectory just shows the
+NADOC native positions". Cause was exactly the omission above: `md_viz_adapter` mapped no
+`getOxdnaFramesAtomistic`/`Surface`, so `_applyHeavy`'s trajectory branch called `undefined`, the
+`catch` swallowed it, and the heavy rep sat at design coordinates. Three parts to the fix:
+- **The two shapes are genuinely different and the controller now branches.** oxDNA reconstructs
+  the DESIGN's atoms → flat XYZ laid over a per-job topology template fetched by
+  `_ensureJobAtomistic`. NAMD renders the SIMULATION's own atoms → each frame is a self-describing
+  `{atoms, bonds}` set. Feeding the latter down the oxDNA path is precisely what failed:
+  `_ensureJobAtomistic` has no MD topology route to call, returned false, and nothing painted. New
+  `_pushMdAtoms` in oxdna_display.js calls `ar.update({atoms, bonds})` instead — the same recipe
+  `animation_player.js:906` already used for NAMD trajectory keyframes. Guarded by `_mdAtomKey`
+  (`update()` rebuilds every mesh, so it must not re-run while the snapped frame is unchanged);
+  cleared in `_restoreHeavy`.
+- **`_trajStride` is repeated on every heavy fetch, exactly like `_trajScope`.** Composite frame
+  indices only address the same frame within one downsample.
+- **The composite→raw index bug is FIXED (it was silent).** `md_frames_atomistic`/`md_frames_surface`
+  indexed the RAW concatenated universe while every caller passes COMPOSITE indices — identical only
+  while nothing was dropped, i.e. runs under the cap, which is why it was never noticed. New
+  `composite_raw_frame_map(segments, max_frames, stride)` (DCD headers only) translates; keys stay
+  composite. Also fixes the animation player's NAMD trajectory keyframes on >200-frame runs.
+  `MdFramesAtomisticBody`/`MdFramesSurfaceBody` gained `stride`.
+- **NAMD atomistic is atoms-only — `bonds: []` is the established contract**, not a regression here:
+  the live WS ballstick path (`ws.py` sends `atom_meta` + `atom_ident`, no bonds) and the animation
+  player do the same. Ball-and-stick therefore draws spheres without sticks for NAMD everywhere.
+  Adding real bonds means emitting the PSF bond list once and caching it across frames — a change to
+  all three paths, not done.
+**ALL-ATOM TRAJECTORY IS NOW PREBUILT, NOT RECONSTRUCTED WHILE YOU SCRUB (2026-07-29).**
+Follow-up to the above. Two costs made the lazy approach untenable, both measured on
+`76759a458653` (VoltronCore, 302 197 DNA heavy atoms, serials to 469 350):
+- **Memory.** A frame as JSON atom OBJECTS is 53 MB on the wire and ~72 MB of JS objects.
+  Twelve of those is 0.9 GB — which is precisely why `_COARSE_ATOM_CAP` was 12 and the
+  atomistic view was far coarser than the beads.
+- **Latency.** `_coarseFrame` fetched ONE frame per request, and the MD analysis rebuilds
+  its context (PSF parse + model) **per request**: measured 34.5 s for 1 frame vs 45.6 s
+  for 5 in one call ⇒ ~32 s fixed + **~2.8 s marginal**. So every first visit to a grid
+  cell paid the full 32 s again.
+**Fix = the oxDNA shape.** New `md_atomistic_model()` + `GET /md/jobs/{id}/atomistic-model`
+returns the STATIC atom set once (identity + `n_serials` + `bonds_available:false`);
+`md_frames_atomistic(..., positions_only=True)` returns serial-indexed flat coords.
+`md_viz_adapter` maps `getOxdnaAtomisticModel`, so `_ensureJobAtomistic` →
+`applyPositionLerp` — the **validated oxDNA path, reused unchanged**. `_pushMdAtoms` (added
+hours earlier) was deleted: with a topology it is redundant, and it also removed the
+per-frame `ar.update()` mesh rebuild. Measured: **8.5 MB/frame wire (6.3x), 5.4 MB/frame
+as Float32Array (13x)**; 5 frames in one call 44 s vs ~172 s as five calls.
+- **The budget is measured against THIS machine, not a constant.** Two independent limits,
+  lower wins (`prebuildMemoryPlan`, pure + exported):
+  1. **`heap`** — `BROWSER_HEAP_CEILING_BYTES = 1536 MB`. A 64-bit tab will not hand out an
+     unbounded JS heap however much RAM the box has, and hitting the ceiling **kills the
+     tab**, it does not merely slow down. Also the fallback when free RAM is unreadable —
+     an unknown machine is never assumed to be a big one.
+  2. **`ram`** — `FREE_RAM_SAFE_FRACTION = 0.5` of the host's **MemAvailable**, read from
+     the EXISTING `GET /system/resources` (the System-monitor endpoint; backend runs on
+     localhost, so its reading is the browser's machine). `build_resource_sample` gained
+     `ram_available_mb` — MemAvailable, not total-minus-used, because it counts reclaimable
+     cache and is the number a "will this allocate?" question actually needs. `None` on a
+     failed probe, never 0 (0 would refuse everything on a healthy machine).
+  Browser APIs were NOT used: `navigator.deviceMemory` is Chrome-only (absent in the
+  Firefox this is developed in), reports TOTAL not free, and rounds to a power of two.
+  `performance.memory` is Chrome-only too.
+- Priced BEFORE the ~30 s topology fetch via `SERIALS_PER_NUCLEOTIDE_EST = 32` (measured
+  469 350 / 14 774 = 31.8) against `n_nucleotides`, which the trajectory payload always
+  carries; the exact serial span takes over once known. So the first load is priced, not
+  attempted blind.
+- If the plan is capped **by RAM specifically**, the panel confirms first, quoting need vs
+  free ("needs about 5.2 GB, but only 512 MB is free"), and offers the affordable count.
+  A heap-bound cap is not worth interrupting for — it just reports. The status line names
+  which limit bound ("free RAM" / "browser memory limit"), never a bare "memory limit".
+  Live check on this box: 24.4 GB free of 31.2 → RAM allows 12.2 GB but heap binds at
+  1536 MB → **285 VoltronCore frames**.
+- `affordableAtomFrames(nSerials, nFrames, budget)` sizes the grid; the panel injects the
+  budget via `prebuildHeavy(cb, {budgetBytes})`, so the RAM *policy* lives in the panel
+  (which does the talking) and the controller just obeys a ceiling.
+- **Batching is a declared CAPABILITY, not a blanket change.** `mdVizApiAdapter` sets
+  `heavyBatch: true`; `prebuildHeavy` then chunks 8 indices/request and SKIPS the
+  warm-one-cell-first step (that step helps oxDNA's server-side alignment cache; here it
+  is just an extra 32 s context build). oxDNA keeps its pinned one-frame-at-a-time
+  behaviour — `oxdna_display.test.js` has explicit invariants for it, deliberately: an
+  oxDNA frame is an independent multi-second rebuild, so a big upfront bake is wrong there.
+- `_narrowFrame` converts flat coord arrays to Float32Array (halves cache RAM; meshes pass
+  through). `bonds_available === false` is an explicit declaration — NOT an empty list —
+  because oxDNA's VDW fetch is also bondless and there the bond warm-ahead re-fetch is right
+  (learned by breaking that test).
+- Trigger: `_prebuildTrajHeavy` runs after every trajectory load AND on
+  `nadoc:representation-change` while scrubbing, with `preparing atoms N/M…` progress.
+  No-op for CG.
+
+**PER-FRAME EXTRACTION VECTORIZED — 2.25 s → 0.18 s (12.5x), byte-identical (2026-07-29).**
+Profiled `_extract_md_atoms_frame` on the real 302 197-atom job: the cost was almost
+entirely per-atom Python, not numerics — 728 k `AtomGroup.__getitem__`, 382 k `.residue`
+property builds, and **906 k scalar `np.round` calls** (3 per atom for the min-image
+correction). The insight: **which P anchors which heavy atom is a TOPOLOGY question**
+(residue ix / segid / resid), identical for every frame, and it was being re-resolved
+per frame. New `_build_heavy_anchor_rows(heavy_ag, dna_p)` builds it ONCE per ctx
+(memoized in `ctx["_heavy_anchor_rows"]`, so no change to the ctx builder or the bead
+path), then the correction is one array op. Ties resolve LAST-wins to match the dict
+comprehension it replaced. Verified `max|new − old| = 0.000e+00 nm` on frames 0/2/4 of
+the real job against a transcribed copy of the old loop.
+
+**Where the remaining time is — and why true streaming needs an architecture change.**
+Measured split on VoltronCore (423 MB PSF): **context build 30.5 s** (PSF parse + model)
++ **0.18 s/frame**. The context is paid **per REQUEST**, because `md_analysis_runner`
+spawns a fresh killable `Process` per call and kills it after — that killability is
+deliberate (it is how a client disconnect aborts a runaway MDAnalysis read), so an
+in-process ctx cache cannot survive. Consequences:
+- Chunk size is a direct trade: every extra chunk is another whole 30 s context build.
+  `CHUNK = 32` (was 8 — which cost 7 rebuilds on a 55-frame prebuild).
+- The prebuild queue is **sorted by distance from `_frameIdx` and re-sorted between
+  chunks**, so a seek mid-build redirects the remaining work and the frames around the
+  playhead arrive first. That is as close to "buffer from here" as this backend allows.
+- **Real streaming (seek anywhere, frames in ~0.2 s) needs a persistent per-job worker**
+  holding the built ctx, with frames served on demand — i.e. replacing the
+  spawn-and-kill model with a warm worker plus an explicit cancel channel. Not done:
+  it changes the cancellation semantics that exist on purpose. That is the next big win
+  and would make the 30 s cost a once-ever, not once-per-request.
+- Pins: `affordableAtomFrames` (5), `md_viz_adapter.test.js` (topology-once, positions-only,
+  stride repeat, ONE batched request, cache-hit on scrub), backend signature-pair test.
+
+- Verified read-only on real job `76759a458653`: composite 2 @stride 2 == composite 4 @no-stride
+  (both raw frame 4) and differs from composite 2 @no-stride — the translation proven end to end;
+  302197 atoms/frame carrying `strand_id`/`helix_id`/`bp_index`/`direction` so `color_resolver`
+  colours them; surface 257k verts. Pins: `tests/test_md_composite_indices.py` (31),
+  `md_viz_adapter.test.js` (+4, **proven to fail against the pre-fix adapter**),
+  `oxdna_display.test.js` (5th positional arg). **NOT click-verified in the browser.**
+
 **SHARED ADJUSTABLE LEGEND + COLORMAP PICKER (2026-07-10).** `flex_scale.js` is now the ONE adjustable
 workspace legend for EVERY scalar sim map — oxDNA/MD flexibility (RMSF) + deviation maps and CanDo
 RMSF/deviation/cylinder heat maps. Architecture: a single `flexScale = initFlexScale()` is created in
@@ -125,6 +250,35 @@ Both are now user-visible/controllable:
   UI: `#oxdna-jobs-prod-steps-per-frame` in the Advanced card + `#oxdna-jobs-prod-frames-hint`
   ("→ 500 frames · ~1.1 GB trajectory", amber over 5 GB), from pure `trajectoryFrameEstimate` +
   `formatBytes` in oxdna_jobs_panel.js (130 B/nt/frame — MUST track `disk_guard._OXDNA_CONF_BYTES_PER_NT`).
+- **NAMD's read-side 200 is now a user-set FRAME INTERVAL — 2026-07-29.** The NAMD half of (2)
+  above stayed hardcoded when oxDNA got `scope`; a 991-frame 18hb run always came back as 198
+  frames with no control. Both `/md/jobs/{id}/trajectory` and `/trajectory-meta` now take an
+  OPTIONAL `?stride=N` = "keep every Nth frame **of each written segment**" (VMD's DCD stride,
+  applied per file — so every non-empty segment keeps at least its own frame 0 and the boundary
+  markers stay meaningful). **Omitting it is load-bearing**: no param → the byte-identical legacy
+  ≤200 proportional budget, which is what `animation_panel`/`animation_player` trajectory
+  keyframes (`main.js:1583/1589`) and `blade_runner.py:648` still ride. Only the Visualizations
+  card sends an interval. `_composite_indices(seg_counts, max_frames, stride)` in md_trajectory.py
+  is now the ONE place the selection is decided — `md_composite_meta` and `md_composite_trajectory`
+  used to carry separate copies, and drift between them desyncs the slider from its frames.
+  `md_composite_meta` also returns `total_raw` + per-stage `n_raw` so the panel can price a
+  different interval with zero network. UI: `#md-jobs-traj-interval` (default 20, from the HTML
+  `value=` attr via `form_defaults`) + `#md-jobs-traj-frames-hint` ("→ 15 frames of 300 written",
+  amber at `TRAJ_FRAME_CONFIRM = 500` → `window.confirm` before the load; warn, never cap).
+  Typing re-prices on `input`; committing on `change` re-loads. Route timeout goes 180 s → 900 s
+  when an interval is given. `loadTrajectory(jobId, align, scope, stride)` — stride APPENDED last
+  (inserting before an existing param is the align/signal hazard below); `md_viz_adapter` forwards
+  `stride` (not `align`, not `scope`); `getMdTrajectory(id, signal, { stride })` takes a third
+  positional OBJECT so it can't be mistaken for the signal. **Interval 20 gives FEWER frames than
+  the old cap on a short run** (100 written → 5) — that is VMD-faithful and the readout makes it
+  visible; lower the interval for density. Pins: `tests/test_md_composite_indices.py` (27, incl.
+  the randomised legacy-equivalence compat pin + the positional-order guard for the analysis
+  subprocess's arg tuple), `md_jobs_panel.test.js` (`stridedFrameCount` + 8 jsdom wiring tests),
+  `md_viz_adapter.test.js`, `client_viz_opts.test.js` (URL query). Verified read-only against real
+  jobs: 18hb `e29d1e5d5ace` 991 raw → 198 legacy / 55 @20 / 199 @5 / 991 @1, meta == ceil-per-
+  segment every time; VoltronCore `76759a458653` full heavy build 5 frames legacy vs 3 @stride=2.
+  Still open: `md_frames_atomistic`/`md_frames_surface` index the RAW universe while their only
+  caller passes COMPOSITE indices — pre-existing, unchanged, only correct when raw ≤ the kept count.
 - **`scope` query param** on `/trajectory`, `/trajectory-meta`, `/frames-atomistic`, `/frames-surface`.
   `lineage` (default) = old behaviour, whole ancestor chain strided to `routes_oxdna._SPARSE_FRAME_CAP=200`.
   `job` = THIS job's stages only, `max_frames=0` → **stride disabled** (`_keep_for` and
