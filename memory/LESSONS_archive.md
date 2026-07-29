@@ -1255,3 +1255,73 @@ Generalise:
 - **Every adapter/seam needs ≥1 test driven by its real caller.** Isolation tests are necessary but they
   cannot see contract drift — that is precisely the failure they must catch.
 
+
+## H16
+
+**Fix the PATH IN USE, not the leaf — three times in one session (2026-07-28).**
+
+Three separate bugs, one shape: a change was correct and unit-tested at the function it touched,
+and absent from the code path the UI actually runs.
+
+1. **GPU-resident size gate.** Added to `build_production_conf`, with tests. The panel's Start
+   Production calls `/production-run` → `md_ensemble.build_replica_package`, a *different*
+   `build_production_conf` call site that passed no `n_atoms`. Two user retries showed no change.
+2. **Production timestep.** Removed the declash conflict, but left
+   `fast = (timestep_fs == 4.0) and not declash` — the same coupling in another variable. The
+   replica builder reads `fast` as "may I use HMR", so a requested 4 fs silently emitted 1 fs and
+   measured ~80 ns/day (exactly the 1 fs rate).
+3. **PBC snap.** Fixed `reassemble_to_posed_reference`, verified 0 broken bonds on the trajectory
+   path, shipped. `ws.py`'s ballstick branch — the *live* display, which is what the user was
+   looking at — had its own inlined copy of the older per-atom snap and never called the shared
+   function. The user hard-reset the browser; the artefact stayed.
+
+**Why unit tests did not help:** every one of them called the leaf directly. Nothing exercised the
+route the button takes, so a fix could be complete at the leaf and absent on the path.
+
+**How to avoid:**
+- Before claiming a fix, ask **"what does the button actually call?"** and trace it. `grep` every
+  call site of the function you changed and check each one passes the new argument.
+- Prefer an **API-level integration test** (drive the route against a temp workspace, assert on the
+  artefact that lands on disk) over another unit test of the helper. No browser needed; runs in the
+  fast suite.
+- For a shared helper, add a **structural guard** that fails if anything re-implements it — the
+  duplicate is what defeats the fix. Example: `test_no_display_path_reimplements_the_pbc_snap`.
+- A shared helper is only shared **if every caller actually calls it**.
+
+## H17
+
+**A rejected request must never mutate the completed job it was launched from.**
+
+A production-timestep conflict handler set `status = failed` on the job production was launched
+FROM — which is the completed relaxation. Refusing a 2 fs production therefore flipped a finished
+12/12 ladder to "failed" in the job list ("NAMD · failed · 12/12 segments · 100% · 9,600,000 /
+9,600,000 steps"), discarding the record of hours of successful work. Nothing was lost on disk, but
+the status was destroyed by a `save()`.
+
+Root design error: the plan was "fail as a job so the standard Fix popup can explain it" — but for a
+*rejection* there is no production job yet. The only job in hand was one that had already succeeded.
+
+**How to avoid:** a route that refuses to start something must reject the REQUEST (HTTP 4xx), not
+edit existing state. Treat any completed upstream job as read-only. If a failure genuinely needs a
+job row to hang off, create the new job first and fail THAT. Pin the invariant by re-reading
+`job.json` from disk, not just checking the in-memory object — the damage is the save.
+
+## K11
+
+**A fast-suite budget "violator" that MOVES between runs is a shared cache warming, not a heavy test.**
+
+Four junction topology/winding tests were relegated to the slow suite on readings of 41 s / 28.8 s /
+11.4 s, then un-relegated the same day: measured serially on an idle machine the slowest is **2.32 s**
+and both files together are ~10 s. Two compounding artifacts —
+`atomistic_minimisers._XB_CACHE` is a **module-level in-memory** cache, so under `-n auto` every xdist
+worker starts cold and whichever test lands first pays the entire one-time minimisation; and the
+sweep also ran while a +p16 NAMD job owned all 16 cores with pytest niced below it.
+
+The tell was visible and missed: the violator named a **different test on every run**
+(T-12 → TT → `test_repaired_build_is_deterministic` → `test_repair_does_not_degrade_geometry`).
+Four heavy tests do not take turns; one shared setup cost does.
+
+**How to avoid:** before relegating anything, re-run the file **alone, serially, on an idle box**:
+`uv run pytest <file> -m "" --durations=0 -p no:randomly`. A first-test-pays-the-cache cost is not
+test weight, and relegating for it is exactly the ratchet the scale-free per-test gate exists to
+prevent. (The guard now suppresses the budget check entirely while a production sim is running.)
