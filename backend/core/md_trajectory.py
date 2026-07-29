@@ -332,6 +332,52 @@ def _extract_md_nadoc_frame(ctx: dict, frame_idx: int, with_c1p: bool = False,
     return p_nm, normals
 
 
+def _build_heavy_anchor_rows(heavy_ag, dna_p) -> "np.ndarray":
+    """For each heavy atom, the ROW in ``dna_p`` whose P anchors its residue-local
+    reconstruction (-1 when none can be found).
+
+    Pure topology — residue index first, then a nearby resid in the same segment (a 5'
+    terminal residue has no P of its own; psfgen strips it), then the nearest resid in
+    that segment. Identical every frame, so it is built once per context.
+
+    Ties resolve LAST-wins, matching the dict-comprehension this replaced: a residue
+    carrying more than one P must keep addressing the same one as before.
+    """
+    p_row_by_res: dict[int, int] = {}
+    p_row_by_key: dict[tuple[str, int], int] = {}
+    p_resids_by_seg: dict[str, list[int]] = {}
+    for row, a in enumerate(dna_p):
+        res_ix = int(a.residue.ix)
+        segid = str(getattr(a.residue, "segid", "") or getattr(a, "segid", ""))
+        resid = int(a.residue.resid)
+        p_row_by_res[res_ix] = row
+        p_row_by_key[(segid, resid)] = row
+        p_resids_by_seg.setdefault(segid, []).append(resid)
+    for segid in p_resids_by_seg:
+        p_resids_by_seg[segid].sort()
+
+    def _row_for(atom) -> int:
+        row = p_row_by_res.get(int(atom.residue.ix))
+        if row is not None:
+            return row
+        segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
+        resid = int(atom.residue.resid)
+        for delta_resid in (1, -1, 2, -2):
+            near = p_row_by_key.get((segid, resid + delta_resid))
+            if near is not None:
+                return near
+        candidates = p_resids_by_seg.get(segid)
+        if candidates:
+            nearest = min(candidates, key=lambda r: abs(r - resid))
+            near = p_row_by_key.get((segid, nearest))
+            if near is not None:
+                return near
+        return -1
+
+    return np.fromiter((_row_for(a) for a in heavy_ag), dtype=np.int64,
+                       count=len(heavy_ag))
+
+
 def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
     """DNA heavy-atom coordinates (nm, NADOC frame) for one DCD frame, as
     ``[{serial, element, strand_id, helix_id, bp_index, direction, x, y, z}, …]``.
@@ -387,48 +433,28 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
 
             # Residue-local reconstruction: heavy atom = corrected P +
             # minimum-image(raw atom − raw P), anchored to each residue's P.
-            p_raw_by_res = {int(a.residue.ix): p_raw[i] for i, a in enumerate(dna_p)}
-            p_pre_by_res = {int(a.residue.ix): p_pre[i] for i, a in enumerate(dna_p)}
-            p_res_by_key: dict[tuple[str, int], int] = {}
-            p_resids_by_seg: dict[str, list[int]] = {}
-            for a in dna_p:
-                segid = str(getattr(a.residue, "segid", "") or getattr(a, "segid", ""))
-                resid = int(a.residue.resid)
-                p_res_by_key[(segid, resid)] = int(a.residue.ix)
-                p_resids_by_seg.setdefault(segid, []).append(resid)
-            for segid in p_resids_by_seg:
-                p_resids_by_seg[segid].sort()
-
-            def _anchor_residue_ix(atom):
-                res_ix = int(atom.residue.ix)
-                if res_ix in p_raw_by_res:
-                    return res_ix
-                segid = str(getattr(atom.residue, "segid", "") or getattr(atom, "segid", ""))
-                resid = int(atom.residue.resid)
-                for delta_resid in (1, -1, 2, -2):
-                    near = p_res_by_key.get((segid, resid + delta_resid))
-                    if near is not None:
-                        return near
-                candidates = p_resids_by_seg.get(segid)
-                if candidates:
-                    nearest_resid = min(candidates, key=lambda r: abs(r - resid))
-                    return p_res_by_key.get((segid, nearest_resid))
-                return None
+            #
+            # Which P anchors which heavy atom is a TOPOLOGY question (residue ix, segid,
+            # resid) — identical for every frame of the run. Resolving it per frame meant
+            # ~302 k MDAnalysis `.residue` lookups each time, which profiling showed was
+            # the bulk of a 2.25 s frame. Build it ONCE per context and reuse.
+            anchor_rows = ctx.get("_heavy_anchor_rows")
+            if anchor_rows is None:
+                anchor_rows = _build_heavy_anchor_rows(ag, dna_p)
+                ctx["_heavy_anchor_rows"] = anchor_rows
 
             pos_pre = pos_nm.copy()
-            for i, a in enumerate(ag):
-                res_ix = _anchor_residue_ix(a)
-                if res_ix is None:
-                    continue
-                p0 = p_raw_by_res.get(res_ix)
-                pc = p_pre_by_res.get(res_ix)
-                if p0 is None or pc is None:
-                    continue
-                delta = pos_raw[i] - p0
-                for d in range(3):
-                    if box_nm[d] > 0:
-                        delta[d] -= np.round(delta[d] / box_nm[d]) * box_nm[d]
-                pos_pre[i] = pc + delta
+            have = anchor_rows >= 0
+            if have.any():
+                rows = anchor_rows[have]
+                # Vectorized min-image: one array op instead of 3 scalar np.round calls
+                # per atom (906 k of them per frame on a 300 k-atom system).
+                delta = pos_raw[have] - p_raw[rows]
+                box = np.asarray(box_nm, dtype=float)
+                good = box > 0
+                if good.any():
+                    delta[:, good] -= np.round(delta[:, good] / box[good]) * box[good]
+                pos_pre[have] = p_pre[rows] + delta
 
             if (eq_centered is not None and eq_centroid is not None
                     and len(eq_centered) == len(p_pre)):
@@ -465,42 +491,134 @@ class _SurfAtom:
         self.strand_id = strand_id
 
 
+def composite_raw_frame_map(segments, max_frames: int = 200,
+                            stride: int | None = None) -> list[int]:
+    """Composite frame index → RAW (concatenated-universe) frame index.
+
+    The bead trajectory the user scrubs is DOWNSAMPLED, so its frame 12 is not the
+    universe's frame 12.  Anything that renders "the same frame" a different way —
+    the per-frame heavy atoms and surface — has to translate first, or the atomistic
+    view silently shows a different point in the run than the beads next to it.
+    Reads DCD headers only (no coordinates), and takes the SAME ``max_frames``/
+    ``stride`` the trajectory was built with, since a frame index only means the same
+    thing within one downsample."""
+    from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
+
+    counts = []
+    for _name, _kind, dcd in segments:
+        try:
+            counts.append(len(DCDReader(str(dcd))))
+        except Exception:
+            counts.append(0)
+    return [g for seg in _composite_indices(counts, max_frames, stride) for g in seg]
+
+
+def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict:
+    """The NAMD job's STATIC heavy-atom set → ``{atoms, bonds, n_serials}``.
+
+    Atom identity (serial/element/strand/helix/bp/direction) does not change frame to
+    frame, so the display fetches it ONCE and then streams coordinates only.  Sending it
+    per frame is what made an all-atom trajectory unaffordable: 302 k atoms as JSON
+    objects is ~53 MB and ~72 MB of JavaScript objects *per frame*, against 5.4 MB for
+    the same frame's coordinates alone.
+
+    ``n_serials`` = max serial + 1, i.e. the length a serial-indexed position array must
+    have.  MD serials are the atom's index in the whole SOLVATED universe, so they are
+    sparse (302 197 heavy atoms spread over 0…469 349) — the gaps cost ~1.5x memory and
+    are worth it: ``applyPositionLerp`` indexes by serial, so renumbering would have to
+    stay in lockstep with every other MD atom path.
+
+    Positions are frame 0's, so the model alone renders a valid structure."""
+    seg_paths = [s[2] for s in segments]
+    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
+                              with_atoms=True)
+    atoms = _extract_md_atoms_frame(ctx, 0) if ctx["n_frames"] > 0 else []
+    n_serials = (max((int(a["serial"]) for a in atoms), default=-1) + 1)
+    # bonds: [] is the established NAMD contract (ws.py's live ballstick + the animation
+    # player both render MD atoms unbonded) — not an omission introduced here.
+    # bonds_available=False is a DECLARATION, not just an empty list: it tells the display
+    # there is nothing more to fetch, so flipping vdw→ball-and-stick doesn't re-run this
+    # ~30 s reconstruction hunting for bonds that were never going to arrive.
+    return {"atoms": atoms, "bonds": [], "bonds_available": False,
+            "n_serials": n_serials, "n_atoms": len(atoms)}
+
+
 def md_frames_atomistic(topology_path, segments, coordinate_path, design,
-                        frame_indices) -> dict:
-    """Per-frame DNA heavy atoms for the given composite-frame indices →
+                        frame_indices, max_frames: int = 200,
+                        stride: int | None = None,
+                        positions_only: bool = False) -> dict:
+    """Per-frame DNA heavy atoms for the given COMPOSITE-trajectory frame indices →
     ``{ "<idx>": {atoms:[{serial,element,strand_id,helix_id,bp_index,direction,x,y,z}],
     bonds:[]} }``. The atom set is the
     NAMD model's own DNA heavy atoms (Phase 2b renders these directly rather than
-    mapping onto the design's idealized template)."""
+    mapping onto the design's idealized template).
+
+    Keys are the caller's COMPOSITE indices; the frame each one reads is translated
+    through :func:`composite_raw_frame_map`, so pass the same ``stride`` the
+    trajectory was loaded with.
+
+    ``positions_only`` switches to the form an all-atom trajectory can actually afford:
+    ``{ "<idx>": [x0,y0,z0, …] }`` indexed by SERIAL (gaps zero-filled), to be paired
+    with one :func:`md_atomistic_model` fetch.  ~10x smaller on the wire and no
+    per-frame JavaScript objects at all — see that function's note on the arithmetic.
+
+    Batching many indices into ONE call matters: the context build (PSF parse + model)
+    costs ~32 s on a 300 k-atom system against ~2.8 s per additional frame, and it is
+    paid once per CALL, not once per frame."""
     seg_paths = [s[2] for s in segments]
     ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
                               with_atoms=True)
     n = ctx["n_frames"]
-    out: dict[str, dict] = {}
+    raw_of = composite_raw_frame_map(segments, max_frames, stride)
+    n_serials = 0
+    if positions_only:
+        n_serials = max((int(m["serial"]) for m in (ctx.get("atom_meta") or [])),
+                        default=-1) + 1
+    out: dict[str, object] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
-        if idx < 0 or idx >= n:
+        if idx < 0 or idx >= len(raw_of):
             continue
-        out[str(idx)] = {"atoms": _extract_md_atoms_frame(ctx, idx), "bonds": []}
+        gidx = raw_of[idx]
+        if gidx >= n:
+            continue
+        atoms = _extract_md_atoms_frame(ctx, gidx)
+        if positions_only:
+            flat = [0.0] * (n_serials * 3)
+            for a in atoms:
+                s = int(a["serial"]) * 3
+                flat[s] = round(a["x"], 4)
+                flat[s + 1] = round(a["y"], 4)
+                flat[s + 2] = round(a["z"], 4)
+            out[str(idx)] = flat
+        else:
+            out[str(idx)] = {"atoms": atoms, "bonds": []}
     return out
 
 
 def md_frames_surface(topology_path, segments, coordinate_path, design, frame_indices,
                       probe_radius: float = 0.28, grid_spacing: float = 0.20,
-                      radius_inflate: float = 1.30, smooth: int = 15, **_ignore) -> dict:
+                      radius_inflate: float = 1.30, smooth: int = 15,
+                      max_frames: int = 200, stride: int | None = None,
+                      **_ignore) -> dict:
     """Per-frame molecular surface from the NAMD DNA heavy atoms → surface-batch
-    shape ``{ "<idx>": {vertices, faces} }`` (uniform colour for v1)."""
+    shape ``{ "<idx>": {vertices, faces} }`` (uniform colour for v1).  Indices are
+    COMPOSITE, translated like md_frames_atomistic's."""
     from backend.core.surface import compute_surface, smooth_mesh
 
     seg_paths = [s[2] for s in segments]
     ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
                               with_atoms=True)
     n = ctx["n_frames"]
+    raw_of = composite_raw_frame_map(segments, max_frames, stride)
     out: dict[str, dict] = {}
     for idx in sorted(set(int(i) for i in frame_indices)):
-        if idx < 0 or idx >= n:
+        if idx < 0 or idx >= len(raw_of):
+            continue
+        gidx = raw_of[idx]
+        if gidx >= n:
             continue
         atoms = [_SurfAtom(a["x"], a["y"], a["z"], a["element"], a.get("strand_id", ""))
-                 for a in _extract_md_atoms_frame(ctx, idx)]
+                 for a in _extract_md_atoms_frame(ctx, gidx)]
         mesh = compute_surface(atoms, grid_spacing=grid_spacing,
                                probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
         mesh = smooth_mesh(mesh, iterations=smooth)
@@ -785,11 +903,15 @@ def md_metric_series(topology_path, segments, coordinate_path, design,
     }
 
 
-def md_composite_meta(segments, max_frames: int = 200) -> dict:
+def md_composite_meta(segments, max_frames: int = 200, stride: int | None = None) -> dict:
     """Lightweight metadata for the NAMD composite — ``{n_frames, markers, stages}``
     — from DCD frame counts only (DCD header, no PSF parse, no coordinate read), so
-    the trajectory-keyframe slider sizes itself in milliseconds. Replicates
-    md_composite_trajectory's per-segment downsample so indices match exactly."""
+    the trajectory-keyframe slider sizes itself in milliseconds. Shares
+    :func:`_composite_indices` with md_composite_trajectory so indices match exactly.
+
+    ``stages`` entries also carry ``n_raw`` (the segment's undownsampled DCD frame
+    count) and the payload carries ``total_raw``, so a caller can show "N of M frames"
+    or recompute the count for a different ``stride`` without another request."""
     from MDAnalysis.coordinates.DCD import DCDReader  # type: ignore
 
     counts = []
@@ -801,21 +923,23 @@ def md_composite_meta(segments, max_frames: int = 200) -> dict:
         counts.append((name, kind, n))
     total = sum(c for _, _, c in counts)
     if total == 0:
-        return {"n_frames": 0, "stages": [], "markers": []}
+        return {"n_frames": 0, "stages": [], "markers": [], "total_raw": 0}
 
+    picked = _composite_indices([c for _, _, c in counts], max_frames, stride)
     out_n = 0
     out_stages: list[dict] = []
     markers: list[dict] = []
-    for name, kind, c in counts:
+    for (name, kind, c), keep_idxs in zip(counts, picked):
         if c <= 0:
             continue
-        keep = max(1, round(c * max_frames / total)) if total > max_frames else c
         if out_n:
             markers.append({"frame": out_n, "label": f"→ {name}",
                             "kind": kind or "md", "stage_name": name})
-        out_stages.append({"name": name, "kind": kind or "md", "n_frames": keep})
-        out_n += keep
-    return {"n_frames": out_n, "stages": out_stages, "markers": markers}
+        out_stages.append({"name": name, "kind": kind or "md",
+                           "n_frames": len(keep_idxs), "n_raw": c})
+        out_n += len(keep_idxs)
+    return {"n_frames": out_n, "stages": out_stages, "markers": markers,
+            "total_raw": total}
 
 
 def _stride_pick(items: list, keep: int) -> list:
@@ -825,15 +949,51 @@ def _stride_pick(items: list, keep: int) -> list:
         if keep > 1 else [items[0]]
 
 
+def _composite_indices(seg_counts, max_frames: int = 200,
+                       stride: int | None = None) -> list[list[int]]:
+    """Which GLOBAL (concatenated-universe) frame indices the composite keeps, per
+    segment.  The single source of truth for both md_composite_meta and
+    md_composite_trajectory — they used to carry separate copies of this arithmetic,
+    and any drift between them desyncs the slider from the frames it scrubs.
+
+    Two modes:
+
+    * ``stride is None`` — the legacy budget: at most ``max_frames`` frames TOTAL,
+      split across segments in proportion to their length (≥1 each), evenly picked
+      within a segment.  Unchanged, index for index.
+    * ``stride >= 1`` — a user-set frame INTERVAL, applied per segment (frames
+      ``0, stride, 2*stride, …`` of each written segment), which is what VMD's DCD
+      stride does to each loaded file.  Every non-empty segment therefore keeps at
+      least its own frame 0, so the segment-boundary markers stay meaningful.
+    """
+    counts = [int(c) for c in seg_counts]
+    total = sum(c for c in counts if c > 0)
+    out: list[list[int]] = []
+    offset = 0
+    for count in counts:
+        if count <= 0:
+            out.append([])
+            continue
+        global_idxs = list(range(offset, offset + count))
+        if stride is not None and stride >= 1:
+            out.append(global_idxs[::int(stride)])
+        else:
+            keep = max(1, round(count * max_frames / total)) if total > max_frames else count
+            out.append(_stride_pick(global_idxs, keep))
+        offset += count
+    return out
+
+
 def md_composite_trajectory(topology_path, segments, coordinate_path, design,
-                            max_frames: int = 200) -> dict:
+                            max_frames: int = 200, stride: int | None = None) -> dict:
     """Composite scrub-able NAMD trajectory for a trajectory keyframe.
 
     ``segments`` = ordered ``[(name, stage, dcd_path), …]`` (every segment that has
     written a DCD). All DCDs load into ONE MDAnalysis Universe (continuous frame
-    index); frames are downsampled per segment (≥1 each) to ≤ ``max_frames`` with a
-    boundary marker at each segment start. Returns the same shape as
-    ``oxdna_health.composite_trajectory``."""
+    index); frames are downsampled per segment via :func:`_composite_indices` — either
+    the legacy ``max_frames`` budget or, when ``stride`` is given, a user-set frame
+    INTERVAL (every Nth frame of each segment) — with a boundary marker at each segment
+    start. Returns the same shape as ``oxdna_health.composite_trajectory``."""
     import MDAnalysis as mda  # type: ignore
 
     seg_paths = [s[2] for s in segments]
@@ -858,17 +1018,14 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
         return {"n_frames": 0, "n_nucleotides": len(key_list),
                 "keys": key_list, "frames": [], "stages": [], "markers": []}
 
+    seg_picked = _composite_indices(seg_counts, max_frames, stride)
     out_frames: list[list[float]] = []
     out_stages: list[dict] = []
     markers: list[dict] = []
-    offset = 0
     run_no = 0
-    for (name, stage, _dcd), count in zip(segments, seg_counts):
+    for (name, stage, _dcd), count, picked in zip(segments, seg_counts, seg_picked):
         if count <= 0:
             continue
-        global_idxs = list(range(offset, offset + count))
-        keep = max(1, round(count * max_frames / total)) if total > max_frames else count
-        picked = _stride_pick(global_idxs, keep)
         if out_frames:
             run_no += 1
             markers.append({"frame": len(out_frames), "label": f"→ {name}",
@@ -890,7 +1047,6 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
                 else:
                     flat.extend((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
             out_frames.append(flat)
-        offset += count
 
     return {"n_frames": len(out_frames), "n_nucleotides": len(key_list),
             "keys": key_list, "frames": out_frames,

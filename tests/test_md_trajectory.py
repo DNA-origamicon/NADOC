@@ -103,6 +103,15 @@ def test_md_composite_meta_matches_full():
     meta = md_composite_meta(segments)
     assert meta["n_frames"] == full["n_frames"]
     assert [m["frame"] for m in meta["markers"]] == [m["frame"] for m in full["markers"]]
+    # …and for a user-set frame interval, which is what the panel's readout promises.
+    full7 = md_composite_trajectory(_PSF, segments, _REF, design, stride=7)
+    meta7 = md_composite_meta(segments, stride=7)
+    assert meta7["n_frames"] == full7["n_frames"]
+    assert [m["frame"] for m in meta7["markers"]] == [m["frame"] for m in full7["markers"]]
+    # Raw counts are what the panel prices other intervals against — they must describe
+    # what is ON DISK, not what this response downsampled to.
+    assert meta7["total_raw"] == sum(s["n_raw"] for s in meta7["stages"])
+    assert meta7["total_raw"] >= meta7["n_frames"]
 
 
 @skip_no_fixture

@@ -25,6 +25,7 @@ import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_sta
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
+import { prebuildMemoryPlan } from './oxdna_display.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
 import { gateAMessage, openGateAModal } from './md_gate_a.js'
@@ -62,6 +63,26 @@ export const DEFAULT_PRODUCTION_TIMESTEP_FS = 4.0
 export function productionNsFromSteps(steps, timestepFs = DEFAULT_PRODUCTION_TIMESTEP_FS) {
   const ts = Number(timestepFs) > 0 ? Number(timestepFs) : DEFAULT_PRODUCTION_TIMESTEP_FS
   return (Number(steps) || 0) * ts / 1_000_000
+}
+// "View trajectory" frame interval: load every Nth frame of each written segment, the
+// same idea as the stride field when a DCD is imported into VMD.  The DEFAULT lives in
+// index.html's `value=` attribute (form_defaults reads el.defaultValue) — this constant is
+// only the fallback for an unreadable/empty field.
+export const DEFAULT_TRAJ_INTERVAL = 20
+// Past this many frames a load is slow and memory-hungry enough to be worth confirming
+// rather than silently starting.  Warn, don't cap — the user asked for the frames.
+export const TRAJ_FRAME_CONFIRM = 500
+/** Pure: how many frames a given interval will actually load, given each written
+ *  segment's raw DCD frame count.  Mirrors the backend's `_composite_indices` stride
+ *  branch exactly — every segment is strided on its own (so a non-empty segment always
+ *  keeps at least its own frame 0), hence ceil per segment rather than over the total. */
+export function stridedFrameCount(rawCountsPerSegment, interval) {
+  const s = Math.max(1, Math.floor(Number(interval)) || 1)
+  if (!Array.isArray(rawCountsPerSegment)) return 0
+  return rawCountsPerSegment.reduce((n, c) => {
+    const raw = Math.floor(Number(c)) || 0
+    return n + (raw > 0 ? Math.ceil(raw / s) : 0)
+  }, 0)
 }
 /** Pure: the production timestep a prepared job will actually use — its stored
  *  `production_timestep_fs` (Advanced card), or the legacy fast?4:1 derivation for
@@ -811,6 +832,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const trajSlider   = document.getElementById('md-jobs-traj-slider')
   const trajMarkers  = document.getElementById('md-jobs-traj-markers')
   const trajLabel    = document.getElementById('md-jobs-traj-label')
+  const trajOpts       = document.getElementById('md-jobs-traj-opts')
+  const trajInterval   = document.getElementById('md-jobs-traj-interval')
+  const trajFramesHint = document.getElementById('md-jobs-traj-frames-hint')
 
   // ── State ──────────────────────────────────────────────────────────────────
   let _jobs         = []     // cached list from API
@@ -832,6 +856,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   let _prewarmKey   = null
   let _listSig      = null   // last-rendered list signature (avoids spinner-restart churn)
   const _legend     = { el: null }   // status-symbol legend, inserted once after the list (renderJobList memo)
+  // job_id → per-segment RAW DCD frame counts, from the header-only /trajectory-meta read.
+  // Prices the "→ N frames" readout for any interval without a round trip per keystroke.
+  const _trajRawCounts = new Map()
+  // Host MemAvailable, briefly cached — read once per prebuild decision, never polled.
+  let _ramCache = null
   const _collapsedParents = new Set()   // parent job_ids whose child rows are hidden (chevron)
   const _autoCollapsed    = new Set()   // ensemble parents we've already default-collapsed once
   let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
@@ -1331,10 +1360,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     resetControlsToDefaults([
       presetSel, threadsInput, devicesInput, saltModeSel, mgInput, naclInput,
       paddingInput, watershellInput, minstepsInput, autostartChk, prodStepsInput,
+      trajInterval,
     ])
     _threadsInit = false
     _applySaltMode()
     _checkEngines()
+    _renderTrajFramesHint()
   }
 
   function _currentPartPath() {
@@ -1914,16 +1945,133 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _setTrajStatus('', _C.dim)
     _syncVizOffRadio()
   }
+  // Frame interval, clamped in JS — the min/max attributes are a hint to the browser,
+  // not a guarantee (same rule as _productionSteps).
+  function _trajInterval() {
+    const n = parseInt(trajInterval?.value ?? '', 10)
+    return Number.isFinite(n) && n >= 1 ? n : DEFAULT_TRAJ_INTERVAL
+  }
+  /** Raw per-segment DCD frame counts for the selected job, cached per job id.  Comes
+   *  from the header-only /trajectory-meta read, so the "→ N frames" readout can be
+   *  recomputed as the user types without touching the network. */
+  async function _loadTrajRawCounts(jobId, { refetch = false } = {}) {
+    if (!jobId) return null
+    if (!refetch && _trajRawCounts.has(jobId)) return _trajRawCounts.get(jobId)
+    const meta = await api.getMdTrajectoryMeta(jobId).catch(() => null)
+    if (!meta?.ready) return null
+    const counts = (meta.stages || []).map(s => Number(s.n_raw) || 0)
+    _trajRawCounts.set(jobId, counts)
+    if (jobId === _selectedId) _renderTrajFramesHint()
+    return counts
+  }
+  function _renderTrajFramesHint() {
+    if (!trajFramesHint) return
+    const counts = _selectedId ? _trajRawCounts.get(_selectedId) : null
+    if (!counts || !counts.length) { trajFramesHint.textContent = ''; return }
+    const frames = stridedFrameCount(counts, _trajInterval())
+    const raw = counts.reduce((n, c) => n + c, 0)
+    trajFramesHint.textContent =
+      `→ ${frames.toLocaleString()} frame${frames === 1 ? '' : 's'} of ${raw.toLocaleString()} written`
+    trajFramesHint.style.color = frames >= TRAJ_FRAME_CONFIRM ? _C.warn : _C.dim
+  }
+  /** Gate a heavy load behind a confirm once the interval asks for a lot of frames.
+   *  Warn, never cap — the frames were explicitly requested. */
+  function _confirmTrajLoad() {
+    const counts = _selectedId ? _trajRawCounts.get(_selectedId) : null
+    if (!counts || !counts.length) return true
+    const frames = stridedFrameCount(counts, _trajInterval())
+    if (frames < TRAJ_FRAME_CONFIRM) return true
+    return window.confirm(
+      `Frame interval ${_trajInterval()} loads ${frames.toLocaleString()} frames.\n\n`
+      + 'That can take several minutes and a lot of memory. Continue?')
+  }
+  /** Build every atomistic/surface frame the trajectory will need, UP FRONT.
+   *
+   *  Reconstructing them lazily as the user scrubs is what made an all-atom trajectory
+   *  feel broken: each first visit to a frame is a fresh backend analysis (the MD
+   *  context — PSF parse + model — is rebuilt per request, ~32 s on a 300 k-atom system
+   *  against ~2.8 s per extra frame in the same call), so scrubbing stalled repeatedly.
+   *  One batched prebuild pays that context cost once.
+   *
+   *  No-op for the CG bead rep, which is instant and needs nothing baked. */
+  /** Host MemAvailable in bytes, or null when unknown. Cached briefly — this is asked
+   *  once per prebuild decision, not polled. The backend runs on the same machine as the
+   *  browser (localhost), so its reading is the right one; if it ever isn't, `null` is
+   *  the honest answer and the fixed budget still applies. */
+  async function _freeRamBytes() {
+    const now = Date.now()
+    if (_ramCache && now - _ramCache.at < 10_000) return _ramCache.bytes
+    const r = await api.getSystemResources?.().catch(() => null)
+    const mb = Number(r?.ram_available_mb)
+    const bytes = Number.isFinite(mb) && mb > 0 ? mb * 1024 * 1024 : null
+    _ramCache = { at: now, bytes }
+    return bytes
+  }
+
+  /** What an all-atom prebuild for the loaded trajectory would cost on THIS machine. */
+  async function _trajMemoryPlan(v) {
+    const info = v?.trajectoryInfo?.() || {}
+    const nFrames = Number(info.total) || 0
+    if (!nFrames) return null
+    return prebuildMemoryPlan({
+      nFrames,
+      nSerials: Number(info.atomSerials) || 0,
+      nNucleotides: Number(info.nNucleotides) || 0,
+      availableBytes: await _freeRamBytes(),
+    })
+  }
+
+  const _LIMIT_WHY = {
+    ram: 'free RAM', heap: 'browser memory limit', budget: 'memory budget',
+  }
+
+  async function _prebuildTrajHeavy(v, baseStatus) {
+    if (typeof v?.prebuildHeavy !== 'function') return
+    const plan = await _trajMemoryPlan(v)
+    // Warn BEFORE spending minutes rebuilding frames that won't fit. The estimate uses
+    // the exact serial span once the topology is known and a per-nucleotide estimate
+    // before that, so the first load is priced too rather than silently attempted.
+    if (plan?.capped && plan.limitedBy === 'ram') {
+      const free = await _freeRamBytes()
+      const ok = window.confirm(
+        `The full atomistic trajectory needs about ${formatBytes(plan.wantBytes)}, but only `
+        + `${formatBytes(free ?? 0)} of memory is free on this machine.\n\n`
+        + `Loading all ${_trajTotalFrames(v)} frames could exhaust it. `
+        + `Prepare ${plan.frames} evenly-spaced frames instead?`)
+      if (!ok) { _setTrajStatus(`${baseStatus} · atoms not prepared`, _C.warn); return }
+    }
+    const r = await v.prebuildHeavy((done, total) => {
+      _setTrajStatus(`${baseStatus} · preparing atoms ${done}/${total}…`, _C.accent)
+    }, { budgetBytes: plan?.budgetBytes ?? null }).catch(() => null)
+    if (!r || !r.n) { _setTrajStatus(baseStatus, _C.ok); return }   // CG, or cancelled
+    // Say plainly when memory forced a coarser set than the slider has — and WHICH limit
+    // bound — otherwise the atomistic view silently snaps to neighbours and looks laggy.
+    const why = _LIMIT_WHY[plan?.limitedBy] || 'memory limit'
+    _setTrajStatus(
+      r.capped
+        ? `${baseStatus} · atoms: ${r.frames} of ${r.trajFrames} frames (${why})`
+        : `${baseStatus} · atoms ready (${r.frames} frames)`,
+      r.capped ? _C.warn : _C.ok)
+  }
+
+  function _trajTotalFrames(v) { return Number(v?.trajectoryInfo?.()?.total) || 0 }
+
   async function _refreshTraj() {
     const v = getMdViz?.()
     if (!_selectedId || !v) return
+    const interval = _trajInterval()
     _setTrajStatus('Loading trajectory…', _C.accent)
-    const r = await v.loadTrajectory(_selectedId)
+    const r = await v.loadTrajectory(_selectedId, true, 'lineage', interval)
     if (r.ok) {
       if (trajControls) trajControls.style.display = ''
       trajPlayer.setTrajectory(r.n_frames, r.markers)
       const nStages = (r.stages || []).length
-      _setTrajStatus(`${r.n_frames} frames · ${nStages} segment${nStages === 1 ? '' : 's'}`, _C.ok)
+      const base =
+        `${r.n_frames} frames · ${nStages} segment${nStages === 1 ? '' : 's'} · every ${interval}`
+      _setTrajStatus(base, _C.ok)
+      // A running job keeps writing — re-price the hint against what's on disk now.
+      _loadTrajRawCounts(_selectedId, { refetch: true })
+      await _prebuildTrajHeavy(v, base)
     } else {
       if (trajToggle) trajToggle.checked = false
       if (trajControls) trajControls.style.display = 'none'
@@ -1936,12 +2084,34 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (!_mdHasTrajectory(_selectedJob())) {
         trajToggle.checked = false; _setTrajStatus('No trajectory yet', _C.warn); _syncVizOffRadio(); return
       }
+      if (!_confirmTrajLoad()) { trajToggle.checked = false; _syncVizOffRadio(); return }
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
       _setFlexOff()
       await _refreshTraj()
     } else {
       _setTrajOff()
     }
+  })
+  // Typing re-prices the readout (free); committing the field reloads at the new density
+  // ('change', not 'input' — one fetch per edit, not one per keystroke).
+  trajInterval?.addEventListener('input', _renderTrajFramesHint)
+  trajInterval?.addEventListener('change', async () => {
+    _renderTrajFramesHint()
+    if (!trajToggle?.checked) return
+    if (!_confirmTrajLoad()) return
+    await _refreshTraj()
+  })
+  _renderTrajFramesHint()
+  // Switching CG → atomistic/surface mid-scrub needs the same up-front build as loading
+  // the trajectory did; without it the first switch drops back to reconstructing frames
+  // one stall at a time. The controller re-applies the current frame on this event
+  // (main.js → reapplyForRepr); this fills the cache behind it.
+  window.addEventListener('nadoc:representation-change', () => {
+    if (!trajToggle?.checked || !_selectedId) return
+    const v = getMdViz?.()
+    if (v?.mode?.() !== 'trajectory') return
+    const base = (trajStatus?.textContent || '').split(' · preparing')[0].split(' · atoms')[0]
+    _prebuildTrajHeavy(v, base)
   })
 
   // Enable/disable one view radio + dim its label.
@@ -1964,6 +2134,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _setRadioEnabled(trajToggle, hasTraj)
     if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
     if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked) _setTrajOff() }
+    // Interval row only means anything for a job with frames on disk; its readout needs
+    // that job's raw per-segment counts (header-only fetch, fire-and-forget).
+    if (trajOpts) trajOpts.style.display = hasTraj ? 'flex' : 'none'
+    if (hasTraj && _selectedId) _loadTrajRawCounts(_selectedId)
+    _renderTrajFramesHint()
     _syncVizOffRadio()
   }
 

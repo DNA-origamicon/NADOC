@@ -2513,11 +2513,34 @@ export const mdArchiveStatus     = (id)          => _oxdnaJSON('GET',  `/md/jobs
 export const fsListDir           = (path)        => _oxdnaJSON('GET',  `/fs/listdir${path ? `?path=${encodeURIComponent(path)}` : ''}`)
 /** Create a folder under an absolute host path; returns the refreshed listing. */
 export const fsMkdir             = (path, name)  => _oxdnaJSON('POST', '/fs/mkdir', { path, name })
+/** `?stride=N` when N is a usable frame interval, else ''. Kept out of the two
+ *  fetchers below so they can't disagree about what counts as "no interval" —
+ *  omitting it is what preserves the legacy 200-frame budget server-side. */
+function _strideQuery(opts) {
+  const s = _strideOrNull(opts)
+  return s == null ? '' : `?stride=${s}`
+}
+function _strideOrNull(opts) {
+  const s = Number(opts?.stride)
+  return Number.isFinite(s) && s >= 1 ? Math.floor(s) : null
+}
+/** Same rule for the POST bodies — omit the key entirely when there's no usable
+ *  interval, so the backend keeps its legacy downsample rather than seeing a null. */
+function _strideBody(opts) {
+  const s = _strideOrNull(opts)
+  return s == null ? {} : { stride: s }
+}
 /** Composite NAMD trajectory ({keys, frames, markers, stages}) — same shape as
- *  getOxdnaTrajectory, so the animation trajectory path is shared. */
-export const getMdTrajectory     = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory`, undefined, { signal })
-/** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast. */
-export const getMdTrajectoryMeta = (id)          => _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory-meta`)
+ *  getOxdnaTrajectory, so the animation trajectory path is shared.
+ *  `opts.stride` = frame interval (every Nth frame of each segment, VMD-style);
+ *  omit it for the legacy ≤200-frame budget. It is a third positional OBJECT, never
+ *  a bare value, so it can't be mistaken for `signal` (see _oxdnaJSON's type check). */
+export const getMdTrajectory     = (id, signal, opts = {}) =>
+  _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory${_strideQuery(opts)}`, undefined, { signal })
+/** Frame count + segment markers only (no coordinates) — sizes the trajectory slider fast.
+ *  Also returns `total_raw` + per-stage `n_raw` (undownsampled DCD counts). */
+export const getMdTrajectoryMeta = (id, opts = {})       =>
+  _oxdnaJSON('GET',  `/md/jobs/${id}/trajectory-meta${_strideQuery(opts)}`)
 /** Per-nucleotide flexibility map (RMSF) over the NAMD run — same shape as
  *  getOxdnaRmsf, so the flexibility-map display code is shared. */
 export const getMdRmsf           = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`, undefined, { signal })
@@ -2527,12 +2550,22 @@ export const getMdRmsf           = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs
 export const cancelMdAnalysis = (id, kind) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/analysis/cancel${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`)
     .catch(() => null)
-/** Per-frame NAMD heavy atoms ({idx:{atoms,bonds}}) for trajectory frame indices. */
-export const getMdFramesAtomistic = (id, frameIndices) =>
-  _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`, { frame_indices: frameIndices })
-/** Per-frame NAMD surface ({idx:{vertices,faces}}) for trajectory frame indices. */
+/** Per-frame NAMD heavy atoms ({idx:{atoms,bonds}}) for COMPOSITE trajectory frame
+ *  indices. `opts.stride` must repeat the interval the trajectory was loaded with —
+ *  a frame index only addresses the same frame within one interval. */
+export const getMdFramesAtomistic = (id, frameIndices, opts = {}) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/frames-atomistic`,
+    { frame_indices: frameIndices, ..._strideBody(opts),
+      ...(opts.positionsOnly ? { positions_only: true } : {}) })
+/** The NAMD job's STATIC heavy-atom set ({atoms, bonds, n_serials}) — fetch once, then
+ *  stream coordinates with getMdFramesAtomistic(..., {positionsOnly:true}). Same
+ *  contract as getOxdnaAtomisticModel. */
+export const getMdAtomisticModel = (id) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/atomistic-model`)
+/** Per-frame NAMD surface ({idx:{vertices,faces}}) for COMPOSITE trajectory frame indices. */
 export const getMdFramesSurface = (id, frameIndices, params = {}) =>
-  _oxdnaJSON('POST', `/md/jobs/${id}/frames-surface`, { frame_indices: frameIndices, ...params })
+  _oxdnaJSON('POST', `/md/jobs/${id}/frames-surface`,
+    { frame_indices: frameIndices, ...params, ..._strideBody(params) })
 
 /** MD "Graphs and Metrics" — launch a background twist/curvature/base-pairing compute for a
  *  NAMD job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getMdMetricsRun`. Same shape

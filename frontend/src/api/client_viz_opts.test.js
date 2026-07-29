@@ -67,12 +67,24 @@ describe('viz fetchers reject the legacy positional forms LOUDLY', () => {
 
 describe('_oxdnaJSON choke point: a non-AbortSignal signal never reaches fetch', () => {
   it('rejects with a named, actionable TypeError', async () => {
-    // getMdTrajectory still takes a positional (id, signal) — it has no align — so this
+    // getMdTrajectory takes a positional (id, signal, opts) — it has no align — so this
     // is the backstop for every fetcher of that shape, not just the viz ones above.
     await expect(getMdTrajectory('J1', true)).rejects.toThrow(TypeError)
     await expect(getMdTrajectory('J1', true)).rejects.toThrow(/must be an AbortSignal/i)
     // The message names the route so the bad call site is findable.
     await expect(getMdTrajectory('J1', true)).rejects.toThrow(/\/md\/jobs\/J1\/trajectory/)
+  })
+
+  it('the frame interval reaches the URL, and only when it is usable', async () => {
+    // The guard above names the full path, so it doubles as a cheap probe of the query
+    // string. Omitting ?stride is what preserves the legacy 200-frame budget server-side,
+    // so "no interval" must produce a BARE url, not `?stride=undefined`.
+    const bad = (opts) => getMdTrajectory('J1', true, opts).then(() => null, e => String(e.message))
+    expect(await bad({ stride: 20 })).toMatch(/\/md\/jobs\/J1\/trajectory\?stride=20\b/)
+    expect(await bad({ stride: 2.9 })).toMatch(/\?stride=2\b/)      // floored, never fractional
+    expect(await bad({})).toMatch(/\/md\/jobs\/J1\/trajectory\)/)   // bare — no query at all
+    expect(await bad({ stride: 0 })).toMatch(/\/md\/jobs\/J1\/trajectory\)/)
+    expect(await bad({ stride: NaN })).toMatch(/\/md\/jobs\/J1\/trajectory\)/)
   })
 
   it('a real AbortSignal passes the guard untouched', async () => {

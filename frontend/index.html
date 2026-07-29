@@ -5428,6 +5428,13 @@
                          title="Play/scrub the composite NAMD trajectory: every written segment, with a marker at each transition. Replaces VMD for reviewing MD runs.">
                     <input id="md-jobs-traj-toggle" name="md-viz" type="radio" value="traj" disabled> View trajectory
                   </label>
+                  <div id="md-jobs-traj-opts" style="display:none;align-items:center;gap:6px;margin-top:4px;padding-left:18px;flex-wrap:wrap">
+                    <label for="md-jobs-traj-interval" style="font-size:var(--text-xs);color:#8b949e">Frame interval</label>
+                    <input id="md-jobs-traj-interval" type="number" value="20" min="1" max="100000" step="1"
+                           title="Load every Nth frame of each written segment — the DCD stride, as when importing a trajectory into VMD. 1 = every frame written."
+                           style="width:64px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <span id="md-jobs-traj-frames-hint" style="font-size:10px;color:#8b949e;min-height:13px"></span>
+                  </div>
                   <div id="md-jobs-traj-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="md-jobs-traj-controls" style="display:none;margin-top:4px">
                     <div style="display:flex;align-items:center;gap:6px">

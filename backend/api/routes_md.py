@@ -510,13 +510,37 @@ async def _run_md_analysis(request, job_id: str, kind: str, qualname: str,
         raise
 
 
+def _traj_stride(stride) -> int | None:
+    """Normalize the `?stride=` query param to a usable frame interval, or None.
+
+    None means "no interval" — the legacy at-most-200-frames budget — so anything
+    unusable (absent, 0, negative, junk) must land back on None rather than on a
+    silently different downsample.  Both trajectory routes share this so they can't
+    disagree about what counts as no interval."""
+    try:
+        n = int(stride)
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 1 else None
+
+
 @router.get("/md/jobs/{job_id}/trajectory")
-async def get_md_job_trajectory(job_id: str, request: Request) -> dict:
+async def get_md_job_trajectory(
+    job_id: str,
+    request: Request,
+    stride: int | None = None,
+) -> dict:
     """Composite scrub-able NAMD trajectory (every written segment, CG/nadoc beads)
     for an animation trajectory keyframe — SAME payload shape as the oxDNA
     /trajectory endpoint ({ready, n_frames, keys, frames, markers, stages}), so the
     animation player's trajectory path is reused unchanged. Deforms the active
-    design (like the live Display-MD toggle)."""
+    design (like the live Display-MD toggle).
+
+    ``stride`` = user-set frame INTERVAL: keep every Nth frame of each written
+    segment (VMD's DCD stride).  OMITTING it keeps the legacy behaviour — at most 200
+    frames total, split proportionally — which is what the animation panel's
+    trajectory keyframes still rely on, so don't give it a non-None default here."""
+    stride = _traj_stride(stride)
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
     psf = package_dir / f"{job.name_stem}.psf"
@@ -529,18 +553,31 @@ async def get_md_job_trajectory(job_id: str, request: Request) -> dict:
     # Frozen snapshot design (job's prepared state), not the live active design —
     # see _md_traj_inputs.  Fall back to active for legacy pre-snapshot jobs.
     design = _md_snapshot_design(job) or design_state.get_or_404()
+    # args is applied POSITIONALLY inside the analysis subprocess, so this tuple must
+    # match md_composite_trajectory's signature: (…, design, max_frames, stride).
+    # A small interval on a long run is a legitimately slow request the user opted into
+    # (the panel confirms first), so give it a far longer ceiling — the route already
+    # kills the subprocess when the client aborts the fetch.
     result = await _run_md_analysis(
-        request, job_id, "trajectory", "md_composite_trajectory", (psf, segments, ref, design))
+        request, job_id, "trajectory", "md_composite_trajectory",
+        (psf, segments, ref, design, 200, stride),
+        timeout_s=180.0 if stride is None else 900.0)
     return {"ready": result["n_frames"] > 0, **result}
 
 
 @router.get("/md/jobs/{job_id}/trajectory-meta")
-async def get_md_job_trajectory_meta(job_id: str) -> dict:
+async def get_md_job_trajectory_meta(
+    job_id: str,
+    stride: int | None = None,
+) -> dict:
     """Frame count + segment markers for the NAMD composite WITHOUT reading
     coordinates (DCD header only) — sizes the trajectory-keyframe slider instantly.
-    Indices match GET /md/jobs/{id}/trajectory exactly."""
+    Indices match GET /md/jobs/{id}/trajectory for the SAME ``stride`` exactly.
+    Also reports ``total_raw`` + per-stage ``n_raw`` (undownsampled DCD counts) so the
+    panel can price a different interval without another request."""
     from backend.core.md_trajectory import md_composite_meta
 
+    stride = _traj_stride(stride)
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
     if not (package_dir / f"{job.name_stem}.psf").exists():
@@ -548,7 +585,7 @@ async def get_md_job_trajectory_meta(job_id: str) -> dict:
     segments = _md_segment_dcds(job)
     if not segments:
         return {"ready": False, "reason": "no trajectory yet"}
-    result = await run_in_threadpool(md_composite_meta, segments)
+    result = await run_in_threadpool(md_composite_meta, segments, 200, stride)
     return {"ready": result["n_frames"] > 0, **result}
 
 
@@ -613,6 +650,14 @@ async def get_md_shape_source(job_id: str, request: Request) -> dict:
 
 class MdFramesAtomisticBody(BaseModel):
     frame_indices: list[int]
+    # The frame interval the trajectory was loaded with.  A composite frame index only
+    # addresses the same frame within one interval, so heavy reps MUST repeat it or the
+    # atomistic view lands on a different point in the run than the beads beside it.
+    stride: int | None = None
+    # Coordinates only, serial-indexed, to be paired with ONE /atomistic-model fetch.
+    # The per-frame atom OBJECTS are ~10x larger and are what made prebuilding a whole
+    # all-atom trajectory unaffordable.
+    positions_only: bool = False
 
 
 class MdFramesSurfaceBody(BaseModel):
@@ -621,6 +666,7 @@ class MdFramesSurfaceBody(BaseModel):
     grid_spacing: float = 0.20
     radius_inflate: float = 1.30
     smooth: int = 15
+    stride: int | None = None
 
 
 def _md_traj_inputs(job_id: str):
@@ -649,21 +695,46 @@ def _md_traj_inputs(job_id: str):
 async def md_frames_atomistic_route(job_id: str, body: MdFramesAtomisticBody,
                                     request: Request) -> dict:
     """Per-frame DNA heavy atoms for NAMD trajectory frame indices (Phase 2b) —
-    {idx: {atoms, bonds}}. The NAMD model's own atoms, rendered directly."""
+    {idx: {atoms, bonds}}. The NAMD model's own atoms, rendered directly.  Indices are
+    COMPOSITE (what the scrub slider shows) — pass the same `stride` the trajectory was
+    loaded with, or they address other frames."""
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
         return {}
     psf, ref, segments, design = inputs
+    # Prebuilding a whole all-atom trajectory arrives here as ONE call with many
+    # indices: the context build (PSF parse + model) is ~32 s on a 300 k-atom system
+    # against ~2.8 s per extra frame, and it is paid per CALL.  Scale the timeout with
+    # the batch instead of letting a legitimate prebuild hit the 180 s ceiling.
+    n_req = max(1, len(body.frame_indices))
     return await _run_md_analysis(
         request, job_id, "atomistic", "md_frames_atomistic",
-        (psf, segments, ref, design, body.frame_indices))
+        (psf, segments, ref, design, body.frame_indices, 200,
+         _traj_stride(body.stride), body.positions_only),
+        timeout_s=min(3600.0, 180.0 + 20.0 * n_req))
+
+
+@router.get("/md/jobs/{job_id}/atomistic-model")
+async def md_atomistic_model_route(job_id: str, request: Request) -> dict:
+    """The job's STATIC heavy-atom set ({atoms, bonds, n_serials}) — fetched once, then
+    /frames-atomistic?positions_only streams coordinates against it.  Mirrors the oxDNA
+    `getOxdnaAtomisticModel` contract so the display controller's validated
+    topology-once + positions-per-frame path is reused unchanged for NAMD."""
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {"atoms": [], "bonds": []}
+    psf, ref, segments, design = inputs
+    return await _run_md_analysis(
+        request, job_id, "atomistic-model", "md_atomistic_model",
+        (psf, segments, ref, design), timeout_s=600.0)
 
 
 @router.post("/md/jobs/{job_id}/frames-surface")
 async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody,
                                   request: Request) -> dict:
     """Per-frame molecular surface from the NAMD DNA heavy atoms (Phase 2b) —
-    surface-batch shape {idx: {vertices, faces}}."""
+    surface-batch shape {idx: {vertices, faces}}.  COMPOSITE indices, same `stride`
+    rule as frames-atomistic."""
     inputs = _md_traj_inputs(job_id)
     if inputs is None:
         return {}
@@ -671,7 +742,8 @@ async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody,
     return await _run_md_analysis(
         request, job_id, "surface", "md_frames_surface",
         (psf, segments, ref, design, body.frame_indices, body.probe_radius,
-         body.grid_spacing, body.radius_inflate, body.smooth))
+         body.grid_spacing, body.radius_inflate, body.smooth, 200,
+         _traj_stride(body.stride)))
 
 
 @router.post("/md/jobs/{job_id}/analysis/cancel")

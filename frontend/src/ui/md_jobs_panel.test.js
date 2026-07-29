@@ -6,6 +6,9 @@ import { normalizeWorkspacePath, filterJobsForPart, newestCompletedForPart, seed
   jobProductionTimestepFs,
   effectiveProductionTimestepFs,
   DEFAULT_PRODUCTION_TIMESTEP_FS,
+  stridedFrameCount,
+  DEFAULT_TRAJ_INTERVAL,
+  TRAJ_FRAME_CONFIRM,
 } from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
@@ -48,6 +51,44 @@ describe('productionNsFromSteps — the ETA that used to be hard-coded to 1 fs',
   it('guards against a bad/zero timestep by falling back to the default', () => {
     expect(productionNsFromSteps(1_000_000, 0)).toBeCloseTo(4.0, 9)
     expect(productionNsFromSteps(1_000_000, NaN)).toBeCloseTo(4.0, 9)
+  })
+})
+
+describe('stridedFrameCount — the "→ N frames" readout beside the interval field', () => {
+  it('mirrors the backend: ceil PER SEGMENT, not over the total', () => {
+    // Backend `_composite_indices` strides each written segment on its own, so a
+    // 10-frame and a 7-frame segment at interval 3 keep 4 + 3.  Summing first and
+    // dividing once would say 6 and the slider would be the wrong length.
+    expect(stridedFrameCount([10, 7], 3)).toBe(7)
+    expect(stridedFrameCount([100, 3], 50)).toBe(3)   // 2 + 1 — the short segment still counts
+  })
+
+  it('keeps every frame at interval 1', () => {
+    expect(stridedFrameCount([4, 3], 1)).toBe(7)
+  })
+
+  it('is not capped by the legacy 200-frame budget', () => {
+    // The whole point of the control: a long run may load far more than the old cap.
+    const frames = stridedFrameCount([10_000], DEFAULT_TRAJ_INTERVAL)
+    expect(frames).toBe(500)
+    expect(frames).toBeGreaterThanOrEqual(TRAJ_FRAME_CONFIRM)   // …so that load asks first
+  })
+
+  it('ignores empty segments', () => {
+    expect(stridedFrameCount([2, 0, 5], 4)).toBe(3)
+    expect(stridedFrameCount([], 20)).toBe(0)
+  })
+
+  it('clamps a junk or sub-1 interval to 1 rather than dividing by zero', () => {
+    expect(stridedFrameCount([10], 0)).toBe(10)
+    expect(stridedFrameCount([10], -5)).toBe(10)
+    expect(stridedFrameCount([10], NaN)).toBe(10)
+    expect(stridedFrameCount([10], 2.7)).toBe(5)      // floored to 2
+  })
+
+  it('returns 0 when the raw counts are unknown', () => {
+    expect(stridedFrameCount(null, 20)).toBe(0)
+    expect(stridedFrameCount(undefined, 20)).toBe(0)
   })
 })
 
@@ -1027,5 +1068,200 @@ describe('mdIsLocalTarget / mdIsRemoteJob', () => {
     expect(mdHasLocalReadouts({ execution_target: 'runpod', health_samples: [] })).toBe(false)
     expect(mdHasLocalReadouts({ execution_target: 'runpod', health_samples: [{}] })).toBe(true)
     expect(mdHasLocalReadouts({ execution_target: 'local', health_samples: [] })).toBe(true)
+  })
+})
+
+// ── "View trajectory" frame interval (DOM → handler → controller) ──────────────
+// The pure arithmetic is pinned above; this drives the REAL panel to prove the three
+// links that arithmetic alone can't: the readout is painted from the job's raw DCD
+// counts, typing re-prices it without a fetch, and the number the user typed actually
+// reaches loadTrajectory. (Controller → adapter → /md/ URL is pinned separately in
+// md_viz_adapter.test.js and client_viz_opts.test.js.)
+describe('initMdJobsPanel — trajectory frame interval', () => {
+  const $ = (id) => document.getElementById(id)
+  const flushMicro = async (n = 20) => { for (let i = 0; i < n; i++) await Promise.resolve() }
+  const JOB = { job_id: 'J9', design_name: 'D', status: 'completed', created_at: 1, segments: [] }
+
+  let viz
+  const mountTrajDom = () => {
+    mountIds({
+      'md-jobs-panel': 'div', 'md-jobs-panel-heading': 'div', 'md-jobs-panel-arrow': 'div',
+      'md-jobs-panel-body': 'div', 'md-jobs-list': 'div', 'md-jobs-detail': 'div',
+      'md-jobs-traj-opts': 'div', 'md-jobs-traj-status': 'div', 'md-jobs-traj-controls': 'div',
+      'md-jobs-traj-frames-hint': 'div', 'md-jobs-traj-slider': 'input',
+      'md-jobs-traj-toggle': 'input', 'md-jobs-traj-interval': 'input',
+    })
+    $('md-jobs-traj-toggle').type = 'radio'
+    const iv = $('md-jobs-traj-interval')
+    iv.type = 'number'
+    iv.value = '20'                       // index.html's `value=` attribute
+  }
+
+  beforeEach(async () => {
+    clearDom(); mountTrajDom(); localStorage.clear(); vi.clearAllMocks()
+    viz = {
+      loadTrajectory: vi.fn(async () => ({ ok: true, n_frames: 50, markers: [], stages: [{}] })),
+      mode: () => 'off', stopAndRestore: vi.fn(), showFrame: vi.fn(),
+      trajectoryInfo: () => null,          // CG by default → nothing to prebuild
+      prebuildHeavy: vi.fn(async () => ({ ok: true, n: 0 })),
+    }
+    mdApi.getSystemResources.mockResolvedValue({ ram_available_mb: 16_000, ram_total_mb: 32_000 })
+    mdApi.listMdJobs.mockResolvedValue([JOB])
+    mdApi.getMdJob.mockResolvedValue(JOB)
+    // 3 segments, 100 raw frames each — interval 20 keeps 5 per segment.
+    mdApi.getMdTrajectoryMeta.mockResolvedValue({
+      ready: true, n_frames: 15, total_raw: 300,
+      stages: [{ n_raw: 100 }, { n_raw: 100 }, { n_raw: 100 }],
+    })
+  })
+  afterEach(() => { clearDom(); vi.useRealTimers() })
+
+  const openWithJob = async () => {
+    const panel = initMdJobsPanel({ getMdViz: () => viz })
+    await flushMicro()
+    await panel.selectJob('J9')
+    await flushMicro()
+    return panel
+  }
+
+  it('prices the readout from the RAW on-disk counts, not the downsampled ones', async () => {
+    await openWithJob()
+    // 3 x ceil(100/20) = 15 of the 300 frames actually written.
+    expect($('md-jobs-traj-frames-hint').textContent).toMatch(/15 frames of 300 written/)
+  })
+
+  it('re-prices as the user types, without another network read', async () => {
+    await openWithJob()
+    const metaCalls = mdApi.getMdTrajectoryMeta.mock.calls.length
+    const iv = $('md-jobs-traj-interval')
+    iv.value = '5'
+    iv.dispatchEvent(new Event('input'))
+    expect($('md-jobs-traj-frames-hint').textContent).toMatch(/60 frames of 300 written/)
+    expect(mdApi.getMdTrajectoryMeta.mock.calls.length).toBe(metaCalls)   // hint is pure arithmetic
+  })
+
+  it('sends the typed interval to loadTrajectory when the view is switched on', async () => {
+    await openWithJob()
+    const iv = $('md-jobs-traj-interval')
+    iv.value = '7'
+    iv.dispatchEvent(new Event('input'))
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', 7)
+  })
+
+  it('falls back to the default interval when the field is emptied', async () => {
+    await openWithJob()
+    const iv = $('md-jobs-traj-interval')
+    iv.value = ''
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', DEFAULT_TRAJ_INTERVAL)
+  })
+
+  it('reloads at the new density when the interval is committed while displaying', async () => {
+    await openWithJob()
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    viz.loadTrajectory.mockClear()
+
+    const iv = $('md-jobs-traj-interval')
+    iv.value = '4'
+    iv.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', 4)
+  })
+
+  it('does NOT reload on a committed interval while the view is off', async () => {
+    await openWithJob()
+    viz.loadTrajectory.mockClear()
+    const iv = $('md-jobs-traj-interval')
+    iv.value = '4'
+    iv.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).not.toHaveBeenCalled()
+  })
+
+  it('warns when the all-atom prebuild would not fit this machine\'s free RAM', async () => {
+    // The whole point of reading host memory: a big origami's atomistic trajectory can
+    // exceed what is actually free, and finding that out by exhausting it is not a plan.
+    mdApi.getSystemResources.mockResolvedValue({ ram_available_mb: 512, ram_total_mb: 8192 })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    viz.trajectoryInfo = () => ({ frame: 1, total: 991, atomSerials: 469_350, nNucleotides: 14_774 })
+    viz.prebuildHeavy = vi.fn(async () => ({ ok: true, n: 1, frames: 1, trajFrames: 991 }))
+    await openWithJob()
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro(40)
+    expect(confirm).toHaveBeenCalled()
+    const msg = confirm.mock.calls.at(-1)[0]
+    // Must be the MEMORY warning, not the frame-count one — they are different gates and
+    // this test would pass on the wrong one if it only checked that *a* confirm fired.
+    expect(msg).toMatch(/free on this machine/i)
+    expect(msg, 'quotes what it needs and what is free').toMatch(/GB|MB/)
+    expect(viz.prebuildHeavy, 'declining must not start the build').not.toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+
+  it('does not warn about memory when the prebuild comfortably fits', async () => {
+    mdApi.getSystemResources.mockResolvedValue({ ram_available_mb: 32_000, ram_total_mb: 64_000 })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    viz.trajectoryInfo = () => ({ frame: 1, total: 20, atomSerials: 20_000, nNucleotides: 600 })
+    viz.prebuildHeavy = vi.fn(async () => ({ ok: true, n: 20, frames: 20, trajFrames: 20 }))
+    await openWithJob()
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro(40)
+    expect(confirm).not.toHaveBeenCalled()
+    expect(viz.prebuildHeavy).toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+
+  it('asks before a load big enough to hurt, and abandons it on cancel', async () => {
+    // 300 raw frames at interval 1 = 300 frames… still under the threshold, so push the
+    // job's size up instead of weakening the guard.
+    mdApi.getMdTrajectoryMeta.mockResolvedValue({
+      ready: true, n_frames: 200, total_raw: 20_000, stages: [{ n_raw: 20_000 }],
+    })
+    await openWithJob()
+    const iv = $('md-jobs-traj-interval')
+    iv.value = '1'
+    iv.dispatchEvent(new Event('input'))
+    expect(stridedFrameCount([20_000], 1)).toBeGreaterThanOrEqual(TRAJ_FRAME_CONFIRM)
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(confirm).toHaveBeenCalled()
+    expect(viz.loadTrajectory).not.toHaveBeenCalled()
+    expect(t.checked, 'a cancelled load must leave the radio off').toBe(false)
+
+    confirm.mockReturnValue(true)                     // …and proceeds when accepted
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).toHaveBeenCalledWith('J9', true, 'lineage', 1)
+    confirm.mockRestore()
+  })
+
+  it('does not ask for an ordinary load', async () => {
+    await openWithJob()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(confirm).not.toHaveBeenCalled()
+    confirm.mockRestore()
   })
 })
