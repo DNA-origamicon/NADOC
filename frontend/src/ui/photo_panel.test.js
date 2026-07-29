@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
-import { initPhotoExpPanel, formatShadowStatus, shadowResolution, DUPLEX_NM } from './photo_exp_panel.js'
+import { initPhotoPanel, formatShadowStatus, shadowResolution, DUPLEX_NM } from './photo_panel.js'
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -61,77 +61,77 @@ describe('formatShadowStatus', () => {
 // ── Panel wiring ─────────────────────────────────────────────────────────────
 
 const PANEL_IDS = {
-  'photoexp-exit-btn':               'button',
-  'photoexp-status':                 'div',
-  'photoexp-pin-lights':             'input',
-  'photoexp-key-shadow':             'input',
-  'photoexp-key-shadow-controls':    'div',
-  'photoexp-key-shadow-mapsize':     'select',
-  'photoexp-key-shadow-res':         'div',
-  'photoexp-key-shadow-bias':        'input',
-  'photoexp-key-shadow-bias-label':  'span',
-  'photoexp-shadow-strength':        'input',
-  'photoexp-shadow-strength-label':  'span',
-  'photoexp-key-intensity':          'input',
-  'photoexp-key-intensity-label':    'span',
-  'photoexp-fill-intensity':         'input',
-  'photoexp-fill-intensity-label':   'span',
-  'photoexp-ambient-intensity':      'input',
-  'photoexp-ambient-intensity-label':'span',
-  'photoexp-max-contrast':           'button',
-  'photoexp-shadow-depth':           'div',
-  'photoexp-key-azimuth':            'input',
-  'photoexp-key-azimuth-label':      'span',
-  'photoexp-key-elevation':          'input',
-  'photoexp-key-elevation-label':    'span',
-  'photoexp-key-dir':                'div',
-  'photoexp-key-dir-reset':          'button',
-  'photoexp-lighting-heading':       'div',
-  'photoexp-lighting-body':          'div',
-  'photoexp-lighting-arrow':         'span',
-  'photoexp-outline':                'input',
-  'photoexp-outline-controls':       'div',
-  'photoexp-outline-color':          'input',
-  'photoexp-outline-strength':       'input',
-  'photoexp-outline-strength-label': 'span',
-  'photoexp-outline-thickness':      'input',
-  'photoexp-outline-thickness-label':'span',
-  'photoexp-outline-jump':           'input',
-  'photoexp-outline-jump-label':     'span',
-  'photoexp-depthcue':               'input',
-  'photoexp-depthcue-controls':      'div',
-  'photoexp-depthcue-color':         'input',
-  'photoexp-depthcue-strength':      'input',
-  'photoexp-depthcue-strength-label':'span',
-  'photoexp-figure-heading':         'div',
-  'photoexp-figure-body':            'div',
-  'photoexp-figure-arrow':           'span',
-  'photoexp-mat-full':               'select',
-  'photoexp-mat-cylinders':          'select',
-  'photoexp-mat-surface':            'select',
-  'photoexp-mat-atomistic':          'select',
-  'photoexp-materials-heading':      'div',
-  'photoexp-materials-body':         'div',
-  'photoexp-materials-arrow':        'span',
-  'photoexp-bg-heading':             'div',
-  'photoexp-bg-body':                'div',
-  'photoexp-bg-arrow':               'span',
-  'photoexp-fov':                    'input',
-  'photoexp-fov-label':              'span',
-  'photoexp-parallel':               'input',
-  'photoexp-res-preset':             'select',
-  'photoexp-res-w':                  'input',
-  'photoexp-res-h':                  'input',
-  'photoexp-export-note':            'div',
-  'photoexp-export-btn':             'button',
-  'photoexp-camera-heading':         'div',
-  'photoexp-camera-body':            'div',
-  'photoexp-camera-arrow':           'span',
-  'photoexp-export-heading':         'div',
-  'photoexp-export-body':            'div',
-  'photoexp-export-arrow':           'span',
-  'photoexp-bg-type':                'select',
-  'photoexp-bg-color':               'input',
+  'photo-exit-btn':               'button',
+  'photo-status':                 'div',
+  'photo-pin-lights':             'input',
+  'photo-key-shadow':             'input',
+  'photo-key-shadow-controls':    'div',
+  'photo-key-shadow-mapsize':     'select',
+  'photo-key-shadow-res':         'div',
+  'photo-key-shadow-bias':        'input',
+  'photo-key-shadow-bias-label':  'span',
+  'photo-shadow-strength':        'input',
+  'photo-shadow-strength-label':  'span',
+  'photo-key-intensity':          'input',
+  'photo-key-intensity-label':    'span',
+  'photo-fill-intensity':         'input',
+  'photo-fill-intensity-label':   'span',
+  'photo-ambient-intensity':      'input',
+  'photo-ambient-intensity-label':'span',
+  'photo-max-contrast':           'button',
+  'photo-shadow-depth':           'div',
+  'photo-key-azimuth':            'input',
+  'photo-key-azimuth-label':      'span',
+  'photo-key-elevation':          'input',
+  'photo-key-elevation-label':    'span',
+  'photo-key-dir':                'div',
+  'photo-key-dir-reset':          'button',
+  'photo-lighting-heading':       'div',
+  'photo-lighting-body':          'div',
+  'photo-lighting-arrow':         'span',
+  'photo-outline':                'input',
+  'photo-outline-controls':       'div',
+  'photo-outline-color':          'input',
+  'photo-outline-strength':       'input',
+  'photo-outline-strength-label': 'span',
+  'photo-outline-thickness':      'input',
+  'photo-outline-thickness-label':'span',
+  'photo-outline-jump':           'input',
+  'photo-outline-jump-label':     'span',
+  'photo-depthcue':               'input',
+  'photo-depthcue-controls':      'div',
+  'photo-depthcue-color':         'input',
+  'photo-depthcue-strength':      'input',
+  'photo-depthcue-strength-label':'span',
+  'photo-figure-heading':         'div',
+  'photo-figure-body':            'div',
+  'photo-figure-arrow':           'span',
+  'photo-mat-full':               'select',
+  'photo-mat-cylinders':          'select',
+  'photo-mat-surface':            'select',
+  'photo-mat-atomistic':          'select',
+  'photo-materials-heading':      'div',
+  'photo-materials-body':         'div',
+  'photo-materials-arrow':        'span',
+  'photo-bg-heading':             'div',
+  'photo-bg-body':                'div',
+  'photo-bg-arrow':               'span',
+  'photo-fov':                    'input',
+  'photo-fov-label':              'span',
+  'photo-parallel':               'input',
+  'photo-res-preset':             'select',
+  'photo-res-w':                  'input',
+  'photo-res-h':                  'input',
+  'photo-export-note':            'div',
+  'photo-export-btn':             'button',
+  'photo-camera-heading':         'div',
+  'photo-camera-body':            'div',
+  'photo-camera-arrow':           'span',
+  'photo-export-heading':         'div',
+  'photo-export-body':            'div',
+  'photo-export-arrow':           'span',
+  'photo-bg-type':                'select',
+  'photo-bg-color':               'input',
 }
 
 function makeMode(overrides = {}) {
@@ -165,24 +165,24 @@ function makeMode(overrides = {}) {
   }
 }
 
-describe('initPhotoExpPanel', () => {
+describe('initPhotoPanel', () => {
   let els, mode, panel, onExit
 
   beforeEach(() => {
     vi.useFakeTimers()
     els = mountIds(PANEL_IDS)
-    for (const id of ['photoexp-pin-lights', 'photoexp-key-shadow',
-                      'photoexp-outline', 'photoexp-depthcue']) els[id].type = 'checkbox'
-    for (const id of ['photoexp-outline-color', 'photoexp-depthcue-color']) els[id].type = 'color'
-    for (const id of ['photoexp-key-shadow-bias', 'photoexp-shadow-strength',
-                      'photoexp-fov']) els[id].type = 'range'
-    for (const id of ['photoexp-res-w', 'photoexp-res-h']) els[id].type = 'number'
-    els['photoexp-parallel'].type = 'checkbox'
-    els['photoexp-bg-color'].type = 'color'
+    for (const id of ['photo-pin-lights', 'photo-key-shadow',
+                      'photo-outline', 'photo-depthcue']) els[id].type = 'checkbox'
+    for (const id of ['photo-outline-color', 'photo-depthcue-color']) els[id].type = 'color'
+    for (const id of ['photo-key-shadow-bias', 'photo-shadow-strength',
+                      'photo-fov']) els[id].type = 'range'
+    for (const id of ['photo-res-w', 'photo-res-h']) els[id].type = 'number'
+    els['photo-parallel'].type = 'checkbox'
+    els['photo-bg-color'].type = 'color'
     for (const [id, values] of [
-      ['photoexp-key-shadow-mapsize', ['1024', '2048', '4096', '8192']],
-      ['photoexp-res-preset', ['screen', 'x2', 'p300', 'p600', 'custom']],
-      ['photoexp-bg-type', ['color', 'transparent']],
+      ['photo-key-shadow-mapsize', ['1024', '2048', '4096', '8192']],
+      ['photo-res-preset', ['screen', 'x2', 'p300', 'p600', 'custom']],
+      ['photo-bg-type', ['color', 'transparent']],
     ]) {
       for (const v of values) {
         const o = document.createElement('option')
@@ -192,120 +192,120 @@ describe('initPhotoExpPanel', () => {
     }
     mode = makeMode()
     onExit = vi.fn()
-    panel = initPhotoExpPanel(mode, { onExit })
+    panel = initPhotoPanel(mode, { onExit })
   })
 
   afterEach(() => { panel?.dispose(); vi.useRealTimers(); clearDom() })
 
   it('syncToState pushes the controller settings into every control', () => {
     panel.syncToState()
-    expect(els['photoexp-pin-lights'].checked).toBe(true)
-    expect(els['photoexp-key-shadow'].checked).toBe(true)
-    expect(els['photoexp-key-shadow-mapsize'].value).toBe('2048')
-    expect(els['photoexp-key-shadow-bias-label'].textContent).toBe('1.0×')
-    expect(els['photoexp-shadow-strength-label'].textContent).toBe('1.00')
+    expect(els['photo-pin-lights'].checked).toBe(true)
+    expect(els['photo-key-shadow'].checked).toBe(true)
+    expect(els['photo-key-shadow-mapsize'].value).toBe('2048')
+    expect(els['photo-key-shadow-bias-label'].textContent).toBe('1.0×')
+    expect(els['photo-shadow-strength-label'].textContent).toBe('1.00')
   })
 
   it('shows the live nm/texel resolution for the fitted scene', () => {
     panel.syncToState()
     // radius 150 nm at 2048 texels → 0.146 nm/texel, comfortably sub-duplex.
-    expect(els['photoexp-key-shadow-res'].textContent).toContain('0.146 nm/texel')
-    expect(els['photoexp-key-shadow-res'].textContent).not.toContain('COARSER')
+    expect(els['photo-key-shadow-res'].textContent).toContain('0.146 nm/texel')
+    expect(els['photo-key-shadow-res'].textContent).not.toContain('COARSER')
   })
 
   it('warns in the UI when the map cannot resolve a duplex', () => {
     mode.getStatus = () => ({ active: true, keyShadow: true, pinned: true, radius: 70710 })
     panel.syncToState()
-    expect(els['photoexp-key-shadow-res'].textContent).toContain('COARSER')
+    expect(els['photo-key-shadow-res'].textContent).toContain('COARSER')
   })
 
   it('wires the shadow map size', () => {
-    els['photoexp-key-shadow-mapsize'].value = '8192'
-    els['photoexp-key-shadow-mapsize'].dispatchEvent(new Event('change'))
+    els['photo-key-shadow-mapsize'].value = '8192'
+    els['photo-key-shadow-mapsize'].dispatchEvent(new Event('change'))
     expect(mode.setKeyShadowMapSize).toHaveBeenCalledWith(8192)
   })
 
   it('drives bias and shadow darkness live, with formatted read-outs', () => {
-    els['photoexp-key-shadow-bias'].value = '2.5'
-    els['photoexp-key-shadow-bias'].dispatchEvent(new Event('input'))
+    els['photo-key-shadow-bias'].value = '2.5'
+    els['photo-key-shadow-bias'].dispatchEvent(new Event('input'))
     expect(mode.setKeyShadowBias).toHaveBeenCalledWith(2.5)
-    expect(els['photoexp-key-shadow-bias-label'].textContent).toBe('2.5×')
+    expect(els['photo-key-shadow-bias-label'].textContent).toBe('2.5×')
 
-    els['photoexp-shadow-strength'].value = '0.4'
-    els['photoexp-shadow-strength'].dispatchEvent(new Event('input'))
+    els['photo-shadow-strength'].value = '0.4'
+    els['photo-shadow-strength'].dispatchEvent(new Event('input'))
     expect(mode.setShadowStrength).toHaveBeenCalledWith(0.4)
-    expect(els['photoexp-shadow-strength-label'].textContent).toBe('0.40')
+    expect(els['photo-shadow-strength-label'].textContent).toBe('0.40')
   })
 
   it('hides the shadow sub-controls when the key shadow is switched off', () => {
     panel.syncToState()
-    els['photoexp-key-shadow'].checked = false
-    els['photoexp-key-shadow'].dispatchEvent(new Event('change'))
+    els['photo-key-shadow'].checked = false
+    els['photo-key-shadow'].dispatchEvent(new Event('change'))
     expect(mode.setKeyShadow).toHaveBeenCalledWith(false)
-    expect(els['photoexp-key-shadow-controls'].style.display).toBe('none')
+    expect(els['photo-key-shadow-controls'].style.display).toBe('none')
   })
 
   it('wires the camera pin and background', () => {
-    els['photoexp-pin-lights'].checked = false
-    els['photoexp-pin-lights'].dispatchEvent(new Event('change'))
+    els['photo-pin-lights'].checked = false
+    els['photo-pin-lights'].dispatchEvent(new Event('change'))
     expect(mode.setPinLights).toHaveBeenCalledWith(false)
 
-    els['photoexp-bg-type'].value = 'transparent'
-    els['photoexp-bg-type'].dispatchEvent(new Event('change'))
+    els['photo-bg-type'].value = 'transparent'
+    els['photo-bg-type'].dispatchEvent(new Event('change'))
     expect(mode.setBackground).toHaveBeenCalledWith('transparent', undefined)
-    expect(els['photoexp-bg-color'].disabled).toBe(true)
+    expect(els['photo-bg-color'].disabled).toBe(true)
 
-    els['photoexp-bg-color'].value = '#ff0000'
-    els['photoexp-bg-color'].dispatchEvent(new Event('input'))
+    els['photo-bg-color'].value = '#ff0000'
+    els['photo-bg-color'].dispatchEvent(new Event('input'))
     expect(mode.setBackground).toHaveBeenLastCalledWith(undefined, '#ff0000')
   })
 
   it('describes where the light is, and how far off the camera axis', () => {
     panel.syncToState()
-    expect(els['photoexp-key-dir'].textContent).toContain('upper-left')
-    expect(els['photoexp-key-dir'].textContent).toContain('55° off the camera axis')
+    expect(els['photo-key-dir'].textContent).toContain('upper-left')
+    expect(els['photo-key-dir'].textContent).toContain('55° off the camera axis')
   })
 
   it('the Reset direction button defers to the mode, which owns the defaults', () => {
-    els['photoexp-key-dir-reset'].dispatchEvent(new Event('click'))
+    els['photo-key-dir-reset'].dispatchEvent(new Event('click'))
     expect(mode.resetKeyDirection).toHaveBeenCalledTimes(1)
   })
 
   it('wires the outline controls and hides them when it is off', () => {
     panel.syncToState()
-    expect(els['photoexp-outline-controls'].style.display).toBe('none')  // off by default
+    expect(els['photo-outline-controls'].style.display).toBe('none')  // off by default
 
-    els['photoexp-outline'].checked = true
-    els['photoexp-outline'].dispatchEvent(new Event('change'))
+    els['photo-outline'].checked = true
+    els['photo-outline'].dispatchEvent(new Event('change'))
     expect(mode.setOutline).toHaveBeenCalledWith(true)
-    expect(els['photoexp-outline-controls'].style.display).toBe('flex')
+    expect(els['photo-outline-controls'].style.display).toBe('flex')
 
-    els['photoexp-outline-thickness'].value = '2.5'
-    els['photoexp-outline-thickness'].dispatchEvent(new Event('input'))
+    els['photo-outline-thickness'].value = '2.5'
+    els['photo-outline-thickness'].dispatchEvent(new Event('input'))
     expect(mode.setOutlineThickness).toHaveBeenCalledWith(2.5)
-    expect(els['photoexp-outline-thickness-label'].textContent).toBe('2.5')
+    expect(els['photo-outline-thickness-label'].textContent).toBe('2.5')
 
     // ChimeraX's depth_jump replaces the old depth/crease pair: the mimic is
     // depth-only, so there is no crease control to wire at all.
-    els['photoexp-outline-jump'].value = '0.075'
-    els['photoexp-outline-jump'].dispatchEvent(new Event('input'))
+    els['photo-outline-jump'].value = '0.075'
+    els['photo-outline-jump'].dispatchEvent(new Event('input'))
     expect(mode.setOutlineDepthJump).toHaveBeenCalledWith(0.075)
-    expect(els['photoexp-outline-jump-label'].textContent).toBe('0.075')
+    expect(els['photo-outline-jump-label'].textContent).toBe('0.075')
   })
 
   it('wires the depth-cue controls', () => {
     panel.syncToState()
-    els['photoexp-depthcue'].checked = true
-    els['photoexp-depthcue'].dispatchEvent(new Event('change'))
+    els['photo-depthcue'].checked = true
+    els['photo-depthcue'].dispatchEvent(new Event('change'))
     expect(mode.setDepthCue).toHaveBeenCalledWith(true)
-    expect(els['photoexp-depthcue-controls'].style.display).toBe('flex')
+    expect(els['photo-depthcue-controls'].style.display).toBe('flex')
 
-    els['photoexp-depthcue-strength'].value = '0.6'
-    els['photoexp-depthcue-strength'].dispatchEvent(new Event('input'))
+    els['photo-depthcue-strength'].value = '0.6'
+    els['photo-depthcue-strength'].dispatchEvent(new Event('input'))
     expect(mode.setDepthCueStrength).toHaveBeenCalledWith(0.6)
 
-    els['photoexp-depthcue-color'].value = '#00ff00'
-    els['photoexp-depthcue-color'].dispatchEvent(new Event('input'))
+    els['photo-depthcue-color'].value = '#00ff00'
+    els['photo-depthcue-color'].dispatchEvent(new Event('input'))
     expect(mode.setDepthCueColor).toHaveBeenCalledWith('#00ff00')
   })
 
@@ -313,34 +313,34 @@ describe('initPhotoExpPanel', () => {
     // Driven off the shared preset table, so adding a preset in
     // material_presets.js shows up here with no markup change.
     const opts = id => [...els[id].querySelectorAll('option')].map(o => o.value)
-    expect(opts('photoexp-mat-full')).toEqual(['flat', 'matte', 'glossy', 'metallic'])
-    expect(opts('photoexp-mat-surface')).toContain('gummy')
-    expect(opts('photoexp-mat-atomistic')).toEqual(['cpk-flat', 'cpk-matte', 'cpk-glossy', 'cpk-metallic'])
+    expect(opts('photo-mat-full')).toEqual(['flat', 'matte', 'glossy', 'metallic'])
+    expect(opts('photo-mat-surface')).toContain('gummy')
+    expect(opts('photo-mat-atomistic')).toEqual(['cpk-flat', 'cpk-matte', 'cpk-glossy', 'cpk-metallic'])
   })
 
   it('wires each material dropdown to its own representation', () => {
-    els['photoexp-mat-cylinders'].value = 'metallic'
-    els['photoexp-mat-cylinders'].dispatchEvent(new Event('change'))
+    els['photo-mat-cylinders'].value = 'metallic'
+    els['photo-mat-cylinders'].dispatchEvent(new Event('change'))
     expect(mode.setMaterialPreset).toHaveBeenCalledWith('cylinders', 'metallic')
 
-    els['photoexp-mat-surface'].value = 'glass'
-    els['photoexp-mat-surface'].dispatchEvent(new Event('change'))
+    els['photo-mat-surface'].value = 'glass'
+    els['photo-mat-surface'].dispatchEvent(new Event('change'))
     expect(mode.setMaterialPreset).toHaveBeenLastCalledWith('surface', 'glass')
   })
 
   it('syncToState selects the active preset in each dropdown', () => {
     panel.syncToState()
-    expect(els['photoexp-mat-full'].value).toBe('flat')
-    expect(els['photoexp-mat-atomistic'].value).toBe('cpk-flat')
+    expect(els['photo-mat-full'].value).toBe('flat')
+    expect(els['photo-mat-atomistic'].value).toBe('cpk-flat')
   })
 
   it('renders every section as a collapsible card', () => {
     // Same contract as the Simulations-tab cards: clicking the heading toggles
     // the body and rotates the chevron.
     for (const id of ['lighting', 'figure', 'materials', 'camera', 'export', 'bg']) {
-      const head = els[`photoexp-${id}-heading`]
-      const body = els[`photoexp-${id}-body`]
-      const arrow = els[`photoexp-${id}-arrow`]
+      const head = els[`photo-${id}-heading`]
+      const body = els[`photo-${id}-body`]
+      const arrow = els[`photo-${id}-arrow`]
       expect(body.style.display).toBe('')
       head.dispatchEvent(new Event('click'))
       expect(body.style.display).toBe('none')
@@ -353,53 +353,53 @@ describe('initPhotoExpPanel', () => {
 
   it('wires FOV and the parallel-projection toggle', () => {
     panel.syncToState()
-    els['photoexp-fov'].value = '20'
-    els['photoexp-fov'].dispatchEvent(new Event('input'))
+    els['photo-fov'].value = '20'
+    els['photo-fov'].dispatchEvent(new Event('input'))
     expect(mode.setFOV).toHaveBeenCalledWith(20)
-    expect(els['photoexp-fov-label'].textContent).toBe('20°')
+    expect(els['photo-fov-label'].textContent).toBe('20°')
 
-    els['photoexp-parallel'].checked = true
-    els['photoexp-parallel'].dispatchEvent(new Event('change'))
+    els['photo-parallel'].checked = true
+    els['photo-parallel'].dispatchEvent(new Event('change'))
     expect(mode.setParallel).toHaveBeenCalledWith(true)
   })
 
   it('resolution presets set a real pixel size', () => {
-    els['photoexp-res-preset'].value = 'p600'
-    els['photoexp-res-preset'].dispatchEvent(new Event('change'))
+    els['photo-res-preset'].value = 'p600'
+    els['photo-res-preset'].dispatchEvent(new Event('change'))
     expect(mode.setExportSize).toHaveBeenCalledWith(8400, 5940)
-    expect(els['photoexp-res-w'].value).toBe('8400')
+    expect(els['photo-res-w'].value).toBe('8400')
   })
 
   it('editing a dimension by hand switches the preset to Custom', () => {
     panel.syncToState()                       // populates both dimension inputs
-    els['photoexp-res-preset'].value = 'p300'
-    els['photoexp-res-w'].value = '1234'
-    els['photoexp-res-w'].dispatchEvent(new Event('change'))
-    expect(els['photoexp-res-preset'].value).toBe('custom')
+    els['photo-res-preset'].value = 'p300'
+    els['photo-res-w'].value = '1234'
+    els['photo-res-w'].dispatchEvent(new Event('change'))
+    expect(els['photo-res-preset'].value).toBe('custom')
     expect(mode.setExportSize).toHaveBeenLastCalledWith(1234, 2970)
   })
 
   it('reports the tile count, since >4096 px must be rendered in tiles', () => {
     panel.syncToState()
-    expect(els['photoexp-export-note'].textContent).toContain('2 tiles')
-    expect(els['photoexp-export-note'].textContent).toContain('4200×2970')
+    expect(els['photo-export-note'].textContent).toContain('2 tiles')
+    expect(els['photo-export-note'].textContent).toContain('4200×2970')
   })
 
   it('the export button calls renderToBlob and re-enables itself', async () => {
-    els['photoexp-export-btn'].dispatchEvent(new Event('click'))
+    els['photo-export-btn'].dispatchEvent(new Event('click'))
     await vi.waitFor(() => expect(mode.renderToBlob).toHaveBeenCalledWith(4200, 2970))
-    await vi.waitFor(() => expect(els['photoexp-export-btn'].disabled).toBe(false))
+    await vi.waitFor(() => expect(els['photo-export-btn'].disabled).toBe(false))
   })
 
   it('the exit button calls back out to the tab controller', () => {
-    els['photoexp-exit-btn'].dispatchEvent(new Event('click'))
+    els['photo-exit-btn'].dispatchEvent(new Event('click'))
     expect(onExit).toHaveBeenCalledTimes(1)
   })
 
   it('polls the status line while entered and stops on exit', () => {
     const spy = vi.spyOn(mode, 'getStatus')
     panel.onEnter()
-    expect(els['photoexp-status'].textContent).toContain('key shadow on')
+    expect(els['photo-status'].textContent).toContain('key shadow on')
     const afterEnter = spy.mock.calls.length
     vi.advanceTimersByTime(1500)
     expect(spy.mock.calls.length).toBeGreaterThan(afterEnter)

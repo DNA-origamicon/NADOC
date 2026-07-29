@@ -466,7 +466,7 @@ Debug handles added: `__NADOC_DBG__.designRenderer`, `__NADOC_DBG__.unfoldView` 
    visible. Fix if real: copy the `instanceAlpha` attribute onto the HD geometry in the swap
    (or skip the swap while overrides are active).
 2. **Photo mode does not read `representation_overrides` at all** (zero hits across
-   photo_mode / photo_exp_mode / photo_renderer / photo_panel / photo_exp_panel /
+   photo_mode / photo_panel / photo_renderer/* (v1's photo_renderer.js is archived) /
    photo_figure_panel). The old fear — that export force-flattens to one global rep — turns out
    to be **assembly-gated only** (`inAssembly && exportRep !== 'working'`, photo_mode.js:31-37),
    so in single-design mode overrides survive the export by accident, not by design. Worth an

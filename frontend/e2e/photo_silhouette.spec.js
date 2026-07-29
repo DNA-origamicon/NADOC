@@ -1,5 +1,5 @@
 /**
- * Exp. Photomode — ChimeraX-style silhouette outline.
+ * Photomode — ChimeraX-style silhouette outline.
  *
  * The silhouette is a GLSL branch, so vitest can only pin the JS→uniform
  * plumbing. Everything that can actually go wrong lives in the shader:
@@ -11,7 +11,7 @@
  *     against background depth, which is clamped to the far plane, so it clears
  *     every threshold and is jump-independent by construction.
  *
- * Run:  npx playwright test e2e/photo_exp_silhouette.spec.js
+ * Run:  npx playwright test e2e/photo_silhouette.spec.js
  */
 
 import { test, expect } from '@playwright/test'
@@ -67,7 +67,7 @@ async function darkPixelCount(page) {
   }, png.toString('base64'))
 }
 
-test.describe('Exp. Photomode silhouette', () => {
+test.describe('Photomode silhouette', () => {
   // Loading a real bundle and settling four render passes on software GL is slow;
   // the 30 s default is nowhere near enough.
   test.setTimeout(900_000)
@@ -79,17 +79,17 @@ test.describe('Exp. Photomode silhouette', () => {
 
     await loadDesign(page)
 
-    await page.locator('#photo-exp-tab-btn').click()
-    await expect(page.locator('#tab-content-photo-exp')).toBeVisible({ timeout: 5_000 })
+    await page.locator('#photo-tab-btn').click()
+    await expect(page.locator('#tab-content-photo')).toBeVisible({ timeout: 5_000 })
 
     // White sky so "outline pixel" == "dark pixel".
-    await page.locator('#photoexp-bg-color').fill('#ffffff')
-    await page.locator('#photoexp-bg-color').dispatchEvent('input')
+    await page.locator('#photo-bg-color').fill('#ffffff')
+    await page.locator('#photo-bg-color').dispatchEvent('input')
     await page.waitForTimeout(1500)
 
     const noOutline = await darkPixelCount(page)
 
-    await page.locator('#photoexp-outline').check()
+    await page.locator('#photo-outline').check()
     await page.waitForTimeout(1200)
     const withOutline = await darkPixelCount(page)
 
@@ -101,7 +101,7 @@ test.describe('Exp. Photomode silhouette', () => {
     // This is the assertion that proves the branch is reached AND that the
     // scene-depth span reached the uniform (with span 0 the threshold collapses
     // to far-near and the slider stops doing anything visible).
-    const jump = page.locator('#photoexp-outline-jump')
+    const jump = page.locator('#photo-outline-jump')
     await jump.fill('0.005')
     await jump.dispatchEvent('input')
     await page.waitForTimeout(1200)
@@ -117,5 +117,40 @@ test.describe('Exp. Photomode silhouette', () => {
 
     const shaderErrors = errors.filter(e => /shader|glsl|WebGLProgram/i.test(e))
     expect(shaderErrors, shaderErrors.join('\n')).toHaveLength(0)
+  })
+
+  test('the grid does not contaminate the silhouette', async ({ page }) => {
+    // `scene.overrideMaterial` applies to Lines too, so a visible GridHelper used
+    // to write depth into the figure pre-pass — stamping a contour along every
+    // grid line and cutting spurious depth steps into the structure behind it.
+    // Toggling the grid must now change NOTHING about the outline.
+    await loadDesign(page)
+
+    await page.locator('#photo-tab-btn').click()
+    await expect(page.locator('#tab-content-photo')).toBeVisible({ timeout: 5_000 })
+    await page.locator('#photo-bg-color').fill('#ffffff')
+    await page.locator('#photo-bg-color').dispatchEvent('input')
+    await page.locator('#photo-outline').check()
+    await page.waitForTimeout(1500)
+
+    const gridOff = await darkPixelCount(page)
+
+    const shown = await page.evaluate(() => {
+      let g = null
+      window.__nadocTest.scene.traverse(o => { if (o.type === 'GridHelper') g = o })
+      if (!g) return false
+      g.visible = true
+      return true
+    })
+    expect(shown, 'GridHelper must exist in the scene').toBe(true)
+    await page.waitForTimeout(1500)
+    const gridOn = await darkPixelCount(page)
+
+    // The grid itself is drawn in the beauty pass (thin, light lines on white),
+    // so allow a small delta — what must NOT happen is the outline colour being
+    // stamped along every grid line, which was a large, obvious jump.
+    const delta = Math.abs(gridOn - gridOff) / Math.max(gridOff, 1)
+    expect(delta, `grid off=${gridOff} on=${gridOn} (${(delta * 100).toFixed(1)}%)`)
+      .toBeLessThan(0.15)
   })
 })

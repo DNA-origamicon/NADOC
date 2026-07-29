@@ -1,1084 +1,485 @@
 /**
- * Photo mode panel — left-panel "Photo" tab.
+ * Photo-mode panel — the controls for scene/photo_mode.js.
  *
- * Wires DOM controls defined in #tab-content-photo (index.html) to the
- * photoRenderer instance.  No HTML is created here; all elements are
- * declared in the template and looked up by ID.
- *
- * Usage:
- *   import { initPhotoPanel } from './ui/photo_panel.js'
- *   initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit })
+ * Thin by design: it reads DOM elements, pushes values into the mode controller,
+ * and renders a status line. All rendering decisions live in the mode; this file
+ * only translates clicks into calls, so the experiment can be re-skinned or
+ * thrown away without touching the renderer.
  */
 
-// ── Resolution presets ────────────────────────────────────────────────────────
+import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { PRESET_LABELS } from '../scene/photo_renderer/material_presets.js'
 
-// Width × height at 1× pixel ratio.  DPI assumes 88 mm (3.46") single-column width.
-const RESOLUTION_PRESETS = {
-  screen: { label: 'Screen (1×)', w: null, h: null, dpi: null },   // null = use canvas size
-  x2:     { label: '2× (slides)',  w: null, h: null, scale: 2, dpi: 130 },
-  p300:   { label: 'Print 300 DPI', w: 4200, h: 2970, dpi: 300 },
-  p600:   { label: 'Print 600 DPI', w: 8400, h: 5940, dpi: 600 },
-  custom: { label: 'Custom',        w: null, h: null, dpi: null },
-}
-
-// ── Profiles (persisted across reloads) ───────────────────────────────────────
-
-const PROFILES_KEY        = 'nadoc.photoProfiles.v1'
-const ACTIVE_PROFILE_KEY  = 'nadoc.photoActiveProfile.v1'
-// One-time flag: the photo-mode default environment changed 'off' → 'room'.
-const ENV_ROOM_MIGRATION_KEY = 'nadoc.photoEnvRoomDefault.v1'
-
-function _loadProfiles() {
-  try { return JSON.parse(localStorage.getItem(PROFILES_KEY) || '{}') }
-  catch { return {} }
-}
-function _saveProfiles(p) {
-  try { localStorage.setItem(PROFILES_KEY, JSON.stringify(p)) } catch {}
-}
-
-// The default photo environment is now a neutral 'room' studio so metallic/glossy
-// materials reflect and look correct.  Existing saved profiles pinned to the OLD
-// 'off' default would otherwise override that and keep metals flat — bump them to
-// 'room' exactly once.  Runs before any deliberate 'off' choice can be made, so a
-// user who later picks 'off' on purpose keeps it (the flag stops re-migration).
-function _migrateEnvDefaultToRoom() {
-  if (localStorage.getItem(ENV_ROOM_MIGRATION_KEY)) return
-  const profiles = _loadProfiles()
-  let changed = false
-  for (const s of Object.values(profiles)) {
-    if (s && s.environment === 'off') { s.environment = 'room'; changed = true }
-  }
-  if (changed) _saveProfiles(profiles)
-  try { localStorage.setItem(ENV_ROOM_MIGRATION_KEY, '1') } catch {}
-}
-function _getActiveProfileName() {
-  return localStorage.getItem(ACTIVE_PROFILE_KEY) || ''
-}
-function _setActiveProfileName(name) {
-  try { localStorage.setItem(ACTIVE_PROFILE_KEY, name) } catch {}
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function _el(id) { return document.getElementById(id) }
-
-function _download(blob, filename) {
-  const url = URL.createObjectURL(blob)
-  const a   = Object.assign(document.createElement('a'), { href: url, download: filename })
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-}
-
-function _fmt(n) { return n ? n.toLocaleString() : '—' }
-
-// ── Main initialiser ──────────────────────────────────────────────────────────
+/** B-DNA duplex diameter — the feature a shadow map has to resolve to be useful. */
+export const DUPLEX_NM = 2.0
 
 /**
- * @param {object} photoRenderer   — returned by createPhotoRenderer()
- * @param {object} sceneCtx        — { camera, renderer }
- * @param {object} callbacks
- * @param {function} callbacks.onEnter  — called when user enters photo mode
- * @param {function} callbacks.onExit   — called when user exits photo mode
- * @param {object}   [callbacks.store]            — global store (for animation list)
- * @param {object}   [callbacks.player]           — initAnimationPlayer instance
- * @param {function} [callbacks.exportPhotoVideo] — high-res video exporter
+ * World size of one shadow-map texel, and how that compares with a duplex.
+ *
+ * This is the number that decides whether an object casts a readable shadow onto
+ * something behind it: once a texel is wider than a helix, the shadow of a thin
+ * feature cannot be represented at all and long-range shadowing degenerates into
+ * a wash. It turned out to be THE parameter here — ChimeraX's map-size defaults
+ * are sized for a ~5 nm protein, not a 150 nm origami.
+ *
+ * @param {number} radiusNm — scene bounding radius the frustum is fitted to
+ * @param {number} texels   — pixels across the map
+ * @returns {{nmPerTexel:number, duplexes:number, ok:boolean}}
  */
+export function shadowResolution(radiusNm, texels) {
+  if (!(radiusNm > 0) || !(texels > 0)) return { nmPerTexel: 0, duplexes: 0, ok: false }
+  const nmPerTexel = (2 * radiusNm) / texels
+  return {
+    nmPerTexel,
+    duplexes: DUPLEX_NM / nmPerTexel,     // texels across one duplex
+    ok: nmPerTexel <= DUPLEX_NM / 2,      // need ≥2 texels per duplex to resolve it
+  }
+}
 
-import { showConfirm } from './primitives/confirm.js'
-import { DEFAULT_PHOTO_SETTINGS } from '../scene/photo_renderer.js'
-import { initPhotoFigurePanel } from './photo_figure_panel.js'
-import { resolveStyle, detectStyle } from '../scene/photo_renderer/style_presets.js'
+/**
+ * Fraction of the light a cast shadow can remove. A shadow only subtracts the
+ * KEY light, so fill + ambient are the floor it cannot go below — which is why
+ * ChimeraX's own 0.7/0.3/0.8 gives a shadow only 39% dark.
+ */
+export function shadowDepthFraction({ keyIntensity, fillIntensity, ambientIntensity }) {
+  const total = keyIntensity + fillIntensity + ambientIntensity
+  if (!(total > 0)) return 0
+  return keyIntensity / total
+}
 
-export function initPhotoPanel(photoRenderer, sceneCtx, { onEnter, onExit, store, player, exportPhotoVideo, withExportRepresentation, setExportRepresentation }) {
-  // Run the export render `fn` with the assembly's chosen export representation
-  // temporarily applied (no-op wrapper if main.js didn't inject one).
-  const _withExportRep = withExportRepresentation ?? (async (fn) => fn())
-  // ── Element refs ────────────────────────────────────────────────────────────
-  const exitBtn      = _el('photo-exit-btn')
-  const exportBtn    = _el('photo-export-btn')
-  const exportRepSel = _el('photo-export-rep')
-  const profileSel    = _el('photo-profile-select')
-  const profileNew    = _el('photo-profile-new')
-  const profileRename = _el('photo-profile-rename')
-  const profileDelete = _el('photo-profile-delete')
-  const profileReset  = _el('photo-profile-reset')
-  const profileStatus = _el('photo-profile-status')
-  const lightingSel  = _el('photo-lighting-select')
-  const bgRadios     = document.querySelectorAll('input[name="photo-bg"]')
-  const bgColorIn    = _el('photo-bg-color')
-  const bgColorRow   = _el('photo-bg-color-row')
-  const matFull      = _el('photo-material-full')
-  const matSurface   = _el('photo-material-surface')
-  const matCylinders = _el('photo-material-cylinders')
-  const matAtomistic = _el('photo-material-atomistic')
-  const lightYaw       = _el('photo-light-yaw')
-  const lightYawLabel  = _el('photo-light-yaw-label')
-  const lightPitch     = _el('photo-light-pitch')
-  const lightPitchLabel= _el('photo-light-pitch-label')
-  const sunEnable      = _el('photo-sun-enable')
-  const sunCtrlsRow    = _el('photo-sun-controls')
-  const sunAzimuth     = _el('photo-sun-azimuth')
-  const sunAzimuthLbl  = _el('photo-sun-azimuth-label')
-  const sunElevation   = _el('photo-sun-elevation')
-  const sunElevationLbl= _el('photo-sun-elevation-label')
-  const sunStrength    = _el('photo-sun-strength')
-  const sunStrengthLbl = _el('photo-sun-strength-label')
-  const sunColor       = _el('photo-sun-color')
-  const fluoroChk      = _el('photo-fluoro-emissive')
-  const fluoroRow      = _el('photo-fluoro-intensity-row')
-  const fluoroInt      = _el('photo-fluoro-intensity')
-  const fluoroIntLabel = _el('photo-fluoro-intensity-label')
-  const envMode        = _el('photo-env-mode')
-  const envFile        = _el('photo-env-file')
-  const envFileName    = _el('photo-env-file-name')
-  const envBg          = _el('photo-env-bg')
-  const envEffect      = _el('photo-env-effect')
-  const envEffectMistRow = _el('photo-env-effect-mist-row')
-  const mistDensity    = _el('photo-mist-density')
-  const mistDensityLbl = _el('photo-mist-density-label')
-  const mistColor      = _el('photo-mist-color')
-  const mistHalo       = _el('photo-mist-halo')
-  const mistHaloLbl    = _el('photo-mist-halo-label')
-  const mistWispC      = _el('photo-mist-wisp-contrast')
-  const mistWispCLbl   = _el('photo-mist-wisp-contrast-label')
-  const mistWispS      = _el('photo-mist-wisp-scale')
-  const mistWispSLbl   = _el('photo-mist-wisp-scale-label')
-  const mistWispSpd    = _el('photo-mist-wisp-speed')
-  const mistWispSpdLbl = _el('photo-mist-wisp-speed-label')
-  const translucIn     = _el('photo-translucency')
-  const translucLbl    = _el('photo-translucency-label')
-  const floorAxis      = _el('photo-floor-axis')
-  const floorCtrlsRow  = _el('photo-floor-controls')
-  const floorMatSel    = _el('photo-floor-material')
-  const floorColorIn   = _el('photo-floor-color')
-  const floorOpacityIn = _el('photo-floor-opacity')
-  const floorOpacityLbl= _el('photo-floor-opacity-label')
-  const floorDensityIn = _el('photo-floor-grid-density')
-  const floorDensityLbl= _el('photo-floor-grid-density-label')
-  const floorOffsetIn  = _el('photo-floor-offset')
-  const floorOffsetLbl = _el('photo-floor-offset-label')
-  const floorShadowsIn = _el('photo-floor-shadows')
-  const floorGridIn       = _el('photo-floor-grid')
-  const floorGridStyleRow = _el('photo-floor-grid-style-row')
-  const floorGridNeonChk  = _el('photo-floor-grid-neon')
-  const floorGridNeonRow  = _el('photo-floor-grid-neon-row')
-  const floorGridNeonHint = _el('photo-floor-grid-neon-hint')
-  const floorGridColor    = _el('photo-floor-grid-color')
-  const floorGridGlow     = _el('photo-floor-grid-glow')
-  const floorGridGlowLbl  = _el('photo-floor-grid-glow-label')
-  const floorGridFade     = _el('photo-floor-grid-fade')
-  const floorGridFadeLbl  = _el('photo-floor-grid-fade-label')
-  const ssaoChk      = _el('photo-ssao')
-  const bloomChk     = _el('photo-bloom')
-  const bloomRow     = _el('photo-bloom-strength-row')
-  const bloomStrIn   = _el('photo-bloom-strength')
-  const exposureIn   = _el('photo-exposure')
-  const resSel       = _el('photo-res-preset')
-  const resWIn       = _el('photo-res-w')
-  const resHIn       = _el('photo-res-h')
-  const dpiLabel     = _el('photo-dpi-label')
-  const fovSlider    = _el('photo-fov')
-  const fovLabel     = _el('photo-fov-label')
-  const styleSel     = _el('photo-style-select')
-  const qualFast     = _el('photo-quality-fast')
-  const qualPT       = _el('photo-quality-pt')
-  const ptProgress   = _el('photo-pt-progress')
-  const ptSamplesEl  = _el('photo-pt-samples')
-  // Animation Video section refs.
-  const animSelect   = _el('photo-anim-select')
-  const animFpsIn    = _el('photo-anim-fps')
-  const animFormatIn = _el('photo-anim-format')
-  const animPreview  = _el('photo-anim-preview-btn')
-  const animExport   = _el('photo-anim-export-btn')
-  const animProgRow  = _el('photo-anim-progress-row')
-  const animProgLbl  = _el('photo-anim-progress-label')
-  const animProgBar  = _el('photo-anim-progress-bar')
-  const animCancel   = _el('photo-anim-cancel-btn')
+/**
+ * Format the status line. Pure — the string is the whole contract, so the test
+ * can assert it without a DOM.
+ *
+ * @param {{active:boolean, keyShadow:boolean, pinned:boolean,
+ *          radius:number, mapSize:number}} status
+ * @returns {string}
+ */
+export function formatShadowStatus(status) {
+  if (!status?.active) return 'inactive'
+  const bits = [status.keyShadow ? 'key shadow on' : 'key shadow off']
+  if (status.pinned) bits.push('camera-pinned')
+  if (status.radius > 0) {
+    const r = status.radius >= 100 ? `${Math.round(status.radius)} nm` : `${status.radius.toFixed(1)} nm`
+    bits.push(`scene radius ${r}`)
+  }
+  return bits.join(' · ')
+}
 
-  if (!exitBtn) return   // panel HTML not loaded yet
+/**
+ * @param {object} photoMode — controller from createPhotoMode()
+ * @param {{onExit: () => void}} deps
+ */
+export function initPhotoPanel(photoMode, { onExit } = {}) {
+  const $ = (id) => document.getElementById(id)
 
-  // Figure (publication) controls — outline / depth cue / occlusion shading /
-  // parallel projection. Own module; we delegate apply + sync to it.
-  const figure = initPhotoFigurePanel(photoRenderer)
-
-  // ── Profile machinery ─────────────────────────────────────────────────────
-  // Settings to skip when applying a profile (HDR file blob can't be persisted;
-  // 'file' environment is downgraded to 'off' on apply so the user can re-upload).
-  function _applyProfile(s) {
-    if (!s) return
-    if (s.lighting)  photoRenderer.setLighting(s.lighting)
-    if (s.lightingYaw != null || s.lightingPitch != null) {
-      photoRenderer.setLightingDirection(s.lightingYaw ?? 0, s.lightingPitch ?? 0)
-    }
-    if (s.full)      photoRenderer.setMaterialPreset('full',      s.full)
-    if (s.cylinders) photoRenderer.setMaterialPreset('cylinders', s.cylinders)
-    if (s.surface)   photoRenderer.setMaterialPreset('surface',   s.surface)
-    if (s.atomistic) photoRenderer.setMaterialPreset('atomistic', s.atomistic)
-    if (s.bgType)    photoRenderer.setBackground(s.bgType, s.bgColor ?? '#ffffff')
-    if (s.ssao  !== undefined) photoRenderer.setSSAO(s.ssao)
-    if (s.bloom !== undefined) photoRenderer.setBloom(s.bloom, s.bloomStrength, s.bloomRadius, s.bloomThreshold)
-    if (s.exposure !== undefined) photoRenderer.setExposure(s.exposure)
-    // Outline / depth cue / occlusion shading / parallel projection (owns fov).
-    figure.applySettings(s)
-    if (s.fluorophoreEmissive !== undefined) {
-      photoRenderer.setFluorophoreEmissive(s.fluorophoreEmissive, s.fluorophoreIntensity ?? 5)
-    }
-    if (s.translucency !== undefined) photoRenderer.setTranslucency(s.translucency)
-    // Sun — apply scalars before toggle so the on-build has the right pose.
-    if (s.sunAzimuth   !== undefined) photoRenderer.setSunAzimuth(s.sunAzimuth)
-    if (s.sunElevation !== undefined) photoRenderer.setSunElevation(s.sunElevation)
-    if (s.sunStrength  !== undefined) photoRenderer.setSunStrength(s.sunStrength)
-    if (s.sunColor     !== undefined) photoRenderer.setSunColor(s.sunColor)
-    if (s.sun          !== undefined) photoRenderer.setSun(s.sun)
-    // Floor — apply in stable order so setFloor() (which triggers a rebuild)
-    // sees the rest of the settings already in place.
-    if (s.floorMaterial !== undefined) photoRenderer.setFloorMaterial(s.floorMaterial)
-    if (s.floorColor    !== undefined) photoRenderer.setFloorColor(s.floorColor)
-    if (s.floorOpacity  !== undefined) photoRenderer.setFloorOpacity(s.floorOpacity)
-    if (s.floorGridDensity !== undefined) photoRenderer.setFloorGridDensity(s.floorGridDensity)
-    if (s.floorOffset   !== undefined) photoRenderer.setFloorOffset(s.floorOffset)
-    if (s.floorShadows  !== undefined) photoRenderer.setFloorShadows(s.floorShadows)
-    if (s.floorGridColor !== undefined) photoRenderer.setFloorGridColor(s.floorGridColor)
-    if (s.floorGridGlow  !== undefined) photoRenderer.setFloorGridGlow(s.floorGridGlow)
-    if (s.floorGridFade  !== undefined) photoRenderer.setFloorGridFade(s.floorGridFade)
-    if (s.floorGridNeon  !== undefined) photoRenderer.setFloorGridNeon(s.floorGridNeon)
-    if (s.floorGrid     !== undefined) photoRenderer.setFloorGrid(s.floorGrid)
-    if (s.floor         !== undefined) photoRenderer.setFloor(s.floor)
-    // Environment: 'file' can't be restored without the blob — downgrade to 'off'.
-    if (s.environment === 'off' || s.environment === 'room') {
-      photoRenderer.setEnvironment(s.environment)
-    } else if (s.environment === 'file') {
-      photoRenderer.setEnvironment('off')
-    }
-    if (s.environmentBackground !== undefined) photoRenderer.setEnvironmentBackground(s.environmentBackground)
-    if (s.envEffect          !== undefined) photoRenderer.setEnvironmentalEffect(s.envEffect)
-    if (s.mistDensity        !== undefined) photoRenderer.setMistDensity(s.mistDensity)
-    if (s.mistColor          !== undefined) photoRenderer.setMistColor(s.mistColor)
-    if (s.mistHaloIntensity  !== undefined) photoRenderer.setMistHaloIntensity(s.mistHaloIntensity)
-    photoRenderer.setMistNoise({
-      contrast: s.mistNoiseContrast,
-      scale:    s.mistNoiseScale,
-      speed:    s.mistNoiseSpeed,
-    })
-    syncToState()
+  const els = {
+    exit:      $('photo-exit-btn'),
+    status:    $('photo-status'),
+    pinLights: $('photo-pin-lights'),
+    keyShadow: $('photo-key-shadow'),
+    keyShadowControls:  $('photo-key-shadow-controls'),
+    keyShadowMapSize:   $('photo-key-shadow-mapsize'),
+    keyShadowRes:       $('photo-key-shadow-res'),
+    keyShadowBias:      $('photo-key-shadow-bias'),
+    keyShadowBiasLabel: $('photo-key-shadow-bias-label'),
+    keyAzimuth:        $('photo-key-azimuth'),
+    keyAzimuthLabel:   $('photo-key-azimuth-label'),
+    keyElevation:      $('photo-key-elevation'),
+    keyElevationLabel: $('photo-key-elevation-label'),
+    keyDir:            $('photo-key-dir'),
+    keyDirReset:       $('photo-key-dir-reset'),
+    shadowStrength:      $('photo-shadow-strength'),
+    shadowStrengthLabel: $('photo-shadow-strength-label'),
+    shadowStrength:      $('photo-shadow-strength'),
+    shadowStrengthLabel: $('photo-shadow-strength-label'),
+    keyIntensity:        $('photo-key-intensity'),
+    keyIntensityLabel:   $('photo-key-intensity-label'),
+    fillIntensity:       $('photo-fill-intensity'),
+    fillIntensityLabel:  $('photo-fill-intensity-label'),
+    ambientIntensity:      $('photo-ambient-intensity'),
+    ambientIntensityLabel: $('photo-ambient-intensity-label'),
+    maxContrast: $('photo-max-contrast'),
+    shadowDepth: $('photo-shadow-depth'),
+    outline:            $('photo-outline'),
+    outlineControls:    $('photo-outline-controls'),
+    outlineColor:       $('photo-outline-color'),
+    outlineStrength:    $('photo-outline-strength'),
+    outlineStrengthLab: $('photo-outline-strength-label'),
+    outlineThickness:   $('photo-outline-thickness'),
+    outlineThicknessLab:$('photo-outline-thickness-label'),
+    outlineJump:        $('photo-outline-jump'),
+    outlineJumpLab:     $('photo-outline-jump-label'),
+    depthCue:           $('photo-depthcue'),
+    depthCueControls:   $('photo-depthcue-controls'),
+    depthCueColor:      $('photo-depthcue-color'),
+    depthCueStrength:   $('photo-depthcue-strength'),
+    depthCueStrengthLab:$('photo-depthcue-strength-label'),
+    matFull:      $('photo-mat-full'),
+    matCylinders: $('photo-mat-cylinders'),
+    matSurface:   $('photo-mat-surface'),
+    matAtomistic: $('photo-mat-atomistic'),
+    fov:        $('photo-fov'),
+    fovLabel:   $('photo-fov-label'),
+    parallel:   $('photo-parallel'),
+    resPreset:  $('photo-res-preset'),
+    resW:       $('photo-res-w'),
+    resH:       $('photo-res-h'),
+    exportNote: $('photo-export-note'),
+    exportBtn:  $('photo-export-btn'),
+    bgType:  $('photo-bg-type'),
+    bgColor: $('photo-bg-color'),
   }
 
-  /** Restore every photo-mode setting to the factory defaults and write them
-   *  into the active profile (so the reset survives a reload rather than being
-   *  undone by the next autosave). `_applyProfile` covers everything that has a
-   *  renderer setter (including the figure controls); path tracing is driven
-   *  straight from the UI radios, so it's reset here. */
-  function _resetToDefaults() {
-    _applyProfile({ ...DEFAULT_PHOTO_SETTINGS })
-    // Quality: back to the fast raster path.
-    if (photoRenderer.isPathTracingEnabled?.()) photoRenderer.enablePathTracing(false)
-    if (qualFast) qualFast.checked = true
-    if (qualPT)   qualPT.checked   = false
-    if (ptProgress) ptProgress.style.display = 'none'
-    const name = _getActiveProfileName()
-    if (name) {
-      const profiles = _loadProfiles()
-      profiles[name] = photoRenderer.getSettings()
-      _saveProfiles(profiles)
-    }
+  let _statusTimer = null
+
+  function _refreshStatus() {
+    if (els.status) els.status.textContent = formatShadowStatus(photoMode.getStatus())
   }
 
-  function _populateProfileDropdown() {
-    if (!profileSel) return
-    const profiles = _loadProfiles()
-    const active   = _getActiveProfileName()
-    profileSel.innerHTML = ''
-    const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b))
-    for (const name of names) {
-      const opt = document.createElement('option')
-      opt.value = name
-      opt.textContent = name
-      if (name === active) opt.selected = true
-      profileSel.appendChild(opt)
-    }
-    if (profileStatus) {
-      profileStatus.textContent = active ? `Active: ${active}` : ''
-    }
+  function _refreshResolution() {
+    if (!els.keyShadowRes) return
+    const s = photoMode.getSettings()
+    const r = shadowResolution(photoMode.getStatus()?.radius ?? 0, s.keyShadowMapSize)
+    els.keyShadowRes.textContent = (!r.ok && r.nmPerTexel > 0)
+      ? `${r.nmPerTexel.toFixed(2)} nm/texel — COARSER than a ${DUPLEX_NM} nm duplex `
+        + `(${r.duplexes.toFixed(1)} texels across one). Raise the map size or the shadow `
+        + `will be a wash, not a cast shadow.`
+      : `${r.nmPerTexel.toFixed(3)} nm/texel (${r.duplexes.toFixed(1)} texels across a ${DUPLEX_NM} nm duplex).`
   }
 
-  function _ensureDefaultProfile() {
-    const profiles = _loadProfiles()
-    if (Object.keys(profiles).length === 0) {
-      profiles.Default = photoRenderer.getSettings()
-      _saveProfiles(profiles)
-      _setActiveProfileName('Default')
-    } else if (!profiles[_getActiveProfileName()]) {
-      // Active name points at a profile that no longer exists — pick first.
-      _setActiveProfileName(Object.keys(profiles).sort()[0])
-    }
+  /** Poll while active — the rig refits inside the render loop, so there is no
+   *  event to hang this off. */
+  function _startStatusPolling() {
+    _stopStatusPolling()
+    _statusTimer = setInterval(() => { _refreshStatus(); _refreshResolution() }, 500)
+    _refreshStatus()
+    _refreshResolution()
   }
 
-  let _persistTimer = null
-  function _schedulePersist() {
-    clearTimeout(_persistTimer)
-    _persistTimer = setTimeout(() => {
-      _persistTimer = null
-      const name = _getActiveProfileName()
-      if (!name) return
-      const profiles = _loadProfiles()
-      profiles[name] = photoRenderer.getSettings()
-      _saveProfiles(profiles)
-    }, 250)
+  function _stopStatusPolling() {
+    if (_statusTimer) { clearInterval(_statusTimer); _statusTimer = null }
+    _refreshStatus()
   }
 
-  // Initial profile setup (runs once when the panel is first instantiated).
-  // The actual application of the active profile is deferred to applyActiveProfile()
-  // which the caller (main.js _photoModeEnter) invokes AFTER photoRenderer.activate(),
-  // so material setters take effect properly instead of queueing with toast warnings.
-  _migrateEnvDefaultToRoom()
-  _ensureDefaultProfile()
-  _populateProfileDropdown()
-
-  function applyActiveProfile() {
-    const name = _getActiveProfileName()
-    if (!name) return
-    const profiles = _loadProfiles()
-    if (profiles[name]) _applyProfile(profiles[name])
-  }
-
-  // Profile dropdown — load on selection.
-  profileSel?.addEventListener('change', () => {
-    const name = profileSel.value
-    if (!name) return
-    _setActiveProfileName(name)
-    const profiles = _loadProfiles()
-    if (profiles[name]) _applyProfile(profiles[name])
-    if (profileStatus) profileStatus.textContent = `Active: ${name}`
-  })
-
-  // New profile — snapshot of current settings under a chosen name.
-  profileNew?.addEventListener('click', async () => {
-    const profiles = _loadProfiles()
-    const suggested = `Profile ${Object.keys(profiles).length + 1}`
-    const name = prompt('New profile name:', suggested)?.trim()
-    if (!name) return
-    if (profiles[name]) {
-      const ok = await showConfirm({
-        title: 'Overwrite profile',
-        message: `Profile "${name}" already exists. Overwrite?`,
-        confirmLabel: 'Overwrite',
-      })
-      if (!ok) return
-    }
-    profiles[name] = photoRenderer.getSettings()
-    _saveProfiles(profiles)
-    _setActiveProfileName(name)
-    _populateProfileDropdown()
-  })
-
-  // Rename — change the active profile's key.
-  profileRename?.addEventListener('click', async () => {
-    const oldName = _getActiveProfileName()
-    if (!oldName) return
-    const newName = prompt(`Rename "${oldName}" to:`, oldName)?.trim()
-    if (!newName || newName === oldName) return
-    const profiles = _loadProfiles()
-    if (profiles[newName]) {
-      const ok = await showConfirm({
-        title: 'Overwrite profile',
-        message: `Profile "${newName}" already exists. Overwrite?`,
-        confirmLabel: 'Overwrite',
-      })
-      if (!ok) return
-    }
-    profiles[newName] = profiles[oldName]
-    delete profiles[oldName]
-    _saveProfiles(profiles)
-    _setActiveProfileName(newName)
-    _populateProfileDropdown()
-  })
-
-  // Delete — remove the active profile, fall back to first remaining (or recreate Default).
-  profileDelete?.addEventListener('click', async () => {
-    const name = _getActiveProfileName()
-    if (!name) return
-    const ok = await showConfirm({
-      title: 'Delete profile',
-      message: `Delete profile "${name}"?`,
-      danger: true,
-      confirmLabel: 'Delete',
-    })
-    if (!ok) return
-    const profiles = _loadProfiles()
-    delete profiles[name]
-    const remaining = Object.keys(profiles).sort()
-    if (remaining.length === 0) {
-      profiles.Default = photoRenderer.getSettings()
-      _saveProfiles(profiles)
-      _setActiveProfileName('Default')
-    } else {
-      _saveProfiles(profiles)
-      _setActiveProfileName(remaining[0])
-      _applyProfile(profiles[remaining[0]])
-    }
-    _populateProfileDropdown()
-  })
-
-  // Reset — every photo setting back to the factory defaults, in place (the
-  // active profile keeps its name and is overwritten with the defaults).
-  profileReset?.addEventListener('click', async () => {
-    const ok = await showConfirm({
-      title: 'Reset photo settings',
-      message: 'Restore all photo-mode settings (lighting, materials, background, '
-             + 'floor, sun, mist, effects) to their defaults? The current camera view is kept.',
-      danger: true,
-      confirmLabel: 'Reset',
-    })
-    if (!ok) return
-    _resetToDefaults()
-  })
-
-  // Auto-save on any user interaction inside the photo panel (event delegation).
-  // Programmatic .value writes from syncToState/_applyProfile do NOT fire input/change,
-  // so loading a profile doesn't trigger a recursive save loop.
-  const _photoTab = document.getElementById('tab-content-photo')
-  _photoTab?.addEventListener('input',  _schedulePersist, true)
-  _photoTab?.addEventListener('change', _schedulePersist, true)
-
-  // Keep the Style dropdown honest: the moment the user changes any control the
-  // active preset has an opinion about, the dropdown must fall back to "Custom".
-  //
-  // Registered on the BUBBLE phase, deliberately. The autosave listeners above
-  // use capture, which runs BEFORE the control's own handler has pushed the
-  // change into the renderer — so a capture-phase read here would see the old
-  // settings and leave the dropdown showing a preset the user just deviated
-  // from. (Deferring the read to a microtask does NOT fix that: the microtask
-  // queue drains between individual listener callbacks, not after the whole
-  // event dispatch.) Bubbling to this ancestor happens after the target's
-  // handler has run, which is exactly the ordering we need.
-  //
-  // The Style select is excluded from its OWN refresh: a <select> fires `input`
-  // BEFORE `change`, so refreshing on that `input` would rewrite styleSel.value
-  // back to whatever the (not yet updated) settings match — and the `change`
-  // handler, which reads styleSel.value, would then apply the wrong style. The
-  // dropdown is set correctly for that case by _applyProfile → syncToState.
-  function _refreshStyleLabel(e) {
-    if (!styleSel || e?.target === styleSel) return
-    styleSel.value = detectStyle(photoRenderer.getSettings())
-  }
-  _photoTab?.addEventListener('input',  _refreshStyleLabel)
-  _photoTab?.addEventListener('change', _refreshStyleLabel)
-
-  // ── Resolution helpers ───────────────────────────────────────────────────────
-
-  function _getTargetSize() {
-    const pkey = resSel?.value ?? 'p300'
-    const preset = RESOLUTION_PRESETS[pkey]
-    if (!preset) return { w: 2100, h: 1485 }
-    if (pkey === 'screen') {
-      return { w: sceneCtx.renderer.domElement.width, h: sceneCtx.renderer.domElement.height }
-    }
-    if (pkey === 'x2') {
-      return {
-        w: sceneCtx.renderer.domElement.width  * 2,
-        h: sceneCtx.renderer.domElement.height * 2,
-      }
-    }
-    if (pkey === 'custom') {
-      return { w: parseInt(resWIn?.value) || 2100, h: parseInt(resHIn?.value) || 1485 }
-    }
-    return { w: preset.w, h: preset.h }
-  }
-
-  function _updateDPILabel() {
-    const pkey = resSel?.value ?? 'p300'
-    const preset = RESOLUTION_PRESETS[pkey]
-    if (!dpiLabel) return
-    if (pkey === 'custom') {
-      const w   = parseInt(resWIn?.value) || 2100
-      const dpi = Math.round(w / 3.46)   // assume 88 mm column width
-      dpiLabel.textContent = `≈ ${dpi} DPI`
-    } else if (preset?.dpi) {
-      dpiLabel.textContent = `${preset.dpi} DPI`
-    } else {
-      dpiLabel.textContent = 'screen res'
-    }
-    const { w, h } = _getTargetSize()
-    if (resWIn) resWIn.value = w
-    if (resHIn) resHIn.value = h
-  }
-
-  // ── Wire controls ────────────────────────────────────────────────────────────
-
-  // Exit
-  exitBtn.addEventListener('click', () => onExit?.())
-
-  // Export
-  exportBtn.addEventListener('click', async () => {
-    exportBtn.disabled = true
-    try {
-      const { w, h } = _getTargetSize()
-      // Temporarily upgrade to the chosen export rep (rebuild before/after);
-      // the working preview is unchanged except a flicker during the render.
-      await _withExportRep(async () => {
-        exportBtn.textContent = 'Rendering…'
-        const blob = await photoRenderer.renderToBlob(w, h)
-        const ts   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-        _download(blob, `nadoc-${ts}.png`)
-      })
-    } catch (err) {
-      console.error('[photo] Export failed:', err)
-    } finally {
-      exportBtn.disabled = false
-      exportBtn.textContent = '↓ Export PNG'
-    }
-  })
-
-  // Export representation: persist on change (per-assembly, saved to .nass).
-  exportRepSel?.addEventListener('change', () => {
-    setExportRepresentation?.(exportRepSel.value)
-  })
-
-  // Lighting
-  lightingSel?.addEventListener('change', () => {
-    photoRenderer.setLighting(lightingSel.value)
-  })
-  lightYaw?.addEventListener('input', () => {
-    if (lightYawLabel) lightYawLabel.textContent = `${lightYaw.value}°`
-    photoRenderer.setLightingDirection(parseFloat(lightYaw.value), null)
-  })
-  lightPitch?.addEventListener('input', () => {
-    if (lightPitchLabel) lightPitchLabel.textContent = `${lightPitch.value}°`
-    photoRenderer.setLightingDirection(null, parseFloat(lightPitch.value))
-  })
-
-  // Sun controls
-  function _syncSunRowVisibility() {
-    if (sunCtrlsRow) sunCtrlsRow.style.display = sunEnable?.checked ? 'flex' : 'none'
-  }
-  sunEnable?.addEventListener('change', () => {
-    _syncSunRowVisibility()
-    photoRenderer.setSun(sunEnable.checked)
-  })
-  sunAzimuth?.addEventListener('input', () => {
-    const v = parseFloat(sunAzimuth.value)
-    if (sunAzimuthLbl) sunAzimuthLbl.textContent = `${Math.round(v)}°`
-    photoRenderer.setSunAzimuth(v)
-  })
-  sunElevation?.addEventListener('input', () => {
-    const v = parseFloat(sunElevation.value)
-    if (sunElevationLbl) sunElevationLbl.textContent = `${Math.round(v)}°`
-    photoRenderer.setSunElevation(v)
-  })
-  sunStrength?.addEventListener('input', () => {
-    const v = parseFloat(sunStrength.value)
-    if (sunStrengthLbl) sunStrengthLbl.textContent = `${v.toFixed(1)}×`
-    photoRenderer.setSunStrength(v)
-  })
-  sunColor?.addEventListener('input', () => {
-    photoRenderer.setSunColor(sunColor.value)
-  })
-
-  // Fluorophore emissive override
-  fluoroChk?.addEventListener('change', () => {
-    if (fluoroRow) fluoroRow.style.display = fluoroChk.checked ? '' : 'none'
-    const intensity = parseFloat(fluoroInt?.value ?? 5)
-    photoRenderer.setFluorophoreEmissive(fluoroChk.checked, intensity)
-  })
-  fluoroInt?.addEventListener('input', () => {
-    const v = parseFloat(fluoroInt.value)
-    if (fluoroIntLabel) fluoroIntLabel.textContent = v.toFixed(1)
-    photoRenderer.setFluorophoreIntensity(v)
-  })
-
-  // Environment (HDRI)
-  envMode?.addEventListener('change', () => {
-    const mode = envMode.value
-    if (mode === 'file') {
-      // Trigger the hidden file input; env applied once the user picks a file
-      envFile?.click()
-      return
-    }
-    if (envFileName) envFileName.textContent = ''
-    photoRenderer.setEnvironment(mode)
-  })
-  envFile?.addEventListener('change', async () => {
-    const f = envFile.files?.[0]
-    if (!f) {
-      // User cancelled; revert dropdown to current setting
-      if (envMode) envMode.value = photoRenderer.getSettings().environment || 'off'
-      return
-    }
-    if (envFileName) envFileName.textContent = `Loading ${f.name}…`
-    await photoRenderer.setEnvironment('file', f)
-    if (envFileName) envFileName.textContent = f.name
-  })
-  envBg?.addEventListener('change', () => {
-    photoRenderer.setEnvironmentBackground(envBg.checked)
-  })
-
-  // Environmental Effects (mist)
-  function _syncMistRowVisibility() {
-    if (envEffectMistRow) envEffectMistRow.style.display = (envEffect?.value === 'mist') ? 'flex' : 'none'
-  }
-  envEffect?.addEventListener('change', () => {
-    _syncMistRowVisibility()
-    photoRenderer.setEnvironmentalEffect(envEffect.value)
-  })
-  mistDensity?.addEventListener('input', () => {
-    const v = parseFloat(mistDensity.value)
-    if (mistDensityLbl) mistDensityLbl.textContent = v.toFixed(3)
-    photoRenderer.setMistDensity(v)
-  })
-  mistColor?.addEventListener('input', () => {
-    photoRenderer.setMistColor(mistColor.value)
-  })
-  mistHalo?.addEventListener('input', () => {
-    const v = parseFloat(mistHalo.value)
-    if (mistHaloLbl) mistHaloLbl.textContent = `${v.toFixed(2)}×`
-    photoRenderer.setMistHaloIntensity(v)
-  })
-  mistWispC?.addEventListener('input', () => {
-    const v = parseFloat(mistWispC.value)
-    if (mistWispCLbl) mistWispCLbl.textContent = v.toFixed(2)
-    photoRenderer.setMistNoise({ contrast: v })
-  })
-  mistWispS?.addEventListener('input', () => {
-    const v = parseFloat(mistWispS.value)
-    if (mistWispSLbl) mistWispSLbl.textContent = v.toFixed(3)
-    photoRenderer.setMistNoise({ scale: v })
-  })
-  mistWispSpd?.addEventListener('input', () => {
-    const v = parseFloat(mistWispSpd.value)
-    if (mistWispSpdLbl) mistWispSpdLbl.textContent = v.toFixed(2)
-    photoRenderer.setMistNoise({ speed: v })
-  })
-
-  // Translucency (full + cylinders SSS override)
-  translucIn?.addEventListener('input', () => {
-    const v = parseFloat(translucIn.value)
-    if (translucLbl) translucLbl.textContent = `${Math.round(v * 100)}%`
-    photoRenderer.setTranslucency(v)
-  })
-
-  // Floor (resting surface)
-  function _syncFloorRowVisibility() {
-    if (floorCtrlsRow) floorCtrlsRow.style.display = (floorAxis?.value && floorAxis.value !== 'off') ? 'flex' : 'none'
-  }
-  floorAxis?.addEventListener('change', () => {
-    _syncFloorRowVisibility()
-    photoRenderer.setFloor(floorAxis.value)
-  })
-  floorMatSel?.addEventListener('change', () => {
-    photoRenderer.setFloorMaterial(floorMatSel.value)
-  })
-  floorColorIn?.addEventListener('input', () => {
-    photoRenderer.setFloorColor(floorColorIn.value)
-  })
-  floorOpacityIn?.addEventListener('input', () => {
-    const v = parseFloat(floorOpacityIn.value)
-    if (floorOpacityLbl) floorOpacityLbl.textContent = `${Math.round(v * 100)}%`
-    photoRenderer.setFloorOpacity(v)
-  })
-  floorDensityIn?.addEventListener('input', () => {
-    const v = parseFloat(floorDensityIn.value)
-    if (floorDensityLbl) floorDensityLbl.textContent = `${v.toFixed(0)}`
-    photoRenderer.setFloorGridDensity(v)
-  })
-  floorOffsetIn?.addEventListener('input', () => {
-    const v = parseFloat(floorOffsetIn.value)
-    if (floorOffsetLbl) floorOffsetLbl.textContent = `${v.toFixed(1)} nm`
-    photoRenderer.setFloorOffset(v)
-  })
-  floorShadowsIn?.addEventListener('change', () => {
-    photoRenderer.setFloorShadows(floorShadowsIn.checked)
-  })
-  function _syncFloorGridSubRows() {
-    if (floorGridStyleRow) floorGridStyleRow.style.display = floorGridIn?.checked ? 'flex' : 'none'
-    if (floorGridNeonRow)  floorGridNeonRow.style.display  = floorGridNeonChk?.checked ? 'flex' : 'none'
-    if (floorGridNeonHint) floorGridNeonHint.style.display = floorGridNeonChk?.checked ? 'block' : 'none'
-  }
-  floorGridIn?.addEventListener('change', () => {
-    _syncFloorGridSubRows()
-    photoRenderer.setFloorGrid(floorGridIn.checked)
-  })
-  floorGridNeonChk?.addEventListener('change', () => {
-    _syncFloorGridSubRows()
-    photoRenderer.setFloorGridNeon(floorGridNeonChk.checked)
-  })
-  floorGridColor?.addEventListener('input', () => {
-    photoRenderer.setFloorGridColor(floorGridColor.value)
-  })
-  floorGridGlow?.addEventListener('input', () => {
-    const v = parseFloat(floorGridGlow.value)
-    if (floorGridGlowLbl) floorGridGlowLbl.textContent = `${v.toFixed(1)}×`
-    photoRenderer.setFloorGridGlow(v)
-  })
-  floorGridFade?.addEventListener('input', () => {
-    const v = parseFloat(floorGridFade.value)
-    if (floorGridFadeLbl) floorGridFadeLbl.textContent = `${v.toFixed(1)}×`
-    photoRenderer.setFloorGridFade(v)
-  })
-
-  // Background
-  bgRadios.forEach(radio => {
-    radio.addEventListener('change', () => {
-      const type = radio.value
-      const color = bgColorIn?.value ?? '#ffffff'
-      if (bgColorRow) bgColorRow.style.display = type === 'custom' ? '' : 'none'
-      photoRenderer.setBackground(type, color)
-    })
-  })
-  bgColorIn?.addEventListener('input', () => {
-    photoRenderer.setBackground('custom', bgColorIn.value)
-  })
-
-  // Material presets — log attachment so we can confirm wiring at init time
-  console.log('[photo-panel] material dropdown refs:', {
-    full:      !!matFull,
-    surface:   !!matSurface,
-    cylinders: !!matCylinders,
-    atomistic: !!matAtomistic,
-  })
-  matFull?.addEventListener('change', () => {
-    console.log('[photo-panel] change → full:', matFull.value)
-    photoRenderer.setMaterialPreset('full', matFull.value)
-  })
-  matSurface?.addEventListener('change', () => {
-    console.log('[photo-panel] change → surface:', matSurface.value)
-    photoRenderer.setMaterialPreset('surface', matSurface.value)
-  })
-  matCylinders?.addEventListener('change', () => {
-    console.log('[photo-panel] change → cylinders:', matCylinders.value)
-    photoRenderer.setMaterialPreset('cylinders', matCylinders.value)
-  })
-  matAtomistic?.addEventListener('change', () => {
-    console.log('[photo-panel] change → atomistic:', matAtomistic.value)
-    photoRenderer.setMaterialPreset('atomistic', matAtomistic.value)
-  })
-  // Expose for console debugging
-  window.__photoRenderer = photoRenderer
-  window.__photoPanelEls = { matFull, matSurface, matCylinders, matAtomistic }
-
-  // SSAO
-  ssaoChk?.addEventListener('change', () => photoRenderer.setSSAO(ssaoChk.checked))
-
-  // Bloom
-  bloomChk?.addEventListener('change', () => {
-    if (bloomRow) bloomRow.style.display = bloomChk.checked ? '' : 'none'
-    photoRenderer.setBloom(
-      bloomChk.checked,
-      parseFloat(bloomStrIn?.value) || 0.5,
-    )
-  })
-  bloomStrIn?.addEventListener('input', () => {
-    photoRenderer.setBloom(bloomChk?.checked ?? false, parseFloat(bloomStrIn.value) || 0.5)
-  })
-  exposureIn?.addEventListener('input', () => {
-    photoRenderer.setExposure(parseFloat(exposureIn.value) || 1.0)
-  })
-
-  // Resolution
-  resSel?.addEventListener('change', () => {
-    const isCustom = resSel.value === 'custom'
-    if (resWIn) resWIn.readOnly = !isCustom
-    if (resHIn) resHIn.readOnly = !isCustom
-    _updateDPILabel()
-  })
-  resWIn?.addEventListener('input', _updateDPILabel)
-  resHIn?.addEventListener('input', _updateDPILabel)
-  _updateDPILabel()
-
-  // FOV. setFOV dollies the camera so the framing is preserved, and flips the
-  // `parallel` flag once the lens gets long enough — so the Parallel checkbox
-  // and the Style dropdown both have to be refreshed from the new state.
-  fovSlider?.addEventListener('input', () => {
-    const v = parseInt(fovSlider.value)
-    if (fovLabel) fovLabel.textContent = `${v}°`
-    photoRenderer.setFOV(v)
-    figure.syncToState()
-    if (styleSel) styleSel.value = detectStyle(photoRenderer.getSettings())
-  })
-
-  // Style preset — a named bundle of the ordinary settings. Applied through the
-  // SAME path as loading a profile, so there is exactly one code path that turns
-  // a settings object into renderer state. Picking "Custom" is a no-op (it is a
-  // label for "matches no preset", not a preset you can apply).
-  styleSel?.addEventListener('change', () => {
-    const patch = resolveStyle(styleSel.value)
-    if (!patch) return
-    _applyProfile({ ...photoRenderer.getSettings(), ...patch })
-    // Path tracing isn't part of _applyProfile (it's driven from the Quality
-    // radios), so honour the preset's choice here.
-    if (patch.pathTracing === false && photoRenderer.isPathTracingEnabled?.()) {
-      photoRenderer.enablePathTracing(false)
-      if (qualFast) qualFast.checked = true
-      if (qualPT)   qualPT.checked   = false
-      if (ptProgress) ptProgress.style.display = 'none'
-    }
-  })
-
-  // Quality (path tracing toggle)
-  qualPT?.addEventListener('change', () => {
-    const enabled = qualPT.checked
-    if (ptProgress) ptProgress.style.display = enabled ? '' : 'none'
-    photoRenderer.enablePathTracing(enabled)
-  })
-  qualFast?.addEventListener('change', () => {
-    if (ptProgress) ptProgress.style.display = 'none'
-    photoRenderer.enablePathTracing(false)
-  })
-
-  // Sample counter update from path tracer
-  photoRenderer.onSamplesUpdate(count => {
-    if (ptSamplesEl) ptSamplesEl.textContent = count
-    // Simple fill bar
-    const fill = _el('photo-pt-bar-fill')
-    if (fill) fill.style.width = Math.min(100, count / 5) + '%'
-  })
-
-  // ── Sync UI to current renderer state on open ────────────────────────────────
-
+  /** Push every control's current value into the UI from the controller. */
   function syncToState() {
-    const s = photoRenderer.getSettings()
-    if (lightingSel) lightingSel.value = s.lighting
-    bgRadios.forEach(r => { r.checked = r.value === s.bgType })
-    if (bgColorIn) bgColorIn.value = s.bgColor
-    if (bgColorRow) bgColorRow.style.display = s.bgType === 'custom' ? '' : 'none'
-    if (matFull)      matFull.value      = s.full
-    if (matSurface)   matSurface.value   = s.surface
-    if (matCylinders) matCylinders.value = s.cylinders
-    if (matAtomistic) matAtomistic.value = s.atomistic
-    // Export rep is a per-assembly setting (not a photo profile setting).
-    if (exportRepSel) exportRepSel.value = store?.getState?.()?.currentAssembly?.export_representation ?? 'full'
-    if (lightYaw)        lightYaw.value        = s.lightingYaw
-    if (lightPitch)      lightPitch.value      = s.lightingPitch
-    if (lightYawLabel)   lightYawLabel.textContent   = `${s.lightingYaw}°`
-    if (lightPitchLabel) lightPitchLabel.textContent = `${s.lightingPitch}°`
-    if (fluoroChk)       fluoroChk.checked     = s.fluorophoreEmissive
-    if (fluoroRow)       fluoroRow.style.display = s.fluorophoreEmissive ? '' : 'none'
-    if (fluoroInt)       fluoroInt.value       = s.fluorophoreIntensity
-    if (fluoroIntLabel)  fluoroIntLabel.textContent = s.fluorophoreIntensity.toFixed(1)
-    if (envMode)         envMode.value         = s.environment ?? 'off'
-    if (envFileName)     envFileName.textContent = s.environmentName ?? ''
-    if (envBg)           envBg.checked         = !!s.environmentBackground
-    if (envEffect)       envEffect.value       = s.envEffect ?? 'none'
-    _syncMistRowVisibility()
-    if (mistDensity)     mistDensity.value     = s.mistDensity ?? 0.04
-    if (mistDensityLbl)  mistDensityLbl.textContent = (s.mistDensity ?? 0.04).toFixed(3)
-    if (mistColor)       mistColor.value       = s.mistColor ?? '#9aa6b8'
-    if (mistHalo)        mistHalo.value        = s.mistHaloIntensity ?? 1.0
-    if (mistHaloLbl)     mistHaloLbl.textContent = `${(s.mistHaloIntensity ?? 1.0).toFixed(2)}×`
-    if (mistWispC)       mistWispC.value       = s.mistNoiseContrast ?? 0
-    if (mistWispCLbl)    mistWispCLbl.textContent = (s.mistNoiseContrast ?? 0).toFixed(2)
-    if (mistWispS)       mistWispS.value       = s.mistNoiseScale ?? 0.05
-    if (mistWispSLbl)    mistWispSLbl.textContent = (s.mistNoiseScale ?? 0.05).toFixed(3)
-    if (mistWispSpd)     mistWispSpd.value     = s.mistNoiseSpeed ?? 0
-    if (mistWispSpdLbl)  mistWispSpdLbl.textContent = (s.mistNoiseSpeed ?? 0).toFixed(2)
-    if (translucIn)      translucIn.value      = s.translucency ?? 0
-    if (translucLbl)     translucLbl.textContent = `${Math.round((s.translucency ?? 0) * 100)}%`
-    // Sun
-    if (sunEnable)       sunEnable.checked      = !!s.sun
-    if (sunAzimuth)      sunAzimuth.value       = s.sunAzimuth ?? 135
-    if (sunAzimuthLbl)   sunAzimuthLbl.textContent  = `${Math.round(s.sunAzimuth ?? 135)}°`
-    if (sunElevation)    sunElevation.value     = s.sunElevation ?? 35
-    if (sunElevationLbl) sunElevationLbl.textContent = `${Math.round(s.sunElevation ?? 35)}°`
-    if (sunStrength)     sunStrength.value      = s.sunStrength ?? 1.5
-    if (sunStrengthLbl)  sunStrengthLbl.textContent = `${(s.sunStrength ?? 1.5).toFixed(1)}×`
-    if (sunColor)        sunColor.value         = s.sunColor ?? '#ffffff'
-    _syncSunRowVisibility()
-    // Floor
-    if (floorAxis)       floorAxis.value       = s.floor ?? 'off'
-    if (floorMatSel)     floorMatSel.value     = s.floorMaterial ?? 'matte'
-    if (floorColorIn)    floorColorIn.value    = s.floorColor ?? '#888888'
-    if (floorOpacityIn)  floorOpacityIn.value  = s.floorOpacity ?? 1
-    if (floorOpacityLbl) floorOpacityLbl.textContent = `${Math.round((s.floorOpacity ?? 1) * 100)}%`
-    if (floorDensityIn)  floorDensityIn.value  = s.floorGridDensity ?? 10
-    if (floorDensityLbl) floorDensityLbl.textContent = `${(s.floorGridDensity ?? 10).toFixed(0)}`
-    if (floorOffsetIn)   floorOffsetIn.value   = s.floorOffset ?? 0
-    if (floorOffsetLbl)  floorOffsetLbl.textContent = `${(s.floorOffset ?? 0).toFixed(1)} nm`
-    if (floorShadowsIn)  floorShadowsIn.checked = s.floorShadows ?? true
-    if (floorGridIn)     floorGridIn.checked   = !!s.floorGrid
-    if (floorGridNeonChk) floorGridNeonChk.checked = !!s.floorGridNeon
-    if (floorGridColor)  floorGridColor.value  = s.floorGridColor ?? '#ff00ff'
-    if (floorGridGlow)   floorGridGlow.value   = s.floorGridGlow ?? 3.0
-    if (floorGridGlowLbl) floorGridGlowLbl.textContent = `${(s.floorGridGlow ?? 3.0).toFixed(1)}×`
-    if (floorGridFade)   floorGridFade.value   = s.floorGridFade ?? 1.5
-    if (floorGridFadeLbl) floorGridFadeLbl.textContent = `${(s.floorGridFade ?? 1.5).toFixed(1)}×`
-    _syncFloorGridSubRows()
-    _syncFloorRowVisibility()
-    if (ssaoChk) ssaoChk.checked  = s.ssao
-    if (bloomChk) bloomChk.checked = s.bloom
-    if (bloomRow) bloomRow.style.display = s.bloom ? '' : 'none'
-    if (bloomStrIn) bloomStrIn.value = s.bloomStrength
-    if (exposureIn && s.exposure !== undefined) exposureIn.value = s.exposure
-    if (fovSlider) {
-      fovSlider.value = s.fov ?? sceneCtx.camera.fov
-      if (fovLabel) fovLabel.textContent = `${Math.round(s.fov ?? sceneCtx.camera.fov)}°`
+    const s = photoMode.getSettings()
+    if (els.pinLights) els.pinLights.checked = s.pinLights
+    if (els.keyShadow) els.keyShadow.checked = s.keyShadow
+    if (els.keyShadowMapSize)   els.keyShadowMapSize.value = String(s.keyShadowMapSize)
+    if (els.keyShadowBias)      els.keyShadowBias.value = String(s.keyShadowBias)
+    if (els.keyShadowBiasLabel) els.keyShadowBiasLabel.textContent = `${s.keyShadowBias.toFixed(1)}×`
+    if (els.shadowStrength)      els.shadowStrength.value = String(s.shadowStrength)
+    if (els.shadowStrengthLabel) els.shadowStrengthLabel.textContent = s.shadowStrength.toFixed(2)
+    if (els.keyShadowControls)  els.keyShadowControls.style.display = s.keyShadow ? 'flex' : 'none'
+    for (const [k, el, lab] of [
+      ['shadowStrength',   els.shadowStrength,   els.shadowStrengthLabel],
+      ['keyIntensity',     els.keyIntensity,     els.keyIntensityLabel],
+      ['fillIntensity',    els.fillIntensity,    els.fillIntensityLabel],
+      ['ambientIntensity', els.ambientIntensity, els.ambientIntensityLabel],
+    ]) {
+      if (el)  el.value = String(s[k])
+      if (lab) lab.textContent = s[k].toFixed(2)
     }
-    if (ptProgress) ptProgress.style.display = s.pathTracing ? '' : 'none'
-    figure.syncToState()
-    // The Style dropdown is a VIEW of the settings, not a stored setting: it
-    // shows whichever preset the live settings match, or "Custom" the moment
-    // the user changes anything a preset has an opinion about.
-    if (styleSel) styleSel.value = detectStyle(s)
-    _updateDPILabel()
+    if (els.keyAzimuth)        els.keyAzimuth.value = String(s.keyAzimuth)
+    if (els.keyAzimuthLabel)   els.keyAzimuthLabel.textContent = `${s.keyAzimuth.toFixed(0)}°`
+    if (els.keyElevation)      els.keyElevation.value = String(s.keyElevation)
+    if (els.keyElevationLabel) els.keyElevationLabel.textContent = `${s.keyElevation.toFixed(0)}°`
+    _refreshKeyDir()
+    _refreshShadowDepth()
+    if (els.outline)  els.outline.checked = s.outline
+    if (els.depthCue) els.depthCue.checked = s.depthCue
+    if (els.outlineControls)  els.outlineControls.style.display  = s.outline  ? 'flex' : 'none'
+    if (els.depthCueControls) els.depthCueControls.style.display = s.depthCue ? 'flex' : 'none'
+    if (els.outlineColor)  els.outlineColor.value  = s.outlineColor
+    if (els.depthCueColor) els.depthCueColor.value = s.depthCueColor
+    for (const [k, el, lab, dp] of [
+      ['outlineStrength',          els.outlineStrength,  els.outlineStrengthLab,  2],
+      ['outlineThickness',         els.outlineThickness, els.outlineThicknessLab, 1],
+      ['outlineDepthJump',         els.outlineJump,      els.outlineJumpLab,      3],
+      ['depthCueStrength',         els.depthCueStrength, els.depthCueStrengthLab, 2],
+    ]) {
+      if (!Number.isFinite(s[k])) continue   // a settings blob predating this control
+      if (el)  el.value = String(s[k])
+      if (lab) lab.textContent = s[k].toFixed(dp)
+    }
+    for (const [repr, sel] of MAT_ROWS) if (sel) sel.value = s[repr]
+    if (els.fov && s.fov != null) {
+      els.fov.value = String(Math.round(s.fov))
+      if (els.fovLabel) els.fovLabel.textContent = `${Math.round(s.fov)}°`
+    }
+    if (els.parallel) els.parallel.checked = s.parallel
+    if (els.resW) els.resW.value = String(s.exportWidth)
+    if (els.resH) els.resH.value = String(s.exportHeight)
+    _refreshExportNote()
+    if (els.bgType)  els.bgType.value = s.bgType
+    if (els.bgColor) els.bgColor.value = s.bgColor
+    _refreshResolution()
+    _refreshStatus()
   }
 
-  // ── Animation Video section ────────────────────────────────────────────────
-  //
-  // Lets the user select a previously-created animation and either preview it
-  // through the live scene (which is already using the photo renderer's
-  // materials/lights/environment) or export it as a high-resolution video by
-  // running each frame through `photoRenderer.renderToBlob` — same path the
-  // "Export PNG" button uses for stills.
-  //
-  // Animations are sourced from the active design or (in assembly mode) the
-  // active assembly. The dropdown auto-refreshes when the relevant slice
-  // changes so the list stays current with the Animation panel.
-
-  function _currentAnimations() {
-    const s = store?.getState?.()
-    if (!s) return []
-    if (s.assemblyActive && s.currentAssembly) return s.currentAssembly.animations ?? []
-    return s.currentDesign?.animations ?? []
+  /** Where the light is, in words, plus the angle off the camera axis — which
+   *  is what decides whether the shadow reads as offset or hides behind the
+   *  object. It is exactly `90 - elevation`. */
+  function _refreshKeyDir() {
+    if (!els.keyDir) return
+    const s = photoMode.getSettings()
+    const az = ((s.keyAzimuth % 360) + 360) % 360
+    const side =
+      az < 22.5 || az >= 337.5 ? 'right' :
+      az < 67.5   ? 'upper-right' :
+      az < 112.5  ? 'above' :
+      az < 157.5  ? 'upper-left' :
+      az < 202.5  ? 'left' :
+      az < 247.5  ? 'lower-left' :
+      az < 292.5  ? 'below' : 'lower-right'
+    const off = 90 - s.keyElevation
+    els.keyDir.textContent = s.keyElevation >= 0
+      ? `Lit from the ${side}, ${off.toFixed(0)}° off the camera axis.`
+      : `Lit from behind (${side}), ${off.toFixed(0)}° off the camera axis — rim light.`
   }
 
-  function _refreshAnimationDropdown() {
-    if (!animSelect) return
-    const prev = animSelect.value
-    const anims = _currentAnimations()
-    animSelect.innerHTML = ''
-    if (anims.length === 0) {
-      const opt = document.createElement('option')
-      opt.value = ''
-      opt.textContent = '— no animations available —'
-      animSelect.appendChild(opt)
-    } else {
-      for (const a of anims) {
-        const opt = document.createElement('option')
-        opt.value = a.id
-        opt.textContent = a.name || a.id
-        animSelect.appendChild(opt)
-      }
-      if (anims.some(a => a.id === prev)) animSelect.value = prev
-    }
-    _refreshAnimationButtons()
+  function _refreshShadowDepth() {
+    if (!els.shadowDepth) return
+    const s = photoMode.getSettings()
+    const pct = Math.round(shadowDepthFraction(s) * 100)
+    els.shadowDepth.textContent =
+      `A cast shadow removes ${pct}% of the light here (key ${s.keyIntensity.toFixed(2)} of `
+      + `${(s.keyIntensity + s.fillIntensity + s.ambientIntensity).toFixed(2)} total). `
+      + `Lower Fill and Ambient to deepen it.`
   }
 
-  function _activeAnimation() {
-    const id = animSelect?.value
-    if (!id) return null
-    return _currentAnimations().find(a => a.id === id) ?? null
-  }
-
-  function _refreshAnimationButtons() {
-    const has = !!_activeAnimation()
-    const ready = has && !!player
-    const exportable = ready && !!exportPhotoVideo
-    if (animPreview) {
-      animPreview.disabled = !ready
-      animPreview.style.opacity = ready ? '1' : '0.45'
-      animPreview.style.cursor  = ready ? 'pointer' : 'default'
-    }
-    if (animExport) {
-      animExport.disabled = !exportable
-      animExport.style.opacity = exportable ? '1' : '0.45'
-      animExport.style.cursor  = exportable ? 'pointer' : 'default'
-    }
-    // When an animation is picked, default FPS from the animation itself
-    // (only if the user hasn't manually changed the field).
-    const a = _activeAnimation()
-    if (a && animFpsIn && animFpsIn.dataset.userEdited !== 'true') {
-      animFpsIn.value = String(Math.max(1, Math.min(60, a.fps ?? 30)))
-    }
-  }
-
-  animFpsIn?.addEventListener('input', () => { animFpsIn.dataset.userEdited = 'true' })
-  animSelect?.addEventListener('change', _refreshAnimationButtons)
-
-  // Subscribe to store updates so newly-created animations show up live.
-  if (store?.subscribe) {
-    store.subscribe((n, p) => {
-      const designChanged   = n.currentDesign   !== p.currentDesign
-      const assemblyChanged = n.currentAssembly !== p.currentAssembly
-      const modeChanged     = n.assemblyActive  !== p.assemblyActive
-      if (designChanged || assemblyChanged || modeChanged) _refreshAnimationDropdown()
+  /** Bind an intensity slider → setter → label → readout. */
+  function _bindIntensity(el, label, setter) {
+    el?.addEventListener('input', () => {
+      const v = Number(el.value)
+      setter(v)
+      if (label) label.textContent = v.toFixed(2)
+      _refreshShadowDepth()
     })
   }
-  _refreshAnimationDropdown()
 
-  // Preview: play the animation in the live scene. Photo mode is active when
-  // this panel is visible, so playback uses the photo materials/lights/HDRI
-  // automatically — no special render path needed.
-  animPreview?.addEventListener('click', async () => {
-    const anim = _activeAnimation()
-    if (!anim || !player) return
-    animPreview.disabled = true
-    animPreview.textContent = 'Playing…'
-    try {
-      await player.play(anim)
-    } catch (err) {
-      console.error('[photo] Preview failed:', err)
-    } finally {
-      animPreview.disabled = false
-      animPreview.textContent = '▶ Preview'
-      _refreshAnimationButtons()
+  // ── Wiring ─────────────────────────────────────────────────────────────────
+
+  els.exit?.addEventListener('click', () => onExit?.())
+
+
+  els.pinLights?.addEventListener('change', () => photoMode.setPinLights(els.pinLights.checked))
+
+  els.keyShadow?.addEventListener('change', () => {
+    photoMode.setKeyShadow(els.keyShadow.checked)
+    if (els.keyShadowControls) {
+      els.keyShadowControls.style.display = els.keyShadow.checked ? 'flex' : 'none'
     }
+    _refreshStatus()
   })
 
-  // Export: drive the animation player frame-by-frame and render each frame
-  // at the chosen photo-mode resolution via photoRenderer.renderToBlob.
-  let _exportAbort = null
-  animCancel?.addEventListener('click', () => { _exportAbort?.abort?.() })
+  els.keyShadowMapSize?.addEventListener('change', () => {
+    photoMode.setKeyShadowMapSize(Number(els.keyShadowMapSize.value))
+    _refreshResolution()
+  })
 
-  animExport?.addEventListener('click', async () => {
-    const anim = _activeAnimation()
-    if (!anim || !player || !exportPhotoVideo) return
-    const { w, h } = _getTargetSize()
-    const fps = Math.max(1, Math.min(60, parseInt(animFpsIn?.value, 10) || 30))
-    const format = (animFormatIn?.value === 'gif') ? 'gif' : 'webm'
+  els.keyShadowBias?.addEventListener('input', () => {
+    const v = Number(els.keyShadowBias.value)
+    photoMode.setKeyShadowBias(v)
+    if (els.keyShadowBiasLabel) els.keyShadowBiasLabel.textContent = `${v.toFixed(1)}×`
+  })
 
-    animExport.disabled = true
-    animExport.textContent = 'Rendering…'
-    if (animProgRow) animProgRow.style.display = 'flex'
-    if (animProgBar) animProgBar.style.width = '0%'
-    if (animProgLbl) animProgLbl.textContent = 'Preparing…'
-    _exportAbort = new AbortController()
+  els.shadowStrength?.addEventListener('input', () => {
+    const v = Number(els.shadowStrength.value)
+    photoMode.setShadowStrength(v)
+    if (els.shadowStrengthLabel) els.shadowStrengthLabel.textContent = v.toFixed(2)
+  })
 
+  for (const [el, lab, setter, unit] of [
+    [els.keyAzimuth,   els.keyAzimuthLabel,   v => photoMode.setKeyAzimuth(v),   '°'],
+    [els.keyElevation, els.keyElevationLabel, v => photoMode.setKeyElevation(v), '°'],
+  ]) {
+    el?.addEventListener('input', () => {
+      const v = Number(el.value)
+      setter(v)
+      if (lab) lab.textContent = `${v.toFixed(0)}${unit}`
+      _refreshKeyDir()
+    })
+  }
+
+  _bindIntensity(els.keyIntensity,     els.keyIntensityLabel,     v => photoMode.setKeyIntensity(v))
+  _bindIntensity(els.fillIntensity,    els.fillIntensityLabel,    v => photoMode.setFillIntensity(v))
+  _bindIntensity(els.ambientIntensity, els.ambientIntensityLabel, v => photoMode.setAmbientIntensity(v))
+  _bindIntensity(els.shadowStrength,   els.shadowStrengthLabel,   v => photoMode.setShadowStrength(v))
+
+  els.maxContrast?.addEventListener('click', () => {
+    photoMode.setKeyIntensity(2.0)
+    photoMode.setFillIntensity(0)
+    photoMode.setAmbientIntensity(0.15)
+    syncToState()
+  })
+
+  els.bgType?.addEventListener('change', () => {
+    photoMode.setBackground(els.bgType.value, undefined)
+    if (els.bgColor) els.bgColor.disabled = els.bgType.value === 'transparent'
+  })
+
+  els.bgColor?.addEventListener('input', () => photoMode.setBackground(undefined, els.bgColor.value))
+
+  // ── Collapsible cards ──────────────────────────────────────────────────────
+  // Same markup, classes and persistence as the Simulations-tab cards
+  // (see ui/chain_sim_panel.js): a clickable <h2> with a rotating chevron and a
+  // sibling body div, with per-tab collapse state in localStorage.
+  function _initCard(id) {
+    const heading = $(`photo-${id}-heading`)
+    const body    = $(`photo-${id}-body`)
+    const arrow   = $(`photo-${id}-arrow`)
+    if (!heading || !body) return
+    let collapsed = getSectionCollapsed('photo', `photo-${id}-panel`, false)
+    body.style.display = collapsed ? 'none' : ''
+    arrow?.classList.toggle('is-collapsed', collapsed)
+    heading.addEventListener('click', () => {
+      collapsed = !collapsed
+      body.style.display = collapsed ? 'none' : ''
+      arrow?.classList.toggle('is-collapsed', collapsed)
+      setSectionCollapsed('photo', `photo-${id}-panel`, collapsed)
+    })
+  }
+  // Material dropdowns are built from PRESET_LABELS so adding a preset to
+  // material_presets.js shows up here with no markup change.
+  const MAT_ROWS = [
+    ['full',      els.matFull],
+    ['cylinders', els.matCylinders],
+    ['surface',   els.matSurface],
+    ['atomistic', els.matAtomistic],
+  ]
+  for (const [repr, sel] of MAT_ROWS) {
+    if (!sel) continue
+    sel.innerHTML = ''
+    for (const [value, label] of Object.entries(PRESET_LABELS[repr] ?? {})) {
+      const o = document.createElement('option')
+      o.value = value
+      o.textContent = label
+      sel.appendChild(o)
+    }
+    sel.addEventListener('change', () => photoMode.setMaterialPreset(repr, sel.value))
+  }
+
+  els.outline?.addEventListener('change', () => {
+    photoMode.setOutline(els.outline.checked)
+    if (els.outlineControls) els.outlineControls.style.display = els.outline.checked ? 'flex' : 'none'
+  })
+  els.depthCue?.addEventListener('change', () => {
+    photoMode.setDepthCue(els.depthCue.checked)
+    if (els.depthCueControls) els.depthCueControls.style.display = els.depthCue.checked ? 'flex' : 'none'
+  })
+  els.outlineColor?.addEventListener('input', () => photoMode.setOutlineColor(els.outlineColor.value))
+  els.depthCueColor?.addEventListener('input', () => photoMode.setDepthCueColor(els.depthCueColor.value))
+
+  /** slider → setter → label, with a fixed number of decimals. */
+  function _bindRange(el, lab, setter, dp = 2) {
+    el?.addEventListener('input', () => {
+      const v = Number(el.value)
+      setter(v)
+      if (lab) lab.textContent = v.toFixed(dp)
+    })
+  }
+  _bindRange(els.outlineStrength,  els.outlineStrengthLab,  v => photoMode.setOutlineStrength(v))
+  _bindRange(els.outlineThickness, els.outlineThicknessLab, v => photoMode.setOutlineThickness(v), 1)
+  _bindRange(els.outlineJump,      els.outlineJumpLab,      v => photoMode.setOutlineDepthJump(v), 3)
+  _bindRange(els.depthCueStrength, els.depthCueStrengthLab, v => photoMode.setDepthCueStrength(v))
+
+  // ── Camera ─────────────────────────────────────────────────────────────────
+  els.fov?.addEventListener('input', () => {
+    const v = Number(els.fov.value)
+    photoMode.setFOV(v)
+    if (els.fovLabel) els.fovLabel.textContent = `${v}°`
+    if (els.parallel) els.parallel.checked = photoMode.getSettings().parallel
+  })
+  els.parallel?.addEventListener('change', () => {
+    photoMode.setParallel(els.parallel.checked)
+    syncToState()
+  })
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+  // A 14×9.9 in figure at the named DPI. 300 DPI already exceeds the 4096
+  // MAX_TEXTURE_SIZE common on WSL/integrated GPUs, which is why the export is
+  // tiled rather than one oversized render target.
+  const RES_PRESETS = {
+    screen: () => [window.innerWidth, window.innerHeight],
+    x2:     () => [window.innerWidth * 2, window.innerHeight * 2],
+    p300:   () => [4200, 2970],
+    p600:   () => [8400, 5940],
+  }
+
+  function _refreshExportNote() {
+    if (!els.exportNote) return
+    const w = Number(els.resW?.value ?? 0)
+    const h = Number(els.resH?.value ?? 0)
+    if (!(w > 0 && h > 0)) { els.exportNote.textContent = ''; return }
+    const tiles = Math.max(1, Math.ceil(w / 4096)) * Math.max(1, Math.ceil(h / 4096))
+    const inches = (w / 300).toFixed(1)
+    els.exportNote.textContent =
+      `${w}×${h} px — ${inches} in wide at 300 DPI, rendered in ${tiles} tile${tiles === 1 ? '' : 's'}.`
+  }
+
+  function _applyResPreset(key) {
+    const fn = RES_PRESETS[key]
+    if (!fn) { _refreshExportNote(); return }
+    const [w, h] = fn().map(Math.round)
+    if (els.resW) els.resW.value = String(w)
+    if (els.resH) els.resH.value = String(h)
+    photoMode.setExportSize(w, h)
+    _refreshExportNote()
+  }
+
+  els.resPreset?.addEventListener('change', () => _applyResPreset(els.resPreset.value))
+  for (const el of [els.resW, els.resH]) {
+    el?.addEventListener('change', () => {
+      if (els.resPreset) els.resPreset.value = 'custom'
+      photoMode.setExportSize(Number(els.resW.value), Number(els.resH.value))
+      _refreshExportNote()
+    })
+  }
+
+  els.exportBtn?.addEventListener('click', async () => {
+    if (!els.exportBtn) return
+    const label = els.exportBtn.textContent
+    els.exportBtn.disabled = true
+    els.exportBtn.textContent = 'Rendering…'
     try {
-      // One upgrade to the export rep before the frame session, one restore
-      // after (the session renders the live scene per frame). Working view unchanged.
-      await _withExportRep(async () => {
-        if (animProgLbl) animProgLbl.textContent = 'Building high-detail…'
-        await exportPhotoVideo({
-          animation: anim,
-          player,
-          photoRenderer,
-          width: w, height: h,
-          options: { format, fps },
-          signal: _exportAbort.signal,
-          onProgress: (frac, info) => {
-            if (animProgBar) animProgBar.style.width = `${Math.round(frac * 100)}%`
-            if (animProgLbl) animProgLbl.textContent =
-              `Frame ${info?.frame ?? 0} / ${info?.frames ?? '?'}  (${Math.round(frac * 100)}%)`
-          },
-        })
-      })
-      if (animProgLbl) animProgLbl.textContent = 'Done.'
-    } catch (err) {
-      if (err?.name === 'AbortError') {
-        if (animProgLbl) animProgLbl.textContent = 'Cancelled.'
-      } else {
-        console.error('[photo] Animation export failed:', err)
-        if (animProgLbl) animProgLbl.textContent = `Error: ${err?.message ?? err}`
+      const s = photoMode.getSettings()
+      const blob = await photoMode.renderToBlob(s.exportWidth, s.exportHeight)
+      if (blob) {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `nadoc-figure-${s.exportWidth}x${s.exportHeight}.png`
+        a.click()
+        URL.revokeObjectURL(url)
       }
+    } catch (err) {
+      console.error('[photo] export failed:', err)
+      if (els.exportNote) els.exportNote.textContent = `Export failed: ${err.message}`
     } finally {
-      _exportAbort = null
-      animExport.disabled = false
-      animExport.textContent = '↓ Export Video'
-      // Hide progress row after a short delay so the user can read the result.
-      setTimeout(() => { if (animProgRow) animProgRow.style.display = 'none' }, 2000)
-      _refreshAnimationButtons()
+      els.exportBtn.disabled = false
+      els.exportBtn.textContent = label
     }
   })
 
-  return { syncToState, applyActiveProfile, refreshAnimationDropdown: _refreshAnimationDropdown }
+  _initCard('lighting')
+  _initCard('camera')
+  _initCard('export')
+  _initCard('figure')
+  _initCard('materials')
+  _initCard('bg')
+
+  els.keyDirReset?.addEventListener('click', () => {
+    photoMode.resetKeyDirection()
+    syncToState()
+  })
+
+  return {
+    syncToState,
+    onEnter: () => { syncToState(); _startStatusPolling() },
+    onExit:  () => { _stopStatusPolling() },
+    dispose: _stopStatusPolling,
+  }
 }

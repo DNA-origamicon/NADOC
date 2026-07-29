@@ -60,7 +60,8 @@ export const FigureShader = {
     uNormalSens:       { value: 0.85 },                    // crease sensitivity (normal step)
 
     // Silhouette algorithm: 0 = Roberts cross on depth+normals (the original,
-    // still what the shipping Photo tab uses), 1 = ChimeraX depth-outline.
+    // inherited from photo mode v1), 1 = ChimeraX depth-outline — what the
+    // live photo mode uses.
     uSilhouette:  { value: 0 },
     uDepthJump:   { value: 0.03 },                         // ChimeraX depth_jump: fraction of scene depth
     uSceneDepth:  { value: 0 },                            // world-space depth span; <=0 falls back to far-near

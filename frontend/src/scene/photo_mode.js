@@ -1,313 +1,1107 @@
-// Photo mode + export-representation subsystem (extracted from main.js, #70).
-//
-// Two coupled concerns:
-//   1. Photo mode — the publication-render pane (PBR/HDRI/path-tracer) driven by
-//      `photoRenderer` + `initPhotoPanel`. Enter/exit toggle annotation overlays
-//      and partial UI lockdown for clean figures.
-//   2. Export representation — for the duration of a photo-mode PNG/video render,
-//      every instance is temporarily upgraded to the assembly's
-//      `export_representation` at full geometric detail, then restored. The
-//      `getExportRepActive()` flag lets the save path skip the temporary upgrade
-//      so it never hits disk.
-//
-// Display-layer only — never mutates Design topology.
+/**
+ * Photo mode — figure-quality rendering of the design on screen.
+ *
+ * This began as the "Exp. Photomode" testbed and REPLACED photo mode v1 on
+ * 2026-07-29; v1 is preserved verbatim under archive/photo_mode_v1/ (see its
+ * README for what was dropped and why). Deliberately narrow: v1 had grown into
+ * a general 3D render suite — HDRI, bloom, path tracer, floor, mist, style
+ * presets — and the surface area buried the two things that actually make a
+ * molecular figure. What this has:
+ *
+ *   • flat figure materials (no specular lobe at all)
+ *   • a CAMERA-PINNED key light — ChimeraX's move_lights_with_camera, so the
+ *     shadow sweeps across the structure as you reorient it
+ *   • a real KEY-LIGHT SHADOW MAP, with no floor required, so an object casts
+ *     onto whatever is behind it
+ *   • the ChimeraX depth-outline silhouette + a depth cue
+ *   • flat-colour background, SMAA, and tiled PNG export
+ *
+ * No HDRI, no bloom, no path tracer, no floor, no mist — all deliberate.
+ *
+ * REMOVED 2026-07-28 — multishadow ambient occlusion. A faithful port of
+ * ChimeraX's 64-direction ambient shadows shipped here and was cut after
+ * side-by-side evaluation: at origami scale each of the 64 per-direction maps
+ * is far too coarse to resolve a 2 nm duplex (ChimeraX's 1024 default gives
+ * ~2.3 nm/texel on a 150 nm structure), so it never produced the long-range
+ * cast shadows it does on a 5 nm protein — only a vague wash that fought the
+ * key shadow. The one part worth keeping was its frustum fitting, which now
+ * lives in photo_renderer/shadow_bounds.js. See
+ * photo_mode_ao_and_lowpoly_spec.md for the full findings.
+ *
+ * Display-layer only — never mutates Design topology (Three-Layer Law).
+ * Every piece of state it changes is saved on activate and restored on
+ * deactivate, the same save/restore contract photo mode v1 honoured.
+ */
 
 import * as THREE from 'three'
-import { BEAD_RADIUS } from './helix_renderer.js'
-import { SPHERE_GEO as ATOM_SPHERE_GEO, CYLINDER_GEO as BOND_CYL_GEO } from './atomistic_renderer/geometry_builder.js'
-import { exportPhotoVideo } from './export_video.js'
-import { initPhotoPanel } from '../ui/photo_panel.js'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js'
+import { SMAAPass }       from 'three/addons/postprocessing/SMAAPass.js'
+import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js'
+
+import { makeMaterial }               from './photo_renderer/material_presets.js'
+import { reprOf }                     from './photo_renderer/mesh_repr.js'
+import { FigurePass }                 from './photo_renderer/figure_pass.js'
+import { dollyDistanceForFov, PARALLEL_FOV, PERSPECTIVE_FOV }
+  from './photo_renderer/figure_camera.js'
+import { applyLighting, LIGHTING_PRESETS } from './photo_renderer/lighting_presets.js'
+import { computeShadowBounds, isShadowExcluded, findBoundsOutlier, rejectedObjects,
+         sceneSignature } from './photo_renderer/shadow_bounds.js'
+import { initPhotoPanel }          from '../ui/photo_panel.js'
 
 /**
- * Pure: from the current store state, decide whether the export render needs to
- * temporarily upgrade every instance's representation, and produce the patch +
- * restore lists. No upgrade when not in assembly mode, no instances, the export
- * rep is 'working', or every instance already matches.
- * @returns {{inAssembly:boolean, exportRep:string, needUpgrade:boolean,
- *            snapshot:Array<{id:string,representation:string}>,
- *            patches:Array<{id:string,representation:string}>}}
+ * Direction the key light shines FROM, in RIG-LOCAL space — which is camera
+ * space while the rig is pinned, so these read as screen directions.
+ *
+ * The Sun in photo mode v1 steered in polar coordinates around the
+ * FLOOR normal. There is no floor here and the rig is pinned to the viewer, so
+ * the natural frame is the screen: azimuth sweeps around it (0 = from the right,
+ * 90 = from directly above, 180 = from the left) and elevation tilts the light
+ * toward the viewer (0 = grazing, in the screen plane; 90 = straight down the
+ * barrel from the camera, which flattens the shadow away; negative = from behind
+ * the subject, a rim light).
+ *
+ * The angle off the camera axis is simply `90 - elevation`.
+ *
+ * Defaults (135°, 35.264°) reproduce ChimeraX's own key direction exactly:
+ * (-0.577, 0.577, 0.577), i.e. 45° up-and-left and 54.7° off the view axis.
+ *
+ * @returns {[number,number,number]} unit vector
  */
-export function planExportRepUpgrade(state) {
-  const asm = state.currentAssembly
-  const exportRep = asm?.export_representation ?? 'full'
-  const insts = asm?.instances ?? []
-  const inAssembly = !!state.assemblyActive && insts.length > 0
-  const needUpgrade = inAssembly && exportRep !== 'working'
-    && !insts.every(i => i.representation === exportRep)
+export function keyLightDirection(azimuthDeg, elevationDeg) {
+  const az = (azimuthDeg   * Math.PI) / 180
+  const el = (elevationDeg * Math.PI) / 180
+  const c  = Math.cos(el)
+  return [c * Math.cos(az), c * Math.sin(az), Math.sin(el)]
+}
+
+/** ChimeraX's own key direction, in the screen frame: 45° up-and-left, 54.7°
+ *  off the camera axis. Exported so the panel's Reset button cannot drift. */
+export const DEFAULT_KEY_AZIMUTH   = 135
+export const DEFAULT_KEY_ELEVATION = 35.264
+
+/** The fixed rig this tab uses. See LIGHTING_PRESETS.full for its geometry. */
+const RIG_PRESET = 'full'
+
+/** Factory defaults — the single source of truth for "what the experiment looks
+ *  like out of the box". */
+export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
+  // Material preset per representation, keyed exactly like
+  // material_presets.js PRESETS/PRESET_LABELS. Defaults are the FIGURE
+  // materials (specularIntensity 0 — no highlight anywhere), which is what this
+  // tab looked like before materials were selectable.
+  full:       'flat',
+  cylinders:  'flat',
+  surface:    'flat',
+  atomistic:  'cpk-flat',
+
+  // ── Figure effects (the publication look) ─────────────────────────────────
+  // Silhouette outline: a dark contour at depth + normal discontinuities, so
+  // overlapping helices separate without lighting having to do it.
+  outline:                  false,
+  outlineColor:             '#1b1f24',
+  outlineStrength:          1.0,
+  outlineThickness:         1.4,    // px
+  outlineDepthSensitivity:  0.35,   // silhouettes (lower = more contours)  [Roberts mode only]
+  outlineCreaseSensitivity: 0.85,   // creases within one surface           [Roberts mode only]
+  // ChimeraX's depth-only silhouette. See figure_pass.js for the algorithm and
+  // why the crease term above is deliberately unused here: normals are what make
+  // a zoomed-out bead field collapse into black line-art, and ChimeraX has none.
+  silhouette:               'chimerax',
+  outlineDepthJump:         0.03,   // ChimeraX depth_jump default: 3% of the structure's depth
+  // Depth cue: a distance fade toward a flat colour so the back of a thick
+  // bundle recedes instead of turning to mush.
+  depthCue:         false,
+  depthCueColor:    '#ffffff',
+  depthCueStrength: 0.35,
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+  // "Parallel" is an 8° LONG LENS + dolly, not a real OrthographicCamera. A true
+  // ortho swap would mean touching every consumer of the shared perspective
+  // camera (the PERSPECTIVE_CAMERA shader defines baked into the post passes at
+  // construction, OrbitControls' distance-based zoom, main.js's per-frame
+  // near/far rewrite). At 8° the residual convergence over a 60 nm object is
+  // sub-pixel at print resolution.
+  parallel:   false,
+  fov:        null,           // null = adopt the editor's lens on entry
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  exportWidth:  4200,         // 300 DPI at 14 in wide
+  exportHeight: 2970,
+
+  bgType:     'color',        // 'color' | 'transparent'
+  bgColor:    '#0b0d10',
+
+  // ChimeraX stores light directions in CAMERA coordinates with
+  // move_lights_with_camera = True, so the key light is pinned to the viewer and
+  // its shadow sweeps across the structure as you reorient. Without this the rig
+  // is welded to the world and orbiting just walks you into the dark side.
+  pinLights:  true,
+
+  // A real shadow map cast by the key light, deliberately NOT gated on a floor.
+  keyShadow:  true,
+  keyShadowMapSize: 2048,     // ChimeraX shadow_map_size; one map, so it is cheap
+  keyShadowBias: 1.0,         // × the texel-scaled normalBias; raise to kill acne
+  shadowStrength:   1.0,      // three's LightShadow.intensity; 1 = physical
+
+  // Per-light intensities — ChimeraX's `lighting intensity / fillIntensity /
+  // ambientIntensity`. THESE are the shadow-contrast controls: a cast shadow can
+  // only subtract the KEY light, so its depth is key/(key+fill+ambient).
+  //
+  // MUST match LIGHTING_PRESETS.full: _rebuildRig applies these OVER the preset's
+  // own values, so a mismatch silently overrides it. Pinned by a test.
+  // Key-light direction in the screen frame (see keyLightDirection). Defaults
+  // reproduce ChimeraX's own key: 45° up-left, 54.7° off the camera axis.
+  keyAzimuth:       DEFAULT_KEY_AZIMUTH,
+  keyElevation:     DEFAULT_KEY_ELEVATION,
+
+  keyIntensity:     2.0,
+  fillIntensity:    0.0,
+  ambientIntensity: 0.15,
+  shadowStrength:   1.0,      // three's LightShadow.intensity; 1 = physical
+})
+
+
+/**
+ * Swap every eligible mesh to its representation's photo material, returning a
+ * restore handle. `presets` maps representation → preset name (see
+ * material_presets.js); omit it for the flat figure materials.
+ *
+ * The mesh→representation decision is shared with photo mode v1 via
+ * mesh_repr.js rather than duplicated, so a renderer adding a mesh name only has
+ * to be taught about it once.
+ *
+ * Preserved from the source material: `side` (the surface mesh is DoubleSide
+ * because its junction edges are non-manifold), `vertexColors`, sub-1 opacity,
+ * and — unlike photo mode v1 — the material COLOUR when the mesh has
+ * neither vertex colours nor instance colours, so a uniformly-coloured mesh
+ * (hull prism, cylinder proxy) doesn't turn white.
+ *
+ * Skipped: impostor materials (their sphere ray-paint lives in an
+ * onBeforeCompile patch that a fresh material would drop), shared-renderer LOD
+ * impostors, additive glow sprites, helper lines, and the photo floor.
+ *
+ * @param {THREE.Object3D} root
+ * @returns {{restore: () => void, count: number}}
+ */
+/** How often (in rendered frames) to re-fingerprint the geometry. ~0.5 s at 60 fps. */
+const SIGNATURE_CHECK_FRAMES = 30
+
+export function swapToFlatMaterials(root, presets = null) {
+  const saved = new Map()
+  root.traverse(obj => {
+    if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.material) return
+    const src = obj.material
+    if (Array.isArray(src)) return
+    if (src.isLineBasicMaterial || src.isLineDashedMaterial) return
+    if (src.blending === THREE.AdditiveBlending) return
+    if (src.userData?.isImpostor || src.userData?.impostorRadius != null) return
+    if (obj.userData?.sharedLodImpostor) return
+    if (obj.userData?.photoFloor) return
+
+    const vc = Boolean(src.vertexColors)
+    // Representation is read from the ORIGINAL material, before any swap —
+    // MeshPhysicalMaterial extends MeshStandardMaterial, so inferring after a
+    // swap makes every unnamed mesh look 'atomistic' (see mesh_repr.js).
+    const repr   = reprOf(obj)
+    const preset = presets?.[repr] ?? (repr === 'atomistic' ? 'cpk-flat' : 'flat')
+    const mat = makeMaterial(repr, preset, vc, 1.0)
+    mat.side = src.side
+    // Preserve the depth contract. Overlay geometry (ghost planes, hit targets,
+    // immobilisation surfaces) is drawn depthWrite:false precisely so it cannot
+    // occlude the structure; a fresh material defaults to TRUE, which turned
+    // those overlays into opaque occluders AND shadow casters, and defeated the
+    // depthWrite exclusion in shadow_bounds.js (which tests the CURRENT material).
+    mat.depthWrite = src.depthWrite
+    mat.depthTest  = src.depthTest
+    if (src.transparent && src.opacity < 1) {
+      mat.transparent = true
+      mat.opacity     = src.opacity
+    }
+    // Only force white where a per-instance / per-vertex colour will supply the
+    // real colour; otherwise carry the source colour through.
+    if (!vc && !obj.instanceColor && src.color) mat.color.copy(src.color)
+
+    saved.set(obj, src)
+    obj.material = mat
+  })
   return {
-    inAssembly,
-    exportRep,
-    needUpgrade,
-    snapshot: insts.map(i => ({ id: i.id, representation: i.representation })),
-    patches:  insts.map(i => ({ id: i.id, representation: exportRep })),
+    count: saved.size,
+    restore() {
+      for (const [obj, mat] of saved) {
+        const swapped = obj.material
+        obj.material = mat
+        if (swapped !== mat) swapped?.dispose?.()
+      }
+      saved.clear()
+    },
   }
 }
 
+/**
+ * @param {object} sceneCtx — the shared scene context from scene.js
+ * @returns photo-mode controller
+ */
+export function createPhotoMode(sceneCtx) {
+  const { scene, camera, renderer, controls, setRenderFn, resetRenderFn,
+          setResizeCallback, clearResizeCallback } = sceneCtx
+
+  const _settings = { ...DEFAULT_PHOTO_SETTINGS }
+
+  let _active      = false
+  let _composer    = null
+  let _matSwap     = null
+  let _lightGroup  = null
+  let _lightTarget = null        // sits at the rig's local origin = scene centre
+  let _keyLight    = null        // the one directional that casts the shadow
+  let _savedLights = []          // [{light, visible}] of the editor's own lights
+  let _savedEnv    = undefined
+  let _savedBg     = undefined
+  const _savedClearColor = new THREE.Color()
+  let _savedClearAlpha   = 1
+  let _savedToneMapping  = null
+  let _savedExposure     = null
+  let _savedShadowEnabled = null
+  let _savedShadowType    = null
+  const _savedMeshShadows = new Map()   // mesh → {cast, receive}
+  let _bounds = null                    // {center, radius} the rig is fitted to
+  let _figurePass = null
+  let _savedFov   = null
+  const _dollyScratch = new THREE.Vector3()
+  const _camForward   = new THREE.Vector3()
+  const _cueScratch   = new THREE.Vector3()
+  let _rejected = new Set()             // objects too large to be part of the structure
+  let _signature = null                 // geometry fingerprint the rig is fitted to
+  let _sigFrame  = 0
+
+  // ── Scene state save / restore ─────────────────────────────────────────────
+
+  function _hideEditorLights() {
+    _savedLights = []
+    scene.traverse(obj => {
+      if (!obj.isLight) return
+      if (_lightGroup && obj.parent === _lightGroup) return
+      _savedLights.push({ light: obj, visible: obj.visible })
+      obj.visible = false
+    })
+  }
+
+  function _restoreEditorLights() {
+    for (const { light, visible } of _savedLights) light.visible = visible
+    _savedLights = []
+  }
+
+  function _applyBackground() {
+    if (_settings.bgType === 'transparent') {
+      scene.background = null
+      renderer.setClearColor(0x000000, 0)
+    } else {
+      const c = new THREE.Color(_settings.bgColor)
+      scene.background = c
+      renderer.setClearColor(c, 1)
+    }
+  }
+
+  // ── Light rig: camera-pinned, fitted to the scene's bounding sphere ─────────
+
+  /**
+   * Rebuild the rig for the active preset and fit it to the scene.
+   *
+   * The rig is a Group parked at the scene CENTRE with the lights pushed out onto
+   * a sphere of radius 2R, and a target object at the group's local origin. Two
+   * consequences, both load-bearing:
+   *   • rotating the group sweeps the lights around the structure while every
+   *     light keeps aiming at the centre — that is what makes camera-pinning a
+   *     single quaternion copy;
+   *   • the shadow frustum can be fitted ONCE, because a sphere looks the same
+   *     from every direction. No per-frame refit as the rig spins.
+   */
+  function _rebuildRig() {
+    if (!_lightGroup) return
+    // Fixed rig geometry — there is no preset selector. The Key/Fill/Ambient
+    // sliders ARE the preset; the dropdown's only remaining effect was to reset
+    // them to an ambient-dominant balance that hid the cast shadow (`flat` had
+    // no directional at all, silently disabling the whole key-shadow block).
+    applyLighting(RIG_PRESET, _lightGroup)
+
+    _bounds = computeShadowBounds(scene)
+    _rejected = rejectedObjects(_bounds)
+    _signature = sceneSignature(scene)
+    _sigFrame = 0
+    const outlier = findBoundsOutlier(_bounds)
+    if (outlier) {
+      console.warn(
+        `[exp-photo] Excluded ${outlier.rejectedCount} oversized object(s) from shadows/occlusion — `
+        + `they would have set the frustum instead of the structure.\n`
+        + `  Largest: "${outlier.worst.name}" (${outlier.worst.type}, ${outlier.worst.material}) spanning `
+        + `${outlier.worst.extent} nm — ${outlier.ratio}× the median mesh (${outlier.medianExtent.toFixed(1)} nm).\n`
+        + `  Frustum radius is now ${_bounds.radius.toFixed(1)} nm. If that object SHOULD occlude, `
+        + `raise OUTLIER_RATIO in multishadow_ao.js.`,
+        outlier,
+      )
+    }
+    const R = _bounds?.radius ?? 1
+    if (_bounds) _lightGroup.position.copy(_bounds.center)
+    else _lightGroup.position.set(0, 0, 0)
+
+    _lightTarget = new THREE.Object3D()
+    _lightGroup.add(_lightTarget)
+
+    // Per-light intensities override the preset's, so the sliders are absolute
+    // values like ChimeraX's `lighting intensity` rather than relative nudges.
+    for (const child of _lightGroup.children) {
+      if (child.isAmbientLight) child.intensity = _settings.ambientIntensity
+    }
+
+    _keyLight = null
+    let seenDirectional = 0
+    for (const child of _lightGroup.children) {
+      if (!child.isDirectionalLight) continue
+      child.intensity = (seenDirectional++ === 0)
+        ? _settings.keyIntensity
+        : _settings.fillIntensity
+      // The KEY light is steered by azimuth/elevation; the fill keeps the
+      // preset's own direction. Both are pushed onto the 2R sphere so the rig's
+      // geometry is scene-scale-independent.
+      const dir = (seenDirectional === 1)
+        ? new THREE.Vector3(...keyLightDirection(_settings.keyAzimuth, _settings.keyElevation))
+        : (child.position.lengthSq() > 0
+            ? child.position.clone().normalize()
+            : new THREE.Vector3(0, 1, 0))
+      child.position.copy(dir.multiplyScalar(2 * R))
+      child.target = _lightTarget
+      child.castShadow = false
+      if (!_keyLight) _keyLight = child          // first directional = the key
+    }
+    _applyKeyShadow()
+  }
+
+  /** Pin the rig to the camera — ChimeraX's move_lights_with_camera.
+   *  World quaternion, not the local one: the render camera is unparented today,
+   *  but a nested camera would silently mis-orient the whole rig. */
+  const _camQuat = new THREE.Quaternion()
+  function _syncRigToCamera() {
+    if (!_lightGroup) return
+    camera.updateMatrixWorld()
+    _lightGroup.quaternion.copy(camera.getWorldQuaternion(_camQuat))
+  }
+
+  /**
+   * Give the key light a real shadow map. This is the SECOND shadow system in
+   * `lighting full`, entirely separate from ambient occlusion: three re-renders
+   * it every frame (so it tracks the camera-pinned light), while the occlusion
+   * bake stays cached. Exactly the asymmetry ChimeraX has.
+   *
+   * Deliberately NOT gated on a floor being present — self-shadowing across a
+   * helix bundle is the point, and a ground plane is the last thing a figure
+   * wants. (Photo mode v1 gated its shadow rig behind `floor !== 'off'`;
+   * that gate is what makes helix-on-helix shadow impossible there.)
+   */
+  function _applyKeyShadow() {
+    const want = _settings.keyShadow && !!_keyLight
+    if (want && _savedShadowEnabled === null) {
+      _savedShadowEnabled = renderer.shadowMap.enabled
+      _savedShadowType    = renderer.shadowMap.type
+    }
+    // `shadowMap.enabled` is compiled INTO every material's program and three
+    // does not re-check it in setProgram (see _suspendShadowMapUpdates in
+    // multishadow_ao.js). Toggling it therefore has no effect on already-compiled
+    // materials unless we force the recompile ourselves.
+    const flagChanged = renderer.shadowMap.enabled !== want
+    renderer.shadowMap.enabled = want
+    if (want) renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    if (flagChanged) _forceMaterialRecompile()
+
+    if (_keyLight) {
+      _keyLight.castShadow = want
+      if (want) {
+        const R = _bounds?.radius ?? 1
+        const cam = _keyLight.shadow.camera
+        cam.left = -R; cam.right = R
+        cam.top  =  R; cam.bottom = -R
+        cam.near = Math.max(1e-4, R * 0.05)
+        cam.far  = 4 * R
+        cam.updateProjectionMatrix()
+        const mapPx = _settings.keyShadowMapSize
+        if (_keyLight.shadow.mapSize.width !== mapPx) {
+          // A shadow map already allocated at another size must be dropped or
+          // three keeps rendering into the old texture.
+          _keyLight.shadow.map?.dispose()
+          _keyLight.shadow.map = null
+          _keyLight.shadow.mapSize.set(mapPx, mapPx)
+        }
+        // Bias must scale with the SHADOW-MAP TEXEL, not with the scene radius.
+        // Scaling to the radius is the usual advice and it is badly wrong here:
+        // origami features are ~0.2 nm beads inside a structure tens to hundreds
+        // of nm across, so a radius-proportional offset reaches several bead
+        // diameters (0.24 nm at R=60, 0.8 nm at R=200) and pushes every sample
+        // clean past the geometry that should be shadowing it — erasing the
+        // shadow instead of just de-acneing it. One texel of the ortho shadow
+        // frustum is the physically motivated unit and stays sane at any scale.
+        const texel = (2 * R) / mapPx
+        _keyLight.shadow.bias       = -0.0005
+        _keyLight.shadow.normalBias = texel * _settings.keyShadowBias
+        _keyLight.shadow.intensity  = _settings.shadowStrength
+        _keyLight.shadow.intensity  = _settings.shadowStrength
+        _keyLight.shadow.needsUpdate = true
+      }
+    }
+    _applyMeshShadowFlags(want)
+  }
+
+  /** Mark every swapped material for recompile — needed whenever a value that
+   *  three bakes into the program (shadowMapEnabled) changes after first draw. */
+  function _forceMaterialRecompile() {
+    scene.traverse(obj => {
+      if ((!obj.isMesh && !obj.isInstancedMesh) || !obj.material) return
+      if (!obj.material.isMeshPhysicalMaterial) return
+      obj.material.needsUpdate = true
+    })
+  }
+
+  function _applyMeshShadowFlags(on) {
+    if (!on) { _restoreMeshShadowFlags(); return }
+    scene.traverse(obj => {
+      if (!obj.isMesh && !obj.isInstancedMesh) return
+      if (_savedMeshShadows.has(obj)) return
+      _savedMeshShadows.set(obj, { cast: obj.castShadow, receive: obj.receiveShadow })
+      // Impostors and shared-LOD instancing cannot cast correctly: three drives
+      // its shadow pass with the built-in depth material, which has neither the
+      // billboard nor the composed instance transform. Let them RECEIVE (that is
+      // a fragment-side lookup and works) but not cast.
+      const canCast = !isShadowExcluded(obj)
+        && !_rejected.has(obj)            // a 100 µm plane would shadow everything
+        && !obj.material?.userData?.isImpostor
+        && obj.material?.userData?.impostorRadius == null
+        && !obj.userData?.sharedLodImpostor
+      obj.castShadow    = canCast
+      obj.receiveShadow = !isShadowExcluded(obj)
+    })
+  }
+
+  function _restoreMeshShadowFlags() {
+    for (const [obj, s] of _savedMeshShadows) {
+      obj.castShadow    = s.cast
+      obj.receiveShadow = s.receive
+    }
+    _savedMeshShadows.clear()
+  }
+
+  function _buildComposer() {
+    _composer?.dispose?.()
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2())
+    const composer = new EffectComposer(renderer)
+    composer.addPass(new RenderPass(scene, camera))
+    // Before SMAA so the contour gets antialiased with everything else.
+    _figurePass = new FigurePass(scene, camera)
+    composer.addPass(_figurePass)
+    composer.addPass(new SMAAPass(size.x, size.y))
+    composer.addPass(new OutputPass())
+    // AFTER every addPass — composer.setSize forwards to each pass it holds, so
+    // sizing first would leave anything added later at its 1×1 placeholder.
+    composer.setSize(size.x, size.y)
+    _composer = composer
+  }
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+  function activate() {
+    if (_active) return
+    _active = true
+
+    // Renderer state.
+    _savedToneMapping = renderer.toneMapping
+    _savedExposure    = renderer.toneMappingExposure
+    renderer.toneMapping         = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.0
+    renderer.getClearColor(_savedClearColor)
+    _savedClearAlpha = renderer.getClearAlpha()
+
+    // Scene state.
+    _savedFov = camera.fov
+    _savedEnv = scene.environment
+    _savedBg  = scene.background
+    scene.environment = null          // ambient occlusion IS the ambient light here
+
+    _lightGroup = new THREE.Group()
+    _lightGroup.name = 'expPhotoLights'
+    scene.add(_lightGroup)
+    _hideEditorLights()
+
+    _matSwap = swapToFlatMaterials(scene, _materialPresets())
+    _applyBackground()
+
+    _buildComposer()
+
+    // Rig last: it fits itself to the scene bounds, and the material swap above
+    // does not move geometry, so the bounds are already final.
+    _rebuildRig()
+    _applyFigure()
+    if (_settings.fov != null) _applyFovWithDolly(_settings.fov)
+    if (_settings.pinLights) _syncRigToCamera()
+
+    setResizeCallback?.(() => {
+      const s = renderer.getDrawingBufferSize(new THREE.Vector2())
+      _composer?.setSize(s.x, s.y)
+      _figurePass?.setSize(s.x, s.y)
+    })
+
+    setRenderFn(() => {
+      _perFrameSync()
+      _composer?.render()
+    })
+  }
+
+  /**
+   * The per-frame CPU work, split out from the render fn so it is exercisable
+   * without a GL context.
+   *
+   * Camera-pinned rig: one quaternion copy. three then re-renders the key
+   * light's shadow map itself every frame, because the light moved — exactly
+   * ChimeraX's per-frame `use_shadow_map`. The occlusion bake, by contrast, is
+   * view-INDEPENDENT and `ensureBaked` is a no-op after the first frame.
+   */
+  function _perFrameSync() {
+    if (_settings.pinLights) _syncRigToCamera()
+    // The cue window's START tracks the camera, so it is pushed every frame.
+    // The outline needs the same push for its scene-depth span.
+    if (_settings.depthCue || _settings.outline) _pushCueRange()
+    // Periodically re-fingerprint the geometry. A representation switch replaces
+    // every mesh while writing NO store field, so without this the shadow
+    // frustum stays fitted to geometry that is no longer on screen.
+    if (++_sigFrame >= SIGNATURE_CHECK_FRAMES) {
+      _sigFrame = 0
+      if (sceneSignature(scene) !== _signature) resync()
+    }
+  }
+
+  function deactivate() {
+    if (!_active) return
+    _active = false
+
+    resetRenderFn()
+    clearResizeCallback?.()
+
+    _composer?.dispose?.()
+    _composer = null
+    _figurePass = null
+    _matSwap?.restore()
+    _matSwap = null
+
+    // Shadow state — restore BEFORE the rig is torn down (the flags live on the
+    // scene meshes and the lights we are about to drop).
+    _restoreMeshShadowFlags()
+    if (_savedShadowEnabled !== null) {
+      renderer.shadowMap.enabled = _savedShadowEnabled
+      if (_savedShadowType !== null) renderer.shadowMap.type = _savedShadowType
+      _savedShadowEnabled = null
+      _savedShadowType    = null
+    }
+
+    if (_lightGroup) {
+      applyLighting('flat', _lightGroup)      // dispose the rig's lights
+      while (_lightGroup.children.length) _lightGroup.remove(_lightGroup.children[0])
+      scene.remove(_lightGroup)
+      _lightGroup = null
+    }
+    _lightTarget = null
+    _keyLight    = null
+    _bounds      = null
+    _restoreEditorLights()
+
+    scene.environment = _savedEnv
+    scene.background  = _savedBg
+    _savedEnv = undefined
+    _savedBg  = undefined
+    renderer.setClearColor(_savedClearColor, _savedClearAlpha)
+    // Restore the editor's lens WITH a dolly, so the user keeps the framing
+    // they orbited to rather than snapping back to the old distance.
+    if (_savedFov != null && camera.fov !== _savedFov) _applyFovWithDolly(_savedFov)
+    _savedFov = null
+    if (_savedToneMapping !== null) renderer.toneMapping = _savedToneMapping
+    if (_savedExposure    !== null) renderer.toneMappingExposure = _savedExposure
+    _savedToneMapping = null
+    _savedExposure    = null
+  }
+
+  // ── Settings ───────────────────────────────────────────────────────────────
+
+  /**
+   * Depth-cue window for the CURRENT camera pose. START = the nearest bbox
+   * corner along the view axis, so the fade always begins at the front of the
+   * object. LENGTH = the bbox DIAGONAL, a CONSTANT for the design — not the
+   * current view's depth extent. Scaling to the current extent normalises every
+   * view to a full 0→1 fade, which washes out a thin helix seen side-on for no
+   * reason; against a fixed length the cue is near-nothing on a shallow view and
+   * strong only when you are genuinely looking down the depth of a bundle.
+   */
+  function _pushCueRange() {
+    if (!_figurePass || !_bounds?.corners) return
+    camera.getWorldDirection(_camForward)
+    let near = Infinity
+    for (const c of _bounds.corners) {
+      const d = _cueScratch.subVectors(c, camera.position).dot(_camForward)
+      if (d < near) near = d
+    }
+    // The camera can sit inside the box on a close-up, putting corners behind
+    // it — clamp so the fade never starts behind the viewer.
+    near = Math.max(near, camera.near)
+    _figurePass.setCueRange(near, near + (_bounds.diagonal || 1))
+    // Same span feeds ChimeraX's depth_jump — it is a fraction OF the structure's
+    // depth, so a 3% jump means the same nm gap whether you framed a 20 nm tile
+    // or a 400 nm origami.
+    _figurePass.setSceneDepth(_bounds.diagonal || 0)
+  }
+
+  function _applyFigure() {
+    if (!_figurePass) return
+    _figurePass.setParams({
+      outline:                  _settings.outline,
+      outlineColor:             _settings.outlineColor,
+      outlineStrength:          _settings.outlineStrength,
+      outlineThickness:         _settings.outlineThickness,
+      outlineDepthSensitivity:  _settings.outlineDepthSensitivity,
+      outlineCreaseSensitivity: _settings.outlineCreaseSensitivity,
+      silhouette:               _settings.silhouette,
+      outlineDepthJump:         _settings.outlineDepthJump,
+      depthCue:                 _settings.depthCue,
+      depthCueColor:            _settings.depthCueColor,
+      depthCueStrength:         _settings.depthCueStrength,
+    })
+    _pushCueRange()
+    // EffectComposer skips a disabled pass entirely, so both effects off costs
+    // nothing — no depth/normal pre-pass at all.
+    _figurePass.enabled = _figurePass.hasEffect()
+  }
+
+  function setOutline(on)          { _settings.outline = !!on; _applyFigure() }
+  function setOutlineColor(hex)    { _settings.outlineColor = hex; _applyFigure() }
+  function setOutlineStrength(v)   { _settings.outlineStrength = v; _applyFigure() }
+  function setOutlineThickness(v)  { _settings.outlineThickness = v; _applyFigure() }
+  function setOutlineSensitivity({ depth, crease } = {}) {
+    if (depth  !== undefined) _settings.outlineDepthSensitivity  = depth
+    if (crease !== undefined) _settings.outlineCreaseSensitivity = crease
+    _applyFigure()
+  }
+  function setOutlineDepthJump(v)  { _settings.outlineDepthJump = v; _applyFigure() }
+  function setDepthCue(on)         { _settings.depthCue = !!on; _applyFigure() }
+  function setDepthCueColor(hex)   { _settings.depthCueColor = hex; _applyFigure() }
+  function setDepthCueStrength(v)  { _settings.depthCueStrength = v; _applyFigure() }
+
+  // ── Camera ────────────────────────────────────────────────────────────────
+
+  /** Change the lens AND dolly to preserve framing, so narrowing the FOV
+   *  flattens perspective instead of zooming in. */
+  function _applyFovWithDolly(newFov) {
+    const target = controls?.target
+    const oldFov = camera.fov
+    if (target && Number.isFinite(oldFov) && oldFov > 0) {
+      const dist = camera.position.distanceTo(target)
+      const newDist = dollyDistanceForFov(dist, oldFov, newFov)
+      if (dist > 1e-6 && Number.isFinite(newDist)) {
+        _dollyScratch.subVectors(camera.position, target).normalize().multiplyScalar(newDist)
+        camera.position.copy(target).add(_dollyScratch)
+      }
+    }
+    camera.fov = newFov
+    camera.updateProjectionMatrix()
+    controls?.update?.()
+  }
+
+  function setFOV(fov) {
+    _settings.fov = fov
+    // A FOV at or below the threshold IS the parallel projection — keep the
+    // flag (and the checkbox) honest either way.
+    _settings.parallel = fov <= PARALLEL_FOV
+    if (_active) _applyFovWithDolly(fov)
+  }
+
+  function setParallel(on) {
+    _settings.parallel = !!on
+    _settings.fov = on ? PARALLEL_FOV : PERSPECTIVE_FOV
+    if (_active) _applyFovWithDolly(_settings.fov)
+  }
+
+  // ── Export ────────────────────────────────────────────────────────────────
+
+  function setExportSize(w, h) {
+    if (Number.isFinite(w) && w > 0) _settings.exportWidth  = Math.round(w)
+    if (Number.isFinite(h) && h > 0) _settings.exportHeight = Math.round(h)
+  }
+
+  /**
+   * Render at an arbitrary resolution and return a PNG Blob.
+   *
+   * TILED, because a render target above the GPU's MAX_TEXTURE_SIZE silently
+   * clamps and produces a black image — 300 DPI (4200×2970) already exceeds the
+   * 4096 limit common on WSL/integrated GPUs. `camera.setViewOffset` renders a
+   * sub-rectangle of the full frame per tile; the CPU-side 2D canvas has no such
+   * limit, so the stitch is safe.
+   *
+   * The offscreen renderer is a SEPARATE GL context, so it needs its own
+   * composer, its own figure-pass parameters and its own shadowMap flag — none
+   * of the live renderer's GPU state carries over. That is the rule that keeps
+   * preview and export in sync.
+   */
+  async function renderToBlob(width, height) {
+    if (!_active) throw new Error('photo: renderToBlob requires the mode to be active')
+
+    const probeCanvas = document.createElement('canvas')
+    const probeR = new THREE.WebGLRenderer({ canvas: probeCanvas, alpha: true })
+    const maxTex = probeR.capabilities.maxTextureSize
+    probeR.dispose()
+
+    const tileMax = Math.min(maxTex, 4096)
+    const tilesX  = Math.max(1, Math.ceil(width  / tileMax))
+    const tilesY  = Math.max(1, Math.ceil(height / tileMax))
+    const tileW   = Math.ceil(width  / tilesX)
+    const tileH   = Math.ceil(height / tilesY)
+
+    const finalCanvas  = document.createElement('canvas')
+    finalCanvas.width  = width
+    finalCanvas.height = height
+    const finalCtx     = finalCanvas.getContext('2d')
+
+    const offCanvas = document.createElement('canvas')
+    offCanvas.width  = tileW
+    offCanvas.height = tileH
+    const offRenderer = new THREE.WebGLRenderer({
+      canvas: offCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true,
+    })
+    offRenderer.setPixelRatio(1)
+    offRenderer.toneMapping         = THREE.ACESFilmicToneMapping
+    offRenderer.toneMappingExposure = 1.0
+    offRenderer.setSize(tileW, tileH, false)
+    // The offscreen renderer is a separate GL context — it needs the shadow flag
+    // set explicitly, or the export comes back without the cast shadow.
+    const wantShadow = !!(_settings.keyShadow && _keyLight?.castShadow)
+    offRenderer.shadowMap.enabled = wantShadow
+    if (wantShadow) offRenderer.shadowMap.type = THREE.PCFSoftShadowMap
+    if (_settings.bgType === 'transparent') offRenderer.setClearColor(0x000000, 0)
+    else offRenderer.setClearColor(new THREE.Color(_settings.bgColor), 1)
+
+    const composer = new EffectComposer(offRenderer)
+    composer.addPass(new RenderPass(scene, camera))
+    const figure = new FigurePass(scene, camera)
+    composer.addPass(figure)
+    composer.addPass(new SMAAPass(tileW, tileH))
+    composer.addPass(new OutputPass())
+    composer.setSize(tileW, tileH)
+
+    const savedAspect = camera.aspect
+    try {
+      camera.aspect = width / height
+      for (let ty = 0; ty < tilesY; ty++) {
+        for (let tx = 0; tx < tilesX; tx++) {
+          camera.setViewOffset(width, height, tx * tileW, ty * tileH, tileW, tileH)
+          camera.updateProjectionMatrix()
+          // Per-tile: the cue window's near corner depends on the projection.
+          figure.setParams({
+            outline:                  _settings.outline,
+            outlineColor:             _settings.outlineColor,
+            outlineStrength:          _settings.outlineStrength,
+            outlineThickness:         _settings.outlineThickness,
+            outlineDepthSensitivity:  _settings.outlineDepthSensitivity,
+            outlineCreaseSensitivity: _settings.outlineCreaseSensitivity,
+            silhouette:               _settings.silhouette,
+            outlineDepthJump:         _settings.outlineDepthJump,
+            depthCue:                 _settings.depthCue,
+            depthCueColor:            _settings.depthCueColor,
+            depthCueStrength:         _settings.depthCueStrength,
+          })
+          if (_bounds?.corners) {
+            camera.getWorldDirection(_camForward)
+            let near = Infinity
+            for (const c of _bounds.corners) {
+              const d = _cueScratch.subVectors(c, camera.position).dot(_camForward)
+              if (d < near) near = d
+            }
+            figure.setCueRange(Math.max(near, camera.near), Math.max(near, camera.near) + (_bounds.diagonal || 1))
+            figure.setSceneDepth(_bounds.diagonal || 0)
+          }
+          figure.enabled = figure.hasEffect()
+          composer.render()
+          finalCtx.drawImage(offCanvas, tx * tileW, ty * tileH)
+        }
+      }
+    } finally {
+      camera.clearViewOffset()
+      camera.aspect = savedAspect
+      camera.updateProjectionMatrix()
+      composer.dispose?.()
+      figure.dispose?.()
+      offRenderer.dispose()
+    }
+
+    return new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'))
+  }
+
+  /** The four preset names, in the shape swapToFlatMaterials expects. */
+  function _materialPresets() {
+    const { full, cylinders, surface, atomistic } = _settings
+    return { full, cylinders, surface, atomistic }
+  }
+
+  /** Change one representation's material. Re-swaps in place — cheap, and it
+   *  keeps the shadow flags/bounds valid because no geometry moved. */
+  function setMaterialPreset(repr, preset) {
+    if (!(repr in _materialPresets())) return
+    _settings[repr] = preset
+    if (!_active) return
+    _matSwap?.restore()
+    _matSwap = swapToFlatMaterials(scene, _materialPresets())
+    _restoreMeshShadowFlags()
+    _applyKeyShadow()
+  }
+
+  /** Steer the key light (and therefore its shadow) around the screen. */
+  function setKeyAzimuth(deg)   { _settings.keyAzimuth = deg;   if (_active) _rebuildRig() }
+  function setKeyElevation(deg) { _settings.keyElevation = deg; if (_active) _rebuildRig() }
+
+  /** Back to ChimeraX's own key direction. Lives here, not in the panel, so the
+   *  defaults have exactly one home and the panel needs no import of them
+   *  (which would close an import cycle: the mode already imports the panel). */
+  function resetKeyDirection() {
+    _settings.keyAzimuth   = DEFAULT_KEY_AZIMUTH
+    _settings.keyElevation = DEFAULT_KEY_ELEVATION
+    if (_active) _rebuildRig()
+  }
+
+  /** Absolute per-light intensities — the real shadow-contrast controls. */
+  function setKeyIntensity(v)     { _settings.keyIntensity = Math.max(0, v);     if (_active) _rebuildRig() }
+  function setFillIntensity(v)    { _settings.fillIntensity = Math.max(0, v);    if (_active) _rebuildRig() }
+  function setAmbientIntensity(v) { _settings.ambientIntensity = Math.max(0, v); if (_active) _rebuildRig() }
+  function setShadowStrength(v) {
+    _settings.shadowStrength = Math.max(0, Math.min(1, v))
+    if (_active) _applyKeyShadow()
+  }
+
+  /** ChimeraX move_lights_with_camera. Off → the rig is welded to the world. */
+  function setPinLights(on) {
+    _settings.pinLights = !!on
+    if (!_active) return
+    if (_settings.pinLights) _syncRigToCamera()
+    else _lightGroup?.quaternion.identity()
+  }
+
+  function setKeyShadow(on) {
+    _settings.keyShadow = !!on
+    if (_active) _applyKeyShadow()
+  }
+
+  function setKeyShadowMapSize(px) {
+    _settings.keyShadowMapSize = Math.max(256, Math.floor(px))
+    if (_active) _applyKeyShadow()
+  }
+
+  function setKeyShadowBias(v) {
+    _settings.keyShadowBias = Math.max(0, v)
+    if (_active) _applyKeyShadow()
+  }
+
+  /** Absolute per-light intensities — the real shadow-contrast controls. */
+  function setKeyIntensity(v)     { _settings.keyIntensity = Math.max(0, v);     if (_active) _rebuildRig() }
+  function setFillIntensity(v)    { _settings.fillIntensity = Math.max(0, v);    if (_active) _rebuildRig() }
+  function setAmbientIntensity(v) { _settings.ambientIntensity = Math.max(0, v); if (_active) _rebuildRig() }
+  function setShadowStrength(v) {
+    _settings.shadowStrength = Math.max(0, Math.min(1, v))
+    if (_active) _applyKeyShadow()
+  }
+
+  function setBackground(type, color) {
+    if (type)  _settings.bgType  = type
+    if (color) _settings.bgColor = color
+    if (_active) _applyBackground()
+  }
+
+  /** Re-apply the material swap after the scene's meshes were rebuilt while the
+   *  mode is active (the rebuild produces fresh meshes with editor materials),
+   *  and invalidate the bake since the geometry is new. */
+  function resync() {
+    if (!_active) return
+    _matSwap?.restore()
+    _matSwap = swapToFlatMaterials(scene, _materialPresets())
+    // Fresh meshes arrive with the editor's shadow flags and the bounds may have
+    // moved, so the rig has to refit and the flags be re-applied.
+    _restoreMeshShadowFlags()
+    _rebuildRig()
+    _applyFigure()          // bounds moved → the cue window has to be refitted
+    if (_settings.pinLights) _syncRigToCamera()
+  }
+
+  function getSettings() { return { ..._settings } }
+
+  /** Diagnostics for the panel + console: is the bake warm, how long it took. */
+  function getStatus() {
+    return {
+      active: _active,
+      keyShadow: !!(_keyLight?.castShadow),
+      pinned:    _active && _settings.pinLights,
+      radius:    _bounds?.radius ?? 0,
+      mapSize:   _settings.keyShadowMapSize,
+    }
+  }
+
+  /**
+   * One-call answer to "why is the key shadow not showing?".
+   *
+   * Reports the whole chain a shadow has to survive: the renderer flag, the
+   * light, the fitted frustum, whether three actually rendered a shadow map,
+   * whether the materials COMPILED with shadow sampling (the parameter three
+   * bakes in and never re-checks), and how many meshes cast vs receive.
+   *
+   * Exposed on window.__photoMode — being able to
+   * answer that question without a rebuild is worth the ~40 lines.
+   */
+  function getDiagnostics() {
+    const key = _keyLight
+    const shadow = key?.shadow
+    let casters = 0, receivers = 0, physical = 0, compiled = 0, withShadowDefine = 0
+    scene.traverse(obj => {
+      if (!obj.isMesh && !obj.isInstancedMesh) return
+      if (obj.castShadow) casters++
+      if (obj.receiveShadow) receivers++
+      const m = obj.material
+      if (!m?.isMeshPhysicalMaterial) return
+      physical++
+      // `program` only exists once three has compiled the material; its cache
+      // key carries the parameter list, so USE_SHADOWMAP presence is visible.
+      const prog = m.program ?? m.__webglProgram
+      if (prog) {
+        compiled++
+        const src = prog.fragmentShader ?? prog.cacheKey ?? ''
+        if (String(src).includes('USE_SHADOWMAP') || String(src).includes('shadowmap')) withShadowDefine++
+      }
+    })
+    const camQ = new THREE.Quaternion()
+    camera.getWorldQuaternion(camQ)
+    return {
+      active: _active,
+      rendererShadowMapEnabled: renderer.shadowMap?.enabled,
+      rendererShadowAutoUpdate: renderer.shadowMap?.autoUpdate,
+      keyLight: key ? {
+        castShadow: key.castShadow,
+        intensity:  key.intensity,
+        worldPos:   key.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)),
+        targetPos:  key.target?.getWorldPosition(new THREE.Vector3()).toArray().map(v => +v.toFixed(2)),
+        mapRendered: !!shadow?.map,          // null until three has drawn it
+        mapSize:     shadow?.mapSize?.width,
+        normalBias:  shadow?.normalBias,
+        frustumHalfWidth: shadow?.camera?.right,
+        near: shadow?.camera?.near, far: shadow?.camera?.far,
+      } : null,
+      bounds: _bounds ? {
+        center: _bounds.center.toArray().map(v => +v.toFixed(2)),
+        radius: +_bounds.radius.toFixed(2),
+        // Biggest contributors first: if the top entry dwarfs the rest, IT is
+        // what set the frustum and why nothing casts a visible shadow.
+        largest:  (_bounds.contributors ?? []).slice(0, 6).map(({ object, ...c }) => c),
+        rejected: (_bounds.rejected ?? []).map(({ object, ...c }) => c),
+        outlier:  findBoundsOutlier(_bounds),
+      } : null,
+      rigPinned: _settings.pinLights,
+      rigMatchesCamera: _lightGroup ? _lightGroup.quaternion.angleTo(camQ) < 1e-3 : null,
+      meshes: { casters, receivers, physical, compiled, withShadowDefine },
+      bake: getStatus(),
+    }
+  }
+
+  return {
+    activate, deactivate,
+    getDiagnostics,
+    isActive: () => _active,
+    setBackground, setMaterialPreset,
+    setFOV, setParallel, setExportSize, renderToBlob,
+    setOutline, setOutlineColor, setOutlineStrength, setOutlineThickness,
+    setOutlineSensitivity, setOutlineDepthJump,
+    setDepthCue, setDepthCueColor, setDepthCueStrength,
+    setPinLights, setKeyShadow, setKeyShadowBias, setKeyShadowMapSize,
+    setKeyAzimuth, setKeyElevation, resetKeyDirection,
+    setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
+    setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
+    resync,
+    getSettings, getStatus,
+    // Test/console seams.
+    _syncFrame:    _perFrameSync,
+    _getKeyLight:  () => _keyLight,
+    _getFigurePass: () => _figurePass,
+    _getLightGroup: () => _lightGroup,
+  }
+}
+
+// ── Tab orchestration ────────────────────────────────────────────────────────
+
+/**
+ * Wire the "Exp. Photomode" left-sidebar tab: construct the renderer + panel,
+ * hide the editor gizmos on entry, restore them on exit, and keep the occlusion
+ * bake in step with geometry changes.
+ *
+ * Mirrors initPhotoMode's contract so main.js gains only an import, one factory
+ * init and two `exit()` calls in the lifecycle spine.
+ *
+ * @returns {{enter: () => void, exit: () => void, mode: object}}
+ */
 export function initPhotoMode({
-  store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
-  bluntEnds, assemblyJointRenderer, player, originAxes,
+  store, sceneCtx, designRenderer, assemblyRenderer,
+  assemblyJointRenderer, bluntEnds, originAxes,
 }) {
-  const { scene, renderer } = sceneCtx
-
-  let _photoPanelCtrl = null
-
-  // Pre-photo visibility of the world-origin XYZ triad, restored on exit. The
-  // triad is an editor orientation aid and must not appear in a publication
-  // render; it also has a real failure mode if left on — its `toneMapped:false`
-  // line material interacts with the bloom pass on the ANGLE/D3D11 backend to
-  // paint a black square at the origin's screen position (Windows-only, never
-  // reproduced on desktop GL). Hiding it both cleans the figure and dodges that.
+  const mode = createPhotoMode(sceneCtx)
+  let _panel = null
   let _savedOriginAxesVisible = null
 
-  // The assembly's `export_representation` is applied to ALL instances only for
-  // the duration of a photo-mode PNG/video render, then the working reps are
-  // restored. Lets the user edit/preview at a fast LOD but export at high
-  // detail. `_exportRepActive` guards saves so the temporary upgrade never hits
-  // disk (restore in `finally` + the load-time auto-downgrade are the net).
-  let _exportRepActive = false
+  function enter() {
+    if (mode.isActive()) return
+    if (!_panel) _panel = initPhotoPanel(mode, { onExit: () => exit() })
 
-  /** Batch-patch all instances and resolve when the renderer finishes the
-   *  rebuild the store subscriber kicks off. `onRebuildComplete` only appends
-   *  (no off-API), so guard a one-shot; a timeout surfaces a stuck rebuild. */
-  function _applyRepAndAwaitRebuild(patches) {
-    return new Promise((resolve, reject) => {
-      let done = false
-      const timer = setTimeout(() => {
-        if (!done) { done = true; reject(new Error('export rebuild timed out')) }
-      }, 120_000)
-      assemblyRenderer.onRebuildComplete(() => {
-        if (done) return
-        done = true; clearTimeout(timer); resolve()
-      })
-      api.batchPatchInstances(patches).catch(err => {
-        if (!done) { done = true; clearTimeout(timer); reject(err) }
-      })
-    })
-  }
+    mode.activate()
 
-  /** Run `fn` (the actual export render) with every instance temporarily set to
-   *  the assembly's export representation, restoring the originals afterward.
-   *  ALSO suppresses the distance LOD demotion for the whole export so every
-   *  part renders at its rep's detail bucket (no far-away hull) → uniform
-   *  high-detail figures regardless of zoom.  The rep upgrade is a no-op when
-   *  not in assembly mode, no instances, 'working', or already matching; the
-   *  LOD suppression still applies whenever we're in an assembly. */
-  // High-segment geometry built once on first export, reused thereafter.  The
-  // interactive scene keeps its fast low-poly meshes; only the export render uses
-  // these.  Atoms/bonds are unit-sized (scaled per-instance); beads/fluorophores
-  // bake their radius (instances only translate), so the radius must match the
-  // low-poly source (GEO_SPHERE = BEAD_RADIUS, GEO_FLUORO_SPHERE = 0.25).
-  let _hdGeoCache = null
-  function _highDetailGeometries() {
-    if (_hdGeoCache) return _hdGeoCache
-    const W = 32, H = 24, RADIAL = 24   // sphere width/height segs; cylinder radial segs
-    _hdGeoCache = {
-      atom:   new THREE.SphereGeometry(1, W, H),
-      bond:   new THREE.CylinderGeometry(1, 1, 1, RADIAL, 1),
-      bead:   new THREE.SphereGeometry(BEAD_RADIUS, W, H),
-      fluoro: new THREE.SphereGeometry(0.25, W, H),
-    }
-    return _hdGeoCache
-  }
-
-  // Export-only: swap the low-poly interactive sphere/cylinder geometry on
-  // atom/bond/bead/fluorophore InstancedMeshes for smooth high-segment versions,
-  // run the export, then restore.  Atoms/bonds are matched by shared-geometry
-  // reference; CG beads/fluorophores by mesh name (and only when they're still
-  // real spheres — skip the opt-in impostor quads).  Swapping `mesh.geometry`
-  // leaves instanceMatrix/instanceColor untouched, so positions + colors hold.
-  async function _withHighDetailGeometry(fn) {
-    const hd = _highDetailGeometries()
-    const restore = []   // [mesh, originalGeometry]
-    scene.traverse(obj => {
-      if (!obj.isInstancedMesh) return
-      let hi = null
-      if      (obj.geometry === ATOM_SPHERE_GEO) hi = hd.atom
-      else if (obj.geometry === BOND_CYL_GEO)    hi = hd.bond
-      else if (obj.name === 'backboneSpheres'       && obj.geometry?.type === 'SphereGeometry') hi = hd.bead
-      else if (obj.name === 'extensionFluorophores' && obj.geometry?.type === 'SphereGeometry') hi = hd.fluoro
-      if (hi && obj.geometry !== hi) { restore.push([obj, obj.geometry]); obj.geometry = hi }
-    })
-    try { await fn() }
-    finally { for (const [mesh, geo] of restore) mesh.geometry = geo }
-  }
-
-  async function _withExportRepresentation(fn) {
-    // Always export at full geometric detail (smooth atoms/beads/bonds), restored
-    // after.  Wraps the actual render so both the rep-upgrade and no-upgrade paths
-    // get it; harmless when no atom/bead meshes are present.
-    const run = () => _withHighDetailGeometry(fn)
-    const { inAssembly, needUpgrade, snapshot, patches } = planExportRepUpgrade(store.getState())
-    if (inAssembly) assemblyRenderer.setSuppressLodDemotion?.(true)
-
-    if (!needUpgrade) {
-      try { await run() }
-      finally { if (inAssembly) assemblyRenderer.setSuppressLodDemotion?.(false) }
-      return
-    }
-
-    _exportRepActive = true
-    try {
-      await _applyRepAndAwaitRebuild(patches)
-      photoRenderer.resyncMaterials()
-      await run()
-    } finally {
-      try {
-        await _applyRepAndAwaitRebuild(snapshot)
-        photoRenderer.resyncMaterials()
-      } catch (err) {
-        console.error('[export-rep] restore failed:', err)
-      }
-      assemblyRenderer.setSuppressLodDemotion?.(false)
-      _exportRepActive = false
-    }
-  }
-
-  function _photoModeEnter() {
-    const leftPanel = document.getElementById('left-panel')
-
-    // Show photo pane directly — bypasses both the locked-hidden guard and the
-    // setActiveTab collapsed-toggle behaviour (clicking an active tab collapses;
-    // entering photo mode should always expand).
-    document.querySelectorAll('#left-panel .tab-content').forEach(el => {
-      el.hidden = el.id !== 'tab-content-photo'
-    })
-    if (leftPanel) {
-      leftPanel.classList.remove('hidden')
-      // Update tab button active states so the Photo button looks selected.
-      document.querySelectorAll('#left-tab-strip .left-tab-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.tab === 'photo')
-      })
-    }
-
-    if (!_photoPanelCtrl) {
-      _photoPanelCtrl = initPhotoPanel(photoRenderer, sceneCtx, {
-        onEnter: _photoModeEnter,
-        onExit:  _photoModeExit,
-        store,
-        player,
-        exportPhotoVideo,
-        withExportRepresentation: _withExportRepresentation,
-        setExportRepresentation: (rep) => api.setAssemblyExportRepresentation(rep),
-      })
-    }
-    photoRenderer.activate({})
-    // Apply the persisted active profile (if any) AFTER activate so material
-    // setters take effect immediately rather than queueing.
-    _photoPanelCtrl?.applyActiveProfile?.()
-    _photoPanelCtrl?.syncToState()
-
-    // Suppress annotation overlays that don't belong in publication renders.
-    // Design-mode renderer (no-op in assembly mode):
-    designRenderer.setAxisArrowsVisible(false)
-    // World-origin triad: hide for the clean render (and to avoid the bloom black
-    // square on ANGLE/D3D11). Save prior visibility so a user who had it on/off
-    // gets the same back on exit.
+    // Same gizmo suppression photo mode v1 used — an editor overlay in
+    // a render being judged for its shading is noise, and the `toneMapped:false`
+    // origin triad has a real artifact history (ANGLE/D3D11 + bloom).
+    designRenderer?.setAxisArrowsVisible?.(false)
     if (originAxes) {
       _savedOriginAxesVisible = originAxes.visible
       originAxes.visible = false
     }
-    bluntEnds?.setVisible(false)
-    // Assembly-mode counterparts: per-instance helix axis arrows + helix-id
-    // labels + overhang-name sprites + active-instance BoxHelper, plus the
-    // orange joint indicators and (mate-mode-only) blunt-end disks drawn by
-    // assemblyJointRenderer. setPhotoMode also flags the renderer so any
-    // rebuild WHILE photo mode is active (e.g. polymerize mid-photo) keeps
-    // the new instances clean too.
-    assemblyRenderer.setPhotoMode(true)
-    assemblyJointRenderer.setVisible(false)
-    // Partial UI lockdown for clean publication renders: hide the nav HUD, leave
-    // selection/orbit/zoom enabled so the user can still frame parts. Active
-    // gizmos remain visible (they self-hide when their owning panel exits
-    // transform mode).
-    //
-    // The view cube + roll buttons STAY VISIBLE — they're the main way to frame a
-    // figure, and they're pure DOM/CSS overlays (#vc-wrap / #vc-roll), not scene
-    // objects, so they can never appear in an export: PNG/video renders go through
-    // an offscreen WebGLRenderer over the Three.js scene only.
-    const modeIndicator = document.getElementById('mode-indicator')
-    if (modeIndicator) modeIndicator.style.display = 'none'
-    store.setState({ photoActive: true })
+    bluntEnds?.setVisible?.(false)
+    assemblyRenderer?.setPhotoMode?.(true)
+    assemblyJointRenderer?.setVisible?.(false)
+
+    _panel.onEnter()
   }
 
-  function _photoModeExit({ skipTabRestore = false } = {}) {
-    // Idempotent: safe to call from any teardown path (file close/open/new,
-    // assembly enter) even when photo mode isn't active — just no-op.
-    // `skipTabRestore` lets a caller that's already driving the sidebar (e.g.
-    // the tab strip switching to a different tab) suppress the feature-log
-    // restore so the user lands on the tab they actually clicked.
-    if (!photoRenderer.isActive()) return
-    photoRenderer.deactivate()
+  function exit() {
+    if (!mode.isActive()) return
+    mode.deactivate()
 
-    // Restore annotation overlays to their pre-photo-mode state.
-    designRenderer.setAxisArrowsVisible(true)
+    designRenderer?.setAxisArrowsVisible?.(true)
     if (originAxes && _savedOriginAxesVisible !== null) {
       originAxes.visible = _savedOriginAxesVisible
       _savedOriginAxesVisible = null
     }
-    const tf = store.getState().toolFilters
-    bluntEnds?.setVisible(tf?.bluntEnds ?? true)
-    assemblyRenderer.setPhotoMode(false)
-    assemblyJointRenderer.setVisible(true)
-    // Restore the partial-lockdown UI (the view cube was never hidden).
-    const modeIndicator = document.getElementById('mode-indicator')
-    if (modeIndicator) modeIndicator.style.display = ''
-    store.setState({ photoActive: false })
+    bluntEnds?.setVisible?.(store.getState().toolFilters?.bluntEnds ?? true)
+    assemblyRenderer?.setPhotoMode?.(false)
+    assemblyJointRenderer?.setVisible?.(true)
 
-    const leftPanel = document.getElementById('left-panel')
-    if (leftPanel?.classList.contains('locked-hidden')) {
-      // No design loaded — hide photo pane and the panel itself.
-      document.getElementById('tab-content-photo').hidden = true
-      leftPanel.classList.add('hidden')
-    } else if (!skipTabRestore) {
-      // Design loaded — restore normal tab state via the sidebar controller.
-      window.__leftSidebar?.setActiveTab('feature-log')
-    }
+    _panel?.onExit()
   }
 
-  document.getElementById('photo-tab-btn')?.addEventListener('click', () => {
-    if (!photoRenderer.isActive()) _photoModeEnter()
+  // ── Keeping the rig in step with the geometry ──────────────────────────────
+  // The camera is irrelevant (the shadow map re-renders every frame anyway) —
+  // but anything that REPLACES meshes needs the material swap re-applied and
+  // the shadow frustum refitted. Store changes catch the design/assembly swaps;
+  // representation switches write no store field at all and are caught by the
+  // geometry fingerprint in _perFrameSync.
+  store.subscribe((next, prev) => {
+    if (!mode.isActive()) return
+    if (next.currentDesign   !== prev.currentDesign
+     || next.currentAssembly !== prev.currentAssembly
+     || next.staplesHidden   !== prev.staplesHidden
+     || next.isolatedStrandId !== prev.isolatedStrandId) {
+      mode.resync()
+    }
   })
+  assemblyRenderer?.onRebuildComplete?.(() => { if (mode.isActive()) mode.resync() })
 
-  // Expose photo debug helpers on the existing debug object.
-  if (window._nadocDebug) {
-    window._nadocDebug.photoMaterials = function() {
-      const s = photoRenderer.getSettings()
-      console.group('[photo] active settings')
-      console.log('active:', photoRenderer.isActive())
-      console.log('lighting:', s.lighting)
-      console.log('background:', s.bgType, s.bgColor)
-      console.log('material presets:', { full: s.full, surface: s.surface, cylinders: s.cylinders, atomistic: s.atomistic })
-      console.log('ssao:', s.ssao, '| bloom:', s.bloom, s.bloomStrength)
-      console.log('pathTracing:', s.pathTracing, '| samples:', photoRenderer.getSampleCount())
-      console.groupEnd()
-      return s
-    }
-    window._nadocDebug.ptSamples = function() {
-      const n = photoRenderer.getSampleCount()
-      const building = photoRenderer.isPathTracingBuilding?.()
-      const enabled  = photoRenderer.isPathTracingEnabled?.()
-      console.log('[photo] path tracer — enabled:', enabled, '| building BVH:', building, '| samples:', n)
-      return n
-    }
-    window._nadocDebug.ssaoParams = function() {
-      const s = photoRenderer.getSettings()
-      console.log('[photo] SSAO enabled:', s.ssao, '— kernelRadius≈0.3 nm, kernelSize=32, minDist=0.002, maxDist=0.12')
-    }
-    window._nadocDebug.bloomParams = function() {
-      const s = photoRenderer.getSettings()
-      console.log('[photo] bloom enabled:', s.bloom, '| strength:', s.bloomStrength)
-    }
-    window._nadocDebug.renderTargetSize = function() {
-      const el = renderer.domElement
-      console.log('[photo] main canvas:', el.width, '×', el.height, '| devicePixelRatio:', window.devicePixelRatio)
-    }
-  }
-
-  return {
-    enter: _photoModeEnter,
-    exit: _photoModeExit,
-    getExportRepActive: () => _exportRepActive,
-    withExportRepresentation: _withExportRepresentation,
-  }
+  return { enter, exit, mode }
 }

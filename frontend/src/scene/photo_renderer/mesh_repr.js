@@ -1,7 +1,8 @@
 /**
  * Which photo-mode representation a scene mesh belongs to.
  *
- * Lifted verbatim out of photo_renderer.js so the experimental photo mode can
+ * Lifted verbatim out of photo mode v1's photo_renderer.js (now under
+ * archive/photo_mode_v1/) so the current photo mode can
  * pick a material preset per representation without duplicating the name table
  * (two copies would silently drift the moment a renderer adds a mesh name).
  *

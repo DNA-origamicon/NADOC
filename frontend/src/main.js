@@ -229,9 +229,7 @@ import { initOxdnaSurfaceStrandsSetup } from './ui/oxdna_surface_strands_setup.j
 import { initSurfaceStrandsOverlay } from './scene/surface_strands_overlay.js'
 import { captureNucleotidesFromChains } from './scene/surface_strands_math.js'
 import { initOxdnaAnchorsSetup } from './ui/oxdna_anchors_setup.js'
-import { createPhotoRenderer } from './scene/photo_renderer.js'
 import { initPhotoMode }      from './scene/photo_mode.js'
-import { initPhotoExpMode }   from './scene/photo_exp_mode.js'
 import { inflateIcons, observeIcons } from './ui/primitives/icon.js'
 import { getSectionCollapsed, setSectionCollapsed } from './ui/section_collapse_state.js'
 
@@ -582,16 +580,6 @@ async function main() {
     addFrameCallback,
   })
 
-  // Forward-declared so the per-frame camera-clip callback below (which reads
-  // photoRenderer.getFloorReach) is safe before photoRenderer is created far
-  // below. Without this, any boot path that yields to requestAnimationFrame
-  // before that creation (e.g. the part-editor tab, which awaits its design
-  // fetch early) hits a `const` temporal-dead-zone throw INSIDE the frame
-  // callback — and since three.js reschedules the loop only AFTER the callback,
-  // one throw kills the render loop permanently (blank workspace). null until
-  // assigned; the callback no-ops via `?.` until then. (mirrors `clusterPanel`.)
-  let photoRenderer = null
-
   // ── Adaptive camera clipping for large assemblies ─────────────────────────
   // The camera's far plane is a fixed 2000 nm (sized for a single design — see
   // scene.js). A large assembly spans far more, so instances past 2000 nm from
@@ -619,7 +607,11 @@ async function main() {
     // is active the far clip must reach past it, or the floor gets cropped near
     // the content — this is what made the "infinite" floor still look small,
     // especially in assembly mode where far brackets the content tightly.
-    const _floorReach = () => photoRenderer?.getFloorReach?.() ?? null
+    // Photo mode v1 owned the ground plane; it was archived with the rest of
+    // that mode (archive/photo_mode_v1/) and the current photo mode is
+    // deliberately floorless — a ground plane is the last thing a bundle figure
+    // wants. The seam stays so reviving a floor is a one-line change.
+    const _floorReach = () => null
     addFrameCallback(() => {
       if (!store.getState().assemblyActive) {
         // Part mode: far is normally pinned at 2000. If a photo floor is up,
@@ -3220,10 +3212,12 @@ async function main() {
     const { currentDesign, assemblyActive } = store.getState()
 
     if (assemblyActive) {
-      // Auto-save to workspace before clearing (skip while an export-rep upgrade
-      // is in flight so the temporary high-detail reps aren't persisted).
+      // Auto-save to workspace before clearing. (This used to be gated on
+      // photo mode v1's export-rep upgrade, which temporarily raised every
+      // instance to full geometric detail and must never hit disk. That
+      // machinery was archived with v1, so there is nothing to skip for.)
       const hasInstances = (store.getState().currentAssembly?.instances?.length ?? 0) > 0
-      if (hasInstances && !_photoMode.getExportRepActive()) {
+      if (hasInstances) {
         try { await (_assemblyWorkspacePath ? api.saveAssemblyAs(_assemblyWorkspacePath) : api.saveAssemblyToWorkspace()) } catch { /* best-effort */ }
       }
       _exitAssemblyMode()
@@ -3288,7 +3282,7 @@ async function main() {
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Forward-declared here because the menu-file-save listeners (~3924) and the
   // keyboard-shortcuts injection (~5134) reference it textually ABOVE its real
-  // init (after `initPhotoMode`, whose getExportRepActive it reads). All call sites
+  // init (after `initPhotoMode`). All call sites
   // invoke on user action (menu click / Ctrl+S) post-init, so wrapped as lazy arrows.
   let _fileSave           = null
   // Doc-scoped so each tab's filename/path metadata is independent (and the
@@ -3497,7 +3491,6 @@ async function main() {
     // "in photo mode" (no-op if not active). Runs first so deactivate() can
     // restore the live materials/lights while the meshes still exist.
     _photoMode.exit()
-    _photoExpMode.exit()
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
@@ -3612,7 +3605,6 @@ async function main() {
     // A photo-mode session belongs to the design/assembly it was opened in;
     // entering an assembly (open/new) must drop it (no-op if not active).
     _photoMode.exit()
-    _photoExpMode.exit()
     _setDesignGeometryVisible(false)
     // Close any open Extrude tool and hide the world-origin triad — both are
     // design-only affordances that shouldn't leak into the assembly view.
@@ -3799,7 +3791,7 @@ async function main() {
 
   // "Save File" / "Save As" dispatch by mode is provided by the ui/file_io.js
   // `initFileSave` factory (extraction #60); `_fileSave` is initialized later
-  // (after `initPhotoMode`, whose getExportRepActive it reads). Lazy arrows defer
+  // (after `initPhotoMode`). Lazy arrows defer
   // the deref to click time.
   document.getElementById('menu-file-save')?.addEventListener('click', () => _fileSave.saveDispatch())
   document.getElementById('menu-file-save-as')?.addEventListener('click', () => _fileSave.saveAsDispatch())
@@ -6395,9 +6387,9 @@ async function main() {
   // sidebar restores its prior state across reloads.
   let _leftSidebar = null
   {
-    const TABS = ['feature-log', 'dynamics', 'scene', 'photo', 'photo-exp', 'plates']
+    const TABS = ['feature-log', 'dynamics', 'scene', 'photo', 'plates']
     // Tabs that install a render override and must be torn down when you leave.
-    const RENDER_OVERRIDE_TABS = ['photo', 'photo-exp']
+    const RENDER_OVERRIDE_TABS = ['photo']
     const STORAGE_KEY = 'nadoc.leftSidebar.v1'
     const leftPanel = document.getElementById('left-panel')
     const tabStrip  = document.getElementById('left-tab-strip')
@@ -6486,7 +6478,7 @@ async function main() {
         // skipTabRestore so the exit doesn't yank us back to feature-log — the
         // switch below lands us on the tab the user actually clicked.
         if (tabId !== 'photo') {
-          _photoMode.exit({ skipTabRestore: true })
+          _photoMode.exit()
           // Pay off a re-seek we skipped on the way into Photo. Going back to
           // Animations cancels it instead — we never really left.
           if (_animLeaveDeferred) {
@@ -6494,9 +6486,6 @@ async function main() {
             if (tabId !== 'scene') _leaveAnimationsTab()
           }
         }
-        // Experimental photo mode installs its own render override, so exactly
-        // one of the two render-override tabs may be live at a time.
-        if (tabId !== 'photo-exp') _photoExpMode.exit()
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         if (collapsed) {
           collapsed = false
@@ -6514,7 +6503,7 @@ async function main() {
         // Idempotent — a second click on an active render-override tab only
         // collapses the sidebar, deliberately leaving the render mode running
         // so the user gets the full viewport.
-        if (activeTab === 'photo-exp') _photoExpMode.enter()
+        if (activeTab === 'photo') _photoMode.enter()
         window.dispatchEvent(new CustomEvent('nadoc:left-tab-change', {
           detail: { activeTab, collapsed },
         }))
@@ -6529,7 +6518,7 @@ async function main() {
       function selectTab(tabId) {
         if (!TABS.includes(tabId)) return
         if (activeTab === tabId) { _render(); return }
-        if (tabId !== 'photo-exp') _photoExpMode.exit()
+        if (tabId !== 'photo') _photoMode.exit()
         const wasOnAnimations = !collapsed && activeTab === 'scene'
         activeTab = tabId
         if (wasOnAnimations) _leaveAnimationsTab()
@@ -6749,34 +6738,25 @@ async function main() {
     getWorkspacePath: () => _workspacePath,
   })
 
-  // ── Photo mode + export representation → scene/photo_mode.js (#70) ───────────
-  photoRenderer = createPhotoRenderer(sceneCtx)
-  // The photo-mode pane + the export-only rep upgrade (every instance temporarily
-  // set to the assembly's export_representation at full geometric detail for the
-  // duration of a PNG/video render, then restored). `_photoMode.getExportRepActive()`
-  // gates the save path below so that temporary upgrade never hits disk. Created
-  // here — before `initFileSave`, which reads getExportRepActive. The lifecycle
-  // spine calls `_photoMode.exit()` (forward-refs this closure const; only invoked
+  // ── Photo mode → scene/photo_mode.js ────────────────────────────────────────
+  // Figure-quality render: flat materials, a camera-pinned key light with a real
+  // cast shadow, and the ChimeraX depth-outline silhouette. The lifecycle spine
+  // calls `_photoMode.exit()` (forward-refs this closure const; only invoked
   // post-init, on file close/new/open / assembly-enter).
+  //
+  // This replaced photo mode v1 (HDRI + bloom + path tracer + floor + mist +
+  // export-rep upgrade), which is preserved verbatim under
+  // archive/photo_mode_v1/ — see its README for what was dropped and why.
   const _photoMode = initPhotoMode({
-    store, api, sceneCtx, photoRenderer, assemblyRenderer, designRenderer,
-    bluntEnds, assemblyJointRenderer, player: animPlayer, originAxes,
-  })
-
-  // Experimental photo mode (the "Exp. Photomode" tab) — a stripped-down render
-  // testbed for features under evaluation, currently view-independent
-  // multishadow ambient occlusion. Independent of `_photoMode`: only one of the
-  // two may be active, enforced by the tab strip below.
-  const _photoExpMode = initPhotoExpMode({
     store, sceneCtx, designRenderer, assemblyRenderer,
     assemblyJointRenderer, bluntEnds, originAxes,
   })
-  window.__photoExpMode = _photoExpMode.mode   // console seam for tuning
+  window.__photoMode = _photoMode.mode   // console seam for tuning
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Placed here — not at the menu listeners (~3924) — because its deps span the
-  // file: `_fileIo`/`_syncBadge`/`_lifecycleSync` (~7200-7240) AND `_photoMode`
-  // (just above, for getExportRepActive). Initializing after the last dep means every value is concrete at
+  // file: `_fileIo`/`_syncBadge`/`_lifecycleSync` (~7200-7240).
+  // Initializing after the last dep means every value is concrete at
   // init time; the only forward references (`_fileSave` in the menu listeners +
   // keyboard-shortcuts injection, both textually above) resolve via lazy arrows
   // because they fire only on user action (post-init). `selfSavedPaths` flows in by
@@ -6789,7 +6769,9 @@ async function main() {
     getFileHandle:             () => _fileHandle,
     getAssemblyWorkspacePath:  () => _assemblyWorkspacePath,
     getAssemblyFileHandle:     () => _assemblyFileHandle,
-    getExportRepActive:        _photoMode.getExportRepActive,
+    // Photo mode v1's export-rep upgrade is archived; no temporary high-detail
+    // representation can be in flight, so the save path is never suppressed.
+    getExportRepActive:        () => false,
     setAssemblyWorkspacePath:  _setAssemblyWorkspacePath,
     selfSavedPaths:            _lifecycleSync.selfSavedPaths,
   })

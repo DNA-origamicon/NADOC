@@ -516,7 +516,7 @@
     #left-tab-toggle:disabled { opacity: 0.3; cursor: default; }
     #left-panel .tab-content[hidden] { display: none; }
 
-    /* ── Exp. Photomode panel (#tab-content-photo-exp) ──────────────────────
+    /* ── Photomode panel (#tab-content-photo) ───────────────────────────
        The sidebar is 280 px. Every control row is label + control + value, and
        the ONLY thing that keeps it inside that width is `min-width:0` on the
        flex control: a flex item defaults to min-width:auto, which refuses to
@@ -544,8 +544,8 @@
     .pxr-note { color: #6a737d; font-size: 11px; line-height: 1.35;
                 overflow-wrap: anywhere; }
     .pxr-cards { padding: 8px 10px; }
-    #tab-content-photo-exp { overflow-x: hidden; }
-    #tab-content-photo-exp .panel-section { min-width: 0; }
+    #tab-content-photo { overflow-x: hidden; }
+    #tab-content-photo .panel-section { min-width: 0; }
     #left-panel #tab-content-plates:not([hidden]) { display: flex; flex-direction: column; height: 100%; min-height: 0; }
     /* Feature log timeline — playhead and suppressed entries */
     .fl-playhead {
@@ -5917,636 +5917,7 @@
 
         </div><!-- /#tab-content-scene -->
 
-        <!-- ── Photo Mode tab ────────────────────────────────────────────── -->
-        <div id="tab-content-photo" class="tab-content" hidden>
-
-          <!-- Header row: exit + export -->
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid #21262d;gap:8px">
-            <button id="photo-exit-btn" style="flex:1;padding:4px 0;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">← Exit Photo Mode</button>
-            <button id="photo-export-btn" style="flex:1;padding:4px 0;background:#1f6feb;border:none;border-radius:3px;color:#fff;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui);font-weight:600">↓ Export PNG</button>
-          </div>
-
-          <!-- Export detail: representation applied ONLY to the exported PNG/video (per-assembly, saved to .nass). The live preview keeps the working representation. -->
-          <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;border-bottom:1px solid #21262d;font-size:var(--text-xs);color:#8b949e">
-            <span style="min-width:78px" title="Representation used only for the exported PNG/video. The live preview keeps your working representation. Saved with the assembly.">Export detail</span>
-            <select id="photo-export-rep" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
-              <option value="working">Working (as-is)</option>
-              <option value="full" selected>Full (beads + slabs)</option>
-              <option value="beads">Beads</option>
-              <option value="cylinders">Cylinders</option>
-              <option value="vdw">VDW / Space-fill</option>
-              <option value="ballstick">Ball &amp; Stick</option>
-              <option value="surface">Surface (molecular)</option>
-            </select>
-          </div>
-
-          <!-- Profile bar — saved photo-mode settings sets, auto-updated as user changes controls -->
-          <div style="padding:8px 14px;border-bottom:1px solid #21262d;display:flex;flex-direction:column;gap:4px">
-            <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e">
-              <span style="min-width:46px">Profile</span>
-              <select id="photo-profile-select"
-                      style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)"></select>
-              <button id="photo-profile-new" title="Create a new profile from current settings"
-                      style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">+</button>
-              <button id="photo-profile-rename" title="Rename the current profile"
-                      style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">✎</button>
-              <button id="photo-profile-delete" title="Delete the current profile"
-                      style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">×</button>
-              <button id="photo-profile-reset" title="Reset all photo settings to their defaults"
-                      style="min-width:0;flex-shrink:1;padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">Reset</button>
-            </div>
-            <div id="photo-profile-status" style="font-size:11px;color:#6a737d;min-height:14px"></div>
-          </div>
-
-          <!-- Style preset — a named bundle of the ordinary settings below.
-               Picking one writes a coherent set of them at once; every knob it
-               touches stays individually adjustable. Shows "Custom" as soon as
-               the live settings stop matching any preset. -->
-          <div style="padding:8px 14px;border-bottom:1px solid #21262d;display:flex;flex-direction:column;gap:4px">
-            <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e">
-              <span style="min-width:46px" title="A named bundle of the settings below. Publication = the molecular-figure look (flat materials, occlusion shading, silhouette outlines, near-parallel camera, no bloom/mist/floor/reflections).">Style</span>
-              <select id="photo-style-select"
-                      style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
-                <option value="publication">Publication (figure)</option>
-                <option value="publication2">Publication 2 (soft occlusion)</option>
-                <option value="studio">Studio (product render)</option>
-                <option value="custom">Custom</option>
-              </select>
-            </div>
-            <div style="color:#6a737d;font-size:11px;line-height:1.3">
-              Publication turns OFF the photoreal knobs (bloom, mist, reflections, floor,
-              specular) and turns ON the figure ones (flat materials, occlusion shading,
-              outlines, near-parallel camera). Everything stays editable below.
-            </div>
-          </div>
-
-          <!-- Resolution -->
-          <div class="panel-section">
-            <h2>Resolution</h2>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-              <select id="photo-res-preset" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
-                <option value="screen">Screen (1×)</option>
-                <option value="x2">2× (slides)</option>
-                <option value="p300" selected>Print 300 DPI</option>
-                <option value="p600">Print 600 DPI</option>
-                <option value="custom">Custom</option>
-              </select>
-              <span id="photo-dpi-label" style="font-size:var(--text-xs);color:#8b949e;white-space:nowrap">300 DPI</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#6e7681">
-              <label style="display:flex;align-items:center;gap:3px">
-                W<input id="photo-res-w" type="number" min="256" max="8192" value="4200" readonly
-                       style="width:54px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)"> px
-              </label>
-              <label style="display:flex;align-items:center;gap:3px">
-                H<input id="photo-res-h" type="number" min="256" max="8192" value="2970" readonly
-                       style="width:54px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)"> px
-              </label>
-            </div>
-          </div>
-
-          <!-- Background -->
-          <div class="panel-section">
-            <h2>Background</h2>
-            <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:6px">
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="radio" name="photo-bg" value="transparent" checked> Transparent
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="radio" name="photo-bg" value="white"> White
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="radio" name="photo-bg" value="black"> Black
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input type="radio" name="photo-bg" value="custom"> Custom
-              </label>
-            </div>
-            <div id="photo-bg-color-row" style="display:none;align-items:center;gap:6px;font-size:var(--text-xs);color:#6e7681">
-              Color <input id="photo-bg-color" type="color" value="#ffffff" style="width:32px;height:20px;padding:1px;border:1px solid #30363d;border-radius:2px;background:#0d1117;cursor:pointer">
-            </div>
-          </div>
-
-          <!-- Lighting -->
-          <div class="panel-section">
-            <h2>Lighting</h2>
-            <select id="photo-lighting-select" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
-              <option value="ambient">Ambient (occlusion-only, figure)</option>
-              <option value="scientific">Scientific (flat, publication)</option>
-              <option value="studio" selected>Studio (warm key + cool fill)</option>
-              <option value="softbox">Soft Box (diffuse, no shadows)</option>
-              <option value="dramatic">Dramatic (hard key + rim)</option>
-              <option value="flat">Flat (ambient only)</option>
-              <option value="backlit">Back-lit (silhouette + rim)</option>
-            </select>
-            <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:var(--text-xs);color:#8b949e">
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="min-width:34px">Yaw</span>
-                <input id="photo-light-yaw" type="range" min="-180" max="180" step="1" value="0"
-                       style="flex:1;accent-color:#58a6ff">
-                <span id="photo-light-yaw-label" style="color:#c9d1d9;min-width:34px;text-align:right">0°</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="min-width:34px">Pitch</span>
-                <input id="photo-light-pitch" type="range" min="-90" max="90" step="1" value="0"
-                       style="flex:1;accent-color:#58a6ff">
-                <span id="photo-light-pitch-label" style="color:#c9d1d9;min-width:34px;text-align:right">0°</span>
-              </div>
-            </div>
-
-            <!-- Sun (independent steerable key light) -->
-            <div style="margin-top:8px;border-top:1px solid #21262d;padding-top:6px">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:var(--text-xs);color:#c9d1d9">
-                <input id="photo-sun-enable" type="checkbox"> Sun (steerable key light + shadow)
-              </label>
-              <div id="photo-sun-controls" style="display:none;flex-direction:column;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:60px" title="Rotation around the floor normal. 0° = +X projected onto floor.">Azimuth</span>
-                  <input id="photo-sun-azimuth" type="range" min="-180" max="180" step="1" value="135"
-                         style="flex:1;accent-color:#f0b429">
-                  <span id="photo-sun-azimuth-label" style="color:#c9d1d9;min-width:38px;text-align:right">135°</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:60px" title="Height above the floor plane. 0° = on the horizon, 90° = straight overhead.">Elevation</span>
-                  <input id="photo-sun-elevation" type="range" min="0" max="90" step="1" value="35"
-                         style="flex:1;accent-color:#f0b429">
-                  <span id="photo-sun-elevation-label" style="color:#c9d1d9;min-width:38px;text-align:right">35°</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:60px">Strength</span>
-                  <input id="photo-sun-strength" type="range" min="0" max="5" step="0.1" value="1.5"
-                         style="flex:1;accent-color:#f0b429">
-                  <span id="photo-sun-strength-label" style="color:#c9d1d9;min-width:38px;text-align:right">1.5×</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:60px">Colour</span>
-                  <input id="photo-sun-color" type="color" value="#ffffff"
-                         style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:18px;padding:0;cursor:pointer">
-                </div>
-                <div style="color:#6a737d;font-size:11px;line-height:1.3">
-                  Polar coordinates relative to the chosen floor's normal (world +Y if no floor).
-                  Increase elevation for a tighter shadow under the part; sweep azimuth to rotate
-                  the shadow around the floor. <b>When Sun is on it is the only shadow caster;</b>
-                  the preset's directional lights stay on as fill but stop casting (no double shadow).
-                  When Sun is off, the preset's first directional light becomes the key shadow.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Environment (HDRI) -->
-          <div class="panel-section">
-            <h2>Environment (HDRI)</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
-              <select id="photo-env-mode" style="background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                <option value="off" selected>Off (direct lights only)</option>
-                <option value="room">Room Studio (synthetic, built-in)</option>
-                <option value="file">Upload .hdr file…</option>
-              </select>
-              <input id="photo-env-file" type="file" accept=".hdr" style="display:none">
-              <div id="photo-env-file-name" style="color:#8b949e;font-size:11px;min-height:14px"></div>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                <input id="photo-env-bg" type="checkbox"> Show HDRI as background
-              </label>
-            </div>
-          </div>
-
-          <!-- Environmental Effects (mist / atmosphere) -->
-          <div class="panel-section">
-            <h2>Environmental Effects</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
-              <select id="photo-env-effect" style="background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                <option value="none" selected>None</option>
-                <option value="mist">Mist (volumetric fog + light halos)</option>
-              </select>
-              <div id="photo-env-effect-mist-row" style="display:none;flex-direction:column;gap:6px;margin-left:12px">
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="Scattering coefficient per scene unit (nm⁻¹)">Density</span>
-                  <input id="photo-mist-density" type="range" min="0.005" max="0.30" step="0.005" value="0.05"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-mist-density-label" style="color:#c9d1d9;min-width:46px;text-align:right">0.050</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px">Colour</span>
-                  <input id="photo-mist-color" type="color" value="#cad3e0"
-                         style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:18px;padding:0;cursor:pointer">
-                  <span style="color:#6a737d;font-size:11px">tint of inscatter (use neutral to preserve light colours)</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="Overall multiplier on inscattered radiance (light shafts/halos)">Scatter</span>
-                  <input id="photo-mist-halo" type="range" min="0" max="3" step="0.05" value="1"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-mist-halo-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.0×</span>
-                </div>
-                <div style="margin-top:4px;border-top:1px solid #21262d;padding-top:6px;color:#6a737d;font-size:11px">Wisps (3D noise)</div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="Strength of density variation. 0 = uniform mist; higher values give cloud-like patches.">Wispiness</span>
-                  <input id="photo-mist-wisp-contrast" type="range" min="0" max="2" step="0.05" value="0"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-mist-wisp-contrast-label" style="color:#c9d1d9;min-width:34px;text-align:right">0.00</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="Approximate size of wisps in nm. Lower = bigger wisps; higher = finer detail.">Wisp size</span>
-                  <input id="photo-mist-wisp-scale" type="range" min="0.005" max="0.30" step="0.005" value="0.05"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-mist-wisp-scale-label" style="color:#c9d1d9;min-width:46px;text-align:right">0.050</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="Drift speed of the noise pattern. 0 = static; higher = visibly drifting wisps.">Drift</span>
-                  <input id="photo-mist-wisp-speed" type="range" min="0" max="1.0" step="0.02" value="0"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-mist-wisp-speed-label" style="color:#c9d1d9;min-width:34px;text-align:right">0.00</span>
-                </div>
-                <div style="color:#6a737d;font-size:11px;line-height:1.3">
-                  Volumetric inscatter — geometry stays sharp, lights become visible in the air.
-                  Fluorophore PointLights produce halos; rig lights add ambient haze.
-                  Path-traced mode does not show inscatter.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Figure (publication look) — outline, depth cue, occlusion shading.
-               Each control is independent; the Publication style preset above is
-               just a bundle that switches the right ones on. -->
-          <div class="panel-section">
-            <h2>Figure (publication)</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
-
-              <!-- Silhouette outline -->
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer"
-                     title="Dark contour at depth/normal discontinuities. Separates overlapping helices without relying on lighting — the single biggest 'publication look' lever.">
-                <input id="photo-outline" type="checkbox"> Silhouette outline
-              </label>
-              <div id="photo-outline-controls" style="display:none;flex-direction:column;gap:4px;margin-left:20px;color:#8b949e">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px">Thickness</span>
-                  <input id="photo-outline-thickness" type="range" min="0.5" max="4" step="0.1" value="1.4"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-outline-thickness-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.4 px</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px">Strength</span>
-                  <input id="photo-outline-strength" type="range" min="0" max="1" step="0.05" value="1"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-outline-strength-label" style="color:#c9d1d9;min-width:34px;text-align:right">100%</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px" title="How big a depth step counts as a silhouette. Lower = more contours.">Silhouette</span>
-                  <input id="photo-outline-depth-sens" type="range" min="0.05" max="1.5" step="0.05" value="0.35"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-outline-depth-sens-label" style="color:#c9d1d9;min-width:34px;text-align:right">0.35</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px" title="How sharp a fold within one surface counts as a crease line. Higher = fewer interior lines.">Creases</span>
-                  <input id="photo-outline-crease-sens" type="range" min="0.1" max="2" step="0.05" value="0.85"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-outline-crease-sens-label" style="color:#c9d1d9;min-width:34px;text-align:right">0.85</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px">Colour</span>
-                  <input id="photo-outline-color" type="color" value="#1b1f24"
-                         style="width:32px;height:20px;padding:1px;border:1px solid #30363d;border-radius:2px;background:#0d1117;cursor:pointer">
-                </div>
-              </div>
-
-              <!-- Depth cue -->
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer"
-                     title="Fades the far side of the structure toward a flat colour, so a thick bundle recedes instead of turning to mush. The window tracks the structure's own depth, so it works at any FOV.">
-                <input id="photo-depthcue" type="checkbox"> Depth cue
-              </label>
-              <div id="photo-depthcue-controls" style="display:none;flex-direction:column;gap:4px;margin-left:20px;color:#8b949e">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px">Strength</span>
-                  <input id="photo-depthcue-strength" type="range" min="0" max="1" step="0.05" value="0.35"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-depthcue-strength-label" style="color:#c9d1d9;min-width:34px;text-align:right">35%</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px" title="Usually matches the background colour.">Fade to</span>
-                  <input id="photo-depthcue-color" type="color" value="#ffffff"
-                         style="width:32px;height:20px;padding:1px;border:1px solid #30363d;border-radius:2px;background:#0d1117;cursor:pointer">
-                </div>
-              </div>
-
-              <!-- Occlusion shading (GTAO) -->
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer"
-                     title="Ground-truth ambient occlusion. Under the flat/ambient figure rig this is the PRIMARY shading cue — crevices between helices carry the shape, not a key light. Much stronger than the SSAO garnish under Post-processing.">
-                <input id="photo-ao" type="checkbox"> Occlusion shading (GTAO)
-              </label>
-              <div id="photo-ao-controls" style="display:none;flex-direction:column;gap:4px;margin-left:20px;color:#8b949e">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px" title="World-space reach, in nm. ~2 nm reaches between neighbouring helices in a bundle.">Radius</span>
-                  <input id="photo-ao-radius" type="range" min="0.2" max="10" step="0.1" value="2"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-ao-radius-label" style="color:#c9d1d9;min-width:42px;text-align:right">2.0 nm</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:62px">Intensity</span>
-                  <input id="photo-ao-intensity" type="range" min="0" max="2" step="0.05" value="1"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-ao-intensity-label" style="color:#c9d1d9;min-width:42px;text-align:right">1.00×</span>
-                </div>
-              </div>
-
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;border-top:1px solid #21262d;padding-top:6px"
-                     title="ON (default): draw the full composite (occlusion, outline, bloom, mist) EVERY frame while you orbit, so ambient-occlusion shadows stay live instead of popping in after you stop. OFF: fast single-pass preview while orbiting — turn off only if orbiting a very heavy structure stutters.">
-                <input id="photo-orbit-fullquality" type="checkbox" checked> Full quality while orbiting
-              </label>
-
-              <div style="color:#6a737d;font-size:11px;line-height:1.3;border-top:1px solid #21262d;padding-top:6px">
-                Pair these with the <em>Ambient</em> lighting rig and the <em>Flat</em> materials
-                for the full molecular-figure look. Path-traced mode bypasses the composer, so
-                outline and depth cue do not apply there.
-              </div>
-            </div>
-          </div>
-
-          <!-- Post-processing -->
-          <div class="panel-section">
-            <h2>Post-processing</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                <input id="photo-ssao" type="checkbox" checked> SSAO (ambient occlusion)
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                <input id="photo-bloom" type="checkbox"> Bloom
-              </label>
-              <div id="photo-bloom-strength-row" style="display:none;align-items:center;gap:6px;margin-left:20px;color:#8b949e">
-                Intensity
-                <input id="photo-bloom-strength" type="range" min="0.1" max="2" step="0.05" value="0.5"
-                       style="flex:1;accent-color:#58a6ff">
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e"
-                   title="Filmic (ACES) tone-mapping exposure. Higher = brighter before highlights roll off. Tames the metallic/emissive + Bloom blow-out.">
-                Exposure
-                <input id="photo-exposure" type="range" min="0.1" max="3" step="0.05" value="1"
-                       style="flex:1;accent-color:#58a6ff">
-              </div>
-            </div>
-          </div>
-
-          <!-- Materials -->
-          <div class="panel-section">
-            <h2>Materials</h2>
-            <div style="display:flex;flex-direction:column;gap:5px;font-size:var(--text-xs)">
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                <span style="min-width:70px">Full / beads</span>
-                <select id="photo-material-full" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                  <option value="flat">Flat (figure)</option>
-                  <option value="matte" selected>Matte</option>
-                  <option value="glossy">Glossy</option>
-                  <option value="metallic">Metallic</option>
-                </select>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                <span style="min-width:70px">Surface</span>
-                <select id="photo-material-surface" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                  <option value="flat">Flat (figure)</option>
-                  <option value="gummy" selected>Gummy</option>
-                  <option value="wax">Wax (SSS)</option>
-                  <option value="skin">Skin (SSS)</option>
-                  <option value="matte">Matte</option>
-                  <option value="glass">Glass</option>
-                </select>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                <span style="min-width:70px">Cylinders</span>
-                <select id="photo-material-cylinders" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                  <option value="flat">Flat (figure)</option>
-                  <option value="matte" selected>Matte</option>
-                  <option value="glossy">Glossy</option>
-                  <option value="metallic">Metallic</option>
-                </select>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                <span style="min-width:70px">Atomistic</span>
-                <select id="photo-material-atomistic" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                  <option value="cpk-flat">CPK Flat (figure)</option>
-                  <option value="cpk-matte" selected>CPK Matte</option>
-                  <option value="cpk-glossy">CPK Glossy</option>
-                  <option value="cpk-metallic">CPK Metallic</option>
-                </select>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e;margin-top:4px;border-top:1px solid #21262d;padding-top:6px">
-                <span style="min-width:70px" title="Adds transmission/SSS to Full + Cylinders reps">Translucency</span>
-                <input id="photo-translucency" type="range" min="0" max="1" step="0.05" value="0"
-                       style="flex:1;accent-color:#58a6ff">
-                <span id="photo-translucency-label" style="color:#c9d1d9;min-width:34px;text-align:right">0%</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Fluorophores -->
-          <div class="panel-section">
-            <h2>Fluorophores</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                <input id="photo-fluoro-emissive" type="checkbox"> Emissive (ray-traced light sources)
-              </label>
-              <div id="photo-fluoro-intensity-row" style="display:none;align-items:center;gap:6px;margin-left:20px;color:#8b949e">
-                Intensity
-                <input id="photo-fluoro-intensity" type="range" min="0.5" max="100" step="0.5" value="5"
-                       style="flex:1;accent-color:#58a6ff">
-                <span id="photo-fluoro-intensity-label" style="color:#c9d1d9;min-width:30px;text-align:right">5.0</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Floor (resting surface) -->
-          <div class="panel-section">
-            <h2>Floor (resting surface)</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs);color:#c9d1d9">
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                <span style="min-width:60px" title="Which side of the scene the floor sits on. -Y = below.">Side</span>
-                <select id="photo-floor-axis" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                  <option value="off" selected>Off</option>
-                  <option value="-y">−Y (below)</option>
-                  <option value="+y">+Y (above)</option>
-                  <option value="-x">−X (left)</option>
-                  <option value="+x">+X (right)</option>
-                  <option value="-z">−Z (front)</option>
-                  <option value="+z">+Z (back)</option>
-                </select>
-              </div>
-              <div id="photo-floor-controls" style="display:none;flex-direction:column;gap:6px">
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px">Material</span>
-                  <select id="photo-floor-material" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                    <option value="matte" selected>Matte</option>
-                    <option value="glossy">Glossy</option>
-                    <option value="metallic">Metallic</option>
-                    <option value="mirror">Mirror (reflective)</option>
-                    <option value="shadow-catcher">Shadow catcher (transparent)</option>
-                  </select>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px">Colour</span>
-                  <input id="photo-floor-color" type="color" value="#888888"
-                         style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:18px;padding:0;cursor:pointer">
-                  <span style="color:#6a737d;font-size:11px">ignored for shadow catcher</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="0 = invisible, 1 = fully opaque">Opacity</span>
-                  <input id="photo-floor-opacity" type="range" min="0" max="1" step="0.05" value="1"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-floor-opacity-label" style="color:#c9d1d9;min-width:34px;text-align:right">100%</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                  <span style="min-width:60px" title="Distance (nm) the floor is pushed outward from the scene's bounding-box face">Offset</span>
-                  <input id="photo-floor-offset" type="range" min="-20" max="20" step="0.1" value="0"
-                         style="flex:1;accent-color:#58a6ff">
-                  <span id="photo-floor-offset-label" style="color:#c9d1d9;min-width:42px;text-align:right">0.0 nm</span>
-                </div>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                  <input id="photo-floor-shadows" type="checkbox" checked> Receive shadows
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                  <input id="photo-floor-grid" type="checkbox"> Grid overlay
-                </label>
-                <div id="photo-floor-grid-style-row" style="display:none;flex-direction:column;gap:4px;margin-left:20px">
-                  <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                    <span style="min-width:60px" title="Number of grid cells across the part's bounding-box diagonal. Higher = finer grid. The plane itself is effectively infinite.">Density</span>
-                    <input id="photo-floor-grid-density" type="range" min="2" max="40" step="0.5" value="10"
-                           style="flex:1;accent-color:#58a6ff">
-                    <span id="photo-floor-grid-density-label" style="color:#c9d1d9;min-width:34px;text-align:right">10</span>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                    <span style="min-width:60px" title="How far the grid extends before fading into the distance. Higher = grid reaches farther toward the horizon. Fades the distant lines so they don't pile into a bright band.">Fade reach</span>
-                    <input id="photo-floor-grid-fade" type="range" min="0.3" max="6" step="0.1" value="1.5"
-                           style="flex:1;accent-color:#58a6ff">
-                    <span id="photo-floor-grid-fade-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.5×</span>
-                  </div>
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                    <input id="photo-floor-grid-neon" type="checkbox"> Neon glow (80's vaporwave)
-                  </label>
-                  <div id="photo-floor-grid-neon-row" style="display:none;align-items:center;gap:6px;color:#8b949e">
-                    <span style="min-width:48px">Colour</span>
-                    <input id="photo-floor-grid-color" type="color" value="#ff00ff"
-                           style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:18px;padding:0;cursor:pointer">
-                    <span style="min-width:48px;margin-left:8px" title="HDR multiplier — higher values bloom more strongly when Bloom is on.">Boost</span>
-                    <input id="photo-floor-grid-glow" type="range" min="1" max="8" step="0.1" value="3"
-                           style="flex:1;accent-color:#ff00ff">
-                    <span id="photo-floor-grid-glow-label" style="color:#c9d1d9;min-width:32px;text-align:right">3.0×</span>
-                  </div>
-                  <div id="photo-floor-grid-neon-hint" style="display:none;color:#6a737d;font-size:11px;line-height:1.3">
-                    For the full glow effect, enable Bloom in Post-processing. The grid colour is
-                    HDR-boosted past Bloom's threshold so it spills light around itself.
-                  </div>
-                </div>
-                <div style="color:#6a737d;font-size:11px;line-height:1.3">
-                  Auto-positioned at the scene's bounding-box edge on the chosen axis.
-                  Mirror uses a real per-frame reflection (Reflector); shadow catcher
-                  shows only the projected shadow (ideal for compositing).
-                  Path-traced mode renders the floor but ignores Mirror reflections.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Camera -->
-          <div class="panel-section">
-            <h2>Camera</h2>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:var(--text-xs)">
-              <div style="display:flex;align-items:center;gap:6px;color:#8b949e">
-                <span style="min-width:28px">FOV</span>
-                <input id="photo-fov" type="range" min="4" max="90" step="1" value="55"
-                       style="flex:1;accent-color:#58a6ff">
-                <span id="photo-fov-label" style="color:#c9d1d9;min-width:28px;text-align:right">55°</span>
-              </div>
-              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer"
-                     title="Snaps to an 8° long lens and dollies back to keep the framing. Removes the vanishing point — perspective distortion across a 60 nm object is a video-game tell. Visually parallel; not a true orthographic camera (see figure_camera.js).">
-                <input id="photo-parallel" type="checkbox"> Parallel projection (long lens)
-              </label>
-              <div style="color:#6a737d;font-size:11px;line-height:1.3">
-                Changing FOV dollies the camera to keep the subject the same size, so the
-                framing you set is preserved. Exiting photo mode restores the editor's lens.
-              </div>
-            </div>
-          </div>
-
-          <!-- Quality -->
-          <div class="panel-section">
-            <h2>Quality</h2>
-            <div style="display:flex;gap:14px;font-size:var(--text-xs);color:#c9d1d9;margin-bottom:8px">
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input id="photo-quality-fast" type="radio" name="photo-quality" value="fast" checked> Fast (SSAO)
-              </label>
-              <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                <input id="photo-quality-pt" type="radio" name="photo-quality" value="pt"> Path Traced
-              </label>
-            </div>
-            <div id="photo-pt-progress" style="display:none">
-              <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:4px">
-                Samples: <span id="photo-pt-samples">0</span>
-              </div>
-              <div style="height:4px;background:#21262d;border-radius:2px;overflow:hidden">
-                <div id="photo-pt-bar-fill" style="height:100%;background:#58a6ff;width:0%;transition:width 0.2s"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Animation Video — render an animation through photo mode -->
-          <div class="panel-section">
-            <h2>Animation Video</h2>
-            <div style="display:flex;flex-direction:column;gap:8px;font-size:var(--text-xs);color:#c9d1d9">
-
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="min-width:48px;color:#8b949e">Source</span>
-                <select id="photo-anim-select"
-                  style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
-                  <option value="">— no animations available —</option>
-                </select>
-              </div>
-
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="min-width:48px;color:#8b949e" title="Frames per second">FPS</span>
-                <input id="photo-anim-fps" type="number" min="1" max="60" step="1" value="30"
-                       style="width:54px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                <span style="min-width:48px;color:#8b949e;margin-left:8px">Format</span>
-                <select id="photo-anim-format"
-                  style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
-                  <option value="webm" selected>WebM (video)</option>
-                  <option value="gif">GIF (animated)</option>
-                </select>
-              </div>
-
-              <div style="display:flex;gap:6px">
-                <button id="photo-anim-preview-btn" type="button"
-                  style="flex:1;padding:6px 0;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">▶ Preview</button>
-                <button id="photo-anim-export-btn" type="button"
-                  style="flex:1;padding:6px 0;background:#1f6feb;border:none;border-radius:3px;color:#fff;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui);font-weight:600">↓ Export Video</button>
-              </div>
-
-              <div id="photo-anim-progress-row" style="display:none;flex-direction:column;gap:4px">
-                <div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e">
-                  <span id="photo-anim-progress-label">Rendering…</span>
-                  <button id="photo-anim-cancel-btn" type="button"
-                    style="background:none;border:none;color:#f85149;font-size:11px;cursor:pointer;padding:0">Cancel</button>
-                </div>
-                <div style="height:4px;background:#21262d;border-radius:2px;overflow:hidden">
-                  <div id="photo-anim-progress-bar" style="height:100%;background:#58a6ff;width:0%;transition:width 0.15s"></div>
-                </div>
-              </div>
-
-              <div style="color:#6a737d;font-size:11px;line-height:1.4">
-                Preview plays the animation in the live view (current photo-mode settings apply).
-                Export renders every frame at the chosen resolution above using the same path
-                <code style="color:#8b949e">Export PNG</code> uses, then encodes the frames as a single video.
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /#tab-content-photo -->
-
-        <!-- ── Experimental photo mode ──────────────────────────────────────
-             A small testbed for rendering ideas before they earn a place in
-             the Photo tab. Currently: flat figure materials + an ambient rig +
-             VIEW-INDEPENDENT 64-DIRECTION AMBIENT OCCLUSION. Deliberately has
-             no HDRI / bloom / path tracer / floor / export — those live in
-             Photo and would bury the thing being tested. -->
-
-        <!-- ── Experimental photo mode ──────────────────────────────────────
+        <!-- ── Photo mode ───────────────────────────────────────────────────
              A camera-pinned key light with a real cast shadow. Multishadow
              ambient occlusion was tried here and retired — see
              archive/multishadow_ao/README.md (it modulates the AMBIENT term and
@@ -6562,13 +5933,13 @@
              cascaded up, pushed #viewport-container out of #main-area, collapsed
              it to zero height and clipped away the welcome screen — with no JS
              error anywhere (95096cf). Re-check div balance after editing. -->
-        <div id="tab-content-photo-exp" class="tab-content" hidden>
+        <div id="tab-content-photo" class="tab-content" hidden>
 
           <div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid #21262d">
-            <button id="photoexp-exit-btn" class="pxr-btn" style="flex:1">Exit experimental mode</button>
+            <button id="photo-exit-btn" class="pxr-btn" style="flex:1">← Exit Photo Mode</button>
           </div>
 
-          <div id="photoexp-status" class="pxr-note" style="padding:6px 14px;border-bottom:1px solid #21262d">
+          <div id="photo-status" class="pxr-note" style="padding:6px 14px;border-bottom:1px solid #21262d">
             inactive
           </div>
 
@@ -6578,44 +5949,44 @@
                #3f464f→#20252b gradient on border-box — which is what makes them
                pop out even when packed flush. Chevron sits LEFT of the title. -->
           <div class="pxr-cards">
-          <div class="ox-card" id="photoexp-lighting-panel">
-            <div id="photoexp-lighting-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photoexp-lighting-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Lighting</span>
+          <div class="ox-card" id="photo-lighting-panel">
+            <div id="photo-lighting-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-lighting-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Lighting</span>
             </div>
-            <div id="photoexp-lighting-body" class="ox-card__body">
+            <div id="photo-lighting-body" class="ox-card__body">
             <div class="pxr-col">
               <label class="pxr-check"
                      title="ChimeraX move_lights_with_camera: light directions live in camera coordinates, so the shadow sweeps across the structure as you reorient it.">
-                <input id="photoexp-pin-lights" type="checkbox" checked> Pin lights to camera
+                <input id="photo-pin-lights" type="checkbox" checked> Pin lights to camera
               </label>
 
               <label class="pxr-check"
                      title="A real shadow map cast by the key light, re-rendered every frame. No floor required.">
-                <input id="photoexp-key-shadow" type="checkbox" checked> Key light casts a shadow
+                <input id="photo-key-shadow" type="checkbox" checked> Key light casts a shadow
               </label>
 
-              <div id="photoexp-key-shadow-controls" class="pxr-col">
+              <div id="photo-key-shadow-controls" class="pxr-col">
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Resolution of the key light's shadow map. This decides whether an arm casts a crisp shadow onto a platform behind it.">Map size</span>
-                  <select id="photoexp-key-shadow-mapsize" class="pxr-sel">
+                  <select id="photo-key-shadow-mapsize" class="pxr-sel">
                     <option value="1024">1024</option>
                     <option value="2048" selected>2048 (ChimeraX)</option>
                     <option value="4096">4096</option>
                     <option value="8192">8192</option>
                   </select>
                 </div>
-                <div id="photoexp-key-shadow-res" class="pxr-note"></div>
+                <div id="photo-key-shadow-res" class="pxr-note"></div>
 
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Normal-offset bias in shadow-map texels. Raise until self-shadowing (acne on beads) disappears; too high and contact shadows detach.">Bias</span>
-                  <input id="photoexp-key-shadow-bias" type="range" min="0" max="5" step="0.1" value="1" class="pxr-rng" style="accent-color:#f0b429">
-                  <span id="photoexp-key-shadow-bias-label" class="pxr-val">1.0×</span>
+                  <input id="photo-key-shadow-bias" type="range" min="0" max="5" step="0.1" value="1" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photo-key-shadow-bias-label" class="pxr-val">1.0×</span>
                 </div>
 
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="How dark the cast shadow is drawn (three.js LightShadow.intensity). 1 = physically correct.">Darkness</span>
-                  <input id="photoexp-shadow-strength" type="range" min="0" max="1" step="0.05" value="1" class="pxr-rng" style="accent-color:#f0b429">
-                  <span id="photoexp-shadow-strength-label" class="pxr-val">1.00</span>
+                  <input id="photo-shadow-strength" type="range" min="0" max="1" step="0.05" value="1" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photo-shadow-strength-label" class="pxr-val">1.00</span>
                 </div>
               </div>
 
@@ -6625,20 +5996,20 @@
               <div class="pxr-col" style="border-top:1px solid #21262d;padding-top:6px">
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Sweeps the light around the screen: 0° = from the right, 90° = from directly above, 180° = from the left, -90° = from below. The shadow falls the opposite way.">Azimuth</span>
-                  <input id="photoexp-key-azimuth" type="range" min="-180" max="180" step="1" value="135" class="pxr-rng" style="accent-color:#f0b429">
-                  <span id="photoexp-key-azimuth-label" class="pxr-val">135°</span>
+                  <input id="photo-key-azimuth" type="range" min="-180" max="180" step="1" value="135" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photo-key-azimuth-label" class="pxr-val">135°</span>
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Tilts the light toward the viewer. 0° = grazing, in the screen plane (longest shadows); 90° = straight down the barrel from the camera, which flattens the shadow away; negative = from behind the subject, a rim light.">Elevation</span>
-                  <input id="photoexp-key-elevation" type="range" min="-80" max="85" step="1" value="35" class="pxr-rng" style="accent-color:#f0b429">
-                  <span id="photoexp-key-elevation-label" class="pxr-val">35°</span>
+                  <input id="photo-key-elevation" type="range" min="-80" max="85" step="1" value="35" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photo-key-elevation-label" class="pxr-val">35°</span>
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl"></span>
-                  <button id="photoexp-key-dir-reset" class="pxr-btn" style="flex:1 1 auto;min-width:0"
+                  <button id="photo-key-dir-reset" class="pxr-btn" style="flex:1 1 auto;min-width:0"
                           title="Back to 135° / 35.3° — ChimeraX's own key direction: 45° up-and-left, 54.7° off the camera axis.">Reset direction</button>
                 </div>
-                <div id="photoexp-key-dir" class="pxr-note"></div>
+                <div id="photo-key-dir" class="pxr-note"></div>
               </div>
 
               <!-- Per-light intensities. A cast shadow only subtracts the key
@@ -6646,24 +6017,24 @@
               <div class="pxr-col" style="border-top:1px solid #21262d;padding-top:6px">
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Brightness of the shadow-casting key light.">Key</span>
-                  <input id="photoexp-key-intensity" type="range" min="0" max="4" step="0.05" value="2" class="pxr-rng">
-                  <span id="photoexp-key-intensity-label" class="pxr-val">2.00</span>
+                  <input id="photo-key-intensity" type="range" min="0" max="4" step="0.05" value="2" class="pxr-rng">
+                  <span id="photo-key-intensity-label" class="pxr-val">2.00</span>
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Secondary light. Fills the shadow back in — raise it for softer shadows.">Fill</span>
-                  <input id="photoexp-fill-intensity" type="range" min="0" max="4" step="0.05" value="0" class="pxr-rng">
-                  <span id="photoexp-fill-intensity-label" class="pxr-val">0.00</span>
+                  <input id="photo-fill-intensity" type="range" min="0" max="4" step="0.05" value="0" class="pxr-rng">
+                  <span id="photo-fill-intensity-label" class="pxr-val">0.00</span>
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Omnidirectional light. This is the floor a cast shadow cannot go below, so lowering it deepens the shadow.">Ambient</span>
-                  <input id="photoexp-ambient-intensity" type="range" min="0" max="3" step="0.05" value="0.15" class="pxr-rng">
-                  <span id="photoexp-ambient-intensity-label" class="pxr-val">0.15</span>
+                  <input id="photo-ambient-intensity" type="range" min="0" max="3" step="0.05" value="0.15" class="pxr-rng">
+                  <span id="photo-ambient-intensity-label" class="pxr-val">0.15</span>
                 </div>
 
-                <button id="photoexp-max-contrast" class="pxr-btn"
+                <button id="photo-max-contrast" class="pxr-btn"
                         title="Key 2.0, fill 0, ambient 0.15 — the cast shadow removes ~93% of the light. Also the default, so this is mainly a way back after experimenting.">Max shadow contrast</button>
 
-                <div id="photoexp-shadow-depth" class="pxr-note"></div>
+                <div id="photo-shadow-depth" class="pxr-note"></div>
               </div>
             </div>
 
@@ -6677,53 +6048,53 @@
             </div>
           </div>
 
-          <div class="ox-card" id="photoexp-figure-panel">
-            <div id="photoexp-figure-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photoexp-figure-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Figure</span>
+          <div class="ox-card" id="photo-figure-panel">
+            <div id="photo-figure-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-figure-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Figure</span>
             </div>
-            <div id="photoexp-figure-body" class="ox-card__body">
+            <div id="photo-figure-body" class="ox-card__body">
               <div class="pxr-col">
                 <label class="pxr-check"
                        title="A dark contour drawn where depth or surface normal jumps. This is what separates overlapping helices without relying on lighting to do it — the single biggest contributor to the publication look.">
-                  <input id="photoexp-outline" type="checkbox"> Silhouette outline
+                  <input id="photo-outline" type="checkbox"> Silhouette outline
                 </label>
-                <div id="photoexp-outline-controls" class="pxr-col">
+                <div id="photo-outline-controls" class="pxr-col">
                   <div class="pxr-row">
                     <span class="pxr-lbl">Colour</span>
-                    <input id="photoexp-outline-color" type="color" value="#1b1f24"
+                    <input id="photo-outline-color" type="color" value="#1b1f24"
                            style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
                   </div>
                   <div class="pxr-row">
                     <span class="pxr-lbl">Strength</span>
-                    <input id="photoexp-outline-strength" type="range" min="0" max="1" step="0.05" value="1" class="pxr-rng">
-                    <span id="photoexp-outline-strength-label" class="pxr-val">1.00</span>
+                    <input id="photo-outline-strength" type="range" min="0" max="1" step="0.05" value="1" class="pxr-rng">
+                    <span id="photo-outline-strength-label" class="pxr-val">1.00</span>
                   </div>
                   <div class="pxr-row">
                     <span class="pxr-lbl" title="Contour width in PIXELS — it does not scale with export resolution, so a print-size render gets a proportionally finer line.">Thickness</span>
-                    <input id="photoexp-outline-thickness" type="range" min="0.5" max="4" step="0.1" value="1.4" class="pxr-rng">
-                    <span id="photoexp-outline-thickness-label" class="pxr-val">1.4</span>
+                    <input id="photo-outline-thickness" type="range" min="0.5" max="4" step="0.1" value="1.4" class="pxr-rng">
+                    <span id="photo-outline-thickness-label" class="pxr-val">1.4</span>
                   </div>
                   <div class="pxr-row">
                     <span class="pxr-lbl" title="ChimeraX 'depth_jump': how big a depth step counts as an edge, as a fraction of the structure's own depth. 0.03 is the ChimeraX default. Lower draws more contours; raise it if a dense bundle fills with lines.">Depth jump</span>
-                    <input id="photoexp-outline-jump" type="range" min="0.005" max="0.15" step="0.005" value="0.03" class="pxr-rng">
-                    <span id="photoexp-outline-jump-label" class="pxr-val">0.03</span>
+                    <input id="photo-outline-jump" type="range" min="0.005" max="0.15" step="0.005" value="0.03" class="pxr-rng">
+                    <span id="photo-outline-jump-label" class="pxr-val">0.03</span>
                   </div>
                 </div>
 
                 <label class="pxr-check"
                        title="Fades distance toward a flat colour so the back of a thick bundle recedes. The window is anchored to the design's bounding-box diagonal, not the current view, so a thin helix seen side-on is not washed out.">
-                  <input id="photoexp-depthcue" type="checkbox"> Depth cue
+                  <input id="photo-depthcue" type="checkbox"> Depth cue
                 </label>
-                <div id="photoexp-depthcue-controls" class="pxr-col">
+                <div id="photo-depthcue-controls" class="pxr-col">
                   <div class="pxr-row">
                     <span class="pxr-lbl">Colour</span>
-                    <input id="photoexp-depthcue-color" type="color" value="#ffffff"
+                    <input id="photo-depthcue-color" type="color" value="#ffffff"
                            style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
                   </div>
                   <div class="pxr-row">
                     <span class="pxr-lbl">Strength</span>
-                    <input id="photoexp-depthcue-strength" type="range" min="0" max="1" step="0.05" value="0.35" class="pxr-rng">
-                    <span id="photoexp-depthcue-strength-label" class="pxr-val">0.35</span>
+                    <input id="photo-depthcue-strength" type="range" min="0" max="1" step="0.05" value="0.35" class="pxr-rng">
+                    <span id="photo-depthcue-strength-label" class="pxr-val">0.35</span>
                   </div>
                 </div>
 
@@ -6737,27 +6108,27 @@
             </div>
           </div>
 
-          <div class="ox-card" id="photoexp-materials-panel">
-            <div id="photoexp-materials-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photoexp-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Materials</span>
+          <div class="ox-card" id="photo-materials-panel">
+            <div id="photo-materials-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-materials-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Materials</span>
             </div>
-            <div id="photoexp-materials-body" class="ox-card__body">
+            <div id="photo-materials-body" class="ox-card__body">
               <div class="pxr-col">
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Backbone beads, base slabs, 5′ cones and fluorophores.">Full</span>
-                  <select id="photoexp-mat-full" class="pxr-sel"></select>
+                  <select id="photo-mat-full" class="pxr-sel"></select>
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Helix and overhang cylinders.">Cylinders</span>
-                  <select id="photoexp-mat-cylinders" class="pxr-sel"></select>
+                  <select id="photo-mat-cylinders" class="pxr-sel"></select>
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="The marching-cubes molecular surface. Its SSS presets (wax, skin, gummy) only read below full opacity.">Surface</span>
-                  <select id="photoexp-mat-surface" class="pxr-sel"></select>
+                  <select id="photo-mat-surface" class="pxr-sel"></select>
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Atoms and bonds in the VDW / ball-and-stick representations.">Atomistic</span>
-                  <select id="photoexp-mat-atomistic" class="pxr-sel"></select>
+                  <select id="photo-mat-atomistic" class="pxr-sel"></select>
                 </div>
                 <div class="pxr-note">
                   The <b>Flat</b> presets kill the specular lobe entirely
@@ -6770,20 +6141,20 @@
             </div>
           </div>
 
-          <div class="ox-card" id="photoexp-camera-panel">
-            <div id="photoexp-camera-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photoexp-camera-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Camera</span>
+          <div class="ox-card" id="photo-camera-panel">
+            <div id="photo-camera-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-camera-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Camera</span>
             </div>
-            <div id="photoexp-camera-body" class="ox-card__body">
+            <div id="photo-camera-body" class="ox-card__body">
               <div class="pxr-col">
                 <div class="pxr-row">
                   <span class="pxr-lbl" title="Changing the lens DOLLIES the camera to keep the subject the same size, so the framing you set is preserved.">FOV</span>
-                  <input id="photoexp-fov" type="range" min="4" max="90" step="1" value="55" class="pxr-rng">
-                  <span id="photoexp-fov-label" class="pxr-val">55°</span>
+                  <input id="photo-fov" type="range" min="4" max="90" step="1" value="55" class="pxr-rng">
+                  <span id="photo-fov-label" class="pxr-val">55°</span>
                 </div>
                 <label class="pxr-check"
                        title="Snaps to an 8° long lens and dollies back to keep the framing — it removes the vanishing point without swapping in a real OrthographicCamera. Visually parallel; at 8° the residual convergence over a 60 nm object is sub-pixel at print size.">
-                  <input id="photoexp-parallel" type="checkbox"> Parallel projection (long lens)
+                  <input id="photo-parallel" type="checkbox"> Parallel projection (long lens)
                 </label>
                 <div class="pxr-note">
                   Perspective distortion across a small object is a video-game tell — a
@@ -6794,15 +6165,15 @@
             </div>
           </div>
 
-          <div class="ox-card" id="photoexp-export-panel">
-            <div id="photoexp-export-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photoexp-export-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Export</span>
+          <div class="ox-card" id="photo-export-panel">
+            <div id="photo-export-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-export-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Export</span>
             </div>
-            <div id="photoexp-export-body" class="ox-card__body">
+            <div id="photo-export-body" class="ox-card__body">
               <div class="pxr-col">
                 <div class="pxr-row">
                   <span class="pxr-lbl">Preset</span>
-                  <select id="photoexp-res-preset" class="pxr-sel">
+                  <select id="photo-res-preset" class="pxr-sel">
                     <option value="screen">Screen (1×)</option>
                     <option value="x2">2× (slides)</option>
                     <option value="p300" selected>Print 300 DPI</option>
@@ -6812,34 +6183,34 @@
                 </div>
                 <div class="pxr-row">
                   <span class="pxr-lbl">Size</span>
-                  <input id="photoexp-res-w" type="number" min="16" step="1" value="4200" class="pxr-sel" style="text-align:right">
+                  <input id="photo-res-w" type="number" min="16" step="1" value="4200" class="pxr-sel" style="text-align:right">
                   <span style="color:#6a737d;font-size:11px">×</span>
-                  <input id="photoexp-res-h" type="number" min="16" step="1" value="2970" class="pxr-sel" style="text-align:right">
+                  <input id="photo-res-h" type="number" min="16" step="1" value="2970" class="pxr-sel" style="text-align:right">
                 </div>
-                <div id="photoexp-export-note" class="pxr-note"></div>
-                <button id="photoexp-export-btn" class="pxr-btn">↓ Export PNG</button>
+                <div id="photo-export-note" class="pxr-note"></div>
+                <button id="photo-export-btn" class="pxr-btn">↓ Export PNG</button>
               </div>
             </div>
           </div>
 
-          <div class="ox-card" id="photoexp-bg-panel">
-            <div id="photoexp-bg-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photoexp-bg-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Background</span>
+          <div class="ox-card" id="photo-bg-panel">
+            <div id="photo-bg-heading" class="ox-card__header" style="color:#c9d1d9">
+              <span id="photo-bg-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Background</span>
             </div>
-            <div id="photoexp-bg-body" class="ox-card__body">
+            <div id="photo-bg-body" class="ox-card__body">
             <div class="pxr-row">
-              <select id="photoexp-bg-type" class="pxr-sel">
+              <select id="photo-bg-type" class="pxr-sel">
                 <option value="color" selected>Solid colour</option>
                 <option value="transparent">Transparent</option>
               </select>
-              <input id="photoexp-bg-color" type="color" value="#0b0d10"
+              <input id="photo-bg-color" type="color" value="#0b0d10"
                      style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
             </div>
             </div>
           </div>
           </div>
 
-        </div><!-- /#tab-content-photo-exp -->
+        </div><!-- /#tab-content-photo -->
 
         <!-- Plates and tubes — 96-well plate layout + IDT tube list -->
         <div id="tab-content-plates" class="tab-content" hidden>
@@ -6861,8 +6232,7 @@
         <button class="left-tab-btn active" data-tab="feature-log" title="Feature Log">Feature Log</button>
         <button class="left-tab-btn"        data-tab="dynamics"     title="Simulations">Simulations</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
-        <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — high-resolution export" id="photo-tab-btn" data-test="photo-tab-btn">Photo</button>
-        <button class="left-tab-btn"        data-tab="photo-exp"    title="Experimental photo mode — camera-pinned key light with a real cast shadow" id="photo-exp-tab-btn" data-test="photo-exp-tab-btn">Exp. Photomode</button>
+        <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — figure-quality render and export" id="photo-tab-btn" data-test="photo-tab-btn">Photomode</button>
         <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
         <!-- Drag-to-resize the sidebar; lives on the tab strip's outer edge
              (the border with the 3D viewport) so it's easy to find. -->
