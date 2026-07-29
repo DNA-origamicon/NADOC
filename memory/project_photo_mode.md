@@ -11,41 +11,41 @@ Photo mode lives at [frontend/src/scene/photo_renderer.js](frontend/src/scene/ph
 
 **Why:** publication-grade rendering for figures and animations. Activate/deactivate must restore the live scene exactly (lights, materials, scene.environment, scene.background) — the live editor still has to work after exit. **How to apply:** never mutate scene state from photo-mode code outside the saved-state pattern (`_savedMaterials`, `_savedSceneEnv`, `_savedSceneBackground`, `_savedLightState`). Adding a new visual feature means adding a save slot and a restore step in `deactivate()`.
 
-## Exp. Photomode tab — camera-pinned key shadow (AO removed) — 2026-07-28
+## Exp. Photomode tab — camera-pinned key shadow — 2026-07-28
 
-A SECOND, deliberately minimal photo tab (`data-tab="photo-exp"`) as a testbed for
-render features before they earn a place in the Photo tab. Modules:
-[photo_exp_mode.js](frontend/src/scene/photo_exp_mode.js) (renderer + tab orchestration),
+A SECOND, minimal photo tab (`data-tab="photo-exp"`) as a render testbed:
+[photo_exp_mode.js](frontend/src/scene/photo_exp_mode.js),
 [ui/photo_exp_panel.js](frontend/src/ui/photo_exp_panel.js),
 [photo_renderer/shadow_bounds.js](frontend/src/scene/photo_renderer/shadow_bounds.js).
 `main.js` gains only an import + factory init + a `TABS` entry.
 
-**What it does:** flat figure materials, a CAMERA-PINNED light rig (ChimeraX
-`move_lights_with_camera` — the rig's quaternion tracks the camera, so the shadow
-sweeps as you reorient), and a real key-light shadow map **not gated on a floor**
-(the shipping mode gates its rig behind `floor !== 'off'`, which makes
-helix-on-helix shadow impossible there).
+Flat figure materials, a CAMERA-PINNED rig (ChimeraX `move_lights_with_camera`),
+and a key-light shadow map **not gated on a floor** (the shipping mode gates its
+rig behind `floor !== 'off'`, which makes helix-on-helix shadow impossible there).
+No preset selector — the Key/Fill/Ambient sliders ARE the preset.
 
-**`full` preset is tuned AWAY from ChimeraX's numbers on purpose.** ChimeraX
-`lighting full` is key 0.7 / fill 0.3 / ambient 0.8, but a cast shadow only
-subtracts the KEY light, so fill+ambient are a floor: the deepest possible shadow
-removes just 39% of the light and reads as a grey smudge. `full` here is one key
-at 2.0, no fill, ambient 0.15 → ~93%. That is what made it legible.
+**The rig ships at MAX CONTRAST, not ChimeraX's numbers.** ChimeraX `full` is key
+0.7 / fill 0.3 / ambient 0.8, but a cast shadow only subtracts the KEY light, so
+fill+ambient are a floor: the deepest shadow removes just 39% of the light. Key
+2.0 / fill 0 / ambient 0.15 → ~93%. `DEFAULT_EXP_SETTINGS` key/fill/ambient MUST
+equal `LIGHTING_PRESETS.full` — `_rebuildRig` applies the settings OVER the
+preset, so a mismatch silently overrides it. Pinned by a test.
 
-**THE parameter is shadow-map resolution, in nm/texel.** ChimeraX's map-size
-defaults are sized for a ~5 nm protein. On a 150 nm origami a 1024 map at 64
-directions gives 2.34 nm/texel — wider than a 2.0 nm duplex, so a thin arm cannot
-cast a readable shadow at all. The panel prints live nm/texel vs a duplex and
-warns when it is too coarse. Key shadow map size is selectable 1024–8192.
+**THE parameter is shadow-map resolution in nm/texel.** ChimeraX's map defaults
+are sized for a ~5 nm protein; on a 150 nm origami a 1024 map at 64 directions is
+2.34 nm/texel, wider than a duplex, so a thin arm cannot cast a readable shadow.
+The panel prints live nm/texel vs a duplex and warns when it is too coarse.
 
-**Multishadow ambient occlusion: built, evaluated, REMOVED (same day).** A faithful
-64-direction port of ChimeraX's ambient shadows (tiled depth atlas, cosine-weighted
-accumulation, cached view-independent transforms, material-side consumption on the
-indirect term). Cut because of the resolution arithmetic above — it never produced
-long-range shadowing at origami scale, only a wash. Findings kept in
-`photo_mode_ao_and_lowpoly_spec.md`; do not re-attempt without solving nm/texel first.
+**Ambient occlusion: built, evaluated, retired** — `archive/multishadow_ao/` has
+the code and rationale. Occlusion modulates the AMBIENT term, so at ambient 0.15
+it can touch only 7% of the light and toggling it changes nothing on screen.
 
-**Three bugs found here that no headless test could reach** — all cost real time:
+**A merge of these features INTO photo_renderer.js was attempted and reverted
+(2026-07-28)** — too many overlapping options; the plan is to rebuild from the
+ground up. The shipping photo mode keeps its own floor-gated shadow rig,
+`floorShadows` and `shadow-catcher` untouched.
+
+**Four bugs found here that no headless test could reach:**
 1. `renderer.shadowMap.enabled` is a PROGRAM parameter (`WebGLPrograms.js`) and
    `setProgram` never re-checks it. Any internal scene render that flips it off
    compiles every material without `USE_SHADOWMAP`, permanently. Use
@@ -53,12 +53,17 @@ long-range shadowing at origami scale, only a wash. Findings kept in
 2. Shadow bias must scale with the shadow-map TEXEL, not the scene radius. A
    radius-proportional bias reaches 2–8 bead diameters on a real design and
    ERASES the shadow rather than de-acneing it.
-3. Editor overlay geometry (~100 µm) silently sets the frustum and puts the whole
-   design inside one texel. `shadow_bounds.js` rejects contributors >8× the median
-   extent and names them in a console warning; they are also barred from casting.
+3. `swapToFlatMaterials` must preserve `depthWrite`. A fresh material defaults to
+   TRUE, so overlays drawn `depthWrite:false` became opaque occluders AND shadow
+   casters, and defeated the depthWrite exclusion in `shadow_bounds.js`.
+4. Editor overlay geometry (~100 µm) silently sets the frustum and puts the whole
+   design inside one texel. `shadow_bounds.js` rejects contributors >8× the
+   median extent and names them in a console warning.
 
-`window.__photoExpMode.getDiagnostics()` reports the whole chain (renderer flag,
-light pose, map rendered, fitted frustum, bounds contributors, cast/receive counts).
+**After ANY edit to a tab pane in index.html**, check whole-file `<div>`/`</div>`
+balance and that the pane's nesting depth matches its siblings. A stray `</div>`
+here once pushed `#viewport-container` out of `#main-area`, collapsed it to zero
+height and clipped the welcome screen away — no JS error, green suite (95096cf).
 
 ## Render-speed: idle gate + interactive preview + backend frame cache — 2026-07-14
 

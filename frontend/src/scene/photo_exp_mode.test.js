@@ -173,13 +173,20 @@ describe('createExpPhotoMode', () => {
     expect(mode.isActive()).toBe(false)
     expect(mode.getSettings()).toEqual({ ...DEFAULT_EXP_SETTINGS })
     const s = mode.getSettings()
-    expect(s.lighting).toBe('full')
     expect(s.keyShadow).toBe(true)
+    // Max-contrast IS the default: a cast shadow only subtracts the key light,
+    // so at 2.0/0/0.15 it removes ~93% of the light instead of ChimeraX's 39%.
+    expect(s.keyIntensity).toBeCloseTo(2.0, 6)
+    expect(s.ambientIntensity).toBeCloseTo(0.15, 6)
     expect(s.pinLights).toBe(true)
     // Max-contrast is the default: the cast shadow removes ~93% of the light
     // instead of the 39% ChimeraX's own key/fill/ambient balance allows.
     expect(LIGHTING_PRESETS.full.ambient.intensity).toBeCloseTo(0.15, 6)
-    expect(LIGHTING_PRESETS.full.lights).toHaveLength(1)
+    expect(LIGHTING_PRESETS.full.lights).toHaveLength(2)     // key + fill(0)
+    expect(LIGHTING_PRESETS.full.lights[1].intensity).toBe(0)
+    // The settings MUST match the preset — _rebuildRig applies them over it.
+    expect(DEFAULT_EXP_SETTINGS.keyIntensity).toBeCloseTo(LIGHTING_PRESETS.full.lights[0].intensity, 9)
+    expect(DEFAULT_EXP_SETTINGS.ambientIntensity).toBeCloseTo(LIGHTING_PRESETS.full.ambient.intensity, 9)
     expect(LIGHTING_PRESETS.full.lights[0].intensity).toBeCloseTo(2.0, 6)
   })
 
@@ -237,11 +244,11 @@ describe('createExpPhotoMode', () => {
 
   // ── `lighting full`: camera-pinned rig + key-light shadow ──────────────────
 
-  it('builds the `full` rig: one key light, aimed at the centre', () => {
+  it('builds the rig: a key light and a fill, both aimed at the centre', () => {
     mode.activate()
     const rig = mode._getLightGroup()
     const dirs = rig.children.filter(c => c.isDirectionalLight)
-    expect(dirs).toHaveLength(1)      // key only — the fill was removed
+    expect(dirs).toHaveLength(2)      // key + fill (fill ships at intensity 0)
     expect(rig.children.some(c => c.isAmbientLight)).toBe(true)
     // Every directional aims at the rig's own origin, so rotating the rig sweeps
     // the lights without ever un-aiming them.
@@ -361,24 +368,6 @@ describe('createExpPhotoMode', () => {
 
     mode.setKeyShadowBias(3)
     expect(key.shadow.normalBias).toBeCloseTo(texel * 3, 9)
-  })
-
-  it('switching to an ambient-only preset leaves no key light casting', () => {
-    mode.activate()
-    expect(mode._getKeyLight().castShadow).toBe(true)
-    mode.setLighting('flat')             // ambient only — no directionals at all
-    expect(mode._getKeyLight()).toBeNull()
-    expect(ctx.renderer.shadowMap.enabled).toBe(false)
-  })
-
-  it('changing the light preset swaps the rig in place', () => {
-    mode.activate()
-    mode.setLighting('scientific')
-    const rig = ctx.scene.getObjectByName('expPhotoLights')
-    // `scientific` is one key light; `ambient` is three weak fills.
-    expect(rig.children.filter(c => c.isDirectionalLight)).toHaveLength(1)
-    mode.setLighting('ambient')
-    expect(rig.children.filter(c => c.isDirectionalLight)).toHaveLength(3)
   })
 
   it('a transparent background clears scene.background so exports stay transparent', () => {

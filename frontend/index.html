@@ -515,6 +515,36 @@
     }
     #left-tab-toggle:disabled { opacity: 0.3; cursor: default; }
     #left-panel .tab-content[hidden] { display: none; }
+
+    /* ── Exp. Photomode panel (#tab-content-photo-exp) ──────────────────────
+       The sidebar is 280 px. Every control row is label + control + value, and
+       the ONLY thing that keeps it inside that width is `min-width:0` on the
+       flex control: a flex item defaults to min-width:auto, which refuses to
+       shrink below its content, so a <select> with long option text pushes the
+       whole row off the panel. Fixed-basis label and value columns keep the
+       sliders vertically aligned down the panel. */
+    .pxr-col  { display: flex; flex-direction: column; gap: 6px;
+                font-size: var(--text-xs); color: #8b949e; }
+    .pxr-row  { display: flex; align-items: center; gap: 6px;
+                font-size: var(--text-xs); color: #8b949e; }
+    .pxr-lbl  { flex: 0 0 68px; min-width: 0; color: #8b949e;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pxr-val  { flex: 0 0 36px; min-width: 0; text-align: right; color: #c9d1d9;
+                font-variant-numeric: tabular-nums; }
+    .pxr-rng  { flex: 1 1 auto; min-width: 0; accent-color: #58a6ff; }
+    .pxr-sel  { flex: 1 1 auto; min-width: 0; background: #0d1117;
+                border: 1px solid #30363d; border-radius: 3px; color: #c9d1d9;
+                padding: 2px 4px; font-size: var(--text-xs); }
+    .pxr-btn  { padding: 4px 6px; background: #21262d; border: 1px solid #30363d;
+                border-radius: 3px; color: #c9d1d9; font-size: var(--text-xs);
+                cursor: pointer; font-family: var(--font-ui); }
+    .pxr-btn:hover { background: #30363d; }
+    .pxr-check { display: flex; align-items: center; gap: 6px; color: #c9d1d9;
+                 cursor: pointer; font-size: var(--text-xs); }
+    .pxr-note { color: #6a737d; font-size: 11px; line-height: 1.35;
+                overflow-wrap: anywhere; }
+    #tab-content-photo-exp { overflow-x: hidden; }
+    #tab-content-photo-exp .panel-section { min-width: 0; }
     #left-panel #tab-content-plates:not([hidden]) { display: flex; flex-direction: column; height: 100%; min-height: 0; }
     /* Feature log timeline — playhead and suppressed entries */
     .fl-playhead {
@@ -5922,7 +5952,7 @@
               <button id="photo-profile-delete" title="Delete the current profile"
                       style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">×</button>
               <button id="photo-profile-reset" title="Reset all photo settings to their defaults"
-                      style="padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">Reset</button>
+                      style="min-width:0;flex-shrink:1;padding:2px 8px;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">Reset</button>
             </div>
             <div id="photo-profile-status" style="font-size:11px;color:#6a737d;min-height:14px"></div>
           </div>
@@ -6474,7 +6504,7 @@
                        style="width:54px;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
                 <span style="min-width:48px;color:#8b949e;margin-left:8px">Format</span>
                 <select id="photo-anim-format"
-                  style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
+                  style="flex:1;min-width:0;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:1px 4px;font-size:var(--text-xs)">
                   <option value="webm" selected>WebM (video)</option>
                   <option value="gif">GIF (animated)</option>
                 </select>
@@ -6514,86 +6544,115 @@
              VIEW-INDEPENDENT 64-DIRECTION AMBIENT OCCLUSION. Deliberately has
              no HDRI / bloom / path tracer / floor / export — those live in
              Photo and would bury the thing being tested. -->
+
+        <!-- ── Experimental photo mode ──────────────────────────────────────
+             A camera-pinned key light with a real cast shadow. Multishadow
+             ambient occlusion was tried here and retired — see
+             archive/multishadow_ao/README.md (it modulates the AMBIENT term and
+             this rig runs ambient at 0.15, so it could only touch 7% of the light).
+
+             LAYOUT RULE: the sidebar is 280 px, so a row is `.pxr-row` = label
+             (fixed 68 px) + control (flex:1 with min-width:0 so it CAN shrink) +
+             value (fixed 36 px). Without min-width:0 a flex item refuses to
+             shrink below its content and the row runs off the panel.
+
+             NESTING: this block closes exactly as many <div>s as it opens. An
+             earlier version closed the Lighting section twice; the extra </div>
+             cascaded up, pushed #viewport-container out of #main-area, collapsed
+             it to zero height and clipped away the welcome screen — with no JS
+             error anywhere (95096cf). Re-check div balance after editing. -->
         <div id="tab-content-photo-exp" class="tab-content" hidden>
 
           <div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid #21262d">
-            <button id="photoexp-exit-btn" style="flex:1;padding:4px 0;background:#21262d;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;font-family:var(--font-ui)">Exit experimental mode</button>
+            <button id="photoexp-exit-btn" class="pxr-btn" style="flex:1">Exit experimental mode</button>
           </div>
 
-          <div id="photoexp-status" style="padding:6px 14px;border-bottom:1px solid #21262d;font-size:11px;color:#6a737d;line-height:1.4">
+          <div id="photoexp-status" class="pxr-note" style="padding:6px 14px;border-bottom:1px solid #21262d">
             inactive
           </div>
 
-          <!-- Lighting -->
           <div class="panel-section">
             <h2>Lighting</h2>
-            <select id="photoexp-lighting" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:3px 4px;font-size:var(--text-xs)">
-              <option value="full" selected>Full (key shadow + occlusion)</option>
-              <option value="ambient">Ambient (occlusion-only, figure)</option>
-              <option value="flat">Flat (ambient only, no fill)</option>
-              <option value="scientific">Scientific (single key)</option>
-              <option value="softbox">Soft Box (two diffuse)</option>
-            </select>
-
-            <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:var(--text-xs);color:#8b949e">
-              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer"
-                     title="ChimeraX stores light directions in CAMERA coordinates (move_lights_with_camera). The rig is pinned to the viewer, so reorienting the structure sweeps the light — and its shadow — across it. Off = the rig is welded to the world and orbiting just walks you into the dark side.">
+            <div class="pxr-col">
+              <label class="pxr-check"
+                     title="ChimeraX move_lights_with_camera: light directions live in camera coordinates, so the shadow sweeps across the structure as you reorient it.">
                 <input id="photoexp-pin-lights" type="checkbox" checked> Pin lights to camera
               </label>
 
-              <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;cursor:pointer"
-                     title="A real shadow map cast by the key light — the SECOND shadow system in ChimeraX's `lighting full`, layered on top of ambient occlusion and re-rendered every frame. No floor required.">
+              <label class="pxr-check"
+                     title="A real shadow map cast by the key light, re-rendered every frame. No floor required.">
                 <input id="photoexp-key-shadow" type="checkbox" checked> Key light casts a shadow
               </label>
 
-              <div id="photoexp-key-shadow-controls" style="display:flex;flex-direction:column;gap:6px">
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:66px" title="Resolution of the key light's single shadow map. This is what decides whether an arm casts a crisp shadow onto a platform behind it.">Shadow map</span>
-                  <select id="photoexp-key-shadow-mapsize" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+              <div id="photoexp-key-shadow-controls" class="pxr-col">
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Resolution of the key light's shadow map. This decides whether an arm casts a crisp shadow onto a platform behind it.">Map size</span>
+                  <select id="photoexp-key-shadow-mapsize" class="pxr-sel">
                     <option value="1024">1024</option>
-                    <option value="2048" selected>2048 (ChimeraX default)</option>
+                    <option value="2048" selected>2048 (ChimeraX)</option>
                     <option value="4096">4096</option>
                     <option value="8192">8192</option>
                   </select>
                 </div>
-                <div id="photoexp-key-shadow-res" style="color:#6a737d;font-size:11px;line-height:1.35"></div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:66px" title="Scales the normal-offset bias, in shadow-map texels. Raise until surface self-shadowing (acne / moiré on beads) disappears; too high and contact shadows detach from what casts them.">Shadow bias</span>
-                  <input id="photoexp-key-shadow-bias" type="range" min="0" max="5" step="0.1" value="1"
-                         style="flex:1;accent-color:#f0b429">
-                  <span id="photoexp-key-shadow-bias-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.0×</span>
+                <div id="photoexp-key-shadow-res" class="pxr-note"></div>
+
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Normal-offset bias in shadow-map texels. Raise until self-shadowing (acne on beads) disappears; too high and contact shadows detach.">Bias</span>
+                  <input id="photoexp-key-shadow-bias" type="range" min="0" max="5" step="0.1" value="1" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photoexp-key-shadow-bias-label" class="pxr-val">1.0×</span>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="min-width:66px" title="How dark the cast shadow is drawn (three.js LightShadow.intensity). 1 = physically correct; lower only fades it.">Shadow dark</span>
-                  <input id="photoexp-shadow-strength" type="range" min="0" max="1" step="0.05" value="1"
-                         style="flex:1;accent-color:#f0b429">
-                  <span id="photoexp-shadow-strength-label" style="color:#c9d1d9;min-width:34px;text-align:right">1.00</span>
+
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="How dark the cast shadow is drawn (three.js LightShadow.intensity). 1 = physically correct.">Darkness</span>
+                  <input id="photoexp-shadow-strength" type="range" min="0" max="1" step="0.05" value="1" class="pxr-rng" style="accent-color:#f0b429">
+                  <span id="photoexp-shadow-strength-label" class="pxr-val">1.00</span>
                 </div>
               </div>
 
+              <!-- Per-light intensities. A cast shadow only subtracts the key
+                   light, so its depth is key/(key+fill+ambient). -->
+              <div class="pxr-col" style="border-top:1px solid #21262d;padding-top:6px">
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Brightness of the shadow-casting key light.">Key</span>
+                  <input id="photoexp-key-intensity" type="range" min="0" max="4" step="0.05" value="2" class="pxr-rng">
+                  <span id="photoexp-key-intensity-label" class="pxr-val">2.00</span>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Secondary light. Fills the shadow back in — raise it for softer shadows.">Fill</span>
+                  <input id="photoexp-fill-intensity" type="range" min="0" max="4" step="0.05" value="0" class="pxr-rng">
+                  <span id="photoexp-fill-intensity-label" class="pxr-val">0.00</span>
+                </div>
+                <div class="pxr-row">
+                  <span class="pxr-lbl" title="Omnidirectional light. This is the floor a cast shadow cannot go below, so lowering it deepens the shadow.">Ambient</span>
+                  <input id="photoexp-ambient-intensity" type="range" min="0" max="3" step="0.05" value="0.15" class="pxr-rng">
+                  <span id="photoexp-ambient-intensity-label" class="pxr-val">0.15</span>
+                </div>
+
+                <button id="photoexp-max-contrast" class="pxr-btn"
+                        title="Key 2.0, fill 0, ambient 0.15 — the cast shadow removes ~93% of the light. Also the default, so this is mainly a way back after experimenting.">Max shadow contrast</button>
+
+                <div id="photoexp-shadow-depth" class="pxr-note"></div>
+              </div>
             </div>
 
-            <div style="color:#6a737d;font-size:11px;line-height:1.35;margin-top:8px">
-              <b>Full</b> mirrors ChimeraX: key 0.7 / fill 0.3 / ambient 0.8, key shadow ON, and
-              occlusion applied to the ambient term only — two independent shadow systems.
-              The occlusion bake is cached and view-independent; the key shadow re-renders every
-              frame, which is why it moves as you reorient.
-              With <b>Ambient</b> or <b>Flat</b> there is no key light at all, so occlusion does
-              all the shading — the ChimeraX <code style="color:#8b949e">lighting soft</code>
-              arrangement.
+            <div class="pxr-note" style="margin-top:8px">
+              One key light, 55° off the view axis (upper-left), pinned to the camera.
+              Key 2.0 / fill 0 / ambient 0.15 rebalances ChimeraX's own 0.7 / 0.3 / 0.8:
+              a cast shadow can only subtract the key light, so that takes it from
+              removing 39% of the light to ~93%. The shadow map re-renders every frame,
+              which is why it sweeps as you reorient.
             </div>
           </div>
 
-          <!-- Background -->
           <div class="panel-section">
             <h2>Background</h2>
-            <div style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e">
-              <select id="photoexp-bg-type" style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:3px;color:#c9d1d9;padding:2px 4px;font-size:var(--text-xs)">
+            <div class="pxr-row">
+              <select id="photoexp-bg-type" class="pxr-sel">
                 <option value="color" selected>Solid colour</option>
                 <option value="transparent">Transparent</option>
               </select>
               <input id="photoexp-bg-color" type="color" value="#0b0d10"
-                     style="background:transparent;border:1px solid #30363d;border-radius:3px;width:36px;height:20px;padding:0;cursor:pointer">
+                     style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
             </div>
           </div>
 
@@ -6620,7 +6679,7 @@
         <button class="left-tab-btn"        data-tab="dynamics"     title="Simulations">Simulations</button>
         <button class="left-tab-btn"        data-tab="scene"        title="Animations — camera poses + animation playback">Animations</button>
         <button class="left-tab-btn"        data-tab="photo"        title="Photo mode — high-resolution export" id="photo-tab-btn" data-test="photo-tab-btn">Photo</button>
-        <button class="left-tab-btn"        data-tab="photo-exp"    title="Experimental photo mode — rendering features under evaluation (multishadow ambient occlusion)" id="photo-exp-tab-btn" data-test="photo-exp-tab-btn">Exp. Photomode</button>
+        <button class="left-tab-btn"        data-tab="photo-exp"    title="Experimental photo mode — camera-pinned key light with a real cast shadow" id="photo-exp-tab-btn" data-test="photo-exp-tab-btn">Exp. Photomode</button>
         <button class="left-tab-btn"        data-tab="plates"       title="Plates and tubes — 96-well plate layout + IDT tube list">Plates &amp; tubes</button>
         <!-- Drag-to-resize the sidebar; lives on the tab strip's outer edge
              (the border with the 3D viewport) so it's easy to find. -->

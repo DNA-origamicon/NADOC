@@ -40,10 +40,12 @@ import { computeShadowBounds, isShadowExcluded, findBoundsOutlier, rejectedObjec
          sceneSignature } from './photo_renderer/shadow_bounds.js'
 import { initPhotoExpPanel }          from '../ui/photo_exp_panel.js'
 
+/** The fixed rig this tab uses. See LIGHTING_PRESETS.full for its geometry. */
+const RIG_PRESET = 'full'
+
 /** Factory defaults — the single source of truth for "what the experiment looks
  *  like out of the box". */
 export const DEFAULT_EXP_SETTINGS = Object.freeze({
-  lighting:   'full',         // key in LIGHTING_PRESETS
   bgType:     'color',        // 'color' | 'transparent'
   bgColor:    '#0b0d10',
 
@@ -57,6 +59,17 @@ export const DEFAULT_EXP_SETTINGS = Object.freeze({
   keyShadow:  true,
   keyShadowMapSize: 2048,     // ChimeraX shadow_map_size; one map, so it is cheap
   keyShadowBias: 1.0,         // × the texel-scaled normalBias; raise to kill acne
+  shadowStrength:   1.0,      // three's LightShadow.intensity; 1 = physical
+
+  // Per-light intensities — ChimeraX's `lighting intensity / fillIntensity /
+  // ambientIntensity`. THESE are the shadow-contrast controls: a cast shadow can
+  // only subtract the KEY light, so its depth is key/(key+fill+ambient).
+  //
+  // MUST match LIGHTING_PRESETS.full: _rebuildRig applies these OVER the preset's
+  // own values, so a mismatch silently overrides it. Pinned by a test.
+  keyIntensity:     2.0,
+  fillIntensity:    0.0,
+  ambientIntensity: 0.15,
   shadowStrength:   1.0,      // three's LightShadow.intensity; 1 = physical
 })
 
@@ -99,6 +112,13 @@ export function swapToFlatMaterials(root) {
     const vc = Boolean(src.vertexColors)
     const mat = makeMaterial('full', 'flat', vc, 1.0)
     mat.side = src.side
+    // Preserve the depth contract. Overlay geometry (ghost planes, hit targets,
+    // immobilisation surfaces) is drawn depthWrite:false precisely so it cannot
+    // occlude the structure; a fresh material defaults to TRUE, which turned
+    // those overlays into opaque occluders AND shadow casters, and defeated the
+    // depthWrite exclusion in shadow_bounds.js (which tests the CURRENT material).
+    mat.depthWrite = src.depthWrite
+    mat.depthTest  = src.depthTest
     if (src.transparent && src.opacity < 1) {
       mat.transparent = true
       mat.opacity     = src.opacity
@@ -198,7 +218,11 @@ export function createExpPhotoMode(sceneCtx) {
    */
   function _rebuildRig() {
     if (!_lightGroup) return
-    applyLighting(_settings.lighting, _lightGroup)
+    // Fixed rig geometry — there is no preset selector. The Key/Fill/Ambient
+    // sliders ARE the preset; the dropdown's only remaining effect was to reset
+    // them to an ambient-dominant balance that hid the cast shadow (`flat` had
+    // no directional at all, silently disabling the whole key-shadow block).
+    applyLighting(RIG_PRESET, _lightGroup)
 
     _bounds = computeShadowBounds(scene)
     _rejected = rejectedObjects(_bounds)
@@ -314,6 +338,7 @@ export function createExpPhotoMode(sceneCtx) {
         const texel = (2 * R) / mapPx
         _keyLight.shadow.bias       = -0.0005
         _keyLight.shadow.normalBias = texel * _settings.keyShadowBias
+        _keyLight.shadow.intensity  = _settings.shadowStrength
         _keyLight.shadow.intensity  = _settings.shadowStrength
         _keyLight.shadow.needsUpdate = true
       }
@@ -483,17 +508,13 @@ export function createExpPhotoMode(sceneCtx) {
 
   // ── Settings ───────────────────────────────────────────────────────────────
 
-  function setLighting(name) {
-    _settings.lighting = name
-    // Adopt the preset's own intensities, otherwise sliders left over from the
-    // previous preset silently override it and switching looks like a no-op.
-    const p = LIGHTING_PRESETS[name]
-    if (p) {
-      _settings.ambientIntensity = p.ambient.intensity
-      _settings.keyIntensity     = p.lights[0]?.intensity ?? 0
-      _settings.fillIntensity    = p.lights[1]?.intensity ?? 0
-    }
-    if (_active) _rebuildRig()
+  /** Absolute per-light intensities — the real shadow-contrast controls. */
+  function setKeyIntensity(v)     { _settings.keyIntensity = Math.max(0, v);     if (_active) _rebuildRig() }
+  function setFillIntensity(v)    { _settings.fillIntensity = Math.max(0, v);    if (_active) _rebuildRig() }
+  function setAmbientIntensity(v) { _settings.ambientIntensity = Math.max(0, v); if (_active) _rebuildRig() }
+  function setShadowStrength(v) {
+    _settings.shadowStrength = Math.max(0, Math.min(1, v))
+    if (_active) _applyKeyShadow()
   }
 
   /** ChimeraX move_lights_with_camera. Off → the rig is welded to the world. */
@@ -596,7 +617,6 @@ export function createExpPhotoMode(sceneCtx) {
     camera.getWorldQuaternion(camQ)
     return {
       active: _active,
-      lighting: _settings.lighting,
       rendererShadowMapEnabled: renderer.shadowMap?.enabled,
       rendererShadowAutoUpdate: renderer.shadowMap?.autoUpdate,
       keyLight: key ? {
@@ -630,8 +650,9 @@ export function createExpPhotoMode(sceneCtx) {
     activate, deactivate,
     getDiagnostics,
     isActive: () => _active,
-    setLighting, setBackground,
+    setBackground,
     setPinLights, setKeyShadow, setKeyShadowBias, setKeyShadowMapSize,
+    setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
     setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
     resync,
     getSettings, getStatus,

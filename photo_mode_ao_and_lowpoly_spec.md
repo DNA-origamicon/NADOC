@@ -1,21 +1,23 @@
 # The ChimeraX "stunning" combination — what it actually is, and what NADOC needs
 
-> ## OUTCOME (2026-07-28) — multishadow AO was BUILT, EVALUATED, AND REMOVED
+> ## STATUS (2026-07-28) — multishadow AO SHIPPED, and the scale rule that governs it
 >
-> The 64-direction port below shipped in the Exp. Photomode tab and was then cut.
-> It never delivered on origami. The reason is arithmetic and is the single most
-> useful thing in this document: at 64 directions a 1024 map gives each direction
-> only **128 px**, which on a 150 nm structure is **2.34 nm/texel** — coarser than
-> a 2.0 nm duplex. ChimeraX's defaults are sized for a ~5 nm protein; scaled to an
-> origami the maps cannot resolve one helix, so the long-range ambient shadowing
-> that makes `lighting soft` work collapses into a wash that fights the key light.
-> Raising the map to 4096/8192 fixes the resolution but the result still lost to
-> a plain camera-pinned key shadow at max contrast.
+> The 64-direction port below is live in the Exp. Photomode tab, alongside a
+> camera-pinned key light with its own shadow map (§B.4a). It was briefly removed
+> and then restored — removing it made the render worse.
 >
-> **What survived:** the camera-pinned rig (§B.4a), the key-light shadow map, the
-> frustum fitting + outlier rejection (now `photo_renderer/shadow_bounds.js`), and
-> the nm-per-texel resolution rule. **Part A (low-poly geodesic spheres) is
-> untouched and still open.** Read Part B as findings, not as a plan.
+> **The one number that decides whether any of this works: nm per shadow texel.**
+> At 64 directions a 1024 atlas gives each direction only **128 px**, which on a
+> 150 nm structure is **2.34 nm/texel** — coarser than a 2.0 nm duplex, so the
+> occlusion cannot resolve a single helix and long-range shadowing collapses into
+> a wash. ChimeraX's defaults are sized for a ~5 nm protein. Origami needs 4096+.
+> The panel prints this live and warns when a texel exceeds a duplex.
+>
+> **Second rule, learned the hard way:** occlusion multiplies the AMBIENT term, so
+> ambient occlusion and "max shadow contrast" (key 2.0 / fill 0 / ambient 0.15)
+> are mutually exclusive by construction — at ambient 0.15 the AO is invisible.
+>
+> **Part A (low-poly geodesic spheres) is untouched and still open.**
 
 **Scope:** the two things named as the priority — (A) low-poly atomistic spheres that hold up at a
 distance, and (B) view-independent 64-direction ambient occlusion — plus the lighting/environment

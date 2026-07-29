@@ -54,7 +54,8 @@ export const LIGHTING_PRESETS = {
     // shadow legible. Chosen from side-by-side comparison, 2026-07-28.
     ambient: { color: 0xffffff, intensity: 0.15 },
     lights: [
-      { color: 0xffffff, intensity: 2.0, position: [-0.577, 0.577, 0.577] },  // key (casts the shadow)
+      { color: 0xffffff, intensity: 2.0, position: [-0.577,  0.577, 0.577] },  // key (casts the shadow)
+      { color: 0xffffff, intensity: 0.0, position: [ 0.2,    0.2,   0.959] },  // fill (off by default)
     ],
   },
 

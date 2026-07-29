@@ -63,7 +63,6 @@ describe('formatShadowStatus', () => {
 const PANEL_IDS = {
   'photoexp-exit-btn':               'button',
   'photoexp-status':                 'div',
-  'photoexp-lighting':               'select',
   'photoexp-pin-lights':             'input',
   'photoexp-key-shadow':             'input',
   'photoexp-key-shadow-controls':    'div',
@@ -79,7 +78,7 @@ const PANEL_IDS = {
 
 function makeMode(overrides = {}) {
   const settings = {
-    lighting: 'full', bgType: 'color', bgColor: '#0b0d10',
+    bgType: 'color', bgColor: '#0b0d10',
     pinLights: true, keyShadow: true, keyShadowMapSize: 2048,
     keyShadowBias: 1.0, shadowStrength: 1.0,
     ...overrides,
@@ -87,7 +86,7 @@ function makeMode(overrides = {}) {
   return {
     getSettings: () => ({ ...settings }),
     getStatus: () => ({ active: true, keyShadow: true, pinned: true, radius: 150, mapSize: 2048 }),
-    setLighting: vi.fn(), setPinLights: vi.fn(), setKeyShadow: vi.fn(),
+    setPinLights: vi.fn(), setKeyShadow: vi.fn(),
     setKeyShadowMapSize: vi.fn(), setKeyShadowBias: vi.fn(), setShadowStrength: vi.fn(),
     setBackground: vi.fn(),
   }
@@ -103,7 +102,6 @@ describe('initPhotoExpPanel', () => {
     for (const id of ['photoexp-key-shadow-bias', 'photoexp-shadow-strength']) els[id].type = 'range'
     els['photoexp-bg-color'].type = 'color'
     for (const [id, values] of [
-      ['photoexp-lighting', ['full', 'ambient', 'flat', 'scientific', 'softbox']],
       ['photoexp-key-shadow-mapsize', ['1024', '2048', '4096', '8192']],
       ['photoexp-bg-type', ['color', 'transparent']],
     ]) {
@@ -122,7 +120,6 @@ describe('initPhotoExpPanel', () => {
 
   it('syncToState pushes the controller settings into every control', () => {
     panel.syncToState()
-    expect(els['photoexp-lighting'].value).toBe('full')
     expect(els['photoexp-pin-lights'].checked).toBe(true)
     expect(els['photoexp-key-shadow'].checked).toBe(true)
     expect(els['photoexp-key-shadow-mapsize'].value).toBe('2048')
@@ -169,14 +166,10 @@ describe('initPhotoExpPanel', () => {
     expect(els['photoexp-key-shadow-controls'].style.display).toBe('none')
   })
 
-  it('wires the camera pin, lighting and background', () => {
+  it('wires the camera pin and background', () => {
     els['photoexp-pin-lights'].checked = false
     els['photoexp-pin-lights'].dispatchEvent(new Event('change'))
     expect(mode.setPinLights).toHaveBeenCalledWith(false)
-
-    els['photoexp-lighting'].value = 'scientific'
-    els['photoexp-lighting'].dispatchEvent(new Event('change'))
-    expect(mode.setLighting).toHaveBeenCalledWith('scientific')
 
     els['photoexp-bg-type'].value = 'transparent'
     els['photoexp-bg-type'].dispatchEvent(new Event('change'))

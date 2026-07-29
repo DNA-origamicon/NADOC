@@ -34,6 +34,17 @@ export function shadowResolution(radiusNm, texels) {
 }
 
 /**
+ * Fraction of the light a cast shadow can remove. A shadow only subtracts the
+ * KEY light, so fill + ambient are the floor it cannot go below — which is why
+ * ChimeraX's own 0.7/0.3/0.8 gives a shadow only 39% dark.
+ */
+export function shadowDepthFraction({ keyIntensity, fillIntensity, ambientIntensity }) {
+  const total = keyIntensity + fillIntensity + ambientIntensity
+  if (!(total > 0)) return 0
+  return keyIntensity / total
+}
+
+/**
  * Format the status line. Pure — the string is the whole contract, so the test
  * can assert it without a DOM.
  *
@@ -62,7 +73,6 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
   const els = {
     exit:      $('photoexp-exit-btn'),
     status:    $('photoexp-status'),
-    lighting:  $('photoexp-lighting'),
     pinLights: $('photoexp-pin-lights'),
     keyShadow: $('photoexp-key-shadow'),
     keyShadowControls:  $('photoexp-key-shadow-controls'),
@@ -72,6 +82,16 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
     keyShadowBiasLabel: $('photoexp-key-shadow-bias-label'),
     shadowStrength:      $('photoexp-shadow-strength'),
     shadowStrengthLabel: $('photoexp-shadow-strength-label'),
+    shadowStrength:      $('photoexp-shadow-strength'),
+    shadowStrengthLabel: $('photoexp-shadow-strength-label'),
+    keyIntensity:        $('photoexp-key-intensity'),
+    keyIntensityLabel:   $('photoexp-key-intensity-label'),
+    fillIntensity:       $('photoexp-fill-intensity'),
+    fillIntensityLabel:  $('photoexp-fill-intensity-label'),
+    ambientIntensity:      $('photoexp-ambient-intensity'),
+    ambientIntensityLabel: $('photoexp-ambient-intensity-label'),
+    maxContrast: $('photoexp-max-contrast'),
+    shadowDepth: $('photoexp-shadow-depth'),
     bgType:  $('photoexp-bg-type'),
     bgColor: $('photoexp-bg-color'),
   }
@@ -110,7 +130,6 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
   /** Push every control's current value into the UI from the controller. */
   function syncToState() {
     const s = expMode.getSettings()
-    if (els.lighting)  els.lighting.value = s.lighting
     if (els.pinLights) els.pinLights.checked = s.pinLights
     if (els.keyShadow) els.keyShadow.checked = s.keyShadow
     if (els.keyShadowMapSize)   els.keyShadowMapSize.value = String(s.keyShadowMapSize)
@@ -119,20 +138,46 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
     if (els.shadowStrength)      els.shadowStrength.value = String(s.shadowStrength)
     if (els.shadowStrengthLabel) els.shadowStrengthLabel.textContent = s.shadowStrength.toFixed(2)
     if (els.keyShadowControls)  els.keyShadowControls.style.display = s.keyShadow ? 'flex' : 'none'
+    for (const [k, el, lab] of [
+      ['shadowStrength',   els.shadowStrength,   els.shadowStrengthLabel],
+      ['keyIntensity',     els.keyIntensity,     els.keyIntensityLabel],
+      ['fillIntensity',    els.fillIntensity,    els.fillIntensityLabel],
+      ['ambientIntensity', els.ambientIntensity, els.ambientIntensityLabel],
+    ]) {
+      if (el)  el.value = String(s[k])
+      if (lab) lab.textContent = s[k].toFixed(2)
+    }
+    _refreshShadowDepth()
     if (els.bgType)  els.bgType.value = s.bgType
     if (els.bgColor) els.bgColor.value = s.bgColor
     _refreshResolution()
     _refreshStatus()
   }
 
+  function _refreshShadowDepth() {
+    if (!els.shadowDepth) return
+    const s = expMode.getSettings()
+    const pct = Math.round(shadowDepthFraction(s) * 100)
+    els.shadowDepth.textContent =
+      `A cast shadow removes ${pct}% of the light here (key ${s.keyIntensity.toFixed(2)} of `
+      + `${(s.keyIntensity + s.fillIntensity + s.ambientIntensity).toFixed(2)} total). `
+      + `Lower Fill and Ambient to deepen it.`
+  }
+
+  /** Bind an intensity slider → setter → label → readout. */
+  function _bindIntensity(el, label, setter) {
+    el?.addEventListener('input', () => {
+      const v = Number(el.value)
+      setter(v)
+      if (label) label.textContent = v.toFixed(2)
+      _refreshShadowDepth()
+    })
+  }
+
   // ── Wiring ─────────────────────────────────────────────────────────────────
 
   els.exit?.addEventListener('click', () => onExit?.())
 
-  els.lighting?.addEventListener('change', () => {
-    expMode.setLighting(els.lighting.value)
-    _refreshStatus()
-  })
 
   els.pinLights?.addEventListener('change', () => expMode.setPinLights(els.pinLights.checked))
 
@@ -159,6 +204,18 @@ export function initPhotoExpPanel(expMode, { onExit } = {}) {
     const v = Number(els.shadowStrength.value)
     expMode.setShadowStrength(v)
     if (els.shadowStrengthLabel) els.shadowStrengthLabel.textContent = v.toFixed(2)
+  })
+
+  _bindIntensity(els.keyIntensity,     els.keyIntensityLabel,     v => expMode.setKeyIntensity(v))
+  _bindIntensity(els.fillIntensity,    els.fillIntensityLabel,    v => expMode.setFillIntensity(v))
+  _bindIntensity(els.ambientIntensity, els.ambientIntensityLabel, v => expMode.setAmbientIntensity(v))
+  _bindIntensity(els.shadowStrength,   els.shadowStrengthLabel,   v => expMode.setShadowStrength(v))
+
+  els.maxContrast?.addEventListener('click', () => {
+    expMode.setKeyIntensity(2.0)
+    expMode.setFillIntensity(0)
+    expMode.setAmbientIntensity(0.15)
+    syncToState()
   })
 
   els.bgType?.addEventListener('change', () => {
