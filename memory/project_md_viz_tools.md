@@ -58,6 +58,27 @@ primes the mode + palette. Fails soft — an unmappable topology yields `atom_id
 CPK render, never a failed display. Pins: `tests/test_md_atom_design_meta.py` (5 fast),
 `md_display_state.test.js` → `zipAtomIdentity` (4).
 
+**PBC: the design-reference snap was tearing the backbone — fixed 2026-07-28.** The MD display
+showed "a few bases missing wrapping" — small clusters floating a box off the structure.
+`reassemble_to_posed_reference` step 5 nearest-image-snapped **per atom** to the posed design
+reference. That reference is an IDEAL structure, so wherever the simulated one has drifted past
+half a box from it (routine at a flexible crossover or a bundle end) that atom rounds to a
+different periodic image than its own chain neighbours and jumps a full box ALONE. Measured on the
+2hb_1xT 4 fs production: exactly 2 broken O3'-P bonds in EVERY frame, 3.7-4.4 nm long (= box_x),
+all inside strand D002 near residues 31-35. Note `snap_mask` was NOT the culprit — all 93 P atoms
+were snapped; the free-ssDNA exclusion is a separate, working concern.
+**Fix:** snap **per strand run** (`_strand_runs`, same backbone-gap criterion as
+`_unwrap_min_image`), taking the MEDIAN of the run's per-atom shifts so a few mis-referenced atoms
+are outvoted. The sequential unwrap already makes each strand internally contiguous and the snap's
+only real job is choosing WHICH image a strand sits in, so one lattice shift per run preserves
+contiguity by construction — a lattice translation cannot change an intra-run distance. After:
+0 broken bonds across all frames, longest bond 0.169 nm. Shared by all four callers (ws.py live,
+bead, and all-atom trajectory), so one fix covers every view. **Oracle worth reusing: audit BOND
+LENGTHS against the PSF topology.** Distance-from-centroid does not work — this bundle is
+legitimately 4.5 nm from its centroid in a 9.94 nm box, so it flags real structure; a broken
+covalent bond is unambiguous. Pins: `test_atomistic_to_nadoc.py` (+3, the torn-backbone case
+proven to fail against the pre-change per-atom snap at 3.91 nm).
+
 Follow-on the same day: **CPK now applies to crossover extra bases too** (ALL atomistic views,
 not just MD). `color_resolver.js` had `if (colorMode === 'strand' || atom.aux_helix_id)` — the
 `aux_helix_id` disjunct pinned extra-base atoms to their strand colour in EVERY mode, so they were

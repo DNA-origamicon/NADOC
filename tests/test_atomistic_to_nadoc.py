@@ -1226,3 +1226,78 @@ class TestReassembleToPosedReference:
                                                   (eq - eq_c + box / 2.0).mean(0), rigid, snap)
         # free-ssDNA rows are returned verbatim from p_box (no design snap)
         assert np.allclose(p_corr[~snap], p_box[~snap])
+
+
+# ── PBC reassembly must not tear the backbone ────────────────────────────────────
+#
+# The design reference is an IDEAL structure.  Wherever the simulated one has drifted
+# more than half a box from it — routine at a flexible crossover or a bundle end — a
+# PER-ATOM nearest-image snap rounds that atom to a different periodic image than its own
+# chain neighbours, and it jumps a full box alone.  Measured on the 2hb_1xT 4 fs
+# production: 2 broken O3'-P bonds in EVERY frame, ~3.7-4.4 nm (= box_x), all inside
+# strand D002 near residues 31-35 — "a few bases missing wrapping" in the MD display.
+#
+# The snap's real job is only to choose WHICH periodic image a strand sits in (the
+# sequential unwrap resets at every strand boundary, so inter-strand placement is
+# arbitrary); the unwrap already made each strand internally contiguous.  Resolving one
+# integer shift per strand run therefore keeps contiguity by construction.
+
+def _straight_strand(n, spacing=0.6, origin=(1.0, 1.0, 1.0)):
+    import numpy as np
+    p = np.tile(np.asarray(origin, float), (n, 1))
+    p[:, 2] += np.arange(n) * spacing
+    return p
+
+
+def test_reassembly_keeps_a_strand_contiguous_when_one_atom_drifts_past_half_a_box():
+    """The regression: one badly-referenced atom must not escape on its own."""
+    import numpy as np
+    from backend.core.atomistic_to_nadoc import reassemble_to_posed_reference
+
+    box = np.array([3.86, 5.83, 9.94])
+    p = _straight_strand(12)
+    eq = p.copy()
+    # One atom's design reference is off by MORE than half box_x — exactly the condition
+    # that makes a per-atom snap grab the wrong image for it alone.
+    eq[6, 0] += box[0] * 0.75
+
+    rigid = np.ones(len(p), bool)
+    out, _c = reassemble_to_posed_reference(
+        p, box, eq, eq.mean(axis=0), rigid, np.ones(len(p), bool))
+
+    steps = np.linalg.norm(np.diff(out, axis=0), axis=1)
+    assert steps.max() < 1.0, f"backbone torn: longest step {steps.max():.2f} nm"
+    # ...and the run kept its shape exactly (a lattice shift cannot distort it).
+    assert np.allclose(np.diff(out, axis=0), np.diff(p, axis=0), atol=1e-9)
+
+
+def test_reassembly_still_places_separate_strands_independently():
+    """Per-RUN, not global: two strands must still be imaged independently, which is the
+    whole reason the snap exists (the unwrap resets at strand boundaries)."""
+    import numpy as np
+    from backend.core.atomistic_to_nadoc import reassemble_to_posed_reference
+
+    box = np.array([4.0, 4.0, 12.0])
+    a = _straight_strand(8, origin=(1.0, 1.0, 1.0))
+    b = _straight_strand(8, origin=(2.0, 2.0, 1.0))
+    eq = np.vstack([a, b])
+    # Strand b starts a full box away in x — the unwrap cannot fix that (it resets at the
+    # boundary), so the snap must pull it back.
+    p = np.vstack([a, b + np.array([box[0], 0.0, 0.0])])
+
+    rigid = np.ones(len(p), bool)
+    out, _c = reassemble_to_posed_reference(
+        p, box, eq, eq.mean(axis=0), rigid, np.ones(len(p), bool))
+    assert np.linalg.norm(out[8:] - b, axis=1).max() < 1e-6, "strand b was not re-imaged"
+    assert np.linalg.norm(out[:8] - a, axis=1).max() < 1e-6, "strand a moved"
+
+
+def test_strand_runs_splits_on_backbone_gaps_only():
+    import numpy as np
+    from backend.core.atomistic_to_nadoc import _strand_runs
+
+    box = np.array([4.0, 4.0, 12.0])
+    p = np.vstack([_straight_strand(5), _straight_strand(4, origin=(3.0, 3.0, 1.0))])
+    assert _strand_runs(p, box) == [(0, 5), (5, 9)]
+    assert _strand_runs(_straight_strand(6), box) == [(0, 6)]
+    assert _strand_runs(np.zeros((1, 3)), box) == [(0, 1)]

@@ -687,6 +687,21 @@ def _kabsch_rotation(mobile_centered: np.ndarray, target_centered: np.ndarray) -
     return Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
 
 
+def _strand_runs(p_box: np.ndarray, box_nm: np.ndarray) -> "list[tuple[int, int]]":
+    """Contiguous [start, end) runs of ``p_box`` that belong to one strand.
+
+    Uses the SAME criterion as ``_unwrap_min_image``: a step longer than a real backbone
+    bond is a strand boundary.  Applied to the ALREADY-UNWRAPPED positions, so a within-
+    strand step is the true ~0.6 nm bond and only genuine boundaries exceed it.
+    """
+    n = len(p_box)
+    if n <= 1:
+        return [(0, n)]
+    steps = np.linalg.norm(np.diff(p_box, axis=0), axis=1)
+    starts = [0, *(np.nonzero(steps > _P_BACKBONE_MAX_NM)[0] + 1).tolist()]
+    return [(s, e) for s, e in zip(starts, [*starts[1:], n])]
+
+
 def reassemble_to_posed_reference(
     p_box: np.ndarray,
     box_nm: np.ndarray,
@@ -747,12 +762,34 @@ def reassemble_to_posed_reference(
     # 4. pose the full design reference into the box frame (design→box is Rᵀ)
     ref_box = (np.asarray(eq_pos, dtype=np.float64) - eq_centroid) @ R + c_box
 
-    # 5. nearest-image snap every atom to its posed reference (small, correct offset)
+    # 5. nearest-image snap to the posed reference — PER STRAND RUN, not per atom.
+    #
+    # A per-atom snap silently tears the backbone apart.  The design reference is an
+    # IDEAL structure; wherever the simulated one has drifted more than half a box from
+    # it (routine at a flexible crossover or a bundle end), that atom rounds to a
+    # different periodic image than its own chain neighbours and jumps a full box on its
+    # own.  Measured on the 2hb_1xT 4 fs production: 2 broken O3'-P bonds in EVERY frame,
+    # ~3.7-4.4 nm long (= box_x), all inside strand D002 around residues 31-35 — a handful
+    # of bases floating off the structure in the MD display.
+    #
+    # The sequential unwrap already made each strand internally contiguous, and the snap's
+    # actual job is only to choose WHICH periodic image a strand sits in (unwrap resets at
+    # every strand boundary, so inter-strand placement is arbitrary).  So resolve one
+    # integer shift per run and apply it whole: contiguity is then preserved by
+    # construction, because a lattice translation cannot change any intra-run distance.
+    # The per-run shift is the MEDIAN of its atoms' individual shifts, so a few atoms whose
+    # reference is off by >L/2 are outvoted instead of escaping.
     dc = p_box - ref_box
+    shift = np.zeros_like(dc)
     for k in range(3):
         if box[k] > 0:
-            dc[:, k] -= np.round(dc[:, k] / box[k]) * box[k]
-    p_corr = ref_box + dc
+            shift[:, k] = np.round(dc[:, k] / box[k]) * box[k]
+    runs = _strand_runs(p_box, box)
+    for s, e in runs:
+        for k in range(3):
+            if box[k] > 0:
+                shift[s:e, k] = np.median(shift[s:e, k])
+    p_corr = p_box - shift
 
     # 6. free ssDNA keeps its sequential-unwrap position
     if snap_mask is not None:
