@@ -382,3 +382,47 @@ class TestRelaxProtocolDoesNotConstrainProduction:
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
         assert plan["timestep_fs"] == 4.0
         assert plan["fast"] is True, "declash must not veto the 4 fs HMR path"
+
+
+class TestHealthPassedUsesTheLastSamplePerSegment:
+    """Health is now sampled WHILE a segment runs, so one segment has many samples.
+
+    `_production_ready_checkpoint` built its passed-set with
+    `{h.segment for h in health_samples if h.passed}` — "any sample passed". A structure
+    that degrades across a long run would then still count as healthy. Real numbers from
+    the 200 ns 4 fs production: c1=0.950 (passed) at 90 ns, c1=0.850 (FAILED) at the end.
+    An `any` test offers that degraded checkpoint as production-ready.
+    """
+
+    def _samples(self):
+        from backend.core.md_job import MdHealthSample
+        mk = lambda t, c, ok: MdHealthSample(                      # noqa: E731
+            wall_time=t, stage="production", segment="seg_A",
+            c1_paired_fraction=c, c1_mean_ang=9.6, c1_p90_ang=10.8,
+            wc_ref_relative_fraction=0.7, wc_mean_hbond_ang=5.3,
+            passed=ok, blocking=False, reason="")
+        return [mk(1.0, 0.950, True), mk(2.0, 0.850, False)]       # improved → degraded
+
+    def test_a_segment_that_ended_failing_is_not_counted_as_passed(self) -> None:
+        samples = self._samples()
+        last = {}
+        for h in samples:
+            last[h.segment] = h
+        passed = {seg for seg, h in last.items() if h.passed}
+        assert passed == set(), "the FINAL sample failed — the segment must not count as passed"
+        # the old rule would have said otherwise:
+        assert {h.segment for h in samples if h.passed} == {"seg_A"}
+
+    def test_a_segment_that_ended_passing_still_counts(self) -> None:
+        samples = list(reversed(self._samples()))   # degraded → recovered
+        last = {}
+        for h in samples:
+            last[h.segment] = h
+        assert {seg for seg, h in last.items() if h.passed} == {"seg_A"}
+
+    def test_single_sample_behaviour_is_unchanged(self) -> None:
+        """With one sample per segment (the pre-change world) both rules agree."""
+        samples = self._samples()[:1]
+        last = {h.segment: h for h in samples}
+        assert ({seg for seg, h in last.items() if h.passed}
+                == {h.segment for h in samples if h.passed})

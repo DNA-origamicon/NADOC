@@ -21,9 +21,13 @@ estimated.
 from __future__ import annotations
 
 import asyncio
+import inspect
+import logging
 import os
 import shutil
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # ── Thresholds ─────────────────────────────────────────────────────────────────
 GiB = 1024 ** 3
@@ -223,6 +227,7 @@ async def wait_proc_with_disk_guard(
     kill,
     poll_s: float = GUARD_POLL_S,
     min_free_bytes: int = ABORT_MIN_FREE_BYTES,
+    on_tick=None,
 ) -> int:
     """``await proc.wait()`` while polling free disk every ``poll_s`` seconds.
 
@@ -245,3 +250,17 @@ async def wait_proc_with_disk_guard(
                 except Exception:  # noqa: BLE001 — process already reaped is fine
                     pass
                 return DISK_ABORT_RC
+            # Periodic hook for callers that want to observe a LONG-running process
+            # while it runs (NAMD's in-flight health sampling).  Awaited if it returns
+            # an awaitable.  Never allowed to disturb the run: a hook that raises is
+            # logged and ignored, because monitoring must not be able to kill the job
+            # it is monitoring.  CancelledError still propagates so a user stop works.
+            if on_tick is not None:
+                try:
+                    r = on_tick()
+                    if inspect.isawaitable(r):
+                        await r
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001
+                    logger.exception("wait_proc_with_disk_guard: on_tick hook failed")

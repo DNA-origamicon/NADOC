@@ -169,7 +169,7 @@ def _install_fakes(monkeypatch, recorder: list[str]):
         wc_per_frame=[0.95] * 20))
 
     async def fake_namd(namd_bin, conf_name, package_dir, log_path, threads, devices,
-                        job_id=None, on_spawn=None):
+                        job_id=None, on_spawn=None, on_tick=None, **_kw):
         recorder.append(conf_name)
         if on_spawn is not None:
             on_spawn(4242)

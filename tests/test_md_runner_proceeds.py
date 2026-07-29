@@ -125,7 +125,7 @@ def _install_fakes(
 
     async def fake_namd(
         namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None,
+        on_spawn=None, on_tick=None, **_kw
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -273,7 +273,7 @@ def _install_cell_shrink_fake(
 
     async def fake_namd(
         namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None,
+        on_spawn=None, on_tick=None, **_kw
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -350,7 +350,7 @@ def _install_host_oom_fake(
 
     async def fake_namd(
         namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None,
+        on_spawn=None, on_tick=None, **_kw
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -430,7 +430,7 @@ def _install_instability_fake(
 
     async def fake_namd(
         namd_bin, conf_name, package_dir, log_path, threads, devices, job_id=None,
-        on_spawn=None,
+        on_spawn=None, on_tick=None, **_kw
     ):
         if recorder is not None:
             recorder.append(conf_name)
@@ -551,7 +551,7 @@ def _install_gpu_fakes(monkeypatch, gpu_safe: bool, launched: list[tuple[str, st
     monkeypatch.setattr(nr, "gpu_tilelist_probe", lambda *a, **k: gpu_safe)
 
     async def fake_namd(namd_bin, conf_name, package_dir, log_path, threads, devices,
-                        job_id=None, on_spawn=None):
+                        job_id=None, on_spawn=None, on_tick=None, **_kw):
         launched.append((namd_bin, devices))
         if on_spawn is not None:
             on_spawn(4242)
@@ -617,7 +617,7 @@ def test_cpu_job_never_pays_for_the_probe(
                         lambda *a, **k: probed.append(1) or True)
 
     async def fake_namd(namd_bin, conf_name, package_dir, log_path, threads, devices,
-                        job_id=None, on_spawn=None):
+                        job_id=None, on_spawn=None, on_tick=None, **_kw):
         launched.append((namd_bin, devices))
         out = package_dir / "output"
         out.mkdir(exist_ok=True)

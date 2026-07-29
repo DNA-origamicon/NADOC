@@ -739,7 +739,16 @@ def _production_ready_checkpoint(job: MdJob) -> tuple[Optional[int], Optional[Se
         return None, None, "manifest.json not found", ""
     _, specs = segments_from_manifest(manifest_path)
     done = {s.name for s in job.segments if s.status == "done"}
-    passed = {h.segment for h in job.health_samples if h.passed}
+    # LAST sample per segment, not "any sample that passed".  Health is now also sampled
+    # WHILE a segment runs, so one segment has many samples and a structure can degrade
+    # across them: the 200 ns production read c1=0.950 (passed) at 90 ns and c1=0.850
+    # (FAILED) at the end.  An `any` test would call that segment healthy and offer a
+    # degraded checkpoint as production-ready.  With one sample per segment this is
+    # identical to the old behaviour.
+    _last_by_segment: dict[str, object] = {}
+    for h in job.health_samples:
+        _last_by_segment[h.segment] = h
+    passed = {seg for seg, h in _last_by_segment.items() if h.passed}
     latest_restrained: SegmentSpec | None = None
     latest_restrained_idx: Optional[int] = None
     latest_unqualified: tuple[int, SegmentSpec] | None = None

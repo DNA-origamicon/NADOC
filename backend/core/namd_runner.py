@@ -1040,6 +1040,78 @@ def resolve_gpu_decision(job: MdJob, choice: str, workspace_dir: Path) -> MdJob:
     return job
 
 
+# ── In-flight health sampling ─────────────────────────────────────────────────
+#
+# Health used to be computed ONLY after a segment finished.  A relaxation ladder has 12
+# segments, so its health bar fills in as it goes — but a PRODUCTION run is ONE segment,
+# so the bar stayed empty for the entire run and produced exactly one sample at the very
+# end.  Measured on a 200 ns / 50M-step 4 fs production: 1 sample after ~13 hours.
+#
+# That is not just a cosmetic gap.  The single end-point sample read c1=0.850 / wc=0.641
+# (FAILED), while a probe of the same run at 90 ns read c1=0.950 / wc=0.744 (passed) —
+# the structure degraded over the run and nothing recorded the trend.
+#
+# `run_health_check` reads output/<segment>.dcd, which NAMD writes incrementally, so the
+# data was there all along.  Measured cost on a live 2.4 GB DCD: ~13 s.
+_INFLIGHT_HEALTH_INTERVAL_S = float(
+    os.environ.get("NADOC_INFLIGHT_HEALTH_INTERVAL_S", "300"))
+# Skip the last frames: NAMD may be mid-write at the DCD tail while we read it.
+_INFLIGHT_HEALTH_SAFE_BACK = 2
+
+
+def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
+                               workspace_dir: Path):
+    """Periodic callback that appends a health sample WHILE a segment runs.
+
+    Returns None when sampling is disabled.  The callback is deliberately total: any
+    failure is logged and swallowed, because a monitoring probe must never be able to
+    disturb (let alone kill) the run it is watching.
+    """
+    if _INFLIGHT_HEALTH_INTERVAL_S <= 0:
+        return None
+    state = {"next_at": time.time() + _INFLIGHT_HEALTH_INTERVAL_S, "busy": False}
+
+    async def _tick():
+        now = time.time()
+        # `busy` guards the case where a check outlives the interval (a very large DCD):
+        # without it the samples would pile up and compound the I/O they are competing
+        # with.  Skipping is always safe — the next tick takes it.
+        if state["busy"] or now < state["next_at"]:
+            return
+        dcd = output_dir / f"{spec.name}.dcd"
+        if not dcd.exists() or dcd.stat().st_size == 0:
+            return
+        state["busy"] = True
+        try:
+            hresult = await asyncio.to_thread(
+                run_health_check, package_dir, spec.name, job.name_stem,
+                min_c1_paired=spec.min_c1_paired,
+                min_wc_ref_relative=spec.min_wc_ref_relative,
+                safe_back=_INFLIGHT_HEALTH_SAFE_BACK,
+            )
+            if hresult.error:            # DCD not yet readable / too few frames
+                return
+            job.health_samples.append(MdHealthSample(
+                wall_time=time.time(), stage=spec.stage, segment=spec.name,
+                c1_paired_fraction=hresult.c1_paired_fraction,
+                c1_mean_ang=hresult.c1_mean_ang, c1_p90_ang=hresult.c1_p90_ang,
+                wc_ref_relative_fraction=hresult.wc_ref_relative_fraction,
+                wc_mean_hbond_ang=hresult.wc_mean_hbond_ang,
+                passed=hresult.passed, blocking=False,
+                reason=hresult.reason or (hresult.error or ""),
+            ))
+            job.save(workspace_dir)
+            logger.info("[%s] in-flight health %s: c1=%.3f wc=%.3f",
+                        job.job_id, spec.name,
+                        hresult.c1_paired_fraction or 0.0,
+                        hresult.wc_ref_relative_fraction or 0.0)
+        finally:
+            state["busy"] = False
+            state["next_at"] = time.time() + _INFLIGHT_HEALTH_INTERVAL_S
+
+    return _tick
+
+
 def soften_stability_confs(
     package_dir: Path, segments: list, from_idx: int, job_id: str = ""
 ) -> list[str]:
@@ -1138,6 +1210,7 @@ async def _run_namd_async(
     devices: str,
     job_id: Optional[str] = None,
     on_spawn=None,
+    on_tick=None,
 ) -> tuple[int, Optional[int]]:
     """Run NAMD asynchronously; return (returncode, pid).
 
@@ -1169,7 +1242,8 @@ async def _run_namd_async(
             try: on_spawn(pid)
             except Exception: pass  # noqa: E722,S110 — persistence must never break the run
         try:
-            rc = await wait_proc_with_disk_guard(proc, package_dir, kill=_kill_process_group)
+            rc = await wait_proc_with_disk_guard(
+                proc, package_dir, kill=_kill_process_group, on_tick=on_tick)
         except asyncio.CancelledError:
             _kill_process_group(pid)
             raise
@@ -1561,6 +1635,10 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 run_devices,
                 job.job_id,
                 on_spawn=_persist_pid,
+                # Sample health WHILE the segment runs, so a one-segment production run
+                # shows a trend instead of a single number ~13 hours later.
+                on_tick=_make_inflight_health_tick(
+                    job, spec, package_dir, output_dir, workspace_dir),
             )
 
             # Check if we were cancelled while NAMD was running

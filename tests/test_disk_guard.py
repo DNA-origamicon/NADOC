@@ -112,3 +112,73 @@ def test_guard_returns_real_rc_with_headroom(monkeypatch):
     rc = asyncio.run(
         wait_proc_with_disk_guard(proc, "/tmp", kill=lambda _p: None, poll_s=0.05))
     assert rc == 0
+
+
+# ── on_tick: periodic hook for observing a long-running process ──────────────────
+#
+# Added for NAMD in-flight health sampling. Health used to be computed only after a
+# segment FINISHED; a production run is one segment, so a 200 ns / 50M-step run produced
+# exactly one sample ~13 hours in, and the health bar stayed empty the whole time.
+
+class _TickProc:
+    """A process that stays alive for `alive_polls` timeouts, then exits with rc=0."""
+
+    def __init__(self, alive_polls: int):
+        self.pid = 4242
+        self._left = alive_polls
+
+    async def wait(self):
+        import asyncio
+        if self._left > 0:
+            self._left -= 1
+            await asyncio.sleep(3600)      # outlive the poll timeout
+        return 0
+
+
+def _run(coro):
+    import asyncio
+    return asyncio.run(coro)
+
+
+def test_on_tick_fires_once_per_poll_while_the_process_runs(tmp_path):
+    from backend.core.disk_guard import wait_proc_with_disk_guard
+    calls = []
+    rc = _run(wait_proc_with_disk_guard(
+        _TickProc(3), tmp_path, kill=lambda _p: None, poll_s=0.01,
+        on_tick=lambda: calls.append(1)))
+    assert rc == 0
+    assert len(calls) == 3
+
+
+def test_on_tick_may_be_async(tmp_path):
+    from backend.core.disk_guard import wait_proc_with_disk_guard
+    calls = []
+
+    async def _tick():
+        calls.append(1)
+
+    rc = _run(wait_proc_with_disk_guard(
+        _TickProc(2), tmp_path, kill=lambda _p: None, poll_s=0.01, on_tick=_tick))
+    assert rc == 0 and len(calls) == 2
+
+
+def test_a_raising_on_tick_never_disturbs_the_run(tmp_path):
+    """Monitoring must not be able to kill the job it is monitoring."""
+    from backend.core.disk_guard import wait_proc_with_disk_guard
+    killed = []
+
+    def _boom():
+        raise RuntimeError("health check exploded")
+
+    rc = _run(wait_proc_with_disk_guard(
+        _TickProc(2), tmp_path, kill=lambda p: killed.append(p), poll_s=0.01,
+        on_tick=_boom))
+    assert rc == 0            # the process still completes normally
+    assert killed == []       # and is never killed
+
+
+def test_on_tick_is_optional(tmp_path):
+    """Omitting the hook reproduces the original behaviour exactly."""
+    from backend.core.disk_guard import wait_proc_with_disk_guard
+    assert _run(wait_proc_with_disk_guard(
+        _TickProc(2), tmp_path, kill=lambda _p: None, poll_s=0.01)) == 0

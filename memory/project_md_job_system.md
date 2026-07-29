@@ -9,6 +9,39 @@ metadata:
 
 Implemented Milestone 1 of the MD integration plan (memory/md_integration_plan.md).
 
+
+## Health is now sampled DURING a segment, not only at its end (2026-07-29)
+
+**Symptom:** the panel's health bar (base-pairs / WC health / "latest") stayed empty for an entire
+production run. Not a broken pipeline — a sampling-granularity gap.
+
+`namd_runner` computed health only in its POST-segment block. A relaxation ladder has 12 segments
+so its bar fills in as it goes (10 samples on a real run); a **production run is ONE segment**, so
+a 200 ns / 50M-step 4 fs job produced **exactly one sample, ~13 hours in**.
+
+That hid a real result. The single end-point sample read **c1=0.850 / wc=0.641 (FAILED)**, while a
+probe of the same run at 90 ns read **c1=0.950 / wc=0.744 (passed)** — the structure degraded over
+the run and nothing recorded the trend.
+
+**Fix:** `disk_guard.wait_proc_with_disk_guard` gained an `on_tick` hook (it already polled every
+`GUARD_POLL_S` for free disk), threaded through `_run_namd_async`, and
+`_make_inflight_health_tick` appends a sample every `NADOC_INFLIGHT_HEALTH_INTERVAL_S` (default
+300 s). `run_health_check` reads `output/<segment>.dcd`, which NAMD writes incrementally, so the
+data was always available — measured 13 s on a live 2.4 GB DCD, 27 s at full length, hence a
+`busy` flag so a check that outlives its interval skips rather than piles up. `safe_back=2` skips
+the tail NAMD may be mid-write on. The hook is total: a raising probe is logged and swallowed,
+because monitoring must never be able to kill the run it watches. Set the interval to 0 to disable.
+
+**Second-order fix that came with it:** `_production_ready_checkpoint` built its passed-set as
+`{h.segment for h in health_samples if h.passed}` — "ANY sample passed". With many samples per
+segment a run that degrades (0.950 → 0.850 above) would still count as healthy and be offered as a
+production-ready checkpoint. Now uses the **LAST** sample per segment; identical to the old
+behaviour when there is one sample per segment.
+
+**Test-double gotcha:** seven `fake_namd` doubles pinned `_run_namd_async`'s exact signature and
+broke on the new kwarg (18 failures). They now take `**_kw`. Worth knowing before adding another
+parameter there.
+
 **Why:** Replace ad hoc experiment scripts with server-managed NAMD jobs that
 persist through browser refreshes, run health gates automatically, and expose a
 REST API.
