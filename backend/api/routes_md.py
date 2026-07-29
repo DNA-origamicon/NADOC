@@ -979,24 +979,30 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
     # PINNED one is a hard conflict.  The caller turns it into a failed job carrying
     # FAILURE_TIMESTEP_PINNED, so the UI surfaces "NAMD run ended prematurely" with the
     # reason instead of quietly producing a different trajectory.
-    # On a declash package ONLY 1 fs is runnable.  4 fs needs the HMR PSF (never built for
-    # a declash prep) AND `rigidBonds all`; 2 fs drops the HMR requirement but still needs
-    # `rigidBonds all` — and rigid constraints are exactly what the declash ladder exists to
-    # avoid, because the residual single-stranded contacts crash RATTLE.  So both elevated
-    # timesteps are impossible here, not just 4 fs.
-    conflict = None
-    if declash and timestep_fs != 1.0:
-        if pinned:
-            conflict = (
-                f"{timestep_fs:g} fs production was requested, but this package was built "
-                f"with the declash ladder (crossover extra bases / extensions). That build "
-                f"has no hydrogen-mass-repartitioned PSF, and its residual single-stranded "
-                f"contacts crash the rigidBonds constraint solver that any timestep above "
-                f"1 fs requires. Re-prep with the geometric + Fix B path to get a package "
-                f"that can run {timestep_fs:g} fs, or set the production timestep to 1 fs."
-            )
-        timestep_fs = 1.0
-        fast = False
+    # The relaxation's integrator does NOT constrain production's.
+    #
+    # A ladder exists to produce equilibrated COORDINATES; once it has, the user is free to
+    # produce from them at any sanctioned timestep.  An earlier version refused 2/4 fs on a
+    # declash package outright, on two premises that do not survive contact:
+    #   * "no HMR PSF" — production BUILDS one on demand from the package's own PSF
+    #     (write_hmr_psf, see _append_production_segments); it was never a prerequisite,
+    #     only an artefact the fast ladder happened to leave behind.
+    #   * "residual single-stranded contacts crash RATTLE" — that describes the STARTING
+    #     structure, which is precisely what the ladder removed.  Measured: a rigidBonds-all
+    #     2 fs production off a declash relax ran 412k steps with no RATTLE failure.
+    # So there is no conflict to raise here.  4 fs on an extra-base design can still hit the
+    # Fix-B problem (HMR lightens C5' on unpaired inserts), but that is an empirical
+    # stability question the run answers — and the instability rescue already handles it —
+    # not grounds to forbid the attempt.  Warn, never block.
+    warning = None
+    if declash and timestep_fs == 4.0:
+        warning = (
+            "4 fs production on a declash package (crossover extra bases / extensions): the "
+            "HMR PSF is being built from the relaxed structure, but hydrogen-mass "
+            "repartitioning lightens C5' on UNPAIRED inserted bases, which can fail RATTLE "
+            "at 4 fs. Watch the first frames; if it blows up, the geometric + Fix B prep "
+            "(heavy extra bases) is the fix — see project_extra_base_4fs_geometric_fixb."
+        )
     # GPU-resident for production: this request's choice > the package's prep-time mode >
     # "auto" (the atom-count gate inside build_production_conf).  None here means auto.
     resident_mode = (body.gpu_resident
@@ -1009,7 +1015,7 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         "length_ns": length_ns,
         "timestep_fs": timestep_fs,
         "fast": fast,
-        "timestep_conflict": conflict,
+        "timestep_warning": warning,
         "force_resident": force_resident,
     }
 
@@ -2027,15 +2033,6 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
         raise HTTPException(400, "Cannot append production while the job is running")
     _assert_md_job_current(job)
     plan = _production_fast_plan(job, body)
-    # A pinned timestep this package cannot honour must not start a run.
-    #
-    # ⚠️ `job` here is the COMPLETED RELAXATION that production would be appended to.
-    # An earlier version set job.status = failed, which flipped a finished 12/12 ladder
-    # to "failed" in the job list — destroying the record of hours of successful work
-    # because a production request was rejected.  Reject the REQUEST instead; the
-    # relaxation is read-only from here.
-    if plan.get("timestep_conflict"):
-        raise HTTPException(400, plan["timestep_conflict"])
     total_steps, length_ns = plan["total_steps"], plan["length_ns"]
     segments = _append_production_segments(
         job,
@@ -2151,17 +2148,11 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         production_timestep_fs=body.production_timestep_fs,
         gpu_resident=body.gpu_resident,
     ))
-    # A pinned timestep this package cannot honour must not start a run.
-    #
-    # ⚠️ NEVER touch `parent` here.  The parent is the COMPLETED RELAXATION — an earlier
-    # version of this block set parent.status = failed, which flipped a finished 12/12
-    # ladder to "failed" in the job list and threw away hours of successful work over a
-    # rejected production request.  The conflict belongs to the production attempt, so it
-    # is reported on its own row (below) or as a plain rejection; the relaxation is
-    # read-only from here.
-    if plan.get("timestep_conflict"):
-        conflict = plan["timestep_conflict"]
-        raise HTTPException(400, conflict)
+    # ⚠️ `parent` is the COMPLETED RELAXATION and is READ-ONLY from here.  An earlier
+    # version failed the parent when it disliked a production setting, which flipped a
+    # finished 12/12 ladder to "failed" and discarded the record of hours of successful
+    # work.  Nothing about a production request is a property of the run that produced
+    # the coordinates.
 
     # Distinct velocity seed per production child of this parent, so a fan-out samples
     # independent trajectories from the same equilibrated coords.  Replica 0 uses the

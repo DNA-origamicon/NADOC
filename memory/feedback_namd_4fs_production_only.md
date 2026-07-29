@@ -61,3 +61,35 @@ the oxDNA-seed fix; read its correction header.)
 
 Related: [[REFERENCE_RUNPOD_RUNBOOK]], [[project_benchmark_tuning]], [[oxdna_relaxation]],
 [[periodic_md]], [[crossover_parameterization]], [[gpu-value-is-two-axes]].
+
+---
+
+## The relaxation protocol must NEVER constrain the production timestep (2026-07-28)
+
+**User correction, verbatim in spirit:** *"The purpose of the relax is to get the atoms in
+positions such that the user can run a production run with any settings they wish."*
+
+A ladder exists to deliver equilibrated **coordinates**. Once it has, production samples them at
+whatever sanctioned timestep the user picks. The relax's own integrator is an implementation
+detail of how the coordinates were reached, not a property of the coordinates.
+
+I violated this by refusing 2/4 fs production on any `declash` package, on two premises that
+both fail:
+
+- **"no HMR PSF"** — production **builds one on demand** from the package's own PSF
+  (`write_hmr_psf`; `_append_production_segments` already did this). It is an artefact the fast
+  ladder happens to leave behind, never a prerequisite. `md_ensemble.build_replica_package` now
+  does the same instead of silently downgrading 4 fs → 1 fs when the parent lacked one.
+- **"residual ssDNA contacts crash RATTLE"** — that describes the **starting** structure, which
+  is exactly what the ladder removed. Measured: a `rigidBonds all` 2 fs production off a declash
+  relax ran 412k steps with zero RATTLE failures.
+
+**Cost of getting it wrong:** the refusal path marked the *parent* job failed, flipping a
+completed 12/12 ladder to "failed" in the job list and discarding the record of hours of work.
+A production request is never a property of the run that produced the coordinates — **treat the
+relaxation as read-only from the production route.**
+
+**Warn, never block.** 4 fs on an extra-base design can still hit the Fix-B problem (HMR lightens
+C5' on unpaired inserts → RATTLE), so the plan returns `timestep_warning`. That is an empirical
+stability question the run answers, and the instability rescue already handles it — it is not
+grounds to forbid the attempt. See [[project_extra_base_4fs_geometric_fixb]].

@@ -33,6 +33,7 @@ from backend.core.md_protocols import (
     build_production_conf,
     build_reseed_conf,
     psf_atom_count,
+    write_hmr_psf,
 )
 
 _DEFAULT_BASE_SEED = 54321
@@ -129,10 +130,29 @@ def build_replica_package(
     for rel in (f"{name_stem}.psf", f"{name_stem}.pdb"):
         _link_or_copy(parent_pkg / rel, child_pkg / rel)
 
+    # 4 fs needs a hydrogen-mass-repartitioned PSF.  It does NOT need the PARENT to have
+    # built one: HMR is a pure mass edit of the PSF (coordinates and force field are
+    # untouched), so it can be produced here from the structure the child already copied.
+    # This used to require `(parent_pkg / hmr_name).exists()`, which silently downgraded a
+    # requested 4 fs to 1 fs whenever the relaxation had not run in fast mode — letting the
+    # RELAXATION's integrator dictate PRODUCTION's, which is backwards: the ladder's job is
+    # to deliver equilibrated coordinates, and production is free to sample them at any
+    # sanctioned timestep.  Reseeding (build_reseed_conf below) re-draws velocities at
+    # temperature, so the mass change never inherits a checkpoint's old kinetic energy.
     hmr_name = f"{name_stem}_hmr.psf"
-    use_fast = bool(fast) and (parent_pkg / hmr_name).exists()
+    use_fast = bool(fast)
     if use_fast:
-        _link_or_copy(parent_pkg / hmr_name, child_pkg / hmr_name)
+        if (parent_pkg / hmr_name).exists():
+            _link_or_copy(parent_pkg / hmr_name, child_pkg / hmr_name)
+        else:
+            # Build it here.  Fails CLOSED to the safe path rather than 500-ing the whole
+            # production launch: write_hmr_psf raises on a PSF it cannot parse, and losing
+            # the run over an unreadable topology would be worse than running it at 1 fs.
+            try:
+                write_hmr_psf(child_pkg / f"{name_stem}.psf", child_pkg / hmr_name)
+            except (OSError, RuntimeError, ValueError, IndexError):
+                (child_pkg / hmr_name).unlink(missing_ok=True)
+                use_fast = False
     structure_psf = hmr_name if use_fast else None
 
     if mgh_extrabonds and (parent_pkg / "mgh_extrabonds.txt").exists():

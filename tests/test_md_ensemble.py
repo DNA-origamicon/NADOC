@@ -187,17 +187,45 @@ def test_replica_4fs_conf_runs_at_4fs(tmp_path):
     assert "structure          demo_hmr.psf" in conf
 
 
-def test_replica_4fs_without_hmr_parent_downgrades(tmp_path):
-    # 4 fs needs the HMR PSF; a parent without one can't run it, so it falls back to the
-    # safe 1 fs reference — and the label follows so simulated time never lies.
+def _write_minimal_psf(path, n_atoms=2):
+    """Smallest PSF write_hmr_psf will parse: NATOM records + an NBOND block."""
+    rows = []
+    for i in range(1, n_atoms + 1):
+        # atomid seg resid resname name type charge MASS ...
+        name, typ, mass = ("H1", "HN", "1.008000") if i % 2 == 0 else ("N1", "NH", "14.007000")
+        rows.append(f"{i:10d} D000 {i:<4d} ADE  {name:<5s}{typ:<5s}  -0.300000     {mass}           0")
+    body = "\n".join(rows)
+    path.write_text(
+        "PSF EXT\n\n       1 !NTITLE\n\n"
+        f"{n_atoms:10d} !NATOM\n{body}\n\n"
+        f"{1:10d} !NBOND: bonds\n{1:10d}{2:10d}\n")
+
+
+def test_replica_4fs_builds_the_hmr_psf_when_the_parent_has_none(tmp_path):
+    # The relaxation's mode must not cap production's timestep.  HMR is a pure mass edit
+    # of the PSF, so a 4 fs production builds one from the structure it already has
+    # instead of silently downgrading to 1 fs because the ladder ran non-fast.
     parent = _make_parent(tmp_path)          # no demo_hmr.psf
+    _write_minimal_psf(parent.package_dir(tmp_path) / "demo.psf")
+    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
+    conf = _prod_conf(child, tmp_path)
+    assert "timestep           4" in conf
+    assert "rigidBonds         all" in conf
+    assert "structure          demo_hmr.psf" in conf
+    assert (child.package_dir(tmp_path) / "demo_hmr.psf").exists()   # built here, not inherited
+    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
+    assert manifest["ensemble"]["timestep_fs"] == 4.0
+    assert cr.total_ns_from_manifest(manifest) == pytest.approx(2.0)  # 500k x 4 fs
+
+
+def test_replica_4fs_falls_back_safely_when_the_psf_cannot_be_repartitioned(tmp_path):
+    """write_hmr_psf raises on an unparseable PSF — that must cost the timestep, not the
+    whole production launch."""
+    parent = _make_parent(tmp_path)          # fixture PSF is literally "psf" — no !NATOM
     child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
     conf = _prod_conf(child, tmp_path)
     assert "timestep           1" in conf
-    assert "rigidBonds         none" in conf
-    manifest = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())
-    assert manifest["ensemble"]["timestep_fs"] == 1.0
-    assert cr.total_ns_from_manifest(manifest) == pytest.approx(0.5)  # 500k × 1 fs
+    assert not (child.package_dir(tmp_path) / "demo_hmr.psf").exists()  # no half-written file
 
 
 def test_fast_replica_uses_hmr_psf(tmp_path):

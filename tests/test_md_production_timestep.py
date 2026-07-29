@@ -122,30 +122,6 @@ class TestProductionFastPlanHonorsManifest:
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
         assert plan["timestep_fs"] == 4.0
 
-    def test_pinned_4fs_on_a_declash_package_is_a_CONFLICT_not_a_silent_downgrade(
-        self, tmp_path, monkeypatch,
-    ) -> None:
-        """A declash package has no HMR PSF, so rigidBonds-all 4 fs cannot run — but the
-        user PINNED 4 fs, so the answer is to stop, not to substitute 1 fs.
-
-        The old behaviour rewrote timestep_fs to 1.0 and ran: the Advanced card kept
-        displaying 4 fs while the run integrated 4x the steps at a different timestep,
-        with no warning (the card's warning keys off the FAST checkbox, and declash
-        auto-enables from extra bases independently of it).  Observed on 2hb_1xT.
-        """
-        from backend.api import routes_md
-        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
-        job = _job_with_manifest(tmp_path, {
-            "production_timestep_fs": 4.0,
-            "fast_relaxation": {"enabled": True}, "declash": True,
-        })
-        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
-        assert plan["timestep_conflict"], "pinned 4 fs + declash must report a conflict"
-        assert "declash" in plan["timestep_conflict"].lower()
-        # timestep_fs/fast stay coherent so downstream sizing never sees a 4 fs declash
-        # plan; the CALLER is what refuses to run, keyed on timestep_conflict.
-        assert plan["timestep_fs"] == 1.0
-        assert plan["fast"] is False
 
     def test_auto_derived_4fs_on_declash_falls_back_quietly(self, tmp_path, monkeypatch) -> None:
         """No pin = nothing was promised, so the quiet fallback is still correct.
@@ -159,7 +135,7 @@ class TestProductionFastPlanHonorsManifest:
             "fast_relaxation": {"enabled": True}, "declash": True,
         })
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
-        assert plan["timestep_conflict"] is None
+        assert plan.get("timestep_conflict") is None   # no such thing any more
         assert plan["timestep_fs"] == 1.0
 
     def test_1fs_is_the_only_timestep_a_declash_package_can_run(
@@ -172,25 +148,9 @@ class TestProductionFastPlanHonorsManifest:
             "fast_relaxation": {"enabled": True}, "declash": True,
         })
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
-        assert plan["timestep_conflict"] is None
+        assert plan.get("timestep_conflict") is None   # no such thing any more
         assert plan["timestep_fs"] == 1.0
 
-    def test_pinned_2fs_on_declash_also_conflicts_not_just_4fs(
-        self, tmp_path, monkeypatch,
-    ) -> None:
-        """2 fs drops the HMR requirement but still needs ``rigidBonds all`` — and rigid
-        constraints are precisely what the declash ladder avoids, because the residual
-        single-stranded contacts crash RATTLE.  So it is no more runnable than 4 fs."""
-        from backend.api import routes_md
-        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
-        job = _job_with_manifest(tmp_path, {
-            "production_timestep_fs": 2.0,
-            "fast_relaxation": {"enabled": True}, "declash": True,
-        })
-        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
-        assert plan["timestep_conflict"]
-        assert "2 fs" in plan["timestep_conflict"]
-        assert plan["timestep_fs"] == 1.0
 
     def test_request_timestep_overrides_the_prep_time_manifest_value(
         self, tmp_path, monkeypatch,
@@ -239,7 +199,7 @@ class TestProductionFastPlanHonorsManifest:
             "fast_relaxation": {"enabled": True}, "declash": False,
         })
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
-        assert plan["timestep_conflict"] is None
+        assert plan.get("timestep_conflict") is None   # no such thing any more
         assert plan["timestep_fs"] == 4.0
         assert plan["fast"] is True
 
@@ -348,50 +308,56 @@ class TestProductionPlanResolvesResident:
             routes_md.ProductionRequest(steps=1000, gpu_resident="yes-please")
 
 
-class TestRejectedProductionNeverTouchesTheRelaxation:
-    """A rejected production request must not mutate the job it was launched from.
 
-    Regression: the timestep-conflict handler set ``job.status = failed`` on the PARENT.
-    The parent is the completed relaxation, so refusing a 2 fs production flipped a
-    finished 12/12 ladder to "failed" in the job list — the UI showed
-    "NAMD · failed · 12/12 segments · 100% · 9,600,000 / 9,600,000 steps" — throwing away
-    the record of hours of successful work over a rejected request.
+
+class TestRelaxProtocolDoesNotConstrainProduction:
+    """The relaxation's integrator must not dictate production's.
+
+    A ladder exists to deliver equilibrated COORDINATES.  Once it has, production is free
+    to sample them at any sanctioned timestep.  An earlier rule refused 2/4 fs outright on
+    a declash package, on two premises that do not hold:
+      * "no HMR PSF" — production builds one on demand from the package's own PSF; it was
+        an artefact the fast ladder happened to leave behind, never a prerequisite.
+      * "residual single-stranded contacts crash RATTLE" — that describes the STARTING
+        structure, which is exactly what the ladder removed.  Measured: a rigidBonds-all
+        2 fs production off a declash relax ran 412k steps with no RATTLE failure.
     """
 
-    def _completed_declash_job(self, tmp_path):
-        from backend.core.md_job import MdStatus
+    @pytest.mark.parametrize("dt", [1.0, 2.0, 4.0])
+    def test_every_sanctioned_timestep_is_allowed_after_a_declash_relax(
+        self, tmp_path, monkeypatch, dt,
+    ) -> None:
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
         job = _job_with_manifest(tmp_path, {
-            "production_timestep_fs": 2.0,          # pinned + declash = conflict
-            "fast_relaxation": {"enabled": True}, "declash": True,
+            "production_timestep_fs": dt,
+            "fast_relaxation": {"enabled": False}, "declash": True,
         })
-        job.status = MdStatus.completed
-        job.save(tmp_path)
-        return job
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_fs"] == dt, "the relax protocol must not cap production's dt"
+        assert plan.get("timestep_conflict") is None
 
-    def test_append_production_rejects_without_failing_the_relaxation(
+    def test_4fs_on_extra_bases_warns_but_does_not_block(self, tmp_path, monkeypatch) -> None:
+        """The Fix-B caveat is real (HMR lightens C5' on unpaired inserts), but it is an
+        empirical stability question the run answers — inform, do not forbid."""
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 4.0,
+            "fast_relaxation": {"enabled": False}, "declash": True,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_fs"] == 4.0
+        assert plan["timestep_warning"] and "RATTLE" in plan["timestep_warning"]
+
+    def test_no_warning_when_the_package_is_not_a_declash_build(
         self, tmp_path, monkeypatch,
     ) -> None:
-        import asyncio
-
-        from fastapi import HTTPException
-
         from backend.api import routes_md
-        from backend.core.md_job import MdStatus
-        job = self._completed_declash_job(tmp_path)
         monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
-        monkeypatch.setattr(routes_md, "_load_job", lambda _id: job)
-        monkeypatch.setattr(routes_md, "is_running", lambda _id: False)
-        monkeypatch.setattr(routes_md, "_assert_md_job_current", lambda _j: None)
-
-        with pytest.raises(HTTPException) as ei:
-            asyncio.run(routes_md.append_md_production(
-                job.job_id, routes_md.ProductionRequest(steps=1000)))
-        assert ei.value.status_code == 400
-        assert "declash" in str(ei.value.detail).lower()
-
-        # THE INVARIANT: the relaxation is untouched, in memory AND on disk.
-        assert job.status == MdStatus.completed
-        assert job.failure_kind is None
-        reloaded = json.loads((job.job_dir(tmp_path) / "job.json").read_text())
-        assert reloaded["status"] == "completed"
-        assert reloaded.get("failure_kind") is None
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 4.0,
+            "fast_relaxation": {"enabled": True}, "declash": False,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_warning"] is None
