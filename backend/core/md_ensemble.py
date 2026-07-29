@@ -20,6 +20,7 @@ the shared, parameterized builders in :mod:`backend.core.md_protocols`.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 from dataclasses import asdict
@@ -35,6 +36,8 @@ from backend.core.md_protocols import (
     psf_atom_count,
     write_hmr_psf,
 )
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_BASE_SEED = 54321
 
@@ -139,6 +142,7 @@ def build_replica_package(
     # to deliver equilibrated coordinates, and production is free to sample them at any
     # sanctioned timestep.  Reseeding (build_reseed_conf below) re-draws velocities at
     # temperature, so the mass change never inherits a checkpoint's old kinetic energy.
+    hmr_downgrade_reason: Optional[str] = None
     hmr_name = f"{name_stem}_hmr.psf"
     use_fast = bool(fast)
     if use_fast:
@@ -150,9 +154,20 @@ def build_replica_package(
             # the run over an unreadable topology would be worse than running it at 1 fs.
             try:
                 write_hmr_psf(child_pkg / f"{name_stem}.psf", child_pkg / hmr_name)
-            except (OSError, RuntimeError, ValueError, IndexError):
+            except (OSError, RuntimeError, ValueError, IndexError) as exc:
                 (child_pkg / hmr_name).unlink(missing_ok=True)
                 use_fast = False
+                # LOUD.  A downgrade the user cannot see is the bug this whole area keeps
+                # reproducing: a "4 fs" run that quietly delivers 1 fs looks like a
+                # mysterious 3x throughput loss, not a fallback.  Recorded in the manifest
+                # (surfaced by the panel) as well as the log.
+                hmr_downgrade_reason = (
+                    f"4 fs was requested but the hydrogen-mass-repartitioned PSF could not "
+                    f"be built from {name_stem}.psf ({type(exc).__name__}: {exc}). The run "
+                    f"was downgraded to the 1 fs conservative reference — it is NOT running "
+                    f"at 4 fs."
+                )
+                logger.warning("[%s] %s", child.job_id, hmr_downgrade_reason)
     structure_psf = hmr_name if use_fast else None
 
     if mgh_extrabonds and (parent_pkg / "mgh_extrabonds.txt").exists():
@@ -270,6 +285,10 @@ def build_replica_package(
             "length_ns": length_ns,
             "steps": steps,
             "timestep_fs": eff_timestep_fs,
+            # Non-null ⇒ the run is NOT at the timestep that was asked for, and says why.
+            # Never let a downgrade be invisible: it presents as unexplained lost
+            # throughput, which is far harder to diagnose than a refusal.
+            "timestep_downgrade_reason": hmr_downgrade_reason,
         },
     }
     text = json.dumps(child_manifest, indent=2)

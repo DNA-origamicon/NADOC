@@ -361,3 +361,24 @@ class TestRelaxProtocolDoesNotConstrainProduction:
         })
         plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
         assert plan["timestep_warning"] is None
+
+    def test_4fs_after_a_declash_relax_yields_the_FAST_path_not_just_the_label(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        """`fast` must mean "4 fs HMR path", not "4 fs AND the relax was fast".
+
+        Removing the hard conflict was not enough: `fast` stayed
+        `(timestep_fs == 4.0) and not declash`, the same coupling in another variable.
+        The replica builder reads `fast` as "may I use an HMR PSF", so with declash it
+        got False, skipped HMR, and emitted a SILENT 1 fs conf — a requested 4 fs run
+        measured ~80 ns/day (exactly the 1 fs rate) with nothing saying why.
+        """
+        from backend.api import routes_md
+        monkeypatch.setattr(routes_md, "_workspace", lambda: tmp_path)
+        job = _job_with_manifest(tmp_path, {
+            "production_timestep_fs": 4.0,
+            "fast_relaxation": {"enabled": False}, "declash": True,
+        })
+        plan = routes_md._production_fast_plan(job, routes_md.ProductionRequest(steps=1000))
+        assert plan["timestep_fs"] == 4.0
+        assert plan["fast"] is True, "declash must not veto the 4 fs HMR path"

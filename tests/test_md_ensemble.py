@@ -387,3 +387,26 @@ def test_replica_unsized_psf_keeps_the_historical_default(tmp_path):
     parent = _make_parent(tmp_path)
     child = _build_replica(tmp_path, parent, timestep_fs=2.0)
     assert "GPUresident        on" in _prod_conf(child, tmp_path)
+
+
+def test_replica_downgrade_records_a_visible_reason(tmp_path):
+    """A downgrade the user cannot see presents as unexplained lost throughput.
+
+    The 4 fs → 1 fs fallback (unparseable PSF) must say so in the manifest, not just
+    quietly produce a slower run.
+    """
+    parent = _make_parent(tmp_path)          # fixture PSF has no !NATOM → HMR build fails
+    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
+    ens = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())["ensemble"]
+    assert ens["timestep_fs"] == 1.0
+    assert ens["timestep_downgrade_reason"]
+    assert "NOT running at 4 fs" in ens["timestep_downgrade_reason"]
+
+
+def test_replica_no_downgrade_reason_when_4fs_actually_runs(tmp_path):
+    parent = _make_parent(tmp_path)
+    _write_minimal_psf(parent.package_dir(tmp_path) / "demo.psf")
+    child = _build_replica(tmp_path, parent, fast=True, timestep_fs=4.0, total_steps=500_000)
+    ens = json.loads((child.package_dir(tmp_path) / "manifest.json").read_text())["ensemble"]
+    assert ens["timestep_fs"] == 4.0
+    assert ens["timestep_downgrade_reason"] is None

@@ -963,9 +963,13 @@ def _production_fast_plan(job: MdJob, body: ProductionRequest) -> dict:
         timestep_fs = float(requested)
     else:
         timestep_fs = 4.0 if (relaxed_fast and not declash) else 1.0
-    # 4 fs implies the HMR/GPUresident fast path; declash designs never get it.
-    fast = (timestep_fs == 4.0) and not declash
-    # A declash package has no HMR PSF, so rigidBonds-all 4 fs genuinely cannot run.
+    # `fast` means "the 4 fs HMR path", nothing more.  It used to be
+    # `(timestep_fs == 4.0) and not declash`, which is the SAME relax-constrains-production
+    # coupling as the removed conflict, just expressed through a different variable: with
+    # declash it went False, the replica builder read that as "no HMR", and a requested 4 fs
+    # came out as a silent 1 fs run at ~80 ns/day.  The HMR PSF is built on demand now, so
+    # the relaxation protocol has no say here.
+    fast = (timestep_fs == 4.0)
     #
     # This used to silently rewrite timestep_fs to 1.0 — including when the user had
     # PINNED 4 fs in the Advanced card.  The card then displayed 4 fs while the run
