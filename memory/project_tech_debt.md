@@ -391,6 +391,50 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   bypass this pipeline entirely. Not a bug today; it is the reason the LOD/representation
   distinction keeps getting confused in docs.
 
+### Deformation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+
+- **`deform_view.js` exposes 8 methods; 4 have ZERO callers in all of `frontend/`** —
+  `reapplyLerp` (`:378`), `snapOff` (`:218`), `setT` (`:388`), `getT` (`:403`), plus `dispose`.
+  **Decide before deleting `reapplyLerp`:** it is `_applyLerp(_currentT)` and its JSDoc says
+  "call after physics is stopped" — XPBD/FEM was retired to `archive/physics_xpbd_fem/`, which is
+  how it lost its caller. It is also the written-but-unwired fix for a real mechanism:
+  `applyFemPositions(null)` → `revertToGeometry()` **with no args** (`helix_renderer.js:3316-3317`)
+  restores `nuc.backbone_position`, i.e. the **deformed** backend geometry, ignoring `_currentT`.
+  With deform view OFF (t=0), stopping an oxDNA/mrDNA/trajectory overlay should therefore snap the
+  design **bent** while the toggle reads straight. Mechanism verified by reading; **not reproduced
+  in-app**. Either wire it into the overlay-stop paths or pass the straight maps to
+  `revertToGeometry(straightPosMap, straightAxesMap)` the way `unfold_view.js:925/1024` already do.
+  `setT`'s JSDoc claims the animation player drives it — `ui/animation_panel.js` does not.
+  Two stale comments still name it: `helix_renderer.js:555`, `:595`.
+- **Three source comments claim `_effective_bend_window` auto-extends the bend window; it does
+  not** (`deformation.py:311-324` explicitly `del`s its `arm_helices` arg and returns the typed
+  planes). Offenders: `deformation.py:337-340`, `models.py:1110` (BendParams docstring),
+  `tests/test_periodic_polymer.py:161` (prose assertion). Don't "fix" the code to match them, and
+  don't delete the function — 2 live call sites (`:348`, `:2603`).
+- **`bend_twist_popup.js:64` JSDoc lists 3 callbacks; `main.js:1361` passes 4**
+  (`onPlaneChanged` missing). Same class as the other stale in-file signature comments.
+- **1,941 LOC of deformation frontend with ZERO tests** — `deformation_editor.js` (1,031, a module
+  singleton with 21 exports and the whole preview/confirm lifecycle), `deform_view.js` (417, the
+  6-subsystem lerp fan-out), `bend_twist_popup.js` (493). No test anywhere exercises
+  `applyDeformLerp` behaviour; `devtools_helpers.test.js:13` only mocks the name. Backend is well
+  covered by contrast (36 tests across 5 `test_deform*` files). The untested paths include
+  "does teardown run if `confirmDeformation()` throws".
+- **`POST /design/deformation` takes `preview` in the request BODY
+  (`routes_deformation.py:55`) while `DELETE …/{op_id}` takes it as a `Query(False)`
+  (`:178`).** Gratuitous asymmetry; every doc that wrote `?preview=true` was half wrong.
+- **`assembly_flatten.py:273` constructs a `Design(...)` carrying neither `deformations` nor
+  `cluster_transforms`.** Possibly deliberate (a flatten artifact), but it is the one remaining
+  place a bend could silently vanish now that `lattice.py` rebuilds via `copy_with`. Confirm
+  intent, then comment it either way.
+- **`initDeformView`'s 3rd parameter `_getCrossoverMarkers` is passed literal `null`**
+  (`main.js:1558`) — vestigial, same class as `cadnano_view.js`'s dead 8th arg.
+- **`docs/triage/04_deform_tools.md` is built on two things that don't exist** — it cites
+  `MAP_DEFORMATION.md` (**never existed anywhere in the repo**, 4th phantom `MAP_*.md`) at `:28`
+  and `:34`, and repeats the obsolete "every `Design(...)` in `lattice.py` MUST include
+  `deformations=`" invariant as *critical*. `docs/triage/00_MASTER_GUIDE.md:4` points at `n.md`
+  for the same thing. Extends the existing `docs/triage/` finding from the animation pass — that
+  directory is now 2 for 2 fiction; treat all 12 files as suspect.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`

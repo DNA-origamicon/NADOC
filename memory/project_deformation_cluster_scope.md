@@ -13,6 +13,14 @@ Landed 2026-05-14. Adds an explicit cluster scope to bend/twist deformations
 so a part with multiple clusters can apply independent bends/twists to each,
 even when the clusters occupy overlapping bp ranges.
 
+> **Location correction (2026-07-30, `/audit-plan`).** The scope helper moved out of `crud.py`
+> and lost its underscore: it is now **`resolve_cluster_scope(design, cluster_ids, helix_ids)` at
+> `backend/core/deformation.py:2683`**, called from `backend/api/routes_deformation.py:111`.
+> All four deformation routes were carved out of `crud.py` into `routes_deformation.py`
+> (POST `:90`, PATCH `:148`, DELETE `:177`, GET debug `:203`), so every `crud.py:~10xxx` anchor
+> below is dead. The data model is unchanged and confirmed live: `DeformationOp.cluster_ids`
+> at `models.py:1128`. Architecture map: [.claude/rules/deformation.md](../.claude/rules/deformation.md).
+
 ## What changed
 
 - **Data model**: `DeformationOp.cluster_id: Optional[str]` →
