@@ -75,6 +75,26 @@ an ordinary coding session**. Three new pieces, all machine-local + gitignored:
   (`uv run pytest <file> -m "" --durations=0 -p no:randomly`), on an idle box.** A first-test-pays-the-
   cache cost is not test weight, and relegating for it is precisely the ratchet the scale-free per-test
   gate exists to avoid.
+- **🔥 BLAS OVERSUBSCRIPTION was the dominant fake-slowness source — FIXED 2026-07-30.** numpy/scipy
+  here are built against **scipy-openblas with `MAX_THREADS=64`**, so every `L-BFGS-B` / `lstsq` /
+  `eigh` fanned out across the whole box. Under `-n auto` each xdist worker had its **own** pool →
+  a 12-core box oversubscribed ~10x. The fast suite's numeric work is *tiny* (the atomistic
+  extra-base joint solve is **29 DOF**), so the thread pool was pure overhead — single-threaded is
+  faster even for a **serial** run. `scripts/test_guard.sh` step 4 now exports
+  `OMP/OPENBLAS/MKL/NUMEXPR/VECLIB_*_NUM_THREADS=1` for **fast-only (`slow=0`) recipes**;
+  `NADOC_TEST_BLAS_THREADS=N` overrides, `=0` leaves the env untouched. Scoped to `slow=0` because
+  the heavy suite's large SNUPI/FEM solves may genuinely want threads (unmeasured).
+  Whole-suite effect: **total test-seconds 532.8 → 261.3, guard wall-clock 130 s → 59 s,
+  per-test violators 8 → 2**, `test_junction_topology.py` 91.9 s → 23.6 s,
+  `test_junction_winding.py` 20.6 s → off the top-15, and `test_{pdb_export,namd_extensions,
+  threemf_export,snupi_hydro_coarse,fem_solver}.py` all dropped out of the slowest-15.
+  **Numerically neutral** — `tests/test_atomistic_geometry_lock.py` yields byte-identical geometry
+  hashes at 1 thread and at N (checked explicitly, since that file hash-pins float output).
+  Residual 2 violators (`test_repair_does_not_degrade_geometry[TT]` 5.75 s,
+  `test_repaired_build_is_deterministic[TT]` 5.16 s) are **4.14 s / 3.91 s measured alone** — under
+  budget in isolation, over it only under suite contention → left unmarked, per the rule above.
+  **Diagnostic upgrade: before relegating anything, check CPU time vs wall time.** A serial pytest
+  run showing `user 4m14s` for `real 25s` is ~10x hidden threading, i.e. thrash, not weight.
 
 **First run of the guard immediately caught a 3-minute lie:** the "fast" suite was documented as
 ~50s but was actually **176s**. The whole SNUPI FEM family was unregistered — `test_snupi_element`

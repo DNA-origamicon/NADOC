@@ -275,6 +275,10 @@ def test_repair_is_what_prevents_catenation():
 # under xdist oversubscribe BLAS badly enough to trip the per-test budget on contention
 # alone (~1 s in isolation, ~6 s alongside the suite). The exhaustive sweep below is the
 # real gate and runs in a test-dedicated session.
+# (2026-07-30: the BLAS oversubscription itself is now fixed at the source — test_guard.sh
+# pins OMP/OPENBLAS threads to 1 on the fast recipes, since a 29-DOF solve gains nothing
+# from a thread pool. This case fell 9.4 s -> 2.7 s. The small parametrization still stands
+# on its own merits, so it is kept.)
 _KNOWN_CATENATING = [("T", 12), ("TT", 12)]
 
 

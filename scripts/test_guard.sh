@@ -31,6 +31,8 @@
 #   NADOC_TEST_CONFIRM=1     answer "yes" to the confirm gate up front (for agents)
 #   NADOC_TEST_BUDGET_SEC=N  raise/lower the total-time backstop
 #   NADOC_TEST_NICE=0        run pytest at normal CPU priority (default: nice -n 10)
+#   NADOC_TEST_BLAS_THREADS=N  BLAS/OpenMP threads per worker on fast-only recipes
+#                            (default 1; 0 = don't touch the environment). See step 4.
 #   NADOC_TEST_FORCE=1       bypass EVERYTHING (last resort; you own the fallout).
 #                            Agents: this one is not yours to set — see CLAUDE.md.
 set -uo pipefail
@@ -151,6 +153,30 @@ fi
 # lets the OS hand cores back to the foreground app; on an idle machine the run is
 # just as fast. Set NADOC_TEST_NICE=0 to opt out.
 NICE_LEVEL="${NADOC_TEST_NICE:-10}"
+
+# BLAS/OpenMP thread pinning (fast-only recipes).  numpy/scipy here are built against
+# scipy-openblas with MAX_THREADS=64, so every L-BFGS-B / lstsq / eigh call fans out
+# across the whole box by default.  The fast suite's numeric work is TINY (e.g. the
+# atomistic extra-base joint solve is 29 DOF), so the thread pool is pure overhead —
+# and under `-n auto` the 12 xdist workers each spawn their own pool, oversubscribing
+# a 12-core box ~144-way.  Measured on tests/test_junction_{topology,winding}.py:
+#   default   -n auto: 38s wall,  6m26s CPU, 3 tests over the 5s per-test budget
+#   threads=1 -n auto: 23s wall,  0m29s CPU, ZERO tests over the budget
+# i.e. the "heavy tests" flagged there were thrashing, not heavy.  Pinning to 1 is
+# faster in wall-clock even for a SERIAL run (25s -> 19s), because the matrices are
+# too small for threading to pay for itself.
+# Scoped to fast-only (slow=0) recipes: the heavy suite's FEM/SNUPI solves are large
+# enough that multithreaded BLAS may genuinely help, and that path is not measured here.
+# Override with NADOC_TEST_BLAS_THREADS=N (0 = leave the environment untouched).
+BLAS_THREADS="${NADOC_TEST_BLAS_THREADS:-1}"
+if [[ "$SLOW" != "1" && "$BLAS_THREADS" != "0" ]]; then
+  export OMP_NUM_THREADS="$BLAS_THREADS"
+  export OPENBLAS_NUM_THREADS="$BLAS_THREADS"
+  export MKL_NUM_THREADS="$BLAS_THREADS"
+  export NUMEXPR_NUM_THREADS="$BLAS_THREADS"
+  export VECLIB_MAXIMUM_THREADS="$BLAS_THREADS"
+fi
+
 START=$(date +%s)
 if [[ "$NICE_LEVEL" != "0" ]] && command -v nice >/dev/null 2>&1; then
   nice -n "$NICE_LEVEL" "$@"

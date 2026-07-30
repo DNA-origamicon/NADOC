@@ -709,6 +709,23 @@ _SLOW_TESTS = {
 # two files together are ~10 s — comfortably inside the budget.  A first-test-pays-the-cache
 # cost is not test weight, and relegating for it is exactly the ratchet that quietly moves
 # healthy coverage out of the fast suite.
+#
+# 2026-07-30 — the note stands, and the THIRD (dominant) artifact behind it is now FIXED at
+# the source.  numpy/scipy here are built against scipy-openblas with MAX_THREADS=64, so every
+# L-BFGS-B / lstsq / eigh call fanned out across the whole box; under `-n auto` each xdist
+# worker had its own pool and the machine was oversubscribed ~10x.  These files' solves are
+# 29-DOF — far too small for threading to pay for itself — so it was pure thrash.
+# `scripts/test_guard.sh` now pins OMP/OPENBLAS/MKL threads to 1 on the fast-only recipes
+# (NADOC_TEST_BLAS_THREADS=0 opts out).  Whole-suite effect: total test-seconds 532.8 -> 261.3,
+# guard wall-clock 130 s -> 59 s, per-test violators 8 -> 2, this file 91.9 s -> 23.6 s,
+# test_junction_winding.py 20.6 s -> off the top-15 entirely.  Verified numerically neutral:
+# tests/test_atomistic_geometry_lock.py produces byte-identical hashes at 1 thread and at N.
+# The 2 residual violators are test_repair_{does_not_degrade_geometry,ed_build_is_deterministic}
+# [TT] — 5.75 s / 5.16 s alongside the full suite but 4.14 s / 3.91 s measured alone, i.e. still
+# UNDER the 5 s budget in isolation.  That is contention, not weight: do not relegate them
+# either.  (Both deliberately clear _XB_CACHE and build twice because the assertion IS the
+# delta between the two builds, so no fixture can cache the cost away.  The exhaustive
+# `test_no_phase_catenates` already covers TT in the heavy suite.)
 
 
 # ---------------------------------------------------------------------------
