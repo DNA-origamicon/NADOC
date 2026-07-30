@@ -325,8 +325,8 @@ Fix the doc, not the code, unless you have re-derived the intent.
 - **`refreshAllGlow()` refreshes 6 of the 7 layers** (`:955-962`) — `_captureGlowLayer` is omitted.
   Likely a bug, not a rule error; capture glow will lag during unfold animation.
 - **The variable is `bluntEnds`, the module is `domain_ends.js`.** Also stale `blunt_ends` comments
-  at `loop_skip_highlight.js:254`, `unfold_view.js:1170`, `cadnano_view.js:91`, and
-  `.claude/rules/unfold.md` still lists `blunt_ends.js` as a file to read.
+  at `loop_skip_highlight.js:254`, `unfold_view.js:1170`, `cadnano_view.js:91`. (`unfold.md` was
+  fixed in its 2026-07-30 rewrite.)
 - **`scene/arc_tube_geometry.test.js` tests a file that does not exist** — a 2026-06-07 throwaway
   diagnostic still in the suite.
 

@@ -70,6 +70,8 @@ unless a migration touches code.
 | 07-30 | `.claude/rules/rendering.md` (off-taxonomy: path-scoped rule, no verdict) | **Churn-ranked, not glob-ranked — and it paid.** Globs resolved fine; the body described 113 lines of a 8.4k-LOC pipeline and was wrong at the level of the *mesh layout*. **The headline: `iFwd`/`iRev` — the two meshes the architecture diagram is built on — have ZERO hits repo-wide and appear never to have existed.** There are **16 InstancedMeshes**, not 4 (`iSpheres` holds *both* strands' beads; `iCubes` 5′ markers are a separate mesh the doc merged into `iCones`; 11 more for cylinders/glow/curved/linker), plus 2 curved-tube `Group`s and an impostor swap (`:836-848`) the doc never mentions. **Signature/arity rot across the board:** `buildHelixObjects` is `(geometry, design, scene, customColors, loopStrandIds, helixAxes, lod)` — **7 positional args in a different order**, and the doc's `designRenderer`/`opts` params are invented; `applyDeformLerp` is 4 args (the doc dropped `straightBnMap`, which fixes a 30° slab error at t=0); `applyUnfoldOffsets` 4 not 2; `_effectiveColors(strandColors, strandGroups)` takes **two maps and returns a map**, not a strandId. **API undercount, 5th consecutive pass:** `initDesignRenderer` returns **92** methods (doc: ~8), the helix controller **69** (doc: 3). **Store table wrong in both directions** — 6 of its 14 keys (`cgRelaxPositions`, `deformVisuActive`, `straightGeometry/Axes`, `showSequences`, `atomisticMode`, `surfaceMode`) are **not read by these files at all**, while 7 real ones are missing incl. the three that gate rebuilds (`domainDesigner.modalActive` defers, `lastPartialChangedHelixIds` drives the in-place patch path, `cadnanoActive`/`unfoldActive` guard position ownership). **`helix_renderer.js` reads the store ZERO times** — it's a pure builder, which is *why* the assembly stack reuses it via **7 call sites** the doc listed as 1. **LOD wrong:** levels are ints (`CG_LOD {full:0,beads:1,cylinders:2}`), "Sticks" is DEAD, `beads` was missing, `setDetailLevel` returns `{needsRebuild}` the assembly renderer depends on, and the real user surface is **7 reps (F1–F7)**. **Two of five globbed files were never mentioned in the body** — `crossover_connections.js` (543 LOC; the entire extra-base render path, and it carries a file-header topology law: *"the crossover record is the single source of truth… any attempt to infer connection targets from strand topology will produce wrong results"*) and `domain_ends.js` (873 LOC, 13-method API, renamed from `blunt_ends.js`). `glow_layer.js` got one line and is **2 factories / 12 instantiations / 7 layers inside design_renderer alone**. **Causal story wrong:** "Selection → glow updated on `selectedObject` change" — there is no such subscriber; glow is imperative from the click handlers (`selection_manager.js:2626`) and splits to an additive *cylinder* glow at LOD 2. **Confirmed the handoff's two leads and killed a third:** `clearFemOverlay` orphaned (0 callers, dead guard) ✓; `revertToGeometry` reachable only from `unfold_view.js:925/:1024` + inside `applyFemPositions(null)` ✓; but `applyFemPositions` is **not** mrDNA-only and **not** historically-FEM — it is the display-position channel for **8 modules incl. `cando_display` (a real FEM solver)**, and `main.js` is not a caller (the doc's "Files to Read" said it was). The handoff's `lammps_display.js:142` was a comment, not a call site. **Biggest single find — a doc-only invariant nothing enforces:** `deform_view.reapplyLerp()` (`:378`, exported `:409`) has **ZERO callers in all of `frontend/`**, yet both the rule (`:100`) and the runbook (invariant #2) instruct you to call it after every `revertToGeometry()`. Also: scalar-color keys are `"helix:bp:dir:copy"` not `"helix:bp:dir"`; `MAP_RENDERING.md` never existed (**3rd phantom `MAP_*.md`**); runbook invariant #1 ("one setState") holds only on the embedded-geometry branch of 3 paths and omits the revision watermark that is the real first check. **Accurate sections:** the whole deform-preview-ghost block (only `PREVIEW_GHOST_OPACITY`'s home file misattributed) and "groups are color-only, no rebuild" (verified, incl. *why* — the repaint runs before the structural early-return at `:706`) | REWRITTEN (n/a — rule, not plan) | Full rewrite. Globs **5 → 9** (`helix_renderer/**` — the canonical `STAPLE_PALETTE`, matched by no rule; `representation_overrides.js`; `impostor_material.js`; `ui/representation_switcher.js`). Added: the two-layer store-aware/pure-builder law + the 7-caller assembly warning, `rg` recipes instead of API enumerations, the real 15-key store list, the 16-mesh table, LOD-vs-representation disambiguation, the mixed-rep coverage gap with its exact mechanism, sections for the 2 never-mentioned files, 6 invariants, a **Traps** section, an honest coverage table (**20 tests / 8.6k LOC**; `design_renderer.js` 1,529 LOC + 92 methods has **zero**), a grep map of 9 undocumented `helix_renderer` subsystems, and a **"Removed API"** block. **`RUNBOOK_RENDERING.md` rewritten** — 11-symptom index; both of its "First-Check Invariants" were wrong, so it now carries an explicit *Corrections* footer; added §6 rep-override blind spots, §7 sim-position channel, §10 assembly-breakage, and noted its hand-rolled `[INTERCEPT]` snippet duplicates one that already ships at `cadnano_view.js:642`. **Off-rule rot fixed:** `.claude/rules/unfold.md`'s "Files to Read" pointed at **`blunt_ends.js`, a file that does not exist** — repointed to `domain_ends.js` + corrected both init lines (`main.js:1535` / `:2988`, was "~859 / ~1753"), rest of that rule marked UNAUDITED. **Withdrew a P1 bug in `project_mixed_representation`** — its worst-ranked open item blamed `_withHighDetailGeometry`/`hd.bead` at `photo_mode.js:126-128`; all three have **zero hits** and those lines are an export-size config block (photo mode was rewritten into `photo_renderer/*`). **6 stragglers → `project_tech_debt`** (the orphaned `reapplyLerp` w/ a decide-before-deleting note, `refreshAllGlow` skipping `_captureGlowLayer` (6 of 7), `arc_tube_geometry.test.js` testing a module that doesn't exist, the 20-tests/8.6k-LOC hole incl. 4 sibling tests that *mock* designRenderer, stale `blunt_ends` naming, and the 7-reps-vs-3-levels unlinked constants). No `MEMORY.md` edit (rules listed by name; name unchanged) |
 | 07-30 | `.claude/rules/deformation.md` (off-taxonomy: path-scoped rule, no verdict) | **First rule whose flagship `CRITICAL` invariant was obsolete because the CODE improved.** Probe of ~60 anchors, backend + frontend. **The CRITICAL section was prescribing a no-op:** it ordered every `Design(...)` in `lattice.py` to pass `deformations=existing_design.deformations` — `lattice.py` has **1** `Design(` call (`:365`, a *fresh* builder) and **0** `deformations=` kwargs anywhere in the file; all four functions it names (`make_bundle_segment:383`, `make_bundle_continuation:737`, `make_bundle_deformed_continuation:1234`, `make_nick:1508`) rebuild via `existing_design.copy_with(...)` (16 sites), and `Design.copy_with` (`models.py:2590`) carries every unlisted field forward by construction. The one true rebuild-from-existing in the backend (`cluster_copy.py:180`) already passes a *scoped* list. **Dependency direction inverted:** `geometry.py` never calls `deformed_nucleotide_positions` and has zero `deformations` hits (2 comments disclaim it, `:375`,`:461`) — `deformation.py` imports *from* `geometry.py`; the real guard is `deformation.py:1752`. **Dead anchors:** `compute_bundle_centroid`, `world_frame_at`, `compute_loop_skip_deformations` = 0 hits; `BOTH_PLANES_PLACED` = 0 hits (real state is **`BOTH`**, `deformation_editor.js:37`); `MAP_DEFORMATION.md` **never existed** (**4th phantom `MAP_*.md`**, still cited by `docs/triage/04_deform_tools.md:28,34`). **Routes moved** crud.py→`routes_deformation.py` (5 routes + 3 elsewhere the doc lacked); all mount `/api`; **`preview` is a BODY field on POST (`:55`) but a `Query` on DELETE (`:178`)** — the doc's `?preview=true` was right only for DELETE. **Signatures, 6th consecutive undercount:** `initDeformationEditor` is **7** args not 6 and **returns nothing** (module singleton, 21 exports); `initBendTwistPopup` gets **4** callbacks not 3 (`main.js:1361`; its own JSDoc `:64` stale the same way); `deform_view.js` has **1** export, not the several the doc implied. **Whole dimension missing:** cluster scoping is **229 lines** of `deformation.py` (`DeformationOp.cluster_ids` `models.py:1128`, `resolve_cluster_scope` `:2683`) and the rule never mentioned clusters. **Init/line anchors all wrong:** editor `~822`→**1333**, popup `~827`→**1361**, capture listeners `~119-143`→**694-718**, auto-save subscriber `main.js ~9272`→**`app/lifecycle.js:167`** (main.js is 8,059 lines — that anchor could not have resolved for months). **Mechanism wrong:** "main.js gates canvas events" — selection is disabled by **zeroing all 10 `selectableTypes`** (`main.js:4330-4336`), not by event capture; the capture listeners consume only left-button hits on a plane/bead. **Handoff wrong again (6th time):** it said 2 `deformToolActive` subscribers — there are **3** (`4285`, `4319`, **`6854`** mutual-exclusion with translate/rotate); and `oxdna_display.test.js:424` pins `applyFemPositions` after `stopAndRestore`, **nothing to do with deform re-apply**. **Biggest find — the dead invariant has a live symptom.** `deform_view.reapplyLerp` (0 callers, confirmed independently) is `_applyLerp(_currentT)` and its JSDoc says "after physics is stopped"; XPBD/FEM was retired to `archive/`, which is how it lost its caller. Meanwhile `applyFemPositions(null)` → `revertToGeometry()` **with no args** (`helix_renderer.js:3316-3317`) restores `nuc.backbone_position` = the **deformed** geometry, ignoring `_currentT` → stopping an oxDNA/mrDNA/trajectory overlay with deform view OFF should snap the design **bent**. `snapOff`/`setT`/`getT`/`dispose` are also 0-caller (**4 of 8 returned methods dead**). **Still-true:** all 4 store key names (incl. `straightHelixAxes`), `PREVIEW_GHOST_OPACITY=0.38` at `deformation_editor.js:33`, the 4-arg `applyDeformLerp` with the base-normal map, the entire transient-sync tagging story, the κ/stagger parameterization, `_rebuild_deformed_continuations` still in `crud.py:10357` (2 callers), `test_deformed_continuation_replace.py` = 4 tests | REWRITTEN (n/a — rule, not plan) | Full rewrite. Globs **4 → 7** (`routes_deformation.py`, `periodic_polymer.py`, `ui/blunt_end_menus.js` — the `sourceBp` threading, matched by no rule). Added: the one-line overlay model, file map w/ LOC, `rg` recipes instead of the fn list, the cluster-scope section cross-linked to its topic file, the 7-row route table with the body-vs-query trap, the **6-subsystem `_applyLerp` fan-out table with each callee's differing arity** (add a position-owning subsystem → it must join), the 3 `deformToolActive` subscribers + the real selection-blocking mechanism, 6 invariants (incl. **inverted invariant 2: do NOT add `deformations=`**), a **Traps** section, an honest coverage table (**1,941 frontend LOC / 0 tests** vs 36 backend tests), and a **"Removed API — do not resurrect"** block (9 entries). **`RUNBOOK_DEFORMATION.md` rewritten** — its 3 First-Check Invariants were obsolete/partial/unimplemented; replaced with an 11-symptom index + an explicit *Corrections* footer, incl. a new symptom 2 documenting the bent-after-overlay-stop mechanism. **Off-rule rot fixed:** dated location banner on `project_deformation_cluster_scope.md` (`_resolve_cluster_scope`/crud.py → `resolve_cluster_scope`/`deformation.py:2683`; all its `crud.py:~10xxx` anchors dead). **8 stragglers → `project_tech_debt`** (the 4 dead `deform_view` methods w/ a decide-before-deleting note, 3 source comments claiming an auto-extension that was removed, the stale popup JSDoc, the 1,941-LOC test hole, the POST/DELETE `preview` asymmetry, `assembly_flatten.py:273` dropping deformations, the vestigial `_getCrossoverMarkers` param, and `docs/triage/` now 2-for-2 fiction). No `MEMORY.md` edit (rules listed by name; name unchanged) |
 
+| 07-30 | `.claude/rules/unfold.md` (off-taxonomy: path-scoped rule, no verdict) | **First rule whose cross-feature section was REVERSED, not merely dead** — and the first whose errors were *inherited from wrong source comments*. Probe of ~55 anchors across `unfold_view.js` (1,610), `cross_section_minimap.js` (712), `expanded_spacing.js` (296). **Whole "Cross-Feature Interactions" section false, 3 of 4 claims:** `deformView.snapOff()` "called before unfold activates" — **0 callers repo-wide** (defined `deform_view.js:218`, exported `:408`, never invoked; already logged dead by the deformation pass, and unfold was its supposed caller); "view cube hidden when unfold active" — `view_cube.js` has **0 hits** for unfold, `hide()/show()` are wired only to the welcome screen; "atomistic hidden when unfold active" — **backwards**: atomistic *blocks entering* unfold (`main.js:2547`, toast). Only "cadnano builds on unfold" survived (`cadnano_view.js:412-415`, `keepUnfold` at `:494-509`). **All entry policy lives in `_toggleUnfold` (`main.js:2541-2606`) — a 5-gate function the rule never mentioned**, incl. the user-facing "press D to suppress them, then unfold" refusal (there is no auto-snap) and the fact that turning unfold OFF **re-activates the deform view** (`:2599`). **Fan-out undercounted:** 5 callees not 4 (omitted `designRenderer` itself), 4 notify sites, and `applyUnfoldOffsetsExtensions` at **5** sites (runbook said 3). **The biggest structural find: a second, divergent implementation of the same contract** — `expanded_spacing.js:182-194` notifies **7**, including the only call to `atomistic_renderer.js:452`; matched by **no rule's glob** and never named in any doc. **Store table wrong 2 of 4:** `showHelixLabels` has **0 hits** in `unfold_view.js` (owned by `domain_ends.js`; default is **`false`**, not "true"), and `unfoldHelixOrder` is **read-only** here — the row order is written by the **slice-plane code in `main.js:2729/2736/2785`**, re-derived independently at 4 sites. **API undercount, 7th consecutive pass:** `initUnfoldView` returns **30 methods**, rule showed 2; 9 store subscribers. **Layout formula incomplete** — `_buildOffsets:825-869` also x-centers every helix; order falls back with append-missing (`:833`). **Two errors copied straight from wrong source comments:** arcs are `THREE.LineSegments` (`:189`) not `THREE.Line` (file header `:9` is wrong), and the minimap is **bottom-left** (`:58-66`) not top-right (its own header `:2-3` says "lower-right"). Minimap parent is `#canvas-area` (`main.js:2530`), not `#viewport-container`; it hides on `unfoldActive→false` **only if `_sliceOffsetNm === null`**. **Still-true:** the subscription-order hazard and its live fix (anchors corrected `~859/~1753` → `main.js:1535`/`:2988`; fix at `domain_ends.js:593`, guarded `!cadnanoActive`), `frustumCulled=false` (`:190`), 500 ms linear (`ANIM_DURATION_MS:28`), `unfoldSpacing` 2.5, the vestigial 7th arg. `_buildArcMap` **never existed** (→ `_buildXbArcMap:435` / `_buildExtArcMap:510`). `MAP_UNFOLD.md` phantom (**5 for 5**); `MAP_CADNANO.md` also phantom. Coverage: **2,618 LOC, zero unit tests**, one 43-line e2e that only asserts no console errors | REWRITTEN (n/a — rule, not plan) | Full rewrite. Globs **1 → 3** (`cross_section_minimap.js` and `expanded_spacing.js` were matched by **no rule at all**). Added: scope banner disambiguating unfold from the K-key cadnano mode, 3-file map w/ LOC, the real `_toggleUnfold` 5-gate table, the 5-callee/4-site fan-out table with the `expanded_spacing` divergence warning, the corrected store table naming the *real* `unfoldHelixOrder` writers, the offset-vs-position layout law, both directions of the deform coupling, 6 invariants, a **Traps** section (the 2 lying source comments), an honest zero-tests section, and a **"Removed API — do not resurrect"** block (7 entries). Documented `unfold_view.js:925/1024` as the **reference implementation** for `revertToGeometry(straightPosMap, straightAxesMap)` — the pattern the sim-overlay stop path lacks (`RUNBOOK_DEFORMATION.md` symptom 2) — so nobody "simplifies" it away. **`RUNBOOK_UNFOLD.md` rewritten** (5 for 5): its 4 First-Check Invariants were 1 right / 3 wrong, and its diagnosis trees named `blunt_ends.js`, `_buildArcMap`, `#viewport-container` and `THREE.Line` — replaced with a first-question ("is unfold even allowed right now?"), a 10-symptom index, and an explicit *Corrections* footer. **Off-rule rot fixed:** `.claude/rules/rendering.md:327` still flagged `unfold.md` for the `blunt_ends.js` citation (fixed in its own pass). **6 stragglers → `project_tech_debt`** (the two divergent fan-outs w/ no shared helper or pinning test, the 4-site `unfoldHelixOrder` derivation, the 2,618-LOC zero-test hole, the 2 self-contradicting source comments, a 3rd vestigial `null` init arg, and `docs/triage/` now **3 for 3 fiction** — recommend deleting the directory rather than auditing 12 files) |
+
 ## HOLD — flagged to user, decision pending
 
 - **project_bundle_stiffness_params** — user said "delete", but the 0T track is a **completed,
@@ -112,46 +114,48 @@ Glob-vs-`ls` check of all 9 unaudited rules. **Don't re-run this; it's the ranki
 | ~~`main-init`~~ | **REWRITTEN 07-30.** Glob resolved fine — and the body was the worst yet (30/30 wrong line anchors, 6 dead symbols, a CRITICAL section guarding a subscriber that doesn't exist). **This retires the glob heuristic entirely**: a clean glob predicts nothing |
 | ~~`rendering`~~ | **REWRITTEN 07-30.** Globs resolved fine — and the diagram's two central meshes (`iFwd`/`iRev`) never existed; 2 of 5 globbed files were never mentioned in the body |
 | ~~`deformation`~~ | **REWRITTEN 07-30.** Globs resolved fine — the body's `CRITICAL` invariant was a **no-op** (obsoleted by `Design.copy_with`), its dependency direction was inverted, and it omitted the entire cluster-scoping dimension |
-| `unfold`, `strand-anim` | globs all resolve; no structural tell (body still unaudited) |
+| ~~`unfold`~~ | **REWRITTEN 07-30.** Glob resolved — but it globbed **1 file of the 3** in the subsystem, and 3 of its 4 cross-feature claims were dead or **reversed** |
+| `strand-anim` | globs all resolve; no structural tell (body still unaudited). **Last unaudited rule.** |
 
 **Do not widen a stale rule's globs without auditing its body** — that just auto-loads wrong guidance
 onto *more* files. Glob fix and body rewrite go together, in one pass, per rule.
 
 ## Next-session handoff
 
-▶ **NEXT: `.claude/rules/unfold.md`** — 72 lines describing `scene/unfold_view.js` (1,610 LOC),
-the worst lines-per-LOC ratio left. Two passes have already fed it evidence; **re-verify every
-item** (a handoff has now been wrong 6 times):
+▶ **NEXT: `.claude/rules/strand-anim.md`** — 61 lines, the **last unaudited rule**; after it the
+sweep is complete. Lowest stakes on paper (it covers the standalone strand-animation sandbox
+app), which is exactly why it should be cheap — but **re-verify every item below**: a handoff has
+now been wrong **7 passes running** (this one said `deform_view.js:308` calls `reapplyIfActive()`
+"after *every* lerp"; it fires only inside the async `getStraightGeometry()` fallback subscriber).
 
-- The rendering pass fixed exactly two things and marked the rest UNAUDITED in-file: "Files to
-  Read" pointed at **`blunt_ends.js`, which does not exist** (→ `scene/domain_ends.js`), and both
-  init anchors were wrong (real: `initUnfoldView` `main.js:1535`, **7** args; `initDomainEnds`
-  `main.js:2988`).
-- **New from the deformation pass — a two-way coupling neither rule documents.**
-  `unfold_view.js:1263` implements `applyDeformLerp(straightPosMap, deformT)` (2 args) and is
-  member 3 of the 6-subsystem deform fan-out (`deform_view.js:154`); conversely
-  `deform_view.js:308` calls `getUnfoldView().reapplyIfActive()` after *every* lerp, and
-  `deform_view.js:344` refuses to auto-activate while `unfoldActive`. Check whether `unfold.md`
-  states that unfold requires deform OFF and owns bead positions while active.
-- `unfold_view.js:925` and `:1024` are the **only two callers in all of `frontend/` that pass the
-  straight maps** to `revertToGeometry(straightPosMap, straightAxesMap)`. That is exactly the
-  pattern the sim-overlay stop path lacks (see the deformation runbook, symptom 2) — worth
-  documenting as the reference implementation before anyone "fixes" the other path.
-- `scene/cross_section_minimap.js` (712 LOC) is discussed in the rule's prose but **not globbed**.
-- `MAP_UNFOLD.md` is a "Related" link. **Phantom `MAP_*.md` is now 4 for 4** (`MAP_SELECTION`,
-  `MAP_API_FLOW`, `MAP_RENDERING`, `MAP_DEFORMATION` — none ever existed). Grep it first and
-  assume dead.
+Evidence already gathered, unverified:
 
-**Rewrite `RUNBOOK_UNFOLD.md` in the same pass.** Every rule rewrite so far has found its runbook
-rotten in the same places — now 4 for 4 (`animation`, `selection`, `rendering`, `deformation`).
-
-**Then `.claude/rules/strand-anim.md`** (61 lines, sandbox app, lowest stakes) — the last
-unaudited rule. After that the rule sweep is complete.
+- The `animation` pass found the rule's own **strand-anim banner was its most accurate section** —
+  every anchor live and wired — with **one** overstatement: `buildStrandGeometry` is
+  **sandbox-only** (`app.js:42`); the editor imports `createStrandRenderer` only. Start by
+  re-checking that split, then the rest of the body.
+- The same pass found an **undocumented second overhang animation path**:
+  `strand_anim_phi` → `overhang_strand_anim.js` (711 LOC), producing beads disjoint from the
+  `binding_states` overlay. Check whether `strand-anim.md` or `animation.md` owns it — it may be
+  the same "sibling implementation" shape this pass found in `expanded_spacing.js`.
+- Apply the **two mechanical pre-checks** before reading the body: (a) diff the `paths:` glob
+  against every file the subsystem actually contains — `unfold` globbed 1 of 3, and both missing
+  files were matched by **no rule at all**; (b) grep every `MAP_*.md` link (now **5 for 5**
+  phantom) and every identifier inside any ASCII diagram.
+- **Rewrite the runbook in the same pass if one exists** — rule rewrites are **5 for 5** on finding
+  the matching runbook rotten in the same places. (`ls .claude/runbooks/` — there is no
+  `RUNBOOK_STRAND_ANIM.md` today, so check whether the rule's Diagnostics pointer dangles.)
 
 **Then resume the plan queue at `project_regional_autorefine`** (queue top). Still standing:
 `project_cadnano_overhaul.md` is stale as an architecture map (last dev-log 2026-05-25; code
 touched 2026-07-28; its gate says "confirm all 17 API tests pass" when there are **25**) — rank it
 as a *plan*, and note its architecture content is superseded by `.claude/rules/cadnano-editor.md`.
+
+**One cross-cutting cleanup now worth doing as its own item, not per-pass:** `docs/triage/` is
+**3 for 3 fiction** (animation, deformation, unfold passes). Twelve files built on phantom
+`MAP_*.md` links and obsolete invariants, none auto-loaded, none cited by code. Proposal: delete
+the directory or move it under `archive/` rather than audit it file by file. Logged in
+`project_tech_debt`; **user call**.
 
 **New-rule candidates, unchanged and still ranked** (metric in `project_tech_debt` → "Rule
 coverage is 33% of production LOC" — don't re-run the sweep): `models-and-schema`
@@ -160,19 +164,33 @@ covers it but is **not auto-loaded**); `assembly-render` (`assembly_renderer_sha
 `joint_renderer.js` 3,224 + `assembly_joint_renderer.js` 2,839 ≈ 10k LOC, and it holds 6 of the 7
 callers of `buildHelixObjects`); `md-jobs`.
 
-*New this pass — an invariant can go obsolete because the CODE got better, not because the doc
-rotted.* `deformation.md`'s only `CRITICAL` section ordered every `Design(...)` rebuild in
-`lattice.py` to pass `deformations=existing_design.deformations`. That was almost certainly true
-when written; then `lattice.py` migrated to `existing_design.copy_with(...)` (16 sites), which
-carries every unlisted field forward by construction, and the obligation became a **no-op**. The
-doc kept prescribing it, and the runbook made it diagnosis step #1 — so the documented first move
-for "my bend vanished" was to grep a file with one `Design(` call in it and add a redundant
-kwarg. **Tell: any sentence of the form "every call site MUST pass X" — grep whether a helper,
-base class, or default now makes it structural.** A dead symbol fails loudly; a retired
-*convention* silently costs every future debugging session its first move. Pairs with the
-dead-invariant lesson (`reapplyLerp`) — both are "the doc is about a world that improved".
-
 ## Standing lessons (carry forward — compressed from earlier passes)
+
+- **A subsystem is rarely one file, and the extra files are usually globbed by nothing.** `unfold`
+  globbed `unfold_view.js` alone; the subsystem is three files, and the other two
+  (`cross_section_minimap.js` 712, `expanded_spacing.js` 296) were matched by **no rule in the
+  repo**. Worse, `expanded_spacing.js` is a **second, divergent implementation of the same
+  contract** — it notifies 7 subsystems where the unfold view notifies 5, and it is the only
+  caller of one of them. **Tell: grep the rule's central function name (`applyUnfoldOffsets`)
+  repo-wide before writing the fan-out table** — a second caller list is a maintenance trap the
+  rule must name, and it never shows up if you only read the file the glob points at. Cousin of
+  "a globbed-but-unmentioned file is a guaranteed hole"; this is the unglobbed-and-unmentioned
+  version, which is invisible to that mechanical check.
+- **A cross-feature claim can be REVERSED, not merely dead — and reversed is worse.** `unfold.md`
+  said "atomistic is hidden when unfold activates"; the code does the opposite (atomistic
+  *blocks entering* unfold, `main.js:2547`). "View cube hidden when unfold active" and
+  "`deformView.snapOff()` called before unfold activates" were pure fiction (0 hits / 0 callers).
+  A dead symbol is caught on first grep; a **backwards causal direction** reads as correct,
+  survives a spot-check, and sends the next session to instrument the wrong module. **Tell: for
+  every "X happens when Y activates" sentence, find the code that *decides* it** — here all five
+  gates lived in one undocumented function (`_toggleUnfold`), not in the view at all.
+- **The doc's error was inherited from a wrong comment in the code it documents.** Two of
+  `unfold`'s wrong facts (arcs are `THREE.Line`; minimap is top-right) are verbatim from
+  `unfold_view.js:9` and `cross_section_minimap.js:2-3`, both of which contradict their own files
+  (`LineSegments` at `:189`; `bottom/left` at `:58-66`). Auditing the doc against the code's
+  *prose* reproduces the bug. **Read the constructor and the CSS, not the header comment** — and
+  log the comment to `tech_debt` + a "Traps" section so nobody later "fixes" the code to match it.
+  Third pass in a row where a stale source comment was the seed.
 
 - **Audit the path-scoped rules, not just the plans.** A stale `project_*.md` costs a session only
   when someone opens it; a stale `.claude/rules/*.md` is **auto-loaded** and teaches every session
@@ -239,9 +257,9 @@ dead-invariant lesson (`reapplyLerp`) — both are "the doc is about a world tha
   had **5 wrong claims** (off-by-one line, an unbound hotkey, 3 keys in the wrong file, a constant in
   the wrong module). Reuse a handoff to *scope* the probe; re-verify everything you write down — a
   wrong rule is auto-loaded, so it is worse than the hole it fills. **Tally: 6 passes, 6 handoffs
-  with at least one wrong claim** — the `deformation` handoff undercounted the `deformToolActive`
-  subscribers (2 → **3**) and mis-attributed `oxdna_display.test.js:424` to deform re-apply when it
-  pins `applyFemPositions`.
+  with at least one wrong claim** — now **7 for 7**: the `unfold` handoff said `deform_view.js:308`
+  calls `reapplyIfActive()` "after *every* lerp", when it fires only inside the async
+  `getStraightGeometry()` fallback subscriber, not on the per-frame lerp path.
 - **A rule can be wrong about a causal story, not just a symbol.** `cadnano-2d`'s worst content was a
   "Known culprit (fixed 2026-04-01)" section guarding against a subscriber that no longer existed, in
   a function with zero callers. Every identifier still resolved; only the wiring was gone. When a

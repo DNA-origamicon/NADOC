@@ -435,6 +435,39 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   for the same thing. Extends the existing `docs/triage/` finding from the animation pass — that
   directory is now 2 for 2 fiction; treat all 12 files as suspect.
 
+### Unfold stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+
+- **Two parallel implementations of the `applyUnfoldOffsets` fan-out, with different callee
+  lists.** `unfold_view.js` notifies 5 (`:883-893`, `:941-949`, `:997-1002`, `:1277-1284`);
+  `expanded_spacing.js:182-194` notifies **7** — the same 5 plus `applyUnfoldOffsetsExtensions`
+  and **`atomisticRenderer.applyUnfoldOffsets` (`:194`)**, which is the *only* caller of
+  `atomistic_renderer.js:452`. Adding a position-owning subsystem silently requires editing both
+  files, and there is no shared helper or test pinning the two lists together. The asymmetry is
+  currently harmless (unfold refuses to enter atomistic mode, `main.js:2547`) — but nothing
+  encodes that, so a future "unfold in atomistic" feature inherits a half-wired fan-out.
+- **`unfoldHelixOrder` is derived in 4 places.** `unfold_view.js:830` and `cadnano_view.js:97`,
+  `:164`, `:264` each independently compute `unfoldHelixOrder ?? allIds` + append-missing. One
+  helper, four copies; drift here shows up as cadnano and unfold stacking helices differently.
+- **2,618 LOC of unfold frontend with ZERO unit tests** — `unfold_view.js` (1,610, 30-method API,
+  9 store subscribers), `cross_section_minimap.js` (712), `expanded_spacing.js` (296). No
+  `.test.js` anywhere imports any of them. Sole coverage is `e2e/test_unfold_debug.spec.js`
+  (43 lines): loads a design, toggles unfold, asserts no console errors — zero position, offset or
+  arc assertions. Same shape as the deformation and rendering test holes.
+- **Two source comments contradict their own file.** `cross_section_minimap.js:2-3` says the
+  overlay is in the "lower-right corner"; the CSS at `:58-66` is `bottom:8px; left:8px`
+  (lower-**left**). `unfold_view.js:9` calls the arcs `THREE.Line`; `:189` constructs
+  `THREE.LineSegments`. Both were faithfully copied into the rule and runbook and survived there
+  for months. Don't "fix" the code to match the comments.
+- **`initUnfoldView`'s 7th parameter `_getCrossoverLocations` is passed literal `null`**
+  (`main.js:1535`) — vestigial, third instance of this pattern after `initDeformView`'s
+  `_getCrossoverMarkers` and `cadnano_view.js`'s dead 8th arg. Worth one sweep for `, null)`
+  init args rather than three separate notes.
+- **`MAP_CADNANO.md` is a 5th phantom `MAP_*.md`** — never existed in this repo, cited by
+  `docs/triage/00_MASTER_GUIDE.md:172`, `01_expanded_quick_view.md:36`, `02_cadnano_3d_mode.md`
+  (multiple), `04_deform_tools.md:49`. `docs/triage/` is now **3 for 3 fiction** across the
+  animation, deformation and unfold passes; the directory should be deleted or moved under
+  `archive/` rather than audited file by file.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`
