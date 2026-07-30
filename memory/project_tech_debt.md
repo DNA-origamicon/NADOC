@@ -322,6 +322,31 @@ these are the artifacts outside them.
   POST/PUT/DELETE + both `/batch` forms, no PATCH decorator. Either the route was dropped or the
   partial-update capability was never built; nothing calls it, so it's doc-only rot today.
 
+### `main.js` stragglers — the composition root is re-growing and has zero tests (found 2026-07-30, `/audit-plan` rule sweep)
+- **`main.js` is 8,059 LOC and RISING.** Measured 2026-07-30: **+245 since 7,814 (2026-07-13)** and
+  **+1,094 since the 6,965 the last carve session left it at (2026-06-06)**. MD/SNUPI/jobs feature
+  work is landing cohesive blocks in the closure — the module-first law in `CLAUDE.md` /
+  `FEATURE_DEVELOPMENT.md` is leaking. `main_js_carveup.md` already flags this as *the* finding and
+  is sitting mid-gate with all four TERMINAL-STATE GATE boxes unchecked, **idle since ~2026-06-06**.
+  Logged here too because tech_debt is what gets scanned when the carve-up loop isn't running.
+- **`main.js` has zero unit tests** — no `main.test.js`, no test imports it. ~30 sibling
+  `*.test.js` files reference it only in "extracted from main.js" comments; `e2e/*.spec.js` pins no
+  main.js symbol. 8,059 LOC whose only gates are `just smoke` and hand-exercising the app. This is
+  structural: the closure isn't importable. Every extraction shrinks the untested surface — that's
+  the argument for the carve-up beyond LOC.
+- **`_clearStapleChecks()` is an empty no-op still called from 5 sites**
+  ([main.js:733](frontend/src/main.js#L733); callers `:829`, `:840`, `:3496`, `:3891`, `:3918`).
+  `_routingChecks` lost its `prebreak` and `autoMerge` fields; the clear-hook survived them. Either
+  delete the function + its 5 calls, or restore whatever staple-routing check it was clearing.
+- **`_floorReach` is a permanent `() => null` stub** ([main.js:614](frontend/src/main.js#L614))
+  whose only consumer is a live per-frame callback (`:615`) that therefore evaluates a dead branch
+  every frame. Deliberate revive seam for photo-mode v1's ground plane (archived to
+  `archive/photo_mode_v1/`) — keep or excise, but it's currently cost with no benefit.
+- **The main.js carve-up loop has no slash command.** `/carve-router` explicitly disclaims main.js
+  ("NOT for frontend main.js — that's its own loop"), but that loop's only artifacts are
+  `main_js_carveup.md` + `main_js_extraction_log.md` + `memory/main_init_detail.md`. Every other
+  loop in the repo has a skill; this one is invoked from memory. Plausible cause of the 5-week idle.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`

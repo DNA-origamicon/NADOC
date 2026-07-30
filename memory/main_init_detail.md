@@ -8,8 +8,10 @@ Read this only when performing a closure→module extraction.
 
 ## Decomposing this file (streamlined extraction loop)
 
-`main.js` is one large `async function main()` closure (~11k lines as of 2026-06-04, down from
-~16.5k) — the project's worst structural debt. We shrink it by **extraction-on-touch**: when a task
+`main.js` is one large `async function main()` closure (**8,059 lines measured 2026-07-30**, down
+from ~16.5k but **up +245 since 2026-07-13** — feature work is re-growing it, see the status banner
+in `.claude/rules/main-init.md`) — the project's worst structural debt. We shrink it by
+**extraction-on-touch**: when a task
 takes you into a subsystem, lift its pure parts out into a module + unit-test, then leave the stateful
 wiring thin. The act of making a function unit-testable *is* the act of lifting it out of the closure.
 
