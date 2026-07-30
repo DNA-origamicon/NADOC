@@ -347,6 +347,50 @@ these are the artifacts outside them.
   `main_js_carveup.md` + `main_js_extraction_log.md` + `memory/main_init_detail.md`. Every other
   loop in the repo has a skill; this one is invoked from memory. Plausible cause of the 5-week idle.
 
+### Rendering stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` against the code.
+
+- **`deform_view.reapplyLerp()` is exported with ZERO callers** —
+  [deform_view.js:378](frontend/src/scene/deform_view.js#L378), exported `:409`; the only other hits
+  are two comments in `helix_renderer.js:555,595`. Both the rendering rule and its runbook stated,
+  as a first-check invariant, *"after any `revertToGeometry()`, call `deformView.reapplyLerp()`"* —
+  **nothing has ever called it.** So either (a) there is a real latent bug (a design with an active
+  deformation that comes back straight after a sim overlay toggles off), or (b) the invariant is
+  obsolete and the function should be deleted. `oxdna_display.test.js:424` explicitly pins that
+  `applyFemPositions(null)` is the LAST call with no re-apply after it, which suggests (b) — but it
+  pins the *current* behaviour, not the correct one. **Decide before deleting**; the wired analogue
+  for unfold is `getUnfoldView?.()?.reapplyIfActive()` (`deform_view.js:308`, `domain_ends.js:593`).
+  Related: `clearFemOverlay` above, same family of dead overlay-teardown code.
+- **`refreshAllGlow()` refreshes 6 of the 7 glow layers** —
+  [design_renderer.js:955-962](frontend/src/scene/design_renderer.js#L955) omits `_captureGlowLayer`
+  (created `:71`) while refreshing `_glowLayer`, `_undefinedGlowLayer`, `_anchorGlowLayer`,
+  `_clashGlowLayer`, `_previewGlowLayer`, `_fluoroGlowLayer`. Since the function's job is "re-read
+  entry.pos each frame during unfold animation", capture glow will lag its beads. Looks like an
+  omission at the time a 7th layer was added, not a decision.
+- **`scene/arc_tube_geometry.test.js` (4 tests) tests a module that does not exist** — there is no
+  `arc_tube_geometry.js`. Its own header calls it "a throwaway diagnostic test — delete once the
+  cause is fixed + pinned" (2026-06-07, crossover-selection TubeGeometry collapse). Still in the
+  suite, still green, pinning nothing.
+- **The CG render pipeline has ~20 tests for ~8.6k LOC.** `design_renderer.js` (1,529 LOC, **92
+  public methods**) and `glow_layer.js` have **zero** test files; `helix_renderer.js` (5,232 LOC,
+  69 controller methods) has **4** tests, both on pure helpers — `buildHelixObjects` (~2,200 LOC)
+  is untested. Worse than the raw number: `ui/cando_display.test.js`, `ui/lammps_display.test.js`,
+  `ui/md_panel.test.js`, `scene/slice_highlighter.test.js` all **mock** `designRenderer`, so a green
+  suite is evidence about the callers only. Cheapest real win: pin the pure functions
+  (`_effectiveColors`, `bezierAt`/`arcControlPoint` in `crossover_connections.js`, `CG_LOD`
+  mapping) rather than attempting a WebGL harness.
+- **Stale `blunt_ends` naming survives the `domain_ends.js` rename** — comments at
+  `loop_skip_highlight.js:254`, `unfold_view.js:1170`, `cadnano_view.js:91`, and the live local
+  variable/opt names `bluntEnds`/`getBluntEnds` (`main.js:2988`, `unfold_view.js:1279`,
+  `cadnano_view.js:439,582`). Cosmetic, but it is why two separate rule audits had to re-derive
+  that `domain_ends.js` is the file. (`.claude/rules/unfold.md`'s dead `blunt_ends.js` path was
+  fixed in this pass.)
+- **`ui/representation_switcher.js` has 7 representations; `setDetailLevel` has 3 levels** — no
+  shared constant ties `hull-prism/cylinders/beads/full/surface/vdw/ballstick` (`:36-44`) to
+  `CG_LOD = {full:0, beads:1, cylinders:2}` (`helix_renderer.js:64`). Four of the seven silently
+  bypass this pipeline entirely. Not a bug today; it is the reason the LOD/representation
+  distinction keeps getting confused in docs.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`

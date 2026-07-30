@@ -464,16 +464,20 @@ Debug handles added: `__NADOC_DBG__.designRenderer`, `__NADOC_DBG__.unfoldView` 
 
 **Rank: P1.** Feature ships; these are the holes. Ordered worst-first.
 
-1. **SUSPECTED BUG — photo export may blank all beads once an override has been used.**
-   `_installInstanceAlpha` permanently patches the shared bead/fluoro material with
-   `diffuseColor.a *= vInstanceAlpha; if (a < 0.02) discard` and puts the `instanceAlpha`
-   attribute on a **cloned per-mesh geometry** [helix_renderer.js:238-260]. On every export
-   (assembly or not) `_withHighDetailGeometry` swaps `backboneSpheres`/`extensionFluorophores`
-   to `hd.bead`/`hd.fluoro` [photo_mode.js:126-128], which carry **no** `instanceAlpha` → the
-   attribute reads 0 → every bead and fluorophore should `discard`. **Not yet confirmed in
-   app.** Repro to try: apply any per-region override, then photo-export a design with beads
-   visible. Fix if real: copy the `instanceAlpha` attribute onto the HD geometry in the swap
-   (or skip the swap while overrides are active).
+1. ~~**SUSPECTED BUG — photo export may blank all beads once an override has been used.**~~
+   **WITHDRAWN 2026-07-30** (`/audit-plan` rendering probe). The mechanism does not exist:
+   `_withHighDetailGeometry`, `hd.bead` and `hd.fluoro` have **zero hits anywhere in
+   `frontend/src`**, and `photo_mode.js:126-128` is an export-dimensions config block
+   (`exportWidth: 4200` …), not a geometry swap. Photo mode was rewritten into
+   `scene/photo_renderer/*` (v2); the closest surviving thing is the static rep table
+   `photo_renderer/mesh_repr.js:18,22` (`backboneSpheres: 'full'`, `extensionFluorophores:
+   'full'`), which never touches geometry or attributes. `instanceAlpha` appears **only** in
+   `helix_renderer.js` — nothing outside it clones, swaps, or drops the attribute.
+   *Still true and still unverified:* `_installInstanceAlpha` does permanently patch the shared
+   bead/fluoro material with `if (a < 0.02) discard` on a cloned per-mesh geometry
+   [helix_renderer.js:238-260], so **whether photo export honours per-instance alpha at all is
+   still an open question** — it just isn't the HD-swap bug described above. Fold that question
+   into item 2 and answer it in the app, not on paper.
 2. **Photo mode does not read `representation_overrides` at all** (zero hits across
    photo_mode / photo_panel / photo_renderer/* (v1's photo_renderer.js is archived) /
    photo_figure_panel). The old fear — that export force-flattens to one global rep — turns out

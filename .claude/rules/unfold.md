@@ -11,8 +11,11 @@ paths:
 
 ## Entry & Initialization
 - **File**: `frontend/src/scene/unfold_view.js`
-- **Init**: `initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations)` — main.js ~line 859
-- **Key**: initialized at line 859; `bluntEnds` initialized at line ~1753. All deps are lazy getters.
+- **Init**: `initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight, () => sequenceOverlay, () => overhangLocations, null)` — **`main.js:1535`** (7 args, last one `null`)
+- **Key**: unfold at `main.js:1535`; the `bluntEnds` dep is **`initDomainEnds` at `main.js:2988`**
+  (the module was renamed `blunt_ends.js` → `domain_ends.js`; only the local variable still says
+  `bluntEnds`). All deps are lazy getters. *Verified 2026-07-30; the rest of this rule's line
+  anchors are UNAUDITED.*
 - **Minimap**: `frontend/src/scene/cross_section_minimap.js` — 224×224px canvas, top-right corner
 
 ## Store Keys
@@ -64,7 +67,9 @@ toggle() → animate t: 0→1 (500ms linear)
 
 ## Files to Read
 - `frontend/src/scene/unfold_view.js` — `toggle()`, `reapplyIfActive()`, arc creation
-- `frontend/src/scene/blunt_ends.js` — `_rebuild()`, check for `reapplyIfActive()` call at end
+- `frontend/src/scene/domain_ends.js` — the store subscriber at `:589-593`; the `else` branch of the
+  cadnano check is what calls `getUnfoldView?.()?.reapplyIfActive()` (`reapplyIfActive` itself lives
+  in `unfold_view.js:1272`). **There is no `blunt_ends.js`** — renamed 2026-07 or earlier.
 - `frontend/src/scene/cross_section_minimap.js` — store subscription
 
 ## Related
