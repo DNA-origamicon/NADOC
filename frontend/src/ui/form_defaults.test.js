@@ -46,6 +46,23 @@ describe('resetControlToDefault', () => {
     expect(el.selectedIndex).toBe(0)
   })
 
+  it('skips a disabled option in the first-option fallback', () => {
+    document.body.innerHTML =
+      '<select id="a"><option disabled>Vacuum</option><option>Standard</option></select>'
+    const el = document.getElementById('a')
+    el.selectedIndex = 1
+    resetControlToDefault(el)
+    expect(el.value).toBe('Standard')
+  })
+
+  it('skips a disabled option even when it is marked selected', () => {
+    document.body.innerHTML =
+      '<select id="a"><option disabled selected>Vacuum</option><option>Standard</option></select>'
+    const el = document.getElementById('a')
+    resetControlToDefault(el)
+    expect(el.value).toBe('Standard')
+  })
+
   it('is a no-op for null', () => {
     expect(() => resetControlToDefault(null)).not.toThrow()
   })

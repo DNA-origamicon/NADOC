@@ -18,8 +18,14 @@ export function resetControlToDefault(el) {
   if (!el) return
   const tag = el.tagName
   if (tag === 'SELECT') {
-    const def = [...el.options].findIndex((o) => o.defaultSelected)
-    el.selectedIndex = def >= 0 ? def : 0
+    // A disabled option is never a legitimate reset target — it names a choice this
+    // build/host cannot run.  Skip it, both as the marked default and in the
+    // first-option fallback, so the control never comes back showing a greyed-out
+    // value the panel would refuse to submit.
+    const opts = [...el.options]
+    const def = opts.findIndex((o) => o.defaultSelected && !o.disabled)
+    const first = def >= 0 ? def : opts.findIndex((o) => !o.disabled)
+    el.selectedIndex = first >= 0 ? first : 0
     return
   }
   if (el.type === 'checkbox' || el.type === 'radio') {

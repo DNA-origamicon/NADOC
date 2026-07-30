@@ -83,7 +83,15 @@ export function initRelaxPresets ({ selectEl, noteEl, fetchPresets, onChange = n
       opt.value = p.id
       opt.textContent = p.available ? p.label : `${p.label} — unavailable`
       opt.disabled = !p.available
-      if (p.id === currentId) opt.selected = true
+      if (p.id === currentId) {
+        opt.selected = true
+        // Also the option's HTML *default*, so a generic form reset (closing or
+        // switching designs runs resetControlsToDefaults over this panel) lands back
+        // on the chosen preset.  Options built here have no `selected` attribute, so
+        // without this the reset fell through to index 0 — the retired vacuum tier,
+        // shown greyed-out and disagreeing with the id the panel would actually send.
+        opt.defaultSelected = true
+      }
       selectEl.appendChild(opt)
     }
     if (noteEl) noteEl.textContent = noteFor(current())

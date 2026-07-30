@@ -3,6 +3,7 @@ import {
   initRelaxPresets, pickInitial, noteFor, applyDefaultsTo, presetIdForProtocol,
   PRESET_FALLBACK,
 } from './md_relax_presets.js'
+import { resetControlToDefault } from './form_defaults.js'
 
 const CATALOGUE = {
   default: 'standard',
@@ -101,6 +102,14 @@ describe('initRelaxPresets', () => {
     await ui.load()
     expect(selectEl.value).toBe('standard')
     expect(noteEl.textContent).toContain('Explicit MgCl2')
+  })
+
+  it('survives a generic form reset — the selected preset is the HTML default too', async () => {
+    const ui = initRelaxPresets({ selectEl, noteEl, fetchPresets: async () => CATALOGUE })
+    await ui.load()
+    resetControlToDefault(selectEl)      // what closing/switching a design does
+    expect(selectEl.value).toBe('standard')
+    expect(selectEl.value).toBe(ui.id()) // display and sent id can never disagree
   })
 
   it('updates the note and fires onChange on selection', async () => {
