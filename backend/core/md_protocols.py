@@ -50,6 +50,38 @@ SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBI
 # minimize/run count is not a multiple of it.  (benchmark_runner.NAMD_STEPS_PER_CYCLE too.)
 AKSIMENTIEV_STEPS_PER_CYCLE = 20
 
+# Cumulative checkpoints inside each ENM stage.  The tutorial does NOT chunk at all — it
+# runs each k for a flat 4.8 ns — so chunking is a NADOC addition and the original
+# 10/50/100 split was arbitrary.  It matters for two reasons:
+#
+#   * ``early_stop_relax`` can only cut at a chunk boundary, so the coarser the split the
+#     more of an already-settled stage gets paid for.  At 10/50/100 a stage that settles
+#     right after p10 still burns the whole 50 % chunk; at 10/25/50/75/100 the worst case
+#     drops from half a stage to a quarter.
+#   * The ladder's real requirement has never been measured here (19.0 ns of explicit
+#     solvent, inherited wholesale).  Health and energy are sampled per chunk, so finer
+#     chunks are what make "how much ladder do we actually need" answerable from an
+#     ordinary relax rather than a bespoke experiment.
+LADDER_CHUNK_PCTS = (10.0, 25.0, 50.0, 75.0, 100.0)
+LADDER_CHUNK_PCTS_COARSE = (10.0, 50.0, 100.0)   # the historical split, kept for A/B
+
+
+def _chunk_fractions(pcts) -> list[tuple[float, float]]:
+    """(cumulative_pct, fraction_of_stage) per chunk — increments of the cumulative %.
+
+    Derived rather than hand-written so the labels and the step counts cannot drift
+    apart: p25 always means "25 % of this stage is done", whatever the split.
+    """
+    out, prev = [], 0.0
+    for pct in pcts:
+        if not 0.0 < pct <= 100.0 or pct <= prev:
+            raise ValueError(f"chunk percents must ascend within (0, 100]: {pcts}")
+        out.append((float(pct), (pct - prev) / 100.0))
+        prev = float(pct)
+    if out and out[-1][0] != 100.0:
+        raise ValueError(f"chunk percents must end at 100: {pcts}")
+    return out
+
 # NAMD sizes its patch grid from the cell at startup and FATALs with "Periodic cell has
 # become too small for original patch grid!" once the cell shrinks past it.  ``margin``
 # is the headroom that buys.  With a correctly filled box the cell only trims ~2-3 % of
@@ -1891,6 +1923,7 @@ def mgh_slow_release_segments(
     soft: bool = False,
     nvt_only: bool = False,
     timestep_fs: float = 2.0,
+    chunk_pcts=LADDER_CHUNK_PCTS,
 ) -> tuple[str, list[SegmentSpec]]:
     """Return (min_name, segments) for the mgh_slow_release protocol.
 
@@ -1925,8 +1958,7 @@ def mgh_slow_release_segments(
         (None, stage_steps, "300K_NPT_MGHH_only"),
     ]
 
-    # Percentages and their fraction of total steps
-    pcts = [(10.0, 0.10), (50.0, 0.40), (100.0, 0.50)]  # steps at 10%, then +40%, then +50%
+    pcts = _chunk_fractions(chunk_pcts)
 
     segments: list[SegmentSpec] = []
     stage_idx = 1

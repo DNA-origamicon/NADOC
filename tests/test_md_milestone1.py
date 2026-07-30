@@ -348,22 +348,35 @@ class TestMghSlowReleaseSegments:
         assert min_name.startswith("B_tube_")
         assert len(segments) > 0
 
-    def test_every_stage_has_three_segments(self) -> None:
+    def test_every_stage_is_chunked_identically(self) -> None:
+        """The invariant is that all stages share ONE chunk schedule — not that it has
+        three entries.  The split is configurable (``chunk_pcts``) and the schedule
+        itself is covered by tests/test_ladder_chunking.py; pinning 10/50/100 here made
+        an arbitrary scheduling choice look like a requirement."""
+        from collections import Counter
+
         from backend.core.md_protocols import mgh_slow_release_segments
 
         _, segments = mgh_slow_release_segments("X")
-        from collections import Counter
         stage_counts = Counter(s.stage for s in segments)
-        for stage, count in stage_counts.items():
-            assert count == 3, f"Stage {stage!r} has {count} segments, expected 3"
+        assert len(set(stage_counts.values())) == 1, stage_counts
+        per_stage: dict[str, list[float]] = {}
+        for seg in segments:
+            per_stage.setdefault(seg.stage, []).append(seg.percent)
+        schedules = {tuple(v) for v in per_stage.values()}
+        assert len(schedules) == 1, f"stages disagree on their chunk split: {schedules}"
 
-    def test_percentages_are_10_50_100(self) -> None:
+    def test_every_stage_ends_at_one_hundred_percent(self) -> None:
+        """A stage that stops short of p100 has silently shortened the ladder."""
         from backend.core.md_protocols import mgh_slow_release_segments
 
         _, segments = mgh_slow_release_segments("X")
-        from collections import Counter
-        pct_counts = Counter(int(s.percent) for s in segments)
-        assert pct_counts[10]  == pct_counts[50] == pct_counts[100]
+        per_stage: dict[str, list[float]] = {}
+        for seg in segments:
+            per_stage.setdefault(seg.stage, []).append(seg.percent)
+        for stage, pcts in per_stage.items():
+            assert pcts == sorted(pcts), f"{stage}: chunks out of order: {pcts}"
+            assert pcts[-1] == 100.0, f"{stage}: last chunk is p{pcts[-1]}, not p100"
 
     def test_segment_names_embed_stem(self) -> None:
         from backend.core.md_protocols import mgh_slow_release_segments
