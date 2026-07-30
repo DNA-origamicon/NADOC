@@ -18,12 +18,47 @@ Reference system = `hextube`, a cadnano hexagonal tube.
 
 **Stage 1 — cadnano → all-atom** via the ENRG-MD web service (returns psf/pdb/`.exb`/namd).
 
+> **No web service needed.** `enrgmd` is a console script **mrdna installs** (`.venv/bin/enrgmd`),
+> from the same lab — mrdna is the 2020 successor to the 2016 ENRG-MD paper it cites (NAR gkw155).
+> It writes psf/pdb/`.exb`/namd locally via `SegmentModel.write_atomic_ENM` +
+> `atomic_simulate(dry_run=True)`.
+> **But it cannot be used for NADOC designs with extra bases**: it calls
+> `_generate_atomic_model()`, rebuilding the structure from cadnano JSON, and cadnano has no
+> representation for extra bases at crossovers. Regenerated atom ordering would not match a
+> NADOC PSF either. Reuse the *recipe* against NADOC's own topology instead — see
+> `experiments/exp48_vacuum_enrgmd/`.
+>
+> The `.exb` has two parts, both in `mrdna/segmentmodel.py::write_atomic_ENM`:
+> - **ENM**: a 52-key template table of measured atom-pair distances keyed by
+>   (pairtype, seq1, seq2) over `pair`/`stack`/`cross`/`paircross` neighbours, k=0.1
+>   (honeycomb gets per-key corrections). NOT the same as the step-3 base-ring ladder ENM.
+> - **PUSHBONDS**: interhelical P–P, k=1.0, r0=31 Å. Rule: pairs of dsDNA segments joined by
+>   ≥2 crossovers → consecutive crossover pairs → both ends parallel (tangent·tangent > 0.5;
+>   antiparallel is an explicit `continue`, "not yet implemented") → walk the nucleotides
+>   between, interpolating on the shorter span → **skip anything within 11 nt of either
+>   crossover** → both strand directions → P atoms, deduped.
+>   Consequence: a span must exceed ~22 nt to place any bond, so a densely crossed-over
+>   bundle generates **zero** and they appear only where crossovers are sparse. This is what
+>   produces the end-weighted distribution seen on the hextube.
+
 **Stage 2 — in-vacuo ENM optimisation** (`step2/hextube.namd`): `PME no`, 1000 Å cell,
 `margin 30`, **`langevinDamping 0.1`** (deliberately low friction for fast relaxation),
 2 fs `rigidBonds all`, `minimize 4800` then ~40 ps with `hextube.exb`. This is the step
 that folds the idealised lattice into the chickenwire arrangement. The chapter's claim:
 *"In less than 2 ns of simulation using the above protocol, better structure is obtained
 than in 200 ns of all-atom MD simulation."*
+
+> **Measured on NADOC designs (exp48, 2026-07-30).** "Less than 2 ns" is an upper bound, not
+> a recipe — the tutorial's own step-2 script runs **~40 ps**, and mrdna's `enrgmd` default of
+> `1e6` steps (2 ns) is 4–100× more than needed. Plateau reached at 0.04 ns (2hb), 0.03 ns
+> (6hb), 0.64 ns (24hb; r_max by ~0.2 ns). **0.5 ns is ample.**
+> Base pairing survives intact at every size (0 broken of 42 / 252 / 3192). The step shrinks
+> the rotation-mode solvation box **7–9%** on ≥6-helix designs but *grows* it 6.8% on a 2hb,
+> which has no global shape to relax — skip it below ~4 helices.
+> Minimisation must scale with the structure: an idealised 224k-atom build starts at
+> ~1×10⁹ kcal/mol VDW concentrated at inserted bases, and a fixed 2400–4800 steps leaves
+> thousands of `BAD CONTACTS` that blow up ~130k steps later (RATTLE failure). One step per
+> 10 atoms is enough. Full numbers: `experiments/exp48_vacuum_enrgmd/REPORT.md`.
 
 **Stage 3 — solvate + ionise** (`step3/solIon.tcl`, `add_mgh_ver2_3.tcl`):
 - Mg²⁺ inserted as explicit **Mg(H₂O)₆²⁺ (MGHH)**, with `mghh_extrabonds` harmonic bonds
