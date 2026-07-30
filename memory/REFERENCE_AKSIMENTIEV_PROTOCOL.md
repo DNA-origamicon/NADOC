@@ -52,9 +52,18 @@ than in 200 ns of all-atom MD simulation."*
 > a recipe — the tutorial's own step-2 script runs **~40 ps**, and mrdna's `enrgmd` default of
 > `1e6` steps (2 ns) is 4–100× more than needed. Plateau reached at 0.04 ns (2hb), 0.03 ns
 > (6hb), 0.64 ns (24hb; r_max by ~0.2 ns). **0.5 ns is ample.**
-> Base pairing survives intact at every size (0 broken of 42 / 252 / 3192). The step shrinks
-> the rotation-mode solvation box **7–9%** on ≥6-helix designs but *grows* it 6.8% on a 2hb,
-> which has no global shape to relax — skip it below ~4 helices.
+> Base pairing survives intact at every size (0 broken of 42 / 252 / 3192).
+>
+> ⚠ **The "shrinks the box 7–9%" claim is ROTATION-box-specific and was inverted by the
+> 2026-07-30 switch to bbox sizing for relax packages.** exp50 re-measured the same runs
+> against both rules: `r_max` does fall 3–4% (so a rotation cell shrinks 9–12%), but the
+> BOUNDING box *grows* 27–85%, because the bundle splays transversally as it relaxes. A
+> bbox-sized relax package therefore pays 1.3–1.9× more solvent for this step, not less.
+> What it buys is shape: RMSD 10.7–26.1 Å on every design tested — not a no-op even on a
+> straight bundle. **Curved designs are the exception that justifies it**: `6hbx100_90deg`
+> relaxes its per-helix centreline bend 98.5° → 69.9° and grows its bbox only 27% (vs
+> 81–85% straight), because a bent structure's bounding box already has room. Skip it
+> below ~4 helices.
 > Minimisation must scale with the structure: an idealised 224k-atom build starts at
 > ~1×10⁹ kcal/mol VDW concentrated at inserted bases, and a fixed 2400–4800 steps leaves
 > thousands of `BAD CONTACTS` that blow up ~130k steps later (RATTLE failure). One step per
@@ -88,7 +97,9 @@ than in 200 ns of all-atom MD simulation."*
 **Stage 5 — their equilibration criteria** (`step4/`): box-size trace (`grepBoxTrace.sh`)
 — *"the box should shrink in the first 300 ps; after that the box size should become
 stable"*; RMSD vs the idealised design; total charge within 2 nm of the origami; broken-bp
-count (purine H1/N1 within 3 Å of pyrimidine N3/H3).
+count — purine H1/N1 within **3 Å** of pyrimidine N3/H3 **AND the N1–H1–N3 / N1–H3–N3
+angle greater than 140°**. The angle term matters: without it a sheared or stacked pair
+with a coincidentally short heavy-atom distance counts as intact.
 
 ## Three notes that bear directly on NADOC failures
 
@@ -109,25 +120,56 @@ count (purine H1/N1 within 3 Å of pyrimidine N3/H3).
    that (200 ns free runs for pose/stiffness extraction) is outside the reference envelope,
    so the box rules have to be extended with it. See [[crossover-catenation]] §2026-07-29.
 
-## NADOC delta
+## NADOC delta — CLOSED 2026-07-30 (recipe version 2)
 
-Faithful already: **ENM is a byte-equivalent reimplementation** —
-`md_protocols.BASE_RING_ATOMS` is the same nine atoms, `cut_ang=8.0`, k ladder
-0.5/0.1/0.01/0, 4.8 ns/stage, inter-residue, measured equilibrium lengths. MGHH +
-`mgh_extrabonds` ✓. CHARMM36 NA + CUFIX ✓. Ladder piston 1000/500 ✓. `minimize 10000`
-(vs 4800) ✓.
+Audited against the chapter PDF itself (`Literature/Aksimentiev_Tutorial.pdf`, 21 pp);
+eight divergences found, all now resolved. `md_protocols.RELAX_RECIPE_VERSION` is the
+stamp, and every package carries a **derived** `protocol_fidelity` manifest block listing
+what it reproduces and what it deliberately does not. **Read that block, not this table,
+to know what a given trajectory actually ran** — a prepared package is frozen on disk, so
+old jobs correctly keep their old physics.
 
-| | tutorial | NADOC | verdict |
+Faithful before this round, and unchanged: **the ENM is a byte-equivalent
+reimplementation** — same nine base-ring atoms, `cut_ang=8.0`, k ladder 0.5/0.1/0.01/0,
+4.8 ns/stage, inter-residue, measured equilibrium lengths. MGHH + `mgh_extrabonds` ✓.
+CHARMM36 NA + CUFIX ✓. Ladder piston 1000/500 ✓. Electrostatics adopted 2026-07-29 ✓.
+
+### What was wrong, and what it is now
+
+| | tutorial | NADOC before | now |
 |---|---|---|---|
-| solvent padding | bbox ± **20 Å** | `padding_nm 1.2` (12 Å) | **ours 40 % tighter** |
-| water fill | full box | full box **or carved shell** | carve is ours only |
-| production dt | 2 fs `rigidBonds all` | **4 fs + HMR** | deliberate, validated |
-| switch / cutoff / pairlist | 8 / 10 / 12 | 10 / 12 / 14 | ours more conservative |
-| PMEGridSpacing | 1.5 | 1.0 | ours finer |
-| piston period / decay | 1000 / 500 | ladder 1000/500; **production 200/100** | **ours 5× stiffer in production** |
-| `useGroupPressure` | off | yes | fine/better with rigidBonds |
-| `wrapAll` | **off** | on | analysis-only, but it forces trajectory unwrapping |
-| unrestrained length | 4.8 ns | up to 200 ns | beyond the reference |
+| **counterion** | **Mg(H₂O)₆²⁺** neutralises, Cl⁻ balances, **no Na⁺** | **Na⁺** neutralised; Mg a 12.5 mM bath only | `namd_solvate.ion_counts` — Mg neutralises, `n_na = 0` |
+| **Mg placement** | inserted into the DRY system, against the DNA | uniform random over the box | seeded within `MGH_SEED_SHELL_NM` of the backbone |
+| **vacuum pre-step** | §3.2, mandatory, before solvation | absent | still absent — **deliberately**, see below |
+| broken-bp criterion | 3.0 Å **and angle > 140°** | 3.6 Å heavy-atom, no angle | both — theirs reported, ours still gates |
+| charge within 2 nm | §3.4 criterion | absent | `md_health.charge_within_shell` |
+| RMSD vs design | §3.4 criterion | absent | `namd_runner._record_design_rmsd` |
+| Note-4 settle stage | fixed-DNA NPT | detector only, no remedy | `_0S_` segment, 500 ps, all DNA fixed |
+| Note-4 piston ×10 | on an abrupt box change | absent | `namd_runner.soften_piston` on shrink-resume |
+| minimisation | Note 2: scale it | flat 4800 | `minimize_steps_for_atoms` (1 step / 10 atoms) |
+| solvent padding | bbox ± 20 Å | 1.2 nm | 2.0 nm, trimmed only when the cell would not fit |
+| `wrapAll` | off | **on in production/reseed** | off everywhere |
+
+⚠ The `wrapAll` row is why it mattered: NAMD wraps **connected components of the bond
+graph**, and an origami's scaffold and its ~200 staples are separate molecules — so
+`wrapAll on` could translate individual staples a full box length from the duplex they
+are hybridised to. The relax ladder was always `off`; production and reseed were not.
+
+### Deliberate, documented deviations (kept)
+
+| | tutorial | NADOC | why |
+|---|---|---|---|
+| production dt | 2 fs `rigidBonds all` | **4 fs + HMR** | measured structurally indistinguishable, ~2× throughput |
+| `fullElectFrequency` | 2 | 1 | dt-dependent; the PME *interval* already matches at 4 fs. The literal 2 would exceed the r-RESPA limit |
+| `wrapWater` | off | on | solute-neutral (`wrapAll off`); keeps coords in [0, L) for the periodic charge query |
+| switch / cutoff / pairlist | 8 / 10 / 12 | 8 / 10 / **13.5** | pairlist buffer for the longer `stepspercycle` |
+| water fill | full box | full box **or carved shell** | memory fallback. ⚠ a carve forces NVT, which **disables** the settle stage and the box trace — `resolve_padding_nm` trims padding rather than trigger one, and the manifest records it |
+| production piston | 1000 / 500 | 200 / 100 | ladder matches; production stiffer by choice |
+| unrestrained length | 4.8 ns | up to 200 ns | beyond the reference envelope |
+
+**Still unvalidated on hardware.** The ion-composition change is the one that alters
+physics most, and it has NOT been run head-to-head. A short arm against an exp47-style
+baseline is owed before any published number uses recipe 2.
 
 ## ✅ Their electrostatics are strictly better here — MEASURED (2026-07-29)
 
@@ -157,9 +199,9 @@ MgCl₂/CUFIX and running with no water at all, uncaught.
 
 | id | label | protocol | state |
 |---|---|---|---|
-| `fast_shape` | Fast Shape Check (Vacuum) | (explicit) | **DISABLED** — no vacuum pipeline yet |
+| `fast_shape` | Fast Shape Check (Vacuum) | `vacuum_enrgmd_namd` | **SHIPPED 2026-07-30** |
 | `implicit_gbis` | Implicit Solvent (GBIS) | `implicit_gbis_namd` | **host-gated** — needs a non-CUDA NAMD build, so DISABLED on this machine |
-| `standard` | Standard (Aksimentiev) | `equilibrium_aware_namd` | **default** |
+| `standard` | Standard (Aksimentiev) | `equilibrium_aware_namd` | **default**; runs the vacuum stage first |
 | `full_physics` | Slow (full physics) | `equilibrium_aware_namd` | padding 1.5 nm, early-stop OFF |
 
 ⚠ **Availability is HOST-aware, not just build-aware** (`preset_availability`). GBIS is
@@ -194,13 +236,23 @@ so a draft recorded with it restores to the default, which is the same ladder an
 `frontend/src/ui/md_relax_presets.js` (16 vitest tests) and renders an unavailable tier
 disabled-with-reason rather than hiding it.
 
-**What `fast_shape` still needs** (from reading the tutorial's own `hextube.exb`): a
-DNA-only package path (no gmx solvate/autoionize) and the inter-helical phosphate
-repulsion restraints. The `.exb` settles the parameters that were unknown — the
-repulsion terms are **`k = 1 kcal/mol/Å², r₀ = 31 Å`**, and there are only **64** of them
-for the hextube (a sparse set, NOT one per base pair as the abstract suggests), alongside
-75,503 ENM terms with per-pair k (0.106–0.666) and r₀ (0.6–6.8 Å). The placement rule for
-those 64 is the remaining unknown.
+**`fast_shape` SHIPPED AND WAS RETIRED, 2026-07-30 — read this before reviving it.**
+The tutorial's §3.2 unfolds caDNAno's abstract parallel-helix lattice. NADOC *derives*
+geometry from topology + B-DNA constants + deformations, so no design ever arrives in
+that state (measured: `6hbx100_90deg`'s ideal build already holds ~98.5° of per-helix
+bend). Worse, the repulsion surrogate needs a >22 nt crossover-free span while honeycomb
+crossovers recur every 21 nt → **zero push bonds** on a dense bundle → the run has no
+interhelical force term at all, and bundles swelled 5.6–10% AWAY from the Mg-screened
+equilibrium. Reviving it needs a NADOC-native spacing restraint (the lattice pitch is
+known from topology), not mrdna's transplanted rule. Historic note follows.
+
+ Both blockers this used to list are closed: the
+placement rule is `backend/core/namd_push_bonds.py` (mrdna's, ported from exp48 with its
+self-test now collected as `tests/test_namd_push_bonds.py`), and the DNA-only package
+path is `backend/core/namd_vacuum.py`. The hextube's `.exb` settled the parameters —
+`k = 1 kcal/mol/Å², r₀ = 31 Å`, and only **64** of them for the hextube (sparse, NOT one
+per base pair) alongside 75,503 ENM terms. Reproduced exactly on NADOC designs:
+2hb → 0 push bonds, 6hb → 11, 24hb → 495.
 
 ## Other defaults flipped (2026-07-29)
 

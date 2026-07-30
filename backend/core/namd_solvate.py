@@ -69,6 +69,8 @@ def _emit(progress: Optional[ProgressCb], key: str, frac: Optional[float], msg: 
         pass
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from backend.core.atomistic import AtomisticModel
 
 from backend.core.models import Design
@@ -135,6 +137,12 @@ _NA = 6.02214076e23
 # the salt concentration stays correct after a water-shell carve (the full box
 # volume would over-count ions once the empty corners are removed).
 _WATER_NUMBER_DENSITY_NM3 = 33.4
+
+# Atoms in one Mg(H₂O)₆ residue: the Mg plus six waters at three atoms each.
+MGH_ATOMS = 19
+# Waters removed from the box to make room for one Mg(H₂O)₆ octahedron: the site
+# the Mg takes plus its five nearest neighbours (_place_ions_mixed_mgh).
+MGH_WATERS_CONSUMED = 6
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -312,11 +320,20 @@ def _parse_gro(
     return waters, box_nm
 
 
-def _dna_atom_positions_nm(pdb_text: str) -> "list[tuple[float, float, float]]":
-    """Return DNA heavy-atom (x, y, z) in nm from ATOM records of a PDB string."""
+def _dna_atom_positions_nm(pdb_text: str,
+                           atom_name: "str | None" = None
+                           ) -> "list[tuple[float, float, float]]":
+    """Return DNA heavy-atom (x, y, z) in nm from ATOM records of a PDB string.
+
+    ``atom_name`` restricts to one atom type — pass ``"P"`` for the phosphate
+    backbone, which is a ~32x smaller point set and the right reference for where
+    divalent counterions condense.
+    """
     pts: list[tuple[float, float, float]] = []
     for line in pdb_text.splitlines():
         if line.startswith("ATOM"):
+            if atom_name is not None and line[12:16].strip() != atom_name:
+                continue
             try:
                 pts.append((
                     float(line[30:38]) / 10.0,   # Å → nm
@@ -391,16 +408,27 @@ _WATER_PER_ANG3 = 1.0 / 29.91
 _DNA_ANG3_PER_ATOM = 8.8
 
 
-def estimate_box_atoms(box_nm, n_dna_atoms: int) -> int:
+def estimate_box_atoms(box_nm, n_dna_atoms: int, n_phosphates: int = 0) -> int:
     """Rough solvated atom count for a cell of this size (pure).
 
     Water fills whatever the solute does not occupy, at bulk density.  Used to decide
     whether a rotation-sized cell is affordable before paying to build it.
+
+    ``n_phosphates`` adds the ion census.  It is a small correction (an Mg(H₂O)₆
+    cluster is 19 atoms but vacates 6 waters, so each is only ~+1 atom net), but this
+    is the function that picks rotation-vs-bbox, so it should not silently model a
+    cell as pure water.  Zero keeps the historical water-only estimate.
     """
     v_box = float(box_nm[0]) * float(box_nm[1]) * float(box_nm[2]) * 1000.0  # nm³→Å³
     v_dna = n_dna_atoms * _DNA_ANG3_PER_ATOM
     waters = max(0.0, v_box - v_dna) * _WATER_PER_ANG3
-    return int(round(waters * 3 + n_dna_atoms))
+    total = waters * 3 + n_dna_atoms
+    if n_phosphates > 0:
+        ions = ion_counts(int(waters), -float(n_phosphates), nacl_mM=0.0,
+                          mgcl2_mM=12.5, box_nm=box_nm, mg_hexahydrate=True)
+        displaced = ions.n_mg * MGH_WATERS_CONSUMED + ions.n_na + ions.n_cl
+        total += ions.n_mg * MGH_ATOMS + ions.n_na + ions.n_cl - displaced * 3
+    return int(round(total))
 
 
 def _box_mode_atom_cap(devices: "str | None") -> "int | None":
@@ -421,29 +449,116 @@ def _box_mode_atom_cap(devices: "str | None") -> "int | None":
         return None
 
 
+#: The tutorial's solvation padding: ``solvate -minmax`` at the DNA bbox ± 20 Å.
+TUTORIAL_PADDING_NM = 2.0
+#: What to fall back to when the tutorial's padding will not fit the hardware.  NADOC's
+#: historical default — 40 % tighter than the reference, but proven on this box.
+FALLBACK_PADDING_NM = 1.2
+
+
+def resolve_padding_nm(pdb_text: str, requested_nm: float, *,
+                       max_atoms: "int | None",
+                       fallback_nm: float = FALLBACK_PADDING_NM,
+                       ) -> tuple[float, "str | None"]:
+    """Trim the requested padding when the resulting cell would not fit (pure).
+
+    The protocol asks for bbox ± 20 Å and that is the default, but honouring it is not
+    free: the extra water can push a large design past the hardware's atom cap, which
+    triggers an automatic water-shell carve — and a carved cell runs NVT throughout,
+    which silently deletes BOTH the Note-4 settle stage and the box-trace criterion, on
+    exactly the designs where they matter most.  A slightly tight box that keeps the
+    barostat beats a faithful one that cannot use it.
+
+    Returns ``(padding_nm, note)``; ``note`` is set only when the request was trimmed.
+    """
+    if not max_atoms or requested_nm <= fallback_nm:
+        return requested_nm, None
+    n_dna = 0
+    n_p = 0
+    for ln in pdb_text.splitlines():
+        if not ln.startswith(("ATOM", "HETATM")):
+            continue
+        n_dna += 1
+        if ln[12:16].strip() == "P":
+            n_p += 1
+    try:
+        _, box = _recenter_pdb_in_padded_box(pdb_text, requested_nm, DEFAULT_BOX_MODE)
+        atoms = estimate_box_atoms(box, n_dna, n_p)
+    except Exception:  # noqa: BLE001 — sizing must never break a build
+        return requested_nm, None
+    if atoms <= max_atoms:
+        return requested_nm, None
+    return fallback_nm, (
+        f"trimmed padding {requested_nm:g} -> {fallback_nm:g} nm: the requested cell "
+        f"would be ~{atoms:,} atoms against a {max_atoms:,} cap, which forces a "
+        f"water-shell carve — and a carved cell runs NVT throughout, losing the "
+        f"fixed-DNA settle stage and the box-trace criterion.")
+
+
+#: Unrestrained nanoseconds below which rotation sizing buys nothing.
+#:
+#: Rotation sizing exists because a FREE solute reorients into its own periodic image —
+#: measured on VoltronCore, which overran a bbox cell over 200 ns (exp47).  A relaxation
+#: ladder is not that: it is ~19 ns of which only the k=0 stage is unrestrained, and
+#: rotational diffusion over a few ns is negligible.  For a 2hb rod (L ≈ 11.4 nm) the
+#: Stokes-Einstein-Debye estimate is D_rot ≈ 4.5e5 s⁻¹, so ⟨θ²⟩ = 2·D_rot·t gives
+#: θ_rms ≈ 4° over 4.8 ns against ≈ 24° over 200 ns.  Four degrees cannot walk a solute
+#: into its image; twenty-four can.
+#:
+#: The cost of getting this wrong is not small.  A 2hb's bbox cell is 4.4 × 6.7 × 11.4 nm
+#: (336 nm³); the rotation cell is a 11.9 nm cube (1,698 nm³) — 5x the water, and gmx
+#: FILLS it, so 32.6k atoms becomes 166k and every stage runs ~4x slower.  Paying that
+#: through a ladder that never turns is pure waste.
+ROTATION_FREE_NS_THRESHOLD = 20.0
+
+
 def resolve_box_mode(pdb_text: str, padding_nm: float, *,
                      max_atoms: "int | None",
+                     free_ns: "float | None" = None,
                      preferred: str = DEFAULT_BOX_MODE) -> tuple[str, "str | None"]:
     """Pick a cell-sizing rule that is both correct and affordable (pure).
 
-    Prefers ``preferred`` (rotation), but falls back to ``bbox`` when the rotation-sized
-    cell would not fit ``max_atoms``.  A too-big cell is not a safer choice than a
-    too-small one: it forces a water-shell carve, which forces NVT, which rules out the
-    free NPT stage the rotation sizing existed to protect.  Returns ``(mode, note)`` with
-    ``note`` set only when a downgrade happened, so the caller can record it.
+    Two independent reasons to decline rotation sizing:
+
+    * **It is not needed.** ``free_ns`` is how long this package will run UNRESTRAINED.
+      Below :data:`ROTATION_FREE_NS_THRESHOLD` the solute cannot turn far enough for the
+      minimum-image problem to arise, so a bbox cell is both correct and far cheaper.
+      Pass ``None`` to size for an arbitrarily long free run (the safe default).
+    * **It does not fit.** A too-big cell is not a safer choice than a too-small one: it
+      forces a water-shell carve, which forces NVT, which rules out the free NPT stage
+      rotation sizing existed to protect.
+
+    Returns ``(mode, note)``; ``note`` is set whenever rotation was declined, so the
+    caller can record WHY a package is bbox-sized — which the production path then reads
+    back to decide whether a long free run is safe in it.
     """
-    if preferred != "rotation" or not max_atoms:
+    if preferred != "rotation":
         return preferred, None
-    n_dna = sum(1 for ln in pdb_text.splitlines()
-                if ln.startswith(("ATOM", "HETATM")))
+    if free_ns is not None and free_ns <= ROTATION_FREE_NS_THRESHOLD:
+        return "bbox", (
+            f"bbox sizing: this package runs {free_ns:g} ns unrestrained, under the "
+            f"{ROTATION_FREE_NS_THRESHOLD:g} ns at which a solute can rotate into its own "
+            f"periodic image. A rotation-sized cell would cost several times the water "
+            f"for no benefit. A LONG free run (production) in this cell is NOT "
+            f"trustworthy — re-solvate for one.")
+    if not max_atoms:
+        return preferred, None
+    n_dna = 0
+    n_p = 0
+    for ln in pdb_text.splitlines():
+        if not ln.startswith(("ATOM", "HETATM")):
+            continue
+        n_dna += 1
+        if ln[12:16].strip() == "P":
+            n_p += 1
     _, rot_box = _recenter_pdb_in_padded_box(pdb_text, padding_nm, "rotation")
-    rot_atoms = estimate_box_atoms(rot_box, n_dna)
+    rot_atoms = estimate_box_atoms(rot_box, n_dna, n_p)
     if rot_atoms <= max_atoms:
         return "rotation", None
     _, bb_box = _recenter_pdb_in_padded_box(pdb_text, padding_nm, "bbox")
     return "bbox", (
         f"rotation-sized cell would be ~{rot_atoms:,} atoms (cap {max_atoms:,}); "
-        f"fell back to bbox sizing (~{estimate_box_atoms(bb_box, n_dna):,} atoms). "
+        f"fell back to bbox sizing (~{estimate_box_atoms(bb_box, n_dna, n_p):,} atoms). "
         f"A free (unrestrained) stage in this box is NOT trustworthy — the solute can "
         f"rotate into its own periodic image. Use a cluster target for a free run.")
 
@@ -1068,6 +1183,116 @@ def _ion_counts(
     return n_na, n_cl
 
 
+@dataclasses.dataclass(frozen=True)
+class IonCounts:
+    """The ion census for one solvated cell, plus how it was arrived at."""
+    n_na: int
+    n_mg: int
+    n_cl: int
+    #: "mg" — the origami is neutralised by Mg(H₂O)₆²⁺ (the Aksimentiev recipe);
+    #: "na" — neutralised by Na⁺ (only when no magnesium was requested).
+    counterion: str
+    #: Magnesium needed purely to neutralise the backbone.
+    n_mg_neutralising: int
+    #: Magnesium implied by the requested bulk concentration alone.
+    n_mg_bulk: int
+    #: Solvent volume (nm³) the bulk-concentration terms were computed over.
+    volume_nm3: float
+    #: |q_DNA| as an integer, for the neutrality assertion downstream.
+    dna_neg_charge: int
+
+    def as_tuple(self) -> tuple[int, int, int]:
+        return self.n_na, self.n_mg, self.n_cl
+
+
+def ion_counts(
+    n_waters: int,
+    dna_charge: float,
+    *,
+    nacl_mM: float,
+    mgcl2_mM: float,
+    box_nm: tuple[float, float, float],
+    volume_nm3: Optional[float] = None,
+    mg_hexahydrate: bool = True,
+) -> IonCounts:
+    """The canonical ion recipe.  ONE implementation, every caller.
+
+    Follows the Aksimentiev origami protocol (Yoo, Li, Slone, Maffeo & Aksimentiev,
+    Methods Mol Biol 1811, §3.3): the origami is neutralised by **Mg(H₂O)₆²⁺**, and
+    Cl⁻ is then added to neutralise the *system* — which implies Mg in excess of the
+    DNA charge whenever the requested bulk concentration exceeds what neutralisation
+    alone needs.  **No Na⁺ is involved at all.**  That is the whole point of the
+    published protocol: the standard monovalent parameterisation gets DNA-DNA forces
+    in dense origami wrong, and MGHH²⁺ is what brings them back in line with
+    experiment (Yoo & Aksimentiev, JPCL 3:45, JPCB 116:12946, NAR 44:2036).
+
+    NADOC neutralised with Na⁺ until 2026-07-30 and treated Mg purely as a bulk
+    bath, so the preset labelled "Standard (Aksimentiev)" was running a
+    monovalent-screened system with a trace of magnesium.
+
+    ``counterion`` is derived, not passed: magnesium neutralises whenever
+    hexahydrate placement is on AND a nonzero Mg concentration was asked for.
+    Setting Mg to 0 is an explicit request for no magnesium, and falls back to the
+    legacy Na⁺ neutralisation so a deliberate monovalent-screening experiment still
+    works.
+
+    ``volume_nm3`` overrides the solvent volume used for the bulk-concentration
+    terms.  The default is derived from the actual water count rather than the box:
+    a rotation-sized (cubic) cell around an anisotropic origami is mostly empty
+    corner, and charging bulk salt for that volume inflates the ion count.
+    """
+    # 1 nm³ = 1e-27 m³ = 1e-24 L  (since 1 m³ = 1000 L)
+    if volume_nm3 is not None:
+        vol_nm3 = float(volume_nm3)
+    elif n_waters > 0:
+        vol_nm3 = n_waters / _WATER_NUMBER_DENSITY_NM3
+    else:
+        bx, by, bz = box_nm
+        vol_nm3 = bx * by * bz
+    vol_L = vol_nm3 * 1e-24  # nm³ → L
+
+    n_nacl = int(round(nacl_mM * 1e-3 * _NA * vol_L))
+    n_mg_bulk = int(round(mgcl2_mM * 1e-3 * _NA * vol_L))
+    dna_neg_charge = max(0, -int(round(dna_charge)))
+
+    use_mg = bool(mg_hexahydrate and mgcl2_mM > 0)
+    if use_mg:
+        # ceil(|q|/2): an odd backbone charge leaves one unit over, which the Cl⁻
+        # term below absorbs (2*n_mg - |q| == 1).
+        n_mg_neutralising = -(-dna_neg_charge // 2)
+        n_mg = max(n_mg_neutralising, n_mg_bulk)
+        n_na = n_nacl
+        # 2*n_mg >= |q| by construction, so this can never go negative.
+        n_cl = 2 * n_mg - dna_neg_charge + n_nacl
+    else:
+        # Legacy monovalent path — kept for an explicit no-magnesium request.
+        n_mg_neutralising = 0
+        n_mg = n_mg_bulk
+        n_na = dna_neg_charge + n_nacl
+        n_cl = n_nacl + 2 * n_mg
+
+    return IonCounts(
+        n_na=n_na, n_mg=n_mg, n_cl=n_cl,
+        counterion="mg" if use_mg else "na",
+        n_mg_neutralising=n_mg_neutralising,
+        n_mg_bulk=n_mg_bulk,
+        volume_nm3=vol_nm3,
+        dna_neg_charge=dna_neg_charge,
+    )
+
+
+def waters_needed_for_ions(ions: IonCounts, *, mg_hexahydrate: bool = True) -> int:
+    """Water molecules the ion recipe will consume (pure).
+
+    Every monatomic ion takes one water site; every Mg(H₂O)₆ takes six.  Neutralising
+    a backbone with magnesium therefore costs ~3 waters per phosphate — enough that a
+    tight hydration-shell carve can genuinely run out, which is why this is checked in
+    the pre-flight rather than discovered an hour into solvation.
+    """
+    per_mg = MGH_WATERS_CONSUMED if mg_hexahydrate else 1
+    return ions.n_na + ions.n_cl + ions.n_mg * per_mg
+
+
 def _ion_counts_mixed(
     n_waters: int,
     dna_charge: float,
@@ -1076,36 +1301,13 @@ def _ion_counts_mixed(
     box_nm: tuple[float, float, float],
     *,
     volume_nm3: Optional[float] = None,
+    mg_hexahydrate: bool = True,
 ) -> tuple[int, int, int]:
-    """Return (n_Na, n_Mg, n_Cl) for neutral DNA plus NaCl/MgCl2 bath.
-
-    ``volume_nm3`` overrides the box volume used for the bulk-concentration term.
-    After a water-shell carve the box is mostly empty, so the salt count must be
-    based on the *solvent* volume (water count ÷ bulk density) rather than the
-    full box — otherwise the carved cell ends up at ~2× the requested molarity.
-
-    Strategy:
-      1. Add MgCl2 pairs for the requested bulk magnesium concentration.
-      2. Add NaCl pairs for the requested monovalent salt concentration.
-      3. Add enough extra Na+ to neutralise the DNA and the added salt bath.
-
-    This keeps the simple water-replacement implementation deterministic while
-    allowing origami-style Mg-containing explicit-solvent tests.  It does not
-    place hexahydrated Mg clusters; use the included CUFIX parameters for Mg2+
-    as the closest currently supported established-practice approximation.
-    """
-    # 1 nm³ = 1e-27 m³ = 1e-24 L  (since 1 m³ = 1000 L)
-    bx, by, bz = box_nm
-    vol_nm3 = volume_nm3 if volume_nm3 is not None else bx * by * bz
-    vol_L = vol_nm3 * 1e-24  # nm³ → L
-    n_nacl = int(round(nacl_mM * 1e-3 * _NA * vol_L))
-    n_mg = int(round(mgcl2_mM * 1e-3 * _NA * vol_L))
-
-    dna_neg_charge = -int(round(dna_charge))
-    n_neutralise_na = max(0, dna_neg_charge)
-    n_na = n_neutralise_na + n_nacl
-    n_cl = n_nacl + 2 * n_mg
-    return n_na, n_mg, n_cl
+    """(n_Na, n_Mg, n_Cl) — thin tuple wrapper over :func:`ion_counts`."""
+    return ion_counts(
+        n_waters, dna_charge, nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM, box_nm=box_nm,
+        volume_nm3=volume_nm3, mg_hexahydrate=mg_hexahydrate,
+    ).as_tuple()
 
 
 def _place_ions(
@@ -1152,6 +1354,7 @@ def _place_ions_mixed(
     seed: int = 42,
     mg_hexahydrate: bool = False,
     progress: Optional[ProgressCb] = None,
+    dna_pdb_text: "str | None" = None,
 ) -> tuple[
     list[_Water],
     list[tuple[float, float, float]],
@@ -1161,7 +1364,8 @@ def _place_ions_mixed(
 ]:
     """Replace waters with Na+, Mg2+/MGH, and Cl- ions."""
     if mg_hexahydrate:
-        return _place_ions_mixed_mgh(waters, n_na, n_mg, n_cl, seed=seed, progress=progress)
+        return _place_ions_mixed_mgh(waters, n_na, n_mg, n_cl, seed=seed,
+                                     progress=progress, dna_pdb_text=dna_pdb_text)
 
     rng = random.Random(seed)
     total_ions = n_na + n_mg + n_cl
@@ -1190,6 +1394,52 @@ def _place_ions_mixed(
             remaining.append(w)
 
     return remaining, na_pos, mg_pos, cl_pos, []
+
+
+#: How far from the phosphate backbone a Mg(H₂O)₆ may be seeded (nm).  1.2 nm spans
+#: the first and second hydration shells, where divalent counterions actually condense;
+#: wide enough that a large origami has far more candidate sites than clusters to place,
+#: so the selection stays a random draw from the shell rather than a rank-ordered pile-up
+#: on the very closest waters.
+MGH_SEED_SHELL_NM = 1.2
+
+
+def _shell_biased_order(pos, dna_pdb_text: "str | None", n_mg: int,
+                        fallback_order: list, rng) -> list:
+    """Shuffled water indices lying within :data:`MGH_SEED_SHELL_NM` of the backbone.
+
+    Returns ``[]`` when there is no solute to condense on, or when the shell holds
+    too few waters to be worth a separate pass — the caller then falls back to the
+    uniform draw, which is the old behaviour.
+
+    Cost is one KD-tree over **P atoms only** (~1/32 of the DNA atoms) plus one
+    bounded query per water.  Querying with ``distance_upper_bound`` lets SciPy prune
+    aggressively, so this stays well inside the placement budget that
+    ``tests/test_md_ion_placement.py`` pins.
+    """
+    if not dna_pdb_text or n_mg <= 0:
+        return []
+    try:
+        import numpy as np  # noqa: PLC0415
+        from scipy.spatial import cKDTree  # noqa: PLC0415
+
+        p_atoms = _dna_atom_positions_nm(dna_pdb_text, "P")
+        if not p_atoms:
+            return []
+        dist, _ = cKDTree(np.asarray(p_atoms, dtype=float)).query(
+            pos, k=1, distance_upper_bound=MGH_SEED_SHELL_NM, workers=-1)
+        shell = np.flatnonzero(np.isfinite(dist))
+        if shell.size < n_mg:
+            # Not enough shell sites to seed every cluster — let the caller mix shell
+            # first, bulk after, rather than pretending the shell is sufficient.
+            logger.info("Mg seeding: shell holds %d waters for %d clusters; "
+                        "the remainder will be placed in bulk", shell.size, n_mg)
+        idx = shell.tolist()
+        rng.shuffle(idx)
+        return idx
+    except Exception as exc:  # noqa: BLE001 — biasing is an improvement, not a gate
+        logger.warning("Mg shell biasing unavailable (%s); placing uniformly", exc)
+        return []
 
 
 def _ideal_mgh_cluster(mg: tuple[float, float, float]) -> _MgHexahydrate:
@@ -1230,6 +1480,7 @@ def _place_ions_mixed_mgh(
     n_cl: int,
     seed: int = 42,
     progress: Optional[ProgressCb] = None,
+    dna_pdb_text: "str | None" = None,
 ) -> tuple[
     list[_Water],
     list[tuple[float, float, float]],
@@ -1243,6 +1494,16 @@ def _place_ions_mixed_mgh(
     nearby waters that are removed to vacate room for the idealized Mg(H2O)6
     residue — six waters per cluster.  Na+/Cl- then take random remaining sites.
 
+    ``dna_pdb_text`` turns on **solute-biased Mg placement**: cluster centres are
+    drawn from waters within :data:`MGH_SEED_SHELL_NM` of the phosphate backbone
+    before falling back to the bulk.  The tutorial does this explicitly — it inserts
+    MGHH into the DRY system before solvating, *"because MGHH2+ molecules diffuse
+    slowly, it is beneficial to place them initially in proximity to the DNA origami
+    structure"* (Methods Mol Biol 1811 §3.3).  Placing them uniformly through the box
+    (what NADOC did until 2026-07-30) means the divalent atmosphere has to form by
+    diffusion, which will not happen over a 19 ns ladder.  Omit it for a bulk
+    electrolyte with no solute to condense on.
+
     Performance: a single shuffled draw order + one cKDTree drives selection in
     ~O(n_ions·log n_water).  The previous implementation rebuilt a ``tuple`` of
     the entire (millions-strong) available-water set on *every* ion and sorted
@@ -1253,7 +1514,7 @@ def _place_ions_mixed_mgh(
     from scipy.spatial import cKDTree  # noqa: PLC0415
 
     n = len(waters)
-    total_replaced = n_na + n_cl + 6 * n_mg
+    total_replaced = n_na + n_cl + MGH_WATERS_CONSUMED * n_mg
     if total_replaced > n:
         raise RuntimeError(
             f"Not enough water molecules ({n}) to place {n_mg} MGH "
@@ -1272,6 +1533,10 @@ def _place_ions_mixed_mgh(
     rng = random.Random(seed)
     order = list(range(n))
     rng.shuffle(order)
+    # Mg centres come from the hydration shell first; everything else (and any
+    # overflow) uses the plain shuffled order.
+    mg_order = _shell_biased_order(pos, dna_pdb_text, n_mg, order, rng) if n_mg else []
+    mg_cursor = 0
     cursor = 0
     claimed = bytearray(n)   # 0/1 flag per water; O(1) membership, no giant tuples
 
@@ -1284,6 +1549,17 @@ def _place_ions_mixed_mgh(
         claimed[idx] = 1
         return idx
 
+    def next_mg_center() -> int:
+        """A cluster centre from the hydration shell, else from the bulk."""
+        nonlocal mg_cursor
+        while mg_cursor < len(mg_order):
+            idx = mg_order[mg_cursor]
+            mg_cursor += 1
+            if not claimed[idx]:
+                claimed[idx] = 1
+                return idx
+        return next_unclaimed()          # shell exhausted → bulk
+
     def water_xyz(idx: int) -> tuple[float, float, float]:
         return (float(pos[idx, 0]), float(pos[idx, 1]), float(pos[idx, 2]))
 
@@ -1291,7 +1567,7 @@ def _place_ions_mixed_mgh(
     _K = 16   # query margin so 5 unclaimed neighbours are virtually always found
     mgh_clusters: list[_MgHexahydrate] = []
     for m in range(n_mg):
-        center = next_unclaimed()
+        center = next_mg_center()
         removed = 0
         if tree is not None:
             _, idxs = tree.query(pos[center], k=min(n, _K))
@@ -2196,6 +2472,10 @@ def build_namd_solvated_package(
     mg_conc_mM: float = 0.0,
     mg_hexahydrate: bool = False,
     require_full_topology: bool = False,
+    #: Unrestrained nanoseconds this package will run — drives the cell-sizing rule.
+    #: See :data:`ROTATION_FREE_NS_THRESHOLD`.  None = size for an arbitrarily long
+    #: free run.
+    free_ns: "float | None" = None,
     seed: int = 42,
     atomistic_model: "AtomisticModel | None" = None,
     solute_coords: "np.ndarray | None" = None,
@@ -2291,8 +2571,15 @@ def build_namd_solvated_package(
         # Cell-sizing rule: prefer rotation (orientation-proof), but fall back to the
         # historical bbox rule when that would not fit the hardware — a cell too big to
         # run is not safer than one too small.  The downgrade is recorded, not silent.
+        _atom_cap = _box_mode_atom_cap(devices)
+        # Prefer the tutorial's bbox ± 20 Å, but only where it does not force a carve
+        # (which would cost the barostat, and with it the settle stage + box trace).
+        padding_nm, padding_note = resolve_padding_nm(
+            dna_pdb, padding_nm, max_atoms=_atom_cap)
+        if padding_note:
+            logger.info("box sizing: %s", padding_note)
         box_mode, box_mode_note = resolve_box_mode(
-            dna_pdb, padding_nm, max_atoms=_box_mode_atom_cap(devices))
+            dna_pdb, padding_nm, max_atoms=_atom_cap, free_ns=free_ns)
         if box_mode_note:
             logger.warning("box sizing: %s", box_mode_note)
             _emit(progress, "assemble", 0.4, f"Box sizing: {box_mode_note}")
@@ -2302,25 +2589,34 @@ def build_namd_solvated_package(
         )
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts.
-    #    After a shell carve the box is mostly empty, so base the bulk salt count
-    #    on the carved solvent volume (water count ÷ bulk density) instead of the
-    #    full box — otherwise the carved cell ends up over-salted.
+    #    Under the Aksimentiev recipe the counterion is Mg(H₂O)₆²⁺, not Na⁺ — see
+    #    :func:`ion_counts`.  The bulk terms are charged over the SOLVENT volume, so a
+    #    carved (or rotation-sized, mostly-empty) cell is not over-salted.
     _emit(progress, "assemble", 0.5, "Placing neutralising ions…")
     dna_charge = _count_dna_charge(dna_pdb)
-    ion_volume_nm3 = (
-        len(waters) / _WATER_NUMBER_DENSITY_NM3
-        if (water_shell_nm and water_shell_nm > 0)
-        else None
+    ions = ion_counts(
+        len(waters), dna_charge, nacl_mM=ion_conc_mM, mgcl2_mM=mg_conc_mM,
+        box_nm=box_nm, mg_hexahydrate=mg_hexahydrate,
     )
-    n_na, n_mg, n_cl = _ion_counts_mixed(
-        len(waters), dna_charge, ion_conc_mM, mg_conc_mM, box_nm,
-        volume_nm3=ion_volume_nm3,
-    )
+    n_na, n_mg, n_cl = ions.as_tuple()
+    ion_volume_nm3 = ions.volume_nm3
+
+    # A cell too tight to hold the hydration waters each Mg(H₂O)₆ needs cannot be
+    # built.  Report the shortfall in the units the caller can act on (padding /
+    # shell), not as a bare arithmetic failure deep inside placement.
+    needed = waters_needed_for_ions(ions, mg_hexahydrate=mg_hexahydrate)
+    if needed > len(waters):
+        raise RuntimeError(
+            f"Cell holds {len(waters):,} waters but the ion recipe needs {needed:,} "
+            f"({n_mg:,} Mg(H₂O)₆ × {MGH_WATERS_CONSUMED} + {n_na:,} Na⁺ + {n_cl:,} Cl⁻). "
+            f"Neutralising {ions.dna_neg_charge:,} backbone charges with magnesium "
+            f"costs ~3 waters per phosphate. Increase padding_nm or the water shell."
+        )
 
     # 4. Place ions (replace water molecules)
     waters, na_pos, mg_pos, cl_pos, mgh_clusters = _place_ions_mixed(
         waters, n_na, n_mg, n_cl, seed=seed, mg_hexahydrate=mg_hexahydrate,
-        progress=progress,
+        progress=progress, dna_pdb_text=dna_pdb,
     )
 
     # 5. Find last DNA atom serial for sequential numbering
@@ -2419,14 +2715,38 @@ def build_namd_solvated_package(
         "ionization": {
             "dna_charge_method": "phosphate_count_legacy",
             "dna_charge_used_e": dna_charge,
+            # Cross-check the phosphate count against the force field's own charges.
+            # They agree today (psfgen's 5TER/3TER patches carry -0.47/-0.53 e, which
+            # sum to exactly -1.00 per strand, so an N-nt strand carries -(N-1) = its
+            # phosphate count).  Recording the delta means a future terminal-patch
+            # change cannot silently de-neutralise the box.
+            "dna_charge_from_psf_e": dry_audit.total_charge,
+            "dna_charge_agrees": abs(dry_audit.total_charge - dna_charge) <= 0.01,
+            "counterion": ions.counterion,
             "n_na": n_na,
             "n_mg": n_mg,
             "n_cl": n_cl,
+            "n_mg_neutralising": ions.n_mg_neutralising,
+            "n_mg_bulk": ions.n_mg_bulk,
+            "net_ion_charge_e": 2 * n_mg + n_na - n_cl,
+            "neutral": (2 * n_mg + n_na - n_cl) == ions.dna_neg_charge,
             "mg_hexahydrate": mg_hexahydrate and bool(mgh_clusters),
             "n_waters": len(waters),
             "box_nm": list(box_nm),
             "water_shell_nm": water_shell_nm,
             "ion_volume_nm3": ion_volume_nm3,
+        },
+        # Which sizing rules produced this cell.  Both were previously logger-only, so a
+        # finished job had no record of whether its box came from rotation or bbox, or
+        # whether the tutorial's padding had been refused for it.
+        "box_sizing": {
+            "padding_nm": padding_nm,
+            "box_mode": box_mode,
+            "padding_note": padding_note,
+            "box_mode_note": box_mode_note,
+            # What the cell was sized FOR.  A package sized for a short ladder cannot
+            # safely host a long production run; append_md_production reads this back.
+            "sized_for_free_ns": free_ns,
         },
     }
 
@@ -2490,19 +2810,17 @@ def get_solvation_stats(
         tmpdir = Path(_tmp)
         waters, box_nm, _ = _gmx_solvate(dna_pdb, padding_nm, tmpdir, water_shell_nm=water_shell_nm)
 
-    ion_volume_nm3 = (
-        len(waters) / _WATER_NUMBER_DENSITY_NM3
-        if (water_shell_nm and water_shell_nm > 0)
-        else None
+    # Same recipe as the real build — ion_counts is the single implementation, so a
+    # pre-flight estimate cannot drift from what the package actually gets.
+    ions = ion_counts(
+        len(waters), dna_charge, nacl_mM=ion_conc_mM, mgcl2_mM=mg_conc_mM,
+        box_nm=box_nm, mg_hexahydrate=mg_hexahydrate,
     )
-    n_na, n_mg, n_cl = _ion_counts_mixed(
-        len(waters), dna_charge, ion_conc_mM, mg_conc_mM, box_nm,
-        volume_nm3=ion_volume_nm3,
-    )
-    n_replaced_by_mg = 6 * n_mg if mg_hexahydrate else n_mg
+    n_na, n_mg, n_cl = ions.as_tuple()
+    n_replaced_by_mg = (MGH_WATERS_CONSUMED * n_mg) if mg_hexahydrate else n_mg
     n_remaining_waters = len(waters) - n_na - n_replaced_by_mg - n_cl
     n_water_atoms = n_remaining_waters * 3
-    n_mg_atoms = n_mg * 19 if mg_hexahydrate else n_mg
+    n_mg_atoms = n_mg * MGH_ATOMS if mg_hexahydrate else n_mg
     n_total = dna_n_atoms + n_water_atoms + n_na + n_mg_atoms + n_cl
 
     bx, by, bz = box_nm
@@ -2513,7 +2831,8 @@ def get_solvation_stats(
         "n_na":         n_na,
         "n_mg":         n_mg,
         "mg_hexahydrate": mg_hexahydrate,
-        "mgh_atoms":    n_mg * 19 if mg_hexahydrate else 0,
+        "mgh_atoms":    n_mg * MGH_ATOMS if mg_hexahydrate else 0,
+        "counterion":   ions.counterion,
         "n_cl":         n_cl,
         "total_atoms":  n_total,
         "box_nm":       box_nm,

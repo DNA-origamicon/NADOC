@@ -186,46 +186,119 @@ def test_no_shell_fills_box_without_shell_flag(monkeypatch, tmp_path):
     assert "-shell" not in cmd
 
 
-def test_ion_count_volume_override_matches_water_volume():
-    """Salt count scales with the supplied solvent volume, not the box volume.
+def _rod_pdb(n: int = 120, rise_ang: float = 3.4, width_ang: float = 44.0) -> str:
+    """A high-aspect-ratio solute — the shape rotation sizing punishes hardest."""
+    return "".join(
+        _pdb_atom(i, j * rise_ang, (j % 2) * width_ang, 0.0) + "\n"
+        for i, j in enumerate(range(n), start=1))
 
-    A carved cell (mostly empty box) must base its molarity on the water it
-    actually contains, else it ends up over-salted.
+
+def test_a_short_free_run_gets_a_bbox_cell():
+    """Rotation sizing protects a LONG unrestrained run from the minimum-image problem.
+    A relaxation ladder is restrained throughout bar one 4.8 ns stage, over which a rod
+    reorients by ~4 degrees — it cannot reach its own image, and a rotation-sized cell
+    costs several times the water for nothing (measured: 2hb 32.6k -> 166k atoms)."""
+    from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD, resolve_box_mode
+
+    mode, note = resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9, free_ns=4.8)
+    assert mode == "bbox"
+    assert "unrestrained" in note and "not" in note.lower()
+    # ...and the boundary is inclusive.
+    assert resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9,
+                            free_ns=ROTATION_FREE_NS_THRESHOLD)[0] == "bbox"
+
+
+def test_a_long_free_run_still_gets_a_rotation_cell():
+    from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD, resolve_box_mode
+
+    assert resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9,
+                            free_ns=ROTATION_FREE_NS_THRESHOLD + 0.1)[0] == "rotation"
+    assert resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9, free_ns=200.0)[0] == "rotation"
+
+
+def test_unknown_free_time_sizes_for_rotation():
+    """None means "no idea how long this runs free" — size for the worst case."""
+    from backend.core.namd_solvate import resolve_box_mode
+
+    assert resolve_box_mode(_rod_pdb(), 1.2, max_atoms=10**9, free_ns=None)[0] == "rotation"
+
+
+def test_bbox_is_dramatically_cheaper_for_a_rod():
+    """The reason this matters at all."""
+    from backend.core.namd_solvate import _recenter_pdb_in_padded_box, estimate_box_atoms
+
+    pdb = _rod_pdb()
+    _, bb = _recenter_pdb_in_padded_box(pdb, 1.2, "bbox")
+    _, rot = _recenter_pdb_in_padded_box(pdb, 1.2, "rotation")
+    assert estimate_box_atoms(rot, 120, 120) > 10 * estimate_box_atoms(bb, 120, 120)
+
+
+def test_the_relax_ladder_declares_its_free_time_to_the_sizer():
+    """Regression guard for the wiring: if prepare stops passing free_ns, every relax
+    package silently goes back to paying for a rotation cell."""
+    from backend.core.md_protocols import _LADDER_FREE_NS
+    from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD
+
+    assert _LADDER_FREE_NS == 4.8               # the k=0 stage, the only free one
+    assert _LADDER_FREE_NS <= ROTATION_FREE_NS_THRESHOLD
+
+
+def test_bulk_salt_scales_with_solvent_volume_not_box_volume():
+    """Molarity is charged over the water the cell actually holds, always.
+
+    A rotation-sized cell around an anisotropic origami is mostly empty corner, and
+    a carved cell is emptier still.  Charging bulk salt for the *box* over-salts
+    both.  The solvent volume is now the default, so passing it explicitly (what the
+    carve path does) must be a no-op rather than a correction.
     """
     box = (60.0, 20.0, 76.0)            # full box ~ 91200 nm³
     n_waters = 1_000_000
     water_vol = n_waters / _WATER_NUMBER_DENSITY_NM3  # ~29940 nm³
 
-    # No override → uses the (much larger) full box volume.
-    n_na_box, _, n_cl_box = _ion_counts_mixed(n_waters, 0.0, 150.0, 0.0, box)
-    # Override → uses the carved water volume.
-    n_na_carve, _, n_cl_carve = _ion_counts_mixed(
+    _, _, n_cl_default = _ion_counts_mixed(n_waters, 0.0, 150.0, 0.0, box)
+    _, _, n_cl_explicit = _ion_counts_mixed(
         n_waters, 0.0, 150.0, 0.0, box, volume_nm3=water_vol
     )
 
-    assert n_cl_carve < n_cl_box  # less volume → fewer bulk ions
-    # Carved salt count should match a direct 150 mM × water-volume calculation.
     expected = round(150.0 * 1e-3 * ns._NA * water_vol * 1e-24)
-    assert n_cl_carve == expected
+    assert n_cl_default == expected
+    assert n_cl_explicit == expected      # explicit solvent volume is now redundant
+
+    # An override still wins when it disagrees — the carve path relies on that.
+    _, _, n_cl_half = _ion_counts_mixed(
+        n_waters, 0.0, 150.0, 0.0, box, volume_nm3=water_vol / 2
+    )
+    assert n_cl_half < n_cl_default
 
 
 def test_soft_start_first_segment_only():
-    """The first dynamics segment runs soft (1 fs, rigidBonds none); rest rigid.
+    """The first FREE dynamics segment runs GENTLE (2 fs, rigid bonds); rest full speed.
 
-    A freshly built model has a residual local strain that crashes 2 fs rigid-bond
-    RATTLE on the first steps; the soft start relaxes it, then speed resumes.
+    A freshly built model carries residual local strain, and 4 fs + HMR blows up on it.
+    exp49 measured how much protection that actually needs: a 25 ps probe as the first
+    dynamics after minimisation, on ideal builds with 2 / 24 / 60 inserted crossover
+    bases.  2 fs with rigid bonds survived all of them; only 4 fs failed.  The old 1 fs
+    flexible-bond tier cost 2x for protection that was never needed.
+
+    "First free" and not simply segs[0]: the Note-4 settle stage runs before it with
+    every DNA atom FIXED, so no solute strain can relieve there and no solute RATTLE can
+    fail there — softening it would spend the protection on the wrong segment.
     """
     from backend.core.md_protocols import _segment_conf, mgh_slow_release_segments
 
     _, segs = mgh_slow_release_segments("S")
-    assert segs[0].soft, "first segment should be soft"
-    assert not any(s.soft for s in segs[1:]), "later segments should be rigid"
+    free = [s for s in segs if s.fixed_atoms_file is None]
+    assert free[0].gentle, "first free segment should be gentle"
+    assert not free[0].soft, "gentle is rigid-bonded — 1 fs flexible is the escape hatch"
+    assert not any(s.gentle or s.soft for s in free[1:]), "later segments run full speed"
 
     box = (80.0, 80.0, 200.0)
-    first = _segment_conf(segs[0], "S", box, False)
-    second = _segment_conf(segs[1], "S", box, False)
-    assert "rigidBonds         none" in first and "timestep           1" in first
-    assert "rigidBonds         all" in second and "timestep           2" in second
+    first = _segment_conf(free[0], "S", box, False, fast=True, structure_psf="S_hmr.psf")
+    second = _segment_conf(free[1], "S", box, False, fast=True, structure_psf="S_hmr.psf")
+    # The gentle segment keeps rigid bonds but refuses the 4 fs/HMR path.
+    assert "rigidBonds         all" in first and "timestep           2" in first
+    assert "structure          S.psf" in first
+    assert "rigidBonds         all" in second and "timestep           4" in second
 
 
 def test_no_margin_on_a_carved_nvt_config():
@@ -276,5 +349,9 @@ def test_segments_nvt_only_disables_barostat():
 
     assert any(s.npt for s in npt_segs), "default ladder should be NPT"
     assert all(not s.npt for s in nvt_segs), "carved ladder must be NVT throughout"
-    # Same number/identity of stages — only the ensemble flag changes.
-    assert [s.name for s in npt_segs] == [s.name for s in nvt_segs]
+    # The RELAXATION stages are identical — only the ensemble flag changes.  A carved
+    # ladder additionally has no Note-4 settle stage: that stage exists to let the
+    # barostat find the box the water wants, and a carved cell never runs a barostat.
+    assert [s.name for s in npt_segs if s.fixed_atoms_file is None] == \
+           [s.name for s in nvt_segs]
+    assert not any(s.fixed_atoms_file for s in nvt_segs)

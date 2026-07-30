@@ -80,11 +80,19 @@ def _record_settle_report(job, spec, output_dir: Path, workspace_dir: Path) -> N
     try:
         from backend.core import md_cell_health as _cell  # noqa: PLC0415
 
-        rows = _cell.read_xst(output_dir / f"{spec.name}.xst")
+        # Include continuation traces, as _cell_shrink_diagnosis does: after an
+        # auto-resume the segment's samples are split across .xst + .contN.xst, and
+        # judging "flat after 300 ps" on the last restart window alone can call a
+        # settled cell unsettled (or miss a drift that only shows across the join).
+        rows = _read_segment_xst(output_dir, spec.name)
         if rows.size == 0:
             return
+        # SegmentSpec.timestep_fs is now a real field.  It was not, so this getattr
+        # always fell through to 2.0 — and on the 4 fs ladder that halved the time
+        # axis, judging the tutorial's "flat after 300 ps" criterion at 150 ps.
         dt = float(getattr(spec, "timestep_fs", 0) or 0) or 2.0
         rep = _cell.settle_report(rows, timestep_fs=dt)
+        rep["timestep_fs"] = dt
         rep["segment"] = spec.name
         job.cell_settle_reports.append(rep)
         job.save(workspace_dir)
@@ -101,12 +109,128 @@ def _record_settle_report(job, spec, output_dir: Path, workspace_dir: Path) -> N
         logger.debug("settle report unavailable for %s: %s", spec.name, exc)
 
 
-def _cell_shrink_diagnosis(output_dir: Path, segment_name: str) -> dict:
-    """How far has the cell moved, and is that a trim or a collapse?
+def _record_design_rmsd(job, spec, output_dir: Path, workspace_dir: Path) -> None:
+    """Append this segment's RMSD from the IDEALISED design to the job.
 
-    Reads the segment's own ``.xst`` (plus any ``.contN.xst`` continuations, which is
-    where an earlier auto-resume wrote), so the verdict covers the whole segment rather
-    than the last restart window.
+    The third of the tutorial's four §3.4 equilibration criteria (their Fig. 7 — the
+    hextube plateaus after ~15 ns).  NADOC measured cross-engine shape agreement but
+    never the deviation from the design itself, so there was no signal for "the
+    structure has stopped moving away from what I drew".
+
+    Deliberately NOT inside ``md_health`` — that module is staged VERBATIM to compute
+    nodes and imported there as a bare sibling, so it must not grow ``backend.*``
+    imports, and a ``Design`` object does not exist on an Alpine node.  Local only,
+    best-effort, never fatal.
+    """
+    try:
+        import numpy as _np  # noqa: PLC0415
+
+        from backend.core.shape_metrics import deviation_profile  # noqa: PLC0415
+
+        design = _job_design(job, workspace_dir)
+        if design is None:
+            return
+        from backend.api.skip_twist_tuning import core_reference_geometry  # noqa: PLC0415
+        ref = core_reference_geometry(design)
+        if ref is None or not len(ref):
+            return
+
+        import MDAnalysis as mda  # noqa: PLC0415
+        pkg = job.package_dir(workspace_dir)
+        dcd = output_dir / f"{spec.name}.dcd"
+        if not dcd.exists() or dcd.stat().st_size == 0:
+            return
+        u = mda.Universe(str(pkg / f"{job.name_stem}.psf"), str(dcd))
+        sel = u.select_atoms("name C1'") or u.select_atoms("name P")
+        if not len(sel):
+            return
+        u.trajectory[-1]
+        cand = _np.asarray(sel.positions, dtype=float) / 10.0     # Å → nm
+        ref_arr = _np.asarray(ref, dtype=float)
+        if cand.shape != ref_arr.shape:
+            # A seeded / extended topology can carry atoms the design reference does
+            # not; compare only what lines up rather than reporting a bogus number.
+            n = min(len(cand), len(ref_arr))
+            if n < 3:
+                return
+            cand, ref_arr = cand[:n], ref_arr[:n]
+        prof = deviation_profile(cand, ref_arr, align=True)
+        rec = {
+            "segment": spec.name,
+            "stage": spec.stage,
+            "rmsd_nm": round(float(prof.get("rmsd_nm", float("nan"))), 4),
+            "n_atoms": int(len(cand)),
+        }
+        job.design_rmsd_reports.append(rec)
+        job.save(workspace_dir)
+        logger.info("[%s] %s: RMSD from the idealised design %.2f nm",
+                    job.job_id, spec.name, rec["rmsd_nm"])
+    except Exception as exc:  # noqa: BLE001 — a diagnostic must never fail a run
+        logger.debug("design RMSD unavailable for %s: %s", spec.name, exc)
+
+
+def _job_design(job, workspace_dir: Path):
+    """The job's OWN design snapshot, or None."""
+    try:
+        from backend.core.models import Design  # noqa: PLC0415
+
+        path = job.job_dir(workspace_dir) / "design.json"
+        if not path.exists():
+            return None
+        return Design.model_validate_json(path.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+#: Note 4's factor for softening the barostat after an abrupt box change.
+PISTON_SOFTEN_FACTOR = 10.0
+#: Ceiling on repeated softening — 10x once is the tutorial's advice, 10,000x is a
+#: barostat that has effectively stopped responding, which is a different failure.
+_PISTON_MAX_PERIOD_FS = 100_000.0
+
+_PISTON_RE = re.compile(
+    r"^([ \t]*langevinPiston(?:Period|Decay)[ \t]+)([0-9.eE+-]+)[ \t]*$",
+    re.IGNORECASE | re.MULTILINE)
+
+
+def soften_piston(conf_text: str, factor: float = PISTON_SOFTEN_FACTOR) -> str:
+    """Multiply langevinPistonPeriod/Decay by ``factor`` in a conf (pure).
+
+    Tutorial Note 4: a box that changes abruptly destabilises the run, and making the
+    cell less responsive to instantaneous pressure is the sanctioned fix.  Idempotent
+    only up to :data:`_PISTON_MAX_PERIOD_FS` — past that the value is left alone, since a
+    barostat that slow is not going to settle the cell either.
+    """
+    def _bump(m: "re.Match[str]") -> str:
+        try:
+            value = float(m.group(2))
+        except ValueError:
+            return m.group(0)
+        if value >= _PISTON_MAX_PERIOD_FS:
+            return m.group(0)
+        return f"{m.group(1)}{value * factor:.1f}"
+
+    return _PISTON_RE.sub(_bump, conf_text)
+
+
+def _soften_piston_in_conf(conf_path: Path, job_id: str, segment: str) -> None:
+    """Apply :func:`soften_piston` to a segment conf in place.  Best-effort."""
+    try:
+        text = conf_path.read_text()
+        softened = soften_piston(text)
+        if softened != text:
+            conf_path.write_text(softened)
+            logger.warning("[%s] %s: softened the barostat %gx before auto-resume "
+                           "(Aksimentiev Note 4)", job_id, segment, PISTON_SOFTEN_FACTOR)
+    except Exception as exc:  # noqa: BLE001 — never block a resume on this
+        logger.debug("could not soften the piston for %s: %s", segment, exc)
+
+
+def _read_segment_xst(output_dir: Path, segment_name: str):
+    """A segment's WHOLE box trace: its own ``.xst`` plus any ``.contN.xst``.
+
+    An auto-resume starts a new trace file, so anything that judges a segment's cell
+    must stitch them back together or it is looking at the last restart window only.
     """
     import numpy as _np  # noqa: PLC0415
 
@@ -119,6 +243,19 @@ def _cell_shrink_diagnosis(output_dir: Path, segment_name: str) -> dict:
         r = _cell.read_xst(t)
         if r.size:
             rows = r if rows.size == 0 else _np.vstack([rows, r])
+    return rows
+
+
+def _cell_shrink_diagnosis(output_dir: Path, segment_name: str) -> dict:
+    """How far has the cell moved, and is that a trim or a collapse?
+
+    Reads the segment's own ``.xst`` (plus any ``.contN.xst`` continuations, which is
+    where an earlier auto-resume wrote), so the verdict covers the whole segment rather
+    than the last restart window.
+    """
+    from backend.core import md_cell_health as _cell  # noqa: PLC0415
+
+    rows = _read_segment_xst(output_dir, segment_name)
     if rows.size == 0:
         return {"volume_fraction": float("nan"), "collapsing": False,
                 "cell_start_ang": None, "cell_end_ang": None, "n_samples": 0}
@@ -1791,6 +1928,15 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                         and _resume_step(output_dir, spec.name, spec.steps) is not None
                     ):
                         seg.auto_resumes += 1
+                        # Note 4: "Sometimes the bubbles are large enough that their
+                        # removal would cause an abrupt change in the box size, resulting
+                        # in unstable MD simulations. In this case, increasing
+                        # langevinPistonPeriod and langevinPistonDecay by a factor of 10
+                        # can be helpful."  A cell that outgrew its patch grid IS that
+                        # abrupt change, so soften the barostat before retrying instead of
+                        # replaying the same collapse against the same piston.
+                        _soften_piston_in_conf(package_dir / f"{spec.name}.conf",
+                                               job.job_id, spec.name)
                         seg.status = "running"
                         job.status = MdStatus.running
                         job.failure_kind = None
@@ -1915,6 +2061,11 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             if getattr(spec, "npt", False):
                 _record_settle_report(job, spec, output_dir, workspace_dir)
 
+            # ── the Aksimentiev RMSD criterion (their Fig. 7) ────────────────
+            # Deviation from the idealised design, which plateaus when the structure
+            # has finished relaxing.  Local-only by construction — it needs the Design.
+            _record_design_rmsd(job, spec, output_dir, workspace_dir)
+
             # Save health sample to job object
             sample = MdHealthSample(
                 wall_time                = time.time(),
@@ -1928,6 +2079,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 passed                  = hresult.passed,
                 blocking                = hresult.blocking,
                 reason                  = hresult.reason or (hresult.error or ""),
+                broken_bp_count         = hresult.broken_bp_count,
+                charge_within_shell_e   = hresult.charge_within_shell_e,
             )
             job.health_samples.append(sample)
 

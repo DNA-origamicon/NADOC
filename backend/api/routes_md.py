@@ -40,7 +40,7 @@ from backend.core import job_archive
 from backend.core import md_chain_executor as _chain
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross_engine_seed
-from backend.core.md_presets import (DEFAULT_PRESET, get_preset,
+from backend.core.md_presets import (DEFAULT_PRESET, FAST_SHAPE, get_preset,
                                      preset_availability, preset_catalogue)
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
@@ -193,6 +193,20 @@ class CreateJobRequest(BaseModel):
                     "straight into solvation via solute_coords=. Forces full-topology "
                     "(psfgen, with hydrogens) prep. Mutually exclusive with the others.",
     )
+    vacuum_job_id: Optional[str] = Field(
+        None,
+        description="If set, seed solvation from this completed in-vacuo ENRG-MD "
+                    "pre-stage (Aksimentiev tutorial §3.2) — the tutorial's §3.3 starts "
+                    "from the vacuum run's last frame, not the idealised build. Normally "
+                    "set automatically by the standard preset rather than by hand.",
+    )
+    skip_vacuum_prestage: bool = Field(
+        False,
+        description="Skip the in-vacuo shape-relaxation pre-stage. It is on by default "
+                    "because the published protocol runs it, but it is measurably "
+                    "counter-productive below ~4 helices (a 2hb's solvation box GREW "
+                    "6.8%), so the UI asks first on small designs.",
+    )
     execution_target: str = Field(
         "local",
         description="'local' runs NAMD as a local subprocess (default); 'alpine' "
@@ -275,6 +289,15 @@ class ProductionRequest(BaseModel):
     steps: Optional[int] = Field(None, ge=100, le=50_000_000)
     autostart: bool = Field(True)
     continue_from_production: bool = Field(False)
+    allow_undersized_cell: bool = Field(
+        False,
+        description="Run even when the package's cell is too small for the solute to "
+                    "rotate freely. A relaxation package is sized for its short "
+                    "restrained ladder, so a long UNRESTRAINED run in it can walk the "
+                    "solute into its own periodic image and quietly corrupt the "
+                    "trajectory. Off by default; set it only if you know the run is "
+                    "short enough or the solute is effectively spherical.",
+    )
     production_timestep_fs: Optional[float] = Field(
         None,
         description="Integrator timestep (fs) for THIS production run: 1.0, 2.0 or 4.0. "
@@ -1417,6 +1440,10 @@ async def create_md_job(body: CreateJobRequest) -> dict:
             400, "A BLADE seed feeds an EXPLICIT-solvent NAMD run — the implicit-GBIS "
                  "protocol re-solvates implicitly and cannot use the exact all-atom seed. "
                  "Choose an explicit-solvent protocol.")
+    if body.vacuum_job_id and body.protocol == IMPLICIT_GBIS_PROTOCOL:
+        raise HTTPException(
+            400, "A vacuum pre-stage seeds an EXPLICIT-solvent run; the implicit-GBIS "
+                 "protocol has no solvation step to seed.")
     seeded = bool(body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id)
     if body.draft and not seeded:
         raise HTTPException(400, "A draft job must be seeded from an oxDNA / mrDNA / BLADE job.")
@@ -1467,6 +1494,13 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     if body.draft:
         job = _spawn_draft_job(body, name=name)
         return job.to_dict()
+
+    # The published protocol relaxes SHAPE in vacuum before solvating (tutorial §3.2),
+    # and §3.3 starts from that run's last frame.  When it applies, this call creates the
+    # VACUUM job and stores the caller's request on it; the supervisor spawns the solvated
+    # run from the relaxed coordinates once the vacuum stage completes.
+    if _wants_vacuum_prestage(body, design):
+        return _spawn_vacuum_prestage(body, design=design, name=name).to_dict()
 
     job = _spawn_prep_job(body, design=design, seeded=seeded, name=name, size_factor=size_factor)
     return job.to_dict()
@@ -1697,6 +1731,72 @@ def _spawn_draft_job(body: CreateJobRequest, *, name: str) -> MdJob:
     return job
 
 
+VACUUM_PRESTAGE_RUN_KIND = "vacuum_prestage"
+
+
+def _wants_vacuum_prestage(body: CreateJobRequest, design) -> bool:  # noqa: ARG001
+    """RETIRED 2026-07-30 — always False.  NADOC does not need a pre-ladder shape step.
+
+    The tutorial's §3.2 exists because caDNAno hands you an ABSTRACT lattice: helices
+    exactly parallel, Holliday junctions abnormally stretched (their Figs. 3a/4a), a
+    thing that is not a structure.  Something has to turn that into a physical
+    conformation before it is worth solvating, and in vacuum is the cheap place.
+
+    NADOC never has that problem.  Geometry here is DERIVED — helix axes and nucleotide
+    positions come from the topology, the B-DNA constants and the design's deformations
+    (the Three-Layer Law), so every design, including one imported from caDNAno, arrives
+    already carrying NADOC's idealised positions.  exp50 measured this directly: the
+    ideal build of ``6hbx100_90deg`` already holds ~98.5 degrees of per-helix centreline
+    bend.  There is no parallel-helix lattice here for a vacuum step to unfold.
+
+    And what the step actually did was not neutral.  Its interhelical repulsion surrogate
+    is mrdna's push-bond rule, which needs a crossover-free span > 22 nt; honeycomb
+    crossovers recur every 21 nt, so a dense NADOC bundle scores **zero** push bonds and
+    the run proceeds with PME off, Coulomb truncated at 10 Å and no interhelical force
+    term at all.  Measured consequence: bundles swelled 5.6-10 % (corroborated by exp48's
+    independent P-P measurement, 20.6 -> 22.6 Å).  Unscreened swelling moves AWAY from the
+    Mg-screened equilibrium the solvated ladder converges on, so the step was not merely
+    unnecessary here — it was seeding the ladder from a worse structure.
+
+    The one case this reasoning does NOT cover is a design carrying genuinely
+    overstretched bonds — a scaffold connection spanning distant clusters, say — where
+    the derived geometry IS unphysical.  That is a different problem (the strain is
+    topological, not a missing relaxation) and is deliberately not addressed here.
+
+    Kept as a function rather than deleted so the decision is documented at the point of
+    use; ``backend/core/namd_vacuum.py`` stays dormant and revivable.
+    """
+    return False
+
+
+def _spawn_vacuum_prestage(body: CreateJobRequest, *, design, name: str) -> MdJob:
+    """Create + start the vacuum job, carrying the caller's request for the follow-up.
+
+    The solvated run is NOT created here.  It is spawned by
+    :func:`advance_vacuum_prestages` once these coordinates exist, so the whole thing
+    goes through the ordinary job lifecycle (PID tracking, stop, resume, failure
+    classification) instead of blocking a prep worker for the length of an MD run.
+    """
+    from backend.core.namd_vacuum import VACUUM_PROTOCOL  # noqa: PLC0415
+
+    vac_body = body.model_copy(update={
+        "protocol": VACUUM_PROTOCOL,
+        "relax_preset": FAST_SHAPE,
+        # The follow-up owns solvation; this stage has no box, salt or shell.
+        "water_shell_nm": 0.0,
+    })
+    job = _spawn_prep_job(vac_body, design=design, seeded=False, name=name,
+                          size_factor=1.0)
+    job = MdJob.load(job.job_id, _workspace())
+    job.run_kind = VACUUM_PRESTAGE_RUN_KIND
+    # Everything the follow-up needs, recorded so a server restart cannot lose it.
+    job.prep_params = dict(job.prep_params or {})
+    job.prep_params["vacuum_followup"] = body.model_dump(mode="json")
+    job.save(_workspace())
+    logger.info("create_md_job: vacuum pre-stage job_id=%s design=%s", job.job_id, name)
+    return job
+
+
 def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
                     size_factor: float, parent_job_id: Optional[str] = None,
                     existing_job: Optional[MdJob] = None) -> MdJob:
@@ -1710,9 +1810,10 @@ def _spawn_prep_job(body: CreateJobRequest, *, design, seeded: bool, name: str,
     ion_conc_mM = body.ion_conc_mM
     mg_conc_mM = body.mg_conc_mM
     if body.salt_mode == "screening":
-        # Validated one-button default for DNA origami: neutralizing Na+ plus
-        # 12.5 mM MgCl2/MGH screening, no extra bulk NaCl.  The neutralizing
-        # counterions are computed from the audited topology charge downstream.
+        # The published origami recipe: the backbone is neutralised by Mg(H2O)6(2+) and
+        # Cl- balances the excess — no Na+ at all (Methods Mol Biol 1811 §3.3).  The Mg
+        # figure is a BULK FLOOR above neutralisation, not the whole magnesium content;
+        # the counts come from namd_solvate.ion_counts against the audited charge.
         ion_conc_mM = 0.0
         mg_conc_mM = 12.5
 
@@ -1822,7 +1923,7 @@ async def _prepare_job_bg(
 
     try:
         seed_model = None
-        blade_solute_coords = None
+        seed_solute_coords = None
         if seeded:
             if body.oxdna_job_id:
                 tracker.report("seed", None, "Reconstructing relaxed atomic model…")
@@ -1845,7 +1946,7 @@ async def _prepare_job_bg(
                 from backend.core.blade_runner import build_namd_seed_from_blade  # noqa: PLC0415
                 seed = await run_in_threadpool(build_namd_seed_from_blade, body.blade_job_id, ws)
                 local_design = seed.design
-                blade_solute_coords = seed.solute_coords
+                seed_solute_coords = seed.solute_coords
                 _seed_src = f"BLADE job {body.blade_job_id} ({seed.n_atoms} atoms)"
             seed_name = (local_design.metadata.name or "design").replace(" ", "_")
             job = MdJob.load(job_id, ws)
@@ -1854,6 +1955,20 @@ async def _prepare_job_bg(
             logger.info("prep %s: seeded from %s", job_id, _seed_src)
         else:
             local_design = design
+
+        # Vacuum pre-stage seed.  Composes WITH the engine seeds above rather than
+        # competing with them: those choose the DESIGN snapshot, this supplies the
+        # starting COORDINATES for the same topology — which is exactly what the
+        # tutorial's §3.3 does (it starts from hextube_min.pdb, the vacuum run's last
+        # frame, not from the idealised build).
+        if body.vacuum_job_id:
+            tracker.report("seed", None, "Reading vacuum-relaxed coordinates…")
+            from backend.core.namd_vacuum import build_namd_seed_from_vacuum  # noqa: PLC0415
+            vac = await run_in_threadpool(
+                build_namd_seed_from_vacuum, body.vacuum_job_id, ws)
+            seed_solute_coords = vac.solute_coords
+            logger.info("prep %s: seeded coordinates from vacuum job %s (%s, %d atoms)",
+                        job_id, body.vacuum_job_id, vac.source, vac.n_atoms)
 
         if _sequenced_base_count(local_design) == 0:
             raise RuntimeError(_NO_SEQUENCE_MSG)
@@ -1906,15 +2021,16 @@ async def _prepare_job_bg(
             prepare = prepare_equilibrium_aware_namd
         else:
             prepare = prepare_mgh_slow_release
-        # A BLADE seed feeds the EXACT all-atom conformation straight into solvation via
-        # solute_coords — which only aligns under the full psfgen topology (with hydrogens),
-        # so force it.  The equilibrium-aware protocol ALREADY pins require_full_topology=True
-        # internally, so passing it again there would be a duplicate-kwarg collision; only add
-        # it for the legacy path (which defaults False).  GBIS is rejected up front for a
-        # BLADE seed, so it never reaches here with solute_coords.
+        # A BLADE or vacuum-prestage seed feeds an EXACT all-atom conformation straight
+        # into solvation via solute_coords — which only aligns under the full psfgen
+        # topology (with hydrogens), so force it.  The equilibrium-aware protocol ALREADY
+        # pins require_full_topology=True internally, so passing it again there would be a
+        # duplicate-kwarg collision; only add it for the legacy path (which defaults
+        # False).  GBIS is rejected up front for both seeds, so it never reaches here with
+        # solute_coords.
         seed_kwargs: dict = {}
-        if blade_solute_coords is not None:
-            seed_kwargs["solute_coords"] = blade_solute_coords
+        if seed_solute_coords is not None:
+            seed_kwargs["solute_coords"] = seed_solute_coords
             if body.protocol != EQUILIBRIUM_AWARE_PROTOCOL:
                 seed_kwargs["require_full_topology"] = True
         # The catenated-seed override is an md_protocols concept; the GBIS prep has its
@@ -1937,6 +2053,7 @@ async def _prepare_job_bg(
             fast            = body.fast,
             gpu_resident_mode = body.gpu_resident or "auto",
             production_timestep_fs = body.production_timestep_fs,
+            devices         = body.devices,
             anchors         = body.anchors,
             field           = body.field,
             progress        = tracker.report,
@@ -2189,6 +2306,44 @@ async def md_archive_status(job_id: str) -> dict:
     return job_archive.task_status("md_jobs", job_id) or {"state": "idle"}
 
 
+def _assert_cell_fits_a_free_run(job: MdJob, length_ns: float, *, allow: bool) -> None:
+    """Refuse a long UNRESTRAINED run in a cell the solute can rotate out of.
+
+    A relaxation package is deliberately bbox-sized (see
+    ``namd_solvate.ROTATION_FREE_NS_THRESHOLD``): its ladder is restrained throughout
+    bar one 4.8 ns stage, and a rotation-sized cell would cost several times the water
+    for a reorientation that never happens.  Production is the opposite case — tens to
+    hundreds of nanoseconds with nothing holding the solute — and that is exactly the
+    run that walks a rod-shaped origami into its own periodic image.
+
+    The package already records the verdict: ``box_check.fits_rotated`` is measured on
+    every build.  This just refuses to ignore it.
+    """
+    from backend.core.namd_solvate import ROTATION_FREE_NS_THRESHOLD  # noqa: PLC0415
+
+    if allow or length_ns <= ROTATION_FREE_NS_THRESHOLD:
+        return
+    try:
+        manifest = json.loads(
+            (job.package_dir(_workspace()) / "manifest.json").read_text())
+        check = (manifest.get("solvation") or {}).get("box_check") or {}
+    except Exception:  # noqa: BLE001 — never block on an unreadable diagnostic
+        return
+    if not check.get("measured", True) or check.get("fits_rotated", True):
+        return
+    gap = check.get("image_gap_rotated_ang")
+    how_close = (f" a turned solute comes within {gap:.0f} Å of its own periodic image;"
+                 if isinstance(gap, (int, float)) else "")
+    raise HTTPException(400, (
+        f"This package's cell is too small for a {length_ns:g} ns unrestrained run. It "
+        f"was sized for the relaxation ladder, which holds the solute still; free of "
+        f"restraints the structure rotates, and in this cell{how_close} the trajectory "
+        f"would be corrupted without ever failing. Prepare a fresh package for "
+        f"production (it will be rotation-sized), keep the run under "
+        f"{ROTATION_FREE_NS_THRESHOLD:g} ns, or resend with allow_undersized_cell=true "
+        f"if you know the solute is effectively spherical."))
+
+
 @router.post("/md/jobs/{job_id}/production")
 async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
     """Append a final production stage after the restraint-release ladder passes."""
@@ -2198,6 +2353,7 @@ async def append_md_production(job_id: str, body: ProductionRequest) -> dict:
     _assert_md_job_current(job)
     plan = _production_fast_plan(job, body)
     total_steps, length_ns = plan["total_steps"], plan["length_ns"]
+    _assert_cell_fits_a_free_run(job, length_ns, allow=body.allow_undersized_cell)
     segments = _append_production_segments(
         job,
         plan,
@@ -3584,6 +3740,60 @@ async def _spawn_fresh_relax(plan: "StagePlan") -> str:
     )
     result = await create_md_job(body)
     return result["job_id"]
+
+
+async def advance_vacuum_prestages(workspace: Path) -> list[str]:
+    """Spawn the solvated run for every vacuum pre-stage that has finished.
+
+    Driven by the MD supervisor loop, beside :func:`advance_chains`.  The vacuum job is
+    an ordinary MdJob, so it already gets PID tracking, stop, resume and failure
+    classification for free; all this adds is the hand-off.
+
+    Idempotent: the follow-up id is recorded on the vacuum job before returning, and a
+    job that already has one is skipped.  A FAILED vacuum stage is left alone — the
+    idealised build is still there, so the user can retry or skip the pre-stage rather
+    than silently getting an unrelaxed run.
+    """
+    spawned: list[str] = []
+    for job in MdJob.list_jobs(workspace):
+        if job.run_kind != VACUUM_PRESTAGE_RUN_KIND:
+            continue
+        if job.status != MdStatus.completed:
+            continue
+        params = dict(job.prep_params or {})
+        followup = params.get("vacuum_followup")
+        if not followup or params.get("vacuum_followup_job_id"):
+            continue
+        try:
+            body = CreateJobRequest.model_validate({
+                **followup,
+                "vacuum_job_id": job.job_id,
+                # Belt and braces against a spawn loop: the follow-up must never itself
+                # decide it wants a pre-stage.
+                "skip_vacuum_prestage": True,
+            })
+            result = await create_md_job(body)
+        except Exception as exc:  # noqa: BLE001 — one bad job must not stall the pass
+            logger.exception("vacuum follow-up for %s failed to spawn", job.job_id)
+            params["vacuum_followup_error"] = str(exc)
+            job.prep_params = params
+            job.save(workspace)
+            continue
+        child_id = result.get("job_id")
+        params["vacuum_followup_job_id"] = child_id
+        job.prep_params = params
+        job.save(workspace)
+        # Provenance both ways: the solvated job records where its coordinates came from.
+        try:
+            child = MdJob.load(child_id, workspace)
+            child.seed_vacuum_job_id = job.job_id
+            child.parent_job_id = job.job_id
+            child.save(workspace)
+        except Exception:  # noqa: BLE001 — provenance is not worth failing the spawn
+            logger.warning("could not stamp vacuum provenance on %s", child_id)
+        logger.info("vacuum pre-stage %s → solvated job %s", job.job_id, child_id)
+        spawned.append(child_id)
+    return spawned
 
 
 async def _spawn_oxdna_child(parent_job_id: str, plan: "StagePlan") -> str:

@@ -71,9 +71,13 @@ def test_finer_chunks_halve_the_worst_case_early_stop_waste():
 
 
 def test_every_stage_gets_the_same_chunk_labels_ending_at_p100():
+    # The Note-4 settle stage that opens the ladder is one un-chunked segment with the
+    # solute pinned; the chunk schedule is about the RELAXATION stages.
     _, segs = mgh_slow_release_segments("X")
     by_stage: dict[str, list[float]] = {}
     for s in segs:
+        if s.fixed_atoms_file:
+            continue
         by_stage.setdefault(s.stage, []).append(s.percent)
     assert len(by_stage) == 4                     # k=0.5, 0.1, 0.01, and k=0
     for pcts in by_stage.values():
@@ -88,19 +92,23 @@ def test_chunk_names_match_their_cumulative_percent():
 
 def test_restraint_schedule_and_soft_start_survive_the_finer_split():
     """The k ladder and the soft first segment are the parts that must not move."""
-    _, segs = mgh_slow_release_segments("X")
+    _, all_segs = mgh_slow_release_segments("X")
+    segs = [s for s in all_segs if s.fixed_atoms_file is None]
     scales = [s.scale for s in segs]
     assert scales[0] == 0.5 and scales[-1] is None
     # k descends monotonically, with None (unrestrained) last
     numeric = [s for s in scales if s is not None]
     assert numeric == sorted(numeric, reverse=True)
-    assert segs[0].soft is True
-    assert not any(s.soft for s in segs[1:])
+    # The gentle start belongs to the first segment whose solute atoms MOVE — the settle
+    # stage before it has every DNA atom fixed, so nothing can strain or fail there.
+    assert segs[0].gentle is True
+    assert not any(s.gentle for s in segs[1:])
+    assert not any(s.gentle or s.soft for s in all_segs if s.fixed_atoms_file)
 
 
 def test_a_single_chunk_per_stage_is_legal():
     """The degenerate split — one chunk per k — is what the tutorial itself does."""
     _, segs = mgh_slow_release_segments("X", chunk_pcts=(100.0,))
-    assert len(segs) == 4
+    assert len([s for s in segs if s.fixed_atoms_file is None]) == 4
     assert _total_ns(segs) == pytest.approx(
         _total_ns(mgh_slow_release_segments("X")[1]), rel=1e-3)

@@ -29,6 +29,7 @@ import { prebuildMemoryPlan } from './oxdna_display.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
 import { gateAMessage, openGateAModal } from './md_gate_a.js'
+import { store } from '../state/store.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
 import { initMdMetricsCard } from './md_metrics_card.js'
@@ -744,12 +745,49 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // Named relaxation protocols (Fast Shape / Standard / Slow).  The module owns the
   // dropdown; the panel only reads back which id to send.  Defaults to Standard, and
   // the backend applies the preset's settings only to fields the request did not set.
+  // Write the selected preset's settings INTO the Advanced controls.
+  //
+  // Without this the preset's defaults were dead on the UI path: the panel always sends
+  // every Advanced field (index.html hardcodes `value="1.2"` for padding, and the payload
+  // reads the input unconditionally), so the backend saw `padding_nm` in
+  // `model_fields_set` on every request, treated it as an explicit user choice, and never
+  // applied the preset's own value.  Standard asks for the tutorial's 2.0 nm; jobs were
+  // silently built at 1.2.  Pushing the values into the inputs also means what the user
+  // SEES is what will run, which the old arrangement quietly broke.
+  //
+  // ``touched`` is respected: once the user edits a field by hand it is theirs, and
+  // switching preset will not overwrite it.
+  const _presetTouched = new Set()
+  const _markTouched = (key, el) =>
+    el?.addEventListener('input', () => _presetTouched.add(key))
+  _markTouched('padding_nm', paddingInput)
+  _markTouched('water_shell_nm', watershellInput)
+  _markTouched('early_stop_relax', earlyStopChk)
+  earlyStopChk?.addEventListener('change', () => _presetTouched.add('early_stop_relax'))
+
+  function _applyPresetToAdvanced () {
+    const d = _relaxPresets?.current()?.defaults ?? {}
+    if (!_presetTouched.has('padding_nm') && d.padding_nm != null && paddingInput) {
+      paddingInput.value = String(d.padding_nm)
+    }
+    // The panel's shell control is in ANGSTROM; the request field is nm.
+    if (!_presetTouched.has('water_shell_nm') && d.water_shell_nm != null && watershellInput) {
+      watershellInput.value = String(Math.round(d.water_shell_nm * 10))
+    }
+    if (!_presetTouched.has('early_stop_relax') && d.early_stop_relax != null && earlyStopChk) {
+      earlyStopChk.checked = Boolean(d.early_stop_relax)
+    }
+  }
+
   _relaxPresets = initRelaxPresets({
     selectEl: relaxPresetSel,
     noteEl: relaxPresetNote,
     fetchPresets: getRelaxPresets,
+    onChange: () => { _applyPresetToAdvanced(); _syncSolventFields() },
   })
-  _relaxPresets.load().then(() => _syncSolventFields()).catch(() => {})
+  _relaxPresets.load()
+    .then(() => { _applyPresetToAdvanced(); _syncSolventFields() })
+    .catch(() => {})
   // Protocol is DERIVED from the preset — there is no separate protocol control any
   // more, so the two can never disagree (they used to: "Standard (Aksimentiev)" plus a
   // separately-selected implicit solvent produced a job with no water at all).
@@ -1381,6 +1419,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       trajInterval,
     ])
     _threadsInit = false
+    // A reset means "forget my edits", so the preset owns these fields again — without
+    // this the reset restores the markup's value and the preset's settings go dead.
+    _presetTouched.clear()
+    _applyPresetToAdvanced()
     _applySaltMode()
     _checkEngines()
     _renderTrajFramesHint()
@@ -3445,6 +3487,22 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       { label: 'WC health',  value: wcValue,                                               color: wcAdvisory ? _C.warn : _healthColor(health?.wc_ref_relative_fraction, wcThreshold), wcTrend: true },
       { label: 'Speed',      value: (speedNote && speedValue !== '—') ? `${speedValue} *` : speedValue, color: _C.muted, title: speedNote?.tooltip },
       { label: 'Latest',     value: health ? _shortStage(health.stage) : (persisted?.stage ? _shortStage(persisted.stage) : '—'), color: _C.muted },
+      // The two published equilibration criteria NADOC used to compute nowhere.
+      // Broken pairs is the citable count (their 3 Å + 140° definition), distinct from
+      // the WC card above, which is NADOC's own ref-relative gate.
+      { label: 'Broken bp',  value: health?.broken_bp_count == null ? '—' : String(health.broken_bp_count),
+        color: (health?.broken_bp_count ?? 0) > 0 ? _C.warn : _C.text,
+        title: 'Broken base pairs, Aksimentiev definition: the central Watson-Crick '
+             + 'bond beyond 3 Å or bent past 140°. Their hextube holds near zero once '
+             + 'equilibrated.' },
+      // The ion atmosphere. It starts at the bare backbone charge and rises toward zero
+      // as counterions condense; a trace that never flattens means the cloud has not
+      // converged — which is exactly what a slow-diffusing Mg(H₂O)₆ does if it was
+      // placed out in the bulk instead of against the DNA.
+      { label: 'Shell charge', value: health?.charge_within_shell_e == null ? '—' : _fmt(health.charge_within_shell_e, 0, ' e'),
+        color: _C.muted,
+        title: 'Net charge within 2 nm of the DNA (Aksimentiev §3.4). Should settle to '
+             + 'a stable value once the counterion atmosphere has equilibrated.' },
     ]
 
     const jobActive = mdJobIsActive(job)

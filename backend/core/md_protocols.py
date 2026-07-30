@@ -44,8 +44,11 @@ IMPLICIT_GBIS_PROTOCOL = "implicit_gbis_namd"
 # NO HMR (unperturbed microscopic dynamics) and per-frame velocity+force capture.
 # The learned atomistic propagator (backend/ml/propagator) trains on these.
 PROPAGATOR_REFERENCE_PROTOCOL = "propagator_reference"
+# In-vacuo ENRG-MD shape relaxation — step §3.2 of the Aksimentiev tutorial, which runs
+# BEFORE solvation.  Builder lives in backend.core.namd_vacuum.
+VACUUM_ENRGMD_PROTOCOL = "vacuum_enrgmd_namd"
 SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBIS_PROTOCOL,
-                       PROPAGATOR_REFERENCE_PROTOCOL}
+                       PROPAGATOR_REFERENCE_PROTOCOL, VACUUM_ENRGMD_PROTOCOL}
 # MUST match _common_header's "stepspercycle" — NAMD FATALs at startup if a
 # minimize/run count is not a multiple of it.  (benchmark_runner.NAMD_STEPS_PER_CYCLE too.)
 AKSIMENTIEV_STEPS_PER_CYCLE = 20
@@ -64,6 +67,19 @@ AKSIMENTIEV_STEPS_PER_CYCLE = 20
 #     ordinary relax rather than a bespoke experiment.
 LADDER_CHUNK_PCTS = (10.0, 25.0, 50.0, 75.0, 100.0)
 LADDER_CHUNK_PCTS_COARSE = (10.0, 50.0, 100.0)   # the historical split, kept for A/B
+
+# Length of the fixed-DNA NPT settle stage that opens the ladder — Note 4's sanctioned
+# remedy for an under-filled box (see mgh_slow_release_segments).  Their own criterion is
+# that the box settles within ~300 ps, so 500 ps leaves margin without being a stage in
+# its own right.  Set to 0 to skip it.
+SETTLE_STAGE_PS = 500.0
+
+#: Unrestrained time a relaxation package actually runs: the k=0 stage, 4.8 ns.  Every
+#: earlier stage is held by the ENM (or, in the settle stage, by fixedAtoms), so the
+#: solute's orientation is pinned.  Passed to the box sizer so a relax package is not
+#: charged for a rotation-sized cell it will never use — see
+#: ``namd_solvate.ROTATION_FREE_NS_THRESHOLD``.
+_LADDER_FREE_NS = 4.8
 
 
 def _chunk_fractions(pcts) -> list[tuple[float, float]]:
@@ -153,6 +169,148 @@ def _xst_freq(steps: int, timestep_fs: float, fallback: int) -> int:
     """Box-trace sampling interval: never coarser than ``XST_MAX_INTERVAL_PS``."""
     cap = max(1, int(XST_MAX_INTERVAL_PS * 1000.0 / max(timestep_fs, 1e-9)))
     return max(1, min(int(fallback), cap, max(1, int(steps))))
+
+
+#: Bumped whenever a change alters the PHYSICS a `standard` relax runs, so a finished
+#: trajectory can always be traced to its recipe.  A prepared package is frozen on disk
+#: — old jobs keep running the old physics, correctly — which makes the manifest the
+#: only record of which recipe produced a given trajectory.
+#:
+#:   1  (…-2026-07-29)  Na+ neutralisation, Mg as a bulk bath only; no vacuum pre-stage;
+#:                      no settle stage; padding 1.2 nm; wrapAll on in production.
+#:   2  (2026-07-30)    The published protocol: Mg(H2O)6 neutralises and is seeded
+#:                      against the backbone; in-vacuo shape relaxation before
+#:                      solvation; Note-4 fixed-DNA settle stage; padding 2.0 nm where
+#:                      it fits; size-scaled minimisation; wrapAll off.
+#:   3  (2026-07-30)    Vacuum pre-stage RETIRED (NADOC geometry is already physical,
+#:                      and the step swelled dense bundles); relax packages bbox-sized;
+#:                      declash ladders run the 2 fs gentle tier, not 1 fs flexible.
+RELAX_RECIPE_VERSION = 3
+
+#: The pairlist buffer _common_header actually emits for the explicit ladder.  Named so
+#: the manifest can report it instead of a stale literal (it said 12.0 for a long time).
+LADDER_PAIRLISTDIST_ANG = 13.5
+
+
+def protocol_fidelity(*, fast: bool, carved: bool, padding_nm: float,
+                      charge_audit: dict) -> dict:
+    """What this package does and does not reproduce of the published protocol (pure).
+
+    Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018).  Every remaining
+    deviation is listed with its justification, so a run is self-documenting rather than
+    requiring someone to re-derive the delta from the source.
+    """
+    ion = _ionization(charge_audit)
+    deviations = []
+    if fast:
+        deviations.append({
+            "item": "timestep",
+            "ours": "4 fs + hydrogen-mass repartitioning",
+            "theirs": "2 fs, rigidBonds all",
+            "why": "measured structurally indistinguishable at ~2x throughput "
+                   "(experiments/exp47_protocol_delta)",
+        })
+    deviations.append({
+        "item": "in-vacuo pre-relaxation (§3.2)",
+        "ours": "not run",
+        "theirs": "mandatory, before solvation",
+        "why": "it unfolds caDNAno's abstract parallel-helix lattice. NADOC derives "
+               "geometry from topology + B-DNA constants + deformations, so the build is "
+               "already physical; and the step's interhelical repulsion surrogate scores "
+               "zero bonds on a dense honeycomb, letting bundles swell 5.6-10% away from "
+               "the Mg-screened equilibrium (experiments/exp50_vacuum_on_curved)",
+    })
+    deviations.append({
+        "item": "fullElectFrequency",
+        "ours": 1,
+        "theirs": 2,
+        "why": "dt-dependent, not a constant: at their 2 fs it means PME every 4 fs, "
+               "which the 4 fs path already does with fullElect 1. Copying the literal "
+               "2 would put PME on an 8 fs interval, past the r-RESPA resonance limit. "
+               "The PME INTERVAL matches; the number does not.",
+    })
+    deviations.append({
+        "item": "wrapWater",
+        "ours": "on",
+        "theirs": "off",
+        "why": "solute-neutral: wrapAll is off so the multi-molecule origami is never "
+               "split, and bounding the solvent keeps coordinates inside [0, L) for the "
+               "periodic charge-shell query",
+    })
+    if carved:
+        deviations.append({
+            "item": "solvation",
+            "ours": "hydration-shell carve, NVT throughout",
+            "theirs": "full periodic water box, NPT",
+            "why": "the full box exceeded this hardware's atom budget. NOTE: a carved "
+                   "cell runs no barostat, so the Note-4 settle stage and the box-trace "
+                   "criterion do not apply to this run.",
+        })
+    if padding_nm < 2.0:
+        deviations.append({
+            "item": "solvent padding",
+            "ours": f"{padding_nm:g} nm",
+            "theirs": "2.0 nm (bbox ± 20 Å)",
+            "why": "trimmed to keep the cell inside the hardware's atom budget; see "
+                   "box_sizing.padding_note in the charge audit",
+        })
+    if ion.get("counterion") == "na":
+        deviations.append({
+            "item": "counterion",
+            "ours": "Na+",
+            "theirs": "Mg(H2O)6(2+)",
+            "why": "no magnesium was requested (mgcl2_mM = 0), so this is a deliberate "
+                   "monovalent-screening run and NOT the published origami protocol",
+        })
+    return {
+        "reference": "Yoo, Li, Slone, Maffeo & Aksimentiev, "
+                     "Methods Mol Biol 1811 (2018), doi:10.1007/978-1-4939-8582-1_15",
+        "recipe_version": RELAX_RECIPE_VERSION,
+        "reproduces": [
+            "Mg(H2O)6(2+) neutralisation with Cl- balancing the excess, no Na+ (§3.3)",
+            "Mg seeded in the hydration shell, not the bulk (§3.3: MGHH diffuses slowly)",
+            "Mg-O harmonic restraints (mghh_extrabonds)",
+            "CHARMM36 nucleic acids + CUFIX ion corrections",
+            "base-ring ENM ladder k = 0.5 / 0.1 / 0.01 / 0, 4.8 ns per stage (§3.3)",
+            "fixed-DNA NPT settle stage for an under-filled box (Note 4)",
+            "x10 piston softening after an abrupt box change (Note 4)",
+            "NVT whenever an external field is applied (Note 3)",
+            "minimisation scaled to system size (Note 2)",
+            "box-trace, RMSD-vs-design, broken-base-pair and 2 nm charge criteria (§3.4)",
+            "switchdist 8 / cutoff 10 / pairlistdist, PME grid 1.5",
+            "wrapAll off, so the multi-molecule origami is never split across images",
+        ],
+        "deviations": deviations,
+    }
+
+
+def _ionization(charge_audit: dict) -> dict:
+    """The ``ionization`` sub-block of a package's charge audit, or {}."""
+    return (charge_audit or {}).get("ionization") or {}
+
+
+def _salt_note(charge_audit: dict) -> str:
+    """Describe the ion recipe this package was ACTUALLY built with (pure).
+
+    Derived from the charge audit rather than restated, so it cannot drift from the
+    build the way the previous hardcoded string did.
+    """
+    ion = _ionization(charge_audit)
+    if not ion:
+        return "ion recipe unavailable (no charge audit)"
+    n_mg, n_na, n_cl = ion.get("n_mg", 0), ion.get("n_na", 0), ion.get("n_cl", 0)
+    if ion.get("counterion") == "mg":
+        head = (f"Aksimentiev recipe: {n_mg:,} Mg(H2O)6(2+) neutralise the "
+                f"{ion.get('dna_charge_used_e', 0):.0f} e backbone")
+        if ion.get("n_mg_bulk", 0) > ion.get("n_mg_neutralising", 0):
+            head += f" ({ion['n_mg_bulk']:,} of them set by the bulk concentration)"
+        tail = f", balanced by {n_cl:,} Cl-"
+        if n_na:
+            tail += f" with {n_na:,} Na+ from an explicitly requested NaCl bath"
+        return head + tail + "; no Na+ counterions."
+    return (f"Monovalent neutralisation: {n_na:,} Na+ / {n_cl:,} Cl- "
+            f"with {n_mg:,} bulk Mg2+ — NOT the published origami recipe "
+            f"(no magnesium was requested).")
 
 
 def _box_check(package_dir: Path, name_stem: str,
@@ -348,8 +506,32 @@ class SegmentSpec:
     min_c1_paired: float = 0.90
     min_wc_ref_relative: float = 0.85
     extra_bonds_file: Optional[str] = None
-    soft: bool = False  # True → rigidBonds none + 1 fs (declash designs with
-    #        residual single-stranded contacts that crash RATTLE)
+    #: True → ``rigidBonds none`` + 1 fs.  The STRONGEST fallback, and now reserved for
+    #: it: the user's explicit ``force_soft``, and the runner's automatic rewrite after a
+    #: segment has actually failed RATTLE.  Not a default any more — see ``gentle``.
+    soft: bool = False
+    #: True → ``rigidBonds all`` + 2 fs.  Never the 4 fs fast path, but not flexible
+    #: bonds either.  This is what a freshly built model needs for its first dynamics.
+    #:
+    #: exp49 measured the old assumption directly: a 25 ps probe as the FIRST dynamics
+    #: after minimisation, on ideal (un-relaxed) builds carrying 2 / 24 / 60 inserted
+    #: crossover bases.  2 fs with rigid bonds survived every one of them (C1' pairing
+    #: 0.957-0.975); 4 fs + HMR blew up within 32-73 steps on the two larger designs.
+    #: So the strain a fresh build carries needs a gentler first segment than 4 fs — but
+    #: nothing like as gentle as 1 fs with flexible bonds, which cost 2x for protection
+    #: that was never needed.
+    gentle: bool = False
+    #: Integrator timestep this segment will actually run at.  Recorded because the
+    #: TIME axis of every per-segment diagnostic is derived from it — the box-settle
+    #: report read ``getattr(spec, "timestep_fs", 0) or 2.0`` from a field that did not
+    #: exist, so on the 4 fs ladder it judged the tutorial's "flat after 300 ps"
+    #: criterion at 150 ps.  Written to the manifest and read back with a 2.0 default
+    #: so pre-existing manifests still resume.
+    timestep_fs: float = 2.0
+    #: A fixedAtoms marker PDB this segment holds immobile, overriding the job-level
+    #: anchors.  Used by the Note-4 settle stage, which pins the whole solute while the
+    #: barostat finds the box size the water actually wants.
+    fixed_atoms_file: Optional[str] = None
 
 
 # ── NAMD conf template ────────────────────────────────────────────────────────
@@ -704,7 +886,15 @@ cellBasisVector2   0.000    {by:.3f}  0.000
 cellBasisVector3   0.000    0.000    {bz:.3f}
 cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}
 
-wrapAll            on
+# wrapAll OFF, deliberately.  NAMD wraps CONNECTED COMPONENTS of the bond graph, and an
+# origami's scaffold and its ~200 staples are separate molecules — no covalent bond joins
+# them.  With wrapAll on, a structure sitting near a cell face gets individual staples
+# translated a full box length away from the duplex they are hybridised to, which is
+# wrong for every shape/RMSD measurement taken off the trajectory.  The tutorial leaves
+# it off for the same reason (its §3.4 step 4 exists only to wrap afterwards, for the
+# charge analysis).  wrapWater stays ON: bounding the solvent costs the solute nothing
+# and keeps coordinates inside [0, L), which the periodic charge-shell query needs.
+wrapAll            off
 wrapWater          on
 exclude            scaled1-4
 oneFourScaling     1.0
@@ -793,7 +983,15 @@ cellBasisVector2   0.000    {by:.3f}  0.000
 cellBasisVector3   0.000    0.000    {bz:.3f}
 cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}
 
-wrapAll            on
+# wrapAll OFF, deliberately.  NAMD wraps CONNECTED COMPONENTS of the bond graph, and an
+# origami's scaffold and its ~200 staples are separate molecules — no covalent bond joins
+# them.  With wrapAll on, a structure sitting near a cell face gets individual staples
+# translated a full box length away from the duplex they are hybridised to, which is
+# wrong for every shape/RMSD measurement taken off the trajectory.  The tutorial leaves
+# it off for the same reason (its §3.4 step 4 exists only to wrap afterwards, for the
+# charge analysis).  wrapWater stays ON: bounding the solvent costs the solute nothing
+# and keeps coordinates inside [0, L), which the periodic charge-shell query needs.
+wrapAll            off
 wrapWater          on
 exclude            scaled1-4
 oneFourScaling     1.0
@@ -836,6 +1034,7 @@ def _common_header(
     structure_psf: Optional[str] = None,
     gbis: bool = False,
     gbis_ion_conc_M: float = 0.15,
+    vacuum: bool = False,
     output_freq: int = 9_600,
     restart_freq: Optional[int] = None,
 ) -> str:
@@ -850,7 +1049,7 @@ def _common_header(
     # _segment_conf and [[water-shell-carve]].
     gpu_line = "GPUresident        on\n" if gpu_resident else ""
 
-    # Electrostatics/solvent block.  Two mutually exclusive modes:
+    # Electrostatics/solvent block.  Three mutually exclusive modes:
     #   • Explicit water (default): a periodic capped box + PME long-range sum.
     #   • Implicit solvent (gbis=True): Generalised Born, NO water box and NO PME
     #     — the solvent is a dielectric continuum, so there are no cell vectors,
@@ -858,7 +1057,27 @@ def _common_header(
     #     the atom count ~6-7x (DNA only) so a large origami fits a small GPU's
     #     VRAM at buildTileLists (the explicit box overflows an 8 GB card).  The
     #     longer 16 Å cutoff is standard for GBIS (Born-radius accuracy).
-    if gbis:
+    #   • Vacuum (vacuum=True): the ENRG-MD shape-relaxation step of the Aksimentiev
+    #     tutorial §3.2.  No solvent model AT ALL and no PME — Coulomb is simply
+    #     truncated at the cutoff, and the missing interhelical repulsion is supplied
+    #     by explicit push bonds (backend/core/namd_push_bonds.py).  This is what folds
+    #     the idealised parallel-helix build into its real chickenwire arrangement
+    #     before a single water molecule is placed.
+    if vacuum:
+        solvent_block = (
+            "# In-vacuo ENRG-MD shape relaxation — no solvent model, no PME.\n"
+            "# The interhelical repulsion that truncated Coulomb cannot supply comes\n"
+            "# from the push-bond extraBonds file instead.\n"
+            "PME                no\n"
+            "\n"
+            f"cutoff             {CUTOFF_ANG:.1f}\n"
+            "switching          on\n"
+            f"switchdist         {SWITCHDIST_ANG:.1f}\n"
+            f"pairlistdist       {LADDER_PAIRLISTDIST_ANG:g}\n"
+            "exclude            scaled1-4\n"
+            "oneFourScaling     1.0\n"
+        )
+    elif gbis:
         solvent_block = (
             f"# Implicit solvent (Generalised Born) — no water box, no PME\n"
             f"gbis               on\n"
@@ -881,7 +1100,11 @@ def _common_header(
             f"cellOrigin         {cx:.3f}   {cy:.3f}   {cz:.3f}\n"
             f"\n"
             f"wrapAll            off\n"
-            f"wrapWater          off\n"
+            # Water wrapped, solute never: bounding the solvent keeps DCD coordinates
+            # inside [0, L) — which the periodic charge-shell query needs — while the
+            # multi-molecule origami stays whole.  (The tutorial has both off; this is a
+            # deliberate, solute-neutral deviation.)
+            f"wrapWater          on\n"
             f"\n"
             f"PME                yes\n"
             f"PMEGridSpacing     1.5\n"
@@ -963,6 +1186,22 @@ def psf_atom_count(psf_path: Path) -> Optional[int]:
     return None
 
 
+def effective_timestep_fs(spec: "SegmentSpec", fast: bool) -> float:
+    """The timestep a segment will ACTUALLY run at (pure).
+
+    Three tiers: ``soft`` (flexible bonds) runs 1 fs, ``gentle`` runs 2 fs and never the
+    fast path, and everything else takes the package's 4 fs (fast) or 2 fs.  One source
+    of truth so the conf and the manifest cannot disagree — the box-settle report derives
+    its time axis from the recorded value, and a wrong one silently halves or doubles
+    every "flat after 300 ps" verdict.
+    """
+    if spec.soft:
+        return 1.0
+    if spec.gentle:
+        return 2.0
+    return 4.0 if fast else 2.0
+
+
 def _segment_conf(
     spec: SegmentSpec,
     name_stem: str,
@@ -978,6 +1217,8 @@ def _segment_conf(
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
     gbis: bool = False,
+    vacuum: bool = False,
+    push_bonds_file: Optional[str] = None,
     capture_vel_force: bool = False,
     n_atoms: Optional[int] = None,
     force_resident: Optional[bool] = None,
@@ -989,9 +1230,11 @@ def _segment_conf(
     # with the soft integrator's flexible bonds.  GBIS runs the standard CUDA path
     # (GPUresident does not support implicit solvent), so fast is off for an
     # implicit ladder.
-    fast = fast and not spec.soft and not gbis
+    # Vacuum runs the same standard-CUDA path as GBIS: there is no periodic cell, so
+    # GPUresident's cell-density bookkeeping has nothing to work with.
+    fast = fast and not spec.soft and not spec.gentle and not gbis and not vacuum
     rigid_bonds = "none" if spec.soft else "all"
-    timestep = 1.0 if spec.soft else (4.0 if fast else 2.0)
+    timestep = effective_timestep_fs(spec, fast)
     # The HMR PSF (heavy hydrogens) is valid ONLY with rigid bonds, so soft
     # segments fall back to the unmodified PSF; only the hard, fast segments use it.
     eff_psf = structure_psf if fast else None
@@ -1052,13 +1295,14 @@ def _segment_conf(
         by_size = bool(force_resident)
     gpu_resident = (
         (not gbis)
+        and (not vacuum)
         and by_size
         and (not carved or fill_fraction >= _RESIDENT_MIN_FILL)
     )
     lines = [
         _common_header(
             name_stem, box, mgh_extrabonds, rigid_bonds=rigid_bonds, timestep=timestep,
-            gpu_resident=gpu_resident, structure_psf=eff_psf, gbis=gbis,
+            gpu_resident=gpu_resident, structure_psf=eff_psf, gbis=gbis, vacuum=vacuum,
             # From THIS chunk's length, so the frame count survives a timestep change.
             output_freq=_output_freq(spec.steps),
             # ...but the RESTART cadence is a DIFFERENT question. It is crash insurance,
@@ -1083,15 +1327,17 @@ def _segment_conf(
     lines.append(f"langevinTemp       {spec.temp:g}\n")
     lines.append(f"langevinDamping    {spec.damping:g}\n")
 
-    lines.append(_pressure_block(bool(spec.npt) and not gbis,
+    lines.append(_pressure_block(bool(spec.npt) and not gbis and not vacuum,
                                  period=1000.0, decay=500.0, temp=spec.temp))
 
-    if mgh_extrabonds or spec.extra_bonds_file:
+    if mgh_extrabonds or spec.extra_bonds_file or push_bonds_file:
         lines.append("extraBonds         on\n")
         if mgh_extrabonds:
             lines.append("extraBondsFile     mgh_extrabonds.txt\n")
     if spec.extra_bonds_file:
         lines.append(f"extraBondsFile     {spec.extra_bonds_file}\n")
+    if push_bonds_file:
+        lines.append(f"extraBondsFile     {push_bonds_file}\n")
 
     if spec.scale is not None and not spec.extra_bonds_file:
         lines.append("constraints        on\n")
@@ -1106,7 +1352,10 @@ def _segment_conf(
     # slow-release restraint is still stiff the structure barely moves, and the deflection
     # develops smoothly as k → 0 — a quasi-static ramp into the tethered-arm regime rather
     # than a shock at the release segment.
-    lines.append(external_forces_block(anchors_file, field))
+    # A settle stage pins the whole solute; otherwise the job's anchors (if any) ride
+    # the ladder as usual.  NAMD has ONE fixedAtoms file, so these cannot combine —
+    # the settle stage's superset (all DNA) subsumes any anchor subset anyway.
+    lines.append(external_forces_block(spec.fixed_atoms_file or anchors_file, field))
 
     if spec.previous:
         lines.append(f"binCoordinates     output/{spec.previous}.coor\n")
@@ -1143,6 +1392,8 @@ def _min_conf(
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
     gbis: bool = False,
+    vacuum: bool = False,
+    push_bonds_file: Optional[str] = None,
 ) -> str:
     # enm_file overrides the default {name_stem}_k{scale}.enm.extra — used by the
     # declash protocol to minimise against an ss-excluded network.  Minimisation
@@ -1159,7 +1410,8 @@ def _min_conf(
     # ENM from the declashed coords (rebuild_declashed_references) so it never
     # encodes the clash again.  See PIPELINE_4FS_EXTRA_BASES.md.
     enm = enm_file or f"{name_stem}_k{scale:g}.enm.extra"
-    lines = [_common_header(name_stem, box, mgh_extrabonds, rigid_bonds="none", gbis=gbis)]
+    lines = [_common_header(name_stem, box, mgh_extrabonds, rigid_bonds="none",
+                            gbis=gbis, vacuum=vacuum)]
     lines.append(f"outputName         output/{min_name}\n")
     lines.append(f"dcdFile            output/{min_name}.dcd\n")
     lines.append("dcdFreq            0\n")
@@ -1173,6 +1425,8 @@ def _min_conf(
         lines.append("extraBondsFile     mgh_extrabonds.txt\n")
     if not no_enm:
         lines.append(f"extraBondsFile     {enm}\n")
+    if push_bonds_file:
+        lines.append(f"extraBondsFile     {push_bonds_file}\n")
     lines.append("constraints        off\n")
     lines.append(external_forces_block(anchors_file, field))
     lines.append(f"minimize           {minimize_steps}\n")
@@ -1198,6 +1452,33 @@ def write_restraints_pdb(pdb_path: Path, dst_path: Path) -> None:
             raw = _set_bfactor(raw, 0.0)
         lines.append(raw)
     dst_path.write_text("".join(lines))
+
+
+#: Filename of the all-DNA fixedAtoms marker the settle stage uses.
+SOLUTE_FIXED_PDB = "fixed_dna_all.pdb"
+
+
+def write_solute_fixed_pdb(pdb_path: Path, dst_path: Path) -> int:
+    """Write a fixedAtoms marker with B=1.0 for EVERY DNA atom, B=0 for solvent/ions.
+
+    Distinct from ``restraints_dna_heavy.pdb``, which zeroes hydrogens because it drives
+    a harmonic restraint where leaving H free is fine.  For ``fixedAtoms`` it is not:
+    fixing a heavy atom while its hydrogens move is a rigid-bond constraint between a
+    fixed and a free atom, which RATTLE cannot satisfy.
+
+    Returns the number of atoms marked.
+    """
+    n = 0
+    lines = []
+    for raw in pdb_path.read_text().splitlines(keepends=True):
+        if raw.startswith("ATOM"):
+            raw = _set_bfactor(raw, 1.0)
+            n += 1
+        elif raw.startswith("HETATM"):
+            raw = _set_bfactor(raw, 0.0)
+        lines.append(raw)
+    dst_path.write_text("".join(lines))
+    return n
 
 
 def write_anchor_restraints_pdb(
@@ -1917,13 +2198,37 @@ def _round_up_to_cycle(steps: int, cycle: int = AKSIMENTIEV_STEPS_PER_CYCLE) -> 
     return steps if remainder == 0 else steps + (cycle - remainder)
 
 
+#: Floor for minimisation — the tutorial's own 4800, which its Note 2 calls "usually
+#: many times longer than necessary" for the small hextube.
+MIN_STEPS_FLOOR = 4_800
+#: ...but minimisation must SCALE with the structure.  Tutorial Note 2 attributes RATTLE
+#: "Constraint failure" / "atoms moving too fast" to a system that "has not gone through
+#: enough steps of energy minimization".  exp48 measured the failure mode directly: an
+#: idealised 224k-atom build starts at ~1e9 kcal/mol of VDW energy concentrated at
+#: inserted bases, and a fixed 4800 steps leaves thousands of BAD CONTACTS that detonate
+#: ~130k steps into dynamics.  One step per 10 atoms clears them.
+MIN_STEPS_PER_ATOMS = 10
+
+
+def minimize_steps_for_atoms(n_atoms: int,
+                             floor: int = MIN_STEPS_FLOOR) -> int:
+    """Minimisation steps that scale with system size (pure).
+
+    A flat step count is safe on a hextube and catastrophic on a 224k-atom origami —
+    see :data:`MIN_STEPS_PER_ATOMS`.
+    """
+    return _round_up_to_cycle(max(int(floor), int(n_atoms) // MIN_STEPS_PER_ATOMS))
+
+
 def mgh_slow_release_segments(
     name_stem: str,
     *,
     soft: bool = False,
+    gentle: bool = False,
     nvt_only: bool = False,
     timestep_fs: float = 2.0,
     chunk_pcts=LADDER_CHUNK_PCTS,
+    settle_ps: float = SETTLE_STAGE_PS,
 ) -> tuple[str, list[SegmentSpec]]:
     """Return (min_name, segments) for the mgh_slow_release protocol.
 
@@ -1964,6 +2269,46 @@ def mgh_slow_release_segments(
     stage_idx = 1
     previous = min_name
 
+    # ── Note-4 settle stage ────────────────────────────────────────────────────
+    # "You can also run your simulation in NPT with the DNA position fixed, allowing the
+    # box size to fluctuate until it reaches a value appropriate for the amount of water
+    # molecules in the system.  As the latter solution does not involve the placement of
+    # additional water molecules, it is the better approach of the two."
+    #
+    # Solvate under-fills — that is why the box shrinks at all, and why the box trace is
+    # their equilibration monitor.  Letting the cell find its own size while the SOLUTE
+    # is pinned separates "the water is settling" from "the structure is moving", so the
+    # ladder that follows starts from a box that already holds the right amount of water.
+    # NADOC had the detector (md_cell_health) and the collapse refusal but not the remedy.
+    #
+    # Skipped for a carved cell: there the barostat is off throughout (vacuum corners),
+    # so there is no box for this stage to settle.
+    if settle_ps > 0 and not nvt_only:
+        settle_steps = _round_up_to_cycle(
+            max(100, int(round(settle_ps * 1000.0 / timestep_fs))))
+        # Deliberately NOT a numbered stage: the ENM ladder's 01..04 must mean the same
+        # thing whether or not this stage exists, so a carved (NVT, no settle) package
+        # and a full-box one stay comparable segment-for-segment.
+        seg_name = f"{name_stem}_0S_300K_NPT_settle_fixed_dna_p100"
+        segments.append(SegmentSpec(
+            name=seg_name,
+            stage="300K NPT settle (DNA fixed)",
+            percent=100.0,
+            steps=settle_steps,
+            temp=300.0,
+            damping=5.0,
+            scale=None,                 # no ENM: nothing is moving that needs restraining
+            npt=True,
+            previous=previous,
+            reinit=False,
+            dcd_freq=_display_dcd_freq(settle_steps),
+            extra_bonds_file=None,
+            fixed_atoms_file=SOLUTE_FIXED_PDB,
+            soft=soft,
+            gentle=gentle,
+        ))
+        previous = seg_name
+
     for scale, total_steps, label in npt_ladder:
         stage_str = (
             "300K NPT k=0"
@@ -1991,6 +2336,7 @@ def mgh_slow_release_segments(
                     if scale is None
                     else f"{name_stem}_k{scale:g}.enm.extra",
                     soft=soft,
+                    gentle=gentle,
                 )
             )
             previous = seg_name
@@ -2003,8 +2349,14 @@ def mgh_slow_release_segments(
     # the soft integrator (rigidBonds none + 1 fs) so the strained atom relaxes
     # safely; every later segment reverts to fast 2 fs rigid dynamics.  (When the
     # whole ladder is already soft — declash designs — this is a no-op.)
-    if segments and not soft:
-        segments[0].soft = True
+    #
+    # It must land on the first segment whose SOLUTE ATOMS MOVE.  The settle stage is
+    # earlier but holds every DNA atom fixed, so no solute strain can relieve there and
+    # no solute RATTLE can fail there either — softening it would spend the protection
+    # on the one segment that does not need it and leave the first free segment hard.
+    first_free = next((s for s in segments if s.fixed_atoms_file is None), None)
+    if first_free is not None and not soft and not gentle:
+        first_free.gentle = True
 
     return min_name, segments
 
@@ -2038,6 +2390,7 @@ def prepare_mgh_slow_release(
     field: Optional[dict] = None,
     capture_vel_force: bool = False,
     allow_catenated_seed: bool = False,
+    devices: str = "0",
 ) -> tuple[str, str, list[SegmentSpec]]:
     """Build the solvated package and all stage configs in job_dir.
 
@@ -2089,6 +2442,12 @@ def prepare_mgh_slow_release(
     topology_check = gate_seed_topology(
         design, model=atomistic_model, allow=allow_catenated_seed)
 
+    # Minimisation must scale with the structure.  Tutorial Note 2 attributes RATTLE
+    # "Constraint failure" to a system that "has not gone through enough steps of energy
+    # minimization"; exp48 measured a 224k-atom build detonating ~130k steps into
+    # dynamics after a fixed 4800.  The request's value is a FLOOR, so an explicit
+    # (larger) setting still wins and a caller asking for less than the structure needs
+    # gets what it needs.
     minimize_steps = _round_up_to_cycle(minimize_steps)
 
     water_shell_nm = water_shell_nm or 0.0
@@ -2121,6 +2480,15 @@ def prepare_mgh_slow_release(
         atomistic_model = atomistic_model,
         solute_coords   = solute_coords,
         water_shell_nm  = water_shell_nm if carve_shell else None,
+        # Without this the box sizer's atom cap always resolved against device "0",
+        # so a CPU-targeted job was sized against VRAM on any host that has a GPU.
+        devices         = devices,
+        # A relaxation package runs exactly ONE unrestrained stage (k=0).  Telling the
+        # sizer so lets it use a bbox cell — the solute cannot turn far enough in a few
+        # nanoseconds to meet its own image, and a rotation-sized cell costs several
+        # times the water for nothing.  Production is a different question and gets a
+        # guard of its own (routes_md.append_md_production).
+        free_ns         = _LADDER_FREE_NS,
         progress        = progress,
     )
 
@@ -2134,7 +2502,14 @@ def prepare_mgh_slow_release(
     inner_dirs = [p for p in pkg_root.iterdir() if p.is_dir()]
     if not inner_dirs:
         raise RuntimeError("ZIP extraction produced no subdirectory.")
-    package_dir = inner_dirs[0]       # e.g. package/B_tube_namd_solvated/
+    # Pick the SOLVATED package by name, not by directory order.  ``iterdir()`` is
+    # filesystem-ordered, so when package/ already holds another protocol's output —
+    # a vacuum pre-stage built into the same job dir, say — this silently selected
+    # whichever came first and then failed downstream looking for a namd.conf the
+    # vacuum package does not have.  Fall back to the old behaviour only if nothing
+    # matches, so an unusual-but-valid layout still builds.
+    solvated = [p for p in inner_dirs if p.name.endswith("_namd_solvated")]
+    package_dir = solvated[0] if solvated else inner_dirs[0]
 
     # Derive file stem from the BASE {stem}.psf.  The package also ships a derived
     # "{stem}_hmr.psf" (heavy-hydrogen topology for fast mode), so an unfiltered
@@ -2154,6 +2529,8 @@ def prepare_mgh_slow_release(
         progress("enm", None, "Building elastic-network restraints…")
     pdb_path = package_dir / f"{name_stem}.pdb"
     write_restraints_pdb(pdb_path, package_dir / "restraints_dna_heavy.pdb")
+    # All-DNA fixedAtoms marker for the Note-4 settle stage (see mgh_slow_release_segments).
+    write_solute_fixed_pdb(pdb_path, package_dir / SOLUTE_FIXED_PDB)
     # Exclude single-stranded crossover extra bases from the LADDER ENM so they relax to
     # their true conformation rather than being pinned into a stretched backbone bond.
     # Without this, an oxDNA-SEEDED FAST (4 fs) ladder restrains the seeded inserts and the
@@ -2236,7 +2613,7 @@ def prepare_mgh_slow_release(
     # ENM (no_enm below) so the duplex declashes, then have the runner rebuild the ENM from
     # the declashed minimise coords (rebuild_declashed_references) — all WITHOUT dropping to
     # the soft 1 fs ladder, which is exactly what pre_declashed preserves.  This is a
-    # DISTINCT trigger from ``declash`` above (which is coupled to soft_ladder/fast).  See
+    # DISTINCT trigger from ``declash`` above (which selects the gentle tier).  See
     # PIPELINE_4FS_EXTRA_BASES.md + the 24hb k0.1 investigation.
     rebuild_enm_from_min = bool(pre_declashed and design_has_extra_bases(design))
 
@@ -2248,15 +2625,26 @@ def prepare_mgh_slow_release(
     # Fast mode: HMR PSF + 4 fs + GPU-resident on the hard ladder (~4x in NPT).
     # Disabled for the soft integrator (HMR / 4 fs need rigid bonds), so a declash
     # / force-soft ladder always runs the classic 2 fs standard-CUDA path.
-    soft_ladder = declash or force_soft
-    fast = fast and not soft_ladder
+    # exp49 (2026-07-30) measured the assumption behind this directly: a 25 ps probe as
+    # the FIRST dynamics after minimisation, on ideal builds carrying 2 / 24 / 60 inserted
+    # crossover bases.  2 fs with rigidBonds all survived every one; only 4 fs + HMR blew
+    # up.  So a declash design needs the GENTLE tier (2 fs, rigid), not the flexible-bond
+    # 1 fs tier — which was costing 2x across the whole 19.2 ns ladder for protection it
+    # never needed.  ``force_soft`` stays as the explicit escape hatch, and the runner
+    # still rewrites any segment that actually fails RATTLE down to 1 fs.
+    gentle_ladder = declash and not force_soft
+    # ``force_soft`` pins every segment to the 1 fs flexible integrator, so the 4 fs/HMR
+    # path cannot apply anywhere in the package.  A declash package is different now: its
+    # segments carry ``gentle``, and _segment_conf drops each of those to 2 fs on the base
+    # PSF by itself — so ``fast`` stays meaningful there and the later stages keep it.
+    fast = fast and not force_soft
 
     # Build segment list.  A water-shell carve leaves vacuum corners, so the
     # whole ladder must run NVT (barostat off) — an NPT piston would collapse the
     # cell onto the DNA's periodic image.  Fast mode halves the step count (4 fs)
     # to hold each stage at its 4.8 ns relaxation target.
     min_name, segments = mgh_slow_release_segments(
-        name_stem, soft=soft_ladder, nvt_only=carve_shell,
+        name_stem, soft=force_soft, gentle=gentle_ladder, nvt_only=carve_shell,
         timestep_fs=4.0 if fast else 2.0,
     )
 
@@ -2287,6 +2675,15 @@ def prepare_mgh_slow_release(
         and (not carve_shell or resident_fill >= _RESIDENT_MIN_FILL)
     )
 
+    # Scale minimisation to the system now that the real atom count is known.
+    if solvated_atoms:
+        scaled_min = minimize_steps_for_atoms(solvated_atoms, floor=minimize_steps)
+        if scaled_min != minimize_steps:
+            logger.info("minimize %d -> %d steps for %d atoms (Note 2: under-minimisation "
+                        "is what trips RATTLE later)",
+                        minimize_steps, scaled_min, solvated_atoms)
+            minimize_steps = scaled_min
+
     # Write minimization conf
     (package_dir / f"{min_name}.conf").write_text(
         _min_conf(
@@ -2303,7 +2700,11 @@ def prepare_mgh_slow_release(
         )
     )
 
-    # Write segment confs
+    # Write segment confs.  Stamp each spec with the timestep it will actually run at
+    # FIRST, so the manifest (and every diagnostic that derives a time axis from it)
+    # agrees with the conf that was written.
+    for spec in segments:
+        spec.timestep_fs = effective_timestep_fs(spec, fast)
     for spec in segments:
         (package_dir / f"{spec.name}.conf").write_text(
             _segment_conf(spec, name_stem, box, mgh_extrabonds,
@@ -2337,6 +2738,9 @@ def prepare_mgh_slow_release(
             "min_wc_ref_relative": s.min_wc_ref_relative,
             "extra_bonds_file": s.extra_bonds_file,
             "soft": s.soft,
+            "gentle": s.gentle,
+            "timestep_fs": s.timestep_fs,
+            "fixed_atoms_file": s.fixed_atoms_file,
         }
         for s in segments
     ]
@@ -2420,11 +2824,16 @@ def prepare_mgh_slow_release(
         # so k0.1 no longer releases stored clash energy.  Decoupled from ``declash``
         # (which forces the soft 1 fs ladder) — this keeps the fast 4 fs ladder.
         "rebuild_enm_from_min": rebuild_enm_from_min,
+        # DERIVED from what was actually built, never restated.  This note used to be a
+        # hardcoded string ("neutralizing Na+ plus 12.5 mM MgCl2/MGH") that the ion-recipe
+        # change would have silently falsified for every new job while staying true for
+        # every old one — leaving no way to tell a trajectory's chemistry from its manifest.
         "salt": {
             "mode": salt_mode,
             "nacl_mM": ion_conc_mM,
             "mgcl2_mM": mg_conc_mM,
-            "note": "screening mode uses neutralizing Na+ plus 12.5 mM MgCl2/MGH and no extra bulk NaCl",
+            "counterion": _ionization(charge_audit).get("counterion"),
+            "note": _salt_note(charge_audit),
         },
         "equilibrium_aware": {
             "requires_full_dna_topology": require_full_topology,
@@ -2469,17 +2878,26 @@ def prepare_mgh_slow_release(
                     "axis (see gpu_resident): it is on for soft/declash ladders too, and "
                     "off only for GBIS or a sparsely-filled carved cell.",
         },
+        # DERIVED from the constants actually emitted into the confs, never restated.
+        # The hand-maintained version of this block had drifted: it declared a 12 Å
+        # pairlist while _common_header emits 13.5, and a 1000/500 piston while
+        # production runs 200/100.  That is precisely the failure `protocol_fidelity`
+        # below exists to prevent, so this one is computed too.
         "relax_protocol_settings": {
             "stage_length_steps": 2_400_000,
             "stage_length_ns_at_2fs": 4.8,
             "timestep_fs": 4.0 if fast else 2.0,
             "temperature_k": 300.0,
             "langevin_damping_ps_inv": 5.0,
-            "pme_grid_spacing_ang": 1.5,
-            "switch_cut_pairlist_ang": [8.0, 10.0, 12.0],
-            "piston_period_decay_fs": [1000.0, 500.0],
-            "output_frequency_steps": 9600,
+            "pme_grid_spacing_ang": PME_GRID_SPACING,
+            "switch_cut_pairlist_ang": [SWITCHDIST_ANG, CUTOFF_ANG, LADDER_PAIRLISTDIST_ANG],
+            "ladder_piston_period_decay_fs": [1000.0, 500.0],
+            "production_piston_period_decay_fs": [200.0, 100.0],
+            "settle_stage_ps": SETTLE_STAGE_PS if not carve_shell else 0.0,
         },
+        "protocol_fidelity": protocol_fidelity(
+            fast=fast, carved=carve_shell, padding_nm=padding_nm,
+            charge_audit=charge_audit),
         "segments": segment_dicts,
         "health_checks": "After every segment: 10%, 50%, and 100% of each stage.",
     }
@@ -2570,6 +2988,14 @@ def segments_from_manifest(manifest_path: Path) -> tuple[str, list[SegmentSpec]]
             min_wc_ref_relative=s.get("min_wc_ref_relative", 0.85),
             extra_bonds_file=s.get("extra_bonds_file"),
             soft=s.get("soft", False),
+            # A manifest written before the gentle tier existed recorded the first
+            # segment as soft=True; that stays honoured verbatim so a resumed job keeps
+            # running exactly the integrator it started with.
+            gentle=s.get("gentle", False),
+            # Default 2.0 so a manifest written before this field existed still resumes;
+            # it was the effective value on every non-fast ladder anyway.
+            timestep_fs=s.get("timestep_fs", 2.0),
+            fixed_atoms_file=s.get("fixed_atoms_file"),
         )
         for s in data["segments"]
     ]

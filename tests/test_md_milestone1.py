@@ -357,11 +357,15 @@ class TestMghSlowReleaseSegments:
 
         from backend.core.md_protocols import mgh_slow_release_segments
 
+        # The Note-4 settle stage that opens the ladder is a single un-chunked
+        # segment (nothing is relaxing yet — the solute is pinned), so it is not part
+        # of this invariant.
         _, segments = mgh_slow_release_segments("X")
-        stage_counts = Counter(s.stage for s in segments)
+        ladder = [s for s in segments if s.fixed_atoms_file is None]
+        stage_counts = Counter(s.stage for s in ladder)
         assert len(set(stage_counts.values())) == 1, stage_counts
         per_stage: dict[str, list[float]] = {}
-        for seg in segments:
+        for seg in ladder:
             per_stage.setdefault(seg.stage, []).append(seg.percent)
         schedules = {tuple(v) for v in per_stage.values()}
         assert len(schedules) == 1, f"stages disagree on their chunk split: {schedules}"
@@ -409,16 +413,21 @@ class TestMghSlowReleaseSegments:
             assert s.temp == pytest.approx(300.0)
 
     def test_default_segments_use_long_aksimentiev_enm_stages(self) -> None:
-        from backend.core.md_protocols import mgh_slow_release_segments
+        from backend.core.md_protocols import (AKSIMENTIEV_STEPS_PER_CYCLE,
+                                               mgh_slow_release_segments)
 
         _, segments = mgh_slow_release_segments("X")
+        ladder = [s for s in segments if s.fixed_atoms_file is None]
         stage_totals: dict[str, int] = {}
-        for s in segments:
+        for s in ladder:
             stage_totals[s.stage] = stage_totals.get(s.stage, 0) + s.steps
         assert set(stage_totals.values()) == {2_400_000}
         assert any(s.extra_bonds_file == "X_k0.5.enm.extra" for s in segments)
         assert all(not s.reinit for s in segments)
-        assert all(s.steps % 12 == 0 for s in segments)
+        # NAMD FATALs when a run count is not a multiple of stepspercycle.  This used
+        # to assert % 12, which every ladder segment satisfied only by coincidence —
+        # the real cycle is AKSIMENTIEV_STEPS_PER_CYCLE (20), and _common_header emits it.
+        assert all(s.steps % AKSIMENTIEV_STEPS_PER_CYCLE == 0 for s in segments)
 
     def test_minimize_steps_round_up_to_stepspercycle(self) -> None:
         from backend.core.md_protocols import _round_up_to_cycle
@@ -469,7 +478,7 @@ class TestSegmentConf:
         from backend.core.md_protocols import _segment_conf, mgh_slow_release_segments
 
         _, segs = mgh_slow_release_segments("S")
-        spec = segs[0]
+        spec = next(s for s in segs if s.extra_bonds_file)
         with_extra = _segment_conf(spec, "S", (100.0, 90.0, 80.0), mgh_extrabonds=True)
         without    = _segment_conf(spec, "S", (100.0, 90.0, 80.0), mgh_extrabonds=False)
         assert "extraBondsFile     mgh_extrabonds.txt" in with_extra
@@ -480,7 +489,7 @@ class TestSegmentConf:
         from backend.core.md_protocols import _segment_conf, mgh_slow_release_segments
 
         _, segs = mgh_slow_release_segments("S")
-        spec = segs[0]   # first ENM stage — k=0.5
+        spec = next(s for s in segs if s.extra_bonds_file)   # first ENM stage — k=0.5
         assert spec.scale is not None
         conf = _segment_conf(spec, "S", (100.0, 90.0, 80.0), mgh_extrabonds=False)
         assert "extraBondsFile     S_k0.5.enm.extra" in conf

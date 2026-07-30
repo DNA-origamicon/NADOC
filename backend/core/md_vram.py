@@ -617,7 +617,9 @@ def package_solvation_profile(package_dir: Path, name_stem: str) -> Optional[dic
     box = ion.get("box_nm")
     if not box or n_waters <= 0:
         return None
-    ion_atoms = n_na + n_cl + n_mg * (19 if mgh else 1)
+    from backend.core.namd_solvate import MGH_ATOMS  # noqa: PLC0415
+
+    ion_atoms = n_na + n_cl + n_mg * (MGH_ATOMS if mgh else 1)
 
     dna_xyz = _read_dna_atoms_from_pdb(pdb_path)
     if not dna_xyz:
@@ -663,12 +665,26 @@ def clear_profile_cache() -> None:
 
 
 def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
-                                 atomistic_model=None) -> Optional[dict]:
+                                 atomistic_model=None,
+                                 nacl_mM: float = 0.0,
+                                 mgcl2_mM: float = 12.5) -> Optional[dict]:
     """Estimate a solvation profile from the *dry* design — no GROMACS run.
 
     Builds the heavy-atom PDB, takes the bounding box + padding as the solvation
     box, and estimates the full-box water count from the effective bulk density.
     Good enough to decide, before any solvation, whether the system needs a carve.
+
+    ``nacl_mM`` / ``mgcl2_mM`` default to the screening recipe the panel sends.  They
+    matter because the ion census is no longer one atom per phosphate: under the
+    Aksimentiev recipe the backbone is neutralised by Mg(H₂O)₆²⁺ at **19 atoms per
+    cluster**, each of which also displaces six waters.  ``ion_atoms`` used to be
+    ``n_p`` on the assumption of one neutralising Na⁺ per phosphate — a ~9.5x
+    under-count of the ion atoms and a double-count of the displaced water, in a
+    number Gate A sizes the whole box from.
+
+    ``full_water`` is the count **after** ion displacement, so the consumer's
+    ``dna_atoms + full_water * 3 + ion_atoms`` is a true total (and agrees with
+    :func:`package_solvation_profile`, which reads post-placement counts).
 
     Memoised on the design's build fingerprint — see ``_PROFILE_CACHE``.  The result is
     treated as read-only by every caller (they only read its keys), so the cached dict
@@ -697,16 +713,30 @@ def estimate_profile_from_design(design, *, padding_nm: float = 1.2,
     if not dna:
         return None
 
+    from backend.core.namd_solvate import (  # noqa: PLC0415
+        MGH_ATOMS, MGH_WATERS_CONSUMED, ion_counts)
+
     P = np.asarray(dna, dtype=float)
     ext = P.max(0) - P.min(0)
     box_nm = tuple(float(e) + 2 * padding_nm for e in ext)
     box_vol = box_nm[0] * box_nm[1] * box_nm[2]
+
+    water_before = int(box_vol * _FULL_BOX_WATER_DENSITY_NM3)
+    ions = ion_counts(water_before, -float(n_p), nacl_mM=nacl_mM, mgcl2_mM=mgcl2_mM,
+                      box_nm=box_nm, mg_hexahydrate=True)
+    # Each MGH cluster is 19 atoms and vacates 6 waters; each monatomic ion takes
+    # one water site.
+    water_displaced = (ions.n_mg * MGH_WATERS_CONSUMED) + ions.n_na + ions.n_cl
+    ion_atoms = ions.n_mg * MGH_ATOMS + ions.n_na + ions.n_cl
+
     profile = {
         "dna_xyz_nm": dna,
         "dna_atoms": len(dna),
         "box_nm": box_nm,
-        "full_water": int(box_vol * _FULL_BOX_WATER_DENSITY_NM3),
-        "ion_atoms": n_p,           # ≈ one neutralising Na⁺ per phosphate
+        "full_water": max(0, water_before - water_displaced),
+        "ion_atoms": ion_atoms,
+        "n_phosphates": n_p,
+        "counterion": ions.counterion,
         "current_water_shell_nm": None,
     }
     if key is not None:
@@ -838,5 +868,47 @@ def preflight_vram_advice(design, *, padding_nm: float = 1.2, devices: str = "0"
         )
     except Exception:  # noqa: BLE001 — a preflight must never block a launch
         return skipped
-    return {**rec, "skipped": False, "tier": classify_vram_fit(rec),
-            "bound": bound, "host_mb": host_mb}
+    water_floor = _water_floor_check(profile, rec)
+    tier = classify_vram_fit(rec)
+    if water_floor and not water_floor["ok"]:
+        tier = "a3"          # a cell that cannot hold its own ions will not build
+    return {**rec, "skipped": False, "tier": tier,
+            "water_floor": water_floor, "bound": bound, "host_mb": host_mb}
+
+
+def _water_floor_check(profile: dict, rec: dict) -> Optional[dict]:
+    """Will the recommended cell still hold the waters the ion recipe consumes?
+
+    Neutralising with Mg(H₂O)₆ costs ~3 waters per phosphate, so a tight hydration
+    shell can run out.  Discovering that inside placement means the failure lands an
+    hour into solvation as a bare "Preparation failed"; here it is a pre-flight verdict
+    the user can act on (more padding, a thicker shell).
+    """
+    try:
+        from backend.core.namd_solvate import (  # noqa: PLC0415
+            ion_counts, waters_needed_for_ions)
+
+        n_p = profile.get("n_phosphates") or 0
+        if n_p <= 0:
+            return None
+        # Water actually present in the cell the recommendation would build.
+        if rec.get("feasible") and rec.get("recommended_shell_nm"):
+            atoms = rec["estimated_atoms"]
+        elif rec.get("tightest_atoms"):
+            atoms = rec["tightest_atoms"]
+        else:
+            atoms = rec.get("current_atoms", 0)
+        have = max(0, (atoms - profile["dna_atoms"] - profile["ion_atoms"]) // 3)
+        ions = ion_counts(have, -float(n_p), nacl_mM=0.0, mgcl2_mM=12.5,
+                          box_nm=profile["box_nm"], mg_hexahydrate=True)
+        need = waters_needed_for_ions(ions)
+        return {
+            "ok": need <= have,
+            "waters_available": int(have),
+            "waters_needed": int(need),
+            "reason": None if need <= have else (
+                f"the cell holds ~{have:,} waters but neutralising "
+                f"{n_p:,} phosphates with Mg(H2O)6 consumes ~{need:,}"),
+        }
+    except Exception:  # noqa: BLE001 — advisory only
+        return None

@@ -26,7 +26,10 @@ get_solvation_stats(design, *, padding_nm=1.2, ion_conc_mM=150.0) -> dict
    parse OOM-crashes WSL on a large plate — see [[water-shell-carve]] ⚡SUPERSEDED)
 6. Parse solvated GRO → list of `_Water(ox,oy,oz,h1x,h1y,h1z,h2x,h2y,h2z)` in nm
 6. Count DNA charge from P atoms in PDB (not PSF partial charges — those don't sum right without H)
-7. Python ion placement: replace random water molecules with Na+/Cl-
+7. Python ion placement: replace water molecules with Mg(H2O)6 / Na+ / Cl-.
+   **Mg cluster centres are drawn from the hydration shell first** (within
+   `MGH_SEED_SHELL_NM` of the phosphate backbone), not uniformly — MGHH diffuses too
+   slowly to find the DNA on its own inside a 19 ns ladder
 8. `_extend_psf` → append TIP3/SOD/CLA atoms to NATOM section; add bonds/angles to NBOND/NTHETA
 9. `_build_solvated_pdb` → DNA ATOM records + water/ion HETATM records with updated CRYST1
 10. NAMD conf with `CUDASOAintegrate on`, PME, NPT 310K/1atm, `rigidBonds water`, 2 fs timestep
@@ -34,10 +37,17 @@ get_solvation_stats(design, *, padding_nm=1.2, ion_conc_mM=150.0) -> dict
 ## Physics choices
 
 - **CUDASOAintegrate on**: GPU-resident MD (fastest NAMD3 mode, requires explicit solvent + PME)
-- **PME**: `PMEGridSpacing 1.0`
+- **PME**: `PMEGridSpacing 1.5` (the tutorial's; adopted 2026-07-29 after a measured
+  +39% throughput arm with no structural difference)
 - **rigidBonds water**: SHAKE on O-H bonds allows 2 fs timestep
 - **NPT**: Langevin piston, 1 atm
-- **NaCl**: 150 mM default (configurable), Na+ used to neutralize DNA charge first
+- **Counterion**: **Mg(H2O)6(2+) neutralises the backbone and Cl- balances the excess —
+  NO Na+** (Aksimentiev, Methods Mol Biol 1811 §3.3). One implementation:
+  `namd_solvate.ion_counts`, recipe version 2 (2026-07-30). Before that the DNA was
+  neutralised with Na+ and Mg was a bulk bath only, which is NOT the published origami
+  protocol — monovalent parameterisation gets DNA-DNA forces in dense bundles wrong.
+  Setting `mgcl2_mM = 0` is an explicit opt-out and falls back to the Na+ path.
+- **NaCl**: an optional bath ON TOP of Mg neutralisation; 0 mM in the screening default
 
 ## Ion parameters (CHARMM36 / toppar_water_ions_cufix.str)
 

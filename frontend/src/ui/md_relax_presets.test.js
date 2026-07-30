@@ -7,13 +7,15 @@ import {
 const CATALOGUE = {
   default: 'standard',
   presets: [
+    // Mirrors the real catalogue since 2026-07-30: the vacuum tier ships, and GBIS is
+    // the host-gated one (it needs a non-CUDA NAMD build).
     { id: 'fast_shape', label: 'Fast Shape Check (Vacuum)', summary: 'No solvent.',
-      available: false, unavailable_reason: 'Needs the vacuum ENRG-MD pipeline.',
-      reference: 'tutorial step 2', defaults: { water_shell_nm: 0 },
-      protocol: 'equilibrium_aware_namd', is_default: false },
+      available: true, unavailable_reason: '',
+      reference: 'MMB 1811 (2018) §3.2', defaults: { water_shell_nm: 0 },
+      protocol: 'vacuum_enrgmd_namd', is_default: false },
     { id: 'implicit_gbis', label: 'Implicit Solvent (GBIS)', summary: 'Continuum solvent.',
-      available: true, unavailable_reason: '', reference: 'NAMD GBIS',
-      defaults: { protocol: 'implicit_gbis_namd' },
+      available: false, unavailable_reason: 'Needs a non-CUDA NAMD build.',
+      reference: 'NAMD GBIS', defaults: { protocol: 'implicit_gbis_namd' },
       protocol: 'implicit_gbis_namd', is_default: false },
     { id: 'standard', label: 'Standard (Aksimentiev)', summary: 'Explicit MgCl2.',
       available: true, unavailable_reason: '', reference: 'MMB 1811 (2018)',
@@ -34,7 +36,7 @@ describe('pickInitial', () => {
     expect(pickInitial(CATALOGUE, 'full_physics')).toBe('full_physics')
   })
   it('refuses to start on an unavailable preset', () => {
-    expect(pickInitial(CATALOGUE, 'fast_shape')).toBe('standard')
+    expect(pickInitial(CATALOGUE, 'implicit_gbis')).toBe('standard')
   })
   it('survives an empty catalogue', () => {
     expect(pickInitial({ presets: [] })).toBe(null)
@@ -46,8 +48,8 @@ describe('noteFor', () => {
     expect(noteFor(CATALOGUE.presets[2])).toBe('Explicit MgCl2. — MMB 1811 (2018)')
   })
   it('leads with the reason for an unavailable one', () => {
-    expect(noteFor(CATALOGUE.presets[0]))
-      .toBe('Not available in this build. Needs the vacuum ENRG-MD pipeline.')
+    expect(noteFor(CATALOGUE.presets[1]))
+      .toBe('Not available in this build. Needs a non-CUDA NAMD build.')
   })
   it('is empty for no preset', () => {
     expect(noteFor(null)).toBe('')
@@ -87,8 +89,9 @@ describe('initRelaxPresets', () => {
     const opts = [...selectEl.options]
     expect(opts.map(o => o.value))
       .toEqual(['fast_shape', 'implicit_gbis', 'standard', 'full_physics'])
-    expect(opts[0].disabled).toBe(true)
-    expect(opts[0].textContent).toContain('unavailable')
+    expect(opts[1].disabled).toBe(true)          // implicit_gbis — host-gated
+    expect(opts[1].textContent).toContain('unavailable')
+    expect(opts[0].disabled).toBe(false)         // fast_shape ships now
     expect(opts[2].disabled).toBe(false)
     expect(ui.id()).toBe('standard')
   })
@@ -114,7 +117,7 @@ describe('initRelaxPresets', () => {
   it('rejects a scripted selection of an unavailable preset', async () => {
     const ui = initRelaxPresets({ selectEl, noteEl, fetchPresets: async () => CATALOGUE })
     await ui.load()
-    selectEl.value = 'fast_shape'
+    selectEl.value = 'implicit_gbis'
     selectEl.dispatchEvent(new Event('change'))
     expect(ui.id()).toBe('standard')
     expect(selectEl.value).toBe('standard')
@@ -149,9 +152,9 @@ describe('derived protocol (the merge)', () => {
     const ui = initRelaxPresets({ selectEl, noteEl, fetchPresets: async () => CATALOGUE })
     await ui.load()
     expect(ui.protocol()).toBe('equilibrium_aware_namd')
-    selectEl.value = 'implicit_gbis'
+    selectEl.value = 'fast_shape'
     selectEl.dispatchEvent(new Event('change'))
-    expect(ui.protocol()).toBe('implicit_gbis_namd')
+    expect(ui.protocol()).toBe('vacuum_enrgmd_namd')
   })
 
   it('has no way to express a preset/protocol contradiction', async () => {
@@ -174,13 +177,42 @@ describe('derived protocol (the merge)', () => {
 
 describe('presetIdForProtocol', () => {
   it('maps a protocol back to the preset that runs it', () => {
-    expect(presetIdForProtocol(CATALOGUE, 'implicit_gbis_namd')).toBe('implicit_gbis')
+    expect(presetIdForProtocol(CATALOGUE, 'vacuum_enrgmd_namd')).toBe('fast_shape')
   })
   it('prefers an AVAILABLE preset', () => {
-    // fast_shape also claims equilibrium_aware_namd but is unavailable
+    // implicit_gbis is the only preset claiming its protocol, but it is host-gated —
+    // restoring a draft onto a preset the user cannot run would dead-end the panel.
+    expect(presetIdForProtocol(CATALOGUE, 'implicit_gbis_namd')).toBe(null)
+    // standard and full_physics both claim the explicit protocol; the first available wins.
     expect(presetIdForProtocol(CATALOGUE, 'equilibrium_aware_namd')).toBe('standard')
   })
   it('returns null for the retired legacy protocol', () => {
     expect(presetIdForProtocol(CATALOGUE, 'mgh_slow_release')).toBe(null)
+  })
+})
+
+describe('preset defaults reach the Advanced controls', () => {
+  // Regression: the panel always sends every Advanced field, so the backend saw
+  // padding_nm in model_fields_set on EVERY request, treated it as an explicit user
+  // choice, and never applied the preset's own value.  Standard asks for the tutorial's
+  // 2.0 nm; jobs were silently built at 1.2.  The panel now writes the preset's settings
+  // into the inputs, so what the user sees is what runs.  These pin the pure half of
+  // that contract (applyDefaultsTo); the DOM wiring lives in md_jobs_panel.
+  const standard = CATALOGUE.presets.find(p => p.id === 'standard')
+  const fullPhysics = CATALOGUE.presets.find(p => p.id === 'full_physics')
+
+  it('supplies the padding the preset actually asks for', () => {
+    expect(applyDefaultsTo(standard, {}, new Set()).padding_nm).toBe(1.2)
+    expect(applyDefaultsTo(fullPhysics, {}, new Set()).padding_nm).toBe(1.5)
+  })
+
+  it('never overwrites a field the user edited by hand', () => {
+    const out = applyDefaultsTo(standard, { padding_nm: 3.7 }, new Set(['padding_nm']))
+    expect(out.padding_nm).toBe(3.7)
+  })
+
+  it('leaves fields the preset says nothing about alone', () => {
+    const out = applyDefaultsTo(standard, { threads: 8 }, new Set())
+    expect(out.threads).toBe(8)
   })
 })

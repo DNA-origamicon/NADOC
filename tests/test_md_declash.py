@@ -72,10 +72,25 @@ def test_segments_soft_flag_propagates():
     _, soft_segs = M.mgh_slow_release_segments("t", soft=True)
     _, hard_segs = M.mgh_slow_release_segments("t", soft=False)
     assert soft_segs and all(s.soft for s in soft_segs)
-    # Soft start: the FIRST segment is always soft (relaxes the strained start
-    # past the RATTLE failure); every later segment reverts to rigid 2 fs.
-    assert hard_segs and hard_segs[0].soft
-    assert not any(s.soft for s in hard_segs[1:])
+    # Soft start: the first segment whose solute atoms MOVE is always soft (it relaxes
+    # the strained start past the RATTLE failure); every later segment reverts to rigid
+    # 2 fs.  The Note-4 settle stage runs earlier with all DNA fixed, so it is excluded —
+    # nothing can strain there.
+    free = [s for s in hard_segs if s.fixed_atoms_file is None]
+    assert free and free[0].gentle
+    assert not any(s.gentle for s in free[1:])
+
+
+def test_declash_gets_the_gentle_tier_not_the_flexible_one():
+    """exp49: an ideal build with 60 inserted crossover bases survived 25 ps at 2 fs with
+    rigid bonds.  The 1 fs flexible-bond ladder was costing 2x across all 19.2 ns for
+    protection it did not need.  force_soft remains the explicit escape hatch."""
+    _, declash = M.mgh_slow_release_segments("t", gentle=True)
+    _, forced = M.mgh_slow_release_segments("t", soft=True)
+    assert all(s.gentle and not s.soft for s in declash)
+    assert all(s.soft for s in forced)
+    assert M.effective_timestep_fs(declash[0], fast=True) == 2.0
+    assert M.effective_timestep_fs(forced[0], fast=True) == 1.0
 
 
 def test_min_conf_enm_override():
@@ -237,3 +252,23 @@ def test_enm_grouping_does_not_merge_distant_cycled_chain_collisions(tmp_path: P
     assert len(residues) == 3, "distant same-key residues must not merge into one node"
     xs = sorted(r.com[0] for r in residues)
     assert xs[0] < 10 and 90 < xs[1] < 110 and xs[2] > 990
+
+
+def test_fast_prepare_does_not_reference_a_removed_variable():
+    """Regression: `fast = fast and not soft_ladder` outlived the variable it read.
+
+    Python short-circuits `False and ...`, so this NameError was invisible to every test
+    that prepared with the default fast=False — and would have crashed EVERY fast prepare
+    at runtime.  Compile-check the module and assert the surviving expression is the
+    intended one.
+    """
+    import io
+    import inspect
+    import tokenize
+
+    src = inspect.getsource(M.prepare_mgh_slow_release)
+    assert "fast = fast and not force_soft" in src
+    # Token-level, so a mention in a COMMENT does not count — only real identifiers.
+    names = {tok.string for tok in tokenize.generate_tokens(io.StringIO(src).readline)
+             if tok.type == tokenize.NAME}
+    assert "soft_ladder" not in names

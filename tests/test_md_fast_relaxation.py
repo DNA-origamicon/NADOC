@@ -97,7 +97,9 @@ def test_segment_conf_soft_segment_ignores_fast():
     # The soft strain-relief segment must stay 1 fs / unmodified PSF even when fast mode
     # is requested (HMR + 4 fs need rigid bonds).  GPU-resident is NOT part of that
     # bundle — see test_segment_conf_soft_segment_still_gets_gpu_resident.
-    _, segs = M.mgh_slow_release_segments("S", timestep_fs=4.0)
+    # soft=True is now reached only via force_soft (or the runner's post-RATTLE
+    # rewrite); the DEFAULT first segment is the gentle 2 fs tier — see exp49.
+    _, segs = M.mgh_slow_release_segments("S", soft=True, timestep_fs=4.0)
     soft = next(s for s in segs if s.soft)
     conf = M._segment_conf(soft, "S", (100.0, 90.0, 80.0), mgh_extrabonds=True,
                            fast=True, structure_psf="S_hmr.psf")
@@ -118,7 +120,9 @@ def test_segment_conf_soft_segment_still_gets_gpu_resident():
     The gain scales UP with N, so SMALL systems are excluded — see
     test_segment_conf_small_system_stays_offload.
     """
-    _, segs = M.mgh_slow_release_segments("S", timestep_fs=4.0)
+    # soft=True is now reached only via force_soft (or the runner's post-RATTLE
+    # rewrite); the DEFAULT first segment is the gentle 2 fs tier — see exp49.
+    _, segs = M.mgh_slow_release_segments("S", soft=True, timestep_fs=4.0)
     soft = next(s for s in segs if s.soft)
     conf = M._segment_conf(soft, "S", (100.0, 90.0, 80.0), mgh_extrabonds=True,
                            fast=True, structure_psf="S_hmr.psf")

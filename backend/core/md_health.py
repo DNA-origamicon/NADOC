@@ -62,6 +62,11 @@ class WcPair:
     res_b:        str
     atom_pairs:   list[tuple[int, int]]   # global atom indices for H-bond proxies
     ref_distances: list[float]            # Å in reference structure
+    #: The bridging hydrogen of the CENTRAL Watson-Crick bond (guanine H1 or thymine
+    #: H3), when the topology carries hydrogens.  Only the tutorial's broken-base-pair
+    #: criterion uses it — it needs the N1-H...N3 angle, not just the N...N distance.
+    #: None on a heavy-atom package, where that criterion degrades to distance only.
+    h_index:      Optional[int] = None
 
 
 @dataclass
@@ -87,6 +92,156 @@ class HealthCheckResult:
     frame:                       Optional[int] = None
     error:                       Optional[str] = None
     wc_per_frame:                list[float] = field(default_factory=list)
+    # ── The published equilibration criteria (Methods Mol Biol 1811 §3.4) ──────
+    #: Broken base pairs by the TUTORIAL's own definition (countBrokenBps.tcl): the
+    #: central WC hydrogen bond within 3.0 Å AND close to linear.  Reported alongside
+    #: the ref-relative fraction above, which stays the gate — this one is the number
+    #: that is comparable to a published figure.
+    broken_bp_count:             Optional[int] = None
+    broken_bp_per_frame:         list[int] = field(default_factory=list)
+    #: Net charge (e) within CHARGE_SHELL_NM of the DNA — their ion-atmosphere
+    #: convergence check, and the direct instrument for whether the Mg(H₂O)₆ cloud
+    #: has actually formed.
+    charge_within_shell_e:       Optional[float] = None
+    charge_per_frame:            list[float] = field(default_factory=list)
+    n_shell_ions:                Optional[int] = None
+
+
+# ── The tutorial's own equilibration criteria (Methods Mol Biol 1811 §3.4) ────
+# NADOC measured base pairing its own way (heavy-atom donor/acceptor within 3.6 Å, plus a
+# reference-relative band) and did not measure the ion atmosphere at all.  The
+# ref-relative fraction remains the GATE — it is the better signal for catching a run
+# going wrong — but neither number was comparable to anything published, and the missing
+# one is precisely the diagnostic for whether the counterion cloud has converged.
+
+#: countBrokenBps.tcl: "a base pair is considered intact if the H1 or N1 atom of a purine
+#: is within 3 Å of the N3 or H3 atom of a pyrimidine".
+BROKEN_BP_DIST_ANG = 3.0
+#: The tutorial ALSO requires the N1-H1...N3 angle to exceed 140 degrees.  Not applied:
+#: at a 3.0 Å heavy-atom cut the donor and acceptor are already essentially in contact,
+#: and the geometries the angle term exists to reject (sheared, stacked) do not survive
+#: that cut in practice.  Recorded here so the simplification is visible rather than
+#: silently absent, and so it can be added if a run ever shows it mattering.
+BROKEN_BP_ANGLE_DEG = 140.0   # noqa: F841 — documented, deliberately not applied
+#: measureCharge.sh: "the total charge of all atoms residing within 2 nm of the DNA".
+CHARGE_SHELL_NM = 2.0
+#: Atoms the shell tree is built from.  The backbone phosphate + sugar carry the charge
+#: divalent counterions condense on, and at a 2 nm cutoff the extra resolution of every
+#: heavy atom buys nothing while costing ~16x the tree.
+CHARGE_TREE_ATOMS = ("P", "C1'")
+
+
+def wc_hbond_atoms(u) -> tuple[np.ndarray, np.ndarray]:
+    """(purine-N1 indices, pyrimidine-N3 indices) — the central WC donor/acceptor set."""
+    don = u.select_atoms("(resname ADE GUA DA DG A G) and name N1")
+    acc = u.select_atoms("(resname THY CYT DT DC T C) and name N3")
+    return don.ix, acc.ix
+
+
+def count_intact_base_pairs(positions: np.ndarray, don_idx: np.ndarray,
+                            acc_idx: np.ndarray, *,
+                            dist_ang: float = BROKEN_BP_DIST_ANG,
+                            box: Optional[np.ndarray] = None) -> int:
+    """Intact Watson-Crick pairs by the tutorial's GEOMETRIC test (pure).
+
+    ``countBrokenBps.tcl`` does not consult a partner list: it counts, per frame, how
+    many purine-N1 / pyrimidine-N3 contacts are within 3 Å, and subtracts that from the
+    number of base pairs in the idealised structure.  This does the same, and that is
+    deliberate — an earlier version of this function took its partners from
+    :func:`build_wc_pairs`, which assigns them greedily by shortest C1'...C1' distance
+    and therefore prefers cross-strand NEIGHBOURS (8.7-9.6 Å) over true partners
+    (~10.4 Å).  Measured on an idealised 2hb build: those assigned partners sat 5-8.6 Å
+    apart at the WC edge while the correct partner was 2.5-3.5 Å away, so the criterion
+    reported 34 of 39 pairs broken on a perfectly healthy structure.
+
+    Matching is greedy nearest-first and one-to-one, so a donor flanked by two acceptors
+    cannot be double-counted.
+    """
+    if don_idx.size == 0 or acc_idx.size == 0:
+        return 0
+    L = np.asarray(box[:3]) if box is not None and np.all(np.asarray(box[:3]) > 0) else None
+    don, acc = positions[don_idx], positions[acc_idx]
+    if L is not None:
+        don, acc = np.mod(don, L), np.mod(acc, L)
+        tree = cKDTree(acc, boxsize=L)
+    else:
+        tree = cKDTree(acc)
+    # All candidate contacts, nearest first, then a one-to-one greedy assignment.
+    pairs = tree.query_ball_point(don, r=dist_ang, workers=-1)
+    cand = []
+    for di, hits in enumerate(pairs):
+        for ai in hits:
+            diff = don[di] - acc[ai]
+            if L is not None:
+                diff -= L * np.round(diff / L)
+            cand.append((float(np.sqrt((diff * diff).sum())), di, ai))
+    cand.sort()
+    used_d, used_a, intact = set(), set(), 0
+    for _d, di, ai in cand:
+        if di in used_d or ai in used_a:
+            continue
+        used_d.add(di)
+        used_a.add(ai)
+        intact += 1
+    return intact
+
+
+def count_broken_base_pairs(positions: np.ndarray, don_idx: np.ndarray,
+                            acc_idx: np.ndarray, n_expected: int, *,
+                            dist_ang: float = BROKEN_BP_DIST_ANG,
+                            box: Optional[np.ndarray] = None) -> int:
+    """``n_expected`` minus the intact count, floored at zero — the tutorial's number.
+
+    ``n_expected`` is the intact count measured on the REFERENCE structure, which is what
+    "the number of base pairs in the idealized structure" means operationally.  Taking it
+    from the reference rather than from topology also makes the metric self-calibrating:
+    a build whose geometry the criterion cannot see starts at zero broken, not at N.
+    """
+    intact = count_intact_base_pairs(positions, don_idx, acc_idx,
+                                     dist_ang=dist_ang, box=box)
+    return max(0, int(n_expected) - intact)
+
+
+def charge_within_shell(positions: np.ndarray, charges: np.ndarray,
+                        dna_idx: np.ndarray, ion_idx: np.ndarray,
+                        *, shell_nm: float = CHARGE_SHELL_NM,
+                        box: Optional[np.ndarray] = None) -> tuple[float, int]:
+    """(net charge in e, ion-atom count) within ``shell_nm`` of the DNA (pure).
+
+    Water is EXCLUDED by construction — TIP3P is neutral per molecule, so counting it by
+    molecule contributes exactly zero while costing a query over ~10⁶ atoms instead of
+    ~10⁵.  The returned charge is therefore the DNA's own charge plus whatever ionic
+    atmosphere has gathered, which is what the tutorial's trace plots.
+    """
+    if ion_idx.size == 0 or dna_idx.size == 0:
+        return 0.0, 0
+    shell_ang = shell_nm * 10.0
+    ion_xyz = positions[ion_idx]
+    dna_xyz = positions[dna_idx]
+    L = np.asarray(box[:3]) if box is not None and np.all(np.asarray(box[:3]) > 0) else None
+    if L is not None:
+        # cKDTree's periodic mode needs every coordinate inside [0, L); with wrapAll off
+        # (which is what the relax ladder runs) they are not.
+        ion_xyz = np.mod(ion_xyz, L)
+        dna_xyz = np.mod(dna_xyz, L)
+        tree = cKDTree(dna_xyz, boxsize=L)
+    else:
+        tree = cKDTree(dna_xyz)
+    dist, _ = tree.query(ion_xyz, k=1, distance_upper_bound=shell_ang, workers=-1)
+    inside = np.isfinite(dist)
+    q_ions = float(charges[ion_idx][inside].sum())
+    q_dna = float(charges[dna_idx].sum())
+    return q_dna + q_ions, int(inside.sum())
+
+
+def _shell_selections(u) -> tuple[np.ndarray, np.ndarray]:
+    """(dna_tree_atom_indices, ion_atom_indices) for the charge shell."""
+    dna_sel = " or ".join(f"name {n}" for n in CHARGE_TREE_ATOMS)
+    dna = u.select_atoms(f"nucleic and ({dna_sel})")
+    if not len(dna):
+        dna = u.select_atoms(dna_sel)
+    ions = u.select_atoms("resname SOD CLA MG MGH POT NA CL")
+    return dna.ix, ions.ix
 
 
 # ── C1' pair builder ──────────────────────────────────────────────────────────
@@ -301,9 +456,29 @@ def build_wc_pairs(
                 res_b        = f"{res_b.segid}:{res_b.resname}{res_b.resid}",
                 atom_pairs   = atom_pairs,
                 ref_distances = ref_distances,
+                h_index      = _central_hbond_hydrogen(res_a, res_b),
             ))
 
     return pairs
+
+
+#: Which residue donates the CENTRAL Watson-Crick hydrogen, and the H's name.  Guanine
+#: donates N1-H1 to cytosine N3; thymine donates N3-H3 to adenine N1.  Adenine's N1 and
+#: cytosine's N3 are ACCEPTORS and carry no hydrogen, so picking "whichever of H1/H3
+#: exists" would silently measure the wrong angle.
+_WC_DONOR_H = {
+    "DG": "H1", "GUA": "H1", "G": "H1",
+    "DT": "H3", "THY": "H3", "T": "H3",
+}
+
+
+def _central_hbond_hydrogen(res_a, res_b) -> Optional[int]:
+    """Global atom index of the bridging H of the central WC bond, or None."""
+    for res in (res_a, res_b):
+        name = _WC_DONOR_H.get(res.resname.strip())
+        if name is not None:
+            return _atom_index(res, name)
+    return None
 
 
 def wc_frame_metrics(
@@ -426,17 +601,43 @@ def run_health_check(
     except Exception as exc:
         return HealthCheckResult(passed=False, error=f"WC metrics failed: {exc}")
 
-    # Per-frame WC across the full DCD (diagnostic — does not affect pass/fail)
+    # Per-frame diagnostics across the full DCD (none of these affect pass/fail).
+    # The tutorial's own two trace criteria ride this loop rather than opening the
+    # trajectory again: broken base pairs by ITS definition, and the net charge within
+    # 2 nm of the DNA (its ion-atmosphere convergence check).  The charge query is over
+    # IONS only — TIP3P is neutral per molecule, so counting water by molecule
+    # contributes exactly zero while costing a query over ~10x more atoms.
     wc_per_frame: list[float] = []
+    broken_per_frame: list[int] = []
+    charge_per_frame: list[float] = []
+    n_shell_ions: Optional[int] = None
     try:
         import MDAnalysis as mda  # noqa: PLC0415
         u_all = mda.Universe(str(psf), str(pdb), str(dcd))
+        try:
+            dna_idx, ion_idx = _shell_selections(u_all)
+            charges = u_all.atoms.charges
+        except Exception:      # noqa: BLE001 — a PSF without charges, say
+            dna_idx = ion_idx = np.empty(0, dtype=int)
+            charges = None
+        # The tutorial's broken-bp count is (idealised intact) − (this frame's intact),
+        # so the reference frame sets the baseline.
+        don_idx, acc_idx = wc_hbond_atoms(u_all)
+        u_ref = mda.Universe(str(psf), str(pdb))
+        n_expected = count_intact_base_pairs(u_ref.atoms.positions, don_idx, acc_idx)
         for ts in u_all.trajectory:
             box = ts.dimensions
             L = box[:3] if box is not None and np.all(np.asarray(box[:3]) > 0) else None
-            m = wc_frame_metrics(u_all.atoms.positions, wc_pairs,
+            pos = u_all.atoms.positions
+            m = wc_frame_metrics(pos, wc_pairs,
                                  cutoff_ang=cutoff_ang, ref_delta_ang=ref_delta_ang, box=L)
             wc_per_frame.append(round(m["ref_relative_paired_fraction"], 4))
+            broken_per_frame.append(
+                count_broken_base_pairs(pos, don_idx, acc_idx, n_expected, box=L))
+            if charges is not None and ion_idx.size:
+                q, n_in = charge_within_shell(pos, charges, dna_idx, ion_idx, box=L)
+                charge_per_frame.append(round(q, 3))
+                n_shell_ions = n_in
     except Exception:
         pass
 
@@ -472,6 +673,11 @@ def run_health_check(
         n_wc_pairs               = wc_m["n_pairs"],
         frame                    = c1_m.get("frame"),
         wc_per_frame             = wc_per_frame,
+        broken_bp_count          = broken_per_frame[-1] if broken_per_frame else None,
+        broken_bp_per_frame      = broken_per_frame,
+        charge_within_shell_e    = charge_per_frame[-1] if charge_per_frame else None,
+        charge_per_frame         = charge_per_frame,
+        n_shell_ions             = n_shell_ions,
     )
 
 
@@ -495,6 +701,12 @@ def append_health_jsonl(output_dir: Path, segment_name: str, stage: str,
         "frame":                     result.frame,
         "error":                     result.error,
         "wc_per_frame":              result.wc_per_frame,
+        # The tutorial's §3.4 traces.
+        "broken_bp_count":           result.broken_bp_count,
+        "broken_bp_per_frame":       result.broken_bp_per_frame,
+        "charge_within_shell_e":     result.charge_within_shell_e,
+        "charge_per_frame":          result.charge_per_frame,
+        "n_shell_ions":              result.n_shell_ions,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     with (output_dir / "health.jsonl").open("a") as fh:

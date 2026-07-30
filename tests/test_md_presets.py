@@ -31,13 +31,17 @@ def test_labels_are_the_ones_the_panel_shows():
     assert labels[IMPLICIT_GBIS] == "Implicit Solvent (GBIS)"
 
 
-def test_vacuum_preset_is_marked_unavailable_with_a_reason():
-    """It must not silently look runnable — the vacuum pipeline does not exist yet."""
+def test_the_vacuum_tier_is_retired_with_a_reason():
+    """It shipped and was retired the same day.  The tutorial's §3.2 unfolds caDNAno's
+    abstract parallel-helix lattice; NADOC derives physical geometry, so there is nothing
+    to unfold — and the step's repulsion surrogate scores ZERO bonds on a dense honeycomb,
+    letting bundles swell away from the Mg-screened equilibrium.  It must not silently
+    look runnable."""
     p = PRESETS[FAST_SHAPE]
     assert p.available is False
-    assert "vacuum" in p.unavailable_reason.lower()
-    assert "31 A" in p.unavailable_reason      # the parameter we DO know
-    assert all(PRESETS[i].available for i in (IMPLICIT_GBIS, STANDARD, FULL_PHYSICS))
+    assert "caDNAno" in p.unavailable_reason
+    assert "ZERO" in p.unavailable_reason          # the measured failure, not a hunch
+    assert all(PRESETS[i].available for i in (STANDARD, FULL_PHYSICS))
 
 
 def test_solvated_presets_ask_for_a_full_water_box():
@@ -57,7 +61,7 @@ def test_full_physics_disables_early_stop_and_pads_wider():
 def test_apply_preset_fills_unset_fields():
     out = apply_preset(STANDARD, {"mg_conc_mM": 12.5}, explicit={"mg_conc_mM"})
     assert out["mg_conc_mM"] == 12.5              # untouched
-    assert out["padding_nm"] == 1.2               # from the preset
+    assert out["padding_nm"] == 2.0               # from the preset (the tutorial's ±20 Å)
     assert out["early_stop_relax"] is True
 
 
@@ -97,9 +101,12 @@ def test_every_preset_names_the_protocol_it_runs():
         assert protocol_for(pid) == PRESETS[pid].defaults["protocol"]
 
 
-def test_only_the_gbis_preset_is_implicit_solvent():
+def test_each_solvent_model_has_its_own_protocol():
+    from backend.core.md_presets import VACUUM_PROTOCOL
+
     assert protocol_for(IMPLICIT_GBIS) == IMPLICIT_PROTOCOL
-    for pid in (FAST_SHAPE, STANDARD, FULL_PHYSICS):
+    assert protocol_for(FAST_SHAPE) == VACUUM_PROTOCOL
+    for pid in (STANDARD, FULL_PHYSICS):
         assert protocol_for(pid) == EXPLICIT_PROTOCOL
 
 
@@ -151,17 +158,22 @@ def test_availability_is_true_when_a_cpu_build_is_present(monkeypatch):
     assert preset_availability(PRESETS[IMPLICIT_GBIS]) == (True, "")
 
 
-def test_statically_unavailable_presets_short_circuit_the_host_probe(monkeypatch):
-    """fast_shape has no pipeline at all — never probe the toolchain for it."""
+def test_a_statically_unavailable_preset_would_short_circuit_the_host_probe(monkeypatch):
+    """No preset is statically unavailable today, but the short-circuit is what stops a
+    future one from paying for a toolchain probe it can never use — so pin the rule
+    against a synthetic preset rather than deleting the guarantee with the last case."""
     import backend.core.namd_runner as runner
-    from backend.core.md_presets import preset_availability
+    from backend.core.md_presets import RelaxPreset, preset_availability
 
     def _boom(**_kw):
         raise AssertionError("must not probe for a statically-unavailable preset")
 
     monkeypatch.setattr(runner, "find_namd", _boom)
-    ok, why = preset_availability(PRESETS[FAST_SHAPE])
-    assert ok is False and "vacuum" in why.lower()
+    ghost = RelaxPreset(id="ghost", label="Ghost", summary="", available=False,
+                        unavailable_reason="pipeline does not exist",
+                        requires_cpu_namd=True)
+    ok, why = preset_availability(ghost)
+    assert ok is False and why == "pipeline does not exist"
 
 
 def test_explicit_presets_never_probe_the_toolchain(monkeypatch):

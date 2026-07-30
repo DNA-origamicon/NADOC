@@ -3,13 +3,15 @@
 Four tiers, from the protocol survey in
 ``experiments/exp47_protocol_delta/PROTOCOL_PRESETS.md``:
 
-* ``fast_shape``  — ENRG-MD vacuum relax (Aksimentiev tutorial step 2).  No solvent at
-  all: the ENM plus inter-helical P-P repulsion bonds stand in for explicit water.
-  Seconds to minutes at any size.  **Not yet runnable** — see ``available``.
+* ``fast_shape``  — ENRG-MD vacuum relax (Aksimentiev tutorial §3.2).  RETIRED
+  2026-07-30: NADOC derives physical geometry, so there is no lattice to unfold, and the
+  repulsion surrogate scores zero bonds on a dense honeycomb.  See ``available``.
 * ``implicit_gbis`` — NAMD GBIS continuum solvent.  The only no-explicit-water option
   that runs today; cannot go GPU-resident.
-* ``standard``    — the Aksimentiev explicit-MgCl2 relax (tutorial step 3).  Mg(H2O)6 +
-  CUFIX, full water box, ENM ladder k = 0.5 -> 0.1 -> 0.01 -> 0.  This is the default.
+* ``standard``    — the Aksimentiev explicit-MgCl2 relax (tutorial §3.3): Mg(H2O)6 +
+  CUFIX in a full water box, ENM ladder k = 0.5 -> 0.1 -> 0.01 -> 0, origami neutralised
+  by magnesium rather than sodium.  Their §3.2 vacuum pre-step is deliberately NOT run —
+  it unfolds caDNAno's abstract lattice, and NADOC geometry is already physical.  Default.
 * ``full_physics`` — solvent-first staged release, after Roodhuizen et al. (ACS Nano 13,
   10798) and Joshi et al. (Methods Mol Biol 2639): hold the solute, let the environment
   equilibrate, then release in stages and run long.
@@ -34,6 +36,11 @@ DEFAULT_PRESET = STANDARD
 #: selecting implicit solvent, and nothing caught it.
 EXPLICIT_PROTOCOL = "equilibrium_aware_namd"
 IMPLICIT_PROTOCOL = "implicit_gbis_namd"
+#: In-vacuo ENRG-MD shape relaxation (tutorial §3.2).  Shipped and then RETIRED on
+#: 2026-07-30: it exists to unfold caDNAno's abstract lattice, which NADOC never has.
+#: The protocol id stays valid so an existing job still resolves; the builder
+#: (backend/core/namd_vacuum.py) is dormant, not deleted.
+VACUUM_PROTOCOL = "vacuum_enrgmd_namd"
 #: Accepted by the API for existing jobs and scripted callers, but no longer offered in
 #: the menu: it is `equilibrium_aware_namd` with the topology gate turned OFF
 #: (``prepare_equilibrium_aware_namd`` is a wrapper that adds require_full_topology=True),
@@ -65,21 +72,25 @@ PRESETS: dict[str, RelaxPreset] = {
         id=FAST_SHAPE,
         label="Fast Shape Check (Vacuum)",
         summary=(
-            "No solvent. Relaxes the idealised lattice into its real shape using an "
-            "elastic network plus inter-helical repulsion. Seconds to minutes at any "
-            "size; gives a structure, not thermodynamics."
+            "No solvent. Relaxes an abstract lattice into a real shape using an elastic "
+            "network plus inter-helical repulsion. Retired: NADOC designs already carry "
+            "derived, physical geometry, so there is no lattice here to unfold."
         ),
-        defaults={"protocol": EXPLICIT_PROTOCOL, "water_shell_nm": 0.0},
+        defaults={"protocol": VACUUM_PROTOCOL, "water_shell_nm": 0.0},
         available=False,
         unavailable_reason=(
-            "Needs the vacuum ENRG-MD pipeline, which NADOC does not have yet: a "
-            "DNA-only package (no gmx solvate / autoionize) and the inter-helical "
-            "phosphate-phosphate repulsion restraints. The tutorial's own extrabonds "
-            "file gives those as k = 1 kcal/mol/A^2 at a 31 A rest length, so the "
-            "parameters are known; the placement rule and the no-solvent package path "
-            "are what remain."
+            "Not needed, and measurably harmful on dense lattices. The tutorial's §3.2 "
+            "exists to turn caDNAno's abstract parallel-helix lattice into a structure; "
+            "NADOC derives geometry from topology + B-DNA constants + deformations, so "
+            "every design already has physical positions (measured: a 90-degree design's "
+            "ideal build already holds ~98.5 degrees of per-helix bend). Worse, the "
+            "interhelical repulsion surrogate needs a >22 nt crossover-free span and "
+            "honeycomb crossovers recur every 21 nt, so a dense bundle gets ZERO of them "
+            "and relaxes with no interhelical force term — bundles swelled 5.6-10%, away "
+            "from the Mg-screened equilibrium. See experiments/exp50_vacuum_on_curved."
         ),
-        reference="Aksimentiev origami tutorial step 2 (ENRG-MD, in vacuo)",
+        reference="Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018) "
+                  "§3.2 (ENRG-MD, in vacuo) — not applicable to NADOC geometry",
     ),
     IMPLICIT_GBIS: RelaxPreset(
         id=IMPLICIT_GBIS,
@@ -87,8 +98,9 @@ PRESETS: dict[str, RelaxPreset] = {
         summary=(
             "No explicit water — the solvent is a continuum. Fits a small GPU and needs "
             "no box sizing at all. Note it cannot run GPU-resident, so on this hardware "
-            "it is slower per step than the explicit path despite the far smaller system; "
-            "it is the only no-water option until the vacuum tier lands."
+            "it is slower per step than the explicit path despite the far smaller system "
+            "— but it is the only no-explicit-water option, now that the vacuum tier "
+            "is retired."
         ),
         defaults={"protocol": IMPLICIT_PROTOCOL},
         reference="NAMD GBIS implicit solvent",
@@ -98,14 +110,20 @@ PRESETS: dict[str, RelaxPreset] = {
         id=STANDARD,
         label="Standard (Aksimentiev)",
         summary=(
-            "Explicit MgCl2 with Mg(H2O)6 and CUFIX, full water box, ENM ladder "
-            "k = 0.5 / 0.1 / 0.01 / 0. The published origami relaxation, and what most "
-            "work should use."
+            "The published origami relaxation: explicit MgCl2 with Mg(H2O)6 and CUFIX "
+            "in a full water box, ENM ladder k = 0.5 / 0.1 / 0.01 / 0, with the origami "
+            "neutralised by magnesium rather than sodium. Starts from NADOC's derived "
+            "geometry — no pre-ladder shape step, because there is no abstract lattice "
+            "to unfold. What most work should use."
         ),
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "water_shell_nm": 0.0,     # full box; the carve is a memory fallback only
-            "padding_nm": 1.2,
+            # The tutorial's own recipe is the DNA bbox ± 20 Å.  NADOC shipped 1.2 nm,
+            # 40 % tighter.  namd_solvate.resolve_padding_nm trims this back down when
+            # the resulting cell would not fit the hardware — a carve would cost the
+            # barostat, and with it the settle stage and the box-trace criterion.
+            "padding_nm": 2.0,
             "early_stop_relax": True,
         },
         reference="Yoo, Li, Slone, Maffeo & Aksimentiev, Methods Mol Biol 1811 (2018)",
@@ -122,7 +140,10 @@ PRESETS: dict[str, RelaxPreset] = {
         defaults={
             "protocol": EXPLICIT_PROTOCOL,
             "water_shell_nm": 0.0,
-            "padding_nm": 1.5,
+            # Wider than Standard's (now-faithful) 2.0 nm: this is the tier whose
+            # numbers go in a paper, so give the solute more room to tumble than the
+            # reference strictly needs.
+            "padding_nm": 2.5,
             "early_stop_relax": False,   # never truncate a stage you intend to publish
         },
         reference=("Roodhuizen et al., ACS Nano 13, 10798 (2019); "

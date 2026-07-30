@@ -167,9 +167,17 @@ def build_namd_gbis_package(
     #    force-soft design runs the soft (1 fs, flexible-bond) integrator.
     if progress is not None:
         progress("finalize", None, "Writing simulation configs…")
-    soft_ladder = declash or force_soft
+    # exp49 (2026-07-30) measured the assumption behind this directly: a 25 ps probe as
+    # the FIRST dynamics after minimisation, on ideal builds carrying 2 / 24 / 60 inserted
+    # crossover bases.  2 fs with rigidBonds all survived every one; only 4 fs + HMR blew
+    # up.  So a declash design needs the GENTLE tier (2 fs, rigid), not the flexible-bond
+    # 1 fs tier — which was costing 2x across the whole 19.2 ns ladder for protection it
+    # never needed.  ``force_soft`` stays as the explicit escape hatch, and the runner
+    # still rewrites any segment that actually fails RATTLE down to 1 fs.
+    gentle_ladder = declash and not force_soft
     min_name, segments = mgh_slow_release_segments(
-        name_stem, soft=soft_ladder, nvt_only=True, timestep_fs=2.0,
+        name_stem, soft=force_soft, gentle=gentle_ladder, nvt_only=True,
+        timestep_fs=2.0,
     )
 
     # 7. Confs.  ``box`` is unused under GBIS (no periodic cell) — pass a dummy.
@@ -207,6 +215,7 @@ def build_namd_gbis_package(
             "previous": s.previous, "reinit": s.reinit, "dcd_freq": s.dcd_freq,
             "min_c1_paired": s.min_c1_paired, "min_wc_ref_relative": s.min_wc_ref_relative,
             "extra_bonds_file": s.extra_bonds_file, "soft": s.soft,
+            "gentle": s.gentle, "timestep_fs": s.timestep_fs,
         }
         for s in segments
     ]
@@ -304,6 +313,7 @@ def prepare_implicit_gbis_namd(
     # tests/test_prepare_signatures.py now pins this.
     gpu_resident_mode: str = "auto",       # noqa: ARG001
     production_timestep_fs: float = 4.0,   # noqa: ARG001
+    devices: str = "0",                    # noqa: ARG001 — no box to size
 ) -> tuple[str, str, list]:
     """Protocol entry point: prepare an implicit-solvent (GBIS) NAMD job.
 

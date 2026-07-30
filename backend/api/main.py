@@ -134,6 +134,18 @@ async def _md_supervisor_loop() -> None:
             raise
         except Exception:
             logger.exception("MD chain advance pass failed")
+        # Vacuum pre-stage (Aksimentiev §3.2): when the in-vacuo shape relaxation
+        # finishes, spawn the solvated run seeded from its relaxed coordinates.
+        try:
+            from backend.api.routes_md import advance_vacuum_prestages
+            seeded = await advance_vacuum_prestages(_WORKSPACE_DIR)
+            if seeded:
+                logger.info("MD supervisor spawned solvated runs from vacuum "
+                            "pre-stages: %s", ", ".join(seeded))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("MD vacuum pre-stage advance pass failed")
         await asyncio.sleep(_MD_SUPERVISOR_INTERVAL_S)
 
 

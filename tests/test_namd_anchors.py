@@ -220,8 +220,10 @@ def test_anchor_pdb_leaves_everything_free_when_nothing_resolves(tmp_path):
 # ── conf emission ─────────────────────────────────────────────────────────────
 
 def _first_spec() -> SegmentSpec:
+    """The first RELAXATION segment.  Not segs[0] — that is the Note-4 settle stage,
+    which pins the whole solute and therefore owns the single fixedAtoms file itself."""
     _min_name, segs = mgh_slow_release_segments("demo")
-    return segs[0]
+    return next(s for s in segs if s.fixed_atoms_file is None)
 
 
 def test_segment_conf_emits_fixedatoms_only_with_anchors():
