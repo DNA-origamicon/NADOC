@@ -268,6 +268,8 @@ def build_namd_gbis_package(
             "name": min_name,
             "steps": minimize_steps,
             "scale": min_scale,
+            # Timeline label — see md_protocols.minimization_slot.
+            "stage": f"Minimization ENM k={min_scale:g}",
             "restraint": "aksimentiev_base_ring_enm",
             "extra_bonds_file": f"{name_stem}_k{min_scale:g}.enm.extra",
         },

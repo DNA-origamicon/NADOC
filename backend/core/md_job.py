@@ -84,6 +84,15 @@ class MdJob:
     )
     name_stem: str  # PSF/PDB file stem (e.g. "B_tube")
     segments: list[MdSegmentStatus] = field(default_factory=list)
+    # The manifest's pre-ladder step, tracked so the UI can show it running and confirm
+    # it finished.  It is NOT a member of ``segments`` — the runner indexes that list by
+    # ``current_segment_idx`` and the manifest keeps minimisation in its own slot, so
+    # prepending it there would shift every index in the runner, the resume path and the
+    # early-stop accelerator.  Reuses MdSegmentStatus purely for its shape (the frontend
+    # renders it with the same glyph logic).  ``stage`` comes from the manifest, so an
+    # ensemble replica correctly reads "Velocity reseed" rather than "Minimization".
+    # None on jobs prepared before this was recorded — the timeline just omits the row.
+    minimization: Optional[MdSegmentStatus] = None
     current_segment_idx: int = 0
     error: Optional[str] = None
     # Structured failure category, set alongside ``error`` so the UI can offer a
@@ -267,6 +276,8 @@ class MdJob:
         data = json.loads(path.read_text())
         data["status"]   = MdStatus(data["status"])
         data["segments"] = [MdSegmentStatus(**s) for s in data.get("segments", [])]
+        _min = data.get("minimization")
+        data["minimization"] = MdSegmentStatus(**_min) if _min else None
         data["health_samples"] = [
             MdHealthSample(**h) for h in data.get("health_samples", [])
         ]

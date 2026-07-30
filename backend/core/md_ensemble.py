@@ -274,7 +274,9 @@ def build_replica_package(
         # NO "declash" key — a production replica never declashes; generate_sbatch
         # rejects a declash manifest (its mid-chain rebuild can't run in a bare sbatch).
         "charge_audit": manifest.get("charge_audit"),
-        "minimization": {"name": reseed_name, "steps": 0},
+        # Occupies the minimization slot but is a zero-step velocity reseed, not a
+        # minimisation — hence the explicit label (md_protocols.minimization_slot).
+        "minimization": {"name": reseed_name, "steps": 0, "stage": "Velocity reseed"},
         "segments": [asdict(prod)],
         # total_ns_from_manifest = Σ(segment steps) × relax ts.  One production segment
         # at the production timestep → total_ns == length_ns (no production_extension,
@@ -306,6 +308,10 @@ def build_replica_package(
             steps=prod.steps, status="pending",
         )
     ]
+    child.minimization = MdSegmentStatus(
+        name=reseed_name, stage="Velocity reseed", percent=100.0, steps=0,
+        status="pending",
+    )
     child.current_segment_idx = 0
     child.status = MdStatus.queued
     child.error = None

@@ -45,7 +45,7 @@ from backend.core.disk_guard import (
 from backend.core.md_health import run_health_check, append_health_jsonl
 from backend.core.namd_metrics import parse_namd_log, parse_namd_log_frames
 from backend.core.md_cutoff import should_early_stop_stage
-from backend.core.md_protocols import segments_from_manifest
+from backend.core.md_protocols import minimization_status, segments_from_manifest
 from backend.core.md_vram import (
     FAILURE_CELL_SHRINK,
     FAILURE_HOST_OOM,
@@ -1599,6 +1599,10 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
     manifest = json.loads(manifest_path.read_text())
     min_name = manifest["minimization"]["name"]
     _, segments = segments_from_manifest(manifest_path)
+    # Jobs prepared before job.minimization existed get their timeline row here, so an
+    # already-queued run does not have to be rebuilt to show its minimisation.
+    if job.minimization is None:
+        job.minimization = minimization_status(manifest)
     logger.info("[%s] Loaded manifest: %d segments, min=%s", job.job_id, len(segments), min_name)
 
     # GPU pre-flight.  NAMD 3.0.2's CUDA buildTileLists kernel dies with an illegal
@@ -1654,6 +1658,12 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
 
     min_coor = output_dir / f"{min_name}.coor"
 
+    def _set_min_status(status: str) -> None:
+        """Stamp the timeline's minimisation row and persist it (no-op on old jobs)."""
+        if job.minimization is not None and job.minimization.status != status:
+            job.minimization.status = status
+            job.save(workspace_dir)
+
     # A minimisation can OUTLIVE its orchestrator (a dev-server --reload, a server
     # restart): the NAMD child keeps going while the runner's task dies.  Adopt the
     # survivor rather than spawning a second NAMD on the same output files, which would
@@ -1666,6 +1676,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             job.job_id, min_name,
         )
         job.status = MdStatus.running
+        _set_min_status("running")
         job.save(workspace_dir)
         await _wait_for_segment_process(min_name)
 
@@ -1674,6 +1685,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             return
         logger.info("[%s] Running minimization: %s", job.job_id, min_name)
         job.status = MdStatus.running
+        _set_min_status("running")
         job.save(workspace_dir)
 
         min_log = package_dir / f"{min_name}.log"
@@ -1689,11 +1701,16 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             _cause = extract_error_line_from_file(min_log)
             job.error  = (f"Minimization failed (rc={rc}). {_cause} (see {min_name}.log)"
                           if _cause else f"Minimization failed (rc={rc}). See {min_name}.log")
+            if job.minimization is not None:
+                job.minimization.status = "failed"
             job.save(workspace_dir)
             return
         logger.info("[%s] Minimization done", job.job_id)
     else:
         logger.info("[%s] Minimization already done (skipping)", job.job_id)
+    # Reached only when output/{min_name}.coor exists — either just written, or left by
+    # an earlier attempt this resume is chaining from.  Either way the step is complete.
+    _set_min_status("done")
 
     # ── Declash reference rebuild ─────────────────────────────────────────────
     # For declash designs, re-anchor the ENM ladder, heavy-atom restraints and

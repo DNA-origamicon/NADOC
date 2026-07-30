@@ -45,6 +45,7 @@ import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 import { initRelaxPresets } from './md_relax_presets.js'
+import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
 
 // Relax-protocol preset dropdown (see ./md_relax_presets.js); set during panel init.
 let _relaxPresets = null
@@ -3316,7 +3317,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     timelineEl.innerHTML = ''
 
     const segments = job.segments ?? []
-    if (!segments.length) {
+    const minRow = mdMinimizationRow(job)
+    if (!segments.length && !minRow) {
       timelineEl.textContent = 'No stages'
       return
     }
@@ -3328,6 +3330,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const stages = []
     let cur = null
     const healthBySegment = new Map((job.health_samples ?? []).map(h => [h.segment, h]))
+    // Minimisation leads the timeline as its own single-dot stage.  It is fed through
+    // the SAME row renderer as a segment, so it gets the spinner while running and the
+    // ✓ when done without a second code path — which is the whole point of the row.
+    if (minRow) {
+      stages.push({
+        stage: minRow.stage,
+        segs: [{ name: minRow.name, stage: minRow.stage, percent: 100,
+                 steps: minRow.steps, status: minRow.status, skipped: false }],
+      })
+    }
     for (const seg of segments) {
       const displayStage = _timelineStage(seg)
       if (!cur || cur.stage !== displayStage) {
@@ -3486,7 +3498,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       { label: 'Base pairs', value: _fmtPct(health?.c1_paired_fraction ?? null),          color: _healthColor(health?.c1_paired_fraction, 0.90) },
       { label: 'WC health',  value: wcValue,                                               color: wcAdvisory ? _C.warn : _healthColor(health?.wc_ref_relative_fraction, wcThreshold), wcTrend: true },
       { label: 'Speed',      value: (speedNote && speedValue !== '—') ? `${speedValue} *` : speedValue, color: _C.muted, title: speedNote?.tooltip },
-      { label: 'Latest',     value: health ? _shortStage(health.stage) : (persisted?.stage ? _shortStage(persisted.stage) : '—'), color: _C.muted },
+      // Falls back to a RUNNING minimisation: it produces no health sample, so a job
+      // spending its first half-hour minimising otherwise reads "Latest —".
+      { label: 'Latest',     value: mdLatestStageLabel(job, health, persisted), color: _C.muted },
       // The two published equilibration criteria NADOC used to compute nowhere.
       // Broken pairs is the citable count (their 3 Å + 140° definition), distinct from
       // the WC card above, which is NADOC's own ref-relative gate.
@@ -3634,14 +3648,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     return null
   }
 
-
-  function _shortStage(stage) {
-    return String(stage ?? '—')
-      .replace(/^300K NPT MGHH-only handoff$/i, '300K NPT k=0')
-      .replace(/^310K NPT (?:conservative )?production ([0-9.]+) ns(?: unrestrained)?$/i, '$1 ns production run')
-      .replace(/^310K NPT\s+/i, '')
-      .replace(/\s+unrestrained$/i, '')
-  }
 
   function _timelineStage(seg) {
     const stage = String(seg?.stage ?? '—')

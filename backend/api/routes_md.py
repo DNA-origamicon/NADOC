@@ -2088,6 +2088,10 @@ async def _prepare_job_bg(
         )
         for s in segments
     ]
+    # The pre-ladder minimisation is not a segment (see MdJob.minimization), but on a
+    # large box it runs for tens of minutes — record it so the timeline shows it running
+    # rather than looking idle, and confirms it finished.
+    job.minimization = _minimization_from_package(job.package_dir(ws))
     job.status = MdStatus.queued
     job.save(ws)
     clear_prep_progress(job_dir)
@@ -2098,6 +2102,21 @@ async def _prepare_job_bg(
     elif body.autostart:
         logger.info("prep %s: remote target %s — submit via /submit-remote when connected",
                     job_id, job.execution_target)
+
+
+def _minimization_from_package(package_dir: Path) -> Optional[MdSegmentStatus]:
+    """The package manifest's pre-ladder step, for the job timeline. None if unreadable.
+
+    Never raises: this runs at the tail of a successful prep, and a job that solvated
+    fine must not be failed over a missing timeline row.
+    """
+    from backend.core.md_protocols import minimization_status  # noqa: PLC0415
+
+    try:
+        manifest = json.loads((package_dir / "manifest.json").read_text())
+    except Exception:  # noqa: BLE001 — absent/unreadable manifest → no row, not a failure
+        return None
+    return minimization_status(manifest)
 
 
 def _backfill_failure_kind(job: MdJob) -> None:
@@ -2201,6 +2220,13 @@ async def get_md_job(job_id: str) -> dict:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
     job = _load_job(job_id)
     d = job.to_dict()
+    # Every job that predates MdJob.minimization has None here.  Read it back off the
+    # package manifest — ONE file per opened job, so the timeline shows the minimisation
+    # for existing runs too.  Deliberately not persisted: a GET should not write job.json.
+    if d.get("minimization") is None:
+        row = _minimization_from_package(job.package_dir(_workspace()))
+        if row is not None:
+            d["minimization"] = asdict(row)
     d["out_of_date"] = _md_job_out_of_date(job, current_active_design_fingerprint())
     d["early_stop_pending"] = pending_early_stop(job_id)
     return d

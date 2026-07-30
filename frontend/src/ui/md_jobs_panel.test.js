@@ -1265,3 +1265,69 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     confirm.mockRestore()
   })
 })
+
+// ── Stage timeline: the minimisation row (DOM → real panel) ────────────────────
+// The pure derivation is pinned in md_stage_timeline.test.js; this drives the REAL
+// panel to prove the row is actually painted, leads the ladder, and carries the same
+// spinner/✓ glyphs a segment does — the "is it running / did it finish" signal the
+// timeline previously had no way to show for the step before segment 1.
+describe('initMdJobsPanel — minimisation timeline row', () => {
+  const $ = (id) => document.getElementById(id)
+  const flushMicro = async (n = 20) => { for (let i = 0; i < n; i++) await Promise.resolve() }
+
+  const MIN = { name: 'D_00_min_enm_k0p5', stage: 'Minimization ENM k=0.5', percent: 100,
+                steps: 9600, status: 'running', skipped: false }
+  const LADDER = [
+    { name: 'D_0S_settle', stage: '300K NPT settle (DNA fixed)', percent: 100, steps: 100, status: 'pending' },
+    { name: 'D_01_k0p5_p10', stage: '300K NPT ENM k=0.5', percent: 10, steps: 100, status: 'pending' },
+  ]
+  const jobWith = (over) => ({ job_id: 'J1', design_name: 'D', created_at: 1, status: 'running',
+                               segments: LADDER, health_samples: [], ...over })
+
+  beforeEach(async () => {
+    clearDom()
+    mountIds({
+      'md-jobs-panel': 'div', 'md-jobs-panel-heading': 'div', 'md-jobs-panel-arrow': 'div',
+      'md-jobs-panel-body': 'div', 'md-jobs-list': 'div', 'md-jobs-detail': 'div',
+      'md-jobs-timeline': 'div',
+    })
+    localStorage.clear(); vi.clearAllMocks()
+    mdApi.getSystemResources.mockResolvedValue({ ram_available_mb: 16_000, ram_total_mb: 32_000 })
+  })
+  afterEach(() => { clearDom() })
+
+  const openWith = async (job) => {
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    const panel = initMdJobsPanel({ getMdViz: () => null })
+    await flushMicro()
+    await panel.selectJob('J1')
+    await flushMicro()
+    return $('md-jobs-timeline')
+  }
+
+  it('leads the timeline, ahead of the settle stage', async () => {
+    const el = await openWith(jobWith({ minimization: MIN }))
+    const labels = [...el.children].map(r => r.firstChild.textContent)
+    expect(labels[0]).toBe('Minimization ENM k=0.5')
+    expect(labels[1]).toBe('300K NPT settle (DNA fixed)')
+  })
+
+  it('spins while it runs and shows ✓ once done', async () => {
+    const running = await openWith(jobWith({ minimization: MIN }))
+    // A running stage gets a spinner instead of the ✓/✗ glyph span.
+    expect(running.children[0].textContent).not.toMatch(/[✓✗]/)
+
+    const done = await openWith(jobWith({
+      minimization: { ...MIN, status: 'done' },
+      segments: [{ ...LADDER[0], status: 'running' }, LADDER[1]],
+    }))
+    expect(done.children[0].textContent).toMatch(/✓/)
+  })
+
+  it('is omitted for a job prepared before the backend recorded it', async () => {
+    const el = await openWith(jobWith({}))
+    expect([...el.children].map(r => r.firstChild.textContent))
+      .toEqual(['300K NPT settle (DNA fixed)', '300K NPT ENM k=0.5'])
+  })
+})

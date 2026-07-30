@@ -10,6 +10,33 @@ metadata:
 Implemented Milestone 1 of the MD integration plan (memory/md_integration_plan.md).
 
 
+## The minimisation is now ON the stage timeline (2026-07-30)
+
+**Symptom:** a fresh run showed an all-pending timeline and a 0 % progress bar for the tens of
+minutes it spent minimising. Nothing distinguished "minimising" from "hung".
+
+Cause is structural, not a bug: the manifest keeps the pre-ladder step in its own
+``minimization`` slot, NOT in ``segments``, because `namd_runner` indexes that list by
+``current_segment_idx`` (prepending would shift the runner, the resume path and the early-stop
+accelerator). The job record mirrored that, so the UI had nothing to draw.
+
+- `MdJob.minimization: Optional[MdSegmentStatus]` — a separate field, deliberately not a member
+  of ``segments``. Set at prep from the manifest; `namd_runner` stamps running/done/failed and
+  backfills jobs prepared before the field existed.
+- The manifest slot gained a **`stage` label** (`md_protocols.minimization_status` reads it, never
+  assumes): an ensemble replica's slot is a zero-step **velocity reseed**, not a minimisation.
+- `GET /md/jobs/{id}` reads the slot off the manifest when the field is None, so the ~84 existing
+  jobs get the row too. Not persisted — a GET must not write job.json.
+- Frontend: new pure module `frontend/src/ui/md_stage_timeline.js` (`mdMinimizationRow`,
+  `mdShortStage`, `mdLatestStageLabel`), consumed by `md_jobs_panel` (leading timeline row, fed
+  through the SAME row renderer as a segment so it gets the spinner + ✓) and `simulate_jobs`
+  (master-bar tooltip). Row status is **inferred**, not just echoed: a started segment proves the
+  minimisation finished (the ladder chains from its `.coor`), which keeps Alpine/RunPod runs
+  truthful without a second status-writing path on the cluster side.
+
+The master bar's **percentage** is unchanged — minimisation is not a segment, so it stays at 0 %
+until segment 1; the tooltip and the timeline row say what is running instead of faking progress.
+
 ## Health is now sampled DURING a segment, not only at its end (2026-07-29)
 
 **Symptom:** the panel's health bar (base-pairs / WC health / "latest") stayed empty for an entire

@@ -33,6 +33,7 @@ import { jobDisplayName as candoDisplayName } from './cando_jobs_panel.js'
 import { jobDisplayName as snupiDisplayName } from './snupi_jobs_panel.js'
 import { jobDisplayName as bladeDisplayName } from './blade_jobs_panel.js'
 import { mdJobRowCtx } from './md_jobs_panel.js'
+import { mdMinimizationRow } from './md_stage_timeline.js'
 import { buildCreatePayload } from './lammps_jobs_logic.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { formatJobTime } from '../scene/trajectory_range.js'
@@ -143,6 +144,10 @@ export function masterProgressTooltip(node) {
     const run = seg.find((s) => s.status === 'running')
     const lines = [`NAMD · ${node.status}`]
     if (seg.length) lines.push(`${done}/${seg.length} segments · ${pct}% overall`)
+    // Minimisation runs before segment 1 and is not one of them, so the bar legitimately
+    // sits at 0 % throughout — say what it is doing rather than let it look stalled.
+    const min = mdMinimizationRow(node)
+    if (min && min.status === 'running') lines.push(`Current: ${min.stage} (before segment 1)`)
     if (run) lines.push(`Current: ${run.name || run.stage || 'running'}${run.percent != null ? ` · ${run.percent}%` : ''}`)
     return lines.join('\n') + stale
   }

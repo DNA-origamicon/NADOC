@@ -88,6 +88,22 @@ describe('pure helpers', () => {
     expect(t).toMatch(/Current: heat · 40%/)
     expect(t).toMatch(/⚠ design changed/)
   })
+  it('masterProgressTooltip: names the minimisation, which sits outside the segment count', () => {
+    // Minimisation runs before segment 1 and is not one of them, so the bar is honestly
+    // at 0 % — the tooltip has to say what is running or the job reads as hung.
+    const t = masterProgressTooltip({ engine: 'namd', status: 'running',
+      minimization: { name: 'B_00_min', stage: 'Minimization ENM k=0.5', steps: 9600, status: 'running' },
+      segments: [{ status: 'pending' }, { status: 'pending' }] })
+    expect(t).toMatch(/0\/2 segments · 0% overall/)
+    expect(t).toMatch(/Current: Minimization ENM k=0\.5 \(before segment 1\)/)
+  })
+  it('masterProgressTooltip: no minimisation line once a segment is running', () => {
+    const t = masterProgressTooltip({ engine: 'namd', status: 'running',
+      minimization: { name: 'B_00_min', stage: 'Minimization ENM k=0.5', steps: 9600, status: 'done' },
+      segments: [{ status: 'running', name: 'heat', percent: 40 }] })
+    expect(t).not.toMatch(/Minimization/)
+    expect(t).toMatch(/Current: heat · 40%/)
+  })
   it('masterProgressPct: a running NAMD job uses the backend live fraction (single-segment production)', () => {
     // A single-segment production child: done/total reads 0 (0 of 1 done) — the
     // backend-stamped progress_fraction must win so the bar advances instead of "hung".

@@ -2849,6 +2849,10 @@ def prepare_mgh_slow_release(
             "name":  min_name,
             "steps": minimize_steps,
             "scale": min_scale,
+            # Display label for the job timeline.  Named per-manifest rather than assumed
+            # by the UI because the slot is not always a minimisation — an ensemble
+            # replica puts a zero-step velocity reseed here (see md_ensemble).
+            "stage": f"Minimization ENM k={min_scale:g}",
             # Seeded extra-base path minimises with NO base-ring ENM so the seed
             # backmap's duplex clashes can open (the ENM is rebuilt from these coords).
             "restraint": (
@@ -2962,6 +2966,34 @@ def prepare_propagator_reference(
         job_dir,
         protocol=PROPAGATOR_REFERENCE_PROTOCOL,
         **kwargs,
+    )
+
+
+#: Fallback label for a manifest whose minimization slot predates the ``stage`` key.
+DEFAULT_MINIMIZATION_STAGE = "Minimization"
+
+
+def minimization_status(manifest: dict):
+    """The manifest's pre-ladder step as a fresh ``MdSegmentStatus``, or None.
+
+    This step runs BEFORE the first segment and is deliberately NOT a member of
+    ``segments`` (the runner indexes that list), so the job record and the UI timeline
+    need it separately — otherwise a run looks idle while it minimises, which on a large
+    box is tens of minutes.  ``stage`` is read from the manifest, never assumed: an
+    ensemble replica's slot holds a zero-step velocity reseed, not a minimisation.
+    """
+    from backend.core.md_job import MdSegmentStatus  # noqa: PLC0415 — avoid import cycle
+
+    slot = (manifest or {}).get("minimization") or {}
+    name = slot.get("name")
+    if not name:
+        return None
+    return MdSegmentStatus(
+        name    = str(name),
+        stage   = str(slot.get("stage") or DEFAULT_MINIMIZATION_STAGE),
+        percent = 100.0,
+        steps   = int(slot.get("steps") or 0),
+        status  = "pending",
     )
 
 
