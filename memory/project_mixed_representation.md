@@ -89,6 +89,15 @@ Two linked bugs when the GLOBAL rep was cylinders (F2) and a region was overridd
 
 ## Region selection unified through _handleBeadHit (2026-06-02)
 
+> **Terminology note (added 2026-07-30, `/audit-plan`).** This section and the two below it are
+> dated work-log entries written *before* the 2026-06-06 selection rewrite. Every `_autoDrill*`,
+> `_autoDrillBead`, `_autoDrillCylinder`, `_drillLock` and "manual filters / Tab lock" mentioned
+> below was **physically deleted** on 2026-06-06 — zero hits in `frontend/` today. What survives is
+> `_handleBeadHit` (`selection_manager.js:2253`), `_repEntryFor` (`:2261`) and the
+> `columnRepAt` rep-cap; the drill *ladder* they fed is now the single-`selectionLevel` model in
+> `scene/selection_level.js`. Read `.claude/rules/selection.md` for current behavior — the
+> rep-aware **cap** semantics described here still hold, only the mechanism name changed.
+
 Goal: cyl/atomistic/surface region picks (incl. linkers/flexible) follow drill/manual/tab rules.
 - Extracted `_handleBeadHit(hitEntry, backboneEntries, coneEntries, prevOverhangId)` from the inline
   pointerup bead block — does auto-drill (with `_drillLock`/Tab + rep-aware cap via columnRepAt) when

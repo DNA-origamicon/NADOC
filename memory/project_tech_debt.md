@@ -209,6 +209,119 @@ Small, each a live trap; all documented in `.claude/rules/cadnano-editor.md`.
   (`X-NADOC-Doc`, per-doc undo stacks) has **zero** end-to-end coverage — and multi-doc is exactly
   where the undo/redo header bug (`api.js:691`) lived.
 
+### Animation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+Found while rewriting `.claude/rules/animation.md`. The rule + `RUNBOOK_ANIMATION.md` are fixed;
+these are the artifacts outside them.
+- **`docs/triage/05_animation.md` (193 lines) is fiction** — it documents `config_panel.js`
+  (`:16, :122`), `DesignConfiguration`/`ClusterConfigEntry` (`:19`), and `update_configuration`, none
+  of which exist. It is the last surviving source of the design-scoped-configurations myth and it
+  reads authoritative. Delete it or stamp it superseded; the other 11 `docs/triage/*.md` files were
+  not audited and are the same vintage — assume they are stale until probed.
+- **`animation_player.js` has zero tests** — 1298 LOC, 23 injected deps, the whole keyframe lerp,
+  pre-bake, bounce/loop, bind-hinge and restore paths. So do `export_video.js` (374),
+  `overhang_unzip_overlay.js` (175), `overhang_strand_anim.js` (711), `camera_panel.js` (363).
+  ~2900 LOC of display logic with no unit test and **no e2e spec** anywhere in `frontend/e2e/`.
+  The one thing that *is* pinned (`assembly_config_animator.test.js`, 13 tests) is the pure
+  interpolation core — the pattern to copy: extract the pure part, pin that.
+- **`captureClusterBase` has two incompatible signatures** — `helix_renderer.js:4441`
+  `(helixIds, domainIds, append, {forceAxes})` vs `domain_ends.js:758`
+  `(transformKeys, append, domainIds)`. Same name, `append` in a different position, both live on
+  the animation path. A positional-arg slip silently captures the wrong base set and shows up as
+  "clusters jump on playback". Unify the order or rename one.
+- **`Design.configurations` was documented in `memory/REFERENCE_MODELS.md:25`** as
+  `List[DesignConfiguration]` — a field and a model that never existed. Fixed 2026-07-30; noted here
+  because the same stale root fed the rule, the runbook, and `docs/triage/`.
+
+### Selection stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+Found while rewriting `.claude/rules/selection.md` + `RUNBOOK_SELECTION.md`. Both are fixed;
+these are the artifacts outside them.
+- **`selection_manager.js` is 4179 LOC with ZERO unit tests** — no `selection_manager.test.js`
+  exists. It owns all raycasting, every click/lasso/modifier path, four multi-select pools, hover
+  preview and the remaining context menus. The three tested siblings (`selection_level.js` 33,
+  `selection_bbox.js` 17, `selection_filter.js` 15) are tested *because* they were extracted pure —
+  that's the pattern to continue: any new (level, hit, flags) → decision logic belongs in
+  `selection_level.js`, not the closure.
+- **Four code comments that contradict the code they sit on** (all verified 2026-07-30):
+  `ui/keyboard_shortcuts.js:282` + the `description` at `:287` say the Tab cycle includes
+  `cluster` (it does not — `TAB_CYCLE`, `selection_level.js:30`); `selection_level.js:59`,
+  `selection_manager.js:2028` and `:2126` call the yellow (`0xffe000`) hover preview **red**;
+  `store.js:69` documents `selectedObject.type` as 3 values when **10** are assigned
+  (`nucleotide, strand, cluster, protein, domain, crossover, overhang, helix, forced_ligation,
+  cone`); `selection_manager.js:1647` JSDoc lists 7 of the **26** `initSelectionManager` opts.
+  Cheap to fix and each one has already misled a doc rewrite.
+- **`main.js:4318–4335` deform-gate writes an incomplete `selectableTypes` object** — it replaces
+  the whole object with 9 of the 11 flags, dropping `clusters` and `extensions` entirely (they come
+  back on restore from `_savedSelectableTypes`). Harmless today (`undefined` is falsy) but the
+  store's shape is inconsistent for the duration of a deform edit, and any `in`/`Object.keys` check
+  over `selectableTypes` will disagree with `store.js:148`.
+- **`lassoCaptureType`'s `beadLevel` field is hard-coded `false`** (`selection_level.js:105`) and
+  read by the single caller — a dead field carried through a pure function's public return shape.
+- **~40 selection-owning frontend modules are matched by no `.claude/rules/*.md` glob.**
+  ~~most notably `frontend/src/state/store.js`~~ — **store.js FIXED 2026-07-30**: `api-and-state.md`
+  gained the glob `frontend/src/state/**/*.js` and a full store section. Still uncovered:
+  every `scene/assembly_*.js` (a parallel selection stack with its own tests), `measurement_tool`,
+  `force_crossover_tool`, `translate_rotate_tool`, `sub_domain_gizmo`, `cluster_clipboard`,
+  `slice_plane`, `cross_section_minimap`, and every `ui/*_panel.js`. The selection rewrite claimed
+  the 10 most load-bearing; the rest is a real hole.
+- **`isolatedStrandId` (isolate mode) is documented nowhere.** Menu item built in
+  `selection_manager.js:782–789`; consumers span `scene/photo_mode.js`, `joint_renderer.js`,
+  `domain_ends.js`, `helix_renderer.js`, `design_renderer.js`, `ui/file_io.js`,
+  `ui/conjugate_manager.js`. A cross-cutting display mode with 7 consumers and no owning doc.
+
+### Rule coverage is 33% of production LOC — the measured hole (found 2026-07-30, `/audit-plan` coverage sweep)
+- **Method (reusable):** match every `.py`/`.js` under `frontend/src/` + `backend/` against the
+  `paths:` globs of all 11 `.claude/rules/*.md` (minimatch semantics: `a/**/*.py` matches
+  `a/x.py`). Script kept at the pass's scratchpad; ~20 lines, re-runnable.
+- **Result:** **205,091 of 306,950 production LOC (67%) are matched by no rule glob.** Per rule:
+  `api-and-state` 82 files/50.7k, `cadnano-editor` 13/10.7k, `main-init` 1/8.1k, `rendering` 5/8.4k,
+  `animation` 16/6.6k, `selection` 10/5.8k, `scaffold-and-loops` 10/5.0k, `deformation` 4/4.6k,
+  `unfold` 1/1.6k, `strand-anim` 11/1.1k, `cadnano-2d` 2/1.1k.
+- **Uncovered LOC by directory:** `backend/core` **91,134** · `frontend/src/ui` **53,213** ·
+  `frontend/src/scene` **38,047** · `backend/physics` 11,671 · `backend/parameterization` 3,546 ·
+  `backend/ml/propagator` 2,350.
+- **The worst individual holes** (no rule, no owner):
+  - `backend/core/lattice.py` (4,923) — **holds the LOCKED `_PHASE_*` constants** that `CLAUDE.md`
+    forbids changing without approval. That prohibition is in `CLAUDE.md` but the file itself
+    auto-loads no rule.
+  - `backend/core/models.py` (3,314) — the `Design` model, every schema in the app. Only
+    `memory/REFERENCE_MODELS.md` covers it, and that is *not* auto-loaded.
+  - `backend/core/oxdna_health.py` (4,047), `atomistic.py` (3,473), `gromacs_package.py` (3,030),
+    `md_protocols.py` (2,576), `namd_solvate.py` (2,560) — the entire MD/sim core.
+  - `frontend/src/scene/assembly_renderer_shared.js` (3,940), `joint_renderer.js` (3,224),
+    `assembly_joint_renderer.js` (2,839) — the assembly render stack, ~10k LOC, no rule.
+  - `frontend/src/ui/md_jobs_panel.js` (3,707), `oxdna_jobs_panel.js` (2,554),
+    `overhangs_manager_popup.js` (2,473) — the biggest panels.
+- **Why it's debt:** an absent rule produces no signal (unlike a stale one, which announces itself
+  at the first dead symbol), so these areas get re-derived every session. Candidate new rules, in
+  value order: `models-and-schema` (models.py + validator.py), `assembly-render`
+  (`scene/assembly_*.js` + `joint_renderer.js`), `md-jobs` (backend MD core + the job panels),
+  `lattice-geometry` (lattice.py + constants.py, carrying the locked-constants warning).
+
+### `api-and-state` stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+- **`crud.py` is the response chokepoint for the whole backend.** `_design_response` /
+  `_design_response_with_geometry` ([crud.py:268/339](backend/api/crud.py#L268)) are imported by
+  **34 modules** — every `routes_*.py`, plus `backend/core/design_geometry.py`, `api/state.py` and
+  `api/doc_context.py`. So the carve-up can move handlers out of `crud.py` but every sub-router
+  still imports back into it; `crud.py` remains 11,266 LOC / 114 routes. The response builders
+  should move to their own module (`api/responses.py`) before the next carve-router pass, or the
+  import graph keeps `crud.py` structurally central no matter how many routes leave.
+- **`frontend/src/state/store.js` has zero tests** — 541 LOC, 53 state keys, 7 subscriber slices,
+  31 importing modules, and the slice-dispatch logic at :438-446 is real branching. The only
+  `*store*` test is `test-helpers/mock_store.test.js`, which tests `createMockStore` — a
+  *different* module whose filename implies coverage it does not provide.
+- **`store.js:460` JSDoc contradicts the code** — lists 6 slices, omits `assembly` (live at :414,
+  accepted by the runtime check at :468). Logged as a Trap in `api-and-state.md`; fix the comment,
+  not the code.
+- **`RUNBOOK_API.md` shipped a bug-causing instruction for an unknown period** — ":20 the ONLY
+  correct way to mutate the active design is `state.mutate_and_validate(fn)`" while
+  `mutate_with_reconcile` has been *mandatory* for any cluster-scope-affecting topology mutation
+  ([state.py:264](backend/api/state.py#L264)). Following the runbook silently skipped
+  `reconcile_cluster_membership`. Rewritten 2026-07-30. Worth grepping past cluster-membership bugs
+  against this.
+- **`PATCH /design/extensions/{id}` is documented but does not exist** — `routes_extensions.py` has
+  POST/PUT/DELETE + both `/batch` forms, no PATCH decorator. Either the route was dropped or the
+  partial-update capability was never built; nothing calls it, so it's doc-only rot today.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`

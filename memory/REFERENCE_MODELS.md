@@ -22,8 +22,9 @@ Design
 ├── overhangs: List[OverhangSpec]
 ├── extensions: List[StrandExtension]
 ├── camera_poses: List[CameraPose]
-├── configurations: List[DesignConfiguration]
 └── animations: List[DesignAnimation]
+    (NO `configurations` field — configurations are assembly-scoped only:
+     AssemblyConfigurationSnapshot. `DesignConfiguration` never existed. Verified 2026-07-30.)
 
 Helix
 ├── id, axis_start: Vec3, axis_end: Vec3
