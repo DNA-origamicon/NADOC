@@ -33,6 +33,7 @@ from backend.core.md_protocols import (
     SegmentSpec,
     build_production_conf,
     build_reseed_conf,
+    package_npt_allowed,
     psf_atom_count,
     write_hmr_psf,
 )
@@ -208,12 +209,15 @@ def build_replica_package(
         shutil.copy2(src, child_pkg / dst_name)
 
     # ── Reseed (velocity reinit for a replica; velocity-PRESERVING for a continuation) ──
+    # A carved cell (vacuum corners) must stay at constant volume — the parent package's
+    # manifest is the record of how it was solvated.  The replica inherits that.
+    npt_allowed = package_npt_allowed(parent_pkg)
     reseed_name = f"{name_stem}_00_reseed"
     (child_pkg / f"{reseed_name}.conf").write_text(
         build_reseed_conf(
             reseed_name, name_stem, box, mgh_extrabonds,
             seed=seed, equil_base="equilibrated", structure_psf=structure_psf,
-            preserve_velocities=continuation,
+            preserve_velocities=continuation, npt=npt_allowed,
         )
     )
 
@@ -254,6 +258,7 @@ def build_replica_package(
             structure_psf=structure_psf,
             n_atoms=psf_atom_count(child_pkg / f"{name_stem}.psf"),
             force_resident=force_resident,
+            npt=npt_allowed,
         )
     )
 

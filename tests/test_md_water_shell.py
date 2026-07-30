@@ -64,7 +64,7 @@ def test_recenter_places_bbox_inside_padded_cell():
         _pdb_atom(2, 1002.8, 10.1, 1182.2),  # bbox max corner
     ]) + "\n"
 
-    out_text, (bx, by, bz) = _recenter_pdb_in_padded_box(pdb, pad_nm)
+    out_text, (bx, by, bz) = _recenter_pdb_in_padded_box(pdb, pad_nm, "bbox")
 
     # Box = span + 2*pad on each axis (nm).
     assert bx == pytest.approx((1002.8 - (-188.9) + 2 * pad_a) / 10.0)
@@ -75,11 +75,38 @@ def test_recenter_places_bbox_inside_padded_cell():
         if ln.startswith("ATOM"):
             xs.append(float(ln[30:38])); ys.append(float(ln[38:46])); zs.append(float(ln[46:54]))
     # Every atom is strictly inside [0, L] with the padding preserved at the low face.
-    assert min(xs) == pad_a and min(ys) == pad_a and min(zs) == pad_a
+    assert min(xs) == pytest.approx(pad_a)
+    assert min(ys) == pytest.approx(pad_a)
+    assert min(zs) == pytest.approx(pad_a)
     assert max(xs) <= bx * 10 and max(ys) <= by * 10 and max(zs) <= bz * 10
     # Centroid sits at the cell centre (cellOrigin = box/2 will enclose it).
     assert abs((min(xs) + max(xs)) / 2 - bx * 10 / 2) < 1e-6
     assert abs((min(ys) + max(ys)) / 2 - by * 10 / 2) < 1e-6
+
+
+def test_recenter_keeps_the_structure_inside_the_cell_in_EVERY_box_mode():
+    """The tile-list protection above is mode-independent: whatever rule sizes the cell,
+    every atom must land inside it with at least the padding at each face.  ``rotation``
+    is the default, so this is the case that actually ships."""
+    pad_nm, pad_a = 1.2, 12.0
+    pdb = "\n".join([
+        _pdb_atom(1, -188.9, -10.1, -3.4),
+        _pdb_atom(2, 1002.8, 10.1, 1182.2),
+    ]) + "\n"
+    for mode in ("bbox", "rotation"):
+        out_text, box = _recenter_pdb_in_padded_box(pdb, pad_nm, mode)
+        pts = [(float(ln[30:38]), float(ln[38:46]), float(ln[46:54]))
+               for ln in out_text.splitlines() if ln.startswith("ATOM")]
+        for axis in range(3):
+            lo = min(p[axis] for p in pts)
+            hi = max(p[axis] for p in pts)
+            assert lo >= pad_a - 1e-6, f"{mode}: atom inside the low-face padding"
+            assert hi <= box[axis] * 10 - pad_a + 1e-6, f"{mode}: atom past the high face"
+    # rotation is cubic and never smaller than bbox on any axis
+    _, bb = _recenter_pdb_in_padded_box(pdb, pad_nm, "bbox")
+    _, rot = _recenter_pdb_in_padded_box(pdb, pad_nm, "rotation")
+    assert rot[0] == rot[1] == rot[2]
+    assert all(r >= b - 1e-9 for r, b in zip(rot, bb))
 
 
 def test_recenter_preserves_internal_geometry():
@@ -201,16 +228,43 @@ def test_soft_start_first_segment_only():
     assert "rigidBonds         all" in second and "timestep           2" in second
 
 
-def test_no_explicit_margin_in_configs():
-    """No explicit ``margin`` keyword — a large margin breaks NAMD's GPU tile-list
-    kernel (cudaStreamSynchronize in buildTileLists) on a carved box. The soft
-    start, not a margin, is what fixes the first-stage RATTLE crash."""
+def test_no_margin_on_a_carved_nvt_config():
+    """A carved box never carries ``margin`` — a large margin broke NAMD's GPU tile-list
+    kernel (cudaStreamSynchronize in buildTileLists) on a carved box, and a fixed cell
+    has nothing for a margin to buy.  The soft start, not a margin, is what fixes the
+    first-stage RATTLE crash.
+
+    A carved package is NVT throughout (``nvt_only``), so this is structural: margin is
+    emitted only alongside a barostat.  See ``md_protocols._pressure_block``.
+    """
     from backend.core.md_protocols import _segment_conf, mgh_slow_release_segments
 
     box = (80.0, 80.0, 200.0)
-    _, segs = mgh_slow_release_segments("S")
-    conf = _segment_conf(segs[1], "S", box, False)
-    assert "\nmargin " not in conf
+    _, carved = mgh_slow_release_segments("S", nvt_only=True)
+    for seg in carved:
+        conf = _segment_conf(seg, "S", box, False)
+        assert "\nmargin " not in conf
+        assert "langevinPiston     off" in conf
+
+
+def test_npt_config_carries_a_small_patch_grid_margin():
+    """An NPT stage DOES carry a small margin: without it NAMD FATALs with "Periodic
+    cell has become too small for original patch grid" as soon as the cell trims, which
+    is exactly what a correctly filled box does in its first 300 ps.
+
+    Small is the point — the historical GPU tile-list crash was a LARGE margin on a
+    carved cell, and a correctly filled box only trims ~2-3 % of its length.
+    """
+    from backend.core.md_protocols import (NPT_MARGIN_ANG, _segment_conf,
+                                           mgh_slow_release_segments)
+
+    box = (80.0, 80.0, 200.0)
+    _, segs = mgh_slow_release_segments("S", nvt_only=False)
+    npt_seg = next(s for s in segs if s.npt)
+    conf = _segment_conf(npt_seg, "S", box, False)
+    assert f"\nmargin             {NPT_MARGIN_ANG:g}\n" in conf
+    assert "langevinPiston     on" in conf
+    assert NPT_MARGIN_ANG <= 5.0, "a large margin is what broke the GPU tile-list kernel"
 
 
 def test_segments_nvt_only_disables_barostat():

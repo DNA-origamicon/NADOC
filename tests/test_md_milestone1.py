@@ -692,10 +692,18 @@ class TestProductionAppend:
         assert "rigidBonds         all" in conf
         assert "GPUresident        on" in conf
         # PME every 4 fs at a 4 fs step (fullElect 1) — matches the Aksimentiev
-        # reference and stays under the r-RESPA ~4 fs resonance limit.
+        # reference and stays under the r-RESPA ~4 fs resonance limit.  This is why
+        # the tutorial's literal `fullElectFrequency 2` is NOT copied: at their 2 fs it
+        # means PME every 4 fs, which is what we already do; at our 4 fs it would mean
+        # every 8 fs.
         assert "fullElectFrequency 1" in conf
-        assert "PMEGridSpacing     1.0" in conf
-        assert "cutoff             12.0" in conf
+        # Aksimentiev tutorial electrostatics, adopted 2026-07-29 after a head-to-head
+        # measurement: +39 % throughput, structurally indistinguishable (bp intact
+        # 1.000 both, same T and energy drift).  See exp47_protocol_delta.
+        assert "PMEGridSpacing     1.5" in conf
+        assert "switchdist         8.0" in conf
+        assert "cutoff             10.0" in conf
+        assert "pairlistdist       12.0" in conf
         # Thermostat/barostat aligned to the Aksimentiev reference.
         assert "langevinTemp       300" in conf
         assert "langevinDamping    5" in conf

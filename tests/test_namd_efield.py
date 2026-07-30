@@ -357,7 +357,8 @@ def test_local_resume_conf_preserves_field_and_anchors(tmp_path):
 # ── real psfgen: q_res = −1 e is the force field's value, not our assumption ───
 
 
-def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *, water_shell_nm=None):
+def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *,
+                  water_shell_nm=None, box_mode=None):
     """Stand-in for gmx solvation (mirrors test_namd_anchors): psfgen still runs for real,
     so the PSF whose charges we read below is the genuine CHARMM topology."""
     import backend.core.namd_solvate as ns

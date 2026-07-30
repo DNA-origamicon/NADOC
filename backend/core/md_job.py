@@ -97,6 +97,15 @@ class MdJob:
     threads: int = 16
     devices: str = "0"
     health_samples: list[MdHealthSample] = field(default_factory=list)
+    # Durable record of every "periodic cell has become too small" fatal, whether it was
+    # auto-resumed or refused: {segment, attempt, volume_fraction, collapsing,
+    # cell_start_ang, cell_end_ang, n_samples}. These used to leave no trace — the resume
+    # path cleared failure_kind and overwrote `error`, so a run that crashed four times
+    # while its cell collapsed 38 % finished "completed" looking clean (exp47).
+    cell_shrink_events: list[dict] = field(default_factory=list)
+    # Per-NPT-stage box-trace verdict (md_cell_health.settle_report): did the cell
+    # settle inside 300 ps and hold, as the Aksimentiev protocol requires?
+    cell_settle_reports: list[dict] = field(default_factory=list)
     design_source_path: Optional[str] = None
     seed_oxdna_job_id: Optional[str] = (
         None  # provenance: oxDNA job whose relaxed coords seeded this run
@@ -249,6 +258,8 @@ class MdJob:
         data["health_samples"] = [
             MdHealthSample(**h) for h in data.get("health_samples", [])
         ]
+        data.setdefault("cell_shrink_events", [])
+        data.setdefault("cell_settle_reports", [])
         data.setdefault("design_source_path", None)
         data.setdefault("seed_oxdna_job_id", None)
         data.setdefault("seed_mrdna_job_id", None)
@@ -257,7 +268,7 @@ class MdJob:
         data.setdefault("ensemble_seed", None)
         data.setdefault("ensemble_index", None)
         data.setdefault("run_kind", None)
-        data.setdefault("early_stop_relax", False)
+        data.setdefault("early_stop_relax", False)   # pre-existing jobs keep their setting
         data.setdefault("early_stop_tier", "B")
         data.setdefault("failure_kind", None)
         data.setdefault("decision", None)

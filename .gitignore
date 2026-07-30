@@ -198,3 +198,6 @@ log.lammps
 # RunPod campaign runtime logs (machine-local)
 experiments/exp43_runpod_bench/logs/
 experiments/exp43_runpod_bench/workspace_e2e/
+
+# exp46: regenerable trajectory dumps (19 MB; rebuild with xb_observables.py from the DCD)
+experiments/exp46_xb_placement/*_xb_traj.json

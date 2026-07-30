@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import dataclasses
 import io
+import logging
 import json
 import math
 import random
@@ -373,8 +374,82 @@ def _carve_water_shell(
     return kept
 
 
+# Default cell-sizing rule.  "rotation" sizes the cell so the padding survives ANY
+# reorientation of the solute (cubic, 2*r_max + 2*pad) rather than only the pose it was
+# built in.  An unrestrained solute rotates: the 2hb built as 20.2 x 42.6 x 88.1 A reached
+# 59.7 x 70.3 x 107.0 A over 200 ns and overran its "bbox"-sized cell on every axis,
+# spending most of the run within 3-9 A of its own periodic image.  "bbox" (the historical
+# rule) remains available and is the automatic fallback when "rotation" would not fit the
+# hardware.  See experiments/exp47_protocol_delta/RESULTS.md.
+logger = logging.getLogger(__name__)
+
+DEFAULT_BOX_MODE = "rotation"
+# Bulk TIP3P number density (waters per Å³) — 1 g/cm³ is 29.9 Å³ per water.
+_WATER_PER_ANG3 = 1.0 / 29.91
+# Partial specific volume of DNA, ~0.55 cm³/g, as Å³ per heavy+H atom (≈ 310 Da / 32
+# atoms per nucleotide → ~8.8 Å³/atom).
+_DNA_ANG3_PER_ATOM = 8.8
+
+
+def estimate_box_atoms(box_nm, n_dna_atoms: int) -> int:
+    """Rough solvated atom count for a cell of this size (pure).
+
+    Water fills whatever the solute does not occupy, at bulk density.  Used to decide
+    whether a rotation-sized cell is affordable before paying to build it.
+    """
+    v_box = float(box_nm[0]) * float(box_nm[1]) * float(box_nm[2]) * 1000.0  # nm³→Å³
+    v_dna = n_dna_atoms * _DNA_ANG3_PER_ATOM
+    waters = max(0.0, v_box - v_dna) * _WATER_PER_ANG3
+    return int(round(waters * 3 + n_dna_atoms))
+
+
+def _box_mode_atom_cap(devices: "str | None") -> "int | None":
+    """Atom ceiling the box sizer must respect — the same VRAM/host-RAM cap the
+    water-shell auto-sizer uses, so the two agree about what "fits"."""
+    try:
+        from backend.core.md_vram import (detect_host_ram_mb, detect_vram_mb,  # noqa: PLC0415
+                                          max_atoms_for_host_ram, max_atoms_for_vram)
+        host = detect_host_ram_mb()
+        host_cap = max_atoms_for_host_ram(host) if host else None
+        if (devices or "").strip().lower() in ("cpu", "none"):
+            return host_cap
+        vram = detect_vram_mb(devices or "0")
+        vram_cap = max_atoms_for_vram(vram) if vram else None
+        caps = [c for c in (vram_cap, host_cap) if c]
+        return min(caps) if caps else None
+    except Exception:  # noqa: BLE001 — sizing must never break a build
+        return None
+
+
+def resolve_box_mode(pdb_text: str, padding_nm: float, *,
+                     max_atoms: "int | None",
+                     preferred: str = DEFAULT_BOX_MODE) -> tuple[str, "str | None"]:
+    """Pick a cell-sizing rule that is both correct and affordable (pure).
+
+    Prefers ``preferred`` (rotation), but falls back to ``bbox`` when the rotation-sized
+    cell would not fit ``max_atoms``.  A too-big cell is not a safer choice than a
+    too-small one: it forces a water-shell carve, which forces NVT, which rules out the
+    free NPT stage the rotation sizing existed to protect.  Returns ``(mode, note)`` with
+    ``note`` set only when a downgrade happened, so the caller can record it.
+    """
+    if preferred != "rotation" or not max_atoms:
+        return preferred, None
+    n_dna = sum(1 for ln in pdb_text.splitlines()
+                if ln.startswith(("ATOM", "HETATM")))
+    _, rot_box = _recenter_pdb_in_padded_box(pdb_text, padding_nm, "rotation")
+    rot_atoms = estimate_box_atoms(rot_box, n_dna)
+    if rot_atoms <= max_atoms:
+        return "rotation", None
+    _, bb_box = _recenter_pdb_in_padded_box(pdb_text, padding_nm, "bbox")
+    return "bbox", (
+        f"rotation-sized cell would be ~{rot_atoms:,} atoms (cap {max_atoms:,}); "
+        f"fell back to bbox sizing (~{estimate_box_atoms(bb_box, n_dna):,} atoms). "
+        f"A free (unrestrained) stage in this box is NOT trustworthy — the solute can "
+        f"rotate into its own periodic image. Use a cluster target for a free run.")
+
+
 def _recenter_pdb_in_padded_box(
-    pdb_text: str, padding_nm: float
+    pdb_text: str, padding_nm: float, box_mode: str = DEFAULT_BOX_MODE
 ) -> tuple[str, tuple[float, float, float]]:
     """Translate every ATOM/HETATM so the structure's bounding box is centred in a
     rectangular ``[0, L]`` cell of size ``span + 2·padding`` per axis.
@@ -390,6 +465,8 @@ def _recenter_pdb_in_padded_box(
     the water only, leaving the DNA far outside the periodic cell → NAMD's GPU
     tile-list kernel hits an illegal memory access at startup (buildTileLists).
     """
+    import numpy as np  # noqa: PLC0415
+
     pad_a = padding_nm * 10.0  # nm → Å
 
     xs: list[float] = []
@@ -410,10 +487,26 @@ def _recenter_pdb_in_padded_box(
     ymin, ymax = min(ys), max(ys)
     zmin, zmax = min(zs), max(zs)
 
-    # Translation that maps each axis' minimum to +padding (bbox → [pad, span+pad]).
-    tx = pad_a - xmin
-    ty = pad_a - ymin
-    tz = pad_a - zmin
+    # ``rotation`` sizes the cell so the padding survives ANY reorientation of the solute
+    # (cubic, 2*r_max + 2*pad) instead of only the pose it was built in.  An unrestrained
+    # run rotates: the 2hb built as 20.2 x 42.6 x 88.1 A reached 59.7 x 70.3 x 107.0 A and
+    # overran its cell on every axis.  ``bbox`` is the historical rule and stays the
+    # default so existing packages reproduce byte-for-byte.
+    half = np.array([(xmax - xmin), (ymax - ymin), (zmax - zmin)], dtype=float) / 2.0
+    centre = np.array([(xmax + xmin), (ymax + ymin), (zmax + zmin)], dtype=float) / 2.0
+    if box_mode == "rotation":
+        r_max = max(
+            float(np.linalg.norm(np.array([x, y, z]) - centre))
+            for x, y, z in zip(xs, ys, zs)
+        )
+        span = np.array([2.0 * r_max] * 3)
+    elif box_mode == "bbox":
+        span = 2.0 * half
+    else:
+        raise ValueError(f"unknown box_mode {box_mode!r} (expected 'bbox' or 'rotation')")
+
+    # Translation that centres the structure in a cell of ``span + 2*padding``.
+    tx, ty, tz = (pad_a + span / 2.0) - centre
 
     out: list[str] = []
     for ln in pdb_text.splitlines():
@@ -429,10 +522,8 @@ def _recenter_pdb_in_padded_box(
         else:
             out.append(ln)
 
-    bx = ((xmax - xmin) + 2 * pad_a) / 10.0  # Å → nm
-    by = ((ymax - ymin) + 2 * pad_a) / 10.0
-    bz = ((zmax - zmin) + 2 * pad_a) / 10.0
-    return "\n".join(out) + "\n", (bx, by, bz)
+    bx, by, bz = (span + 2 * pad_a) / 10.0  # Å → nm
+    return "\n".join(out) + "\n", (float(bx), float(by), float(bz))
 
 
 def _gmx_solvate(
@@ -442,6 +533,7 @@ def _gmx_solvate(
     progress: Optional[ProgressCb] = None,
     *,
     water_shell_nm: Optional[float] = None,
+    box_mode: str = DEFAULT_BOX_MODE,
 ) -> tuple[list[_Water], tuple[float, float, float], str]:
     """Place TIP3P water around the DNA using GROMACS.
 
@@ -464,7 +556,7 @@ def _gmx_solvate(
 
     # Centre the DNA ourselves in a rectangular box, then tell editconf NOT to move
     # it (-noc) — so the DNA we hand back and the water gmx places share one frame.
-    pdb_text, box_nm = _recenter_pdb_in_padded_box(pdb_text, padding_nm)
+    pdb_text, box_nm = _recenter_pdb_in_padded_box(pdb_text, padding_nm, box_mode)
     bx, by, bz = box_nm
 
     (tmpdir / "dry.pdb").write_text(pdb_text)
@@ -2108,6 +2200,9 @@ def build_namd_solvated_package(
     atomistic_model: "AtomisticModel | None" = None,
     solute_coords: "np.ndarray | None" = None,
     water_shell_nm: Optional[float] = None,
+    # Compute target, used ONLY to size the box against the right memory ceiling
+    # (see _box_mode_atom_cap).  "cpu"/"none" sizes to host RAM instead of VRAM.
+    devices: str = "0",
     progress: Optional[ProgressCb] = None,
 ) -> bytes:
     """Return raw ZIP bytes of a complete NAMD explicit-solvent package.
@@ -2193,9 +2288,17 @@ def build_namd_solvated_package(
         #    _gmx_solvate returns the DNA re-centred into the SAME [0,L] frame as the
         #    water; use THAT text below so DNA + water co-register and every atom
         #    lands inside the periodic cell (else NAMD's GPU kernel crashes).
+        # Cell-sizing rule: prefer rotation (orientation-proof), but fall back to the
+        # historical bbox rule when that would not fit the hardware — a cell too big to
+        # run is not safer than one too small.  The downgrade is recorded, not silent.
+        box_mode, box_mode_note = resolve_box_mode(
+            dna_pdb, padding_nm, max_atoms=_box_mode_atom_cap(devices))
+        if box_mode_note:
+            logger.warning("box sizing: %s", box_mode_note)
+            _emit(progress, "assemble", 0.4, f"Box sizing: {box_mode_note}")
         waters, box_nm, dna_pdb = _gmx_solvate(
             dna_pdb, padding_nm, tmpdir, progress=progress,
-            water_shell_nm=water_shell_nm,
+            water_shell_nm=water_shell_nm, box_mode=box_mode,
         )
 
     # 3. Count DNA net charge (1 phosphate = -1 charge) and calculate ion counts.

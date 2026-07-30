@@ -58,7 +58,78 @@ from backend.core.md_vram import (
 # A "periodic cell too small" fatal is self-healing on a checkpoint restart (the
 # grid rebuilds for the shrunken box), but bound the automatic retries per segment
 # so a genuinely stuck run still fails instead of resuming forever.
+#
+# ⚠ Resuming is only legitimate when the cell is TRIMMING (a correctly filled box loses a
+# few percent in the first ~300 ps and then holds — the Aksimentiev box-trace criterion).
+# When the cell is COLLAPSING the crash is a symptom of an under-filled box, and every
+# resume walks further into a cell that ends up smaller than the solute; measured on
+# 2hb_1xT, four resumes carried a 37 %-vacuum cell down to 62 % of its initial volume with
+# the DNA in contact with its own periodic image (experiments/exp47_protocol_delta).
+# _cell_shrink_diagnosis makes that distinction, and every event is recorded on the job.
 MAX_CELL_SHRINK_RESUMES = 4
+
+
+def _record_settle_report(job, spec, output_dir: Path, workspace_dir: Path) -> None:
+    """Append this NPT stage's box-trace verdict to the job and log it.
+
+    Best-effort and never fatal — it is a diagnostic.  The hard stop for a genuinely
+    collapsing cell lives in the failure path (``_cell_shrink_diagnosis``); this is the
+    signal for the far more common case of a run that never crashes but whose cell was
+    quietly wrong all along.
+    """
+    try:
+        from backend.core import md_cell_health as _cell  # noqa: PLC0415
+
+        rows = _cell.read_xst(output_dir / f"{spec.name}.xst")
+        if rows.size == 0:
+            return
+        dt = float(getattr(spec, "timestep_fs", 0) or 0) or 2.0
+        rep = _cell.settle_report(rows, timestep_fs=dt)
+        rep["segment"] = spec.name
+        job.cell_settle_reports.append(rep)
+        job.save(workspace_dir)
+        if rep["ok"] is False:
+            logger.warning("[%s] %s: box did NOT settle — %s",
+                           job.job_id, spec.name, rep["reason"])
+        else:
+            logger.info("[%s] %s: cell %.1f%% of start, %s",
+                        job.job_id, spec.name,
+                        (rep.get("volume_end_ang3", 0) /
+                         max(rep.get("volume_start_ang3", 1), 1e-9)) * 100.0,
+                        rep["reason"])
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("settle report unavailable for %s: %s", spec.name, exc)
+
+
+def _cell_shrink_diagnosis(output_dir: Path, segment_name: str) -> dict:
+    """How far has the cell moved, and is that a trim or a collapse?
+
+    Reads the segment's own ``.xst`` (plus any ``.contN.xst`` continuations, which is
+    where an earlier auto-resume wrote), so the verdict covers the whole segment rather
+    than the last restart window.
+    """
+    import numpy as _np  # noqa: PLC0415
+
+    from backend.core import md_cell_health as _cell  # noqa: PLC0415
+
+    traces = [output_dir / f"{segment_name}.xst"]
+    traces += sorted(output_dir.glob(f"{segment_name}.cont*.xst"))
+    rows = _np.zeros((0, 4))
+    for t in traces:
+        r = _cell.read_xst(t)
+        if r.size:
+            rows = r if rows.size == 0 else _np.vstack([rows, r])
+    if rows.size == 0:
+        return {"volume_fraction": float("nan"), "collapsing": False,
+                "cell_start_ang": None, "cell_end_ang": None, "n_samples": 0}
+    frac = _cell.volume_fraction(rows)
+    return {
+        "volume_fraction": frac,
+        "collapsing": _cell.is_collapsing(rows),
+        "cell_start_ang": [round(float(x), 2) for x in rows[0, 1:]],
+        "cell_end_ang": [round(float(x), 2) for x in rows[-1, 1:]],
+        "n_samples": int(rows.shape[0]),
+    }
 
 # A host pinned-memory OOM (cudaHostAlloc in the bonded-CUDA tuple staging — see
 # md_vram.FAILURE_HOST_OOM) is usually TRANSIENT: the same allocation succeeds when
@@ -1678,28 +1749,66 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 # leave the job RUNNING and let the supervisor auto-resume it (up
                 # to a per-segment cap), instead of dead-ending on a healthy run.
                 seg = job.segments[idx] if idx < len(job.segments) else None
-                if (
-                    failure_kind == FAILURE_CELL_SHRINK
-                    and seg is not None
-                    and seg.auto_resumes < MAX_CELL_SHRINK_RESUMES
-                    and _resume_step(output_dir, spec.name, spec.steps) is not None
-                ):
-                    seg.auto_resumes += 1
-                    seg.status = "running"
-                    job.status = MdStatus.running
-                    job.failure_kind = None
-                    job.error = (
-                        f"{spec.name}: periodic cell outgrew the patch grid during "
-                        f"NPT equilibration; auto-resuming from the last checkpoint "
-                        f"(attempt {seg.auto_resumes}/{MAX_CELL_SHRINK_RESUMES})."
-                    )
-                    job.save(workspace_dir)
-                    logger.warning(
-                        "[%s] %s hit periodic-cell-too-small; auto-resuming from "
-                        "checkpoint (attempt %d/%d)",
-                        job.job_id, spec.name, seg.auto_resumes, MAX_CELL_SHRINK_RESUMES,
-                    )
-                    return
+                if failure_kind == FAILURE_CELL_SHRINK and seg is not None:
+                    cell = _cell_shrink_diagnosis(output_dir, spec.name)
+                    # Record the event PERMANENTLY before deciding what to do with it.
+                    # The old code set job.failure_kind = None and left only a transient
+                    # `error` string, so a run that crashed four times finished
+                    # "completed" with no trace — which is how the 2hb_1xT 200 ns run
+                    # came to inherit a cell that had collapsed 38 % (exp47).
+                    job.cell_shrink_events.append({
+                        "segment": spec.name,
+                        "attempt": seg.auto_resumes + 1,
+                        **cell,
+                    })
+                    if cell["collapsing"]:
+                        # Not equilibration. The box was built with vacuum in it, and
+                        # resuming only walks further into a cell too small for the
+                        # solute. Fail loudly and point at the cause.
+                        if idx < len(job.segments):
+                            job.segments[idx].status = "failed"
+                        job.status = MdStatus.failed
+                        job.failure_kind = FAILURE_CELL_SHRINK
+                        job.error = (
+                            f"{spec.name}: the periodic cell has collapsed to "
+                            f"{cell['volume_fraction'] * 100:.0f}% of its initial volume "
+                            f"({cell['cell_start_ang']} -> {cell['cell_end_ang']} A) and "
+                            f"outgrew the patch grid. That is not NPT equilibration — the "
+                            f"box was solvated with vacuum in it (a water-shell carve, or "
+                            f"too few waters). Rebuild with a full water box, or run this "
+                            f"stage at constant volume. Auto-resume refused: continuing "
+                            f"would produce a cell smaller than the solute."
+                        )
+                        job.save(workspace_dir)
+                        logger.error(
+                            "[%s] %s: cell collapsed to %.0f%% of initial volume — "
+                            "refusing to auto-resume (box is under-filled)",
+                            job.job_id, spec.name, cell["volume_fraction"] * 100,
+                        )
+                        return
+                    if (
+                        seg.auto_resumes < MAX_CELL_SHRINK_RESUMES
+                        and _resume_step(output_dir, spec.name, spec.steps) is not None
+                    ):
+                        seg.auto_resumes += 1
+                        seg.status = "running"
+                        job.status = MdStatus.running
+                        job.failure_kind = None
+                        job.error = (
+                            f"{spec.name}: periodic cell outgrew the patch grid during "
+                            f"NPT equilibration (cell at "
+                            f"{cell['volume_fraction'] * 100:.0f}% of initial volume); "
+                            f"auto-resuming from the last checkpoint "
+                            f"(attempt {seg.auto_resumes}/{MAX_CELL_SHRINK_RESUMES})."
+                        )
+                        job.save(workspace_dir)
+                        logger.warning(
+                            "[%s] %s hit periodic-cell-too-small at %.0f%% of initial "
+                            "volume; auto-resuming from checkpoint (attempt %d/%d)",
+                            job.job_id, spec.name, cell["volume_fraction"] * 100,
+                            seg.auto_resumes, MAX_CELL_SHRINK_RESUMES,
+                        )
+                        return
                 # A host pinned-memory OOM is usually a transient starvation, not a
                 # size limit (the same allocation succeeded on the previous segment).
                 # Leave the job RUNNING so the supervisor relaunches it after a short
@@ -1797,6 +1906,14 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                  else f" WARN: {hresult.reason or hresult.error}"),
             )
             append_health_jsonl(output_dir, spec.name, spec.stage, hresult)
+
+            # ── the Aksimentiev box-trace criterion ──────────────────────────
+            # "The box should shrink in the first 300 ps.  After that the box size
+            # should become stable."  Reported for every barostatted stage: a cell that
+            # never flattens means the box does not hold the right amount of water, and
+            # that used to be invisible until a 200 ns run finished in a collapsed cell.
+            if getattr(spec, "npt", False):
+                _record_settle_report(job, spec, output_dir, workspace_dir)
 
             # Save health sample to job object
             sample = MdHealthSample(

@@ -50,6 +50,139 @@ SUPPORTED_PROTOCOLS = {LEGACY_PROTOCOL, EQUILIBRIUM_AWARE_PROTOCOL, IMPLICIT_GBI
 # minimize/run count is not a multiple of it.  (benchmark_runner.NAMD_STEPS_PER_CYCLE too.)
 AKSIMENTIEV_STEPS_PER_CYCLE = 20
 
+# NAMD sizes its patch grid from the cell at startup and FATALs with "Periodic cell has
+# become too small for original patch grid!" once the cell shrinks past it.  ``margin``
+# is the headroom that buys.  With a correctly filled box the cell only trims ~2-3 % of
+# its length, so a few Angstrom is plenty; measured cost of a (far larger) margin 30 was
+# 9 % throughput, and margin 3 is well inside the noise.  NVT stages do not need it.
+# See experiments/exp47_protocol_delta/RESULTS.md.
+#
+# ⚠ A LARGE margin once broke NAMD's GPU tile-list kernel (cudaStreamSynchronize in
+# buildTileLists) on a CARVED box — hence both "small" and "NPT only" (a carved package
+# is NVT throughout, so the two never combine).  Verified 2026-07-29 on the full-box
+# 2hb_1xT package: margin 3 + GPUresident on + NPT ran 5000 steps clean at 261 ns/day.
+NPT_MARGIN_ANG = 3.0
+
+# ── Electrostatics ───────────────────────────────────────────────────────────
+# The Aksimentiev origami tutorial's values (`step3/equil_k*.namd`), adopted 2026-07-29
+# after a head-to-head measurement on the full-water-box 2hb_1xT (32,572 atoms, 4 fs+HMR,
+# GPU-resident, 2 ns each — experiments/exp47_protocol_delta/run_electrostatics_arms.py):
+#
+#   8/10/12 + PME 1.5 + fullElect 2 : 369.6 ns/day   cell settled, bp intact 1.000
+#   10/12/14 + PME 1.0 + fullElect 1: 265.3 ns/day   cell settled, bp intact 1.000
+#
+# +39 % throughput, structurally indistinguishable (identical base-pair integrity,
+# temperature and total-energy drift).  The previous values were not wrong — they match
+# Roodhuizen et al., ACS Nano 13, 10798 (2019) — but they cost 39 % for no measured gain.
+# See memory/REFERENCE_AKSIMENTIEV_PROTOCOL.md.
+SWITCHDIST_ANG = 8.0
+CUTOFF_ANG = 10.0
+PAIRLISTDIST_ANG = 12.0
+PME_GRID_SPACING = 1.5
+# NOT adopted: the tutorial's ``fullElectFrequency 2``.  That is a dt-dependent knob —
+# at THEIR 2 fs it means PME every 4 fs, and NADOC's 4 fs path already evaluates PME
+# every 4 fs with fullElect 1.  Copying the literal 2 at 4 fs would put PME on an 8 fs
+# interval, past the r-RESPA resonance limit (~4 fs).  The +12 % it showed over 2 ns is
+# not worth a slow heating failure that a 2 ns arm cannot rule out; the PME *interval*
+# already matches the reference.  Keep PME_MAX_INTERVAL_FS as the invariant.
+PME_MAX_INTERVAL_FS = 4.0
+
+# Cell samples must be frequent enough to JUDGE the box trace — the Aksimentiev
+# criterion is "flat after 300 ps", which needs samples inside 300 ps.  Production used
+# to reuse ``outputEnergies`` (125,000 steps = 500 ps at 4 fs), i.e. one sample per
+# 500 ps, which is how a 38 % collapse went unnoticed for 200 ns.
+XST_MAX_INTERVAL_PS = 10.0
+
+
+def _pressure_block(npt: bool, *, period: float, decay: float, temp: float = 300.0,
+                    margin_ang: float = NPT_MARGIN_ANG) -> str:
+    """The barostat + patch-grid-margin lines for a conf.
+
+    ``npt=False`` emits a constant-volume block.  That is REQUIRED, not merely allowed,
+    when the cell contains vacuum (a water-shell carve): a barostat expels the vacuum,
+    which collapses the cell onto the solute and crashes the patch grid on the way.
+    """
+    if not npt:
+        return "langevinPiston     off\n"
+    return (
+        f"margin             {margin_ang:g}\n"
+        "useGroupPressure   yes\n"
+        "useFlexibleCell    no\n"
+        "useConstantArea    no\n"
+        "langevinPiston     on\n"
+        "langevinPistonTarget  1.01325\n"
+        f"langevinPistonPeriod  {period:.1f}\n"
+        f"langevinPistonDecay   {decay:.1f}\n"
+        f"langevinPistonTemp {temp:g}\n"
+    )
+
+
+def _xst_freq(steps: int, timestep_fs: float, fallback: int) -> int:
+    """Box-trace sampling interval: never coarser than ``XST_MAX_INTERVAL_PS``."""
+    cap = max(1, int(XST_MAX_INTERVAL_PS * 1000.0 / max(timestep_fs, 1e-9)))
+    return max(1, min(int(fallback), cap, max(1, int(steps))))
+
+
+def _box_check(package_dir: Path, name_stem: str,
+               box: tuple[float, float, float], padding_nm: float) -> dict:
+    """Measure the built solute against the cell it was given.
+
+    Best-effort: a package must never fail to build because a diagnostic could not be
+    computed, so any error degrades to ``{"measured": False}``.
+    """
+    try:
+        from backend.core import md_cell_health as _cell  # noqa: PLC0415
+
+        pdb = package_dir / f"{name_stem}.pdb"
+        if not pdb.exists():
+            return {"measured": False, "reason": "no built PDB"}
+        xyz = []
+        for ln in pdb.read_text(errors="replace").splitlines():
+            if ln.startswith(("ATOM", "HETATM")) and ln[72:76].strip().startswith("D"):
+                xyz.append((float(ln[30:38]), float(ln[38:46]), float(ln[46:54])))
+        if not xyz:
+            return {"measured": False, "reason": "no DNA atoms in the built PDB"}
+        import numpy as _np  # noqa: PLC0415
+
+        env = _cell.solute_envelope([_np.asarray(xyz, dtype=float)])
+        rep = _cell.box_adequacy([b / 10.0 for b in box], env,
+                                 padding_nm=padding_nm, percentile="max")
+        rep["measured"] = True
+        if not rep["fits_rotated"]:
+            logger.warning(
+                "%s: the solvent box fits the solute AS BUILT but not once it rotates "
+                "(cell %s A, solute radius %.1f A — a turn needs %.1f A per axis). An "
+                "unrestrained run will bring the DNA within %.1f A of its own periodic "
+                "image. Rebuild with box_mode='rotation' or more padding if this run "
+                "includes a free stage.",
+                name_stem, [round(b, 1) for b in box], rep["radius_ang"],
+                2 * rep["radius_ang"] + 2 * padding_nm * 10.0,
+                max(rep["image_gap_rotated_ang"], 0.0),
+            )
+        return rep
+    except Exception as exc:  # noqa: BLE001 — a diagnostic must not break a build
+        return {"measured": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
+def package_npt_allowed(package_dir: "str | Path") -> bool:
+    """May this package's stages run under a barostat?
+
+    ``False`` when it was solvated with a water-shell carve — the cell then has vacuum
+    corners and a barostat will collapse it.  Packages built before ``solvation`` was
+    recorded in the manifest fall back to ``True`` (their historical behaviour), so this
+    never silently changes an existing job's ensemble.
+    """
+    mpath = Path(package_dir) / "manifest.json"
+    if not mpath.exists():
+        return True
+    try:
+        sol = json.loads(mpath.read_text()).get("solvation") or {}
+    except (json.JSONDecodeError, OSError):
+        return True
+    if "npt_allowed" in sol:
+        return bool(sol["npt_allowed"])
+    return not bool(sol.get("carved", False))
+
 
 # ── Electric field (NAMD native eFieldOn / eField) ────────────────────────────
 #
@@ -426,8 +559,16 @@ def build_production_conf(
     field: Optional[dict] = None,
     n_atoms: Optional[int] = None,
     force_resident: Optional[bool] = None,
+    npt: bool = True,
 ) -> str:
     """Unrestrained NPT production conf, continuing from a prior checkpoint (pure).
+
+    ``npt=False`` runs the stage at constant volume.  Pass it whenever the package was
+    solvated with a water-shell carve: the cell then contains vacuum, and a barostat
+    collapses it onto the solute (measured: -38 % volume, DNA in contact with its own
+    periodic image, and a hard patch-grid crash on the way).  The relax ladder has always
+    honoured this via ``SegmentSpec.npt``; production did not, which is the gap this
+    parameter closes.
 
     Shared by the local production path (``routes_md._conservative_production_conf``,
     which delegates here with the defaults → byte-identical output) and the Alpine
@@ -511,6 +652,11 @@ def build_production_conf(
     # were pure overhead on a 1.9M-atom GPU-resident run — a GPU->host energy pull every
     # 100 steps, and 90 MB of restart files to a NETWORK filesystem every 1000.
     prod_e, prod_r = _production_output_freqs(spec.steps, cycle=spc)
+    # Box trace must stay fine enough to judge (see XST_MAX_INTERVAL_PS); it used to
+    # inherit prod_e, i.e. one cell sample per 500 ps on a long run.
+    prod_x = _xst_freq(spec.steps, ts, prod_e)
+    # A cell with vacuum in it MUST run at constant volume — see _pressure_block.
+    pressure = _pressure_block(npt, period=200.0, decay=100.0)
     return f"""\
 structure          {psf}
 coordinates        {name_stem}.pdb
@@ -531,11 +677,11 @@ wrapWater          on
 exclude            scaled1-4
 oneFourScaling     1.0
 switching          on
-switchdist         10.0
-cutoff             12.0
-pairlistdist       14.0
+switchdist         {SWITCHDIST_ANG:.1f}
+cutoff             {CUTOFF_ANG:.1f}
+pairlistdist       {PAIRLISTDIST_ANG:.1f}
 PME                yes
-PMEGridSpacing     1.0
+PMEGridSpacing     {PME_GRID_SPACING:g}
 rigidBonds         {rigid}
 rigidTolerance     1.0e-8
 timestep           {ts:g}
@@ -546,16 +692,8 @@ stepspercycle      {spc}
 langevinTemp       300
 langevinDamping    5
 langevinHydrogen   off
-useGroupPressure   yes
-useFlexibleCell    no
-useConstantArea    no
-langevinPiston     on
-langevinPistonTarget  1.01325
-langevinPistonPeriod  200.0
-langevinPistonDecay   100.0
-langevinPistonTemp 300
-outputEnergies     {prod_e}
-xstFreq            {prod_e}
+{pressure}outputEnergies     {prod_e}
+xstFreq            {prod_x}
 restartfreq        {prod_r}
 binaryrestart      yes
 constraints        off
@@ -580,6 +718,7 @@ def build_reseed_conf(
     equil_base: str = "equilibrated",
     structure_psf: Optional[str] = None,
     preserve_velocities: bool = False,
+    npt: bool = True,
 ) -> str:
     """Velocity-reseed bridge conf for an ensemble replica (pure).
 
@@ -627,11 +766,11 @@ wrapWater          on
 exclude            scaled1-4
 oneFourScaling     1.0
 switching          on
-switchdist         10.0
-cutoff             12.0
-pairlistdist       14.0
+switchdist         {SWITCHDIST_ANG:.1f}
+cutoff             {CUTOFF_ANG:.1f}
+pairlistdist       {PAIRLISTDIST_ANG:.1f}
 PME                yes
-PMEGridSpacing     1.0
+PMEGridSpacing     {PME_GRID_SPACING:g}
 rigidBonds         none
 rigidTolerance     1.0e-8
 timestep           1.0
@@ -642,15 +781,7 @@ langevin           on
 langevinTemp       300
 langevinDamping    5
 langevinHydrogen   off
-useGroupPressure   yes
-useFlexibleCell    no
-useConstantArea    no
-langevinPiston     on
-langevinPistonTarget  1.01325
-langevinPistonPeriod  200.0
-langevinPistonDecay   100.0
-langevinPistonTemp 300
-outputEnergies     100
+{_pressure_block(npt, period=200.0, decay=100.0)}outputEnergies     100
 xstFreq            1000
 restartfreq        1000
 binaryrestart      yes
@@ -920,17 +1051,8 @@ def _segment_conf(
     lines.append(f"langevinTemp       {spec.temp:g}\n")
     lines.append(f"langevinDamping    {spec.damping:g}\n")
 
-    if spec.npt and not gbis:
-        lines.append("useGroupPressure   yes\n")
-        lines.append("useFlexibleCell    no\n")
-        lines.append("useConstantArea    no\n")
-        lines.append("langevinPiston     on\n")
-        lines.append("langevinPistonTarget  1.01325\n")
-        lines.append("langevinPistonPeriod  1000.0\n")
-        lines.append("langevinPistonDecay   500.0\n")
-        lines.append(f"langevinPistonTemp {spec.temp:g}\n")
-    else:
-        lines.append("langevinPiston     off\n")
+    lines.append(_pressure_block(bool(spec.npt) and not gbis,
+                                 period=1000.0, decay=500.0, temp=spec.temp))
 
     if mgh_extrabonds or spec.extra_bonds_file:
         lines.append("extraBonds         on\n")
@@ -2209,6 +2331,20 @@ def prepare_mgh_slow_release(
                if capture_vel_force else {}),
         },
         "capture_vel_force": capture_vel_force,
+        # How the cell was solvated.  Production and reseed confs READ this back: a
+        # carved cell contains vacuum, so its stages must run at constant volume or the
+        # barostat collapses the box onto the solute.  Without it recorded, the
+        # production path had no way to know and hardcoded the barostat on.
+        "solvation": {
+            "padding_nm": float(padding_nm),
+            "water_shell_nm": float(water_shell_nm or 0.0),
+            "carved": bool(carve_shell),
+            "npt_allowed": not carve_shell,
+            # Is the cell big enough for the solute once it turns?  Always measured,
+            # even when the box was sized the historical way, so the answer is on the
+            # record instead of being discovered 200 ns later.
+            "box_check": _box_check(package_dir, name_stem, box, padding_nm),
+        },
         "box_ang":     list(box),
         "mgh_extrabonds": mgh_extrabonds,
         "anchors": {

@@ -43,10 +43,15 @@ bundle cohesion ✗. A valid 4fs build, but NOT a usable free-dynamics validatio
 | 2 fs, `rigidBonds all`, GPUresident | 1.365 | 126.6 |
 | **4 fs, `rigidBonds all` + HMR, resident OFF** | **0.960** | **~360** |
 
-**22.5M of 50M steps (90 of 200 ns) with ZERO RATTLE / constraint / fast-atom failures**, T flat
-297.4 → 296.9 K, total-energy drift 0.41% over 90 ns (NPT + Langevin, so not conserved anyway).
+**COMPLETED 2026-07-29 — all 50M steps = 200 ns, ZERO RATTLE / constraint / fast-atom
+failures**, 360.7 ns/day sustained (0.958 ms/step, sd 9e-6), T flat 297.4 → 297.3 K, 13.3 h
+wall. Job `29c5b267380f`, 20 000-frame DCD (10 ps) on Archive.
 The HMR PSF was **built on demand at production time** from the declash package's own PSF (1086
 hydrogens repartitioned) — the relax never made one.
+It has since been mined for the equilibrium extra-base pose — see [[crossover-catenation]]
+§2026-07-29 and `experiments/exp46_xb_placement/REPORT.md`; note the caveat there that NPT
+shrank the carved-shell box **below the solute width** (DNA within 2–3 Å of its own periodic
+image for part of the run).
 
 **What this does and does not say.** It does NOT overturn the Fix-B finding above: that was
 established on **24hb_1xT (338 extra T)** and **6hb_2xT (48 extra-base residues)**, where HMR

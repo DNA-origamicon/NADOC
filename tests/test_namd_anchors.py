@@ -251,7 +251,8 @@ def test_min_conf_emits_fixedatoms_only_with_anchors():
 
 # ── real-psfgen end-to-end (SLOW: runs the actual topology build) ─────────────
 
-def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *, water_shell_nm=None):
+def _fake_solvate(_pdb_text, _padding_nm, _tmpdir, progress=None, *,
+                  water_shell_nm=None, box_mode=None):
     """Stand-in for gmx solvation (mirror test_md_prep_wiring): psfgen still runs on
     the real DNA, so the built {stem}.pdb the anchor mark is written against is real."""
     import backend.core.namd_solvate as ns

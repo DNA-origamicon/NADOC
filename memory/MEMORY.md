@@ -49,6 +49,7 @@ and shared across both computers (see `CLAUDE.md` → Memory layout).
 [DEFORMATION_THEORY](REFERENCE_DEFORMATION_THEORY.md) DTP-6 / loop-skip ·
 [SQUARE_LATTICE](REFERENCE_SQUARE_LATTICE.md) DTP-SQ ·
 [CROSSOVER_AUTOBREAK](REFERENCE_CROSSOVER_AUTOBREAK.md) ligation, circular ·
+**[AKSIMENTIEV_PROTOCOL](REFERENCE_AKSIMENTIEV_PROTOCOL.md)** — the canonical origami NAMD protocol (read from its own scripts) + our delta; read before touching solvation/ENM/barostat ·
 [PLAYWRIGHT](REFERENCE_PLAYWRIGHT.md) troubleshooting only, never routine ·
 **[RUNPOD_RUNBOOK](REFERENCE_RUNPOD_RUNBOOK.md)** — READ + run `preflight.py` BEFORE renting any GPU
 
