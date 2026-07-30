@@ -65,6 +65,7 @@ unless a migration touches code.
 | 07-28 | project_simulate_panel_overhaul | Probe: Phase A/B **shipped+live** (`#simulate-body`←main.js:2413, `collapsible:false` ×6 panels, `engine_selector` tabs+strip, periodic_md_panel/overlay ABSENT). Phase C **half done**: foundation `job_run_control.js` live (3 importers), oxDNA `_runControl`:1201 + NAMD `mdRunControl`:176 (always-RUN, `#md-jobs-job-ctl-btn` handler:2214) wired — but **mrDNA + CanDo entirely unstarted** (no `job_run_control` import; coarse/fine/stop trio at mrdna:202/cando:268). Master card partial: `#md-jobs-progress` GONE, but `#mrdna-jobs-progress`/`#cando-jobs-progress` still un-hidden+painted (mrdna:416, cando:603) → two bars visible; `masterStepText`:187 exported with no consumer outside its test. Doc's test paths wrong (`tests/`, not `backend/tests/`); anchors event payload richer than documented (halo reads `highlighted`). No supersession — `md_sidebar_audit` owns only NAMD's half | UNFINISHED-ACTIVE | Kept; **rank P1**; 880-line file split → lean head + `_archive.md`; head rewritten as status banner + 15-row code-location table + 7 live open items; MEMORY.md hook updated |
 | 07-30 | project_dumbbell_autoscaffold | Probe: **every anchor GONE** — `rg auto_scaffold lattice.py` = 0, `seam_line` = 0 repo-wide. `_HC_SCAF_VALID`, `_expand_helices_for_seam`, `_assemble_dumbbell_path`, `_build_seam_line_domains`, `_route_standard_virt_seg`, `_scaffold_direction_from_helix_id`, `_HC_XOVER_PERIOD`, `loop_targets`, `coverage_regions`, `has_merged_seg` — zero hits each. Replaced by shape-dispatch: `auto_scaffold_seamed/_matched` (`seamed_router.py:1224/1305`), `auto_scaffold_seamless` (`seamless_router.py:111`) → `section_router.route_sections` (`:354`) gated by `has_multisection_helix` (`:77`); routes `routes_scaffold_routing.py:86/112/140`; no `mode=`/`scaffold_loops` anywhere (headless `headless_build.py:564` takes a bool `seamless`). Successor documented in `project_autoscaffold_single_strand` (dumbbell explicitly: section shape, `route_sections(seamless=)`, 6-RING known limit). Surviving valid-position set is the *different* 6-element `_HC_SCAF_BOW_RIGHT` (`seamed_router.py:40`), not the plan's 12-element set. Dumbbell tests moved+rewritten: 6 in `tests/test_section_router.py` on `tests/fixtures/10-6-10hb_seamed.nadoc` asserting coverage/gap/nick-burial — **still no assertion on crossover-bp validity or negative-bp loops**, the two things the plan was about | SUPERSEDED-DOCUMENTED (successor: `autoscaffold_single_strand`) | Deleted + pointer scrubbed. Migrated first: the *lesson* was undocumented → new **LESSONS.md H18** (5 green tests over a wrong dumbbell; wrong oracle; approach later deleted wholesale). Repointed the 2 live citations (`issues_ledger.md:253`, `tests/test_section_router.py:16`) at H18. Logged the dead-API stragglers to `project_tech_debt` (2 unrunnable scripts + auto-loaded `.claude/rules/scaffold-and-loops.md` still teaching `seam_line`) |
 | 07-30 | project_scaffold_router | Probe: the CSP router the doc is named for is **entirely GONE** — no `backend/core/scaffold_router.py`, and all 15 of its symbols (`RouterDomain`, `CandidateXover`, `Routing`, `extract_router_domains`, `build_candidate_graph`, `validate_routing`, `_csp_backtrack`, `_solve_routing`, `_route_bulge`, `apply_routing_to_design`, `_domain_segment`, `max_backtracks`, `seam_tol`, `end_tol`, `preserve_manual`) have zero hits outside `memory/`. Its `POST /design/auto-scaffold` is gone (3 live routes: `routes_scaffold_routing.py:86/112/140` `-seamed/-matched/-seamless`); `tests/test_scaffold_router.py` (27 tests) gone. Its tolerance-window model (`seam_tol`/`end_tol` ±5bp) did NOT survive under another name — the live routers use exact modular residue sets (`_HC_SCAF_BOW_RIGHT` `seamed_router.py:40`) + `crossover_positions.py`. Only surviving named symbols are `HC/SQ_SCAFFOLD_CROSSOVER_OFFSETS`, which were never router-owned (`constants.py:259/285`, consumed by ~14 modules) → no rescue needed. The doc's OTHER half (Hamiltonian budget/pruning, `_ham_path_search`, `_HAM_PATH_BUDGET`, the `(len(adj[n]), n)` tiebreaker, matched-ends) is all live but is a *summary* of `project_seamless_router.md:27-31` (deeper, correct line anchors, 2026-07-13 resolution) + `project_autoscaffold_single_strand.md` (matched-ends, ragged faces, P). Zero inbound citations from code/tests/`.claude/` | SUPERSEDED-DOCUMENTED (successors: `seamless_router` + `autoscaffold_single_strand`) | Deleted + pointer scrubbed. Migrated first: the **matched-ends far-crossover-LEFT rule** (user rule 2026-06-02) lived only here as prose → moved into `project_autoscaffold_single_strand` (far−near ∈ {P, P-1}, bow-right step, no-circle + ragged-face corrections, pinned by `test_seamed_router.py:60`). Repointed 2 inbound wikilinks (`project_headless_build.md:264`, `exp40 ASYMMETRIC_SCAFFOLD_HANDOFF.md:55`) at the successors. Logged new dead-API stragglers to `project_tech_debt`: 4 E2E specs POST the removed `/design/auto-scaffold` (404 at runtime), `autoScaffoldMatched()` orphaned in 2 client files, stale mode list in `autoscaffold_picker.js:2` |
+| 07-30 | `.claude/rules/scaffold-and-loops.md` (off-taxonomy: path-scoped rule, no verdict) | Probe of all ~55 anchors. **Dead:** all 6 `lattice.py` routing symbols (`auto_scaffold`, `compute_scaffold_routing`, `_build_seam_line_domains`, `_build_end_to_end_domains`, `_helix_adjacency_graph`, `_greedy_hamiltonian_path`), the `seam_line`/`end_to_end` mode concept, `compute_loop_skip_deformations` (0 hits repo-wide), 4 of 12 documented routes (`/design/auto-scaffold`, `-scaffold-nick`, `-extrude-near`, `-extrude-far`), `tests/test_scaffold_geometry.py`, `MAP_SCAFFOLD_ROUTING.md`. **Wrong-not-dead:** hotkey table off-by-one from `[4]` on + `[2]`/`[7]` wrong outright (actual: 1 Autoscaffold / 2 Full Autostaple / 4 Add Loops-Skips / 5 scaffold seq / 6 staple seq; 7 unbound; two binding sites `cadnano-editor/main.js:1436` + `keyboard_shortcuts.js:392`); `LoopSkip.delta` is plain `int`, **not** `Literal[-1,+1]` (no type-level guard); `ROUTING_ENTRY_POINTS` is in `tests/test_scaffold_invariants.py:53`, not `scaffold_invariants.py`; validator string is `location(s)`; seam window is `_SEAM_BP_WINDOW=1` w/ `seam_margin` 7/8. **Moved by carve-up:** `full_autostaple_endpoint`+`_linearize_staple_precursors` crud.py→`routes_assign_sequences.py:346/216`; 5 of 7 loop-skip routes crud.py→`routes_loop_skip.py` (but `apply-deformations`/`clear-all` stayed). **Still-true:** the entire autostaple half (`nick_all_major_ticks`/`grow_staples`/`_has_sandwich`/anti-sandwich/56-cap) + `auto_crossover`/`_place_auto_crossovers`/`_desplice_strands_for_crossover` in crud.py. **Structural defect found independently:** frontmatter globs (`scaffold*.py`, `seamless*.py`, `loop_skip*.py`) never matched `seamed_router.py` or `section_router.py` — the rule failed to auto-load on the primary router file it exists to describe | REWRITTEN (n/a — rule, not plan) | Full rewrite against the probe: 3-router table w/ line anchors, corrected hotkeys, per-route file column, `_ham_path_search`/`_HC_SCAF_BOW_RIGHT` map, `CELLS_*`-are-not-shared warning, and a **"Removed API — do not resurrect"** block naming every dead symbol. Globs widened to all 3 routers + both route files. Struck the entry from `project_tech_debt`; logged 1 new debt item (`CELLS_6HB`/`CELLS_18HB` copy-pasted with divergent cell lists across 9 files). No `MEMORY.md` edit (rules are listed by name only; name unchanged) |
 | 07-25 | project_mate_connectors | Probe: ALL implemented anchors EXIST+WIRED (create_mate→route, _propagate_fk_inplace/_compose_add_joint shared, `assembly-create-mate` in SnapshotOpKind, shared+legacy `getInstanceBluntEnds` both live, no `()=>[]` stub). Feature ships. Locations drifted (routes_assembly_joints/geometry.py, scene/, ui/overhang_orientation_panel.js). 1 of 4 "known issues" (cache invalidation) FIXED — `_ooApplyDelta` now calls `invalidateInstance`+`rebuild`; 3 connector-placement bugs survive | UNFINISHED-ACTIVE | Kept; **rank P2**; head banner + relocations + open-items rewritten (cache issue struck as RESOLVED); MEMORY.md hook updated |
 
 ## HOLD — flagged to user, decision pending
@@ -98,36 +99,38 @@ manual_validation_debt, SIM_COVERAGE_PLAN, project_cando_fem, project_atomistic_
 
 ## Next-session handoff
 
-▶ **NEXT:** **`.claude/rules/scaffold-and-loops.md`** — off-taxonomy (it is a path-scoped rule, not a
-`project_*` plan, so no verdict applies; the deliverable is a symbol-by-symbol re-verify + rewrite, not a
-delete/rank). Promoted over the queue for the third pass running because it is **auto-loaded on every
-scaffold-file read** and still teaches an API that two consecutive audits have now confirmed deleted:
-`lattice.py — auto_scaffold, compute_scaffold_routing, _build_seam_line_domains, _build_end_to_end_domains,
-_helix_adjacency_graph, _greedy_hamiltonian_path` and a "seam_line (default)" mode (lines 16, 35, 44, 131).
-Every other symbol in it is *unverified* — check them all, don't spot-fix the four known-bad lines. The
-correct map to write against is now fully probed across these two passes: routes
-`routes_scaffold_routing.py:86/112/140` → `seamed_router.auto_scaffold_seamed/_matched` (`:1224/:1305`,
-shared `_auto_scaffold_seamed_impl:512`) / `seamless_router.auto_scaffold_seamless:111`, dispatching to
-`section_router.route_sections:354` when `has_multisection_helix:77`; Hamiltonian search =
-`seamed_router._ham_path_search:195` + `_HAM_PATH_BUDGET:192` (`seamless_router._ham_path_ending:68`
-delegates); valid scaffold-crossover bp = `_HC_SCAF_BOW_RIGHT:40` + `crossover_positions.py` over
-`HC/SQ_SCAFFOLD_CROSSOVER_OFFSETS` (`constants.py:259/285`); regression gate `scaffold_invariants.py`
-(`ROUTING_ENTRY_POINTS`). Do it now while that map is warm.
+▶ **NEXT:** **`project_protein_attachment`** (queue top — "2 helpers pending"). Standard taxonomy pass:
+probe the two named helpers, decide DERELICT / UNFINISHED-ACTIVE + rank. The three-pass scaffold-routing
+excursion is **closed** — the router map is now written down in `.claude/rules/scaffold-and-loops.md`, so a
+future scaffold question should start there rather than re-probing.
 
-Fallback if the rule file is out of appetite: queue top `project_protein_attachment` (2 helpers pending).
+Consider promoting after it: the **other 9 path-scoped rules** (`api-and-state`, `rendering`, `selection`,
+`cadnano-2d`, `unfold`, `deformation`, `animation`, `main-init`, `strand-anim`) have never been audited, and
+`scaffold-and-loops` proved they rot in a uniquely expensive way — see the new pattern note below. Cheap
+triage: for each rule, grep just its **frontmatter `paths` globs** against `ls` of the directories it claims;
+a glob that matches no current file (or misses the module the rule is *about*) is a 10-second tell that the
+body is stale too. Do that sweep before committing to a full per-rule rewrite.
 
-*New this pass (second consecutive SUPERSEDED delete — a pattern is now visible):* a plan file that has
-outlived its subject usually splits cleanly into a **dead half** and a **still-true half that belongs to a
-younger doc**. Here the CSP router (name, module, endpoint, 27-test file, entire tolerance model) was 100%
-gone, while the Hamiltonian/matched-ends notes appended to the same file years later were entirely accurate —
-and already covered better elsewhere. Probe the halves separately; "some of this is still true" is not a
-reason to keep the file. Corollary that DID cost a migration: the still-true half held exactly one fact no
-successor carried — the matched-ends **far-crossover-LEFT** rule, an explicit *user decision* whose visible
-signature is an off-by-one (`far−near ∈ {P, P-1}`, not `P`). User rules that look like bugs are the highest-risk
-thing to lose in a delete; grep the head for "user rule / user decision / user accepted" before removing it.
-Third pass running that the probe also turned up **stale non-plan artifacts** the doc was innocent of (this
-time: 4 E2E specs POSTing a route deleted by `e9d6750`, and a client fn defined twice with no caller) — those
-belong in `project_tech_debt`, not in the deleted file's grave.
+*New this pass — audit the path-scoped rules, not just the plans.* A stale `project_*.md` costs a session
+only when someone opens it. A stale `.claude/rules/*.md` is **auto-loaded**, so it teaches every session
+that touches the area, unprompted — strictly worse decay for the same rot. This one had ~55 anchors and was
+wrong in four distinct ways at once: symbols deleted (all 6 `lattice.py` routing fns), symbols *moved* by the
+carve-ups (crud.py → `routes_assign_sequences.py` / `routes_loop_skip.py`), facts that were never true or
+drifted silently (hotkeys off-by-one from `[4]`; `LoopSkip.delta` documented as `Literal[-1,+1]` when it is an
+unconstrained `int` — a doc that promises a guard the model doesn't have is worse than silence), and a
+**structural** defect no anchor-by-anchor check would have caught: its `paths:` globs never matched
+`seamed_router.py`/`section_router.py`, so the rule silently failed to load on the one file it most describes.
+Check the frontmatter, not only the body. Corollary for rewrites: end a rule with an explicit **"Removed API —
+do not resurrect"** block. The deleted names outlive the code in scripts, e2e specs, and older memory files,
+so a session will meet them again; naming them as dead is what stops the next re-derivation.
+
+*Pattern from the two preceding passes (kept — still load-bearing):* a plan that has outlived its subject
+splits into a **dead half** and a **still-true half that belongs to a younger doc**; probe the halves
+separately, and "some of this is still true" is not a reason to keep the file. Before any delete, grep the
+head for "user rule / user decision / user accepted" — a user decision whose signature looks like a bug
+(the matched-ends `far−near ∈ {P, P-1}` off-by-one) is the highest-risk thing to lose. Every pass so far has
+also turned up **stale non-plan artifacts** the doc was innocent of (dead-API scripts, e2e specs POSTing a
+removed route, `CELLS_6HB` copy-pasted with divergent geometry) — those go to `project_tech_debt`.
 
 *Pattern worth carrying (4 for 4 among the KEPT plans — `surface_strands`, `mate_connectors`,
 `mixed_representation`, `simulate_panel_overhaul`):* the plan's own status text is stale in **both** directions.

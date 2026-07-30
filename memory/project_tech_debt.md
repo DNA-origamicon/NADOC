@@ -98,8 +98,23 @@ The old per-helix router (`auto_scaffold(design, mode="seam_line"|"end_to_end", 
 the dead API:
 - `scripts/inspect_bp0.py:13,66-68` — imports `auto_scaffold` from `lattice`, loops `mode in ("seam_line","end_to_end")`. **Cannot run** (ImportError). Revive against the new entry points or delete.
 - `scripts/gen_examples.py:41-49,183` — imports 6 symbols that no longer exist (only `make_bundle_design`, `make_merge_short_staples` survive) and calls `auto_scaffold(design, mode="seam_line")`. **Cannot run.**
-- `.claude/rules/scaffold-and-loops.md:16,35,44,131` — **auto-loaded** when a scaffold file is read, and it still points sessions at `lattice.py — auto_scaffold, compute_scaffold_routing, _build_seam_line_domains, _build_end_to_end_domains, _helix_adjacency_graph, _greedy_hamiltonian_path` and documents a "seam_line (default)" mode. Actively misleading; needs a full symbol-by-symbol re-verify (other names in it are unchecked), not a spot fix.
+- ~~`.claude/rules/scaffold-and-loops.md`~~ — **FIXED 2026-07-30** (`/audit-plan`): fully re-verified
+  symbol-by-symbol and rewritten against the live routers, with a "Removed API — do not resurrect"
+  block naming the dead names. Its frontmatter globs were also wrong (`scaffold*.py`/`seamless*.py`
+  never matched `seamed_router.py` or `section_router.py`, so the rule failed to auto-load on the
+  primary router file) — globs now cover all three routers + both route files.
 Also orphaned: `section_router.py:255` `_pull_window_turns` — self-labelled `⚠ WIP — NOT YET WIRED`, called nowhere.
+
+### `CELLS_6HB` / `CELLS_18HB` are copy-pasted with *divergent* geometry (found 2026-07-30, `/audit-plan`)
+Both read like shared fixtures — every doc that mentions them says "use `CELLS_6HB` as the minimum test
+fixture" — but there is no shared definition. Each is re-declared locally with **different cell lists**:
+`CELLS_6HB` in `scripts/inspect_bp0.py:16` `[(0,0),(0,1),(1,0),(1,2),(0,2),(2,1)]` vs
+`tests/test_helix_neighbors.py:61` `[(0,1),(0,2),(0,3),(1,1),(1,2),(1,3)]` (also
+`scripts/gen_examples.py:56`, `tests/test_overhang_geometry.py:47`); `CELLS_18HB` in 5 more places
+(`tests/test_helix_neighbors.py:58`, `experiments/exp06,07,09/run.py`, `gen_examples.py:61`). The two 6HB
+variants are not the same shape — one is a bent/L cluster, the other two clean rows — so a test copied
+between files silently changes its neighbour graph. Fix = one fixture module; until then, never copy the
+name without copying the list.
 
 ### Dead `POST /design/auto-scaffold` (unsuffixed) + orphaned matched-ends client fns (found 2026-07-30, `/audit-plan`)
 Commit `e9d6750` consolidated the plain endpoint into `-seamed`/`-seamless` (the three live routes are
