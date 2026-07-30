@@ -468,6 +468,45 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   animation, deformation and unfold passes; the directory should be deleted or moved under
   `archive/` rather than audited file by file.
 
+### Strand-anim stragglers (found 2026-07-30, `/audit-plan` rule sweep — final rule)
+
+- **`strand-anim/params.js` `DEFAULTS` is a production constant source, not sandbox-local.**
+  `scene/overhang_unzip_overlay.js:33-34` imports it as `STRAND_DEFAULTS` and reads `rise`,
+  `armPull`, `meltBp` at `:83-84`. Editing a "sandbox slider default" silently changes the
+  editor's overhang unzip animation. Three more editor modules import from this directory
+  (`overhang_strand_anim.js:28` → `createStrandRenderer`; `overhang_unzip_overlay.js:33` →
+  `meltFraction`; `ui/strand_anim_panel.js:11-12` → `createParamState`/`createPhiTicker`).
+  Nothing in either directory says so; the topic file still calls the module "drop-in" in the
+  future tense.
+- **Second hand-rolled implementation of the strand-list contract.**
+  `scene/overhang_strand_anim.js:441` and `:599` build `{pos,tan,bn,role}` inline instead of
+  calling any `strand-anim` builder, then feed it to the sandbox's `createStrandRenderer`. A
+  change to the contract shape must be mirrored by hand in both files; nothing pins them. Same
+  shape as the `expanded_spacing.js` divergence from the unfold pass. It also re-implements
+  `melt.js`'s exported `smoothstep` inline **4×** (`_sstep` at `:247, :377, :519, :567`), which
+  is why that export has zero external importers.
+- **Latent slab-radius divergence.** The model's helix radius is `R = params.W * 0.5`
+  (`geometry_helical.js:58`, `geometry_displacement.js:60`) with `W` adjustable over [0.5 … 4.0]
+  (`params.js:12`), but the renderer's slab offset uses hard-coded `HELIX_RADIUS = 1.0`
+  (`strand_renderer.js:98`). Correct only at the default `W = 2.0`; any other `W` renders slabs at
+  the wrong radial offset. Not a live bug (nothing ships a non-default `W`), but the rule/topic
+  file both state `HELIX_RADIUS 1.0` as an invariant without the condition.
+- **1,084 LOC / 0 tests, and the builders are the easiest test target in the repo** — pure, zero
+  imports, deterministic `(params, phi) → Float32Arrays`. No `.test.js` under
+  `frontend/src/strand-anim/`, and no test file anywhere mentions `buildStrandGeometry`,
+  `createStrandRenderer`, `meltFraction` or `createPhiTicker`. Add the two consumers
+  (`overhang_strand_anim.js` 711, `overhang_unzip_overlay.js` 175) and it is 1,970 LOC untested.
+- **Six stale comments inside the subsystem** (rule now carries a Traps section):
+  `geometry_straight.js:40-44` and `geometry_helical.js:49-53` both `@returns` the pre-2026-05-29
+  `{posA,tanA,bnA,posB,…}` shape the functions stopped returning; `geometry_helical.js:30-31`
+  says the renderer is "in app.js" (it is `strand_renderer.js`); `geometry_displacement.js:8`
+  references a variable `p` that does not exist in the file (it is `b`/`bIdx`); `ticker.js:10-11`
+  calls `animation_player.js` "990-line" (1,298) and `strand_renderer.js:14-15` calls
+  `helix_renderer.js` "4k-line" (5,232).
+- **Three 0-importer exports:** `geometry_helical.js:39` re-exports `nucsPerStrand` (everyone
+  imports it from `geometry_straight.js:33`), `model.js:35` re-exports it again, and
+  `melt.js:13` `smoothstep` (see above). Facade surface vs dead code — decide before deleting.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`

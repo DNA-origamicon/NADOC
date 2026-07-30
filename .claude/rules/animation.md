@@ -166,6 +166,10 @@ authored `unbound_angle_deg`/`bound_angle_deg` — `models.py:381-383` / `:611,6
   nucleotides splay as a straight ssDNA arm pointing toward that strand's own root. Linkers move
   the two overhangs' beads only (bridge left as-is). Beads on the driven cluster get the live
   hinge `incrRot` so they stay attached to the moving arm.
+  ⚠️ Its melt shape comes from the **sandbox**: `:33-34` imports `meltFraction` *and*
+  `DEFAULTS as STRAND_DEFAULTS` from `strand-anim/`, and `:83-84` reads `rise`/`armPull`/`meltBp`
+  from it. Editing `strand-anim/params.js` changes this overlay. See
+  [strand-anim.md](strand-anim.md) → "Who imports this".
 - Frame-loop call site: `animation_player.js:1037-1047` (`overlay.update(items, geometry)`);
   cleared at `:1202`. Overlay constructed at [main.js:1722](../../frontend/src/main.js#L1722),
   handed to the player at `main.js:1572`.

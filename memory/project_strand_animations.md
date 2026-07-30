@@ -20,6 +20,19 @@ Opened from main app **Help → Strand Animations Testing…** → `window.open(
 
 ## ⇒ Integration handoff (read this first — for dropping into the main animation toolset)
 
+> **STATUS 2026-07-30 (`/audit-plan`): the integration BELOW ALREADY HAPPENED — option (c) shipped.**
+> `AnimationKeyframe.strand_anim_phi` (`backend/core/models.py:1726`, OverhangSpec id → φ) is
+> lerped by the player (`animation_player.js:250, :1051`), authored in `ui/strand_anim_panel.js`
+> (which imports this module's `createParamState` + `createPhiTicker`), and rendered by
+> `scene/overhang_strand_anim.js` (711 LOC) via this module's `createStrandRenderer`.
+> `scene/overhang_unzip_overlay.js:33-34` additionally imports `meltFraction` **and `DEFAULTS`**,
+> so `params.js` defaults are now production constants. **Caveat:** only the *renderer* seam was
+> reused — `overhang_strand_anim.js:441/:599` re-implements the strand-list contract by hand on
+> the real helix frame, so `buildStrandGeometry` is still sandbox-only (`app.js:42`, sole caller)
+> and fixes to the pure builders do **not** reach the app. Editor-side details:
+> `.claude/rules/animation.md`; the reverse-coupling traps: `.claude/rules/strand-anim.md`.
+> The "player exposes no scalar-`t` driver" analysis below is historical.
+
 The module is split into **drop-in pieces** (no page dependencies) vs **page-only glue**:
 
 | Layer | Files | Deps | Reuse |
