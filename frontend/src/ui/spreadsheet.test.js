@@ -29,7 +29,8 @@ vi.mock('../api/client.js', () => new Proxy({}, {
 vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 vi.mock('../state/store.js', () => ({ pushGroupUndo: vi.fn() }))
 
-import { initSpreadsheet } from './spreadsheet.js'
+import { initSpreadsheet, getStapleColorOrder } from './spreadsheet.js'
+import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 
 const DESIGN = {
   helices: [{ id: 'h0', loop_skips: [] }],
@@ -151,5 +152,43 @@ describe('Sequence-cell context menu', () => {
     expect(document.querySelector('.ctx-menu')).toBeTruthy()
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
     expect(document.querySelector('.ctx-menu')).toBeNull()
+  })
+})
+
+/**
+ * This file used to declare its OWN `STAPLE_PALETTE` with entirely different colours
+ * (an editor syntax theme) under a comment claiming it mirrored helix_renderer. Because
+ * `paletteColor` is the last-resort fallback in `effectiveColor`, every staple arriving
+ * with `color === null` — the normal case; Full Autostaple stamps no colour — was painted
+ * one hue in the spreadsheet and a different one in the 3D view (index 1: green vs yellow;
+ * index 3: blue vs orange). `getStapleColorOrder` feeds `exportSequenceXlsx`, so the wrong
+ * hues also reached the exported oligo order sheet.
+ *
+ * These assertions fail against the old code: it returned '#98c379' for index 1.
+ */
+describe('Staple colour fallback uses the canonical shared palette', () => {
+  const asHex = (rgb) => '#' + rgb.toString(16).padStart(6, '0')
+
+  it('colours an uncoloured staple from scene/helix_renderer/palette.js by array index', () => {
+    // DESIGN.strands = [scaffold (idx 0), staple (idx 1)]; neither carries `color`.
+    const { strandColors } = getStapleColorOrder({ currentDesign: DESIGN })
+    expect(strandColors.stap).toBe(asHex(STAPLE_PALETTE[1]))
+    expect(strandColors.stap).toBe('#ffd93d')          // literal pin: the 3D view's hue
+  })
+
+  it('excludes the scaffold and never emits the old syntax-theme colours', () => {
+    const { strandColors, strandOrder } = getStapleColorOrder({ currentDesign: DESIGN })
+    expect(strandOrder).toEqual(['stap'])
+    expect(strandColors.scaf).toBeUndefined()
+    const retired = ['#e06c75', '#98c379', '#d19a66', '#61afef']
+    expect(retired).not.toContain(strandColors.stap)
+  })
+
+  it('still honours an explicit per-strand colour override', () => {
+    const { strandColors } = getStapleColorOrder({
+      currentDesign: DESIGN,
+      strandColors: { stap: 0x123456 },
+    })
+    expect(strandColors.stap).toBe('#123456')
   })
 })

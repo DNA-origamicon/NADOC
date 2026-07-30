@@ -17,6 +17,7 @@
 import * as api from '../api/client.js'
 import { pushGroupUndo } from '../state/store.js'
 import { showToast } from './toast.js'
+import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -51,15 +52,16 @@ const MIN_HEIGHT = 28   // tab only
 const TAB_HEIGHT = 28
 const MAX_HEIGHT_OFFSET = 40  // px above viewport bottom
 
-// Staple palette (mirrors helix_renderer.js)
-const STAPLE_PALETTE = [
-  '#e06c75','#98c379','#d19a66','#61afef',
-  '#c678dd','#56b6c2','#e5c07b','#abb2bf',
-  '#be5046','#7dab6e','#b07e45','#4e8cc4',
-]
-
+// Staple palette: IMPORTED from scene/helix_renderer/palette.js — never re-declare it.
+// This file used to carry a private copy with entirely DIFFERENT colours (an editor
+// syntax theme) under a comment claiming it mirrored the renderer. It did not: index 1
+// was green here and yellow in 3D, index 3 blue here and orange in 3D. Since this is the
+// fallback for any staple whose `color` is null — the normal case, e.g. after Full
+// Autostaple, which stamps no colour — the panel AND the exported .xlsx (via
+// getStapleColorOrder) disagreed with the 3D view for most staples.
 function paletteColor(strandIndex) {
-  return STAPLE_PALETTE[strandIndex % STAPLE_PALETTE.length]
+  const rgb = STAPLE_PALETTE[strandIndex % STAPLE_PALETTE.length]
+  return '#' + rgb.toString(16).padStart(6, '0')
 }
 
 /** Format a strand endpoint as "label[bp]" using the 5' or 3' terminal domain. */

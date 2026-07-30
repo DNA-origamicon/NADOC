@@ -143,16 +143,71 @@ a live trap for the next reader:
   Nothing enforces it; there is no shared constant.
 - **Vestigial 5th init param** — `initCadnanoView(..., _getCrossoverLocations, ...)`
   (`cadnano_view.js:42`) is always passed `null` (`main.js:1542`) and never referenced in the body.
-- **`frontend/src/cadnano-editor/` is 10,713 LOC with ~1.7% unit-test coverage** — only
+- **`frontend/src/cadnano-editor/` is 10,713 LOC with ~1.6% unit-test coverage** — only
   `element_keys.test.js` + `sequence_layout.test.js` (176 LOC of the 10,512 production LOC).
   `pathview.js` (4977 LOC — second-largest JS file in the repo after `main.js`), `main.js` (2554),
   `api.js` (724) and `sliceview.js` are entirely unpinned. Only 2 e2e specs load the page
   (`autobreak_edges.spec.js`, `cadnano_sliceview_positions.spec.js`).
-- **Reverse coupling, undocumented:** `frontend/src/ui/overhang_pathview.js:32-54` imports
-  `BP_W/CELL_H/PAIR_Y/GUTTER` **and 15 `CLR_*` constants** from `cadnano-editor/pathview.js` +
+  ~~Undocumented~~ — **documented 2026-07-30** in the new `.claude/rules/cadnano-editor.md`.
+- **Reverse coupling:** `frontend/src/ui/overhang_pathview.js:32-54` imports
+  `BP_W/CELL_H/PAIR_Y/GUTTER` **and `STAPLE_PALETTE` + 14 `CLR_*`** from `cadnano-editor/pathview.js` +
   `cadnano-editor/pathview/palette.js`. So editing the *editor's* layout constants or palette silently
-  moves the main app's Domain Designer. The palette is a **three-way** invariant with
-  `backend/core/constants.py` `STAPLE_PALETTE` and `scene/helix_renderer.js`.
+  moves the main app's Domain Designer — and pulling 4 numbers out of `pathview.js` drags the whole
+  4977-LOC module graph into the main-app bundle.
+
+### `STAPLE_PALETTE` — 3 copies that agree, 1 that doesn't, and 3 comments pointing at the wrong files (found 2026-07-30, `/audit-plan`)
+- **Agreeing three-way invariant** (same 12 colours, same order today): `backend/core/constants.py:325-329`
+  (`'#rrggbb'`) · `frontend/src/cadnano-editor/pathview/palette.js:85-89` (`'#rrggbb'`) ·
+  `frontend/src/scene/helix_renderer/palette.js:23-26` (`0xrrggbb` ints).
+- **Every one of the three "keep in sync with…" comments names a file that no longer holds the constant**
+  (`palette.js:83-84`, `constants.py:324`, `helix_renderer/palette.js:21-22` — the last points at
+  `cadnano-editor/pathview.js`, stale since the extraction to `pathview/palette.js`).
+  `scene/helix_renderer.js` only *imports* `STAPLE_PALETTE` (`:33`, used `:2719/2848/2907`) — it has
+  not defined it for some time, yet two docs and one code comment still say it does.
+- ~~**A fourth copy that is NOT in sync:** `frontend/src/ui/spreadsheet.js:54-60`~~ — **FIXED 2026-07-30.**
+  It declared a module-private `STAPLE_PALETTE` with **completely different colours**
+  (`#e06c75 #98c379 #d19a66 #61afef …` — an editor syntax theme) under the false comment
+  `// Staple palette (mirrors helix_renderer.js)`. Because `paletteColor` is the last-resort fallback in
+  `effectiveColor`, every staple arriving with `color === null` (the normal case — **Full Autostaple
+  stamps no colour**; only `POST /design/strands` and `_build_nick` do) was painted one hue in the panel
+  and another in 3D (index 1 green vs yellow, index 3 blue vs orange) — and via `getStapleColorOrder` →
+  `exportSequenceXlsx`, the wrong hues reached the **exported oligo order sheet**. Now imports the
+  canonical `STAPLE_PALETTE` from `scene/helix_renderer/palette.js` and formats int→`'#rrggbb'`.
+  Pinned by 3 tests in `ui/spreadsheet.test.js` ("Staple colour fallback uses the canonical shared
+  palette"). The sync-pointer comment in `helix_renderer/palette.js` was corrected at the same time.
+  (`scene/color_util.js:35 ATOM_STAPLE_PALETTE` is a separate, intentionally different atomistic palette.)
+- **STILL OPEN — the two remaining stale sync-pointer comments** (`pathview/palette.js:83-84`,
+  `constants.py:324`) still name files that no longer hold the constant.
+- **STILL OPEN — index agreement, not just palette agreement.** The 3D view does **not** use a plain
+  `strandIndex % 12`: `buildStapleColorMap` (`scene/helix_renderer/palette.js:172`) **pins** colours per
+  strand id at first encounter and takes the slot from a **union-find root** over crossover-joined
+  staples (`:186-200`), so it survives mutations and groups topology-connected oligos. `ui/spreadsheet.js`
+  recomputes from the raw array index. They now agree on the *palette* and on a freshly-loaded design
+  with no crossover unions, but can still drift apart after mutations. **Real fix** = have the spreadsheet
+  consume the renderer's `buildStapleColorMap` (it already receives `designRenderer`) instead of
+  recomputing — one source of truth for the assignment, not just for the colour list.
+
+### Cadnano-editor app stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+Small, each a live trap; all documented in `.claude/rules/cadnano-editor.md`.
+- **`unligatedCrossoverIds` is written but never declared** — `cadnano-editor/api.js:120`
+  (`_absorbAuxFields`) sets it on the store, but it is absent from `store.js:14-58` `_initialState`,
+  so it is `undefined` until the first mutation response. Only `pathview.js:4901` defends
+  (`new Set(ids ?? [])`); a second reader would crash. Add it to the initial state.
+- **`Ctrl+Shift+L` is case-sensitive** — `ligation_debug.js:403` tests `e.key === 'L'` with no
+  lowercase fallback, unlike `Ctrl+Shift+D` (`main.js:327`) which tests both. Works in practice only
+  because Shift produces uppercase.
+- **Codec logic outside the codec** — `cadnano-editor/main.js:2070` `const flId = key.slice(3)`
+  duplicates `parseForcedLigKey` (`element_keys.js:109`). Index-free so it can't hit the negative-bp
+  bug, but it is the exact pattern ISSUE-7 came from.
+- **`const DEBUG = true` is shipping** — `frontend/src/ui/overhang_pathview.js:61`. Its editor
+  counterpart (`pathview.js:104` `DBG = false`) documents the flip-then-revert convention; this one
+  was never reverted, so the Domain Designer logs to the console in production.
+- **`ui/overhang_pathview.js:60-63` re-declares `RULER_H/LABEL_R/TOP_PAD` locally** with `LABEL_R`/
+  `TOP_PAD` deliberately *different* from pathview's 16/18, under a comment claiming it mirrors the
+  editor. Partly true is worse than silent here — say which three are shared and which two diverge.
+- **All 3 editor e2e specs `goto('/cadnano-editor')` with no `?doc=`**, so the multi-document path
+  (`X-NADOC-Doc`, per-doc undo stacks) has **zero** end-to-end coverage — and multi-doc is exactly
+  where the undo/redo header bug (`api.js:691`) lived.
 
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
