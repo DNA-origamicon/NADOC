@@ -78,7 +78,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Workspace / UX:** ux_overhaul (file browser, library panel, sidebar widths, sim-folder hiding)
 
-**Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · **mixed_representation** (SHIPPED; P1 — deformed cylinders + impostors uncovered, suspected photo-export bead bug) · strand_animations · reference_geometry · protein_attachment · headless_build · sphere_impostors
+**Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · **mixed_representation** (SHIPPED; P1 — deformed cylinders + impostors uncovered, suspected photo-export bead bug) · strand_animations · reference_geometry · protein_attachment (SHIPPED incl. conjugation picker; P2 — only Phase 3 assembly-scope left) · headless_build · sphere_impostors
 
 **Sequences:** **strand_sequence_edit** (hand-edit a strand's bases; targeted vs design-wide re-derive)
 
