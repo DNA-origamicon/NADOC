@@ -295,6 +295,15 @@ def prepare_implicit_gbis_namd(
     water_shell_nm: float = 0.0,  # noqa: ARG001
     fast: bool = False,        # noqa: ARG001 — GBIS forces standard CUDA
     seed: int = 42,            # noqa: ARG001
+    # GBIS has no explicit-solvent box and cannot run GPU-resident (no implicit-solvent
+    # path in resident mode), so both of these are inapplicable here — but the shared
+    # prep call site in routes_md passes ONE uniform kwarg set for every protocol, so
+    # they must still be accepted.  They were added to that call site by the
+    # GPU-resident dropdown work without being added here, which broke every GBIS job
+    # at prep with "unexpected keyword argument 'gpu_resident_mode'".
+    # tests/test_prepare_signatures.py now pins this.
+    gpu_resident_mode: str = "auto",       # noqa: ARG001
+    production_timestep_fs: float = 4.0,   # noqa: ARG001
 ) -> tuple[str, str, list]:
     """Protocol entry point: prepare an implicit-solvent (GBIS) NAMD job.
 
