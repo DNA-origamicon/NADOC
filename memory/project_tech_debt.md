@@ -130,6 +130,30 @@ Commit `e9d6750` consolidated the plain endpoint into `-seamed`/`-seamless` (the
 - **Stale header comment:** `frontend/src/ui/autoscaffold_picker.js:2` still lists "seamed / seamless / matched /
   advanced-*" while `AUTOSCAFFOLD_MODES` (`:11-19`) has exactly two keys.
 
+### Cadnano-2D-mode stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+Turned up while rewriting `.claude/rules/cadnano-2d.md` against the code. All low-stakes but each is
+a live trap for the next reader:
+- **`design_renderer.clearFemOverlay()` is dead code** — `frontend/src/scene/design_renderer.js:1241`,
+  **zero callers repo-wide**. It survived the FEM/XPBD retirement; its doc comment now describes the
+  mrDNA relaxed-position overlay instead, and its `_helixCtrl.clearFemColors()` line is gone (no such
+  function exists in the frontend). Its `if (!cadnanoActive && !unfoldActive)` guard is the only reason
+  to keep it — if nothing revives it, delete the function and drop the guard folklore with it.
+- **`PERSP_FOV_DEG = 55` is a hardcoded duplicate** — `frontend/src/scene/cadnano_view.js:40` must stay
+  in lockstep with `scene/scene.js`'s camera FOV or the ortho↔perspective switch stops being seamless.
+  Nothing enforces it; there is no shared constant.
+- **Vestigial 5th init param** — `initCadnanoView(..., _getCrossoverLocations, ...)`
+  (`cadnano_view.js:42`) is always passed `null` (`main.js:1542`) and never referenced in the body.
+- **`frontend/src/cadnano-editor/` is 10,713 LOC with ~1.7% unit-test coverage** — only
+  `element_keys.test.js` + `sequence_layout.test.js` (176 LOC of the 10,512 production LOC).
+  `pathview.js` (4977 LOC — second-largest JS file in the repo after `main.js`), `main.js` (2554),
+  `api.js` (724) and `sliceview.js` are entirely unpinned. Only 2 e2e specs load the page
+  (`autobreak_edges.spec.js`, `cadnano_sliceview_positions.spec.js`).
+- **Reverse coupling, undocumented:** `frontend/src/ui/overhang_pathview.js:32-54` imports
+  `BP_W/CELL_H/PAIR_Y/GUTTER` **and 15 `CLR_*` constants** from `cadnano-editor/pathview.js` +
+  `cadnano-editor/pathview/palette.js`. So editing the *editor's* layout constants or palette silently
+  moves the main app's Domain Designer. The palette is a **three-way** invariant with
+  `backend/core/constants.py` `STAPLE_PALETTE` and `scene/helix_renderer.js`.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`
