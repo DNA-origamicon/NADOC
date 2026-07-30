@@ -142,7 +142,7 @@ class MdJob:
     # Opt-in relaxation accelerator.  When True, the runner may skip a stage's
     # remaining p50/p100 chunks once its first chunk shows an energy+WC plateau
     # (backend/core/md_cutoff.py).  Default OFF — never changes existing runs.
-    early_stop_relax: bool = False
+    early_stop_relax: bool = True
     # Early-stop criterion tier for a REMOTE (Alpine) relaxation.  "B" (default) =
     # energy(+volume) plateau only, stdlib evaluator, restricted to well-restrained
     # stages.  "A" = energy AND WC base-pairing (full local parity), which needs an

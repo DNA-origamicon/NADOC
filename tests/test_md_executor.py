@@ -248,7 +248,9 @@ def _submit(job, tmp_path, alpine, resources):
 
 
 def test_no_early_stop_staging_when_off(tmp_path, alpine, resources):
-    conn = _submit(_make_prepared_job(tmp_path), tmp_path, alpine, resources)
+    job = _make_prepared_job(tmp_path)
+    job.early_stop_relax = False        # ON by default since 2026-07-29; opt OUT here
+    conn = _submit(job, tmp_path, alpine, resources)
     staged = {r for r in conn.put_contents}
     assert not any("nadoc_cutoff_eval.py" in r for r in staged)
 

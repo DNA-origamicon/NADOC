@@ -2489,6 +2489,9 @@ export const applyCandoAutorefine = (id)          => _oxdnaJSON('POST', `/design
  *  instead of ideal B-DNA (BLADE seeds the EXACT all-atom conformation).  Pass
  *  {draft:true} (seeded only) to create an unprepared draft — solvation is
  *  deferred to prepareMdDraft ("Relax from oxDNA/BLADE"). */
+// Named relaxation protocols for the panel's Protocol dropdown (backend owns the
+// catalogue; see backend/core/md_presets.py).
+export const getRelaxPresets     = ()            => _oxdnaJSON('GET',  '/md/relax-presets')
 export const createMdJob         = (body)        => _oxdnaJSON('POST', '/md/jobs', body)
 /** Prepare (solvate) + start a DRAFT NAMD job with the given advanced settings
  *  (same body shape as createMdJob). Seeds from the draft's recorded oxDNA/mrDNA

@@ -15,7 +15,7 @@ import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
 import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
-import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram } from '../api/client.js'
+import { rollMdJobDesign, estimateMdDisk, estimateMdProductionDisk, preflightMdVram, getRelaxPresets } from '../api/client.js'
 import { getRunDir, recommendArchive, archiveRecommendation } from './run_location.js'
 import { docKey } from '../shared/doc_id.js'
 import { resetControlsToDefaults } from './form_defaults.js'
@@ -43,6 +43,10 @@ import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_s
 import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
+import { initRelaxPresets } from './md_relax_presets.js'
+
+// Relax-protocol preset dropdown (see ./md_relax_presets.js); set during panel init.
+let _relaxPresets = null
 
 // ── Colour palette (matches NADOC dark theme) ─────────────────────────────────
 const _C = {
@@ -695,7 +699,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   // Form elements
   const namdStatusEl  = document.getElementById('md-jobs-namd-status')
-  const presetSel     = document.getElementById('md-jobs-preset')
   const runBtn        = document.getElementById('md-jobs-run-btn')
   const jobCtlBtn     = document.getElementById('md-jobs-job-ctl-btn')   // contextual Stop/Resume for the SELECTED job
   const runTargetLocal  = document.getElementById('md-run-target-local')
@@ -736,6 +739,21 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const fastChk       = document.getElementById('md-jobs-fast')
   const gpuAskChk     = document.getElementById('md-jobs-gpu-ask')
   const earlyStopChk  = document.getElementById('md-jobs-early-stop')
+  const relaxPresetSel = document.getElementById('md-jobs-relax-preset')
+  const relaxPresetNote = document.getElementById('md-jobs-relax-preset-note')
+  // Named relaxation protocols (Fast Shape / Standard / Slow).  The module owns the
+  // dropdown; the panel only reads back which id to send.  Defaults to Standard, and
+  // the backend applies the preset's settings only to fields the request did not set.
+  _relaxPresets = initRelaxPresets({
+    selectEl: relaxPresetSel,
+    noteEl: relaxPresetNote,
+    fetchPresets: getRelaxPresets,
+  })
+  _relaxPresets.load().then(() => _syncSolventFields()).catch(() => {})
+  // Protocol is DERIVED from the preset — there is no separate protocol control any
+  // more, so the two can never disagree (they used to: "Standard (Aksimentiev)" plus a
+  // separately-selected implicit solvent produced a job with no water at all).
+  const _protocol = () => _relaxPresets?.protocol() ?? 'equilibrium_aware_namd'
   const optimizeBtn   = document.getElementById('md-jobs-optimize')
   const runPathEl     = document.getElementById('md-jobs-path')
   const displayToggle = document.getElementById('md-jobs-display-toggle')
@@ -762,7 +780,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // padding, water shell, fast/HMR) don't apply.  Gray them out when GBIS is the
   // selected protocol so the user isn't misled into tuning inert fields.
   function _syncSolventFields() {
-    const implicit = isImplicitSolventProtocol(presetSel?.value)
+    const implicit = isImplicitSolventProtocol(_protocol())
     for (const el of [saltModeSel, mgInput, naclInput, paddingInput, watershellInput, fastChk]) {
       if (!el) continue
       el.disabled = implicit
@@ -786,7 +804,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       host.style.opacity = cpu ? '0.4' : ''
     }
   }
-  presetSel?.addEventListener('change', _syncSolventFields)
+  relaxPresetSel?.addEventListener('change', _syncSolventFields)
   computeSel?.addEventListener('change', _syncSolventFields)
 
   // List + detail
@@ -1358,7 +1376,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // and salt-mode visibility is re-synced.
   function _resetControlsToDefaults() {
     resetControlsToDefaults([
-      presetSel, threadsInput, devicesInput, saltModeSel, mgInput, naclInput,
+      relaxPresetSel, threadsInput, devicesInput, saltModeSel, mgInput, naclInput,
       paddingInput, watershellInput, minstepsInput, autostartChk, prodStepsInput,
       trajInterval,
     ])
@@ -2482,15 +2500,15 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
     if (isLocalRun && !(await confirmNoConcurrentJob())) return
     // Only warn about a busy GPU when this run actually targets the GPU.
-    const runsOnGpu = deviceStringForCompute(computeSel?.value, devicesInput?.value, presetSel?.value) !== 'cpu'
+    const runsOnGpu = deviceStringForCompute(computeSel?.value, devicesInput?.value, _protocol()) !== 'cpu'
     if (isLocalRun && runsOnGpu && !(await confirmGpuNotBusy(devicesInput?.value?.trim() || '0'))) return
     _launching = true
     runBtn.disabled = true
 
     const payload = {
-      protocol:       presetSel?.value ?? 'mgh_slow_release',
+      protocol:       _protocol(),
       threads:        parseInt(threadsInput?.value  ?? '16', 10),
-      devices:        deviceStringForCompute(computeSel?.value, devicesInput?.value, presetSel?.value),
+      devices:        deviceStringForCompute(computeSel?.value, devicesInput?.value, _protocol()),
       salt_mode:      saltModeSel?.value ?? 'screening',
       mg_conc_mM:     parseFloat(mgInput?.value     ?? '12.5'),
       ion_conc_mM:    parseFloat(naclInput?.value   ?? '0'),
@@ -2503,7 +2521,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       gpu_fallback_policy: gpuFallbackFromToggle(gpuAskChk?.checked ?? true),
       production_timestep_fs: Number(prodTimestepSel?.value) || DEFAULT_PRODUCTION_TIMESTEP_FS,
       gpu_resident:   residentSel?.value ?? 'auto',
-      early_stop_relax: earlyStopChk?.checked ?? false,
+      relax_preset:   _relaxPresets?.id() ?? 'standard',
+      early_stop_relax: earlyStopChk?.checked ?? true,
       design_source_path: _currentPartPath() || null,
       execution_target: runTarget,
       cluster_name:   runTarget === 'alpine' ? 'alpine' : null,
@@ -2903,7 +2922,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (!mdJobIsDraft(job)) return
     const p = job.prep_params || {}
     const set = (el, v) => { if (el && v != null) el.value = String(v) }
-    set(presetSel, p.protocol)
+    // A draft records the PROTOCOL it was prepared with; the control is now the preset,
+    // so restore whichever preset runs that protocol (falls back to the default).
+    if (p.relax_preset || p.protocol) {
+      _relaxPresets?.load(p.relax_preset ?? _relaxPresets?.idForProtocol(p.protocol))
+        .then(() => _syncSolventFields()).catch(() => {})
+    }
     set(threadsInput, p.threads)
     // "cpu" belongs to the Compute selector, not the CUDA-device text field.
     if (computeSel) computeSel.value = computeFromDeviceString(p.devices)
@@ -2924,7 +2948,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       residentSel.value = String(p.gpu_resident)
       _paintResidentWarning()
     }
-    if (earlyStopChk) earlyStopChk.checked = p.early_stop_relax ?? false
+    if (earlyStopChk) earlyStopChk.checked = p.early_stop_relax ?? true
     _syncSolventFields()   // gray explicit-solvent knobs if the draft is GBIS
     if (advBody && advBody.style.display === 'none') advToggle?.click()   // reveal the drawer
   }

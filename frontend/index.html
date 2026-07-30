@@ -5163,13 +5163,14 @@
                    Advanced card at init (see main.js); the Relax/Production buttons inside it
                    are first extracted to the run-controls host above the jobs card. -->
               <div id="md-launch-form" style="margin-bottom:8px">
-                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px">Protocol</div>
-                <select id="md-jobs-preset"
-                        style="width:100%;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px 5px;margin-bottom:6px">
-                  <option value="equilibrium_aware_namd">Equilibrium-Aware NAMD</option>
-                  <option value="implicit_gbis_namd">Implicit Solvent (GBIS) — no water, fits small GPUs</option>
-                  <option value="mgh_slow_release">Legacy Explicit Mg/MGH Slow Release</option>
+                <div style="font-size:var(--text-xs);color:#8b949e;margin-bottom:3px"
+                     title="Named relaxation protocol. Sets the solvent model, restraint ladder and run lengths to a published recipe; the engine protocol is derived from it. Anything you change by hand afterwards wins.">Protocol</div>
+                <select id="md-jobs-relax-preset"
+                        style="width:100%;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:3px 5px;margin-bottom:3px">
+                  <option value="standard" selected>Standard (Aksimentiev)</option>
                 </select>
+                <div id="md-jobs-relax-preset-note"
+                     style="color:#8b949e;font-size:var(--text-xs);line-height:1.35;margin-bottom:6px"></div>
                 <!-- Relax / Production buttons — relocated above the jobs card at init
                      (see main.js run-control move). Run-on (Local/Alpine) radios live in the
                      Cluster card now. -->
@@ -5379,8 +5380,8 @@
                     Prefer fastest GPU mode (ask before running slower)
                   </label>
                   <label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:var(--text-xs);color:#8b949e;cursor:pointer"
-                         title="Relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. Off by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages. Also editable mid-relax: changing it while a running local relaxation is selected applies at the next stage checkpoint (no relaunch).">
-                    <input id="md-jobs-early-stop" type="checkbox" style="accent-color:#3fb950">
+                         title="Relaxation accelerator: skip a restraint stage's remaining p50/p100 chunks once its first chunk shows an energy + base-pairing plateau (multi-criteria). Never skips production/qualification stages. ON by default; large extra speedup on well-behaved designs, holds fragile low-restraint stages. The 'Slow (full physics)' preset turns it off. Also editable mid-relax: changing it while a running local relaxation is selected applies at the next stage checkpoint (no relaunch).">
+                    <input id="md-jobs-early-stop" type="checkbox" checked style="accent-color:#3fb950">
                     Early-stop settled stages
                     <span id="md-jobs-early-stop-pending"
                           style="display:none;color:#d29922"

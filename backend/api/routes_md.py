@@ -40,6 +40,8 @@ from backend.core import job_archive
 from backend.core import md_chain_executor as _chain
 from backend.core.md_job import MdJob, MdSegmentStatus, MdStatus, new_job
 from backend.core.md_pipeline import MdPipeline, PipelineStage, StagePlan, cross_engine_seed
+from backend.core.md_presets import (DEFAULT_PRESET, get_preset,
+                                     preset_availability, preset_catalogue)
 from backend.core.md_protocols import (
     EQUILIBRIUM_AWARE_PROTOCOL,
     IMPLICIT_GBIS_PROTOCOL,
@@ -49,6 +51,7 @@ from backend.core.md_protocols import (
     build_production_conf,
     external_forces_block,
     namd_efield_vector,
+    package_npt_allowed,
     prepare_mgh_slow_release,
     prepare_equilibrium_aware_namd,
     segments_from_manifest,
@@ -224,12 +227,21 @@ class CreateJobRequest(BaseModel):
                     "force just streams the structure). A JOB-REQUEST annotation, never a "
                     "Design edit.",
     )
+    relax_preset: str = Field(
+        DEFAULT_PRESET,
+        description="Named relaxation protocol (backend/core/md_presets.py): "
+                    "'fast_shape' (vacuum ENRG-MD), 'standard' (Aksimentiev explicit "
+                    "MgCl2 + ENM ladder, the default), or 'full_physics' (solvent-first "
+                    "staged release). Supplies DEFAULTS only — any field the caller sets "
+                    "explicitly wins.",
+    )
     early_stop_relax: bool = Field(
-        False,
-        description="Relaxation accelerator (opt-in, EXPERIMENTAL): skip a stage's "
-                    "remaining p50/p100 chunks once its first chunk shows an energy+WC "
-                    "plateau (multi-criteria, backend/core/md_cutoff.py). Never skips "
-                    "production/qualification stages. Off by default.",
+        True,
+        description="Relaxation accelerator: skip a stage's remaining p50/p100 chunks "
+                    "once its first chunk shows an energy+WC plateau (multi-criteria, "
+                    "backend/core/md_cutoff.py). Never skips production/qualification "
+                    "stages. ON by default; the 'full_physics' preset turns it off, "
+                    "since a stage you intend to publish should not be truncated.",
     )
     early_stop_tier: str = Field(
         "B",
@@ -907,7 +919,8 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   anchors_file: Optional[str] = None,
                                   field: Optional[dict] = None,
                                   n_atoms: Optional[int] = None,
-                                  force_resident: Optional[bool] = None) -> str:
+                                  force_resident: Optional[bool] = None,
+                                  package_dir: Optional[Path] = None) -> str:
     # Thin delegate to the shared, parameterized builder in md_protocols (the ensemble
     # path calls the same builder with a per-replica seed + start_checkpoint).  Defaults
     # here reproduce the original template byte-for-byte; timestep_fs (1/2/4) selects the
@@ -915,11 +928,15 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
     # external-forces block in for anchored/E-field production runs.  n_atoms/
     # force_resident carry the GPU-resident decision (size gate + explicit override) —
     # without them production hard-coded resident ON and ignored the dropdown entirely.
+    # A water-shell-carved cell has vacuum corners; running production under a barostat
+    # collapses it onto the solute (see md_protocols._pressure_block).  The relax ladder
+    # has always honoured this; production read nothing, so it hardcoded NPT.
     return build_production_conf(
         spec, name_stem, box, mgh_extrabonds,
         fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
         anchors_file=anchors_file, field=field,
         n_atoms=n_atoms, force_resident=force_resident,
+        npt=package_npt_allowed(package_dir) if package_dir else True,
     )
 
 
@@ -1210,6 +1227,7 @@ def _append_production_segments(
                 anchors_file=anchors_file, field=field,
                 n_atoms=_psf_atom_count(package_dir / f"{name_stem}.psf") or None,
                 force_resident=plan.get("force_resident"),
+                package_dir=package_dir,
             )
         (package_dir / f"{spec.name}.conf").write_text(conf)
         segments.append(spec)
@@ -1288,6 +1306,54 @@ _NO_SEQUENCE_MSG = (
 )
 
 
+@router.get("/md/relax-presets")
+async def list_relax_presets() -> dict:
+    """The named relaxation protocols the panel offers, cheapest first.
+
+    Each entry carries its label, a one-paragraph summary, the settings it defaults, its
+    literature reference, and whether it is runnable — the vacuum tier is listed but
+    marked unavailable rather than silently missing, so the menu tells the truth about
+    what this build can do.
+    """
+    return {"presets": preset_catalogue(), "default": DEFAULT_PRESET}
+
+
+def _apply_relax_preset(body: CreateJobRequest) -> CreateJobRequest:
+    """Fill unset request fields from the chosen preset; DERIVE ``protocol`` from it.
+
+    ``model_fields_set`` is exactly "what the caller actually sent", so a preset supplies
+    defaults without ever overriding an explicit choice — except for ``protocol``, which
+    the preset OWNS.  The panel used to carry a second protocol dropdown, so you could
+    ask for "Standard (Aksimentiev)" (explicit MgCl2 + CUFIX) while separately selecting
+    implicit solvent, and nothing caught it.
+
+    Backward compatibility for API callers, which the panel no longer exercises:
+
+    * ``protocol`` alone, no ``relax_preset`` → honoured as before (legacy path);
+    * both, and they agree → fine;
+    * both, and they disagree → 400 rather than a silent override.
+    """
+    explicit = set(body.model_fields_set)
+    preset_id = getattr(body, "relax_preset", None)
+    preset = get_preset(preset_id)
+    wanted = preset.defaults.get("protocol")
+
+    if "protocol" in explicit and wanted and body.protocol != wanted:
+        if "relax_preset" not in explicit:
+            return body                      # legacy caller: protocol alone still rules
+        raise HTTPException(
+            400,
+            f"protocol={body.protocol!r} contradicts relax_preset={preset.id!r}, which "
+            f"runs {wanted!r}. Protocol is derived from the preset — send one or the "
+            f"other.")
+
+    if not preset.defaults:
+        return body
+    updates = {k: v for k, v in preset.defaults.items()
+               if k in type(body).model_fields and (k == "protocol" or k not in explicit)}
+    return body.model_copy(update=updates) if updates else body
+
+
 @router.post("/md/jobs")
 async def create_md_job(body: CreateJobRequest) -> dict:
     """Create a new MD job and prepare it (solvation + config gen) in the background.
@@ -1299,6 +1365,17 @@ async def create_md_job(body: CreateJobRequest) -> dict:
     blocked for the whole 60-120 s+ preparation, so the UI could only show an
     indeterminate spinner with no ETA and no way to detect a hung run.
     """
+    preset = get_preset(body.relax_preset)
+    # Host-aware, not just build-aware: GBIS needs a non-CUDA NAMD binary, and finding
+    # that out AFTER solvation (which is what happened) wastes a prep and looks like a
+    # crash rather than an unmet requirement.
+    _ok, _why = preset_availability(preset)
+    if not _ok:
+        raise HTTPException(
+            400, f"The {preset.label!r} preset cannot run here. {_why}")
+    # Preset supplies defaults for anything the caller did not set explicitly.
+    body = _apply_relax_preset(body)
+
     if body.protocol not in SUPPORTED_PROTOCOLS:
         raise HTTPException(400, f"Unknown protocol: {body.protocol!r}")
     if body.salt_mode not in {"screening", "custom"}:

@@ -34,6 +34,10 @@ def _run(coro):
 
 def _job(tmp_path, n_segs=2) -> MdJob:
     job = new_job("d", "equilibrium_aware_namd", "d", "package/d_namd_solvated")
+    # Early-stop is ON by default since 2026-07-29, which stages an extra evaluator
+    # script.  These tests are about staging REUSE, so opt out to keep them focused;
+    # test_md_executor.py covers the staging that early-stop itself triggers.
+    job.early_stop_relax = False
     job.segments = [
         MdSegmentStatus(name=f"d_{i:02d}", stage="relax", percent=10.0, steps=100)
         for i in range(1, n_segs + 1)
