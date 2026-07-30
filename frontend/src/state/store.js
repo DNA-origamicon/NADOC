@@ -134,7 +134,7 @@ const _initialState = {
    * bluntEnds: show blunt-end markers + enable click interaction.
    */
   toolFilters: {
-    bluntEnds:          true,
+    bluntEnds:          false,
     overhangLocations:  false,
     extensionLocations: true,   // show/hide strand extension beads and fluorophores
   },
