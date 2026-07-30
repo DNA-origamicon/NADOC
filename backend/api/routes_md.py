@@ -1436,6 +1436,8 @@ async def create_md_job(body: CreateJobRequest) -> dict:
                 from backend.core.blade_runner import assert_blade_namd_seed_available  # noqa: PLC0415
                 await run_in_threadpool(assert_blade_namd_seed_available, body.blade_job_id, _workspace())
         except FileNotFoundError as exc:
+            # A seed is named deliberately ("Use as NAMD seed"), so an unusable one is a
+            # real error rather than something to quietly relax without.
             raise HTTPException(400, str(exc))
         design = None
         name = _seed_design_name(body)   # nice list label; provisional otherwise
