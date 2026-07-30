@@ -13,7 +13,8 @@ existing Three.js helix meshes into two tracks. It edits nothing.
 
 **Not this rule:** `frontend/src/cadnano-editor/` is a **separate 10.7k-LOC Vite app** (own HTML
 entry, own `editorStore`, own `api.js`, reached by `window.open`). It shares **no module** with
-`cadnano_view.js` — neither imports the other. Don't reason about one from the other.
+`cadnano_view.js` — neither imports the other. Don't reason about one from the other. It has its
+own rule: [cadnano-editor](cadnano-editor.md).
 
 ## Files
 

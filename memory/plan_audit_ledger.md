@@ -68,6 +68,7 @@ unless a migration touches code.
 | 07-30 | `.claude/rules/scaffold-and-loops.md` (off-taxonomy: path-scoped rule, no verdict) | Probe of all ~55 anchors. **Dead:** all 6 `lattice.py` routing symbols (`auto_scaffold`, `compute_scaffold_routing`, `_build_seam_line_domains`, `_build_end_to_end_domains`, `_helix_adjacency_graph`, `_greedy_hamiltonian_path`), the `seam_line`/`end_to_end` mode concept, `compute_loop_skip_deformations` (0 hits repo-wide), 4 of 12 documented routes (`/design/auto-scaffold`, `-scaffold-nick`, `-extrude-near`, `-extrude-far`), `tests/test_scaffold_geometry.py`, `MAP_SCAFFOLD_ROUTING.md`. **Wrong-not-dead:** hotkey table off-by-one from `[4]` on + `[2]`/`[7]` wrong outright (actual: 1 Autoscaffold / 2 Full Autostaple / 4 Add Loops-Skips / 5 scaffold seq / 6 staple seq; 7 unbound; two binding sites `cadnano-editor/main.js:1436` + `keyboard_shortcuts.js:392`); `LoopSkip.delta` is plain `int`, **not** `Literal[-1,+1]` (no type-level guard); `ROUTING_ENTRY_POINTS` is in `tests/test_scaffold_invariants.py:53`, not `scaffold_invariants.py`; validator string is `location(s)`; seam window is `_SEAM_BP_WINDOW=1` w/ `seam_margin` 7/8. **Moved by carve-up:** `full_autostaple_endpoint`+`_linearize_staple_precursors` crud.py→`routes_assign_sequences.py:346/216`; 5 of 7 loop-skip routes crud.py→`routes_loop_skip.py` (but `apply-deformations`/`clear-all` stayed). **Still-true:** the entire autostaple half (`nick_all_major_ticks`/`grow_staples`/`_has_sandwich`/anti-sandwich/56-cap) + `auto_crossover`/`_place_auto_crossovers`/`_desplice_strands_for_crossover` in crud.py. **Structural defect found independently:** frontmatter globs (`scaffold*.py`, `seamless*.py`, `loop_skip*.py`) never matched `seamed_router.py` or `section_router.py` — the rule failed to auto-load on the primary router file it exists to describe | REWRITTEN (n/a — rule, not plan) | Full rewrite against the probe: 3-router table w/ line anchors, corrected hotkeys, per-route file column, `_ham_path_search`/`_HC_SCAF_BOW_RIGHT` map, `CELLS_*`-are-not-shared warning, and a **"Removed API — do not resurrect"** block naming every dead symbol. Globs widened to all 3 routers + both route files. Struck the entry from `project_tech_debt`; logged 1 new debt item (`CELLS_6HB`/`CELLS_18HB` copy-pasted with divergent cell lists across 9 files). No `MEMORY.md` edit (rules are listed by name only; name unchanged) |
 | 07-30 | project_protein_attachment | Probe: feature **ships end-to-end**. Routes carved out of crud.py → `routes_protein.py` (9 routes, registered `main.py:272`); only `pdb-auto` + `_import_protein_free` stayed in `crud.py:1771/1843`. Frontend closure extracted → `scene/protein_subsystem.js` (renderer+gizmo+**store-driven** refresh, `:76-81`) — main.js keeps 1 redundant ad-hoc call. Of the 2 "NOT built" items, **one shipped**: conjugation-atom picking is a 563-LOC Conjugate Manager (3D marker picking) + `backend/core/conjugation.py` SASA candidates + `POST /design/protein/conjugate` + 5th op kind `protein-conjugate` — all undocumented here. `infer_bonds_by_distance` (doc: "Phase 4, not written") is built AND called (`atomistic.py:1197`). Tests 36 not 28 (+7 conjugation, +5 vitest). Only Phase 3 (assembly) truly unbuilt — `kind=="assembly"` explicitly skipped `routes_protein.py:132`, zero `protein` hits across all assembly modules front+back. Stale claims both directions: `menu-file-import-protein` gone (correct), `test_delete_earlier_protein_import_lists_dependent` renamed+inverted, discriminator is `"overhang"` not `"design"`, gotcha "no auto-refresh on design load" fixed by the subsystem extraction | UNFINISHED-ACTIVE | Kept; **rank P2**; 89-line work-log head split → lean head + `_archive.md`; head rewritten as status banner + 20-row code-location table + 5 live open items; **migrated in** the undocumented conjugation subsystem; cross-linked MD side to `proteins_in_simulation`; MEMORY.md hook updated. New code defects recorded as open items (not tech_debt — the plan owns them): `ProteinAsset.bonds` never populated (`protein.py:191` hard-codes `[]` → bond-free preview render), `Assembly.protein_*` are orphaned serialized slots, `routes_protein.py:97` docstring promises a fallback the code removed |
 | 07-30 | `.claude/rules/cadnano-2d.md` (off-taxonomy: path-scoped rule, no verdict) | **Frontmatter triage of all 9 unaudited rules first** (see handoff table). Worst: `cadnano-2d`'s glob `frontend/src/cadnano/**/*.js` matches **zero files** — that path has never existed; the real dir is `frontend/src/cadnano-editor/`. Body probe of ~40 anchors: **Moved** — init site `main.js:878`→`:1542`; reapply subscriber `~952`→`:2499` (+ a **second, undocumented** compensator at `:2517` on `straightGeometry`); K/U bindings now `ui/keyboard_shortcuts.js:259-271` via injected deps (`main.js:4510`). **Renamed/gone** — `scene/blunt_ends.js`→`scene/domain_ends.js` (and its `reapplyIfActive` grew a *positive* `_lastCadnanoParams` re-apply branch the rule never had); `_clearSliceHighlights()`→`sliceHighlighter.clear()`; `_helixCtrl.clearFemColors()` gone. **Whole narrative dead** — the "Known culprit (fixed 2026-04-01) FEM clear-stale-results subscriber at main.js:2475" no longer exists, and `clearFemOverlay()` now has **zero callers**. **Wrong-not-dead** — init signature is 8 params not 7 (undocumented vestigial `_getCrossoverLocations`, always `null`); `captureCurrentCamera` listed as required but never called; `_restoreSideEffects()` is *also* a no-op (rule implies it works); ortho frustum is `fh = 2·dist·tan(fov/2)` (full height), no `halfH` at construction; `reapplyPositions()` list omitted the `_computeCadnanoPosMap()` recompute + empty-map abort. **Still-true** — merge-only `_unfoldPosMap` verbatim (incl. `__xb_`/`__ext_` skips), glow `refreshAllGlow()` invariant, 250 ms two-stage anim, YZ skip quats, `keepUnfold`, ortho shift-right capture fix, all 3 cross-feature guards. **Undocumented finds** — atomistic-mode entry block (`main.js:2614`), `end_extrude_arrows.js:382` cadnano-Z override, the 12-module `cadnanoActive` consumer list, **zero unit tests for `cadnano_view.js`** (and neither `e2e/cadnano_*.spec.js` covers this mode — one tests the importer, one the *editor*) | REWRITTEN (n/a — rule, not plan) | Full rewrite: dead glob dropped, `loop_skip_highlight.js` added (was matched by **no** rule); file table w/ line anchors, corrected 8-arg signature, 10-step `reapplyPositions`, both subscribers, honest "there are no tests" section, and a **"Removed API — do not resurrect"** block (7 dead names). Scope banner added disambiguating this K-key view mode from the separate `cadnano-editor/` app. 5 code stragglers → `project_tech_debt` (dead `clearFemOverlay`, duplicated `PERSP_FOV_DEG=55`, vestigial init param, editor's 1.7% test coverage, and `ui/overhang_pathview.js` importing the editor's layout+palette constants — a three-way invariant w/ `constants.py` + `helix_renderer.js`). No `MEMORY.md` edit (rules listed by name; name unchanged) |
+| 07-30 | `.claude/rules/cadnano-editor.md` (off-taxonomy: **new** path-scoped rule, no verdict) | The repo's largest documentation hole, filled. `frontend/src/cadnano-editor/` = **10,713 LOC / 13 files**, a second Vite app (`vite.config.js:30`, entry `cadnano-editor.html:1723`), with **zero `.claude/` coverage** before this pass. Probe corrected 5 handoff claims: the file list is 13 not 13-with-different-sizes (`element_keys.test.js`/`sequence_layout.test.js` are 2 of the 13); `store.js`'s not-shared line is **:5** not :4; hotkey **`3` is NOT bound** (folded into `2`; comment :1437-1438) while `F`/`?`/`F1`/`S`/`Backspace`/`Space`/`Ctrl+O`/`Ctrl+S`/`Ctrl+Shift+S`/`Ctrl+Y` are and weren't listed; `Ctrl+Shift+L` lives in `ligation_debug.js:403` not `main.js`; and the palette's third copy is `scene/helix_renderer/**palette.js**:23-26`, **not** `helix_renderer.js` (which only imports it :33). Element-key law CONFIRMED and already correctly implemented — all 4 regexes use `-?\d+` (`element_keys.js:79-82`), header :6-11 cites ISSUE-7, and a full-frontend sweep found **zero `\d+`-only offenders**. New load-bearing finds the handoff didn't have: the stale-response **revision watermark** (`api.js:24-56`, `_lastAppliedRev`; `resetRevisionWatermark()` must fire on backend restart or the editor freezes), the **mutations-must-go-through-`mutate()`** law and its documented failure (`api.js:655-660` — bare fetch → wrong doc → "Feature index N out of range"), `doc_id.js:16/28` **editor tabs never mint a doc id** (fall back to `__default__`), per-strand-id staple-colour pinning (`palette.js:91-102`), the periodic auto-shift user law (`pathview.js:4930-4944`), negative-bp handling in `_fitToContent` (:882-889), `pathview` is **render-only** (imports no `api.js`; 24 `on*` callbacks), and `update()` clearing selection. Tests: **25** backend (`test_cadnano_editor_api.py`, 3 classes), **2** vitest files = 176 of 10,512 production LOC (**1.6%**); `cadnano_crosssection.spec.js` does **not** touch this app | NEW RULE (n/a — rule, not plan) | Wrote `.claude/rules/cadnano-editor.md`: globs `cadnano-editor/**` + the HTML + both `shared/` sync modules; 13-file map w/ LOC + entry points, separate-app model, doc-scoping asymmetry, full backend surface (2 editor-only routes in `crud.py:1964/2315`, no dedicated router) + both header conventions, element-key codec law, geometry/layout w/ the bp→x cell-boundary convention, 8 invariants, the reverse-coupling trap, corrected hotkey table, honest coverage section, "Removed API" block. Cross-linked from `cadnano-2d.md`. **7 code defects → `project_tech_debt`**, incl. a *new* palette entry: a **4th, divergent** `STAPLE_PALETTE` in `ui/spreadsheet.js:54-60` (3D spreadsheet paints strands differently from the canvas) + all 3 sync-pointer comments naming files that no longer hold the constant. MEMORY.md rule list updated (one edit) |
 | 07-25 | project_mate_connectors | Probe: ALL implemented anchors EXIST+WIRED (create_mate→route, _propagate_fk_inplace/_compose_add_joint shared, `assembly-create-mate` in SnapshotOpKind, shared+legacy `getInstanceBluntEnds` both live, no `()=>[]` stub). Feature ships. Locations drifted (routes_assembly_joints/geometry.py, scene/, ui/overhang_orientation_panel.js). 1 of 4 "known issues" (cache invalidation) FIXED — `_ooApplyDelta` now calls `invalidateInstance`+`rebuild`; 3 connector-placement bugs survive | UNFINISHED-ACTIVE | Kept; **rank P2**; head banner + relocations + open-items rewritten (cache issue struck as RESOLVED); MEMORY.md hook updated |
 
 ## HOLD — flagged to user, decision pending
@@ -104,7 +105,8 @@ Glob-vs-`ls` check of all 9 unaudited rules. **Don't re-run this; it's the ranki
 
 | Rule | Frontmatter verdict |
 |---|---|
-| ~~`cadnano-2d`~~ | **REWRITTEN this pass.** Glob `frontend/src/cadnano/**/*.js` matched **zero files** |
+| ~~`cadnano-2d`~~ | **REWRITTEN 07-30.** Glob `frontend/src/cadnano/**/*.js` matched **zero files** |
+| ~~`cadnano-editor`~~ | **NEW 07-30** — 10,713 LOC that no rule covered at all |
 | `selection` | ⚠️ single glob `scene/selection_manager.js`; **misses** `scene/selection_bbox.js`, `scene/selection_level.js`, `ui/selection_filter.js` — all extracted siblings |
 | `animation` | ⚠️ `backend/api/animation*.py` matches **zero files**; also misses `scene/animation_text_overlay.js` |
 | `api-and-state`, `rendering`, `deformation`, `main-init`, `unfold`, `strand-anim` | globs all resolve; no structural tell (body still unaudited) |
@@ -114,39 +116,43 @@ onto *more* files. Glob fix and body rewrite go together, in one pass, per rule.
 
 ## Next-session handoff
 
-▶ **NEXT: write a new `.claude/rules/cadnano-editor.md`.** This pass's probe found the largest
-documentation hole in the repo: `frontend/src/cadnano-editor/` is **10,713 LOC** — a second Vite app
-(`frontend/cadnano-editor.html`, entry `vite.config.js:30`, own `editorStore`, own `api.js`, reached by
-`window.open` from `main.js:4223/7875`) — with **zero `.claude/` coverage** (the only mention repo-wide is
-one line anchor in `scaffold-and-loops.md:29`) and ~1.7% unit-test coverage. `pathview.js` alone is 4977 LOC,
-the second-largest JS file after `main.js`. Its smaller sibling sandbox app `strand-anim` already has a rule.
+▶ **NEXT: `.claude/rules/animation.md`** (or `selection` — either is fine; `animation` first because its
+defect is the same class as the two already-fixed ones). Per the frontmatter triage table above,
+`animation`'s glob `backend/api/animation*.py` matches **zero files**, and it also misses
+`scene/animation_text_overlay.js`. Zero-match globs have now predicted body rot **twice for two** —
+treat it as the strongest available signal. `selection` is the runner-up: its single glob
+`scene/selection_manager.js` misses three extracted siblings (`scene/selection_bbox.js`,
+`scene/selection_level.js`, `ui/selection_filter.js`), so the rule loads on the parent and stays silent
+on the children. Fix the glob and rewrite the body **in the same pass** — widening a stale rule's globs
+alone just auto-loads wrong guidance onto more files.
 
-It is **architecturally disjoint** from `scene/cadnano_view.js` (probe was definitive: they share no module
-and neither imports the other) — one rule cannot cover both, and the rewritten `cadnano-2d.md` now says so.
+After the rule sweep, resume the plan queue at **`project_regional_autorefine`** (queue top).
+Still standing from the last pass: **`project_cadnano_overhaul.md`** is stale as an architecture map
+(last dev-log entry 2026-05-25; code last touched 2026-07-28; its "Remaining Work" gate still says
+"confirm all 17 API tests pass" when there are **25**) — already queued; rank it as a *plan*, not a map,
+and note that its architecture content is now superseded by `.claude/rules/cadnano-editor.md`.
 
-Probe evidence is already gathered — **do not re-probe from scratch**; the rule needs to carry:
-globs `frontend/src/cadnano-editor/**/*.js` + `frontend/cadnano-editor.html`; the separate-app model
-(own store explicitly NOT shared — `cadnano-editor/store.js:4`; cross-tab sync = BroadcastChannel via
-`shared/broadcast.js` + backend-as-ground-truth; `shared/doc_id.js:16` branches on the pathname); the
-13-file map (`pathview.js` 4977 / `main.js` 2554 / `api.js` 724 / `strands_spreadsheet.js` 657 /
-`sliceview.js` 631 / `ligation_debug.js` 433 / `zoom_scope.js` / `element_keys.js` / `store.js` /
-`sequence_layout.js` / `pathview/palette.js`); the **reverse-coupling trap** (`ui/overhang_pathview.js:32-54`
-imports the editor's `BP_W/CELL_H/PAIR_Y/GUTTER` + 15 `CLR_*` — palette is a three-way invariant with
-`backend/core/constants.py` `STAPLE_PALETTE` and `scene/helix_renderer.js`); the **element-key codec law**
-(bp indices **can be negative** — `\d+`-only regexes silently no-op; this bug has been fixed twice, see
-`project_cadnano_resize.md`); the backend surface (**no dedicated router** — shared `crud.py` etc.; only
-`/design/helix-at-cell` and `/design/scaffold-domain-paint` are editor-specific, pinned by
-`tests/test_cadnano_editor_api.py`, now **25** tests; conventions `X-NADOC-Skip-Geometry: 1` on undo/redo
-and `docHeaders()` doc-scoping on every call); and the hotkey table (`R` cycle tool, `N`/`P` nick/paint with
-`P`-again nudging colour, `1/2/4/5/6` scaffold+staple actions at `main.js:1436-1442`, `Tab` filter cycle,
-`Ctrl+Shift+D`/`Ctrl+Shift+L` debug panels, pathview-local `Escape`/`Shift`-ghost/`D`/`Delete`).
-Do **not** absorb `project_cadnano_overhaul.md`'s Phase 3–5 planning content — that's a separate audit target.
+*New this pass (cadnano-editor) — the missing rule is worse than the stale rule, and it is invisible.*
+The last two passes fixed rules that were wrong; this one covered 10,713 LOC that **no rule had ever
+described**. A stale rule at least announces itself when a session reads it and finds a dead symbol; an
+absent rule produces no signal at all — the area simply gets re-derived from scratch, every session,
+forever. The tell that found it was incidental (a rule for a *different* module needed a "not this
+rule" disambiguation, and the thing being disambiguated turned out to have no rule of its own). So:
+**when a rewrite makes you write "not this rule: X", check whether X has a rule.** Cheap, and it found
+the biggest hole in the repo. Corollary for prioritising the remaining sweep: LOC-without-coverage is a
+better target metric than staleness — `frontend/src/` should be swept for directories with no matching
+`paths:` glob anywhere in `.claude/rules/`.
 
-Then continue the rule sweep at **`selection`** or **`animation`** (both have a structural tell, table above),
-and only after that resume the plan queue at **`project_regional_autorefine`** (queue top).
-Also newly visible: **`project_cadnano_overhaul.md`** is stale as an architecture map (last dev-log entry
-2026-05-25; code last touched 2026-07-28; its "Remaining Work" gate still says "confirm all 17 API tests pass"
-when there are 25) — it is already queued, and the ranking should reflect that it is a *plan*, not a map.
+*Also new — "do not re-probe from scratch" is advice, not an instruction; verify the handoff's anchors.*
+The handoff carried pre-gathered evidence and **5 of its claims were wrong** (an off-by-one line number,
+a hotkey that isn't bound, three keys attributed to the wrong file, and a constant attributed to
+`helix_renderer.js` when that file only imports it). None would have been caught by writing the rule
+from the handoff alone — and a wrong rule is auto-loaded, so it is worse than the hole it fills. Reuse
+the handoff to *scope* the probe (it saved the discovery pass entirely); re-verify every anchor you
+actually write down. Related: the probe's most valuable single output was a **negative** result — the
+element-key `-?\d+` law was already correctly implemented everywhere, with zero offenders. Recording
+"this invariant is currently held, repo-wide, verified on <date>" is worth as much as finding a
+violation, because it is what stops the next session re-auditing it.
 
 *New this pass (cadnano-2d) — the frontmatter triage works, and it is nearly free.* Nine rules, one
 `awk` over the frontmatter plus one `ls`, and it ranked them correctly on the first try: the rule with the
