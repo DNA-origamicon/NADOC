@@ -250,7 +250,7 @@ gated on a decision only the user can make — don't burn a session trying to in
   territory, manual-only) or a **2-opt cycle reconnection** (remove one crossover from each of two cycles, add
   two that cross-connect them). 2-opt is the real path; it is the "cycle merging not implemented" gap the
   deleted CSP router had noted.
-- **Caution:** this is the area `memory/project_dumbbell_autoscaffold.md` documents as repeatedly producing
+- **Caution:** this is the area `memory/LESSONS.md` **H18** records as repeatedly producing
   tests-pass-but-visually-wrong results. Do the rework with a real design loaded in the running app + visual
   confirmation at each step, NOT tests alone.
 

@@ -90,7 +90,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Cadnano editor:** periodic_boundary · cadnano_overhaul · cadnano_resize · domain_shift_feature · xover_base_lerp
 
-**Scaffold / seam / autostaple:** **hinge_autoscaffold** (regression gate) · autoscaffold_single_strand · scaffold_router · seamless_router · dumbbell_autoscaffold
+**Scaffold / seam / autostaple:** **hinge_autoscaffold** (regression gate) · **autoscaffold_single_strand** (section_router / dumbbell+teeth) · seamless_router
 
 **Cluster submission (Alpine):** **alpine_cluster_submission** (read its "Resume model" block before touching resume)
 

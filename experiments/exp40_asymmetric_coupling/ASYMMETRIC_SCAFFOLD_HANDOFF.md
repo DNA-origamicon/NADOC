@@ -52,8 +52,8 @@ More broadly, any asymmetric origami the user draws may fail to auto-route.
 - Regression gate: `backend/core/scaffold_invariants.py` (+ the `ROUTING_ENTRY_POINTS` list —
   new routing paths must register here, per `memory/project_hinge_autoscaffold.md`).
 - Read FIRST: `memory/project_autoscaffold_single_strand.md` (ISSUE-8: uniform sub-bundles + 2-opt
-  splice — the single-strand routing work is already in progress), then `project_scaffold_router.md`,
-  `project_seamless_router.md`.
+  splice — the single-strand routing work is already in progress), then `project_seamless_router.md`
+  (Hamiltonian search: visit budget, pruning, the load-bearing degree tiebreaker).
 
 ## Goal & first steps
 1. Reproduce + characterize: which cell-adjacency-graph property predicts failure (no Hamiltonian

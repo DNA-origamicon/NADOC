@@ -89,6 +89,32 @@ each has a documented reason to exist. Re-check this list before assuming any of
 **Why this is debt at all:** unreferenced modules read as dead to every future sweep, so each one costs
 a fresh investigation. The fix is a decision per file (revive or delete), not another audit.
 
+### Dead `lattice.auto_scaffold(mode=…)` API still referenced by 2 scripts + 1 auto-loaded rule (found 2026-07-30, `/audit-plan`)
+The old per-helix router (`auto_scaffold(design, mode="seam_line"|"end_to_end", scaffold_loops=…)`,
+`_build_seam_line_domains`, `_expand_helices_for_seam`, `_assemble_dumbbell_path`, `_HC_SCAF_VALID`,
+`_route_standard_virt_seg`, `_scaffold_direction_from_helix_id`, `_HC_XOVER_PERIOD`) was **deleted from
+`backend/core/lattice.py`**; routing is now shape-dispatched (`auto_scaffold_seamed` / `_matched` /
+`_seamless` → `section_router.route_sections` via `has_multisection_helix`). Three stragglers still name
+the dead API:
+- `scripts/inspect_bp0.py:13,66-68` — imports `auto_scaffold` from `lattice`, loops `mode in ("seam_line","end_to_end")`. **Cannot run** (ImportError). Revive against the new entry points or delete.
+- `scripts/gen_examples.py:41-49,183` — imports 6 symbols that no longer exist (only `make_bundle_design`, `make_merge_short_staples` survive) and calls `auto_scaffold(design, mode="seam_line")`. **Cannot run.**
+- `.claude/rules/scaffold-and-loops.md:16,35,44,131` — **auto-loaded** when a scaffold file is read, and it still points sessions at `lattice.py — auto_scaffold, compute_scaffold_routing, _build_seam_line_domains, _build_end_to_end_domains, _helix_adjacency_graph, _greedy_hamiltonian_path` and documents a "seam_line (default)" mode. Actively misleading; needs a full symbol-by-symbol re-verify (other names in it are unchecked), not a spot fix.
+Also orphaned: `section_router.py:255` `_pull_window_turns` — self-labelled `⚠ WIP — NOT YET WIRED`, called nowhere.
+
+### Dead `POST /design/auto-scaffold` (unsuffixed) + orphaned matched-ends client fns (found 2026-07-30, `/audit-plan`)
+Commit `e9d6750` consolidated the plain endpoint into `-seamed`/`-seamless` (the three live routes are
+`routes_scaffold_routing.py:86/112/140`). Stragglers:
+- **4 E2E specs still POST the removed path → 404 at runtime:** `frontend/e2e/atomistic_helix_parity.spec.js:41,157`,
+  `impostor_beads.spec.js:35`, `atomistic_mode_guard.spec.js:24`. (`e2e/helpers/scene_harness.js:75` already documents
+  the removal — the specs just weren't updated.) These are Playwright-only, so they fail silently in the normal loop.
+- **`autoScaffoldMatched()` is defined twice and called nowhere:** `frontend/src/api/client.js:1103`,
+  `frontend/src/cadnano-editor/api.js:197`. Matched routing is reached *implicitly* — `auto_scaffold_seamed`
+  tries `matched_ends=True` first and falls back (`seamed_router.py:1275-1289`), which is why the picker
+  says "matched ends when feasible". There is no `value="matched"` radio (only `seamed`/`seamless`, in
+  `frontend/index.html:2751/2758` + `cadnano-editor.html:1540/1547`).
+- **Stale header comment:** `frontend/src/ui/autoscaffold_picker.js:2` still lists "seamed / seamless / matched /
+  advanced-*" while `AUTOSCAFFOLD_MODES` (`:11-19`) has exactly two keys.
+
 ### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
 - **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
   **both** the starter sort and the neighbor key handed to `_ham_path_search`

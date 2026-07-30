@@ -261,5 +261,5 @@ design-specific *failure-mode* assertions do not — verify each individually, n
 bulk-swap. Hinge3 / hingeV4 / mini_rect / 10hb-MD fixtures stay file-based (bespoke
 or hand-routed).
 
-Related: [[project_scaffold_router]], [[project_autoscaffold_single_strand]],
+Related: [[project_autoscaffold_single_strand]], [[project_seamless_router]],
 [[project_extrude_preview]].

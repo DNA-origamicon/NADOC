@@ -60,7 +60,17 @@ the per-helix seamed path used to bridge a gap (min_clear=0). Test `test_seamed_
 pins the PUBLIC entry. **User must restart servers** to pick it up. Eyeball still owed.
 **FINAL ROUTING SHAPE (section_router, 2026-06-09):** TRUNK (continuous helices) routes `matched=True` → `auto_scaffold_seamed`
 = MATCHED ends (far = near + P, P=288 default; +33 outer extension is the deliberate periodic-boundary spacing) so the two
-farthest faces puzzle-fit for end-to-end polymerization via periodic-boundary staples (user decision). WINDOWS (teeth) route
+farthest faces puzzle-fit for end-to-end polymerization via periodic-boundary staples (user decision).
+**Far crossovers sit on the LEFT of their junction (user rule 2026-06-02 — do not "fix" the off-by-one):** after
+`far = near + P` (P a whole multiple of HC 21 / SQ 32, so the translate stays lattice-valid and in integer-turn helical
+register), a far crossover whose `bp % period` lands in `_HC_SCAF_BOW_RIGHT`/`_SQ_SCAF_BOW_RIGHT`
+([seamed_router.py:40](../backend/core/seamed_router.py#L40), applied at `:550`) is stepped one bp left to its bow partner.
+So copy N's far crossover and copy N+1's near crossover form an adjacent `(bp-1, bp)` HJ pair at the polymer seam, and
+far−near deltas are `{P, P-1}`, not a clean `P`. Pinned by `test_matched_ends_far_is_left_side_translate_of_near`
+([tests/test_seamed_router.py:60](../tests/test_seamed_router.py#L60)) on a fresh 18HB — a plain 3×6 block does NOT
+reproduce the bow-left near-crossover bug. Related: matched-ends does NOT close a circle (the serpentine stays one linear
+strand — the closing nick is gated on `is_circular`), and faces stay RAGGED by ~4-6 bp (lattice-phase-forced), so
+far = near + P gives per-helix tessellation, not a flush face. WINDOWS (teeth) route
 bounded → per-helix-face turns at each tooth's own face (gaps clear, ≤9bp dip, ≥32bp clearance). Trunk↔tooth connection
 double-crossovers placed at the tooth MIDPOINT (`_adj_pair_in_domain` picks valid pair nearest `(lo+hi)/2` → 23/24, 108/109,
 183/184). NOTE teeth tile every 84bp but matched P=288 isn't a multiple of 84, so the TEETH don't tile across the polymer seam

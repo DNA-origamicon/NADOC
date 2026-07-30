@@ -63,6 +63,8 @@ unless a migration touches code.
 | 07-25 | project_surface_strands | Probe: anchors 1–9 EXISTS+WIRED (builder→runner→route→field-exclusion→display→UI/overlay+tests). Feature shipped 2026-07-17, not deferred. Gaps: `oxdna_design_fingerprint` omits capture state; `validate_capture_build` tests-only | UNFINISHED-ACTIVE | Kept; **rank P3**; head banner + open-items rewritten; **fixed stale MEMORY.md hook** (said "DEFERRED to Phase 2" — was shipped) |
 | 07-28 | project_mixed_representation | Probe: PATH A **shipped**, not in-progress — model+`Design.representation_overrides` [models.py:1054,2275], routes moved crud.py→`routes_display_metadata.py:117/142` (registered), 13 backend tests (doc said 9), `resolveRepOverrides`+`editOverridesForSegments`, `_installInstanceAlpha`/`_applyRepOverrides`, `_applyRepresentationOverrides` (setDetailLevel re-sync intact), `_appendRepresentationMenu` ×6 sites, F-key master reset moved main.js→`ui/representation_switcher.js:256`, `initAtomSurfaceDisplay` wired at main.js:2442. UI was listed "pending" — it shipped. `editOverridesForStrands/ForClusters` named as shipped **do not exist** (column pivot replaced them). Real gaps: curved `_curvedCylGroup` + impostor beads uncovered, `iLinkerBindingCylinders` global-LOD only, no `representation_overrides.test.js`, photo mode reads overrides nowhere (+ suspected bead-`discard` bug from `_withHighDetailGeometry` swapping in `hd.bead` with no `instanceAlpha`). No superseding mechanism exists | UNFINISHED-ACTIVE | Kept; **rank P1**; head banner + code-location table rewritten, stale symbol/test-count/path claims corrected, 8-item live open-list appended; MEMORY.md hook updated |
 | 07-28 | project_simulate_panel_overhaul | Probe: Phase A/B **shipped+live** (`#simulate-body`←main.js:2413, `collapsible:false` ×6 panels, `engine_selector` tabs+strip, periodic_md_panel/overlay ABSENT). Phase C **half done**: foundation `job_run_control.js` live (3 importers), oxDNA `_runControl`:1201 + NAMD `mdRunControl`:176 (always-RUN, `#md-jobs-job-ctl-btn` handler:2214) wired — but **mrDNA + CanDo entirely unstarted** (no `job_run_control` import; coarse/fine/stop trio at mrdna:202/cando:268). Master card partial: `#md-jobs-progress` GONE, but `#mrdna-jobs-progress`/`#cando-jobs-progress` still un-hidden+painted (mrdna:416, cando:603) → two bars visible; `masterStepText`:187 exported with no consumer outside its test. Doc's test paths wrong (`tests/`, not `backend/tests/`); anchors event payload richer than documented (halo reads `highlighted`). No supersession — `md_sidebar_audit` owns only NAMD's half | UNFINISHED-ACTIVE | Kept; **rank P1**; 880-line file split → lean head + `_archive.md`; head rewritten as status banner + 15-row code-location table + 7 live open items; MEMORY.md hook updated |
+| 07-30 | project_dumbbell_autoscaffold | Probe: **every anchor GONE** — `rg auto_scaffold lattice.py` = 0, `seam_line` = 0 repo-wide. `_HC_SCAF_VALID`, `_expand_helices_for_seam`, `_assemble_dumbbell_path`, `_build_seam_line_domains`, `_route_standard_virt_seg`, `_scaffold_direction_from_helix_id`, `_HC_XOVER_PERIOD`, `loop_targets`, `coverage_regions`, `has_merged_seg` — zero hits each. Replaced by shape-dispatch: `auto_scaffold_seamed/_matched` (`seamed_router.py:1224/1305`), `auto_scaffold_seamless` (`seamless_router.py:111`) → `section_router.route_sections` (`:354`) gated by `has_multisection_helix` (`:77`); routes `routes_scaffold_routing.py:86/112/140`; no `mode=`/`scaffold_loops` anywhere (headless `headless_build.py:564` takes a bool `seamless`). Successor documented in `project_autoscaffold_single_strand` (dumbbell explicitly: section shape, `route_sections(seamless=)`, 6-RING known limit). Surviving valid-position set is the *different* 6-element `_HC_SCAF_BOW_RIGHT` (`seamed_router.py:40`), not the plan's 12-element set. Dumbbell tests moved+rewritten: 6 in `tests/test_section_router.py` on `tests/fixtures/10-6-10hb_seamed.nadoc` asserting coverage/gap/nick-burial — **still no assertion on crossover-bp validity or negative-bp loops**, the two things the plan was about | SUPERSEDED-DOCUMENTED (successor: `autoscaffold_single_strand`) | Deleted + pointer scrubbed. Migrated first: the *lesson* was undocumented → new **LESSONS.md H18** (5 green tests over a wrong dumbbell; wrong oracle; approach later deleted wholesale). Repointed the 2 live citations (`issues_ledger.md:253`, `tests/test_section_router.py:16`) at H18. Logged the dead-API stragglers to `project_tech_debt` (2 unrunnable scripts + auto-loaded `.claude/rules/scaffold-and-loops.md` still teaching `seam_line`) |
+| 07-30 | project_scaffold_router | Probe: the CSP router the doc is named for is **entirely GONE** — no `backend/core/scaffold_router.py`, and all 15 of its symbols (`RouterDomain`, `CandidateXover`, `Routing`, `extract_router_domains`, `build_candidate_graph`, `validate_routing`, `_csp_backtrack`, `_solve_routing`, `_route_bulge`, `apply_routing_to_design`, `_domain_segment`, `max_backtracks`, `seam_tol`, `end_tol`, `preserve_manual`) have zero hits outside `memory/`. Its `POST /design/auto-scaffold` is gone (3 live routes: `routes_scaffold_routing.py:86/112/140` `-seamed/-matched/-seamless`); `tests/test_scaffold_router.py` (27 tests) gone. Its tolerance-window model (`seam_tol`/`end_tol` ±5bp) did NOT survive under another name — the live routers use exact modular residue sets (`_HC_SCAF_BOW_RIGHT` `seamed_router.py:40`) + `crossover_positions.py`. Only surviving named symbols are `HC/SQ_SCAFFOLD_CROSSOVER_OFFSETS`, which were never router-owned (`constants.py:259/285`, consumed by ~14 modules) → no rescue needed. The doc's OTHER half (Hamiltonian budget/pruning, `_ham_path_search`, `_HAM_PATH_BUDGET`, the `(len(adj[n]), n)` tiebreaker, matched-ends) is all live but is a *summary* of `project_seamless_router.md:27-31` (deeper, correct line anchors, 2026-07-13 resolution) + `project_autoscaffold_single_strand.md` (matched-ends, ragged faces, P). Zero inbound citations from code/tests/`.claude/` | SUPERSEDED-DOCUMENTED (successors: `seamless_router` + `autoscaffold_single_strand`) | Deleted + pointer scrubbed. Migrated first: the **matched-ends far-crossover-LEFT rule** (user rule 2026-06-02) lived only here as prose → moved into `project_autoscaffold_single_strand` (far−near ∈ {P, P-1}, bow-right step, no-circle + ragged-face corrections, pinned by `test_seamed_router.py:60`). Repointed 2 inbound wikilinks (`project_headless_build.md:264`, `exp40 ASYMMETRIC_SCAFFOLD_HANDOFF.md:55`) at the successors. Logged new dead-API stragglers to `project_tech_debt`: 4 E2E specs POST the removed `/design/auto-scaffold` (404 at runtime), `autoScaffoldMatched()` orphaned in 2 client files, stale mode list in `autoscaffold_picker.js:2` |
 | 07-25 | project_mate_connectors | Probe: ALL implemented anchors EXIST+WIRED (create_mate→route, _propagate_fk_inplace/_compose_add_joint shared, `assembly-create-mate` in SnapshotOpKind, shared+legacy `getInstanceBluntEnds` both live, no `()=>[]` stub). Feature ships. Locations drifted (routes_assembly_joints/geometry.py, scene/, ui/overhang_orientation_panel.js). 1 of 4 "known issues" (cache invalidation) FIXED — `_ooApplyDelta` now calls `invalidateInstance`+`rebuild`; 3 connector-placement bugs survive | UNFINISHED-ACTIVE | Kept; **rank P2**; head banner + relocations + open-items rewritten (cache issue struck as RESOLVED); MEMORY.md hook updated |
 
 ## HOLD — flagged to user, decision pending
@@ -79,14 +81,13 @@ unless a migration touches code.
 ## Audit queue (unaudited — rough priority top-first)
 
 Genuinely-unfinished-with-intent candidates (likely UNFINISHED-ACTIVE, need rank):
-- project_dumbbell_autoscaffold — "tests pass, visual still wrong"
 - project_protein_attachment — 2 helpers pending
 - project_regional_autorefine, project_deformation_cluster_scope,
   project_cadnano_overhaul, project_assembly_part_context, memory/trajectory_keyframes —
   Phase-1-shipped, later-phase-deferred (rank each)
 
 Small-tail / verify-if-superseded:
-- project_scaffold_router (TODO section), project_overhang_sequence_display (caveat),
+- project_overhang_sequence_display (caveat),
   project_assembly_groups (Escape not wired), project_ux_overhaul (deferred flow work),
   memory/pipeline_validation_log (NOT YET VALIDATED), photo_mode_audit_plan (root),
   memory/project_overhang_duplex_foundation (bulges deferred)
@@ -97,16 +98,39 @@ manual_validation_debt, SIM_COVERAGE_PLAN, project_cando_fem, project_atomistic_
 
 ## Next-session handoff
 
-▶ **NEXT:** `project_dumbbell_autoscaffold` — head says "tests pass, visual still wrong," which is
-the one failure mode this loop hasn't hit yet: green tests over a wrong result. Probe the dumbbell
-routing entry point + whatever oracle its tests assert on, and decide whether the visual defect is
-still reproducible in current code (→ UNFINISHED-ACTIVE, rank by how load-bearing dumbbell routing
-is) or was fixed by later scaffold-router work (→ SUPERSEDED-*; check `project_scaffold_router` and
-`project_seamless_router` for the successor). If the "visual still wrong" claim can't be reproduced
-from the code alone, park the reproduction question under HOLD rather than guessing.
+▶ **NEXT:** **`.claude/rules/scaffold-and-loops.md`** — off-taxonomy (it is a path-scoped rule, not a
+`project_*` plan, so no verdict applies; the deliverable is a symbol-by-symbol re-verify + rewrite, not a
+delete/rank). Promoted over the queue for the third pass running because it is **auto-loaded on every
+scaffold-file read** and still teaches an API that two consecutive audits have now confirmed deleted:
+`lattice.py — auto_scaffold, compute_scaffold_routing, _build_seam_line_domains, _build_end_to_end_domains,
+_helix_adjacency_graph, _greedy_hamiltonian_path` and a "seam_line (default)" mode (lines 16, 35, 44, 131).
+Every other symbol in it is *unverified* — check them all, don't spot-fix the four known-bad lines. The
+correct map to write against is now fully probed across these two passes: routes
+`routes_scaffold_routing.py:86/112/140` → `seamed_router.auto_scaffold_seamed/_matched` (`:1224/:1305`,
+shared `_auto_scaffold_seamed_impl:512`) / `seamless_router.auto_scaffold_seamless:111`, dispatching to
+`section_router.route_sections:354` when `has_multisection_helix:77`; Hamiltonian search =
+`seamed_router._ham_path_search:195` + `_HAM_PATH_BUDGET:192` (`seamless_router._ham_path_ending:68`
+delegates); valid scaffold-crossover bp = `_HC_SCAF_BOW_RIGHT:40` + `crossover_positions.py` over
+`HC/SQ_SCAFFOLD_CROSSOVER_OFFSETS` (`constants.py:259/285`); regression gate `scaffold_invariants.py`
+(`ROUTING_ENTRY_POINTS`). Do it now while that map is warm.
 
-*Pattern worth carrying (now 4 for 4 — `surface_strands`, `mate_connectors`, `mixed_representation`,
-`simulate_panel_overhaul`):* the plan's own status text is stale in **both** directions.
+Fallback if the rule file is out of appetite: queue top `project_protein_attachment` (2 helpers pending).
+
+*New this pass (second consecutive SUPERSEDED delete — a pattern is now visible):* a plan file that has
+outlived its subject usually splits cleanly into a **dead half** and a **still-true half that belongs to a
+younger doc**. Here the CSP router (name, module, endpoint, 27-test file, entire tolerance model) was 100%
+gone, while the Hamiltonian/matched-ends notes appended to the same file years later were entirely accurate —
+and already covered better elsewhere. Probe the halves separately; "some of this is still true" is not a
+reason to keep the file. Corollary that DID cost a migration: the still-true half held exactly one fact no
+successor carried — the matched-ends **far-crossover-LEFT** rule, an explicit *user decision* whose visible
+signature is an off-by-one (`far−near ∈ {P, P-1}`, not `P`). User rules that look like bugs are the highest-risk
+thing to lose in a delete; grep the head for "user rule / user decision / user accepted" before removing it.
+Third pass running that the probe also turned up **stale non-plan artifacts** the doc was innocent of (this
+time: 4 E2E specs POSTing a route deleted by `e9d6750`, and a client fn defined twice with no caller) — those
+belong in `project_tech_debt`, not in the deleted file's grave.
+
+*Pattern worth carrying (4 for 4 among the KEPT plans — `surface_strands`, `mate_connectors`,
+`mixed_representation`, `simulate_panel_overhaul`):* the plan's own status text is stale in **both** directions.
 `mixed_representation` claimed "UI pending" (it shipped) *and* claimed two shipped helpers that no
 longer exist; `simulate_panel_overhaul`'s newest block claimed four progress bars were all still
 rendered-but-hidden — NAMD's was deleted and mrDNA's/CanDo's are *visible*. Diff every head claim

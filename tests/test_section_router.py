@@ -13,8 +13,8 @@ nearest section face.  That is the testable form of the user's design rule:
 The hand-routed reference (``workspace/Scaffold routing/teeth_seamed_route*.nadoc``)
 satisfies it (worst inter-tooth extension 10 bp).  These tests pin the reference as
 the proof the checker is correct, and require any router we ship to match it.  This
-is a "tests pass but visually wrong" area (see project_dumbbell_autoscaffold.md /
-LESSONS.md) — the gap check is the missing feedback that earlier diagnostics lacked.
+is a "tests pass but visually wrong" area (see LESSONS.md H18) — the gap check is
+the missing feedback that earlier diagnostics lacked.
 """
 from __future__ import annotations
 
