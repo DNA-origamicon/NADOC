@@ -672,3 +672,20 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
 - **`_floorReach` is a permanent `() => null` stub** in `main.js` (already noted in
   `.claude/rules/main-init.md:171`) — the camera-clip seam left behind when v1's ground plane was
   deliberately not ported. Listed here so it is counted, not re-discovered.
+
+### Duplex-foundation stragglers (found 2026-07-30, `/audit-plan` — [[overhang-duplex-foundation]])
+
+- **Two `showChoice` implementations.** `frontend/src/ui/primitives/choice.js:32` (used by
+  `overhang_gen.js`, `run_location.js`) and `frontend/src/ui/primitives/confirm.js:111` (used by
+  `job_activity.js`) both export a function of that name from the same `primitives/` directory.
+  A session that imports "the" `showChoice` has a 50% chance of the wrong modal. Pick one, keep a
+  re-export shim in the other for a release. (Same shape as the duplicated `PERSP_FOV_DEG`.)
+- **Every e2e spec hardcodes an absolute fixture path.** `frontend/e2e/duplex_pairing_display.spec.js:8`
+  is `/home/joshua/NADOC/workspace/playwright_tests/duplex_demo.nadoc`, and **20 spec files** do the
+  same. It happens to work on both computers because both check out to `/home/joshua/NADOC`, but it
+  is a one-rename-away break. A `FIXTURE_DIR` helper resolved from the spec's own location would
+  retire all 20 at once.
+- **The plan-owned duplex code defects are NOT here** — orphaned `revert_duplex_relocation`,
+  never-read `binding_mode`/`target_joint_id`/`locked_angle_deg`, the false `models.py:537`
+  docstring, and the three zero-caller client fns are open items **1-6** in
+  `project_overhang_duplex_foundation.md`, because that plan owns them.

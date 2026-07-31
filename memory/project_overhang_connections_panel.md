@@ -91,6 +91,53 @@ Built per user request to "rework the UI for the overhang manager."
     binder *splice* (`lattice.apply_end_to_root_binder`, which CONSUMED overhang B) was
     **deleted**, as was the version-keyed `relax-end-to-root` route + `end_to_root_relax.py`.
     The only per-type difference is the attach/connection point.
+    - **⚠ CORRECTION (2026-07-30, `/audit-plan`) — this section is true only for EQUAL-length
+      pairs, and it is not the whole record set.** Everything below was written before/alongside
+      the `Duplex` graph ([[overhang-duplex-foundation]]) and never mentions it. What the panel
+      actually does on Connect/Apply, verified in code:
+      `_onConnect` ([overhang_connections_panel.js:665](frontend/src/ui/overhang_connections_panel.js))
+      → teardown → sequences → `POST /design/connection-versions` → `…/apply` (**the only call
+      that can create an `OverhangBinding`**) → **`_ensureDuplexForPair()` `:595` →
+      `POST /design/duplexes/connect`, gated on connection TYPE ONLY** (`ctIsDirect`) — no length
+      check, no binding check. So the panel **always** creates a Duplex for a direct connection.
+
+      | Caller | Equal-length | Different-length |
+      |---|---|---|
+      | **Connections panel** | `OverhangBinding` **+** `Duplex` (binding relocates; the duplex is display — its own comment `:592` calls it "the display duplex") | **`Duplex` only** — the binding is silently skipped at `crud.py:7652` and `relocate_duplex` does the move |
+      | Raw API / headless `apply_connection_version` | Binding only | **NEITHER — silent no-op** |
+      | Raw API / headless `connect_duplex` | Duplex only | Duplex only |
+
+      The fork is **length, not connection type**: `_cv_create_bound_binding` returns early when
+      the two attach sub-domains differ in length (`crud.py:7645-7655`), with a comment saying the
+      duplex "is created separately by the frontend's `_ensureDuplexForPair`" — i.e. **the backend
+      deliberately relies on the frontend to finish the job**, which is why the headless row above
+      has a hole. Mirror guard on the duplex side: `routes_duplex.py:204-215` relocates **only**
+      when no binding exists for the pair.
+    - **⚠ Two claims below are superseded, both correct when written:**
+      1. **Relax is no longer a swing.** The "swinging the driver's overhang duplex about its root
+         + cluster kinematics" description was replaced **2026-07-01** by the linker-bridge method:
+         arc-minimize via cluster joints → re-seat at the oriented midpoint
+         (`duplex_midpoint_placement` → driver's `OverhangSpec.rotation` **and** `translation`) →
+         clash-spin the duplex only. `swing_*` fields are gone (0 hits repo-wide). Full description
+         in [[overhang-duplex-foundation]]. The panel's own `_onSecondary` docstring `:429-434`
+         still describes the old swing too.
+      2. ~~**The co-rotation fix is binding-keyed, so different-length pairs never got it.**~~
+         **CONFIRMED then FIXED 2026-07-30** — a 90° driver rotation moved the WC pair distance
+         1.93 → 5.25 nm and the duplex cluster omitted the driven domain. `driven_to_driver`,
+         `driven_bound_oh_ids` and the cluster scope now all come from
+         `deformation._bound_driver_driven_pairs`, which reads bound **duplexes** as well as bound
+         bindings. Pinned by two tests in `tests/test_overhang_binder_rotation.py`
+         (`test_diff_length_duplex_*`). Original diagnosis, kept because it explains the shape:
+         `_overhang_binding_partner_refs` builds `driven_to_driver` from
+         `design.overhang_bindings` only (`deformation.py:1021-1025`), and `relocate_duplex`'s
+         `__duplex_reloc__` binding is **transient — never persisted** (`duplex.py:311`). All three
+         `is_partner` tests (`deformation.py:1036-1042`) therefore fail for a duplex-only pair, so
+         `_duplex_domain_refs` → `materialize_duplex_cluster` builds a cluster whose `domain_ids`
+         holds the driver domain alone. The driver helix then has PARTIAL coverage = a "bridge"
+         helix, where only listed domains move (`deformation.py:2232-2242`). **Predicted symptom
+         (static analysis, not yet app-verified): drag or rotate a DIFFERENT-length direct
+         connection and the driven overhang stays behind** — the same "the other overhang doesn't
+         track" bug this bullet fixed, reintroduced through the path that has no binding.
     - **Apply** (`crud._cv_create_bound_binding`, called from `apply_connection_version`
       for every direct type): create `OverhangBinding(bound=True, driver_oh_id=A,
       driven_oh_id=B, connection_type=…)` + relocate via `binding_relax.compute_bind_topology
