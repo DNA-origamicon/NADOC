@@ -130,7 +130,7 @@ skip_twist_selfconsistency · **regional_autorefine** (LIVE REF — the always-o
 
 **Imports / validation:** sq_importer_fix · crossover_distance_script · clash_detector · corner_primitive
 
-**Assembly overhaul:** **path_to_thousands** (shared renderer DEFAULT; read before touching assembly) · assembly_part_context (P2 — camera+anim part-context live; part-mode anim PLAYBACK unbuilt, feature-log path is dead code) · assembly_groups · gear_relations · belt_paths · route_for_polymerization · polymerize_origami · session_recovery
+**Assembly overhaul:** **path_to_thousands** (shared renderer DEFAULT; read before touching assembly) · assembly_part_context (P2 — camera+anim part-context live; part-mode anim PLAYBACK unbuilt, feature-log path is dead code) · assembly_groups (SHIPPED; P2 — group `representation` is a dead control no renderer reads; Escape-pop still unwired) · gear_relations · belt_paths · route_for_polymerization · polymerize_origami · session_recovery
 
 ## Maintenance
 
