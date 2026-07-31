@@ -123,9 +123,9 @@ state, §6 visibility sets) because they all need the same missing thing: **a wa
 the design and apply a property to it**. Something like `strand:staple & helix:0-5` → hide / colour /
 transparency. Design that once and §4/§5/§6 collapse into one feature.
 
-**P1, but it is the keystone.** Note the honest constraint from
-[photo_mode_audit_plan.md](photo_mode_audit_plan.md): photo mode is frontend-only, has no REST route,
-and its "automation API" is the JS controller. A spec language would live in the same place.
+**P1, but it is the keystone.** Note the honest constraint (from the 2026-06-18 photo audit, migrated into
+[memory/project_photo_mode_archive.md](memory/project_photo_mode_archive.md)): photo mode is frontend-only,
+has no REST route, and its "automation API" is the JS controller. A spec language would live in the same place.
 
 ---
 

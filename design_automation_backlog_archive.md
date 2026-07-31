@@ -1375,7 +1375,7 @@ intent → a passthrough). Bound by `FEATURE_DEVELOPMENT.md` — lands in the su
   minimisation would be the next step; out of scope).  Pins: `tests/test_atomistic_validation.py::test_backbone_
   closure_connects_and_preserves_rigid` + the P1 audit on the real job.  **Live visual is human-eye → MV-OXREPS.**
 
-- [x] **AF-PHOTO (P-A + P-B) — photomode option-coverage + effect oracles. SHIPPED 2026-06-18.** `frontend/src/scene/photo_renderer.test.js` (39 tests): P-A drives each setter and asserts the REAL object (renderer.toneMapping/exposure, scene-graph lights, `material.metalness`, `camera.fov`, composer `pass.enabled` via the new `getComposerState()`); P-B is the automation contract (getSettings is a copy; a 21-case table proves every option is settable through the API + every key persists). Shipped alongside the R1–R5 render fixes from the audit (tone mapping + exposure, Sun-sole, env re-bake isolation, emissive bloom clamp, Reflector state isolation). Remaining: P-C GPU-truth e2e → `MV-PHOTO-1`/`MV-PHOTO-2` (manual-validation debt). Below is the original intake item.
+- [x] **AF-PHOTO (P-A + P-B) — photomode option-coverage + effect oracles. SHIPPED 2026-06-18; SUBJECT ARCHIVED 2026-07-29.** *(Both the renderer and this whole test suite moved to `frontend/archive/photo_mode_v1/` with photo-mode v1 — the suite is outside the vitest `include` glob and no longer runs. The paths below are historical. Context: [memory/project_photo_mode_archive.md](memory/project_photo_mode_archive.md).)* `frontend/src/scene/photo_renderer.test.js` (39 tests): P-A drives each setter and asserts the REAL object (renderer.toneMapping/exposure, scene-graph lights, `material.metalness`, `camera.fov`, composer `pass.enabled` via the new `getComposerState()`); P-B is the automation contract (getSettings is a copy; a 21-case table proves every option is settable through the API + every key persists). Shipped alongside the R1–R5 render fixes from the audit (tone mapping + exposure, Sun-sole, env re-bake isolation, emissive bloom clamp, Reflector state isolation). Remaining: P-C GPU-truth e2e → `MV-PHOTO-1`/`MV-PHOTO-2` (manual-validation debt). Below is the original intake item.
 - [x] **AF-PHOTO — photomode option-coverage + effect oracles. P-A + P-B SHIPPED 2026-06-18 (row above); only P-C (GPU-truth e2e) remains and is routed to manual-validation debt as `MV-PHOTO-1`/`MV-PHOTO-2`, NOT an active AF item.** Photo mode
   ([frontend/src/scene/photo_renderer.js](frontend/src/scene/photo_renderer.js), ~1588 ln, ~45 setters on
   `window.__photoRenderer`) has **zero test coverage**; no automated proof any option takes effect, nor that
@@ -1383,13 +1383,16 @@ intent → a passthrough). Bound by `FEATURE_DEVELOPMENT.md` — lands in the su
   built in jsdom with a real scene/camera + fake renderer and `activate({environment:'off'})`; the
   `EffectComposer` + passes *construct* without GL (only `.render()` / PMREM baking need WebGL), so even
   `bloomPass.enabled` / inscatter uniforms are vitest-assertable. **Phases:** (P-A) table-driven per-setter
-  effect oracles in a new `photo_renderer.test.js` — see catalogue in `photo_mode_audit_plan.md` Part 3;
+  effect oracles in a new `photo_renderer.test.js` — the 23-row per-setter catalogue went with the deleted
+  root plan; the surviving copy of the approach is in `memory/project_photo_mode_archive.md`;
   (P-B) automation-contract oracles — setter⇄`getSettings` completeness + full profile round-trip; (P-C,
   MV-debt) GPU-truth e2e incl. the **yellow/purple no-tint regression** that guards the R1–R3 render fixes.
   **Validation gained, not a passthrough:** first proof photomode options reach the GPU-facing objects + the
-  whole surface round-trips. Plan + per-setter table + the R1–R5 render-bug remediation in
-  **`photo_mode_audit_plan.md`** (repo root, from the 2026-06-18 audit). Two MV rows queued:
-  `MV-PHOTO-1` (no-tint regression render), `MV-PHOTO-2` (mid-session env-change garbage-frame guard).
+  whole surface round-trips. The R1–R5 render-bug remediation, the wash's root cause, and the per-setter
+  approach were migrated 2026-07-30 into
+  **[memory/project_photo_mode_archive.md](memory/project_photo_mode_archive.md)** (the root
+  `photo_mode_audit_plan.md` that held them was deleted — its subject is archived v1 code). Two MV rows were
+  queued, `MV-PHOTO-1`/`MV-PHOTO-2`, and both were **retired unrun 2026-07-30** when v1 was archived.
 
 ### Appendix — genuinely UI-only (route these to manual-validation debt, NOT here)
 

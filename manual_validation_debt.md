@@ -68,7 +68,8 @@ counts** (102 = 92+2+8, then GENERATED 1 / VALIDATED 9, then "90 pending rows" �
 and 9 already-VALIDATED rows plus 1 FAILING row were still sitting in the PENDING index, so the queue
 over-reported the work left. Counts below are derived from the actual index, not hand-maintained.
 
-- **PENDING (genuinely open): 84.** The index now holds 85 rows: 84 pending + MV-5 (generated, see below).
+- **PENDING (genuinely open): 82.** The index now holds 83 rows: 82 pending + MV-5 (generated, see below).
+  *(Was 84/85 — `MV-PHOTO-1`/`MV-PHOTO-2` struck 2026-07-30, see "Retired" below.)*
 - **GENERATED (block written, not yet run): 1** — MV-5.
 - **VALIDATED: 10** — MV-1, MV-2, MV-3, MV-4, MV-6, MV-7 (all 2026-06-07), MV-LNK (2026-06-07),
   MV-OXDNA (2026-06-14), MV-OXNATIVE (2026-06-20), MV-OXREPS (atomistic 2026-06-21 + trajectory scrub/play
@@ -85,6 +86,13 @@ over-reported the work left. Counts below are derived from the actual index, not
 - **Likely obsolete:** MV-22…MV-27 validate intermediate U2/U3 job-list slices in a stacked-panel UI that
   the Simulate-panel overhaul is actively replacing; MV-28 + MV-30 describe the *replacement*. Collapse
   MV-22…MV-27 into MV-28/MV-30 rather than hand-driving a UI that's being deleted (≈78 open if you do).
+- **Retired 2026-07-30 (plan audit): MV-PHOTO-1 + MV-PHOTO-2.** Both validate photo-mode **v1**, which was
+  archived wholesale to `frontend/archive/photo_mode_v1/` on 2026-07-29. Every control they instruct you to
+  drive — Environment dropdown, Bloom, Mirror floor, the Exposure slider, fluorophore emissive, Sun — no
+  longer exists in the shipping photo tab, and their unit pin (`frontend/src/scene/photo_renderer.test.js`)
+  moved out of the vitest `include` glob with it. **Not "unvalidated debt" — unrunnable.** The one fix that
+  survived into v2 (ACES tone mapping) is unit-pinned in `src/scene/photo_mode.test.js`. Full rows remain in
+  the archive; context in [memory/project_photo_mode_archive.md](memory/project_photo_mode_archive.md).
 - **Cluster multi-select gestures — browser-driven 2026-07-09** (discharges the additive-click part of MV-MRSEL):
   on `workspace/2x4_Hinge_autoscaff_test1.nadoc`, all four paths driven with real synthetic gestures, 0 console
   errors. Still human-eye only: the green multi-cluster glow's appearance. Rewrite MV-MRSEL down to that one check.
@@ -219,8 +227,6 @@ discharges) are in the archive's `## PENDING queue` section — open only the on
 - **MV-OXRESUME** — oxDNA resume killed job + mid-run flexibility map: load a sequenced crossover-routed design → …
 - **MV-OXSEQ** — oxDNA undefined-sequence guard popup: load a design that still has undefined bases — either fu…
 - **MV-EFIELD** — oxDNA E-field setup — direction/magnitude gizmo + anchor picker (live gesture/visual): load a …
-- **MV-PHOTO-1** — Photo-mode tone-mapping + no-tint regression + Sun-sole (GPU-pixel visual): load a representat…
-- **MV-PHOTO-2** — Photo-mode mid-session state-churn — no garbage frame (R3 env re-bake + R4 mirror floor): (a) …
 - **MV-EXT** — Extrude-tool sidebar rework — live cell-pick build + blunt-end continuation: New Part → Tools …
 - **MV-OX-PROT** — Proteins in an oxDNA (DNANM) hybrid relax + display: build/load a design with a conjugated pro…
 - **MV-MD-PROT** — Proteins in an all-atom NAMD/GROMACS package (Part B / MD): load a design with a conjugated pr…

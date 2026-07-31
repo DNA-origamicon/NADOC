@@ -648,3 +648,27 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   `project_regional_autorefine.md` for the ±30–45° wholesale-swing figure. That figure is a
   pre-exp34 mid-transient measurement (LESSONS A8) — still qualitatively right, but the comment
   should say so or point at `project_skip_twist_curvature_sweep.md`.
+
+### Photo-mode v1 stragglers (found 2026-07-30, `/audit-plan` — [[photo-mode]])
+
+- **A live module holds an orphaned function.** `frontend/src/scene/photo_renderer/material_presets.js`
+  SURVIVED the v1 archival (it is one of the six shared sub-modules v2 kept), but its
+  `makeFluorophoreEmissive()` + `FLUORO_EMISSIVE_MAX = 25` (`:163`/`:178`) have **no caller under
+  `src/`** — live `photo_mode.js:42` imports only `makeMaterial`, and the only callers are in
+  `frontend/archive/photo_mode_v1/photo_renderer.js:356,1314`. There is no `material_presets.test.js`
+  either, so it is uncalled *and* untested. **Do not just delete it:** its comment block (`:152-162`)
+  is the only in-code record of *why* the fluorophore slider had to be clamped (bloom samples
+  pre-tone-map, so filmic roll-off can't tame a maxed emissive) — that explanation is now also in
+  `project_photo_mode_archive.md`, so deletion is safe once you've checked v1 revival is off the table.
+- **Stale sync pointer in that same comment.** It cites `_FLUORO_LIGHT_GAIN in photo_renderer.js` —
+  there is no live `frontend/src/scene/photo_renderer.js` (archive-only). Same shape as the
+  `STAPLE_PALETTE` comments above: a comment naming a file that no longer holds the constant.
+- **~1400 LOC of archived tests that can never run.** `frontend/archive/photo_mode_v1/` contains
+  `photo_renderer.test.js` (24 `it(`, incl. a 21-case table), `photo_mode.test.js` (15),
+  `style_presets.test.js` (13), `photo_renderer/floor.test.js` (2) and two Playwright specs — all
+  outside vitest's `include: ['src/**/*.test.js']`. Fine as archive, but nothing marks them as
+  non-running, so a future grep for "is X tested?" will find false positives. Consider a one-line
+  banner in `frontend/archive/photo_mode_v1/README.md`.
+- **`_floorReach` is a permanent `() => null` stub** in `main.js` (already noted in
+  `.claude/rules/main-init.md:171`) — the camera-clip seam left behind when v1's ground plane was
+  deliberately not ported. Listed here so it is counted, not re-discovered.

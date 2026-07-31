@@ -24,7 +24,35 @@ that SURVIVED v1 under `photo_renderer/`: `figure_pass`, `figure_camera`,
 `main.js` carries only an import + factory init + the `TABS` entry (LOC 8074 → 8059
 on the merge — the archive removed more wiring than the rename added).
 
-**Why:** publication-grade rendering for figures and animations. Activate/deactivate must restore the live scene exactly (lights, materials, scene.environment, scene.background) — the live editor still has to work after exit. **How to apply:** never mutate scene state from photo-mode code outside the saved-state pattern (`_savedMaterials`, `_savedSceneEnv`, `_savedSceneBackground`, `_savedLightState`). Adding a new visual feature means adding a save slot and a restore step in `deactivate()`.
+**Why:** publication-grade rendering for figures and animations. Activate/deactivate must restore the live scene exactly (lights, materials, scene.environment, scene.background, **renderer tone mapping**) — the live editor still has to work after exit. **How to apply:** never mutate scene state from photo-mode code outside the saved-state pattern (`_savedMaterials`, `_savedSceneEnv`, `_savedSceneBackground`, `_savedLightState`, `_savedToneMapping`/`_savedExposure`). Adding a new visual feature means adding a save slot and a restore step in `deactivate()`.
+
+## Inherited from v1 — tone mapping is load-bearing, don't drop it
+
+v2 was written from the ground up, but one v1 fix was re-derived into it and must
+stay: [photo_mode.js:513](frontend/src/scene/photo_mode.js#L513) sets
+`THREE.ACESFilmicToneMapping` in `activate()` (exposure hardcoded `1.0`, no
+slider), restores both at [:621](frontend/src/scene/photo_mode.js#L621), and the
+offscreen export renderer sets the same at
+[:772](frontend/src/scene/photo_mode.js#L772). **Why it is not cosmetic:** with
+`NoToneMapping` (the Three.js default), HDR values hard-clip at 1.0 — that clipping
+is what produced v1's screen-filling **yellow/purple wash** (2026-06-18 audit).
+Pinned by `photo_mode.test.js` (ACES on activate, `NoToneMapping` on deactivate).
+Export parity depends on the offscreen renderer matching the preview.
+
+The rest of v1's lighting stack is gone by design — no IBL (`scene.environment =
+null` unconditionally, "ambient occlusion IS the ambient light here"), no bloom, no
+Sun/preset-rig duality, no fluorophore point-lights, no floor. So v1's other four
+remediations (Sun-sole, PMREM re-bake isolation, Reflector state isolation, the
+emissive clamp) have **no live subject matter**; they are recorded in
+[project_photo_mode_archive.md](project_photo_mode_archive.md) for anyone reviving
+`frontend/archive/photo_mode_v1/`.
+
+**One live orphan.** `FLUORO_EMISSIVE_MAX = 25` +`makeFluorophoreEmissive()` in the
+surviving [material_presets.js:163](frontend/src/scene/photo_renderer/material_presets.js#L163)
+have **no caller in `src/`** (only the archived v1 renderer) and no test. Its
+comment block is the only in-code record of the pre-tone-map bloom mechanism, and
+it points at `photo_renderer.js`, which no longer exists live. Don't delete it
+without moving that explanation; don't trust its file pointer.
 
 ## Camera-pinned key shadow — 2026-07-28
 

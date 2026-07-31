@@ -615,6 +615,11 @@ documented "lights update on PT off/on" limitation still applies). **Image-based
 lighting from the Environment dropdown is independent** and still contributes;
 turn the environment off too for a pure single-light look. **NOT VERIFIED IN APP.**
 
+> **SUPERSEDED 2026-06-18 by R2** (see "The yellow/purple wash + the R1–R5
+> remediation" below): the user decided Sun = *truly* sole, so IBL is no longer
+> independent — `scene.environment` is nulled and the fluorophore point-lights are
+> skipped while the Sun is on. Don't read the sentence above as current v1 behaviour.
+
 ## One-key-light shadow rule — 2026-05-27
 
 To avoid double shadows from the preset rig + Sun, **exactly one directional
@@ -699,6 +704,12 @@ bloom additive blend paints garbage (angle-dependent colour tint).
 The activate-time pattern works because PMREM has never run on the renderer
 yet — composer construction is clean, bake comes after.
 
+> **Extended 2026-06-18 by R3** (see "The yellow/purple wash + the R1–R5
+> remediation" below): a *mid-session* env change re-bakes PMREM after the
+> composer already exists, so a one-shot `resetState()` fires right after that
+> re-bake. Rebuilding the composer instead would reintroduce exactly the tint
+> bug described here — that option was considered and rejected.
+
 First attempt (2026-05-27, since reverted) tried "dispose + rebuild composer +
 re-bake env" inside `setBloom`/`setSSAO`. **This did NOT work.** Within that
 helper, composer construction still happens AFTER the activate-time bake's
@@ -755,6 +766,72 @@ bloom black-square artifact — hide editor gizmos in photo mode. **Separate lat
 bug found + deferred:** the live EffectComposer doesn't resize with the canvas
 (`handleResize` is never wired via `setResizeCallback`); harmless on desktop GL
 (it stretches the stale buffer) but a real size mismatch that could bite on ANGLE.
+
+## The yellow/purple wash + the R1–R5 remediation — 2026-06-18
+
+*(Migrated 2026-07-30 from the root `photo_mode_audit_plan.md`, deleted in that
+pass. This is the LAST v1 work; it supersedes the two v1 sections flagged below.
+All of it lives in `frontend/archive/photo_mode_v1/` now — read this before
+reviving anything from there.)*
+
+**Symptom.** Intermittent, non-repeatable **yellow/purple wash over ~80 % of the
+viewport**, plus a sense that the lighting systems fought each other. **Root
+cause:** the renderer was created with **no tone mapping**, so `OutputPass` ran
+`NoToneMapping` and HDR values **hard-clipped at 1.0**. Photo mode produces
+genuinely HDR input (metallic env reflections, emissive fluorophores at
+`intensity ≤ 100 × _FLUORO_LIGHT_GAIN 12`); clipped primaries + `UnrealBloomPass`
+(threshold 0.85) smear into large saturated patches. Five fixes shipped:
+
+- **R1 — filmic tone mapping + exposure. This is the only one that survived into
+  v2.** `THREE.ACESFilmicToneMapping` set in `activate()`, both `toneMapping` and
+  `toneMappingExposure` saved/restored in `deactivate()`, propagated to the export
+  renderers; plus a user-facing Exposure slider (v1 only — v2 hardcodes 1.0 and
+  ships no slider). See the live head for where this sits now.
+- **R2 — "Sun = truly sole" (user decision, 2026-06-18). This SUPERSEDES the
+  2026-05-31 section above**, which says image-based lighting "is independent and
+  still contributes" — after 06-18 it does not. When the Sun is on,
+  `_applyEnvToScene` gates IBL (`scene.environment` → null) **and**
+  `_spawnFluoroLights`/`_syncFluoroLights` skip, on top of `_applyRigVisibility`
+  hiding the preset rig. Expected consequence: a metallic rep under sun-only reads
+  **dark** — metals need an environment to reflect.
+- **R3 — mid-session PMREM re-bake isolation.** One-shot `renderer.resetState()`
+  right after the mid-session env re-bake (in addition to the per-frame one in
+  `_installComposerRenderFn`). A composer **rebuild** was explicitly **rejected**:
+  per the "Bloom + HDRI — corrected fix" section above, a composer constructed
+  after any PMREM bake inherits the mutated renderer state and paints the
+  angle-dependent colour tint. Do not "fix" a bake artifact by rebuilding the
+  composer.
+- **R4 — targeted isolation, NOT a dedicated renderer.** The original proposal
+  (give photo mode its own renderer so it can't collide with the live editor) was
+  **rejected because its premise is false**: photo mode swaps the render
+  *function*, so it never renders concurrently with the live editor. The desync is
+  **internal** — PMREM + bloom + `Reflector` + the PT quad all churn one
+  renderer's GL state — and a second renderer fixes none of that. What shipped
+  instead: `photo_renderer/floor.js` wraps the mirror floor's `onBeforeRender` to
+  flush `resetState()` right after its **nested mid-frame reflection render**, the
+  prime remaining internal offender.
+- **R5 — emissive bloom clamp.** `FLUORO_EMISSIVE_MAX = 25` caps only the
+  fluorophore **self-emission** (which feeds `UnrealBloomPass`, and bloom samples
+  the value **pre-tone-map**, so filmic roll-off alone cannot tame it). The
+  per-fluorophore **PointLight keeps its full 0–100 range** — that is the
+  user-requested reflection strength. This constant is the one part of R2–R5 still
+  sitting in a **live** module; see the head for its orphan status.
+
+**Testing (P-A/P-B, the AF-PHOTO deliverable).** `photo_renderer.test.js` — 24
+`it(` blocks incl. a 21-case table (~39 expanded oracles) — plus 2 in
+`floor.test.js`. **Both are archive-only now and outside the vitest `include`
+(`src/**/*.test.js`), so they cannot run.** Their principle is worth keeping and
+generalizes: **read the object, not the intent.** `getSettings()` only echoes the
+stored settings object, so asserting on it is a passthrough that proves nothing
+reached the GPU-facing state; every oracle asserted the real Three.js object (a
+light in the scene graph, `material.metalness`, `pass.enabled`, `camera.fov`).
+The enabling trick, still valid for v2: the controller builds fine in **jsdom**
+with a real `THREE.Scene`/`PerspectiveCamera` + a fake renderer — only `.render()`
+and PMREM baking need actual GL.
+
+**Never hand-validated.** The GPU-pixel half (`MV-PHOTO-1`, `MV-PHOTO-2`) was
+never run and was **retired 2026-07-30** — every control it drove (Environment
+dropdown, Bloom, Mirror floor, Exposure slider, fluorophore emissive) left with v1.
 
 ## Locked constants
 
