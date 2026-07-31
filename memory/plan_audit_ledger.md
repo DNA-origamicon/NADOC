@@ -82,6 +82,7 @@ unless a migration touches code.
 | 07-30 | project_deformation_cluster_scope | **The feature is fully shipped — and the doc's model of it is wrong in a way that matters.** Probe of ~32 anchors, backend + frontend; almost everything ALIVE+WIRED. **Headline: there are TWO scoping mechanisms and they don't talk.** `resolve_cluster_scope` (`deformation.py:2683`, **4** callers not 1) freezes scope into `op.affected_helix_ids` at create/edit time; the render-time filter `_arm_filter_cluster:603` picks *the first non-default cluster containing the helix* and **never reads `op.cluster_ids`**. So `affected_helix_ids` is the real enforcement, `cluster_ids` is metadata (create/edit + `cluster_copy.py:293-318/:503` + `feature_dependencies.py:217` cascade + debug echo), saved ops are never recomputed on load, and a helix in 2 non-default clusters resolves by **arbitrary list order** — which is the mechanical root of the doc's own "shared helix conflicts" limitation, stated there as geometry rather than as list ordering. **The doc's hard-break claim is FALSE:** `models.py` declares no `model_config`, so pydantic v2 `extra='ignore'` means legacy singular `cluster_id` files **load silently, unscoped** — they do not "fail to load"; `RUNBOOK_DEFORMATION.md:146` had inherited the same error. **Undocumented 4th consumer:** `routes_loop_skip.py:266/269` reuses both `helices_crossing_planes` and `resolve_cluster_scope` — blast radius the doc never described. **Whole edit flow replaced since the doc:** `_onEditFeature` (`main.js:1441`) now *peels* the op with a transient preview-DELETE (`:1513`) and re-enters via the new-op path with `opId=null` (`:1523`); `skipInitialPreview` is hardcoded `false` (`:1427`) — leaving `_editOpId`/`_editOrigParams`/`_editDirty`/`_editCommitted` + the revert guard (`deformation_editor.js:60-63`, `:510-516`) **written but unreachable**. Backend logic moved `crud.py`→**`core/feature_log_edit.py:109`** (`crud.py:9876` is a 10-line shell). **Everything the doc logs as fixed survives verbatim** — overlap test `:2646`, `min(h.bp_start …)` `:487`, `_ops_affecting_helix:585`, `_bundle_centroid_and_tangent:189` (name-collides with `loop_skip_calculator.py:148`), nearest-helix `_pickBpFromPoint:710`, longest-helix `_defaultBpForPlaneB:469`, the PATCH-flood coalescing `:388-406`, the picker + its `clusters.length <= 1` gate. **Phase 2 confirmed NOT started** (one `_frame_at_bp` stack per helix, `:2470-2473`; the `seg_geoms` subdivision `:2477-2482` is cluster *rigid-transform* only). Undersold: 10 tests not 5, plus a new 9-test `test_deformation_params_core.py`. Anchors re-based: `models.py:1129`, `index.html:6774-6786` (was ~3980), `client.js:1324` (was :916). Both fixtures present (`tests/fixtures/teeth.nadoc`, `workspace/Ultimate Polymer Hinge 191016.nadoc` — the hinge's bp_starts are cited in live code `deformation.py:2464`) | LIVE-REFERENCE | Kept, **no rank**. 301-line work log split → lean head + `_archive.md` (archive banner marks the one section that is *obsolete*, not merely re-anchored). Head rewritten as: status banner, a **"The one thing to know"** section stating the two-mechanism split and its three consequences, a 20-row code-location table, a **Corrections** section (5 items), the limitations with the verified Phase-2-absent evidence, and **2 open defects on shipped code**. **Fixed both auto-loaded docs:** `RUNBOOK_DEFORMATION.md` §7 — killed the inherited load-failure claim, added the `affected_helix_ids`-first check, the `_arm_filter_cluster` mechanism, and a peel-and-preview symptom so nobody diagnoses from the dead branch; `.claude/rules/deformation.md:89-93` — 4 callers incl. loop-skip, plus the two-mechanisms law (and dropped its now-stale "the topic file still calls it `_resolve_cluster_scope`" note). MEMORY.md hook updated (one edit). **7 stragglers → `project_tech_debt`** (the unreachable edit branch w/ a decide-before-deleting note — a naive delete takes the shared flood guard with it; the arbitrary `non_default[0]`; the unvalidated `cluster_ids`↔`affected_helix_ids` drift; **`extra='ignore'` silently swallowing dropped fields across all of `models.py`**; the stale `crud.py:9924` docstring; the vestigial singular coercion `client.js:1331`; the `_bundle_centroid_and_tangent` name collision) |
 
 | 07-30 | project_cadnano_overhaul | **The first plan whose roadmap was overtaken in every direction at once — and the first clean delete where an auto-loaded rule had already absorbed the architecture half.** Probe of ~60 anchors. **Phase 1 is not just shipped, it is now better documented elsewhere:** `.claude/rules/cadnano-editor.md` (written 07-30, auto-loads on `frontend/src/cadnano-editor/**`) carries the file map, every line anchor, the invariants, the honest 1.6% coverage figure — and is *more* accurate than the plan, which still cited `helix_renderer.js:2152` for `stapleColorMap` (that file was carved into `scene/helix_renderer/palette.js`; it is now a **parameter** of `nucColor`/`nucSlabColor`/`nucArrowColor`, no such anchor) and paired `effectiveColor` with a **`paletteColor` that has zero hits and appears never to have existed**. **Every later phase resolved without the plan:** Phase 2 shipped past its own scope — 6 tools (`store.js:19` `select\|pencil\|nick\|paint\|skip\|loop`, toolbar `cadnano-editor.html:1420-1435`), per-staple colour picker, no separate erase tool (subsumed by `Delete` on a Select-tool selection, `pathview.js:4781`). Phase 3 shipped **under different names**: no `Origami`, no `Connection` model (only an unrelated `ConnectionType` enum `models.py:42`) — instead `Part`/`PartInstance`/`PartGroup` (`models.py:2682+`), and **Risk 5 ("state.py singleton is the highest-risk backend change") is resolved**: `state.py` is a per-doc registry (`_sessions` keyed by `doc_id`, `_DesignSession:74`, 35 public fns) reached by **`?doc=`**, not the planned `?origami_id=`. Phase 4 mostly shipped (skip/loop tools, sequence-assignment menu items `:1153-1156`, the strands spreadsheet in place of a "properties sidebar") — only editor-side scadnano/cadnano2 *import* never landed (backend `crud.py:1622` exists, driven from the 3D app). Phase 5 split: bidirectional 3D↔2D selection sync **shipped** (`main.js:2015/2228/2302`, echo guard `_syncingFromBroadcast:2321`), cadnano2 export shipped from the editor's File menu, and the **FEM RMSF pathview heat-map is unbuildable** — FEM/XPBD was retired; zero `fem\|rmsf\|xpbd` hits under `cadnano-editor/`. **Its own open items:** the `sortedHelices()` gutter-badge item is **resolved in code and pinned** (`_rebuildLayout` computes `nativeIdx` at `:813` *before* the `_helices.reverse()` at `:815`, stores `idx` at `:856`; asserted by `e2e/cadnano_sliceview_positions.spec.js:86`); the pre-merge gate ("confirm all **17** API tests pass") is obsolete twice over — the branch merged months ago and there are **25**. `_flMutate`, the mechanism its last dev-log entry named, **exists only in memory files** — replaced by the `_flApi` delegate (`main.js:2433`→`initFeatureLogPanel:2440`) routing through `mutate()`, which broadcasts at `api.js:51`. `_overhang_neighbor_xy` moved `crud.py`→`backend/core/lattice.py:2684`. **Zero inbound citations from code, tests, or `.claude/`**; one content wikilink (`project_periodic_boundary.md:179`) | SUPERSEDED-DOCUMENTED (successor: `.claude/rules/cadnano-editor.md`) | Deleted + pointer scrubbed. **Migrated first — 4 load-bearing facts the rule deliberately didn't carry**, all re-verified against source before writing: (1) **`helix-at-cell` places relative to a NEIGHBOUR, not the lattice formula** (`crud.py:1998-2020`) — nearest lattice helix by Manhattan grid distance, XY from its *real* axis, and it **copies z-span/`bp_start`/`length_bp`**; the 42 bp default now applies only to the first helix on an empty design. This was the only add-helix path skipping the physical-offset derivation, and on imported `bp_start≠0` designs the raw formula put path-view column *c* at the wrong 3D Z. (2) **Skip-geometry strips TWO things** — the rule had only the geometry half; `_strip_feature_log_payloads` (`crud.py:244`, called `:289`) is the other 1.2 MB — **and it makes the editor's in-memory design incomplete**, so restart-recovery (`main.js:213-232`) must reload from the workspace FILE or it **permanently destroys fine-routing revert history**. Written up as a data-loss trap any new "restore from the editor" path inherits. (3) **Both pathview caches key on `_design` REFERENCE identity** (`_ensureStrandIndex:1440`, `_ensureComponents:1508`) → an in-place design mutation silently hit-tests the wrong strand; replace the reference, don't patch it. (4) the **full autosave mechanism** (600 ms debounce, `_hasSaveTarget` gate, workspace-path-over-file-handle) — incl. the previously-undocumented **`file-saved` emit that must precede the write** (`main.js:371`), without which the 3D tab's SSE reload clobbers in-progress edits as "the nick reverts a second later" (a *second*, distinct mechanism from the `_lastAppliedRev` watermark the rule already had). Also corrected the rule's opening line (it said the editor is "never routed to" — `@app.get("/cadnano")` `backend/api/main.py:295` exists, and e2e uses a third form `goto('/cadnano-editor')`), and added 4 rows to its **"Removed API — do not resurrect"** block (`_flMutate`; the `Origami`/`Connection`/`?origami_id=` vocabulary w/ what shipped instead; the FEM heat-map). Repointed the `project_periodic_boundary.md:179` wikilink at the rule. **4 stragglers → `project_tech_debt`**: `experiments/exp02/exp03/exp04/run.py` still construct **`LatticeType.FREE`**, deleted in 2026-04 — those three scripts raise on import and are unrunnable, not merely stale; the `slice_plane.js:840` deformed-mode `TOL = 0.6` label mis-match (don't conflate with the *other* `TOL = 0.5` at `:647`); no user-configurable default helix length; the phantom `paletteColor` |
+| 07-31 | project_overhang_duplex_cluster | Probe of ~40 anchors. **The head was wrong by a month** — "planning; no code" + "Open questions before P0" over a §9 log recording P0–P3 DONE and P4 routing DONE; the probe says **SHIPPED and wired**, every anchor alive. Backend: `parent_cluster_id`/`overhang_duplex_driver_id` (`models.py:1181/1187`), `core/duplex_cluster.py` 13 fns w/ `materialize_duplex_cluster` **5 external callers** (load `crud.py:6335`, apply `:7695`, relax `direct_relax.py:593`, `relocate_duplex` `duplex.py:343`, headless `:926`), child-INNER composition genuinely implemented (`deformation.py:673-675`/`716-723`), 3 routes `routes_clusters.py:207/220/263` (registered), both validator guards `validator.py:303-342`, migration-on-load on BOTH load+import. Frontend: `⛓` tag, `dup:root:`/`dup:taut` dropdown (4 `main.js` sites), `buildDuplexTautPayload`, right-click routing + `duplexClusterForOverhang`, apply toast — all wired. 17 backend tests across 4 files (all fast) + 3 e2e w/ live dev hooks. **Layer-bucket check passed where duplex_foundation's failed**: geometry genuinely consumes the fields (10 sites in `deformation.py`) — though `lattice.py` = 0 and **renderers = 0** (no `helix_renderer*.js` hit; the shaft follows via re-sourced `ovhg_axes`, not a cluster read). **The overlay is NOT dead and must not be deleted** — `ovhg.rotation/.translation` keeps 11 read sites and is the sole path for standalone overhangs, every driven partner, and all sub-domain θ/φ; the two paths are mutually exclusive per-overhang, not layered. Genuine residue: (a) **P4 feature-log migrate-on-load ABSENT and confirmed absent** — `_materialize_duplex_clusters_on_load` never touches `design.feature_log`, `_seek_feature_log` is duplex-blind (`rg duplex` over `crud.py:9000-11000` = 0), so pre-07-01 saves replay a stale OverhangSpec rotation into the validator's identity guard; (b) **a cited pin that never existed** — `test_real_fixture_materialize_is_bead_and_shaft_neutral` has 1 hit repo-wide, the plan doc itself; (c) `client.js:2778 getClusterRotationPoints` orphaned in-app, e2e-only (the panel builds the options client-side). P0's 2 deferred items both silently CLOSED. No supersession — `ssdna_ball_joints` **skips** duplex children in its gate and reuses `duplex_cluster_tethers`, `connection_tethers.py` consumes it, `duplex_foundation` defers *to* it | UNFINISHED-ACTIVE | Kept; **rank P2** (one narrow backend item, legacy files only, cheap safe fallback); 433-line file split → lean head + `_archive.md` (w/ known-stale banner); head rewritten as status banner + a "**the law**" section (child-INNER order, pose MOVES not copies, gizmo pivot is parent-rest **not world** — the DEAD END lifted out of the archive so it stays visible) + the overlay-coexistence rule + 2 probed code tables + test inventory + 6 live open items + a which-doc-to-open table; MEMORY.md hook updated. No new tech_debt: the DELETE-ON-COMPLETION entry (`project_tech_debt.md:16-45`) already names this plan's P4 as its precondition — head now states that precondition is open item 1, **not** "the plan ships", and that the overlay must survive |
 
 ## HOLD — flagged to user, decision pending
 
@@ -113,7 +114,7 @@ Small-tail / verify-if-superseded:
   ~~project_overhang_duplex_foundation~~ (UNFINISHED-ACTIVE, P1, 07-30)
 
 Surfaced BY the 07-30 duplex pass (three duplex-blind or wrong-tense siblings — see its row):
-- **project_overhang_duplex_cluster** (head says "planning; no code"; §9 says P0–P3 DONE 07-01),
+- ~~project_overhang_duplex_cluster~~ (UNFINISHED-ACTIVE, **P2**, 07-31 — head was tense-wrong; shipped),
   **project_overhang_connections_panel** (445 ln; describes the whole direct-connect apply/relax
   pipeline in `OverhangBinding` vocabulary, never mentions the Duplex graph — same date as the
   rebuild), **project_overhang_subdomains** (880 ln; its Phase 5/6 IS what duplex Phase 6 retires)
@@ -144,57 +145,62 @@ onto *more* files. Glob fix and body rewrite go together, in one pass, per rule.
 
 ## Next-session handoff
 
-**Every anchor can be alive and the plan still be unfinished — because "wired" is per-LAYER.**
-`overhang_duplex_foundation` resolved ~70 for 70: model, 9 routes, migration, drag hooks, relax
-rewrite, oracles, deleted modules confirmed deleted. A pure alive/dead sweep would have called it
-SHIPPED. What decided it was one extra grep: `design.duplexes` has **zero reads in `lattice.py` and
-`deformation.py`** — the model of record for pairing is not an input to the geometry that draws it,
-and the thing it was built to replace still runs everything. **Tell: for a model-layer plan, bucket
-the consumers by layer (model / route / panel / render / geometry) and report the count per bucket.
-A plan alive in the top three and absent from the bottom two is exactly what UNFINISHED looks like
-from the inside, and no per-symbol table shows it.** Corollary that paid twice this pass: the
-orphans hid in the same blind spot — `revert_duplex_relocation` exists, is correct, and has **no
-caller**, so a feature that can relocate cannot un-relocate.
+**A completed phase log is not evidence — it is a to-do list written in the past tense.**
+`overhang_duplex_cluster`'s §9 cited `test_real_fixture_materialize_is_bead_and_shaft_neutral` as
+the frozen-fixture pin proving the geometry-source switch. It has **one hit repo-wide: the plan
+doc itself.** Everything around it (17 real tests, 3 e2e, 5 wired call sites) checked out, which is
+exactly why it survived — a log that is right about 40 anchors buys the 41st for free. **Tell: grep
+every test NAME a phase log cites, separately from the symbols. In-flight logs record the pin the
+session meant to write in the same breath as the ones it did, and nothing downstream ever
+re-reads them.** The mirror-image residue is the same shape: `getClusterRotationPoints` is wired to
+a live route and called by **nothing but an e2e spec** — the panel builds the options client-side.
+Test-only consumers look identical to production consumers in a caller count; bucket them.
 
-▶ **NEXT: `memory/project_overhang_duplex_cluster.md`** (433 lines, no `_archive.md`). Take it
-because its head reads **"Status: planning; no code"** and **"Open questions for the user (before
-P0)"** while its own §9 records **P0/P1a/P1b/P2/P3 DONE 2026-07-01** and P4 routing done. That is
-the `strand-anim` failure mode (a doc wrong about its own *tense*) with the expensive variant of the
-consequence: a session that trusts the head concludes the duplex gizmo/cluster doesn't exist and
-**rebuilds shipped code**. It is also where duplex_foundation's open item 2 (relax for a
-binding-less duplex) actually lives — `:265-268` claims the different-length placement follow-up
-DONE. Two cheap opening moves: (1) probe `materialize_duplex_cluster` /
-`core/duplex_cluster.py` / `core/connection_tethers.py` (newest file in `core/`, keys off
-`cluster_transforms[].overhang_duplex_driver_id`) and settle which of P0–P4 are real before reading
-a word of the narrative; (2) it owns four MV rows (**MV-CONNLINK, MV-DUPMENU, MV-DUPTAUT,
-MV-DUPPIVOT**, `manual_validation_debt.md` at repo **root** `:179-183`) — check they still describe
-reachable gestures, since this is the plan that actually filed its debt.
+Second, the one that decides whether the audit is safe: **a "finish the migration" item can be a
+trap.** This plan's residue is P4 (feature-log migrate-on-load), and `project_tech_debt.md:16-45`
+carries a DELETE-ON-COMPLETION entry for "the legacy `OverhangSpec` pose overlay". Deleting the
+overlay when P4 lands would break **standalone overhangs, every driven partner, and the whole
+per-sub-domain θ/φ chain** — 11 live read sites the plan never mentions, because the two paths are
+mutually exclusive *per overhang*, not layered generations. **Tell: before endorsing any
+delete-the-old-path item, grep the old path's read sites and ask which ones the NEW path does not
+cover. "Superseded" is usually per-case, not wholesale.**
+
+▶ **NEXT: `memory/project_overhang_subdomains.md`** (880 lines — the largest unaudited plan left,
+and the queue's own note says its Phase 5/6 *is* what duplex Phase 6 retires). Take it because this
+pass produced a concrete, probed hook into it: sub-domain θ/φ is the **surviving reason** the
+`OverhangSpec` overlay and `OverhangRotationLogEntry` must stay alive (`crud.py:5300/5390`
+coalescing at `:5213`, slots distinguished by `sub_domain_ids[i] is None` at `crud.py:10836-10840`,
+11 overlay reads all in `deformation.py`). So the audit has a real question, not just an
+alive/dead sweep: **does the sub-domain path still need the overlay, or has it drifted onto the
+cluster/child path too?** Two cheap opening moves: (1) probe `sub_domain` across
+`models.py`/`crud.py`/`deformation.py` and settle which of its phases shipped **before** reading
+the narrative (this plan is 880 lines and the last two were tense-wrong); (2) check it against
+`overhang_binding_extensions` and `oh_binder` — three overhang-geometry docs of similar vintage,
+so ask the CONTRADICTING-PEER question (same layer, different vocabulary?) rather than assuming a
+successor chain.
 
 Carry into it:
 
-- **A file the probe calls "missing from disk" may just be in the other directory.** The subagent
-  reported `manual_validation_debt.md` absent; it is at the repo **root**, not `memory/` — and
-  `MEMORY.md`'s session-loop table lists bare filenames with no directory, so the ambiguity is
-  built in. I nearly recorded a second `trajectory_keyframes`-style "the queue is fiction" finding
-  that would have been wrong. **Tell: before recording any file as missing, `ls` it at repo root
-  AND in `memory/`.** (The real finding underneath survived: 4 "NOT hand-driven" admissions, 0 MV
-  rows filed. **Grep both directions — the plan's IDs in other ledgers, and the other ledgers for
-  the plan's subject.**)
-- **"Parallel tier" and "successor" are not the only two options — there is also CONTRADICTING
-  PEER.** `overhang_connections_panel.md` describes the *same* direct-connect apply/relax pipeline,
-  written the *same day*, entirely in `OverhangBinding` vocabulary, with zero mention of the Duplex
-  graph — and it is the doc a session naturally opens for "connect two overhangs in the app". Not
-  superseding, not a different layer: the same layer, told wrong. **Tell: for each sibling, ask
-  "same layer, different vocabulary?" — if yes, the fix is a forward pointer in BOTH, and the
-  audited plan's head needs a which-doc-to-open table, not just a Related list.**
-- **When a doc corrects a LESSONS entry, LESSONS never hears about it.** This plan's 07-01 relax
-  rewrite went two-sided and **supersedes LESSONS E7's** one-sided "never back off" floor — E7's
-  index line still states the old rule. Same shape as the missing F-entry for the
-  `patch_overhang`-sequence-write-resizes-the-domain trap, which exists nowhere but this plan.
-  **Tell: grep `LESSONS.md` for the plan's failure modes at the END of the pass; a plan that
-  supersedes a lesson or invents a new trap owes the index a line, and keeping the plan doesn't
-  discharge that.**
-
+- **A plan can be SHIPPED and still deserve the pass.** `overhang_duplex_cluster` cost a full probe
+  to conclude "it's built" — and that probe still returned a missing pin, an e2e-only orphan, a
+  tech-debt trap, and P0's two silently-closed deferred items. **Tell: the value of auditing a
+  shipped plan is the residue, not the verdict; budget the probe accordingly and don't shortcut it
+  once the first ten anchors come back green.**
+- **The head/§9 tense contradiction is now 2-for-2** (`strand-anim` rule, this plan). Both times the
+  wrong half was the part a session reads FIRST. **Tell: when a doc's status line and its phase log
+  disagree, believe the log and probe it — the status line is written once and never revisited,
+  while the log is appended to by the session doing the work.**
+- **Lift the DEAD ENDs out before archiving.** This plan's most expensive fact — that a duplex
+  cluster's stored `pivot/rotation/translation` are in the **parent-rest frame, not world**, so
+  skipping `_refreshClusterPivotForAttach` throws the gizmo off the structure — was buried at
+  archive depth inside a phase log. Head/archive splits silently demote traps to unreadable. **Tell:
+  when splitting, scan the history half for "DEAD END / do not retry / WRONG" blocks and promote
+  them into the head's invariants section; that is the one class of content the archive rule
+  actively hides.**
+- LESSONS checked at the end of the pass (per the 07-30 tell): nothing here supersedes an existing
+  entry, and the frame trap is now visible in the plan head rather than the archive, so no new
+  index line is owed. **E8** (07-30, binding-only `driven_to_driver`) already covers the adjacent
+  duplex-cluster `domain_ids` partial-coverage failure.
 ---
 
 **When a subsystem gets a ground-up rewrite, per-anchor alive/dead stops meaning anything — the only
