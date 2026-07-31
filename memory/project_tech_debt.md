@@ -568,3 +568,32 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
 - **NOT hand-driven in-app** (manual-validation debt): the link icon (appears for connected
   overhangs, click opens the Connections section on the applied version) is pinned by jsdom
   but not exercised against a real overhang-bearing design in the running app.
+
+### Autorefine skip placement — stragglers found by the 2026-07-30 plan audit ([[project_regional_autorefine]])
+- **`redistribute_by_twist_profile` (`backend/core/regional_skip_placer.py:208`) is fully
+  orphaned** — zero non-test callers; its only references are 3 tests
+  (`tests/test_regional_skip_placer.py:207/234/263`). It is the wholesale-redistribution
+  controller that was refuted four times (LESSONS A7). **Decide before deleting:** the rest of
+  the module is load-bearing (`core_candidates` is imported by production
+  `backend/core/cando_autorefine.py:161-162`), so this is a function-level delete, not a
+  module-level one, and the 3 tests go with it.
+- **A dead API surface reachable only by hand-POSTing.** `AutorefineStartRequest.regional` /
+  `w_dev` / `w_strain` / `min_spacing` (`backend/api/routes_autorefine.py:31-46`) thread all the
+  way down to `place_regional_skips`, but the frontend exposes **no control for any of them**
+  and `regional` defaults `False`. Either delete the four fields + the `regional=True` branch in
+  `autorefine_sq_design` (`skip_twist_tuning.py:599-622`, which is also the only builder of the
+  `on_measure` hook), or document them as a deliberate expert/API-only escape hatch. Right now
+  they read as a live feature.
+- **The shipped fine-tuner ranks on an unsigned metric.** `greedy_finetune_skips` /
+  `identify_finetune_edits` accept an edit on `dev_max` improvement, which violates LESSONS A6
+  (unsigned deviation can't tell over- from under-wound). Needs the signed-twist variant. Already
+  flagged as follow-up in `project_skip_twist_curvature_sweep.md`; repeated here because the code
+  is **always on** for every ✦ Autorefine click.
+- **`finetune` has two different defaults.** `AutorefineStartRequest.finetune=True`
+  (`routes_autorefine.py:47`) but `autorefine_sq_design(..., finetune=False)`
+  (`skip_twist_tuning.py:504`). Any non-route caller (headless, scripts, tests) silently gets the
+  opposite behavior from the app. Pick one.
+- **Stale doc citation in code:** `backend/core/skip_finetune.py:9` points at
+  `project_regional_autorefine.md` for the ±30–45° wholesale-swing figure. That figure is a
+  pre-exp34 mid-transient measurement (LESSONS A8) — still qualitatively right, but the comment
+  should say so or point at `project_skip_twist_curvature_sweep.md`.

@@ -102,7 +102,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 **oxDNA CG:** oxdna_benchmarks · oxdna_extra_bases · surface_strands (immobilization; P3 residual) ·
 **strand_extensions_sim** (5′/3′ tails in oxDNA+NAMD — read before touching the nucleotide walk
 or the native seed) ·
-skip_twist_selfconsistency · regional_autorefine · skip_twist_curvature_sweep · md_twist_validation
+skip_twist_selfconsistency · **regional_autorefine** (LIVE REF — the always-on 1–5-edit skip fine-tuner; wholesale regional placement shelved) · skip_twist_curvature_sweep · md_twist_validation
 
 **Native FEM shape predictor:** cando_fem · **snupi_mimic** (DONE, `material="snupi"`) · snupi_frontend_tab (SHIPPED) · **snupi_gaps** (A–D DONE) · **snupi_reference_compare** (real SNUPI at `~/SNUPI`; comparator loop) · **snupi_dynamics** (Langevin / Nat Commun 2023) ·
 **snupi_ssdna** (PLAN SS-0…SS-5: bridging ssDNA + free tails)
