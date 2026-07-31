@@ -176,4 +176,5 @@ two sliders (near 42 / far 0), mirror direction + red-label origin both correct 
 DOM, not `editorStore.getState()` via evaluate. STILL PENDING USER VERIFICATION: interactive
 editing through a mirror (resize/forced-lig → real strand), auto-shift on a real edit, and
 reference-strand exclusion (6hb_test has none). See [[reference-geometry]] for the is_reference
-flag; [[massive-cadnano-overhaul-2d-editor-assembly-model]] for editor architecture.
+flag; `.claude/rules/cadnano-editor.md` for editor architecture (auto-loads on any
+`frontend/src/cadnano-editor/**` read; it replaced the deleted `project_cadnano_overhaul` plan).

@@ -89,7 +89,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Primitives / export:** plates_and_tubes · extrude_preview · primitive_library · stl_export
 
-**Cadnano editor:** periodic_boundary · cadnano_overhaul · cadnano_resize · domain_shift_feature · xover_base_lerp
+**Cadnano editor:** periodic_boundary · cadnano_resize · domain_shift_feature · xover_base_lerp
 
 **Scaffold / seam / autostaple:** **hinge_autoscaffold** (regression gate) · **autoscaffold_single_strand** (section_router / dumbbell+teeth) · seamless_router
 

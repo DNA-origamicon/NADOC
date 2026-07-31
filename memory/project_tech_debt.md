@@ -209,6 +209,23 @@ Small, each a live trap; all documented in `.claude/rules/cadnano-editor.md`.
   (`X-NADOC-Doc`, per-doc undo stacks) has **zero** end-to-end coverage — and multi-doc is exactly
   where the undo/redo header bug (`api.js:691`) lived.
 
+Added 2026-07-30 by the `project_cadnano_overhaul` plan audit (that plan is now deleted; its
+architecture content lives in the rule):
+- **`experiments/exp02_thermal_stability/run.py:41`, `exp03_excluded_volume/run.py:46,54`,
+  `exp04_crossover_geometry/run.py:56,64` still construct `LatticeType.FREE`** — a member deleted
+  from `models.py`/`lattice.py` in the 2026-04-06 FREE-lattice removal. All three scripts raise on
+  import of that symbol; they are unrunnable, not merely stale. Fix to HC/SQ or delete.
+- **`slice_plane.js` deformed-mode helix labels can mis-label at close range** — when
+  `_deformedFrame` is set, labels are matched by proximity to helix axis endpoints with
+  `const TOL = 0.6` (`frontend/src/scene/slice_plane.js:840`, used :844-845). Two helices whose
+  endpoints fall within 0.6 nm can swap labels. Known since 2026-05, low priority, no fix.
+  (Don't conflate with the *other* `TOL = 0.5` at :647 in `_cellStateDeformed`.)
+- **Default helix length is not user-configurable** — the 42 bp default in `helix-at-cell` now
+  applies only to the first helix on an *empty* design (later cells inherit the neighbour's
+  `length_bp`/`bp_start`), so the sharp edge is gone, but there is still no setting. Nice-to-have.
+- **`paletteColor` was cited for years and never existed** — `strands_spreadsheet.js` has only
+  `effectiveColor` (:72). Symptom of prose anchors nobody greps; no code action.
+
 ### Animation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Found while rewriting `.claude/rules/animation.md`. The rule + `RUNBOOK_ANIMATION.md` are fixed;
 these are the artifacts outside them.

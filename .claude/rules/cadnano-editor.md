@@ -12,8 +12,12 @@ paths:
 
 **A second, separate app.** `frontend/cadnano-editor.html` (1725 ln) is its own Vite multi-page
 entry (`frontend/vite.config.js:30`), bootstrapped by `cadnano-editor/main.js`
-(`cadnano-editor.html:1723`). It is opened with `window.open` from the 3D app — never routed to.
-**10,713 LOC across 13 files.**
+(`cadnano-editor.html:1723`). **10,713 LOC across 13 files.**
+
+**Three URLs reach it** — normal use is `window.open` from the 3D app (below), but there is also a
+FastAPI route `@app.get("/cadnano")` `backend/api/main.py:295` (prod: `FileResponse` of the dist
+`cadnano-editor.html`; dev: 302 → `http://localhost:5173/cadnano-editor.html`), and all three e2e
+specs use a *third* form, `page.goto('/cadnano-editor')` (no `.html`). Don't assume one entry path.
 
 **Not this rule:** `scene/cadnano_view.js` is the 3D app's K-key *view mode* — a read-only camera
 flattening. It shares **no module** with this editor; neither imports the other. See
@@ -99,6 +103,19 @@ the shared god-file `backend/api/crud.py` (mounted `backend/api/main.py:214`, pr
 Everything else (~65 calls in `api.js`) is shared with the 3D app across `crud.py`,
 `routes_extensions.py`, and the feature-log / sequences / scaffold-routing / loop-skip routers.
 
+**`helix-at-cell` places relative to a NEIGHBOUR, not to the lattice formula** (`crud.py:1965`
+docstring + `:1998-2020`). A sliceview cell-click picks the nearest existing lattice helix by
+Manhattan grid distance (linker helices — `_LINKER_HELIX_PREFIX` — excluded), takes XY from that
+helix's *real* axis via `_overhang_neighbor_xy` (`backend/core/lattice.py:2684`), and **copies its
+`axis_start.z`/`axis_end.z`, `bp_start` and `length_bp`.** Only an *empty* design falls back to the
+raw `_lattice_position` + the requested default (42 bp, `bp_start=0`). Why it must stay this way:
+on imported / re-centered designs (caDNAno files with `bp_start≠0`) the raw formula put the new
+track at z=0, so a strand penned at path-view column *c* landed at a different 3D Z than its
+neighbour's column *c*. This was the only add-helix path that skipped the physical-offset
+derivation `make_bundle` continuation and overhang-extrude already do.
+Frontend sends `populate_strands: false` (`api.js:164`) — cell-click makes a **bare** track, the
+user pens strands. The `true` path is legacy-only and uses GLOBAL bp (`lo = bp_start`).
+
 ### Two header conventions — both load-bearing
 
 Every `api.js` call funnels through `_request()` (:81); headers at :86-96:
@@ -110,6 +127,22 @@ Every `api.js` call funnels through `_request()` (:81); headers at :86-96:
 
 Backend: `SKIP_GEOMETRY_HEADER` `backend/api/doc_context.py:69`, contextvar :40, extracted in the
 ASGI middleware :110/:128, honoured `crud.py:289` and `crud.py:381`.
+
+**Skip-geometry strips TWO things, and the second one is a data-loss trap.**
+`should_skip_geometry()` gates (a) `_design_response_with_geometry` (`crud.py:339`) falling back to
+the geometry-free `_design_response` (`:268`) — 3D geometry the 2D editor parses and throws away
+(VoltronCore: 829 ms / 23.4 MB → ~9 ms); **and (b) `_strip_feature_log_payloads` (`crud.py:244`,
+called `:289`)** — snapshot pre/post blobs → `""`, per-child diff blobs → `"1"` sentinel, because
+the panel only checks `evicted`/`diffs_evicted` and diff *presence*, never decodes. That was ~1.2 MB
+of every response; total 1.93 MB → 0.71 MB.
+
+⚠️ **The editor's in-memory design is therefore INCOMPLETE.** Its restart-recovery
+(`main.js:213-232`, backend-came-back-empty branch) must reload from the **workspace file**
+(`getLibraryFileContent` → `importDesign`) — re-importing the stripped in-memory copy would
+**permanently destroy the fine-routing revert history**. The in-memory fallback is reached only for
+a never-saved design, and it prompts. Server-side revert/seek/save are unaffected: the backend keeps
+the real blobs and only the response *copy* is edited. Any new "restore from the editor" path
+inherits this trap.
 
 **All mutations MUST go through `mutate()`** — `api.js:655-660` records why: an old inline bare
 `fetch` in main.js carried no doc header, so revert/delete/seek hit the wrong document and threw
@@ -213,9 +246,30 @@ FORWARD (cadnano2 convention), mirrored in `scene/slice_plane/lattice_math.js:19
 - **`update()` clears selection** (`pathview.js:4923-4925`), so any broadcast-driven refetch from
   the 3D tab wipes the editor's selection. The reverse direction is guarded against an echo loop by
   `_syncingFromBroadcast` (`main.js:2321-2324`).
-- **Autosave / unsaved-badge suppression around external updates** — `_suppressUnsavedBadge`
-  (`main.js:334-335`), set in the broadcast handler (:2308) and initial load (:2543). Forget it and
-  every sibling-tab edit looks like a local unsaved change and triggers a redundant autosave write.
+- **Every local edit autosaves; the badge is only the fallback.** `_runAutosave` (`main.js:356`) /
+  `_scheduleAutosave` (:394, `_AUTOSAVE_DEBOUNCE_MS = 600`), driven from the store's `design`
+  subscriber, with in-flight + pending guards and a `_lastSavedDesign` reference check. It is gated
+  on `_hasSaveTarget()` (:352 — a workspace path in `localStorage` **or** a File System Access
+  handle); a never-saved design keeps the yellow "unsaved" badge until the first manual Save
+  establishes a target (user's choice). Workspace-path save wins over the file handle.
+  - **The write is announced BEFORE it happens** — `nadocBroadcast.emit('file-saved', {path})`
+    (:371) precedes `saveDesignToWorkspace` so the 3D tab skips its SSE file-changed reload
+    (5 s self-saved window on the receiver). Drop that emit and the 3D tab reloads our autosave
+    into the shared backend doc — a stale snapshot over in-progress edits, surfacing as
+    "the nick reverts a second later". (Distinct from the `_lastAppliedRev` watermark above:
+    that one drops stale *responses*, this one suppresses a stale *file reload*.)
+  - **Only the originating tab autosaves** — `_suppressUnsavedBadge` (`main.js:334-335`) is set in
+    the broadcast handler (:2308) and on initial load (:2543), because loading backend state is not
+    a local edit. Forget it and every sibling-tab edit looks like a local change, triggering a
+    redundant write and a two-tab race (resolution is last-write-wins).
+- **The two pathview caches key on `_design` REFERENCE identity, so the design object must never be
+  mutated in place.** `_ensureStrandIndex` (`pathview.js:1440`, bucket index for `_findStrandIdxAt`
+  — which is otherwise O(strands × domains) and runs ~2×/crossover/frame: 9.5 → 0.85 ms on a
+  1252-crossover design) and `_ensureComponents` (:1508, the crossover-slot set + `ensureStapleColors`).
+  Both compare `_designRef !== _design` and rebuild only on change — that is what makes pan/zoom
+  free. An in-place edit of the current design object silently reuses a stale index and hit-tests
+  the wrong strand. Replace the reference; don't patch it. (`_helixById` :376 is rebuilt
+  unconditionally in `_rebuildLayout` :818 — different lifecycle.)
 - **`DBG` is commit-time state** — `pathview.js:104-109` `const DBG = false`, *"flip to true while
   debugging, then revert before commit"*.
 
@@ -318,3 +372,6 @@ Treat every change to `pathview.js`/`main.js` as unpinned: exercise it in the ru
 | bare `fetch` for a mutation | Forbidden — misses `docHeaders()`, hits the default doc (`api.js:655-660`) |
 | `ui/lattice_editor.js` | Deleted 2026-07-25; orphaned by the 2026-04-11 editor overhaul |
 | hotkey `3` | Unbound; folded into `2` (full autostaple) |
+| `_flMutate` | Gone. The feature-log panel gets a 4-method `_flApi` delegate (`main.js:2433` → `initFeatureLogPanel` :2440); it routes through `api.js` `mutate()`, which broadcasts `design-changed` (:51). The old inline shim skipped `docHeaders()` — see :2429-2432 |
+| `Origami`, `Connection`, `?origami_id=` | **Vocabulary from the abandoned 2026-04 phase plan.** Never built. What shipped instead: `Part`/`PartInstance`/`PartGroup` (`models.py:2682+`), the `?doc=` per-document registry (`state.py` `_sessions`), and cross-origami strand links as **overhang connections / assembly bindings** — not a `Connection` model. Don't reintroduce the names |
+| FEM/RMSF heat-map overlay in pathview | Planned in 2026-04, never built, and now unbuildable — the FEM/XPBD code was retired. Zero `fem\|rmsf\|xpbd` hits under `cadnano-editor/` |

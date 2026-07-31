@@ -76,6 +76,8 @@ unless a migration touches code.
 
 | 07-30 | project_deformation_cluster_scope | **The feature is fully shipped — and the doc's model of it is wrong in a way that matters.** Probe of ~32 anchors, backend + frontend; almost everything ALIVE+WIRED. **Headline: there are TWO scoping mechanisms and they don't talk.** `resolve_cluster_scope` (`deformation.py:2683`, **4** callers not 1) freezes scope into `op.affected_helix_ids` at create/edit time; the render-time filter `_arm_filter_cluster:603` picks *the first non-default cluster containing the helix* and **never reads `op.cluster_ids`**. So `affected_helix_ids` is the real enforcement, `cluster_ids` is metadata (create/edit + `cluster_copy.py:293-318/:503` + `feature_dependencies.py:217` cascade + debug echo), saved ops are never recomputed on load, and a helix in 2 non-default clusters resolves by **arbitrary list order** — which is the mechanical root of the doc's own "shared helix conflicts" limitation, stated there as geometry rather than as list ordering. **The doc's hard-break claim is FALSE:** `models.py` declares no `model_config`, so pydantic v2 `extra='ignore'` means legacy singular `cluster_id` files **load silently, unscoped** — they do not "fail to load"; `RUNBOOK_DEFORMATION.md:146` had inherited the same error. **Undocumented 4th consumer:** `routes_loop_skip.py:266/269` reuses both `helices_crossing_planes` and `resolve_cluster_scope` — blast radius the doc never described. **Whole edit flow replaced since the doc:** `_onEditFeature` (`main.js:1441`) now *peels* the op with a transient preview-DELETE (`:1513`) and re-enters via the new-op path with `opId=null` (`:1523`); `skipInitialPreview` is hardcoded `false` (`:1427`) — leaving `_editOpId`/`_editOrigParams`/`_editDirty`/`_editCommitted` + the revert guard (`deformation_editor.js:60-63`, `:510-516`) **written but unreachable**. Backend logic moved `crud.py`→**`core/feature_log_edit.py:109`** (`crud.py:9876` is a 10-line shell). **Everything the doc logs as fixed survives verbatim** — overlap test `:2646`, `min(h.bp_start …)` `:487`, `_ops_affecting_helix:585`, `_bundle_centroid_and_tangent:189` (name-collides with `loop_skip_calculator.py:148`), nearest-helix `_pickBpFromPoint:710`, longest-helix `_defaultBpForPlaneB:469`, the PATCH-flood coalescing `:388-406`, the picker + its `clusters.length <= 1` gate. **Phase 2 confirmed NOT started** (one `_frame_at_bp` stack per helix, `:2470-2473`; the `seg_geoms` subdivision `:2477-2482` is cluster *rigid-transform* only). Undersold: 10 tests not 5, plus a new 9-test `test_deformation_params_core.py`. Anchors re-based: `models.py:1129`, `index.html:6774-6786` (was ~3980), `client.js:1324` (was :916). Both fixtures present (`tests/fixtures/teeth.nadoc`, `workspace/Ultimate Polymer Hinge 191016.nadoc` — the hinge's bp_starts are cited in live code `deformation.py:2464`) | LIVE-REFERENCE | Kept, **no rank**. 301-line work log split → lean head + `_archive.md` (archive banner marks the one section that is *obsolete*, not merely re-anchored). Head rewritten as: status banner, a **"The one thing to know"** section stating the two-mechanism split and its three consequences, a 20-row code-location table, a **Corrections** section (5 items), the limitations with the verified Phase-2-absent evidence, and **2 open defects on shipped code**. **Fixed both auto-loaded docs:** `RUNBOOK_DEFORMATION.md` §7 — killed the inherited load-failure claim, added the `affected_helix_ids`-first check, the `_arm_filter_cluster` mechanism, and a peel-and-preview symptom so nobody diagnoses from the dead branch; `.claude/rules/deformation.md:89-93` — 4 callers incl. loop-skip, plus the two-mechanisms law (and dropped its now-stale "the topic file still calls it `_resolve_cluster_scope`" note). MEMORY.md hook updated (one edit). **7 stragglers → `project_tech_debt`** (the unreachable edit branch w/ a decide-before-deleting note — a naive delete takes the shared flood guard with it; the arbitrary `non_default[0]`; the unvalidated `cluster_ids`↔`affected_helix_ids` drift; **`extra='ignore'` silently swallowing dropped fields across all of `models.py`**; the stale `crud.py:9924` docstring; the vestigial singular coercion `client.js:1331`; the `_bundle_centroid_and_tangent` name collision) |
 
+| 07-30 | project_cadnano_overhaul | **The first plan whose roadmap was overtaken in every direction at once — and the first clean delete where an auto-loaded rule had already absorbed the architecture half.** Probe of ~60 anchors. **Phase 1 is not just shipped, it is now better documented elsewhere:** `.claude/rules/cadnano-editor.md` (written 07-30, auto-loads on `frontend/src/cadnano-editor/**`) carries the file map, every line anchor, the invariants, the honest 1.6% coverage figure — and is *more* accurate than the plan, which still cited `helix_renderer.js:2152` for `stapleColorMap` (that file was carved into `scene/helix_renderer/palette.js`; it is now a **parameter** of `nucColor`/`nucSlabColor`/`nucArrowColor`, no such anchor) and paired `effectiveColor` with a **`paletteColor` that has zero hits and appears never to have existed**. **Every later phase resolved without the plan:** Phase 2 shipped past its own scope — 6 tools (`store.js:19` `select\|pencil\|nick\|paint\|skip\|loop`, toolbar `cadnano-editor.html:1420-1435`), per-staple colour picker, no separate erase tool (subsumed by `Delete` on a Select-tool selection, `pathview.js:4781`). Phase 3 shipped **under different names**: no `Origami`, no `Connection` model (only an unrelated `ConnectionType` enum `models.py:42`) — instead `Part`/`PartInstance`/`PartGroup` (`models.py:2682+`), and **Risk 5 ("state.py singleton is the highest-risk backend change") is resolved**: `state.py` is a per-doc registry (`_sessions` keyed by `doc_id`, `_DesignSession:74`, 35 public fns) reached by **`?doc=`**, not the planned `?origami_id=`. Phase 4 mostly shipped (skip/loop tools, sequence-assignment menu items `:1153-1156`, the strands spreadsheet in place of a "properties sidebar") — only editor-side scadnano/cadnano2 *import* never landed (backend `crud.py:1622` exists, driven from the 3D app). Phase 5 split: bidirectional 3D↔2D selection sync **shipped** (`main.js:2015/2228/2302`, echo guard `_syncingFromBroadcast:2321`), cadnano2 export shipped from the editor's File menu, and the **FEM RMSF pathview heat-map is unbuildable** — FEM/XPBD was retired; zero `fem\|rmsf\|xpbd` hits under `cadnano-editor/`. **Its own open items:** the `sortedHelices()` gutter-badge item is **resolved in code and pinned** (`_rebuildLayout` computes `nativeIdx` at `:813` *before* the `_helices.reverse()` at `:815`, stores `idx` at `:856`; asserted by `e2e/cadnano_sliceview_positions.spec.js:86`); the pre-merge gate ("confirm all **17** API tests pass") is obsolete twice over — the branch merged months ago and there are **25**. `_flMutate`, the mechanism its last dev-log entry named, **exists only in memory files** — replaced by the `_flApi` delegate (`main.js:2433`→`initFeatureLogPanel:2440`) routing through `mutate()`, which broadcasts at `api.js:51`. `_overhang_neighbor_xy` moved `crud.py`→`backend/core/lattice.py:2684`. **Zero inbound citations from code, tests, or `.claude/`**; one content wikilink (`project_periodic_boundary.md:179`) | SUPERSEDED-DOCUMENTED (successor: `.claude/rules/cadnano-editor.md`) | Deleted + pointer scrubbed. **Migrated first — 4 load-bearing facts the rule deliberately didn't carry**, all re-verified against source before writing: (1) **`helix-at-cell` places relative to a NEIGHBOUR, not the lattice formula** (`crud.py:1998-2020`) — nearest lattice helix by Manhattan grid distance, XY from its *real* axis, and it **copies z-span/`bp_start`/`length_bp`**; the 42 bp default now applies only to the first helix on an empty design. This was the only add-helix path skipping the physical-offset derivation, and on imported `bp_start≠0` designs the raw formula put path-view column *c* at the wrong 3D Z. (2) **Skip-geometry strips TWO things** — the rule had only the geometry half; `_strip_feature_log_payloads` (`crud.py:244`, called `:289`) is the other 1.2 MB — **and it makes the editor's in-memory design incomplete**, so restart-recovery (`main.js:213-232`) must reload from the workspace FILE or it **permanently destroys fine-routing revert history**. Written up as a data-loss trap any new "restore from the editor" path inherits. (3) **Both pathview caches key on `_design` REFERENCE identity** (`_ensureStrandIndex:1440`, `_ensureComponents:1508`) → an in-place design mutation silently hit-tests the wrong strand; replace the reference, don't patch it. (4) the **full autosave mechanism** (600 ms debounce, `_hasSaveTarget` gate, workspace-path-over-file-handle) — incl. the previously-undocumented **`file-saved` emit that must precede the write** (`main.js:371`), without which the 3D tab's SSE reload clobbers in-progress edits as "the nick reverts a second later" (a *second*, distinct mechanism from the `_lastAppliedRev` watermark the rule already had). Also corrected the rule's opening line (it said the editor is "never routed to" — `@app.get("/cadnano")` `backend/api/main.py:295` exists, and e2e uses a third form `goto('/cadnano-editor')`), and added 4 rows to its **"Removed API — do not resurrect"** block (`_flMutate`; the `Origami`/`Connection`/`?origami_id=` vocabulary w/ what shipped instead; the FEM heat-map). Repointed the `project_periodic_boundary.md:179` wikilink at the rule. **4 stragglers → `project_tech_debt`**: `experiments/exp02/exp03/exp04/run.py` still construct **`LatticeType.FREE`**, deleted in 2026-04 — those three scripts raise on import and are unrunnable, not merely stale; the `slice_plane.js:840` deformed-mode `TOL = 0.6` label mis-match (don't conflate with the *other* `TOL = 0.5` at `:647`); no user-configurable default helix length; the phantom `paletteColor` |
+
 ## HOLD — flagged to user, decision pending
 
 - **project_bundle_stiffness_params** — user said "delete", but the 0T track is a **completed,
@@ -92,7 +94,8 @@ unless a migration touches code.
 Genuinely-unfinished-with-intent candidates (likely UNFINISHED-ACTIVE, need rank):
 - ~~project_regional_autorefine~~ (LIVE-REFERENCE 07-30),
   ~~project_deformation_cluster_scope~~ (LIVE-REFERENCE 07-30),
-  project_cadnano_overhaul, project_assembly_part_context, memory/trajectory_keyframes —
+  ~~project_cadnano_overhaul~~ (SUPERSEDED-DOCUMENTED, deleted 07-30),
+  project_assembly_part_context, memory/trajectory_keyframes —
   Phase-1-shipped, later-phase-deferred (rank each)
 
 Small-tail / verify-if-superseded:
@@ -127,19 +130,50 @@ onto *more* files. Glob fix and body rewrite go together, in one pass, per rule.
 
 ## Next-session handoff
 
-**Two consecutive plan passes have come back LIVE-REFERENCE** (`regional_autorefine`,
-`deformation_cluster_scope`) — both were shipped features whose docs *read* as unfinished plans.
-That is now the base rate to expect in this band of the queue, not a surprise.
+**The rule sweep has changed the base rate.** Three plan passes in: two LIVE-REFERENCE
+(`regional_autorefine`, `deformation_cluster_scope`), then the first clean delete
+(`cadnano_overhaul`). The variable that decided it was **whether an auto-loaded rule already covers
+the plan's subsystem.** Where one does, the plan's architecture half is dead weight by definition
+and the whole question collapses to "what does the rule deliberately not carry?" — for
+`cadnano_overhaul` that was four behavioural laws (two of them data-loss traps), and once those
+moved, delete was unarguable. **Do the rule-vs-plan diff FIRST on any plan whose subsystem has a
+rule; it decides the verdict faster than the anchor sweep does.**
 
-▶ **NEXT: `memory/project_cadnano_overhaul.md`** — next in the queue's "Phase-1-shipped,
-later-phase-deferred" band, and the one with the most already-known rot. Standing from earlier
-passes: it is stale as an architecture map (last dev-log 2026-05-25; the code was touched
-2026-07-28), and its own gate says "confirm all 17 API tests pass" when there are **25**
-(counted during the `cadnano-editor` rule pass). **Its architecture content is superseded by the
-new `.claude/rules/cadnano-editor.md`** — so the real question is whether anything *besides* the
-architecture map survives (deferred phases, UX rationale, user laws like the periodic auto-shift).
-If not, it is SUPERSEDED-DOCUMENTED; if the residue is real, trim to a lean reference. Note that
-rule already records the editor at **1.6% test coverage**, so don't re-derive it.
+▶ **NEXT: `memory/project_assembly_part_context.md`** — next in the "Phase-1-shipped,
+later-phase-deferred" band. Expect it to be the *opposite* case from `cadnano_overhaul`: the
+assembly stack has **no rule at all** (the ~10k-LOC `assembly-render` candidate is still just a
+proposal in `project_tech_debt` → "Rule coverage is 33%"), so nothing has absorbed its architecture
+content and SUPERSEDED-DOCUMENTED is unlikely. Two things to weigh against it before ranking:
+`memory/project_path_to_thousands.md` is flagged in `MEMORY.md` as the **default** assembly doc
+("shared renderer DEFAULT; read before touching assembly") — diff against it for overlap the way
+you'd diff against a rule; and `Part`/`PartInstance`/`PartGroup` (`models.py:2682+`) plus the
+per-doc `state.py` registry are confirmed live as of this pass, so any "Part model not yet built"
+claim in it is already false.
+
+Carry into it:
+
+- **A plan can be overtaken in every direction at once and still read as current.** Every one of
+  `cadnano_overhaul`'s five phases resolved without it — shipped past scope (Phase 2), shipped
+  under *different names* (Phase 3: `Part`/`?doc=`, never `Origami`/`?origami_id=`), shipped
+  partially (Phase 4/5), or became **unbuildable** when a dependency was retired (the Phase 5 FEM
+  heat-map). **Tell: check each phase against a different question — not "was it built?" but "did
+  the problem it solves get solved another way, or stop existing?"** Its highest-rated architecture
+  *risk* ("state.py singleton is the highest-risk backend change") had been quietly resolved by
+  unrelated multi-document work.
+- **The migration payload lives in the dev log, not the plan.** The four facts worth saving were
+  all `[FIXED]`/`[PERF]` entries — root causes with their *why*, which is exactly the register a
+  path-scoped rule omits. Two were latent data-loss traps (`_strip_feature_log_payloads` making the
+  in-memory design incomplete; `_design`-reference cache keying). **Tell: when deleting a plan with
+  a dev log, read the log's FIXED/PERF/GOTCHA entries as the migration list and re-verify each
+  against source before writing it into the rule — three of the four had drifted anchors.**
+- **Fourth pass running on "two mechanisms enforcing one rule"** (after unfold's `expanded_spacing`,
+  strand-anim's hand-rolled contract, cluster scope's create-vs-render). Here: **two independent
+  stale-data guards** — `_lastAppliedRev` drops stale *responses*, the `file-saved` broadcast
+  suppresses a stale *file reload* — with the same user-visible symptom ("the nick reverts a second
+  later") and no shared code. The rule documented one. Keep looking for this explicitly.
+- **A doc's own paired anchors are a cheap lie detector.** `effectiveColor`/`paletteColor` were
+  cited together for a year; only the first ever existed. **Tell: grep BOTH halves of any
+  `x`/`y` pair a doc names — the dead one is free evidence about how carefully the doc was written.**
 
 Carry into it:
 
