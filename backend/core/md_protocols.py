@@ -2372,6 +2372,10 @@ def prepare_mgh_slow_release(
     mg_conc_mM: float = 12.5,
     salt_mode: str = "custom",
     padding_nm: float = 1.2,
+    #: Unrestrained ns this package will run.  None = the ladder's own 4.8 ns free
+    #: stage, which is what a relaxation-only package needs.  Pass the intended
+    #: PRODUCTION length to size the cell for a solute that will actually turn.
+    free_ns: Optional[float] = None,
     water_shell_nm: float = 0.0,
     minimize_steps: int = 4_800,
     gpu_resident_mode: str = "auto",
@@ -2486,9 +2490,14 @@ def prepare_mgh_slow_release(
         # A relaxation package runs exactly ONE unrestrained stage (k=0).  Telling the
         # sizer so lets it use a bbox cell — the solute cannot turn far enough in a few
         # nanoseconds to meet its own image, and a rotation-sized cell costs several
-        # times the water for nothing.  Production is a different question and gets a
-        # guard of its own (routes_md.append_md_production).
-        free_ns         = _LADDER_FREE_NS,
+        # times the water for nothing.
+        #
+        # But a production CHILD re-uses this package's cell verbatim, so a bbox cell
+        # is a decision made here on behalf of every run that will ever seed from it.
+        # A caller that already knows it wants a long free run passes that length and
+        # gets a rotation-sized cell up front — the only point where it is cheap to
+        # choose, since no later step re-solvates.
+        free_ns         = _LADDER_FREE_NS if free_ns is None else max(free_ns, _LADDER_FREE_NS),
         progress        = progress,
     )
 
@@ -2776,6 +2785,12 @@ def prepare_mgh_slow_release(
             "water_shell_nm": float(water_shell_nm or 0.0),
             "carved": bool(carve_shell),
             "npt_allowed": not carve_shell,
+            # Unrestrained ns the cell was sized for.  A production child re-uses this
+            # cell verbatim, so this is the record of the decision every descendant
+            # inherits — without it, a package that cannot host a long free run is
+            # indistinguishable from one that can.
+            "sized_for_free_ns": (
+                _LADDER_FREE_NS if free_ns is None else max(free_ns, _LADDER_FREE_NS)),
             # Is the cell big enough for the solute once it turns?  Always measured,
             # even when the box was sized the historical way, so the answer is on the
             # record instead of being discovered 200 ns later.

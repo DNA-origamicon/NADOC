@@ -10,6 +10,137 @@ metadata:
 Implemented Milestone 1 of the MD integration plan (memory/md_integration_plan.md).
 
 
+## Microsecond production runs are allowed, and priced before they start (2026-07-30)
+
+**Symptom:** starting a 1 µs production child of a 2 ns `2hb_1xT` run showed only
+`Production failed: [object Object]`.
+
+Two independent faults, both worth knowing:
+
+1. **The cap.** `steps` was `le=50_000_000` (200 ns at 4 fs) and `length_ns` `le=100.0`, so
+   250M steps was rejected by **pydantic, before the handler ran**. A 422's `detail` is a
+   *list of dicts*, not a string — `new Error(detail)` stringifies it to `[object Object]`.
+   Now `MAX_PRODUCTION_STEPS = 1_000_000_000` / `MAX_PRODUCTION_NS = 10_000.0`
+   (`routes_md.py`), shared by **all four** length-carrying models — `ProductionRequest`,
+   `ProductionRunRequest`, `EnsembleProductionRequest`, `ChainStageRequest`. Keep them
+   shared: a length one route accepts and another rejects is a bug that only appears in
+   whichever panel uses the stricter one. 1e9 stays inside NAMD's int32 `numsteps`.
+2. **The message.** `client.js` stored `json.detail` raw in **12** places, so *every* 422
+   anywhere in the app rendered as `[object Object]`. `errorDetailToMessage(detail, fallback)`
+   now flattens `[{loc, msg}]` → `"steps: Input should be less than or equal to …"`, caps at
+   3 entries, and is used by all of them (it also replaced a hand-rolled copy that had been
+   written for the binary-export path only). Tests: `frontend/src/api/error_detail.test.js`.
+
+**What actually protects a long run** is the forecast, not a step count:
+
+- `disk_guard.forecast()` gained `target_dir` + `volume` (`volume_root()` walks to the real
+  mount point). This matters because `MdJob.job_dir` resolves an **archived** job onto its
+  external drive — the in-run guard already polled that path, but the forecast reported free
+  space without saying which disk, and the relax route (`estimate-disk`) measured the
+  workspace even when `run_dir` pointed elsewhere. Both now measure the run's real volume.
+- `estimate-production-disk` honours the request's **`dcd_freq`** (bytes scale as
+  1/dcd_freq — forecasting the 2500 default while the panel sends 25000 under-read the run
+  tenfold) and returns `est_ns_per_day` / `est_hours` via `_throughput_estimate()`
+  (`md_optimize.predict_ns_per_day`, scaled by dt/4 since it is calibrated at 4 fs).
+- New **`confirmBigRunOk`** (`ui/job_activity.js`): a Proceed/Cancel showing simulated ns,
+  trajectory bytes, free space + volume, and estimated wall-clock whenever a run exceeds
+  `BIG_RUN_BYTES` (10 GB) **or** `BIG_RUN_HOURS` (24 h). Deliberately independent of
+  `confirmDiskSpaceOk`, which fires only when the disk would run *short* — an 80 GB / 17-day
+  run onto a 5.8 TB archive drive raises no space warning at all and still wants confirming.
+  Wired into both the production-child and relax launch paths.
+
+Worked example (`2hb_1xT`, 62,677 atoms, archived to `/media/jojo/Archive`): 1 µs at 4 fs =
+250M steps → **86.5 GB** at `dcd_freq 2500` (8.1 GB at 25000), `warn=false` (5.8 TB free).
+
+
+## Throughput: MEASURE it, never model it (2026-07-30)
+
+The first version of the estimate above used `md_optimize.predict_ns_per_day` and reported
+**407 h (17 days)** for that 1 µs run. The real machine does it in ~3 days. The atom-count
+model is calibrated against one GPU and read **7.5× low** here: 29.5 ns/day predicted at 2 fs
+vs **220 measured** on the live 2hb production run.
+
+`_measured_ns_per_day(job)` now reads the job's own NAMD logs and wins over the model:
+
+- **`namd_metrics.benchmark_ns_per_day(log, head_bytes=256k)`** — NAMD emits
+  `Benchmark time:` a few times right after a `run` starts and never again (line 277 of a
+  2,446-line log; ~14 kB into the file). So this reads the **HEAD**, the mirror of the
+  existing `last_timestep_from_tail`. `parse_namd_log` reads the whole file, which does not
+  survive a multi-GB production log on a hot path.
+- **The timestep comes from the matching manifest SEGMENT**, never from
+  `relax_protocol_settings.timestep_fs` — those disagree in the wild (`8c116f8db22b` records
+  4.0 there while every ladder segment ran at 2.0), and a wrong dt silently rescales the
+  answer 2×. A log that cannot be paired with a segment is skipped, not guessed at.
+- Production segments outrank ladder segments (unrestrained, production dt = the closest
+  analogue). A restrained ENM segment is the fallback and reads ~1.6× pessimistic, which is
+  the safe direction.
+- The response carries `throughput_source`: `"measured:<segment>"` or `"model"`.
+
+Result for the same 1 µs run: **407 h → 84.8 h** (relax-derived, 283 ns/day) or **54.5 h**
+(production-derived, 440 ns/day). The model survives only for a package that has never run
+a step.
+
+The refusal text was also cut from a paragraph to one line (a test pins it under 250 chars);
+the panel renders its own one-liner via `confirmUndersizedCell({lengthNs})`. The token
+`allow_undersized_cell` is the load-bearing part — `isUndersizedCellRefusal` keys off it.
+
+**Still open (not fixed here):**
+- The panel sends `runpod_gpu_key` on the production spawn but `ProductionRunRequest` has no
+  such field and no `extra=` config, so pydantic **silently drops it** — a RunPod production
+  child carries no GPU selection.
+
+
+## The production cell: sized once at prep, inherited forever (2026-07-30)
+
+Follow-up to the entry above. "Standard relax then production" **cannot** produce a cell
+big enough for a long free run, by construction:
+
+- Relax prep passes `free_ns = _LADDER_FREE_NS = 4.8` ([md_protocols.py:82]), and
+  `resolve_box_mode` returns **bbox** for anything ≤ `ROTATION_FREE_NS_THRESHOLD` (20 ns).
+  Deliberate: a rotation cell is ~5× the water for a reorientation the restrained ladder
+  never performs.
+- **Nothing after prep re-solvates.** `build_replica_package` copies `box_ang` and hardlinks
+  the parent PSF/PDB, so every production child — and every chained production — re-uses the
+  ladder's cell verbatim.
+
+Measured on `2hb_1xT`: solute swept diameter 93.2 Å in a 60.1 × 82.6 × 129.6 Å cell; a turned
+solute **overlaps its own image by 33 Å**. Prep measured this correctly and recorded
+`box_check.fits_rotated=False` on the parent — then `build_replica_package` wrote a child
+manifest with **no `solvation` block at all**, and the guard's `fits_rotated=True` default
+waved every child through. The verdict was computed, recorded, and discarded one hop later.
+
+Fixes:
+- `build_replica_package` carries `solvation` into the child manifest (the child's cell IS
+  the parent's, so the verdict transfers unchanged).
+- `_inherited_box_check(job)` walks `parent_job_id` (depth ≤ 8, cycle-safe) so jobs created
+  *before* that fix — and chained productions two hops from the solvated package — still
+  resolve a verdict. Fails open when no ancestor has one: packages predating `box_check`
+  must not become unrunnable.
+- `_assert_cell_fits_a_free_run` is now called from `spawn_md_production` too, not only the
+  sibling append route. `ProductionRunRequest.allow_undersized_cell` is the override, and the
+  panel offers it via `confirmUndersizedCell` on an `isUndersizedCellRefusal` message rather
+  than making the user hand-craft a request.
+- **`CreateJobRequest.production_ns_intent`** (panel: "Production intent (ns)") threads to
+  `prepare_mgh_slow_release(free_ns=…)` → the box sizer. Set it above 20 ns and the package
+  is rotation-sized up front. Recorded as `solvation.sized_for_free_ns`. This is the only
+  point where the choice exists. Signature parity matters: `namd_gbis` must accept-and-ignore
+  `free_ns` or `test_prepare_signatures` fails (it caught exactly that).
+
+**Literature position (asked + answered 2026-07-30).** Resizing the cell is standard —
+`DEFAULT_BOX_MODE` is already `"rotation"`. A weak **orientation restraint** to license a
+smaller cell is NOT standard for this purpose (it appears for binding free energies, membrane
+tilt, steered-MD reaction coordinates) and would bias the global rotational/bending dynamics a
+long run exists to sample — **not implemented, deliberately**. Note the canonical Aksimentiev
+protocol solvates `bbox ± 20 Å` and runs production there; that is sound for large slow-tumbling
+origami and breaks for a small anisotropic bundle like a 2hb. See
+[[reference-aksimentiev-protocol]].
+
+Cost of doing it right on `2hb_1xT`: ~133 Å cube, 3.67× the water, 62.7k → ~230k atoms,
+~59 → ~16 ns/day; 1 µs goes 17 → ~62 days. For a rod this anisotropic the usual alternative is
+to keep the snug cell and analyse only internal coordinates (twist, rise, groove widths, bp
+parameters), which imaging does not corrupt.
+
+
 ## The minimisation is now ON the stage timeline (2026-07-30)
 
 **Symptom:** a fresh run showed an all-pending timeline and a 0 % progress bar for the tens of

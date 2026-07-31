@@ -5333,6 +5333,10 @@
                     <label style="color:#8b949e;align-self:center">Padding (nm)</label>
                     <input id="md-jobs-padding" type="number" value="2.0" min="0.5" step="0.1"
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
+                    <label style="color:#8b949e;align-self:center" title="How many UNRESTRAINED nanoseconds you intend to run off this package. Blank or ≤20 ns = the cheap bounding-box cell the restrained relaxation ladder needs. Above 20 ns the box is sized so the solute can turn through ANY orientation without meeting its own periodic image — several times the water, and proportionally slower. This is the ONLY point where the choice can be made: nothing after prep re-solvates, and a production child re-uses this package's cell verbatim.">Production intent (ns)</label>
+                    <input id="md-jobs-prod-intent" type="number" value="" min="0" step="10" placeholder="ladder only"
+                           title="How many UNRESTRAINED nanoseconds you intend to run off this package. Blank or ≤20 ns = the cheap bounding-box cell the relaxation ladder needs. Above 20 ns the cell is rotation-sized so a tumbling solute never meets its periodic image — several times the water, proportionally slower. Set it now: nothing after prep re-solvates, and a production child inherits this cell."
+                           style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">
                     <label style="color:#8b949e;align-self:center">Min. steps</label>
                     <input id="md-jobs-minsteps" type="number" value="10000" min="100" step="1000"
                            style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px;font-size:var(--text-xs)">

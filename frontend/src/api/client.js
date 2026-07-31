@@ -248,6 +248,58 @@ function _busyHeaderForPath(method, path) {
   return 'Working…'
 }
 
+/** How many validation entries a flattened 422 message spells out before summarising. */
+const ERROR_DETAIL_MAX_ITEMS = 3
+
+/**
+ * Readable message from a FastAPI error body's `detail`.
+ *
+ * A hand-raised HTTPException (400/404/409) sends `detail` as a plain string and
+ * needs no help. A 422 — pydantic rejecting the REQUEST BODY before the handler
+ * runs — sends an ARRAY of `{loc, msg, type, input}` objects instead, and handing
+ * that array to `new Error(...)` or a template literal stringifies it to the
+ * useless "[object Object]". That is what the MD panel showed for every request
+ * that tripped a `Field(ge=…, le=…)` bound, e.g. a production run longer than the
+ * step cap: the real reason ("steps: Input should be less than or equal to …")
+ * was in the response the whole time and simply never reached the toast.
+ *
+ * @param {unknown} detail
+ * @param {string} fallback used when `detail` is absent or carries no message
+ * @returns {string}
+ */
+export function errorDetailToMessage(detail, fallback = 'Server error') {
+  if (typeof detail === 'string') return detail || fallback
+  if (Array.isArray(detail)) {
+    const parts = detail.map((d) => {
+      if (typeof d === 'string') return d
+      // Drop the leading 'body'/'query' frame — it names the request part, not a field.
+      const loc = Array.isArray(d?.loc)
+        ? d.loc.filter(p => p !== 'body' && p !== 'query').join('.')
+        : ''
+      const msg = d?.msg || d?.type || ''
+      if (loc && msg) return `${loc}: ${msg}`
+      return msg || loc
+    }).filter(Boolean)
+    if (parts.length) {
+      // Cap it: a body that fails ten constraints would otherwise render an
+      // unreadable toast, and the first few are enough to act on.
+      const shown = parts.slice(0, ERROR_DETAIL_MAX_ITEMS).join('; ')
+      const extra = parts.length - ERROR_DETAIL_MAX_ITEMS
+      return extra > 0 ? `${shown}; and ${extra} more validation error${extra > 1 ? 's' : ''}` : shown
+    }
+  }
+  // Arrays are handled above; one that yielded no readable part (empty, or all
+  // entries blank) must reach the fallback rather than serialise to a bare "[]".
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    if (typeof detail.msg === 'string' && detail.msg) return detail.msg
+    try {
+      const s = JSON.stringify(detail)
+      if (s && s !== '{}') return s
+    } catch { /* circular / non-serialisable → fall through to the fallback */ }
+  }
+  return fallback
+}
+
 export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS } = {}) {
   // Hard timeout so a wedged-but-listening backend (event loop stuck) can't make a
   // request hang forever — without it the welcome screen waited indefinitely and
@@ -328,7 +380,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     }
   }
   if (!r.ok) {
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return null
   }
   store.setState({ lastError: null })
@@ -912,7 +964,7 @@ export async function exportDesign() {
   const r = await fetch(`${BASE}/design/export`)
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   // Extract filename from Content-Disposition header, fall back to 'design.nadoc'
@@ -1150,7 +1202,7 @@ export async function exportSequenceCsv() {
   const r = await fetch(`${BASE}/design/export/sequence-csv`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   const blob = await r.blob()
@@ -1180,7 +1232,7 @@ export async function exportSequenceXlsx(strandColors = {}, strandOrder = []) {
   })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   const blob = await r.blob()
@@ -1198,7 +1250,7 @@ export async function exportCadnano() {
   const r = await fetch(`${BASE}/design/export/cadnano`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   const blob = await r.blob()
@@ -1226,14 +1278,9 @@ async function _downloadBinaryExport(path, fallbackName, options = null) {
   const r = await fetch(`${BASE}${path}`, options ?? { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    const detail = json?.detail
-    const message = Array.isArray(detail)
-      ? detail.slice(0, 3).map(e => {
-          const field = Array.isArray(e?.loc) ? e.loc.filter(x => x !== 'body').join('.') : ''
-          return `${field ? `${field}: ` : ''}${e?.msg || JSON.stringify(e)}`
-        }).join('; ') + (detail.length > 3 ? `; and ${detail.length - 3} more validation errors` : '')
-      : (typeof detail === 'object' && detail !== null ? JSON.stringify(detail) : detail)
-    store.setState({ lastError: { status: r.status, message: message || r.statusText } })
+    store.setState({
+      lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) },
+    })
     return false
   }
   const blob = await r.blob()
@@ -1283,7 +1330,7 @@ export async function exportSurfaceStl({ targetMm = 200, gridSpacing, probeRadiu
   const r = await fetch(`${BASE}/design/export/stl?${params}`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   const blob = await r.blob()
@@ -1304,7 +1351,7 @@ export async function exportSurface3mf({ targetMm = 200, gridSpacing, probeRadiu
   const r = await fetch(`${BASE}/design/export/3mf?${params}`, { headers: docHeaders() })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   const coloring = r.headers.get('X-NADOC-Coloring') || ''
@@ -2034,7 +2081,7 @@ export async function exportOxdna() {
   const r = await fetch(`${BASE}/design/oxdna/export`, { method: 'POST' })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   const disposition = r.headers.get('Content-Disposition') ?? ''
@@ -2092,7 +2139,7 @@ async function _oxdnaJSON(method, path, body = undefined, { signal } = {}) {
   if (!r) return null
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return null
   }
   return r.json().catch(() => null)
@@ -2290,9 +2337,9 @@ export async function exportOxdnaTrajectory(jobId, { lo, hi, format = 'pdb' } = 
   })
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    const message = typeof json?.detail === 'string'
-      ? json.detail : (json?.detail ? JSON.stringify(json.detail) : r.statusText)
-    store.setState({ lastError: { status: r.status, message } })
+    store.setState({
+      lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) },
+    })
     return false
   }
   const blob = await r.blob()
@@ -3133,7 +3180,7 @@ export async function exportAssembly() {
   const r = await fetch(`${BASE}/assembly/export`)
   if (!r.ok) {
     const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: json?.detail ?? r.statusText } })
+    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
     return false
   }
   const disposition = r.headers.get('Content-Disposition') ?? ''

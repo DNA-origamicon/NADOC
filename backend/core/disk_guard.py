@@ -50,20 +50,42 @@ GUARD_POLL_S = 15.0
 DISK_ABORT_RC = -99
 
 
-def free_bytes(path: Path) -> int:
-    """Free bytes on the filesystem holding ``path`` (walks up to the nearest
-    existing ancestor so a not-yet-created job/output dir still measures its
-    target volume).  Returns a large sentinel if the volume can't be stat'd, so a
-    stat hiccup never spuriously aborts a run."""
+def _nearest_existing(path: Path) -> Path:
+    """Deepest existing ancestor of ``path`` (or the root, for a wholly absent tree)."""
     p = Path(path)
     while not p.exists():
         if p.parent == p:
             break
         p = p.parent
+    return p
+
+
+def free_bytes(path: Path) -> int:
+    """Free bytes on the filesystem holding ``path`` (walks up to the nearest
+    existing ancestor so a not-yet-created job/output dir still measures its
+    target volume).  Returns a large sentinel if the volume can't be stat'd, so a
+    stat hiccup never spuriously aborts a run."""
     try:
-        return shutil.disk_usage(p).free
+        return shutil.disk_usage(_nearest_existing(path)).free
     except OSError:
         return 1 << 62  # unknowable → treat as plenty; never abort on a stat error
+
+
+def volume_root(path: Path) -> Path:
+    """Mount point of the filesystem actually holding ``path``.
+
+    A job archived to an external drive lives on a different volume than the
+    workspace, and both the forecast and the in-run guard must measure *that*
+    drive — reporting the mount point is what lets the UI say which one it read.
+    """
+    p = _nearest_existing(path)
+    try:
+        p = p.resolve()
+        while not os.path.ismount(p) and p.parent != p:
+            p = p.parent
+        return p
+    except OSError:
+        return p
 
 
 # ── Output-size estimation ──────────────────────────────────────────────────────
@@ -136,6 +158,11 @@ def forecast(target_dir: Path, predicted_bytes: int) -> dict:
     Returns a JSON-ready dict the frontend renders into a Continue/Cancel popup.
     ``warn`` is true when finishing the run would leave the disk below the 10 GB
     warn threshold.
+
+    ``target_dir``/``volume`` name the directory asked about and the mount point
+    actually measured.  They matter because a job archived to an external drive is
+    forecast — and guarded — against that drive, not against the workspace disk;
+    without them a user reading "1.2 TB free" has no way to tell which one it is.
     """
     fb = free_bytes(target_dir)
     predicted = max(0, int(predicted_bytes))
@@ -147,6 +174,8 @@ def forecast(target_dir: Path, predicted_bytes: int) -> dict:
         "warn": after < WARN_MIN_FREE_BYTES,
         "warn_threshold_bytes": WARN_MIN_FREE_BYTES,
         "abort_threshold_bytes": ABORT_MIN_FREE_BYTES,
+        "target_dir": str(target_dir),
+        "volume": str(volume_root(target_dir)),
         # When the run won't comfortably fit, point the user at a roomier volume so the UI
         # can offer "archive & run there" instead of just Continue/Cancel.
         "suggested_archive": (suggest_archive_dir(target_dir, predicted)

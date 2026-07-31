@@ -172,6 +172,43 @@ def overall_fraction(
     return min(1.0, frac / total)
 
 
+def benchmark_ns_per_day(log_path: Path, head_bytes: int = 256 * 1024) -> float | None:
+    """Measured throughput (ns/day) from a log's Benchmark lines, reading only its HEAD.
+
+    NAMD emits "Benchmark time:" a handful of times shortly after a ``run`` starts and
+    then never again — on a real production log they land within the first ~15 kB of a
+    file that grows to gigabytes.  So this is the mirror of
+    :func:`last_timestep_from_tail`: the same bounded-read trick, at the other end of
+    the file, because :func:`parse_namd_log` would read the whole thing to recover one
+    number that is always near the top.
+
+    Same format handling as :func:`parse_namd_log`: older builds print ``days/ns``,
+    NAMD 3 prints ``ns/day``; the last line is the most equilibrated.  Returns ``None``
+    when the log has no benchmark line yet (a run that has not timed any steps).
+    """
+    try:
+        with log_path.open("rb") as fh:
+            chunk = fh.read(head_bytes)
+    except OSError:
+        return None
+    text = chunk.decode("utf-8", errors="replace")
+    dpns = _RE_DAYS_PER_NS.findall(text)
+    if dpns:
+        try:
+            d = float(dpns[-1])
+            return 1.0 / d if d > 0 else None
+        except ValueError:
+            return None
+    nspd = _RE_NS_PER_DAY.findall(text)
+    if nspd:
+        try:
+            v = float(nspd[-1])
+            return v if v > 0 else None
+        except ValueError:
+            return None
+    return None
+
+
 def parse_namd_log_series(log_paths: list[Path]) -> list[NamdLogMetrics]:
     """Parse multiple segment logs in order (for stage timeline display)."""
     return [parse_namd_log(p) for p in log_paths if p.exists()]

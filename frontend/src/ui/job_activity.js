@@ -317,13 +317,124 @@ export function diskWarningMessage(forecast) {
   const afterStr = after < 0
     ? `run OUT of disk (short by ${formatBytes(-after)})`
     : `leave only ${formatBytes(after)} free`
+  // Name the volume: a job archived to an external drive is forecast and guarded
+  // against THAT drive, so "you have 42 GB free" is meaningless without saying
+  // which disk was measured.
+  const on = forecast.volume ? ` on ${forecast.volume}` : ''
   return (
     `This run is estimated to write about ${predicted} of trajectory and restart ` +
-    `data. You currently have ${free} free, so finishing it would ${afterStr}.\n\n` +
+    `data. You currently have ${free} free${on}, so finishing it would ${afterStr}.\n\n` +
     'Simulations that fill the disk can corrupt their output and wedge the machine. ' +
     'Free up space (delete or archive old jobs) first, or start anyway if you know ' +
     'the run will be stopped early.'
   )
+}
+
+/** A run writing more than this much data is worth confirming before it starts. */
+export const BIG_RUN_BYTES = 10 * 1024 ** 3
+/** A run predicted to take longer than this many hours is worth confirming too. */
+export const BIG_RUN_HOURS = 24
+
+/** Human duration from hours: "45 min", "6.5 h", "2.1 days". */
+function formatHours(hours) {
+  if (!(hours > 0)) return null
+  if (hours < 1) return `${Math.round(hours * 60)} min`
+  if (hours < 48) return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)} h`
+  return `${(hours / 24).toFixed(1)} days`
+}
+
+/**
+ * Pure: describe a run that is big enough (bytes) or long enough (hours) to be
+ * worth an explicit Proceed/Cancel, or null when it is neither.
+ *
+ * This is deliberately separate from {@link diskWarningMessage}: that one fires
+ * only when the disk would actually run *short*, which a roomy archive drive
+ * never does. A 1 µs production run streaming 80 GB over two weeks onto a 6 TB
+ * disk raises no space warning at all, and still very much wants confirming.
+ *
+ * @param {?object} forecast  backend forecast + {est_hours, volume, length_ns}
+ * @returns {?{message: string, bytes: number, hours: ?number}}
+ */
+export function bigRunSummary(forecast) {
+  if (!forecast) return null
+  const bytes = Number(forecast.predicted_bytes) || 0
+  const hours = Number(forecast.est_hours) || null
+  const bigDisk = bytes > BIG_RUN_BYTES
+  const bigTime = hours !== null && hours > BIG_RUN_HOURS
+  if (!bigDisk && !bigTime) return null
+
+  const lines = []
+  if (forecast.length_ns) lines.push(`Simulated time: ${forecast.length_ns.toLocaleString()} ns`)
+  lines.push(`Trajectory + restart data: about ${formatBytes(bytes)}`)
+  const free = Number(forecast.free_bytes)
+  if (Number.isFinite(free)) {
+    lines.push(`Free space${forecast.volume ? ` on ${forecast.volume}` : ''}: ${formatBytes(free)}`)
+  }
+  const dur = formatHours(hours)
+  if (dur) {
+    const rate = forecast.est_ns_per_day ? ` (at roughly ${forecast.est_ns_per_day} ns/day)` : ''
+    lines.push(`Estimated wall-clock: ${dur}${rate}`)
+  }
+  return {
+    bytes,
+    hours,
+    message: `${lines.join('\n')}\n\n` +
+      'The throughput estimate is a rough atom-count model, so treat the time as an ' +
+      'order of magnitude, not a deadline. The run checkpoints as it goes and can be ' +
+      'stopped and resumed.',
+  }
+}
+
+/**
+ * Confirm a run that is large on disk or long in wall-clock before launching it.
+ * Resolves true immediately for ordinary runs and for a missing/failed forecast —
+ * like every other pre-flight here, a forecast must never block a launch by itself.
+ *
+ * @param {?object} forecast
+ * @returns {Promise<boolean>} true to proceed, false to abort
+ */
+/**
+ * Pure: is this backend refusal the "cell too small for a free run" one?
+ *
+ * Matched on the override flag the message names, which is the stable part of the
+ * contract (the prose around it is free to change). Deliberately narrow — every
+ * other 400 from the production route is a real error and must keep propagating.
+ *
+ * @param {?string} message
+ * @returns {boolean}
+ */
+export function isUndersizedCellRefusal(message) {
+  return typeof message === 'string' && message.includes('allow_undersized_cell')
+}
+
+/**
+ * Offer the override for an undersized-cell refusal. One line — the backend's own
+ * detail is API-facing and too wordy for a dialog.
+ *
+ * @param {{lengthNs?: number}} [opts]
+ * @returns {Promise<boolean>} true to re-send with allow_undersized_cell
+ */
+export async function confirmUndersizedCell({ lengthNs } = {}) {
+  const over = lengthNs ? `${lengthNs.toLocaleString()} ns` : 'this timescale'
+  return showConfirm({
+    title: 'Box may be too small',
+    message: `Designs this size tend to drift into themselves over ${over}. ` +
+             'Increase the box size (slower) or continue anyway?',
+    danger: true,
+    confirmLabel: 'Continue anyway',
+    cancelLabel: 'Cancel',
+  })
+}
+
+export async function confirmBigRunOk(forecast) {
+  const summary = bigRunSummary(forecast)
+  if (!summary) return true
+  return showConfirm({
+    title: 'This is a large run — start it?',
+    message: summary.message,
+    confirmLabel: 'Start run',
+    cancelLabel: 'Cancel',
+  })
 }
 
 /**

@@ -64,6 +64,16 @@ Key knobs:
   (cubic, `2·r_max + 2·pad`, orientation-proof) alongside the default `"bbox"`, and every
   build now records + warns on `box_check` (verified: the real 2hb package reports
   `fits_as_built=True, fits_rotated=False`, rotated image gap −49 Å).
+- ✅ **2026-07-30 — `box_check` is now ENFORCED, not just recorded.** Recording it was not
+  enough: `build_replica_package` dropped the whole `solvation` block from the child
+  manifest, so the guard read `{}` on every production child and its `fits_rotated=True`
+  default let a 1 µs run start in the ladder cell. The block is now inherited, resolved
+  through `parent_job_id` for pre-existing jobs (`routes_md._inherited_box_check`), and
+  checked on **both** production routes. `CreateJobRequest.production_ns_intent` lets a
+  package be rotation-sized at prep — the only point where the choice exists, since nothing
+  after prep re-solvates. (A later 2hb build at `padding_nm=2.0` reports gap −33 Å; the −49 Å
+  above is the 1.2 nm-padding package — same verdict, different cell.)
+  Full context in [[md-job-system]].
 - ⚠ **2026-07-29 — THE NVT GUARD DID NOT COVER PRODUCTION, and it failed hard.**
   `nvt_only=carve_shell` is set only in `mgh_slow_release_segments` (md_protocols.py:2105);
   `build_production_conf` and the reseed conf **hardcode `langevinPiston on`**

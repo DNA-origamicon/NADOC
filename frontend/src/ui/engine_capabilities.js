@@ -186,7 +186,8 @@ export const ENGINE_CAPABILITIES = {
     protocols: ['run', 'production', 'ensemble', 'alpine-submit', 'resume'],
     advancedParams: [
       'md-jobs-preset', 'md-jobs-threads', 'md-jobs-devices', 'md-jobs-salt-mode',
-      'md-jobs-mg', 'md-jobs-nacl', 'md-jobs-padding', 'md-jobs-watershell',
+      'md-jobs-mg', 'md-jobs-nacl', 'md-jobs-padding', 'md-jobs-prod-intent',
+      'md-jobs-watershell',
       'md-jobs-minsteps', 'md-jobs-autostart', 'md-jobs-fast', 'md-jobs-early-stop',
     ],
   },

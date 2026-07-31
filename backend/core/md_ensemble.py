@@ -274,6 +274,14 @@ def build_replica_package(
         # NO "declash" key — a production replica never declashes; generate_sbatch
         # rejects a declash manifest (its mid-chain rebuild can't run in a bare sbatch).
         "charge_audit": manifest.get("charge_audit"),
+        # The parent's solvation record — padding, water shell, npt_allowed and the
+        # box_check verdict.  A child re-uses the parent's cell verbatim (hardlinked
+        # PSF/PDB, box_ang copied above), so the parent's verdict is EXACTLY the
+        # child's verdict.  Dropping it made `_assert_cell_fits_a_free_run` read an
+        # empty dict on every child and fall through its `fits_rotated=True` default:
+        # prep measured that a turned solute overlaps its own image, recorded it, and
+        # the one hop to the child threw the answer away.
+        "solvation": manifest.get("solvation"),
         # Occupies the minimization slot but is a zero-step velocity reseed, not a
         # minimisation — hence the explicit label (md_protocols.minimization_slot).
         "minimization": {"name": reseed_name, "steps": 0, "stage": "Velocity reseed"},

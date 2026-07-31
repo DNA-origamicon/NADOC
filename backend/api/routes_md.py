@@ -80,6 +80,16 @@ router = APIRouter(tags=["md"])
 # mid-run (asyncio only holds weak references to tasks).
 _PREP_TASKS: set[asyncio.Task] = set()
 
+#: Upper bound on a single production run's length.  These are sanity rails, not a
+#: policy on how long a run *should* be — microsecond-scale origami production is a
+#: normal ask, and the previous 50M-step / 100 ns ceiling rejected it with a raw
+#: pydantic 422 (an array of dicts, which the panel rendered as "[object Object]").
+#: 1e9 steps is 4 µs at 4 fs and 2 µs at 2 fs, and stays well inside the 32-bit int
+#: NAMD parses ``numsteps`` into.  What actually protects a long run is the disk
+#: forecast + the periodic-cell rotation check, not an arbitrary step count.
+MAX_PRODUCTION_STEPS = 1_000_000_000
+MAX_PRODUCTION_NS = 10_000.0
+
 
 # ── Request/response models ────────────────────────────────────────────────────
 
@@ -94,6 +104,17 @@ class CreateJobRequest(BaseModel):
     ion_conc_mM: float = Field(0.0,  ge=0.0)
     mg_conc_mM:  float = Field(12.5, ge=0.0)
     padding_nm:  float = Field(1.2,  gt=0.0)
+    production_ns_intent: Optional[float] = Field(
+        None, gt=0.0, le=MAX_PRODUCTION_NS,
+        description="How many UNRESTRAINED nanoseconds you intend to run off this "
+                    "package. Drives the cell-sizing rule: above "
+                    "ROTATION_FREE_NS_THRESHOLD (20 ns) the box is sized so the solute "
+                    "can turn through any orientation without meeting its periodic "
+                    "image, instead of the cheap bbox cell the restrained ladder needs. "
+                    "Costs several times the water — set it only when you will actually "
+                    "run a long production, which a production CHILD cannot fix later "
+                    "because it re-uses this package's cell verbatim.",
+    )
     water_shell_nm: float = Field(
         0.0, ge=0.0,
         description="If >0, keep only water within this distance (nm) of the DNA "
@@ -285,9 +306,15 @@ class CreateJobRequest(BaseModel):
 
 
 class ProductionRequest(BaseModel):
-    length_ns: Optional[float] = Field(None, gt=0.0, le=100.0)
-    steps: Optional[int] = Field(None, ge=100, le=50_000_000)
+    length_ns: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS)
+    steps: Optional[int] = Field(None, ge=100, le=MAX_PRODUCTION_STEPS)
     autostart: bool = Field(True)
+    dcd_freq: Optional[int] = Field(
+        None, ge=100, le=1_000_000,
+        description="DCD trajectory output interval (steps). Defaults to PRODUCTION_DCD_FREQ "
+                    "(2500 = every 10 ps at 4 fs). The disk forecast reads this too, so a "
+                    "raised interval shrinks the predicted trajectory the same way it "
+                    "shrinks the real one.")
     continue_from_production: bool = Field(False)
     allow_undersized_cell: bool = Field(
         False,
@@ -1663,6 +1690,104 @@ async def prepare_draft_job(job_id: str, body: CreateJobRequest) -> dict:
     return MdJob.load(job_id, _workspace()).to_dict()
 
 
+def _measured_ns_per_day(job: MdJob) -> Optional[tuple[float, float, str]]:
+    """``(ns_per_day, timestep_fs, segment_name)`` measured from this job's own NAMD logs.
+
+    THE point of this: the atom-count model (:func:`md_optimize.predict_ns_per_day`) is
+    calibrated against one machine and is badly wrong on another — on this box it read
+    **7.5x low** for a 62.7k-atom 2hb (model 29.5 ns/day at 2 fs, measured 220), which
+    turned a ~2-day estimate into "17 days".  A job that has actually run carries the
+    real number in its logs, so prefer it and keep the model only for a package that has
+    never run a step.
+
+    The timestep is read from the MATCHING manifest segment, never from
+    ``relax_protocol_settings.timestep_fs`` — those disagree in the wild (a fast-ladder
+    package records 4.0 there while every ladder segment runs at 2.0), and a wrong dt
+    silently rescales the answer by 2x.  A log we cannot pair with a segment is skipped
+    rather than guessed at.
+
+    Production segments are preferred: they are unrestrained and at the production
+    timestep, so they are the closest analogue to the run being estimated.  A restrained
+    ENM ladder segment is the fallback — a little pessimistic (extra bonds cost time),
+    which is the safe direction for a wall-clock estimate.
+    """
+    from backend.core.namd_metrics import benchmark_ns_per_day  # noqa: PLC0415
+
+    package_dir = job.package_dir(_workspace())
+    try:
+        manifest = json.loads((package_dir / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return None
+    # Segment name → its timestep.  Only these are measurable: the minimisation slot
+    # does no timed dynamics and a reseed is zero-step.
+    dt_by_name: dict[str, float] = {}
+    for seg in manifest.get("segments") or []:
+        name, dt = seg.get("name"), seg.get("timestep_fs")
+        if name and isinstance(dt, (int, float)) and dt > 0:
+            dt_by_name[str(name)] = float(dt)
+    if not dt_by_name:
+        return None
+
+    def _rank(name: str) -> tuple[int, float]:
+        # Production first, then newest log.
+        is_prod = "production" in name.lower()
+        try:
+            mtime = (package_dir / f"{name}.log").stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        return (1 if is_prod else 0, mtime)
+
+    for name in sorted(dt_by_name, key=_rank, reverse=True):
+        log = package_dir / f"{name}.log"
+        if not log.is_file():
+            continue
+        rate = benchmark_ns_per_day(log)
+        if rate and rate > 0:
+            return rate, dt_by_name[name], name
+    return None
+
+
+def _throughput_estimate(
+    n_atoms: int,
+    length_ns: float,
+    timestep_fs: float,
+    *,
+    force_resident: Optional[bool] = None,
+    measured: Optional[tuple[float, float, str]] = None,
+) -> dict:
+    """``{est_ns_per_day, est_hours, throughput_source}`` for a run — advisory only.
+
+    ``measured`` is a ``(ns_per_day, measured_at_fs, segment)`` triple from
+    :func:`_measured_ns_per_day`; when present it wins over the atom-count model.
+    Either way the rate is rescaled to the run's own timestep, since ns/day is
+    steps/day x dt.  ``est_*`` are ``None`` when nothing can be estimated, which is the
+    signal for the panel to say nothing rather than guess.
+    """
+    from backend.core.md_optimize import gpu_resident_pays, predict_ns_per_day
+
+    if length_ns <= 0:
+        return {"est_ns_per_day": None, "est_hours": None, "throughput_source": None}
+
+    if measured is not None and measured[0] > 0 and measured[1] > 0:
+        rate, measured_at_fs, segment = measured
+        ns_per_day = rate * (timestep_fs / measured_at_fs)
+        source = f"measured:{segment}"
+    elif n_atoms > 0:
+        resident = force_resident if force_resident is not None else gpu_resident_pays(n_atoms)
+        ns_per_day = predict_ns_per_day(n_atoms, gpu_resident=bool(resident)) * (timestep_fs / 4.0)
+        source = "model"
+    else:
+        return {"est_ns_per_day": None, "est_hours": None, "throughput_source": None}
+
+    if ns_per_day <= 0:
+        return {"est_ns_per_day": None, "est_hours": None, "throughput_source": None}
+    return {
+        "est_ns_per_day": round(ns_per_day, 1),
+        "est_hours": round(length_ns / ns_per_day * 24.0, 1),
+        "throughput_source": source,
+    }
+
+
 @router.post("/md/jobs/estimate-disk")
 async def estimate_md_disk(body: CreateJobRequest) -> dict:
     """Forecast the disk a relaxation run would write vs. free space.
@@ -1671,30 +1796,43 @@ async def estimate_md_disk(body: CreateJobRequest) -> dict:
     warning when finishing the run would leave the disk below the 10 GB floor.
     Best-effort: an oxDNA-seeded job (design resolved later) or any estimation
     error returns ``warn=False`` so the launch is never blocked by the forecast.
+
+    Forecast against the volume the run will ACTUALLY write to: when the panel sends
+    ``run_dir`` the job is archived there from birth (:func:`_apply_run_dir`), so
+    measuring the workspace disk would report free space from an unrelated drive —
+    warning about a full system disk while the run streams onto a roomy external one,
+    or vice versa.
     """
     from backend.core.disk_guard import forecast, namd_run_output_bytes
     from backend.core.md_protocols import design_has_extra_bases, mgh_slow_release_segments
     from backend.core.md_vram import estimate_profile_from_design
 
+    target = Path(body.run_dir).expanduser() if body.run_dir else _workspace()
     if body.oxdna_job_id or body.mrdna_job_id or body.blade_job_id:
         # A seeded job's design is resolved later from the source job's snapshot, not the
         # live design — so we can't forecast here; never block the launch on it.
-        return {**forecast(_workspace(), 0), "skipped": True}
+        return {**forecast(target, 0), "skipped": True}
     try:
         design = design_state.get_or_404()
         profile = await run_in_threadpool(
             estimate_profile_from_design, design, padding_nm=body.padding_nm)
         if not profile:
-            return {**forecast(_workspace(), 0), "skipped": True}
+            return {**forecast(target, 0), "skipped": True}
         n_atoms = profile["dna_atoms"] + profile["full_water"] * 3 + profile["ion_atoms"]
         soft = body.declash or body.force_soft or design_has_extra_bases(design)
         timestep_fs = 4.0 if (body.fast and not soft) else 2.0
         _, segments = mgh_slow_release_segments("est", timestep_fs=timestep_fs)
         predicted = namd_run_output_bytes(segments, n_atoms)
+        length_ns = sum(int(s.steps) for s in segments) * timestep_fs / 1_000_000.0
     except Exception as exc:  # noqa: BLE001 — a forecast must never block a launch
         logger.warning("estimate_md_disk failed (allowing launch): %s", exc)
-        return {**forecast(_workspace(), 0), "skipped": True}
-    return forecast(_workspace(), predicted)
+        return {**forecast(target, 0), "skipped": True}
+    return {
+        **forecast(target, predicted),
+        **_throughput_estimate(n_atoms, length_ns, timestep_fs),
+        "n_atoms": n_atoms,
+        "length_ns": round(length_ns, 3),
+    }
 
 
 @router.post("/md/jobs/preflight-vram")
@@ -1738,23 +1876,48 @@ def _psf_atom_count(psf_path: Path) -> int:
 
 @router.post("/md/jobs/{job_id}/estimate-production-disk")
 async def estimate_md_production_disk(job_id: str, body: ProductionRequest) -> dict:
-    """Forecast the disk a production stage of this job would write vs. free space.
+    """Forecast the disk AND wall-clock a production stage of this job would cost.
 
     Atom count is exact (from the built PSF); the segment split mirrors
-    :func:`_append_production_segments`.
+    :func:`_append_production_segments`.  The DCD interval is the one THIS request
+    will run with, not the module default — trajectory bytes scale as 1/dcd_freq, so
+    forecasting the default while the panel sends 25000 under-reads the run tenfold.
+
+    The volume measured is the job's own ``package_dir``, which resolves onto the
+    archive drive for an archived job (``MdJob.job_dir``) — the same directory the
+    in-run guard polls, so the popup and the killer never disagree about which disk
+    they mean.
+
+    On top of :func:`disk_guard.forecast` this adds ``est_ns_per_day`` /
+    ``est_hours`` so the panel can warn about a multi-day run before it starts.
+    Throughput is a rough atom-count model, so it is advisory only and is omitted
+    (``None``) when the atom count is unknown.
     """
     from backend.core.disk_guard import forecast, namd_run_output_bytes
 
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
     n_atoms = _psf_atom_count(package_dir / f"{job.name_stem}.psf")
-    total_steps = _production_fast_plan(job, body)["total_steps"]
+    plan = _production_fast_plan(job, body)
+    total_steps = plan["total_steps"]
+    timestep_fs = float(plan["timestep_fs"])
+    dcd_freq = int(body.dcd_freq or PRODUCTION_DCD_FREQ)
     segments = [
-        (max(100, int(round(total_steps * frac))), PRODUCTION_DCD_FREQ)
+        (max(100, int(round(total_steps * frac))), dcd_freq)
         for frac in (0.10, 0.40, 0.50)
     ]
     predicted = namd_run_output_bytes(segments, n_atoms)
-    return forecast(package_dir if package_dir.exists() else _workspace(), predicted)
+    return {
+        **forecast(package_dir if package_dir.exists() else _workspace(), predicted),
+        **_throughput_estimate(n_atoms, plan["length_ns"], timestep_fs,
+                               force_resident=plan["force_resident"],
+                               measured=_measured_ns_per_day(job)),
+        "n_atoms": n_atoms,
+        "total_steps": total_steps,
+        "length_ns": plan["length_ns"],
+        "timestep_fs": timestep_fs,
+        "dcd_freq": dcd_freq,
+    }
 
 
 def _seed_design_name(body: CreateJobRequest) -> str:
@@ -2150,6 +2313,7 @@ async def _prepare_job_bg(
             mg_conc_mM      = mg_conc_mM,
             salt_mode       = body.salt_mode,
             padding_nm      = body.padding_nm,
+            free_ns         = body.production_ns_intent,
             water_shell_nm  = water_shell_nm,
             minimize_steps  = body.minimize_steps,
             atomistic_model = seed_model,
@@ -2437,6 +2601,42 @@ async def md_archive_status(job_id: str) -> dict:
     return job_archive.task_status("md_jobs", job_id) or {"state": "idle"}
 
 
+def _inherited_box_check(job: MdJob, *, max_depth: int = 8) -> Optional[dict]:
+    """The rotation verdict governing ``job``'s cell, walking up to an ancestor if needed.
+
+    A production child re-uses its parent's cell verbatim, so the verdict measured at
+    prep applies unchanged to every descendant.  Children created before the child
+    manifest carried the ``solvation`` block have no verdict of their own, and a chained
+    production (child of a child) puts two hops between the run and the package that was
+    actually solvated — so resolve it by walking ``parent_job_id`` rather than treating a
+    missing block as "unknown, allow".
+
+    Returns ``None`` when no ancestor has a usable verdict, which the caller treats as
+    fail-open: a package prepared before ``box_check`` existed must not be unrunnable.
+    """
+    ws = _workspace()
+    seen: set[str] = set()
+    cur: Optional[MdJob] = job
+    for _ in range(max_depth):
+        if cur is None or cur.job_id in seen:
+            return None
+        seen.add(cur.job_id)
+        try:
+            manifest = json.loads((cur.package_dir(ws) / "manifest.json").read_text())
+            check = (manifest.get("solvation") or {}).get("box_check") or {}
+        except Exception:  # noqa: BLE001 — never block on an unreadable diagnostic
+            check = {}
+        if check.get("measured"):
+            return check
+        if not cur.parent_job_id:
+            return None
+        try:
+            cur = MdJob.load(cur.parent_job_id, ws)
+        except Exception:  # noqa: BLE001 — a pruned ancestor is not a reason to refuse
+            return None
+    return None
+
+
 def _assert_cell_fits_a_free_run(job: MdJob, length_ns: float, *, allow: bool) -> None:
     """Refuse a long UNRESTRAINED run in a cell the solute can rotate out of.
 
@@ -2454,25 +2654,28 @@ def _assert_cell_fits_a_free_run(job: MdJob, length_ns: float, *, allow: bool) -
 
     if allow or length_ns <= ROTATION_FREE_NS_THRESHOLD:
         return
-    try:
-        manifest = json.loads(
-            (job.package_dir(_workspace()) / "manifest.json").read_text())
-        check = (manifest.get("solvation") or {}).get("box_check") or {}
-    except Exception:  # noqa: BLE001 — never block on an unreadable diagnostic
+    check = _inherited_box_check(job)
+    if check is None:
         return
     if not check.get("measured", True) or check.get("fits_rotated", True):
         return
     gap = check.get("image_gap_rotated_ang")
-    how_close = (f" a turned solute comes within {gap:.0f} Å of its own periodic image;"
-                 if isinstance(gap, (int, float)) else "")
+    if not isinstance(gap, (int, float)):
+        how_close = ""
+    elif gap < 0:
+        # A negative gap is an overlap, not a clearance — "within -33 Å" is
+        # arithmetically faithful and completely unreadable.
+        how_close = f" ({-gap:.0f} Å overlap)"
+    else:
+        how_close = f" ({gap:.0f} Å clearance)"
+    # Kept short on purpose: the panel shows its own one-line version, and the two
+    # option tokens below are the load-bearing part (the frontend keys its
+    # "continue anyway" offer off allow_undersized_cell).
     raise HTTPException(400, (
-        f"This package's cell is too small for a {length_ns:g} ns unrestrained run. It "
-        f"was sized for the relaxation ladder, which holds the solute still; free of "
-        f"restraints the structure rotates, and in this cell{how_close} the trajectory "
-        f"would be corrupted without ever failing. Prepare a fresh package for "
-        f"production (it will be rotation-sized), keep the run under "
-        f"{ROTATION_FREE_NS_THRESHOLD:g} ns, or resend with allow_undersized_cell=true "
-        f"if you know the solute is effectively spherical."))
+        f"A {length_ns:g} ns run drifts this structure into its own periodic "
+        f"image{how_close}. Re-prep with a larger cell (production_ns_intent), keep the "
+        f"run under {ROTATION_FREE_NS_THRESHOLD:g} ns, or resend with "
+        f"allow_undersized_cell=true."))
 
 
 @router.post("/md/jobs/{job_id}/production")
@@ -2512,9 +2715,9 @@ class ProductionRunRequest(BaseModel):
     distinct, selectable entry and each production nests under it, so the user can fan
     out several independent productions (distinct velocity seeds) from one equilibrated
     structure — or chain one (spawn a production off a completed production child)."""
-    steps: Optional[int] = Field(None, ge=100, le=50_000_000,
+    steps: Optional[int] = Field(None, ge=100, le=MAX_PRODUCTION_STEPS,
                                  description="Raw integration steps (falls back to length_ns)")
-    length_ns: Optional[float] = Field(None, gt=0.0, le=100.0,
+    length_ns: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS,
                                        description="Simulated ns (used if steps omitted)")
     autostart: bool = Field(True, description="Start the child right away (local target only)")
     production_timestep_fs: Optional[float] = Field(
@@ -2556,6 +2759,14 @@ class ProductionRunRequest(BaseModel):
         description="DCD trajectory output interval (steps). Defaults to PRODUCTION_DCD_FREQ "
                     "(2500 = every 10 ps at 4 fs). Lower it for denser sampling when the "
                     "trajectory feeds fluctuation-based parameter extraction (FEM/SNUPI/mrdna).")
+    allow_undersized_cell: bool = Field(
+        False,
+        description="Run even when the package's cell is too small for the solute to "
+                    "rotate freely. A child re-uses its parent's cell verbatim, and a "
+                    "relaxation cell is sized for the restrained ladder — so a long "
+                    "UNRESTRAINED child can walk the solute into its own periodic image "
+                    "and quietly corrupt the trajectory. Off by default; set it only if "
+                    "the run is short enough or the solute is effectively spherical.")
 
 
 def _production_seed_checkpoint(parent: MdJob) -> tuple[Optional[SegmentSpec], str, str]:
@@ -2599,6 +2810,13 @@ async def spawn_md_production(parent_id: str, body: ProductionRunRequest) -> dic
         production_timestep_fs=body.production_timestep_fs,
         gpu_resident=body.gpu_resident,
     ))
+    # A child re-uses its parent's cell verbatim (build_replica_package hardlinks the
+    # PSF/PDB and copies box_ang), so the parent's rotation verdict IS the child's.
+    # This check lived only on the sibling append route while the panel's button came
+    # here — the one path that can start a microsecond-long free run was the one path
+    # that never asked whether the box could hold it.
+    _assert_cell_fits_a_free_run(parent, plan["length_ns"],
+                                 allow=body.allow_undersized_cell)
     # ⚠️ `parent` is the COMPLETED RELAXATION and is READ-ONLY from here.  An earlier
     # version failed the parent when it disliked a production setting, which flipped a
     # finished 12/12 ladder to "failed" and discarded the record of hours of successful
@@ -2706,9 +2924,9 @@ async def revert_md_production(job_id: str) -> dict:
 class EnsembleProductionRequest(BaseModel):
     """Stage N independent NAMD production replicas (distinct seeds) from a parent."""
     n_replicas: int = Field(4, ge=1, le=64, description="Number of independent replicas")
-    steps: Optional[int] = Field(None, ge=100, le=50_000_000,
+    steps: Optional[int] = Field(None, ge=100, le=MAX_PRODUCTION_STEPS,
                                  description="Raw integration steps per replica")
-    length_ns: Optional[float] = Field(None, gt=0.0, le=100.0,
+    length_ns: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS,
                                        description="Simulated ns per replica (used if steps omitted)")
     base_seed: int = Field(54321, description="First NAMD seed; replica i uses base_seed + i")
     cluster_name: str = Field("alpine")
@@ -4012,8 +4230,8 @@ class ChainStageRequest(BaseModel):
     surface: Optional[dict] = Field(None, description="Shared surface/floor descriptor")
     run_target: str = Field("local", description="'local' or 'alpine'")
     cluster_name: Optional[str] = Field(None, description="Cluster for an alpine stage")
-    length_ns: Optional[float] = Field(None, gt=0.0, le=100.0)
-    steps: Optional[int] = Field(None, ge=100, le=50_000_000)
+    length_ns: Optional[float] = Field(None, gt=0.0, le=MAX_PRODUCTION_NS)
+    steps: Optional[int] = Field(None, ge=100, le=MAX_PRODUCTION_STEPS)
     label: Optional[str] = Field(None, description="Human label for the stage")
 
 

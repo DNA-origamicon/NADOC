@@ -11,6 +11,10 @@ import {
   runningEngines,
   runningEngineForPath,
   diskWarningMessage,
+  bigRunSummary,
+  BIG_RUN_BYTES,
+  BIG_RUN_HOURS,
+  isUndersizedCellRefusal,
 } from './job_activity.js'
 
 const GiB = 1024 ** 3
@@ -44,6 +48,122 @@ describe('diskWarningMessage', () => {
     })
     expect(msg).toContain('OUT of disk')
     expect(msg).toContain('6 GB')      // shortfall
+  })
+
+  it('names the volume it measured when the forecast reports one', () => {
+    const msg = diskWarningMessage({
+      warn: true,
+      free_bytes: 12 * GiB,
+      predicted_bytes: 9 * GiB,
+      free_after_bytes: 3 * GiB,
+      volume: '/media/jojo/Archive',
+    })
+    // A job archived to an external drive is forecast against THAT drive; without
+    // naming it "you have 12 GB free" could be read as the system disk.
+    expect(msg).toContain('/media/jojo/Archive')
+  })
+})
+
+describe('bigRunSummary', () => {
+  // The 1 us 2hb_1xT production run from the bug report: ~80 GB over ~17 days,
+  // onto a 5.8 TB archive drive that raises no low-space warning at all.
+  const MICROSECOND_RUN = {
+    warn: false,
+    predicted_bytes: 80 * GiB,
+    free_bytes: 5800 * GiB,
+    free_after_bytes: 5720 * GiB,
+    volume: '/media/jojo/Archive',
+    length_ns: 1000,
+    est_hours: 407,
+    est_ns_per_day: 59,
+  }
+
+  it('returns null for a run that is neither big nor long', () => {
+    expect(bigRunSummary(null)).toBeNull()
+    expect(bigRunSummary(undefined)).toBeNull()
+    expect(bigRunSummary({ predicted_bytes: 1 * GiB, est_hours: 2 })).toBeNull()
+  })
+
+  it('fires on a huge run even when the disk has ample room', () => {
+    // The whole point: warn === false, so diskWarningMessage stays silent here.
+    expect(diskWarningMessage(MICROSECOND_RUN)).toBeNull()
+    const s = bigRunSummary(MICROSECOND_RUN)
+    expect(s).not.toBeNull()
+    expect(s.message).toContain('80 GB')                 // what it will write
+    expect(s.message).toContain('/media/jojo/Archive')   // onto which drive
+    expect(s.message).toContain('1,000 ns')              // simulated time
+    expect(s.message).toContain('days')                  // wall-clock, not "407 h"
+    expect(s.message).toContain('59 ns/day')             // the rate behind it
+  })
+
+  it('fires on size alone when the run is quick', () => {
+    const s = bigRunSummary({ predicted_bytes: BIG_RUN_BYTES + 1, est_hours: 1 })
+    expect(s).not.toBeNull()
+    expect(s.bytes).toBe(BIG_RUN_BYTES + 1)
+  })
+
+  it('fires on duration alone when the run is small', () => {
+    const s = bigRunSummary({ predicted_bytes: 1024, est_hours: BIG_RUN_HOURS + 1 })
+    expect(s).not.toBeNull()
+    expect(s.hours).toBe(BIG_RUN_HOURS + 1)
+  })
+
+  it('does not fire exactly at the thresholds', () => {
+    expect(bigRunSummary({ predicted_bytes: BIG_RUN_BYTES, est_hours: BIG_RUN_HOURS })).toBeNull()
+  })
+
+  it('still reports size when the backend could not estimate a duration', () => {
+    // est_hours is null whenever the atom count is unknown — that must not
+    // suppress the size half of the warning.
+    const s = bigRunSummary({ predicted_bytes: 50 * GiB, est_hours: null, free_bytes: 100 * GiB })
+    expect(s).not.toBeNull()
+    expect(s.hours).toBeNull()
+    expect(s.message).toContain('50 GB')
+    expect(s.message).not.toContain('Estimated wall-clock')
+  })
+
+  it('formats short durations in hours and long ones in days', () => {
+    expect(bigRunSummary({ predicted_bytes: 20 * GiB, est_hours: 30 }).message)
+      .toContain('30 h')
+    expect(bigRunSummary({ predicted_bytes: 20 * GiB, est_hours: 96 }).message)
+      .toContain('4.0 days')
+  })
+})
+
+describe('isUndersizedCellRefusal', () => {
+  // Verbatim tail of routes_md._assert_cell_fits_a_free_run's 400 detail.
+  const REFUSAL =
+    "This package's cell is too small for a 1000 ns unrestrained run. It was sized " +
+    'for the relaxation ladder... or resend with allow_undersized_cell=true if you ' +
+    'know the solute is effectively spherical.'
+
+  it('recognises the cell refusal so the panel can offer the override', () => {
+    expect(isUndersizedCellRefusal(REFUSAL)).toBe(true)
+  })
+
+  it('does not swallow other production errors', () => {
+    // These must keep propagating as real failures, not become an "override?" prompt.
+    expect(isUndersizedCellRefusal(
+      'Production requires a completed relaxation (or production) to seed from.')).toBe(false)
+    expect(isUndersizedCellRefusal(
+      'steps: Input should be less than or equal to 1000000000')).toBe(false)
+    expect(isUndersizedCellRefusal('Checkpoint d_01 coordinates were not found locally.'))
+      .toBe(false)
+  })
+
+  it('is safe on non-strings', () => {
+    expect(isUndersizedCellRefusal(null)).toBe(false)
+    expect(isUndersizedCellRefusal(undefined)).toBe(false)
+    expect(isUndersizedCellRefusal({ detail: 'allow_undersized_cell' })).toBe(false)
+  })
+
+  it('still matches the shortened backend refusal', () => {
+    // The detail was cut to one sentence; the override token is the load-bearing
+    // part of the contract and must survive any further rewording.
+    expect(isUndersizedCellRefusal(
+      'A 1000 ns run drifts this structure into its own periodic image (33 Å overlap). ' +
+      'Re-prep with a larger cell (production_ns_intent), keep the run under 20 ns, or ' +
+      'resend with allow_undersized_cell=true.')).toBe(true)
   })
 })
 

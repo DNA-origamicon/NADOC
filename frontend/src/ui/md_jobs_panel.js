@@ -34,7 +34,10 @@ import { store } from '../state/store.js'
 import { formatBytes } from './format_bytes.js'
 import { initJobArchive } from './job_archive_action.js'
 import { initMdMetricsCard } from './md_metrics_card.js'
-import { confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk } from './job_activity.js'
+import {
+  confirmNoConcurrentJob, confirmGpuNotBusy, confirmDiskSpaceOk, confirmBigRunOk,
+  isUndersizedCellRefusal, confirmUndersizedCell,
+} from './job_activity.js'
 import { initMdSubmitReview, remoteJobBadge, alpineTargetDisabledReason } from './md_submit_review.js'
 import { runExclusive } from './primitives/button_busy.js'
 import { RUN_ACTION } from './job_run_control.js'
@@ -731,6 +734,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const mgInput       = document.getElementById('md-jobs-mg')
   const naclInput     = document.getElementById('md-jobs-nacl')
   const paddingInput  = document.getElementById('md-jobs-padding')
+  const prodIntentInput = document.getElementById('md-jobs-prod-intent')
   const watershellInput = document.getElementById('md-jobs-watershell')
   const minstepsInput = document.getElementById('md-jobs-minsteps')
   const dcdFreqInput  = document.getElementById('md-jobs-dcd-freq')
@@ -2323,10 +2327,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (isLocalRun && !(await confirmNoConcurrentJob({ excludeJobId: _selectedId }))) return
     const steps = _productionSteps()
     const ns = _productionNs(steps)
+    const dcdFreq = parseInt(dcdFreqInput?.value ?? '2500', 10) || 2500
     if (isLocalRun) {
       try {
-        const fc = await estimateMdProductionDisk(_selectedId, { steps, autostart: true })
+        // Forecast with the SAME dt and DCD interval the run will use — trajectory
+        // bytes scale as 1/dcd_freq, so forecasting the defaults while the panel
+        // sends something else silently mis-states the size by that ratio.
+        const fc = await estimateMdProductionDisk(_selectedId, {
+          steps,
+          autostart: true,
+          dcd_freq: dcdFreq,
+          production_timestep_fs: _effectiveProdTimestepFs(),
+        })
+        // Two independent gates: "the disk will run short" (only fires on a full
+        // volume) and "this run is simply big/long" (fires on a roomy archive drive
+        // too, where the first never would).
         if (!(await confirmDiskSpaceOk(fc))) return
+        if (!(await confirmBigRunOk(fc))) return
       } catch { /* forecast is best-effort — never block a launch on it */ }
     }
     if (prodStatus) {
@@ -2340,13 +2357,13 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // Child-job model (mirrors oxDNA): the relaxation stays a distinct entry and each
       // production nests under it as a new, independently-seeded child.  A local child
       // autostarts; an Alpine child is left queued and handed to the submit-review card.
-      const d = await api.spawnMdProduction(_selectedId, {
+      const body = {
         steps,
         autostart: isLocalRun,
         execution_target: runTarget,
         cluster_name: runTarget === 'alpine' ? 'alpine' : null,
         runpod_gpu_key: runTarget === 'runpod' ? (_selectedRunpodGpu?.key ?? null) : null,
-        dcd_freq: parseInt(dcdFreqInput?.value ?? '2500', 10) || 2500,
+        dcd_freq: dcdFreq,
         // Pin the dropdown's dt to THIS run, so the trajectory matches the estimate shown
         // above it.  Without this the timestep could only be chosen at prep time and the
         // dropdown silently had no effect on production.
@@ -2354,8 +2371,18 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         // Same reason as the timestep: production hard-coded GPU-resident ON for 2/4 fs,
         // so ⚡ could report "GPU-resident: off" while the run used it anyway.
         gpu_resident: residentSel?.value ?? 'auto',
-      })
-      if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
+      }
+      let d = await api.spawnMdProduction(_selectedId, body)
+      if (!d) {
+        const why = api.lastErrorMessage() ?? 'Server error'
+        // The cell-too-small refusal is advisory, not a hard error: the run is
+        // physically startable, it just risks periodic-image contamination. Offer the
+        // documented override here rather than making the user hand-craft a request.
+        if (!isUndersizedCellRefusal(why)) throw new Error(why)
+        if (!(await confirmUndersizedCell({ lengthNs: ns }))) return
+        d = await api.spawnMdProduction(_selectedId, { ...body, allow_undersized_cell: true })
+        if (!d) throw new Error(api.lastErrorMessage() ?? 'Server error')
+      }
       const childId = d.job?.job_id
       await _fetchJobs()
       if (isLocalRun) {
@@ -2370,7 +2397,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         prodStatus.textContent = err.message
         prodStatus.style.color = _C.err
       }
-      showToast(`Production failed: ${err.message}`, 'error')
+      showToast(`Production failed: ${err.message}`, { severity: 'error', duration: 8000 })
     } finally {
       const job = _jobs.find(j => j.job_id === _selectedId)
       _renderProductionControls(job)
@@ -2592,6 +2619,12 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       mg_conc_mM:     parseFloat(mgInput?.value     ?? '12.5'),
       ion_conc_mM:    parseFloat(naclInput?.value   ?? '0'),
       padding_nm:     parseFloat(paddingInput?.value ?? '1.2'),
+      // Blank = size for the ladder only (the cheap bbox cell). A value here sizes the
+      // cell for a solute that will actually tumble — the only chance to choose, since
+      // nothing after prep re-solvates and a production child inherits this cell.
+      production_ns_intent: Number(prodIntentInput?.value) > 0
+        ? Number(prodIntentInput.value)
+        : null,
       // UI is in Å; API wants nm. 0 = full box (no carve).
       water_shell_nm: (parseFloat(watershellInput?.value ?? '0') || 0) / 10,
       minimize_steps: parseInt(minstepsInput?.value  ?? '10000', 10),
@@ -2652,6 +2685,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
         payload.run_dir = rec.runDir || null   // suggested archive OR the user's chosen dir
         // No archive suggestion but still tight → the plain low-disk Continue/Cancel warning.
         if (!archiveRecommendation(fc).show && !(await confirmDiskSpaceOk(fc))) {
+          hideOpProgress(); _launching = false; runBtn.disabled = false; return
+        }
+        // Independent of whether the disk is tight: a run this big or this long gets
+        // an explicit Proceed/Cancel showing what it will actually cost.
+        if (!(await confirmBigRunOk(fc))) {
           hideOpProgress(); _launching = false; runBtn.disabled = false; return
         }
       } catch { /* forecast is best-effort — never block a launch on it */ }
