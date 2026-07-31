@@ -1364,3 +1364,53 @@ nothing about the pair. Related: [[overhang-duplex-foundation]] (the coexistence
 that bug reintroduced through the path that has no binding.
 
 ---
+
+## H19
+
+**A byte-exact golden over an optimizer's output is machine-specific — it pinned the CPU, not the
+geometry (2026-07-31, `test_atomistic_geometry_lock.py`).**
+
+Symptom: two atomistic geometry goldens failed on one computer and passed on the other, with a
+clean tree. Five commits in a row tried to settle it by *regenerating the hashes*
+(`77663ba → 91a8eed → 0cbbc9f → 3093b83 → ce1ef35`), each one flipping the values to whichever
+box ran last and breaking the other. The final commit asserted "no reachable code state produces
+these values"; the real answer was that a code state *did* — just not on that CPU.
+
+Cause: `build_atomistic_model` stamps atoms from locked templates (bit-reproducible) and then
+closes the backbone at crossover/skip steps with an L-BFGS-B bridge solve whose basin is nearly
+flat. A last-ULP difference in a BLAS dot product walks that solve to a different converged
+point. This box (Ryzen 9 9950X) dispatches OpenBLAS `SkylakeX` AVX-512 kernels; the goldens were
+made where it dispatched non-AVX-512 ones. `OPENBLAS_CORETYPE=Haswell` reproduced all four stale
+goldens exactly, at HEAD. Thread COUNT is neutral (1 vs N is byte-identical, which is what the
+conftest note actually measured) — kernel dispatch is not.
+
+Diagnostic that settled it in one command: rebuild under `OPENBLAS_CORETYPE=Haswell` /
+`Nehalem`. If the stale golden reappears, the code never changed. A worktree bisect confirmed the
+build emits the same values at *every* commit back through `77663ba^`, so no commit was ever the
+culprit — including the catenation fix (e810dd8) that two sessions blamed.
+
+Scale of the amplification: only the 5 atoms per junction that the solver places (O3′ of the
+outgoing residue, P/OP1/OP2/O5′ of the incoming one) move — 0.25 Å on Con4, 0.70 Å on
+2hb_xover_val, 1.30 Å on U6hb — while every other atom is bit-identical. That overlaps the
+0.1–0.8 Å band [[#h15]] identifies as a *real* regression, so no single tolerance over all atoms
+can separate signal from noise either.
+
+Fix: split the oracle by provenance. Hash the **stamped** atoms byte-exactly (98–99% of the
+model, verified identical across three kernel dispatches) and pin the **solver-placed** ones on
+tolerance — the junction SET exactly, plus O3′–P bond lengths, which are stable to 1.7e-4 Å where
+the positions are not, because the linker swings inside the flat basin without stretching.
+
+Two traps found while building it, both worth reusing:
+- **Walk the strand, not `model.bonds`.** At a skip the display emits no O3′–P bond at all, so a
+  bond-walk misses those junctions entirely and silently leaves 205 solver-placed atoms inside
+  the "byte-exact" half. Use `strand_id` + `seq_num` adjacency.
+- **Band the tolerance.** Junction lengths are bimodal with an empty gap at 3.17–3.48 Å: below it
+  the solve closed the step and the length reproduces to 1.7e-4 Å; above it the step is open
+  (4.9–44 Å, not a bond) and floats up to 0.213 Å. One tolerance is either blind on the closed
+  band or permanently red on the open one.
+
+**How to avoid:** never hash the output of an iterative solver as a cross-machine golden. Hash
+what is deterministic by construction and put a tolerance on what a solver placed. Before
+regenerating any golden that "no code change explains", rule out BLAS kernel dispatch
+(`OPENBLAS_CORETYPE`) first — regenerating is what turns a one-machine bug into a permanent
+two-machine ping-pong. See [[#h15]] for the same amplification via a ULP-level speedup.

@@ -236,9 +236,16 @@ channels disagreeing because of the mode instability, not real ambiguity. Switch
 
 ## Invariants to preserve
 
-- All six geometry-lock hashes are **byte-unchanged** by the fix (verified). The repair only
-  touches geometry where a pair was actually linked, and no `Examples/` design has one. If a
-  golden moves, the change leaked into the shared bridge minimiser.
+- All six geometry-lock hashes are **byte-unchanged** by the fix (verified, and re-verified
+  2026-07-31 by rebuilding at `e810dd8` and `e810dd8^` — identical). The repair only touches
+  geometry where a pair was actually linked, and no `Examples/` design has one. If a golden
+  moves, the change leaked into the shared bridge minimiser.
+  - **This fix was twice blamed for a failure it did not cause.** `3093b83` regenerated two
+    goldens "after the catenation fix" and `ce1ef35` reverted them; the real cause was BLAS
+    kernel dispatch differing between the two dev computers, not any commit. See
+    [[LESSONS]] H19. `test_atomistic_geometry_lock.py` no longer hashes solver-placed atoms
+    at all, so it can no longer implicate this fix that way — but the invariant above still
+    holds and is still the right thing to check.
 - The build must stay **byte-reproducible** — the ladder is a fixed, ordered search.
 - The gate must never fire on the display path (`fast_bridges=True`) or the oxDNA-override
   paths; it lives in the packaging functions only.

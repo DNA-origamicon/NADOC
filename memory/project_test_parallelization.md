@@ -90,6 +90,13 @@ an ordinary coding session**. Three new pieces, all machine-local + gitignored:
   threemf_export,snupi_hydro_coarse,fem_solver}.py` all dropped out of the slowest-15.
   **Numerically neutral** — `tests/test_atomistic_geometry_lock.py` yields byte-identical geometry
   hashes at 1 thread and at N (checked explicitly, since that file hash-pins float output).
+  **⚠️ That says thread COUNT only — kernel DISPATCH is not neutral.** Same commit, same lockfile,
+  same box: AVX-512 OpenBLAS kernels vs `OPENBLAS_CORETYPE=Haswell` move the L-BFGS-B-placed
+  crossover/skip bridge atoms by up to 1.3 Å, every other atom bit-identical. That is why four of
+  that file's five goldens were machine-specific and ping-ponged across five commits. Fixed
+  2026-07-31 by splitting the oracle (byte-exact hash of stamped atoms + tolerance on
+  solver-placed bridges); before regenerating any golden there, rule out `OPENBLAS_CORETYPE`
+  first. See [[LESSONS]] H19.
   Residual 2 violators (`test_repair_does_not_degrade_geometry[TT]` 5.75 s,
   `test_repaired_build_is_deterministic[TT]` 5.16 s) are **4.14 s / 3.91 s measured alone** — under
   budget in isolation, over it only under suite contention → left unmarked, per the rule above.
@@ -116,7 +123,12 @@ so `loadfile` can spread it.
 **Backstop triage 2026-07-22 — `FAST SUITE TOO SLOW` (93–95s) was mostly CPU CONTENTION, not fat.**
 Zero per-test violators; 5393 tests. Re-measured on an idle box: **76.8s pytest / 81s guard** — under
 the 90s backstop. Lessons for the next time this banner fires:
-- **This box is 6 physical cores / 12 threads (Ryzen 5 3600), so `-n auto` = 12 workers oversubscribes
+- **THE TWO COMPUTERS DIFFER — say which one a timing came from.** The numbers in this section were
+  measured on the **Ryzen 5 3600** box (6 cores / 12 threads, no AVX-512). The other box is a
+  **Ryzen 9 9950X** (16 cores / 32 threads, AVX-512, OpenBLAS dispatching `SkylakeX`), where both
+  the timings AND float results differ — a hash-pinned float golden generated on one is red on the
+  other ([[LESSONS]] H19). Re-measure rather than trusting a figure below.
+- **The Ryzen 5 box is 6 physical cores / 12 threads, so `-n auto` = 12 workers oversubscribes
   SMT and inflates every per-test reading 2–6×.** `test_fem_solver` / `test_snupi_hydro_coarse` tests that
   the report showed at 2–3.1s are **0.3–0.7s in isolation**; `test_headless_oxdna_build` is 22.7s isolated
   vs 32.7s in-suite. **Never relegate off the in-suite number alone — re-time the file in isolation first.**

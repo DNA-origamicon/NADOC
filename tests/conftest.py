@@ -749,6 +749,15 @@ _SLOW_PARAMS = {
 # test_junction_winding.py 20.6 s -> off the top-15 entirely.  Verified numerically neutral:
 # tests/test_atomistic_geometry_lock.py produces byte-identical hashes at 1 thread and at N.
 #
+# 2026-07-31 — that last sentence is true but was read as more than it says.  Thread COUNT is
+# neutral; BLAS KERNEL DISPATCH is not.  Same commit, same lockfile, same box: AVX-512 kernels
+# vs `OPENBLAS_CORETYPE=Haswell` move the L-BFGS-B-placed crossover/skip bridge atoms by up to
+# 1.3 A, leaving every other atom bit-identical.  That is why 4 of the 5 goldens in
+# test_atomistic_geometry_lock.py were machine-specific and got "regenerated" and reverted
+# across five commits — each dev box read the other's values as a regression.  That file now
+# hashes only the stamped atoms and pins the bridges on tolerance; do NOT "fix" a failure
+# there by regenerating hashes until you have ruled out the other machine's dispatch.
+#
 # 2026-07-30 (later, superseding the last paragraph of the above): after the BLAS fix the 2
 # residual violators were test_repair_{does_not_degrade_geometry,ed_build_is_deterministic}[TT]
 # — 5.17-5.75 s in the fast suite, 4.16 s / 3.93 s re-measured SERIALLY on an idle box (numbers
