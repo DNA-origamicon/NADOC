@@ -295,16 +295,34 @@ def test_prepare_writes_anchor_restraints_end_to_end(tmp_path, monkeypatch):
     fixed_ordinals, _rows = _b1_residue_ordinals(anchor_pdb.read_text())
     assert fixed_ordinals == expected  # OUTPUT residue order aligns with the resolver
 
-    # Every LADDER conf (the minimization + each segment) enables the anchors; the
+    # Every LADDER conf (the minimization + each segment) enables fixedAtoms; the
     # solvation base template (namd.conf) is intentionally not a run conf.
+    #
+    # A SETTLE segment is the one exception to "names the anchor file": it pins the
+    # whole solute while the solvent equilibrates, and NAMD allows only ONE
+    # fixedAtomsFile, so it names the all-DNA superset instead (md_protocols.py:
+    # `spec.fixed_atoms_file or anchors_file`).  That superset contains every anchor
+    # residue, so the anchors are still held — assert the substitution deliberately
+    # rather than exempting the segment, or a dropped anchor file would look the same.
     manifest = json.loads((pkg / "manifest.json").read_text())
-    ladder_confs = [pkg / f"{manifest['minimization']['name']}.conf"]
-    ladder_confs += [pkg / f"{s.name}.conf" for s in segments]
-    for c in ladder_confs:
+    expected_fixed = [(pkg / f"{manifest['minimization']['name']}.conf",
+                       "restraints_anchors.pdb")]
+    expected_fixed += [(pkg / f"{s.name}.conf",
+                        s.fixed_atoms_file or "restraints_anchors.pdb")
+                       for s in segments]
+    for c, want in expected_fixed:
         text = c.read_text()
         assert "fixedAtoms         on" in text
-        assert "fixedAtomsFile     restraints_anchors.pdb" in text
+        assert f"fixedAtomsFile     {want}\n" in text
         assert "fixedAtomsCol      B" in text
+
+    # The settle stage's superset must really be a superset, not a silent replacement.
+    settle = [s for s in segments if s.fixed_atoms_file]
+    if settle:
+        all_dna = pkg / settle[0].fixed_atoms_file
+        assert all_dna.exists()
+        all_dna_ordinals, _ = _b1_residue_ordinals(all_dna.read_text())
+        assert set(expected) <= set(all_dna_ordinals)
 
     assert manifest["anchors"]["file"] == "restraints_anchors.pdb"
     assert manifest["anchors"]["n_residues"] == len(expected)
