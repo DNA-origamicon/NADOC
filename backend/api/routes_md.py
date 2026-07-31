@@ -2411,35 +2411,47 @@ def _backfill_failure_kind(job: MdJob) -> None:
     job.save(_workspace())
 
 
-def _namd_running_fraction(job: MdJob, ws) -> float | None:
-    """Live overall progress fraction (0..1) for a RUNNING NAMD job, for the master
-    progress bar.  ``None`` for non-running jobs (the bar falls back to done/total
-    segments).  Reads only the currently-running segment's log (cheap: ≤1 per running
-    job), mirroring the WS ``segment_progress`` so a single-segment production advances
-    instead of sitting at 0 %."""
+def _namd_live_progress(job: MdJob, ws) -> tuple[float | None, float | None]:
+    """``(overall fraction 0..1, seconds remaining)`` for a RUNNING NAMD job — the two
+    live numbers under the master progress bar.  Both are ``None`` for a non-running job
+    (the bar falls back to done/total segments and shows no estimate).
+
+    Bounded reads only — this sits on a ~1.5 s poll, and reading the whole growing log
+    each time contended with NAMD's own writes and tripped the slow-request popup.  The
+    step comes from :func:`live_segment_step` (log ENERGY frames / box trace / restart
+    checkpoint, whichever is furthest); the rate from the log's Benchmark lines, which
+    are in its first few kB.
+
+    The estimate covers the WHOLE job — the steps left in the running segment plus every
+    segment still queued behind it — so a relaxation ladder counts down to the end of the
+    ladder, not to the end of its current chunk.
+    """
     if job.status != MdStatus.running:
-        return None
+        return None, None
     segs = job.segments or []
     total = len(segs)
     if not total:
-        return None
-    from backend.core.namd_metrics import last_namd_timestep_fast, overall_fraction  # noqa: PLC0415
+        return None, None
+    from backend.core.namd_metrics import (  # noqa: PLC0415
+        benchmark_s_per_step, eta_seconds, live_segment_step, overall_fraction,
+    )
     done = sum(1 for s in segs if s.status == "done")
     ts = None
     steps = None
+    eta = None
     idx = job.current_segment_idx
     if 0 <= idx < total and segs[idx].status == "running":
         seg = segs[idx]
         steps = seg.steps
-        log_path = job.package_dir(ws) / f"{seg.name}.log"
-        if log_path.exists():
-            # Tail-read only — this is a ~1.5 s poll; reading the whole growing log each
-            # time contended with NAMD's own writes and tripped the slow-request popup.
-            try:
-                ts = last_namd_timestep_fast(log_path)
-            except Exception:
-                ts = None
-    return overall_fraction(done, total, ts, steps)
+        pkg = job.package_dir(ws)
+        try:
+            ts = live_segment_step(pkg, seg.name)
+            remaining = max(0, int(seg.steps) - int(ts or 0))
+            remaining += sum(int(s.steps or 0) for s in segs[idx + 1:])
+            eta = eta_seconds(remaining, benchmark_s_per_step(pkg / f"{seg.name}.log"))
+        except Exception:  # noqa: BLE001 — progress/ETA are advisory, never fatal
+            pass
+    return overall_fraction(done, total, ts, steps), eta
 
 
 # Strong refs to in-flight background dir-size walks so the event loop can't GC them
@@ -2470,9 +2482,11 @@ async def list_md_jobs() -> list[dict]:
         if size is None:
             to_warm.append(job_dir)
         d["early_stop_pending"] = pending_early_stop(j.job_id)
-        frac = _namd_running_fraction(j, ws)
+        frac, eta = _namd_live_progress(j, ws)
         if frac is not None:
             d["progress_fraction"] = frac
+        if eta is not None:
+            d["eta_seconds"] = eta
         out.append(d)
     if to_warm:
         # Fire-and-forget: walk the uncached dirs in a threadpool AFTER returning, keeping

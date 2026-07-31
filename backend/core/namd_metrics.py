@@ -39,6 +39,9 @@ class NamdLogMetrics:
 # Each interval prints one line; the LAST is the most equilibrated, so we take findall[-1].
 _RE_DAYS_PER_NS = re.compile(r"([\d.]+(?:e[+-]?\d+)?)\s+days/ns")
 _RE_NS_PER_DAY = re.compile(r"([\d.]+(?:e[+-]?\d+)?)\s+ns/day")
+# Every Benchmark line also carries the raw step cost, which is what a time-remaining
+# estimate actually needs — no timestep lookup, so one less thing to be missing.
+_RE_S_PER_STEP = re.compile(r"([\d.]+(?:e[+-]?\d+)?)\s+s/step")
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
@@ -150,6 +153,66 @@ def last_namd_timestep_fast(log_path: Path, tail_bytes: int = 131072) -> int | N
     return last_ts
 
 
+def last_xsc_step(path: Path, tail_bytes: int = 8192) -> int | None:
+    """Last step recorded in a NAMD ``.xst`` / ``.xsc`` file — the first column of its
+    final data row — reading only the TAIL.
+
+    ``.restart.xsc`` is three lines; a ``.xst`` box trace grows all run (one row per
+    ``xstFreq``), so both are read the same bounded way.  Returns ``None`` when the tail
+    holds no complete data row (header only, empty, or unreadable).
+    """
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    if size <= 0:
+        return None
+    try:
+        with path.open("rb") as fh:
+            if size > tail_bytes:
+                fh.seek(size - tail_bytes)
+                fh.readline()  # drop the partial first line after the seek
+            chunk = fh.read()
+    except OSError:
+        return None
+    last: int | None = None
+    for raw in chunk.split(b"\n"):
+        line = raw.strip()
+        if not line or line.startswith(b"#"):
+            continue
+        try:
+            last = int(float(line.split()[0]))
+        except (ValueError, IndexError):
+            continue
+    return last
+
+
+def live_segment_step(package_dir: Path, segment_name: str) -> int | None:
+    """Furthest step a RUNNING segment has demonstrably reached, from every cheap on-disk
+    marker.  ``None`` when nothing has been written yet.
+
+    The master progress bar used to read ONLY the log's ENERGY frames, and a production
+    conf deliberately prints ~400 of those for the WHOLE run
+    (``md_protocols._production_output_freqs``, to keep GPU-resident mode from dragging
+    energies back off the card).  On a measured 500 ns / 125M-step run that is one frame
+    per 312,500 steps ≈ 8 min of wall clock, so the bar read 0 % for a quarter of an hour
+    while NAMD was already 585,000 steps in.
+
+    NAMD writes two far finer step markers into the same package, and neither costs
+    anything extra: the box trace (``xstFreq`` — 2,500 steps ≈ 4 s on that run) and the
+    restart checkpoint (``restartfreq`` — 5,000 steps).  Take whichever marker is
+    furthest along, so the bar tracks the finest cadence the conf happens to use.
+    """
+    output_dir = package_dir / "output"
+    candidates = [
+        last_namd_timestep_fast(package_dir / f"{segment_name}.log"),
+        last_xsc_step(output_dir / f"{segment_name}.xst"),
+        last_xsc_step(output_dir / f"{segment_name}.restart.xsc"),
+    ]
+    steps = [s for s in candidates if s is not None]
+    return max(steps) if steps else None
+
+
 def overall_fraction(
     done: int,
     total: int,
@@ -207,6 +270,46 @@ def benchmark_ns_per_day(log_path: Path, head_bytes: int = 256 * 1024) -> float 
         except ValueError:
             return None
     return None
+
+
+def benchmark_s_per_step(log_path: Path, head_bytes: int = 256 * 1024) -> float | None:
+    """Wall-clock seconds per integration step, from the log's Benchmark lines (HEAD read).
+
+    The same bounded-read trick as :func:`benchmark_ns_per_day` and the same reason to
+    prefer the LAST line (most equilibrated).  Read the step cost directly rather than
+    deriving it from ns/day + the conf's ``timestep``: it is the number a time-remaining
+    estimate needs, and it lands within ~30 s of a run starting — long before the first
+    production ENERGY frame (see :func:`live_segment_step`), which is exactly the window
+    where "how long will this take?" is being asked.
+
+    ``None`` when the run has not timed any steps yet.
+    """
+    try:
+        with log_path.open("rb") as fh:
+            chunk = fh.read(head_bytes)
+    except OSError:
+        return None
+    hits = _RE_S_PER_STEP.findall(chunk.decode("utf-8", errors="replace"))
+    if not hits:
+        return None
+    try:
+        v = float(hits[-1])
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+def eta_seconds(remaining_steps: int, s_per_step: float | None) -> float | None:
+    """Seconds of wall clock left for ``remaining_steps`` at the measured step cost (pure).
+
+    ``None`` when the rate is unknown — an absent estimate is honest, a fabricated one is
+    not.  Assumes any segments still queued behind the running one integrate at the same
+    cost; that holds across a relaxation ladder (one conf shape throughout) and is exact
+    for a single-segment production.
+    """
+    if not s_per_step or s_per_step <= 0:
+        return None
+    return max(0, int(remaining_steps)) * float(s_per_step)
 
 
 def parse_namd_log_series(log_paths: list[Path]) -> list[NamdLogMetrics]:

@@ -250,6 +250,155 @@ class TestLastNamdTimestepFast:
         assert last_namd_timestep_fast(log) is None
 
 
+class TestLastXscStep:
+    """Tail-read of a ``.xst`` box trace / ``.restart.xsc`` checkpoint — the FINE step
+    markers the master bar reads, written every ``xstFreq`` / ``restartfreq`` steps."""
+
+    _XSC = (
+        "# NAMD extended system configuration restart file\n"
+        "#$LABELS step a_x a_y a_z b_x b_y b_z c_x c_y c_z\n"
+        "585000 59.19 0 0 0 81.33 0 0 0 127.52\n"
+    )
+
+    def test_restart_xsc_single_row(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import last_xsc_step
+
+        p = tmp_path / "prod.restart.xsc"
+        p.write_text(self._XSC)
+        assert last_xsc_step(p) == 585_000
+
+    def test_xst_returns_last_row_beyond_the_tail_window(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import last_xsc_step
+
+        rows = ["# NAMD extended system trajectory file\n", "#$LABELS step a_x\n"]
+        rows += [f"{step} 59.1{step % 10}\n" for step in range(0, 250_000, 2_500)]
+        p = tmp_path / "prod.xst"
+        p.write_text("".join(rows))
+        # Far more rows than the tail window holds — the answer is still the LAST one.
+        assert last_xsc_step(p, tail_bytes=256) == 247_500
+
+    def test_header_only_missing_and_empty(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import last_xsc_step
+
+        assert last_xsc_step(tmp_path / "nope.xst") is None
+        empty = tmp_path / "empty.xst"
+        empty.write_text("")
+        assert last_xsc_step(empty) is None
+        header = tmp_path / "header.xst"
+        header.write_text("# NAMD extended system trajectory file\n#$LABELS step a_x\n")
+        assert last_xsc_step(header) is None
+
+
+class TestLiveSegmentStep:
+    """The bar's live step for a RUNNING segment: the FURTHEST of the log's ENERGY
+    frames, the box trace and the restart checkpoint.
+
+    Regression: a production conf prints ~400 ENERGY frames for the whole run, so on a
+    measured 500 ns / 125M-step run the log said 312,500 (one frame, ~8 min apart) while
+    the box trace said 585,000.  Reading the log alone pinned the bar at 0 %.
+    """
+
+    def _package(self, tmp_path: Path) -> Path:
+        (tmp_path / "output").mkdir()
+        return tmp_path
+
+    def test_takes_the_furthest_marker(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import live_segment_step
+
+        pkg = self._package(tmp_path)
+        (pkg / "prod.log").write_text("ETITLE: TS BOND\nENERGY:  312500  1200.0\n")
+        (pkg / "output" / "prod.xst").write_text("# trace\n0 59.1\n585000 59.2\n")
+        (pkg / "output" / "prod.restart.xsc").write_text("# ckpt\n580000 59.2\n")
+        assert live_segment_step(pkg, "prod") == 585_000
+
+    def test_box_trace_alone_is_enough(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import live_segment_step
+
+        # The first minutes of a production: the log holds only the TS-0 frame, so the
+        # box trace is the ONLY evidence the run has moved.
+        pkg = self._package(tmp_path)
+        (pkg / "prod.log").write_text("ETITLE: TS BOND\nENERGY:  0  1200.0\n")
+        (pkg / "output" / "prod.xst").write_text("# trace\n0 59.1\n42500 59.2\n")
+        assert live_segment_step(pkg, "prod") == 42_500
+
+    def test_log_alone_still_works(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import live_segment_step
+
+        # A relaxation segment prints ~30 ENERGY frames and may not have checkpointed yet.
+        pkg = self._package(tmp_path)
+        (pkg / "prod.log").write_text("ETITLE: TS BOND\nENERGY:  9600  1200.0\n")
+        assert live_segment_step(pkg, "prod") == 9_600
+
+    def test_nothing_written_yet(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import live_segment_step
+
+        assert live_segment_step(self._package(tmp_path), "prod") is None
+
+
+class TestBenchmarkSPerStep:
+    """Step cost from the log's Benchmark lines — the rate behind the bar's
+    time-remaining estimate.  Head-read, and available within ~30 s of a run starting."""
+
+    _BENCH = (
+        "Info: Startup phase 12 took 0.001638 s\n"
+        "Info: Benchmark time: 16 CPUs 0.00156458 s/step 0.00452714 days/ns 0 MB memory\n"
+        "Info: Benchmark time: 16 CPUs 0.00160176 s/step 0.00463472 days/ns 0 MB memory\n"
+    )
+
+    def test_takes_the_last_most_equilibrated_line(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import benchmark_s_per_step
+
+        log = tmp_path / "prod.log"
+        log.write_text(self._BENCH)
+        assert benchmark_s_per_step(log) == pytest.approx(0.00160176)
+
+    def test_agrees_with_the_days_per_ns_on_the_same_line(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import benchmark_ns_per_day, benchmark_s_per_step
+
+        # 4 fs/step: s/step and days/ns are two views of one measurement, so a mismatch
+        # here means one of the two regexes grabbed the wrong column.
+        log = tmp_path / "prod.log"
+        log.write_text(self._BENCH)
+        s_per_step = benchmark_s_per_step(log)
+        ns_per_day = benchmark_ns_per_day(log)
+        steps_per_ns = 1e6 / 4.0
+        assert s_per_step * steps_per_ns * ns_per_day == pytest.approx(86_400.0, rel=1e-3)
+
+    def test_missing_and_unbenchmarked(self, tmp_path: Path) -> None:
+        from backend.core.namd_metrics import benchmark_s_per_step
+
+        assert benchmark_s_per_step(tmp_path / "nope.log") is None
+        fresh = tmp_path / "fresh.log"
+        fresh.write_text("Info: NAMD 3.0 for Linux-x86_64\nInfo: Startup phase 0 took 9e-05 s\n")
+        assert benchmark_s_per_step(fresh) is None
+
+
+class TestEtaSeconds:
+    """Time-remaining estimate (pure): remaining steps x measured step cost."""
+
+    def test_matches_the_live_production_run(self) -> None:
+        from backend.core.namd_metrics import eta_seconds
+
+        # 2hb_1xT 500 ns: 124.035M steps left at 1.565 ms/step -> ~2d 6h, which must agree
+        # with the run's own 221 ns/day over the 496 ns still to simulate.
+        eta = eta_seconds(124_035_000, 0.00156458)
+        assert eta == pytest.approx(194_063, rel=1e-3)
+        assert eta / 86_400.0 == pytest.approx(496.14 / 221.0, rel=0.02)
+
+    def test_no_rate_no_estimate(self) -> None:
+        from backend.core.namd_metrics import eta_seconds
+
+        # An absent estimate is honest; a fabricated one is not.
+        assert eta_seconds(1_000_000, None) is None
+        assert eta_seconds(1_000_000, 0.0) is None
+
+    def test_finished_run_reads_zero_not_negative(self) -> None:
+        from backend.core.namd_metrics import eta_seconds
+
+        assert eta_seconds(0, 0.002) == 0
+        assert eta_seconds(-500, 0.002) == 0
+
+
 class TestOverallFraction:
     """Master-bar progress fraction for a NAMD job (done segments + running within-fraction)."""
 

@@ -141,6 +141,48 @@ to keep the snug cell and analyse only internal coordinates (twist, rise, groove
 parameters), which imaging does not corrupt.
 
 
+## The master bar reads the BOX TRACE, not just ENERGY frames (2026-07-30)
+
+**Symptom:** a long production sat at 0 % for ~16 minutes after NAMD had demonstrably started
+stepping. Measured on the live `2hb_1xT` 500 ns run: 15 min in, `restart.xsc` said step 585,000
+while the bar read 0 %.
+
+Not a stall and not the startup cost (the GPU tile-list probe + reseed took ~1 s at 62.7k atoms).
+The bar's only step signal was the log's ENERGY frames, and `_production_output_freqs` prints
+**~400 of them for the whole run** — deliberately, so GPU-resident mode is not dragged off the
+card (LESSONS L7). On that run: `outputEnergies 312500` = 1.25 ns = **8.1 min of wall clock per
+frame**, and one frame is 0.25 % of the run, so whole-percent rounding needed *two* frames before
+the number could change. A textbook L2 ("a cadence denominated in steps is a latent bug once the
+step count is a variable") — here the cadence scales with run *length*, so the longer the run,
+the blinder the bar.
+
+- `namd_metrics.last_xsc_step` (tail-read) + **`live_segment_step(package_dir, segment_name)`** —
+  the furthest of the log's ENERGY frames, `output/<seg>.xst` (`xstFreq`, 2,500 steps ≈ 4 s on
+  that run) and `output/<seg>.restart.xsc` (`restartfreq`). Nothing new is written; these markers
+  already existed and nothing read them for progress.
+- `routes_md._namd_running_fraction` calls it — so the REST job list AND the WS push (which
+  reuses the same helper) both advance. `ws.py`'s `live_metrics.segment_progress` still uses the
+  coarse parsed log; **it has no frontend consumer**, so it was left alone.
+- Frontend `simulate_jobs.masterProgressPct` now reports **one decimal** (`_pct1`); whole values
+  are unchanged, so short runs read exactly as before. `masterStepText` derives its step count
+  from the raw `progress_fraction`, not the displayed percent (0.1 % = 125,000 steps there).
+
+**Time remaining, same pass.** The step line now ends `· ~2d 06h remaining`.
+`namd_metrics.benchmark_s_per_step` (HEAD-read) takes the step cost straight off the log's
+Benchmark lines — **not** ns/day ÷ conf `timestep`, which needed two ingredients and the coarse
+ENERGY step — and `eta_seconds(remaining_steps, s_per_step)` applies it to the steps left in the
+running segment **plus every segment still queued**, so a ladder counts down to the end of the
+ladder. Benchmark lines land ~30 s into a run, i.e. long before the first production ENERGY
+frame. `_namd_live_progress` returns `(fraction, eta)` together and both the REST list and the WS
+push stamp both — otherwise the estimate blinked in and out with whichever channel painted last.
+`routes_jobs._md_eta_seconds` was rewritten onto the same helpers (it had the ns/day + whole-log
+version, so the two endpoints could quote different numbers); `_conf_timestep_fs` died with it.
+Frontend: `_etaSuffix` appends it for EVERY engine, so the BLADE/SNUPI branches of
+`masterStatusText` no longer append their own (that would have printed it twice), and
+`formatEta` coarsens past an hour — an MD run is measured in days, and the old m:ss form rendered
+2¼ days as `3255m 12s`. No estimate is shown when the rate is unknown; a fabricated one is worse
+than none.
+
 ## The minimisation is now ON the stage timeline (2026-07-30)
 
 **Symptom:** a fresh run showed an all-pending timeline and a 0 % progress bar for the tens of

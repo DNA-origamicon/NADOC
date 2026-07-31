@@ -1640,11 +1640,16 @@ async def md_job_status_ws(websocket: WebSocket, job_id: str) -> None:
             # so the master never adopted it as its active node) shows a frozen / "hung"
             # bar even though the detail timeline advances.  Same helper the REST list
             # uses, so the two channels never disagree.
-            from backend.api.routes_md import _namd_running_fraction  # lazy: avoids a router import cycle
+            from backend.api.routes_md import _namd_live_progress  # lazy: avoids a router import cycle
             try:
-                frac = _namd_running_fraction(job, _WORKSPACE_DIR)
+                # Both numbers, from the same helper the REST list uses: the bar's text
+                # would otherwise gain and lose its time-remaining estimate depending on
+                # which channel last painted it.
+                frac, eta = _namd_live_progress(job, _WORKSPACE_DIR)
                 if frac is not None:
                     payload["progress_fraction"] = frac
+                if eta is not None:
+                    payload["eta_seconds"] = eta
             except Exception:
                 pass
 

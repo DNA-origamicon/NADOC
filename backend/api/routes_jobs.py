@@ -75,43 +75,30 @@ def _live_remote_pod_names() -> "set[str] | None":
     return names
 
 
-def _conf_timestep_fs(conf_path: Path) -> Optional[float]:
-    """Femtoseconds per step from a NAMD .conf ``timestep`` line (default unknown)."""
-    try:
-        for line in conf_path.read_text(errors="replace").splitlines():
-            parts = line.split()
-            if len(parts) >= 2 and parts[0].lower() == "timestep":
-                return float(parts[1])
-    except (OSError, ValueError):
-        pass
-    return None
-
-
 def _md_eta_seconds(job, ws: Path) -> Optional[float]:
-    """Best-effort seconds-remaining for a running NAMD job: the current segment's
-    live ns/day (from its log) converted to a step rate via the conf's fs/step, then
-    applied to the steps left in this segment plus every later segment.  None when any
-    ingredient is missing (e.g. the log has not printed an energy line yet)."""
+    """Best-effort seconds-remaining for a running NAMD job: the steps left in this
+    segment plus every later segment, at the log's measured step cost.  ``None`` when the
+    run has not timed any steps yet.
+
+    Shares :mod:`backend.core.namd_metrics` with the master progress bar
+    (``routes_md._namd_live_progress``) so the two never quote different numbers.  It
+    used to derive the rate from ns/day + the conf's ``timestep`` and take the step from
+    ``parse_namd_log``, which read the WHOLE growing log and — on a production conf that
+    prints ~400 ENERGY frames — reported nothing for the first ~8 minutes and a stale
+    step thereafter.
+    """
     try:
         if not (0 <= job.current_segment_idx < len(job.segments)):
             return None
-        from backend.core.namd_metrics import parse_namd_log
+        from backend.core.namd_metrics import (
+            benchmark_s_per_step, eta_seconds, live_segment_step,
+        )
 
         pkg = job.package_dir(ws)
         seg = job.segments[job.current_segment_idx]
-        log = pkg / f"{seg.name}.log"
-        if not log.exists():
-            return None
-        m = parse_namd_log(log)
-        fs = _conf_timestep_fs(pkg / f"{seg.name}.conf")
-        if not m.ns_per_day or m.timestep is None or not fs:
-            return None
-        steps_per_s = m.ns_per_day * 1e6 / fs / 86_400.0
-        if steps_per_s <= 0:
-            return None
-        remaining = max(0, seg.steps - int(m.timestep))
-        remaining += sum(s.steps for s in job.segments[job.current_segment_idx + 1:])
-        return remaining / steps_per_s
+        remaining = max(0, int(seg.steps) - int(live_segment_step(pkg, seg.name) or 0))
+        remaining += sum(int(s.steps or 0) for s in job.segments[job.current_segment_idx + 1:])
+        return eta_seconds(remaining, benchmark_s_per_step(pkg / f"{seg.name}.log"))
     except Exception:  # noqa: BLE001 — ETA is advisory; never fail the listing
         return None
 

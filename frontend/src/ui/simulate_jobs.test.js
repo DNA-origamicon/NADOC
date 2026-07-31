@@ -111,6 +111,28 @@ describe('pure helpers', () => {
     // Falls back to done/total segment count when no fraction was stamped.
     expect(masterProgressPct({ engine: 'namd', status: 'running', segments: [{ status: 'done' }, { status: 'running' }] })).toBe(50)
   })
+  it('masterProgressPct: reports ONE decimal, so a long production leaves 0 % early', () => {
+    // A 500 ns / 125M-step production is a fraction of a percent for its first hour.
+    // Whole-percent rounding pinned the bar at a flat 0 while the run was demonstrably
+    // advancing (measured: 585,000 steps in, bar still reading 0 %).
+    const namd = (f) => ({ engine: 'namd', status: 'running', progress_fraction: f, segments: [{ status: 'running' }] })
+    expect(masterProgressPct(namd(585000 / 125e6))).toBe(0.5)
+    expect(masterProgressPct(namd(42500 / 125e6))).toBe(0)      // genuinely below a tenth
+    expect(masterProgressPct(namd(0.00126))).toBe(0.1)
+    expect(masterProgressPct(namd(0.4237))).toBe(42.4)
+    // Whole values are untouched — short runs read exactly as they did before.
+    expect(masterProgressPct(namd(0.42))).toBe(42)
+    expect(masterProgressPct(namd(1))).toBe(100)
+    expect(masterProgressPct(oxNode({ status: 'running', progress_fraction: 0.7312, stages: [{ status: 'running' }] }))).toBe(73.1)
+    expect(masterProgressPct(lmNode({ status: 'running', current_step: 3, steps: 1000 }))).toBe(0.3)
+  })
+  it('masterStepText: the step count comes from the raw fraction, not the rounded percent', () => {
+    // 0.1 % of a 125M-step run is 125,000 steps — deriving the count from the DISPLAYED
+    // percent would make the readout disagree with the checkpoint it was measured from.
+    expect(masterStepText({ engine: 'namd', status: 'running', progress_fraction: 585000 / 125e6,
+      segments: [{ status: 'running', steps: 125000000 }] }))
+      .toBe('0.5% · 585,000 / 125,000,000 steps · 124,415,000 left')
+  })
   it('masterStatusText labels the engine + state (NAMD/mrDNA/CanDo are NOT mislabeled oxDNA)', () => {
     expect(masterStatusText(lmNode({ status: 'running', current_step: 500, steps: 1000 }))).toMatch(/LAMMPS \(CPU\) · running · 50%/)
     expect(masterStatusText(oxNode({ production_state: 'done' }))).toMatch(/oxDNA · production done/)
@@ -146,7 +168,10 @@ describe('pure helpers', () => {
     expect(masterProgressPct(running)).toBe(42)
     const t = masterStatusText(running)
     expect(t).toMatch(/^SNUPI · running · 42%/)
-    expect(t).toContain('~1m 35s left')      // ETA is formatted, not a bare "95s"
+    // The ETA now comes from masterStepText (one place, every engine), so it reads
+    // "remaining" and appears exactly once — it used to be appended here as well.
+    expect(t).toContain('~1m 35s remaining')  // ETA is formatted, not a bare "95s"
+    expect(t.match(/1m 35s/g)).toHaveLength(1)
     expect(t).toContain('trajectory')
     // The slow, step-less friction build must name itself or the bar looks stuck.
     expect(masterStatusText({ engine: 'snupi', status: 'running', progress_fraction: 0.02,
@@ -158,6 +183,25 @@ describe('pure helpers', () => {
     expect(formatEta(45)).toBe('45s')
     expect(formatEta(95)).toBe('1m 35s')
     expect(formatEta(650)).toBe('10m 50s')
+  })
+  it('formatEta coarsens to h:mm and d:hh — an MD run is measured in DAYS, not minutes', () => {
+    expect(formatEta(3600)).toBe('1h 00m')
+    expect(formatEta(11220)).toBe('3h 07m')
+    expect(formatEta(86400)).toBe('1d 00h')
+    // The live 500 ns production: 124.0M steps left at 1.565 ms/step.
+    expect(formatEta(124035000 * 0.00156458)).toBe('2d 05h')
+  })
+  it('masterStepText appends the time remaining after the steps left', () => {
+    expect(masterStepText({ engine: 'namd', status: 'running', progress_fraction: 965000 / 125e6,
+      eta_seconds: 124035000 * 0.00156458, segments: [{ status: 'running', steps: 125000000 }] }))
+      .toBe('0.8% · 965,000 / 125,000,000 steps · 124,035,000 left · ~2d 05h remaining')
+    // No engine-supplied estimate → no fabricated one.
+    expect(masterStepText({ engine: 'namd', status: 'running', progress_fraction: 0.5,
+      segments: [{ status: 'running', steps: 4000 }] }))
+      .toBe('50% · 2,000 / 4,000 steps · 2,000 left')
+    // A step-less engine still gets the estimate next to its percent.
+    expect(masterStepText({ engine: 'mrdna', status: 'running', progress_fraction: 0.3, eta_seconds: 95 }))
+      .toBe('30% · ~1m 35s remaining')
   })
   it('nodeDetailText explains the LAMMPS CPU fallback', () => {
     expect(nodeDetailText(lmNode({ ranks: 6 }), 'oxdna')).toMatch(/CPU \(LAMMPS, 6 cores\) because the GPU was busy/)

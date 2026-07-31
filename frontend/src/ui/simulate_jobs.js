@@ -84,38 +84,51 @@ export function verbForNode(node) {
   return node.kind === 'run' ? 'Run' : 'Relax'
 }
 
-/** Coarse progress % for the ONE master bar (no extra fetch): completed → 100; LAMMPS
- *  from current_step/steps; NAMD from segments done/total; oxDNA from stages done/total;
- *  mrDNA/CanDo have no granular signal → 0 while running (the bar COLOR conveys state). */
+/** Percent → ONE decimal (0.1, 0.2, …), clamped to 0..100.
+ *
+ *  Whole-percent rounding hid the start of every long run: a 500 ns production is
+ *  125M steps, so its first hour is a fraction of a percent and `Math.round` pinned the
+ *  bar at a flat 0 while the run was demonstrably progressing. A tenth of a percent is
+ *  1.25 ns there — reached in minutes — so the bar leaves 0 almost immediately.
+ *  Whole values are unaffected: 50 stays 50, and JS drops the trailing `.0` when
+ *  interpolated, so short runs read exactly as before. */
+function _pct1(x) {
+  return Math.max(0, Math.min(100, Math.round(x * 1000) / 10))
+}
+
+/** Progress % (one decimal) for the ONE master bar (no extra fetch): completed → 100;
+ *  LAMMPS from current_step/steps; NAMD from the backend live fraction (else segments
+ *  done/total); oxDNA likewise from stages; mrDNA/CanDo have no granular signal → 0
+ *  while running (the bar COLOR conveys state). */
 export function masterProgressPct(node) {
   if (!node) return 0
   if (node.status === 'completed' || node.production_state === 'done') return 100
   if (node.engine === 'lammps') {
     const total = Number(node.steps) || 0
     const cur = Number(node.current_step) || 0
-    return total > 0 ? Math.max(0, Math.min(100, Math.round((cur / total) * 100))) : 0
+    return total > 0 ? _pct1(cur / total) : 0
   }
   if (node.engine === 'namd') {
     // Prefer the live within-segment fraction the backend stamps on a RUNNING NAMD job
     // (so a single-segment production child advances instead of sitting at 0 % until its
     // one segment flips to done). Fall back to the done/total segment count otherwise.
     if (node.progress_fraction != null) {
-      return Math.max(0, Math.min(100, Math.round(Number(node.progress_fraction) * 100)))
+      return _pct1(Number(node.progress_fraction))
     }
     const seg = node.segments || []
     if (!seg.length) return 0
-    return Math.round((seg.filter((s) => s.status === 'done').length / seg.length) * 100)
+    return _pct1(seg.filter((s) => s.status === 'done').length / seg.length)
   }
   // oxDNA: prefer the live within-stage fraction the backend stamps on a running job
   // (so a SINGLE-stage run — e-field / surface / production child — advances smoothly
   // instead of sitting at 0 % until its one stage flips to done). Fall back to the
   // completed-stage count for jobs without it (queued / older list payloads).
   if (node.progress_fraction != null) {
-    return Math.max(0, Math.min(100, Math.round(Number(node.progress_fraction) * 100)))
+    return _pct1(Number(node.progress_fraction))
   }
   const st = node.stages || []
   if (!st.length) return 0
-  return Math.round((st.filter((s) => s.status === 'done').length / st.length) * 100)
+  return _pct1(st.filter((s) => s.status === 'done').length / st.length)
 }
 
 /** Fill colour of the master bar, by status: green done · red failed · orange WARNING
@@ -188,18 +201,33 @@ function _stepTotal(node) {
   return 0
 }
 
+/** Time left on the whole job, as ` · ~2d 06h remaining`, or '' when no engine-supplied
+ *  estimate exists. "remaining" rather than "left" so it can't be misread as a second
+ *  step count next to "… 124,035,000 left". */
+function _etaSuffix(node) {
+  const eta = Number(node?.eta_seconds)
+  return Number.isFinite(eta) && eta > 0 ? ` · ~${formatEta(eta)} remaining` : ''
+}
+
 /** Engine-symmetric numeric progress appended beneath the unified Jobs bar. */
 export function masterStepText(node) {
   if (!node) return ''
   const pct = masterProgressPct(node)
   const total = _stepTotal(node)
-  if (!(total > 0)) return `${pct}%`
+  if (!(total > 0)) return `${pct}%${_etaSuffix(node)}`
   const explicit = Number(node.current_step ?? node.completed_steps ?? node.steps_completed)
+  // Derive the step count from the RAW fraction, not the displayed percent: rounding to
+  // a tenth of a percent is 125,000 steps of slop on a 125M-step production, which would
+  // make the step readout visibly disagree with the checkpoint it came from.
+  const fraction = Number(node.progress_fraction)
   const completed = Number.isFinite(explicit)
     ? Math.max(0, Math.min(total, Math.round(explicit)))
-    : Math.max(0, Math.min(total, Math.round(total * pct / 100)))
+    : Number.isFinite(fraction)
+      ? Math.max(0, Math.min(total, Math.round(total * fraction)))
+      : Math.max(0, Math.min(total, Math.round(total * pct / 100)))
   const left = Math.max(0, total - completed)
-  return `${pct}% · ${completed.toLocaleString()} / ${total.toLocaleString()} steps · ${left.toLocaleString()} left`
+  return `${pct}% · ${completed.toLocaleString()} / ${total.toLocaleString()} steps`
+       + ` · ${left.toLocaleString()} left${_etaSuffix(node)}`
 }
 
 /** One-line master status text for the selected node (engine-symmetric). */
@@ -218,10 +246,9 @@ export function masterStatusText(node) {
   // BLADE reports a REAL fraction streamed out of the OpenMM process, plus its phase. Naming the
   // phase matters here: `build` is psfgen constructing the CHARMM topology, which on a large design
   // is a minute of legitimately step-less work that would otherwise read as a stuck bar.
+  // (The ETA is no longer appended here — `masterStepText` carries it for every engine.)
   if (node.engine === 'blade' && node.status === 'running') {
     const parts = [`${eng} · running · ${masterStepText(node)}`]
-    const eta = Number(node.eta_seconds)
-    if (Number.isFinite(eta) && eta > 0) parts.push(`~${formatEta(eta)} left`)
     if (node.phase) parts.push(node.phase)
     return parts.join(' · ')
   }
@@ -230,8 +257,6 @@ export function masterStatusText(node) {
   // or the bar looks stuck. This line sits directly under the master bar.
   if (node.engine === 'snupi' && node.status === 'running') {
     const parts = [`${eng} · running · ${masterStepText(node)}`]
-    const eta = Number(node.eta_seconds)
-    if (Number.isFinite(eta) && eta > 0) parts.push(`~${formatEta(eta)} left`)
     if (node.phase) parts.push(node.phase)
     return parts.join(' · ')
   }
@@ -242,12 +267,19 @@ export function masterStatusText(node) {
   return [`${eng} · ${node.status}`, stageText, masterStepText(node)].filter(Boolean).join(' · ')
 }
 
-/** Compact ETA: seconds under a minute, else m:ss — a multi-minute RPY solve reads badly as "412s". */
+/** Seconds → a two-unit duration: `45s` · `1m 35s` · `3h 07m` · `2d 06h`.
+ *
+ *  Coarsens as it grows: a NAMD production is measured in DAYS (a 500 ns run at 221
+ *  ns/day is ~2d 6h), and the m:ss form this used to always emit would have rendered
+ *  that as "3255m 12s". Sub-hour output is unchanged — the FEM/SNUPI solves that were
+ *  its only callers still read exactly as before. */
 export function formatEta(seconds) {
   const s = Math.max(0, Math.ceil(Number(seconds) || 0))
   if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  return `${m}m ${String(s % 60).padStart(2, '0')}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+  const pad = (n) => String(n).padStart(2, '0')
+  if (s < 86400) return `${Math.floor(s / 3600)}h ${pad(Math.floor((s % 3600) / 60))}m`
+  return `${Math.floor(s / 86400)}d ${pad(Math.floor((s % 86400) / 3600))}h`
 }
 
 /**
