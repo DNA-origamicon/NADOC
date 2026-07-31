@@ -1325,3 +1325,42 @@ Four heavy tests do not take turns; one shared setup cost does.
 `uv run pytest <file> -m "" --durations=0 -p no:randomly`. A first-test-pays-the-cache cost is not
 test weight, and relegating for it is exactly the ratchet the scale-free per-test gate exists to
 prevent. (The guard now suppresses the budget check entirely while a production sim is running.)
+### E8. Co-motion keyed on the record that only ONE of two forks produces (2026-07-30)
+
+Symptom: rotate an overhang whose direct connection joins two **different-length** overhangs and
+the partner stays behind (WC pair distance 1.93 → 5.25 nm through a 90° driver rotation). Dragging
+the duplex cluster moves the driver alone. The **equal-length** case works perfectly — which is why
+this survived: the existing regression test
+(`test_relocated_direct_binding_partner_follows_rotated_driver`) pins the equal-length path and
+passes, so the area looked covered.
+
+Root cause: applying a direct connection has **two forks by LENGTH**. Equal-length →
+`crud._cv_create_bound_binding` materializes a bound `OverhangBinding`. Different-length → that
+function returns early (`crud.py:7652`) and the pair is carried by a bound `Duplex`, relocated by
+`core.duplex.relocate_duplex` — whose `__duplex_reloc__` binding is **transient and never
+persisted** (`duplex.py:311`). Three separate co-motion sites all built their driver/driven map
+from `design.overhang_bindings` alone: `driven_to_driver` (partner refs), `driven_bound_oh_ids`
+(the driven-side self-rotation skip), and transitively `_duplex_domain_refs` →
+`materialize_duplex_cluster` (the gizmo-drag scope). One missing map, three broken behaviours.
+Worse, the cluster then lists only the driver domain on the driver helix, making it a
+PARTIAL-coverage "bridge" helix where **only listed domains move** (`deformation.py:2232-2242`) —
+so the omission is silently self-reinforcing rather than erroring.
+
+Fix: `deformation._bound_driver_driven_pairs(design)` — one helper returning `driven → driver` from
+**both** bound bindings and bound duplexes (bindings win on conflict; they agree anyway because
+`_propagate_driver_to_binding` syncs duplex→binding). Both call sites use it; the cluster scope is
+fixed transitively. Pinned by `test_diff_length_duplex_partner_follows_rotated_driver` (geometry)
+and `test_diff_length_duplex_cluster_contains_the_driven_domain` (structure), both of which assert
+the no-binding precondition first so they fail loudly if the fork ever moves.
+
+**How to avoid / diagnose**: when a feature can be represented by **either of two records**, every
+lookup keyed on one of them is a latent half-feature. Grep the discriminating field
+(`design.overhang_bindings`) and ask of each hit "what happens on the fork that doesn't produce
+this?" The tell that hid it here: the two test suites were **disjoint by construction** —
+apply-path tests assert bindings and never inspect duplexes, connect-path tests do the reverse, and
+nothing exercised the sequence the UI actually performs. A green suite over two record types proves
+nothing about the pair. Related: [[overhang-duplex-foundation]] (the coexistence truth table),
+[[overhang-connections-panel]]. Same shape as E4 ("the other overhang doesn't track") — this is
+that bug reintroduced through the path that has no binding.
+
+---

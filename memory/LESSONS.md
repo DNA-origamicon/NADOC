@@ -91,7 +91,8 @@ FIX (both layers): (A) write side — `build_replica_package` now copies `parent
 - **E4** — Overhang rotation missed the linker complement domain — bridge appears at the pre-rotation location, no console error. [detail](LESSONS_archive.md#e4)
 - **E5** — patch_overhang extrude resize assumed +Z helices — −Z extrude grows the junction side; doubled-crossover symptom. [detail](LESSONS_archive.md#e5)
 - **E6** — Free-posed `h_XY` helix gets grid_pos back-filled → canonicalised — primitive on a bent end collapses to a 45° sheet. [detail](LESSONS_archive.md#e6)
-- **E7** — Direct-overhang relax is under-constrained (null-space hinge) — relax over-rotates the hinge and isn't idempotent. [detail](LESSONS_archive.md#e7)
+- **E7** — Direct-overhang relax is under-constrained (null-space hinge) — relax over-rotates the hinge and isn't idempotent. **Its one-sided floor was later REVERSED (two-sided, 2026-07-01)** — read the SUPERSEDED note before applying it. [detail](LESSONS_archive.md#e7)
+- **E8** — Co-motion keyed on the record only ONE fork produces — rotate a DIFFERENT-length overhang connection and the driven overhang stays behind (equal-length works fine). [detail](LESSONS_archive.md#e8)
 
 ## F. Length / index conventions
 - **F1** — caDNAno `length_bp` is NOT physical extent — dividing/indexing by `length_bp` overshoots the axis end hundreds of bp. **Recurred 2026-07-13** in the FEM display: `rise_geom = |axis_end−axis_start| / length_bp` collapsed to ~½ on ssDNA-tail helices (axis_end = paired end, length_bp counts the tail) → 20 nm stretched overhang↔staple bonds. Fix = the true bead rise `BDNA_RISE_PER_BP`, not any ratio over `length_bp`. See [[project_snupi_gaps]]. [detail](LESSONS_archive.md#f1)

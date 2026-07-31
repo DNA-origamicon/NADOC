@@ -982,6 +982,36 @@ def _quat_from_theta_phi(
     ]
 
 
+def _bound_driver_driven_pairs(design: "Design") -> dict:
+    """``driven_oh_id -> driver_oh_id`` for every APPLIED direct connection — from BOTH
+    records that can carry one.
+
+    An EQUAL-length pair materializes a bound ``OverhangBinding``
+    (``crud._cv_create_bound_binding``). A DIFFERENT-length pair takes the other fork:
+    that function returns early on the length check, and the pair is carried by a bound
+    ``Duplex`` whose relocation binding is TRANSIENT and never persisted
+    (``core.duplex.relocate_duplex``). Reading only ``design.overhang_bindings`` therefore
+    left every different-length driven overhang out of co-motion — it stayed behind when
+    the driver rotated, and was omitted from the duplex cluster's ``domain_ids``.
+
+    Bindings win where a pair has both (they agree — ``_propagate_driver_to_binding``
+    syncs duplex -> binding on every driver change).
+    """
+    out = {
+        b.driven_oh_id: b.driver_oh_id
+        for b in design.overhang_bindings
+        if b.bound and b.driver_oh_id and b.driven_oh_id
+    }
+    for dx in (getattr(design, "duplexes", None) or []):
+        if not getattr(dx, "bound", False):
+            continue
+        driver_end = dx.left if dx.driver == "left" else dx.right
+        driven_end = dx.right if dx.driver == "left" else dx.left
+        if driver_end.overhang_id and driven_end.overhang_id:
+            out.setdefault(driven_end.overhang_id, driver_end.overhang_id)
+    return out
+
+
 def _overhang_binding_partner_refs(
     design: "Design", helix_id: str, oh_domain: "Domain",
 ) -> list:
@@ -1018,11 +1048,9 @@ def _overhang_binding_partner_refs(
     # so it would be invisible to the binder check below — the cause of "the other
     # overhang doesn't track." Map driven_oh_id → driver_oh_id for every bound
     # binding so the relocated driven domain co-rotates when the DRIVER swings.
-    driven_to_driver = {
-        b.driven_oh_id: b.driver_oh_id
-        for b in design.overhang_bindings
-        if b.bound and b.driver_oh_id and b.driven_oh_id
-    }
+    # ...and the same for a DIFFERENT-length pair, which has no binding at all and is
+    # carried by a bound Duplex instead. See _bound_driver_driven_pairs.
+    driven_to_driver = _bound_driver_driven_pairs(design)
     out: list = []
     for s in design.strands:
         for di, d in enumerate(s.domains):
@@ -1131,10 +1159,8 @@ def apply_overhang_rotation_if_needed(
     # Driven overhangs of a bound direct binding move ONLY as the driver's
     # co-rotation partner (the relax swing is written onto the DRIVER's rotation);
     # they must never self-rotate about their own pivot, or the swing double-applies.
-    driven_bound_oh_ids = {
-        b.driven_oh_id for b in design.overhang_bindings
-        if b.bound and b.driven_oh_id
-    }
+    # Includes duplex-only (different-length) pairs — see _bound_driver_driven_pairs.
+    driven_bound_oh_ids = set(_bound_driver_driven_pairs(design))
 
     for ovhg in design.overhangs:
         if ovhg.helix_id != helix.id:

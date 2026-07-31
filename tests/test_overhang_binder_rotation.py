@@ -35,7 +35,7 @@ from backend.api.main import app
 from backend.api.routes import _demo_design
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.models import (
-    Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, Vec3,
+    Design, Direction, Domain, Helix, OverhangSpec, Strand, StrandType, SubDomain, Vec3,
 )
 
 
@@ -261,4 +261,136 @@ def test_relocated_direct_binding_partner_follows_rotated_driver():
     assert abs(pair_post - pair_pre) < 0.1, (
         f"end-to-root binder lagged the rotated OH: pair pre={pair_pre:.3f} "
         f"post={pair_post:.3f} (the strand-type filter would fail here)"
+    )
+
+
+# ── Case 3: DIFFERENT-length direct connection (Duplex only, no OverhangBinding) ──
+#
+# Case 2 above pins co-rotation for an EQUAL-length pair, where apply creates a bound
+# `OverhangBinding` and `_overhang_binding_partner_refs` finds the relocated driven
+# domain through `driven_to_driver`. A DIFFERENT-length pair takes the other fork
+# (`_cv_create_bound_binding` returns early, crud.py:7652) — the pair is carried by a
+# `Duplex` and relocated by `core.duplex.relocate_duplex`, whose `__duplex_reloc__`
+# binding is TRANSIENT and never persisted. These two tests ask whether the driven
+# overhang still tracks the driver on that fork.
+
+def _seed_diff_length_direct() -> tuple[Design, str, str]:
+    """Driver overhang A = 12 bp on its own helix; driven overhang B = 8 bp as a
+    2-domain staple (root on the bundle helix + tip on B's own helix). Sequences are
+    complementary over the 8 bp window so the WC gate passes."""
+    base = _demo_design()
+    oh_helix_a = Helix(id="oh_helix_a", axis_start=Vec3(x=2.5, y=0.0, z=0.0),
+                       axis_end=Vec3(x=2.5, y=0.0, z=12 * BDNA_RISE_PER_BP),
+                       phase_offset=0.0, length_bp=12, grid_pos=(0, 0))
+    oh_helix_b = Helix(id="oh_helix_b", axis_start=Vec3(x=5.0, y=0.0, z=0.0),
+                       axis_end=Vec3(x=5.0, y=0.0, z=8 * BDNA_RISE_PER_BP),
+                       phase_offset=0.0, length_bp=8, grid_pos=(0, 3))
+    oh_strand_a = Strand(
+        id="oh_strand_a",
+        domains=[Domain(helix_id="oh_helix_a", start_bp=0, end_bp=11,
+                        direction=Direction.FORWARD, overhang_id="oh_a")],
+        strand_type=StrandType.STAPLE,
+    )
+    oh_strand_b = Strand(
+        id="oh_strand_b",
+        domains=[
+            Domain(helix_id="demo_helix", start_bp=20, end_bp=27, direction=Direction.REVERSE),
+            Domain(helix_id="oh_helix_b", start_bp=0, end_bp=7,
+                   direction=Direction.FORWARD, overhang_id="oh_b"),
+        ],
+        strand_type=StrandType.STAPLE,
+    )
+    overhangs = [
+        OverhangSpec(id="oh_a", helix_id="oh_helix_a", strand_id="oh_strand_a", label="OHA",
+                     pivot=[2.5, 0.0, 0.0], sequence="A" * 12,
+                     sub_domains=[SubDomain(id="sd_a", start_bp_offset=0, length_bp=12)]),
+        OverhangSpec(id="oh_b", helix_id="oh_helix_b", strand_id="oh_strand_b", label="OHB",
+                     pivot=[5.0, 0.0, 0.0], sequence="T" * 8,
+                     sub_domains=[SubDomain(id="sd_b", start_bp_offset=0, length_bp=8)]),
+    ]
+    d = base.model_copy(update={
+        "helices": [*base.helices, oh_helix_a, oh_helix_b],
+        "strands": [*base.strands, oh_strand_a, oh_strand_b],
+        "overhangs": overhangs,
+    })
+    return d, "oh_a", "oh_b"
+
+
+def _connect_diff_length_duplex() -> dict:
+    """Seed + connect the different-length pair. Returns the response design dict."""
+    d, a_id, b_id = _seed_diff_length_direct()
+    design_state.set_design(d)
+    r = client.post("/api/design/duplexes/connect", json={
+        "overhang_a_id": a_id, "overhang_a_attach": "root",
+        "overhang_b_id": b_id, "overhang_b_attach": "root",
+    })
+    assert r.status_code == 201, r.text
+    design = r.json()["design"]
+    # Precondition for this whole case: the length fork means NO binding was created,
+    # and the driven tip was relocated onto the driver's helix by the duplex path.
+    assert design["overhang_bindings"] == [], (
+        "expected the different-length fork (no OverhangBinding); if this fires, "
+        "_cv_create_bound_binding's length skip changed and these tests are moot"
+    )
+    b_doms = [(s["id"], di, dom) for s in design["strands"]
+              for di, dom in enumerate(s["domains"]) if dom.get("overhang_id") == "oh_b"]
+    assert len(b_doms) == 1, f"expected one B tip domain, got {len(b_doms)}"
+    assert b_doms[0][2]["helix_id"] == "oh_helix_a", "B's tip must relocate onto A's helix"
+    return design
+
+
+def test_diff_length_duplex_partner_follows_rotated_driver():
+    """Rotating the DRIVER overhang must co-rotate the relocated DRIVEN overhang,
+    exactly as it does for the equal-length binding in case 2 above."""
+    design = _connect_diff_length_duplex()
+    b_dom = next(dom for s in design["strands"] for dom in s["domains"]
+                 if dom.get("overhang_id") == "oh_b")
+    bp = min(b_dom["start_bp"], b_dom["end_bp"])
+    b_dir = b_dom["direction"]
+
+    pre = _get_geom()
+    a_pre = _find_nuc(pre, strand_id="oh_strand_a", helix_id="oh_helix_a",
+                      bp_index=bp, direction="FORWARD")
+    b_pre = _find_nuc(pre, strand_id="oh_strand_b", helix_id="oh_helix_a",
+                      bp_index=bp, direction=b_dir)
+    p_a_pre = np.asarray(a_pre["backbone_position"], dtype=float)
+    p_b_pre = np.asarray(b_pre["backbone_position"], dtype=float)
+
+    _patch_rotation("oh_a", _quat_axis_angle((0.0, 1.0, 0.0), math.pi / 2))
+
+    post = _get_geom()
+    a_post = _find_nuc(post, strand_id="oh_strand_a", helix_id="oh_helix_a",
+                       bp_index=bp, direction="FORWARD")
+    b_post = _find_nuc(post, strand_id="oh_strand_b", helix_id="oh_helix_a",
+                       bp_index=bp, direction=b_dir)
+    p_a_post = np.asarray(a_post["backbone_position"], dtype=float)
+    p_b_post = np.asarray(b_post["backbone_position"], dtype=float)
+
+    assert float(np.linalg.norm(p_a_post - p_a_pre)) > 0.5, "driver overhang did not move"
+    pair_pre = float(np.linalg.norm(p_a_pre - p_b_pre))
+    pair_post = float(np.linalg.norm(p_a_post - p_b_post))
+    assert abs(pair_post - pair_pre) < 0.1, (
+        f"different-length duplex partner lagged the rotated driver: pair "
+        f"pre={pair_pre:.3f} post={pair_post:.3f} nm. The relocated driven domain is "
+        f"not a co-rotation partner because driven_to_driver (deformation.py) is built "
+        f"from design.overhang_bindings only, and this pair has none."
+    )
+
+
+def test_diff_length_duplex_cluster_contains_the_driven_domain():
+    """The gizmo path: `materialize_duplex_cluster` must scope the duplex cluster over
+    BOTH the driver domain and the relocated driven domain. With only the driver listed,
+    the driver helix has PARTIAL coverage ('bridge' helix) and a cluster drag moves the
+    driver alone."""
+    design = _connect_diff_length_duplex()
+    cluster = next((c for c in design["cluster_transforms"]
+                    if c.get("overhang_duplex_driver_id") == "oh_a"), None)
+    assert cluster is not None, "connect did not materialize a duplex cluster"
+
+    b_ref = next((s["id"], di) for s in design["strands"]
+                 for di, dom in enumerate(s["domains"]) if dom.get("overhang_id") == "oh_b")
+    listed = {(dr["strand_id"], dr["domain_index"]) for dr in cluster["domain_ids"]}
+    assert b_ref in listed, (
+        f"duplex cluster omits the relocated driven domain {b_ref}; listed={sorted(listed)}. "
+        f"Only the driver moves when the cluster is dragged."
     )
