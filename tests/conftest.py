@@ -698,6 +698,31 @@ _SLOW_TESTS = {
     "test_autodetect_produces_scaffold_and_geometry_clusters",
 }
 
+# Individual heavy PARAMETRISATIONS of an otherwise-fast test.  Matched against the
+# full item name (``test_name[param-id]``), so the cheap params of the same test stay
+# in the fast suite and keep guarding the invariant.  Use this instead of _SLOW_TESTS
+# whenever only one param of a parametrized test is heavy — relegating the whole test
+# would throw away a fast gate that costs almost nothing.
+_SLOW_PARAMS = {
+    # test_junction_topology.py — the catenation-repair pair, TT (2-insert) param only.
+    # Each of these builds the atomistic model TWICE from a deliberately cold
+    # ``_XB_CACHE`` (the assertion IS the delta between the two builds, so no fixture
+    # can cache the cost away), and each build runs the repair ladder: an ordered search
+    # that re-solves L-BFGS-B for BOTH extra-base records at every rung until one comes
+    # out unlinked, sound and clash-neutral (backend/core/extra_base_repair.py).
+    # The 2-insert minimiser is ~3x the 1-insert one, so a single repaired TT build is
+    # ~2 s and the two-build tests floor out at ~3.9-4.2 s measured ALONE on an idle box
+    # — i.e. no headroom at all under the 5 s per-test budget, and reliably 5.2-5.8 s in
+    # the fast suite's own `-n auto` operating condition.  That is real numeric-solve
+    # weight, not a stall, so it belongs in the heavy suite (area "atomistic").
+    # The [T] params of the SAME two tests stay fast (~1.3 s each) and guard the same
+    # two invariants — repair determinism, and repair-does-not-degrade-geometry — on the
+    # 1-insert path.  TT's "repaired build is clean" is additionally covered in the heavy
+    # suite by the exhaustive test_no_phase_catenates[TT-*] sweep.
+    "test_repaired_build_is_deterministic[TT]",
+    "test_repair_does_not_degrade_geometry[TT]",
+}
+
 # ⚠️ DO NOT relegate the tests in test_junction_topology.py / test_junction_winding.py.
 # They were added here on 2026-07-28 and REMOVED the same day — the timings that justified
 # it were an artifact, twice over:
@@ -723,12 +748,18 @@ _SLOW_TESTS = {
 # guard wall-clock 130 s -> 59 s, per-test violators 8 -> 2, this file 91.9 s -> 23.6 s,
 # test_junction_winding.py 20.6 s -> off the top-15 entirely.  Verified numerically neutral:
 # tests/test_atomistic_geometry_lock.py produces byte-identical hashes at 1 thread and at N.
-# The 2 residual violators are test_repair_{does_not_degrade_geometry,ed_build_is_deterministic}
-# [TT] — 5.75 s / 5.16 s alongside the full suite but 4.14 s / 3.91 s measured alone, i.e. still
-# UNDER the 5 s budget in isolation.  That is contention, not weight: do not relegate them
-# either.  (Both deliberately clear _XB_CACHE and build twice because the assertion IS the
-# delta between the two builds, so no fixture can cache the cost away.  The exhaustive
-# `test_no_phase_catenates` already covers TT in the heavy suite.)
+#
+# 2026-07-30 (later, superseding the last paragraph of the above): after the BLAS fix the 2
+# residual violators were test_repair_{does_not_degrade_geometry,ed_build_is_deterministic}[TT]
+# — 5.17-5.75 s in the fast suite, 4.16 s / 3.93 s re-measured SERIALLY on an idle box (numbers
+# reproduced; the earlier reading of 4.14/3.91 was right).  The first call was "contention, not
+# weight — do not relegate", but that left the guard demanding triage on EVERY `just test-smart`
+# run, which is not a terminal state, and 4.2 s against a 5 s budget is zero headroom.  Re-triaged
+# to the minimum action: only the **[TT] params** of those two tests move to the heavy suite
+# (see `_SLOW_PARAMS` above) — real L-BFGS-B repair-ladder weight, not a stall.  The [T] params
+# stay fast at ~1.3 s and still guard both invariants; every other test in
+# test_junction_topology.py / test_junction_winding.py stays fast, and the blanket "do not
+# relegate these files wholesale" rule above still stands.
 
 
 # ---------------------------------------------------------------------------
@@ -794,8 +825,23 @@ def pytest_collection_modifyitems(config, items):
         # item.originalname is the bare function name without any param id.
         name = getattr(item, "originalname", None) or item.name.split("[")[0]
         cls = item.cls.__name__ if getattr(item, "cls", None) else None
-        if module in _SLOW_MODULES or name in _SLOW_TESTS or cls in _SLOW_CLASSES:
+        # item.name carries the param id (``test_foo[TT]``) — that is what _SLOW_PARAMS
+        # matches, so a single heavy parametrisation can be relegated on its own.
+        if (module in _SLOW_MODULES or name in _SLOW_TESTS or cls in _SLOW_CLASSES
+                or item.name in _SLOW_PARAMS):
             item.add_marker(pytest.mark.slow)
+            item.add_marker(getattr(pytest.mark, _slow_area_for(module)))
+            continue
+
+        # A test can also be heavy by its OWN ``@pytest.mark.slow`` decorator (or a
+        # module-level ``pytestmark``) without ever passing through the registry above.
+        # Those used to get ``slow`` and NO area, which made them invisible to every
+        # narrow selection: ``-m "not slow or atomistic"`` skipped them even for an
+        # atomistic change, and only a FULL run ever executed them.  Backfill the area
+        # from the same filename mapping so an area group means "every heavy test in
+        # this area", however it was relegated.
+        if item.get_closest_marker("slow") and not any(
+                item.get_closest_marker(a) for a in AREA_MARKERS):
             item.add_marker(getattr(pytest.mark, _slow_area_for(module)))
 
 

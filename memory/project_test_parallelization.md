@@ -145,6 +145,29 @@ SUPERSEDED the same day by THE LAW above: the confirm gate is now OFF for `test-
 
 **Slow-test registry lives in `tests/conftest.py`** (`pytest_collection_modifyitems` hook, `_SLOW_MODULES` + `_SLOW_TESTS`), NOT scattered `@pytest.mark.slow` decorators. Two heavy classes now: (1) real oxDNA/oxpy/GROMACS/protein-fork binaries + MD-trajectory parses (MDAnalysis); (2) **pure-Python CanDo-FEM eigensolves + autorefine density sweeps** (the G1/G3/G4 shape-objective work — test_cando_autorefine/_job/_cylinders/_deviation, test_fem_solver, test_fem_curvature_validation, test_namd_topology, test_oxdna_relaxation, whole module test_md_pipeline). Class (2) was UNREGISTERED until 2026-07-05, silently ballooning test-fast to 3 min. A THIRD bucket was added 2026-07-10: **`_SLOW_CLASSES`** (bare class names) for heavy tests that share an expensive **class-scoped fixture** — marking individual methods is useless there because the fixture just re-fires on a surviving sibling (e.g. `TestSyntheticRoundTrip`/`TestRoutedPrimitiveIntegration` in test_mrdna_pipeline, ~26–32 s each), and it also cleanly covers a class whose methods have generic collision-prone names (`TestMinimize3ExtraBase`'s `test_cache_path`). **To refresh after adding heavy tests:** `just test-fast --durations=25`, fold new ≥~2s "call"/**"setup"** entries into the sets (setup-dominated files → `_SLOW_MODULES`; class-scoped-fixture-dominated classes → `_SLOW_CLASSES`; a heavy test in an otherwise-fast file → `_SLOW_TESTS`). **Non-sim slow-ish tests (assembly/cluster/geometry/browse, ~2–4 s) are deliberately LEFT fast** to keep those subsystems' quick feedback — they don't set the wall-clock floor.
 
+**Two registry upgrades, 2026-07-30.**
+- **`_SLOW_PARAMS` — relegate ONE parametrisation, not the whole test.** Matched against
+  `item.name` (which carries the param id) rather than `originalname`. Added because
+  `test_junction_topology`'s catenation-repair pair was 5.2–5.4 s on `[TT]` (2-insert: two cold
+  atomistic builds × the L-BFGS-B repair ladder) but ~1.3 s on `[T]` — and the only options used to
+  be "relegate both params or neither", so an earlier session chose neither and left the guard
+  demanding triage on every run. Now `[TT]` is heavy (area `atomistic`) and `[T]` stays fast,
+  guarding the same two invariants on the 1-insert path.
+- **Every `slow` test now really does get an area — it didn't before.** The hook only tagged areas
+  on *registry-matched* items, so the ~71 tests relegated by their own `@pytest.mark.slow`
+  decorator got `slow` and **no area** — invisible to every narrow selection
+  (`-m "not slow or atomistic"` skipped them even for an atomistic change; only a FULL run ever
+  executed them). The hook now backfills the area from `_slow_area_for(module)` for any `slow` item
+  carrying none of `AREA_MARKERS`. Effect on the heavy groups: **atomistic 24→61**, md 44→58,
+  mrdna 28→37, oxdna 39→47, cando 121→124, namd/headless unchanged — 365 slow tests, sum of the
+  seven areas now equals 365 exactly (it was 294). This makes the claim two paragraphs below
+  ("slow tests carry a `slow` + one `area` marker") true for the first time; it had been aspirational.
+  Note the consequence: an area group is now genuinely "every heavy test in this area", so a
+  test-dedicated session draining `slow[atomistic]` does ~2.5× the work it used to. Fast suite
+  unaffected (5962 passed either way). **`AREA_MARKERS` is now load-bearing** — it is the "does this
+  item already have an area?" oracle, not just documentation, so keep it in sync with
+  `_slow_area_for`'s return values and pyproject's `markers`.
+
 **Test-scoping protocol — decide which slow tests are actually relevant BEFORE running (added 2026-07-10).**
 *(Largely MOOT under THE LAW: an agent can no longer run the slow tail at all, so the judgement calls below
 now only apply inside a user-opened test-dedicated session.)*

@@ -498,6 +498,10 @@ def test_repaired_build_is_deterministic(extra):
 
     Byte-reproducibility is what makes the geometry-lock goldens meaningful; a repair
     that picked a different rung on a retry would make every hash unstable.
+
+    [TT] is relegated to the heavy suite by ``_SLOW_PARAMS`` in tests/conftest.py (two
+    cold-cache builds x the 2-insert repair ladder ~= 4 s); [T] keeps this invariant in
+    the fast loop at ~1.3 s.
     """
     design = _reciprocal_design(extra)
     first, second = _positions(design), _positions(design)
@@ -535,6 +539,10 @@ def test_repair_does_not_degrade_geometry(extra):
     the two backbones belong in contact, and an UNLINKED pair sits measurably closer than
     a linked one — so a raw proximity count penalises the correct answer. The invariants
     that do hold are no new invalid bonds, and no material clash regression.
+
+    [TT] is relegated to the heavy suite by ``_SLOW_PARAMS`` in tests/conftest.py (two
+    cold-cache builds x the 2-insert repair ladder ~= 4 s); [T] keeps this invariant in
+    the fast loop at ~1.3 s.
     """
     design = _reciprocal_design(extra, bp=_CATENATING_BP)
     with _repair_disabled():
