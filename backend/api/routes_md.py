@@ -30,7 +30,7 @@ from pathlib import Path
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator
 
@@ -704,6 +704,32 @@ class MdFramesSurfaceBody(BaseModel):
     stride: int | None = None
 
 
+class MdFramesSolventBody(BaseModel):
+    """Explicit water / ions / periodic cell for the Visualizations card's solvent
+    toggles.  COMPOSITE frame indices, same ``stride`` rule as frames-atomistic."""
+
+    frame_indices: list[int]
+    stride: int | None = None
+    water: bool = True
+    ions: bool = True
+    box: bool = True
+    # Hydration shell in ANGSTROM, measured to DNA heavy atoms.  None = the whole
+    # cell.  Water is the only bounded species: a solvated origami is 70 k-880 k
+    # molecules and drawing all of them is both unaffordable and, at bulk density,
+    # an opaque brick.  Ions are never bounded (15 k at the very most).
+    shell_ang: float | None = 5.0
+    # Real O + 2 H per molecule (for vdw/ballstick reps) vs one sphere at the
+    # oxygen (for full/beads).  Triples the payload.
+    atomistic: bool = False
+    # Server-side hard cap, set from the frontend's measured memory budget. The
+    # NEAREST molecules are kept, never a bare prefix.
+    max_waters: int | None = None
+    # Also return the frame's DNA coordinates, so an atomistic-rep scrub pays the
+    # ~30 s MDAnalysis context build ONCE per chunk instead of once here and once
+    # in /frames-atomistic.
+    include_dna: bool = False
+
+
 def _md_traj_inputs(job_id: str):
     """(psf, ref_pdb, segments, design) for a job's composite — shared by the MD
     trajectory + per-frame atomistic/surface routes. Returns None when the
@@ -781,12 +807,91 @@ async def md_frames_surface_route(job_id: str, body: MdFramesSurfaceBody,
          _traj_stride(body.stride)))
 
 
+@router.post("/md/jobs/{job_id}/frames-solvent-bin")
+async def md_frames_solvent_route(job_id: str, body: MdFramesSolventBody,
+                                  request: Request) -> Response:
+    """Per-frame explicit solvent + periodic cell, as a binary blob.
+
+    Binary rather than JSON because whole-box atomistic water is millions of
+    numbers per frame; see backend/core/md_solvent.pack_solvent_bin for the layout
+    and frontend/src/scene/md_solvent_bin.js for the reader.
+
+    The timeout runs above the atomistic route's because the neighbour search adds
+    ~0.15 s/frame on a small job and a couple of seconds on a large one, on top of
+    the per-request context build."""
+    from backend.core.md_solvent import empty_solvent_bin
+
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return Response(content=empty_solvent_bin(),
+                        media_type="application/octet-stream")
+    psf, ref, segments, design = inputs
+    n_req = max(1, len(body.frame_indices))
+    opts = body.model_dump(exclude={"frame_indices", "stride"})
+    buf = await _run_md_analysis(
+        request, job_id, "solvent", "md_frames_solvent",
+        (psf, segments, ref, design, body.frame_indices, 200,
+         _traj_stride(body.stride), opts),
+        timeout_s=min(3600.0, 240.0 + 30.0 * n_req))
+    if not isinstance(buf, (bytes, bytearray)):
+        buf = empty_solvent_bin()
+    return Response(content=bytes(buf), media_type="application/octet-stream")
+
+
+@router.get("/md/jobs/{job_id}/solvent-meta")
+async def md_solvent_meta(job_id: str) -> dict:
+    """How much solvent this job HAS — read straight out of the package's
+    ``charge_audit.json`` + ``manifest.json``, with no MDAnalysis and no
+    trajectory read, so the panel can price a fetch (and warn about it) in
+    milliseconds instead of after a 30 s context build.
+
+    ``n_waters`` counts every water OXYGEN the viewer would draw, which is the
+    bulk TIP3 count PLUS the six waters of each magnesium hexahydrate — those are
+    ordinary water and ride the water toggle. The charge audit's own ``n_waters``
+    counts only the bulk, so the two legitimately differ by ``6 * n_mg``."""
+    job = _load_job(job_id)
+    package_dir = job.package_dir(_workspace())
+    out: dict = {"ready": False, "n_waters": 0, "n_ions": 0, "species": {},
+                 "box_nm": None, "mg_hexahydrate": False}
+
+    audit = package_dir / "charge_audit.json"
+    if audit.exists():
+        try:
+            ca = json.loads(audit.read_text())
+        except Exception:  # noqa: BLE001
+            ca = {}
+        ion = ca.get("ionization") or {}
+        n_na = int(ion.get("n_na") or 0)
+        n_cl = int(ion.get("n_cl") or 0)
+        n_mg = int(ion.get("n_mg") or 0)
+        hexa = bool(ion.get("mg_hexahydrate"))
+        out.update(
+            ready=True,
+            n_waters=int(ion.get("n_waters") or 0) + (6 * n_mg if hexa else 0),
+            n_ions=n_na + n_cl + n_mg,
+            species={"NA": n_na, "CL": n_cl, "MG": n_mg},
+            mg_hexahydrate=hexa,
+            box_nm=ion.get("box_nm"),
+        )
+
+    manifest = package_dir / "manifest.json"
+    if out.get("box_nm") is None and manifest.exists():
+        try:
+            box_ang = (json.loads(manifest.read_text()) or {}).get("box_ang")
+        except Exception:  # noqa: BLE001
+            box_ang = None
+        if box_ang:
+            out["box_nm"] = [float(v) / 10.0 for v in box_ang]
+    return out
+
+
 @router.post("/md/jobs/{job_id}/analysis/cancel")
 async def md_cancel_analysis(job_id: str, kind: Optional[str] = None) -> dict:
     """Kill the in-flight trajectory/RMSF/surface analysis for this job — wired to
     the frontend toggling a view OFF, so a heavy MDAnalysis read of a live, growing
     DCD can't run away after the user stops looking at it.  ``kind`` (rmsf /
-    trajectory / surface / atomistic) cancels one view; omit it to cancel all."""
+    trajectory / surface / atomistic / solvent) cancels one view; omit it to cancel
+    all."""
     from backend.core import md_analysis_runner  # noqa: PLC0415
 
     return {"cancelled": md_analysis_runner.cancel(job_id, kind)}

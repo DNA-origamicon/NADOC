@@ -149,6 +149,14 @@ async def md_run_ws(websocket: WebSocket) -> None:
        "mode": "nadoc"|"beads"|"ballstick"}
       {"action": "seek",       "frame_idx": int}
       {"action": "get_latest"}
+      {"action": "set_solvent", "water": bool, "ions": bool, "box": bool,
+       "shell_ang": float|null,   # null = the whole cell; else the hydration shell
+       "atomistic": bool,         # real O + 2 H instead of one sphere per molecule
+       "max_waters": int|null}    # client-side memory cap, enforced server-side
+        Turns the explicit-solvent / periodic-cell overlay on or off for this
+        stream. All three false = off, and a stream that never sends this pays
+        nothing. Acknowledged with {"type":"solvent_ack"}, then the frame already
+        on screen is re-emitted with solvent so the toggle is immediate.
 
     Server → Client
       {"type": "log",     "message": str}          (emitted during load)
@@ -165,7 +173,13 @@ async def md_run_ws(websocket: WebSocket) -> None:
       {"type": "frame",   "frame_idx": int, "n_frames": int, "time_ps": float,
                           "positions": [{helix_id, bp_index, direction, x, y, z}, ...]}
         (ballstick) same but "atoms": [{serial, element, x, y, z}, ...]
+      {"type": "solvent_ack", "active": bool}
       {"type": "error",   "message": str}
+      <BINARY>  the solvent/periodic-cell blob for the frame just sent, when the
+                overlay is on — see backend/core/md_solvent.pack_solvent_bin and
+                frontend/src/scene/md_solvent_bin.js. Binary and separate from the
+                frame because a whole-cell frame is millions of coordinates; the
+                client must set ws.binaryType = 'arraybuffer'.
     """
     await websocket.accept()
 
@@ -183,6 +197,16 @@ async def md_run_ws(websocket: WebSocket) -> None:
         "coordinate_path": None,
         "latest_frame_cache": None,
         "latest_frame_sig": None,
+        # Solvent overlay (Water / Ions / Periodic box). `solvent_opts` is None
+        # until the client sends `set_solvent`, so a viewer that never turns the
+        # toggles on pays nothing. `xf_parts` + the anchor arrays are refreshed by
+        # every _seek_sync; `solvent_ctx` is topology and is built once.
+        "solvent_opts": None,
+        "solvent_ctx": None,
+        "xf_parts": None,
+        "heavy_raw": None,
+        "heavy_pre": None,
+        "last_frame_idx": 0,
     }
     _latest_refresh_lock = asyncio.Lock()
 
@@ -560,21 +584,28 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "prev_frame_idx": -999,
         }
 
+        # DNA heavy atoms are selected for EVERY mode, not just ballstick: the
+        # hydration-shell overlay measures its distance to heavy atoms, so the
+        # coarse (nadoc/beads) display needs them too — a phosphate-only shell
+        # would be a different quantity from the one the trajectory view draws at
+        # the same setting.  The selection itself is cheap (an index array); the
+        # expensive part is `atom_meta` + the design-identity build below, which
+        # stay ballstick-only.
+        #
+        # Use a name-based hydrogen filter — GRO topologies carry no element data
+        # so "not element H" raises AttributeError.  GROMACS writes hydrogen atom
+        # names starting with H (CHARMM36, AMBER, …); digit-prefixed AMBER
+        # hydrogens (e.g. 1H2) are excluded by the second pattern.
+        resnames = " ".join(_GRO_DNA_RESNAMES)
+        try:
+            dna_heavy = u.select_atoms(f"not element H and resname {resnames}")
+        except Exception:
+            dna_heavy = u.select_atoms(
+                f"(not name H* and not name [0-9]H*) and resname {resnames}"
+            )
+        result["heavy_idx"] = dna_heavy.indices
+
         if mode == "ballstick":
-            # Use name-based hydrogen filter — GRO topologies carry no element
-            # data so "not element H" raises AttributeError.  GROMACS outputs
-            # hydrogen atom names starting with H (CHARMM36, AMBER, etc.).
-            # Digit-prefixed AMBER hydrogens (e.g. 1H2) are also excluded via
-            # the second pattern.
-            resnames = " ".join(_GRO_DNA_RESNAMES)
-            try:
-                dna_heavy = u.select_atoms(
-                    f"not element H and resname {resnames}"
-                )
-            except Exception:
-                dna_heavy = u.select_atoms(
-                    f"(not name H* and not name [0-9]H*) and resname {resnames}"
-                )
 
             def _element(a) -> str:
                 """Derive element symbol tolerantly (GRO has no element info)."""
@@ -588,7 +619,6 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 name = a.name.lstrip("0123456789")
                 return name[0].upper() if name else "C"
 
-            result["heavy_idx"] = dna_heavy.indices
             result["atom_meta"] = [
                 {"serial": int(a.index), "element": _element(a)}
                 for a in dna_heavy
@@ -635,6 +665,12 @@ async def md_run_ws(websocket: WebSocket) -> None:
         T        = _ctx["centroid_T"]
         mode     = _ctx["mode"]
         n_frames = _ctx["n_frames"]
+
+        # Per-frame solvent inputs start empty, so a frame that fails to build a
+        # transform can never let the overlay draw against the PREVIOUS frame's.
+        _ctx["xf_parts"] = None
+        _ctx["heavy_raw"] = None
+        _ctx["heavy_pre"] = None
 
         if _injected is None:
             ts      = u.trajectory[frame_idx]
@@ -695,6 +731,11 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         _c_box = p_box.mean(axis=0)
                     _T_dyn = eq_centroid - _c_box if (eq_centroid is not None) else T
                     p_nm = p_box + _T_dyn
+                # The solvent/box overlay rides the SAME affine as the DNA; stash
+                # what this frame used rather than letting it re-derive anything.
+                _ctx["xf_parts"] = {"T_dyn": _T_dyn, "c_box": _c_box, "box_nm": box_nm}
+                _ctx["p_pre"] = p_nm.copy()      # before the Kabsch below
+                _ctx["p_raw"] = p_raw
             else:
                 p_nm = p_raw + T
 
@@ -758,6 +799,9 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 p_nm = _mc @ R_align.T + eq_centroid
                 _ctx["R_prev"]         = R_align
                 _ctx["prev_frame_idx"] = frame_idx
+                if _ctx.get("xf_parts") is not None:
+                    _ctx["xf_parts"].update(
+                        mob_c=_mob_c, eq_centroid=eq_centroid, R=R_align)
 
                 # Server-side diagnostic (one line per frame).
                 if _MD_SEEK_DIAG:
@@ -948,6 +992,18 @@ async def md_run_ws(websocket: WebSocket) -> None:
                         pos_nm = (pos_pre - mob_c) @ R_align.T + eq_centroid
                     else:
                         pos_nm = pos_pre
+                        mob_c = R_align = None
+                    # Hand the solvent/box overlay this frame's affine and the DNA
+                    # anchor arrays it already built — never re-derive them.
+                    _ctx["xf_parts"] = {
+                        "T_dyn": T_dyn, "c_box": c_box, "box_nm": box_nm,
+                        "mob_c": mob_c, "R": R_align,
+                        "eq_centroid": eq_centroid if R_align is not None else None,
+                    }
+                    _ctx["heavy_raw"] = pos_raw
+                    _ctx["heavy_pre"] = pos_pre
+                    _ctx["p_raw"] = p_raw
+                    _ctx["p_pre"] = p_pre
             except Exception as exc:
                 print(
                     f"[ws seek] atomistic PBC correction skipped "
@@ -1090,6 +1146,79 @@ async def md_run_ws(websocket: WebSocket) -> None:
         idx = max(0, min(frame_idx, len(u.trajectory) - 1))
         return _seek_sync(idx)
 
+    def _solvent_bytes_sync() -> bytes | None:
+        """Explicit solvent + periodic cell for the frame `_seek_sync` just built.
+
+        Reads the affine and the DNA anchor arrays that frame stashed in `_ctx`
+        rather than recomputing anything — the transform has exactly one owner
+        (backend/core/md_solvent.py), and a second derivation would silently put
+        the water somewhere else from the DNA it belongs to.
+
+        The coarse (nadoc/beads) branch has only P atoms on hand, so heavy-atom
+        anchors are reconstructed here; that costs one array op per frame after the
+        first (the anchor rows are a topology fact, memoised on `_ctx`). Returns
+        None whenever solvent is off or the frame carried no periodic box.
+        """
+        opts = _ctx.get("solvent_opts")
+        if not opts or not (opts.get("water") or opts.get("ions") or opts.get("box")):
+            return None
+        parts = _ctx.get("xf_parts")
+        if not parts:
+            return None
+        from backend.core import md_solvent as _MS
+        from backend.core.atomistic_to_nadoc import _GRO_DNA_RESNAMES
+
+        u = _ctx["universe"]
+        sctx = _ctx.get("solvent_ctx")
+        if sctx is None:
+            sctx = _ctx["solvent_ctx"] = _MS.build_solvent_ctx(u)
+
+        xf = _MS.DisplayXform.build(
+            T_dyn=parts.get("T_dyn"), c_box=parts.get("c_box"),
+            box_nm=parts.get("box_nm"), mob_c=parts.get("mob_c"),
+            eq_centroid=parts.get("eq_centroid"), R=parts.get("R"))
+
+        heavy_raw = _ctx.get("heavy_raw")
+        heavy_pre = _ctx.get("heavy_pre")
+        if heavy_raw is None:                       # coarse branch → rebuild anchors
+            heavy_idx = _ctx.get("heavy_idx")
+            p_raw, p_pre = _ctx.get("p_raw"), _ctx.get("p_pre")
+            if heavy_idx is None or p_raw is None or p_pre is None:
+                return None
+            heavy_ag = u.atoms[heavy_idx]
+            heavy_raw = heavy_ag.positions / 10.0
+            dna_p = u.select_atoms(
+                "name P and resname " + " ".join(_GRO_DNA_RESNAMES))
+            heavy_pre = _MS.reconstruct_heavy_pre(
+                heavy_ag, dna_p, heavy_raw, p_raw, p_pre, xf.box_nm, rows_cache=_ctx)
+
+        frame = _MS.extract_solvent_frame(
+            u, sctx, heavy_raw, heavy_pre, xf,
+            water=bool(opts.get("water")), ions=bool(opts.get("ions")),
+            box=bool(opts.get("box")),
+            shell_nm=(None if opts.get("shell_ang") is None
+                      else float(opts["shell_ang"]) / 10.0),
+            atomistic=bool(opts.get("atomistic")),
+            max_waters=opts.get("max_waters"))
+        return _MS.pack_solvent_bin({int(_ctx.get("last_frame_idx") or 0): frame})
+
+    async def _send_frame(frame_msg: dict) -> None:
+        """Send a frame, followed by its solvent blob when the overlay is on.
+
+        Binary, and a SEPARATE message: a whole-cell frame is millions of numbers,
+        which as JSON would dwarf the frame it accompanies."""
+        await websocket.send_json(frame_msg)
+        if not _ctx.get("solvent_opts"):
+            return
+        _ctx["last_frame_idx"] = frame_msg.get("frame_idx", 0)
+        try:
+            buf = await asyncio.to_thread(_solvent_bytes_sync)
+        except Exception as exc:                                    # noqa: BLE001
+            print(f"[ws solvent] skipped ({type(exc).__name__}: {exc})", flush=True)
+            return
+        if buf:
+            await websocket.send_bytes(buf)
+
     try:
         while True:
             msg    = await websocket.receive_json()
@@ -1203,7 +1332,31 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 if frame_msg.get("frame_idx") == _ctx["n_frames"] - 1:
                     _ctx["latest_frame_cache"] = frame_msg
                     _ctx["latest_frame_sig"] = _trajectory_signature()
-                await websocket.send_json(frame_msg)
+                await _send_frame(frame_msg)
+
+            elif action == "set_solvent":
+                # Turn the Water / Ions / Periodic-box overlay on or off for this
+                # stream, and re-emit the frame already on screen so the change is
+                # immediate rather than waiting for the next poll.
+                on = bool(msg.get("water") or msg.get("ions") or msg.get("box"))
+                _ctx["solvent_opts"] = {
+                    "water": bool(msg.get("water")),
+                    "ions": bool(msg.get("ions")),
+                    "box": bool(msg.get("box")),
+                    "shell_ang": msg.get("shell_ang", 5.0),
+                    "atomistic": bool(msg.get("atomistic")),
+                    "max_waters": msg.get("max_waters"),
+                } if on else None
+                await websocket.send_json({"type": "solvent_ack", "active": on})
+                if on and _ctx["universe"] is not None and _ctx.get("xf_parts"):
+                    try:
+                        buf = await asyncio.to_thread(_solvent_bytes_sync)
+                    except Exception as exc:                        # noqa: BLE001
+                        await websocket.send_json(
+                            {"type": "error", "message": f"Solvent: {exc}"})
+                        continue
+                    if buf:
+                        await websocket.send_bytes(buf)
 
             elif action == "get_latest":
                 if _ctx["universe"] is None:
@@ -1214,7 +1367,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "message": str(exc)})
                     continue
-                await websocket.send_json(frame_msg)
+                await _send_frame(frame_msg)
 
     except WebSocketDisconnect:
         pass

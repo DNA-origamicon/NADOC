@@ -1332,3 +1332,51 @@ def test_no_display_path_reimplements_the_pbc_snap():
         "PBC snap re-implemented outside atomistic_to_nadoc.py: " + ", ".join(offenders)
         + " — call reassemble_to_posed_reference instead."
     )
+
+
+def test_no_path_reimplements_the_solvent_display_transform():
+    """The display affine and the cell geometry have exactly one owner: md_solvent.
+
+    Same failure mode as the PBC snap above, one level up. A served MD coordinate
+    is ``(pos_pre - mob_c) @ R_align.T + eq_centroid``; the extractors compute that
+    for the DNA and now HAND IT OVER (``_extract_md_atoms_frame(..., frame_out=)``)
+    rather than letting downstream code re-derive it. A second derivation drifts
+    silently — the solvent would simply sit somewhere else from the DNA, with
+    nothing raising.
+
+    Guards the shape, not the text: defining ``box_corners`` / ``apply_xform`` /
+    ``DisplayXform`` anywhere under backend/ except the owner is a re-implementation.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    owner = root / "backend" / "core" / "md_solvent.py"
+    pat = re.compile(r"^\s*(?:def\s+(?:box_corners|apply_xform)\b"
+                     r"|class\s+DisplayXform\b)", re.M)
+    offenders = [
+        str(py.relative_to(root))
+        for py in sorted((root / "backend").rglob("*.py"))
+        if py != owner and pat.search(py.read_text())
+    ]
+    assert not offenders, (
+        "solvent display transform re-implemented outside md_solvent.py: "
+        + ", ".join(offenders)
+        + " — take the affine from _extract_md_atoms_frame's frame_out instead."
+    )
+
+
+def test_the_heavy_extractor_hands_over_its_transform():
+    """`frame_out` is the hand-over channel the guard above depends on existing.
+
+    If this parameter is ever dropped, the solvent path has no way to get the
+    affine except by recomputing it — which is exactly what must not happen.
+    """
+    import inspect
+
+    from backend.core.md_trajectory import _extract_md_atoms_frame
+
+    sig = inspect.signature(_extract_md_atoms_frame)
+    assert "frame_out" in sig.parameters
+    # Optional, so every existing caller is unaffected.
+    assert sig.parameters["frame_out"].default is None

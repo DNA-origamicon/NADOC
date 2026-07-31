@@ -10,6 +10,7 @@ import {
   mdReadinessIndicator,
   shouldForceDisplayReload,
   sceneUsesHeavy,
+  solventRepMode,
   restorePlan,
   zipAtomIdentity,
 } from './md_display_state.js'
@@ -51,6 +52,37 @@ describe('sceneUsesHeavy', () => {
     // case sceneUsesNativeCg misses (hence a dedicated predicate).
     for (const r of ['full', 'beads', 'cylinders', 'hull-prism', 'anything', undefined])
       expect(sceneUsesHeavy(r)).toBe(false)
+  })
+})
+
+describe('solventRepMode', () => {
+  it('draws one sphere per molecule in the nucleotide-level reps', () => {
+    expect(solventRepMode('full')).toBe('sphere')
+    expect(solventRepMode('beads')).toBe('sphere')
+  })
+
+  it('draws real atoms in the atomistic reps', () => {
+    expect(solventRepMode('vdw')).toBe('atomistic')
+    expect(solventRepMode('ballstick')).toBe('atomistic')
+  })
+
+  // THE trap. `cylinders` is in sceneUsesNativeCg, so anyone deriving this from
+  // that predicate gets solvent in the coarse structural view, which the feature
+  // deliberately excludes. Spelled out, and pinned.
+  it('is OFF for cylinders, even though sceneUsesNativeCg includes it', () => {
+    expect(sceneUsesNativeCg('cylinders')).toBe(true)
+    expect(solventRepMode('cylinders')).toBe('off')
+  })
+
+  it('is off for every other repr', () => {
+    for (const r of ['surface', 'hull-prism', 'anything', undefined, null])
+      expect(solventRepMode(r)).toBe('off')
+  })
+
+  // The two modes are different wire payloads (3 vs 9 floats per molecule), so a
+  // switch between them must invalidate cached frames rather than just re-render.
+  it('distinguishes the two payload shapes', () => {
+    expect(solventRepMode('beads')).not.toBe(solventRepMode('ballstick'))
   })
 })
 

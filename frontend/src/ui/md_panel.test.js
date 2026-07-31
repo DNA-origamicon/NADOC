@@ -125,3 +125,118 @@ describe('representation switch while stopped keeps the scene repr in sync', () 
     expect(deps.onRestoreDesignHeavy).not.toHaveBeenCalled()
   })
 })
+
+// ── Live solvent side-channel ────────────────────────────────────────────────
+//
+// The solvent/periodic-cell payload arrives as BINARY next to the JSON frames (a
+// whole-cell frame is millions of coordinates). This panel owns the socket but not
+// the overlay, so its whole job is to route ArrayBuffers straight back out, and to
+// replay the request when the socket is rebuilt — a representation change tears the
+// socket down and the overlay must not silently go dark because of it.
+describe('live solvent side-channel', () => {
+  let sockets, RealWS
+
+  class MockSocket {
+    static OPEN = 1
+    constructor(url) {
+      this.url = url
+      this.readyState = 0
+      this.sent = []
+      sockets.push(this)
+    }
+
+    send(s) { this.sent.push(JSON.parse(s)) }
+    close() { this.readyState = 3 }
+
+    /** Pretend the handshake completed. */
+    open() { this.readyState = 1; this.onopen?.() }
+
+    actions() { return this.sent.map((m) => m.action) }
+    lastOf(action) { return [...this.sent].reverse().find((m) => m.action === action) }
+  }
+
+  beforeEach(() => {
+    sockets = []
+    RealWS = globalThis.WebSocket
+    globalThis.WebSocket = MockSocket
+    globalThis.WebSocket.OPEN = 1
+    globalThis.WebSocket.CONNECTING = 0
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    globalThis.WebSocket = RealWS
+  })
+
+  /** Open a socket and complete its handshake. `_openWebSocket` debounces by
+   *  120 ms to coalesce bursty reopens, so the timers have to be advanced. */
+  function connected(extraDeps = {}) {
+    const c = initMdPanel(store, { ...makeDeps(), ...extraDeps })
+    c.displayLatest('/tmp/run.json', { forceReload: true, live: true, jobId: 'j1' })
+    vi.advanceTimersByTime(200)
+    const ws = sockets.at(-1)
+    ws.open()
+    return { c, ws }
+  }
+
+  it('sends set_solvent over an open socket', () => {
+    const { c, ws } = connected()
+    expect(c.setSolvent({ water: true, ions: true, box: false, shell_ang: 5 })).toBe(true)
+    const msg = ws.lastOf('set_solvent')
+    expect(msg).toMatchObject({ water: true, ions: true, box: false, shell_ang: 5 })
+  })
+
+  // Turning the overlay off must be an explicit all-false request, not silence —
+  // the server keeps streaming solvent until told otherwise.
+  it('sends an explicit all-false request when switched off', () => {
+    const { c, ws } = connected()
+    c.setSolvent(null)
+    expect(ws.lastOf('set_solvent')).toMatchObject({ water: false, ions: false, box: false })
+  })
+
+  it('remembers the request and replays it on reconnect', () => {
+    const { c } = connected()
+    c.setSolvent({ water: true, ions: false, box: true })
+    // A representation change rebuilds the socket; the new one must re-request.
+    setSceneRepr('ballstick')
+    c.displayLatest('/tmp/run.json', { forceReload: true, live: true, jobId: 'j1' })
+    vi.advanceTimersByTime(200)
+    const fresh = sockets.at(-1)
+    expect(fresh).not.toBe(sockets[0])
+    expect(fresh.actions()).not.toContain('set_solvent')   // nothing sent pre-handshake
+    fresh.open()
+    expect(fresh.lastOf('set_solvent')).toMatchObject({ water: true, box: true })
+  })
+
+  it('does not send anything when the overlay was never turned on', () => {
+    const { ws } = connected()
+    expect(ws.actions()).not.toContain('set_solvent')
+  })
+
+  it('reports false when there is no open socket to send on', () => {
+    const c = initMdPanel(store, makeDeps())
+    expect(c.setSolvent({ water: true, ions: true, box: true })).toBe(false)
+  })
+
+  // A binary message must reach the overlay sink and must NEVER reach the JSON
+  // frame handler — JSON.parse on an ArrayBuffer yields garbage, not an error.
+  it('routes a binary message to onSolventBlob', () => {
+    const onSolventBlob = vi.fn()
+    const { ws } = connected({ onSolventBlob })
+    const buf = new ArrayBuffer(32)
+    ws.onmessage({ data: buf })
+    expect(onSolventBlob).toHaveBeenCalledWith(buf)
+  })
+
+  it('still routes JSON messages to the frame handler', () => {
+    const onSolventBlob = vi.fn()
+    const { ws } = connected({ onSolventBlob })
+    ws.onmessage({ data: JSON.stringify({ type: 'log', message: 'hi' }) })
+    expect(onSolventBlob).not.toHaveBeenCalled()
+  })
+
+  it('asks for arraybuffer framing, not blobs', () => {
+    const { ws } = connected()
+    expect(ws.binaryType).toBe('arraybuffer')
+  })
+})

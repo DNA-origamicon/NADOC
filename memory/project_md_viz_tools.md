@@ -15,6 +15,93 @@ The MD jobs panel got oxDNA-parity visualization tools (trajectory scrub + flexi
 
 **P-ORDER MAPPING BUG — fixed 2026-07-02 (many-strand "map not ready").** `_build_md_nadoc_ctx` originally built the P-atom→(helix,bp,dir) order ONLY via `build_p_pdb_order`, which keys off the reference PDB's SINGLE-char chainID. CHARMM psfgen collapses NADOC's multi-char chain ids (`A`,`AA`,`AB`,…) into one letter, so for many-strand designs the keys collide → atoms DROPPED → `len(p_order) != ` universe DNA-P count → md_rmsf's strict guard `len(p_nm)!=n_keys` skips EVERY frame → `ready:false` with no reason → frontend fallback text "not ready" (oxdna_display.js:525). Real case: 3x6x200 (77 strands) mapped 6758 of 7229 P atoms. FIX: extracted `_select_p_order(u, cm, run_dir, coordinate_path)` — tries the segid map (`load_segid_chain_map`+`build_p_order_from_universe` from charge_audit.json) FIRST, falls back to PDB only when charge_audit absent/incomplete. This mirrors what ws.py's live-display NAMD branch already did (which is why live Display-MD worked but the flex map/trajectory didn't). md_rmsf now returns a real `reason` on total-drop (design/topology atom mismatch). Also: `_md_traj_inputs` + the trajectory route now analyse the job's FROZEN `design.json` snapshot (`_md_snapshot_design`, active-design fallback for legacy jobs) — like the oxDNA route — not the live active design. Regression: `tests/test_md_p_order_mapping.py` (fast, always-on, fakes the collision); heavy real 3x6x200 e2e in test_md_trajectory.py is env-gated `NADOC_RUN_HEAVY_MD_FIXTURE=1` (~20min: 3600-nt model build + 1M-atom unwrap).
 
+**EXPLICIT SOLVENT + PERIODIC CELL ARE NOW DRAWN (2026-07-30).** Three checkbox layers in the
+Visualizations card — Water, Ions, Periodic box — over the trajectory view. Until now every display
+path funnelled through the positive DNA whitelist `_GRO_DNA_RESNAMES` (`md_trajectory.py:131-138`),
+so none of the simulated solvent ever reached the viewer.
+
+- **`backend/core/md_solvent.py` is the single owner** of (a) the display affine, (b) solvent
+  selection/imaging, (c) the wire format. A guard test
+  (`test_atomistic_to_nadoc.py::test_no_path_reimplements_the_solvent_display_transform`) fails if
+  `box_corners`/`apply_xform`/`DisplayXform` are defined anywhere else under `backend/` — the same
+  shape of guard as the PBC-snap one, for the same reason.
+- **The affine is HANDED OVER, never re-derived.** A served coordinate is
+  `(pos_pre - mob_c) @ R_align.T + eq_centroid`, computed at four sites today
+  (`md_trajectory` heavy :468 + bead :292, `ws.py` :761 + :947) and previously discarded at all four.
+  `_extract_md_atoms_frame(..., frame_out={})` now returns it plus `pos_raw`/`pos_pre`; return value
+  and every existing caller unchanged. Verified on a real job: the emitted affine reproduces the
+  served DNA coordinates to **exactly 0.0 nm**.
+- **Water is bounded, ions never are.** Hydration shell (default 5 Å, adjustable) measured to DNA
+  HEAVY atoms via `capped_distance`; "whole box" also selectable. Ions max out ~15 k so they are
+  always drawn in full. **MGH gets no special case**: the MG atom is the ion, its six waters are
+  water — which is why each Mg sphere visibly carries its own hydration shell on screen. Consequence
+  for counts: drawable water = the charge audit's bulk `n_waters` **+ 6·n_mg**.
+- **The box origin is the STRUCTURE, not the lab cell.** A NAMD DCD stores cell lengths but no
+  origin, so the cell is drawn centred on `c_box` (the PBC-robust DNA centroid the reassembly already
+  computes). Lengths + orientation are the simulation's own, so it breathes with the barostat and
+  rotates with the design alignment. It is a rotated cuboid in view space — `Box3Helper` is wrong;
+  `md_box_overlay.js` writes the 12 edges into a 72-float buffer directly.
+- **EVERY BLOCK IS OPTIONAL, and the header must say which are present — format v2
+  (2026-07-30).** The three toggles are independent, so any subset of water/ions/box can be
+  absent. v1 wrote an EMPTY block for a disabled species while the header still advertised the
+  full ion count and the reader always consumed a fixed 24-float cell, so any combination with a
+  gap put every later read at the wrong offset, `parseSolventBin` bailed, and **Water-alone and
+  Ions-alone silently drew nothing** — only all-three-on (and ions+box, by luck) lined up.
+  Reported from the app. Fix: `n_ions` / `has_box` / `per_frame_nw` / `n_serials` now describe
+  what was WRITTEN, totals ride separately as `n_waters_total` / `n_ions_total`, and
+  `pack_solvent_bin` ASSERTS block-vs-header agreement so a caller cannot reintroduce the desync
+  silently. Version bumped 1→2 and the parser rejects anything else, so a stale tab fails closed
+  instead of misparsing. Pins: all 8 combinations round-trip (pytest) + all 7 non-empty
+  combinations parse (vitest, incl. real backend bytes for the water-only case). **Lesson: a
+  fixed-layout binary format needs a test per on/off combination, not just the all-on one** — my
+  original fixtures always populated every block, which is exactly why the suite was green while
+  the feature was broken.
+- **Binary wire format** (`pack_solvent_bin` ↔ `scene/md_solvent_bin.js`, magic `NSLV`), mirroring
+  `pack_surface_bin`. Whole-box atomistic water is millions of numbers/frame; JSON would be tens of
+  MB plus a `JSON.parse` that materialises a JS number array first. JSON header is zero-padded to 4
+  bytes so the Float32 views are legal. `include_dna` piggybacks the frame's DNA coords so an
+  atomistic-rep scrub pays the ~30 s context build ONCE per chunk instead of twice.
+- **The molecule set changes every frame** (a shell is a distance query; water diffuses — measured
+  20 595 then 19 837 at 5 Å on the same run). Two consequences baked into the overlay: it is
+  **capacity-allocated** (grow-only, only `mesh.count` moves) rather than rebuilt like
+  `md_overlay.js`, and it **SNAPS to a frame, never lerps** — molecule *k* of frame *i* is a
+  different molecule from molecule *k* of frame *i+1*.
+- **Ions are ONE MESH PER SPECIES.** A single mesh cannot carry per-species radii under impostors
+  (the painted radius is a material uniform). They first shipped 7× oversized because the impostor
+  test was `atomInstanceScale(1) === 1`, which is true in BOTH paths — caught by screenshot, not by
+  a unit test. Pinned now.
+- **Measured on the real 11 M-atom VoltronCore job:** 250 458 shell waters + 15 178 ions = 3.2 MB
+  per frame, 36 s (≈30 s of that is the per-request MDAnalysis context build). The ion cloud renders
+  as a cast of the origami — Na⁺ condensed on the polyanion — which is the physical check that the
+  imaging and the transform are right.
+- **TWO TRANSPORTS, one overlay.** The trajectory view fetches + caches over REST; the live
+  "Display MD" stream gets solvent pushed over the job WebSocket (`{"action":"set_solvent",…}` →
+  a BINARY message beside each JSON frame; the client sets `ws.binaryType='arraybuffer'`).
+  `setEnabled(on, 'live'|'traj')` picks the transport, and switching between them drops the cache
+  (a live frame index is a stream position, not a composite trajectory index — fetching against it
+  would return some other frame's solvent). Three things this cost:
+  - **`heavy_idx` is now built for EVERY ws mode, not just ballstick.** The shell is measured to
+    DNA heavy atoms, and the coarse branch had only P atoms; a phosphate-anchored shell would be a
+    different quantity from the trajectory view's at the same setting. The selection is cheap — the
+    expensive `atom_meta` + design-identity build stays ballstick-only.
+  - **`md_solvent.reconstruct_heavy_pre`** hoists the residue-local
+    `heavy = corrected_P + minimage(raw_heavy − raw_P)` reconstruction so the coarse branch can
+    produce anchors. Vectorised, with the anchor rows memoised on `_ctx` (they are a topology fact).
+  - **The request is replayed on reconnect.** A representation change tears the socket down and
+    rebuilds it; without the replay in `onopen` the overlay silently goes dark on a rep switch.
+    Pinned (`md_panel.test.js`, proven to fail without it).
+  Verified against the real VoltronCore job in both modes: CG 90 k shell waters + 15 178 ions in
+  15 s; atomistic the same in 18 s with real O+2H molecules. Cross-check that the anchoring is
+  right: the same water set is ≤2.8 Å from the nearest DNA **heavy** atom but up to 13.4 Å from the
+  nearest **P** — which is exactly what a heavy-atom shell should look like measured against beads.
+- Files: `backend/core/md_solvent.py`, `md_trajectory.md_frames_solvent`, routes
+  `POST /md/jobs/{id}/frames-solvent-bin` + `GET /md/jobs/{id}/solvent-meta` (the latter reads
+  `charge_audit.json` + `manifest.json` only — no MDAnalysis, answers in ms so the panel can price a
+  fetch before making one); `scene/md_solvent_bin.js`, `scene/md_solvent_overlay.js`,
+  `scene/md_box_overlay.js`, `ui/md_solvent_controls.js` (own module — the panel gains only wiring),
+  `md_display_state.solventRepMode`. Pins: 4 fast pytest files (61) + 5 vitest files (~100) + a
+  cross-language byte pin + `tests/test_md_solvent_extraction.py` (16, slow/`md`).
+
 **Panel (md_jobs_panel.js).** flex + traj toggles/controls mirror oxdna_jobs_panel; reuse `oxdna_trajectory_player.js`. Three display modes (live "Display MD" / flexibility map / trajectory) are MUTUALLY EXCLUSIVE — each deforms the same design model, so activating one calls stopAndRestore on the others. Rows now have `data-job-id` (for the e2e + the existing md_live_no_stale spec).
 
 **v1 scope = CG/nadoc representation only.** Deliberate follow-ons: (1) heavy-rep (atomistic/surface) RMSF colouring — the per-frame atomistic data shapes differ between oxDNA (template) and NAMD (real DCD atoms), needs its own mapping, so the adapter intentionally omits the heavy methods (controller heavy path is a no-op for CG, fails closed for atomistic/surface scenes); ~~(2) the draggable colour-rescale widget~~ **DONE 2026-07-10** — see below.

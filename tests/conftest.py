@@ -413,6 +413,9 @@ _SLOW_MODULES = {
     # CPU). Same heavy-atomistic family as test_atomistic / test_oxdna_relaxation; the
     # whole file is atomistic reconstruction work, so relegate it whole (area "atomistic").
     "test_atomistic_display_split",
+    # Real solvated PSF+DCD: parses a 32 MB topology, then runs the neighbour-grid
+    # hydration-shell search per frame. Every test in the file needs that universe.
+    "test_md_solvent_extraction",
 }
 
 # Whole test CLASSES that share an expensive class-scoped fixture (the build runs

@@ -7,8 +7,7 @@
  * (two copies would silently drift the moment a renderer adds a mesh name).
  *
  * The name map is the authority; `inferRepr` is the fallback for meshes that
- * don't carry one of these names — chiefly the atomistic renderer's atom/bond
- * InstancedMeshes, which are unnamed.
+ * don't carry one of these names.
  */
 
 import * as THREE from 'three'
@@ -27,6 +26,11 @@ export const MESH_NAME_TO_REPR = {
   curvedOverhangFullCylindersProxy: 'cylinders',
   curvedOvhgGroup:           'cylinders',
   'dna-surface':             'surface',
+  // Atomistic renderer meshes. Named 2026-07-30 so `inferRepr` never has to guess
+  // for them: under the impostor flag their material is a MeshPhongMaterial, which
+  // the `MeshStandardMaterial` test below would misread as 'full'.
+  atomSpheres:               'atomistic',
+  atomBonds:                 'atomistic',
 }
 
 /**

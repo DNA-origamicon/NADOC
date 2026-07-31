@@ -72,7 +72,11 @@ function _activeSceneRepresentation() {
 }
 
 export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer,
-                                     onRestoreDesignHeavy, refreshAtomColors }) {
+                                     onRestoreDesignHeavy, refreshAtomColors,
+                                     onSolventBlob = null }) {
+  // Binary solvent frames go straight back out to whoever owns the overlay; this
+  // panel only owns the socket.
+  const _onSolventBlob = onSolventBlob
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const panel          = document.getElementById('md-panel')
   const heading        = document.getElementById('md-panel-heading')
@@ -125,6 +129,9 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _browseDir = ''     // last directory visited in file browser
 
   let _ws        = null
+  // Last set_solvent request, replayed on (re)connect — declared with the rest of
+  // the socket state so `_ws.onopen` can never read it in its dead zone.
+  let _solventReq = null
   let _reopenTimer = null   // debounce handle: coalesce bursty _openWebSocket calls
   let _wsSig     = null     // config|mode of the last opened socket (skip redundant reopen)
   let _loadInFlight   = false  // true between sending 'load' and receiving 'ready'/'error'
@@ -434,6 +441,9 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
     try {
       _ws = new WebSocket(_WS_URL)
+      // The solvent/periodic-cell blob arrives as a binary side-channel next to the
+      // JSON frames — a whole-cell frame is millions of coordinates.
+      _ws.binaryType = 'arraybuffer'
     } catch (e) {
       _log('WebSocket failed: ' + e.message, 'error')
       return
@@ -454,9 +464,11 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
         design:          store?.getState?.().currentDesign ?? null,
       }))
       if (statusLine) statusLine.textContent = 'Loading…'
+      if (_solventReq) _sendSolvent(_solventReq)
     }
 
     _ws.onmessage = ev => {
+      if (ev.data instanceof ArrayBuffer) { _onSolventBlob?.(ev.data); return }
       let msg
       try { msg = JSON.parse(ev.data) } catch { return }
       _handleMessage(msg)
@@ -661,6 +673,18 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     _ws.send(JSON.stringify({ action: 'seek', frame_idx: idx }))
   }
 
+  // The socket is torn down and rebuilt whenever the representation changes stream
+  // mode, so the overlay must not silently go dark just because the user switched
+  // to ball-and-stick — hence the replay in `onopen`.
+  function _sendSolvent(req) {
+    _solventReq = req
+    if (_ws?.readyState !== WebSocket.OPEN) return false
+    _ws.send(JSON.stringify({ action: 'set_solvent', ...(req || {
+      water: false, ions: false, box: false,
+    }) }))
+    return true
+  }
+
   scrubber?.addEventListener('input', () => {
     _setPlaying(false)
     _seekFrame(parseInt(scrubber.value))
@@ -855,6 +879,14 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   _loadPersistedPaths()
 
   return {
+    /**
+     * Turn the explicit-solvent / periodic-cell overlay on or off for the live
+     * stream. `req` is null (or all-false) to switch it off. Remembered across
+     * reconnects, since a representation change rebuilds the socket.
+     * Returns true when the request went out on an open socket.
+     */
+    setSolvent(req) { return _sendSolvent(req) },
+
     displayLatest(configPath, { forceReload = false, live = true, jobId = null } = {}) {
       if (!configPath) return
       _jobId = jobId

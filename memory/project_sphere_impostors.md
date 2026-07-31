@@ -116,16 +116,52 @@ a COMBINED injection was needed, NOT just letting both patches run.
     `transform.values` (row-major; translation at `[3],[7],[11]`) instead. Hide the busy overlay
     (`#op-progress`) before screenshotting.
 
-> **Remaining:** Phase C (atomistic atoms) + the photo-mode real-sphere revert path (still TODO).
+> **Remaining:** the photo-mode real-sphere revert path (still TODO). Phase C is DONE — see below.
 - Verify on a large `.nass`; `traceFrame()` before/after for triangle drop.
 
-### Phase C — Atomistic atoms (`atomistic_renderer/`)              [TODO]
-- Per-element atom InstancedMesh (`atomistic_renderer.js:106`) → quad + impostor material, radius as
-  per-mesh uniform (radius is per-element). Per-instance CPK color already present. Ball-stick BONDS
-  stay real cylinders for v1. NOTE: this impostors the per-instance/per-part atomistic renderer
-  (design view + part context = immediate win). Atomistic AT ASSEMBLY SCALE additionally needs
-  atomistic on the shared path (today vdw/ballstick → grey hull box, `assembly_renderer.js:332`) —
-  separate effort where the "drop base atoms" idea (~1.8×) plugs in.
+### Phase C — Atomistic atoms (`atomistic_renderer/`)     [DONE 2026-07-30; flag still opt-in]
+
+**The head was stale before this entry:** the ASSEMBLY shared path already had atom impostors —
+`_attachAtomImpostorShader` (`assembly_renderer_shared.js:642`, `customProgramCacheKey` at :713,
+meshes named `atomImpostor_${el}` at :806). Only the PER-PART `atomistic_renderer.js` was missing,
+and that is what landed now. Don't re-derive the GLSL; mirror the sibling.
+
+- **`geometry_builder.js` gained the choice point** — `atomSphereGeometry()`,
+  `makeAtomSphereMaterial(radius)`, `atomInstanceScale(radius)`. Its "imports `three` ONLY" header
+  contract was relaxed to allow the sibling leaf `impostor_material.js` (which itself imports only
+  `three`), so the geometry/material/scale triple is decided in ONE place.
+- **`_state.elementRadius` → `_state.elementScale`.** THE load-bearing detail. The shader computes
+  `v_impR = u_impostorRadius * length(instanceMatrix[0].xyz)`, so an impostor instance matrix must
+  carry scale **1** and let the uniform own the radius; a real unit sphere is the opposite (the
+  matrix scale IS the radius). Bake the radius into both and every atom renders at radius²
+  (0.07 nm → 0.005 nm) — which looks exactly like "impostors don't work". All four position-writing
+  paths (`_rebuild`, `applyLiveTransform`, `applyOxdnaTransforms`, `applyUnfoldOffsets`,
+  `applyPositionLerp`) now write `elementScale`. The true radius needs no field: the material carries
+  it (`userData.impostorRadius`, which `shadow_bounds` reads) and the raycast closure captures it.
+- **A material cache is REQUIRED, not an optimisation.** `makeImpostorPhongMaterial` sets a unique
+  `customProgramCacheKey` (that is how `u_impostorRadius` gets bound at all), so one material == one
+  shader program. `_rebuild` made a fresh material every call and the live MD display calls
+  `update()` EVERY FRAME → a shader compile per frame plus an unbounded program-cache leak. Cached
+  by `(element, radius)`; `_clearScene` no longer disposes materials, `dispose()` drains the cache.
+- **Fixed a pre-existing leak while in there:** `_clearScene` removed meshes and disposed materials
+  but never called `mesh.dispose()`, leaking the instanceMatrix/instanceColor GPU buffers on every
+  rebuild — i.e. once per frame on the live display path.
+- **Meshes are now NAMED** (`atomSpheres` / `atomBonds`) and registered in
+  `photo_renderer/mesh_repr.js::MESH_NAME_TO_REPR`. `inferRepr` classifies atomistic by
+  `material instanceof MeshStandardMaterial`; an impostor material is `MeshPhongMaterial` and would
+  have been misread as `'full'`.
+- **`atom_palette.js` gained `Na` and `Cl`** (CPK violet / green). Neither existed, so every ion
+  reaching the renderer drew as the grey `DEFAULT_ELEMENT`.
+- Bonds stay real cylinders (v1 scope, unchanged).
+- **Measured on the real VoltronCore job** (`__NADOC_DBG__`-driven, 250 k water + 15 k ion spheres):
+  **140 tri/sphere → 2.0 tri/sphere, a 70× cut**, exactly the predicted figure. 530 k triangles for
+  265 k spheres vs 5.6 M for 40 k with real geometry. Screenshots at both settings are visually
+  indistinguishable (round, lit, correctly occluded).
+- Pins in `atomistic_renderer.test.js` (11): flag-off real `SPHERE_GEO` + radius-in-matrix (proves
+  the refactor is behaviour-preserving on the default path); flag-on quad + `isImpostor` +
+  **instance scale is 1, not the radius**; raycast override installed; **material identity reused
+  across two `update()` calls** — the shader-recompile guard, and the highest-value pin of the set
+  (proven to fail against a cache-defeating build).
 
 ### Photo-mode revert path                                        [TODO]
 - On photo-mode enter, rebuild impostor meshes with real `GEO_SPHERE` + PBR material (reuse the

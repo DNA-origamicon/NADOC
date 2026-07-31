@@ -22,6 +22,7 @@ import { resetControlsToDefaults } from './form_defaults.js'
 import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
+import { initMdSolventControls } from './md_solvent_controls.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
@@ -692,7 +693,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1187,6 +1188,20 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       ar?.classList.toggle('is-collapsed', open)
     })
   }
+  // Water / ions / periodic box — layers over whichever view is active. Owns its own
+  // DOM, cache and network; the panel only tells it which job and which frame.
+  // Built BEFORE the first _updateVizToggles() below, which gates it: a `const`
+  // declared further down would be in its temporal dead zone there, and `?.` does
+  // not save you from that.
+  const solvent = initMdSolventControls({
+    api, getSolventOverlay, getBoxOverlay, getCurrentRepr,
+    getLiveDisplay: () => mdDisplayController,
+    // Synchronous read of the same MemAvailable cache the DNA prebuild uses, so
+    // both price against ONE budget. Null until _freeRamBytes() has run, which is
+    // the honest answer (an unknown machine is not assumed to be a large one).
+    getAvailableBytes: () => _ramCache?.bytes ?? null,
+  })
+
   _updateVizToggles(null)   // no job selected yet → only "Off" is selectable
 
   function _applySaltMode() {
@@ -1831,11 +1846,17 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _fetchJobs()
     _refreshMdDisplay()
     _displayTimer = setInterval(_refreshMdDisplay, 15000)
+    // Solvent rides the live stream in this view; the request is replayed by the
+    // socket on (re)connect, so ordering against the WS handshake doesn't matter.
+    solvent?.setEnabled(true, 'live')
+    solvent?.setJob(_selectedId)
   }
 
   function _stopMdDisplay(status = 'Off') {
     clearInterval(_displayTimer)
     _displayTimer = null
+    solvent?.setEnabled(false)
+    solvent?.clear()
     // Kill any in-flight backend trajectory/RMSF/surface analysis for this job so a
     // heavy MDAnalysis read of the live DCD can't keep running after the user
     // toggles the view off (the run-away that used to wedge the server).
@@ -1908,7 +1929,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
-    onSeek: (i) => getMdViz?.()?.showFrame(i),
+    onSeek: (i) => { getMdViz?.()?.showFrame(i); solvent?.showFrame(i) },
     onBeforePlay: async () => {
       const v = getMdViz?.()
       if (!v) return true
@@ -2004,6 +2025,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     if (trajToggle) trajToggle.checked = false
     if (trajControls) trajControls.style.display = 'none'
     _setTrajStatus('', _C.dim)
+    solvent?.setEnabled(false)
+    solvent?.clear()
     _syncVizOffRadio()
   }
   // Frame interval, clamped in JS — the min/max attributes are a hint to the browser,
@@ -2132,6 +2155,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       _setTrajStatus(base, _C.ok)
       // A running job keeps writing — re-price the hint against what's on disk now.
       _loadTrajRawCounts(_selectedId, { refetch: true })
+      // loadTrajectory applies frame 0 through its own showFrame(0), which bypasses
+      // the player's onSeek — so the solvent for frame 0 has to be asked for here.
+      solvent?.setEnabled(true, 'traj')
+      await solvent?.setJob(_selectedId, { stride: interval, nFrames: r.n_frames })
+      solvent?.showFrame(0)
       await _prebuildTrajHeavy(v, base)
     } else {
       if (trajToggle) trajToggle.checked = false
@@ -2195,6 +2223,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _setRadioEnabled(trajToggle, hasTraj)
     if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
     if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked) _setTrajOff() }
+    // Solvent layers over any view that shows ONE FRAME — the live stream or the
+    // trajectory scrub, which deliver frames by different transports. The flex map
+    // is deliberately excluded: an RMSF map is a time-mean structure, so there is
+    // no single frame's solvent to draw.
+    solvent?.setEnabled(
+      !!trajToggle?.checked || !!displayToggle?.checked,
+      displayToggle?.checked ? 'live' : 'traj')
+    if (hasJob) _freeRamBytes()      // prime the shared budget for the readout
     // Interval row only means anything for a job with frames on disk; its readout needs
     // that job's raw per-segment counts (header-only fetch, fire-and-forget).
     if (trajOpts) trajOpts.style.display = hasTraj ? 'flex' : 'none'
@@ -3730,6 +3766,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // The panel's external surface: the currently-selected job (consumed by the shared
   // comparison card's getSources and by the Plan-Run overlay's default root, P4).
   return {
+    /** Binary solvent frame from the live MD WebSocket → the overlay. Wired in
+     *  main.js, because md_panel owns the socket and this panel owns the toggles. */
+    acceptLiveSolvent: (buf) => solvent?.liveBlob(buf),
+
     getSelectedJob: _selectedJob,
     // Immediately re-fetch the job list (used when a chain launch spawns a NAMD job from
     // the Chain Simulations panel — this panel wouldn't otherwise know to poll). A single

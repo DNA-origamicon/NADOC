@@ -378,13 +378,23 @@ def _build_heavy_anchor_rows(heavy_ag, dna_p) -> "np.ndarray":
                        count=len(heavy_ag))
 
 
-def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
+def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
+                            frame_out: dict | None = None) -> list[dict]:
     """DNA heavy-atom coordinates (nm, NADOC frame) for one DCD frame, as
     ``[{serial, element, strand_id, helix_id, bp_index, direction, x, y, z}, …]``.
     Ported from ws.py ``_seek_sync`` (ballstick
     path): residue-local reconstruction of each heavy atom relative to its corrected
     P atom, then the same Kabsch alignment as the bead path so the all-atom and CG
-    views coincide. Requires a ctx built with ``with_atoms=True``."""
+    views coincide. Requires a ctx built with ``with_atoms=True``.
+
+    Pass ``frame_out`` (an empty dict) to also receive this frame's DISPLAY AFFINE
+    and the raw/pre heavy-atom positions it was applied to — what the solvent and
+    periodic-box overlays need in order to land in the same frame as the DNA.  The
+    return value is unchanged, so every existing caller is unaffected.  Solvent code
+    must take the transform from here rather than recompute it: a second copy of
+    this arithmetic is how the PBC-snap fix once shipped without changing anything
+    on screen (see memory/project_md_viz_tools.md).
+    """
     from backend.core.atomistic_to_nadoc import (
         _GRO_DNA_RESNAMES, _unwrap_min_image, reassemble_to_posed_reference)
 
@@ -456,6 +466,8 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
                     delta[:, good] -= np.round(delta[:, good] / box[good]) * box[good]
                 pos_pre[have] = p_pre[rows] + delta
 
+            mob_c = None
+            R_align = None
             if (eq_centered is not None and eq_centroid is not None
                     and len(eq_centered) == len(p_pre)):
                 rm = rigid_mask if (rigid_mask is not None and rigid_mask.any()) else None
@@ -468,6 +480,17 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int) -> list[dict]:
                 pos_nm = (pos_pre - mob_c) @ R_align.T + eq_centroid
             else:
                 pos_nm = pos_pre
+
+            if frame_out is not None:
+                # The affine THIS frame's DNA actually rode, handed over rather
+                # than re-derived downstream. When the Kabsch branch was skipped
+                # the display frame IS the pre frame, so mob_c/eq_centroid/R are
+                # left at the identity.
+                frame_out.update(
+                    pos_raw=pos_raw, pos_pre=pos_pre, box_nm=box_nm,
+                    T_dyn=T_dyn, c_box=c_box, mob_c=mob_c, R_align=R_align,
+                    eq_centroid=eq_centroid if R_align is not None else None,
+                )
     except Exception:
         pass
 
@@ -593,6 +616,88 @@ def md_frames_atomistic(topology_path, segments, coordinate_path, design,
         else:
             out[str(idx)] = {"atoms": atoms, "bonds": []}
     return out
+
+
+def md_frames_solvent(topology_path, segments, coordinate_path, design,
+                      frame_indices, max_frames: int = 200,
+                      stride: int | None = None, opts: dict | None = None) -> bytes:
+    """Per-frame explicit solvent + periodic cell for COMPOSITE frame indices, as one
+    binary blob (see :func:`backend.core.md_solvent.pack_solvent_bin`).
+
+    Whole-box atomistic water on a large job is millions of numbers per frame, so
+    this route is binary rather than JSON — a Float32 view onto the transferred
+    buffer instead of a ``JSON.parse`` that materialises a JS number array first.
+
+    ``opts`` mirrors the request body: ``water``/``ions``/``box`` toggles,
+    ``shell_ang`` (None ⇒ the whole cell), ``atomistic``, ``max_waters`` and
+    ``include_dna``.  With ``include_dna`` the payload also carries the
+    serial-indexed DNA coordinates in the ``md_frames_atomistic(positions_only=True)``
+    shape — the context build is ~30 s and is paid PER REQUEST (killable subprocess),
+    so an atomistic-rep scrub must not pay it twice for the same frames.
+
+    The display affine comes from :func:`_extract_md_atoms_frame`'s ``frame_out``;
+    it is never recomputed here."""
+    from backend.core.md_solvent import (
+        DisplayXform, build_solvent_ctx, empty_solvent_bin, pack_solvent_bin,
+    )
+
+    o = dict(opts or {})
+    shell_ang = o.get("shell_ang", 5.0)
+    include_dna = bool(o.get("include_dna"))
+
+    seg_paths = [s[2] for s in segments]
+    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
+                              with_atoms=True)
+    u = ctx["universe"]
+    sctx = build_solvent_ctx(u)
+    n = ctx["n_frames"]
+    raw_of = composite_raw_frame_map(segments, max_frames, stride)
+
+    n_serials = 0
+    if include_dna:
+        n_serials = max((int(m["serial"]) for m in (ctx.get("atom_meta") or [])),
+                        default=-1) + 1
+
+    frames: dict[int, dict] = {}
+    for idx in sorted(set(int(i) for i in frame_indices)):
+        if idx < 0 or idx >= len(raw_of):
+            continue
+        gidx = raw_of[idx]
+        if gidx >= n:
+            continue
+        fo: dict = {}
+        atoms = _extract_md_atoms_frame(ctx, gidx, frame_out=fo)
+        if not fo:
+            continue                    # no periodic box on this frame → nothing to draw
+        xf = DisplayXform.build(
+            T_dyn=fo["T_dyn"], c_box=fo["c_box"], box_nm=fo["box_nm"],
+            mob_c=fo["mob_c"], eq_centroid=fo["eq_centroid"], R=fo["R_align"])
+        frames[idx] = extract_solvent_frame_for(
+            u, sctx, fo, xf,
+            water=bool(o.get("water", True)), ions=bool(o.get("ions", True)),
+            box=bool(o.get("box", True)),
+            shell_nm=None if shell_ang is None else float(shell_ang) / 10.0,
+            atomistic=bool(o.get("atomistic")),
+            max_waters=o.get("max_waters"))
+        if include_dna:
+            flat = np.zeros(n_serials * 3, dtype=np.float32)
+            for a in atoms:
+                s = int(a["serial"]) * 3
+                flat[s] = a["x"]; flat[s + 1] = a["y"]; flat[s + 2] = a["z"]
+            frames[idx]["dna"] = flat
+
+    if not frames:
+        return empty_solvent_bin()
+    return pack_solvent_bin(frames, meta={"n_serials": n_serials} if include_dna else None)
+
+
+def extract_solvent_frame_for(u, sctx, frame_out: dict, xf, **kw) -> dict:
+    """Thin adapter: hand :func:`md_solvent.extract_solvent_frame` the DNA anchor
+    arrays that ``_extract_md_atoms_frame``'s ``frame_out`` already carries."""
+    from backend.core.md_solvent import extract_solvent_frame
+
+    return extract_solvent_frame(
+        u, sctx, frame_out["pos_raw"], frame_out["pos_pre"], xf, **kw)
 
 
 def md_frames_surface(topology_path, segments, coordinate_path, design, frame_indices,

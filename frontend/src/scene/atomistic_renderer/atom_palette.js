@@ -22,6 +22,13 @@ export const ELEMENTS = {
   Mg: { vdw: 0.173, color: 0x8AFF00 },
   Mn: { vdw: 0.161, color: 0x9C7AC7 },
   Ca: { vdw: 0.231, color: 0x3DFF00 },
+  // Buffer ions from an explicit-solvent NAMD run. Absent until 2026-07-30, so
+  // every SOD/CLA reaching the renderer used to draw as the grey DEFAULT_ELEMENT.
+  // NB the PSF resnames are SOD/CLA, not NA/CL — the resname→element mapping is
+  // the backend's job (see backend/core/md_solvent.py); by the time an atom gets
+  // here its `element` is already 'Na' / 'Cl'.
+  Na: { vdw: 0.227, color: 0xAB5CF2 },   // CPK violet
+  Cl: { vdw: 0.175, color: 0x1FF01F },   // CPK green
 }
 
 // Fallback for any element not catalogued above (grey, mid radius). Keeps the

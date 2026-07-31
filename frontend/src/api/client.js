@@ -2569,6 +2569,41 @@ export const getMdAtomisticModel = (id) =>
 export const getMdFramesSurface = (id, frameIndices, params = {}) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/frames-surface`,
     { frame_indices: frameIndices, ...params, ..._strideBody(params) })
+/**
+ * Per-frame explicit solvent + periodic cell, BINARY — decode with
+ * scene/md_solvent_bin.js `parseSolventBin`. Returns an ArrayBuffer or null.
+ *
+ * COMPOSITE frame indices, and `opts.stride` must repeat the trajectory's interval
+ * exactly like getMdFramesAtomistic.
+ *
+ * Options: `water`/`ions`/`box` toggles · `shellAng` (null = the whole cell) ·
+ * `atomistic` (real O+2H instead of one sphere) · `maxWaters` (hard cap from the
+ * measured memory budget) · `includeDna` (also return this frame's DNA coordinates,
+ * so an atomistic-rep scrub pays the ~30 s server-side context build once per chunk
+ * instead of twice).
+ *
+ * Follows the `(id, frameIndices, opts)` shape of its siblings. Never pass a
+ * positional boolean or a bare AbortSignal to a viz fetcher — `_vizOpts` throws on
+ * exactly that, because an `align` argument once silently bound to `signal` and
+ * killed the NAMD trajectory scrub with a fully green suite.
+ */
+export const getMdFramesSolventBin = (id, frameIndices, opts = {}) =>
+  _oxdnaBin('POST', `/md/jobs/${id}/frames-solvent-bin`, {
+    frame_indices: frameIndices,
+    ..._strideBody(opts),
+    water: opts.water !== false,
+    ions: opts.ions !== false,
+    box: opts.box !== false,
+    shell_ang: opts.shellAng === undefined ? 5.0 : opts.shellAng,
+    atomistic: !!opts.atomistic,
+    max_waters: opts.maxWaters ?? null,
+    include_dna: !!opts.includeDna,
+  })
+/** How much solvent a NAMD job HAS ({ready, n_waters, n_ions, species, box_nm}) —
+ *  read from the package's charge audit, so it answers in milliseconds and can price
+ *  a fetch before one is made. */
+export const getMdSolventMeta = (id) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/solvent-meta`)
 
 /** MD "Graphs and Metrics" — launch a background twist/curvature/base-pairing compute for a
  *  NAMD job (`{scope:'latest'|'chain'}`) → {metrics_id}; poll `getMdMetricsRun`. Same shape

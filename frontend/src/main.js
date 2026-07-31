@@ -186,6 +186,8 @@ import { initFileLoadDialog }                  from './ui/file_load_dialog.js'
 import { nadocBroadcast } from './shared/broadcast.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
+import { initMdSolventOverlay }      from './scene/md_solvent_overlay.js'
+import { initMdBoxOverlay }          from './scene/md_box_overlay.js'
 import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
 import { initMdPanel }    from './ui/md_panel.js'
 import { initReprOptionSliders } from './ui/repr_option_sliders.js'
@@ -1859,12 +1861,17 @@ async function main() {
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
   const mdOverlay         = initMdOverlay(scene)
+  const mdSolventOverlay  = initMdSolventOverlay(scene)
+  const mdBoxOverlay      = initMdBoxOverlay(scene)
   const mdDisplayController = initMdPanel(store, {
     designRenderer, mdOverlay, atomisticRenderer,
     onRestoreDesignHeavy: _restoreDesignHeavy,
     // Lazy: _atomSurface is assigned further below.  MD sets the atomistic mode itself,
     // so it needs this to pull the live coloring mode + strand palette onto its atoms.
     refreshAtomColors: () => _atomSurface?.refreshAtomColors?.(),
+    // md_panel owns the WebSocket; md_jobs_panel owns the solvent toggles. Lazy,
+    // because the jobs panel is created below.
+    onSolventBlob: (buf) => mdPanel?.acceptLiveSolvent?.(buf),
   })
   // getOxdnaDisplay is a lazy getter (oxdnaDisplay is declared below at ~1808): a
   // seeded MD run with no MD frame yet shows the inherited oxDNA-seed positions via it.
@@ -1899,6 +1906,10 @@ async function main() {
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
     // flexibility-map tools reuse the oxDNA display controller via an MD api adapter.
     getMdViz: () => mdViz,
+    // Explicit water / ions / periodic cell overlays for the Visualizations card.
+    getSolventOverlay: () => mdSolventOverlay,
+    getBoxOverlay: () => mdBoxOverlay,
+    getCurrentRepr: () => _currentRepr,
     // Phase 4: gate the Alpine run-target on the live cluster-connection state.
     getClusterState: () => clusterConn?.getState?.() ?? 'disconnected',
     // N2: the shared anchor-scope picker resolves the 3D selection to fixedAtoms scopes.

@@ -5449,6 +5449,47 @@
                     </div>
                     <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
                   </div>
+
+                  <!-- ── Solvent & periodic cell ──────────────────────────────
+                       CHECKBOXES, deliberately NOT peers in the name="md-viz"
+                       radio group above: they LAYER on whichever view is active.
+                       The scope radios use their own group name for the same
+                       reason — sharing "md-viz" would make "Whole box" switch the
+                       whole view off. -->
+                  <div id="md-jobs-solvent-opts" style="margin-top:10px;padding-top:8px;border-top:1px solid #21262d">
+                    <div style="font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Solvent &amp; cell</div>
+
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer"
+                           title="Explicit TIP3P water from the simulation. One sphere per molecule in Beads/Full; the real O + 2 H in VDW/Ball-and-stick.">
+                      <input id="md-jobs-water-toggle" type="checkbox" style="accent-color:#58a6ff"> Water
+                    </label>
+                    <div id="md-jobs-water-opts" style="display:none;padding-left:18px;margin-top:3px">
+                      <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer"
+                             title="Only water within this distance of a DNA heavy atom — the hydration layer.">
+                        <input id="md-jobs-water-scope-shell" name="md-water-scope" type="radio" value="shell" checked style="accent-color:#58a6ff"> Hydration shell
+                        <input id="md-jobs-water-shell" type="number" value="5" min="1" max="30" step="0.5"
+                               style="width:48px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:1px 3px;font-size:var(--text-xs)"> Å
+                      </label>
+                      <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer;margin-top:2px"
+                             title="Every water molecule in the cell. At bulk density this fills the box — expect the structure to be hidden, and expect a large payload.">
+                        <input id="md-jobs-water-scope-box" name="md-water-scope" type="radio" value="box" style="accent-color:#58a6ff"> Whole box
+                      </label>
+                      <div id="md-jobs-water-count" style="font-size:10px;color:#8b949e;min-height:13px;margin-top:2px"></div>
+                    </div>
+
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer;margin-top:4px"
+                           title="Every Na+, Cl- and Mg2+ in the cell — never bounded by the shell. Mg is drawn oversized: the sphere stands for the whole hexahydrate complex.">
+                      <input id="md-jobs-ions-toggle" type="checkbox" style="accent-color:#58a6ff"> Ions
+                    </label>
+                    <div id="md-jobs-ions-legend" style="display:none;padding-left:18px;margin-top:2px;font-size:10px;color:#8b949e"></div>
+
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer;margin-top:4px"
+                           title="The periodic cell as a wireframe, redrawn every frame so it breathes with the NPT barostat. Lengths and orientation are the simulation's own; the origin is pinned to the structure, because a NAMD DCD stores cell lengths but no cell origin.">
+                      <input id="md-jobs-box-toggle" type="checkbox" style="accent-color:#58a6ff"> Periodic box
+                    </label>
+
+                    <div id="md-jobs-solvent-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  </div>
                 </div>
               </div>
 

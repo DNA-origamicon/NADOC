@@ -29,6 +29,28 @@ export function sceneUsesNativeCg(sceneRepr) {
 }
 
 /**
+ * How explicit solvent should be drawn for a scene representation:
+ *
+ *   'sphere'    — full / beads:      one sphere per molecule at its oxygen
+ *   'atomistic' — vdw / ballstick:   the real O + 2 H
+ *   'off'       — everything else
+ *
+ * NOT built on `sceneUsesNativeCg`, deliberately: that set includes `cylinders`,
+ * where solvent must be OFF (the coarse structural views stay clean). Same class of
+ * trap as `sceneUsesHeavy` not being `!sceneUsesNativeCg` — the repr sets here
+ * overlap without nesting, so each one is spelled out.
+ *
+ * The two modes are different WIRE payloads (3 vs 9 floats per molecule), so a
+ * change between them has to invalidate any cached solvent frames, not just
+ * re-render them.
+ */
+export function solventRepMode(sceneRepr) {
+  if (sceneRepr === 'full' || sceneRepr === 'beads') return 'sphere'
+  if (sceneUsesAtomistic(sceneRepr)) return 'atomistic'
+  return 'off'
+}
+
+/**
  * Stamp each streamed ball-and-stick atom with its design identity, IN PLACE.
  *
  * MD frames carry coordinates only; the identity the colour resolver keys on

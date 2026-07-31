@@ -17,6 +17,13 @@
  *   multi-lasso — atoms in any selected strand_id → white; others → dimmed CPK
  *   (no selection) — all atoms at full CPK colour
  *
+ * Sphere impostors (Phase C, 2026-07-30): when `impostorsEnabled()` each atom
+ * mesh is a 2-triangle billboard quad ray-painting a lit sphere instead of a
+ * ~160-triangle SphereGeometry — ~80x fewer triangles, which is what makes a
+ * solvated all-atom scene renderable at all. Bonds stay real cylinders. The flag
+ * is read at REBUILD time, so flipping it mid-session needs an `update()` /
+ * `setMode()` / `setVdwScale()` to take effect. See memory/project_sphere_impostors.md.
+ *
  * Usage:
  *   const ar = initAtomisticRenderer(scene)
  *   ar.update(atomData)                        // atomData = GET /api/design/atomistic
@@ -29,10 +36,12 @@ import * as THREE from 'three'
 
 import { ELEMENTS, DEFAULT_ELEMENT, BALL_RADIUS, BOND_RADIUS } from './atomistic_renderer/atom_palette.js'
 import {
-  SPHERE_GEO, CYLINDER_GEO, createGeometryState,
+  CYLINDER_GEO, createGeometryState,
   atomOffset, sphereMatrix, bondMatrix,
-  makeSphereMaterial, makeBondMaterial,
+  makeBondMaterial,
+  atomSphereGeometry, makeAtomSphereMaterial, atomInstanceScale,
 } from './atomistic_renderer/geometry_builder.js'
+import { impostorsEnabled, installSphereImpostorRaycast } from './impostor_material.js'
 import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
 import { makeAtomTable } from './atom_table.js'
 
@@ -69,7 +78,15 @@ export function initAtomisticRenderer(scene) {
     scene,
     elementMeshes:  {},   // { P: InstancedMesh, C: …, N: …, O: … }
     elementAtoms:   {},   // { P: Int32Array of atom rows, … } — instance order
-    elementRadius:  {},   // { P: r, … } — sphere radius at t=0
+    // What goes in the INSTANCE MATRIX — NOT necessarily the sphere radius.
+    // Under impostors it is 1 and the material's u_impostorRadius uniform owns
+    // the radius; with real unit-sphere geometry it IS the radius. Conflating
+    // the two renders every atom at radius² (see geometry_builder's note). The
+    // true radius needs no field: it is carried by the material
+    // (`userData.impostorRadius`, which shadow_bounds reads) and captured by the
+    // raycast closure at build time.
+    elementScale:   {},   // { P: s, … }
+    matCache:       new Map(),  // `${el}|${radius}` → material; see _material()
     bondMesh:       null,
     bondAtomIdx:    null, // Int32Array [a0,b0,a1,b1,…] atom rows, bond instance order
     atoms:          makeAtomTable(null),
@@ -81,19 +98,41 @@ export function initAtomisticRenderer(scene) {
     geom:           createGeometryState(),
   }
 
+  // ── Materials ─────────────────────────────────────────────────────────────
+
+  /**
+   * Cached material per (element, radius). The cache is a CORRECTNESS
+   * requirement under the impostor flag, not an optimisation: an impostor
+   * material carries `customProgramCacheKey = 'impostorPhong_' + uuid`
+   * (impostor_material.js) so that its `u_impostorRadius` actually gets bound.
+   * A fresh material per rebuild therefore means a fresh SHADER PROGRAM per
+   * rebuild — and the live MD display calls `update()` every frame, which would
+   * be a shader compile per frame plus an unbounded program-cache leak. With
+   * plain MeshStandardMaterials this was invisible (they all share one program).
+   */
+  function _material(key, make) {
+    let mat = _state.matCache.get(key)
+    if (!mat) { mat = make(); _state.matCache.set(key, mat) }
+    return mat
+  }
+
   // ── Cleanup ──────────────────────────────────────────────────────────────
 
+  // Removes meshes; materials survive in `matCache` (see _material) and are
+  // freed only by dispose(). `mesh.dispose()` frees the instanceMatrix /
+  // instanceColor GPU buffers — it was missing before 2026-07-30, which leaked
+  // one buffer pair per rebuild on the per-frame live-display path.
   function _clearScene() {
     for (const mesh of Object.values(_state.elementMeshes)) {
       _state.scene.remove(mesh)
-      mesh.material.dispose()
+      mesh.dispose()
     }
     _state.elementMeshes = {}
     _state.elementAtoms  = {}
-    _state.elementRadius = {}
+    _state.elementScale  = {}
     if (_state.bondMesh) {
       _state.scene.remove(_state.bondMesh)
-      _state.bondMesh.material.dispose()
+      _state.bondMesh.dispose()
       _state.bondMesh = null
     }
     _state.bondAtomIdx = null
@@ -131,12 +170,24 @@ export function initAtomisticRenderer(scene) {
       (buckets[table.element(i)] ??= []).push(i)
     }
 
+    const useImpostors = impostorsEnabled()
+
     for (const [el, rows] of Object.entries(buckets)) {
       if (!rows.length) continue
       const meta = ELEMENTS[el] ?? DEFAULT_ELEMENT
       const radius = (isVdw ? meta.vdw : BALL_RADIUS) * _vdwScale
-      const mesh   = new THREE.InstancedMesh(SPHERE_GEO, makeSphereMaterial(), rows.length)
+      const scale  = atomInstanceScale(radius)
+      const mesh   = new THREE.InstancedMesh(
+        atomSphereGeometry(),
+        _material(`${el}|${radius.toFixed(4)}`, () => makeAtomSphereMaterial(radius)),
+        rows.length,
+      )
       mesh.frustumCulled = false
+      // Named so photo_renderer/mesh_repr.js resolves these by NAME rather than by
+      // material class — under impostors the material is Phong, which its
+      // MeshStandardMaterial inference would misread as the 'full' representation.
+      mesh.name = 'atomSpheres'
+      mesh.userData.element = el
       // Enable per-instance colour (initialised to white; _applyColors sets them)
       mesh.instanceColor = new THREE.InstancedBufferAttribute(
         new Float32Array(rows.length * 3), 3
@@ -144,13 +195,17 @@ export function initAtomisticRenderer(scene) {
       const group = Int32Array.from(rows)
       for (let i = 0; i < group.length; i++) {
         const a = group[i]
-        mesh.setMatrixAt(i, sphereMatrix(_state.geom, table.x(a), table.y(a), table.z(a), radius))
+        mesh.setMatrixAt(i, sphereMatrix(_state.geom, table.x(a), table.y(a), table.z(a), scale))
       }
       mesh.instanceMatrix.needsUpdate = true
+      // The quad geometry is a flat billboard on the CPU side, so the stock
+      // InstancedMesh.raycast would test the un-billboarded quad. Swap in a
+      // ray-vs-sphere test against the instance centres.
+      if (useImpostors) installSphereImpostorRaycast(mesh, radius)
       _state.scene.add(mesh)
       _state.elementMeshes[el] = mesh
       _state.elementAtoms[el]  = group
-      _state.elementRadius[el] = radius
+      _state.elementScale[el]  = scale
     }
 
     // Bond cylinders
@@ -181,8 +236,11 @@ export function initAtomisticRenderer(scene) {
         kept++
       }
       if (kept) {
-        const bm = new THREE.InstancedMesh(CYLINDER_GEO, makeBondMaterial(), kept)
+        // Bonds stay real cylinders under impostors (Phase C v1 scope).
+        const bm = new THREE.InstancedMesh(
+          CYLINDER_GEO, _material('bond', makeBondMaterial), kept)
         bm.frustumCulled = false
+        bm.name = 'atomBonds'
         bm.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(kept * 3), 3)
         for (let i = 0; i < kept; i++) bm.setMatrixAt(i, matrices[i])
         bm.instanceMatrix.needsUpdate = true
@@ -315,7 +373,7 @@ export function initAtomisticRenderer(scene) {
         const mesh = _state.elementMeshes[it.el]
         if (!mesh) continue
         v.set(it.x, it.y, it.z).applyMatrix4(mat4)
-        mesh.setMatrixAt(it.idx, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementRadius[it.el]))
+        mesh.setMatrixAt(it.idx, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementScale[it.el]))
         touched.add(mesh)
       }
       for (const mesh of touched) mesh.instanceMatrix.needsUpdate = true
@@ -352,7 +410,7 @@ export function initAtomisticRenderer(scene) {
           const m = sid ? mats[sid] : null
           v.set(table.x(r), table.y(r), table.z(r))
           if (m) v.applyMatrix4(m)
-          mesh.setMatrixAt(i, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementRadius[el]))
+          mesh.setMatrixAt(i, sphereMatrix(_state.geom, v.x, v.y, v.z, _state.elementScale[el]))
           touched.add(mesh)
         }
       }
@@ -390,6 +448,8 @@ export function initAtomisticRenderer(scene) {
     /** Remove all scene objects and free GPU memory. */
     dispose() {
       _clearScene()
+      for (const mat of _state.matCache.values()) mat.dispose()
+      _state.matCache.clear()
       _state.lastData = null
     },
 
@@ -457,15 +517,15 @@ export function initAtomisticRenderer(scene) {
 
       // Spheres
       for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
-        const group  = _state.elementAtoms[el]
-        const radius = _state.elementRadius[el] ?? BALL_RADIUS
+        const group = _state.elementAtoms[el]
+        const scale = _state.elementScale[el]
         let dirty = false
         for (let i = 0; i < group.length; i++) {
           const r = group[i]
           const off = atomOffset(_state.geom, table.get(r), offsets, t)
           _tmpP.set(table.x(r) + off.x, table.y(r) + off.y, table.z(r) + off.z)
           tmpMat.identity()
-          tmpMat.makeScale(radius, radius, radius)
+          tmpMat.makeScale(scale, scale, scale)
           tmpMat.setPosition(_tmpP.x, _tmpP.y, _tmpP.z)
           mesh.setMatrixAt(i, tmpMat)
           dirty = true
@@ -550,14 +610,14 @@ export function initAtomisticRenderer(scene) {
       const table = _state.atoms
 
       for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
-        const group  = _state.elementAtoms[el]
-        const radius = _state.elementRadius[el] ?? BALL_RADIUS
+        const group = _state.elementAtoms[el]
+        const scale = _state.elementScale[el]
         let dirty = false
         for (let i = 0; i < group.length; i++) {
           const r = group[i]
           const [x, y, z] = _atomXYZ(table.helixId(r), table.serial(r))
           tmpMat.identity()
-          tmpMat.makeScale(radius, radius, radius)
+          tmpMat.makeScale(scale, scale, scale)
           tmpMat.setPosition(x, y, z)
           mesh.setMatrixAt(i, tmpMat)
           dirty = true

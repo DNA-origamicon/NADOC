@@ -545,6 +545,15 @@ class TestProductionAppend:
                 self.status_code = status_code
                 self.detail = detail
 
+        class _Response:
+            """Stand-in for fastapi.Response — the binary solvent route returns one.
+            Records what it was handed so a caller can assert on it; these tests
+            never invoke that route, they just need the import to resolve."""
+
+            def __init__(self, content=b"", media_type=None, **kwargs):
+                self.body = content
+                self.media_type = media_type
+
         async def _run_in_threadpool(fn, *args, **kwargs):
             return fn(*args, **kwargs)
 
@@ -553,6 +562,7 @@ class TestProductionAppend:
         fastapi.BackgroundTasks = object
         fastapi.HTTPException = _HTTPException
         fastapi.Request = object
+        fastapi.Response = _Response
         concurrency = types.ModuleType("fastapi.concurrency")
         concurrency.run_in_threadpool = _run_in_threadpool
         assembly = types.ModuleType("backend.api.assembly")

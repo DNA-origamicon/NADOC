@@ -3,10 +3,11 @@
 // to preserve the allocation-avoidance contract: callers reuse one state bag
 // per renderer rather than allocating per-call.
 //
-// Leaf module: imports `three` (external) ONLY — NO imports from
-// `atomistic_renderer.js` or sibling modules under `atomistic_renderer/`
-// (substantive precondition #19). This is the purest leaf possible alongside
-// `atom_palette.js` (which has zero imports).
+// Leaf module: imports `three` (external) and the sibling LEAF
+// `../impostor_material.js` (which itself imports only `three`) — NO imports from
+// `atomistic_renderer.js` or other modules under `atomistic_renderer/`
+// (substantive precondition #19). The impostor import was added 2026-07-30 for
+// Phase C so the atom-sphere geometry/material pair is chosen in ONE place.
 //
 // Public API:
 //   createGeometryState() → state bag of THREE temps + shared geometry constants
@@ -15,6 +16,9 @@
 //   bondMatrix(state, ax, ay, az, bx, by, bz, r)   → THREE.Matrix4 | null
 //   makeSphereMaterial()                            → THREE.MeshStandardMaterial
 //   makeBondMaterial()                              → THREE.MeshStandardMaterial
+//   atomSphereGeometry()                            → quad (impostors) | SPHERE_GEO
+//   makeAtomSphereMaterial(radius)                  → impostor Phong | MeshStandardMaterial
+//   atomInstanceScale(radius)                       → the INSTANCE-MATRIX scale for that radius
 //
 // All helpers take `state` as the first argument so the THREE scratch buffers
 // (tmpMat / tmpQ / tmpS / yAxis / zeroVec) live with the renderer instance and
@@ -22,6 +26,10 @@
 // (assembly_renderer.js builds one renderer per assembly entry).
 
 import * as THREE from 'three'
+
+import {
+  impostorsEnabled, IMPOSTOR_QUAD, makeImpostorPhongMaterial,
+} from '../impostor_material.js'
 
 // ── Shared geometry constants (module-level — pure data, safe to share) ──────
 
@@ -65,6 +73,35 @@ export function makeSphereMaterial() {
 
 export function makeBondMaterial() {
   return new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 })
+}
+
+// ── Atom spheres: impostor quad or real sphere (impostor Phase C) ────────────
+//
+// The flag is read at BUILD time, so flipping `window.NADOC_IMPOSTORS` mid-session
+// only takes effect on the next rebuild (`update()` / `setMode()` / `setVdwScale()`).
+//
+// These three MUST agree with each other. `atomInstanceScale` is the subtle one:
+// the impostor shader computes its painted radius as
+//   v_impR = u_impostorRadius * length(instanceMatrix[0].xyz)
+// (impostor_material.js `_VERT_PROJECT`), i.e. the uniform TIMES the instance
+// scale. So an impostor instance matrix must carry scale 1 and let the uniform
+// own the radius; baking the radius into the matrix as well renders every atom
+// at radius² (0.14 nm → 0.02 nm). A real sphere is the opposite: SPHERE_GEO is a
+// unit sphere, so the matrix scale IS the radius.
+
+/** Geometry for one atom instance: a 2-triangle billboard, or a ~160-tri sphere. */
+export function atomSphereGeometry() {
+  return impostorsEnabled() ? IMPOSTOR_QUAD : SPHERE_GEO
+}
+
+/** Material for an atom-sphere InstancedMesh of the given true radius (nm). */
+export function makeAtomSphereMaterial(radius) {
+  return impostorsEnabled() ? makeImpostorPhongMaterial({ radius }) : makeSphereMaterial()
+}
+
+/** Instance-matrix scale that pairs with `atomSphereGeometry()` for `radius`. */
+export function atomInstanceScale(radius) {
+  return impostorsEnabled() ? 1 : radius
 }
 
 // ── Pure geometry helpers ────────────────────────────────────────────────────
