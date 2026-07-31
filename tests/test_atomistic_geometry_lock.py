@@ -44,14 +44,21 @@ _FAST_GOLDEN = {
     # Regenerated again 2026-07-18: commit 91a8eed (phosphate 4fs-safe on position-only override
     # inserts) shifted the same two extra-base designs without updating the goldens.  6hb_test
     # (no such inserts) still matches, again confirming a design-specific change, not drift.
-    # Regenerated again 2026-07-28: commit d9bed33 (crossover extra bases were built topologically
-    # CATENATED) necessarily re-places the inserted bases, shifting these two without updating the
-    # goldens.  APPROVED — verified by the fix's own oracle rather than by pattern-match:
-    # `scripts/check_catenation.py` now reports catenated=0 for Con4 (1 reciprocal junction) and
-    # 2hb_xover_val (2).  6hb_test has 0 reciprocal extra-base junctions and its hash is unchanged,
-    # which is exactly why it is the drift control.
-    "Con4":          "1c2f22b9d164e88add0ade366ae5e416",
-    "2hb_xover_val": "77b38f80cde66f179fb03b2ff88f35ba",
+    # 2026-07-30: REVERTED the 2026-07-28 "regeneration" (commit 3093b83) back to these, the
+    # values 0cbbc9f left.  That commit assumed the catenation fix (e810dd8) had shifted these
+    # two and pasted hashes that NO reachable code state produces — not at HEAD, not at 3093b83
+    # itself, not pre-fix, and not under any close_backbone/relaxed_oxdna_phase combination
+    # (all 4 enumerated).  The test has therefore been red since it was written that way.
+    #
+    # The premise was wrong, not the code.  Neither design was ever catenated, so the repair
+    # never fires on them, and `project_crossover_catenation.md` guarantees exactly this:
+    # "seed 0 = today's behaviour exactly, so clean pairs and unpaired crossovers stay
+    # bit-identical".  Measured both ways — the build at e810dd8^ (pre-fix) and at HEAD emit
+    # the same hashes below, and `scripts/check_catenation.py` reports catenated=0 for Con4
+    # (1 reciprocal junction) and 2hb_xover_val (2).  Also confirmed BLAS-thread-independent
+    # (1 vs unpinned) and deterministic across repeat builds, so these are true constants.
+    "Con4":          "dbaee5ae201a4c422c7ed85f32777a2f",
+    "2hb_xover_val": "e69b20ba99d7d97562807ff06c78d411",
 }
 
 # Slow: large designs that additionally exercise the SKIP-site bridge and the
