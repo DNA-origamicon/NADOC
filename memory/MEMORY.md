@@ -73,7 +73,7 @@ loopskip_no_crossover_ends · browser_console_debugging
 
 Files are `project_<name>.md`. Bold = read before touching that area.
 
-**Cluster/joints:** cluster_joints · cluster_reconcile · cluster_autodetect · deformation_cluster_scope · cluster_copy_paste
+**Cluster/joints:** cluster_joints · cluster_reconcile · cluster_autodetect · **deformation_cluster_scope** (LIVE REF — scope is frozen into `affected_helix_ids`; geometry never reads `cluster_ids`) · cluster_copy_paste
 
 **Feature log / anim:** feature_log_overhaul · animation_fade · animation_all_reprs · assembly_configurations
 

@@ -1,301 +1,126 @@
 ---
 name: deformation-cluster-scope
-description: Bend/twist features carry a cluster_ids list scoping the deformation to a subset of clusters within a part. Multi-select picker in the bend/twist popup; default = active cluster.
+description: LIVE REFERENCE — bend/twist deformations carry a cluster_ids list scoping them to a subset of clusters. Shipped 2026-05-14, in production. Scope is FROZEN into affected_helix_ids at create time; the geometry never reads cluster_ids.
 metadata: 
   node_type: memory
   type: project
   originSessionId: a3036cf2-209c-483d-9711-c9abdac2f237
 ---
 
-# Bend/Twist cluster scoping (multi-cluster, helix-level)
+# Bend/twist cluster scoping — LIVE REFERENCE
 
-Landed 2026-05-14. Adds an explicit cluster scope to bend/twist deformations
-so a part with multiple clusters can apply independent bends/twists to each,
-even when the clusters occupy overlapping bp ranges.
+> **Status (audited 2026-07-30, `/audit-plan`): SHIPPED and in production.** Every anchor probed;
+> the feature is live end-to-end (model → 4 routes → picker UI). This is **not** an unfinished
+> plan — it is the reference for how scoping actually works. **No rank.**
+>
+> The 2026-05-14…05-27 work log (five backend geometry fixes + the edit-flow history) moved to
+> **[project_deformation_cluster_scope_archive.md](project_deformation_cluster_scope_archive.md)**
+> — its root-cause explanations are still correct; all its line anchors are dead. Don't read it in
+> a routine loop.
+>
+> Architecture map: [.claude/rules/deformation.md](../.claude/rules/deformation.md) (auto-loads).
+> Symptom→diagnosis: `.claude/runbooks/RUNBOOK_DEFORMATION.md` §7.
 
-> **Location correction (2026-07-30, `/audit-plan`).** The scope helper moved out of `crud.py`
-> and lost its underscore: it is now **`resolve_cluster_scope(design, cluster_ids, helix_ids)` at
-> `backend/core/deformation.py:2683`**, called from `backend/api/routes_deformation.py:111`.
-> All four deformation routes were carved out of `crud.py` into `routes_deformation.py`
-> (POST `:90`, PATCH `:148`, DELETE `:177`, GET debug `:203`), so every `crud.py:~10xxx` anchor
-> below is dead. The data model is unchanged and confirmed live: `DeformationOp.cluster_ids`
-> at `models.py:1128`. Architecture map: [.claude/rules/deformation.md](../.claude/rules/deformation.md).
+## The one thing to know
 
-## What changed
+**There are two independent scoping mechanisms, and the geometry math reads neither `cluster_ids`
+nor the cluster picker.**
 
-- **Data model**: `DeformationOp.cluster_id: Optional[str]` →
-  `DeformationOp.cluster_ids: List[str]` (`backend/core/models.py`). Empty
-  list = unscoped (apply to all crossing helices). Hard break, no
-  auto-migration: old `.nadoc` files with `cluster_id` will fail to load —
-  re-author affected designs.
-- **API**: `AddDeformationBody.cluster_ids: list[str]` plus a
-  `_resolve_cluster_scope` helper in `backend/api/crud.py` that filters
-  `affected_helix_ids` to the union of the named clusters' `helix_ids` and
-  drops missing cluster ids. The deformation-branch of
-  `/design/features/{i}/edit` follows the same path.
-- **Frontend**: `addDeformation(..., clusterIds = [])`; the deformation
-  editor stores a per-session `_sessionClusterIds`. `setDeformSessionClusterIds`
-  is async and rebuilds the live preview op when called mid-session (params
-  update via PATCH can't change scope; delete+recreate is required).
-- **UI**: multi-select cluster picker in `frontend/src/ui/bend_twist_popup.js`
-  with All / None buttons. Hidden when the design has 0–1 clusters.
-  Defaults to `[activeClusterId]`, falls back to the single cluster, else
-  `[]` (unscoped).
+1. **Create/edit time — `resolve_cluster_scope`** intersects the crossing helices with the union
+   of the named clusters' `helix_ids` and **freezes the result into `op.affected_helix_ids`**.
+   Unknown cluster ids are dropped silently — a stale id narrows the scope, possibly to nothing.
+2. **Render time — `_arm_filter_cluster`** picks, per helix, *the first non-default cluster that
+   contains that helix*. It never looks at `op.cluster_ids`.
 
-## Why this matters (and what it doesn't fix)
+Consequences, all real:
 
-- "Different parts can occupy the same bp range" works *as long as the
-  clusters have disjoint `helix_ids`*. Two clusters sharing a helix still
-  share a single axis, so the bend deforms the axis for both — Phase 2
-  (per-domain sub-axis isolation) is deferred.
+- `affected_helix_ids` is the **actual** enforcement. `cluster_ids` is metadata (used by
+  create/edit, copy/paste, dependency cascade, and the debug echo). **If the two drift, geometry
+  silently follows `affected_helix_ids`.** A saved op keeps its stored list on load — it is never
+  recomputed, so an op saved before a scope-affecting fix stays wrong until re-applied.
+- A helix in **two** non-default clusters gets `non_default[0]` — arbitrary list order. This is the
+  mechanical root of the known "two clusters sharing a helix conflict" limitation (below).
+- **PATCH cannot change scope** (`UpdateDeformationBody` is `params` only). Changing the picker
+  mid-session deletes and re-creates the preview op.
 
-## `_frame_at_bp` arm anchor — fixed (2026-05-14)
+## Code locations (probed 2026-07-30)
 
-After fixing the helix-axis sampling to pass arm-local bp (`local_bp +
-bp_offset`), the axis still drifted to the old "translate forward" position
-on Ultimate Polymer Hinge — but only the axis, not the nucleotides. Root
-cause: `_frame_at_bp` was using `helices[0].bp_start` as the arm anchor for
-converting global op-plane bp to arm-local. When the first helix in the
-arm wasn't the one with the smallest bp_start (typical when a Scaffold
-Cluster spans the whole design and `design.helices` isn't ordered by
-bp_start), this offset by `(helices[0].bp_start − arm_min_bp_start) × RISE`
-from where the centroid math placed things. The nucleotide path appeared
-correct because the buggy anchor and its own `arm_min_bp_start` subtraction
-happened to cancel inside `nucleotide_positions_arrays`, but the axis path
-exposed the mismatch. Fixed by replacing `helices[0].bp_start` with
-`min(h.bp_start for h in helices)` in `_frame_at_bp`. Regression covered
-by `test_frame_at_bp_uses_min_bp_start_not_first_helix`. The same anchor
-convention is already used by `_precompute_arm_frames` (takes `arm_min_bp`
-as a parameter from callers).
+| Thing | Where |
+|---|---|
+| `DeformationOp.cluster_ids: List[str]` | `backend/core/models.py:1129` (class `:1120`). Empty = unscoped |
+| `resolve_cluster_scope(design, cluster_ids, helix_ids) -> dict` | `backend/core/deformation.py:2683` |
+| — called from | `routes_deformation.py:111` (POST) · `core/feature_log_edit.py:162` (edit) · **`routes_loop_skip.py:269`** |
+| `helices_crossing_planes` (overlap test, not full-span) | `deformation.py:2646`; callers `feature_log_edit.py:159`, `routes_deformation.py:105`, `routes_loop_skip.py:266` |
+| `_ops_affecting_helix` (per-helix short-circuit) | `deformation.py:585`; 5 callers `:1453,:1568,:1663,:1755,:2416` |
+| `_arm_filter_cluster` (prefers first non-default) | `deformation.py:603`; 5 callers `:1464,:1578,:1685,:1751,:2443` |
+| `_frame_at_bp` (arm anchor = `min(h.bp_start ...)`) | `deformation.py:460`, anchor at `:487` |
+| `_precompute_arm_frames(… arm_min_bp …)` | `deformation.py:1363`; `arm_min_bp` computed `:2467`, passed `:1491`,`:1704` |
+| `_bundle_centroid_and_tangent` (projects to `arm_min_bp_start`) | `deformation.py:189`, 8 call sites. **Name collision** with an unrelated one at `loop_skip_calculator.py:148` |
+| `deformed_helix_axes` / `deformed_nucleotide_positions` | `deformation.py:2332` / same module |
+| Routes (all mount `/api`) | `routes_deformation.py` — POST `:90`, PATCH `:148`, DELETE `:177`, GET debug `:203` |
+| `AddDeformationBody.cluster_ids` | `routes_deformation.py:46`, field `:53`. `UpdateDeformationBody` `:58` = **params only** |
+| Feature-log edit (rebuild from LOG) | **`backend/core/feature_log_edit.py:109` `edit_deformation_entry`** — `op_snapshot` `:147/:167/:178`, 409 `:147-151`, `rebuilt_ops` `:182`, `copy_with(...)` `:187`. `crud.py:9876` is a 10-line shell |
+| Other `op.cluster_ids` readers | `cluster_copy.py:293-318`/`:503` (scope + id remap on paste) · `feature_dependencies.py:217` (cascade; returns `None` if a cluster id is missing) · `headless_build.py:501/529` (`cluster_ids=()`) |
+| `addDeformation(type, planeA, planeB, params, helixIds, preview, clusterIds = [])` | `frontend/src/api/client.js:1324`; `updateDeformation` `:1366` |
+| Session scope | `deformation_editor.js` — `_sessionClusterIds` `:560`, `setDeformSessionClusterIds` `:567` (async, delete+recreate), `_defaultClusterIds` `:550` (exported as `getDeformDefaultClusterIds` `:585`), `_effectiveClusterIds` `:576` (also scopes plane picking, `:595`) |
+| Picker | `ui/bend_twist_popup.js` — All `:100` / None `:104`, gate `:383-387`, default via `:192` |
+| Picker markup | `frontend/index.html:6774-6786` — `#def-cluster-section`, `-all-btn`, `-none-btn`, `-list`, `-empty-msg` |
+| Plane picking (nearest helix, longest-helix default) | `deformation_editor.js:710` `_pickBpFromPoint`, `:469` `_defaultBpForPlaneB` |
+| Tests | `tests/test_deformation_clusters.py` (**10**) · `tests/test_deformation_params_core.py` (**9**, core-level `resolve_cluster_scope`) · `test_geometry.py:455/:471` · `test_feature_log_snapshot.py:689` |
+| Fixtures the history rests on | `tests/fixtures/teeth.nadoc`, `workspace/Ultimate Polymer Hinge 191016.nadoc` (the hinge's bp_starts are cited in live code, `deformation.py:2464-2466`) |
 
-## Apply race + axis arm-local bp — fixed (2026-05-14)
+## Corrections to what this file used to say
 
-Two follow-on bugs surfaced once cluster-scoped bend was actually exercised
-on Ultimate Polymer Hinge 191016.nadoc:
+- **"Old `.nadoc` files with singular `cluster_id` fail to load — hard break" is FALSE.**
+  `models.py` declares no `model_config`, so pydantic v2's default `extra='ignore'` applies: the
+  legacy field is **silently dropped** and the file loads. The op survives as *unscoped* with its
+  persisted `affected_helix_ids` intact. The real risk is quiet scope-metadata loss, not a load
+  failure. (`RUNBOOK_DEFORMATION.md:146` inherited the wrong claim — corrected 07-30.)
+- **`_resolve_cluster_scope` in `crud.py` is gone** — it is `resolve_cluster_scope` in
+  `deformation.py`, and it has **four** callers, not one (see table).
+- **The edit-in-place PATCH flow described in the archive was replaced.** `_onEditFeature`
+  (`main.js:1441`) now **peels** the op off with a transient `deleteDeformation(op.id, preview=true)`
+  (`:1513`), records `origOpId` (`:1505`), and re-enters through the *new-op preview* path with
+  `startDeformToolForEdit(..., opId=null, op.params)` (`:1523`) so the popup can show a
+  before/after solid-vs-ghost. `skipInitialPreview` is now hardcoded `false` (`:1427`). It still
+  does **not** seek (✔ as documented) and still calls `_watchDeformState()` itself (`:1530`).
+- **Test coverage doubled** — 10 cases in `test_deformation_clusters.py` (this file said five),
+  plus the 9-test `test_deformation_params_core.py` that didn't exist when this was written.
+- **Loop-skip is an undocumented second consumer** of `helices_crossing_planes` +
+  `resolve_cluster_scope` (`routes_loop_skip.py:266-269`). Any change to the resolver's contract
+  has a blast radius this file never described.
 
-**Apply doesn't bend (race).** `confirmDeformation` called
-`_clearPreviewSession()` first, which delegates to `_cancelPreview()` —
-that fires `api.deleteDeformation(opId, preview=true).catch(...)` as a
-fire-and-forget, no await. Then the awaited `api.addDeformation(...)`
-runs in parallel. Both responses come back to the client and the *last*
-one to arrive overwrites `currentDesign` via `_syncFromDesignResponse`.
-When the DELETE response arrived last, the client store went back to a
-no-deformations state even though the server state and feature_log were
-correct — visible as "Apply doesn't bend but the feature-log entry
-appears." Fixed by awaiting the DELETE sequentially before the POST in
-`confirmDeformation` (inlining the cleanup so `_clearPreviewSession`'s
-fire-and-forget never runs in the confirm path).
+## Known limitations (unchanged, still true)
 
-**Helix axis lines drift from nucleotides during preview.** In
-`deformed_helix_axes`, the per-helix sampling loop iterated `local_bp ∈
-[0, h.length_bp)` and passed that value directly to `_frame_at_bp(...)`
-— but `_frame_at_bp` expects **arm-local** bp, not helix-local. For any
-helix whose `bp_start ≠ arm_min_bp_start` (routing-adjusted short
-helices that begin mid-bundle), the axis line was sampled at the wrong
-Z. The nucleotide path correctly converted with `p − arm_min_bp_start`.
-Fixed by adding `bp_offset = h.bp_start − arm_min_bp` and passing
-`local_bp + bp_offset` to `_frame_at_bp`. Regression covered by
-`test_helix_axis_samples_use_arm_local_bp_for_off_anchor_helices`.
+- **Two clusters sharing a helix still conflict.** Disjoint `helix_ids` works; a shared helix has
+  one axis-frame stack, so a bend deforms it for both. Phase 2 (per-cluster sub-axis isolation) is
+  **not implemented and not started** — verified: `deformation.py:2470-2473` samples exactly one
+  `_frame_at_bp` stack per helix. The `seg_geoms` subdivision at `:2477-2482` is cluster **rigid
+  transform** subdivision applied to points already sampled off the single shared curve, which is a
+  different thing. If Phase 2 is ever taken on, the hard parts are `deformed_nucleotide_positions`
+  and `deformed_helix_axes`.
+- Un-affected helices are kept still by *side-stepping* an identity-preservation weakness in the
+  frame math (the `_ops_affecting_helix` short-circuit), not by fixing it — see the archive.
 
-## Centroid projection — fixed in `_bundle_centroid_and_tangent` (2026-05-14)
+## Open defects on the shipped code
 
-When a cluster's helices have mixed `bp_start`s — typical for routing-adjusted
-sub-clusters where short helices begin mid-bundle (e.g. Ultimate Polymer
-Hinge's Geometry Cluster 3 with bp_starts 114/123/129/135) — adding *any*
-deformation op covering that cluster shifted every helix in it forward
-along the tangent by `(avg(bp_start) − arm_min_bp_start) × BDNA_RISE_PER_BP`.
-At angle=0 the bend was visually a no-op but the cluster still translated
-~2.5 nm in Z. Plane-A drag flickered between shifted/not-shifted because the
-preview op was deleted+recreated on every drag-end.
-
-Root cause: `_bundle_centroid_and_tangent` averaged raw `axis_start`s, which
-sit at each helix's own `bp_start`. But the spine math uses
-`arm_min_bp_start` as the reference for that centroid. The fix projects each
-`axis_start` back along the tangent to `arm_min_bp_start` before averaging,
-so `centroid_0.z = arm_min_bp_start × RISE` for canonical Z-aligned helices
-and the identity `axis_deformed == axis_orig` holds for the angle=0 case.
-
-Single-arm same-bp_start designs are unaffected (projection is a no-op when
-`h.bp_start == arm_min_bp_start` for every helix). Regression covered by
-`test_mixed_bp_start_cluster_zero_angle_bend_does_not_translate`. This change
-touches every caller of `_bundle_centroid_and_tangent` — full suite still
-green vs pre-existing failures.
-
-## Per-helix short-circuit — fixed by `_ops_affecting_helix` (2026-05-14)
-
-Adding *any* preview deformation op to a design caused un-affected helices to
-shift by a small, per-cluster amount even before angle/twist controls were
-touched. Visible as "the other clusters translate forward when I place plane
-A on this cluster." Root cause: when no op covers a helix, the frame-math
-path still ran with that helix's arm, and the
-`spine + R @ cs_offset = axis_orig` identity doesn't hold exactly when the
-arm has mixed `bp_starts` or axis offsets — every helix outside the bent
-arm drifted by `(centroid_0.z - h_start.z + (bp_start - arm_min_bp_start) * RISE)`.
-
-Fix: short-circuit four nucleotide/atomistic paths and the helix-axis path
-with `_ops_affecting_helix(design, helix.id)`. When the result is empty
-(no op covers this helix), skip frame math and return the straight geometry
-+ cluster rigid transforms. Regression covered by
-`test_unaffected_cluster_does_not_translate_when_other_cluster_bent`.
-
-The math drift is a pre-existing identity-preservation issue in
-`deformed_nucleotide_positions` / `deformed_helix_axes`; we sidestep it
-rather than fixing the root math, which would require revisiting the
-centroid / cs_offset / arm_min_bp convention used everywhere in
-`backend/core/deformation.py`. The short-circuit is also a perf win.
-
-## Default-cluster leak — fixed by `_arm_filter_cluster` (2026-05-14)
-
-When a design has an auto-created umbrella cluster
-(`ClusterRigidTransform(is_default=True, helix_ids=<all>)`) plus specific
-sub-clusters, the physics-layer arm filter at five sites in
-`backend/core/deformation.py` (~1279/1384/1491/1557/2120) picked
-`clusters[0]` — which could be the default cluster. The default cluster
-contains every helix, so the filter became a no-op and a bend scoped to a
-single sub-cluster bled across helices in OTHER sub-clusters. Now the five
-sites call `_arm_filter_cluster(clusters)` which prefers the first
-non-default cluster, falling back to `clusters[0]` only when no specific
-cluster exists. Regression covered by
-`tests/test_deformation_clusters.py::test_default_cluster_does_not_leak_bend_to_other_clusters`.
-
-## Unequal-length bundles ("teeth") — fixed 2026-05-26
-
-teeth.nadoc bends only half its helices and plane B couldn't reach the structure
-end. Two independent bugs, both triggered by a bundle whose helices have unequal
-lengths (teeth.nadoc: rows 0–1 = backbone bp 0–251; rows 2–3 = teeth bp 0–209
-with internal scaffold gaps):
-
-- **Only full-length helices bent.** `helices_crossing_planes`
-  ([backend/core/deformation.py](backend/core/deformation.py)) required a helix to
-  cover BOTH planes (`bp_start ≤ lo and bp_start+len−1 ≥ hi`). With plane B at 230,
-  the teeth (end 209) failed and were dropped from `affected_helix_ids`, then
-  short-circuited straight by `_ops_affecting_helix`. Fix: **overlap** test
-  (`bp_start ≤ hi and bp_start+len−1 ≥ lo`). The bend math is bp-parameterized
-  (`arc_bp = min(target_bp, local_b) − local_a`) so a partially-spanning helix
-  bends over the bp range it occupies and ends partway along the arc — no arm/
-  centroid change (arm was already all 16 via the default umbrella cluster, so no
-  LESSONS-E1 centroid shift). Regression: `test_geometry.py::
-  test_helices_crossing_planes_includes_partially_spanning_helix` +
-  `test_short_helix_bends_when_window_extends_past_its_end`.
-- **Plane B capped at the mean clamp (bp 230).** `_pickBpFromPoint`
-  ([frontend/src/scene/deformation_editor.js](frontend/src/scene/deformation_editor.js))
-  AVERAGED each helix's nearest bp after clamping each to its own `[0, lengthBp−1]`
-  → (8·251 + 8·209)/16 = 230, unreachable past. Fix: snap to the bp of the
-  NEAREST helix axis (not the average), so past the teeth's end only a long helix
-  is nearby → plane reaches bp 251. Also `_defaultBpForPlaneB` now uses the
-  LONGEST helix's far end (was `Math.min` = shortest, defaulted to 209).
-
-NOTE: a saved op stored before the fix keeps its stale 8-helix `affected_helix_ids`
-on load (not recomputed). Re-apply / edit the bend to pick up all helices.
-
-## Editing a deformation feature must rebuild from the LOG, not the live design (2026-05-26)
-
-Editing a twist/bend via the feature-log ✎ silently failed to save (404, swallowed
-by the frontend), and the feature-log slider didn't return to its pre-edit position.
-
-**Root cause (two bugs).**
-1. `_onEditFeature` ([frontend/src/main.js](frontend/src/main.js)) seeks the design
-   back to `featureIndex-1` to drive the edit preview. That rolls the target op
-   (and any LATER deformation — e.g. teeth.nadoc's bend at log idx 10 when editing
-   the twist at idx 9) OUT of `design.deformations`, and the preview adds a transient
-   `preview=true` op. The old `_edit_deformation_feature`
-   ([backend/api/crud.py](backend/api/crud.py)) looked the op up by id in the live
-   (seeked) `design.deformations` → not found → **HTTP 404**, which the confirm
-   handler didn't null-check → "doesn't save."
-2. The confirm branch set `_editContext = null` BEFORE `deformExitTool()`, so the
-   `onExit` callback (which seeks back to `ctx.priorCursor`) saw null and never ran
-   → slider stuck at the seeked-back pre-feature position.
-
-**Fix.**
-- Backend: `_edit_deformation_feature` now rebuilds the deformation set from the
-  LOG (the source of truth) — update the entry's `op_snapshot`, then
-  `rebuilt_ops = [e.op_snapshot for e in new_log if feature_type=='deformation']`,
-  and `copy_with(deformations=rebuilt_ops, feature_log_cursor=-1)`. Robust to the
-  seeked-out state, keeps later ops (the bend), drops the preview op (no log entry).
-  Works because deformations are geometric-only (DTP-6a) → live topology is the
-  latest regardless of the preview seek. Raises 409 if `op_snapshot` is None
-  (evicted/broken — revert + re-apply instead).
-- Frontend: the confirm branch no longer clears `_editContext` early, so
-  `deformExitTool()` → `onExit` restores the cursor to `priorCursor`; added an
-  error toast on a null edit response.
-- Test: `tests/test_feature_log_snapshot.py::
-  test_edit_deformation_after_seek_back_saves_and_keeps_later_ops` (bundle-create
-  snapshot + twist + bend, seek back, add preview op, edit twist → 200, twist
-  updated, bend kept, preview dropped, cursor -1). Note the test MUST create the
-  bundle via the endpoint so a snapshot precedes the deformations — otherwise the
-  twist is at log idx 0 and `seek(position=-1)` means "seek to end" (no rollback),
-  hiding the bug.
-
-## Deformation edit is now IN-PLACE (no seek) — fast + popup opens immediately (2026-05-26)
-
-Two follow-on UX/perf problems with the edit flow:
-1. Clicking ✎ on a twist/bend entry didn't open the popup until the user clicked into the
-   3D canvas — `_watchDeformState()` (which opens the popup when the deform state hits BOTH)
-   was only called from the canvas `pointerdown` handler, never after `_onEditFeature`.
-2. Edit-open was slow (several seconds, several GETs): `_onEditFeature` did
-   `await _seekFeaturesWithDelta(featureIndex-1)` (full pre-state geometry recompute) AND the
-   popup's `openPopup` auto-fired an initial preview → `previewDeformation` added a `preview=true`
-   op (another recompute). Plus a `getStraightGeometry` fetch on tool activation.
-
-**Fix (frontend only; the backend `_edit_deformation_feature` rebuild-from-log already supports
-editing on the live/latest state):**
-- `_onEditFeature` ([main.js](frontend/src/main.js)) NO LONGER seeks. It edits the op IN PLACE on
-  the current state, passes `op.id` + `op.params` to `startToolForEdit(t,a,b,opId,origParams)`,
-  and calls `_watchDeformState()` itself so the popup opens immediately.
-- `_watchDeformState` passes `skipInitialPreview = !!_editContext` to `openPopup`; in edit mode the
-  op is already applied so the popup does NOT auto-fire a preview (cuts a redundant recompute).
-- [deformation_editor.js](frontend/src/scene/deformation_editor.js) gained edit-in-place state
-  (`_editOpId`, `_editOrigParams`, `_editDirty`, `_editCommitted`). `previewDeformation` in edit
-  mode PATCHes the LIVE op (`api.updateDeformation(opId, params)`) instead of seek+add-preview —
-  one round-trip per slider change, and the preview now shows the correct COMBINED geometry (the
-  other deformations stay; the old seek dropped them). `_exitTool` silently reverts to
-  `_editOrigParams` on cancel/Esc UNLESS `markEditCommitted()` was called (main.js calls it right
-  before `editFeature`). On confirm, editFeature rebuilds from the log (committed params win).
-- Cursor: no seek means the cursor never moves during edit; confirm's editFeature sets it to
-  latest (-1); if the user was mid-scrub (`priorCursor != -1`) onConfirm seeks back. Cancel leaves
-  the cursor untouched (silent PATCH revert), so the old onExit blanket-seek was removed.
-- Net edit-open cost: ZERO geometry calls (popup opens instantly); the first recompute happens only
-  when the user moves a slider. Plane edits during edit apply on confirm (no live plane-drag preview
-  in edit mode — `updateDeformation` is params-only; acceptable, noted).
-- Verified: `npx vite build` passes. NOT yet click-verified in app (local :8000 backend was hung).
-
-### Preview PATCH flood during a slider drag — fixed 2026-05-27
-Editing a twist/bend (the popup's value slider fires `input` on every drag tick — ~40 events) flooded
-the backend: each `previewDeformation` → `api.updateDeformation` PATCH → `_syncFromDesignResponse` →
-a SEPARATE `GET /design/geometry` (the PATCH response carries no embedded geometry), with NO in-flight
-guard → ~40 concurrent PATCH+geometry round-trips, each ~30 s under saturation. Fix
-([deformation_editor.js](frontend/src/scene/deformation_editor.js) `previewDeformation`): coalesce the
-update path (both `_editOpId` edit-in-place and `_previewOpId`) with `_updateInFlight` +
-`_pendingUpdateParams` — if a PATCH is in flight, stash the latest params and bail; the in-flight
-handler flushes the newest when it finishes (latest wins, render keeps up at backend speed). Cleared in
-`_clearPreviewSession`. Verified (throwaway Playwright): a 20-input drag → 2 PATCH + 2
-`/design/geometry` (was ~20-40 each). Same in-flight-guard pattern as the assembly refresh coalescing
-([[polymerize-origami]]).
+1. **The in-place-PATCH edit branch is orphaned.** `_editOpId`/`_editOrigParams`/`_editDirty`/
+   `_editCommitted` (`deformation_editor.js:60-63`), set only in `startToolForEdit:163-166`, and
+   the revert-on-exit guard `:510-516` are fully written but **unreachable** — the only UI caller
+   now passes `opId=null` (`main.js:1523`). `markEditCommitted` (`:117`) is still called
+   (`main.js:1383`) but only feeds the unreachable guard. Decide: delete the branch, or restore a
+   caller. Do not "simplify" it away without checking headless/script callers first.
+2. **`_arm_filter_cluster` picks arbitrarily when a helix is in ≥2 non-default clusters** —
+   `non_default[0]` is list order, not the op's scope. Making it consult `op.cluster_ids` is the
+   obvious narrowing, and is a prerequisite for any Phase 2 work.
 
 ## How to apply
 
-- When scoping a bend/twist, **always set `cluster_ids` to the cluster(s)
-  the user wants to affect**, even if it looks like a single cluster — the
-  implicit "use the only cluster if there's one" fallback only kicks in
-  when no scope is supplied.
-- For new tests of cluster-scoped deformations, follow
-  `tests/test_deformation_clusters.py` — bundle design, two disjoint
-  clusters, assert `op.cluster_ids` and `op.affected_helix_ids` after POST.
-- If a future Phase 2 (overlapping-cluster isolation) is taken on, the
-  hard parts are in `deformed_nucleotide_positions` and
-  `deformed_helix_axes` — each helix currently has one axis-frame stack,
-  not one per cluster. See [[deformation-cluster-scope]] notes.
+- **Always set `cluster_ids` explicitly** when scoping a bend/twist, even with a single cluster —
+  the "use the only cluster" fallback fires only when no scope is supplied.
+- Changing scope mid-edit requires **delete + recreate**, never PATCH.
+- New tests: follow `tests/test_deformation_clusters.py` (bundle design, two disjoint clusters,
+  assert both `op.cluster_ids` **and** `op.affected_helix_ids` after POST — asserting only the
+  former proves nothing, per the two-mechanism split above).
 
-## Files touched
-
-- `backend/core/models.py:632` — `DeformationOp`
-- `backend/api/crud.py:~10770` (`AddDeformationBody`), `~10784`
-  (`_resolve_cluster_scope`), `~10916` (`add_deformation`),
-  `~9975` (`edit_feature` deformation branch)
-- `frontend/src/api/client.js:916` (`addDeformation`)
-- `frontend/src/scene/deformation_editor.js:~457` (`_defaultClusterIds`,
-  `setDeformSessionClusterIds`, `_effectiveClusterIds`)
-- `frontend/src/main.js:~782`, `~890`, `~830` (edit body + popup wiring)
-- `frontend/src/ui/bend_twist_popup.js` — picker render + change handler
-- `frontend/index.html:~3980` — picker section
-- `tests/test_deformation_clusters.py` — five-case coverage
+Related: [[cluster-copy-paste]] (id remap on paste) · [[cluster-joints]] · [[cluster-reconcile]]

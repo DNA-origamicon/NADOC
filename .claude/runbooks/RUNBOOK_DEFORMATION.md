@@ -142,20 +142,35 @@ Don't diagnose from them, and don't delete the function (2 live call sites: `:34
 
 ## 7. Cluster-scoped bend hits the wrong helices / scope change ignored
 
-- The scope field is **`cluster_ids: List[str]`** (plural, `models.py:1128`). Empty = unscoped
-  (all crossing helices). Old `.nadoc` files with a singular `cluster_id` fail to load — no
-  auto-migration.
+- **First check: is the op's `affected_helix_ids` wrong, or its `cluster_ids`?** Scope is
+  **frozen into `affected_helix_ids` at create/edit time** and the geometry math reads *only*
+  that — `cluster_ids` is metadata. If they drift, geometry silently follows
+  `affected_helix_ids`, and a **saved op is never recomputed on load** (re-apply/edit the bend to
+  pick up a fix). `GET` debug route `routes_deformation.py:203` echoes both.
+- The scope field is **`cluster_ids: List[str]`** (plural, `models.py:1129`). Empty = unscoped
+  (all crossing helices). Old `.nadoc` files carrying a singular `cluster_id` **load fine** —
+  `models.py` sets no `model_config`, so pydantic's default `extra='ignore'` drops the field
+  silently and the op becomes unscoped with its stored `affected_helix_ids` intact. (Corrected
+  2026-07-30: the topic file and this runbook both used to claim they "fail to load".)
 - The filter is `resolve_cluster_scope(design, cluster_ids, helix_ids)`
-  (`deformation.py:2683`), called from `routes_deformation.py:111`. It intersects
-  `affected_helix_ids` with the union of those clusters' helices and drops unknown ids — so a
-  stale cluster id silently narrows the scope to nothing. (`project_deformation_cluster_scope.md`
-  still calls it `_resolve_cluster_scope` in `crud.py`; it moved.)
+  (`deformation.py:2683`). It intersects `affected_helix_ids` with the union of those clusters'
+  helices and drops unknown ids — so a stale cluster id silently narrows the scope to nothing.
+  **Four callers**: `routes_deformation.py:111` (POST), `core/feature_log_edit.py:162` (edit),
+  `routes_loop_skip.py:269` (loop-skip reuses it), and `tests/test_deformation_params_core.py`.
 - **PATCH cannot change scope** — params only. The editor must delete + recreate the preview op;
   see `setDeformSessionClusterIds` (`deformation_editor.js:567`, async), driven from
   `bend_twist_popup.js:387/411/432`.
-- Two clusters sharing a helix still conflict — the known limitation in the topic file.
+- Two clusters sharing a helix still conflict — the known limitation in the topic file. The
+  **mechanism**: `_arm_filter_cluster` (`deformation.py:603`) picks the first **non-default**
+  cluster containing that helix and never consults `op.cluster_ids`, so with two non-default
+  clusters the winner is arbitrary list order.
 - Cluster arm-filtering runs inside every hot path (`deformation.py:1468,1582,1687,1768,2445`);
   child clusters resolve through `parent_cluster_id` at `:676-689`.
+- **Symptom "editing a bend from the feature log behaves oddly"**: the edit flow is
+  *peel-and-preview*, not in-place PATCH — `_onEditFeature` (`main.js:1441`) deletes the op as a
+  preview (`:1513`) and re-enters via the new-op path with `opId=null` (`:1523`). The in-place
+  branch in `deformation_editor.js:60-63/510-516` still exists but is **unreachable**; don't
+  diagnose from it.
 
 ## 8. A preview or cancel wrote to disk / pushed to the assembly
 

@@ -74,6 +74,8 @@ unless a migration touches code.
 | 07-30 | `.claude/rules/strand-anim.md` (off-taxonomy: path-scoped rule, no verdict) — **completes the 11-rule sweep** | **The first rule that was substantially RIGHT, and the first needing no glob change.** Probe of ~55 anchors. **Verified true, item by item:** all 11 files exist with zero unnamed extras (1,084 LOC); the **layer-purity law actually holds** (every import statement checked — no `three`/DOM/`../scene`/`../state`/`../api` anywhere in the model layer; `ticker.js` has 0 imports); mesh names `strandBeads`/`strandSlabs`/`strandBackbone<n>` verbatim (`:68`,`:78`); auto-growth real (two 1.5× paths, `:57`,`:74`); all 4 invariants confirmed with line anchors incl. the fork anchoring (`geometry_helical.js:77-78`→`:108`, displacement `:80`) and — the nicest result — **the emergent toehold is genuinely emergent**: all 17 `toehold` hits are comments/params/readout strings, the substrate loop builds all N beads unconditionally (`:107-112`). Constants match 3-way (strand-anim ↔ `helix_renderer.js` ↔ `constants.py`) with the slab dims a byte-identical literal. Doc pointer resolves (`project_strand_animations.md` §"Integration handoff" at `:21`); Vite entry `vite.config.js:31`; menu `index.html:3552`→`main.js:7159`. **Zero phantom `MAP_*.md`** (breaks the 5-for-5 streak) and the absent `## Diagnostics →` is *correct* — no `RUNBOOK_STRAND_ANIM.md` should exist. **The one real hole is structural, not factual: the "built for drop-in… a host" framing is written in the future tense and the drop-in ALREADY SHIPPED.** Four production importers, none named: `scene/overhang_strand_anim.js:28` (711 LOC) takes `createStrandRenderer`; `scene/overhang_unzip_overlay.js:33-34` takes `meltFraction` **and `DEFAULTS`** — so **`params.js` sliders are production constants** (`:83-84` reads `rise`/`armPull`/`meltBp`); `ui/strand_anim_panel.js:11-12` takes `createParamState`+`createPhiTicker`. And the editor reused the *renderer* seam only: `overhang_strand_anim.js:441/:599` **re-implements the strand-list contract by hand** on the real helix frame (single `role:'invader'` strand, `setBeadOverrides` channel, `_sstep` re-derived inline 4× instead of importing `melt.js`) — the `expanded_spacing.js` shape again. So `buildStrandGeometry` really is sandbox-only (`app.js:42`, sole caller — handoff claim **confirmed**, first correct handoff in 8 passes). Three disjoint bead sources exist for what a user calls "strand animation" (`binding_states` splays real nucleotides, `strand_anim_phi` synthesizes, sandbox). **Understatements:** `createStrandRenderer` also takes `lineOpacity` (used in production, `:200`); ticker `dt` is clamped `[0, 0.1]` not just ≥0, and its "sweeps inward" consequence holds **only with `bounce`/`loop`** (`play()` always seeds `du=+1`). **Latent divergence:** model radius `R = W*0.5` over W∈[0.5,4.0] vs the renderer's hard-coded `HELIX_RADIUS=1.0` (`strand_renderer.js:98`) — agree only at default W=2.0. **6 lying comments** (2 `@returns` still declaring the pre-2026-05-29 `posA/posB` shape; "renderer in app.js"; a dangling `p`; two stale LOC counts). **Coverage: 0 tests / 1,084 LOC**, and the builders are the easiest test target in the repo (pure, zero imports) | REWRITTEN (n/a — rule, not plan) | Rewrite, globs **unchanged** (the consumers are deliberately owned by `animation.md` — widening would double-load). Added: an audited-date + "no longer only a sandbox" banner, file table w/ LOC + real import lists, a **"Who imports this — the drop-in already happened"** table w/ the hand-rolled-contract warning and the three-disjoint-bead-sources note, corrected seam docs (`lineOpacity`, growth sites, the fact that `buildStrandGeometry` is a dispatch and the *builders* own the contract), 6 line-anchored invariants (incl. the ticker's bounce condition and "keep the toehold emergent"), a **Traps** section (the 6 self-contradicting comments + the W/HELIX_RADIUS divergence), an honest **zero-tests** section replacing the capability-as-coverage "Verify" claim, a **dead-exports** block (3), and a verify step requiring an *editor* exercise when `params.js`/`melt.js`/`strand_renderer.js` change. **Off-rule rot fixed:** `memory/project_strand_animations.md`'s "Integration handoff" still analysed how integration *might* work ("the player exposes NO scalar-`t` driver", options a/b/c) — **option (c) shipped**: `AnimationKeyframe.strand_anim_phi` (`models.py:1726`) lerped at `animation_player.js:250/:1051`; dated STATUS banner added w/ the buildStrandGeometry caveat. Added the `params.js`-is-production coupling warning to `animation.md`'s unzip-overlay bullet (it globs that file; `strand-anim.md` does not). **6 stragglers → `project_tech_debt`** (the DEFAULTS coupling, the second contract implementation + 4× duplicated smoothstep, the slab-radius divergence, the 1,084-LOC zero-test hole, the 6 stale comments, 3 zero-importer exports). No `MEMORY.md` edit (rules listed by name; name unchanged) |
 | 07-30 | project_regional_autorefine | **First plan pass in 9; and the first doc whose EMPIRICAL BASIS was retro-invalidated by a later experiment.** Probe of ~45 anchors. **The file's two loudest claims are both wrong, in opposite directions.** (1) "Regional autorefine is NOT viable — shelved": the *re-scoped* 1–5-edit fine-tuner it pivoted to **shipped and is ALWAYS ON** — `AutorefineStartRequest.finetune=True` (`routes_autorefine.py:47`), all 4 fns of `skip_finetune.py` (118 LOC) wired at `skip_twist_tuning.py:365/383/388/394`, no UI toggle. (2) "Built + green, next is GPU validation": the whole `Next`/5.4/5.5 list is stale — 5.5 frontend shipped, 5.4 validates a path that is now unreachable. **Wholesale regional IS shelved and dead-ended in the UI:** `regional=False` at both the request and function default, and the frontend exposes **zero** `regional`/`w_dev`/`w_strain`/`min_spacing` controls → reachable only by hand-POSTing; `redistribute_by_twist_profile` (`regional_skip_placer.py:208`) is **fully orphaned** (3 tests, 0 callers). **But `regional_skip_placer.py` must NOT be deleted — the `bundle_stiffness` trap, live:** `core_candidates:43` is imported by **production `cando_autorefine.py:161-162`**, `aggregate_deviation_per_bp:34` and `detrend_error_profile:130` by the live fine-tune path. **The real successor is `backend/core/cando_autorefine.py` (53 KB)** — its docstring `:12` says it *is* `greedy_finetune_skips` with the FEM oracle swapped in; fully wired w/ its own router (`main.py:71/272`). **The headline finding is off-anchor:** `project_skip_twist_curvature_sweep.md` ran exp34/exp35 (06-29/30) and found a **~5M-step twist equilibration transient** — the 8M production + `equil_steps=100_000` protocol behind **every degree value in this plan** never equilibrated, so the +45.4° A/B swing, the −116° divergence and the ±30° register sensitivity are all biased mid-transient reads (±9° scatter). The qualitative verdicts survived independent re-derivation (exp32 `profile_guided_refine` diverged the same way → LESSONS A7); the numbers did not. `autorefine_sq_design` now ships `equilibration_steps=10_000_000` (the exp34 fix). **Factual corrections:** `iterate_to_constraint` is in `headless_oxdna_build.py:985`, **not** `skip_twist_tuning`; `test_regional_skip_placer.py` has **18** tests not 10; the twice-cited pin `test_period_adjuster_first_step_is_small_and_directed` **does not exist**; `backbone_bond_pairs`/`oxdna_backbone_site` are in `backend/physics/oxdna_interface.py:2179/1446`; routes moved crud.py→`routes_autorefine.py` (start :99 / apply :124 / stop :197 / poll :216); `autorefine_sq_design`'s own `finetune` default is **`False`** (only the request model is `True`); the `oxdna-jobs-finetune-toggle` checkbox is **gone** (0 hits — the file described it as live in one section and removed in another); and its "KNOWN v1 gap" (completion apply passing a period) is **fixed** (`oxdna_jobs_panel.js:718-724`). `explore_max/gain/min` = 0.5/0.015/0.03 — the plan's values were right. exp31 CSV path is exp31-relative | LIVE-REFERENCE | Kept, **no rank**. 295-line work log split → lean head + `_archive.md` (archive carries a measurement-caveat banner). Head rewritten as: two-halves status banner (shipped fine-tuner vs shelved placer), the 4-step "what runs when you click ✦ Autorefine", a 13-row code-location table, a per-function wired/orphaned table for `regional_skip_placer` with the **do-not-delete** warning, the `cando_autorefine` supersession, a do-not-resurrect section, honest test counts, an explicit **Corrections** section, and **2 open defects on the SHIPPED code** (unsigned-`dev_max` ranking violates LESSONS A6; never GPU-validated). MEMORY.md hook updated (one edit). **5 stragglers → `project_tech_debt`** (the orphaned `redistribute_by_twist_profile` w/ a function-level-delete note, the 4 unreachable request fields, the unsigned-metric defect, the **two conflicting `finetune` defaults** — non-route callers silently get the opposite behavior — and the stale pre-exp34 citation at `skip_finetune.py:9`). **1 new `MV-AUTOREFINE-FT`** → `manual_validation_debt.md` (always-on pass never seen against a real GPU run) |
 
+| 07-30 | project_deformation_cluster_scope | **The feature is fully shipped — and the doc's model of it is wrong in a way that matters.** Probe of ~32 anchors, backend + frontend; almost everything ALIVE+WIRED. **Headline: there are TWO scoping mechanisms and they don't talk.** `resolve_cluster_scope` (`deformation.py:2683`, **4** callers not 1) freezes scope into `op.affected_helix_ids` at create/edit time; the render-time filter `_arm_filter_cluster:603` picks *the first non-default cluster containing the helix* and **never reads `op.cluster_ids`**. So `affected_helix_ids` is the real enforcement, `cluster_ids` is metadata (create/edit + `cluster_copy.py:293-318/:503` + `feature_dependencies.py:217` cascade + debug echo), saved ops are never recomputed on load, and a helix in 2 non-default clusters resolves by **arbitrary list order** — which is the mechanical root of the doc's own "shared helix conflicts" limitation, stated there as geometry rather than as list ordering. **The doc's hard-break claim is FALSE:** `models.py` declares no `model_config`, so pydantic v2 `extra='ignore'` means legacy singular `cluster_id` files **load silently, unscoped** — they do not "fail to load"; `RUNBOOK_DEFORMATION.md:146` had inherited the same error. **Undocumented 4th consumer:** `routes_loop_skip.py:266/269` reuses both `helices_crossing_planes` and `resolve_cluster_scope` — blast radius the doc never described. **Whole edit flow replaced since the doc:** `_onEditFeature` (`main.js:1441`) now *peels* the op with a transient preview-DELETE (`:1513`) and re-enters via the new-op path with `opId=null` (`:1523`); `skipInitialPreview` is hardcoded `false` (`:1427`) — leaving `_editOpId`/`_editOrigParams`/`_editDirty`/`_editCommitted` + the revert guard (`deformation_editor.js:60-63`, `:510-516`) **written but unreachable**. Backend logic moved `crud.py`→**`core/feature_log_edit.py:109`** (`crud.py:9876` is a 10-line shell). **Everything the doc logs as fixed survives verbatim** — overlap test `:2646`, `min(h.bp_start …)` `:487`, `_ops_affecting_helix:585`, `_bundle_centroid_and_tangent:189` (name-collides with `loop_skip_calculator.py:148`), nearest-helix `_pickBpFromPoint:710`, longest-helix `_defaultBpForPlaneB:469`, the PATCH-flood coalescing `:388-406`, the picker + its `clusters.length <= 1` gate. **Phase 2 confirmed NOT started** (one `_frame_at_bp` stack per helix, `:2470-2473`; the `seg_geoms` subdivision `:2477-2482` is cluster *rigid-transform* only). Undersold: 10 tests not 5, plus a new 9-test `test_deformation_params_core.py`. Anchors re-based: `models.py:1129`, `index.html:6774-6786` (was ~3980), `client.js:1324` (was :916). Both fixtures present (`tests/fixtures/teeth.nadoc`, `workspace/Ultimate Polymer Hinge 191016.nadoc` — the hinge's bp_starts are cited in live code `deformation.py:2464`) | LIVE-REFERENCE | Kept, **no rank**. 301-line work log split → lean head + `_archive.md` (archive banner marks the one section that is *obsolete*, not merely re-anchored). Head rewritten as: status banner, a **"The one thing to know"** section stating the two-mechanism split and its three consequences, a 20-row code-location table, a **Corrections** section (5 items), the limitations with the verified Phase-2-absent evidence, and **2 open defects on shipped code**. **Fixed both auto-loaded docs:** `RUNBOOK_DEFORMATION.md` §7 — killed the inherited load-failure claim, added the `affected_helix_ids`-first check, the `_arm_filter_cluster` mechanism, and a peel-and-preview symptom so nobody diagnoses from the dead branch; `.claude/rules/deformation.md:89-93` — 4 callers incl. loop-skip, plus the two-mechanisms law (and dropped its now-stale "the topic file still calls it `_resolve_cluster_scope`" note). MEMORY.md hook updated (one edit). **7 stragglers → `project_tech_debt`** (the unreachable edit branch w/ a decide-before-deleting note — a naive delete takes the shared flood guard with it; the arbitrary `non_default[0]`; the unvalidated `cluster_ids`↔`affected_helix_ids` drift; **`extra='ignore'` silently swallowing dropped fields across all of `models.py`**; the stale `crud.py:9924` docstring; the vestigial singular coercion `client.js:1331`; the `_bundle_centroid_and_tangent` name collision) |
+
 ## HOLD — flagged to user, decision pending
 
 - **project_bundle_stiffness_params** — user said "delete", but the 0T track is a **completed,
@@ -88,7 +90,8 @@ unless a migration touches code.
 ## Audit queue (unaudited — rough priority top-first)
 
 Genuinely-unfinished-with-intent candidates (likely UNFINISHED-ACTIVE, need rank):
-- ~~project_regional_autorefine~~ (LIVE-REFERENCE 07-30), project_deformation_cluster_scope,
+- ~~project_regional_autorefine~~ (LIVE-REFERENCE 07-30),
+  ~~project_deformation_cluster_scope~~ (LIVE-REFERENCE 07-30),
   project_cadnano_overhaul, project_assembly_part_context, memory/trajectory_keyframes —
   Phase-1-shipped, later-phase-deferred (rank each)
 
@@ -124,42 +127,43 @@ onto *more* files. Glob fix and body rewrite go together, in one pass, per rule.
 
 ## Next-session handoff
 
-**The 11-rule sweep is COMPLETE (07-30)** and the plan queue has resumed —
-`project_regional_autorefine` came back **LIVE-REFERENCE** (the "not viable / shelved" plan had
-already shipped its re-scoped half, always-on, undocumented as such).
+**Two consecutive plan passes have come back LIVE-REFERENCE** (`regional_autorefine`,
+`deformation_cluster_scope`) — both were shipped features whose docs *read* as unfinished plans.
+That is now the base rate to expect in this band of the queue, not a surprise.
 
-▶ **NEXT: `memory/project_deformation_cluster_scope.md`** — next in the queue's
-"Phase-1-shipped, later-phase-deferred" band. **It already has a known head defect**: the
-`deformation.md` rule pass (07-30) added a dated location banner to it because every one of its
-`crud.py:~10xxx` anchors is dead and `_resolve_cluster_scope`/crud.py became
-`resolve_cluster_scope`/`deformation.py:2683`. That banner is a patch, not an audit — probe the
-rest of its anchors and rank or retire it.
+▶ **NEXT: `memory/project_cadnano_overhaul.md`** — next in the queue's "Phase-1-shipped,
+later-phase-deferred" band, and the one with the most already-known rot. Standing from earlier
+passes: it is stale as an architecture map (last dev-log 2026-05-25; the code was touched
+2026-07-28), and its own gate says "confirm all 17 API tests pass" when there are **25**
+(counted during the `cadnano-editor` rule pass). **Its architecture content is superseded by the
+new `.claude/rules/cadnano-editor.md`** — so the real question is whether anything *besides* the
+architecture map survives (deferred phases, UX rationale, user laws like the periodic auto-shift).
+If not, it is SUPERSEDED-DOCUMENTED; if the residue is real, trim to a lean reference. Note that
+rule already records the editor at **1.6% test coverage**, so don't re-derive it.
 
 Carry into it:
 
-- **Probe the doc's own empirical basis, not just its symbols.** `regional_autorefine`'s symbols
-  mostly resolved; what killed it was a *later experiment in a sibling file* (exp34's ~5M-step
-  equilibration transient) that retro-invalidated **every degree value in it**. A doc can be
-  symbol-accurate and physically obsolete. **Tell: when a plan's conclusions rest on measurements,
-  grep the sibling topic files for a later run that changed the measurement protocol** — here the
-  protocol default (`equil_steps` 100k → 10M) had already changed *in the code the plan describes*.
-- **The always-on default is the thing to grep.** The single highest-value fact of this pass was
-  that `finetune=True` on the request model — i.e. shelved-sounding code runs for every user, every
-  click. **Tell: for any "shipped but optional" feature, grep the default at BOTH ends** (request
-  model and function signature). Here they disagree (`True` vs `False`), so headless/script callers
-  silently get the opposite behavior from the app. Logged to `tech_debt`.
-- **The `bundle_stiffness` trap fired again and was caught by the guard rail.** The obvious move
-  was to delete `regional_skip_placer.py` along with the shelved plan; `core_candidates` inside it
-  is imported by **production CanDo autorefine**. Grep every function of a module separately —
-  "the module is shelved" is a claim about the module's *headline* function only.
-- **A stale plan's status text is stale in BOTH directions — now 5 for 5 among kept plans.**
-  This one simultaneously under-claimed (the fine-tuner shipped, the frontend gap was fixed) and
-  over-claimed (a pin that never existed, a checkbox it described as both live and removed).
-
-Still standing from earlier passes:
-`project_cadnano_overhaul.md` is stale as an architecture map (last dev-log 2026-05-25; code
-touched 2026-07-28; its gate says "confirm all 17 API tests pass" when there are **25**) — rank it
-as a *plan*, and note its architecture content is superseded by `.claude/rules/cadnano-editor.md`.
+- **When an auto-loaded rule now covers the same ground, the plan's remaining value is the part
+  the rule deliberately doesn't carry** — empirical history, root-cause narratives, user design
+  rationale. `deformation_cluster_scope` was ~80% redundant with `.claude/rules/deformation.md`,
+  and the 20% that wasn't (five root-cause writeups, the fixtures they were found on) is exactly
+  what justified keeping it. **Tell: diff the plan against its rule before deciding delete-vs-keep,
+  and if you keep it, delete the overlapping half rather than maintaining two copies.**
+- **A shipped feature's doc can describe a mechanism that no longer exists in the code path the
+  user touches.** The whole edit-in-place PATCH flow this plan documented was replaced by
+  peel-and-preview, leaving four state vars and a revert guard **unreachable**. Nothing was
+  deleted, nothing failed, no test caught it. **Tell: for any doc describing a UI flow, grep the
+  entry point (`_onEditFeature`-equivalent) and check what it actually passes** — a `null` where
+  the doc says an id is passed silently strands a whole branch.
+- **Check the field-drop policy, not just the field.** The plan's loudest correctness claim ("old
+  files fail to load") was false because `models.py` sets no `model_config` and pydantic v2
+  defaults to `extra='ignore'` — a *file-wide* silent-drop policy nobody chose deliberately.
+  **Tell: a claim about migration/compat behavior is a claim about the model config; go read it.**
+- **Two mechanisms enforcing "the same" rule is the highest-value structural find available.**
+  Here: create-time `resolve_cluster_scope` freezing `affected_helix_ids` vs render-time
+  `_arm_filter_cluster` re-deriving a cluster from helix membership. Both work; they cannot drift
+  *loudly*. Same shape as `expanded_spacing.js` (unfold) and the hand-rolled strand contract
+  (strand-anim) — **three passes running**. Look for it explicitly.
 
 **One cross-cutting cleanup now worth doing as its own item, not per-pass:** `docs/triage/` is
 **3 for 3 fiction** (animation, deformation, unfold passes). Twelve files built on phantom
@@ -191,6 +195,15 @@ callers of `buildHelixObjects`); `md-jobs`.
   a matched pair (builder + renderer, model + view) and only one is imported elsewhere, the other
   has a hand-rolled twin.** Find it and name it in the rule; nothing else will pin them together.
 
+- **When one rule is enforced in two places, the doc almost always describes only one of them —
+  and usually the one that doesn't decide.** Cluster scoping is enforced at create time
+  (`resolve_cluster_scope` → freezes `affected_helix_ids`) *and* at render time
+  (`_arm_filter_cluster` → re-derives a cluster from helix membership, ignoring `op.cluster_ids`).
+  The plan documented only the first, so its "how to apply" advice was about a field the geometry
+  never reads. **Tell: for the doc's central field, grep who *reads* it, not who writes it.** If
+  the consumers are all create/edit/copy/debug and none are in the math, the field is metadata and
+  something else is doing the enforcing. Third pass running for the two-implementations shape
+  (after `expanded_spacing.js` and the hand-rolled strand contract).
 - **A subsystem is rarely one file, and the extra files are usually globbed by nothing.** `unfold`
   globbed `unfold_view.js` alone; the subsystem is three files, and the other two
   (`cross_section_minimap.js` 712, `expanded_spacing.js` 296) were matched by **no rule in the

@@ -86,11 +86,18 @@ Callers of `deformed_nucleotide_positions` are `physics/fem_solver.py:2227`,
 
 `cluster` matches **229 lines** of `deformation.py`. Empty `cluster_ids` = unscoped (all crossing
 helices); a non-empty list filters `affected_helix_ids` to the union of those clusters' helices.
-`resolve_cluster_scope(design, cluster_ids, helix_ids)` `deformation.py:2683` is called from
-`routes_deformation.py:111`. (The topic file still names it `_resolve_cluster_scope` **in
-crud.py** — it moved and lost the underscore.) Arm filtering by cluster runs inside every hot
-path: `:1468`, `:1582`, `:1687`, `:1768`, `:2445`; child clusters via `parent_cluster_id` at
-`:676-689`.
+`resolve_cluster_scope(design, cluster_ids, helix_ids)` `deformation.py:2683` has **four**
+callers: `routes_deformation.py:111` (POST), `core/feature_log_edit.py:162` (the edit path),
+**`routes_loop_skip.py:269`** (loop-skip reuses deformation's scoping semantics — widen your blast
+radius accordingly), and `tests/test_deformation_params_core.py`. Arm filtering by cluster runs
+inside every hot path: `:1468`, `:1582`, `:1687`, `:1768`, `:2445`; child clusters via
+`parent_cluster_id` at `:676-689`.
+
+**The two mechanisms don't talk to each other.** `resolve_cluster_scope` freezes scope into
+`op.affected_helix_ids` at create/edit time; the render-time filter `_arm_filter_cluster:603` picks
+the first **non-default** cluster containing the helix and **never reads `op.cluster_ids`**. So
+`affected_helix_ids` is the real enforcement, `cluster_ids` is metadata, and a helix in two
+non-default clusters resolves by arbitrary list order. Saved ops are never recomputed on load.
 
 ### Routes
 

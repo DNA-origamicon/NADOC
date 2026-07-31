@@ -435,6 +435,40 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   for the same thing. Extends the existing `docs/triage/` finding from the animation pass — that
   directory is now 2 for 2 fiction; treat all 12 files as suspect.
 
+### Cluster-scoped deformation stragglers (found 2026-07-30, `/audit-plan` — [[deformation-cluster-scope]])
+
+- **The in-place-PATCH edit branch in `deformation_editor.js` is fully written and unreachable.**
+  `_editOpId`/`_editOrigParams`/`_editDirty`/`_editCommitted` (`:60-63`), their assignment in
+  `startToolForEdit:163-166`, the revert-on-exit guard `:510-516`, and the `_editOpId` arm of the
+  `previewDeformation` update path (`:388`, `const updOpId = _editOpId ?? _previewOpId`) are dead:
+  the only UI caller now passes `opId=null` (`main.js:1523`, the peel-and-preview rewrite).
+  `markEditCommitted` (`:117`) is still called from `main.js:1383` but only feeds the unreachable
+  guard. **Decide before deleting** — the branch is the cheaper edit flow (one PATCH per slider tick
+  vs delete+re-add) and its coalescing guard is shared with the live `_previewOpId` path, so a naive
+  delete takes the flood protection with it.
+- **`_arm_filter_cluster` (`deformation.py:603`) resolves by arbitrary list order.** It returns the
+  first **non-default** cluster containing the helix and never consults `op.cluster_ids`, so a helix
+  in two non-default clusters picks a winner by `design.clusters` ordering. This is the mechanical
+  root of the "two clusters sharing a helix conflict" limitation and the prerequisite for any
+  per-cluster sub-axis work.
+- **`cluster_ids` vs `affected_helix_ids` can drift silently.** Scope is frozen into
+  `affected_helix_ids` at create/edit time and *only that* is read by geometry; a saved op is never
+  recomputed on load. No validator checks the two agree. Cheap fix: assert consistency in the debug
+  route (`routes_deformation.py:203`) or on load.
+- **Legacy singular `cluster_id` is silently swallowed, not rejected.** `backend/core/models.py`
+  declares no `model_config`/`ConfigDict`, so pydantic v2's default `extra='ignore'` drops unknown
+  fields on every model in the file. For deformations that means an old op loads *unscoped* with no
+  warning. Worth deciding globally (`extra='forbid'` on `Design`-adjacent models would surface a
+  whole class of silent-drop bugs, and would need a load-path audit first).
+- **Stale docstring** at `backend/api/crud.py:9924` still says the deformation edit branch updates
+  "`affected_helix_ids` / `cluster_id`" — singular field is gone, and the branch delegates to
+  `core/feature_log_edit.py` rather than updating anything itself.
+- **Vestigial singular-era coercion** at `frontend/src/api/client.js:1331` —
+  `Array.isArray(clusterIds) ? clusterIds : (clusterIds ? [clusterIds] : [])` defends against a
+  scalar `cluster_id` that no caller has passed since 2026-05-14.
+- **Name collision:** two unrelated `_bundle_centroid_and_tangent` — `deformation.py:189` (8 call
+  sites, the arm-centroid one) and `loop_skip_calculator.py:148`. A grep for the name returns both.
+
 ### Unfold stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 
 - **Two parallel implementations of the `applyUnfoldOffsets` fan-out, with different callee
