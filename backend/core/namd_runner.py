@@ -40,9 +40,10 @@ from backend.core.disk_guard import (
     DISK_ABORT_RC,
     GiB,
     free_bytes,
+    wait_external_proc_with_disk_guard,
     wait_proc_with_disk_guard,
 )
-from backend.core.md_health import run_health_check, append_health_jsonl
+from backend.core.md_health import _latest_segment_dcd, run_health_check, append_health_jsonl
 from backend.core.namd_metrics import parse_namd_log, parse_namd_log_frames
 from backend.core.md_cutoff import should_early_stop_stage
 from backend.core.md_protocols import minimization_status, segments_from_manifest
@@ -445,7 +446,13 @@ def _external_process_running(job: MdJob, workspace_dir: Optional[Path] = None) 
     return False
 
 
-async def _wait_for_segment_process(segment_name: str, poll: float = 10.0) -> None:
+async def _wait_for_segment_process(
+    segment_name: str,
+    poll: float = 10.0,
+    *,
+    guard_dir: Optional[Path] = None,
+    on_tick=None,
+) -> int:
     """Block until an adopted (orphaned) NAMD process for this segment exits.
 
     Used when a NAMD run outlived its previous orchestrator (e.g. a dev-server
@@ -453,9 +460,34 @@ async def _wait_for_segment_process(segment_name: str, poll: float = 10.0) -> No
     files, the new runner waits for the survivor to finish.  Cancellable — a stop
     request interrupts the wait but leaves the orphan running (it is not ours to
     kill via the process-group registry).
+
+    An adopted segment gets the SAME orchestration services as one we spawned
+    ourselves: the disk guard and the in-flight ``on_tick`` probe both run here, via
+    the shared loop in ``disk_guard``.  They used to run only inside
+    :func:`_run_namd_async`, which this path never calls — so an adopted run silently
+    lost both its low-disk abort and its health sampling for the whole segment.
+
+    Returns the same rc vocabulary as :func:`_run_namd_async`: ``0`` when the adopted
+    process exited, :data:`DISK_ABORT_RC` when the guard stopped it.  ``guard_dir``
+    is optional so callers with nothing to guard keep the plain wait.
     """
-    while _segment_process_running(segment_name):
-        await asyncio.sleep(poll)
+    if guard_dir is None:
+        while _segment_process_running(segment_name):
+            await asyncio.sleep(poll)
+        return 0
+
+    def _kill_adopted() -> None:
+        pid = _segment_pid(segment_name)
+        if pid is not None:
+            _kill_process_group(pid)
+
+    return await wait_external_proc_with_disk_guard(
+        lambda: _segment_process_running(segment_name),
+        guard_dir,
+        kill=_kill_adopted,
+        poll_s=poll,
+        on_tick=on_tick,
+    )
 
 
 def _read_xsc_step(xsc_path: Path) -> Optional[int]:
@@ -579,13 +611,42 @@ def _log_completed(log_path: Path) -> bool:
     return "End of program" in tail or "WRITING VELOCITIES TO OUTPUT FILE" in tail
 
 
+#: Keys that make a metrics/health JSONL record worth keeping.  If every one of them is
+#: null the record carries no information and must not block a recompute.
+_JSONL_SUBSTANTIVE_KEYS = (
+    "c1_paired_fraction", "wc_ref_relative_fraction",   # health.jsonl
+    "temperature_k", "pressure_bar", "ns_per_day", "volume_ang3",  # metrics.jsonl
+)
+
+
 def _jsonl_has_segment(path: Path, segment_name: str) -> bool:
+    """Has this segment already been recorded in a metrics/health JSONL?
+
+    Parsed rather than substring-matched, and — importantly — a record whose every
+    value came back empty does NOT count as recorded.  A record written from a
+    truncated or not-yet-flushed log has all-``None`` scalars, and treating that as
+    "done" pinned the segment to blank metrics forever: nothing ever recomputed it even
+    after the log had grown.  A record that carries a real ``error`` DOES count, so a
+    legitimately-failed check is not re-run on every supervisor pass.
+    """
     if not path.exists():
         return False
     try:
         for line in path.read_text(errors="replace").splitlines():
-            if f'"segment": "{segment_name}"' in line or f'"segment":"{segment_name}"' in line:
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue          # a torn final line — treat as not-yet-written
+            if rec.get("segment") != segment_name:
+                continue
+            if rec.get("error"):
+                return True       # a real failure; do not recompute it endlessly
+            if any(rec.get(k) is not None for k in _JSONL_SUBSTANTIVE_KEYS):
                 return True
+            # else: an all-empty record — fall through so it can be rewritten
     except OSError:
         return False
     return False
@@ -755,19 +816,8 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
             min_wc_ref_relative = spec.min_wc_ref_relative,
         )
         append_health_jsonl(output_dir, active.name, active.stage, hresult)
-        job.health_samples.append(MdHealthSample(
-            wall_time                = time.time(),
-            stage                   = active.stage,
-            segment                 = active.name,
-            c1_paired_fraction      = hresult.c1_paired_fraction,
-            c1_mean_ang             = hresult.c1_mean_ang,
-            c1_p90_ang              = hresult.c1_p90_ang,
-            wc_ref_relative_fraction = hresult.wc_ref_relative_fraction,
-            wc_mean_hbond_ang       = hresult.wc_mean_hbond_ang,
-            passed                  = hresult.passed,
-            blocking                = hresult.blocking,
-            reason                  = hresult.reason or (hresult.error or ""),
-        ))
+        job.health_samples.append(MdHealthSample.from_result(
+            hresult, active.stage, active.name, blocking=hresult.blocking))
         # Health is advisory only — a below-threshold checkpoint warns and is
         # flagged in the UI, but never stops the run.
         if not hresult.passed:
@@ -1265,6 +1315,57 @@ _INFLIGHT_HEALTH_INTERVAL_S = float(
     os.environ.get("NADOC_INFLIGHT_HEALTH_INTERVAL_S", "300"))
 # Skip the last frames: NAMD may be mid-write at the DCD tail while we read it.
 _INFLIGHT_HEALTH_SAFE_BACK = 2
+# How soon the FIRST in-flight probe runs, so the Health card fills in promptly instead
+# of showing nothing for a whole interval at every segment start.
+_INFLIGHT_HEALTH_FIRST_S = float(os.environ.get("NADOC_INFLIGHT_HEALTH_FIRST_S", "30"))
+
+
+def _fail_on_disk_abort(job, spec, idx: int, package_dir: Path, workspace_dir: Path) -> None:
+    """Mark a job failed because the disk guard stopped it.  Shared by the spawned and
+    adopted segment paths so an adopted run reports the abort identically."""
+    fb = free_bytes(package_dir)
+    logger.error("[%s] Disk guard aborted %s: %.1f GB free",
+                 job.job_id, spec.name, fb / GiB)
+    if idx < len(job.segments):
+        job.segments[idx].status = "failed"
+    job.status = MdStatus.failed
+    job.failure_kind = "disk_full"
+    job.error = (
+        f"Stopped: free disk fell below {ABORT_MIN_FREE_BYTES / GiB:.0f} GB "
+        f"while running {spec.name} ({fb / GiB:.1f} GB free). "
+        "Free up space (delete/archive old jobs), then resume."
+    )
+    job.save(workspace_dir)
+
+
+def _note_health_probe(job, workspace_dir: Path, **fields) -> None:
+    """Merge ``fields`` into ``job.health_probe`` and persist.
+
+    This is what lets the Health card explain an absent metric instead of spinning on
+    it forever: the card reads ``enabled`` / ``last_at`` / ``last_error`` / ``reason``
+    and decides between "still computing", "will not be computed" and "failed".
+    Never raises — bookkeeping must not be able to disturb the run it describes.
+    """
+    try:
+        probe = dict(job.health_probe or {})
+        probe.setdefault("enabled", True)
+        probe.setdefault("interval_s", _INFLIGHT_HEALTH_INTERVAL_S)
+        probe.setdefault("started_at", None)   # when this segment's probe began watching
+        probe.setdefault("last_tick_at", None)  # last time the probe RAN (sample or not)
+        probe.setdefault("last_at", None)       # last time it produced a SAMPLE
+        probe.setdefault("last_error", None)
+        probe.setdefault("reason", None)
+        if fields.pop("adopted", False):
+            # A durable fact about this segment, not a transient status: recorded on its
+            # own key so the tick factory's counter reset does not wipe it, and so it
+            # never masquerades as the reason a metric is missing (it is not — an
+            # adopted run samples normally now).
+            probe["adopted"] = True
+        probe.update(fields)
+        job.health_probe = probe
+        job.save(workspace_dir)
+    except Exception:  # noqa: BLE001
+        logger.debug("[%s] health_probe bookkeeping failed", job.job_id, exc_info=True)
 
 
 def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
@@ -1276,8 +1377,26 @@ def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
     disturb (let alone kill) the run it is watching.
     """
     if _INFLIGHT_HEALTH_INTERVAL_S <= 0:
+        _note_health_probe(job, workspace_dir, enabled=False,
+                           reason="in-flight health sampling is disabled "
+                                  "(NADOC_INFLIGHT_HEALTH_INTERVAL_S=0)")
         return None
-    state = {"next_at": time.time() + _INFLIGHT_HEALTH_INTERVAL_S, "busy": False}
+    # Publish the probe's existence up front, so the card can distinguish "a sample is
+    # coming" from "nothing will ever sample this" before the first tick has run.
+    #
+    # `started_at` is when THIS segment's probe began watching, and the counters are
+    # reset with it.  The job's own `created_at` is not a usable clock here: a resumed
+    # run can be many hours old while its probe is seconds old, which would make any
+    # staleness test fire instantly on resume.
+    _note_health_probe(job, workspace_dir, enabled=True,
+                       interval_s=_INFLIGHT_HEALTH_INTERVAL_S,
+                       started_at=time.time(), last_tick_at=None,
+                       last_at=None, last_error=None, reason=None)
+    # The FIRST probe fires early, then the loop settles to the full interval.  Waiting
+    # a whole interval meant the Health card sat blank for five minutes at the start of
+    # every segment even when everything was working.
+    state = {"next_at": time.time() + min(_INFLIGHT_HEALTH_FIRST_S, _INFLIGHT_HEALTH_INTERVAL_S),
+             "busy": False}
 
     async def _tick():
         now = time.time()
@@ -1286,8 +1405,11 @@ def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
         # with.  Skipping is always safe — the next tick takes it.
         if state["busy"] or now < state["next_at"]:
             return
-        dcd = output_dir / f"{spec.name}.dcd"
+        dcd = _latest_segment_dcd(output_dir, spec.name)
         if not dcd.exists() or dcd.stat().st_size == 0:
+            _note_health_probe(job, workspace_dir, last_tick_at=time.time(),
+                               last_error=None,
+                               reason="waiting for the first trajectory frames")
             return
         state["busy"] = True
         try:
@@ -1296,19 +1418,29 @@ def _make_inflight_health_tick(job, spec, package_dir: Path, output_dir: Path,
                 min_c1_paired=spec.min_c1_paired,
                 min_wc_ref_relative=spec.min_wc_ref_relative,
                 safe_back=_INFLIGHT_HEALTH_SAFE_BACK,
+                # The per-frame series is discarded on this path (an in-flight probe
+                # writes no health.jsonl record), so walking the whole trajectory is
+                # pure cost — and this runs inline in the disk guard's poll loop.
+                per_frame=False,
             )
-            if hresult.error:            # DCD not yet readable / too few frames
+            if hresult.error:
+                # Record WHY there is no sample.  "Too few frames yet" is normal at the
+                # start of a segment and must not read as a failure; anything else is
+                # one, and the card says so instead of spinning on it forever.
+                _note_health_probe(
+                    job, workspace_dir, last_tick_at=time.time(),
+                    last_error=None if hresult.not_ready else hresult.error,
+                    reason=("waiting for the first trajectory frames"
+                            if hresult.not_ready else None),
+                )
                 return
-            job.health_samples.append(MdHealthSample(
-                wall_time=time.time(), stage=spec.stage, segment=spec.name,
-                c1_paired_fraction=hresult.c1_paired_fraction,
-                c1_mean_ang=hresult.c1_mean_ang, c1_p90_ang=hresult.c1_p90_ang,
-                wc_ref_relative_fraction=hresult.wc_ref_relative_fraction,
-                wc_mean_hbond_ang=hresult.wc_mean_hbond_ang,
-                passed=hresult.passed, blocking=False,
-                reason=hresult.reason or (hresult.error or ""),
-            ))
-            job.save(workspace_dir)
+            job.health_samples.append(MdHealthSample.from_result(
+                # Advisory by construction: an in-flight probe must never be able to
+                # stop the run it is watching.
+                hresult, spec.stage, spec.name, blocking=False))
+            _note_health_probe(job, workspace_dir, last_at=time.time(),
+                               last_tick_at=time.time(),
+                               last_error=hresult.diagnostics_error, reason=None)
             logger.info("[%s] in-flight health %s: c1=%.3f wc=%.3f",
                         job.job_id, spec.name,
                         hresult.c1_paired_fraction or 0.0,
@@ -1678,7 +1810,10 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         job.status = MdStatus.running
         _set_min_status("running")
         job.save(workspace_dir)
-        await _wait_for_segment_process(min_name)
+        # Guarded like a spawned minimisation.  Minimisation emits no health sample
+        # (there is no trajectory yet), so there is no on_tick here — but it writes
+        # just as much to disk, and used to run with no low-disk abort at all.
+        await _wait_for_segment_process(min_name, guard_dir=package_dir)
 
     if not min_coor.exists():
         if not _disk_floor_ok("minimization"):
@@ -1809,9 +1944,23 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             seg_log = _latest_segment_log(package_dir, spec.name)
         elif _segment_process_running(spec.name):
             # A NAMD run for this segment outlived a previous orchestrator
-            # (e.g. dev-server reload).  Adopt it instead of spawning a duplicate.
-            logger.info("[%s] Adopting running NAMD for %s", job.job_id, spec.name)
-            await _wait_for_segment_process(spec.name)
+            # (e.g. dev-server reload).  Adopt it instead of spawning a duplicate —
+            # WITH the disk guard and in-flight health sampling, so an adopted segment
+            # is indistinguishable from one we spawned ourselves.  Without them a
+            # routine backend edit left the rest of the run unguarded and its Health
+            # card spinning on data that was never collected.
+            logger.info("[%s] Adopting running NAMD for %s "
+                        "(disk guard + in-flight health enabled)", job.job_id, spec.name)
+            _note_health_probe(job, workspace_dir, adopted=True)
+            rc = await _wait_for_segment_process(
+                spec.name,
+                guard_dir=package_dir,
+                on_tick=_make_inflight_health_tick(
+                    job, spec, package_dir, output_dir, workspace_dir),
+            )
+            if rc == DISK_ABORT_RC:
+                _fail_on_disk_abort(job, spec, idx, package_dir, workspace_dir)
+                return
             seg_log = _latest_segment_log(package_dir, spec.name)
             if not (
                 _segment_outputs_complete(output_dir, spec.name)
@@ -1873,19 +2022,7 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
                 raise asyncio.CancelledError
 
             if rc == DISK_ABORT_RC:
-                fb = free_bytes(package_dir)
-                logger.error("[%s] Disk guard aborted %s: %.1f GB free",
-                             job.job_id, spec.name, fb / GiB)
-                if idx < len(job.segments):
-                    job.segments[idx].status = "failed"
-                job.status = MdStatus.failed
-                job.failure_kind = "disk_full"
-                job.error = (
-                    f"Stopped: free disk fell below {ABORT_MIN_FREE_BYTES / GiB:.0f} GB "
-                    f"while running {spec.name} ({fb / GiB:.1f} GB free). "
-                    "Free up space (delete/archive old jobs), then resume."
-                )
-                job.save(workspace_dir)
+                _fail_on_disk_abort(job, spec, idx, package_dir, workspace_dir)
                 return
 
             if rc != 0:
@@ -2084,21 +2221,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
             _record_design_rmsd(job, spec, output_dir, workspace_dir)
 
             # Save health sample to job object
-            sample = MdHealthSample(
-                wall_time                = time.time(),
-                stage                   = spec.stage,
-                segment                 = spec.name,
-                c1_paired_fraction      = hresult.c1_paired_fraction,
-                c1_mean_ang             = hresult.c1_mean_ang,
-                c1_p90_ang              = hresult.c1_p90_ang,
-                wc_ref_relative_fraction = hresult.wc_ref_relative_fraction,
-                wc_mean_hbond_ang       = hresult.wc_mean_hbond_ang,
-                passed                  = hresult.passed,
-                blocking                = hresult.blocking,
-                reason                  = hresult.reason or (hresult.error or ""),
-                broken_bp_count         = hresult.broken_bp_count,
-                charge_within_shell_e   = hresult.charge_within_shell_e,
-            )
+            sample = MdHealthSample.from_result(
+                hresult, spec.stage, spec.name, blocking=hresult.blocking)
             job.health_samples.append(sample)
 
             # Health is advisory only — a below-threshold checkpoint (C1' or WC,

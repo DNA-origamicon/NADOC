@@ -82,4 +82,25 @@ describe('mdShortStage / mdLatestStageLabel', () => {
     expect(mdLatestStageLabel(done, null, null)).toBe('—')
     expect(mdLatestStageLabel({}, null, null)).toBe('—')
   })
+
+  it('last resort: the segment the job says it is on', () => {
+    // A production run is ONE long segment that emits its health sample at the very
+    // end, so "Latest" used to read "—" for the whole run — and on an active job a
+    // dash was drawn as an endless spinner. The current segment is always known.
+    const job = {
+      status: 'running',
+      current_segment_idx: 0,
+      segments: [{ name: 'p1', stage: '310K NPT conservative production 500 ns', status: 'running' }],
+    }
+    expect(mdLatestStageLabel(job, null, null)).toBe('500 ns production run')
+  })
+
+  it('still prefers a real health sample over the segment fallback', () => {
+    const job = {
+      status: 'running',
+      current_segment_idx: 1,
+      segments: [{ stage: 'a' }, { stage: '310K NPT ENM k=0.1' }],
+    }
+    expect(mdLatestStageLabel(job, { stage: '300K NPT k=0' }, null)).toBe('300K NPT k=0')
+  })
 })

@@ -46,11 +46,19 @@ export function mdShortStage(stage) {
 
 /** Pure: what the "Latest" stat card shows. A live health sample wins, then the last
  *  persisted one, then a RUNNING minimisation — that step emits no health sample, so
- *  without it the card reads "—" for the whole (long) minimisation. */
+ *  without it the card reads "—" for the whole (long) minimisation.
+ *
+ *  Last resort: the segment the job says it is on. That is carried on every running job
+ *  regardless of whether anything has measured it yet, so "Latest" should never be
+ *  unknown mid-run — it used to read "—" (and, on an active job, spin) for the entire
+ *  first segment of a production run, which produces exactly one health sample at its
+ *  very end. */
 export function mdLatestStageLabel(job, health, persisted) {
   if (health) return mdShortStage(health.stage)
   if (persisted?.stage) return mdShortStage(persisted.stage)
   const min = mdMinimizationRow(job)
   if (min && min.status === 'running') return mdShortStage(min.stage)
+  const seg = job?.segments?.[job?.current_segment_idx]
+  if (seg?.stage) return mdShortStage(seg.stage)
   return '—'
 }

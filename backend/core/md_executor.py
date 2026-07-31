@@ -886,7 +886,6 @@ def _finalize_local_bookkeeping(job: MdJob, workspace_dir: Path) -> None:
     logs/coords — the between-segment bookkeeping the local runner does inline, which
     a bare remote sbatch skips (plan decision #1: health is advisory, computed locally
     post-fetch).  Best-effort; never raises."""
-    import time
     from backend.core.md_health import append_health_jsonl, run_health_check
     from backend.core.md_job import MdHealthSample
     from backend.core.namd_runner import (
@@ -928,15 +927,8 @@ def _finalize_local_bookkeeping(job: MdJob, workspace_dir: Path) -> None:
                     min_wc_ref_relative=spec.min_wc_ref_relative,
                 )
                 append_health_jsonl(output_dir, seg.name, seg.stage, hres)
-                job.health_samples.append(MdHealthSample(
-                    wall_time=time.time(), stage=seg.stage, segment=seg.name,
-                    c1_paired_fraction=hres.c1_paired_fraction,
-                    c1_mean_ang=hres.c1_mean_ang, c1_p90_ang=hres.c1_p90_ang,
-                    wc_ref_relative_fraction=hres.wc_ref_relative_fraction,
-                    wc_mean_hbond_ang=hres.wc_mean_hbond_ang,
-                    passed=hres.passed, blocking=hres.blocking,
-                    reason=hres.reason or (hres.error or ""),
-                ))
+                job.health_samples.append(MdHealthSample.from_result(
+                    hres, seg.stage, seg.name, blocking=hres.blocking))
         except Exception:  # noqa: BLE001
             pass
     job.current_segment_idx = max(0, len(job.segments) - 1)

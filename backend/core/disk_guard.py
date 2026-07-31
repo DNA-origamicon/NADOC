@@ -249,6 +249,33 @@ def suggest_archive_dir(target_dir: Path, predicted_bytes: int) -> "dict | None"
 
 # ── Guard (during a run) ─────────────────────────────────────────────────────────
 
+async def _guard_interval(guard_dir: Path, min_free_bytes: int, on_tick) -> bool:
+    """One between-polls pass, shared by the spawned and adopted wait loops.
+
+    Returns ``False`` when free space has fallen below the abort floor — the caller
+    then kills its process and returns :data:`DISK_ABORT_RC`.  Otherwise runs
+    ``on_tick`` and returns ``True``.
+
+    ``on_tick`` is the periodic hook for callers that want to observe a LONG-running
+    process while it runs (NAMD's in-flight health sampling).  Awaited if it returns
+    an awaitable.  Never allowed to disturb the run: a hook that raises is logged and
+    ignored, because monitoring must not be able to kill the job it is monitoring.
+    ``CancelledError`` still propagates so a user stop works.
+    """
+    if free_bytes(guard_dir) < min_free_bytes:
+        return False
+    if on_tick is not None:
+        try:
+            r = on_tick()
+            if inspect.isawaitable(r):
+                await r
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception("disk_guard: on_tick hook failed")
+    return True
+
+
 async def wait_proc_with_disk_guard(
     proc,
     guard_dir: Path,
@@ -272,24 +299,43 @@ async def wait_proc_with_disk_guard(
             # keeps running; the next loop simply re-awaits it.
             return await asyncio.wait_for(proc.wait(), timeout=poll_s)
         except asyncio.TimeoutError:
-            if free_bytes(guard_dir) < min_free_bytes:
+            if not await _guard_interval(guard_dir, min_free_bytes, on_tick):
                 kill(proc.pid)
                 try:
                     await proc.wait()
                 except Exception:  # noqa: BLE001 — process already reaped is fine
                     pass
                 return DISK_ABORT_RC
-            # Periodic hook for callers that want to observe a LONG-running process
-            # while it runs (NAMD's in-flight health sampling).  Awaited if it returns
-            # an awaitable.  Never allowed to disturb the run: a hook that raises is
-            # logged and ignored, because monitoring must not be able to kill the job
-            # it is monitoring.  CancelledError still propagates so a user stop works.
-            if on_tick is not None:
-                try:
-                    r = on_tick()
-                    if inspect.isawaitable(r):
-                        await r
-                except asyncio.CancelledError:
-                    raise
-                except Exception:  # noqa: BLE001
-                    logger.exception("wait_proc_with_disk_guard: on_tick hook failed")
+
+
+async def wait_external_proc_with_disk_guard(
+    is_alive,
+    guard_dir: Path,
+    *,
+    kill=None,
+    poll_s: float = GUARD_POLL_S,
+    min_free_bytes: int = ABORT_MIN_FREE_BYTES,
+    on_tick=None,
+) -> int:
+    """Same guarantees as :func:`wait_proc_with_disk_guard`, for a process this worker
+    did **not** spawn.
+
+    A NAMD run that outlived its orchestrator (a dev-server ``--reload``, say) is
+    adopted by the next runner, which has no ``asyncio`` handle for it — only a
+    liveness probe (``is_alive()``, a self-verifying /proc scan).  Without this the
+    adopted segment ran with no disk guard and no health sampling at all, so a routine
+    backend edit silently downgraded a multi-day production run.
+
+    ``kill`` (called with no arguments) is invoked only for a **disk abort**: killing
+    an orphan beats filling the volume and wedging the machine.  A user stop still
+    arrives as ``CancelledError``, which propagates and leaves the orphan running —
+    that one is not ours to kill from here.
+    """
+    while True:
+        if not is_alive():
+            return 0
+        await asyncio.sleep(poll_s)
+        if not await _guard_interval(guard_dir, min_free_bytes, on_tick):
+            if kill is not None:
+                kill()
+            return DISK_ABORT_RC

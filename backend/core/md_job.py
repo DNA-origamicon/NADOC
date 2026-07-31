@@ -53,6 +53,52 @@ class MdHealthSample:
     broken_bp_count:         Optional[int] = None
     #: Net charge (e) within 2 nm of the DNA: has the counterion atmosphere converged?
     charge_within_shell_e:   Optional[float] = None
+    #: Provenance of the two per-frame diagnostics above.  Three-valued, and the UI
+    #: depends on all three being distinguishable:
+    #:   ``None``  — this sample predates the field, or the probe skipped the per-frame
+    #:               loop; the two values were never computed → show "—", not a spinner.
+    #:   ``"ok"``  — the loop ran; a ``None`` value then genuinely means "nothing to
+    #:               measure" (no ions, no pairs).
+    #:   anything else — the captured failure text → show "—" with the reason.
+    #: A key-presence test cannot substitute for this: ``MdJob.load`` reconstructs every
+    #: sample through ``MdHealthSample(**h)`` and ``save`` re-emits it via ``asdict``, so
+    #: old samples are normalised to the current shape on the next save.
+    diagnostics:             Optional[str] = None
+
+    @classmethod
+    def from_result(cls, hresult, stage: str, segment: str, *, blocking: bool,
+                    wall_time: Optional[float] = None) -> "MdHealthSample":
+        """Build a sample from a ``md_health.HealthCheckResult``.
+
+        The single construction point for every producer (end-of-segment, in-flight,
+        crash-reconcile, remote finalize).  Three of those four used to hand-copy the
+        field list and had silently drifted — each omitted ``broken_bp_count`` and
+        ``charge_within_shell_e`` despite the result carrying both, so those two Health
+        tiles were blank for entire production runs.
+
+        ``blocking`` stays an explicit argument rather than being read off ``hresult``:
+        an in-flight probe is advisory by construction (it must never stop a run), while
+        ``HealthCheckResult`` defaults ``blocking`` to True on its error early-returns.
+        """
+        diagnostics = getattr(hresult, "diagnostics_error", None)
+        if diagnostics is None and getattr(hresult, "per_frame_ran", False):
+            diagnostics = "ok"
+        return cls(
+            wall_time                = time.time() if wall_time is None else wall_time,
+            stage                    = stage,
+            segment                  = segment,
+            c1_paired_fraction       = hresult.c1_paired_fraction,
+            c1_mean_ang              = hresult.c1_mean_ang,
+            c1_p90_ang               = hresult.c1_p90_ang,
+            wc_ref_relative_fraction = hresult.wc_ref_relative_fraction,
+            wc_mean_hbond_ang        = hresult.wc_mean_hbond_ang,
+            passed                   = hresult.passed,
+            blocking                 = blocking,
+            reason                   = hresult.reason or (hresult.error or ""),
+            broken_bp_count          = hresult.broken_bp_count,
+            charge_within_shell_e    = hresult.charge_within_shell_e,
+            diagnostics              = diagnostics,
+        )
 
 
 @dataclass
@@ -111,6 +157,12 @@ class MdJob:
     threads: int = 16
     devices: str = "0"
     health_samples: list[MdHealthSample] = field(default_factory=list)
+    #: Liveness of the in-flight health probe, so the UI can explain an absent metric
+    #: rather than spin on it: ``{enabled, interval_s, last_at, last_error, reason}``.
+    #: ``enabled=False`` means no probe will ever run for this segment (with ``reason``
+    #: saying why); ``last_error`` is the most recent failure; ``last_at`` + ``interval_s``
+    #: let the card decide a sample is overdue instead of waiting forever.
+    health_probe: Optional[dict] = None
     # Durable record of every "periodic cell has become too small" fatal, whether it was
     # auto-resumed or refused: {segment, attempt, volume_fraction, collapsing,
     # cell_start_ang, cell_end_ang, n_samples}. These used to leave no trace — the resume

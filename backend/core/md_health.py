@@ -14,6 +14,7 @@ file without MDAnalysis installed.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,6 +22,8 @@ from typing import Any, Optional
 
 import numpy as np
 from scipy.spatial import cKDTree
+
+logger = logging.getLogger(__name__)
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -105,6 +108,17 @@ class HealthCheckResult:
     charge_within_shell_e:       Optional[float] = None
     charge_per_frame:            list[float] = field(default_factory=list)
     n_shell_ions:                Optional[int] = None
+    #: True once the per-frame diagnostics loop has actually run, so a caller can tell
+    #: "measured, and there was nothing there" from "never measured".
+    per_frame_ran:               bool = False
+    #: Why the per-frame diagnostics produced nothing, when they failed.  Kept separate
+    #: from ``reason`` on purpose: ``reason`` is the pass/fail explanation shown in the
+    #: WC trend tooltip and the production-checkpoint warning, and must not be polluted
+    #: with a diagnostics-only failure that does not affect the verdict.
+    diagnostics_error:           Optional[str] = None
+    #: The DCD exists but has too few frames yet — a normal early-in-segment state, NOT
+    #: a failure.  The UI keeps such a tile "computing" instead of painting it failed.
+    not_ready:                   bool = False
 
 
 # ── The tutorial's own equilibration criteria (Methods Mol Biol 1811 §3.4) ────
@@ -548,6 +562,21 @@ def wc_metrics_from_dcd(
 
 # ── Combined health check ─────────────────────────────────────────────────────
 
+def _latest_segment_dcd(output_dir: Path, segment_name: str) -> Path:
+    """Newest trajectory for a segment: ``<seg>.dcd`` or the highest ``<seg>.contN.dcd``.
+
+    A segment resumed from its checkpoint (cell-shrink auto-resume, instability rescue)
+    writes to ``<seg>.cont1.dcd``, ``cont2``… — so a probe hard-coded to ``<seg>.dcd``
+    kept sampling the frozen pre-crash trajectory for the rest of the run.
+    """
+    base = output_dir / f"{segment_name}.dcd"
+    conts = sorted(
+        output_dir.glob(f"{segment_name}.cont*.dcd"),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0.0,
+    )
+    return conts[-1] if conts else base
+
+
 def run_health_check(
     package_dir: Path,
     segment_name: str,
@@ -559,15 +588,25 @@ def run_health_check(
     cutoff_ang: float = 3.6,
     ref_delta_ang: float = 0.75,
     safe_back: int = 0,
+    per_frame: bool = True,
 ) -> HealthCheckResult:
     """Run C1' and WC health checks on the last frame of a completed segment.
 
     package_dir: NAMD working directory containing {name_stem}.psf/.pdb
     segment_name: output name prefix, expects output/{segment_name}.dcd
+
+    ``per_frame`` walks the WHOLE trajectory to build the per-frame series
+    (``wc_per_frame`` feeds the early-stop accelerator and the Tier-A remote
+    evaluator).  **The default must stay True** — ``remote_health_eval`` runs a staged
+    copy of this module on the compute node and exits "no WC" on an empty series,
+    which would make every Tier-A stage hold.  An in-flight probe, which discards the
+    series anyway, passes ``per_frame=False`` and gets the two scalars from a single
+    frame: O(1) instead of O(n_frames), which matters because the probe runs inline in
+    the disk guard's poll loop and a 500 ns run reaches tens of thousands of frames.
     """
     psf = package_dir / f"{name_stem}.psf"
     pdb = package_dir / f"{name_stem}.pdb"
-    dcd = package_dir / "output" / f"{segment_name}.dcd"
+    dcd = _latest_segment_dcd(package_dir / "output", segment_name)
 
     if not psf.exists() or not pdb.exists():
         return HealthCheckResult(passed=False, error=f"PSF or PDB not found in {package_dir}")
@@ -588,7 +627,11 @@ def run_health_check(
         c1_m = c1_metrics_from_dcd(psf, dcd, c1_pairs,
                                    safe_back=safe_back, paired_max_ang=paired_max_ang)
         if c1_m is None:
-            return HealthCheckResult(passed=False, error="DCD has no frames yet")
+            # Normal early-in-segment state, not a failure: NAMD has not written
+            # safe_back+1 frames yet.  Flagged so the UI keeps the tile "computing"
+            # rather than painting it failed at the start of every run.
+            return HealthCheckResult(passed=False, not_ready=True,
+                                     error="DCD has no frames yet")
         if "error" in c1_m:
             return HealthCheckResult(passed=False, error=f"C1' read error: {c1_m['error']}")
     except Exception as exc:
@@ -611,35 +654,60 @@ def run_health_check(
     broken_per_frame: list[int] = []
     charge_per_frame: list[float] = []
     n_shell_ions: Optional[int] = None
+    per_frame_ran = False
+    diagnostics_error: Optional[str] = None
     try:
         import MDAnalysis as mda  # noqa: PLC0415
-        u_all = mda.Universe(str(psf), str(pdb), str(dcd))
+        # NOTE the topology-only Universe for the DCD.  Passing the PDB as a second
+        # coordinate file (as this used to) builds a ChainReader whose frame 0 is the
+        # reference structure, not a trajectory frame — which silently shifted
+        # wc_per_frame (read by the early-stop accelerator) by one and made the [-1]
+        # scalars below describe a different instant than c1_paired_fraction.
+        u_all = mda.Universe(str(psf), str(dcd))
         try:
             dna_idx, ion_idx = _shell_selections(u_all)
             charges = u_all.atoms.charges
-        except Exception:      # noqa: BLE001 — a PSF without charges, say
+        except Exception as exc:      # noqa: BLE001 — a PSF without charges, say
             dna_idx = ion_idx = np.empty(0, dtype=int)
             charges = None
+            diagnostics_error = f"shell selection failed: {exc}"
         # The tutorial's broken-bp count is (idealised intact) − (this frame's intact),
         # so the reference frame sets the baseline.
         don_idx, acc_idx = wc_hbond_atoms(u_all)
         u_ref = mda.Universe(str(psf), str(pdb))
         n_expected = count_intact_base_pairs(u_ref.atoms.positions, don_idx, acc_idx)
-        for ts in u_all.trajectory:
-            box = ts.dimensions
-            L = box[:3] if box is not None and np.all(np.asarray(box[:3]) > 0) else None
-            pos = u_all.atoms.positions
-            m = wc_frame_metrics(pos, wc_pairs,
-                                 cutoff_ang=cutoff_ang, ref_delta_ang=ref_delta_ang, box=L)
-            wc_per_frame.append(round(m["ref_relative_paired_fraction"], 4))
-            broken_per_frame.append(
-                count_broken_base_pairs(pos, don_idx, acc_idx, n_expected, box=L))
-            if charges is not None and ion_idx.size:
-                q, n_in = charge_within_shell(pos, charges, dna_idx, ion_idx, box=L)
-                charge_per_frame.append(round(q, 3))
-                n_shell_ions = n_in
-    except Exception:
-        pass
+
+        n_frames = len(u_all.trajectory)
+        # Honour safe_back here too: NAMD may be mid-write at the DCD tail while a live
+        # probe reads it, and a torn frame used to take all three series down with it.
+        last = n_frames - safe_back
+        frames = range(max(0, last - 1), max(0, last)) if not per_frame else range(max(0, last))
+        for i in frames:
+            try:
+                ts = u_all.trajectory[i]
+                box = ts.dimensions
+                L = box[:3] if box is not None and np.all(np.asarray(box[:3]) > 0) else None
+                pos = u_all.atoms.positions
+                m = wc_frame_metrics(pos, wc_pairs,
+                                     cutoff_ang=cutoff_ang, ref_delta_ang=ref_delta_ang, box=L)
+                wc_per_frame.append(round(m["ref_relative_paired_fraction"], 4))
+                broken_per_frame.append(
+                    count_broken_base_pairs(pos, don_idx, acc_idx, n_expected, box=L))
+                if charges is not None and ion_idx.size:
+                    q, n_in = charge_within_shell(pos, charges, dna_idx, ion_idx, box=L)
+                    charge_per_frame.append(round(q, 3))
+                    n_shell_ions = n_in
+            except Exception as exc:  # noqa: BLE001, PERF203 — one torn frame, not the run
+                if diagnostics_error is None:
+                    diagnostics_error = f"frame {i}: {exc}"
+                continue
+        per_frame_ran = True
+    except Exception as exc:  # noqa: BLE001
+        # Diagnostics-only: never changes the pass/fail verdict.  But it must leave a
+        # trace — silently emptying these arrays is what made "Broken bp"/"Shell charge"
+        # blank with no way to tell "not measured" from "measured as nothing".
+        diagnostics_error = f"per-frame diagnostics failed: {exc}"
+        logger.exception("run_health_check: per-frame diagnostics failed for %s", dcd)
 
     c1_frac = c1_m["paired_fraction"]
     wc_frac = wc_m["ref_relative_paired_fraction"]
@@ -678,6 +746,8 @@ def run_health_check(
         charge_within_shell_e    = charge_per_frame[-1] if charge_per_frame else None,
         charge_per_frame         = charge_per_frame,
         n_shell_ions             = n_shell_ions,
+        per_frame_ran            = per_frame_ran,
+        diagnostics_error        = diagnostics_error,
     )
 
 
@@ -707,6 +777,10 @@ def append_health_jsonl(output_dir: Path, segment_name: str, stage: str,
         "charge_within_shell_e":     result.charge_within_shell_e,
         "charge_per_frame":          result.charge_per_frame,
         "n_shell_ions":              result.n_shell_ions,
+        # Why the two traces above are absent, when they are.
+        "per_frame_ran":             result.per_frame_ran,
+        "diagnostics_error":         result.diagnostics_error,
+        "not_ready":                 result.not_ready,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     with (output_dir / "health.jsonl").open("a") as fh:

@@ -50,6 +50,7 @@ import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
 import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 import { initRelaxPresets } from './md_relax_presets.js'
 import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
+import { mdHealthTileStates, TILE_STATE } from './md_health_tiles.js'
 
 // Relax-protocol preset dropdown (see ./md_relax_presets.js); set during panel init.
 let _relaxPresets = null
@@ -3566,19 +3567,36 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // its Speed with a "*" + hover tooltip so the low number doesn't look broken.
     const speedNote = fastPhaseSpeedNote(job, scalar?.ns_per_day ?? null)
     const speedValue = _fmt(scalar?.ns_per_day ?? null, 1, ' ns/day')
+    // Raw values feed the state classifier; the formatted strings above are only ever
+    // drawn for a VALUE tile.  Keep the two lists keyed the same.
+    const raws = {
+      temp:        scalar?.temperature_k ?? null,
+      pressure,
+      basePairs:   health?.c1_paired_fraction ?? null,
+      wcHealth:    health?.wc_ref_relative_fraction ?? null,
+      speed:       scalar?.ns_per_day ?? null,
+      latest:      null,   // filled below — derived, never pending
+      brokenBp:    health?.broken_bp_count ?? null,
+      shellCharge: health?.charge_within_shell_e ?? null,
+    }
+    const latestLabel = mdLatestStageLabel(job, health, persisted)
+    raws.latest = latestLabel === '—' ? null : latestLabel
+    const states = mdHealthTileStates({
+      job, health, raws, nowMs: Date.now(), active: mdJobIsActive(job) })
+
     const cards = [
-      { label: 'Temp',       value: _fmt(scalar?.temperature_k ?? null, 1, 'K'),          color: _C.text },
-      { label: 'Pressure avg', value: _fmt(pressure, 2, 'bar'),                            color: _C.text, title: pressureTitle },
-      { label: 'Base pairs', value: _fmtPct(health?.c1_paired_fraction ?? null),          color: _healthColor(health?.c1_paired_fraction, 0.90) },
-      { label: 'WC health',  value: wcValue,                                               color: wcAdvisory ? _C.warn : _healthColor(health?.wc_ref_relative_fraction, wcThreshold), wcTrend: true },
-      { label: 'Speed',      value: (speedNote && speedValue !== '—') ? `${speedValue} *` : speedValue, color: _C.muted, title: speedNote?.tooltip },
+      { key: 'temp',       label: 'Temp',       value: _fmt(scalar?.temperature_k ?? null, 1, 'K'),          color: _C.text },
+      { key: 'pressure',   label: 'Pressure avg', value: _fmt(pressure, 2, 'bar'),                            color: _C.text, title: pressureTitle },
+      { key: 'basePairs',  label: 'Base pairs', value: _fmtPct(health?.c1_paired_fraction ?? null),          color: _healthColor(health?.c1_paired_fraction, 0.90) },
+      { key: 'wcHealth',   label: 'WC health',  value: wcValue,                                               color: wcAdvisory ? _C.warn : _healthColor(health?.wc_ref_relative_fraction, wcThreshold), wcTrend: true },
+      { key: 'speed',      label: 'Speed',      value: (speedNote && speedValue !== '—') ? `${speedValue} *` : speedValue, color: _C.muted, title: speedNote?.tooltip },
       // Falls back to a RUNNING minimisation: it produces no health sample, so a job
       // spending its first half-hour minimising otherwise reads "Latest —".
-      { label: 'Latest',     value: mdLatestStageLabel(job, health, persisted), color: _C.muted },
+      { key: 'latest',       label: 'Latest',     value: latestLabel, color: _C.muted },
       // The two published equilibration criteria NADOC used to compute nowhere.
       // Broken pairs is the citable count (their 3 Å + 140° definition), distinct from
       // the WC card above, which is NADOC's own ref-relative gate.
-      { label: 'Broken bp',  value: health?.broken_bp_count == null ? '—' : String(health.broken_bp_count),
+      { key: 'brokenBp',     label: 'Broken bp',  value: health?.broken_bp_count == null ? '—' : String(health.broken_bp_count),
         color: (health?.broken_bp_count ?? 0) > 0 ? _C.warn : _C.text,
         title: 'Broken base pairs, Aksimentiev definition: the central Watson-Crick '
              + 'bond beyond 3 Å or bent past 140°. Their hextube holds near zero once '
@@ -3587,25 +3605,38 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // as counterions condense; a trace that never flattens means the cloud has not
       // converged — which is exactly what a slow-diffusing Mg(H₂O)₆ does if it was
       // placed out in the bulk instead of against the DNA.
-      { label: 'Shell charge', value: health?.charge_within_shell_e == null ? '—' : _fmt(health.charge_within_shell_e, 0, ' e'),
+      { key: 'shellCharge',  label: 'Shell charge', value: health?.charge_within_shell_e == null ? '—' : _fmt(health.charge_within_shell_e, 0, ' e'),
         color: _C.muted,
         title: 'Net charge within 2 nm of the DNA (Aksimentiev §3.4). Should settle to '
              + 'a stable value once the counterion atmosphere has equilibrated.' },
     ]
 
-    const jobActive = mdJobIsActive(job)
-    cards.forEach(({ label, value, color, wcTrend, title }) => {
+    cards.forEach(({ key, label, value, color, wcTrend, title }) => {
+      const { state, reason } = states[key] ?? { state: TILE_STATE.VALUE, reason: null }
       const card = document.createElement('div')
       card.style.cssText = `background:${_C.bg2};border:1px solid ${_C.border};border-radius:3px;padding:4px 6px;position:relative`
-      if (title) card.title = title
-      // A still-pending value (—) on a running job shows a small spinner so the user
-      // knows that card is being calculated, not stuck.
-      const pending = jobActive && String(value).replace(/[⚠\s]/g, '') === '—'
+      // The reason a value is missing beats the metric's static explainer — a tile the
+      // user is asking "why is this blank?" about should answer that first.
+      const tip = state === TILE_STATE.VALUE || !reason
+        ? title
+        : (title ? `${reason}\n\n${title}` : reason)
+      if (tip) card.title = tip
       card.innerHTML = `<div style="font-size:9px;color:${_C.muted};margin-bottom:1px">${label}</div>`
       const valEl = document.createElement('div')
       valEl.style.cssText = `font-size:11px;color:${color};font-weight:600;font-family:var(--font-mono);display:flex;align-items:center;min-height:13px`
-      if (pending) valEl.appendChild(makeSpinner(_C.muted, 9))
-      else valEl.textContent = value
+      // A spinner may ONLY mean "being computed right now".  Every other absence renders
+      // as a dash with a tooltip saying why — an endless spinner is the bug this fixes.
+      if (state === TILE_STATE.PENDING) {
+        valEl.appendChild(makeSpinner(_C.muted, 9))
+      } else if (state === TILE_STATE.FAILED) {
+        valEl.style.color = _C.warn
+        valEl.textContent = '—'
+      } else if (state === TILE_STATE.UNAVAILABLE) {
+        valEl.style.color = _C.muted
+        valEl.textContent = '—'
+      } else {
+        valEl.textContent = value
+      }
       card.appendChild(valEl)
       if (wcTrend) {
         card.style.cursor = 'default'

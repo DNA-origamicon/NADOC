@@ -242,6 +242,79 @@ behaviour when there is one sample per segment.
 broke on the new kwarg (18 failures). They now take `**_kw`. Worth knowing before adding another
 parameter there.
 
+## Health-card audit — an ADOPTED run is now a first-class run (2026-07-31)
+
+The 2026-07-29 fix above was only wired into `_run_namd_async`, i.e. the path that **spawns** NAMD.
+It missed the other one.
+
+**Symptom:** on a local production run Temp / Pressure / Speed populated while Base pairs / WC
+health / Latest / Broken bp / Shell charge showed spinning circles indefinitely. That split is the
+diagnosis: the first three are parsed from the NAMD log by `ws.py` and are **runner-independent**;
+the rest need the runner's probe.
+
+**Root cause — orphan adoption.** When NAMD outlives its orchestrator (the dev server runs
+`uvicorn --reload`, so **any backend edit during a run** does this), `run_job` adopts the survivor
+via `_wait_for_segment_process` — which was a bare 10 s poll loop. No `on_tick`, **no disk guard**
+(that lives inside `_run_namd_async` too), no `job.save`. Caught live: NAMD reparented to
+`systemd --user`, a 776 MB growing DCD, `health_samples: []`, `job.json` frozen 10 h.
+
+**Invariant now:** a segment gets identical services whether we spawned NAMD or adopted it.
+`disk_guard._guard_interval` is shared by `wait_proc_with_disk_guard` and the new
+`wait_external_proc_with_disk_guard` (liveness by probe, not by asyncio handle);
+`_wait_for_segment_process(…, guard_dir=, on_tick=)` delegates to it. Both adopt sites are wired
+(segment + minimisation). `_run_namd_async`'s signature is untouched — the seven doubles are safe.
+
+**Also fixed, same audit:**
+- Three of four `MdHealthSample` sites dropped `broken_bp_count` / `charge_within_shell_e` after
+  computing them (only end-of-segment set them). All four now go through
+  **`MdHealthSample.from_result(...)`** — `blocking` stays an explicit per-site argument, because
+  `HealthCheckResult` defaults it True on error early-returns and the in-flight probe is advisory.
+- `md_health`'s per-frame loop had a bare `except Exception: pass` that erased all three series
+  plus the reason. Now: per-frame `try`, honours `safe_back`, and records `diagnostics_error` /
+  `per_frame_ran` / `not_ready` (diagnostics NEVER change the pass/fail verdict, and stay out of
+  `reason`, which the WC tooltip and production-checkpoint warning render).
+- The loop opened `Universe(psf, pdb, dcd)` — a ChainReader whose **frame 0 was the reference
+  PDB**, shifting `wc_per_frame` (read by the early-stop accelerator) by one. Now `Universe(psf, dcd)`.
+- `run_health_check(per_frame=…)`. **The default MUST stay True** — `remote_health_eval` runs a
+  staged copy on the Alpine node and exits `_EXIT_NO_WC` on an empty series, which would make every
+  Tier-A stage HOLD. The in-flight probe passes `per_frame=False`: it discards the series anyway,
+  and it runs *inline in the disk guard's poll loop*, so an O(n_frames) walk is a blind spot in
+  disk-abort detection. Measured on the real 1043-frame DCD: **5.35 s → 1.70 s**.
+- The probe read `output/<seg>.dcd`, but a resumed segment writes `<seg>.contN.dcd` — so after any
+  auto-resume it sampled the frozen pre-crash trajectory forever. `_latest_segment_dcd` picks the newest.
+- First probe now fires at `NADOC_INFLIGHT_HEALTH_FIRST_S` (30 s) then settles to the full interval;
+  the card used to be blank for 5 min at every segment start even when healthy.
+- `_jsonl_has_segment` parses JSON instead of substring-matching, and treats an **all-null** record
+  (written from a truncated log) as absent so it can be recomputed. A record with a real `error`
+  still counts, so a legitimately-failed check is not retried every supervisor pass.
+
+**New: `MdJob.health_probe`** = `{enabled, interval_s, started_at, last_tick_at, last_at,
+last_error, reason, adopted}`, published on the job payload and WS state. This is what lets the UI
+explain an absence instead of spinning; see `project_md_sidebar_audit.md` for the tile rules.
+
+**Three clocks, and they are NOT interchangeable** (found by resuming a real job right after the
+first fix landed):
+- `started_at` — when THIS segment's probe began watching. Set by the tick factory, which also
+  resets `last_tick_at`/`last_at`/`last_error`/`reason` so a previous segment cannot answer for this one.
+- `last_tick_at` — the probe RAN. Stamped on every tick including the ones that produce nothing.
+- `last_at` — the probe produced a SAMPLE.
+
+`job.created_at` is **not** a probe clock. A resumed run is hours old with a probe seconds old; the
+first UI watchdog anchored on job age and so painted failed tiles the instant the job came back.
+"The probe died" (silent for `2 × interval`) and "the probe is running but the DCD is still too
+short" (`safe_back + 1` frames — at `dcdFreq 25000` / 4 fs that is ~10 min of wall-clock) are
+different situations on different timescales, and both must be bounded separately.
+
+`adopted` is a durable fact on its own key, deliberately not in `reason`: an adopted run samples
+normally, so it must never read as the reason a metric is missing.
+
+**Verified live** on the resumed 500 ns `2hb_1xT`: editing a backend file re-orphaned NAMD (PPID →
+`systemd`), the supervisor re-adopted it, and the first complete sample landed ~90 s later —
+`c1=0.927 wc=0.718 broken_bp=0 charge=243.9 diagnostics=ok`, read from the resume's `.cont1.dcd`.
+Before the fix that same shape produced zero samples in 11 hours.
+
+Pins: `tests/test_md_health_reporting.py` (39).
+
 **Why:** Replace ad hoc experiment scripts with server-managed NAMD jobs that
 persist through browser refreshes, run health gates automatically, and expose a
 REST API.

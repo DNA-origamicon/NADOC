@@ -1331,3 +1331,132 @@ describe('initMdJobsPanel — minimisation timeline row', () => {
       .toEqual(['300K NPT settle (DNA fixed)', '300K NPT ENM k=0.5'])
   })
 })
+
+// ── The Health card must never spin on data that is not coming ────────────────
+// The reported bug, end to end: on a local production run Temp/Pressure/Speed filled
+// in (the WebSocket parses the NAMD log itself) while Base pairs / WC health / Latest /
+// Broken bp / Shell charge spun forever — the runner's health probe was disabled by an
+// orphaning dev-server reload and nothing on screen could say so. The renderer turned
+// ANY missing value on an active job into a spinner, so "not coming" looked identical
+// to "arriving shortly". These drive the REAL panel and count actual spinner nodes.
+describe('initMdJobsPanel — Health card tile states', () => {
+  const $ = (id) => document.getElementById(id)
+  const flushMicro = async (n = 20) => { for (let i = 0; i < n; i++) await Promise.resolve() }
+  const spinners = () => $('md-jobs-metrics').querySelectorAll('.nadoc-spinner').length
+  const tiles = () => [...$('md-jobs-metrics').children]
+      .map(c => [c.children[0]?.textContent, c.children[1]?.textContent])
+
+  const PRODUCTION = {
+    job_id: 'P1', design_name: 'D', created_at: 1, status: 'running',
+    execution_target: 'local', run_kind: 'production', current_segment_idx: 0,
+    segments: [{ name: 'p_01_prod', stage: '310K NPT conservative production 500 ns',
+                 percent: 100, steps: 1000, status: 'running', skipped: false }],
+    health_samples: [],
+    // Exactly what the WS pushes while the runner samples nothing.
+    live_metrics: { temperature_k: 310.4, pressure_avg_bar: 1.2, ns_per_day: 44.1 },
+  }
+
+  beforeEach(async () => {
+    clearDom()
+    mountIds({
+      'md-jobs-panel': 'div', 'md-jobs-panel-heading': 'div', 'md-jobs-panel-arrow': 'div',
+      'md-jobs-panel-body': 'div', 'md-jobs-list': 'div', 'md-jobs-detail': 'div',
+      'md-jobs-timeline': 'div', 'md-jobs-metrics': 'div',
+    })
+    localStorage.clear(); vi.clearAllMocks()
+    mdApi.getSystemResources.mockResolvedValue({ ram_available_mb: 16_000, ram_total_mb: 32_000 })
+    mdApi.getMdJobMetrics.mockResolvedValue([])
+  })
+  afterEach(() => { clearDom() })
+
+  const openWith = async (job) => {
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    const panel = initMdJobsPanel({ getMdViz: () => null })
+    await flushMicro()
+    await panel.selectJob(job.job_id)
+    await flushMicro()
+    return $('md-jobs-metrics')
+  }
+
+  it('THE BUG: a probe that will never run paints dashes, not endless spinners', async () => {
+    await openWith({
+      ...PRODUCTION,
+      health_probe: { enabled: false, reason: 'adopted after an orchestrator restart',
+                      interval_s: 300, last_at: null, last_error: null },
+    })
+    expect(spinners()).toBe(0)
+    const byLabel = Object.fromEntries(tiles())
+    expect(byLabel['Temp']).toMatch(/310/)          // log-derived tiles still populate
+    expect(byLabel['Speed']).toMatch(/44/)
+    expect(byLabel['Base pairs']).toBe('—')         // and the rest say "no", not "wait"
+    expect(byLabel['WC health']).toBe('—')
+    expect(byLabel['Broken bp']).toBe('—')
+    expect(byLabel['Shell charge']).toBe('—')
+    // "Latest" is derived from the running segment, so it is never unknown mid-run.
+    expect(byLabel['Latest']).toBe('500 ns production run')
+  })
+
+  it('an absent tile carries a tooltip explaining WHY it is absent', async () => {
+    const el = await openWith({
+      ...PRODUCTION,
+      health_probe: { enabled: false, reason: 'adopted after an orchestrator restart',
+                      interval_s: 300, last_at: null, last_error: null },
+    })
+    const bp = [...el.children].find(c => c.children[0].textContent === 'Base pairs')
+    expect(bp.title).toMatch(/adopted after an orchestrator restart/)
+  })
+
+  it('an OLD sample missing the per-frame fields does not spin them', async () => {
+    // Samples written before `diagnostics` existed reload as diagnostics: null. Those
+    // two tiles were the ones that spun for entire production runs.
+    await openWith({
+      ...PRODUCTION,
+      health_probe: { enabled: true, interval_s: 300, last_at: Date.now() / 1000,
+                      last_error: null, reason: null },
+      health_samples: [{
+        wall_time: 1, stage: '310K NPT conservative production 500 ns', segment: 'p_01_prod',
+        c1_paired_fraction: 0.95, wc_ref_relative_fraction: 0.88, passed: true,
+        broken_bp_count: null, charge_within_shell_e: null, diagnostics: null,
+      }],
+    })
+    expect(spinners()).toBe(0)
+    const byLabel = Object.fromEntries(tiles())
+    expect(byLabel['Base pairs']).toMatch(/95/)
+    expect(byLabel['Broken bp']).toBe('—')
+    expect(byLabel['Shell charge']).toBe('—')
+  })
+
+  it('a fresh run with a live probe DOES spin the tiles that are genuinely coming', async () => {
+    // The spinner is not banned — it is restricted to values actually in flight.
+    await openWith({
+      ...PRODUCTION,
+      created_at: Date.now() / 1000 - 5,
+      health_probe: { enabled: true, interval_s: 300, last_at: null, last_error: null,
+                      reason: 'waiting for the first trajectory frames' },
+    })
+    expect(spinners()).toBeGreaterThan(0)
+  })
+
+  it('a terminal job never spins, whatever is missing', async () => {
+    await openWith({ ...PRODUCTION, status: 'completed', live_metrics: null })
+    expect(spinners()).toBe(0)
+  })
+
+  it('a full sample renders every tile with no spinner', async () => {
+    await openWith({
+      ...PRODUCTION,
+      health_probe: { enabled: true, interval_s: 300, last_at: Date.now() / 1000,
+                      last_error: null, reason: null },
+      health_samples: [{
+        wall_time: 1, stage: '310K NPT conservative production 500 ns', segment: 'p_01_prod',
+        c1_paired_fraction: 0.96, wc_ref_relative_fraction: 0.91, passed: true,
+        broken_bp_count: 0, charge_within_shell_e: -244, diagnostics: 'ok',
+      }],
+    })
+    expect(spinners()).toBe(0)
+    const byLabel = Object.fromEntries(tiles())
+    expect(byLabel['Broken bp']).toBe('0')      // zero is a reading, not an absence
+    expect(byLabel['Shell charge']).toMatch(/-244/)
+  })
+})

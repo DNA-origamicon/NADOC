@@ -13,6 +13,28 @@ new items; strike through (and date) when resolved.
 
 ## Open
 
+### `just lint` is RED, so it cannot act as a gate — 5 dead-code errors to clear (found 2026-07-31, health-card audit)
+
+`just lint` exits 1 on `master` with 11 ruff errors, none of which are in actively-developed code.
+Because it is always red it is useless as a pre-commit signal — a NEW lint error is invisible.
+Getting it green is the point; the individual fixes are trivial.
+
+**Fix these 5 (all `F401`, all auto-fixable with `ruff --fix`):**
+- `backend/api/routes_oxdna.py:1892` — `oxdna_health.composite_trajectory_atomistic`
+- `tests/test_atomistic_display_split.py:20` — `models.StrandType`, `models.Direction` (×2)
+- `tests/test_cg_seed_ssdna_collapse.py:42` — `oxdna_health._ssdna_frame_override`
+- `tests/test_oxdna_surface_strands.py:278` — `oxdna_interface._strand_nucleotide_order`
+
+Check each test import first: an unused import of a private helper (`_ssdna_frame_override`,
+`_strand_nucleotide_order`) can mean the test was meant to exercise it and no longer does. Deleting
+the import may be hiding a coverage hole rather than closing a debt.
+
+**Do NOT fix the other 6** — user decision 2026-07-31: `backend/ml/propagator/` is the shelved
+BLADE / atomistic-propagator work (see [[atomistic-propagator]], ~60× too slow), left dormant on
+purpose. 3× `F541` f-string-without-placeholder in `scaling.py:248,249,268`, 2× `F401` in
+`systems.py:36,42`, 1× `F841` unused local `n` in `windows.py:132`. If lint must go green while
+that code stays shelved, per-file-ignore the directory rather than editing dormant code.
+
 ### DELETE-ON-COMPLETION: legacy OverhangSpec pose overlay + standalone orientation panel (superseded by the duplex CLUSTER)
 - **Where / delete when [[overhang-duplex-cluster]] ships end-to-end:**
   - `OverhangSpec.rotation` / `OverhangSpec.translation` (backend/core/models.py) — the

@@ -32,9 +32,38 @@
     are queued/running/preparing AND the session isn't connected. Wired to
     `nadoc:cluster-state-change` + every `_fetchJobs`. Tests: `test_cluster_connect_kicks_remote_poll`
     (backend), `mdRemoteReconnectPrompt` (frontend).
-  - #5 by design — no live metrics/health for remote runs (SLURM has no local WS).
+  - #5 by design — no live metrics/health for remote runs (SLURM has no local WS). The card now
+    says so via `health_probe`/`mdRemoteReadoutNote` rather than spinning (2026-07-31).
   - #11 minor — ensemble button gated on connection though `ensemble-production` staging works
     offline (only submit needs the session).
+
+## Health card: a spinner may ONLY mean "in flight" — SHIPPED 2026-07-31
+
+The card decided "show a spinner" from the *rendered* value: `jobActive && value === '—'`. That
+conflated three different situations, and the two that were not in flight spun forever — which is
+how a run whose health probe was dead (see `project_md_job_system.md`, orphan adoption) looked
+identical to one about to report.
+
+**New pure module `frontend/src/ui/md_health_tiles.js`** — `mdHealthTileStates(...)` maps job +
+sample + probe to `TILE_STATE.VALUE | PENDING | UNAVAILABLE | FAILED` per tile. It imports
+**nothing** (importing `md_jobs_panel.js` would drag the whole DOM surface into every consumer), so
+`active` is passed in by the panel, which owns `mdJobIsActive`. `_renderMetrics` draws
+`makeSpinner` for **PENDING only**; every other absence is `—` plus a `title` saying why.
+
+Rules, in order: a present value always wins (`0` is a reading, not an absence) → job not active =
+UNAVAILABLE → `health_probe.enabled === false` = UNAVAILABLE with its reason → `last_error` =
+FAILED → Broken bp / Shell charge consult the sample's `diagnostics` (`null` = predates the field,
+so **old jobs on disk never spin**; `"ok"` + null value = "measured as none"; anything else =
+FAILED with that text) → **watchdog**: no sample in `2 × interval_s` = FAILED, which bounds every
+remaining spinner in time → otherwise PENDING. The log-derived tiles (Temp / Pressure / Speed) do
+not consult the probe at all — they come from the WS log parse, which is why they kept working.
+
+`mdLatestStageLabel` gained a last-resort fallback to `job.segments[current_segment_idx].stage`, so
+"Latest" is never unknown mid-run.
+
+Pins: `md_health_tiles.test.js` (16), 6 DOM tests in `md_jobs_panel.test.js` driving the real panel
+and counting `.nadoc-spinner` nodes, 2 in `md_stage_timeline.test.js`. Verified in a real browser
+against the reported fixture: 0 spinners, four tiles `—` with reasons, Latest correct.
 
 ## NAMD detail declutter — SHIPPED 2026-07-11 (the loose stack below Health)
 Audited the loose items under the Health card; user directed the cleanup. Done in
