@@ -263,3 +263,53 @@ describe('atomistic_renderer sphere impostors (Phase C)', () => {
     expect(_bondMesh(scene).name).toBe('atomBonds')
   })
 })
+
+// The live NAMD MD-Display payload, end to end. `ws.py` sends heavy-atom bond
+// topology once in 'ready' as FLAT universe-global serial pairs; md_panel caches it
+// as an Int32Array and re-hands it to every frame's plain-object atom list. Two
+// things must line up for sticks to appear at all, and both are easy to break:
+// the flat typed array must take `_bondEnds`' ArrayBuffer.isView branch, and the
+// object atom table (columnar === false) must resolve those serials via rowOfSerial.
+describe('live MD ball-and-stick payload (flat Int32 serials + sparse object atoms)', () => {
+  // Serials as MDAnalysis hands them out: universe-global, so the DNA heavy atoms of
+  // a solvated box are sparse and never start at 0.
+  const atoms = [
+    { serial: 4021, element: 'P', helix_id: 'h0', x: 0,    y: 0, z: 0 },
+    { serial: 4022, element: 'O', helix_id: 'h0', x: 0.15, y: 0, z: 0 },
+    { serial: 9107, element: 'C', helix_id: 'h0', x: 0.30, y: 0, z: 0 },
+  ]
+
+  function render(bonds) {
+    const scene = new THREE.Scene()
+    const ar = initAtomisticRenderer(scene)
+    ar.setMode('ballstick')
+    ar.update({ atoms, bonds })
+    return { scene, ar }
+  }
+
+  it('draws a cylinder per bond from a flat Int32Array of universe serials', () => {
+    const { scene, ar } = render(Int32Array.from([4021, 4022, 4022, 9107]))
+    const mesh = _bondMesh(scene)
+    expect(mesh).toBeTruthy()
+    expect(mesh.count).toBe(2)
+    // 0.15 nm apart → a real covalent stick, not a zero-length or model-spanning one.
+    expect(bondCylinderScaleY(scene, 0)).toBeCloseTo(0.15, 5)
+    ar.dispose?.()
+  })
+
+  it('drops a bond reaching an atom absent from the frame, keeping the rest', () => {
+    // 55555 is not in the atom table; rowOfSerial.get returns undefined. Before the
+    // serial→row map that index would have been used as a ROW and drawn garbage.
+    const { scene, ar } = render(Int32Array.from([4021, 4022, 4021, 55555]))
+    expect(_bondMesh(scene).count).toBe(1)
+    ar.dispose?.()
+  })
+
+  it('draws no bond mesh at all when the topology is missing — the old NAMD symptom', () => {
+    const { scene, ar } = render([])
+    expect(_bondMesh(scene)).toBeUndefined()
+    // Spheres still render: this was exactly what a live NAMD run used to look like.
+    expect(scene.children.filter((o) => o.isInstancedMesh).length).toBeGreaterThan(0)
+    ar.dispose?.()
+  })
+})

@@ -85,6 +85,31 @@ export function zipAtomIdentity(atoms, ident) {
 }
 
 /**
+ * Normalise the `atom_bonds` payload of a 'ready' message into the flat serial-pair
+ * array `atomisticRenderer` consumes for its bond cylinders.
+ *
+ * Bond connectivity is STATIC across a trajectory, so `ws.py` sends it once at load
+ * (like `atom_ident`) and the caller re-hands the result to every later frame. An MD
+ * frame therefore carries no `bonds` key of its own, and before this existed the
+ * ball-and-stick view of a NAMD run drew spheres with no sticks.
+ *
+ * Returns null — not `[]` — when there is nothing usable, so a caller can tell
+ * "no topology" from "a topology with zero bonds" and fall through to its own
+ * default. An odd tail is truncated rather than emitted, since a lone index would
+ * otherwise pair with `undefined` and draw a bond to atom 0.
+ *
+ * @param {number[]|ArrayBufferView|null|undefined} flat serial pairs [i0,j0,i1,j1,…]
+ * @returns {ArrayBufferView|null}
+ */
+export function toBondPairs(flat) {
+  if (!flat) return null
+  if (ArrayBuffer.isView(flat)) return flat.length >= 2 ? flat : null
+  if (!Array.isArray(flat) || flat.length < 2) return null
+  const n = flat.length - (flat.length % 2)
+  return Int32Array.from(n === flat.length ? flat : flat.slice(0, n))
+}
+
+/**
  * Is the scene drawn by a HEAVY renderer (atomistic or molecular surface) rather
  * than the design's own CG geometry?  The heavy set is exactly {vdw, ballstick,
  * surface}; every other repr (full / beads / cylinders / hull-prism) is drawn by

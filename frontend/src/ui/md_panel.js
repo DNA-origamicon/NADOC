@@ -8,11 +8,13 @@
  * Repr modes:
  *   "nadoc"     → designRenderer.applyFemPositions(updates)
  *   "beads"     → mdOverlay.update(positions, beadRadius, opacity)
- *   "ballstick" → atomisticRenderer.update({atoms, bonds:[]})
+ *   "ballstick" → atomisticRenderer.update({atoms, bonds})
  *
- * The streamed frames carry coordinates only.  Atom IDENTITY (strand/helix/bp/direction
- * — what the colour resolver keys on) is static, so it arrives once in the 'ready'
- * message as interned parallel arrays and is zipped onto each frame's atoms here.
+ * The streamed frames carry coordinates only.  Everything STATIC across the trajectory
+ * arrives once in the 'ready' message and is re-applied to every frame here: atom
+ * IDENTITY (strand/helix/bp/direction — what the colour resolver keys on) as interned
+ * parallel arrays, and BOND topology (`atom_bonds`) as flat serial pairs.  Both are
+ * ball-and-stick only; bead modes get neither.
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
@@ -25,6 +27,7 @@ import {
   nextLivePollAction,
   restorePlan,
   zipAtomIdentity,
+  toBondPairs,
 } from './md_display_state.js'
 
 const _WS_URL  = `ws://${location.host}/ws/md-run`
@@ -168,6 +171,9 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   // arrays and sent ONCE in 'ready' (see ws.py) — zipped onto every frame's atoms so
   // MD atoms colour by strand/base/cluster instead of falling back to CPK.
   let _atomIdent = null
+  // Static heavy-atom bond topology for ball-and-stick, likewise sent ONCE in 'ready'
+  // — an MD frame carries coordinates only, so without this the sticks never appear.
+  let _atomBonds = null
   let _atomColorsPrimed = false   // reset per load: pull the colouring mode onto MD atoms once
   let _latestOnReady = false
   let _latestOnceOnReady = false
@@ -536,6 +542,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
     if (msg.type === 'ready') {
       _loadInFlight = false
       _atomIdent = msg.atom_ident ?? null
+      _atomBonds = toBondPairs(msg.atom_bonds)
       _atomColorsPrimed = false
       _nFrames = msg.n_frames
       _dtPs    = msg.dt_ps
@@ -643,7 +650,10 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       if (!msg.atoms) return
       atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : 'ballstick')
       atomisticRenderer?.update({
-        atoms: zipAtomIdentity(msg.atoms, _atomIdent), bonds: msg.bonds ?? [],
+        // Bonds come from 'ready', not the frame: connectivity is static, coordinates
+        // are not. `msg.bonds` first only so a future frame-level list would win.
+        atoms: zipAtomIdentity(msg.atoms, _atomIdent),
+        bonds: msg.bonds ?? _atomBonds ?? [],
       })
       // The renderer resolves colours against whatever mode was last set on it, and MD
       // drives setMode() directly (bypassing the representation switcher that normally

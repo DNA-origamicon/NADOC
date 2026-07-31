@@ -557,8 +557,12 @@ def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict
                               with_atoms=True)
     atoms = _extract_md_atoms_frame(ctx, 0) if ctx["n_frames"] > 0 else []
     n_serials = (max((int(a["serial"]) for a in atoms), default=-1) + 1)
-    # bonds: [] is the established NAMD contract (ws.py's live ballstick + the animation
-    # player both render MD atoms unbonded) — not an omission introduced here.
+    # bonds: [] — THIS path (the trajectory-scrub REST model) still serves atoms
+    # unbonded.  It is no longer the whole NAMD story: the live/MD-Display stream now
+    # sends heavy-atom bond topology once in its 'ready' message
+    # (`ws.py::_heavy_bond_pairs`), so ball-and-stick has real sticks there.  Porting
+    # that here is the same three lines against `ctx["universe"]` — do it when the
+    # scrub view needs sticks, and drop bonds_available with it.
     # bonds_available=False is a DECLARATION, not just an empty list: it tells the display
     # there is nothing more to fetch, so flipping vdw→ball-and-stick doesn't re-run this
     # ~30 s reconstruction hunting for bonds that were never going to arrive.

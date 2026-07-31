@@ -701,3 +701,33 @@ Visualizations card; controller methods `displayStrain(resp)` / `recolorStrain(l
 (+164 % strain). Those are physically impossible and the FENE-window guard correctly started
 rejecting them — the fixtures were wrong, not the guard. Keep synthetic bond fixtures inside
 `r0 ± delta` unless the test is specifically about rejection.
+
+**BALL-AND-STICK GOT ITS STICKS (2026-07-31).** MD Display in ball-and-stick drew bare
+spheres for every NAMD job — live or finished — because `/ws/md-run` never sent bond
+topology and `md_panel.js` substituted `bonds: msg.bonds ?? []`, which was *always* `[]`
+(a frame carries coordinates only; verified on the live job — no `bonds` key). Not a
+renderer fault: `md_solvent_overlay.js` was happily drawing O–H sticks for explicit water
+in the same scene, which is the tell that the material/cylinder path was healthy and only
+the DNA bond list was empty.
+
+- **Connectivity is STATIC, so it rides `ready`, not the frame** — the same reasoning
+  `atom_ident` already used. `ws.py::_heavy_bond_pairs(u, dna_heavy.indices)` filters the
+  PSF's bonds to the drawn heavy subset and emits FLAT serial pairs in the `atom_meta`
+  serial space (universe-global `Atom.index`); the frontend caches it once
+  (`toBondPairs` → `Int32Array`) and re-hands it to every frame.
+- **Flat, not `[[i,j],…]`** — ~325 k pairs on a 3 kbp origami, and the renderer's
+  `_bondEnds` already accepts a typed array. Real live job (2hb_2xT, 62 730 atoms
+  solvated): 2 003 heavy atoms → **2 248 bonds, 0.03 MB** in `ready`. Bond parsing is
+  free — `_try_unwrap` already touches `u.bonds` on the same load.
+- **No box-spanning sticks, by construction.** A covalent bond never crosses a strand run,
+  and `reassemble_to_posed_reference` snaps per strand run to one periodic image (this is
+  the D12 machinery). Measured on the live frame: median 0.144 nm, max 0.303 nm, **zero**
+  over the renderer's 1.0 nm `_MAX_BOND_NM` hide threshold.
+- **Still unbonded: the trajectory-scrub REST path** (`md_trajectory.py::md_atomistic_model`
+  / `md_frames_atomistic`, `bonds_available=False`). Its comment used to justify `[]` as
+  "the established NAMD contract, ws.py does it too" — that justification is now dead and
+  the comment says so. Porting is the same three lines against `ctx["universe"]`.
+- oxDNA never had the symptom: its atomistic bundle derives bonds from the DESIGN topology
+  (`atomistic.py`), not from the simulation's own, so they exist regardless of job state.
+- Pins: `tests/test_md_ws_bond_topology.py` (6, backend) + a `toBondPairs` block in
+  `frontend/src/ui/md_display_state.test.js` (5).

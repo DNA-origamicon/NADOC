@@ -13,6 +13,7 @@ import {
   solventRepMode,
   restorePlan,
   zipAtomIdentity,
+  toBondPairs,
 } from './md_display_state.js'
 
 describe('targetStreamMode', () => {
@@ -298,5 +299,36 @@ describe('zipAtomIdentity', () => {
       expect(atoms.every(a => a.strand_id === undefined)).toBe(true)
     }
     expect(zipAtomIdentity(null, IDENT)).toBe(null)
+  })
+})
+
+describe('toBondPairs', () => {
+  it('turns the ready message\'s flat serial list into a typed array', () => {
+    const out = toBondPairs([0, 1, 1, 2, 3, 4])
+    expect(ArrayBuffer.isView(out)).toBe(true)
+    expect(Array.from(out)).toEqual([0, 1, 1, 2, 3, 4])
+  })
+
+  it('returns null (not []) when there is no topology, so a caller can tell them apart', () => {
+    for (const v of [null, undefined, [], [7], 0, '']) {
+      expect(toBondPairs(v)).toBe(null)
+    }
+  })
+
+  it('truncates an odd tail rather than drawing a bond to atom 0', () => {
+    // A lone trailing index would otherwise pair with `undefined` → NaN → a bond
+    // anchored at the origin, spearing the whole model.
+    expect(Array.from(toBondPairs([5, 6, 7]))).toEqual([5, 6])
+  })
+
+  it('passes a typed array straight through without recopying', () => {
+    const given = Int32Array.from([2, 3])
+    expect(toBondPairs(given)).toBe(given)
+    expect(toBondPairs(new Int32Array(0))).toBe(null)
+  })
+
+  it('keeps large universe-global serials exact (Int32, not Float32)', () => {
+    // A solvated origami PSF runs past a million atoms; serial IS the universe index.
+    expect(Array.from(toBondPairs([1_048_577, 1_400_003]))).toEqual([1_048_577, 1_400_003])
   })
 })

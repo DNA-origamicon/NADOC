@@ -108,6 +108,38 @@ def _psf_natom(path) -> "int | None":
     return None
 
 
+def _heavy_bond_pairs(u, heavy_indices) -> "list[int] | None":
+    """Topology bonds restricted to the heavy atoms the ball-and-stick view draws.
+
+    Returned FLAT (``[i0, j0, i1, j1, …]``) in the SAME serial space ``atom_meta``
+    uses — the universe-global ``Atom.index`` — so the frontend resolves each end
+    through the serial→row map it already builds.  Flat rather than ``[[i, j], …]``
+    because this is ~325 k pairs for a 3 kbp origami and the nested form costs ~30 %
+    more JSON for nothing; the renderer already accepts a flat typed array.
+
+    Bonds with an endpoint outside the heavy subset (every X–H bond) are dropped:
+    those atoms are not in the atom table, so the renderer would discard the bond
+    anyway.  Covalent bonds never cross a strand run, which is the unit
+    ``reassemble_to_posed_reference`` snaps to a single periodic image — so a kept
+    bond cannot span the box.
+
+    Returns None when the topology carries no bonds (GRO files don't), leaving the
+    display exactly as it was: spheres, no sticks.
+    """
+    try:
+        idx = u.bonds.to_indices()      # raises NoDataError when there is no bond data
+    except Exception:  # noqa: BLE001
+        return None
+    if idx is None or len(idx) == 0:
+        return None
+    in_heavy = np.zeros(len(u.atoms), dtype=bool)
+    in_heavy[np.asarray(heavy_indices, dtype=np.int64)] = True
+    keep = in_heavy[idx[:, 0]] & in_heavy[idx[:, 1]]
+    if not keep.any():
+        return None
+    return np.asarray(idx[keep], dtype=np.int32).ravel().tolist()
+
+
 def _preload_size_note(config_str: str, topology_str: str) -> "str | None":
     """A cheap 'what we're about to parse' message so a large first-open reads as
     working (with its size), not a bare spinner.  Best-effort — returns None (no
@@ -573,6 +605,7 @@ async def md_run_ws(websocket: WebSocket) -> None:
             "total_ns":      total_ns,
             "atom_meta":     None,
             "atom_ident":    None,
+            "atom_bonds":    None,
             "heavy_idx":     None,
             "c1p_idx":       c1p_idx,
             "term_specs":    term_specs,          # 5'-terminal bases recovered via O5'
@@ -623,6 +656,19 @@ async def md_run_ws(websocket: WebSocket) -> None:
                 {"serial": int(a.index), "element": _element(a)}
                 for a in dna_heavy
             ]
+            # The STICK half of ball-and-stick.  Connectivity is static across
+            # frames, so it rides the 'ready' message once rather than every frame
+            # (a frame is already hundreds of thousands of atoms).  Without this the
+            # renderer receives `bonds: []` and a live NAMD run draws bare spheres —
+            # oxDNA never had the symptom because its atomistic bundle derives bonds
+            # from the DESIGN topology instead of from the simulation's own.
+            result["atom_bonds"] = _heavy_bond_pairs(u, dna_heavy.indices)
+            if result["atom_bonds"]:
+                logs.append(f"Bond topology: {len(result['atom_bonds']) // 2} bonds "
+                            f"over {len(dna_heavy)} heavy atoms")
+            else:
+                logs.append("Bond topology: unavailable (topology carries no bonds) "
+                            "— atoms will render without sticks")
             # Per-atom design identity (strand/helix/bp/direction), sent ONCE in the
             # 'ready' message rather than per frame — it is static across frames and a
             # ball-and-stick frame is hundreds of thousands of atoms.  Without it the
@@ -1317,6 +1363,10 @@ async def md_run_ws(websocket: WebSocket) -> None:
                     # frontend can colour MD atoms by strand/base/cluster (null in
                     # bead modes, and when the mapping was unavailable).
                     "atom_ident":    loaded.get("atom_ident"),
+                    # Ball-and-stick only: flat serial pairs for the bond cylinders,
+                    # also static across frames (null in bead modes / bond-less
+                    # topologies).
+                    "atom_bonds":    loaded.get("atom_bonds"),
                 })
 
             elif action == "seek":
