@@ -36,6 +36,17 @@ so none of the simulated solvent ever reached the viewer.
   always drawn in full. **MGH gets no special case**: the MG atom is the ion, its six waters are
   water — which is why each Mg sphere visibly carries its own hydration shell on screen. Consequence
   for counts: drawable water = the charge audit's bulk `n_waters` **+ 6·n_mg**.
+- **"I can't see the Cl⁻" is usually not a rendering bug — a Mg-neutralised box barely has any.**
+  Since the 2026-07-30 protocol switch, `ion_counts` neutralises with Mg(H₂O)₆²⁺ and adds Cl⁻ only to
+  zero the *system* (`n_cl = 2·n_mg − |q_DNA| + n_nacl`, `namd_solvate.py:1266`), with `nacl_mM = 0`.
+  For a small design that rounds to almost nothing: real 2hb_1xT job — |q| = 93 e → 47 Mg, **1 Cl**,
+  confirmed in the PSF. Bigger boxes are fine (10hb: 948 Na / 38 Cl / 19 Mg). **Read
+  `charge_audit.json` → `ionization` before suspecting the overlay**; the panel's ion legend already
+  prints the per-species counts. More chloride only comes from bulk salt above neutralisation.
+  Because of this, **Cl⁻ and Mg²⁺ are deliberately OFF-CPK** (CPK puts both in green and leaves
+  radius as the only cue): Cl⁻ = pure green `0x00E000`, Mg²⁺ = yellow `0xFFD400`, in BOTH
+  `scene/md_solvent_overlay.js::ION_STYLE` and `scene/atomistic_renderer/atom_palette.js` — change
+  the two together. One chloride among 47 magnesiums has to be findable by hue alone.
 - **The box origin is the STRUCTURE, not the lab cell.** A NAMD DCD stores cell lengths but no
   origin, so the cell is drawn centred on `c_box` (the PBC-robust DNA centroid the reassembly already
   computes). Lengths + orientation are the simulation's own, so it breathes with the barostat and

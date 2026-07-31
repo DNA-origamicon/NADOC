@@ -533,6 +533,37 @@ export function setExtraBaseConnectors(connMesh, connStartIdx, points, segCount,
   }
 }
 
+/**
+ * Scalar (flexibility-map) colour for every backbone connector cone of ONE extra-base
+ * arc, in segment order.
+ *
+ * Mirrors the helix_renderer bond-cone convention exactly: a cone takes the colour of
+ * the nucleotide it points away FROM (`coneEntries[].fromNuc`).  The chain is
+ *   posA(real) → eb0 → … → eb_{n-1} → posB(real)
+ * so segment 0 starts at the real nucleotide `nucA`, and segments 1..n start at
+ * inserts 0..n-1.  The trailing real nucleotide `nucB` is only ever a segment END, so
+ * it never colours a cone — same as a real backbone, where the last nucleotide of a
+ * strand owns no outgoing cone.
+ *
+ * @param {{xoId:*, nucA:object, beadCount:number}} arc  one entry of buildCrossoverConnections' arcData
+ * @param {(key:string)=>number|undefined} lookup        colorByKey accessor (hex int)
+ * @returns {(number|null)[]} length beadCount+1; null = no scalar datum, leave as-is
+ */
+export function extraBaseConnectorScalarColors(arc, lookup) {
+  const n = arc.beadCount
+  const out = new Array(n + 1)
+  const norm = (h) => (h === undefined || h === null) ? null : h
+  const a = arc.nucA
+  // Real nucleotides are keyed "helix:bp:dir:copy"; rmsfColorMap also emits the
+  // 3-part form for copy 0.  We don't track the loop-copy of a crossover endpoint,
+  // so fall back to copy 0 — a missing key just leaves that cone alone.
+  out[0] = a
+    ? norm(lookup(`${a.helix_id}:${a.bp_index}:${a.direction}`) ?? lookup(`${a.helix_id}:${a.bp_index}:${a.direction}:0`))
+    : null
+  for (let s = 1; s <= n; s++) out[s] = norm(lookup(`__xb__:${arc.xoId}:${s - 1}`))
+  return out
+}
+
 /** Zero-scale an arc's connector cones (hidden crossover), keeping their position. */
 export function hideExtraBaseConnectors(connMesh, connStartIdx, segCount) {
   for (let s = 0; s < segCount; s++) {

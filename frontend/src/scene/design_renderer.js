@@ -14,7 +14,7 @@
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { resolveRepOverrides } from './representation_overrides.js'
-import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors } from './crossover_connections.js'
+import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors } from './crossover_connections.js'
 import { auditRenderedBonds, inventoryRenderedElements } from './render_bond_audit.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
@@ -203,21 +203,33 @@ export function initDesignRenderer(scene, storeRef) {
    */
   function _applyExtraBaseScalarColors(colorByKey) {
     if (!colorByKey || !_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+    const get = colorByKey instanceof Map ? (k) => colorByKey.get(k) : (k) => colorByKey[k]
     const _col = new THREE.Color()
     let dirty = false
     for (const ad of _xoverArcData) {
       for (let k = 0; k < ad.beadCount; k++) {
-        const hex = colorByKey[`__xb__:${ad.xoId}:${k}`]
+        const hex = get(`__xb__:${ad.xoId}:${k}`)
         if (hex == null) continue
         const idx = ad.beadStartIdx + k
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(hex))
         _xoverSlabsMesh.setColorAt(idx, _col.setHex(hex))
         dirty = true
       }
+      // The backbone bond cones live in their OWN InstancedMesh, so they need the
+      // same treatment or they stay at the build-time strand colour under a flex map.
+      if (_xoverConnMesh) {
+        const segHex = extraBaseConnectorScalarColors(ad, get)
+        for (let s = 0; s < segHex.length; s++) {
+          if (segHex[s] == null) continue
+          _xoverConnMesh.setColorAt(ad.connStartIdx + s, _col.setHex(segHex[s]))
+          dirty = true
+        }
+      }
     }
     if (dirty) {
       if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
       if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
+      if (_xoverConnMesh?.instanceColor) _xoverConnMesh.instanceColor.needsUpdate = true
     }
   }
 
@@ -232,9 +244,17 @@ export function initDesignRenderer(scene, storeRef) {
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(ad.beadBaseColor))
         _xoverSlabsMesh.setColorAt(idx, _col.setHex(ad.slabBaseColor))
       }
+      // Cones too — _applyExtraBaseScalarColors recoloured them, so leaving them out
+      // here would strand them in viridis after the flex map is switched off.
+      if (_xoverConnMesh) {
+        for (let s = 0; s < ad.beadCount + 1; s++) {
+          _xoverConnMesh.setColorAt(ad.connStartIdx + s, _col.setHex(ad.beadBaseColor))
+        }
+      }
     }
     if (_xoverBeadsMesh.instanceColor) _xoverBeadsMesh.instanceColor.needsUpdate = true
     if (_xoverSlabsMesh.instanceColor) _xoverSlabsMesh.instanceColor.needsUpdate = true
+    if (_xoverConnMesh?.instanceColor) _xoverConnMesh.instanceColor.needsUpdate = true
   }
 
   /** Crossover extra-base beads/slabs are children of root, NOT part of the helix

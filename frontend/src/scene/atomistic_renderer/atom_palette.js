@@ -19,7 +19,7 @@ export const ELEMENTS = {
   Se: { vdw: 0.190, color: 0xFFA100 },
   Fe: { vdw: 0.160, color: 0xE06633 },
   Zn: { vdw: 0.139, color: 0x7D80B0 },
-  Mg: { vdw: 0.173, color: 0x8AFF00 },
+  Mg: { vdw: 0.173, color: 0xFFD400 },   // yellow, NOT CPK's green — see Cl below
   Mn: { vdw: 0.161, color: 0x9C7AC7 },
   Ca: { vdw: 0.231, color: 0x3DFF00 },
   // Buffer ions from an explicit-solvent NAMD run. Absent until 2026-07-30, so
@@ -27,8 +27,12 @@ export const ELEMENTS = {
   // NB the PSF resnames are SOD/CLA, not NA/CL — the resname→element mapping is
   // the backend's job (see backend/core/md_solvent.py); by the time an atom gets
   // here its `element` is already 'Na' / 'Cl'.
+  // Cl and Mg are pulled apart from CPK, which puts BOTH in green: Cl takes a pure
+  // green and Mg (above) takes yellow. A Mg-neutralised box holds ~47 Mg to a
+  // single Cl, so that one chloride has to be findable by colour alone. Mirrors
+  // ION_STYLE in scene/md_solvent_overlay.js — change the two together.
   Na: { vdw: 0.227, color: 0xAB5CF2 },   // CPK violet
-  Cl: { vdw: 0.175, color: 0x1FF01F },   // CPK green
+  Cl: { vdw: 0.175, color: 0x00E000 },
 }
 
 // Fallback for any element not catalogued above (grey, mid radius). Keeps the

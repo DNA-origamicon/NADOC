@@ -35,17 +35,24 @@ import {
 } from './atomistic_renderer/geometry_builder.js'
 
 /**
- * Per-species display. Radii are deliberately NOT the bare ionic radii:
+ * Per-species display. Neither the radii nor two of the colours are the textbook
+ * values:
  *  - Mg is drawn oversized because the sphere stands in for the whole hexahydrate
- *    complex (the backend keeps the ion's six waters on the water toggle), and
- *    because it separates Mg from Cl, whose CPK greens are close.
- *  - Na/Cl use their CPK colours so they read the same as in any other viewer.
+ *    complex (the backend keeps the ion's six waters on the water toggle).
+ *  - Cl and Mg are pulled APART from CPK, which puts both in green (Cl 0x1FF01F,
+ *    Mg 0x8AFF00) and leaves radius as the only cue. Cl goes to a pure green and
+ *    Mg to yellow, so the two never have to be told apart by size — under Mg
+ *    neutralisation a box can hold 47 Mg and a single Cl, and that one sphere has
+ *    to be findable.
+ *  - Na keeps its CPK violet so it reads the same as in any other viewer.
  * Index = the species code on the wire (md_solvent.SPECIES) — append only.
+ * Keep Cl/Mg in step with `atomistic_renderer/atom_palette.js`, which colours the
+ * same two ions when they arrive through the ball-and-stick path.
  */
 export const ION_STYLE = [
   { name: 'Na⁺', color: 0xAB5CF2, radius: 0.120 },
-  { name: 'Cl⁻', color: 0x1FF01F, radius: 0.170 },
-  { name: 'Mg²⁺', color: 0x8AFF00, radius: 0.300 },
+  { name: 'Cl⁻', color: 0x00E000, radius: 0.170 },
+  { name: 'Mg²⁺', color: 0xFFD400, radius: 0.300 },
   { name: 'K⁺',  color: 0x8F40D4, radius: 0.150 },
   { name: 'Ca²⁺', color: 0x3DFF00, radius: 0.200 },
 ]

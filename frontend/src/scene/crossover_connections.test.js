@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, CONN_RADIUS } from './crossover_connections.js'
+import { partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors, CONN_RADIUS } from './crossover_connections.js'
 
 function mockMesh(n) {
   const mats = Array.from({ length: n }, () => new THREE.Matrix4())
@@ -106,5 +106,36 @@ describe('partitionExtraBaseUpdates', () => {
       { helix_id: '__xb__', bp_index: 'xoB', direction: 0, backbone_position: [0, 0, 0] },
     ])
     expect(simXb.get('xoB').get(0).normal).toEqual([0, 0, 0])
+  })
+})
+
+describe('extraBaseConnectorScalarColors', () => {
+  const arc = { xoId: 'xo7', beadCount: 3, nucA: { helix_id: 2, bp_index: 11, direction: 0 } }
+  const lookupOf = (map) => (k) => map[k]
+
+  it('colors each cone by the nucleotide it points AWAY from (helix_renderer fromNuc rule)', () => {
+    const out = extraBaseConnectorScalarColors(arc, lookupOf({
+      '2:11:0': 0x111111,
+      '__xb__:xo7:0': 0x222222,
+      '__xb__:xo7:1': 0x333333,
+      '__xb__:xo7:2': 0x444444,
+    }))
+    // beadCount+1 segments: real nucA → eb0 → eb1 → eb2 → real nucB
+    expect(out).toEqual([0x111111, 0x222222, 0x333333, 0x444444])
+  })
+
+  it('falls back to the 4-part copy-0 key for the real endpoint', () => {
+    const out = extraBaseConnectorScalarColors(arc, lookupOf({ '2:11:0:0': 0xabcdef }))
+    expect(out[0]).toBe(0xabcdef)
+  })
+
+  it('yields null for segments with no scalar datum (leave the cone as-is)', () => {
+    const out = extraBaseConnectorScalarColors(arc, lookupOf({ '__xb__:xo7:1': 0x555555 }))
+    expect(out).toEqual([null, null, 0x555555, null])
+  })
+
+  it('handles a missing endpoint nucleotide without throwing', () => {
+    const out = extraBaseConnectorScalarColors({ xoId: 'xo9', beadCount: 1, nucA: null }, lookupOf({}))
+    expect(out).toEqual([null, null])
   })
 })

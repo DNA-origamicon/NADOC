@@ -198,6 +198,20 @@ throwaway Playwright spec (inner cone midpoint = bead average, end cones bridge 
 endpoints). NOTE: connector color is fixed at build/coloring time, not re-tinted on
 selection-highlight (beads have the same limitation).
 
+Connector cones under a SCALAR (flex/RMSF) map (FIXED 2026-07-30): `_applyExtraBaseScalarColors`
+recoloured only `_xoverBeadsMesh` + `_xoverSlabsMesh`, so with a flexibility map on, the inserts
+went viridis while the `beadCount+1` cones bridging them stayed at the build-time strand colour
+(and `_restoreExtraBaseColors` had the mirror hole). Both now cover `_xoverConnMesh`. Colour rule
+lives in the pure `extraBaseConnectorScalarColors(arc, lookup)` (`crossover_connections.js`) and
+mirrors `helix_renderer`'s bond-cone convention exactly — **a cone takes the colour of the
+nucleotide it points AWAY from** (`coneEntries[].fromNuc`): segment 0 from the real endpoint
+`nucA` (key `helix:bp:dir`, falling back to `…:0`), segments 1..n from inserts 0..n-1
+(`__xb__:<xoId>:<k>`); trailing `nucB` is only ever a segment END so it colours nothing, same as
+the last nucleotide of a real strand. Missing key → that cone is left alone. Pins:
+4 tests in `crossover_connections.test.js`. Verified in app (6hbx100_1xT + oxDNA job
+`012a0fbe2de2`, 60 inserts / 120 cones): 120/120 cones recoloured, 61 distinct colours,
+`cone[2a+1] === bead[a]` for 60/60 arcs, and clearScalarColors restored all 120 exactly.
+
 Arc-line removal (DONE 2026-06-25): the thin point-to-point Bezier arc line that
 `unfold_view.js` draws for every crossover is REDUNDANT for extra-base crossovers (the
 bead+slab+connector cones now show the real backbone), so it's collapsed to zero length.
