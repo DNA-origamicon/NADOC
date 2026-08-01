@@ -1264,6 +1264,58 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     expect(confirm).not.toHaveBeenCalled()
     confirm.mockRestore()
   })
+
+  // ── Click-the-selected-row-to-deselect ────────────────────────────────────
+  // Deselecting is not a job switch: the loaded trajectory (and the live display) stay
+  // exactly as they are. It also has to STICK — `_selectBestJob` runs on every poll and
+  // would otherwise re-select the job a beat later.
+  // The shared `openWithJob` selects programmatically; a row CLICK needs the job to
+  // survive the per-part list filter, so give it a design path and a matching workspace.
+  const PART = '/w/D.nadoc'
+  const openWithRow = async () => {
+    const job = { ...JOB, design_source_path: PART }
+    mdApi.listMdJobs.mockResolvedValue([job])
+    mdApi.getMdJob.mockResolvedValue(job)
+    // `_selectBestJob` auto-selects the only job on the first fetch — no click needed.
+    const panel = initMdJobsPanel({ getMdViz: () => viz, getWorkspacePath: () => PART })
+    await flushMicro()
+    return panel
+  }
+  const clickRow = () => $('md-jobs-list').querySelector('[data-job-id="J9"]').click()
+
+  it('clicking the selected row deselects it WITHOUT unloading the trajectory', async () => {
+    const panel = await openWithRow()
+    expect(panel.getSelectedJob()?.job_id).toBe('J9')
+    const t = $('md-jobs-traj-toggle')
+    t.checked = true
+    t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    expect(viz.loadTrajectory).toHaveBeenCalled()
+    viz.mode = () => 'trajectory'
+    viz.stopAndRestore.mockClear()
+
+    clickRow()                                                   // second click, same row
+    await flushMicro()
+    expect(panel.getSelectedJob()).toBe(null)                    // deselected
+    expect($('md-jobs-detail').style.display).toBe('none')       // detail cleared
+    expect(viz.stopAndRestore).not.toHaveBeenCalled()            // …frames kept
+    expect(t.checked).toBe(true)
+  })
+
+  it('the poll does not re-select after a deliberate deselect (until the user picks again)', async () => {
+    const panel = await openWithRow()
+    clickRow()
+    await flushMicro()
+    expect(panel.getSelectedJob()).toBe(null)
+
+    await panel.refresh()      // a poll tick → _selectBestJob
+    await flushMicro()
+    expect(panel.getSelectedJob()).toBe(null)   // still deselected (the sticky flag)
+
+    clickRow()
+    await flushMicro()
+    expect(panel.getSelectedJob()?.job_id).toBe('J9')            // an explicit pick wins again
+  })
 })
 
 // ── Stage timeline: the minimisation row (DOM → real panel) ────────────────────

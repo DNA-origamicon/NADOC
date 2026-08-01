@@ -487,7 +487,7 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
     renderJobList(listEl, buildJobListModel(_jobs, ctx), {
-      onClick: (jobId) => _selectJob(jobId),
+      onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId)),
       emptyText: 'No SNUPI FEM jobs for this design yet.',
       dimColor: _C.dim,
       legendState: _legend,
@@ -501,6 +501,18 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     _renderList()
     _renderDetail()
     await _retargetDisplayToSelection()
+    _base.schedulePoll()
+  }
+
+  /** Clicking the ALREADY-selected row deselects it: the highlight + detail clear, but the
+   *  overlay stays on screen and snupiDisplay keeps its loaded data (deselecting never
+   *  discards cached visualization — only selecting a DIFFERENT job retargets it, via
+   *  `_retargetDisplayToSelection`, deliberately not called here). */
+  function _deselectJob() {
+    _selectedId = null
+    _progress = null
+    _renderList()
+    _renderDetail()
     _base.schedulePoll()
   }
 
@@ -561,7 +573,12 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
   function _syncDisplayModes() {
     const job = _selectedJob()
     const ready = job?.status === 'completed'
+    // Deselecting leaves the previous job's overlay up (cached, not cleared), so "Off"
+    // stays clickable with nothing selected — otherwise it could only be taken down by
+    // re-selecting the job first.
+    const overlayUp = !!snupiDisplay?.deformActive?.()
     modeRadios().forEach((r) => {
+      if (r.value === 'off') { r.disabled = !snupiDisplay || (!ready && !overlayUp); return }
       const needsRmsf = r.value === 'flex'
       const needsTraj = r.value === 'trajectory'   // only dynamics jobs cache a trajectory
       r.disabled = !ready || !snupiDisplay || (needsRmsf && !job?.rmsf_max_nm) || (needsTraj && !job?.dynamics)
@@ -661,5 +678,8 @@ export function initSnupiJobsPanel({ snupiDisplay = null, getWorkspacePath = nul
     if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
     return _selectJob(jobId)
   }
-  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected }
+  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected,
+           // Drop the selection without touching the display (the unified Simulate list
+           // routes its own click-the-selected-row-to-deselect here).
+           deselectJob: _deselectJob }
 }

@@ -83,9 +83,49 @@ Note: tests live in **`tests/`**, not `backend/tests/` (earlier notes here had t
 Not blockers, but note for whoever picks this up: `manual_validation_debt.md` (repo **root**)
 still lists **MV-30** (Simulate collapse + static engine headers + Periodic-MD gone), **MV-31**
 (context Run/Stop/Resume on oxDNA + NAMD) and **MV-32** (chain-sim round-trip) as open PENDING
-rows — all three are blocked by the same doc-context limit (an API-`design/load`ed design isn't
-the frontend's active document, so Playwright can't drive job selection). MV-32 has a known
-duplicate-ID collision flagged at that file's L80.
+rows. They were recorded as blocked by a doc-context limit (an API-`design/load`ed design isn't
+the frontend's active document, so Playwright can't drive job selection). **That limit is now
+worked around** — see "Gesture-level verification" below; MV-30/31/32 are re-runnable.
+MV-32 has a known duplicate-ID collision flagged at that file's L80.
+
+## Job selection: click the selected row to DESELECT (2026-08-01)
+
+`#simulate-jobs-list` is the ONE list the user clicks — every engine panel's own list is
+`display:none` in `index.html` (the oxDNA one carries the comment saying so at :3860). Clicking a
+row that is already selected now clears the selection instead of being a no-op.
+
+**The rule: deselecting is not a job switch, so it discards nothing.** Whatever the job loaded
+(trajectory frames, RMSF/deviation/strain map, the deform overlay, a live MD stream) stays on
+screen and in its controller; only selecting a DIFFERENT job unloads/retargets it, exactly as
+before. What clears is the row highlight, the master card, `#simulate-job-actions`, and the
+engine panel's detail block.
+
+| Where | What was added |
+|---|---|
+| `simulate_jobs.js` | `_deselect()` next to `_select()`; row `onClick` toggles; routes to the owning panel's `deselectJob()` (LAMMPS → `oxdnaPanel`, since it hosts the LAMMPS viz) |
+| every engine panel | `_deselectJob()` + a `deselectJob` export. cando/snupi/blade deliberately skip `_retargetDisplayToSelection`; oxDNA skips `_setTrajOff`/`_clearRunCards` **and does not fire `nadoc:oxdna-job-selected`** (its listeners stop a running Live session and rebuild the export card — that's a job-switch reaction, not a deselect one) |
+| cando/snupi/blade | `_syncDisplayModes` keeps the **"Off" radio enabled** whenever the display is active. Every other mode locks with no job selected; without this the lingering overlay could only be taken down by re-selecting the job |
+| mrdna | the display/beads checkbox handlers no longer early-return on "no selection" for the **off** branch (same reason) |
+| md | `_userDeselected` sticky flag — `_selectBestJob` runs on every poll and would re-select a beat later. `_selectDisplayJob` now prefers `_displayJobId` when nothing is selected, so deselecting can't jump the live display to another job |
+| oxdna | new `_trajJobId` (who the loaded frames belong to). The "Unload trajectory?" confirm keys off it, not `_selectedId` — those differ after a deselect, and re-selecting the job whose trajectory is already up must not offer to unload it |
+
+Pinned by: `simulate_jobs.test.js` (3), `oxdna_jobs_panel.test.js` (2 — incl. "deselect does not
+unload the trajectory"), `md_jobs_panel.test.js` (2 — incl. "the poll does not re-select").
+
+## Gesture-level verification — the doc-context limit is solved
+
+`frontend/playwright.livedev.config.js` + opening the design through the **welcome-screen library
+row** (not `POST /design/load`) gives a spec a real active document on the user's own dev servers,
+so job selection IS drivable. `frontend/e2e/job_deselect.spec.js` is the worked example: pinned
+`?doc=`, read-only w.r.t. jobs, walks all five engine tabs that have jobs on this machine
+(oxDNA/NAMD/CanDo/SNUPI on `3x6x400_test`, mrDNA on `6hb_2xT`; BLADE has no jobs here).
+
+Two gotchas it cost a run each to learn:
+- **Screenshot the part from OUTSIDE it.** Dollying inside the structure amplifies sub-pixel
+  camera drift into a wholly different image, so byte-comparison of two "identical" frames fails
+  for reasons that have nothing to do with the feature. Always take a static A==A baseline first.
+- The unified list's selection is an **inline `background`** on the row (`jobs_panel_render.js`),
+  not a class — assert `el.style.background !== ''`.
 
 ## Verification + debt
 

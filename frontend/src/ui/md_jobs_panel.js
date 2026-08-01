@@ -903,6 +903,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // ── State ──────────────────────────────────────────────────────────────────
   let _jobs         = []     // cached list from API
   let _selectedId   = null   // currently displayed job_id
+  // The user clicked the selected row to DESELECT it. `_selectBestJob` runs on every poll
+  // and would otherwise re-select a job a beat later, so the deselection has to be sticky
+  // until something explicit happens (a row click, a launch, an empty list, a design switch).
+  let _userDeselected = false
   let _ws           = null   // active WebSocket
   let _wsWatchdog   = null   // safety-net interval: reconnect a dropped detail WS / unwedge a silent one
   let _lastWsMsgAt  = 0      // ms timestamp of the last WS push (staleness detector)
@@ -1328,8 +1332,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const jobs = _visibleJobs()
     if (!jobs.length) {
       _clearSelectedJob()
+      _userDeselected = false   // nothing to hold a deselection against
       return
     }
+    if (_userDeselected) return   // the user deliberately cleared the selection — respect it
     const selected = jobs.find(j => j.job_id === _selectedId)
     const active = jobs.find(j => ['running', 'preparing'].includes(j.status))
     if (!_selectedId || !selected) {
@@ -1409,6 +1415,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   function _clearSelectedJob() {
     _selectedId = null
+    _userDeselected = false   // a forced clear (design switch / empty list), not a user deselect
     _displayMeta = null
     _closeWs()
     if (detailEl) detailEl.style.display = 'none'
@@ -1611,6 +1618,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     const jobs = _visibleJobs()
     return (
       jobs.find(j => j.job_id === _selectedId) ??
+      // Nothing selected (the user deselected the row): stay on whatever the display is
+      // already streaming rather than jumping to another job — deselecting must not move
+      // the picture, only clear the highlight.
+      jobs.find(j => j.job_id === _displayJobId) ??
       jobs.find(j => j.status === 'running') ??
       jobs[0] ??
       null
@@ -2920,7 +2931,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       }
     }
     renderJobList(listEl, buildJobListModel(jobs, ctx), {
-      onClick: (jobId) => _selectJob(jobId),
+      onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId)),
       onChevron: (jobId) => _toggleCollapse(jobId),
       onAction: (jobId) => _openVramFix(jobId),   // the "Fix" VRAM-OOM row action
       emptyText: _jobs.length && !_showAllJobs() ? 'No jobs for this part.' : 'No jobs yet.',
@@ -3049,6 +3060,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   // ── Job selection + WS subscription ───────────────────────────────────────
   function _selectJob(jobId) {
+    _userDeselected = false   // an explicit pick supersedes a previous deselection
     if (_selectedId === jobId) return
     _gateBDismissed = null   // a fresh selection may re-show a pending decision
     console.log(`[${_ts()}] md-jobs: selecting job ${jobId}`)
@@ -3062,6 +3074,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     _maybePrefillDraft(jobId)
     if (displayToggle?.checked) _refreshMdDisplay()
     else _refreshMdPrewarm(true)
+  }
+
+  /** Clicking the ALREADY-selected row deselects it.  Deliberately NON-destructive: unlike
+   *  `_selectJob` (which switches jobs) this does NOT call `_setFlexOff` / `_setTrajOff` /
+   *  `_stopMdDisplay` / `_updateVizToggles(null)`, so a loaded trajectory, the RMSF map and
+   *  the live-display stream all stay on screen with their cached frames intact.  Only
+   *  picking a DIFFERENT job unloads them.  The status WebSocket does close — it streams
+   *  detail for a job that's no longer being shown — and reopens on re-selection. */
+  function _deselectJob() {
+    _userDeselected = true
+    _selectedId = null
+    _displayMeta = null
+    _gateBDismissed = null
+    _closeWs()
+    if (detailEl) detailEl.style.display = 'none'
+    _renderList()
+    _paintRunControl()   // nothing selected → the control reverts to "▶ Relax"
   }
 
   /** When a DRAFT is selected, pre-fill the Advanced inputs from its stored prep
@@ -3885,6 +3914,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
       return _selectJob(jobId)
     },
+    // Drop the selection without unloading anything (the unified Simulate list routes its own
+    // click-the-selected-row-to-deselect here).
+    deselectJob: _deselectJob,
     // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
     // selected node's engine panel; both operate on this panel's currently-selected job).
     deleteSelected, archiveSelected,

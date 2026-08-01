@@ -551,7 +551,7 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
     renderJobList(listEl, buildJobListModel(_jobs, ctx), {
-      onClick: (jobId) => _selectJob(jobId),
+      onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId)),
       emptyText: 'No CanDo FEM jobs for this design yet.',
       dimColor: _C.dim,
       legendState: _legend,
@@ -564,6 +564,20 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     _renderList()
     _renderDetail()
     await _retargetDisplayToSelection()
+    _base.schedulePoll()
+  }
+
+  /** Clicking the ALREADY-selected row deselects it: the row highlight and the detail
+   *  block clear, but nothing cached is thrown away — the predicted-shape / flexibility /
+   *  deviation overlay stays on screen and candoDisplay keeps the data it loaded, so
+   *  re-selecting the same job costs nothing.  Only picking a DIFFERENT job retargets
+   *  (and therefore drops) the cached visualization — that's `_retargetDisplayToSelection`,
+   *  deliberately NOT called here. */
+  function _deselectJob() {
+    _selectedId = null
+    _progress = null
+    _renderList()
+    _renderDetail()
     _base.schedulePoll()
   }
 
@@ -620,7 +634,12 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
   function _syncDisplayModes() {
     const job = _selectedJob()
     const ready = job?.status === 'completed'
+    // Deselecting leaves the previous job's overlay on screen (it's cached, not cleared),
+    // so "Off" has to stay clickable with nothing selected — otherwise the only way to
+    // take that overlay down would be to re-select the job first.
+    const overlayUp = !!candoDisplay?.deformActive?.()
     modeRadios().forEach((r) => {
+      if (r.value === 'off') { r.disabled = !candoDisplay || (!ready && !overlayUp); return }
       const needsRmsf = r.value === 'flex'
       r.disabled = !ready || !candoDisplay || (needsRmsf && !job?.rmsf_max_nm)
     })
@@ -717,5 +736,8 @@ export function initCandoJobsPanel({ candoDisplay = null, getWorkspacePath = nul
     if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
     return _selectJob(jobId)
   }
-  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected }
+  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected,
+           // Drop the selection without touching the display (the unified Simulate list
+           // routes its own click-the-selected-row-to-deselect here).
+           deselectJob: _deselectJob }
 }

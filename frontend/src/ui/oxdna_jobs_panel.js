@@ -546,6 +546,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   let _seeding    = false
   let _flexBusy   = false
   let _trajBusy   = false
+  // The job the frames currently on screen were loaded from. Not the same thing as
+  // `_selectedId`: deselecting a row leaves the trajectory up with nothing selected, and
+  // the "Unload trajectory?" prompt must key off the OWNER of the frames, not the selection.
+  let _trajJobId  = null
   let _lastFrameIndex = null   // last live frame the relaxed display was refreshed to
   let _displayBaseText = ''    // base display-status text (countdown appended while running)
   let _displayBaseColor = _C.ok
@@ -1365,7 +1369,10 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
     renderJobList(listEl, buildJobListModel(jobs, ctx), {
-      onClick: (jobId) => { _selectJob(jobId, { confirmTrajUnload: true }) },
+      onClick: (jobId) => {
+        if (jobId === _selectedId && !_lammpsMode) _deselectJob()
+        else _selectJob(jobId, { confirmTrajUnload: true })
+      },
       emptyText: 'No oxDNA jobs for this design yet.',
       dimColor: _C.dim,
       legendState: _legend,
@@ -1388,8 +1395,11 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // screen until the user closes the session (leaves the tab / switches design)
     // or picks a DIFFERENT job here.  Switching jobs unloads it; on an explicit
     // list click, confirm first so the trajectory isn't lost by accident.
+    // Gate on `_trajJobId` (who the frames belong to), NOT on `_selectedId` — those
+    // differ after a deselect, and re-selecting the job whose trajectory is already up
+    // must not prompt to unload the very frames it is about to show again.
     const trajLoaded = trajToggle?.checked || oxdnaDisplay?.mode() === 'trajectory'
-    if (trajLoaded && jobId !== _selectedId) {
+    if (trajLoaded && _trajJobId && jobId !== _trajJobId) {
       if (confirmTrajUnload) {
         const ok = await showConfirm({
           title: 'Unload trajectory?',
@@ -1413,6 +1423,24 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       _lastFrameIndex = null
       await _refreshDisplay()
     }
+    _base.schedulePoll()
+  }
+
+  // Clicking the ALREADY-selected row deselects it.  Deliberately NON-destructive: no
+  // _setTrajOff / _allDisplaysOff / _clearRunCards, so a loaded trajectory, an RMSF or
+  // deviation/strain map, the relaxed-display overlay and the run cards' E-field arrow all
+  // stay exactly as they are — the data belongs to the job it was loaded from and survives
+  // until the user picks a DIFFERENT job (which unloads it, with the usual confirm), leaves
+  // the tab, or switches design.  `nadoc:oxdna-job-selected` is NOT fired either: its
+  // listeners tear things down (a running Live session stops, the export card rebuilds) and
+  // deselecting is not a job switch.  The viz radios lock (no job → no per-job action) but
+  // "Off" never disables, so any lingering overlay can still be taken down.
+  function _deselectJob() {
+    _selectedId = null
+    _progress = null
+    _hideDetail()
+    _renderList()
+    _updateButtons(null)
     _base.schedulePoll()
   }
 
@@ -2042,6 +2070,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   function _setTrajOff() {
     trajPlayer.stop()
     _trajBusy = false
+    _trajJobId = null
     oxdnaDisplay?.cancelPendingLoad?.()
     if (oxdnaDisplay?.mode() === 'trajectory') oxdnaDisplay.stopAndRestore()
     if (trajToggle) trajToggle.checked = false
@@ -2094,6 +2123,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     }
     _trajBusy = false
     if (r.ok) {
+      _trajJobId = jobId   // the loaded frames belong to THIS job (see _selectJob's unload gate)
       if (trajControls) trajControls.style.display = ''
       trajPlayer.setTrajectory(r.n_frames, r.markers)
       // Drive the E-field arrow from the per-stage field descriptors: reset the
@@ -2547,6 +2577,9 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     // Show a LAMMPS (CPU-fallback) run in this same viz card — same oxDNA2 bead model, so the
     // same display/RMSF/deviation/trajectory tools apply (driven by the LAMMPS controller).
     selectLammpsJob,
+    // Drop the selection without unloading anything (the unified Simulate list routes its own
+    // click-the-selected-row-to-deselect here).
+    deselectJob: _deselectJob,
     // Consolidated Archive/Delete (the section-level #simulate-job-actions dispatches to the
     // selected node's engine panel; both operate on this panel's currently-selected job).
     deleteSelected, archiveSelected,

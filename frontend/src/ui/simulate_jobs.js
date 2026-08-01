@@ -464,7 +464,7 @@ export function initSimulateJobs({
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
     renderJobList(listEl, buildJobListModel(nodes, ctx), {
-      onClick: (jobId) => _select(jobId),
+      onClick: (jobId) => (jobId === _sel.id ? _deselect() : _select(jobId)),
       emptyText: _showAllTypes
         ? 'No simulation runs for this design yet — press ▶ Relax to start one.'
         : `No ${_activeEngine === 'namd' ? 'NAMD' : _activeEngine} runs for this design yet. Toggle “Show all job types” to see every engine’s runs.`,
@@ -592,6 +592,23 @@ export function initSimulateJobs({
     _renderList()
     _renderMaster()
     _dispatchDetail(node)
+  }
+
+  // Clicking the ALREADY-selected row deselects it: the highlight, master card and job
+  // actions clear here, and the owning engine panel drops its own selection the same
+  // non-destructive way — nothing loaded for that job (trajectory, RMSF/deviation map,
+  // relaxed overlay, live stream) is unloaded.  Only selecting a DIFFERENT job does that.
+  function _deselect() {
+    const node = _selectedNode()
+    _sel = { engine: null, id: null }
+    _renderList()
+    _renderMaster()
+    if (!node) return
+    // A LAMMPS run is shown in the oxDNA panel's viz card (selectLammpsJob), so its
+    // deselection routes there too.
+    const panel = { oxdna: oxdnaPanel, lammps: oxdnaPanel, mrdna: mrdnaPanel, cando: candoPanel,
+                    snupi: snupiPanel, blade: bladePanel, namd: mdPanel }[node.engine]
+    panel?.deselectJob?.()
   }
 
   // Rich detail dispatch by engine: reveal the selected job's engine tab and light up

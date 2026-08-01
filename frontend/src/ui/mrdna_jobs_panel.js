@@ -391,7 +391,7 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     if (sig === _listSig && listEl.childElementCount > 0) return
     _listSig = sig
     renderJobList(listEl, buildJobListModel(_jobs, ctx), {
-      onClick: (jobId) => _selectJob(jobId),
+      onClick: (jobId) => (jobId === _selectedId ? _deselectJob() : _selectJob(jobId)),
       emptyText: 'No mrDNA jobs for this design yet.',
       dimColor: _C.dim,
       legendState: _legend,
@@ -401,6 +401,19 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   async function _selectJob(jobId) {
     _selectedId = jobId
     _progress = await api.getMrdnaProgress(jobId)
+    _renderList()
+    _renderDetail()
+    _base.schedulePoll()
+  }
+
+  /** Clicking the ALREADY-selected row deselects it: the highlight + detail clear, but the
+   *  deformed model / CG-bead overlay stays on screen and mrdnaDisplay keeps what it loaded
+   *  — deselecting never discards cached visualization.  The display checkboxes keep their
+   *  current enabled state (`_renderDetail` returns early with no job), so the overlay can
+   *  still be switched off; only selecting a DIFFERENT job re-points the display. */
+  function _deselectJob() {
+    _selectedId = null
+    _progress = null
     _renderList()
     _renderDetail()
     _base.schedulePoll()
@@ -515,25 +528,23 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
   // ── Display toggles ───────────────────────────────────────────────────────────
   if (displayToggle) {
     displayToggle.addEventListener('change', async () => {
-      if (!_selectedId || !mrdnaDisplay) return
-      if (displayToggle.checked) {
-        const r = await mrdnaDisplay.showDeform(_selectedId)
-        if (!r?.ok) { displayToggle.checked = false; showToast('Relaxed positions not ready', { severity: 'warn' }) }
-      } else {
-        mrdnaDisplay.stopDeform()
-      }
+      if (!mrdnaDisplay) return
+      // Turning the overlay OFF must work with nothing selected — a deselected row leaves
+      // the previous job's deformed model on screen, and this is how it comes down.
+      if (!displayToggle.checked) { mrdnaDisplay.stopDeform(); _syncDisplayStatus(); return }
+      if (!_selectedId) { displayToggle.checked = false; return }
+      const r = await mrdnaDisplay.showDeform(_selectedId)
+      if (!r?.ok) { displayToggle.checked = false; showToast('Relaxed positions not ready', { severity: 'warn' }) }
       _syncDisplayStatus()
     })
   }
   if (beadsToggle) {
     beadsToggle.addEventListener('change', async () => {
-      if (!_selectedId || !mrdnaDisplay) return
-      if (beadsToggle.checked) {
-        const r = await mrdnaDisplay.showBeads(_selectedId)
-        if (!r?.ok) { beadsToggle.checked = false; showToast('CG beads not ready', { severity: 'warn' }) }
-      } else {
-        mrdnaDisplay.hideBeads()
-      }
+      if (!mrdnaDisplay) return
+      if (!beadsToggle.checked) { mrdnaDisplay.hideBeads(); _syncDisplayStatus(); return }
+      if (!_selectedId) { beadsToggle.checked = false; return }
+      const r = await mrdnaDisplay.showBeads(_selectedId)
+      if (!r?.ok) { beadsToggle.checked = false; showToast('CG beads not ready', { severity: 'warn' }) }
       _syncDisplayStatus()
     })
   }
@@ -575,5 +586,8 @@ export function initMrdnaJobsPanel({ mrdnaDisplay = null, getWorkspacePath = nul
     if (!_jobs.find((j) => j.job_id === jobId)) await _fetchJobs()
     return _selectJob(jobId)
   }
-  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected }
+  return { refresh: _fetchJobs, getSelectedJob: _selectedJob, selectJob, deleteSelected,
+           // Drop the selection without touching the display (the unified Simulate list
+           // routes its own click-the-selected-row-to-deselect here).
+           deselectJob: _deselectJob }
 }

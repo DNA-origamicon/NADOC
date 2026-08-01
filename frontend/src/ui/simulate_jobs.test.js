@@ -266,11 +266,11 @@ function make(nodes, apiOverrides = {}) {
     lastErrorMessage: () => '', ...apiOverrides,
   }
   const oxdnaPanel = { selectJob: vi.fn(), selectLammpsJob: vi.fn(), launchRelax: vi.fn(),
-    autorefineJobIds: () => new Set(),
+    autorefineJobIds: () => new Set(), deselectJob: vi.fn(),
     deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
-  const mrdnaPanel = { selectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
-  const candoPanel = { selectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
-  const mdPanel = { selectJob: vi.fn(),
+  const mrdnaPanel = { selectJob: vi.fn(), deselectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
+  const candoPanel = { selectJob: vi.fn(), deselectJob: vi.fn(), deleteSelected: vi.fn().mockResolvedValue(true) }
+  const mdPanel = { selectJob: vi.fn(), deselectJob: vi.fn(),
     deleteSelected: vi.fn().mockResolvedValue(true), archiveSelected: vi.fn().mockResolvedValue(undefined) }
   const engineSelector = { select: vi.fn(), getSelected: () => 'oxdna' }
   const sim = initSimulateJobs({ api, getWorkspacePath: () => '/w/D.nadoc',
@@ -532,6 +532,53 @@ describe('one consolidated progress bar + relocated timeline', () => {
     expect(document.getElementById('md-jobs-timeline').style.display).toBe('none')
     expect(document.getElementById('simulate-jobs-status').textContent).toMatch(/Select a run/)
     expect(document.querySelector('#simulate-jobs-progress .bar').style.width).toBe('0%')
+  })
+
+  // ── Click-the-selected-row-to-deselect ──────────────────────────────────────
+  // This unified list is the ONE list the user clicks (every engine panel's own list is
+  // display:none in index.html), so deselection is defined here and routed to the owning
+  // engine panel. Selecting a DIFFERENT job is the only thing that unloads cached viz.
+  it('clicking the already-selected row deselects it and tells that engine panel to deselect', async () => {
+    mount()
+    const { sim, candoPanel } = make([{ engine: 'cando', job_id: 'cd1', parent_job_id: null,
+      created_at: 5, status: 'completed', production_state: null, kind: 'relax', design_name: 'D' }])
+    sim.setActiveEngine('cando')
+    await sim.refresh()
+    const row = () => document.querySelector('#simulate-jobs-list [data-job-id="cd1"]')
+    row().click()
+    expect(sim.getSelected().id).toBe('cd1')
+    expect(candoPanel.selectJob).toHaveBeenCalledWith('cd1')
+
+    row().click()                                       // second click on the SAME row
+    expect(sim.getSelected().id).toBe(null)             // deselected
+    expect(sim.getSelected().engine).toBe(null)
+    expect(candoPanel.deselectJob).toHaveBeenCalled()   // panel dropped its selection too
+    expect(candoPanel.selectJob).toHaveBeenCalledTimes(1)   // NOT re-selected
+    expect(document.getElementById('simulate-jobs-status').textContent).toMatch(/Select a run/)
+  })
+
+  it('re-clicking the row after a deselect selects it again', async () => {
+    mount()
+    const { sim, candoPanel } = make([{ engine: 'cando', job_id: 'cd1', parent_job_id: null,
+      created_at: 5, status: 'completed', production_state: null, kind: 'relax', design_name: 'D' }])
+    sim.setActiveEngine('cando')
+    await sim.refresh()
+    const row = () => document.querySelector('#simulate-jobs-list [data-job-id="cd1"]')
+    row().click(); row().click(); row().click()
+    expect(sim.getSelected().id).toBe('cd1')
+    expect(candoPanel.selectJob).toHaveBeenCalledTimes(2)
+  })
+
+  it('deselecting a LAMMPS node routes the deselect to the oxDNA panel (it hosts the LAMMPS viz)', async () => {
+    mount()
+    const { sim, oxdnaPanel } = make([oxNode(), lmNode()])
+    await sim.refresh()
+    const row = () => document.querySelector('#simulate-jobs-list [data-job-id="lm1"]')
+    row().click()
+    expect(oxdnaPanel.selectLammpsJob).toHaveBeenCalled()
+    row().click()
+    expect(sim.getSelected().id).toBe(null)
+    expect(oxdnaPanel.deselectJob).toHaveBeenCalled()
   })
 
   it('“show all job types” keeps the selection when the engine tab changes (still visible)', async () => {
