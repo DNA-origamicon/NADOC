@@ -65,8 +65,8 @@ outranks a stale comment; a stale comment outranks a program of work.
 | ~~TD-01~~ | ~~`just lint` is RED (5 `F401`)~~ | — | **CLOSED 2026-07-31** — lint exits 0. 5 FIXED + 1 ACCEPTED (propagator per-file-ignore). Archived. |
 | ~~TD-02~~ | ~~`STAPLE_PALETTE` index agreement + 2 stale sync comments~~ | — | **CLOSED 2026-07-31** — 1 STALE / 4 FIXED / 1 DECIDE (DEC-01). Found + fixed a bug the entry didn't know about: the backend .xlsx export was still on the retired palette. Archived. |
 | ~~TD-03~~ | ~~Cadnano-editor app stragglers~~ | — | **CLOSED 2026-07-31** — 5 FIXED / 1 PROMOTED (MV-EDITORDOC) / 1 DECIDE (DEC-02) / 2 ACCEPTED / 1 STALE. Also closed TD-14's reverse-coupling bullet; spawned TD-26. Archived. |
-| ▶ TD-04 | Dead `POST /design/auto-scaffold` + orphaned matched-ends fns | P0 | 4 e2e specs 404 at runtime → that coverage is silently fake. |
-| TD-05 | Rendering stragglers | P0 | `refreshAllGlow` skips the 7th glow layer (live lag bug); a 4-test file pins a module that doesn't exist. |
+| ~~TD-04~~ | ~~Dead `POST /design/auto-scaffold` + orphaned matched-ends fns~~ | — | **CLOSED 2026-08-01** — 2 FIXED / 1 DELETED. The "silently fake coverage" was false: all 4 call sites guarded the dead POST and fell back to domain-paint, so the specs always scaffolded. Archived. |
+| ▶ TD-05 | Rendering stragglers | P0 | `refreshAllGlow` skips the 7th glow layer (live lag bug); a 4-test file pins a module that doesn't exist. |
 | TD-06 | Cross-cutting sweeps (see its section) | P0 | Three separate audits each re-found the same rot (`docs/triage/` fiction, `, null)` init args, phantom `MAP_*.md`). Resolve once, strike in all sections. |
 | TD-07 | Dead `lattice.auto_scaffold(mode=…)` in 2 scripts | P1 | Two unrunnable scripts (ImportError) + an orphaned `_pull_window_turns`. |
 | TD-08 | `CELLS_6HB` / `CELLS_18HB` divergent copies | P1 | Copying the name between files silently changes the neighbour graph. |
@@ -152,6 +152,42 @@ outcomes**; surface them in batches, don't block a pass on an answer.
 
 ## Next-session handoff
 
+**Pass 4 (2026-08-01) closed TD-04** — **2 FIXED / 1 DELETED / 0 DECIDE.** Cheapest pass yet; no
+user decisions raised. The predicted miscount was real (queue said "4 E2E specs"; it is **3 files /
+4 call sites** — `atomistic_helix_parity.spec.js` holds two), and one line anchor had drifted
+(`client.js:1103` → **1155**). But the pass's finding is the *severity* claim, again:
+
+- **"That coverage is silently fake" was false.** Every one of the four sites read
+  `const r = await request.post(…/auto-scaffold); if (!r.ok()) { …paint a scaffold domain… }`. The
+  route has been gone for weeks, so the guarded fallback is what has run every time — the specs
+  scaffolded correctly and passed. The debt was a dead round-trip and a misleading comment, not
+  missing coverage. **Fourth pass in a row where the entry overstated harm.**
+- **The lesson to carry: read the lines AROUND the anchor, not the anchor line.** The 2026-07-30
+  sweep grepped `/design/auto-scaffold`, found four hits, and wrote the severity from the hit
+  itself. The disproof was on the *next line*. A grepped line tells you a symbol is referenced; it
+  never tells you what happens when that reference fails. (Pass 3's lesson was *prove the path you
+  grepped exists*; this is its sibling — **prove you read the block, not the line**.)
+- **Repo-specific delete check, worth reusing:** before deleting an exported API wrapper here,
+  grep the **bare name as a string**, not just call syntax — `ui/autoscaffold_picker.js` dispatches
+  client methods by string (`apiMethod: 'autoScaffoldSeamed'`), so a live caller can exist with no
+  `foo(` anywhere. `autoScaffoldMatched` was clean on that test; the next one may not be.
+
+**▶ NEXT: TD-05** (rendering stragglers). Now the top P0: it claims a live per-frame lag bug
+(`refreshAllGlow` refreshing 6 of 7 glow layers) plus a 4-test file pinning a module that doesn't
+exist.
+
+**The traps to expect in TD-05:** (1) It is the **first item that pre-declares its own DECIDE** —
+`deform_view.reapplyLerp()` (zero callers, but it is the written-but-unwired fix for a real
+mechanism). Do **not** delete it to clear the bullet; the ledger already says decide first, and
+**the identical bullet also sits in TD-09**, so resolve once and strike in both (that is what TD-06
+exists for). (2) `scene/arc_tube_geometry.test.js` is a **test file deletion → user confirm**
+(`CLAUDE.md` → Risky-action policy), not a free DELETED. (3) Given this pass's finding, verify the
+`refreshAllGlow` "live lag" claim by reading what `_captureGlowLayer` actually holds and when it is
+rebuilt before treating it as P0 — an omitted layer only lags if something re-reads `entry.pos`
+during unfold. (4) Two bullets (the ~8.6k-LOC CG render pipeline's ~20 tests; the
+representation-vs-LOD mismatch) are PROMOTE/ACCEPTED shaped — don't start a test program inside
+this loop.
+
 **Pass 3 (2026-07-31) closed TD-03** — **5 FIXED / 1 PROMOTED / 1 DECIDE / 2 ACCEPTED / 1 STALE.**
 The predicted landmine (the `experiments/` scripts) was real but *understated*, and the two cheapest
 bullets were both **overstated**. Pattern for pass 4: **this ledger's severity adjectives are the
@@ -184,23 +220,11 @@ just a dead one.
 any more, so it left the main-app bundle. Probe first confirmed it had exactly two importers repo-wide
 — that check is what made a refactor of an untested 5k-LOC module a 15-minute job instead of a program.
 
-**▶ NEXT: TD-04** (dead `POST /design/auto-scaffold` + orphaned matched-ends fns). Top remaining P0:
-4 e2e specs POST a path that was consolidated into `-seamed`/`-seamless`, so they 404 at runtime and
-that coverage is silently fake.
+*(Pass 3's trap prediction for TD-04 — "assume the 4-specs count is wrong" — was correct, and the
+`scene_harness.js` half-migration it flagged turned out to be the template for the fix. Both
+resolved; see the archive.)*
 
-**The trap to expect in TD-04:** by this pass's own evidence, **assume the "4 specs" count is wrong**
-— TD-03's "3 editor e2e specs" was 2 specs / 3 `goto` calls, and TD-04 names *4 spec files with 5
-line numbers*. Count files, not call sites, and check each path is still POSTed rather than already
-patched (`e2e/helpers/scene_harness.js:75` documents the removal in a comment and paints the domain
-directly instead — at least one caller has already been migrated, which is exactly the kind of
-half-done fix that makes a stale bullet read as live). Second trap: the bullet says
-`autoScaffoldMatched()` is "defined twice and called nowhere" — before deleting either copy, confirm
-zero callers *including the editor app*, since `cadnano-editor/api.js` has its own parallel client and
-TD-03 showed the two apps duplicate more than anyone expects. Playwright specs are not run by
-`just test-smart`, so a wrong edit there is invisible until someone runs the E2E suite — read them,
-don't trust the suite to catch it.
-
-The 21 open items below are otherwise as `/audit-plan` left them on 2026-07-30/31 — **treat every
+The 20 open items below are otherwise as `/audit-plan` left them on 2026-07-30/31 — **treat every
 anchor as unverified.** Three passes in, the hit rate on prose-written anchors is roughly half.
 
 ---
@@ -333,20 +357,6 @@ fixture" — but there is no shared definition. Each is re-declared locally with
 variants are not the same shape — one is a bent/L cluster, the other two clean rows — so a test copied
 between files silently changes its neighbour graph. Fix = one fixture module; until then, never copy the
 name without copying the list.
-
-### TD-04 — Dead `POST /design/auto-scaffold` (unsuffixed) + orphaned matched-ends client fns (found 2026-07-30, `/audit-plan`)
-Commit `e9d6750` consolidated the plain endpoint into `-seamed`/`-seamless` (the three live routes are
-`routes_scaffold_routing.py:86/112/140`). Stragglers:
-- **4 E2E specs still POST the removed path → 404 at runtime:** `frontend/e2e/atomistic_helix_parity.spec.js:41,157`,
-  `impostor_beads.spec.js:35`, `atomistic_mode_guard.spec.js:24`. (`e2e/helpers/scene_harness.js:75` already documents
-  the removal — the specs just weren't updated.) These are Playwright-only, so they fail silently in the normal loop.
-- **`autoScaffoldMatched()` is defined twice and called nowhere:** `frontend/src/api/client.js:1103`,
-  `frontend/src/cadnano-editor/api.js:197`. Matched routing is reached *implicitly* — `auto_scaffold_seamed`
-  tries `matched_ends=True` first and falls back (`seamed_router.py:1275-1289`), which is why the picker
-  says "matched ends when feasible". There is no `value="matched"` radio (only `seamed`/`seamless`, in
-  `frontend/index.html:2751/2758` + `cadnano-editor.html:1540/1547`).
-- **Stale header comment:** `frontend/src/ui/autoscaffold_picker.js:2` still lists "seamed / seamless / matched /
-  advanced-*" while `AUTOSCAFFOLD_MODES` (`:11-19`) has exactly two keys.
 
 ### TD-14 — Cadnano-2D-mode stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Turned up while rewriting `.claude/rules/cadnano-2d.md` against the code. All low-stakes but each is

@@ -1152,12 +1152,6 @@ export async function autoScaffoldSeamed() {
   return _syncFromDesignResponse(json)
 }
 
-export async function autoScaffoldMatched() {
-  const json = await _request('POST', '/design/auto-scaffold-matched')
-  if (json?.warnings?.length) console.warn('[AutoScaffoldMatched] warnings:', json.warnings)
-  return _syncFromDesignResponse(json)
-}
-
 export async function routeForPolymerization() {
   const json = await _request('POST', '/design/route-for-polymerization')
   if (!json) return null  // 422 (nothing to route) etc. — store.lastError set by _request

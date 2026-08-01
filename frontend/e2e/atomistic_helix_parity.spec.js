@@ -35,22 +35,18 @@ async function freshDesignWithHelix(request, label, row, col, length_bp = 21) {
   })
   expect(r2.ok(), `POST helix-at-cell (${row},${col}) failed`).toBeTruthy()
 
-  // Auto-scaffold so the atomistic model has atoms to place.
-  // Falls back to scaffold-domain-paint for single-helix designs where
-  // auto-scaffold can't find a Hamiltonian path.
-  const r3 = await request.post(`${API}/design/auto-scaffold`, {
-    data: {},
+  // Scaffold by painting a domain over the helix's full length, so the atomistic
+  // model has atoms to place. (This used to try POST /design/auto-scaffold first
+  // and fall back to here; e9d6750 consolidated that route into -seamed/-seamless,
+  // so the try always failed and painting is what actually ran. It is also the
+  // only thing that works for a single helix, where routing finds no path.)
+  const dr = await request.get(`${API}/design`)
+  const { design } = await dr.json()
+  const h = design.helices[0]
+  await request.post(`${API}/design/scaffold-domain-paint`, {
+    data: { helix_id: h.id, lo_bp: 0, hi_bp: length_bp - 1 },
     headers: { 'Content-Type': 'application/json' },
   })
-  if (!r3.ok()) {
-    const dr = await request.get(`${API}/design`)
-    const { design } = await dr.json()
-    const h = design.helices[0]
-    await request.post(`${API}/design/scaffold-domain-paint`, {
-      data: { helix_id: h.id, lo_bp: 0, hi_bp: length_bp - 1 },
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
 }
 
 /**
@@ -153,19 +149,14 @@ test.describe('Atomistic helix parity (REVERSE vs FORWARD)', () => {
       data: { row, col, length_bp: 21 },
       headers: { 'Content-Type': 'application/json' },
     })
-    // Scaffold: auto-scaffold first; fall back to domain-paint for single-helix
-    const scfR = await page.request.post(`${API}/design/auto-scaffold`, {
-      data: {}, headers: { 'Content-Type': 'application/json' },
+    // Scaffold by painting a domain (single helix → no routing path; see above)
+    const dr = await page.request.get(`${API}/design`)
+    const { design } = await dr.json()
+    const h = design.helices[0]
+    await page.request.post(`${API}/design/scaffold-domain-paint`, {
+      data: { helix_id: h.id, lo_bp: 0, hi_bp: 20 },
+      headers: { 'Content-Type': 'application/json' },
     })
-    if (!scfR.ok()) {
-      const dr = await page.request.get(`${API}/design`)
-      const { design } = await dr.json()
-      const h = design.helices[0]
-      await page.request.post(`${API}/design/scaffold-domain-paint`, {
-        data: { helix_id: h.id, lo_bp: 0, hi_bp: 20 },
-        headers: { 'Content-Type': 'application/json' },
-      })
-    }
     // Allow the frontend to receive the updated design
     await page.waitForTimeout(2000)
 

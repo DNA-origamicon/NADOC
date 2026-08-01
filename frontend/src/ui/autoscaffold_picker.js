@@ -1,5 +1,8 @@
 // Autoscaffold picker — the routing dialog that lets the user pick a scaffold
-// routing strategy (seamed / seamless / matched / advanced-*) and run it.
+// routing strategy (seamed / seamless) and run it. There is no separate "matched"
+// mode: seamed routing tries matched ends first and falls back on its own
+// (backend/core/seamed_router.py:1275-1289), which is what AUTOSCAFFOLD_MODES.seamed
+// means by "matched ends when feasible".
 // Extracted verbatim from main.js (carve-up #65).
 import { showToast }                    from './toast.js'
 import { showOpProgress, hideOpProgress } from './op_progress.js'

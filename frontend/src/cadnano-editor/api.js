@@ -193,11 +193,6 @@ export async function autoScaffoldSeamed() {
   return mutate(req => req('POST', '/design/auto-scaffold-seamed'))
 }
 
-/** Route a matched-ends scaffold (far face = translate of near face) for blunt-end polymers. */
-export async function autoScaffoldMatched() {
-  return mutate(req => req('POST', '/design/auto-scaffold-matched'))
-}
-
 /**
  * Paint a scaffold domain onto a helix from the pencil tool.
  * loBp/hiBp are bp indices left-to-right (order-independent).

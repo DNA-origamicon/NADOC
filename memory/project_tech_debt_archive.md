@@ -278,3 +278,42 @@ architecture content lives in the rule):
   anchor). Their `effectiveColor`s take different arguments. **Also corrected**:
   `plan_audit_ledger.md:84` carried the same false claim, and its `:427` lesson ("a doc's own paired
   anchors are a cheap lie detector") was built on this false negative — both amended 2026-07-31.
+
+### TD-04 — Dead `POST /design/auto-scaffold` (unsuffixed) + orphaned matched-ends client fns — CLOSED 2026-08-01 (2 FIXED / 1 DELETED)
+
+Commit `e9d6750` consolidated the plain endpoint into `-seamed`/`-seamless`; the three live routes
+are `routes_scaffold_routing.py:86` (`-seamed`) / `:112` (`-matched`) / `:140` (`-seamless`) —
+probe confirmed all three line anchors exact, and zero hits for `"/design/auto-scaffold"` anywhere
+in `backend/` (no `/design/{param}` catch-all either, so the path cannot be absorbed).
+
+- ~~4 E2E specs still POST the removed path → 404 at runtime; that coverage is silently fake~~ —
+  **FIXED 2026-08-01.** Two corrections. **(a) It is 3 spec files, 4 call sites** —
+  `atomistic_helix_parity.spec.js` holds *two* (`:41` and `:157`); `impostor_beads.spec.js:35` and
+  `atomistic_mode_guard.spec.js:24` hold one each. (The queue's "4 specs" counted call sites as
+  files — the exact miscount the pass-3 handoff predicted.) **(b) The coverage was never fake.**
+  All four sites were `const r = await request.post(.../auto-scaffold); if (!r.ok()) { …paint a
+  scaffold domain… }` — the guarded fallback is what has actually run every time, so the specs
+  scaffolded correctly and passed. The debt was a dead round-trip plus a comment implying routing
+  ran. Fix: each site collapsed to the domain-paint call it always took, matching the
+  already-migrated `e2e/helpers/scene_harness.js:74-81`. These are single-helix designs, where
+  routing finds no path anyway. `rg "design/auto-scaffold[\`'\"]" frontend/` → zero hits.
+- ~~`autoScaffoldMatched()` is defined twice and called nowhere~~ — **DELETED 2026-08-01.** Line
+  anchor was stale: `frontend/src/api/client.js:` **1155**, not 1103 (`cadnano-editor/api.js:197`
+  was exact). Probe: repo-wide `rg ScaffoldMatched` returned exactly the two definitions + one log
+  label — **zero callers, zero imports, and zero string references**, which matters here because
+  `autoscaffold_picker.js` dispatches the API by *string* name (`apiMethod: 'autoScaffoldSeamed'`),
+  so a dynamic call would have shown in that grep. Both wrappers deleted.
+  **The backend route stays live and covered** (`routes_scaffold_routing.py:112`,
+  `tests/test_seamed_router.py:75`, `test_scaffold_invariants.py:40,55`) — only the two unused JS
+  wrappers are gone; re-adding one is 3 lines if a matched-only UI is ever wanted.
+- ~~Stale header comment `ui/autoscaffold_picker.js:2` lists "seamed / seamless / matched /
+  advanced-*"~~ — **FIXED 2026-08-01.** `AUTOSCAFFOLD_MODES` (`:10-23`) has exactly two keys,
+  confirmed. Header now names the two real modes and says *why* there is no third: seamed already
+  tries matched ends first and falls back on its own (`seamed_router.py:1275-1289`,
+  `_matched_ends_feasible` `:1134`) — which is what the picker's "matched ends when feasible" copy
+  means. Also confirmed: `rg 'value="matched"' frontend/` → zero hits; the only mode radios are
+  `index.html:2751/2758` and `cadnano-editor.html:1540/1547`, both seamed/seamless.
+
+**Gate:** frontend-only, no Python touched → `just test-frontend` **252 files / 3806 tests passed**.
+Playwright not run (troubleshooting-only per `CLAUDE.md`); the spec edits are behaviour-preserving by
+construction — the deleted branch could only ever 404.

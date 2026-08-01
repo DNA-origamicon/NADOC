@@ -32,18 +32,16 @@ async function buildScaffoldedPart(page, name) {
     data: { row: 0, col: 0, length_bp: 200 },
     headers: { 'Content-Type': 'application/json' },
   })
-  const scfR = await page.request.post(`${API}/design/auto-scaffold`, {
-    data: {}, headers: { 'Content-Type': 'application/json' },
+  // Scaffold by painting a domain over the full helix. (Was a POST to
+  // /design/auto-scaffold with this as a fallback; e9d6750 removed that route in
+  // favour of -seamed/-seamless, so the fallback is what has always run.)
+  const dr = await page.request.get(`${API}/design`)
+  const { design } = await dr.json()
+  const h = design.helices[0]
+  await page.request.post(`${API}/design/scaffold-domain-paint`, {
+    data: { helix_id: h.id, lo_bp: 0, hi_bp: 199 },
+    headers: { 'Content-Type': 'application/json' },
   })
-  if (!scfR.ok()) {
-    const dr = await page.request.get(`${API}/design`)
-    const { design } = await dr.json()
-    const h = design.helices[0]
-    await page.request.post(`${API}/design/scaffold-domain-paint`, {
-      data: { helix_id: h.id, lo_bp: 0, hi_bp: 199 },
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
   // page.request mutations bypass the frontend's API client, so nudge the app
   // to re-fetch the active design via the same BroadcastChannel the cadnano
   // editor uses ('nadoc-design' → main.js design-changed handler → getDesign +

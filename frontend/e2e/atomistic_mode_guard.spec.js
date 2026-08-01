@@ -21,17 +21,15 @@ async function buildScaffoldedPart(page, name) {
   await page.request.post(`${API}/design/helix-at-cell`, {
     data: { row: 0, col: 0, length_bp: 200 }, headers: { 'Content-Type': 'application/json' },
   })
-  const scfR = await page.request.post(`${API}/design/auto-scaffold`, {
-    data: {}, headers: { 'Content-Type': 'application/json' },
+  // Scaffold by painting a domain over the full helix. (Was a POST to
+  // /design/auto-scaffold with this as a fallback; e9d6750 removed that route in
+  // favour of -seamed/-seamless, so the fallback is what has always run.)
+  const dr = await page.request.get(`${API}/design`)
+  const { design } = await dr.json()
+  await page.request.post(`${API}/design/scaffold-domain-paint`, {
+    data: { helix_id: design.helices[0].id, lo_bp: 0, hi_bp: 199 },
+    headers: { 'Content-Type': 'application/json' },
   })
-  if (!scfR.ok()) {
-    const dr = await page.request.get(`${API}/design`)
-    const { design } = await dr.json()
-    await page.request.post(`${API}/design/scaffold-domain-paint`, {
-      data: { helix_id: design.helices[0].id, lo_bp: 0, hi_bp: 199 },
-      headers: { 'Content-Type': 'application/json' },
-    })
-  }
   await page.evaluate(() => {
     const bc = new BroadcastChannel('nadoc-design')
     bc.postMessage({ type: 'design-changed' }); bc.close()
