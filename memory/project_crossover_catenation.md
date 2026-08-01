@@ -8,8 +8,14 @@ metadata:
 
 # Catenated crossover junctions — detector, gate, repair
 
-**Status 2026-07-28: FIXED and gated.** Every design screened is clean, including 24hb_2xT
-(170 reciprocal pairs). MD-validated on 2hb (see below); 6hb in progress (`experiments/exp45_extra_base_catenation/`).
+**Status 2026-07-28: catenation FIXED and gated.** Every design screened is clean, including
+24hb_2xT (170 reciprocal pairs). MD-validated on 2hb (see the archive); 6hb in progress
+(`experiments/exp45_extra_base_catenation/`).
+
+**Status 2026-07-31: a SECOND permanent defect of the same family — a covalent bond built
+through a nucleotide RING — was found, and the catenation repair itself was manufacturing it.**
+Detector + ranking term + gate shipped; every design in the workspace now builds with 0 of both.
+See the ⭐ section below; that is the one to read if you are here about extra-base geometry.
 
 ## What was wrong
 
@@ -92,129 +98,146 @@ remembering:
   pair catenated and the whole build refused. It must rank, not exclude — strain relaxes
   out, a linking number never does.
 
-## MD validation (exp45, 2026-07-28)
+## ⭐ 2026-07-31 — the repair ladder was manufacturing a SECOND permanent defect: THREADED RINGS
 
-Two arms per design, identical but for the seed: **fixed** (repaired) vs **catenated**
-(repair off + `allow_catenated_seed=True`). Local RTX 3080 Ti, equilibrium-aware ladder,
-4 fs with Fix B applied explicitly.
+**Symptom:** on the `2hb_2xT` relaxation (job `c8c4a87e2033`, archived) a phosphate bond visibly
+runs through the ribose ring of another extra crossover base. **Root cause: the repair ladder
+above.** Measured on that exact design.json:
 
-| arm | seed | through minimisation + k=0.5 + k=0.1 |
+| build | catenated | ring-pierced |
 |---|---|---|
-| 2hb_1xT fixed | unlinked, G = −0.19 | unlinked, \|ΔG\| ≤ 0.02 |
-| 2hb_1xT catenated | linked, G = +0.67 | linked, \|ΔG\| ≤ 0.08 |
-| 2hb_2xT fixed | unlinked, G = −0.16 | unlinked, \|ΔG\| ≤ 0.04 |
-| 2hb_2xT catenated | linked, G = +0.58 | linked, \|ΔG\| ≤ 0.09 |
+| raw (repair OFF) | **1/1** | 0 |
+| shipped (repair ON) | 0 | **1** |
+| display path (`fast_bridges=True`) | 0 | 0 |
 
-No strand passage in any arm. The control never unlinks, the repaired arm never links —
-the topological-invariance argument confirmed in simulation, not just asserted.
+The ladder took rung 11 — the FIRST rung that unlinks (spin `(π, 3π/2)`; reported as
+`attempts: 12`, which is 1-based) — and stopped there because `penalty == 0` and
+`clashes 17 ≤ baseline 34`. The early exit never reached rung 15 (spin `(3π/2, 3π/2)`), which is
+**strictly better on every axis**: unlinked, unpierced, 11 clashes, `separation_nm` 0.136 vs
+0.072. That is the rung the fixed ladder now picks (`attempts: 16`).
+The bond threaded is the inter-insert phosphodiester `O3'(xb0) – P(xb1)` of one crossover,
+through the **sugar of the partner crossover's insert**.
 
-### The closed Lk is NOT trustworthy on a thermalised frame
+The full rung table for this pair (mid-build, both measures) is worth keeping — it shows the
+defect is not rare among rungs and that the ladder had a clean one available all along:
 
-`2hb_2xT/catenated` read Lk = +1 → 0 → −1 across three stages. That is **a closure
-artefact, not strand passage**: these are open backbone arcs closed by an artificial
-straight chord, and once MD jiggles the structure the chord can sweep across the partner,
-flipping Lk by exactly ±1 — with **zero integrality residual**, so the `lk_residual`
-ambiguity check does not catch it.
+| rung | 0–10 | 11 | 12–14 | **15** | 16–18 (Δ0.12) | 19–20 (Δ0.06/0.03) | 21,23 (arc a) | 22 (arc b) |
+|---|---|---|---|---|---|---|---|---|
+| catenated | yes | no | no | **no** | no | no | no | no |
+| pierced | 0 | **1** | 2 | **0** | 2–4 | 0 | 1 | 0 |
+| separation nm | — | 0.072 | 0.02–0.06 | **0.136** | 0.02–0.04 | 0.013–0.037 | 0.010 | 0.043 |
 
-The fix is `g_open`, the same Gauss double integral over the *unclosed* arcs. It is a
-continuous function of the coordinates, so it cannot jump without atoms moving: a real
-passage shifts it by ~1, thermal motion by ~0.05. It also separates the arms cleanly
-(≈ −0.17 unlinked vs ≈ +0.6 linked).
+**Why nothing caught it.**
+- **Gauss `Lk` provably cannot see it.** The connector polyline is `P, O5', C5', C4', C3', O3'`
+  — the direct C4'→C3' step. The sugar ring closes through the *other* path
+  (C4'-O4'-C1'-C2'-C3'), so it is entirely off-curve and threading it changes no linking number.
+  The two measures are complementary, not redundant — see the table above.
+- **The clash counters cannot either.** A sugar ring is ~4.6 Å across, so a bond through its
+  centre keeps every ring atom 2.2–2.6 Å away — above `extra_base_repair._CLASH_NM` (0.30 nm)
+  for part of the ring and far above `atomistic_validation.CLASH_NM` (0.08 nm) for all of it.
+  In the ladder's own score the pierced rung looked like an *improvement* (34 → 17 clashes).
 
-**So: the SEED measurement establishes whether a pair is catenated (the build closure is
-well conditioned — every noT design returns 0); the TRAJECTORY measurement establishes
-whether that ever CHANGED.** `catenation_in_frame(..., reference=<seed gauss_open>)`
-reports `delta_g` and a `changed` flag for exactly this.
+**What relaxation does to it (why it is not "just strain").** In the raw seed the bond is a
+correct 1.60 Å with a ring atom 1.32 Å away. The 10 000-step declash minimisation cannot pull
+the bond out of the ring, so it relieves the overlap the only way left — by **stretching the
+covalent bond to 3.08 Å** (~250 kcal/mol, CHARMM36). It was still 2.98 Å after the full ladder
+to unrestrained MGHH, the **longest heavy-atom bond in the DNA** in the final frame, and the
+ring atom never moved past 2.21 Å. Note 2.98 Å slips *under*
+`atomistic_validation.BACKBONE_STRETCH_NM` (0.30 nm) — and `audit_bonds` is not called on the
+NAMD path anyway (only from `routes_oxdna`), so nothing downstream flagged it either.
 
-Two harness traps worth remembering: segment names sort **alphabetically**, so
-`..._p100` precedes `..._p50` — chronological ordering must be explicit; and running heavy
-Python builds alongside NAMD starves its `+p16` threads badly enough to halve throughput.
+**Prevalence, before the fix** (raw build → shipped build, whole workspace):
 
-## 2026-07-29 — the 200 ns 1xT ensemble measures where an insert BELONGS (exp46)
+| design | pairs | cat raw | pierce raw | cat shipped | **pierce shipped** |
+|---|---|---|---|---|---|
+| 2hb_1xT | 1 | 1 | 0 | 0 | 0 |
+| 2hb_2xT | 1 | 1 | 0 | 0 | **1** |
+| 6hb_2xT | 10 | 10 | 0 | 0 | **5** |
+| 6hbS21_2xT / 6hbS42_2xT | 1 / 3 | 1 / 3 | 0 | 0 | 0 |
+| 6hbx100_1xT | 28 | 15 | 0 | 0 | 0 |
+| 6hbx100_2xT | 28 | 26 | 3 | 0 | **18** |
+| 24hb_1xT | 159 | 65 | 6 | 0 | **6** |
+| **24hb_2xT** | 159 | 138 | 51 | 0 | **131** |
 
-`experiments/exp46_xb_placement/` (full write-up in its `REPORT.md`) measured the
-equilibrium insert pose from job `29c5b267380f` (2hb_1xT, **200 ns free k=0**, 4 fs+HMR,
-20 000 frames; 2hb_1xT = ONE reciprocal pair, one T on each crossover). Reported in the
-builder's own chord frame but with the bow referenced to the **chemical hop** (3′ exit →
-5′ entry) instead of `half_a → half_b`, C1′ equilibrates at
+Two things to take from it: the defect is overwhelmingly a **2xT** phenomenon (two inserts give
+the solve a second rigid body *and* an inter-insert bond to route through something), and the
+repair pass **multiplies** it (24hb_2xT 51 → 131). 24hb_1xT shows the raw build can pierce on
+its own at scale, so this is not purely a repair artefact.
+**Consequence: any ensemble built from a 2xT design before 2026-07-31 may carry threaded rings.**
+Screened directly on the shipped packages with `scripts/check_ring_piercing_frame.py` (measures
+the PSF + coordinates a job actually ran, not a rebuild):
 
-| | t along C3′(src)→C5′(dst) | bow | ax |
-|---|---|---|---|
-| **MD 20–180 ns, pooled** | **+0.57 ± 0.05** | **−0.31 ± 0.11** | \|ax\| 0.27, sign not transferable |
-| pure arc seed | 0.72 / 0.79 | **+0.65 / −0.67** | −0.20 / +0.19 |
-| full build (after the joint solve) | 0.65 / 0.63 | −0.28 / −0.23 | −0.27 / +0.26 |
+| archived job | package seed | threaded rings |
+|---|---|---|
+| `336a067ba241` — 24hb_2xT, the "validated 2xT" package | `24hb_2xT_build.pdb` | **51** |
+| `83a8ed8ded0e` — 24hb_1xT, the validated 1xT package | `24hb_1xT_build.pdb` | **6** |
+| `c8c4a87e2033` — 2hb_2xT, 2026-07-31 | `2hb_2xT_build.pdb` | **1** |
 
-(units = fractions of the chord L ≈ 9.1 Å. P sits at t 0.17, bow −0.17.)
+So the `extra_base_co` parameters were extracted from an ensemble with **51 permanently threaded
+rings** — a second, independent reason those numbers need re-deriving (the first is in the header
+of this file). The 2hb_2xT run is unusable for junction observables outright: it has exactly one
+reciprocal pair and that pair is the one that was pierced.
 
-**Why this belongs in this file: it explains the frustration the repair ladder is
-cleaning up.** `bow_dir = cross(half_a → half_b, avg_axis)`, and `half_a` is only the
-order the record stores its halves in — so the seed side is arbitrary, and **the builder
-seeds both inserts of every reciprocal pair on the SAME physical side** (verified 28/28
-pairs in 6hbx100_1xT, and on 2hb_1xT/2hb_2xT/6hb_2xT/6hbS42_1xT/6hbx100_2xT; `half_a` is
-not the 3′ exit for exactly half of all extra-base crossovers). MD puts them on
-**opposite** sides — bow < 0 in **100 %** of frames for both inserts, in every sub-window
-(20–100 / 20–180 / 100–180 ns all give pooled bow −0.30…−0.31). The `ax` coordinate the
-arc rule already gets right; `t` is 0.15–0.22 L too far toward the 5′ entry; the bow is
-~2× too far out *and* wrong-signed on half the crossovers.
+### The fix
 
-**The joint solve already recovers ALL of it.** Distance of the delivered (post-solve,
-post-repair) C1′ from the MD mean: **1.18 Å / 0.97 Å**, versus the ensemble's own thermal
-spread of 1.51 Å / 1.99 Å (the raw arc seed is 8.77 Å / 3.85 Å away). So the *shipped*
-geometry is already indistinguishable from equilibrium; only the *seed* is wrong.
+- **`backend/core/ring_piercing.py`** (new) — segment/ring Möller-Trumbore over a fan
+  triangulation of every sugar and base ring. `model_piercings` / `piercing_report` /
+  `assert_not_pierced` for a whole model; `PierceScope` is the cheap re-measurable
+  neighbourhood scope the ladder uses per rung (indexes rings + name-derived bonds once,
+  re-reads coordinates per call; radius 1.2 nm, so a rung that shoves a linker into a
+  *neighbouring duplex* residue is seen too — 6hbx100_2xT had exactly that).
+- **`extra_base_repair.repair_catenated_pairs`** — a pair is now "defective" if it is linked
+  **or** pierced, and the rung score is `(pierced, penalty, clashes, n_try)`. Piercing is
+  RANKED, not excluded, for the same reason the geometry penalty is: if every rung pierces,
+  ship the least-bad one and let the gate refuse it rather than silently leave it catenated.
+  The early exit now requires `pierced == 0` as well as `penalty == 0` — that alone is what
+  would have taken rung 16 instead of rung 12 on `2hb_2xT`.
+- **`gate_seed_topology`** — refuses a pierced seed exactly as it refuses a catenated one, at
+  the same single choke point (`md_protocols`, `namd_package`, `namd_vacuum`), and records
+  `n_ring_pierced` + `ring_pierced` in `manifest.json → topology_check`.
+  `allow_catenated_seed=True` overrides both.
+- **`scripts/check_catenation.py`** — screens a *design* for both defects off one build (the
+  pre-GPU gate). **`scripts/check_ring_piercing_frame.py`** (new) screens an already-built
+  structure — a job's packaged PSF + seed PDB, a `.coor`, or a whole DCD — which is how the
+  archived runs above were audited and how to decide whether an existing run's data is usable.
 
-### ⭐ The MD side is also the side that stops the solve catenating
+After the fix, every design in the table above builds with **0 catenated and 0 pierced**, and
+the synthetic reciprocal fixture is clean at **every phase** of a full helical turn for both
+insert counts (pre-fix: TT pierced at 6 of 11 phases, T at 1). On `2hb_2xT` the chosen rung is
+better than the pre-fix one on all three axes at once (clashes 17 → 11, separation 0.072 →
+0.136 nm, pierced 1 → 0), so this is not a quality trade.
+Tests: `tests/test_ring_piercing.py` (geometry primitive, hand-built model, gate, and a
+`_piercing_check_disabled()` positive control that reproduces the pre-fix ranking on demand).
 
-The bow side can be selected with no source change, by which half is stored as `half_a`
-(`half_a = dst` ⇒ `bow = −cross(hop,axis)` = the MD side; `half_a = src` ⇒ `+cross(hop,axis)`).
-Screened with the repair ladder DISABLED — raw builds, catenated reciprocal insert pairs:
+### ⚠ Two traps in inferring connectivity mid-build — both produced silent wrong answers
 
-| design | inserts/xover | today | **−cross(hop,axis) [MD]** | +cross(hop,axis) |
-|---|---|---|---|---|
-| 2hb_1xT | 1 | 1/1 | **0/1** | 1/1 |
-| 6hbS42_1xT | 1 | 1/3 | **0/3** | 3/3 |
-| 6hbx100_1xT | 1 | 15/28 | **2/28** | 22/28 |
-| 24hb_1xT | 1 | 65/159 | **5/159** | 89/159 |
-| 2hb_2xT | 2 | 1/1 | 1/1 | **0/1** |
-| 6hb_2xT | 2 | 10/10 | 8/10 | **0/10** |
-| 6hbx100_2xT | 2 | 26/28 | 17/28 | **0/28** |
+The ladder measures *before any bond list exists*, so `PierceScope` derives connectivity from
+atom names + geometry. Two ways that went wrong, each caught only by cross-checking the scoped
+detector against `model_piercings` on **identical final coordinates**:
 
-**For ONE insert, seeding on the MD side cuts raw catenation ~93 % (24hb_1xT 65→5).** Two
-independent criteria — 200 ns equilibrium and Gauss linking of the L-BFGS-B linker solve —
-pick the same side. **The correct side FLIPS with insert count**: for 2 inserts the other
-side is clean (37→0 pairs), which is a solver observation only (no 2xT MD exists).
+1. **Chain adjacency is not connectivity at an extra-base crossover.** Linking `O3'(seq i)` to
+   `P(seq i+1)` invents an ~0.8 nm bond straight across the junction — the inserts sit between
+   those two duplex residues, and mid-build the inserts are not yet numbered into the chain at
+   all (they are appended at the end: chain A duplex 1–14, inserts 15–16, vs 8–9 in the final
+   model). That phantom "pierced" every ring near the crossover and made three sound rungs —
+   **including the winner** — look defective, pushing the ladder onto a Δ-cap rung with 10× less
+   backbone separation. Infer the phosphodiester as *nearest P within 0.40 nm of each O3'*.
+2. **Connectivity cannot be frozen at index time.** A rung moves whole inserts, so which P an
+   O3' bonds to changes with the rung. Caching the bond list when the scope was built dropped
+   the bond a later rung created, and one threaded junction in `6hb_2xT` went unseen by the
+   ladder while the whole-model gate still refused the build. Only the *intra-residue* half is
+   geometry-independent; re-derive the links on every measurement.
 
-**Not shippable as-is:** with the MD-side seed the *post-solve* pose moves away from
-equilibrium (1.18→4.88 Å, 0.97→3.05 Å) — the solve objective and the repair ranking are
-tuned around today's seed. The seed also still lands at ~2× the equilibrium radius, and
-`_BOW_FRAC_3D` alone cannot fix that (≈0.5 L of the arc C1′ offset comes from the template
-ORIENTATION via `_extra_base_frame`'s `e_n = bow_dir`; only 0.15 L from the control point),
-so the placement would have to be respecified as a pose. Trade-off: side fix ⇒ far fewer
-catenated builds; pose fix ⇒ solve needs re-tuning.
-**Nothing was changed — `feedback_crossover_no_reasoning` names "swap half_a/half_b by bow
-direction" as a known-bad move, so this needs the user's sign-off. The in-memory half swap
-in `hop_bow_experiment.py` is a MEASUREMENT device, not a proposal.**
+Both bugs are pinned by named regression tests. **If the ladder and the gate ever disagree
+again, this is where to look first** — the gate uses the real `model.bonds` and is the authority.
 
-Also from the same run: **base orientation is not a transferable constant** — the two
-inserts' whole-nucleotide orientations differ by **103°** (per-insert spread 18°/26°). A
-lone unpaired base at a junction is soft and multi-modal; don't bake one in.
+## Completed history → archive
 
-Open from exp46: no design and no MD for **an insert on only ONE crossover of a pair**
-(every 2hb variant is symmetric) — next experiment is an asymmetric 2hb through the same
-protocol. And no free-MD 2-insert numbers on a verified-unlinked build.
+Two large blocks of finished work live in [project_crossover_catenation_archive.md](project_crossover_catenation_archive.md) —
+**don't open them in a routine loop**:
 
-⚠ **The 200 ns box is smaller than the solute.** NPT collapsed the carved-shell cell to
-37.6 × 56.7 × 96.7 Å while the DNA spans 45–55 Å in x; DNA-to-own-periodic-image minimum
-distance averages 7.0 Å, is under 3 Å in 26 % of frames and **2.2 Å throughout the last
-25 ns**. The local insert pose is window-insensitive, but the global splay (helix-axis
-angle 16–18°, → 33° late) and the late fraying (designed bp intact 98.7 % over 20–180 ns,
-90.5 % after) are suspect. See [[project_water_shell_carve]].
-
-⚠ Analysis trap worth keeping: with `wrapAll on` a single-atom minimum-image fix is NOT
-enough here (the true solute span exceeds half the box in every dimension). Use
-bond-based `unwrap(compound='fragments')` then shift each fragment by the **modal**
-box offset over the base pairs it shares with an already-placed fragment —
-`exp46_xb_placement/xb_map.py:FrameJoiner`. Verified by the two phosphodiester bonds each
-insert bridges measuring 1.57 ± 0.03 Å across all 4 000 frames.
+- **exp45 (2026-07-28) — MD validation of the catenation fix.** Two arms per design (repaired vs deliberately catenated) through minimisation + ENM; no strand passage in any arm, the control never unlinks and the repaired arm never links. Also records why the **closed** Lk is untrustworthy on a thermalised frame (a closure artefact flips it ±1 with zero integrality residual) and that `g_open` is the measure to use on a trajectory.
+- **exp46 (2026-07-29) — where an insert BELONGS, from the 200 ns 1xT ensemble.** The equilibrium insert pose, the finding that the builder seeds both inserts of a pair on the SAME physical side while MD puts them on opposite sides, that the joint solve already recovers all of it (delivered C1' within 1.2 A of the MD mean), and that the MD-side seed would cut raw catenation ~93% for ONE insert but is **not shippable** without re-tuning the solve. Includes the ⚠ that that run's NPT box collapsed below the solute width.
 
 ## Detection: use f_hi, never the modal crossing number
 
@@ -255,10 +278,16 @@ channels disagreeing because of the mode instability, not real ambiguity. Switch
 - `backend/core/junction_topology.py` — connectors, reciprocal pairs, vectorised Gauss `Lk`,
   `catenation_report`, `gate_seed_topology`, plus `package_connector_rows` /
   `catenation_in_frame` for measuring a NAMD trajectory.
-- `backend/core/extra_base_repair.py` — the repair ladder.
-- `scripts/check_catenation.py` — Screen 0, build-only, run before spending GPU time.
+- `backend/core/extra_base_repair.py` — the repair ladder (scores BOTH defects).
+- `backend/core/ring_piercing.py` — the threaded-ring detector: `model_piercings` /
+  `piercing_report` / `assert_not_pierced` on a model, `PierceScope` for the ladder.
+- `scripts/check_catenation.py` — Screen 0, build-only, run before spending GPU time; reports
+  catenation AND piercings off one build.
+- `scripts/check_ring_piercing_frame.py` — screens an already-built structure (a job's PSF +
+  seed PDB / `.coor` / DCD), for deciding whether an existing run's data is usable.
 - Gate sites: `md_protocols.prepare_mgh_slow_release`, `namd_package.build_namd_package`,
-  `routes_md` (`allow_catenated_seed`). Recorded in every manifest as `topology_check`.
+  `namd_vacuum`, `routes_md` (`allow_catenated_seed` overrides BOTH defects). Recorded in every
+  manifest as `topology_check`, now with `n_ring_pierced` + `ring_pierced`.
 - `audit_bonds` gained `catenation` + `ok_including_topology` (its `ok` is unchanged).
 
 ## Open / adjacent
@@ -273,3 +302,13 @@ channels disagreeing because of the mode instability, not real ambiguity. Switch
   `atomistic_validation.py:166`. Pre-existing, unrelated.
 - The oxDNA seed (`_resolve_extra_base_geometry`, straight chord lerp) has **not** been measured
   for catenation yet; unifying both engines on one placer is still open.
+- **The pierced runs have not been re-run.** `2hb_2xT` (job `c8c4a87e2033`) needs rebuilding and
+  relaxing from scratch — it has one reciprocal pair and that pair was the pierced one, so no
+  junction observable from it is usable. `24hb_2xT` (`336a067ba241`, 51 piercings) is the source
+  of `extra_base_co`.
+- **The `n_ring_pierced_after` in the ladder summary is a scoped, per-pair count** taken at the
+  winning rung, not a whole-model measurement — a pair cleared as a side effect of repairing its
+  neighbour can read high. The manifest's `topology_check` is the authority.
+- **`PierceScope` covers the reciprocal pair's neighbourhood, not the whole model.** A piercing
+  between two crossovers that are not a registered reciprocal pair would be caught by the gate
+  (build refused) but has no repair lever. Not observed on any design screened.

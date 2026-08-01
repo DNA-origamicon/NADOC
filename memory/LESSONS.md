@@ -243,5 +243,14 @@ Symptom the user reported: "can't delete the chain-simulator's completed oxDNA j
   L-BFGS-B joint solve, whose repulsion term only sees a static snapshot that never contains the
   PARTNER crossover. Also: it is **helical-phase dependent**, so a fixture pinned to one bp proves
   nothing — sweep a full turn. [detail](LESSONS_archive.md#l11)
+- **L12** — 🧬 **A repair that optimises against one measured defect manufactured a different one
+  it cannot measure.** The catenation repair ladder unlinked a `2hb_2xT` reciprocal pair by
+  choosing a rung that built a phosphate bond **through a ribose ring** — invisible to Gauss `Lk`
+  (the connector polyline takes the C4'→C3' step, so the sugar ring is off-curve) and invisible to
+  the clash count (a bond through the ring centre keeps every ring atom 2.2–2.6 Å away, so the
+  pierced rung scored as an *improvement*, 34 → 17). Permanent, like a linking number: minimisation
+  could only stretch the impaled bond 1.60 → 3.08 Å, and it stayed 2.98 Å through the whole run —
+  just under the 3.0 Å stretch threshold, on a path that never calls `audit_bonds`. 2xT-specific and
+  the repair *multiplied* it (24hb_2xT 51 → 131). [detail](LESSONS_archive.md#l12)
 
 > **Detail.** Full entries live in [LESSONS_archive.md](LESSONS_archive.md). Open only the entry that matches your symptom.

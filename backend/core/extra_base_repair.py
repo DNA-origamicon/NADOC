@@ -63,6 +63,8 @@ from typing import Callable
 
 import numpy as _np
 
+from backend.core.ring_piercing import PierceScope as _PierceScope
+
 # A repair attempt is (spin_a, spin_b, delta_cap_a, delta_cap_b).
 #
 # PRIMARY = spin re-seeding.  Each insert's spin DOF is about ``target_c1n``, the very
@@ -340,23 +342,42 @@ def repair_catenated_pairs(
     """
     live = [(a, b) for a, b in pairs if a in records and b in records]
     if not live:
-        return {"n_pairs": 0, "n_repaired": 0, "n_unrepaired": 0, "repairs": []}
+        return {"n_pairs": 0, "n_repaired": 0, "n_unrepaired": 0,
+                "n_ring_pierced_after": 0, "repairs": []}
 
     repairs: list[dict] = []
     unrepaired: list[dict] = []
+    scopes: dict[tuple, "_PierceScope"] = {}
+    all_pos = _np.array([[a.x, a.y, a.z] for a in atoms], dtype=float)
+
+    def _scope(a, b):
+        """Ring-piercing scope for one pair, indexed once and reused every rung."""
+        if (a, b) not in scopes:
+            scopes[(a, b)] = _PierceScope(
+                atoms, _moved_serials(records[a]) | _moved_serials(records[b]),
+                all_pos=all_pos)
+        return scopes[(a, b)]
 
     for _pass in range(_MAX_PASSES):
-        linked = []
+        defective = []
         for a, b in live:
             lk = pair_linking_number(atoms, records[a], records[b])
-            if abs(lk) >= _LK_LINKED:
-                linked.append((a, b, lk))
-        if not linked:
+            # Two independent permanent defects, one ladder.  A linking number is what
+            # this pass was built for; a bond threaded through a ring is just as
+            # unrecoverable (MD only trades it for a stretched bond — measured 1.60 ->
+            # 3.08 A on 2hb_2xT job c8c4a87e2033) and the Lk measure cannot see it,
+            # because the connector polyline takes the C4'->C3' step and the sugar ring
+            # closes through the other side.  See backend/core/ring_piercing.py.
+            n_pierce = _scope(a, b).count(atoms)
+            if abs(lk) >= _LK_LINKED or n_pierce:
+                defective.append((a, b, lk, n_pierce))
+        if not defective:
             break
 
         progressed = False
-        for a, b, lk0 in linked:
+        for a, b, lk0, pierce0 in defective:
             rec_a, rec_b = records[a], records[b]
+            scope = _scope(a, b)
             # Unlinking is necessary but not sufficient: a rung can trade the link for a
             # steric clash (measured: 2hb_2xT went 6 -> 13 clashes when the first
             # unlinking rung was taken blindly). So score every unlinking rung by how far
@@ -393,19 +414,26 @@ def repair_catenated_pairs(
                 gap = _min_separation(atoms, rec_a, rec_b)
                 penalty = (_geometry_penalty(geo_a, base_geo_a)
                            + _geometry_penalty(geo_b, base_geo_b))
-                # Rank: sound linker geometry, then fewest clashes into the surrounding
-                # structure, then attempt order (determinism).
-                score = (penalty, surroundings.clash_count(atoms, scored), n_try)
+                # Rank: unthreaded rings FIRST, then sound linker geometry, then fewest
+                # clashes, then attempt order (determinism).  Piercing outranks the
+                # geometry penalty because strain relaxes out in minimisation and a
+                # threaded ring never does — the same argument that puts the linking
+                # number above both.  It is ranked rather than excluded for the same
+                # reason the geometry penalty is: if every rung pierces, shipping the
+                # least-bad one and letting the build gate refuse it beats silently
+                # leaving the pair catenated.
+                pierced = scope.count(atoms)
+                score = (pierced, penalty, surroundings.clash_count(atoms, scored), n_try)
                 if best_score is None or score < best_score:
                     best_score, best_gap, fixed = score, gap, attempt
-                if penalty == 0:
+                if penalty == 0 and pierced == 0:
                     if first_good is None:
                         first_good = n_try
                     # Stop once the pair is sound and clash-neutral, or after a short
                     # look-ahead past the first sound solution.  Exhausting all attempts
                     # chasing a marginally better clash count costs an L-BFGS-B solve
                     # each and dominates build time on crowded designs.
-                    if score[1] <= baseline_clashes or n_try - first_good >= _LOOK_AHEAD:
+                    if score[2] <= baseline_clashes or n_try - first_good >= _LOOK_AHEAD:
                         break
             if fixed is not None:
                 # Re-apply the winner (the loop may have moved on to a worse attempt).
@@ -415,7 +443,8 @@ def repair_catenated_pairs(
                                bridge_fn, minimisers, arc=fixed["arc"][1])
             if fixed is None:
                 # Leave the pair at the last ladder rung; the build gate refuses it.
-                unrepaired.append({"crossover_ids": [a, b], "lk": round(lk0, 3)})
+                unrepaired.append({"crossover_ids": [a, b], "lk": round(lk0, 3),
+                                   "ring_piercings": pierce0})
             else:
                 progressed = True
                 repairs.append({
@@ -424,19 +453,31 @@ def repair_catenated_pairs(
                     "spin": [round(v, 4) for v in fixed["spin"]],
                     "delta_cap": [str(v) for v in fixed["delta"]],
                     "arc": list(fixed["arc"]),
-                    "attempts": (best_score[2] + 1) if best_score else None,
-                    "geometry_penalty": (best_score[0] if best_score else None),
+                    "attempts": (best_score[3] + 1) if best_score else None,
+                    "geometry_penalty": (best_score[1] if best_score else None),
                     "separation_nm": round(best_gap, 4),
-                    "clashes": (best_score[1] if best_score else None),
+                    "clashes": (best_score[2] if best_score else None),
                     "clashes_before": baseline_clashes,
+                    "ring_piercings": (best_score[0] if best_score else None),
+                    "ring_piercings_before": pierce0,
                 })
         if not progressed:
             break
 
+    # A pair can be repaired in more than one pass (fixing its neighbour can disturb it),
+    # so the piercing total counts only the LAST outcome per pair — summing every pass
+    # would report defects that a later pass already replaced.  It is still a per-pair
+    # SCOPED count taken at the winning rung, so a pair whose piercing was cleared as a
+    # side effect of repairing its neighbour can read high; the authoritative number is
+    # the whole-model one ``gate_seed_topology`` records in the manifest.
+    last: dict[tuple, dict] = {}
+    for r in repairs + unrepaired:
+        last[tuple(r["crossover_ids"])] = r
     return {
         "n_pairs": len(live),
         "n_repaired": len(repairs),
         "n_unrepaired": len(unrepaired),
+        "n_ring_pierced_after": sum(r.get("ring_piercings") or 0 for r in last.values()),
         "repairs": repairs[:50],
         "unrepaired": unrepaired[:50],
     }

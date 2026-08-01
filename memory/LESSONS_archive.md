@@ -1414,3 +1414,48 @@ what is deterministic by construction and put a tolerance on what a solver place
 regenerating any golden that "no code change explains", rule out BLAS kernel dispatch
 (`OPENBLAS_CORETYPE`) first — regenerating is what turns a one-machine bug into a permanent
 two-machine ping-pong. See [[#h15]] for the same amplification via a ULP-level speedup.
+
+---
+
+## L12
+
+### L12. A repair that optimises against ONE measured defect manufactured a different one it does not measure — a phosphate bond built through a ribose ring (2026-07-31, 2hb_2xT)
+
+Symptom: in the relaxed `2hb_2xT` display (job `c8c4a87e2033`), a phosphate bond visibly runs
+through the ribose ring of another extra crossover base.
+
+The catenation repair ladder ([[project_crossover_catenation]]) is a deterministic search: it
+re-seeds the extra-base solve until the pair's Gauss linking number comes out 0, ranking the
+unlinked rungs by linker geometry then by clash count. On this design the raw build was
+**catenated and unpierced**; the rung that unlinked it was **unpierced-of-catenation and
+pierced**. Measured on the exact shipped design.json:
+
+- raw build (repair OFF): 1 catenated pair, 0 ring piercings
+- shipped build (repair ON): 0 catenated, **1 ring piercing**
+- and rung 16 of the same ladder was unlinked, unpierced, with *fewer* clashes (11 vs 17) — the
+  early exit stopped at rung 12 because it was already sound and clash-improving.
+
+**Neither of the ladder's two acceptance measures can see a threaded ring, for structural
+reasons.** (a) The connector polyline walks `P, O5', C5', C4', C3', O3'` — the direct C4'→C3'
+step — so the sugar ring, which closes through C4'-O4'-C1'-C2'-C3', is entirely off-curve and
+threading it changes no linking number. (b) A sugar ring is ~4.6 Å across, so a bond through its
+centre leaves every ring atom 2.2–2.6 Å away — above the 0.30 nm clash threshold for part of the
+ring. In the ladder's own score the pierced rung looked like an *improvement*, 34 → 17 clashes.
+
+**Nothing downstream caught it either, and the reason is instructive:** the defect is permanent,
+so minimisation converted it into a *different* symptom instead of removing it — the impaled
+covalent bond was stretched 1.60 Å → 3.08 Å and stayed at 2.98 Å (~250 kcal/mol) through the
+whole 4 fs ladder, the longest heavy-atom bond in the DNA. That value sits just *under*
+`atomistic_validation.BACKBONE_STRETCH_NM` (3.0 Å), and `audit_bonds` is not wired into the NAMD
+path at all. Prevalence before the fix was overwhelmingly on 2-insert designs and the repair pass
+*multiplied* it: 24hb_2xT went 51 raw piercings → **131** repaired.
+
+**How to avoid:** when a search accepts on a measured criterion, enumerate what the criterion is
+*blind* to before trusting its winner — a defect that a fix cannot see is a defect the fix is free
+to create. Two concrete rules from this one: (1) a topological measure defined on a *reduced*
+curve (here, backbone-only) says nothing about the parts of the molecule you reduced away — every
+ring you skipped is a hole something can be threaded through; (2) when a defect is permanent,
+downstream detectors will report its *consequence* (a strained bond, a stiff junction), not the
+defect, so the check has to live at build time. Fixed by `backend/core/ring_piercing.py` +
+a `(pierced, penalty, clashes, n_try)` rung score + a build gate; see
+[[project_crossover_catenation]] §2026-07-31.

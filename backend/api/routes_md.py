@@ -297,11 +297,14 @@ class CreateJobRequest(BaseModel):
     )
     allow_catenated_seed: bool = Field(
         False,
-        description="Build even when a reciprocal crossover pair's two backbones are "
-                    "topologically LINKED (Gauss Lk != 0) in the seed. Off by default: "
-                    "both chain ends are covalently pinned into the network, so the "
-                    "entanglement survives every relaxation stage and the trajectory "
-                    "measures an artefact. Recorded in manifest.json either way.",
+        description="Build even when the seed carries a permanent topological defect: a "
+                    "reciprocal crossover pair whose two backbones are LINKED (Gauss "
+                    "Lk != 0), or a covalent bond threaded through a nucleotide ring. "
+                    "Off by default: every chain end is covalently pinned into the "
+                    "network, so neither defect survives being relaxed away — the "
+                    "trajectory just measures an artefact (a threaded ring turns into a "
+                    "permanently 3 A phosphodiester bond). Recorded in manifest.json "
+                    "either way.",
     )
 
 

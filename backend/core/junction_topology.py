@@ -499,9 +499,28 @@ def gate_seed_topology(design, *, model=None, allow: bool = False) -> dict:
             "gate": "skipped_no_extra_bases",
             "ok": True,
             "n_catenated": 0,
+            "n_ring_pierced": 0,
             "override_requested": bool(allow),
         }
+    if model is None:                       # build once; both checks measure the same seed
+        from backend.core.atomistic import build_atomistic_model  # noqa: PLC0415
+        model = build_atomistic_model(design)
     report = assert_not_catenated(design, model=model, allow=allow)
+
+    # Second, independent topological defect: a covalent bond threaded through a sugar
+    # or base ring.  The connector polyline this module walks takes the C4'->C3' step,
+    # so a threaded ring changes no linking number and the check above cannot see it —
+    # they have to run together.  Measured on 2hb_2xT job c8c4a87e2033: catenation
+    # clean, one phosphodiester bond through a partner insert's ribose, which the
+    # relaxation could only convert into a permanently 3.08 A bond.
+    from backend.core.ring_piercing import assert_not_pierced  # noqa: PLC0415
+    pierce = assert_not_pierced(design, model=model, allow=allow)
+    report["n_ring_pierced"] = pierce["n_pierced"]
+    report["ring_pierced"] = pierce["pierced"][:20]
+    report["ring_piercing_schema"] = pierce["schema"]
+    report["ok"] = bool(report["ok"] and pierce["ok"])
+    report["override_used"] = bool(report.get("override_used") or pierce["override_used"])
+
     report["gate"] = "overridden" if report.get("override_used") else "passed"
     report["override_requested"] = bool(allow)
     return report

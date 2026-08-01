@@ -807,7 +807,8 @@ def _slow_area_for(module: str) -> str:
     # junction_winding is the same stack (it builds a model per phase sample to find the
     # wound/clean boundary), so it shares the group.
     if ("atomistic" in module or "pdb_export" in module
-            or "junction_topology" in module or "junction_winding" in module):
+            or "junction_topology" in module or "junction_winding" in module
+            or "ring_piercing" in module):
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"
