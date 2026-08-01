@@ -531,10 +531,49 @@ def _latest_display_segment(job: MdJob) -> tuple[Optional[str], Optional[Path]]:
     return None, None
 
 
+def _dcd_first_step(path: Path) -> float:
+    """The DCD's first-frame time — a header read, no coordinates.
+
+    Ordering continuation pieces by *mtime* or by *name* both break: an archived or
+    re-touched file reorders under mtime, and ``cont10`` sorts before ``cont2`` under
+    name. The trajectory's own clock is the only ordering that cannot lie.
+    """
+    try:
+        from MDAnalysis.coordinates.DCD import DCDReader  # noqa: PLC0415
+
+        with DCDReader(str(path)) as r:
+            return float(r[0].time)
+    except Exception:  # noqa: BLE001 - fall back to mtime rather than dropping the file
+        try:
+            return float(path.stat().st_mtime)
+        except OSError:
+            return 0.0
+
+
 def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
-    """Every segment that has written a DCD, in run order → (name, stage, dcd_path).
-    Picks each segment's newest trajectory file (mirrors _latest_display_segment's
-    per-segment preference for continuation DCDs)."""
+    """Every DCD a segment has written, in TIME order → (name, stage, dcd_path).
+
+    A resumed segment writes ``<seg>.cont1.dcd``, ``cont2``, … and each covers only the
+    steps AFTER its restart checkpoint — ``md_protocols`` re-emits the conf with
+    ``firsttimestep <restart_step>`` and only the remaining steps. They are therefore
+    **sequential pieces of one trajectory, not alternatives.**
+
+    This used to return ``max(dcds, key=mtime)`` — one file per segment — which silently
+    analysed only the tail of every resumed run. Measured on the 2hb_1xT run created
+    2026-07-30 15:26: the base DCD covers 0.10–104.30 ns and ``cont1`` covers
+    104.40–161.90 ns, so the newest-only rule saw 36% of the run and every consumer
+    (RMSF, metrics, the scrub view, the weld trace) inherited that.
+
+    One entry per DCD: the consumers all concatenate, and the extra label distinguishes
+    the pieces where a UI shows segment names.
+
+    OVERLAP: a piece whose first frame predates the previous piece's last frame
+    re-simulates ground already covered, which happens when ``restartfreq`` does not
+    divide ``dcdfreq`` (NADOC's own 5000/25000 always does, so the checkpoint never
+    lands behind the last written frame). It is logged rather than dropped — a few
+    double-counted frames skew an average slightly, where dropping a whole piece loses
+    real trajectory.
+    """
     package_dir = job.package_dir(_workspace())
     output_dir = package_dir / "output"
     out: list[tuple[str, str, Path]] = []
@@ -547,9 +586,18 @@ def _md_segment_dcds(job: MdJob) -> list[tuple[str, str, Path]]:
             )
             if d.exists() and d.stat().st_size > 0
         ]
-        if dcds:
-            out.append((seg.name, getattr(seg, "stage", "md") or "md",
-                        max(dcds, key=lambda d: d.stat().st_mtime)))
+        if not dcds:
+            continue
+        stage = getattr(seg, "stage", "md") or "md"
+        # Tiebreak matters: when two headers report the same start (a DCD whose header
+        # carries no start step, or an unreadable one) a bare time sort keeps the glob
+        # order, which lists cont* BEFORE the base. Sort the base first explicitly.
+        def _order(d, _seg=seg.name):
+            return (_dcd_first_step(d), 0 if d.name == f"{_seg}.dcd" else 1, d.name)
+
+        for i, dcd in enumerate(sorted(dict.fromkeys(dcds), key=_order)):
+            label = seg.name if i == 0 else f"{seg.name} ({dcd.stem.split('.')[-1]})"
+            out.append((label, stage, dcd))
     return out
 
 
