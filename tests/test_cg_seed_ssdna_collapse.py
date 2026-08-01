@@ -39,7 +39,6 @@ from backend.core.cg_to_atomistic import (
 from backend.core.constants import BDNA_RISE_PER_BP
 from backend.core.design_geometry import _geometry_for_design
 from backend.core.models import Direction, Domain, Helix, Strand, StrandType, Vec3
-from backend.core.oxdna_health import _ssdna_frame_override
 from backend.physics.oxdna_interface import oxdna_backbone_site, write_configuration
 
 # nm thresholds; the model is in nm.  0.03 nm = 0.3 Å = "near-coincident".

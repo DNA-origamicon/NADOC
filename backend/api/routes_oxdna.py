@@ -1888,8 +1888,7 @@ async def export_oxdna_trajectory(job_id: str, body: OxdnaExportTrajectoryBody) 
     shows is the range emitted. Heavy (one all-atom rebuild per frame) — progress streams to
     ``/export-progress``. ``format='oxdna'`` (oxView .top+.dat) is not wired yet.
     """
-    from backend.core.oxdna_health import (
-        composite_trajectory_atomistic, composite_trajectory_meta)
+    from backend.core.oxdna_health import composite_trajectory_meta
 
     if body.format not in ("pdb", "dcd", "oxdna"):
         raise HTTPException(400, f"Unknown export format {body.format!r}.")

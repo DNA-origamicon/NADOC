@@ -17,7 +17,7 @@ import pytest
 from backend.api import headless_build as hb
 from backend.api import state as design_state
 from backend.core.models import (
-    Design, LatticeType, StrandType, Direction, DeformationOp, BendParams,
+    Design, LatticeType, DeformationOp, BendParams,
 )
 from backend.core.design_geometry import _geometry_for_design
 from backend.core.atomistic import atomistic_stamp_descriptor

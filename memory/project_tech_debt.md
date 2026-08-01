@@ -62,8 +62,8 @@ outranks a stale comment; a stale comment outranks a program of work.
 
 | ID | Item | Band | Why here |
 |---|---|---|---|
-| ▶ TD-01 | `just lint` is RED (5 `F401`) | P0 | The gate is dead until it's green; a NEW lint error is invisible today. ~20 min. |
-| TD-02 | `STAPLE_PALETTE` index agreement + 2 stale sync comments | P0 | Colour assignment can still drift between panel and 3D after mutations → wrong hues in the **exported oligo order sheet**. |
+| ~~TD-01~~ | ~~`just lint` is RED (5 `F401`)~~ | — | **CLOSED 2026-07-31** — lint exits 0. 5 FIXED + 1 ACCEPTED (propagator per-file-ignore). Archived. |
+| ▶ TD-02 | `STAPLE_PALETTE` index agreement + 2 stale sync comments | P0 | Colour assignment can still drift between panel and 3D after mutations → wrong hues in the **exported oligo order sheet**. |
 | TD-03 | Cadnano-editor app stragglers | P0 | `unligatedCrossoverIds` undeclared (2nd reader crashes), `DEBUG = true` shipping to production console. Both cheap. |
 | TD-04 | Dead `POST /design/auto-scaffold` + orphaned matched-ends fns | P0 | 4 e2e specs 404 at runtime → that coverage is silently fake. |
 | TD-05 | Rendering stragglers | P0 | `refreshAllGlow` skips the 7th glow layer (live lag bug); a 4-test file pins a module that doesn't exist. |
@@ -86,6 +86,7 @@ outranks a stale comment; a stale comment outranks a program of work.
 | TD-22 | Rule coverage is 33% of production LOC | P3 | PROMOTE — 4 new rules, one per pass, not a debt fix. |
 | TD-23 | Duplex-foundation stragglers | P1 | Two `showChoice`s; 20 e2e specs hardcode an absolute path; `reassign_if_sequenced` is a zero-caller footgun with 3 lying docstrings. |
 | TD-24 | Photo-mode v1 stragglers | P2 | Orphaned fluorophore fn whose comment is the only record of *why* the clamp exists. |
+| TD-25 | `just lint`'s SCOPE hides 193 findings | P2 | Found closing TD-01. The gate is green but only lints `backend/ tests/`; `scripts/` + root are unlinted. |
 
 ## DECISIONS — one question each, the user's call
 
@@ -97,47 +98,66 @@ outcomes**; surface them in batches, don't block a pass on an answer.
 ## ACCEPTED — deliberate, do not re-report
 
 - **`backend/ml/propagator/` lint errors (6)** — shelved BLADE/atomistic-propagator code, dormant on
-  purpose (user decision 2026-07-31). If lint must be green, per-file-ignore the directory; never
-  edit the dormant code. See TD-01.
+  purpose (user decision 2026-07-31). **The per-file-ignore now exists**
+  (`pyproject.toml` → `[tool.ruff.lint.per-file-ignores]`, `"backend/ml/propagator/*.py" =
+  ["F401","F541","F841"]`, added 2026-07-31 closing TD-01) — so lint is green *and* the dormant code
+  is untouched. **Reviving that directory means deleting the ignore entry first**; the entry says so
+  in a comment. Never edit the dormant code to satisfy lint.
 - **`scene/joint_panel_experiments.js`** (456 ln) — a DevTools console harness for still-live
   `_computeExteriorPanels`. Unreferenced *by design*, like `src/debug_snippet.js`. See TD-19.
 
 ## Next-session handoff
 
-**▶ NEXT: TD-01** (`just lint` is RED). Cheapest item with the largest downstream effect: every other
-`/audit-debt` pass that touches Python wants a lint signal it can trust, and today there isn't one.
-Watch the trap already written into the entry — an unused import of a *private* helper
-(`_ssdna_frame_override`, `_strand_nucleotide_order`) may mean the test stopped exercising it, so
-check what each import was for before deleting it; that check is the actual work.
+**Pass 1 (2026-07-31) closed TD-01** — `just lint` now exits 0. 5 bullets FIXED (4 dead imports
+deleted) + 1 ACCEPTED (the `backend/ml/propagator/` per-file-ignore, so the dormant code stays
+untouched). All 11 anchors reproduced exactly — this entry was written from a real `ruff` run, not
+from prose, which is why nothing in it was stale. The flagged trap (private-helper imports hiding a
+coverage hole) was **probed and cleared**: both helpers are exercised through the production path and
+pinned directly in other tests. New debt logged as **TD-25** (the gate only lints `backend/ tests/`;
+193 findings sit outside it — do NOT widen the glob until TD-07/TD-03's script bullets land).
 
-No pass has run yet. The 24 items below are as `/audit-plan` left them on 2026-07-30/31 —
-**treat every anchor as unverified.**
+**▶ NEXT: TD-02** (`STAPLE_PALETTE` index agreement + 2 stale sync comments). Top of the remaining
+P0s and the only one whose failure reaches *outside the app* — a wrong hue in the **exported oligo
+order sheet** is a wet-lab artifact, not a display glitch.
+
+**The trap to expect in TD-02** is the inverse of TD-01's. TD-01's bullets came from a machine
+(`ruff`) and were all true; TD-02's came from reading, and its own text already shows one bullet was
+half-wrong when written (the "fourth copy" was FIXED 2026-07-30 mid-entry). Two bullets remain and
+they are **not the same kind of work**: the 2 stale sync-pointer comments (`pathview/palette.js:83-84`,
+`constants.py:324`) are prose-only and cheap; the **index-agreement** bullet is a real behavior
+change — making `ui/spreadsheet.js` consume the renderer's `buildStapleColorMap` instead of
+recomputing `strandIndex % 12`. That second one is frontend, so it needs `just test-frontend` **plus**
+an app exercise, and its claim ("can still drift apart after mutations") is asserted, **not
+reproduced** — reproduce the drift before rewiring, or it may be PROMOTE/ACCEPTED rather than FIXED.
+
+The 23 open items below are otherwise as `/audit-plan` left them on 2026-07-30/31 — **treat every
+anchor as unverified.**
 
 ---
 
 ## Open items
 
-### TD-01 — `just lint` is RED, so it cannot act as a gate — 5 dead-code errors to clear (found 2026-07-31, health-card audit)
+### TD-25 — `just lint` is now green, but it only lints `backend/ tests/` — 193 findings sit outside the gate (found 2026-07-31, closing TD-01)
 
-`just lint` exits 1 on `master` with 11 ruff errors, none of which are in actively-developed code.
-Because it is always red it is useless as a pre-commit signal — a NEW lint error is invisible.
-Getting it green is the point; the individual fixes are trivial.
+TD-01 got `just lint` to exit 0. It does **not** follow that the repo is lint-clean: the recipe is
+`uv run ruff check backend/ tests/` ([justfile:163](justfile#L163)), so everything else is invisible
+to the gate. `uv run ruff check .` reports **204 total** — 11 of which TD-01 just cleared, leaving
+**193 under `scripts/` and the repo root**, e.g. `scripts/test_gromacs_6hb_bend.py` (4× `F841`
+assigned-never-used locals — the class of finding that *is* usually a real bug), `test_gromacs_health.py`
+(repo root, `F401` numpy + `F541`), `scripts/validate_domain_axis_rotation.py`,
+`scripts/verify_blunt_ends_scaffold_delete.py`, `scripts/snupi_visual_compare.py`.
 
-**Fix these 5 (all `F401`, all auto-fixable with `ruff --fix`):**
-- `backend/api/routes_oxdna.py:1892` — `oxdna_health.composite_trajectory_atomistic`
-- `tests/test_atomistic_display_split.py:20` — `models.StrandType`, `models.Direction` (×2)
-- `tests/test_cg_seed_ssdna_collapse.py:42` — `oxdna_health._ssdna_frame_override`
-- `tests/test_oxdna_surface_strands.py:278` — `oxdna_interface._strand_nucleotide_order`
+**Why it's debt, and why it is NOT simply "widen the recipe":** several of these scripts are already
+known-unrunnable for unrelated reasons (TD-07's `auto_scaffold(mode=…)` ImportErrors, TD-03's
+`LatticeType.FREE` constructions in `experiments/`), so widening the glob today would re-RED the gate
+that TD-01 just made trustworthy — the exact failure mode TD-01 existed to fix. The `F841`s are worth
+a read on their own (an assigned-never-used result usually means a check was silently dropped).
 
-Check each test import first: an unused import of a private helper (`_ssdna_frame_override`,
-`_strand_nucleotide_order`) can mean the test was meant to exercise it and no longer does. Deleting
-the import may be hiding a coverage hole rather than closing a debt.
-
-**Do NOT fix the other 6** — user decision 2026-07-31: `backend/ml/propagator/` is the shelved
-BLADE / atomistic-propagator work (see [[atomistic-propagator]], ~60× too slow), left dormant on
-purpose. 3× `F541` f-string-without-placeholder in `scaling.py:248,249,268`, 2× `F401` in
-`systems.py:36,42`, 1× `F841` unused local `n` in `windows.py:132`. If lint must go green while
-that code stays shelved, per-file-ignore the directory rather than editing dormant code.
+**Options (pick one, don't drift):** (a) widen to `ruff check .` only *after* TD-07 + TD-03's script
+bullets land, (b) add a separate non-gating `just lint-all` now so the findings are at least visible,
+or (c) accept `backend/ tests/` as the deliberate gate scope and record that decision here so no
+future sweep re-finds it. Note the scope is **not** documented anywhere today — that absence is what
+made this a surprise.
 
 ### TD-21 — DELETE-ON-COMPLETION: legacy OverhangSpec pose overlay + standalone orientation panel (superseded by the duplex CLUSTER)
 - **Where / delete when [[overhang-duplex-cluster]] ships end-to-end:**

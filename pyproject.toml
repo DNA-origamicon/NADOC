@@ -83,6 +83,12 @@ ignore = [
 "backend/core/atomistic_to_nadoc.py" = ["F821"]
 "backend/parameterization/validation_stub.py" = ["F821"]
 
+# Shelved BLADE / atomistic-propagator work — dormant ON PURPOSE (user decision
+# 2026-07-31; see memory/project_tech_debt.md ACCEPTED + project_atomistic_propagator.md).
+# Ignored rather than edited so `just lint` can be a real gate while the code sleeps.
+# If this directory is ever revived, DELETE this entry first and clear the findings.
+"backend/ml/propagator/*.py" = ["F401", "F541", "F841"]
+
 [dependency-groups]
 dev = [
     "pytest-cov>=7.1.0",

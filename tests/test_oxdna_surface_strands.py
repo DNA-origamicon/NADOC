@@ -275,7 +275,6 @@ def test_headless_setup_build_validate():
     from backend.core.oxdna_protocol import build_relaxation_stages
     from backend.core.oxdna_runner import prepare_oxdna_job
     from backend.api.crud import _geometry_for_design
-    from backend.physics.oxdna_interface import _strand_nucleotide_order
     from tests.conftest import make_6hb_design
 
     design = make_6hb_design()
