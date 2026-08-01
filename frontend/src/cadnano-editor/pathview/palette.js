@@ -5,8 +5,8 @@
  *
  * Values are verbatim copies — do NOT change any colour without coordinated
  * updates to backend/core/constants.py STAPLE_PALETTE and
- * frontend/src/scene/helix_renderer.js STAPLE_PALETTE (canonical palette
- * must match across all three).
+ * frontend/src/scene/helix_renderer/palette.js STAPLE_PALETTE. That
+ * constants.py comment lists every copy of the palette in the repo.
  */
 
 // ── Modification dot colours ─────────────────────────────────────────────────
@@ -81,7 +81,9 @@ export const CLR_CELL_GRID  = '#c4cdd5'                    // minor column separ
 
 // ── Canonical staple palette ─────────────────────────────────────────────────
 // Must match backend/core/constants.py STAPLE_PALETTE and
-// frontend/src/scene/helix_renderer.js STAPLE_PALETTE exactly.
+// frontend/src/scene/helix_renderer/palette.js STAPLE_PALETTE exactly.
+// (NOT helix_renderer.js — that file only imports it. The full list of copies
+//  lives in the comment above STAPLE_PALETTE in backend/core/constants.py.)
 export const STAPLE_PALETTE = [
   '#ff6b6b', '#ffd93d', '#6bcb77', '#f9844a',
   '#a29bfe', '#ff9ff3', '#00cec9', '#e17055',

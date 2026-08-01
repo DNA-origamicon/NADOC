@@ -63,8 +63,8 @@ outranks a stale comment; a stale comment outranks a program of work.
 | ID | Item | Band | Why here |
 |---|---|---|---|
 | ~~TD-01~~ | ~~`just lint` is RED (5 `F401`)~~ | — | **CLOSED 2026-07-31** — lint exits 0. 5 FIXED + 1 ACCEPTED (propagator per-file-ignore). Archived. |
-| ▶ TD-02 | `STAPLE_PALETTE` index agreement + 2 stale sync comments | P0 | Colour assignment can still drift between panel and 3D after mutations → wrong hues in the **exported oligo order sheet**. |
-| TD-03 | Cadnano-editor app stragglers | P0 | `unligatedCrossoverIds` undeclared (2nd reader crashes), `DEBUG = true` shipping to production console. Both cheap. |
+| ~~TD-02~~ | ~~`STAPLE_PALETTE` index agreement + 2 stale sync comments~~ | — | **CLOSED 2026-07-31** — 1 STALE / 4 FIXED / 1 DECIDE (DEC-01). Found + fixed a bug the entry didn't know about: the backend .xlsx export was still on the retired palette. Archived. |
+| ▶ TD-03 | Cadnano-editor app stragglers | P0 | `unligatedCrossoverIds` undeclared (2nd reader crashes), `DEBUG = true` shipping to production console. Both cheap. |
 | TD-04 | Dead `POST /design/auto-scaffold` + orphaned matched-ends fns | P0 | 4 e2e specs 404 at runtime → that coverage is silently fake. |
 | TD-05 | Rendering stragglers | P0 | `refreshAllGlow` skips the 7th glow layer (live lag bug); a 4-test file pins a module that doesn't exist. |
 | TD-06 | Cross-cutting sweeps (see its section) | P0 | Three separate audits each re-found the same rot (`docs/triage/` fiction, `, null)` init args, phantom `MAP_*.md`). Resolve once, strike in all sections. |
@@ -93,7 +93,17 @@ outranks a stale comment; a stale comment outranks a program of work.
 Park a bullet here when the call is genuinely the user's. Keep it to **one question + the two
 outcomes**; surface them in batches, don't block a pass on an answer.
 
-*(empty — the loop seeds this)*
+- **DEC-01 (from TD-02, 2026-07-31) — should the two frontend palette *lookalikes* be unified with
+  `STAPLE_PALETTE`, or stay independent?** `scene/color_util.js` `ATOM_STAPLE_PALETTE` (byte-identical
+  ints, indexed by **cluster** for atomistic/surface colouring) and `scene/selection_manager.js`
+  `PICKER_COLORS` (same 12 with `{hex, css, label}` names, the user colour picker) are *values*-
+  identical to the canonical staple palette but *semantically* different indexings.
+  **(a) Unify** — both import `STAPLE_PALETTE`; two fewer copies to drift, but a future staple-palette
+  tweak silently repaints the atomistic view and renames the picker swatches.
+  **(b) Keep separate** — they stay free to diverge on purpose; the cost is the cross-reference
+  comments added 2026-07-31, which future sweeps must trust.
+  *(No code change either way is risky — the values already match. This is purely "should they be
+  allowed to diverge later".)*
 
 ## ACCEPTED — deliberate, do not re-report
 
@@ -108,30 +118,37 @@ outcomes**; surface them in batches, don't block a pass on an answer.
 
 ## Next-session handoff
 
-**Pass 1 (2026-07-31) closed TD-01** — `just lint` now exits 0. 5 bullets FIXED (4 dead imports
-deleted) + 1 ACCEPTED (the `backend/ml/propagator/` per-file-ignore, so the dormant code stays
-untouched). All 11 anchors reproduced exactly — this entry was written from a real `ruff` run, not
-from prose, which is why nothing in it was stale. The flagged trap (private-helper imports hiding a
-coverage hole) was **probed and cleared**: both helpers are exercised through the production path and
-pinned directly in other tests. New debt logged as **TD-25** (the gate only lints `backend/ tests/`;
-193 findings sit outside it — do NOT widen the glob until TD-07/TD-03's script bullets land).
+**Pass 2 (2026-07-31) closed TD-02** — **1 STALE / 4 FIXED / 1 DECIDE.** The flagged trap held: this
+entry came from reading, and its bullets were wrong in *both* directions. The "three-way invariant" is
+five-way (4 more definitions, all in agreement). Two of the stale sync comments the entry named were
+real, one was already fixed, and **two more it never found** (`pathview/palette.js:6-9`,
+`surface.py:44`). The index-agreement claim was **under**-stated, not over-stated — the spreadsheet
+had *three* different indexings across its own call sites, so the row swatch, the colour sort key and
+the exported .xlsx could disagree before any mutation. Drift reproduced in vitest, then fixed by
+threading `buildStapleColorMap`'s pinned map through the file.
 
-**▶ NEXT: TD-02** (`STAPLE_PALETTE` index agreement + 2 stale sync comments). Top of the remaining
-P0s and the only one whose failure reaches *outside the app* — a wrong hue in the **exported oligo
-order sheet** is a wet-lab artifact, not a display glitch.
+**The find that mattered was not in the entry at all:** `routes_sequences.py` still hard-coded the
+retired editor-syntax palette for the server-side .xlsx, so every **headless** oligo-order sheet came
+out in colours that match nothing in the app. The 2026-07-30 pass fixed the frontend copy and never
+grepped for the *rejected* values. Generalise that: when a pass declares a canonical constant, grep
+for the values it just rejected, not only for the name it just blessed.
 
-**The trap to expect in TD-02** is the inverse of TD-01's. TD-01's bullets came from a machine
-(`ruff`) and were all true; TD-02's came from reading, and its own text already shows one bullet was
-half-wrong when written (the "fourth copy" was FIXED 2026-07-30 mid-entry). Two bullets remain and
-they are **not the same kind of work**: the 2 stale sync-pointer comments (`pathview/palette.js:83-84`,
-`constants.py:324`) are prose-only and cheap; the **index-agreement** bullet is a real behavior
-change — making `ui/spreadsheet.js` consume the renderer's `buildStapleColorMap` instead of
-recomputing `strandIndex % 12`. That second one is frontend, so it needs `just test-frontend` **plus**
-an app exercise, and its claim ("can still drift apart after mutations") is asserted, **not
-reproduced** — reproduce the drift before rewiring, or it may be PROMOTE/ACCEPTED rather than FIXED.
+**▶ NEXT: TD-03** (cadnano-editor app stragglers). Now the top P0. Cheapest real fix in the queue —
+`unligatedCrossoverIds` is written to the editor store but missing from `_initialState`, so the one
+existing reader survives only by defending with `?? []` and the next one crashes; and
+`overhang_pathview.js:61` ships `const DEBUG = true`, logging to the production console.
 
-The 23 open items below are otherwise as `/audit-plan` left them on 2026-07-30/31 — **treat every
-anchor as unverified.**
+**The trap to expect in TD-03:** its bullets are a *mixed bag with one landmine*. Most are one-liners
+(store key, `DEBUG`, a lowercase-key fallback, a duplicated `slice(3)`), but the same section carries
+**three `experiments/exp0*/run.py` files that construct a deleted `LatticeType.FREE`** — those are
+"fix to HC/SQ **or delete**", i.e. an unrunnable-script judgement call that belongs in DECISIONS, not
+a silent rewrite. It also overlaps TD-25 (widening `just lint` waits on exactly those scripts) and
+TD-14 (the `overhang_pathview.js` reverse-coupling bullet is the *same file* as the `DEBUG` one — fix
+both while you are in it, and strike the TD-14 line too). Editor changes are frontend: `just
+test-frontend` **plus** an app exercise, and the editor is a separate page (`/cadnano-editor.html`).
+
+The 22 open items below are otherwise as `/audit-plan` left them on 2026-07-30/31 — **treat every
+anchor as unverified.** Two passes in, the hit rate on prose-written anchors is roughly half.
 
 ---
 
@@ -300,38 +317,6 @@ a live trap for the next reader:
   `cadnano-editor/pathview/palette.js`. So editing the *editor's* layout constants or palette silently
   moves the main app's Domain Designer — and pulling 4 numbers out of `pathview.js` drags the whole
   4977-LOC module graph into the main-app bundle.
-
-### TD-02 — `STAPLE_PALETTE` — 3 copies that agree, 1 that doesn't, and 3 comments pointing at the wrong files (found 2026-07-30, `/audit-plan`)
-- **Agreeing three-way invariant** (same 12 colours, same order today): `backend/core/constants.py:325-329`
-  (`'#rrggbb'`) · `frontend/src/cadnano-editor/pathview/palette.js:85-89` (`'#rrggbb'`) ·
-  `frontend/src/scene/helix_renderer/palette.js:23-26` (`0xrrggbb` ints).
-- **Every one of the three "keep in sync with…" comments names a file that no longer holds the constant**
-  (`palette.js:83-84`, `constants.py:324`, `helix_renderer/palette.js:21-22` — the last points at
-  `cadnano-editor/pathview.js`, stale since the extraction to `pathview/palette.js`).
-  `scene/helix_renderer.js` only *imports* `STAPLE_PALETTE` (`:33`, used `:2719/2848/2907`) — it has
-  not defined it for some time, yet two docs and one code comment still say it does.
-- ~~**A fourth copy that is NOT in sync:** `frontend/src/ui/spreadsheet.js:54-60`~~ — **FIXED 2026-07-30.**
-  It declared a module-private `STAPLE_PALETTE` with **completely different colours**
-  (`#e06c75 #98c379 #d19a66 #61afef …` — an editor syntax theme) under the false comment
-  `// Staple palette (mirrors helix_renderer.js)`. Because `paletteColor` is the last-resort fallback in
-  `effectiveColor`, every staple arriving with `color === null` (the normal case — **Full Autostaple
-  stamps no colour**; only `POST /design/strands` and `_build_nick` do) was painted one hue in the panel
-  and another in 3D (index 1 green vs yellow, index 3 blue vs orange) — and via `getStapleColorOrder` →
-  `exportSequenceXlsx`, the wrong hues reached the **exported oligo order sheet**. Now imports the
-  canonical `STAPLE_PALETTE` from `scene/helix_renderer/palette.js` and formats int→`'#rrggbb'`.
-  Pinned by 3 tests in `ui/spreadsheet.test.js` ("Staple colour fallback uses the canonical shared
-  palette"). The sync-pointer comment in `helix_renderer/palette.js` was corrected at the same time.
-  (`scene/color_util.js:35 ATOM_STAPLE_PALETTE` is a separate, intentionally different atomistic palette.)
-- **STILL OPEN — the two remaining stale sync-pointer comments** (`pathview/palette.js:83-84`,
-  `constants.py:324`) still name files that no longer hold the constant.
-- **STILL OPEN — index agreement, not just palette agreement.** The 3D view does **not** use a plain
-  `strandIndex % 12`: `buildStapleColorMap` (`scene/helix_renderer/palette.js:172`) **pins** colours per
-  strand id at first encounter and takes the slot from a **union-find root** over crossover-joined
-  staples (`:186-200`), so it survives mutations and groups topology-connected oligos. `ui/spreadsheet.js`
-  recomputes from the raw array index. They now agree on the *palette* and on a freshly-loaded design
-  with no crossover unions, but can still drift apart after mutations. **Real fix** = have the spreadsheet
-  consume the renderer's `buildStapleColorMap` (it already receives `designRenderer`) instead of
-  recomputing — one source of truth for the assignment, not just for the colour list.
 
 ### TD-03 — Cadnano-editor app stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Small, each a live trap; all documented in `.claude/rules/cadnano-editor.md`.
@@ -828,8 +813,10 @@ per-section is how it got re-discovered three times.
   a reader must trace. One sweep of the `init*` call sites, not three notes.
   (Named in TD-14, TD-09, TD-16.)
 - **"Keep in sync with X" comments naming a file that no longer holds the constant.** Confirmed:
-  `cadnano-editor/pathview/palette.js:83-84` and `backend/core/constants.py:324` (both still point
-  at files that shed `STAPLE_PALETTE`), and `photo_renderer/material_presets.js` citing
+  ~~`cadnano-editor/pathview/palette.js:83-84` and `backend/core/constants.py:324`~~ — **FIXED
+  2026-07-31 (TD-02)**, along with two more the sweep missed (`pathview/palette.js:6-9`,
+  `surface.py:44`); the palette copy list now lives in one place. Still open:
+  `photo_renderer/material_presets.js` citing
   `_FLUORO_LIGHT_GAIN in photo_renderer.js` (no live file of that name). Sweep for the pattern —
   a stale sync pointer is worse than no pointer, because it *stops* the reader looking further.
   (Named in TD-02, TD-24.)

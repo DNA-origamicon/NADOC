@@ -286,19 +286,25 @@ main-app bundle. Note also `:60-63` re-declares `RULER_H/LABEL_R/TOP_PAD` **loca
 `LABEL_R`/`TOP_PAD` deliberately *different* from pathview's 16/18 — the "mirrors cadnano-editor"
 comment there is only partly true.
 
-`STAPLE_PALETTE` is a **three-way** invariant — all three agree today (same 12 colours, same order):
+`STAPLE_PALETTE` is a **five-way** invariant, not three (all agree today — same 12 colours, same order):
 
 | Copy | Where | Form |
 |---|---|---|
-| backend | `backend/core/constants.py:325-329` | `'#rrggbb'` |
+| **3D (canonical)** | `scene/helix_renderer/palette.js:28` | `0xrrggbb` |
+| backend | `backend/core/constants.py` | `'#rrggbb'` |
+| backend surface | `backend/core/surface.py` `_STAPLE_PALETTE_HEX` | `0xRRGGBB` |
 | editor | `cadnano-editor/pathview/palette.js:85-89` | `'#rrggbb'` |
-| 3D | `scene/helix_renderer/palette.js:23-26` | `0xrrggbb` |
+| atomistic / picker | `scene/color_util.js` `ATOM_STAPLE_PALETTE`, `scene/selection_manager.js` `PICKER_COLORS` | `0xrrggbb` / `{hex,css,label}` |
 
-⚠️ Two of the three sync-pointer comments (`pathview/palette.js:83-84`, `constants.py:324`) still
-name files that **no longer hold the constant** — `scene/helix_renderer.js` only *imports* it (:33).
-A fourth, **divergent** copy in `ui/spreadsheet.js` (an editor syntax theme, wrong hues in the strand
-panel and the exported .xlsx) was **removed 2026-07-30**; that file now imports the canonical palette.
-**Frontend code must import `STAPLE_PALETTE`, never re-declare it.** See `memory/project_tech_debt.md`.
+The sync-pointer comments all named `scene/helix_renderer.js`, which has only *imported* the constant
+(:33) since the palette module was extracted — **corrected 2026-07-31** (TD-02); the full copy list now
+lives in one place, the comment above `STAPLE_PALETTE` in `backend/core/constants.py`.
+**Frontend code must import `STAPLE_PALETTE`, never re-declare it.**
+
+⚠️ Matching the palette *list* is only half of it — **the ASSIGNMENT must match too.** 3D pins a slot
+per `strand.id` for the life of the design (`buildStapleColorMap`), exactly as this editor's
+`ensureStapleColors` does; `ui/spreadsheet.js` re-derived `index % 12` and drifted after every
+mutation until 2026-07-31. See `memory/project_tech_debt.md` TD-02.
 
 ## Hotkeys
 

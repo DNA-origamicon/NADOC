@@ -160,8 +160,15 @@ Two different scales, often confused:
 - Palette fallback is *not* in that function — applied downstream (`:695-696` `?? palette.get(sid)`,
   and inside `palette.js::nucColor` :230).
 - `STAPLE_PALETTE` here is the canonical copy, `scene/helix_renderer/palette.js:28`
-  (imported `helix_renderer.js:33`). Three other divergent copies exist repo-wide — see
-  `project_tech_debt`. `design_renderer.js` imports only `buildStapleColorMap`.
+  (imported `helix_renderer.js:33`). **Four other copies exist repo-wide and all AGREE**
+  (`constants.py`, `surface.py`, `cadnano-editor/pathview/palette.js`,
+  `color_util.js`+`selection_manager.js`) — verified 2026-07-31; the list is kept in the
+  `constants.py` comment. `design_renderer.js` imports only `buildStapleColorMap`.
+- **`buildStapleColorMap` is the palette ASSIGNMENT, and it is shared state.** It pins a slot per
+  `strand.id` in a module-level `_pinnedByDesign` map, so a mutation that reshuffles `design.strands`
+  does not recolour untouched staples. **Any consumer that wants to agree with 3D must call it, not
+  re-derive `index % 12`** — `ui/spreadsheet.js` did the latter until 2026-07-31 (TD-02) and its
+  row swatches, colour sort key and exported .xlsx each used a different index.
 - `setEntryColor(entry, hex)` — `design_renderer:808` → `_setInstColor` (`helix_renderer:192`).
   Main callers are `selection_manager.js` (12 sites), `ui/view_tool_buttons.js`,
   `scene/slice_highlighter.js`.

@@ -17,7 +17,7 @@
 import * as api from '../api/client.js'
 import { pushGroupUndo } from '../state/store.js'
 import { showToast } from './toast.js'
-import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
+import { STAPLE_PALETTE, buildStapleColorMap } from '../scene/helix_renderer/palette.js'
 
 // ── Column definitions ────────────────────────────────────────────────────
 
@@ -64,6 +64,33 @@ function paletteColor(strandIndex) {
   return '#' + rgb.toString(16).padStart(6, '0')
 }
 
+// ── Palette ASSIGNMENT, not just the palette list ─────────────────────────────
+// Matching STAPLE_PALETTE was only half the fix. The 3D view does not colour by
+// array index: `buildStapleColorMap` PINS a slot per strand.id for the life of the
+// design (see its comment), so an edit that reshuffles `design.strands` — a nick, a
+// forced-ligation delete that appends fragments — leaves untouched staples on their
+// colour. This file re-derived `strandIndex % 12` at three call sites using THREE
+// DIFFERENT indexings (staples-only array position, `design.strands` position, and
+// sorted-row position), so the row swatch, the colour sort key and the exported
+// .xlsx could each show a different hue for the same staple, and all three drifted
+// from 3D after any mutation. Now every fallback reads the renderer's pinned map.
+//
+// Cached on design + geometry REFERENCE identity: `buildStapleColorMap`'s union-find
+// does a `strands.findIndex` per crossover, so it must not run on every re-render.
+let _pinDesignRef = null
+let _pinGeoRef    = null
+let _pinMap       = new Map()
+function stapleColorPins(state) {
+  const design = state?.currentDesign  ?? null
+  const geo    = state?.currentGeometry ?? null
+  if (design !== _pinDesignRef || geo !== _pinGeoRef) {
+    _pinDesignRef = design
+    _pinGeoRef    = geo
+    _pinMap = (design && geo) ? buildStapleColorMap(geo, design) : new Map()
+  }
+  return _pinMap
+}
+
 /** Format a strand endpoint as "label[bp]" using the 5' or 3' terminal domain. */
 function strandEndpoint(strand, end, helixIndex) {
   if (!strand.domains?.length) return '—'
@@ -99,7 +126,7 @@ function terminalOverhang(strand, design, which) {
   return (design.overhangs ?? []).find(o => o.id === domain.overhang_id) ?? null
 }
 
-function effectiveColor(strand, strandIndex, strandColors, strandGroups) {
+function effectiveColor(strand, strandIndex, strandColors, strandGroups, pins) {
   for (const group of strandGroups ?? []) {
     if (group.color && group.strandIds.includes(strand.id)) return group.color
   }
@@ -108,6 +135,10 @@ function effectiveColor(strand, strandIndex, strandColors, strandGroups) {
   if (strand.strand_type === 'scaffold') return '#0070bb'
   if (strand.color) return strand.color
   if (strand.strand_type === 'oh_binder') return '#c050d0'
+  // Renderer's pinned assignment first; the raw index is the last resort (a staple
+  // with no geometry yet, or a caller with no store state to hand).
+  const pinned = pins?.get(strand.id)
+  if (pinned != null) return '#' + pinned.toString(16).padStart(6, '0')
   return paletteColor(strandIndex)
 }
 
@@ -256,7 +287,7 @@ function _strandDisplaySequence(strand, design) {
   return result || null
 }
 
-function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SORT_ORDER) {
+function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_SORT_ORDER, pins = null) {
   const strands  = design?.strands ?? []
   const scaffold = strands.filter(s => s.strand_type === 'scaffold')
   const staples  = strands.filter(s => s.strand_type !== 'scaffold')
@@ -270,10 +301,11 @@ function sortedStrands(design, strandColors, strandGroups, sortOrder = DEFAULT_S
       groupOrderById.set(sid, ord)
     }
   })
-  // Pre-compute meta using the original array index (stable palette assignment).
+  // Palette assignment comes from `pins` (the renderer's per-strand-id map); the
+  // array index is only the no-geometry fallback.
   const withMeta = staples.map((s, idx) => ({
     strand:     s,
-    color:      effectiveColor(s, idx, strandColors ?? {}, strandGroups ?? []),
+    color:      effectiveColor(s, idx, strandColors ?? {}, strandGroups ?? [], pins),
     length:     strandLength(s, design),
     groupOrder: groupOrderById.has(s.id) ? groupOrderById.get(s.id) : Infinity,
   }))
@@ -303,14 +335,15 @@ export function getStapleColorOrder(state) {
   const strandGroups = state?.strandGroups ?? []
   const stored       = (() => { try { return JSON.parse(localStorage.getItem(LS_SORT_KEY) ?? 'null') } catch { return null } })()
   const sortOrder    = Array.isArray(stored) && stored.length ? stored : DEFAULT_SORT_ORDER
-  const ordered      = sortedStrands(design, strandColors, strandGroups, sortOrder)
+  const pins         = stapleColorPins(state)
+  const ordered      = sortedStrands(design, strandColors, strandGroups, sortOrder, pins)
   const staples      = ordered.filter(s => s.strand_type !== 'scaffold')
 
   const allStrands = design?.strands ?? []
   const indexOf    = new Map(allStrands.map((s, i) => [s.id, i]))
   const colors = {}
   for (const s of staples) {
-    colors[s.id] = effectiveColor(s, indexOf.get(s.id) ?? 0, strandColors, strandGroups)
+    colors[s.id] = effectiveColor(s, indexOf.get(s.id) ?? 0, strandColors, strandGroups, pins)
   }
   return { strandColors: colors, strandOrder: staples.map(s => s.id) }
 }
@@ -676,13 +709,14 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       return
     }
 
-    const strands = sortedStrands(design, strandColors, strandGroups, sortOrder)
+    const pins    = stapleColorPins(state)
+    const strands = sortedStrands(design, strandColors, strandGroups, sortOrder, pins)
     // Map helix_id → display index (matches cadnano pathview gutter labels)
     const helixIndex = Object.fromEntries((design.helices ?? []).map((h, i) => [h.id, i]))
 
     strands.forEach((strand, idx) => {
       const isScaffold = strand.strand_type === 'scaffold'
-      const color      = effectiveColor(strand, idx, strandColors, strandGroups)
+      const color      = effectiveColor(strand, idx, strandColors, strandGroups, pins)
       const ovhg5p     = terminalOverhang(strand, design, '5p')
       const ovhg3p     = terminalOverhang(strand, design, '3p')
 
@@ -1067,7 +1101,7 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
       }
     } else {
       // New group — initialise with strand's current effective color
-      const color = effectiveColor(strand, strandIdx, state.strandColors, state.strandGroups)
+      const color = effectiveColor(strand, strandIdx, state.strandColors, state.strandGroups, stapleColorPins(state))
       store.setState({
         strandGroups: [...groups, {
           id: `grp_${Date.now()}`,
@@ -1280,7 +1314,9 @@ export function initSpreadsheet(store, { goToStrand = () => {}, designRenderer =
     const design = store.getState().currentDesign
     if (!design) return
     const state = store.getState()
-    const strands = sortedStrands(design, state.strandColors ?? {}, state.strandGroups, sortOrder)
+    // Must pass the same pins as the render pass — colour is a sort key, so a
+    // different palette assignment here would reorder rows and misalign highlights.
+    const strands = sortedStrands(design, state.strandColors ?? {}, state.strandGroups, sortOrder, stapleColorPins(state))
     let scrolled = false
     for (let i = 0; i < strands.length; i++) {
       const row = tbody.children[i]

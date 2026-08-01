@@ -41,7 +41,10 @@ from backend.core.atomistic import Atom, VDW_RADIUS
 from backend.core.models import Design
 
 
-# ── Strand colour palette (mirrors helix_renderer.js exactly) ────────────────
+# ── Strand colour palette ─────────────────────────────────────────────────────
+# _STAPLE_PALETTE_HEX must equal backend/core/constants.py STAPLE_PALETTE, in
+# order (same 12 colours, int form instead of '#rrggbb'). That comment lists
+# every copy of the palette in the repo.
 
 _SCAFFOLD_COLOR = (0x29, 0xB6, 0xF6)   # sky blue, normalised below
 _STAPLE_PALETTE_HEX = [

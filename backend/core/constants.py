@@ -321,7 +321,14 @@ SQ_SCAFFOLD_CROSSOVER_OFFSETS: dict[tuple[bool, int], tuple[int, int]] = {
 
 # ── Staple colour palette ─────────────────────────────────────────────────────
 # Canonical 12-colour palette shared across backend and both frontend views.
-# CSS hex strings ("#RRGGBB"), mirrors helix_renderer.js STAPLE_PALETTE exactly.
+# CSS hex strings ("#RRGGBB"). Must match, exactly and in order:
+#   frontend/src/scene/helix_renderer/palette.js          STAPLE_PALETTE  (0xrrggbb ints)
+#   frontend/src/cadnano-editor/pathview/palette.js       STAPLE_PALETTE  ('#rrggbb')
+#   backend/core/surface.py                               _STAPLE_PALETTE_HEX (0xRRGGBB ints)
+#   frontend/src/scene/color_util.js                      ATOM_STAPLE_PALETTE (0xrrggbb ints)
+#   frontend/src/scene/selection_manager.js               PICKER_COLORS  ({hex, css, label})
+# (helix_renderer.js only IMPORTS it — it has not defined it since the palette
+#  module was extracted. Backend consumers import from HERE.)
 STAPLE_PALETTE: list[str] = [
     '#ff6b6b', '#ffd93d', '#6bcb77', '#f9844a',
     '#a29bfe', '#ff9ff3', '#00cec9', '#e17055',

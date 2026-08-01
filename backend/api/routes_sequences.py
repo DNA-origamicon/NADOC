@@ -28,6 +28,7 @@ from fastapi import APIRouter, Body
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from backend.core.constants import STAPLE_PALETTE
 from backend.core.models import StrandType
 from backend.core.sequences import domain_bp_range, strand_nucleotide_count
 # Shared export resolver used by many routes across crud.py + assembly.py + core;
@@ -180,12 +181,6 @@ def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) 
     color_overrides = (req.strand_colors if req else {}) or {}
     order           = (req.strand_order  if req else []) or []
 
-    _PALETTE = [
-        "#e06c75", "#98c379", "#d19a66", "#61afef",
-        "#c678dd", "#56b6c2", "#e5c07b", "#abb2bf",
-        "#be5046", "#7dab6e", "#b07e45", "#4e8cc4",
-    ]
-
     def _hex_to_argb(hexstr: str) -> str:
         h = (hexstr or "").lstrip("#")
         if len(h) != 6:
@@ -205,6 +200,13 @@ def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) 
     for col in range(1, len(headers) + 1):
         ws.cell(row=1, column=col).font = hf
 
+    # Palette fallback must agree with the Sequence panel (ui/spreadsheet.js
+    # `paletteColor`), which indexes the CANONICAL STAPLE_PALETTE by the
+    # strand's position in `design.strands` — not by the sorted row number.
+    # This branch only fires for headless/API exports; the UI supplies
+    # `strand_colors` for every strand.
+    strand_pos = {s.id: i for i, s in enumerate(design.strands)}
+
     staples = [s for s in design.strands if s.strand_type != StrandType.SCAFFOLD]
     if order:
         pos = {sid: i for i, sid in enumerate(order)}
@@ -220,7 +222,7 @@ def export_sequence_xlsx(req: _SequenceXlsxRequest | None = Body(default=None)) 
 
         color_hex = color_overrides.get(strand.id) \
                     or strand.color \
-                    or _PALETTE[(row_idx - 1) % len(_PALETTE)]
+                    or STAPLE_PALETTE[strand_pos.get(strand.id, 0) % len(STAPLE_PALETTE)]
         argb = _hex_to_argb(color_hex)
 
         ws.cell(row=row_idx + 1, column=1, value=row_idx)

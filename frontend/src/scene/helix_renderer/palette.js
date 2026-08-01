@@ -18,9 +18,12 @@ export const C = {
   unassigned:        0x445566,
 }
 
-// Canonical palette. THREE-WAY invariant — must match, exactly and in order:
-//   backend/core/constants.py            STAPLE_PALETTE  ('#rrggbb' strings)
-//   cadnano-editor/pathview/palette.js   STAPLE_PALETTE  ('#rrggbb' strings)
+// Canonical palette. Must match, exactly and in order:
+//   backend/core/constants.py            STAPLE_PALETTE       ('#rrggbb' strings)
+//   backend/core/surface.py              _STAPLE_PALETTE_HEX  (0xRRGGBB ints)
+//   cadnano-editor/pathview/palette.js   STAPLE_PALETTE       ('#rrggbb' strings)
+//   scene/color_util.js                  ATOM_STAPLE_PALETTE  (0xrrggbb ints)
+//   scene/selection_manager.js           PICKER_COLORS        ({hex, css, label})
 // Frontend consumers import from HERE — do not re-declare it locally.
 // (ui/spreadsheet.js did exactly that until 2026-07-30, with different colours, so the
 //  strand panel and the exported .xlsx disagreed with the 3D view for every staple

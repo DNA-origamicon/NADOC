@@ -30,7 +30,8 @@ vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 vi.mock('../state/store.js', () => ({ pushGroupUndo: vi.fn() }))
 
 import { initSpreadsheet, getStapleColorOrder } from './spreadsheet.js'
-import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
+import { STAPLE_PALETTE, buildStapleColorMap, _resetStapleColorPins }
+  from '../scene/helix_renderer/palette.js'
 
 const DESIGN = {
   helices: [{ id: 'h0', loop_skips: [] }],
@@ -190,5 +191,68 @@ describe('Staple colour fallback uses the canonical shared palette', () => {
       strandColors: { stap: 0x123456 },
     })
     expect(strandColors.stap).toBe('#123456')
+  })
+})
+
+/**
+ * The OTHER half of the same bug (TD-02, 2026-07-31). Matching STAPLE_PALETTE only
+ * fixed the colour LIST. The ASSIGNMENT still diverged: the 3D view pins a palette
+ * slot per strand.id for the life of the design (`buildStapleColorMap`), while this
+ * file re-derived `strandIndex % 12` — at three call sites, with three different
+ * indexings (staples-only array position, `design.strands` position, sorted-row
+ * position). So any edit that reshuffles `design.strands` (nick, forced-ligation
+ * delete → fragments appended) silently recoloured untouched staples in the panel
+ * and in the exported .xlsx while 3D kept them put.
+ *
+ * The first test below fails against the pre-fix code (index-based: s1 moves from
+ * slot 1 to slot 2 when a strand is inserted ahead of it).
+ */
+describe('Staple palette ASSIGNMENT follows the 3D view, not the array index', () => {
+  const asHex = (rgb) => '#' + rgb.toString(16).padStart(6, '0')
+  const dom   = () => [{ helix_id: 'h0', start_bp: 0, end_bp: 7, direction: 'FORWARD' }]
+  const mkDesign = (strands) => ({
+    id: 'drift-design', helices: [{ id: 'h0', loop_skips: [] }],
+    overhangs: [], extensions: [], crossovers: [], strands,
+  })
+  const SCAF = { id: 'scaf', strand_type: 'scaffold', domains: dom() }
+  const S1   = { id: 's1',   strand_type: 'staple',   domains: dom() }
+  const S2   = { id: 's2',   strand_type: 'staple',   domains: dom() }
+  const GEO  = [
+    { strand_id: 'scaf', strand_type: 'scaffold' },
+    { strand_id: 's1',   strand_type: 'staple' },
+    { strand_id: 's2',   strand_type: 'staple' },
+  ]
+
+  beforeEach(() => { _resetStapleColorPins() })
+
+  it('a mutation that reshuffles design.strands does not recolour untouched staples', () => {
+    const before = getStapleColorOrder({
+      currentDesign: mkDesign([SCAF, S1, S2]), currentGeometry: GEO,
+    })
+    expect(before.strandColors.s1).toBe(asHex(STAPLE_PALETTE[1]))
+    expect(before.strandColors.s2).toBe(asHex(STAPLE_PALETTE[2]))
+
+    // An edit inserts a fragment ahead of s1 — every later staple's array index shifts.
+    const S0 = { id: 's0', strand_type: 'staple', domains: dom() }
+    const after = getStapleColorOrder({
+      currentDesign:   mkDesign([SCAF, S0, S1, S2]),
+      currentGeometry: [...GEO, { strand_id: 's0', strand_type: 'staple' }],
+    })
+    expect(after.strandColors.s1).toBe(before.strandColors.s1)
+    expect(after.strandColors.s2).toBe(before.strandColors.s2)
+  })
+
+  it('the exported colours ARE the renderer\'s pinned map, entry for entry', () => {
+    const design = mkDesign([SCAF, S1, S2])
+    const pinned = buildStapleColorMap(GEO, design)
+    const { strandColors } = getStapleColorOrder({ currentDesign: design, currentGeometry: GEO })
+    expect(pinned.size).toBe(2)
+    for (const [sid, hex] of pinned) expect(strandColors[sid]).toBe(asHex(hex))
+  })
+
+  it('falls back to the array index when there is no geometry to pin against', () => {
+    const { strandColors } = getStapleColorOrder({ currentDesign: mkDesign([SCAF, S1, S2]) })
+    expect(strandColors.s1).toBe(asHex(STAPLE_PALETTE[1]))
+    expect(strandColors.s2).toBe(asHex(STAPLE_PALETTE[2]))
   })
 })

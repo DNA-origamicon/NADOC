@@ -119,3 +119,78 @@ no test-dedicated session open). No behavior changed: 4 unused-import deletions 
 
 **New debt found while resolving:** the gate's *scope* (`just lint` = `backend/ tests/` only) hides
 193 findings under `scripts/` + repo root. Logged as **TD-25**, not fixed in this pass.
+
+---
+
+### ~~TD-02~~ — `STAPLE_PALETTE` copies + sync comments + index agreement — **CLOSED 2026-07-31**
+- ~~**Agreeing three-way invariant**~~ — **STALE 2026-07-31:** the invariant is **five-way**, not
+  three. Repo-wide grep for palette definitions found four more, and **all agree colour-for-colour**:
+  `backend/core/surface.py` `_STAPLE_PALETTE_HEX`, `scene/color_util.js` `ATOM_STAPLE_PALETTE`,
+  `scene/selection_manager.js` `PICKER_COLORS`, plus the three already listed. Line numbers in the
+  original bullet were also wrong (`helix_renderer/palette.js` is `:28-31`, not `:23-26`).
+  **The ledger's own parenthetical that `ATOM_STAPLE_PALETTE` is "a separate, intentionally different
+  atomistic palette" is FALSE — it is byte-identical.** See DECISIONS.
+- ~~**Every one of the three "keep in sync with…" comments names a file that no longer holds the
+  constant**~~ — **FIXED 2026-07-31.** Half-stale as written: `helix_renderer/palette.js:21` was
+  already corrected on 2026-07-30, and two *unlisted* offenders existed (`pathview/palette.js:6-9`
+  file header, `backend/core/surface.py:44`). All four stale pointers to `helix_renderer.js` (which
+  only *imports* it, `:33`) rewritten; the single authoritative copy list now lives in the comment
+  above `STAPLE_PALETTE` in `backend/core/constants.py`, and every other comment points there.
+  `.claude/rules/cadnano-editor.md` + `rendering.md` updated to match.
+- ~~**A fourth copy that is NOT in sync:** `frontend/src/ui/spreadsheet.js:54-60`~~ — **FIXED 2026-07-30.**
+  It declared a module-private `STAPLE_PALETTE` with **completely different colours**
+  (`#e06c75 #98c379 #d19a66 #61afef …` — an editor syntax theme) under the false comment
+  `// Staple palette (mirrors helix_renderer.js)`. Because `paletteColor` is the last-resort fallback in
+  `effectiveColor`, every staple arriving with `color === null` (the normal case — **Full Autostaple
+  stamps no colour**; only `POST /design/strands` and `_build_nick` do) was painted one hue in the panel
+  and another in 3D (index 1 green vs yellow, index 3 blue vs orange) — and via `getStapleColorOrder` →
+  `exportSequenceXlsx`, the wrong hues reached the **exported oligo order sheet**. Now imports the
+  canonical `STAPLE_PALETTE` from `scene/helix_renderer/palette.js` and formats int→`'#rrggbb'`.
+  Pinned by 3 tests in `ui/spreadsheet.test.js` ("Staple colour fallback uses the canonical shared
+  palette"). The sync-pointer comment in `helix_renderer/palette.js` was corrected at the same time.
+  (`scene/color_util.js:35 ATOM_STAPLE_PALETTE` is a separate, intentionally different atomistic palette.)
+- ~~**STILL OPEN — the two remaining stale sync-pointer comments**~~ — folded into the FIXED bullet
+  above (four offenders, not two).
+- ~~**STILL OPEN — index agreement, not just palette agreement.**~~ — **FIXED 2026-07-31.** The claim
+  was under-stated, not over-stated. `buildStapleColorMap` (`palette.js:180`, union-find `:190-208`)
+  pins a slot per `strand.id` in a module-level `_pinnedByDesign`; its own comment (`:166-177`) spells
+  out the exact bug — *"re-derived from the strand's array position on every rebuild, so any edit that
+  reshuffles design.strands … silently recoloured untouched staples"* — and `ui/spreadsheet.js` was
+  still doing precisely that. Worse: it did so at **three call sites with three DIFFERENT indexings**
+  (staples-only array position `:276`, `design.strands` position `:313`, sorted-row position `:685`),
+  so the row swatch, the colour *sort key* and the exported .xlsx could each show a different hue for
+  the same staple even before any mutation. Fixed by threading the renderer's pinned map through
+  `effectiveColor`/`sortedStrands` (cached on design+geometry **reference** identity — the union-find
+  does a `findIndex` per crossover and must not run per re-render). The renderer route was
+  unavailable: `design_renderer.js` builds the map into a local and exposes no getter, so the
+  spreadsheet imports `buildStapleColorMap` directly — same module-level pins, so both agree.
+  Pinned by 3 new tests in `ui/spreadsheet.test.js` ("Staple palette ASSIGNMENT follows the 3D view");
+  the drift test was **proven** by re-running it against the pin-lookup removed (got slot 2 `#6bcb77`
+  where the pin says slot 1 `#ffd93d`).
+- **NEW, found while probing — the server-side .xlsx export had the retired palette all along.**
+  `backend/api/routes_sequences.py:183-187` hard-coded a local `_PALETTE` holding the **exact editor
+  syntax theme** (`#e06c75 #98c379 #d19a66 #61afef …`) that `spreadsheet.test.js:183` asserts is dead,
+  and indexed it by *sorted row position*. The UI always sends `strand_colors`, which is why the
+  2026-07-30 pass never saw it — but every **headless / API-driven** oligo-order sheet came out in
+  colours that match nothing in the app. **FIXED 2026-07-31**: imports `STAPLE_PALETTE` from
+  `constants.py`, indexed by `design.strands` position to match the panel. Pinned by
+  `tests/test_sequence_xlsx_palette.py` (3 tests, **proven** failing against the old code).
+  *Lesson for the next pass: a "canonical constant" fix is not done until you grep for the values of
+  the REJECTED palette, not just the name of the canonical one.*
+
+**Pass 2 (2026-07-31) tally: 1 STALE / 4 FIXED / 1 DECIDE (DEC-01, still open in the head).**
+
+**Gate:** `just test-smart` → `decision: FAST`, **6111 passed / 41 skipped** (76 s), one `DEFERRED`
+group parked in `.nadoc-slow-pending`. `npx vitest run` → **3712 passed / 248 files**.
+Both fixes proven-failing against the pre-fix code before being kept.
+
+**Files touched:** `backend/api/routes_sequences.py` · `backend/core/constants.py` ·
+`backend/core/surface.py` · `frontend/src/scene/helix_renderer/palette.js` ·
+`frontend/src/cadnano-editor/pathview/palette.js` · `frontend/src/ui/spreadsheet.js` (+ its test) ·
+new `tests/test_sequence_xlsx_palette.py` · `.claude/rules/cadnano-editor.md` + `rendering.md`.
+
+**NOT VERIFIED IN APP** — the spreadsheet change was gated on tests only. Vite was up but the live
+backend held no design, and `feedback_no_live_server_mutation_for_verify` forbids loading one to
+verify. The visible check still owed: open a design with unstapled/uncoloured staples, confirm the
+Sequence panel swatches match the 3D staple colours, nick a strand, confirm untouched staples keep
+their colour in **both** views.
