@@ -731,3 +731,187 @@ the DNA bond list was empty.
   (`atomistic.py`), not from the simulation's own, so they exist regardless of job state.
 - Pins: `tests/test_md_ws_bond_topology.py` (6, backend) + a `toBondPairs` block in
   `frontend/src/ui/md_display_state.test.js` (5).
+
+**REPRESENTATION-SWITCH AUDIT (2026-08-01).** An end-to-end audit of "change representation while
+an oxDNA/NAMD visualization option is on". The switch path is
+`representation_switcher._setRepresentation` → six `nadoc:representation-change` listeners
+(md_panel live WS · md_solvent_controls · md_jobs_panel heavy prebuild · oxdnaDisplay ·
+mdViz · the slab-options auto-expand). Five real defects, all fixed:
+
+- **The "native flash" suppression was oxDNA-only, so NAMD paid the design build twice.**
+  `getSimOverlayWillDriveHeavy` read `oxdnaDisplay.drivesHeavy()` and nothing else, so scrubbing a
+  NAMD trajectory and pressing F7 hid the CG, fetched + built the DESIGN's all-atom model (seconds,
+  and the *wrong structure* on screen), and only then let mdViz rebuild from the job. It is now
+  **kind-aware** — `getSimOverlayWillDriveHeavy('atomistic' | 'surface')` — and asks all three
+  controllers that can drive a heavy rep: `oxdnaDisplay` (both kinds), `mdViz` (whatever
+  md_viz_adapter maps), `mdDisplayController` (**atomistic only** — the live stream carries beads
+  or atoms, never a surface).
+- **The kind argument is not decoration.** A single boolean cannot express this: a NAMD flexibility
+  map can deliver NEITHER kind, and deferring the design build to an overlay that never delivers
+  leaves a blank surface / empty atoms up forever. `drivesHeavy(kind)` answers from the injected
+  `api` (`_HEAVY_ROUTE` × `typeof api[route] === 'function'`), **not** from an engine name — so a
+  route added to md_viz_adapter later starts working with no change in the controller.
+- **mdViz needed `onHeavyApplied`.** Now that it triggers the defer path, the CG is deliberately
+  left up and only that callback takes it down when the simulated atoms land. Without it a NAMD
+  trajectory in vdw/ballstick draws CG beads through the atoms. (`main.js`, mdViz init.)
+- **The NAMD flex map in a heavy rep now says so.** `getOxdnaRmsfAtomistic|Surface` are unmapped by
+  the adapter (deliberate — see its header); `_applyHeavy` called the undefined method, threw, and
+  the blanket `catch {}` swallowed it, leaving the design's equilibrium structure on screen looking
+  like a result. It now emits `{unsupported: true}` on the heavy-status event and
+  `atom_surface_display` turns that into a toast pointing at F2–F4.
+- **Relaxed + RMSF heavy payloads are memoised** (`_memoHeavy`, keyed `align|mode|kind`, dropped on
+  job change / `refresh()` / stop). Trajectory frames were already grid-cached; these were not, so
+  an F6↔F7 flip — which changes the renderer's GEOMETRY and not one coordinate — re-downloaded the
+  whole multi-megabyte all-atom payload every press.
+- **Solvent no longer refetches on a rep change that doesn't flip the wire format.**
+  `solventRepMode` collapses seven scene reps onto three modes, so `full`↔`beads` (both `sphere`)
+  and `cylinders`↔`hull-prism`↔`surface` (all `off`) were wiping the cache and re-downloading every
+  buffered frame for nothing. `vdw`↔`ballstick` is the third case: same payload, different overlay
+  bond geometry → **redraw, no fetch**. The comparison is seeded in `setEnabled()`, never at wiring
+  time — `getCurrentRepr` closes over a `main.js` `let` declared further down and reading it during
+  construction is a TDZ throw that kills app boot.
+- **Re-picking the active representation is now a no-op** — see `project_mixed_representation.md`
+  for the master-reset exemption.
+
+**LEGACY REMOVED — md_panel's own representation vocabulary.** `#md-panel` is `display:none` in
+`index.html` and nothing un-hides it (`main.js`'s `_DESIGN_PANEL_IDS` only saves and restores that
+same `'none'`), so its `#md-repr` select — NADOC Full / **Beads Only** / Ball & Stick — was
+unreachable UI *and the only writer that could set `_repr = 'beads'`*. That made `_applyFrame`'s
+beads branch dead, and with it the `md_overlay` bead cloud in md_panel, `_beadSize`, `_opacity` and
+their sliders; the whole `initMdOverlay` instance in `main.js` went with them (mrDNA keeps its own —
+there the bead cloud is a real standalone rep). `_repr` is now documented for what it is: the
+**socket wire mode**, always `targetStreamMode(_sceneRepr)`, stored rather than derived only so
+`decideReload` can compare "mode the socket was opened with" against "mode the scene now wants".
+A per-frame `console.log` in `_applyFrame` went too.
+
+**STILL OPEN.** (a) The rest of the hidden `#md-panel` chrome — config browse / Load / scrubber /
+play / loop / live / output log / metrics — is still live code writing to invisible DOM; making
+md_panel headless is a separate carve, not a representation change. (b) mrDNA / CanDo / SNUPI /
+LAMMPS register no `nadoc:representation-change` listener and only write `applyFemPositions`, so
+choosing a heavy rep silently discards their displayed result — same class as the first item above,
+untouched here. (c) The flexibility-map heavy routes are still unmapped; the failure is now loud
+rather than fixed.
+
+Pins: `oxdna_display.test.js` → `relaxed / RMSF payload memo` (4) + `drivesHeavy(kind) capability`
+(5); `md_solvent_controls.test.js` → `representation change → cache invalidation` (4);
+`representation_switcher.test.js` → `no-op re-pick` (4) + 2 assembly-mode. All RED-verified against
+the pre-change code (the memo, capability, unsupported, solvent and no-op pins each fail without
+their fix).
+
+**VERIFIED IN THE APP (2026-08-01) — `frontend/e2e/repr_switch_with_md_viz.spec.js`.** Three
+tests against a real finished NAMD job (2hb_1xT, `29c5b267380f`, 200 composite frames), driving
+the real UI: library → Simulations → NAMD → job → View trajectory / Display MD, then F4/F6/F7.
+They assert on WHICH ROUTES ARE FETCHED (`page.route` recorder) and WHAT IS DRAWN (visible
+instance counts, `.visible` walked up the parent chain — `count` alone reports beads as present
+while they are hidden under the atoms), plus screenshots in `e2e/screenshots/repr-*.png`.
+
+- **RED-verified:** reverting `getSimOverlayWillDriveHeavy` to the old oxDNA-only predicate makes
+  both the trajectory and the live-display tests fail with `design heavy build leaked in:
+  /api/design/atomistic` — the native flash, reproduced on demand.
+- The ball-and-stick view of a trajectory frame shows the SAME conformation as the CG frame it
+  replaced (screenshots 1 vs 2), which is the point: they are the simulated coordinates, not the
+  design's equilibrium pose.
+- **It needs the USER'S dev servers** (`frontend/playwright.livedev.config.js`, added for this).
+  The default `playwright.config.js` boots a throwaway backend, and a cold single worker has to
+  redo the archived job's MDAnalysis work — it blocks its own event loop doing so and the app just
+  shows "reconnecting…". That config documents the read-only/pinned-`?doc` rules for using it.
+  Session docs it creates under `workspace/.session/` are NOT auto-cleaned; remove them (and their
+  `registry.json` entries) after a run.
+
+**Two things the app run corrected in this session's own work:**
+- A first draft of the R7 assertion read the prebuild's ordinary *first fill* (sequential chunks
+  32-63, 64-95, …) as a refetch. It is not. The steady-state claim only means anything AFTER the
+  prebuild reports ready — the test now waits for that. A conclusion drawn mid-prebuild is noise.
+- Stalling the per-frame route to force a slow switch is the WRONG way to test the indicator: it
+  supersedes the in-flight heavy build, which then correctly falls back to leaving the CG up.
+  Throttle the one-shot `atomistic-model` topology fetch instead — that is the real slow step.
+
+**Progress indicator, all four paths** (the toast owner is `atom_surface_display`'s heavy-status
+listener — one owner, so the three sim controllers can't fight over the global persistent toast):
+| Path | Signal |
+|---|---|
+| oxDNA / mdViz heavy rebuild | `_setHeavyBusy` → `{building, kind}` → "Loading atomistic model…" / "Computing surface…" |
+| live MD rep-switch reload (NEW) | `md_panel._setSwitchBusy` → `kind:'atomistic'\|'cg'` → …/"Loading MD frame…" |
+| no viz active | `_applyAtomisticMode`'s own persistent toast |
+| overlay can't deliver the kind | `{unsupported:true}` → a warn toast naming F2-F4 |
+
+`_setSwitchBusy` tracks the KIND, not just a boolean: switching again mid-wait (F7 then F4 before
+the first reload lands) changes which text is correct, and a plain `building === _busy` guard
+swallowed that and left "Loading atomistic model…" up over a CG reload.
+
+**Also hardened (no observed failure, but the reasoning was wrong):** `prebuildHeavy` compared RAW
+BYTE budgets derived from MemAvailable, so any wobble in free RAM discarded the whole grid bake and
+every already-fetched frame with it. It now quantises the budget (`_BUDGET_QUANTUM` = 128 MB) and
+re-grids only when the affordable frame COUNT actually changes.
+
+**TWO BUGS FROM THE 2026-08-01 SWITCH AUDIT, both found by driving the real app.**
+
+**1. "Weld pair turns itself on when I switch to atomistic."** It never did — the control was
+persisted. `md_weld_controls` stored the checkbox in `localStorage['nadoc:md:weldPair']`, so a
+stored `true` re-checked the box at boot and `setJob()` silently re-applied it to the next job
+selected. The markers are drawn from inside the atomistic renderer's `applyPositionLerp`, so
+nothing appeared while the scene was coarse-grained; they materialised at the moment the user
+pressed F6/F7. Measured with the key set: at "trajectory on" `overlayVisible=true` with **0** drawn
+meshes, and after F7 **3**, without the control ever being touched. With the key cleared, nothing
+turns on at any step. **Fix: the layer is opt-in per session** — persistence removed, checkbox
+keeps the HTML default. A stale key already in a browser is inert (nothing reads it). Within a
+session it still follows a job change, which is correct: the user ticked it. The old
+`remembers the checkbox state across a rebuild` test was REVERSED, not deleted, so nobody restores
+the key thinking it was an oversight.
+
+**2. "Play shows an hourglass and doesn't play" — two causes, one real bug.**
+- **The real bug: the client raced itself into a 500.** `md_analysis_runner.run_analysis` starts
+  by KILLING any in-flight analysis for the same `(job_id, kind)` — supersede, not queue — so the
+  victim returns `RuntimeError("… worker died without a result")` → HTTP 500. `prebuildHeavy`'s
+  chunk loop and `_applyHeavy`'s single-frame fetch legitimately want frames at the same moment,
+  so the client was murdering its own prebuild mid-play. Reproduced with two curls: overlapping
+  POSTs to `/md/jobs/{id}/frames-atomistic` → the earlier one 500s in **0.25 s**, while either
+  alone succeeds in ~2.3 s (32-index batch and 1-index are both fine solo — it is not batch size).
+  **Fix: `_coarseFrames` now serialises through one promise chain** (`_queueFrameFetch`), re-reading
+  the bake and re-filtering the wanted cells INSIDE the queue — the bake object can be replaced by
+  a re-grid while a fetch waits, and results written into the captured one would vanish.
+  Superseding stays the backend's job for a genuinely new intent; it must not fire on self-racing.
+- **The rest was honest work, reported badly.** `onBeforePlay` passed `() => {}` as the progress
+  callback and threw the prebuild's progress away, so a 200-frame atomistic prebuild sat on a bare
+  ⏳ with nothing moving. It now writes the same `preparing atoms N/M…` line the toggle's prebuild
+  uses. With atoms already prepared, play starts in **<500 ms** and frames advance normally
+  (measured 3→10→17→…). Scrubbing always worked because it fetches one cell, never racing itself.
+
+Both verified against job `29c5b267380f`; no 500s or console errors remain in the play path.
+
+**PLAY BUTTON NOW REPORTS THE PREPARE (2026-08-01).** Follow-up to the bug above, from the
+right question: *"if I can scrub the whole trajectory in atomistic, what is play working on?"*
+
+**Answer, measured:** scrubbing was not filling the cache — the BACKGROUND PREBUILD was, at the
+same time, which is why the work looked already done. On a 200-frame job: 32 of 200 cells fetched
+3 s after F7; +168 during ~25 s of scrubbing (the prebuild finishing concurrently); then play
+fetched **0** and started in 1.16 s. Control: wait for the prebuild first, then scrub → scrubbing
+fetches **0** cells. The asymmetry is real and not a bug — scrubbing needs only the one cell you
+stop on (fetched on demand in ~2.3 s, and the prebuild fills nearest-the-playhead first, so you
+rarely hit a gap), while playback at 8 fps needs every cell in hand or it stutters.
+
+**What was wrong was the affordance, not the wait.** The button showed a ready ▶ throughout, so
+the user pressed it expecting instant playback. Now `oxdna_trajectory_player` has
+`setPreparing({done,total}|null)`: during a background prepare the button shows a `.nadoc-spinner`
+loading circle, is `disabled`, and its tooltip reads *"Preparing all-atom frames (N/200 frames) —
+playback needs the whole trajectory in memory"*. All four button states (playing / preparing-by-
+click / preparing-in-background / idle) now render from ONE `_renderPlayBtn()`; the scattered
+`playBtn.textContent = …` assignments are what let it advertise ▶ while its frames were still
+downloading. `md_jobs_panel._prebuildTrajHeavy` wraps the whole prepare (memory plan + confirm
+included) in `setPreparing(...)` / `finally setPreparing(null)`, and skips it entirely when
+`repKind(getCurrentRepr()) === 'cg'` so a CG trajectory never flashes a spinner over a button that
+is genuinely ready.
+
+**oxDNA is deliberately untouched.** That panel has no background prebuild — it prepares only on
+click (`onBeforePlay`), so ▶ is honest there and `setPreparing` is simply never called. It picks up
+the same loading circle in place of the old ⏳ character, which is cosmetic.
+
+Verified in the app: CG `{spinner:false}` → F7 `{spinner:true, disabled:true, title:"…(0/200
+frames)…"}` → prepare done `{text:"▶", disabled:false}` → play starts in 1.56 s. Screenshots
+`e2e/screenshots/playbtn-{preparing,ready}.png`. Pins: 7 tests in
+`oxdna_trajectory_player.test.js` (`background prepare is visible on the play button`); the old
+`⏳`-character assertion was updated to look for the spinner element.
+
+**Not done (offered, not chosen):** starting playback once a RUNWAY ahead of the playhead is ready
+instead of the whole trajectory. That would cut the wait rather than just report it, at the cost
+of a stall-and-resume path for when playback outruns the fill.

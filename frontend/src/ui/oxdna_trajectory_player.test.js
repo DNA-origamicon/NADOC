@@ -111,7 +111,7 @@ describe('initOxdnaTrajectoryPlayer', () => {
     await Promise.resolve()
     expect(onBeforePlay).toHaveBeenCalledTimes(1)
     expect(p.isPlaying()).toBe(false)            // not playing yet — still pre-building
-    expect(playBtn.textContent).toBe('⏳')        // spinner while preparing
+    expect(playBtn.querySelector('.nadoc-spinner'), 'spinner while preparing').toBeTruthy()
     expect(onPlayStateChange).not.toHaveBeenCalled()
     release()                                     // pre-build finished
     await Promise.resolve(); await Promise.resolve()
@@ -133,5 +133,82 @@ describe('initOxdnaTrajectoryPlayer', () => {
     expect(p.isPlaying()).toBe(false)             // the resolved prepare did NOT start the loop
     expect(playBtn.textContent).toBe('▶')
     p.stop()
+  })
+})
+
+// A heavy trajectory cannot play until every coarse cell is in memory — at 8 fps the loop
+// cannot stop for a ~2 s fetch per frame. The button used to show a ready ▶ throughout the
+// background prepare, so the user pressed it expecting instant playback and got a
+// multi-second wait. Scrubbing keeps working during that window (it needs only the one
+// cell you stop on), which made the button look broken rather than busy.
+describe('background prepare is visible on the play button', () => {
+  let playBtn, slider, player
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    playBtn = document.createElement('button')
+    slider = document.createElement('input')
+    slider.type = 'range'
+    document.body.append(playBtn, slider)
+    player = initOxdnaTrajectoryPlayer({ playBtn, slider, fps: 10 })
+    player.setTrajectory(5, [])
+  })
+  afterEach(() => { player.stop() })
+
+  const spinner = () => playBtn.querySelector('.nadoc-spinner')
+
+  it('shows ▶ and is clickable when nothing is being prepared', () => {
+    expect(playBtn.textContent).toBe('▶')
+    expect(playBtn.disabled).toBe(false)
+  })
+
+  it('swaps ▶ for a spinner and refuses the click while preparing', () => {
+    player.setPreparing({ done: 12, total: 200 })
+    expect(spinner()).toBeTruthy()
+    expect(playBtn.textContent).not.toContain('▶')
+    expect(playBtn.disabled).toBe(true)
+    expect(player.isPreparing()).toBe(true)
+    // …and the click really is inert, not merely styled as such.
+    playBtn.click()
+    expect(player.isPlaying()).toBe(false)
+  })
+
+  it('puts the frame count in the tooltip so the wait is quantified', () => {
+    player.setPreparing({ done: 12, total: 200 })
+    expect(playBtn.title).toMatch(/12\/200/)
+  })
+
+  it('restores a clickable ▶ when the prepare finishes', () => {
+    player.setPreparing({ done: 200, total: 200 })
+    player.setPreparing(null)
+    expect(spinner()).toBeNull()
+    expect(playBtn.textContent).toBe('▶')
+    expect(playBtn.disabled).toBe(false)
+    playBtn.click()
+    expect(player.isPlaying()).toBe(true)
+  })
+
+  // Whatever was being prepared belonged to the old trajectory; leaving the spinner up
+  // would disable playback for a job with nothing pending.
+  it('clears the spinner on stop (job switch)', () => {
+    player.setPreparing({ done: 1, total: 200 })
+    player.stop()
+    expect(spinner()).toBeNull()
+    expect(playBtn.disabled).toBe(false)
+  })
+
+  it('a zero-length prepare is treated as nothing to do', () => {
+    player.setPreparing({ done: 0, total: 0 })
+    expect(spinner()).toBeNull()
+    expect(playBtn.disabled).toBe(false)
+  })
+
+  it('pausing mid-playback returns to ▶, not to a spinner', () => {
+    playBtn.click()
+    expect(player.isPlaying()).toBe(true)
+    expect(playBtn.textContent).toBe('⏸')
+    playBtn.click()
+    expect(playBtn.textContent).toBe('▶')
+    expect(spinner()).toBeNull()
   })
 })

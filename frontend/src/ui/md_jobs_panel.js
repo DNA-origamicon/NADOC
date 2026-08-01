@@ -27,7 +27,7 @@ import { initMdWeldControls } from './md_weld_controls.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
-import { prebuildMemoryPlan } from './oxdna_display.js'
+import { prebuildMemoryPlan, repKind } from './oxdna_display.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
 import { gateAMessage, openGateAModal } from './md_gate_a.js'
@@ -1945,8 +1945,16 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       const v = getMdViz?.()
       if (!v) return true
       v.setPlaying(true)
-      // CG plays instantly (prebuildHeavy is a no-op for the bead model).
-      const r = await v.prebuildHeavy(() => {})
+      // CG plays instantly (prebuildHeavy is a no-op for the bead model). A heavy rep has
+      // to have every played frame in hand first, and on a long trajectory that is tens of
+      // seconds — REPORT IT. Discarding the progress callback (`() => {}`) left the play
+      // button sitting on a bare ⏳ with nothing moving anywhere, which reads as "play is
+      // broken", not "play is waiting". Same status line the toggle's own prebuild uses.
+      const base = (trajStatus?.textContent || '').split(' · preparing')[0].split(' · atoms')[0]
+      const r = await v.prebuildHeavy((done, total) => {
+        if (total) _setTrajStatus(`${base} · preparing atoms ${done}/${total}…`, _C.accent)
+      })
+      if (r?.n) _setTrajStatus(`${base} · atoms ready (${r.frames ?? r.n} frames)`, _C.ok)
       return r?.ok !== false
     },
     onPlayStateChange: (playing) => { if (!playing) getMdViz?.()?.setPlaying(false) },
@@ -2122,6 +2130,23 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
 
   async function _prebuildTrajHeavy(v, baseStatus) {
     if (typeof v?.prebuildHeavy !== 'function') return
+    // CG plays instantly — there is nothing to prepare, so don't flash a spinner over a
+    // button that is genuinely ready.
+    const heavy = repKind(getCurrentRepr?.()) !== 'cg'
+    if (!heavy) return _prebuildTrajHeavyInner(v, baseStatus)
+    // Mark the player busy for the WHOLE prepare, including the memory plan + confirm
+    // above the fetch loop. Playback needs every coarse cell in memory, so until this
+    // finishes the play button must not offer a ▶ it cannot honour. `finally` is what
+    // guarantees it clears on every exit — cancel, cap-declined, or throw.
+    trajPlayer.setPreparing({ done: 0, total: _trajTotalFrames(v) || 1 })
+    try {
+      return await _prebuildTrajHeavyInner(v, baseStatus)
+    } finally {
+      trajPlayer.setPreparing(null)
+    }
+  }
+
+  async function _prebuildTrajHeavyInner(v, baseStatus) {
     const plan = await _trajMemoryPlan(v)
     // Warn BEFORE spending minutes rebuilding frames that won't fit. The estimate uses
     // the exact serial span once the topology is known and a per-nucleotide estimate
@@ -2137,6 +2162,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     }
     const r = await v.prebuildHeavy((done, total) => {
       _setTrajStatus(`${baseStatus} · preparing atoms ${done}/${total}…`, _C.accent)
+      trajPlayer.setPreparing({ done, total })   // same count, on the button's tooltip
     }, { budgetBytes: plan?.budgetBytes ?? null }).catch(() => null)
     if (!r || !r.n) { _setTrajStatus(baseStatus, _C.ok); return }   // CG, or cancelled
     // Say plainly when memory forced a coarser set than the slider has — and WHICH limit
