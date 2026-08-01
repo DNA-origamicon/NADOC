@@ -5494,6 +5494,30 @@
 
                     <div id="md-jobs-solvent-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   </div>
+
+                  <!-- ── CPD weld pair — the designed extra-base UV weld ─────────── -->
+                  <div id="md-jobs-weld-opts" style="margin-top:10px;padding-top:8px;border-top:1px solid #21262d">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;cursor:pointer"
+                           title="Marks the designed UV weld: a sphere on each extra thymine's C5=C6 bond midpoint and a bar between them, coloured by how close the pair is to cyclobutane-dimer geometry — red far, amber approaching, green reactive. Only designs with extra bases on a reciprocal crossover pair have one.">
+                      <input id="md-jobs-weld-toggle" type="checkbox" style="accent-color:#58a6ff"> Weld pair (CPD)
+                    </label>
+                    <div id="md-jobs-weld-readout" style="display:none;padding-left:18px;margin-top:3px;font-size:10px;color:#8b949e;font-variant-numeric:tabular-nums"></div>
+                    <div id="md-jobs-weld-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+
+                    <!-- Trace over the whole run: the overlay answers "now", this answers "ever" -->
+                    <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+                      <button id="md-jobs-weld-trace-btn" class="btn btn--sm" style="font-size:var(--text-xs)"
+                              title="Measure d and η for every frame of this run. The overlay shows the current frame; this shows whether the pair ever approached at all.">Trace over run</button>
+                      <select id="md-jobs-weld-trace-metric" style="font-size:var(--text-xs);background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:4px">
+                        <option value="d">distance</option>
+                        <option value="eta">twist η</option>
+                        <option value="k">propensity k</option>
+                      </select>
+                    </div>
+                    <canvas id="md-jobs-weld-trace-canvas" width="520" height="200"
+                            style="display:none;width:100%;margin-top:6px;border:1px solid #21262d;border-radius:4px"></canvas>
+                    <div id="md-jobs-weld-trace-summary" style="display:none;margin-top:3px;font-size:10px;color:#8b949e;font-variant-numeric:tabular-nums"></div>
+                  </div>
                 </div>
               </div>
 

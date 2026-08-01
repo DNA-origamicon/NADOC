@@ -59,7 +59,7 @@ and shared across both computers (see `CLAUDE.md` → Memory layout).
 
 Files are `feedback_<name>.md`. Match the name against what you're editing; each is short.
 
-**General:** **runpod_downloads_to_archive** (big downloads → `/media/jojo/Archive`, not the full system disk) ·
+**General:** **refer_to_jobs_by_part_and_time** (name a sim job by its part + creation time — the UI shows no job ids) · **runpod_downloads_to_archive** (big downloads → `/media/jojo/Archive`, not the full system disk) ·
 **concurrent_sessions** (shared worktree — never `git stash`/`reset`/`restore`; forbid git in subagent prompts) ·
 **no_live_server_mutation_for_verify** · **use_completion_triggers** (never foreground sleep/poll) ·
 **runpod_babysitter_must_act** (must KILL the pod on failure, not just log) · aksel_abandoned · crossover_no_reasoning · phase_constants_locked · native_files_preserve_positions ·
@@ -96,7 +96,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Cluster submission (Alpine):** **alpine_cluster_submission** (read its "Resume model" block before touching resume)
 
-**MD (NAMD+oxDNA):** **reference_local_namd_build** (use the Dec-2025 git build via `NADOC_NAMD_BIN`; 3.0.2 crashes GPU-resident — read before any local NAMD run) · lammps_oxdna · oxpy_binding_patch · proteins_in_simulation · oxdna_efield · oxdna_relaxation · benchmark_tuning · md_engines_panel
+**MD (NAMD+oxDNA):** **cpd_umbrella_sampling** (free energy of the designed extra-base UV weld; Phase 0 says it never forms unbiased — read before any colvars/US/free-energy work) · **reference_local_namd_build** (use the Dec-2025 git build via `NADOC_NAMD_BIN`; 3.0.2 crashes GPU-resident — read before any local NAMD run) · lammps_oxdna · oxpy_binding_patch · proteins_in_simulation · oxdna_efield · oxdna_relaxation · benchmark_tuning · md_engines_panel
 
 **MrDNA / ARBD:** mrdna_arbd_setup · **mrdna_bead_model** (1 DNA bead per bp, not per nt) · mrdna_panel · mrdna_extensions (guard `__ext_`, NOT `__` — `__lnk__` is real duplex)
 

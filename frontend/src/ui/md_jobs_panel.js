@@ -23,6 +23,7 @@ import { buildJobListModel, jobListSignature } from './jobs_panel_model.js'
 import { renderJobList } from './jobs_panel_render.js'
 import { shouldForceDisplayReload, mdReadinessIndicator } from './md_display_state.js'
 import { initMdSolventControls } from './md_solvent_controls.js'
+import { initMdWeldControls } from './md_weld_controls.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
@@ -697,7 +698,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -1206,6 +1207,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // the honest answer (an unknown machine is not assumed to be a large one).
     getAvailableBytes: () => _ramCache?.bytes ?? null,
   })
+  // CPD weld pair — markers on the designed extra-base UV weld. Owns its own DOM +
+  // readout ticker; the panel only tells it which job is selected. Most designs have no
+  // weld pair, which the control reports as information rather than an error.
+  const weld = initMdWeldControls({ api, getWeldOverlay })
 
   _updateVizToggles(null)   // no job selected yet → only "Off" is selectable
 
@@ -1855,6 +1860,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
     // socket on (re)connect, so ordering against the WS handshake doesn't matter.
     solvent?.setEnabled(true, 'live')
     solvent?.setJob(_selectedId)
+    weld?.setJob(_selectedId)
   }
 
   function _stopMdDisplay(status = 'Off') {
@@ -2164,6 +2170,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       // the player's onSeek — so the solvent for frame 0 has to be asked for here.
       solvent?.setEnabled(true, 'traj')
       await solvent?.setJob(_selectedId, { stride: interval, nFrames: r.n_frames })
+      weld?.setJob(_selectedId)
       solvent?.showFrame(0)
       await _prebuildTrajHeavy(v, base)
     } else {

@@ -119,6 +119,7 @@ import { initViewCube }            from './scene/view_cube.js'
 import { initDebugOverlay }        from './scene/debug_overlay.js'
 import { initSequenceOverlay }     from './scene/sequence_overlay.js'
 import { initAtomisticRenderer }   from './scene/atomistic_renderer.js'
+import { initCpdWeldOverlay }      from './scene/cpd_weld_overlay.js'
 import { initSurfaceRenderer }     from './scene/surface_renderer.js'
 import { initAtomSurfaceDisplay }  from './scene/atom_surface_display.js'
 import { overhangsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './scene/representation_overrides.js'
@@ -1830,6 +1831,10 @@ async function main() {
 
   // ── Atomistic renderer (Phase AA) ───────────────────────────────────────────
   const atomisticRenderer = initAtomisticRenderer(scene)
+  // CPD weld overlay — markers on the designed extra-base weld pair. Driven from inside
+  // applyPositionLerp so it tracks the atoms exactly; see scene/cpd_weld_overlay.js.
+  const cpdWeldOverlay = initCpdWeldOverlay({ scene, THREE })
+  atomisticRenderer.setWeldOverlay(cpdWeldOverlay)
 
   // ── Protein subsystem (imported proteins; independent of the DNA atomistic
   // mode so proteins coexist with cylinders/beads/atomistic DNA). Owns its own
@@ -1906,6 +1911,7 @@ async function main() {
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
     // flexibility-map tools reuse the oxDNA display controller via an MD api adapter.
     getMdViz: () => mdViz,
+    getWeldOverlay: () => cpdWeldOverlay,
     // Explicit water / ions / periodic cell overlays for the Visualizations card.
     getSolventOverlay: () => mdSolventOverlay,
     getBoxOverlay: () => mdBoxOverlay,
@@ -2537,6 +2543,7 @@ async function main() {
 
   // ── Browser dev-tools debug helpers (window._nadocDebug) — see scene/debug/devtools_helpers.js ──
   window._nadocDebug = initDevtoolsDebug({ designRenderer, store, api, overhangLinkArcs, selectionManager, scene })
+  window._nadocDebug.cpdWeld = cpdWeldOverlay   // await _nadocDebug.cpdWeld.loadForJob(...)
 
   const crossSectionMinimap = initCrossSectionMinimap(document.getElementById('canvas-area'))
 

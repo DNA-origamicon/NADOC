@@ -2612,6 +2612,21 @@ export const getMdFramesAtomistic = (id, frameIndices, opts = {}) =>
  *  contract as getOxdnaAtomisticModel. */
 export const getMdAtomisticModel = (id) =>
   _oxdnaJSON('GET', `/md/jobs/${id}/atomistic-model`)
+/** The design's intended extra-base UV weld pairs + their C5/C6 atom serials
+ *  ({ready, pairs, constants}). Identity only — the viewer computes d_mid/eta from the
+ *  frame it is already rendering, so the markers can't drift off the atoms. `pairs` is
+ *  empty for a design with no insert-carrying reciprocal crossover pair (most designs). */
+export const getMdCpdPairs = (id) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/cpd-pairs`)
+/** Start a background pass measuring (d_mid, eta, k) for the weld pairs over the WHOLE
+ *  trajectory → {trace_id}. The overlay answers "how close now"; this answers "did they
+ *  ever get close". Poll with getMdCpdTrace. */
+export const startMdCpdTrace = (id, body = {}) =>
+  _oxdnaJSON('POST', `/md/jobs/${id}/cpd-trace/start`,
+    { stride: body.stride ?? 1, max_frames: body.maxFrames ?? 2000 })
+/** Progress + result of a weld-trace run ({state, progress, frames_done, result?}). */
+export const getMdCpdTrace = (traceId) =>
+  _oxdnaJSON('GET', `/md/cpd-trace/${traceId}`)
 /** Per-frame NAMD surface ({idx:{vertices,faces}}) for COMPOSITE trajectory frame indices. */
 export const getMdFramesSurface = (id, frameIndices, params = {}) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/frames-surface`,

@@ -299,9 +299,17 @@ export function initAtomisticRenderer(scene) {
     }
   }
 
+  // Optional CPD weld overlay (scene/cpd_weld_overlay.js). It is driven from inside
+  // applyPositionLerp so its markers are computed from the SAME placement that positions
+  // the atom instances — see the note there.
+  let _weldOverlay = null
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
+    /** Attach (or detach, with null) the CPD weld overlay. */
+    setWeldOverlay(overlay) { _weldOverlay = overlay || null },
+
     /** Load new atom data and rebuild scene objects. */
     update(data) {
       _state.lastData = data
@@ -640,6 +648,19 @@ export function initAtomisticRenderer(scene) {
           if (m) _state.bondMesh.setMatrixAt(i, m)
         }
         _state.bondMesh.instanceMatrix.needsUpdate = true
+      }
+
+      // Drive the CPD weld overlay from the SAME placement that just positioned the
+      // atoms, so its markers cannot drift off the atoms they annotate.
+      //
+      // Under an active cluster transform the atoms follow the rigid-body branch, which
+      // is keyed by helix_id — an identity the overlay's serial-only pairs cannot supply.
+      // Rather than draw at a knowingly wrong position, it is fed nothing and hides
+      // itself. MD trajectory display passes no cluster transforms, which is the path
+      // this overlay exists for.
+      if (_weldOverlay) {
+        _weldOverlay.update(
+          helixClusterMap.size ? null : (serial) => _atomXYZ(null, serial))
       }
     },
   }

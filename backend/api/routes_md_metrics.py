@@ -221,6 +221,108 @@ def start_md_metrics(job_id: str, req: MdMetricsStartRequest) -> dict:
     return {"metrics_id": run_id, "state": "running"}
 
 
+@router.get("/md/jobs/{job_id}/cpd-pairs")
+def get_md_cpd_pairs(job_id: str) -> dict:
+    """The design's intended extra-base UV weld pairs, with their C5/C6 atom serials.
+
+    Identity only — no coordinates.  The serials index the same solvated-universe atom
+    numbering the atomistic display already streams positions under, so the viewer reads
+    these four atoms straight out of the frame it is rendering and computes ``d_mid`` /
+    ``eta`` client-side.  That is deliberate: the display affine is handed over rather
+    than re-derived (``project_md_viz_tools``), so a second coordinate path here would
+    draw the markers off the atoms.
+
+    ``pairs`` is empty for a design with no insert-carrying reciprocal crossover pair,
+    which is not an error — most designs have none.
+    """
+    from backend.core.cpd_metrics import (
+        D0, N0, REACTIVE_D_NM, REACTIVE_ETA_DEG, VDW_FLOOR_NM,
+        designed_weld_pairs, resolve_weld_serials,
+    )
+
+    job = _load_job(job_id)
+    inputs = _job_inputs(job, _workspace())
+    constants = {"d0_nm": D0, "eta0_deg": N0, "reactive_d_nm": REACTIVE_D_NM,
+                 "reactive_eta_deg": REACTIVE_ETA_DEG, "vdw_floor_nm": VDW_FLOOR_NM}
+    if isinstance(inputs, str):
+        return {"ready": False, "reason": inputs, "pairs": [], "constants": constants}
+
+    psf, _ref, _segments, design = inputs
+    pairs = designed_weld_pairs(design)
+    if not pairs:
+        return {"ready": True, "reason": "design has no extra-base reciprocal crossover pair",
+                "pairs": [], "constants": constants}
+    try:
+        import MDAnalysis as mda
+
+        pairs = resolve_weld_serials(pairs, mda.Universe(str(psf)))
+    except Exception as exc:  # noqa: BLE001 - identity is still useful without serials
+        return {"ready": False, "reason": f"could not read topology: {exc}",
+                "pairs": pairs, "constants": constants}
+    return {"ready": True, "pairs": pairs, "constants": constants}
+
+
+class MdCpdTraceRequest(BaseModel):
+    stride: int = 1
+    max_frames: int = 2000
+
+
+def _compute_cpd_trace(run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path) -> None:
+    """Background pass: read the trajectory once and measure the weld coordinates."""
+    from backend.core.cpd_metrics import weld_trace
+
+    try:
+        job = _load_job(job_id)
+        inputs = _job_inputs(job, ws)
+        if isinstance(inputs, str):
+            _set(run_id, state="error", error=inputs)
+            return
+        psf, _ref, segments, design = inputs
+        _set(run_id, frames_total=None)
+
+        def _progress(done: int, total: int) -> None:
+            _set(run_id, progress=(done / total) if total else 0.0,
+                 frames_done=done, frames_total=total)
+
+        result = weld_trace(psf, [s[2] for s in segments], design,
+                            stride=max(1, req.stride), max_frames=max(1, req.max_frames),
+                            progress=_progress)
+        _set(run_id, state="done", progress=1.0, result=result)
+    except Exception as exc:  # surface any failure to the poller
+        _set(run_id, state="error", error=str(exc))
+
+
+@router.post("/md/jobs/{job_id}/cpd-trace/start")
+def start_md_cpd_trace(job_id: str, req: MdCpdTraceRequest) -> dict:
+    """Launch a background pass measuring (d_mid, eta, k) for the design's weld pairs
+    over the whole trajectory.  Returns ``{trace_id}``; poll ``GET /md/cpd-trace/{id}``.
+
+    Separate from the overlay, which only ever shows the CURRENT frame: the question
+    "did these two extra bases EVER get close enough to weld" is a whole-run question,
+    and on a 1xT design the answer so far is no — which you can only see as a trace.
+    """
+    _load_job(job_id)                          # 404 early if the job is unknown
+    run_id = uuid.uuid4().hex[:12]
+    _set(run_id, state="running", progress=0.0, frames_done=0, frames_total=None,
+         result=None, error=None)
+    threading.Thread(target=_compute_cpd_trace,
+                     args=(run_id, job_id, req, _workspace()), daemon=True).start()
+    return {"trace_id": run_id, "state": "running"}
+
+
+@router.get("/md/cpd-trace/{run_id}")
+def get_md_cpd_trace(run_id: str) -> dict:
+    """Progress + result of a weld-trace run: ``{state, progress, frames_done,
+    frames_total, result?, error?}``.  ``result.pairs[]`` carries the per-frame
+    ``d_nm`` / ``eta_deg`` / ``k`` series plus the run summary (``d_min_nm``,
+    ``k_max``, ``reactive_frames``)."""
+    with _LOCK:
+        run = _RUNS.get(run_id)
+        if run is None:
+            raise HTTPException(404, detail=f"no weld-trace run {run_id!r}")
+        return {"trace_id": run_id, **run}
+
+
 @router.get("/md/metrics/{run_id}")
 def get_md_metrics(run_id: str) -> dict:
     """Progress + result of an MD metric run: ``{state, progress, eta_s, frames_done,
