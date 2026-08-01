@@ -664,6 +664,23 @@ Override with `NADOC_IGNORE_SIM_GUARD=1`. **A red gate on a loaded box tells you
 
 ---
 
+<a id="f7"></a>
+### F7. Crossover extra bases render on their neighbour's coordinates — insert index vs arc direction (2026-08-01)
+
+SYMPTOM: during a live NAMD run (`2hb_2xT`), the backbone beads + slabs of a yellow staple's extra bases sat visibly wrong compared to the ball-and-stick view of the *same frame*. Only some crossovers; the rest of the structure was fine.
+
+NOT the backend. Replaying `ws.py::_seek_sync`'s bead path against the live DCD and diffing each `__xb__` bead against the same P atom in the ball-and-stick path gave **0.0000 nm** — the server sends exactly the atomistic coordinate. `p_order` mapped 95/95 with 0 unmapped and no duplicate design keys, and both paths shared one Kabsch rotation. When a CG overlay disagrees with atomistic, prove the *server* frame first; it collapses the search space by half in one script.
+
+ROOT CAUSE: two conventions for "insert k", never reconciled.
+- **Emitters** number a run **5′→3′ from `src`** — the half sitting at a domain END (`domain_end_to_strand`; `atomistic.py:2795-2802`, `oxdna_interface.py:394-403`). `src` is `half_b` whenever the strand enters that junction from the B side.
+- **Renderer** lays beads along the Bézier `half_a → half_b` and wrote sim-k straight into `beadStartIdx + k` (`crossover_connections.js`, `design_renderer.js`).
+
+They agree only for A→B strands. `2hb_2xT` has one crossover of each direction — the A→B one looked perfect, which is exactly why this survived: a design where every crossover runs the same way shows nothing. On the reversed one each TT bead landed ~0.63 nm off (≈2 bp rises) and the connector cones crossed. The `__xb__` **RMSF/scalar colours** were swapped by the same assumption. `forced_ligations` were always immune — their wrapper assigns `half_a = 3′ side` by construction, which is the fix, applied at build time.
+
+**How to avoid**: an insert index is meaningless without its direction convention. When one module numbers a run and another positions it, the ordering rule must be *stamped on the shared record* (here: `simReversed` on `arcData`), not re-derived independently at each site — there were **three** k↔bead sites and all three were wrong the same way. Prove the chain from the artifact, not from the design: the PSF's own `O3'→P` bonds settled the traversal in one query where domain arithmetic would only have been an argument. See [[project-oxdna-extra-bases]] ("THE INSERT-ORDERING LAW"), and D12/F6 for the two earlier bugs in this same key-convention family.
+
+---
+
 ## G. Disabled / deferred functionality
 
 <a id="g1"></a>

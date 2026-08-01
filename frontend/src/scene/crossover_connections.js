@@ -138,6 +138,48 @@ export function arcSlabQuaternion(arcTangent, helixAxis, out) {
 }
 
 /**
+ * Set of every domain-END key `"helix:end_bp:direction"` in the design.
+ *
+ * Mirrors `domain_end_to_strand` in backend/core/atomistic.py (:2727) — the map the
+ * simulation emitters use to decide which half of a crossover the strand EXITS from
+ * (its 3′ side = `src`).  Kept as a set because the renderer only needs membership,
+ * not the strand id.
+ */
+export function domainEndKeys(design) {
+  const keys = new Set()
+  for (const strand of design?.strands ?? []) {
+    for (const dom of strand.domains ?? []) {
+      keys.add(`${dom.helix_id}:${dom.end_bp}:${dom.direction}`)
+    }
+  }
+  return keys
+}
+
+/**
+ * Does this crossover's extra-base run need its simulated `k` indices reversed
+ * before they address bead instances?
+ *
+ * Beads are laid out along the Bezier from `half_a` to `half_b`, so bead 0 is the one
+ * next to `half_a`.  The emitters (NAMD atomistic.py:2795-2802, oxDNA
+ * oxdna_interface.py:394-403) number the run **5′→3′ from `src`**, where `src` is
+ * whichever half is a domain END — which is `half_b` whenever the strand happens to
+ * enter the junction from the B side.  Same test as the backend, including its
+ * default: half_a is `src` only if half_a is a domain end.
+ *
+ * Without this, a B→A crossover draws its inserts in reverse — each bead lands on its
+ * neighbour's coordinates and the backbone connectors cross.
+ */
+export function extraBaseOrderReversed(xo, endKeys) {
+  if (!endKeys) return false
+  return !endKeys.has(`${xo.half_a.helix_id}:${xo.half_a.index}:${xo.half_a.strand}`)
+}
+
+/** Bead-instance offset for simulated insert `k` on an arc. */
+export function simBeadIndex(k, beadCount, reversed) {
+  return reversed ? beadCount - 1 - k : k
+}
+
+/**
  * Resolve the strand color for a crossover nucleotide.
  * Checks customColors (strand.color overrides) before palette stapleColorMap.
  * Mirrors helix_renderer's nucColor priority order.
@@ -290,6 +332,9 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
   const bowDir = new THREE.Vector3()
   const slabPt = new THREE.Vector3()
   const arcData = []
+  // Which crossovers run half_b → half_a, so simulated insert k must be mirrored
+  // onto the A→B bead layout.  Computed once for the whole design.
+  const endKeys = domainEndKeys(design)
 
   for (const ac of arcCrossovers) {
     const { xo, nucA, nucB, posA, posB } = ac
@@ -362,6 +407,9 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
       beadCount: n,
       connStartIdx,
       avgAx: avgAx.clone(),
+      // Simulated inserts arrive numbered 5′→3′ from the strand's exit half; beads are
+      // laid out A→B.  True when those two disagree — see extraBaseOrderReversed.
+      simReversed: extraBaseOrderReversed(xo, endKeys),
       zOffset,
       bowDir: bowDir.clone(),
       beadBaseColor: beadColor,
@@ -469,12 +517,43 @@ export function partitionExtraBaseUpdates(updates) {
 }
 
 const _simNorm = new THREE.Vector3()
+const _simTan  = new THREE.Vector3()
+const _simAxis = new THREE.Vector3()
+const _simBasis = new THREE.Matrix4()
+
+/**
+ * Slab orientation for a SIMULATED extra base — the same basis helix_renderer builds
+ * for every real nucleotide it drives from an MD frame (:3416-3418):
+ *
+ *   X (SLAB_LENGTH  0.30) = tangential  = axis × baseNormal
+ *   Y (SLAB_WIDTH   0.06) = helix axis  — the thin stacking direction
+ *   Z (SLAB_THICK   0.70) = baseNormal  — the long axis, backbone → base
+ *
+ * NOT `arcSlabQuaternion`: that takes an ARC TANGENT in its first slot and puts the
+ * long 0.70 axis on the helix axis, which is right for a Bezier arc of un-simulated
+ * inserts but leaves a simulated insert's plate 90° off from the real slabs beside it
+ * (and pinned to the design's static axis instead of following the trajectory).
+ */
+export function simSlabQuaternion(baseNormal, helixAxis, out) {
+  _simAxis.copy(helixAxis)
+  _simTan.crossVectors(_simAxis, baseNormal)
+  if (_simTan.lengthSq() < 1e-12) {
+    // baseNormal ∥ axis — pick any perpendicular so the basis stays well-formed.
+    _simTan.set(1, 0, 0).cross(baseNormal)
+    if (_simTan.lengthSq() < 1e-12) _simTan.set(0, 1, 0).cross(baseNormal)
+  }
+  _simTan.normalize()
+  _simBasis.makeBasis(_simTan, _simAxis, baseNormal)
+  return out.setFromRotationMatrix(_simBasis)
+}
 
 /**
  * Place a SINGLE extra-base bead + slab at its REAL simulated position (from an
  * oxDNA/MD relaxed frame or trajectory), instead of the geometric Bezier arc.
- * The bead sits at the backbone position; the slab orients its base face along the
- * per-frame base normal (a1) and sits one SLAB_OFFSET inward toward the base.
+ * The bead sits at the backbone position; the slab points its long axis along the
+ * per-frame base normal (a1) and sits one SLAB_OFFSET inward toward the base — the
+ * same convention helix_renderer uses for real nucleotides, so an insert's plate
+ * reads the same way as the ones flanking it.
  * Does NOT set needsUpdate — batch then call flushExtraBaseMeshes() once.
  *
  * @param {number} idx          instance index (beadStartIdx + k)
@@ -490,7 +569,7 @@ export function setExtraBaseInstanceFromSim(beadsMesh, slabsMesh, idx, pos, base
   _simNorm.set(baseNormal?.[0] ?? 0, baseNormal?.[1] ?? 0, baseNormal?.[2] ?? 0)
   if (_simNorm.lengthSq() < 1e-12) _simNorm.set(0, 0, 1)
   _simNorm.normalize()
-  arcSlabQuaternion(_simNorm, avgAx, _uQuat)
+  simSlabQuaternion(_simNorm, avgAx, _uQuat)
   _uSlab.copy(_uPt).addScaledVector(_simNorm, SLAB_OFFSET)
   _uMat.compose(_uSlab, _uQuat, _uScl.set(SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK))
   slabsMesh.setMatrixAt(idx, _uMat)
@@ -560,7 +639,12 @@ export function extraBaseConnectorScalarColors(arc, lookup) {
   out[0] = a
     ? norm(lookup(`${a.helix_id}:${a.bp_index}:${a.direction}`) ?? lookup(`${a.helix_id}:${a.bp_index}:${a.direction}:0`))
     : null
-  for (let s = 1; s <= n; s++) out[s] = norm(lookup(`__xb__:${arc.xoId}:${s - 1}`))
+  // Segment s starts at bead s−1.  Which INSERT occupies that bead depends on the
+  // arc's direction — simBeadIndex is its own inverse, so it maps both ways.
+  for (let s = 1; s <= n; s++) {
+    const k = simBeadIndex(s - 1, n, arc.simReversed)
+    out[s] = norm(lookup(`__xb__:${arc.xoId}:${k}`))
+  }
   return out
 }
 

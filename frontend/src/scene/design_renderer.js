@@ -14,7 +14,7 @@
 import * as THREE from 'three'
 import { buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 import { resolveRepOverrides } from './representation_overrides.js'
-import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors } from './crossover_connections.js'
+import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, simBeadIndex, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors } from './crossover_connections.js'
 import { auditRenderedBonds, inventoryRenderedElements } from './render_bond_audit.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 
@@ -210,7 +210,9 @@ export function initDesignRenderer(scene, storeRef) {
       for (let k = 0; k < ad.beadCount; k++) {
         const hex = get(`__xb__:${ad.xoId}:${k}`)
         if (hex == null) continue
-        const idx = ad.beadStartIdx + k
+        // Same 5′→3′-vs-A→B mismatch as the position path: key by simulated k,
+        // paint the bead that k actually occupies.
+        const idx = ad.beadStartIdx + simBeadIndex(k, ad.beadCount, ad.simReversed)
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(hex))
         _xoverSlabsMesh.setColorAt(idx, _col.setHex(hex))
         dirty = true
@@ -1412,10 +1414,12 @@ export function initDesignRenderer(scene, storeRef) {
           for (let k = 0; k < ad.beadCount; k++) {
             const s = sim.get(k)
             if (!s) continue
+            // Simulated k is 5′→3′ from the strand's exit half; beads run A→B.
+            const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
             setExtraBaseInstanceFromSim(
-              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + k, s.pos, s.normal, ad.avgAx)
+              _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx)
             for (const g of _xoverGlowLive) {
-              if (g.arcData === ad && g.localIdx === k) g.pos.copy(s.pos)
+              if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
             }
           }
           dirty = true
@@ -1460,10 +1464,11 @@ export function initDesignRenderer(scene, storeRef) {
         for (let k = 0; k < ad.beadCount; k++) {
           const s = sim.get(k)
           if (!s) continue
+          const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
           setExtraBaseInstanceFromSim(
-            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + k, s.pos, s.normal, ad.avgAx)
+            _xoverBeadsMesh, _xoverSlabsMesh, ad.beadStartIdx + bi, s.pos, s.normal, ad.avgAx)
           for (const g of _xoverGlowLive) {
-            if (g.arcData === ad && g.localIdx === k) g.pos.copy(s.pos)
+            if (g.arcData === ad && g.localIdx === bi) g.pos.set(s.pos[0], s.pos[1], s.pos[2])
           }
         }
         return

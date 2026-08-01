@@ -101,6 +101,7 @@ FIX (both layers): (A) write side — `build_replica_package` now copies `parent
 - **F4** — Overhang autodetect per-HELIX coverage misses crossover tails — a crossover free tail is never tagged as an overhang. [detail](LESSONS_archive.md#f4)
 - **F5** — Negative bp: a `\d+` regex drops negative-bp elements — delete/edit "nothing happens" on fully-negative-bp elements. [detail](LESSONS_archive.md#f5)
 - **F6** — `+1` loop bases don't move after NAMD relax/production — a loop insertion shares `(helix,bp,dir)` with its base, so any readback/display keyed by that bare 3-tuple collapses the two. Disambiguate with a `copy` key (like crossover extra-bases' `__xb__`); oxDNA already did, the NAMD/MD path didn't. See [[md-viz-tools]] (2026-07-12 entry).
+- **F7** — Crossover extra bases render on their NEIGHBOUR's coordinates (beads/slabs "very off" vs the atomistic view of the same frame) — the emitters number a run 5′→3′ from the strand's exit half, the renderer lays beads out `half_a`→`half_b`; they disagree whenever the strand exits from `half_b`. An insert index is only meaningful WITH its direction convention. [detail](LESSONS_archive.md#f7)
 
 ## I. Assembly FK propagation in resolve / multi-mate chains
 - **I1** — Rigid-group BFS preempts per-joint snap in a chain — Resolve snaps only the first mate of a rigid chain. [detail](LESSONS_archive.md#i1)

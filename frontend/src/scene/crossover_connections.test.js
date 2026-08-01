@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors, CONN_RADIUS } from './crossover_connections.js'
+import { partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors, domainEndKeys, extraBaseOrderReversed, simBeadIndex, simSlabQuaternion, setExtraBaseInstanceFromSim, SLAB_OFFSET, SLAB_LENGTH, SLAB_WIDTH, SLAB_THICK, CONN_RADIUS } from './crossover_connections.js'
 
 function mockMesh(n) {
   const mats = Array.from({ length: n }, () => new THREE.Matrix4())
@@ -137,5 +137,160 @@ describe('extraBaseConnectorScalarColors', () => {
   it('handles a missing endpoint nucleotide without throwing', () => {
     const out = extraBaseConnectorScalarColors({ xoId: 'xo9', beadCount: 1, nucA: null }, lookupOf({}))
     expect(out).toEqual([null, null])
+  })
+
+  it('maps the scalar key through the arc direction when the run is reversed', () => {
+    // Bead s−1 holds insert simBeadIndex(s−1) — so on a reversed arc the cone leaving
+    // bead 0 is coloured by insert n−1, not insert 0.
+    const rev = { xoId: 'xo7', beadCount: 3, nucA: null, simReversed: true }
+    const out = extraBaseConnectorScalarColors(rev, lookupOf({
+      '__xb__:xo7:0': 0x222222,
+      '__xb__:xo7:1': 0x333333,
+      '__xb__:xo7:2': 0x444444,
+    }))
+    expect(out).toEqual([null, 0x444444, 0x333333, 0x222222])
+  })
+})
+
+// ── Insert ordering (the 5′→3′ vs A→B mismatch) ──────────────────────────────
+
+// Shape of workspace 2hb_2xT: two staples, each crossing between the same two helices
+// but entering their junction from opposite sides.  Verified against that run's PSF
+// covalent bonds — chain A runs half_a→k0→k1→half_b, chain B runs half_b→k0→k1→half_a.
+const TWO_HB_DESIGN = {
+  strands: [
+    { id: 'stpl_XY_0_1', domains: [
+      { helix_id: 'h_XY_0_1', start_bp: 7,  end_bp: 13, direction: 'FORWARD' },
+      { helix_id: 'h_XY_1_1', start_bp: 13, end_bp: 7,  direction: 'REVERSE' },
+    ] },
+    { id: 'stpl_XY_1_1', domains: [
+      { helix_id: 'h_XY_1_1', start_bp: 27, end_bp: 14, direction: 'REVERSE' },
+      { helix_id: 'h_XY_0_1', start_bp: 14, end_bp: 27, direction: 'FORWARD' },
+    ] },
+  ],
+}
+const XO_A_TO_B = {   // 54c5689d — strand exits from half_a
+  half_a: { helix_id: 'h_XY_0_1', index: 13, strand: 'FORWARD' },
+  half_b: { helix_id: 'h_XY_1_1', index: 13, strand: 'REVERSE' },
+}
+const XO_B_TO_A = {   // 4a12dd44 — strand exits from half_b
+  half_a: { helix_id: 'h_XY_0_1', index: 14, strand: 'FORWARD' },
+  half_b: { helix_id: 'h_XY_1_1', index: 14, strand: 'REVERSE' },
+}
+
+describe('domainEndKeys', () => {
+  it('collects helix:end_bp:direction for every domain of every strand', () => {
+    const keys = domainEndKeys(TWO_HB_DESIGN)
+    expect(keys.has('h_XY_0_1:13:FORWARD')).toBe(true)   // stpl_XY_0_1 exits here
+    expect(keys.has('h_XY_1_1:14:REVERSE')).toBe(true)   // stpl_XY_1_1 exits here
+    expect(keys.has('h_XY_0_1:14:FORWARD')).toBe(false)  // that is a domain START
+    expect(keys.size).toBe(4)
+  })
+
+  it('tolerates a design with no strands', () => {
+    expect(domainEndKeys(null).size).toBe(0)
+    expect(domainEndKeys({}).size).toBe(0)
+  })
+})
+
+describe('extraBaseOrderReversed', () => {
+  const keys = domainEndKeys(TWO_HB_DESIGN)
+
+  it('is false when the strand exits the junction from half_a (beads already run 5′→3′)', () => {
+    expect(extraBaseOrderReversed(XO_A_TO_B, keys)).toBe(false)
+  })
+
+  it('is TRUE when the strand exits from half_b — the swapped-insert bug', () => {
+    expect(extraBaseOrderReversed(XO_B_TO_A, keys)).toBe(true)
+  })
+})
+
+describe('simBeadIndex', () => {
+  it('is the identity on a forward arc', () => {
+    expect([0, 1, 2].map(k => simBeadIndex(k, 3, false))).toEqual([0, 1, 2])
+  })
+
+  it('mirrors the run on a reversed arc', () => {
+    expect([0, 1, 2].map(k => simBeadIndex(k, 3, true))).toEqual([2, 1, 0])
+  })
+
+  it('swaps the pair for the common TT insert', () => {
+    expect([0, 1].map(k => simBeadIndex(k, 2, true))).toEqual([1, 0])
+  })
+
+  it('is its own inverse, so it maps bead→insert as well as insert→bead', () => {
+    for (const n of [1, 2, 3, 5]) {
+      for (let k = 0; k < n; k++) {
+        expect(simBeadIndex(simBeadIndex(k, n, true), n, true)).toBe(k)
+      }
+    }
+  })
+
+  it('leaves a single insert alone in either direction', () => {
+    expect(simBeadIndex(0, 1, true)).toBe(0)
+    expect(simBeadIndex(0, 1, false)).toBe(0)
+  })
+})
+
+// ── Simulated slab orientation ───────────────────────────────────────────────
+
+describe('simSlabQuaternion', () => {
+  const V = (x, y, z) => new THREE.Vector3(x, y, z)
+
+  it('puts the long axis on the base normal and the thin axis on the helix axis', () => {
+    // helix_renderer's convention: basis(tangential, axis, baseNormal), so local +Z
+    // (the SLAB_THICK 0.70 axis) must land on the base normal and local +Y (the
+    // SLAB_WIDTH 0.06 stacking axis) on the helix axis.
+    const bn = V(1, 0, 0), axis = V(0, 0, 1)
+    const q = simSlabQuaternion(bn, axis, new THREE.Quaternion())
+    expect(V(0, 0, 1).applyQuaternion(q).distanceTo(bn)).toBeCloseTo(0, 6)
+    expect(V(0, 1, 0).applyQuaternion(q).distanceTo(axis)).toBeCloseTo(0, 6)
+    expect(V(1, 0, 0).applyQuaternion(q).distanceTo(V(0, 1, 0))).toBeCloseTo(0, 6)
+  })
+
+  it('is the identity when the base normal is +Z and the axis is +Y', () => {
+    const q = simSlabQuaternion(V(0, 0, 1), V(0, 1, 0), new THREE.Quaternion())
+    expect(q.angleTo(new THREE.Quaternion())).toBeCloseTo(0, 6)
+  })
+
+  it('stays finite when the base normal is parallel to the helix axis', () => {
+    const q = simSlabQuaternion(V(0, 0, 1), V(0, 0, 1), new THREE.Quaternion())
+    for (const c of [q.x, q.y, q.z, q.w]) expect(Number.isFinite(c)).toBe(true)
+  })
+})
+
+describe('setExtraBaseInstanceFromSim', () => {
+  it('puts the bead on the raw simulated position and the slab one SLAB_OFFSET along the base normal', () => {
+    const beads = mockMesh(1), slabs = mockMesh(1)
+    const axis = new THREE.Vector3(0, 0, 1)
+    setExtraBaseInstanceFromSim(beads, slabs, 0, [2.044, 2.998, 4.365], [1, 0, 0], axis)
+
+    const b = decompose(beads, 0)
+    expect(b.pos.toArray()).toEqual([2.044, 2.998, 4.365])   // untouched MD coordinate
+    expect(b.scl.x).toBeCloseTo(1)
+
+    const s = decompose(slabs, 0)
+    expect(s.pos.x).toBeCloseTo(2.044 + SLAB_OFFSET)         // shifted along the base normal
+    expect(s.pos.y).toBeCloseTo(2.998)
+    expect(s.scl.x).toBeCloseTo(SLAB_LENGTH)
+    expect(s.scl.y).toBeCloseTo(SLAB_WIDTH)
+    expect(s.scl.z).toBeCloseTo(SLAB_THICK)
+    // Long axis follows the per-frame normal, not the design's static helix axis.
+    const long = new THREE.Vector3(0, 0, 1).applyQuaternion(s.quat)
+    expect(long.distanceTo(new THREE.Vector3(1, 0, 0))).toBeCloseTo(0, 6)
+  })
+
+  it('normalises a non-unit base normal instead of scaling the offset by it', () => {
+    const beads = mockMesh(1), slabs = mockMesh(1)
+    setExtraBaseInstanceFromSim(beads, slabs, 0, [0, 0, 0], [5, 0, 0], new THREE.Vector3(0, 0, 1))
+    expect(decompose(slabs, 0).pos.x).toBeCloseTo(SLAB_OFFSET)
+  })
+
+  it('falls back to +Z for a zero-length base normal', () => {
+    const beads = mockMesh(1), slabs = mockMesh(1)
+    setExtraBaseInstanceFromSim(beads, slabs, 0, [0, 0, 0], [0, 0, 0], new THREE.Vector3(0, 1, 0))
+    const s = decompose(slabs, 0)
+    expect(s.pos.z).toBeCloseTo(SLAB_OFFSET)
+    for (const c of s.pos.toArray()) expect(Number.isFinite(c)).toBe(true)
   })
 })

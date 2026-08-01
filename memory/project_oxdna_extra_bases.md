@@ -139,8 +139,38 @@ Extra-base beads/slabs ALWAYS render (built by `crossover_connections.js`
 but were positioned by a geometric **Bézier arc** between the crossover endpoints
 (`updateExtraBaseInstances`, re-interpolated each frame via
 `design_renderer.applyClusterCrossoverUpdate`). They never reflected the real ssDNA
-conformation. `_xoverArcDataMap.get(crossover_id) → {beadStartIdx, beadCount}` maps
-`(crossover_id, k)` → bead instance `beadStartIdx + k`.
+conformation. `_xoverArcDataMap.get(crossover_id) → {beadStartIdx, beadCount, simReversed}`
+maps `(crossover_id, k)` → bead instance `beadStartIdx + simBeadIndex(k, beadCount,
+simReversed)` — **NOT `beadStartIdx + k`**; see the ordering law below.
+
+### THE INSERT-ORDERING LAW (fixed 2026-08-01 — was silently swapping inserts)
+
+Beads are laid out along the Bézier from **`half_a` → `half_b`**, so bead 0 is the one
+next to `half_a`. Every emitter — NAMD (`atomistic.py:2795-2802`) and oxDNA
+(`oxdna_interface.py:394-403`) — instead numbers the run **5′→3′ from `src`**, where
+`src` is whichever half sits at a domain **END** (`domain_end_to_strand`, half_a
+preferred when both are). Those two agree only when the strand exits from `half_a`.
+When it exits from `half_b` the run is drawn **reversed**: every bead lands on a
+neighbouring insert's coordinates (~0.6 nm each for a TT — ~2 bp rises) and the
+connector cones cross themselves. `forced_ligations` never had the bug: their wrapper
+assigns `half_a = 3′ side` by construction.
+
+Fix lives entirely in the renderer (display layer — no topology touched):
+`domainEndKeys(design)` + `extraBaseOrderReversed(xo, endKeys)` (pure, mirroring the
+backend rule including its tie-break) stamp `simReversed` on each `arcData` at build
+time; `simBeadIndex(k, n, reversed)` (self-inverse) is applied at all **three** sites
+that map k↔bead: both sim branches in `design_renderer.js` and the `__xb__` scalar
+(RMSF) colour lookup — the colours were swapped too. Real regression fixture in
+`crossover_connections.test.js` uses the `2hb_2xT` shape (one crossover of each
+direction), verified against that run's PSF covalent bonds.
+
+**Slab orientation for simulated inserts** now uses `simSlabQuaternion` — the
+helix_renderer basis (`tangential, axis, baseNormal` → long 0.70 axis on the base
+normal). It previously fed the base normal into `arcSlabQuaternion`'s **arc-tangent**
+slot, leaving the plate 90° off from the real slabs beside it and pinned to the
+design's static `avgAx` instead of following the trajectory. `arcSlabQuaternion` is
+still correct — and still used — for the un-simulated Bézier arc and by
+`overhang_link_arcs.js`, which pass a genuine arc tangent.
 
 Phase 1 (CG beads/slabs, oxDNA display + trajectory) — DONE:
 - The oxDNA composite TRAJECTORY already carried `__xb__` keys+positions. The single-
@@ -152,7 +182,8 @@ Phase 1 (CG beads/slabs, oxDNA display + trajectory) — DONE:
 - Frontend: `partitionExtraBaseUpdates` (pure, in crossover_connections.js) splits FEM/
   trajectory updates into real vs `__xb__` (key shape `{helix_id:"__xb__",
   bp_index:crossover_id, direction:k}`); `design_renderer.applyFemPositions` routes
-  `__xb__` to `setExtraBaseInstanceFromSim` (bead at real pos, slab oriented from a1),
+  `__xb__` to `setExtraBaseInstanceFromSim` (bead at real pos, slab oriented from a1 —
+  through `simBeadIndex`, see the ordering law above),
   marks those arcs sim-driven, and `applyClusterCrossoverUpdate` SKIPS Bézier for them
   (Bézier stays for static design view / revert).
 - Verified: pytest (`test_display_route_surfaces_extra_bases`,
