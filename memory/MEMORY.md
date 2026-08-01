@@ -77,7 +77,7 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **Feature log / anim:** feature_log_overhaul · animation_fade · animation_all_reprs · assembly_configurations
 
-**Workspace / UX:** ux_overhaul (file browser, library panel, sidebar widths, sim-folder hiding)
+**Workspace / UX:** **ux_overhaul** (P2 — sole owner of file-browser/library/sidebar/modal/toast ground; read before any UI-chrome work. `drag_scrub.js` + `overhang_binding_lines.js` are gone despite the archive)
 
 **Display / representation:** ssdna_ball_joints · photo_mode · hull_prism · **mixed_representation** (SHIPPED; P1 — deformed cylinders + impostors uncovered, suspected photo-export bead bug) · strand_animations · reference_geometry · protein_attachment (SHIPPED incl. conjugation picker; P2 — only Phase 3 assembly-scope left) · headless_build · sphere_impostors
 

@@ -1,221 +1,149 @@
 ---
 name: ux-overhaul
-description: "Approved but deferred UX flow-change work. User has already chosen direction for each item — implement when picked up; don't re-question the decision."
+description: "Approved-but-deferred UX flow work. User already chose the direction for each item — implement, don't re-question. Rank P2."
 metadata: 
   node_type: memory
   type: project
   originSessionId: 880cb9b6-569c-448a-ad02-08f5fd187d03
 ---
 
-# UX Overhaul — Approved Deferred Work (2026-05-16)
+# UX Overhaul — Approved Deferred Work
 
-## Shipped 2026-07-16 — workspace list hygiene (out-of-session work)
+**Rank:** P2 — the remaining items are UI polish, nothing is blocked on them, and two of the
+four have softened (item 15's target is orphaned; item 14's backend half is a large refactor).
+But this file is the **sole owner** of the file-browser / library-panel / sidebar / modal /
+toast ground — no `.claude/rules/*.md` and no other topic file covers it (probed 2026-07-31).
 
-- **Engine job folders hidden from the file lists.** `ui/sim_folders.js` (new, pure + tested):
-  `SIM_FOLDER_NAMES` + `isSimFolderPath(path)` + `visibleWorkspaceEntries(entries, showSimFolders)`.
-  `file_browser.js` and `library_panel.js` filter through it; each toolbar gained a **"show sim
-  folders"** checkbox, OFF by default. Matching is **root-segment only** — `Projects/md_jobs/x.nadoc`
-  stays VISIBLE (pinned by test); and it is a heuristic, not just the literal set:
-  `root.endsWith('_jobs')` means a future engine's `*_jobs` folder auto-hides with no code change.
-  Backslashes are normalised first.
-- **Left sidebar width is now per design file.** `sidebar_resize.js` `leftWidthStorageKey(path)` →
-  `nadoc.leftPanel.width.file:<encodeURIComponent(path)>`; re-read on the existing
-  `nadoc:workspace-path-change`. **An unsaved design (null path) reuses the legacy global key**
-  `nadoc.leftPanel.width` (pinned). The RIGHT panel width stays global — deliberate.
+**Status (probed 2026-07-31):** the 2026-05-16 audit produced ~25 UX proposals; the user decided
+each one. Everything in Batches A/B shipped except **one** (joint-targeted Polymerize). Batch C
+has one real item left. Batch D is untouched. History → `project_ux_overhaul_archive.md`.
 
-Audit session 2026-05-16 produced ~25 UX flow-change proposals across the
-codebase. The user reviewed and decided each one. The smaller items were
-implemented in that session (see "Shipped" below). The rest are queued here
-with the approved direction so a future session can pick them up.
+**Don't re-litigate the decisions.** Each item was chosen by the user with full awareness of the
+alternatives. If a tradeoff emerges during implementation that contradicts the decision, surface
+it explicitly rather than silently re-deciding.
 
-**Don't re-litigate the decisions.** Each item below has been chosen by the
-user with full awareness of the alternatives. If a tradeoff emerges during
-implementation that contradicts the decision, surface it explicitly rather
-than silently re-deciding.
+## Corrections from the 2026-07-31 audit (the archive is wrong about these)
 
-## Shipped 2026-05-16
-
-| Area | Change |
+| Archive claim | Reality |
 |---|---|
-| `frontend/src/ui/toast.js` | Severity variants (info/success/warning/error), stacking, `×` dismiss, optional action button. Backward-compat with `showToast(msg, durationMs)`. |
-| `frontend/src/main.js` | **F** key now frames selection bbox (strands/domains/single nuc) before falling back to fit-all. `_currentOrbitMode` initial value fixed. Selection-count HUD pill added to canvas-area. Photo mode hides view cube + mode indicator (`store.photoActive` flag set so other modules can subscribe). |
-| `frontend/src/scene/view_cube.js` | rAF loop skips CSS write while hidden. |
-| `frontend/src/scene/cross_section_minimap.js` | Backing store scales by `devicePixelRatio` (clamped to 2); ctx pre-scaled. |
-| `frontend/index.html` | Duplicate `display:none` in `#sync-debug-panel` removed. Selection-count HUD container added. |
-| `frontend/src/ui/library_panel.js` | Search input above sort bar; auto-expands folders with matches. |
-| `frontend/src/cadnano-editor/main.js` | **Esc** drops back to Select tool when not in help modal. |
-| `frontend/src/ui/feature_log_panel.js` | Floating label follows rail thumb during drag. |
-| `frontend/src/ui/polymerize_panel.js` | Live colored cost preview; blocking confirm only fires at ≥20. |
-| `frontend/src/ui/extrude_panel.js` | A/B style alternates removed (Fusion-style retained). |
-| `frontend/src/input/drag_scrub.js` | NEW: drag-scrub helper for `<input type=number>`. Wired in polymerize, animation, extrude panels. |
-| `frontend/src/main.js` + `frontend/src/cadnano-editor/main.js` + `frontend/src/ui/library_panel.js` | All 117 `alert()` calls rewritten to `showToast(msg, { severity: 'error' })`. Script at `/tmp/alert_to_toast.py` (regex-literal aware version recommended; current version has a one-line gap on regex-literal-containing functions — caught by `grep -c "alert("` after the script and fixed by hand). |
-| `frontend/src/scene/photo_renderer.js` | Bloom-related fix: PMREM env bake reordered to AFTER composer creation in `activate()` (was producing black/colored-filter viewport because PMREMGenerator side effects contaminated freshly-created composer RTs). Also: bloom slider drags no longer dispose+rebuild the composer — just tweak `bloomPass.strength/radius/threshold` uniforms when bloom is already enabled. |
-| `frontend/src/scene/assembly_renderer.js` + `frontend/src/main.js` | Added `assemblyRenderer.onRebuildComplete(fn)` subscriber API. `_rebuildOverhangLocations()` now subscribes to it, fixing overhang-location arrows vanishing after every assembly rebuild (was hooked to 1 of 9 rebuild sites in main.js). |
-| `frontend/src/ui/assembly_context_menu.js` + `frontend/src/main.js` | Right-click on a part instance now exposes Show/Hide, Edit Part…, Duplicate, Polymerize…, Delete in addition to the existing Repr/Move-Rotate/Define-Connector/Fixed/Allow-Joints. Verbs are opt-in via callbacks (`onToggleVisible`, `onEditPart`, `onDuplicate`, `onPolymerize`, `onDelete`); sidebar (`assembly_panel.js`) continues to expose the same actions independently. |
-| `frontend/src/ui/overhangs_manager_popup.js` + `assembly_overhangs_manager_popup.js` + `frontend/index.html` | Connection-Types tab: filter input above each side list (A/B) — case-insensitive substring on overhang label; auto-keeps the currently-selected overhang visible. Linker/binding table: clickable column headers (Name/Type/Length/Overhangs/Bound) toggle sort with ▲/▼ arrow, plus sticky `<thead>`. Both per-part popup (`#ct-list-search-{a,b}` + `#ct-table`) and assembly popup (`#aohc-list-search-{a,b}` + `#aohc-table`). Assembly variant additionally filters across part name + overhang name, auto-expanding any part with a matching overhang. |
-| `camera_panel.js` + `photo_panel.js` + `bend_twist_popup.js` + `main.js` Move/Rotate panel | dragScrub helper wired in (in addition to polymerize/animation/extrude from before). Coverage now: camera pose FOV (re-attaches per `_rebuild`), photo-mode controls (lighting / bloom / fluoro / mist sliders), bend/twist plane-bp inputs, cluster Move/Rotate tx/ty/tz/rx/ry/rz/joint-angle. Joints panel and deformation_editor have no number inputs to scrub — skipped intentionally. |
-| `frontend/src/ui/primitives/confirm.js` (new) + `main.js` + `feature_log_panel.js` + `polymerize_panel.js` | Promise-returning `showConfirm({title, message, danger, confirmLabel, cancelLabel})` modal primitive built on `createModal`. Replaces 9 `window.confirm(...)` calls in the original alert→toast follow-up scope: main.js (clear-all loops/skips, delete strand from palette, assembly atomistic warning), feature_log_panel.js (delete loadout, revert FineRouting cluster, revert-to-before-feature design + assembly, delete assembly feature), polymerize_panel.js (large-polymerize gate at ≥20 new instances). Dangerous prompts focus the Cancel button by default; non-destructive focus Confirm. |
-| `frontend/src/scene/selection_manager.js` + `main.js` + `.claude/rules/selection.md` | Selection-modifier remap (2026-05-17): Ctrl-drag = lasso (unchanged), Alt-click = measurement-bead pick (moved from Ctrl-click), Shift-click = additive multi-select (toggle hit strand in `multiSelectedStrandIds`; also toggles crossover arc in multi-arc set when `selectableTypes.crossoverArcs` is on). Ctrl-click no-drag is now a no-op. Capture-phase listener disables OrbitControls on Ctrl/Alt/Shift+left to prevent pan/rotate competition. One-time startup toast (gated on `localStorage` key `nadoc.hint.selModifiers.v1`) hints users to the new bindings. |
-| `frontend/src/ui/feature_log_panel.js` + `animation_panel.js` + `main.js` | Animation panel's "State" picker: flat `<select>` of every feature_log entry replaced with a **Pin to feature** button. Button label shows current pinned feature (or "— not pinned —"); when pinned, a `×` Unpin button appears alongside. Clicking the pin button calls `main.js`'s `pinToFeature()`, which switches the left sidebar to the feature-log tab and calls a new `featureLogPanel.enterPickMode(callback)` API. The user clicks a feature row; the callback receives the feature index, the FL panel exits pick mode, and the sidebar switches back to the Scene tab. Pick mode renders a blue banner ("Click a feature to pin the keyframe to. [Cancel]") at the top of the FL panel and re-routes row clicks from seek to callback. Assembly mode keeps its existing configuration `<select>` (configurations are small named sets and don't have the scaling problem). |
-| `frontend/src/scene/overhang_binding_lines.js` (new) + `main.js` | Dashed 3D connectors between overhang pairs that have an `OverhangBinding` record. Bound = solid green; unbound (pre-bind) = translucent amber. Endpoints use a representative backbone position per overhang. Module exposes `rebuild(design, geometry)`, `setVisible(v)`, `hitTest(raycaster)`. Main.js wires a store subscription so lines rebuild on design/geometry change (skipped in assembly mode — `OverhangBinding` is per-part). Right-click on a binding line opens a small custom context menu with **Bind / Unbind** and **Delete binding** (uses `showConfirm` for delete). The original audit assumed this line already existed; in reality it was never shipped — added here. Cross-part `AssemblyOverhangBinding` not yet covered (follow-up). |
+| Item 7 `input/drag_scrub.js` "SHIPPED", wired into 7 panels | **File does not exist.** Zero hits for `dragScrub`/`drag_scrub` anywhere in `frontend/src`; none of the 7 named panels reference it. Removed at an unknown date, unrecorded. `frontend/src/input/` holds only `shortcuts.js`. **User decision pending** (parked in `plan_audit_ledger.md` HOLD) |
+| `scene/overhang_binding_lines.js` shipped (dashed pre-bind connectors + Bind/Unbind menu) | **Deleted 2026-07-01** with `ui/overhang_binding_menu.js`; recorded in [[project_overhang_duplex_foundation]]:112, never crossed off here. Item 3's *own* file guesses (`scene/overhang_link_arcs.js`, `scene/crossover_connections.js`) both still exist |
+| Part-origin fix #2: `originAxes.visible = false` at init | **Reverted.** `main.js:274-276` is `visible = true`; `_syncOriginAxesForEmpty` (`:279-285`) force-shows the triad for an empty part and never auto-hides. The "helper masquerading as a part gizmo" rationale no longer describes the code |
+| GROMACS TODOs at `index.html:2845` and `main.js:10517` | `index.html:3302-3308`; **main.js is 8,070 lines** — the wiring moved to `ui/export_menu.js:330-338` (TODO :330, stub toast :338, pinned by `ui/export_menu.test.js:265`) |
+| `_onAssemblyContextMenu` in `main.js` | **Moved** → `scene/assembly_pointer.js:591` (`onAssemblyContextMenu`); `main.js:6228` is a one-line `deferrableContextMenu` wrapper. `_lastRightClickedKind` = 0 hits repo-wide |
+| `_openNewDesignModal`, `_attachGroupGizmo` in `main.js` | Both **moved**: `ui/new_design_modal.js` (`initNewDesignModal:40`) and `scene/group_gizmo.js` (`main.js:4896` is an alias). Still in main.js: `pinToFeature:6737`, `_enterAssemblyMode:3613`, `_rebuildOverhangLocations:1664`, `originAxes:274` |
 
-## Queued — Batch B leftovers (still open)
+## Live code — where this subsystem actually is (probed 2026-07-31)
 
-### Assembly context menu — Polymerize-From-Mate (joint-targeted variant)
-The instance-targeted Polymerize… entry is shipped (opens the panel; user picks mate inside). The joint-targeted variant ("right-click a joint indicator → Polymerize from this mate") is deferred — it needs the contextmenu handler to call `assemblyRenderer.pickPartJoint(ndc, camera)` first, fall through to `pickInstance` if no joint hit, and then call `polymerizePanel.setSelectedJoint(jointId); polymerizePanel.open()` for the joint case. ~30 lines in `_onAssemblyContextMenu` + a small new context-menu variant.
+| Thing | Location |
+|---|---|
+| Sim-folder hiding | `ui/sim_folders.js` — `SIM_FOLDER_NAMES:2`, `isSimFolderPath:17` (`root.endsWith('_jobs')` heuristic :19), `visibleWorkspaceEntries:22`. Importers: `ui/library_panel.js:14`, `ui/file_browser.js:16` — **both** pass the flag (`library_panel.js:245`, `file_browser.js:381`). Checkboxes OFF by default (`library_panel.js:121`, `file_browser.js:71`) |
+| Per-file sidebar width | `ui/sidebar_resize.js` — `leftWidthStorageKey:26`, legacy global `LS_LEFT:23`, `nadoc:workspace-path-change` listener `:115-119` (left only), RIGHT stays global `:55-57`. Sole importer `main.js:180` |
+| Modal primitive | `ui/primitives/modal.js` `createModal` — 22 call sites |
+| Confirm primitive | `ui/primitives/confirm.js` `showConfirm` — ~25 call sites, **zero tests** |
+| Toast | `ui/toast.js` — 374 call sites, **1 test** |
+| Selection modifiers | `scene/selection_manager.js:3284` (capture-phase orbit disable), `:3300` Alt = bead, `:3304` Shift = additive, `:3308` Ctrl = lasso. Hint toast + `nadoc.hint.selModifiers.v1` at `main.js:1008-1017` |
+| FL pick mode | `ui/feature_log_panel.js` `enterPickMode:1911` / `exitPickMode:1917`; `pinToFeature` `main.js:6737` → `ui/animation_panel.js:100` |
+| Configurations-in-FL | `_configurationsMode` `ui/feature_log_panel.js:68,179,225,364,374,383`. `assembly_config_panel.js` confirmed deleted (tombstone `main.js:155`) |
+| Scene inspector | `scene/scene_inspector.js` — Ctrl+Shift+I `:172`, `window.__nadocInspect:202`, wired `main.js:181`. `window.__nadocBoxAudit` `main.js:4686` → `assembly_renderer.js:1376` |
+| CT-tab sort/filter | `index.html:2980,3019` + `:3192,3231` (search inputs), sticky thead `:3078-3084`, `:3281-3287`; wiring `overhangs_manager_popup.js:224,2035`, `assembly_overhangs_manager_popup.js:129,1051` |
 
-### Part-origin gizmo follow-up: centroid anchor + bounding-box leaks — SHIPPED 2026-05-17 (session 2)
+## Open items
 
-User reported that after the earlier phantom-instance fix, a mysterious gold/white "icon" was still floating at each part's part-local origin, the bounding box extended far past visible geometry, and the Move/Rotate gizmo planted at the part-local origin rather than visible center. Iterative inspector-driven debugging found four overlapping causes; all fixed:
+### 1. Polymerize-From-Mate (joint-targeted right-click) — the last Batch B item
+Both anchors are alive: `assemblyRenderer.pickPartJoint` (`scene/assembly_renderer.js:1032`,
+exported `:1786`; **no-op stub** in `assembly_renderer_shared.js:88` — and shared is now the
+default renderer, so check that first) and `polymerizePanel.setSelectedJoint`
+(`ui/polymerize_panel.js:606`). The right-click chain is `scene/assembly_pointer.js:591-636`
+(overhang arrows → linker → belt → `pickInstance`) and **never calls `pickPartJoint`** — that is
+the ~30-line edit, now in `assembly_pointer.js`, not `main.js`. The instance-targeted entry is
+`ui/assembly_context_menu.js:207-208`; `show(inst, x, y)` (`:82`) takes no joint.
+**Partly obsolete:** `setSelectedJoint` already ships on a *different* gesture —
+`assembly_pointer.js:236-243` intercepts left-click while the polymerize panel is open and calls
+it via `assemblyJointRenderer.pickJointAny(e)`. Decide whether the right-click variant is still
+wanted before building it.
 
-1. **Centroid-anchored Move/Rotate gizmo.** `frontend/src/scene/instance_gizmo.js` now accepts a world-space `centroidWorld` parameter. When supplied, the dummy is placed at the centroid and the centroid is cached in instance-local coords (`_centroidLocal = inv(instance_mat) · centroidWorld`); on every drag frame the recovered instance world matrix is `dummy · T(-centroid_local)`. Wired in `main.js _attachGroupGizmo` to pull the centroid from `assemblyRenderer.getInstanceCenters()`. Solves: gizmo placement on parts (e.g. polymerize-seeded) whose part-local origin sits well outside the visible structure.
-2. **World-origin AxesHelper masquerading as a part gizmo.** `main.js` allocated `originAxes = new THREE.AxesHelper(4)` at world (0,0,0) and added it to the scene visible-by-default. When a part's centroid happened to be near the world origin (always true for the first instance in a fresh assembly), the helper read as "part-specific." Fix: `originAxes.visible = false` at init; `is-on` class removed from `#menu-view-axes` in `index.html`. **View > Origin Axes** toggle still flips it on for users who want the world frame.
-3. **Part-joint indicator opt-in only.** `assembly_renderer.js _rebuildPartJointIndicators` no longer renders the orange-passive variant on every part. Indicators are built only when `inst.allow_part_joints === true` (the explicit right-click → "Allow Part Joints" opt-in). Removed the passive `0xff8c00` color path entirely; the only variant left is the highlighted yellow `0xffff88` at scale 2x. Indicators appear/disappear immediately when the user toggles the context-menu checkbox (`api.patchInstance` updates the store, which triggers the renderer's rebuild). Shaft/tip/ring meshes additionally got `userData.skipBounds = true` so they don't bloat the BoxHelper even when shown.
-4. **Bounding-box leaks → see LESSONS D4.** `_computeGroupBox` in `assembly_renderer.js`:
-   - Empty `InstancedMesh` (`count === 0`) was falling through to the regular-Mesh branch and contributing its **template** geometry's bounding box (e.g. an unpositioned fluorophore sphere) at the instance origin — pulling minZ down to ~0 even though no fluorophores existed.
-   - Per-leaf `visible` check missed hidden parent groups (e.g. `_curvedCylGroup.visible = false`'s TubeGeometry children whose own `visible` was true). Fix: walk the parent chain via `_isVisibleUnder(obj, stopAt)`.
-   - Both fixes flow through to `getInstanceCenters()` (same `_computeGroupBox` call), so the gizmo centroid is now also tight.
+### 8. Migrate the overhangs-manager modal pair to `createModal()`
+The only *real* remaining migration. Still hand-rolled: `index.html:2831`
+(`#overhangs-manager-modal`) and `:3179` (`#assembly-overhangs-manager-modal`), both
+`style="display:none;position:fixed;inset:0;…"` wrappers toggled directly —
+`overhangs_manager_popup.js:1726`/`:1749`, `assembly_overhangs_manager_popup.js:175`/`:203`.
+Neither file imports `createModal`. **The anti-pattern has since spread:**
+`ui/conjugate_manager.js:330` explicitly "mirrors #overhangs-manager-modal" — a third
+hand-rolled overlay written after this doc. Migrating the pair should take it too.
+GROMACS export (`#gromacs-export-modal`) is still removed-with-a-stub-toast; re-implement only
+when the exporter itself is re-worked.
 
-**New diagnostics that stay in the codebase:**
-- `window.__nadocInspect.toggle()` — Ctrl+Shift+I scene-object inspector with click-to-table output. Now reports `instanceId`, `instanceLocalPos`, `instanceWorldPos`, `instanceScale`, `instanceColor`, and `flags` (NaN/zero/huge scale) for InstancedMesh hits. Visibility check upgraded to walk the parent chain (was leaf-only, surfacing false hits on hidden subtrees).
-- `window.__nadocBoxAudit(instanceId?)` — dumps every mesh's contribution to the active instance's bounding box, sorted by extent. Outliers section flags rows reaching the global min/max on any axis. Use whenever the BoxHelper looks too big.
+**Modal recipe — REVISED (use this).** Keep `hidden` on the body DIV. Inside
+`_build*ModalOnce()`, after grabbing the body but **before** passing it to `createModal`, call
+`body.removeAttribute('hidden')`. Doing it at IIFE-init instead renders the body inline above
+the canvas — that bug is what killed the gromacs migration.
 
-### Scene inspector debug overlay + phantom-instance + workspace-grid fixes — SHIPPED 2026-05-17
-A user-reported "part-specific origin gizmo" in an assembly turned out to be **multiple overlapping things**, isolated using a new debug tool.
+### 14. AbortController + backend abort endpoints — frontend half is nearly free
+Backend is **untouched**: no `POST /op/{op_id}/abort`, no op-keyed cancel flag (the only `op_id`
+hits are unrelated deformation record IDs in `routes_deformation.py`).
+Frontend is **further along than the doc knew, and mis-wired**: `ui/op_progress.js:47` already
+accepts `onCancel` and renders `#op-progress-cancel` (`_cancelHandler:19-35`) — but
+`api/client.js:337` calls `showOpProgress(...)` **without** it, so the busy popup that wraps
+every request is uncancellable. Only `ui/animation_panel.js:1419,1489` pass `onCancel`.
+`api/client.js:309` does mint an AbortController, but it is `_timeoutCtrl` (hard request
+timeout), not a user cancel; it forwards a caller-supplied `signal` at `:312-315`.
+~14 viz modules mint their own controllers (`oxdna_display.js:390`, `mrdna_display.js:76`,
+`cando_display.js:152`, `oxdna_jobs_panel.js:810,936`, `animation_player.js:422`, …).
+**Cheapest first step:** give `client.js` a per-request controller and pass `onCancel` into
+`showOpProgress` — that alone buys cancellation for every short op, no backend work.
 
-**New: `frontend/src/scene/scene_inspector.js`** — Ctrl+Shift+I toggles an inspect mode. Click any 3D object → console.table + toast with: type, name, material, color, world position, userData, ancestor chain up to scene root, plus the top 3 hits if stacked. Filters by `obj.visible` so invisible-but-pickable proxies still surface. Available as `window.__nadocInspect.toggle()` for console use. Tagged the joint-indicator groups in `joint_renderer.js` (`name: 'clusterJointIndicator'`) and `assembly_joint_renderer.js` (`name: 'assemblyMateIndicator'`) so they're easy to identify when hit.
+### 15. Validation Report: clickable rows + severity + jump-to-locate — RE-SCOPE BEFORE BUILDING
+`ui/validation_report_panel.js` exists (41 ln) but has **0 importers**, and its mount point
+`#validation-report-content` **does not exist in `index.html`** — implementing this as written
+edits a module nothing loads. Rows are interpolated `<div class="vr-row">`, severity is binary
+(`r.ok` → `vr-ok`/`vr-fail`). `ui/validation_panel.js` (165 ln, `initValidationPanel:138`) is
+likewise unimported. Both are already triaged as **HELD** in [[project_tech_debt]]:98,103 —
+which cites *this* item as the reason they're held. Circular: decide the panel's fate there
+first (mount it or delete it), then this item is either a real feature or moot.
 
-**Bug 1: workspace plane-picker grid leaked into assembly view.** The XY/XZ/YZ semi-infinite faded grid planes from `workspace.js` (intended for the new-design lattice-orientation picker) were still in the scene when an assembly was opened. Fix in `main.js _enterAssemblyMode`: explicit `workspace.hide()` on assembly entry. Inspector confirmed the hit-target `MeshBasicMaterial` (`userData.planeName: 'XZ'`) at world origin.
+### 16. `showConfirm` destructive sites missing `danger: true` (new, found 2026-07-31)
+Three delete actions focus **Confirm** by default instead of Cancel:
+`ui/assembly_panel.js:1433` (Delete gear relation), `:1595` (Delete belt path),
+`ui/chain_sim_panel.js:178` (Delete chain project). Every other `Delete*` site passes `danger`
+(`file_deletion.js:59`, `assembly_panel.js:239,642`, `overhangs_manager_popup.js:2154,2459`,
+`domain_designer_panel.js:817`, `overhang_connections_panel.js:1070,1137`,
+`selection_manager.js:105`, `main.js:4055,4553`). One-word fix each.
 
-**Bug 2: phantom InstancedMesh instances at world origin.** All four cylinder InstancedMeshes in `helix_renderer.js` allocated with `Math.max(1, count)` capacity — required because Three.js refuses size-0 InstancedMesh. But when `count === 0`, the single phantom instance rendered with the default all-zero `instanceMatrix`, which produces NaN/degenerate vertices that show as a small floating shape at world (0,0,0). Visible in coarse-LOD ("cylinders" rep — the assembly clone default) for designs with no curved-helix overhangs (most designs). Fix: set `mesh.count = realCount` right after construction; Three.js honours `.count` for rendering regardless of capacity, so count=0 renders nothing. Applied to all four meshes (helixCylinders, curvedHelixCylindersProxy, overhangCylinders, curvedOverhangCylindersProxy). Long comment block documents the pattern for future readers.
+### 17. `ui/import_menu.js` never migrated off the legacy `showToast(msg, ms)` form (new)
+4 sites — `:84,134,186,219`, all `showToast('…coordinate convention.', 8000)` — the only file of
+374 call sites still on the numeric-2nd-arg form. It still works (`ui/toast.js:6` keeps
+back-compat), so this is hygiene, not a bug.
 
-### Modal migrations #3-4 — autobreak / background — SHIPPED 2026-05-17
-- `#autobreak-modal` → `<div id="autobreak-modal-body">` + lazy createModal. Cancel + Run Autobreak in actions row. Was wrapped in an IIFE that holds local state (`_animTimer`, `_runAutoBreak3d`); preserved the IIFE pattern.
-- `#background-modal` → `<div id="background-modal-body">`. Three-button action row: Cancel + Reset + Apply (Cancel is just close; Reset rolls back state and re-syncs; Apply is also just close — the form already mutated state via input events). The "Apply Underwater Theme" button stays inside the body since it's a content action, not a footer verb.
+### 18. Test debt on the primitives this overhaul created (new)
+`ui/primitives/confirm.js` (~25 consumers) and `ui/edit_feature_popover.js` have **no tests**;
+`ui/toast.js` (374 consumers) has **1**. `ui/assembly_context_menu.js` and
+`ui/validation_report_panel.js` have none. `sim_folders` and `sidebar_resize` have 2 each — the
+only two modules here the doc claimed tests for, and both claims hold.
 
-### Modal migration bug + #5 gromacs-export — REMOVED 2026-05-17
-A migration mistake on gmx + bg: I called `body.removeAttribute('hidden')` at module-init time (top of the IIFE), not inside the `_build*ModalOnce()` lazy-build function. Effect: the body div rendered **inline in the page above the canvas** until the modal was opened. Visible on `#background-modal-body` and `#gromacs-export-modal-body`.
-- **Fix for background:** moved `removeAttribute('hidden')` inside `_buildBackgroundModalOnce()` so the unhide happens after createModal reparents the body into the detached overlay.
-- **gromacs-export-modal:** user requested removal pending a clean re-implementation. The `<div id="gromacs-export-modal-body">` block in `index.html` is now an HTML comment. The dialog wiring (`_buildGmxModalOnce`, `_onGmxExport`, the poll loop against `/api/design/export/gromacs-status/{jobId}`) is also removed; menu item shows a "GROMACS export is being re-worked" toast. TODO comments in both `index.html:2845` and `main.js:10517` describe what to re-add (and remind the next person to **unhide inside the build function, not at IIFE init**). The original implementation is in git history under commit b97f44a's pre-state.
-
-### Modal recipe — REVISED
-The original `index.html`-based hidden body + `removeAttribute('hidden')` at init pattern is brittle. New rule for the remaining migration (overhangs-manager pair): keep `hidden` on the body DIV. Inside `_build*ModalOnce()`, after the body is grabbed but before passing to `createModal`, call `body.removeAttribute('hidden')`. CreateModal then reparents the body into its detached overlay; the unhide doesn't cause a flash because the overlay isn't in the document until `.open()`.
-
-### Modal migration #2 — `#assign-scaffold-modal` — SHIPPED 2026-05-17
-Same recipe as the new-design pilot. Outer wrapper replaced with `<div id="assign-scaffold-modal-body" hidden>`; Cancel/Apply lifted to `actions`; inline styles tokenized. `modal.dataset.targetStrandId` replaced with a module-level `_ascTargetStrandId` variable (the dataset trick relied on the outer modal div which no longer exists). Existing event wiring (radio change → `_ascUpdateWarning`, textarea input → char count + invalid char check) moved into `_buildScaffoldModalOnce()` so it attaches just once. Enter on the body commits, except inside the textarea where Enter inserts a newline.
-
-### Modal migration pilot — `#new-design-modal` — SHIPPED 2026-05-17
-First hand-rolled modal migrated to `createModal()`. Pattern:
-- HTML: the outer `<div id="new-design-modal" style="display:none;...">` wrapper is replaced with a hidden `<div id="new-design-modal-body" hidden>` containing just the form fields (warning + name input + lattice radios). All field IDs preserved (`#new-design-name`, `#new-design-unsaved-warn`, `#new-design-name-error`, `input[name="new-lattice-type"]`).
-- Inline styles updated to use design tokens (`var(--color-bg-canvas)`, `var(--text-sm)`, etc.) instead of literal hexes.
-- Cancel + Create buttons removed from HTML — they're now `createButton`-created and passed to the modal's `actions` array.
-- `main.js`: `_openNewDesignModal()` lazily builds the modal via `createModal({title:'New Part', size:'sm', body:_newDesignBody, actions:[cancelBtn, createBtn]})` on first open; subsequent opens call `modal.open()` on the cached controller. Form reset (clear name, hide warn, etc.) happens before each open. Enter on the name input commits via a one-line keydown handler.
-- Removed: manual Escape/Enter keydown handler (createModal already handles Escape + backdrop close), inline `display:none/flex` toggle, hardcoded modal chrome styles.
-
-Pattern for the remaining 5 modals: same recipe — replace outer wrapper with a hidden body div, lift Cancel/primary buttons to `actions`, lazy-build on first open, cache the controller.
-
-### Mate preview during 2nd-connector pick — SHIPPED 2026-05-17
-`frontend/src/scene/assembly_joint_renderer.js` `_onMatePointerMove` now drives a live ghost-preview of where `instance_b` will land while the user is hovering candidate second connectors (after they've clicked the first). Uses the existing `_computeAlignTransform` / `_onLivePreview` machinery — same code path the post-pick preview already used, just wired to hover instead of click. Honors the existing "Preview" checkbox in the mate sidebar. Cleared on hover-off, pointer-leave, or pick of the second connector (the existing click handler then re-applies the same transform as a settled preview). Settles into the actual joint on Create Mate.
-
-### Configurations consolidation into FL panel — SHIPPED 2026-05-17
-`assembly_config_panel.js` deleted; its DOM block removed from `frontend/index.html`. Configurations now live in the existing Feature Log panel via a new "Configurations" option in the assembly target dropdown. Implementation:
-- `_configurationsMode` flag (module-level) re-enables the previously-dead `_isAssemblyConfigMode()` path.
-- Selecting "Configurations" sets `_configurationsMode = true`, fires `_rebuildAssembly(assembly)` (existing dead-but-correct rendering path).
-- `_refreshTitle` switches the panel title to "Configurations" and shows the "+ Capture Configuration" button only in this mode; hides Loadouts (design-mode concept).
-- `_renderCurrentView` routes to `_rebuildAssembly` when in config mode, ahead of the "select a part" prompt branch.
-- `main.js` import + `initAssemblyConfigPanel(...)` call removed.
-
-### Gizmo axis colors — N/A (already correctly implemented)
-Audited 2026-05-17. The "RGB-by-axis for axis-aligned constraints, custom colors for bond-aligned" convention is already in place: cluster gizmo in `centroid` mode + instance gizmo + overhang gizmo all use native `THREE.TransformControls` (RGB by default); cluster gizmo in `joint` mode is intentionally orange because the axis is along a joint bond; sub-domain θ/φ rings stay gold/cyan for the same reason. The audit's premise was wrong — no work needed.
-
-### Feature-log schema edit popover — SHIPPED 2026-05-17
-`frontend/src/ui/edit_feature_popover.js` (new) — schema-driven modal editor for feature_log entries. Hardcoded `OP_SCHEMAS` table keyed by `op_kind` declares the editable fields per op (type/min/max/options/etc.); the popover builds one labelled input per field, validates on Save, resolves with the patch object (or null on cancel). Built on `createModal` + `createButton`. Replaces:
-- Design-mode prompt at `feature_log_panel.js:1095` (length_bp for bundle-create / extrude-segment / extrude-continuation / extrude-deformed-continuation / overhang-extrude)
-- Assembly-mode prompts at `feature_log_panel.js:1436` (assembly-polymerize: count + direction; assembly-overhang-connection-add/patch: length_value + length_unit + bridge_sequence)
-
-Adding a new editable op_kind is a one-line addition to OP_SCHEMAS. `editFeature(...)` returns null when the op_kind isn't in the schema (shows a toast). Caller can fall back if needed; for now both call sites just abort.
-
-### Panel resize — SHIPPED 2026-05-17
-`frontend/src/ui/sidebar_resize.js` (new) + CSS rules in `frontend/index.html` (`.panel-resize-handle`) + 4-px handle `<div>` injected at the inner edge of `#left-panel` and `#right-panel`. Drag updates `style.width`; clamps to 200–600 px; releases below MIN_PX*0.5 snap the panel shut via the existing `.hidden` class. Width persists to `localStorage` keys `nadoc.leftPanel.width` / `nadoc.rightPanel.width`, restored on init by `initSidebarResize()` (called from main.js right after the left-sidebar tab wiring). The canvas re-fit is already handled by the existing ResizeObserver on `#canvas-area` — no extra plumbing needed. During drag, the left panel's CSS `transition: width 0.15s` is temporarily suppressed so it doesn't lag behind the pointer.
-
-### Remaining confirm() migrations — SHIPPED 2026-05-17
-Every `window.confirm()` in the frontend has been migrated to `showConfirm` (from `frontend/src/ui/primitives/confirm.js`). Total: 18 callsites across 9 files (9 in the first pass, 9 in this follow-up). Files touched in this follow-up:
-- `frontend/src/scene/selection_manager.js` — Delete linker
-- `frontend/src/ui/file_browser.js` — Overwrite file, Delete folder, Delete file
-- `frontend/src/ui/assembly_panel.js` — Delete connector in use, Apply atomistic representation
-- `frontend/src/ui/assembly_context_menu.js` — Atomistic warning
-- `frontend/src/ui/library_panel.js` — Delete folder, Delete file
-- `frontend/src/ui/overhangs_manager_popup.js` — Delete binding, Delete linker
-- `frontend/src/ui/domain_designer_panel.js` — Delete binding
-- `frontend/src/ui/photo_panel.js` — Overwrite profile (×2), Delete profile (sync handlers became async)
-- `frontend/src/cadnano-editor/main.js` — Clear loops/skips (mirrors main.js path)
-
-No `confirm(` calls remain in `frontend/src/` other than a single past-tense comment in `polymerize_panel.js:244`.
-
-
-### 2. Assembly context menu: add Duplicate / Delete / Edit Part / Show-Hide / Polymerize From Mate
-**File:** `frontend/src/ui/assembly_context_menu.js`
-**Decision:** add all five verbs. Sidebar (`assembly_panel.js:297-403`) keeps the same actions; the menu colocates them with the object.
-**Polymerize-From-Mate** is only valid when the right-click hit is on a joint indicator — gate that entry on `_lastRightClickedKind === 'joint'` and call into `polymerizePanel.setSelectedJoint(jointId)` followed by `polymerizePanel.open()`.
-
-### 3. Right-click verb on the dashed pre-bind 3D line → toggle bind
-**Files:** the dashed line is drawn somewhere in `overhang_link_arcs.js` or `crossover_connections.js` (verify which renders the pre-bind line). Hook a raycast hit into selection_manager's context menu, expose a "Toggle bind" entry that calls the existing bind/unbind API.
-
-### 4. Selection modifier semantics: measurement → Alt; Ctrl/Shift = additive selection
-**File:** `frontend/src/scene/selection_manager.js`
-**Decision:** Move measurement pick (`_ctrlBeads`) from Ctrl-click to Alt-click. Ctrl-click and Ctrl-drag still do lasso; Shift+click now adds to multi-selection. Update `path-scoped rules/selection.md` after.
-**Risk:** muscle memory. Add a single startup toast or status-bar hint the first time the user holds Ctrl, pointing to the new mapping.
-
-### 5. Overhangs Manager + CT-tab: sortable columns + sticky header + filter input
-**Files:**
-- `frontend/src/ui/overhangs_manager_popup.js` — two list panels need a search input each; rows need to honour a sort key.
-- `frontend/src/ui/spreadsheet.js` and the CT-tab table (find via grep) need `<thead position:sticky;top:0;background:var(--color-bg-surface)>` and click-on-header sort.
-
-### 6. Animation panel "Pin to feature" button → FL picker mode
-**File:** `frontend/src/ui/animation_panel.js`
-**Decision:** Per-keyframe button (replaces the flat `<select>` at lines 603-628). Click pin → right sidebar switches to FL panel in a special "pick" mode, user clicks a feature row, FL panel closes, keyframe's `state_at_feature_id` is set.
-**Plumbing:** FL panel needs a `enterPickMode(callback)` / `exitPickMode()` API. Keyframe row stays in the animation panel; only the picker UX changes.
-
-### 7. dragScrub rollout — SHIPPED 2026-05-17
-Helper applied to: polymerize_panel, animation_panel, extrude_panel (Batch B initial), then camera_panel (per `_rebuild`), photo_panel, bend_twist_popup, main.js Move/Rotate panel. Joints panel and deformation_editor had no number inputs — intentionally skipped. **Still skipped:** spreadsheet cell editors (text-focus required), assign-scaffold-modal sequence offset input.
-
-## Queued — Batch C (each is its own session)
-
-### 8. Migrate remaining hand-rolled modals to `createModal()` primitive
-**Decision:** one at a time. Pilot + 3 follow-ups shipped 2026-05-17 (new-design, assign-scaffold, autobreak, background). Remaining:
-1. `#gromacs-export-modal` — removed during the pass because of the unhide-at-init bug; re-implement using the revised recipe (see "Modal recipe — REVISED" in Shipped section). Stub toast wired so the menu item doesn't crash.
-2. `#overhangs-manager-modal` + `#assembly-overhangs-manager-modal` (paired) — the biggest pair (tabs, lists, table inside); deserves its own session
-**Pattern (from pilot):** replace outer wrapper with a hidden body div; preserve all inner IDs; lift Cancel/primary buttons to `actions`; lazy-build on first open and cache the controller; remove inline `display:none/flex` toggles and the hand-rolled Escape/Enter handler (createModal owns those).
-
-
-## Queued — Batch D (largest)
-
-### 14. AbortController + backend abort endpoints
-**Decision:** True cancellation, including server-side.
-- Frontend: `api/client.js` creates an AbortController per long fetch, passes `signal` and registers `onCancel: () => ctrl.abort()` with `op_progress`.
-- Backend: New `POST /op/{op_id}/abort` endpoint. Long solvers (autostaple, autobreak, scaffold_router, seamless_router, GROMACS exporter, atomistic builder) need to be refactored to (a) generate an op_id, (b) check a cancellation flag periodically.
-**Order:** Frontend signal wiring first (free cancellation for short ops). Then backend abort endpoint, one solver at a time.
-
-### 15. Validation Report: clickable rows + severity + jump-to-locate
-**File:** `frontend/src/ui/validation_report_panel.js`
-**Decision:** Each row becomes a button that calls `store.setState({ selectedObject: ... })` and `_centerOnStrand(strandId)`. Add severity column (info/warn/fail) with token colours. Rename the `validation_panel.js` (dead handedness checkpoint walkthrough) to "Renderer Checkpoints" if/when it's revived — currently it's not imported anywhere so the rename was N/A in 2026-05-16 session.
+### Gap, not a rival: sim-folder filtering in the pickers
+`ui/file_picker.js:79-80` and `ui/folder_picker.js:74-77` iterate a *different* (folder-scoped)
+API response and do **not** filter sim folders. Not a duplicate implementation — the workspace
+listers (`file_browser`, `library_panel`) both route through `sim_folders.js` cleanly — but a
+user browsing via a picker still sees `*_jobs`.
 
 ## Deferred indefinitely (not on roadmap)
 
 - Command palette expansion (user explicitly deferred 2026-05-16)
 - OrbitControls damping (user kept current 2026-05-16)
 - Drag-marquee in cadnano select tool (audit suggestion, no user decision yet)
-- Preset thumbnails in `presets_panel.js`
+- Preset thumbnails in `presets_panel.js` (`ui/presets_panel.js` HELD in [[project_tech_debt]])
 - Keyboard nav (arrow keys) in list popups (mate list, instance list, FL, configurations, keyframes)
 - Hover tooltip with strand_id/helix_id/bp on raycast hit (medium-risk; conflicts with current cursor management)
 - Custom hover cursor change when over selectable instances (same reason as above)
 
 ## How to apply
 
-1. Pick one item, open the file(s) it points to.
-2. Check whether the codebase shape still matches what's described — file/line refs are from 2026-05-16.
+1. Pick one item, open the file(s) it points to. Line refs above are from **2026-07-31**.
+2. `main.js` is 8,070 LOC and **rising** — new cohesive logic goes in a module, never the closure.
 3. Implement. Each item is independent.
-4. After ship: cross it off this file (delete the entry), update `MEMORY.md` if needed.
+4. After ship: delete the entry here (not in the archive), update `MEMORY.md` if the hook changes.
 
-**Why:** This file is the single record of *what* and *why* — losing it means re-running the audit and re-asking the user, which they explicitly invested time in to avoid.
+**Why:** this file is the single record of *what* and *why* — losing it means re-running the
+audit and re-asking the user, which they explicitly invested time in to avoid.
 **How to apply:** open it whenever picking up UX work; treat each entry as a small spec.
