@@ -696,6 +696,42 @@ _SLOW_TESTS = {
     # relegated `test_make_18hb_routed_design_is_deterministic`.  The file's three other
     # cluster tests (6hb / no-op paths) stay fast.
     "test_autodetect_produces_scaffold_and_geometry_clusters",
+
+    # ---------------------------------------------------------------------------
+    # 2026-07-31 — test_ring_piercing.py (the ring-threading gate from the
+    # crossover-catenation work).  These two build a real atomistic model at the
+    # exact phases that USED to ship a threaded ring, so by construction they are
+    # the cases where the extra-base repair ladder climbs the MOST rungs: an
+    # ordered search re-solving L-BFGS-B for every insert at every rung, now also
+    # counting ring piercings per rung.  Measured SERIALLY on an idle box with
+    # OPENBLAS/OMP pinned to 1 thread (the fast recipes' own operating condition):
+    # 6.83 s and 4.74 s — i.e. over/at the 5 s budget with no contention at all,
+    # 10.1 s and 6.5 s in the `-n auto` fast suite.  That is real numeric-solve
+    # weight, not a first-test-pays-the-cache artifact (the file already pays the
+    # template load + L-BFGS-B warm-up in a module-scoped autouse fixture), and
+    # the design is already the 2-helix / 28-bp minimum, so there is nothing to
+    # shrink.  Area "atomistic".
+    #
+    # Coverage is not lost: the exhaustive `test_no_phase_pierces[T|TT-8..18]`
+    # sweep in the same file is already @pytest.mark.slow and covers T-14 / TT-8
+    # among its 22 cases, so both relegated cases keep running in a
+    # test-dedicated session.  The fast suite keeps ALL the cheap pins in that
+    # file: the segment/ring intersection primitives, ring identification, the
+    # fake-model detector, the two `_synthesise_bonds` scope regressions, the
+    # re-derive-on-move regression, `assert_not_pierced` + override, and the
+    # real-build gate negatives (`test_gate_refuses_a_pierced_seed` 3.3 s serial,
+    # `test_designs_without_inserts_skip_the_gate_entirely`).
+    #
+    # Both params ([T-14] and [TT-8]) are over budget, so the whole test moves —
+    # _SLOW_PARAMS would leave nothing fast behind.  Both names are unique in the
+    # suite, so the bare-name match cannot over-reach into another file.
+    "test_known_piercing_phases_are_clean",
+    # Same file, same cost driver: `gate_seed_topology` on the TT-8 (2-insert)
+    # design does its OWN full repaired build (4.74 s serial / 6.5 s in-suite).
+    # It cannot share a model with `test_gate_refuses_a_pierced_seed` — that one
+    # deliberately builds under `_piercing_check_disabled()`, i.e. a different
+    # (pre-fix) structure — so no fixture can cache the second build away.
+    "test_gate_reports_both_defects",
 }
 
 # Individual heavy PARAMETRISATIONS of an otherwise-fast test.  Matched against the
@@ -721,6 +757,16 @@ _SLOW_PARAMS = {
     # suite by the exhaustive test_no_phase_catenates[TT-*] sweep.
     "test_repaired_build_is_deterministic[TT]",
     "test_repair_does_not_degrade_geometry[TT]",
+    # 2026-07-31 — the same file's FAST catenation gate, TT (2-insert) param only.
+    # `_KNOWN_CATENATING = [("T", 12), ("TT", 12)]`; the TT case is one repaired
+    # 2-insert build through the same L-BFGS-B repair ladder and measures 3.57 s
+    # SERIALLY on an idle box with BLAS pinned to 1 thread, 5.12 s in the `-n auto`
+    # fast suite — the identical profile (and the identical remedy) as the two
+    # entries above, which were triaged one day earlier.  [T-12] stays fast at
+    # 1.33 s and keeps the gate in the per-change loop on the 1-insert path; TT-12
+    # is additionally covered in the heavy suite by the exhaustive
+    # `test_no_phase_catenates[TT-*]` sweep.  Area "atomistic".
+    "test_known_catenating_phases_are_repaired[TT-12]",
 }
 
 # ⚠️ DO NOT relegate the tests in test_junction_topology.py / test_junction_winding.py.
@@ -769,6 +815,15 @@ _SLOW_PARAMS = {
 # stay fast at ~1.3 s and still guard both invariants; every other test in
 # test_junction_topology.py / test_junction_winding.py stays fast, and the blanket "do not
 # relegate these files wholesale" rule above still stands.
+#
+# 2026-07-31 — one more param joined them on exactly the same evidence:
+# `test_known_catenating_phases_are_repaired[TT-12]` (3.57 s serial / 1 BLAS thread on an
+# idle box, 5.12 s in the fast suite).  Still no wholesale relegation of either file — the
+# T params and all 28 other tests in test_junction_topology.py stay fast.  The rule of
+# thumb this file has now converged on: a 2-INSERT repaired build costs ~2 s of L-BFGS-B
+# repair ladder, so any test that does two of them, or one plus a second detector pass,
+# has no headroom under the 5 s budget and is a heavy test — while the 1-insert twin of
+# the same invariant stays comfortably fast and is what belongs in the per-change loop.
 
 
 # ---------------------------------------------------------------------------

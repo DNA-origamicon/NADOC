@@ -163,6 +163,8 @@ from backend.core.design_geometry import (  # noqa: F401
 from backend.core.render_diff import (  # noqa: F401
     _cluster_diff_payload,
     _diff_is_cluster_only,
+    _local_changed_helices,
+    _strand_occupancy,
     _topology_diff_field,
     _topology_unchanged,
 )
@@ -444,67 +446,6 @@ def _design_response_with_geometry(
         out["straight_positions_by_helix"] = straight_positions
         out["straight_helix_axes"]         = straight_axes
     return out
-
-
-def _strand_occupancy(design: Design) -> dict:
-    """Mutation-proof snapshot of what each strand occupies, plus the synthetic-
-    geometry inputs (extensions, ds-linker connections). Captures plain values,
-    so it stays valid even if *design* is later mutated in place. Cheap —
-    topology only, no geometry compute. Pair with :func:`_local_changed_helices`
-    to drive the partial-geometry fast path for position-preserving edits.
-    """
-    return {
-        "sig": {
-            s.id: (
-                s.strand_type,
-                tuple((d.helix_id, d.start_bp, d.end_bp, d.direction, d.overhang_id)
-                      for d in s.domains),
-            )
-            for s in design.strands
-        },
-        "helices": {
-            s.id: frozenset(d.helix_id for d in s.domains) for s in design.strands
-        },
-        "ext":   {e.id: e.model_dump(mode="json") for e in design.extensions},
-        "conns": {c.id: c.model_dump(mode="json") for c in design.overhang_connections},
-    }
-
-
-def _local_changed_helices(before: dict, after: dict) -> list[str] | None:
-    """Helix IDs to reship via the partial-geometry fast path for a
-    POSITION-PRESERVING topology edit (add / remove / relabel of strands — never
-    a move). Both args are :func:`_strand_occupancy` snapshots, pre- and post-edit.
-
-    Returns ``None`` — fall back to full geometry — when the edit can't be
-    expressed partially: it touched synthetic geometry (extensions or ds-linker
-    bridges, both emitted only in full mode), OR nothing occupancy-changed (an
-    empty changed-list would trip the frontend's full-replacement branch and
-    wipe the scene).
-
-    A helix's nucleotides change only if some strand's occupancy on it changes,
-    so we diff strand signatures and union the domain helices of every differing
-    strand across BOTH snapshots (a split fragment keeps helices that leave the
-    original strand id; a merge's absorbed id contributes its old helices).
-    """
-    b_sig, a_sig = before["sig"], after["sig"]
-    changed = {sid for sid in b_sig.keys() | a_sig.keys()
-               if b_sig.get(sid) != a_sig.get(sid)}
-    if not changed:
-        return None
-    # Extensions / ds-linker bridges are synthetic — the partial path never
-    # re-emits them, so any change to them (or any changed strand that carries
-    # an extension) forces a full recompute.
-    if before["ext"] != after["ext"] or before["conns"] != after["conns"]:
-        return None
-    ext_strand_ids = ({e["strand_id"] for e in before["ext"].values()}
-                      | {e["strand_id"] for e in after["ext"].values()})
-    if changed & ext_strand_ids:
-        return None
-    helices: set[str] = set()
-    for sid in changed:
-        helices |= before["helices"].get(sid, frozenset())
-        helices |= after["helices"].get(sid, frozenset())
-    return list(helices)
 
 
 def _find_helix(design: Design, helix_id: str) -> Helix:

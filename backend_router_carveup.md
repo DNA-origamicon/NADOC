@@ -164,12 +164,30 @@ section drives the session.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this (step 9). Last updated 2026-07-13
-(docs-cleanup audit — no extraction). The prior row was Refactor #49
-(**assembly.py: geometry-cache + override-merge kernel → NEW `backend/core/assembly_geometry.py`**, service
-push B=0, +15 unit tests, assembly.py **29 routes**). **#43–#49 ARE COMMITTED** (`f1c2f29`, "push pure
-geometry/render kernels from crud.py + assembly.py into backend/core") — the old "still NOT committed"
-warning here was stale and is retracted; working tree is clean._
+_Living pointer — each session overwrites this (step 9). Last updated 2026-07-31 by Refactor #50
+(**crud.py: `_strand_occupancy` + `_local_changed_helices` → existing `backend/core/render_diff.py`**, service
+push B=0, +10 unit tests, crud.py still **118 routes**). #43–#49 are committed (`f1c2f29`)._
+
+**▶ THE ONLY REMAINING JOB FOR THIS LOOP IS DRIFT WATCH — run these two commands first, every session:**
+
+```bash
+for f in backend/api/crud.py backend/api/assembly.py; do \
+  echo "$f: $(grep -cE '^@router\.(get|post|put|patch|delete)' $f) routes"; done   # expect 118 / 29
+git log --oneline --since=<last-session-date> -- backend/api/crud.py backend/api/assembly.py | \
+  xargs -I{} true; git show <each> -- backend/api/crud.py | grep -E '^\+(async )?def '   # new helpers?
+```
+
+Both files are terminal (below), so a session has honest work ONLY if one of these fired:
+1. **Route count rose** → feature work added a cluster; probe it and lift it normally.
+2. **New `def _helper` landed in a god-file** and its body is pure (no `design_state` / `HTTPException` /
+   `backend.api` import) → **service-push it into the core module that already owns its concern** (a fold, not
+   a new module) + unit tests. **This is what #50 was**: the 2026-07-10 partial-geometry perf commit put ~59 ln
+   of untested pure diff logic back into crud's "Internal helpers", the exact mass #46/#47/#48 had drained.
+   Expect this to recur — perf/feature work naturally deposits helpers next to the handler that needs them.
+   Catching it early is cheap; letting it accrete is how the god-file grew the first time.
+
+Neither fired → **say so and stop.** Re-opening a terminal file to relocate kernel code is the shovel this
+loop exists to prevent.
 
 **▶ BOTH GOD-FILES AT TERMINAL STATE — the backend router carve-up is COMPLETE (2026-07-08).** crud.py =
 **113 routes at the terminal decision; 118 as of 2026-07-13** (+5 added since by ordinary feature work —
@@ -548,6 +566,17 @@ Tiers are priority hints, not gospel.
   crud.py routes unchanged (113). The residual "Internal helpers" mass is now the **api-bound response kernel**
   (`_design_response*`/`_design_replace_response`, `_inject_joint_world_axes`, `_strip_feature_log_payloads`) —
   all L4-blocked (touch `design_state` / response-shaping); the pure geometry kernel is fully out.
+
+- [x] **Partial-geometry occupancy diff → `backend/core/render_diff.py` (#47 follow-on)** — DONE (Refactor #50,
+  2026-07-31). **Service push, B=0.** The 2 pure fns added by the 2026-07-10 partial-geometry perf commit
+  (`_strand_occupancy` = Design → mutation-proof occupancy snapshot; `_local_changed_helices` = two snapshots →
+  the helix ids to reship, or `None` for "send full geometry", ~59 ln) moved **byte-identical** out of crud's
+  `# ── Internal helpers` block into the EXISTING `render_diff.py` (a fold, same one-reason-to-change as #47 —
+  they answer the *partial-helix-set* form of the same "how cheap is this render?" question). crud re-exports
+  both under their `_`-names; all 10 call sites (nick/merge/relabel/sequence-edit handlers) unchanged, zero
+  repoints, no caller outside crud. +10 direct unit tests (`tests/test_render_diff_core.py`, 12→**22**) — this
+  logic had shipped with **no** direct tests. crud.py routes unchanged (118). **This is post-terminal drift
+  repair, NOT a re-open** — see the handoff's drift-watch note.
 
 ### Stays in crud.py (the shared kernel — do NOT extract)
 - `_design_response` / `_design_response_with_geometry` / `_helix_label` (used by 100+ routes), the request
