@@ -718,6 +718,15 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   `autodetect_overhangs` or the co-rotation predicate is told about a code path that no longer
   exists. (Found by `/audit-plan` 2026-07-31 on `overhang_connections_panel`; the panel-owned
   stragglers stayed in that plan's head.)
+- **`sequences.reassign_if_sequenced` (`backend/core/sequences.py:742`) has zero callers.** It was
+  the design-wide re-derive, replaced 2026-07-27 by targeted `reassign_strands` +
+  `overhang_dependent_strand_ids` (it silently destroyed hand-typed staple sequences). It was left
+  in "for headless/ML callers" — no such caller was ever written, in backend, tests, or scripts.
+  Its only surviving mentions are docstrings that *describe the behavior it no longer performs*
+  (`sequences.py:719`, `tests/test_overhang_sequence_propagation.py:7`, `tests/test_targeted_reassign.py:6`),
+  which is worse than nothing: a session reading them is told the old semantics are current.
+  Delete the function and fix the three docstrings. (Found by `/audit-plan` 2026-07-31 on
+  `overhang_sequence_display`; that plan's own display defects stayed in its head.)
 - **`.claude/rules/rendering.md:237` cites `main.js:4119`; the glow-layer injection is at
   `main.js:4130`.** Eleven-line drift in an auto-loaded rule. Cheap to fix, but the real lesson is
   that line anchors in auto-loaded rules need re-probing whenever `main.js` moves.
