@@ -212,7 +212,12 @@ export function swapToFlatMaterials(root, presets = null) {
     // occlude the structure; a fresh material defaults to TRUE, which turned
     // those overlays into opaque occluders AND shadow casters, and defeated the
     // depthWrite exclusion in shadow_bounds.js (which tests the CURRENT material).
-    mat.depthWrite = src.depthWrite
+    // …but a material that only dropped depthWrite to blend correctly at a
+    // user-chosen opacity (the base-pair slabs and their crossover extra-base
+    // twins, whose sidebar opacity slider tracks depthWrite per LESSONS D8) is
+    // STRUCTURE, not overlay. It opts back in with `photoForceDepthWrite` so it
+    // stays a shadow caster/receiver in the figure at any opacity.
+    mat.depthWrite = src.userData?.photoForceDepthWrite ? true : src.depthWrite
     mat.depthTest  = src.depthTest
     if (src.transparent && src.opacity < 1) {
       mat.transparent = true

@@ -12,12 +12,16 @@
  * Which option rows / panels are visible for a given representation.
  * Pure — drives the row `display` toggles in `updateForRepr`.
  * @param {string} repr
- * @returns {{beadRadius:boolean, cylRadius:boolean, hullMargin:boolean,
- *            hullCurve:boolean, atomisticSliders:boolean, surfacePanel:boolean}}
+ * @returns {{beadRadius:boolean, slabThickness:boolean, slabOpacity:boolean,
+ *            cylRadius:boolean, hullMargin:boolean, hullCurve:boolean,
+ *            atomisticSliders:boolean, surfacePanel:boolean}}
  */
 export function reprSliderRowVisibility(repr) {
   return {
     beadRadius:       repr === 'full' || repr === 'beads',
+    // Base-pair slabs are only built at full LOD (helix_renderer `_skipSlabs`).
+    slabThickness:    repr === 'full',
+    slabOpacity:      repr === 'full',
     cylRadius:        repr === 'cylinders',
     hullMargin:       repr === 'hull-prism',
     hullCurve:        repr === 'hull-prism',
@@ -66,6 +70,24 @@ export function initReprOptionSliders({
     if (lod === 'full' || lod === 'beads') designRenderer.setBeadRadius(r)
   })
 
+  // Base-pair slab plate thickness (nm) and opacity. Full repr only — the slabs
+  // don't exist at bead/cylinder LOD.
+  const _slSlabThickness = document.getElementById('sl-slab-thickness')
+  const _svSlabThickness = document.getElementById('sv-slab-thickness')
+  _slSlabThickness?.addEventListener('input', () => {
+    const nm = parseFloat(_slSlabThickness.value)
+    if (_svSlabThickness) _svSlabThickness.textContent = nm.toFixed(2)
+    if (getLodMode() === 'full') designRenderer.setSlabThickness(nm)
+  })
+
+  const _slSlabOpacity = document.getElementById('sl-slab-opacity')
+  const _svSlabOpacity = document.getElementById('sv-slab-opacity')
+  _slSlabOpacity?.addEventListener('input', () => {
+    const o = parseFloat(_slSlabOpacity.value)
+    if (_svSlabOpacity) _svSlabOpacity.textContent = o.toFixed(2)
+    if (getLodMode() === 'full') designRenderer.setSlabOpacity(o)
+  })
+
   const _slCylRadius = document.getElementById('sl-cyl-radius')
   const _svCylRadius = document.getElementById('sv-cyl-radius')
   _slCylRadius?.addEventListener('input', () => {
@@ -96,6 +118,10 @@ export function initReprOptionSliders({
     const vis = reprSliderRowVisibility(repr)
     document.getElementById('repr-bead-radius-row')?.style.setProperty(
       'display', vis.beadRadius ? '' : 'none')
+    document.getElementById('repr-slab-thickness-row')?.style.setProperty(
+      'display', vis.slabThickness ? '' : 'none')
+    document.getElementById('repr-slab-opacity-row')?.style.setProperty(
+      'display', vis.slabOpacity ? '' : 'none')
     document.getElementById('repr-cyl-radius-row')?.style.setProperty(
       'display', vis.cylRadius ? '' : 'none')
     document.getElementById('repr-hull-margin-row')?.style.setProperty(

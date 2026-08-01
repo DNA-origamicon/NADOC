@@ -50,6 +50,12 @@ export function initDesignRenderer(scene, storeRef) {
   // geometric Bezier interpolation is skipped for it.  Null/empty → all arcs Bezier.
   let _simXbByCrossover = null
   let _detailLevel      = 0      // current LOD (0=full,1=beads,2=cylinders); re-applied to xover extras after _rebuild
+  // Base-pair slab display tuning from the sidebar (Full representation). Held
+  // here — not in the helix controller — so it survives a rebuild; both are
+  // re-applied in the post-rebuild block. 0.06 nm / 0.90 are the build-time
+  // defaults (slab thickness = the plate's smallest dimension).
+  let _slabThickness    = 0.06
+  let _slabOpacity      = 0.90
   let _currentMode      = 'normal'
   // External (job-snapshot) render: while a CanDo display mode is active, the scene is
   // rebuilt from a job's OWN design snapshot (its topology at solve time) instead of the
@@ -529,6 +535,15 @@ export function initDesignRenderer(scene, storeRef) {
 
 
     // Re-apply post-rebuild visibility state
+    if (_slabThickness !== 0.06) _helixCtrl.setSlabThickness(_slabThickness)
+    if (_slabOpacity !== 0.90) {
+      _helixCtrl.setSlabOpacity(_slabOpacity)
+      if (_xoverSlabsMesh) {
+        _xoverSlabsMesh.material.opacity = _slabOpacity
+        _xoverSlabsMesh.material.transparent = true
+        _xoverSlabsMesh.material.depthWrite = _slabOpacity >= 0.90
+      }
+    }
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
     if (isolatedStrandId) _helixCtrl.setIsolatedStrand(isolatedStrandId)
     if (_hiddenNucKeys.size) _helixCtrl.setHiddenNucs(_hiddenNucKeys)
@@ -972,13 +987,19 @@ export function initDesignRenderer(scene, storeRef) {
 
     /**
      * Re-read current entry.pos values for all active glow layers.
-     * Call each frame during unfold animation after bead positions are mutated.
+     * Call each frame during unfold animation, and on every simulation frame
+     * (applyFemPositions), after bead positions are mutated in place.
+     *
+     * MUST list every layer created at :60-106 — pinned by design_renderer.test.js.
+     * A layer omitted here keeps drawing its halo at the previous positions until
+     * the next full rebuild.  (_captureGlowLayer was missing until 2026-08-01.)
      */
     refreshAllGlow() {
       _glowLayer.refresh()
       _undefinedGlowLayer.refresh()
       _anchorGlowLayer.refresh()
       _clashGlowLayer.refresh()
+      _captureGlowLayer.refresh()
       _previewGlowLayer.refresh()
       _fluoroGlowLayer.refresh()
     },
@@ -1182,6 +1203,23 @@ export function initDesignRenderer(scene, storeRef) {
 
     setBeadRadius(r)     { _helixCtrl?.setBeadRadius(r) },
     setCylinderRadius(r) { _helixCtrl?.setCylinderRadius(r) },
+
+    /** Base-pair slab plate thickness in nm (the slab's smallest dimension). */
+    setSlabThickness(nm) {
+      _slabThickness = nm
+      _helixCtrl?.setSlabThickness(nm)
+    },
+    /** Base-pair slab opacity (0–1). Also applied to the crossover extra-base
+     *  slabs so they fade with the rest of the base plates. */
+    setSlabOpacity(o) {
+      _slabOpacity = o
+      _helixCtrl?.setSlabOpacity(o)
+      if (_xoverSlabsMesh) {
+        _xoverSlabsMesh.material.opacity = o
+        _xoverSlabsMesh.material.transparent = true
+        _xoverSlabsMesh.material.depthWrite = o >= 0.90   // LESSONS D8 — see setSlabOpacity
+      }
+    },
 
     /** Current GLOBAL LOD level: 0=full, 1=beads, 2=cylinders. Use this — not the
      *  cylinder mesh's .visible — to decide "are beads globally hidden", since

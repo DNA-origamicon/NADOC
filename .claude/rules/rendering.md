@@ -16,7 +16,7 @@ paths:
 # rendering
 
 **Scope.** The coarse-grained *design* render pipeline: how a `Design` + geometry array becomes
-Three.js objects. ~10.4k LOC across 9 files, **20 unit tests** (see Coverage — it is worse than
+Three.js objects. ~10.4k LOC across 9 files, **23 unit tests** (see Coverage — it is worse than
 it sounds).
 
 **Not this rule:** the assembly render stack (`assembly_renderer_shared.js` 3,940 +
@@ -33,11 +33,11 @@ citing one.*
 
 | File | LOC | Entry | Tests |
 |---|---|---|---|
-| `scene/design_renderer.js` | 1,529 | `initDesignRenderer(scene, storeRef)` — **the only export**; called `main.js:286`, first factory in `main()` | **0** |
+| `scene/design_renderer.js` | 1,554 | `initDesignRenderer(scene, storeRef)` — **the only export**; called `main.js:286`, first factory in `main()` | **3** (structural only) |
 | `scene/helix_renderer.js` | 5,232 | `buildHelixObjects(...)` :344 + ~6 named exports | 4 |
 | `scene/helix_renderer/palette.js` | 253 | `STAPLE_PALETTE` :28, `buildStapleColorMap`, `nucColor` | 4 |
 | `scene/glow_layer.js` | 188 | `createGlowLayer` :120, `createMultiColorGlowLayer` :70 | 0 |
-| `scene/domain_ends.js` | 873 | `initDomainEnds(...)` :350 — called `main.js:2988` | 4 |
+| `scene/domain_ends.js` | 873 | `initDomainEnds(...)` :350 — called `main.js:3006` | 4 |
 | `scene/crossover_connections.js` | 543 | 15 pure exports, no factory | 8 |
 | `scene/representation_overrides.js` | 264 | `resolveRepOverrides` etc. | (via `design_queries.test.js`) |
 | `scene/impostor_material.js` | 183 | `impostorsEnabled()` :30, `makeImpostorPhongMaterial` | 0 |
@@ -137,6 +137,23 @@ Two different scales, often confused:
    `hull-prism, cylinders, beads, full, surface, vdw, ballstick`. Only 3 of them map to
    `setDetailLevel`; `surface`/`vdw`/`ballstick` are separate renderers and `hull-prism` is a
    separate mesh path.
+
+**Sidebar tuning sliders** (`ui/repr_option_sliders.js`, rows in `index.html` under
+`#repr-options-section`): bead radius (full/beads) and **slab thickness + slab opacity (full only)**.
+Slab thickness is **`slabParams.width`** — mind the historical naming, `width` (0.06) is the plate's
+smallest dimension and `thickness` (0.70) is the long in-plane extent. It mutates the live
+`slabParams` in `helix_renderer.js` — the ~25 inline slab composes on the deform/lerp/cluster/MD
+paths read it, so they stay consistent — then restretches the existing instances' Y scale **in
+place** (keeping whatever an active display overlay positioned/sized them at) rather than calling
+the still-dead `applySlabParams()`, which would snap them back to design geometry. Both
+settings are held in `design_renderer.js` (`_slabScale`/`_slabOpacity`) and re-applied in the
+post-rebuild block, since a rebuild makes a fresh `iSlabs`. Opacity also drives the crossover
+extra-base slabs and tracks `depthWrite` (LESSONS D8) — which is why both slab materials carry
+**`userData.photoForceDepthWrite = true`**: `photo_mode.js::swapToFlatMaterials` copies `depthWrite`
+onto the figure material and `shadow_bounds.js::isShadowExcluded` reads `depthWrite:false` as
+"cannot occlude", so without the opt-in a user-faded slab silently stopped casting *and* receiving
+shadows in photo mode. Pinned by `photo_mode.test.js`. Any future structural mesh whose depthWrite
+tracks a user opacity control needs the same flag.
 
 **Per-column/strand overrides** (mixed representation): `resolveRepOverrides`
 (`scene/representation_overrides.js`, used `design_renderer.js:396` inside
@@ -253,7 +270,7 @@ happens in the same handlers but nothing keys off it for glow.
 ## `domain_ends.js` (formerly `blunt_ends.js`)
 
 Rings/labels at domain ends. `initDomainEnds(scene, camera, canvas, { onDomainEndClick,
-onDomainEndRightClick, isDisabled, getUnfoldView })` :350, called `main.js:2988` — where **the
+onDomainEndRightClick, isDisabled, getUnfoldView })` :350, called `main.js:3006` — where **the
 local variable is still named `bluntEnds`**. 13-method API (`:634+`): `clear`, `setVisible`,
 `isRingHit`, `getEndScreenInfo`, `applyDeformLerp`, `applyUnfoldOffsets`, `applyCadnanoPositions`,
 `revertPhysics`, `captureClusterBase`, `applyClusterTransform`, `getEndTable`, `getHelixLabelTable`,
@@ -329,29 +346,58 @@ Fix the doc, not the code, unless you have re-derived the intent.
 - **`design_renderer.clearFemOverlay()` has ZERO callers** (`:1241`). The off path now goes through
   `applyFemPositions(null)`. Its body still carries the 2026-04-01 cadnano/unfold guard — that
   guard is dead code, and the subscriber it was written against no longer exists.
-- **`refreshAllGlow()` refreshes 6 of the 7 layers** (`:955-962`) — `_captureGlowLayer` is omitted.
-  Likely a bug, not a rule error; capture glow will lag during unfold animation.
-- **The variable is `bluntEnds`, the module is `domain_ends.js`.** Also stale `blunt_ends` comments
-  at `loop_skip_highlight.js:254`, `unfold_view.js:1170`, `cadnano_view.js:91`. (`unfold.md` was
-  fixed in its 2026-07-30 rewrite.)
+- ~~**`refreshAllGlow()` refreshes 6 of the 7 layers**~~ — **FIXED 2026-08-01** (TD-05).
+  `_captureGlowLayer` was omitted; it is now refreshed at `:980`. The lag was worse than the old
+  note said: `refreshAllGlow` has **5 callers**, and one is inside `applyFemPositions`
+  (`design_renderer.js:1068`), so it fires on **every simulation frame**, not just unfold. Capture
+  strands are precisely the beads `applyFemPositions` moves (`:420-422`), so with "Highlight
+  strands" on the white halos stayed at design positions while the strands went to the oxDNA frame.
+  **Pinned by `design_renderer.test.js`** — a source-text test asserting the created-layer list and
+  the refreshed-layer list agree. Add an 8th glow layer and that test tells you to refresh it.
+- **The variable is `bluntEnds`, the module is `domain_ends.js`.** The three stale *comments*
+  (`loop_skip_highlight.js:254`, `unfold_view.js:1170`, `cadnano_view.js:91`) were fixed
+  2026-08-01. **The identifiers deliberately stay** — `getBluntEnds` is a named dep in **7 factory
+  signatures** (`unfold_view:42`, `cadnano_view:42`, `deform_view:25`, `slice_plane:144`,
+  `expanded_spacing`, `animation_player`, `debug_overlay`), a destructured `bluntEnds` opt in 4 more,
+  and `toolFilters.bluntEnds` is a **persisted store key** (`store.js:137`, in the `ui` slice `:411`)
+  — renaming it resets the toggle for every existing session without a migration. Not worth it.
+  Unrelated and **correctly** named: `ui/blunt_end_menus.js`, `scene/blunt_end_connectors.js` and the
+  backend's `blunt` usage are about real blunt-end duplex termini. Never blanket-rename `blunt`.
 - **`scene/arc_tube_geometry.test.js` tests a file that does not exist** — a 2026-06-07 throwaway
-  diagnostic still in the suite.
+  diagnostic still in the suite, and it has since **drifted**: it hardcodes tube radius `0.63` while
+  the live constants are `PREVIEW_ARC_RADIUS = SELECTION_ARC_RADIUS = 0.147` (`:78-79`), so its exact
+  bbox tuples describe geometry the app has not built since 2026-06-07. Deletion is parked as
+  **DEC-04** in `memory/project_tech_debt.md` (test deletion is a user call).
 
 ## Coverage — honest
 
 | File | LOC | Tests |
 |---|---|---|
-| `design_renderer.js` | 1,529 | **0** — none of its 92 methods |
+| `design_renderer.js` | 1,554 | **3**, all *structural* (source-text) — none of its 92 methods run |
 | `helix_renderer.js` | 5,232 | **4**, both pure helpers (`orderStrandNucleotides`, `directConnectedOverhangIds`). `buildHelixObjects` (~2,200 LOC) and all 69 controller methods: untested |
 | `glow_layer.js` | 188 | **0** |
 | `domain_ends.js` | 873 | 4 |
 | `crossover_connections.js` | 543 | 8 |
 | `helix_renderer/palette.js` | 253 | 4 (all on `buildStapleColorMap`) |
 
-**20 tests for ~8.6k LOC.** Several sibling tests (`ui/cando_display.test.js`,
+**23 tests for ~8.6k LOC.** Several sibling tests (`ui/cando_display.test.js`,
 `ui/lammps_display.test.js`, `ui/md_panel.test.js`, `scene/slice_highlighter.test.js`) *mock*
-`designRenderer` rather than exercise it — a green suite proves nothing about this pipeline.
-Rendering changes need an app exercise; see `CLAUDE.md` → Verification expectations.
+`designRenderer` rather than exercise it — verified 2026-08-01, all four build literal mock objects.
+A green suite proves nothing about this pipeline. Rendering changes need an app exercise; see
+`CLAUDE.md` → Verification expectations.
+
+**This section is the OWNER of the render-coverage debt** (promoted here from `project_tech_debt.md`
+TD-05, 2026-08-01 — it auto-loads on these files, which the ledger does not). Do not attempt a WebGL
+harness. Two things actually work here, in value order:
+
+1. **Pin the pure functions**, one per pass: `_effectiveColors` (`design_renderer.js:151`),
+   `bezierAt` / `arcControlPoint` (`crossover_connections.js`), the `CG_LOD` ↔ representation
+   mapping. Each is argument-in / value-out and needs no scene.
+2. **Pin cross-list agreement with source-text tests** where two lists in one closure must match.
+   `design_renderer.test.js` is the template: it caught nothing at runtime but would have caught the
+   `_captureGlowLayer` omission the day it was written. Other candidates in this file: the 7
+   representations vs `CG_LOD`; the 16 instanced meshes vs `_reapplyDetailVisibility`'s list; the
+   `_applyRepOverrides` skip-list documented under "Known gap" above.
 
 ## Undocumented subsystems inside `helix_renderer.js`
 

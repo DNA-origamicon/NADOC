@@ -9,14 +9,18 @@ import { createMockStore } from '../test-helpers/mock_store.js'
 
 // ── Pure cores ────────────────────────────────────────────────────────────────
 describe('reprSliderRowVisibility', () => {
-  it('full → bead-radius row only', () => {
+  it('full → bead-radius + both slab rows', () => {
     expect(reprSliderRowVisibility('full')).toEqual({
-      beadRadius: true, cylRadius: false, hullMargin: false,
+      beadRadius: true, slabThickness: true, slabOpacity: true,
+      cylRadius: false, hullMargin: false,
       hullCurve: false, atomisticSliders: false, surfacePanel: false,
     })
   })
-  it('beads → bead-radius row too', () => {
-    expect(reprSliderRowVisibility('beads').beadRadius).toBe(true)
+  it('beads → bead-radius row too, but no slab rows (no slabs below full LOD)', () => {
+    const v = reprSliderRowVisibility('beads')
+    expect(v.beadRadius).toBe(true)
+    expect(v.slabThickness).toBe(false)
+    expect(v.slabOpacity).toBe(false)
   })
   it('cylinders → cyl-radius row only', () => {
     const v = reprSliderRowVisibility('cylinders')
@@ -49,15 +53,21 @@ describe('hullMarginDefaultTick', () => {
 // ── Factory wiring ──────────────────────────────────────────────────────────
 const SLIDER_IDS = {
   'sl-bead-radius': 'input', 'sv-bead-radius': 'span',
+  'sl-slab-thickness': 'input', 'sv-slab-thickness': 'span',
+  'sl-slab-opacity': 'input', 'sv-slab-opacity': 'span',
   'sl-cyl-radius': 'input', 'sv-cyl-radius': 'span',
   'sl-hull-margin': 'input', 'sv-hull-margin': 'span',
   'sl-hull-curve': 'input', 'sv-hull-curve': 'span',
   'repr-bead-radius-row': 'div', 'repr-cyl-radius-row': 'div',
+  'repr-slab-thickness-row': 'div', 'repr-slab-opacity-row': 'div',
   'repr-hull-margin-row': 'div', 'repr-hull-curve-row': 'div',
 }
 
 function makeDeps(overrides = {}) {
-  const designRenderer = { setBeadRadius: vi.fn(), setCylinderRadius: vi.fn() }
+  const designRenderer = {
+    setBeadRadius: vi.fn(), setCylinderRadius: vi.fn(),
+    setSlabThickness: vi.fn(), setSlabOpacity: vi.fn(),
+  }
   const jointRenderer = { setHullScanTick: vi.fn(), setHullCurveDetail: vi.fn() }
   return {
     store: createMockStore({ currentDesign: { lattice_type: 'SQUARE' } }),
@@ -105,6 +115,41 @@ describe('initReprOptionSliders', () => {
     expect(deps._designRenderer.setBeadRadius).not.toHaveBeenCalled()
   })
 
+  it('slab-thickness slider writes label (nm) + setSlabThickness at full LOD', () => {
+    const els = mountIds(SLIDER_IDS)
+    const deps = makeDeps()   // full
+    initReprOptionSliders(deps)
+    fireInput(els['sl-slab-thickness'], 0.3)
+    expect(els['sv-slab-thickness'].textContent).toBe('0.30')
+    expect(deps._designRenderer.setSlabThickness).toHaveBeenCalledWith(0.3)
+  })
+
+  it('slab-thickness slider skips setSlabThickness below full LOD', () => {
+    const els = mountIds(SLIDER_IDS)
+    const deps = makeDeps({ getLodMode: () => 'beads' })
+    initReprOptionSliders(deps)
+    fireInput(els['sl-slab-thickness'], 0.2)
+    expect(els['sv-slab-thickness'].textContent).toBe('0.20')   // label still updates
+    expect(deps._designRenderer.setSlabThickness).not.toHaveBeenCalled()
+  })
+
+  it('slab-opacity slider writes label + setSlabOpacity at full LOD', () => {
+    const els = mountIds(SLIDER_IDS)
+    const deps = makeDeps()
+    initReprOptionSliders(deps)
+    fireInput(els['sl-slab-opacity'], 0.35)
+    expect(els['sv-slab-opacity'].textContent).toBe('0.35')
+    expect(deps._designRenderer.setSlabOpacity).toHaveBeenCalledWith(0.35)
+  })
+
+  it('slab-opacity slider skips setSlabOpacity below full LOD', () => {
+    const els = mountIds(SLIDER_IDS)
+    const deps = makeDeps({ getLodMode: () => 'cylinders' })
+    initReprOptionSliders(deps)
+    fireInput(els['sl-slab-opacity'], 0.5)
+    expect(deps._designRenderer.setSlabOpacity).not.toHaveBeenCalled()
+  })
+
   it('cyl slider sets cylinder radius only in cylinders LOD', () => {
     const els = mountIds(SLIDER_IDS)
     const deps = makeDeps({ getLodMode: () => 'cylinders' })
@@ -132,12 +177,14 @@ describe('initReprOptionSliders', () => {
     expect(deps._jointRenderer.setHullCurveDetail).toHaveBeenCalledWith(0.05)
   })
 
-  it('updateForRepr(full) shows bead row, hides the rest, calls visibility setters', () => {
+  it('updateForRepr(full) shows bead + slab rows, hides the rest, calls visibility setters', () => {
     const els = mountIds(SLIDER_IDS)
     const deps = makeDeps()
     const ctrl = initReprOptionSliders(deps)
     ctrl.updateForRepr('full')
     expect(els['repr-bead-radius-row'].style.display).toBe('')
+    expect(els['repr-slab-thickness-row'].style.display).toBe('')
+    expect(els['repr-slab-opacity-row'].style.display).toBe('')
     expect(els['repr-cyl-radius-row'].style.display).toBe('none')
     expect(els['repr-hull-margin-row'].style.display).toBe('none')
     expect(deps.setAtomisticSlidersVisible).toHaveBeenCalledWith(false)
@@ -149,6 +196,8 @@ describe('initReprOptionSliders', () => {
     const deps = makeDeps()   // SQUARE
     const ctrl = initReprOptionSliders(deps)
     ctrl.updateForRepr('hull-prism')
+    expect(els['repr-slab-thickness-row'].style.display).toBe('none')
+    expect(els['repr-slab-opacity-row'].style.display).toBe('none')
     expect(els['repr-hull-margin-row'].style.display).toBe('')
     expect(els['repr-hull-curve-row'].style.display).toBe('')
     expect(els['sl-hull-margin'].value).toBe('7')

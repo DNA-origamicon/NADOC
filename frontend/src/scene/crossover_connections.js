@@ -307,6 +307,10 @@ export function buildCrossoverConnections(design, geometry, stapleColorMap, cust
     new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
     Math.max(1, totalBeads),
   )
+  // Structure, not overlay — the slab-opacity slider drives depthWrite here too,
+  // and photo mode must still treat these as solid shadow casters. See the same
+  // flag on `baseSlabs` in helix_renderer.js.
+  slabsMesh.material.userData.photoForceDepthWrite = true
   slabsMesh.frustumCulled = false
   slabsMesh.name     = 'xoverExtraSlabs'    // DEBUG ID
   slabsMesh.userData = { debugType: 'xoverExtraSlabs' }

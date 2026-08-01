@@ -79,6 +79,27 @@ describe('swapToFlatMaterials', () => {
     expect(surf.material.side).toBe(THREE.DoubleSide)
   })
 
+  it('preserves depthWrite:false — an overlay must not become an occluder', () => {
+    const scene = new THREE.Scene()
+    const overlay = new THREE.Mesh(box(), new THREE.MeshPhongMaterial({ depthWrite: false }))
+    scene.add(overlay)
+    swapToFlatMaterials(scene)
+    expect(overlay.material.depthWrite).toBe(false)
+  })
+
+  it('photoForceDepthWrite re-opts structure back in — a faded base slab still casts', () => {
+    // The slab-opacity slider drops depthWrite to blend correctly (LESSONS D8).
+    // Without this opt-in, isShadowExcluded() reads that as "cannot occlude" and
+    // silently removes the slabs from the figure's shadow pass.
+    const scene = new THREE.Scene()
+    const mat = new THREE.MeshPhongMaterial({ transparent: true, opacity: 0.45, depthWrite: false })
+    mat.userData.photoForceDepthWrite = true
+    const slabs = new THREE.Mesh(box(), mat)
+    scene.add(slabs)
+    swapToFlatMaterials(scene)
+    expect(slabs.material.depthWrite).toBe(true)
+  })
+
   it('preserves vertexColors so strand colouring survives', () => {
     const scene = new THREE.Scene()
     const mesh = new THREE.Mesh(box(), new THREE.MeshPhongMaterial({ vertexColors: true }))

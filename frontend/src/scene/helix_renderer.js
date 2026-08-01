@@ -175,6 +175,7 @@ const _slabTanS    = new THREE.Vector3()   // straight tangential (for basis)
 const _slabCenterS = new THREE.Vector3()   // straight slab center
 const _slabCenterD = new THREE.Vector3()   // deformed slab center
 const _slabCenterL = new THREE.Vector3()   // lerped slab center
+const _slabRescaleQ   = new THREE.Quaternion()  // scratch for the in-place slab rescale
 const _slabQuatS      = new THREE.Quaternion()
 const _slabQuatL      = new THREE.Quaternion()
 const _slabBasis      = new THREE.Matrix4()
@@ -975,14 +976,28 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // ── Base slabs (InstancedMesh) ────────────────────────────────────────────
 
-  const slabParams = { length: 0.30, width: 0.06, thickness: 0.70, distance: 0.55 }
+  // Nominal slab dimensions (nm). NOTE the historical naming: `width` is the
+  // PLATE THICKNESS — the smallest dimension, normal to the base-plate face —
+  // while `thickness` is the long in-plane extent. The sidebar slider drives
+  // `width` (see setSlabThickness). `slabParams` is the LIVE copy every slab
+  // matrix-compose in this file reads, so the deform / MD / cluster paths that
+  // compose slab matrices inline stay consistent with the user's chosen value.
+  const SLAB_WIDTH_DEFAULT = 0.06
+  const SLAB_OPACITY = 0.90
+  const slabParams = { length: 0.30, width: SLAB_WIDTH_DEFAULT, thickness: 0.70, distance: 0.55 }
 
   const _slabCount = _skipSlabs ? 1 : Math.max(1, assignedGeometry.length)
   const iSlabs = new THREE.InstancedMesh(
     GEO_UNIT_BOX,
-    new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 }),
+    new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: SLAB_OPACITY }),
     _slabCount,
   )
+  // Slabs are STRUCTURE, not overlay: their depthWrite tracks the opacity slider
+  // (LESSONS D8) but photo mode must still treat them as solid shadow casters.
+  // See photo_mode.js `swapToFlatMaterials` / shadow_bounds.js `isShadowExcluded`,
+  // which otherwise read depthWrite:false as "cannot occlude" and drop the slabs
+  // out of the shadow pass entirely.
+  iSlabs.material.userData.photoForceDepthWrite = true
   iSlabs.count = _skipSlabs ? 0 : assignedGeometry.length
   iSlabs.frustumCulled = false
   iSlabs.name = 'baseSlabs'
@@ -2616,6 +2631,40 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     setBeadRadius(r) {
       _beadScale = r / BEAD_RADIUS
       for (const entry of backboneEntries) _setBeadScale(entry, _beadScale)
+    },
+
+    /** Set the base-pair slab PLATE THICKNESS in nm — `slabParams.width`, the
+     *  smallest slab dimension (default 0.06); the in-plane footprint is left
+     *  alone.  Mutates the live `slabParams` so every inline slab compose in this
+     *  file (deform lerp, position lerp, cluster transform, MD/sim updates) picks
+     *  the new value up on its next pass, then restretches the slabs that exist
+     *  right now IN PLACE — keeping whatever position/orientation/in-plane size
+     *  the active display overlay gave them, rather than snapping back to design
+     *  geometry. */
+    setSlabThickness(nm) {
+      slabParams.width = nm
+      for (const entry of slabEntries) {
+        iSlabs.getMatrixAt(entry.id, _tMatrix)
+        _tMatrix.decompose(_tPos, _slabRescaleQ, _tScale)
+        // Zero scale = a hidden slab (fade-out / hide toggle) — leave it hidden.
+        if (_tScale.lengthSq() < 1e-12) continue
+        _tScale.y = nm
+        _tMatrix.compose(_tPos, _slabRescaleQ, _tScale)
+        iSlabs.setMatrixAt(entry.id, _tMatrix)
+      }
+      iSlabs.instanceMatrix.needsUpdate = true
+    },
+
+    /** Set base-pair slab opacity (0–1).  Material-level; no matrix work.
+     *  `depthWrite` tracks opacity (LESSONS D8): a nearly-see-through slab that
+     *  still writes depth is an invisible occluder that punches voids into the
+     *  beads behind it.  The build default (SLAB_OPACITY) keeps depth writes —
+     *  at 0.90 the slabs are near-opaque and should sort as solids, which is how
+     *  they have always rendered. */
+    setSlabOpacity(o) {
+      iSlabs.material.opacity = o
+      iSlabs.material.transparent = true
+      iSlabs.material.depthWrite = o >= SLAB_OPACITY
     },
 
     /** Set the domain cylinder display radius (nm).  Rebuilds all cylinder matrices. */
