@@ -6,7 +6,7 @@
 // flag sub-vdW contact) assertable at all.
 
 import { describe, it, expect, vi } from 'vitest'
-import { planWeldDraw, initCpdWeldOverlay } from './cpd_weld_overlay.js'
+import { planWeldDraw, planWindowMarkers, initCpdWeldOverlay } from './cpd_weld_overlay.js'
 import { weldColor, VDW_FLOOR_NM } from './cpd_geometry.js'
 
 // two parallel C5=C6 bonds, separation set by `gap` nm along z
@@ -232,5 +232,107 @@ describe('initCpdWeldOverlay with real three.js', () => {
     expect(scene.getObjectByName('cpdWeldOverlay')).toBeTruthy()
     overlay.dispose()
     expect(scene.getObjectByName('cpdWeldOverlay')).toBeFalsy()
+  })
+})
+
+
+// ── umbrella window ladder ───────────────────────────────────────────────────
+//
+// A window restrains |midB - midA|, so its constraint surface is a sphere around midA.
+// Drawn as beads on the pair axis instead: same information, no occlusion.
+
+describe('planWindowMarkers', () => {
+  const geom = { midA: [0, 0, 0], midB: [0, 0, 1.0], dNm: 1.0 }   // 10 Å apart, along +z
+  const windows = [
+    { center_ang: 3.5, force_constant: 3.0 },
+    { center_ang: 7.0, force_constant: 1.0 },
+    { center_ang: 12.0, force_constant: 1.0 },
+  ]
+
+  it('places each window at its own distance along the pair axis', () => {
+    const m = planWindowMarkers(geom, windows)
+    expect(m.map((w) => w.pos[2])).toEqual([0.35, 0.7, 1.2])   // Å → nm along +z
+    expect(m.every((w) => w.pos[0] === 0 && w.pos[1] === 0)).toBe(true)
+  })
+
+  it('marks which windows the current separation has reached', () => {
+    // the pair is at 10 Å: it is inside the 12 Å window, outside 3.5 and 7
+    const m = planWindowMarkers(geom, windows)
+    expect(m.map((w) => w.reached)).toEqual([false, false, true])
+  })
+
+  it('normalises stiffness so the stiffest window reads brightest', () => {
+    const m = planWindowMarkers(geom, windows)
+    expect(m[0].stiffness).toBe(1)      // k = 3.0, the stiffest
+    expect(m[1].stiffness).toBe(0)      // k = 1.0
+  })
+
+  it('survives a ladder where every window has the same force constant', () => {
+    const flat = windows.map((w) => ({ ...w, force_constant: 2 }))
+    expect(planWindowMarkers(geom, flat).every((w) => Number.isFinite(w.stiffness))).toBe(true)
+  })
+
+  it('is empty without geometry, without windows, or on a degenerate pair', () => {
+    expect(planWindowMarkers(null, windows)).toEqual([])
+    expect(planWindowMarkers(geom, [])).toEqual([])
+    expect(planWindowMarkers({ midA: [0, 0, 0], midB: [0, 0, 0], dNm: 0 }, windows)).toEqual([])
+  })
+
+  it('keeps the window centre so the UI can label a bead', () => {
+    expect(planWindowMarkers(geom, windows)[0].centerAng).toBe(3.5)
+  })
+})
+
+describe('overlay window ladder', () => {
+  it('draws a bead per window and clears them when the ladder is dropped', async () => {
+    const THREE = await import('three')
+    const scene = new THREE.Scene()
+    const overlay = initCpdWeldOverlay({ scene, THREE })
+    overlay.setPairs([PAIR])
+    overlay.setWindows([{ center_ang: 3.5, force_constant: 3 }, { center_ang: 7, force_constant: 1 }])
+    overlay.setVisible(true)
+    overlay.update(getPosFor(0.34))
+
+    const group = scene.getObjectByName('cpdWeldOverlay')
+    // 3 pair meshes + 2 window beads
+    expect(group.children.filter((c) => c.isMesh && c.visible)).toHaveLength(5)
+
+    overlay.setWindows([])
+    overlay.update(getPosFor(0.34))
+    expect(group.children.filter((c) => c.isMesh && c.visible)).toHaveLength(3)
+  })
+})
+
+
+describe('ladder beads carry the seeding verdict', () => {
+  const geom = { midA: [0, 0, 0], midB: [0, 0, 1.0], dNm: 1.0 }
+
+  it('passes seeded through, and reports null when it was never measured', () => {
+    const m = planWindowMarkers(geom, [
+      { center_ang: 3.5, force_constant: 3, seeded: false },
+      { center_ang: 9.0, force_constant: 1, seeded: true },
+      { center_ang: 12.0, force_constant: 1 },
+    ])
+    expect(m.map((w) => w.seeded)).toEqual([false, true, null])
+  })
+
+  it('an unseeded window reads amber whatever its stiffness or reach', async () => {
+    const THREE = await import('three')
+    const scene = new THREE.Scene()
+    const overlay = initCpdWeldOverlay({ scene, THREE })
+    overlay.setPairs([PAIR])
+    // 3.4 Å separation: BOTH windows below are "reached", but one has no seed
+    overlay.setWindows([
+      { center_ang: 12.0, force_constant: 1, seeded: false },
+      { center_ang: 12.0, force_constant: 1, seeded: true },
+    ])
+    overlay.setVisible(true)
+    overlay.update(getPosFor(0.34))
+
+    const group = scene.getObjectByName('cpdWeldOverlay')
+    const beads = group.children.filter((c) => c.isMesh && c.visible).slice(3)
+    expect(beads).toHaveLength(2)
+    expect(beads[0].material.color.getHex()).toBe(0xd29922)   // unseeded → amber
+    expect(beads[1].material.color.getHex()).not.toBe(0xd29922)
   })
 })

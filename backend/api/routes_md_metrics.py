@@ -262,9 +262,51 @@ def get_md_cpd_pairs(job_id: str) -> dict:
     return {"ready": True, "pairs": pairs, "constants": constants}
 
 
+@router.get("/md/jobs/{job_id}/cpd-colvars")
+def get_md_cpd_colvars(job_id: str, mode: str = "metrics", center_ang: float | None = None,
+                       force_constant: float = 2.0,
+                       d_start_ang: float = 3.5, d_end_ang: float = 12.0) -> dict:
+    """The runnable Colvars config for this job's weld pair, plus a window ladder.
+
+    ``mode`` is ``metrics`` (observe only) | ``umbrella`` (one window at ``center_ang``)
+    | ``eabf`` (adaptive, no window grid).  ``windows`` is the suggested ladder over
+    ``[d_start_ang, d_end_ang]`` — dense and stiff at short range where the free energy
+    varies fastest.  Preview only; nothing is launched here.
+    """
+    from backend.core.cpd_colvars import VDW_FLOOR_ANG, emit_colvars, umbrella_windows
+    from backend.core.cpd_metrics import designed_weld_pairs, resolve_weld_serials
+
+    job = _load_job(job_id)
+    inputs = _job_inputs(job, _workspace())
+    if isinstance(inputs, str):
+        return {"ready": False, "reason": inputs, "config": "", "windows": []}
+    psf, _ref, _segments, design = inputs
+    pairs = designed_weld_pairs(design)
+    if not pairs:
+        return {"ready": True, "config": "", "windows": [],
+                "reason": "design has no extra-base reciprocal crossover pair"}
+    try:
+        import MDAnalysis as mda
+
+        pairs = resolve_weld_serials(pairs, mda.Universe(str(psf)))
+        config = emit_colvars(pairs, mode=mode, center_ang=center_ang,
+                              force_constant=force_constant,
+                              comment=f"{job.name_stem} — {mode}")
+        windows = umbrella_windows(d_start_ang, d_end_ang)
+    except Exception as exc:  # noqa: BLE001 - a preview must not 500
+        return {"ready": False, "reason": str(exc), "config": "", "windows": []}
+    return {"ready": True, "config": config, "windows": windows,
+            "mode": mode, "vdw_floor_ang": VDW_FLOOR_ANG,
+            "pairs": [{"id": p["id"], "label": p["label"]} for p in pairs]}
+
+
 class MdCpdTraceRequest(BaseModel):
     stride: int = 1
     max_frames: int = 2000
+    # When set, the trace also reports which umbrella windows this run could seed.
+    with_windows: bool = False
+    d_start_ang: float = 3.5
+    d_end_ang: float = 12.0
 
 
 def _compute_cpd_trace(run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Path) -> None:
@@ -284,9 +326,14 @@ def _compute_cpd_trace(run_id: str, job_id: str, req: MdCpdTraceRequest, ws: Pat
             _set(run_id, progress=(done / total) if total else 0.0,
                  frames_done=done, frames_total=total)
 
+        windows = None
+        if req.with_windows:
+            from backend.core.cpd_colvars import umbrella_windows
+
+            windows = umbrella_windows(req.d_start_ang, req.d_end_ang)
         result = weld_trace(psf, [s[2] for s in segments], design,
                             stride=max(1, req.stride), max_frames=max(1, req.max_frames),
-                            progress=_progress)
+                            windows=windows, progress=_progress)
         _set(run_id, state="done", progress=1.0, result=result)
     except Exception as exc:  # surface any failure to the poller
         _set(run_id, state="error", error=str(exc))

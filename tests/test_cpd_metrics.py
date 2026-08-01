@@ -240,3 +240,90 @@ def test_weld_trace_reports_no_pairs_as_a_ready_result_not_an_error():
     assert out["ready"] is True
     assert out["pairs"] == []
     assert "reciprocal" in out["reason"]
+
+
+# ── window seeding ────────────────────────────────────────────────────────────
+#
+# Starting an umbrella window from a structure already near its restraint centre is what
+# keeps its equilibration short. A window with no nearby frame must be reported as
+# UNSEEDED before any GPU time goes into it — that is the whole point of the check.
+
+
+def _ladder(*centers, k=1.0):
+    return [{"center_ang": c, "force_constant": k} for c in centers]
+
+
+def test_seed_picks_the_frame_closest_to_each_window_centre():
+    d_nm = [1.20, 0.90, 0.60, 0.40, 0.35]          # 12, 9, 6, 4, 3.5 A
+    seeds = cm.seed_windows(d_nm, _ladder(4.0, 6.0, 9.0))
+
+    assert [s["frame"] for s in seeds] == [3, 2, 1]
+    assert [s["actual_ang"] for s in seeds] == [4.0, 6.0, 9.0]
+    assert all(s["seeded"] for s in seeds)
+
+
+def test_a_window_with_no_nearby_frame_is_reported_unseeded():
+    # the pull never got below 7.4 A, so the short-range windows have no seed
+    d_nm = [1.14, 1.00, 0.90, 0.80, 0.74]
+    seeds = cm.seed_windows(d_nm, _ladder(3.5, 4.0, 8.0, 9.0))
+
+    by_centre = {s["center_ang"]: s for s in seeds}
+    assert by_centre[3.5]["seeded"] is False
+    assert by_centre[4.0]["seeded"] is False
+    assert by_centre[8.0]["seeded"] is True
+
+
+def test_tolerance_defaults_to_half_the_local_window_spacing():
+    """Ladders are not evenly spaced — dense at short range, coarse further out — so a
+    fixed tolerance would be wrong at one end or the other."""
+    seeds = cm.seed_windows([0.35, 1.20], _ladder(3.5, 4.0, 12.0))
+
+    by_centre = {s["center_ang"]: s for s in seeds}
+    assert by_centre[3.5]["tolerance_ang"] == pytest.approx(0.25)   # neighbour 0.5 away
+    assert by_centre[12.0]["tolerance_ang"] == pytest.approx(4.0)   # neighbour 8.0 away
+
+
+def test_explicit_tolerance_overrides_the_spacing_rule():
+    seeds = cm.seed_windows([0.40], _ladder(3.5, 4.0), tolerance_ang=2.0)
+    assert all(s["tolerance_ang"] == 2.0 for s in seeds)
+    assert all(s["seeded"] for s in seeds)
+
+
+def test_frame_indices_map_back_to_the_real_trajectory_when_strided():
+    d_nm = [1.20, 0.90, 0.60]
+    seeds = cm.seed_windows(d_nm, _ladder(6.0), frame_indices=[0, 50, 100])
+
+    assert seeds[0]["frame"] == 100        # real frame
+    assert seeds[0]["series_index"] == 2   # position within the strided series
+
+
+def test_offset_is_signed_so_you_can_see_which_way_the_seed_misses():
+    seeds = cm.seed_windows([0.50], _ladder(4.0))
+    assert seeds[0]["offset_ang"] == pytest.approx(1.0)     # seed is FURTHER out
+
+
+def test_seed_windows_is_empty_without_data_or_windows():
+    assert cm.seed_windows([], _ladder(4.0)) == []
+    assert cm.seed_windows([0.4], []) == []
+
+
+def test_seeding_report_flags_a_partially_covered_ladder():
+    d_nm = [1.14, 0.90, 0.80]
+    seeds = cm.seed_windows(d_nm, _ladder(3.5, 4.0, 8.0, 9.0))
+
+    rep = cm.seeding_report(seeds)
+
+    assert rep["n_windows"] == 4
+    assert rep["fully_seeded"] is False
+    assert 3.5 in rep["unseeded_centers_ang"]
+    assert rep["n_seeded"] + rep["n_unseeded"] == rep["n_windows"]
+
+
+def test_seeding_report_is_clean_when_every_window_has_a_seed():
+    d_nm = [0.35, 0.40, 0.45]
+    seeds = cm.seed_windows(d_nm, _ladder(3.5, 4.0, 4.5))
+
+    rep = cm.seeding_report(seeds)
+
+    assert rep["fully_seeded"] is True
+    assert rep["unseeded_centers_ang"] == []

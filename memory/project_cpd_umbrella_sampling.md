@@ -39,28 +39,83 @@ Two things the trace deliberately does:
   of a long run reads as "never got close" when the run simply was not looked at past N.
 - **Plots time in ns, not frame index** — once the stride widens, a frame index means nothing.
 
-**Next:** watch it in the browser on that run, then Phase 2 (the 2D PMF).
+**The COLVARS EMITTER SHIPPED 2026-07-31** (`backend/core/cpd_colvars.py`) — the gate to
+every biased run. Three modes: `metrics` (observe only), `umbrella` (one window), `eabf`
+(extended Lagrangian + abf; in Colvars that combination *is* eABF, there is no keyword).
+`GET /md/jobs/{id}/cpd-colvars` previews the config + a suggested window ladder; nothing
+is launched. The **"Umbrella window ladder"** checkbox draws the ladder in 3D as beads
+along the pair axis (brighter = stiffer, blue = a separation this frame has reached) —
+a window restrains |midB−midA| so its true surface is a sphere around midA, and thirteen
+nested spheres would bury the structure.
 
-## ⚠ FOUND 2026-07-31, NOT FIXED — resumed runs are analysed at ~1/3 coverage
+**`atomNumbers` IS 1-BASED.** Colvars counts atoms from 1 like NAMD; weld-pair serials are
+0-based MDAnalysis indices. An off-by-one does not error — it restrains a *different,
+nearby* atom and yields a plausible, wrong free energy. `emit_colvars` is the only place
+that conversion happens, and it is pinned against the hand-written reference config.
+Verified on 2hb_1xT: emitted `242 234 949 941` → D000:THY8 C5/C6, D001:THY15 C5/C6.
 
-`routes_md._md_segment_dcds` takes **one** DCD per segment — `max(dcds, key=mtime)` —
-treating a `.cont1.dcd` as a *replacement* for the base `.dcd`. On the 2hb_1xT run created
-2026-07-30 15:26 they are **strictly sequential**, not alternatives:
+Default ladder for this pair: **13 windows, 3.5 → 12 Å**, k=3.0 below 7 Å then 1.0
+(dense+stiff at short range where the free energy varies fastest — the AutoNAMD shape).
 
-```
-2hb_1xT_01_production_500ns_k0.dcd        1043 frames    0.10 -> 104.30 ns
-2hb_1xT_01_production_500ns_k0.cont1.dcd   576 frames  104.40 -> 161.90 ns
-```
+## Phase 2 — window SEEDING (2026-07-31). Result: the unbiased run seeds 5/13 windows.
 
-One 100 ps frame apart, no overlap. So every consumer of the job's segments sees only the
-**last 57.6 ns of 161.9 ns — 64% of the run is dropped**: RMSF, the metrics card, the
-trajectory scrub view, and the weld trace. (Phase 0's numbers are NOT affected — that
-analysis loaded both DCDs directly.)
+A ladder is only runnable if each window has a starting structure near its restraint
+centre. `cpd_metrics.seed_windows` (PURE — takes a d series + a ladder) picks the closest
+frame per window and marks anything further off than **half the local window spacing** as
+`seeded: False`. Half-spacing rather than a fixed tolerance because ladders are dense at
+short range and coarse further out. `seeding_report` summarises.
 
-Fix is small — concatenate base + `cont*` in time order instead of picking the newest —
-but it changes results for **every resumed job across several features**, so it wants a
-deliberate decision + revalidation, not a drive-by. Not done. Confirm whether any protocol
-writes a continuation that genuinely *restarts* the trajectory before assuming append.
+Measured on the 2hb_1xT run created 2026-07-30 15:26 (both DCDs, 161.8 ns):
+
+| | |
+|---|---|
+| seeded | **5 / 13** (8.0–12.0 Å) |
+| unseeded | **8** — 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0 Å |
+| worst offset | +3.97 Å |
+
+All eight short-range windows collapse onto the SAME frame (the single closest approach at
+7.47 Å). That is the quantified argument for the SMD pull, obtained before spending any
+GPU time — which is the entire point of checking.
+
+**So `smd` mode was added to the emitter**: a moving `harmonic` walking `centers` →
+`targetCenters` over `targetNumSteps`, exactly what the reference `colvars_cpd_smd.in`
+does. Pull 11.4 → 3.4 Å slowly, then re-run seeding against the SMD trajectory to fill the
+ladder. Keep k low and the pull slow — a fast pull does work on the structure that the
+umbrella windows then have to relax back out.
+
+Seeding rides on `weld_trace` (`with_windows: true`) because it needs the same d series,
+and the ladder beads colour by it: **amber = unseeded**, and that outranks stiffness and
+reach on a bead, because an unseeded window cannot be run at all.
+
+**Next:** run the SMD pull on 2hb_1xT, re-seed, then launch the ladder. Per-window NAMD
+configs (`.namd` + start coordinates per window) are still unbuilt — the emitter produces
+the colvars half only.
+
+## ✅ FIXED 2026-07-31 — resumed runs were analysed at ~1/3 coverage
+
+`routes_md._md_segment_dcds` took **one** DCD per segment (`max(dcds, key=mtime)`),
+treating `.cont1.dcd` as a *replacement* for the base `.dcd`. They are sequential pieces:
+`md_protocols` re-emits a resume conf with `firsttimestep <restart_step>` and only the
+**remaining** steps, writing to `cont<k>.dcd`. Confirmed on the run created 2026-07-30
+15:26 — base 0.10–104.30 ns, cont1 104.40–161.90 ns, one frame apart, no overlap.
+
+Every consumer inherited it: RMSF, the metrics card, the scrub view, the weld trace all
+saw **36% of the run** and reported nothing wrong.
+
+Now returns **one entry per DCD, ordered by the trajectory's own clock** (`_dcd_first_step`,
+a header read). mtime reorders when a file is archived or re-touched; name sorting puts
+`cont10` before `cont2`. Tiebreak sorts the base first, because equal keys otherwise keep
+the glob order — which lists `cont*` first (a test caught exactly this).
+
+Live result on that run: **576 → 1619 frames, 0.1 → 161.1 ns**, and d_min/d_mean now match
+the Phase 0 direct-load numbers exactly — the route and the offline analysis agree.
+Window seeding improved 4/13 → **5/13**. Regression: `tests/test_md_segment_dcds.py`.
+
+**Overlap is possible in principle** (a checkpoint behind the last written frame, when
+`restartfreq` does not divide `dcdfreq` — NADOC's 5000/25000 always does). Logged, not
+dropped: a few double-counted frames skew an average slightly, where dropping a whole
+piece loses real trajectory. `md_health._latest_segment_dcd` is a DIFFERENT function that
+genuinely wants the newest (it probes current state) — deliberately unchanged.
 
 **Side-fix 2026-07-31 — the trajectory-scrub view now has sticks.** `md_atomistic_model`
 served `bonds: []` with a note to port ws.py's version "when the scrub view needs sticks";

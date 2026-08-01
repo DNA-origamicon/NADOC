@@ -52,10 +52,50 @@ export function planWeldDraw (pairs, getPos) {
   return out
 }
 
+/**
+ * Where each umbrella window's centre sits, as a bead on the pair axis.
+ * PURE.
+ *
+ * A window restrains |midB - midA|, so its true constraint surface is a SPHERE of that
+ * radius around midA. Drawing thirteen nested spheres would bury the structure, so the
+ * ladder is drawn as beads along the axis instead: same information (which separations
+ * are sampled, how they're spaced, which are stiff) without occluding anything.
+ *
+ * `reached` marks windows the pair is currently at or inside — i.e. how far down the
+ * ladder this frame has actually got.
+ */
+export function planWindowMarkers (geom, windows) {
+  if (!geom || !windows?.length) return []
+  const [ax, ay, az] = geom.midA
+  const [bx, by, bz] = geom.midB
+  const dx = bx - ax, dy = by - ay, dz = bz - az
+  const len = Math.sqrt(dx * dx + dy * dy + dz * dz)
+  if (!(len > 0)) return []
+  const ux = dx / len, uy = dy / len, uz = dz / len
+  const dAng = geom.dNm * 10
+  const ks = windows.map((w) => w.force_constant ?? 1)
+  const kMin = Math.min(...ks), kMax = Math.max(...ks)
+  return windows.map((w) => {
+    const r = (w.center_ang ?? 0) / 10                       // Å → nm
+    const stiffness = kMax > kMin ? ((w.force_constant ?? 1) - kMin) / (kMax - kMin) : 1
+    return {
+      centerAng: w.center_ang,
+      forceConstant: w.force_constant,
+      pos: [ax + ux * r, ay + uy * r, az + uz * r],
+      stiffness,
+      reached: dAng <= (w.center_ang ?? 0) + 1e-9,
+      // null = seeding not measured yet; false = no frame near enough to start it.
+      seeded: w.seeded === undefined ? null : !!w.seeded,
+    }
+  })
+}
+
 export function initCpdWeldOverlay ({ scene, THREE } = {}) {
   let _pairs = []
   let _visible = false
   let _plans = []
+  let _windows = []
+  let _windowMeshes = []
   let _group = null
   const _nodes = new Map() // pair id → { markerA, markerB, bar }
 
@@ -133,7 +173,40 @@ export function initCpdWeldOverlay ({ scene, THREE } = {}) {
     for (const [id, node] of _nodes) {
       if (!alive.has(id)) for (const m of Object.values(node)) m.visible = false
     }
+    _drawWindows(_plans[0])
     return _plans
+  }
+
+  /** Umbrella-window beads along the first pair's axis. */
+  function _drawWindows (plan) {
+    const marks = plan ? planWindowMarkers(plan, _windows) : []
+    if (!_group || !THREE) return marks
+    while (_windowMeshes.length < marks.length) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.045, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0x8b949e, transparent: true, opacity: 0.55, depthTest: false }))
+      m.renderOrder = 998
+      _group.add(m)
+      _windowMeshes.push(m)
+    }
+    _windowMeshes.forEach((m, i) => {
+      const w = marks[i]
+      if (!w) { m.visible = false; return }
+      m.visible = true
+      m.position.set(...w.pos)
+      // Seeding, once measured, outranks everything else a bead could say: an unseeded
+      // window cannot be run at all, so it reads amber regardless of stiffness or reach.
+      const hex = w.seeded === false ? 0xd29922 : (w.reached ? 0x58a6ff : 0x6e7681)
+      m.material.color.setHex(hex)
+      m.material.opacity = (w.seeded === false ? 0.85 : 0.35) + 0.35 * w.stiffness
+    })
+    return marks
+  }
+
+  /** Ladder to preview (from /cpd-colvars). Pass [] to clear. */
+  function setWindows (windows) {
+    _windows = Array.isArray(windows) ? windows : []
+    if (!_windows.length) _windowMeshes.forEach((m) => { m.visible = false })
   }
 
   function setVisible (v) {
@@ -165,10 +238,12 @@ export function initCpdWeldOverlay ({ scene, THREE } = {}) {
       for (const m of Object.values(node)) { m.geometry?.dispose?.(); m.material?.dispose?.(); _group?.remove(m) }
     }
     _nodes.clear()
+    for (const m of _windowMeshes) { m.geometry?.dispose?.(); m.material?.dispose?.(); _group?.remove(m) }
+    _windowMeshes = []
     if (_group && scene) scene.remove(_group)
     _group = null
     _plans = []
   }
 
-  return { setPairs, loadForJob, update, setVisible, isVisible, getReadouts, dispose }
+  return { setPairs, setWindows, loadForJob, update, setVisible, isVisible, getReadouts, dispose }
 }

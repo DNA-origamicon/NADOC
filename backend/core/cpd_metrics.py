@@ -220,6 +220,69 @@ def make_whole_dna(dna, fragments, box) -> None:
             frag.positions = frag.positions + shift
 
 
+def seed_windows(d_nm: Sequence[float], windows: Sequence[dict], *,
+                 frame_indices: Sequence[int] | None = None,
+                 tolerance_ang: float | None = None) -> list[dict]:
+    """Pick the frame that best seeds each umbrella window.
+
+    PURE — takes a d_mid series (nm, e.g. from :func:`weld_trace`) and a ladder, and for
+    each window returns the frame whose separation is closest to that window's centre.
+    Starting a window from a structure already near its restraint centre is what keeps its
+    equilibration short; starting it far away means the first chunk of sampling is the
+    structure being dragged, not the free energy.
+
+    ``tolerance_ang`` defaults to **half the local window spacing** — a seed further off
+    than that is closer to a neighbouring window than to its own, which is the honest line
+    for "this window has no seed". Those come back ``seeded: False`` so the ladder can be
+    fixed (widen the pull, run it slower) BEFORE any GPU time is spent on it.
+
+    ``frame_indices`` maps series positions back to real trajectory frames when the series
+    was strided; without it the returned index is the position in the series.
+    """
+    d = np.asarray(d_nm, dtype=float)
+    out: list[dict] = []
+    if d.size == 0 or not windows:
+        return out
+    centers = [float(w.get("center_ang", 0.0)) for w in windows]
+    for i, w in enumerate(windows):
+        c_ang = centers[i]
+        # Half the distance to the nearer neighbour — ladders are not evenly spaced.
+        if tolerance_ang is not None:
+            tol = float(tolerance_ang)
+        else:
+            gaps = [abs(c_ang - centers[j]) for j in (i - 1, i + 1)
+                    if 0 <= j < len(centers)]
+            tol = (min(gaps) / 2.0) if gaps else 0.5
+        best = int(np.argmin(np.abs(d * 10.0 - c_ang)))
+        actual = float(d[best] * 10.0)
+        out.append({
+            "center_ang": c_ang,
+            "force_constant": w.get("force_constant"),
+            "frame": int(frame_indices[best]) if frame_indices is not None else best,
+            "series_index": best,
+            "actual_ang": round(actual, 3),
+            "offset_ang": round(actual - c_ang, 3),
+            "tolerance_ang": round(tol, 3),
+            "seeded": abs(actual - c_ang) <= tol,
+        })
+    return out
+
+
+def seeding_report(seeds: Sequence[dict]) -> dict:
+    """Summary of a seeding pass: how much of the ladder is actually startable."""
+    total = len(seeds)
+    ok = [s for s in seeds if s.get("seeded")]
+    gaps = [s for s in seeds if not s.get("seeded")]
+    return {
+        "n_windows": total,
+        "n_seeded": len(ok),
+        "n_unseeded": len(gaps),
+        "fully_seeded": total > 0 and not gaps,
+        "unseeded_centers_ang": [s["center_ang"] for s in gaps],
+        "worst_offset_ang": (max((abs(s["offset_ang"]) for s in seeds), default=None)),
+    }
+
+
 def trace_stride(n_total: int, stride: int = 1, max_frames: int = 2000) -> int:
     """Frame step for a bounded trace over ``n_total`` frames.
 
@@ -237,7 +300,8 @@ def trace_stride(n_total: int, stride: int = 1, max_frames: int = 2000) -> int:
 
 
 def weld_trace(topology_path, trajectory_paths, design, *, stride: int = 1,
-               max_frames: int = 2000, progress=None) -> dict:
+               max_frames: int = 2000, windows: Sequence[dict] | None = None,
+               progress=None) -> dict:
     """(d_mid, eta, k) per frame for every designed weld pair.
 
     This is the "watch it over the whole run" view: the overlay shows the current frame,
@@ -291,6 +355,7 @@ def weld_trace(topology_path, trajectory_paths, design, *, stride: int = 1,
         if progress is not None:
             progress(n_done, len(idx))
 
+    frame_indices = idx
     out = []
     for p in pairs:
         s = series[p["id"]]
@@ -304,6 +369,13 @@ def weld_trace(topology_path, trajectory_paths, design, *, stride: int = 1,
             "k_max": float(k.max()) if len(k) else None,
             "k_mean": float(k.mean()) if len(k) else None,
             "reactive_frames": int(reactive.sum()),
+            # Which umbrella windows this run could actually start. Computed here because
+            # it needs the same d series — and knowing a window has no seed is worth far
+            # more BEFORE the GPU time than after.
+            "seeds": seed_windows(s["d"], windows, frame_indices=frame_indices)
+            if windows else [],
         })
+        if windows:
+            out[-1]["seeding"] = seeding_report(out[-1]["seeds"])
     return {"ready": True, "n_frames": len(times), "stride": step,
             "n_total_frames": n_total, "times_ps": times, "pairs": out}

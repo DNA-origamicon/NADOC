@@ -191,7 +191,7 @@ export function initMdWeldControls ({ api, getWeldOverlay = null } = {}) {
     if (traceBtn) traceBtn.disabled = true
     let started
     try {
-      started = await api.startMdCpdTrace(_jobId, {})
+      started = await api.startMdCpdTrace(_jobId, { withWindows: !!ladderToggle?.checked })
     } catch (err) {
       _setStatus(String(err?.message || err), '#f85149')
       if (traceBtn) traceBtn.disabled = false
@@ -215,6 +215,10 @@ export function initMdWeldControls ({ api, getWeldOverlay = null } = {}) {
       if (traceBtn) traceBtn.disabled = false
       if (r.state === 'error') { _setStatus(r.error || 'trace failed', '#f85149'); return }
       _traceResult = r.result
+      // Fold the seeding verdict into the ladder beads: an unseeded window is one this
+      // run cannot start, which is worth seeing BEFORE any GPU time goes into it.
+      const seeds = _traceResult?.pairs?.[0]?.seeds
+      if (seeds?.length && ladderToggle?.checked) getWeldOverlay?.()?.setWindows?.(seeds)
       if (!_traceResult?.pairs?.length) {
         _setStatus(_traceResult?.reason || 'no weld pair to trace', '#d29922')
         return
@@ -226,6 +230,27 @@ export function initMdWeldControls ({ api, getWeldOverlay = null } = {}) {
 
   traceBtn?.addEventListener('click', () => { runTrace() })
   traceMetric?.addEventListener('change', () => { _drawTrace() })
+
+  // ── umbrella window ladder (preview only, launches nothing) ─────────────────
+  const ladderToggle = document.getElementById('md-jobs-weld-ladder-toggle')
+
+  async function _applyLadder () {
+    const overlay = getWeldOverlay?.()
+    if (!overlay?.setWindows) return
+    if (!ladderToggle?.checked) { overlay.setWindows([]); return }
+    if (!_jobId) { _setStatus('select a job first'); return }
+    const resp = await api?.getMdCpdColvars?.(_jobId).catch(() => null)
+    if (!resp?.windows?.length) {
+      overlay.setWindows([])
+      _setStatus(resp?.reason || 'no window ladder available', '#d29922')
+      return
+    }
+    overlay.setWindows(resp.windows)
+    _setStatus(`${resp.windows.length} umbrella windows `
+      + `(${resp.windows[0].center_ang}–${resp.windows[resp.windows.length - 1].center_ang} Å)`)
+  }
+
+  ladderToggle?.addEventListener('change', () => { _applyLadder() })
 
   /** The panel tells us which job is selected; re-resolve the pair set for it. */
   function setJob (jobId) {
@@ -239,6 +264,8 @@ export function initMdWeldControls ({ api, getWeldOverlay = null } = {}) {
     if (traceCanvas) traceCanvas.style.display = 'none'
     if (traceSummary) traceSummary.style.display = 'none'
     if (traceBtn) traceBtn.disabled = false
+    getWeldOverlay?.()?.setWindows?.([])
+    if (ladderToggle?.checked) _applyLadder()
     if (toggle.checked) _apply()
     else _setStatus('')
   }

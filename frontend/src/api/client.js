@@ -2623,10 +2623,16 @@ export const getMdCpdPairs = (id) =>
  *  ever get close". Poll with getMdCpdTrace. */
 export const startMdCpdTrace = (id, body = {}) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/cpd-trace/start`,
-    { stride: body.stride ?? 1, max_frames: body.maxFrames ?? 2000 })
+    { stride: body.stride ?? 1, max_frames: body.maxFrames ?? 2000,
+      with_windows: !!body.withWindows })
 /** Progress + result of a weld-trace run ({state, progress, frames_done, result?}). */
 export const getMdCpdTrace = (traceId) =>
   _oxdnaJSON('GET', `/md/cpd-trace/${traceId}`)
+/** Runnable Colvars config for this job's weld pair + the suggested umbrella window
+ *  ladder ({ready, config, windows}). Preview only — launches nothing. */
+export const getMdCpdColvars = (id, opts = {}) =>
+  _oxdnaJSON('GET', `/md/jobs/${id}/cpd-colvars?mode=${opts.mode || 'metrics'}`
+    + `&d_start_ang=${opts.dStartAng ?? 3.5}&d_end_ang=${opts.dEndAng ?? 12.0}`)
 /** Per-frame NAMD surface ({idx:{vertices,faces}}) for COMPOSITE trajectory frame indices. */
 export const getMdFramesSurface = (id, frameIndices, params = {}) =>
   _oxdnaJSON('POST', `/md/jobs/${id}/frames-surface`,
