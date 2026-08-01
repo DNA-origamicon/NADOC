@@ -181,6 +181,49 @@ describe('initMdWeldControls', () => {
     expect(overlay.loadForJob).not.toHaveBeenCalled()
   })
 
+  // The overlay used to be persisted in localStorage, which made the control look like it
+  // switched ITSELF on: a stored `true` re-checked the box at boot and setJob() re-applied
+  // it to the next job selected — but the markers are drawn from inside the atomistic
+  // renderer, so nothing appeared until the user switched to a heavy representation. From
+  // the user's seat, "changing the representation turned on weld pair".
+  describe('is opt-in per session (never self-arms)', () => {
+    it('ignores a stale persisted preference', async () => {
+      try { localStorage.setItem('nadoc:md:weldPair', 'true') } catch { /* private mode */ }
+      const overlay = makeOverlay()
+      const c = initMdWeldControls({ api: {}, getWeldOverlay: () => overlay })
+      expect(els().toggle.checked).toBe(false)
+      c.setJob('job-a')
+      await vi.runOnlyPendingTimersAsync()
+      expect(overlay.loadForJob).not.toHaveBeenCalled()
+      expect(overlay.setVisible).not.toHaveBeenCalledWith(true)
+    })
+
+    it('does not write the preference when ticked', async () => {
+      const overlay = makeOverlay()
+      const c = initMdWeldControls({ api: {}, getWeldOverlay: () => overlay })
+      c.setJob('job-a')
+      els().toggle.checked = true
+      els().toggle.dispatchEvent(new Event('change'))
+      await vi.runOnlyPendingTimersAsync()
+      expect(overlay.loadForJob).toHaveBeenCalled()          // it DID turn on for this session…
+      expect(localStorage.getItem('nadoc:md:weldPair')).toBeNull()   // …but left no trace
+    })
+
+    // Following the job WITHIN a session is correct and not surprising: the user ticked it.
+    it('still follows a job change while ticked in this session', async () => {
+      const overlay = makeOverlay()
+      const c = initMdWeldControls({ api: {}, getWeldOverlay: () => overlay })
+      c.setJob('job-a')
+      els().toggle.checked = true
+      els().toggle.dispatchEvent(new Event('change'))
+      await vi.runOnlyPendingTimersAsync()
+      overlay.loadForJob.mockClear()
+      c.setJob('job-b')
+      await vi.runOnlyPendingTimersAsync()
+      expect(overlay.loadForJob).toHaveBeenCalledWith({}, 'job-b')
+    })
+  })
+
   it('asks the user to select a job when ticked with none', async () => {
     const overlay = makeOverlay()
     const c = initMdWeldControls({ api: {}, getWeldOverlay: () => overlay })
@@ -282,7 +325,12 @@ describe('initMdWeldControls', () => {
     expect(els().status.textContent).toBe('boom')
   })
 
-  it('remembers the checkbox state across a rebuild', async () => {
+  // SUPERSEDED 2026-08-01. This used to assert the opposite — that the checkbox state
+  // survived a rebuild, via localStorage. That persistence is exactly what made the
+  // control appear to switch itself on (see the "opt-in per session" block above), so the
+  // intent was reversed on user report. Kept as an explicit pin of the NEW behaviour
+  // rather than deleted, so nobody re-adds the key thinking it was an oversight.
+  it('does NOT remember the checkbox state across a rebuild', async () => {
     const overlay = makeOverlay()
     const c1 = initMdWeldControls({ api: {}, getWeldOverlay: () => overlay })
     c1.setJob('job-a')
@@ -292,7 +340,7 @@ describe('initMdWeldControls', () => {
 
     document.body.innerHTML = MARKUP
     initMdWeldControls({ api: {}, getWeldOverlay: () => overlay })
-    expect(els().toggle.checked).toBe(true)
+    expect(els().toggle.checked).toBe(false)
   })
 
   it('reports when the atomistic view is unavailable', async () => {

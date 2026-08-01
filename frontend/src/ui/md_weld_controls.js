@@ -20,7 +20,21 @@
 
 import { buildChartSpec, drawChart, SERIES_COLORS } from './metric_graph.js'
 
-const LS_KEY = 'nadoc:md:weldPair'
+// The weld overlay is DELIBERATELY not persisted across sessions (was
+// localStorage 'nadoc:md:weldPair', removed 2026-08-01).
+//
+// It used to be, and the result was a control that appeared to switch itself on. A stored
+// `true` re-checked the box at boot and `setJob()` silently re-applied it to whatever job
+// you next selected — but the markers are drawn from inside the atomistic renderer, so
+// nothing showed while the scene was coarse-grained. They materialised later, at the
+// moment the user switched to a heavy representation, which reads as "changing the
+// representation turned on weld pair". Reproduced: with the key set, selecting a job and
+// enabling a trajectory gives overlayVisible=true / 0 drawn meshes, and F7 then makes 3
+// appear, having never touched the control.
+//
+// An annotation layer this specialised should be opt-in per session. If persistence is
+// wanted back, the fix is NOT to restore the key: it is to make the overlay visible (or
+// honestly reported) in the representation the user is actually looking at.
 const READOUT_MS = 120
 const POLL_MS = 700
 
@@ -104,8 +118,6 @@ export function initMdWeldControls ({ api, getWeldOverlay = null } = {}) {
   let _timer = null
   let _last = { ready: false, pairs: [], reason: null }
 
-  const _read = () => { try { return localStorage.getItem(LS_KEY) === 'true' } catch { return false } }
-  const _write = (v) => { try { localStorage.setItem(LS_KEY, String(v)) } catch { /* private mode */ } }
 
   function _setStatus (text, color = '#8b949e') {
     if (statusEl) { statusEl.textContent = text; statusEl.style.color = color }
@@ -132,7 +144,6 @@ export function initMdWeldControls ({ api, getWeldOverlay = null } = {}) {
   async function _apply () {
     const overlay = getWeldOverlay?.()
     const on = !!toggle.checked
-    _write(on)
     if (!overlay) { _setStatus('atomistic view not available'); return }
     if (!on) {
       overlay.setVisible(false)
@@ -154,7 +165,8 @@ export function initMdWeldControls ({ api, getWeldOverlay = null } = {}) {
   }
 
   toggle.addEventListener('change', () => { _apply() })
-  toggle.checked = _read()
+  // No restore here — the checkbox keeps the HTML default (unchecked). See the LS_KEY
+  // note at the top of this file for why it is opt-in per session.
 
   // ── trace over the whole run ────────────────────────────────────────────────
   const traceBtn = document.getElementById('md-jobs-weld-trace-btn')
