@@ -194,3 +194,87 @@ backend held no design, and `feedback_no_live_server_mutation_for_verify` forbid
 verify. The visible check still owed: open a design with unstapled/uncoloured staples, confirm the
 Sequence panel swatches match the 3D staple colours, nick a strand, confirm untouched staples keep
 their colour in **both** views.
+
+
+---
+
+### ~~TD-03~~ — Cadnano-editor app stragglers — **CLOSED 2026-07-31** (5 FIXED / 1 PROMOTED / 1 DECIDE / 2 ACCEPTED / 1 STALE)
+Small, each a live trap; all documented in `.claude/rules/cadnano-editor.md`.
+- ~~**`unligatedCrossoverIds` is written but never declared**~~ — **FIXED 2026-07-31**: added
+  `unligatedCrossoverIds: new Set()` to `store.js` `_initialState`. Probe: writer is `api.js:124`
+  (not :120); absent from `_initialState` — confirmed. **The "a second reader would crash" framing
+  was wrong**: all 5 readers are safe (`cadnano-editor/main.js:2280` and `frontend/src/main.js:1766`
+  reference-compare, so `undefined !== undefined` never fires; `pathview.js:4901` does `new Set(ids
+  ?? [])`; `pathview.js:2254` reads a module-local Set; and the two apparently-undefended sites
+  `frontend/src/main.js:1778` + `scene/response_delta.js:106` pass into
+  `unligated_crossover_markers.js:103`, which *also* does `new Set(unligatedIds ?? [])`). So this was
+  a shape/hygiene fix, not a crash fix. **New debt found**: the *3D* store
+  (`frontend/src/state/store.js`) has the identical undeclared key, written by `api/client.js:428,743`
+  → logged as **TD-26**.
+- ~~**`Ctrl+Shift+L` is case-sensitive**~~ — **FIXED 2026-07-31**: `ligation_debug.js:403` now tests
+  `(e.key === 'l' || e.key === 'L')`. Probe confirmed the anchor verbatim. Note the convention is
+  split 2-and-2, not uniform — `main.js:1369` (Save As) is uppercase-only too, and `:1349` (redo) is
+  both-case. Left `:1369` alone: it is out of this bullet's scope, and Shift always yields uppercase
+  under a standard layout, so both are robustness fixes rather than live bugs.
+- ~~**Codec logic outside the codec**~~ — **FIXED 2026-07-31**: `cadnano-editor/main.js:2070` now
+  calls `parseForcedLigKey(key)?.id` (import added at `:51`). Probe: the site sits in an
+  `else if (key.startsWith('fl:'))` branch whose sibling already uses `parseXoverKey`, and
+  `parseForcedLigKey` (`element_keys.js:109-111`) is `key.slice(3)` behind the same guard — a
+  byte-equivalent drop-in. No other `.slice(3)` on an fl key exists repo-wide.
+- ~~**`const DEBUG = true` is shipping**~~ — **FIXED 2026-07-31**: flipped to `false` at
+  `overhang_pathview.js:57` and given the editor's flip-then-revert comment. Probe softened the
+  severity: it gates `console.debug` (browser *verbose* level, hidden by default) with a
+  `[DD-pathview]` tag, at 9 call sites — noisy, not user-visible.
+- ~~**`ui/overhang_pathview.js:60-63` re-declares `RULER_H/LABEL_R/TOP_PAD` locally**~~ —
+  **FIXED 2026-07-31, and the root cause with it.** Probe found the real numbers: `RULER_H` 26 = 26
+  (**equal**), `LABEL_R` 12 vs 16 and `TOP_PAD` 12 vs 18 (**differ**), `BOTTOM_PAD` has no editor
+  counterpart — so the `// mirror cadnano-editor` comment was false for 2 of 3. Root cause: the
+  editor's `pathview.js:256` exported only 4 of its 7 layout constants, so the fork had to
+  re-declare the rest and drifted. Fix: extracted the 9 drawing-grid constants **verbatim** into a
+  new leaf module `cadnano-editor/pathview/layout.js` (zero imports); `pathview.js` imports them;
+  `overhang_pathview.js` imports the 5 it shares (incl. `RULER_H`) and keeps `LABEL_R`/`TOP_PAD`/
+  `BOTTOM_PAD` local with `// editor: 16` / `// editor: 18` markers. Pinned by
+  `pathview/layout.test.js` (4 tests). **This also closes TD-14's reverse-coupling bullet** — nothing
+  now imports `pathview.js` for constants, so the 4977-LOC module no longer enters the main-app
+  bundle (only `main.js:41` `initPathview` imports it).
+- ~~**All 3 editor e2e specs `goto('/cadnano-editor')` with no `?doc=`**~~ — **PROMOTED 2026-07-31**
+  → `manual_validation_debt.md` **MV-EDITORDOC**. Substance confirmed (zero multi-doc coverage), count
+  corrected: **2 specs, 3 `goto` calls** (`cadnano_sliceview_positions.spec.js:86`,
+  `autobreak_edges.spec.js:194` **and** `:257`). `cadnano_crosssection.spec.js` is NOT an editor spec
+  — it drives the 3D app at a hardcoded `http://localhost:8000`. Writing an e2e spec is not this
+  loop's job (Playwright is non-routine per `CLAUDE.md`); the manual op is the cheaper oracle.
+
+Added 2026-07-30 by the `project_cadnano_overhaul` plan audit (that plan is now deleted; its
+architecture content lives in the rule):
+- ~~**`experiments/exp0{2,3,4}/run.py` still construct `LatticeType.FREE`**~~ — **DECIDE 2026-07-31
+  → DEC-02.** Probe: `LatticeType` is exactly `{HONEYCOMB, SQUARE}` (`models.py:30-33`), zero `FREE`
+  anywhere in `backend/`. But the entry is wrong twice over: it is **four** files, not three
+  (`exp01_bond_integrity/run.py:40` was missed; 6 construction sites total), and
+  **`LatticeType.FREE` is not the first failure** — every one of them imports
+  `from backend.physics.xpbd import build_simulation, xpbd_step, …`, and `backend/physics/xpbd.py`
+  **does not exist** (retired with the FEM/XPBD code), plus `_geometry_for_design` moved from
+  `backend/api/crud.py` to `backend/core/design_geometry.py:567`. So "fix to HC/SQ" is not available:
+  the physics these experiments measure is gone. Deletion vs revival is the user's call.
+- ~~**`slice_plane.js` deformed-mode helix labels can mis-label at close range**~~ —
+  **ACCEPTED 2026-07-31** (known since 2026-05, deliberately unfixed). Anchors re-verified verbatim:
+  `TOL = 0.6` at `:840` used `:844-845` in the `_deformedFrame` label branch; separate `TOL = 0.5`
+  at `:647` used `:654` in `_cellStateDeformed`. Extra detail for the next sweep so it stops
+  re-deriving it: both run the **identical** start/end proximity test against
+  `_cellWorldPosDeformed(row, col)` with different thresholds, so there is a 0.5–0.6 nm annulus where
+  a cell reads `'free'` yet still resolves to a helix label. Only `:647` carries the `// nm` unit.
+- ~~**Default helix length is not user-configurable**~~ — **ACCEPTED 2026-07-31.** Confirmed: no
+  setting exists (zero hits for `defaultHelixLength`/`default_helix_length` repo-wide), and the 42 is
+  **duplicated** — `crud.py:490` (`HelixAtCellRequest.length_bp = 42`) and `api.js:163`
+  (`addHelixAtCell(row, col, length_bp = 42)`), whose only caller `main.js:1945` passes no length. The
+  entry's own caveat holds and defuses it: a new helix inherits its neighbour's `bp_start`/`length_bp`
+  (`crud.py:1907-1919`), so 42 only ever applies to the first helix on an empty design. Nice-to-have.
+- ~~**`paletteColor` was cited for years and never existed**~~ — **STALE 2026-07-31: the claim is
+  FALSE. `paletteColor` exists.** `rg paletteColor` → `frontend/src/ui/spreadsheet.js:62` (defined),
+  `:142` (called, the last-resort fallback inside `effectiveColor`), `spreadsheet.test.js:162`, and
+  named in `backend/api/routes_sequences.py:204`. The original probe searched
+  `frontend/src/ui/strands_spreadsheet.js` — **a path that does not exist**. There are two
+  same-named panels: `ui/spreadsheet.js` (3D app; has *both* `paletteColor` and `effectiveColor` :129)
+  and `cadnano-editor/strands_spreadsheet.js` (editor; `effectiveColor` at :72 — the "~line 72"
+  anchor). Their `effectiveColor`s take different arguments. **Also corrected**:
+  `plan_audit_ledger.md:84` carried the same false claim, and its `:427` lesson ("a doc's own paired
+  anchors are a cheap lie detector") was built on this false negative — both amended 2026-07-31.

@@ -1,6 +1,15 @@
 # NADOC Validation Experiments
 
 Systematic validation of XPBD simulation (exp01–04) and autostaple algorithm (exp05–08).
+
+> **exp01–04 no longer have a `run.py` (deleted 2026-08-01).** They validated the **XPBD solver,
+> which has since been retired** (`backend/physics/xpbd.py` is gone; the FEM/XPBD code moved to
+> `archive/physics_xpbd_fem/`), and they also constructed `LatticeType.FREE`, a lattice removed in
+> 2026-04. The scripts had been unrunnable-on-import for months and could not be repaired without
+> rewriting the physics they measured. **Their `hypothesis.md`, `conclusion.md` and `results/`
+> (metrics + plots) are untouched** — the findings below stand as the record. Recover the scripts
+> from git history if the solver is ever revived. See `memory/project_tech_debt.md` → DEC-02.
+
 Run from the repo root with:
 
 ```bash

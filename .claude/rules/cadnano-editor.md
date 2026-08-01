@@ -12,7 +12,7 @@ paths:
 
 **A second, separate app.** `frontend/cadnano-editor.html` (1725 ln) is its own Vite multi-page
 entry (`frontend/vite.config.js:30`), bootstrapped by `cadnano-editor/main.js`
-(`cadnano-editor.html:1723`). **10,713 LOC across 13 files.**
+(`cadnano-editor.html:1723`). **~10,740 LOC across 14 files.**
 
 **Three URLs reach it** — normal use is `window.open` from the 3D app (below), but there is also a
 FastAPI route `@app.get("/cadnano")` `backend/api/main.py:295` (prod: `FileResponse` of the dist
@@ -36,13 +36,17 @@ but it **imports from here** — see *Reverse coupling* below.
 | 433 | `ligation_debug.js` | Ctrl+Shift+L overlay + `window._ligDebug` | `initLigationDebug()` :349 |
 | 151 | `zoom_scope.js` | Space-held 240 px magnifier lens | `initZoomScope(canvas, pathview)` :28 |
 | 129 | `pathview/palette.js` | all colour constants + per-strand-id staple-colour pinning | `ensureStapleColors()` :105, `stapleColorOf()` :123 |
+| 29 | `pathview/layout.js` | the 9 drawing-grid constants, **shared with the 3D app's Domain Designer fork** | plain `export const`s, no imports |
 | 111 | `element_keys.js` | selection-key codec (see below) | 6 builders / 5 parsers |
 | 80 | `store.js` | editor-local reactive store | `editorStore` :63 |
 | 65 | `sequence_layout.js` | pure: skip/loop-compressed sequence ↔ geometric bp columns | `skipMapFromHelices()` :22, `sequenceColumns()` :47 |
-| — | `element_keys.test.js`, `sequence_layout.test.js` | the only unit tests in the directory | — |
+| — | `element_keys.test.js`, `sequence_layout.test.js`, `pathview/layout.test.js` | the only unit tests in the directory | — |
 
-`pathview.js` exports exactly two things: `initPathview` (:260) and the four layout constants
-(:256). Everything else is closure-private. Returned API :4809 — `update(design)` :4909,
+`pathview.js` exports exactly **one** thing: `initPathview`. Everything else is closure-private.
+(It used to also re-export four layout constants for the Domain Designer fork; those moved to
+`pathview/layout.js` 2026-07-31 — see *Reverse coupling*. Don't re-add a constants re-export.)
+
+Returned API :4809 — `update(design)` :4909,
 `setTool` :4828, `setSelection` :4867, `setPaintColor` :4842, `setSelectFilter` :4846,
 `setViewTools` :4850, `setNativeOrientation` :4891, `setUnligatedCrossoverIds` :4901,
 `fitToContent` :4826, `drawToLens` :4816, `getZoom/getPanX/getPanY` :4821-23.
@@ -60,9 +64,10 @@ Nothing under `cadnano-editor/` imports `src/state/store.js`. State keys :14-58 
 `selectedTool` :19 (`select|pencil|nick|paint|skip|loop`), `paintColorIdx` :22, `paintCustomColor`
 :28, `hoveredStrand` :34, `selectFilter` :47, `viewTools` :51, `loading` :54, `lastError` :57.
 
-⚠️ A 10th key, `unligatedCrossoverIds`, is written by `api.js:120` (`_absorbAuxFields`) but is
-**absent from `_initialState`** — `undefined` until the first mutation response. `pathview.js:4901`
-defends with `new Set(ids ?? [])`. Any new reader must too.
+A 10th key, `unligatedCrossoverIds` (a `Set`), is written by `api.js:124` (`_absorbAuxFields`).
+It was **absent from `_initialState`** until 2026-07-31 (tech-debt TD-03) — declared now, so readers
+can assume a Set from the first frame. ⚠️ The **3D app's** `frontend/src/state/store.js` still has
+the same key undeclared (written by `api/client.js:428,743`) — see `project_tech_debt.md` TD-26.
 
 **Ground truth is the backend, not a shared store.** The two apps stay in step via
 `shared/broadcast.js` (channel `'nadoc-design'` :28, per-page-load `_id` :27, self-messages dropped
@@ -183,20 +188,24 @@ digits (`h_XY_0_0`), so backtracking is what makes the split correct.
 
 Sweep verified 2026-07-30: **no `\d+`-only offender exists** anywhere in `frontend/`. Everything
 outside the codec is prefix dispatch that delegates the numeric parse back
-(`pathview.js:2766/2960/4000/4730`, `main.js:2054/2069/2081/2082/2085/2123`) — with one exception,
-`main.js:2070` `key.slice(3)`, an inline duplicate of `parseForcedLigKey` (index-free, so harmless,
-but it is codec logic living outside the codec).
+(`pathview.js:2766/2960/4000/4730`, `main.js:2054/2069/2081/2082/2085/2123`). The last inline
+duplicate — `main.js:2070` `key.slice(3)` — was replaced with `parseForcedLigKey(key)?.id` on
+2026-07-31 (TD-03), so **no key parsing lives outside the codec today**. Keep it that way.
 
 ## Geometry / layout
 
-World-space px, `pathview.js:18-32`:
+World-space px. The **drawing grid lives in `pathview/layout.js`** (extracted 2026-07-31, TD-03 —
+a zero-import leaf so the 3D app's Domain Designer fork can share it without pulling this 4977-LOC
+module into the main bundle). `pathview.js` imports them at the top; the rest stay local.
 
 ```
-GUTTER 40   RULER_H 26   TOP_PAD 18   BP_W 10   LABEL_R 16
-CELL_H 12   PAIR_Y 12 (= CELL_H)   ROW_H 40   GROUP_GAP 28
-EXTEND_BPS 56   MIN_ZOOM 0.06   MAX_ZOOM 10   XOVER_R 4 (:102)
-EXT_LEN_PX 18 / EXT_ANGLE_RAD 145°  (:35-36)
+pathview/layout.js:  GUTTER 40   RULER_H 26   TOP_PAD 18   BP_W 10   LABEL_R 16
+                     CELL_H 12   PAIR_Y 12 (= CELL_H)   ROW_H 40   GROUP_GAP 28
+pathview.js local:   EXTEND_BPS 56   MIN_ZOOM 0.06   MAX_ZOOM 10   XOVER_R 4
+                     EXT_LEN_PX 18 / EXT_ANGLE_RAD 145°
 ```
+
+Values are pinned by `pathview/layout.test.js`. **Changing one moves geometry in BOTH apps.**
 
 **bp → x** (`:629-636`) — cell-boundary convention, quoted from the code:
 
@@ -270,21 +279,30 @@ FORWARD (cadnano2 convention), mirrored in `scene/slice_plane/lattice_math.js:19
   free. An in-place edit of the current design object silently reuses a stale index and hit-tests
   the wrong strand. Replace the reference; don't patch it. (`_helixById` :376 is rebuilt
   unconditionally in `_rebuildLayout` :818 — different lifecycle.)
-- **`DBG` is commit-time state** — `pathview.js:104-109` `const DBG = false`, *"flip to true while
-  debugging, then revert before commit"*.
+- **`DBG` is commit-time state** — `pathview.js` `const DBG = false`, *"flip to true while
+  debugging, then revert before commit"*. The fork's `DEBUG` (`ui/overhang_pathview.js:57`) follows
+  the same convention — it shipped `true` for a while and was reverted 2026-07-31 (TD-03).
 
 ## Reverse coupling (the trap)
 
-`frontend/src/ui/overhang_pathview.js` is a **3D-app** module that imports **upward into this app**:
+`frontend/src/ui/overhang_pathview.js` is a **3D-app** module that imports **upward into this app**.
+**Defanged 2026-07-31 (TD-03/TD-14)** — it now imports only from the two zero-import *leaf* modules,
+never from `pathview.js`:
 
-- `:32-37` — `BP_W, CELL_H, PAIR_Y, GUTTER` from `../cadnano-editor/pathview.js`
-- `:38-54` — `STAPLE_PALETTE` + 14 `CLR_*` from `../cadnano-editor/pathview/palette.js`
+- `BP_W, CELL_H, PAIR_Y, GUTTER, RULER_H` from `../cadnano-editor/pathview/layout.js`
+- `STAPLE_PALETTE` + 14 `CLR_*` from `../cadnano-editor/pathview/palette.js`
 
-Consequences: (a) changing any of those four numbers moves geometry in **two** apps; (b) importing
-`pathview.js` for four constants drags the whole 4977-LOC module and its dependency graph into the
-main-app bundle. Note also `:60-63` re-declares `RULER_H/LABEL_R/TOP_PAD` **locally** with
-`LABEL_R`/`TOP_PAD` deliberately *different* from pathview's 16/18 — the "mirrors cadnano-editor"
-comment there is only partly true.
+**Rule: import from `pathview/layout.js` or `pathview/palette.js`, never from `pathview.js`.** The
+old form pulled the whole 4977-LOC drawing module and its dependency graph into the main-app bundle
+for four numbers. `pathview.js` now has exactly two importers repo-wide: `cadnano-editor/main.js:41`
+(`initPathview`) and nothing else.
+
+Still true, and deliberate: **changing a value in either leaf moves geometry/colour in BOTH apps** —
+that is the point, and `pathview/layout.test.js` pins it. Not everything is shared: the fork keeps
+`LABEL_R` 12 / `TOP_PAD` 18→12 / `BOTTOM_PAD` 12 **local**, because it is a single-row view that wants
+tighter padding than the editor's multi-row pathview. Those three carry `// editor: NN` markers at
+`overhang_pathview.js:65-70`; the old comment claimed it "mirrors cadnano-editor", which was false for
+two of three.
 
 `STAPLE_PALETTE` is a **five-way** invariant, not three (all agree today — same 12 colours, same order):
 
@@ -337,14 +355,16 @@ checked *before* the INPUT/TEXTAREA bail (:1375), then `if (ctrl) return` (:1376
 Gotchas: **`3` is not bound** (`2` subsumed the old auto-crossover/autobreak keys — comment
 :1437-1438). `skip` and `loop`, both legal `selectedTool` values, are **not reachable by hotkey** —
 toolbar only; `R`'s cycle is 4-long. `Escape` is bound in three places without `stopPropagation`, so
-cancelling a forced ligation *also* resets the tool to Select. `Ctrl+Shift+L` matches `'L'`
-case-sensitively with no lowercase fallback (`Ctrl+Shift+D` at :327 tests both).
+cancelling a forced ligation *also* resets the tool to Select. `Ctrl+Shift+L` now tests both cases
+(fixed 2026-07-31, TD-03), matching `Ctrl+Shift+D` at :327. **`Ctrl+Shift+S` (Save As, `main.js:1369`)
+is still uppercase-only** — harmless under a standard layout, since Shift yields `'S'`.
 
 ## Test coverage — state it honestly: there is almost none
 
-**Unit: 2 files, 176 LOC of the 10,512 production LOC (≈1.6%), 21 assertions.**
+**Unit: 3 files, ≈1.7% of the 10,512 production LOC.**
 `element_keys.test.js` (15 `it()`s — negative-bp ISSUE-7 regression :12, round-trips :44, wrong-prefix
-null :85, junction slots :96) and `sequence_layout.test.js` (6). `pathview.js` (4977), `main.js`
+null :85, junction slots :96), `sequence_layout.test.js` (6) and `pathview/layout.test.js` (4, the
+cross-app constant pin). `pathview.js` (4977), `main.js`
 (2554), `api.js` (724), `strands_spreadsheet.js` (657), `sliceview.js` (631), `ligation_debug.js`
 (433), `zoom_scope.js`, `store.js`, `pathview/palette.js` have **zero** unit tests.
 
@@ -353,7 +373,7 @@ editor-only endpoints + the skip-geometry header: `TestHelixAtCell` :54 (13),
 `TestScaffoldDomainPaint` :267 (8), `TestSkipGeometryHeader` :391 (3). The other ~65 endpoints the
 editor calls are covered, if at all, by the general `crud` test files.
 
-**E2E (Playwright — not routine):** `e2e/cadnano_sliceview_positions.spec.js:86` (asserts each
+**E2E (Playwright — not routine): 2 spec files, 3 `goto` calls.** `e2e/cadnano_sliceview_positions.spec.js:86` (asserts each
 occupied `.sv-cell` label equals the helix's index in `design.helices` — creation order, no
 geometric sort — plus the row-0 y-flip) and `e2e/autobreak_edges.spec.js:194,257`.
 **`e2e/cadnano_crosssection.spec.js` does NOT touch this app** — it drives the *3D* slice plane on
@@ -365,7 +385,7 @@ Treat every change to `pathview.js`/`main.js` as unpinned: exercise it in the ru
 ## Debug handles
 
 `window._ligDebug` (`ligation_debug.js`, Ctrl+Shift+L) · Ctrl+Shift+D sync panel (`main.js:326`) ·
-`D` in pathview for sprite hit radii · `DBG` const `pathview.js:104` (revert before commit).
+`D` in pathview for sprite hit radii · `DBG` const in `pathview.js` (revert before commit).
 
 ## Removed API / do-not-resurrect
 

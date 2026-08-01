@@ -64,8 +64,8 @@ outranks a stale comment; a stale comment outranks a program of work.
 |---|---|---|---|
 | ~~TD-01~~ | ~~`just lint` is RED (5 `F401`)~~ | — | **CLOSED 2026-07-31** — lint exits 0. 5 FIXED + 1 ACCEPTED (propagator per-file-ignore). Archived. |
 | ~~TD-02~~ | ~~`STAPLE_PALETTE` index agreement + 2 stale sync comments~~ | — | **CLOSED 2026-07-31** — 1 STALE / 4 FIXED / 1 DECIDE (DEC-01). Found + fixed a bug the entry didn't know about: the backend .xlsx export was still on the retired palette. Archived. |
-| ▶ TD-03 | Cadnano-editor app stragglers | P0 | `unligatedCrossoverIds` undeclared (2nd reader crashes), `DEBUG = true` shipping to production console. Both cheap. |
-| TD-04 | Dead `POST /design/auto-scaffold` + orphaned matched-ends fns | P0 | 4 e2e specs 404 at runtime → that coverage is silently fake. |
+| ~~TD-03~~ | ~~Cadnano-editor app stragglers~~ | — | **CLOSED 2026-07-31** — 5 FIXED / 1 PROMOTED (MV-EDITORDOC) / 1 DECIDE (DEC-02) / 2 ACCEPTED / 1 STALE. Also closed TD-14's reverse-coupling bullet; spawned TD-26. Archived. |
+| ▶ TD-04 | Dead `POST /design/auto-scaffold` + orphaned matched-ends fns | P0 | 4 e2e specs 404 at runtime → that coverage is silently fake. |
 | TD-05 | Rendering stragglers | P0 | `refreshAllGlow` skips the 7th glow layer (live lag bug); a 4-test file pins a module that doesn't exist. |
 | TD-06 | Cross-cutting sweeps (see its section) | P0 | Three separate audits each re-found the same rot (`docs/triage/` fiction, `, null)` init args, phantom `MAP_*.md`). Resolve once, strike in all sections. |
 | TD-07 | Dead `lattice.auto_scaffold(mode=…)` in 2 scripts | P1 | Two unrunnable scripts (ImportError) + an orphaned `_pull_window_turns`. |
@@ -87,6 +87,7 @@ outranks a stale comment; a stale comment outranks a program of work.
 | TD-23 | Duplex-foundation stragglers | P1 | Two `showChoice`s; 20 e2e specs hardcode an absolute path; `reassign_if_sequenced` is a zero-caller footgun with 3 lying docstrings. |
 | TD-24 | Photo-mode v1 stragglers | P2 | Orphaned fluorophore fn whose comment is the only record of *why* the clamp exists. |
 | TD-25 | `just lint`'s SCOPE hides 193 findings | P2 | Found closing TD-01. The gate is green but only lints `backend/ tests/`; `scripts/` + root are unlinted. |
+| TD-26 | 3D store's undeclared `unligatedCrossoverIds` | P2 | Found closing TD-03 — same defect, but adding the key means picking a store slice. |
 
 ## DECISIONS — one question each, the user's call
 
@@ -104,6 +105,31 @@ outcomes**; surface them in batches, don't block a pass on an answer.
   comments added 2026-07-31, which future sweeps must trust.
   *(No code change either way is risky — the values already match. This is purely "should they be
   allowed to diverge later".)*
+- ~~**DEC-02 (from TD-03, 2026-07-31)**~~ — **RESOLVED 2026-08-01: user chose (a), delete.** The four
+  `run.py` files are gone. **Only the scripts** — each directory keeps its `hypothesis.md`,
+  `conclusion.md` and `results/` (metrics.json + plots), verified present before deleting, so the
+  scientific record is intact and only the unrunnable code left. `experiments/README.md` now carries
+  a note saying why and pointing at git history for recovery. **This unblocks TD-25 option (a)** —
+  widening `just lint` to `ruff check .` now waits on TD-07's two scripts alone. Original framing:
+  *the four scripts are unrunnable and unrevivable as written: delete them, or keep them as a frozen
+  record?* All four
+  import `from backend.physics.xpbd import build_simulation, xpbd_step, …` and **`backend/physics/xpbd.py`
+  no longer exists** (retired with the FEM/XPBD code to `archive/physics_xpbd_fem/`); they also
+  construct `LatticeType.FREE` (deleted 2026-04-06 — the enum is now exactly `{HONEYCOMB, SQUARE}`)
+  and import `_geometry_for_design` from `backend/api/crud.py`, which moved to
+  `backend/core/design_geometry.py:567`. Sites: `exp01_bond_integrity/run.py:40`,
+  `exp02_thermal_stability/run.py:41`, `exp03_excluded_volume/run.py:46,54`,
+  `exp04_crossover_geometry/run.py:56,64`.
+  **(a) Delete the four scripts** — they measure bond integrity / thermal stability / excluded volume
+  / crossover geometry under an XPBD solver that is gone, so "fixing" them means re-writing the
+  physics, not swapping an enum. Deleting also unblocks **TD-25** (widening `just lint` to
+  `ruff check .`) and removes a standing trap for the next sweep.
+  **(b) Keep them, stamped unrunnable** — a header comment naming the three dead imports, so the
+  experimental *protocol* survives as a record even though the code can't execute. Costs a per-file
+  lint ignore.
+  *(This is a delete-files call, so it is the user's per `CLAUDE.md` → Risky-action policy. Note
+  option (a) is only safe if these experiments' RESULTS are recorded elsewhere — I did not check
+  whether `experiments/exp0*/` holds output data alongside the scripts.)*
 
 ## ACCEPTED — deliberate, do not re-report
 
@@ -115,40 +141,67 @@ outcomes**; surface them in batches, don't block a pass on an answer.
   in a comment. Never edit the dormant code to satisfy lint.
 - **`scene/joint_panel_experiments.js`** (456 ln) — a DevTools console harness for still-live
   `_computeExteriorPanels`. Unreferenced *by design*, like `src/debug_snippet.js`. See TD-19.
+- **`slice_plane.js` deformed-mode label swap within 0.6 nm** (from TD-03, 2026-07-31) — `TOL = 0.6`
+  at `scene/slice_plane.js:840` (labels) vs `TOL = 0.5` at `:647` (`_cellStateDeformed`). Same
+  proximity test, different thresholds → a 0.5–0.6 nm annulus reads `'free'` but still gets a label.
+  Known since 2026-05, deliberately unfixed, low priority. Don't re-report.
+- **Default helix length 42 bp has no user setting** (from TD-03, 2026-07-31) — hard-coded twice
+  (`backend/api/crud.py:490`, `frontend/src/cadnano-editor/api.js:163`), but it only applies to the
+  first helix on an *empty* design; every later cell inherits its neighbour's `bp_start`/`length_bp`
+  (`crud.py:1907-1919`). Nice-to-have, not a trap. Don't re-report.
 
 ## Next-session handoff
 
-**Pass 2 (2026-07-31) closed TD-02** — **1 STALE / 4 FIXED / 1 DECIDE.** The flagged trap held: this
-entry came from reading, and its bullets were wrong in *both* directions. The "three-way invariant" is
-five-way (4 more definitions, all in agreement). Two of the stale sync comments the entry named were
-real, one was already fixed, and **two more it never found** (`pathview/palette.js:6-9`,
-`surface.py:44`). The index-agreement claim was **under**-stated, not over-stated — the spreadsheet
-had *three* different indexings across its own call sites, so the row swatch, the colour sort key and
-the exported .xlsx could disagree before any mutation. Drift reproduced in vitest, then fixed by
-threading `buildStapleColorMap`'s pinned map through the file.
+**Pass 3 (2026-07-31) closed TD-03** — **5 FIXED / 1 PROMOTED / 1 DECIDE / 2 ACCEPTED / 1 STALE.**
+The predicted landmine (the `experiments/` scripts) was real but *understated*, and the two cheapest
+bullets were both **overstated**. Pattern for pass 4: **this ledger's severity adjectives are the
+least reliable part of it.** Concretely —
 
-**The find that mattered was not in the entry at all:** `routes_sequences.py` still hard-coded the
-retired editor-syntax palette for the server-side .xlsx, so every **headless** oligo-order sheet came
-out in colours that match nothing in the app. The 2026-07-30 pass fixed the frontend copy and never
-grepped for the *rejected* values. Generalise that: when a pass declares a canonical constant, grep
-for the values it just rejected, not only for the name it just blessed.
+- **Overstated ×2.** `unligatedCrossoverIds` "a second reader would crash": there are 5 readers and
+  **none** can crash — the two that look undefended feed a sink that normalises with
+  `new Set(x ?? [])`. And `DEBUG = true` "logs to the production console": it gates `console.debug`,
+  the browser's *verbose* level, hidden by default. Both were still worth the one-line fix; neither
+  was the P0 the queue implied.
+- **Understated ×2.** The `LatticeType.FREE` bullet named 3 files; it is **4** (`exp01` missed), and
+  the enum is the *third* import failure — `backend/physics/xpbd` doesn't exist at all, so "fix to
+  HC/SQ" was never an option (→ **DEC-02**). And "re-declares RULER_H/LABEL_R/TOP_PAD" was a symptom:
+  the editor's `pathview.js` exported only 4 of its 7 layout constants, which is *why* the fork
+  re-declared and drifted.
+- **Flatly false ×1.** `paletteColor` "never existed" — it exists, at `ui/spreadsheet.js:62`, with 4
+  references. The 2026-07-30 probe searched `ui/strands_spreadsheet.js`, **a path that has never
+  existed**; the real file is `cadnano-editor/strands_spreadsheet.js`. Two same-named panels in two
+  directories. The `plan_audit_ledger.md:427` lesson built on it was amended too.
 
-**▶ NEXT: TD-03** (cadnano-editor app stragglers). Now the top P0. Cheapest real fix in the queue —
-`unligatedCrossoverIds` is written to the editor store but missing from `_initialState`, so the one
-existing reader survives only by defending with `?? []` and the next one crashes; and
-`overhang_pathview.js:61` ships `const DEBUG = true`, logging to the production console.
+**Generalise that last one — it is the pass's real lesson.** *A grep that returns nothing proves
+nothing until you have proved the path you grepped exists.* "Zero hits" and "wrong filename" are
+indistinguishable in the output. Every future STALE verdict that rests on absence must cite the
+`ls`/`rg --files` that shows the file is real. This is the third pass in a row where the *entry* was
+wrong rather than the code, but the first where a bad anchor manufactured a fake finding instead of
+just a dead one.
 
-**The trap to expect in TD-03:** its bullets are a *mixed bag with one landmine*. Most are one-liners
-(store key, `DEBUG`, a lowercase-key fallback, a duplicated `slice(3)`), but the same section carries
-**three `experiments/exp0*/run.py` files that construct a deleted `LatticeType.FREE`** — those are
-"fix to HC/SQ **or delete**", i.e. an unrunnable-script judgement call that belongs in DECISIONS, not
-a silent rewrite. It also overlaps TD-25 (widening `just lint` waits on exactly those scripts) and
-TD-14 (the `overhang_pathview.js` reverse-coupling bullet is the *same file* as the `DEBUG` one — fix
-both while you are in it, and strike the TD-14 line too). Editor changes are frontend: `just
-test-frontend` **plus** an app exercise, and the editor is a separate page (`/cadnano-editor.html`).
+**Bonus closed:** TD-14's reverse-coupling bullet. Extracting `cadnano-editor/pathview/layout.js`
+(9 constants, verbatim, zero imports) means nothing imports the 4977-LOC `pathview.js` for constants
+any more, so it left the main-app bundle. Probe first confirmed it had exactly two importers repo-wide
+— that check is what made a refactor of an untested 5k-LOC module a 15-minute job instead of a program.
 
-The 22 open items below are otherwise as `/audit-plan` left them on 2026-07-30/31 — **treat every
-anchor as unverified.** Two passes in, the hit rate on prose-written anchors is roughly half.
+**▶ NEXT: TD-04** (dead `POST /design/auto-scaffold` + orphaned matched-ends fns). Top remaining P0:
+4 e2e specs POST a path that was consolidated into `-seamed`/`-seamless`, so they 404 at runtime and
+that coverage is silently fake.
+
+**The trap to expect in TD-04:** by this pass's own evidence, **assume the "4 specs" count is wrong**
+— TD-03's "3 editor e2e specs" was 2 specs / 3 `goto` calls, and TD-04 names *4 spec files with 5
+line numbers*. Count files, not call sites, and check each path is still POSTed rather than already
+patched (`e2e/helpers/scene_harness.js:75` documents the removal in a comment and paints the domain
+directly instead — at least one caller has already been migrated, which is exactly the kind of
+half-done fix that makes a stale bullet read as live). Second trap: the bullet says
+`autoScaffoldMatched()` is "defined twice and called nowhere" — before deleting either copy, confirm
+zero callers *including the editor app*, since `cadnano-editor/api.js` has its own parallel client and
+TD-03 showed the two apps duplicate more than anyone expects. Playwright specs are not run by
+`just test-smart`, so a wrong edit there is invisible until someone runs the E2E suite — read them,
+don't trust the suite to catch it.
+
+The 21 open items below are otherwise as `/audit-plan` left them on 2026-07-30/31 — **treat every
+anchor as unverified.** Three passes in, the hit rate on prose-written anchors is roughly half.
 
 ---
 
@@ -165,13 +218,15 @@ assigned-never-used locals — the class of finding that *is* usually a real bug
 `scripts/verify_blunt_ends_scaffold_delete.py`, `scripts/snupi_visual_compare.py`.
 
 **Why it's debt, and why it is NOT simply "widen the recipe":** several of these scripts are already
-known-unrunnable for unrelated reasons (TD-07's `auto_scaffold(mode=…)` ImportErrors, TD-03's
-`LatticeType.FREE` constructions in `experiments/`), so widening the glob today would re-RED the gate
+known-unrunnable for unrelated reasons (TD-07's `auto_scaffold(mode=…)` ImportErrors — the four
+`experiments/exp0*/run.py` scripts that used to be the other blocker were deleted 2026-08-01 per
+DEC-02), so widening the glob today would re-RED the gate
 that TD-01 just made trustworthy — the exact failure mode TD-01 existed to fix. The `F841`s are worth
 a read on their own (an assigned-never-used result usually means a check was silently dropped).
 
-**Options (pick one, don't drift):** (a) widen to `ruff check .` only *after* TD-07 + TD-03's script
-bullets land, (b) add a separate non-gating `just lint-all` now so the findings are at least visible,
+**Options (pick one, don't drift):** (a) widen to `ruff check .` only *after* TD-07 lands (**DEC-02
+is now answered — the four `experiments/exp0*/run.py` were deleted 2026-08-01, so TD-07's two scripts
+are the last blocker**), (b) add a separate non-gating `just lint-all` now so the findings are at least visible,
 or (c) accept `backend/ tests/` as the deliberate gate scope and record that decision here so no
 future sweep re-finds it. Note the scope is **not** documented anywhere today — that absence is what
 made this a surprise.
@@ -312,50 +367,29 @@ a live trap for the next reader:
   `api.js` (724) and `sliceview.js` are entirely unpinned. Only 2 e2e specs load the page
   (`autobreak_edges.spec.js`, `cadnano_sliceview_positions.spec.js`).
   ~~Undocumented~~ — **documented 2026-07-30** in the new `.claude/rules/cadnano-editor.md`.
-- **Reverse coupling:** `frontend/src/ui/overhang_pathview.js:32-54` imports
-  `BP_W/CELL_H/PAIR_Y/GUTTER` **and `STAPLE_PALETTE` + 14 `CLR_*`** from `cadnano-editor/pathview.js` +
-  `cadnano-editor/pathview/palette.js`. So editing the *editor's* layout constants or palette silently
-  moves the main app's Domain Designer — and pulling 4 numbers out of `pathview.js` drags the whole
-  4977-LOC module graph into the main-app bundle.
+- ~~**Reverse coupling:** `overhang_pathview.js` imports `BP_W/CELL_H/PAIR_Y/GUTTER` from
+  `cadnano-editor/pathview.js`~~ — **FIXED 2026-07-31 while closing TD-03.** The 9 drawing-grid
+  constants were lifted verbatim into a new leaf module `cadnano-editor/pathview/layout.js` (zero
+  imports, pinned by `layout.test.js`); `pathview.js` now imports them and its
+  `export { BP_W, CELL_H, PAIR_Y, GUTTER }` re-export is gone. Probe confirmed `pathview.js` had
+  exactly **two** importers repo-wide, so nothing else broke: `cadnano-editor/main.js:41` takes only
+  `initPathview`, and the fork now takes its 5 shared constants from `layout.js`. **The 4977-LOC
+  module no longer enters the main-app bundle.** *Still true, and still fine:* the fork imports
+  `STAPLE_PALETTE` + 14 `CLR_*` from `cadnano-editor/pathview/palette.js` — but that is already a
+  129-line leaf with **zero imports of its own**, so it carries no graph. Cross-app value coupling
+  is now explicit and one-way into two leaf modules; that is the intended end state, not debt.
 
-### TD-03 — Cadnano-editor app stragglers (found 2026-07-30, `/audit-plan` rule sweep)
-Small, each a live trap; all documented in `.claude/rules/cadnano-editor.md`.
-- **`unligatedCrossoverIds` is written but never declared** — `cadnano-editor/api.js:120`
-  (`_absorbAuxFields`) sets it on the store, but it is absent from `store.js:14-58` `_initialState`,
-  so it is `undefined` until the first mutation response. Only `pathview.js:4901` defends
-  (`new Set(ids ?? [])`); a second reader would crash. Add it to the initial state.
-- **`Ctrl+Shift+L` is case-sensitive** — `ligation_debug.js:403` tests `e.key === 'L'` with no
-  lowercase fallback, unlike `Ctrl+Shift+D` (`main.js:327`) which tests both. Works in practice only
-  because Shift produces uppercase.
-- **Codec logic outside the codec** — `cadnano-editor/main.js:2070` `const flId = key.slice(3)`
-  duplicates `parseForcedLigKey` (`element_keys.js:109`). Index-free so it can't hit the negative-bp
-  bug, but it is the exact pattern ISSUE-7 came from.
-- **`const DEBUG = true` is shipping** — `frontend/src/ui/overhang_pathview.js:61`. Its editor
-  counterpart (`pathview.js:104` `DBG = false`) documents the flip-then-revert convention; this one
-  was never reverted, so the Domain Designer logs to the console in production.
-- **`ui/overhang_pathview.js:60-63` re-declares `RULER_H/LABEL_R/TOP_PAD` locally** with `LABEL_R`/
-  `TOP_PAD` deliberately *different* from pathview's 16/18, under a comment claiming it mirrors the
-  editor. Partly true is worse than silent here — say which three are shared and which two diverge.
-- **All 3 editor e2e specs `goto('/cadnano-editor')` with no `?doc=`**, so the multi-document path
-  (`X-NADOC-Doc`, per-doc undo stacks) has **zero** end-to-end coverage — and multi-doc is exactly
-  where the undo/redo header bug (`api.js:691`) lived.
-
-Added 2026-07-30 by the `project_cadnano_overhaul` plan audit (that plan is now deleted; its
-architecture content lives in the rule):
-- **`experiments/exp02_thermal_stability/run.py:41`, `exp03_excluded_volume/run.py:46,54`,
-  `exp04_crossover_geometry/run.py:56,64` still construct `LatticeType.FREE`** — a member deleted
-  from `models.py`/`lattice.py` in the 2026-04-06 FREE-lattice removal. All three scripts raise on
-  import of that symbol; they are unrunnable, not merely stale. Fix to HC/SQ or delete.
-- **`slice_plane.js` deformed-mode helix labels can mis-label at close range** — when
-  `_deformedFrame` is set, labels are matched by proximity to helix axis endpoints with
-  `const TOL = 0.6` (`frontend/src/scene/slice_plane.js:840`, used :844-845). Two helices whose
-  endpoints fall within 0.6 nm can swap labels. Known since 2026-05, low priority, no fix.
-  (Don't conflate with the *other* `TOL = 0.5` at :647 in `_cellStateDeformed`.)
-- **Default helix length is not user-configurable** — the 42 bp default in `helix-at-cell` now
-  applies only to the first helix on an *empty* design (later cells inherit the neighbour's
-  `length_bp`/`bp_start`), so the sharp edge is gone, but there is still no setting. Nice-to-have.
-- **`paletteColor` was cited for years and never existed** — `strands_spreadsheet.js` has only
-  `effectiveColor` (:72). Symptom of prose anchors nobody greps; no code action.
+### TD-26 — the *3D* store has the same undeclared `unligatedCrossoverIds` key (found 2026-07-31, closing TD-03)
+`frontend/src/state/store.js` has **no** `unligatedCrossoverIds` in its initial state, yet
+`api/client.js:428` and `:743` both `setState` it from `json.unligated_crossover_ids`. Exactly the
+editor-store defect TD-03 just fixed, in the app that has the *un*defended readers
+(`frontend/src/main.js:1778`, `scene/response_delta.js:106` pass the raw value on). **Not a live
+crash today** — the sink `unligated_crossover_markers.js:103` normalises with
+`new Set(unligatedIds ?? [])` — so this is shape hygiene, same as TD-03's. Deliberately **not** fixed
+opportunistically in that pass: the 3D store dispatches by slice (`_SLICES`, `store.js:395-398`), so
+adding a key means picking its slice, which is a real decision the TD-03 probe didn't cover.
+Fix = add the key to the right slice's initial state, then drop the `?? []` folklore from the two
+call sites. Cheap; needs the slice question answered first.
 
 ### TD-15 — Animation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Found while rewriting `.claude/rules/animation.md`. The rule + `RUNBOOK_ANIMATION.md` are fixed;

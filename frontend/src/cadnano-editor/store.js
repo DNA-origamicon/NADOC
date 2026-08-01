@@ -50,6 +50,14 @@ const _initialState = {
    *  referenceGeometry=true → show reference strands (translucent); false → hide. */
   viewTools: { lengthHeatmap: false, sequences: false, undefinedBases: false, loopSkips: true, overhangNames: false, grid: true, referenceGeometry: true, periodicBoundary: false },
 
+  /**
+   * Ids of crossovers the backend reports as unligated, from the
+   * `unligated_crossover_ids` aux field (api.js `_absorbAuxFields`).
+   * Always a Set — declared here so readers don't have to defend against
+   * `undefined` before the first mutation response.
+   */
+  unligatedCrossoverIds: new Set(),
+
   /** True while an API request is in flight. */
   loading: false,
 

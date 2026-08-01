@@ -400,7 +400,7 @@ export function initLigationDebug() {
 
   // ── Keyboard shortcut ────────────────────────────────────────────────────
   document.addEventListener('keydown', e => {
-    if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+    if (e.ctrlKey && e.shiftKey && (e.key === 'l' || e.key === 'L')) {
       e.preventDefault()
       toggle()
     }

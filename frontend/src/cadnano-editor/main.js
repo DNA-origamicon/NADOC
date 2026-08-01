@@ -48,7 +48,7 @@ import { initStrandSequenceDialog } from '../ui/strand_sequence_dialog.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
 import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
-import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey } from './element_keys.js'
+import { xoverKey, parseXoverKey, parseLineKey, parseEndKey, parseLoopSkipKey, parseForcedLigKey } from './element_keys.js'
 import { SCAFFOLD_LENGTHS, ascWarningText, countScaffoldNt } from '../scene/scaffold_assign.js'
 
 // ── Tab identity ─────────────────────────────────────────────────────────────
@@ -2067,7 +2067,7 @@ const pathview = initPathview(pathCanvas, pathContainer, {
           xoPositions.add(`${xo.half_b.helix_id}_${xo.half_b.index}_${xo.half_b.strand}`)
         }
       } else if (key.startsWith('fl:')) {
-        const flId = key.slice(3)  // strip 'fl:' prefix
+        const flId = parseForcedLigKey(key)?.id   // codec owns the 'fl:' prefix
         const fl = design.forced_ligations?.find(f => f.id === flId)
         if (fl) {
           flIdsToDelete.add(fl.id)

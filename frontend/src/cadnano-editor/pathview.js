@@ -16,20 +16,17 @@
  */
 
 // ── Layout constants (world-space pixels) ─────────────────────────────────────
+// The drawing-grid geometry lives in ./pathview/layout.js because the 3D app's
+// Domain Designer fork (ui/overhang_pathview.js) shares it — importing it from
+// HERE dragged this whole 4977-LOC module into the main-app bundle (TD-14).
+import {
+  GUTTER, RULER_H, TOP_PAD, BP_W, LABEL_R,
+  CELL_H, PAIR_Y, ROW_H, GROUP_GAP,
+} from './pathview/layout.js'
 
-const GUTTER     = 40
-const RULER_H    = 26
-const TOP_PAD    = 18
-const BP_W       = 10
-const LABEL_R    = 16
 const EXTEND_BPS = 56
 const MIN_ZOOM   = 0.06
 const MAX_ZOOM   = 10
-
-const CELL_H  = 12        // height of each track cell (strand fills this)
-const PAIR_Y  = CELL_H   // distance between fwdY and revY — adjacent cells
-const ROW_H   = 40        // total row height: 2×CELL_H cells + 16 px inter-helix gap
-const GROUP_GAP = 28      // extra vertical gap between disconnected helix groups
 
 // ── Extension geometry (inspired by scadnano defaults) ────────────────────────
 const EXT_LEN_PX    = 18                    // arm length in world-space px
@@ -249,11 +246,10 @@ function strandPassesScafStapFilter(strand, filter) {
   return !!filter.stap
 }
 
-// Phase 3 (overhang revamp): re-export the layout constants used by the
-// Domain Designer pathview fork in `frontend/src/ui/overhang_pathview.js`. The
-// fork is a simplified single-row variant; sharing constants keeps tick
-// spacing / cell height in lockstep with the cadnano editor pathview.
-export { BP_W, CELL_H, PAIR_Y, GUTTER }
+// (The Domain Designer fork used to import BP_W/CELL_H/PAIR_Y/GUTTER from here.
+//  It now imports them from ./pathview/layout.js directly — see the import at
+//  the top of this file. Don't re-add a constants re-export: it is what pulled
+//  this module into the main-app bundle.)
 
 // ── Main init ─────────────────────────────────────────────────────────────────
 

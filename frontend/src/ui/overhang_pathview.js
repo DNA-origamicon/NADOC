@@ -29,12 +29,16 @@
  * routed through CRUD callbacks — never via direct store writes.
  */
 
+// Shared drawing-grid geometry. Imported from the leaf constants module, NOT
+// from cadnano-editor/pathview.js — that 4977-LOC drawing module would land in
+// the main-app bundle for the sake of four numbers (TD-14).
 import {
   BP_W,
   CELL_H,
   PAIR_Y,
   GUTTER,
-} from '../cadnano-editor/pathview.js'
+  RULER_H,
+} from '../cadnano-editor/pathview/layout.js'
 import {
   STAPLE_PALETTE,
   CLR_BG,
@@ -54,14 +58,19 @@ import {
 } from '../cadnano-editor/pathview/palette.js'
 
 // ── Debug instrumentation ────────────────────────────────────────────────────
-const DEBUG = true
+// Commit-time state: flip to `true` while debugging, then revert before commit.
+// Same convention as the editor's `DBG` (cadnano-editor/pathview.js).
+const DEBUG = false
 const _debug = (...args) => { if (DEBUG) console.debug('[DD-pathview]', ...args) }
 
-// ── Local layout constants (mirror cadnano-editor) ───────────────────────────
-const RULER_H       = 26
-const LABEL_R       = 12
-const TOP_PAD       = 12
-const BOTTOM_PAD    = 12
+// ── Layout constants ─────────────────────────────────────────────────────────
+// SHARED with the cadnano editor (imported above): BP_W, CELL_H, PAIR_Y,
+// GUTTER, RULER_H.
+// DELIBERATELY DIVERGENT — the Domain Designer is a single-row view, so it uses
+// a tighter label + top padding than the editor's multi-row pathview:
+const LABEL_R       = 12   // editor: 16
+const TOP_PAD       = 12   // editor: 18
+const BOTTOM_PAD    = 12   // no editor counterpart
 
 // 150-bp visible window on Reset view; current overhang scales to 50%.
 const VISIBLE_WINDOW_BP = 150
