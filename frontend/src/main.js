@@ -1873,11 +1873,13 @@ async function main() {
   }
 
   // ── MD overlay + panel ───────────────────────────────────────────────────────
-  const mdOverlay         = initMdOverlay(scene)
+  // (No md_overlay bead cloud here: that served md_panel's deleted "Beads Only" view.
+  // The live CG path moves the design's OWN beads via applyFemPositions. mrDNA still
+  // builds its own initMdOverlay instance below — that one is a real standalone rep.)
   const mdSolventOverlay  = initMdSolventOverlay(scene)
   const mdBoxOverlay      = initMdBoxOverlay(scene)
   const mdDisplayController = initMdPanel(store, {
-    designRenderer, mdOverlay, atomisticRenderer,
+    designRenderer, atomisticRenderer,
     onRestoreDesignHeavy: _restoreDesignHeavy,
     // Lazy: _atomSurface is assigned further below.  MD sets the atomistic mode itself,
     // so it needs this to pull the live coloring mode + strand palette onto its atoms.
@@ -2018,6 +2020,11 @@ async function main() {
     onHeavyStatus: (d) => window.dispatchEvent(
       new CustomEvent('nadoc:md-heavy-status', { detail: d })),
     onFrame: (u) => flexibleArcs.applySimPositions(u),
+    // Required now that this controller is counted by getSimOverlayWillDriveHeavy: when
+    // the design heavy build is skipped, the CG is deliberately left up and ONLY this
+    // callback takes it down, at the moment the simulated atoms/surface land.  Without
+    // it a NAMD trajectory in vdw/ballstick draws the CG beads through the atoms.
+    onHeavyApplied: () => _atomSurface?.setCGVisible(false),
   })
   window.addEventListener('nadoc:representation-change', () => {
     if (mdViz.isActive?.()) mdViz.reapplyForRepr()
@@ -2462,10 +2469,21 @@ async function main() {
   _atomSurface = initAtomSurfaceDisplay({
     scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
     unfoldView, overhangLinkArcs,
-    // Suppress the design "native flash" on full→atomistic/surface while an oxDNA overlay
-    // is reconstructing the heavy rep (relaxed/rmsf/trajectory) — it rebuilds from the
-    // job's atoms + relaxed frame; the CG stays up until those land (onHeavyApplied).
-    getSimOverlayWillDriveHeavy: () => oxdnaDisplay.drivesHeavy?.() ?? false,
+    // Suppress the design "native flash" on full→atomistic/surface while a sim overlay is
+    // reconstructing the heavy rep — it rebuilds from the job's atoms + relaxed frame, so
+    // the CG stays up until those land (onHeavyApplied).  THREE controllers can drive it,
+    // and each is asked whether it can deliver the specific `kind` being built:
+    //   oxdnaDisplay — oxDNA relaxed/rmsf/trajectory: atomistic AND surface
+    //   mdViz        — NAMD flex/trajectory: only what md_viz_adapter maps (trajectory
+    //                  atomistic+surface; the flexibility-map heavy routes are unmapped)
+    //   mdDisplayController — the live "Display MD" stream: atomistic only, never surface
+    // Asking without the kind (or forgetting a controller, as this did for both NAMD paths
+    // until 2026-08-01) either pays the full design build twice or defers to an overlay
+    // that never delivers.
+    getSimOverlayWillDriveHeavy: (kind) =>
+      (oxdnaDisplay.drivesHeavy?.(kind) ?? false) ||
+      (mdViz.drivesHeavy?.(kind) ?? false) ||
+      (mdDisplayController?.drivesHeavy?.(kind) ?? false),
     // A surface option changed while the overlay owns the surface → re-generate its mesh
     // with the new probe radius / colour mode (debounced; reapplyForRepr re-runs the fetch).
     onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,

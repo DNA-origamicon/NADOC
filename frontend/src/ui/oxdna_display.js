@@ -260,6 +260,12 @@ export function repKind(repr) {
 const _COARSE_ATOM_CAP = 12
 const _COARSE_SURF_CAP = 8
 
+// Granularity the prebuild budget is rounded down to. The budget comes from the host's
+// MemAvailable and is only ever a rough "how much can we spare" — quantising it keeps the
+// derived grid size STABLE across calls, so a representation change can't silently resize
+// the grid and refetch frames it already holds. See prebuildHeavy.
+const _BUDGET_QUANTUM = 128 * 1024 * 1024
+
 // When the backend can stream COORDINATES ONLY against a topology fetched once (the MD
 // path — see md_viz_adapter), a whole all-atom trajectory can be held in memory and the
 // grid stops being a compromise. What it cannot be is unbounded: a frame costs
@@ -581,6 +587,46 @@ export function initOxdnaDisplay({
     return (live() && r?.ready) ? r.atomistic : null
   }
 
+  // ── Heavy-payload memo (relaxed + RMSF) ─────────────────────────────────────────
+  // Trajectory frames are already cached per grid cell (bake.byIdx); relaxed and RMSF
+  // were not, and a representation change re-runs _applyHeavy.  So flipping F6<->F7 —
+  // vdw to ball-and-stick, which changes the renderer's GEOMETRY and not one coordinate
+  // — re-downloaded the entire all-atom payload (megabytes) every press.  There is
+  // exactly one payload per (job, align, mode, kind), so memo it.
+  //
+  // Keyed by job+align, and dropped wholesale when the job changes, so the map holds at
+  // most one job's worth.  What it must NOT survive is data that can have MOVED under it:
+  // a running job accumulates production frames, which is what refresh() exists for —
+  // that clears the memo explicitly.
+  let _heavyMemo = new Map()
+  let _heavyMemoJob = null
+  async function _memoHeavy(kind, produce) {
+    if (_heavyMemoJob !== _jobId) { _heavyMemo.clear(); _heavyMemoJob = _jobId }
+    const key = `${_align}|${_mode}|${kind}`
+    if (_heavyMemo.has(key)) return _heavyMemo.get(key)
+    const v = await produce()
+    if (v) _heavyMemo.set(key, v)   // never cache a null/superseded result
+    return v
+  }
+
+  /**
+   * Is a relaxed/RMSF re-apply going to be INSTANT — i.e. can the spinner be skipped?
+   *
+   * The memo is necessary but NOT sufficient: `_pushAtomistic` also needs the job topology
+   * in the renderer, and vdw→ballstick deliberately does not accept a bond-less hold
+   * (`_ensureJobAtomistic`), so that exact flip re-fetches the bundle even with the
+   * coordinates already in hand.  Answering on the memo alone would have made the one
+   * switch most likely to be slow the one switch with no indicator.
+   */
+  function _heavyWarm(kind) {
+    if (_heavyMemoJob !== _jobId) return false
+    if (!_heavyMemo.has(`${_align}|${_mode}|${kind}`)) return false
+    if (kind !== 'atomistic') return true
+    const ar = getAtomisticRenderer?.()
+    const needBonds = ar?.getMode?.() !== 'vdw'
+    return _atomTopoJob === _jobId && (!needBonds || _atomTopoBonds)
+  }
+
   async function _pushAtomistic(arr, epoch, live, colorByKey = null) {
     const ar = getAtomisticRenderer?.()
     // arr may be a plain Array (legacy flat route) OR a Float32Array (fast stamp
@@ -655,6 +701,29 @@ export function initOxdnaDisplay({
     onHeavyStatus?.({ building, kind, mode: _mode })
   }
 
+  // Which api route _applyHeavy would call for (current mode, kind). One table, read by
+  // both the capability check and nothing else — keep it in step with _applyHeavy's tree.
+  const _HEAVY_ROUTE = {
+    relaxed:    { atomistic: 'getOxdnaDisplayAtomistic', surface: 'getOxdnaDisplaySurface' },
+    rmsf:       { atomistic: 'getOxdnaRmsfAtomistic',    surface: 'getOxdnaRmsfSurface' },
+    trajectory: { atomistic: 'getOxdnaFramesAtomistic',  surface: 'getOxdnaFramesSurface' },
+  }
+
+  /**
+   * Can this controller actually PRODUCE `kind` ('atomistic'|'surface') in its current
+   * mode?  The injected `api` is the authority, not the engine name: md_viz_adapter maps
+   * the trajectory heavy routes but deliberately NOT the flexibility-map ones, so a NAMD
+   * RMSF view can deliver neither.  Asking the api directly means a route added to the
+   * adapter later starts working with no change here.
+   *
+   * This is what stops the caller deferring the design's heavy build to an overlay that
+   * will never deliver — which would leave a blank surface / empty atoms on screen.
+   */
+  function _canDeliverHeavy(kind) {
+    const route = _HEAVY_ROUTE[_mode]?.[kind]
+    return !!route && typeof api?.[route] === 'function'
+  }
+
   /** Ensure the coarse snap-grid for the active trajectory job is DEFINED for `kind`
    *  (cheap — just the index list; frames are fetched lazily on visit). Returns the
    *  bake object {grid:[idx…], byIdx:Map<idx,data>} or null. */
@@ -696,20 +765,53 @@ export function initOxdnaDisplay({
    *  One request per frame is what made this slow: the MD analysis rebuilds its context
    *  (PSF parse + model) per CALL — ~32 s on a 300 k-atom system against ~2.8 s per
    *  extra frame — so N separate fetches paid that N times. Epoch-guarded. */
+  // Serialises heavy frame fetches for THIS controller. The MD backend treats
+  // (job_id, kind) as a single-slot resource: `md_analysis_runner.run_analysis` starts by
+  // KILLING any in-flight analysis for the same key, so a second overlapping request does
+  // not queue behind the first — it murders it, and the victim returns 500 ("analysis
+  // worker died without a result").
+  //
+  // Two of our own callers legitimately want frames at the same moment: `prebuildHeavy`'s
+  // chunk loop and `_applyHeavy`'s single-frame fetch for whatever the user is looking at.
+  // Overlap them and the prebuild chunk dies mid-play, which is what put a 500 in the
+  // console and stalled the play button on ⏳ for seconds before the loop recovered.
+  //
+  // A queue, not a drop: both callers are already epoch/token-guarded, so anything that
+  // became irrelevant while it waited re-checks and bails cheaply on its own. Superseding
+  // stays the BACKEND's job for a genuinely new intent (a view toggled off aborts its
+  // fetch); it must not be triggered by this controller racing itself.
+  let _frameFetchQueue = Promise.resolve()
+  function _queueFrameFetch(fn) {
+    const run = _frameFetchQueue.then(fn, fn)
+    // Keep the chain alive after a rejection, but let the caller see the error.
+    _frameFetchQueue = run.then(() => {}, () => {})
+    return run
+  }
+
+  const _bakeFor = (kind) => (kind === 'atomistic' ? _bakedAtom : _bakedSurf)
+
   async function _coarseFrames(kind, gridIdxs, epoch) {
-    const bake = kind === 'atomistic' ? _bakedAtom : _bakedSurf
-    const want = gridIdxs.filter((g) => !bake.byIdx.has(g))
-    if (!want.length) return
-    // _trajStride is repeated on every heavy fetch for the same reason _trajScope is:
-    // a composite frame index only addresses the same frame within one interval.
-    const resp = kind === 'atomistic'
-      ? await api.getOxdnaFramesAtomistic(_jobId, want, _align, _trajScope, _trajStride)
-      : await api.getOxdnaFramesSurface(_jobId, want, { stride: _trajStride }, _align, _trajScope)
-    if (epoch !== _epoch) return
-    for (const g of want) {
-      const data = resp?.[String(g)]
-      if (data) bake.byIdx.set(g, _narrowFrame(data))
-    }
+    if (!gridIdxs.some((g) => !_bakeFor(kind)?.byIdx.has(g))) return
+    return _queueFrameFetch(async () => {
+      // Re-read the bake and re-filter INSIDE the queue. Both can move while we wait: the
+      // other caller may have fetched exactly these cells (re-asking would be a pointless
+      // round trip), and a re-grid may have REPLACED the bake object entirely — writing
+      // results into the one captured on entry would drop them into an orphan.
+      const bake = _bakeFor(kind)
+      if (!bake || epoch !== _epoch) return
+      const want = gridIdxs.filter((g) => !bake.byIdx.has(g))
+      if (!want.length) return
+      // _trajStride is repeated on every heavy fetch for the same reason _trajScope is:
+      // a composite frame index only addresses the same frame within one interval.
+      const resp = kind === 'atomistic'
+        ? await api.getOxdnaFramesAtomistic(_jobId, want, _align, _trajScope, _trajStride)
+        : await api.getOxdnaFramesSurface(_jobId, want, { stride: _trajStride }, _align, _trajScope)
+      if (epoch !== _epoch) return
+      for (const g of want) {
+        const data = resp?.[String(g)]
+        if (data) bake.byIdx.set(g, _narrowFrame(data))
+      }
+    })
   }
 
   async function _coarseFrame(kind, gridIdx, epoch) {
@@ -736,9 +838,31 @@ export function initOxdnaDisplay({
     if (_mode !== 'trajectory') return { ok: true, n: 0 }
     // The caller may narrow the budget to what THIS machine can spare (it is the one
     // that talks to the user about it); the built-in constant is the fallback ceiling.
+    //
+    // QUANTISED first: the caller reads MemAvailable, which moves constantly, and an
+    // unrounded budget makes the affordable-frame count jitter by a frame or two between
+    // otherwise identical calls — enough to resize the grid and refetch. Rounding down to
+    // a whole quantum makes the budget a stable function of "roughly how much RAM is
+    // free", which is all the precision this decision ever had.
+    if (Number.isFinite(budgetBytes) && budgetBytes > 0) {
+      budgetBytes = Math.max(_BUDGET_QUANTUM,
+                             Math.floor(budgetBytes / _BUDGET_QUANTUM) * _BUDGET_QUANTUM)
+    }
     if (Number.isFinite(budgetBytes) && budgetBytes > 0 && budgetBytes !== _atomBudget) {
       _atomBudget = budgetBytes
-      _bakedAtom = null                // re-grid against the new ceiling
+      // Re-grid ONLY when the new ceiling actually changes how many frames fit.
+      //
+      // Hardening, not an observed failure: the previous `budgetBytes !== _atomBudget`
+      // test compared RAW BYTES derived from the host's MemAvailable, so any wobble in
+      // free memory discarded the whole bake — and with it every already-fetched frame,
+      // which the MD jobs panel's `nadoc:representation-change` prebuild would then
+      // re-download. Dropping correct megabytes because free RAM moved is never right;
+      // the only thing that justifies a re-grid is a different NUMBER of frames.
+      const n = _traj?.n_frames || _traj?.frames?.length || 0
+      const nextCap = _atomSerials > 0 && n > 0
+        ? affordableAtomFrames(_atomSerials, n, budgetBytes)
+        : null
+      if (!_bakedAtom || nextCap === null || nextCap !== _bakedAtom.cap) _bakedAtom = null
     }
     const kind = _repKind()
     if (kind === 'cg') return { ok: true, n: 0 }   // CG plays instantly — nothing to bake
@@ -811,39 +935,52 @@ export function initOxdnaDisplay({
     if (!_active || !_jobId) return
     const kind = _repKind()
     if (kind === 'cg') return
+    // No route for this (mode, kind) — e.g. a NAMD flexibility map in a heavy rep, which
+    // md_viz_adapter deliberately leaves unmapped.  This used to call an undefined api
+    // method, throw, and get swallowed by the blanket catch below: the user silently got
+    // the DESIGN's equilibrium atoms with no RMSF colouring and no explanation.  Say so.
+    if (!_canDeliverHeavy(kind)) {
+      onHeavyStatus?.({ building: false, kind, mode: _mode, unsupported: true })
+      return
+    }
     const epoch = _epoch
     const token = ++_heavyToken
     const live = () => epoch === _epoch && token === _heavyToken
     // During playback, force coarse even if the dropdown says fine — a fine rebuild per
     // tick (~seconds each) would stall the loop; play steps the pre-built coarse frames.
     const useFine = _granularity === 'fine' && !_playing
-    // Skip the spinner only when a trajectory grid cell is already cached (instant).
+    // Skip the spinner only when the payload is already in hand (instant): a cached
+    // trajectory grid cell, or a memoised relaxed/RMSF payload.
     let busy = true
     if (_mode === 'trajectory' && !useFine) {
       const bake = _ensureGrid(kind)
       const g = bake ? nearestOf(bake.grid, _frameIdx) : null
       busy = !(bake && g != null && bake.byIdx.has(g))
+    } else if (_mode === 'relaxed' || _mode === 'rmsf') {
+      busy = !_heavyWarm(kind)
     }
     if (busy) _setHeavyBusy(true, kind)
     try {
       if (_mode === 'relaxed') {
         if (kind === 'atomistic') {
-          const flat = await _relaxedAtomisticFlat(epoch, live)
+          const flat = await _memoHeavy(kind, () => _relaxedAtomisticFlat(epoch, live))
           if (live() && flat) await _pushAtomistic(flat, epoch, live)
         } else {
-          const mesh = await _relaxedSurfaceMesh(live)
+          const mesh = await _memoHeavy(kind, () => _relaxedSurfaceMesh(live))
           if (live() && mesh) _pushSurface(mesh)
         }
       } else if (_mode === 'rmsf') {
         if (kind === 'atomistic') {
-          const r = await api.getOxdnaRmsfAtomistic(_jobId, { align: _align })
+          const r = await _memoHeavy(kind,
+            () => api.getOxdnaRmsfAtomistic(_jobId, { align: _align }))
           if (live() && r?.ready) {
             const { lo, hi } = _activeBounds()
             const m = rmsfColorMap(_rmsfResp, lo, hi, _rmsfCmap)   // same ramp/scale as the beads
             await _pushAtomistic(r.atomistic, epoch, live, m?.colorByKey || null)
           }
         } else {
-          const r = await api.getOxdnaRmsfSurface(_jobId, {}, { align: _align })
+          const r = await _memoHeavy(kind,
+            () => api.getOxdnaRmsfSurface(_jobId, {}, { align: _align }))
           if (live() && r?.ready) _pushSurface(r.surface, true)   // colour by per-vertex RMSF
         }
       } else if (_mode === 'trajectory') {
@@ -884,6 +1021,8 @@ export function initOxdnaDisplay({
     _heavyActive = false
     _bakedAtom = null
     _bakedSurf = null
+    _heavyMemo.clear()    // and the relaxed/RMSF payload memo
+    _heavyMemoJob = null
     _atomSerials = 0      // next job re-measures its own per-frame cost
     _atomBudget = _ATOM_PREBUILD_BUDGET_BYTES
     _atomTopoJob = null   // next job display rebuilds the renderer from its own topology
@@ -1259,6 +1398,9 @@ export function initOxdnaDisplay({
   /** Re-fetch the current job's frame (e.g. after a stage completes). */
   async function refresh() {
     if (!_active || !_jobId) return { ok: false, reason: 'not active' }
+    // A running job accumulates production frames, so the memoised relaxed/RMSF payloads
+    // for THIS (job, align) are exactly what refresh exists to re-fetch.
+    _heavyMemo.clear()
     if (_mode === 'trajectory') {
       _surfaceStrandsByJob.delete(_jobId) // refresh both origami frames and latest real caps
       return loadTrajectory(_jobId, _align, _trajScope, _trajStride)
@@ -1371,6 +1513,19 @@ export function initOxdnaDisplay({
     // from the job's atoms (relaxed / rmsf / trajectory) — NOT the CG-only modes
     // (live / deviation / strain), which would leave an atomistic switch with nothing to show.
     // Used to suppress the design "native flash" on full→atomistic.
-    drivesHeavy: () => _active && (_mode === 'relaxed' || _mode === 'rmsf' || _mode === 'trajectory'),
+    /**
+     * Will this overlay REBUILD the heavy rep from the job (rather than let the design's
+     * own heavy build stand)?  Callers use it to skip the design build entirely — the
+     * multi-second "native flash" of the un-simulated structure.
+     *
+     * Pass the kind the caller is about to build ('atomistic' | 'surface') and the answer
+     * accounts for what this controller's api can actually deliver in its current mode.
+     * Omitting it keeps the old "any heavy mode" answer.
+     */
+    drivesHeavy: (kind = null) => {
+      if (!_active) return false
+      if (_mode !== 'relaxed' && _mode !== 'rmsf' && _mode !== 'trajectory') return false
+      return kind ? _canDeliverHeavy(kind) : true
+    },
   }
 }

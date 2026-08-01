@@ -5749,24 +5749,10 @@
                 </div>
               </div>
 
-              <!-- Representation (always visible — select before loading) -->
-              <div class="slider-row" style="margin-bottom:4px">
-                <label style="font-size:var(--text-xs);color:#8b949e;width:70px">View</label>
-                <select id="md-repr"
-                        style="flex:1;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
-                  <option value="nadoc" selected>NADOC Full</option>
-                  <option value="beads">Beads Only</option>
-                  <option value="ballstick">Ball &amp; Stick</option>
-                </select>
-              </div>
-
-              <!-- Bead size (shown for beads-only mode) -->
-              <div class="slider-row" id="md-bead-size-row" style="display:none;margin-bottom:4px">
-                <label style="font-size:var(--text-xs);color:#8b949e;width:70px">Bead size</label>
-                <span id="md-bead-size-val" style="font-size:var(--text-xs);color:#58a6ff;width:30px">1.0&times;</span>
-                <input type="range" id="md-bead-size" min="0.1" max="3.0" step="0.1" value="1.0"
-                       style="flex:1;accent-color:#58a6ff">
-              </div>
+              <!-- (Removed 2026-08-01: the "View" select + bead-size row. They were the MD
+                   panel's own representation vocabulary — NADOC Full / Beads Only / Ball &
+                   Stick — superseded by the global F1-F7 representation. md_panel derives its
+                   stream wire mode from the scene rep via targetStreamMode(). -->
 
               <!-- Load button (disabled until both files selected) -->
               <button id="md-load-btn" disabled
@@ -5853,13 +5839,8 @@
                          style="width:50px;font-size:var(--text-xs);background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 4px">
                 </div>
 
-                <!-- Opacity -->
-                <div class="slider-row" style="margin-bottom:4px">
-                  <label style="font-size:var(--text-xs);color:#8b949e;width:70px">Opacity</label>
-                  <span id="md-opacity-val" style="font-size:var(--text-xs);color:#58a6ff;width:30px">1.0</span>
-                  <input type="range" id="md-opacity" min="0.05" max="1.00" step="0.05" value="1.00"
-                         style="flex:1;accent-color:#58a6ff">
-                </div>
+                <!-- (Removed 2026-08-01: the Opacity slider — it only set the md_overlay bead
+                     cloud's opacity for the deleted "Beads Only" view.) -->
 
                 <!-- Displacement amplification -->
                 <div class="slider-row" id="md-amp-row" style="margin-bottom:4px">

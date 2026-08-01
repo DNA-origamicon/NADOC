@@ -5,10 +5,18 @@
  * The backend resolves PSF/PDB/DCD paths and streams frames through /ws/md-run.
  * Trajectory streaming goes through /ws/md-run.
  *
- * Repr modes:
+ * Stream WIRE modes (`_repr`) — NOT a user-facing representation:
  *   "nadoc"     → designRenderer.applyFemPositions(updates)
- *   "beads"     → mdOverlay.update(positions, beadRadius, opacity)
  *   "ballstick" → atomisticRenderer.update({atoms, bonds})
+ *
+ * `_repr` is always `targetStreamMode(_sceneRepr)`; the user picks a SCENE
+ * representation (F1–F7) and this derives the payload shape the socket must ask for.
+ * It stays a stored field rather than a getter because `decideReload` compares the
+ * mode the socket was OPENED with against the one the scene now wants.
+ * (A third mode, "beads", drew an md_overlay bead cloud from a `#md-repr` dropdown.
+ * That dropdown lived in the permanently-hidden `#md-panel`, so it was unreachable and
+ * the branch was dead; removed 2026-08-01. The live CG path moves the design's OWN
+ * beads via applyFemPositions, which is what "beads" duplicated.)
  *
  * The streamed frames carry coordinates only.  Everything STATIC across the trajectory
  * arrives once in the 'ready' message and is re-applied to every frame here: atom
@@ -74,7 +82,7 @@ function _activeSceneRepresentation() {
   return 'full'
 }
 
-export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRenderer,
+export function initMdPanel(store, { designRenderer, atomisticRenderer,
                                      onRestoreDesignHeavy, refreshAtomColors,
                                      onSolventBlob = null }) {
   // Binary solvent frames go straight back out to whoever owns the overlay; this
@@ -109,12 +117,6 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   const liveBtn        = document.getElementById('md-live-btn')
   const speedSel       = document.getElementById('md-speed')
   const strideInput    = document.getElementById('md-stride')
-  const reprSel        = document.getElementById('md-repr')
-  const opacitySlider  = document.getElementById('md-opacity')
-  const opacityVal     = document.getElementById('md-opacity-val')
-  const beadSizeRow    = document.getElementById('md-bead-size-row')
-  const beadSizeSlider = document.getElementById('md-bead-size')
-  const beadSizeVal    = document.getElementById('md-bead-size-val')
   const ampSlider      = document.getElementById('md-amp')
   const ampVal         = document.getElementById('md-amp-val')
   const showNadocChk   = document.getElementById('md-show-nadoc')
@@ -160,9 +162,10 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   let _livePollSentAt = 0     // performance.now() of the outstanding get_latest (timeout tracking)
   const _LIVE_INTERVAL = 5000 // must match the setInterval below
   const _LIVE_POLL_TIMEOUT = 15000 // a get_latest is "stuck" after ~3 missed intervals
+  // Wire mode the socket was last opened with — 'nadoc' | 'ballstick'. Derived from the
+  // scene representation via targetStreamMode(); stored (not computed) so decideReload
+  // can tell "the scene wants a different payload shape" from "same target, reuse".
   let _repr      = 'nadoc'
-  let _opacity   = 1.0
-  let _beadSize  = 1.0
   let _stride    = 1
   let _speed     = 1.0
   let _amp       = 1.0   // displacement amplification factor (1 = no amp)
@@ -507,7 +510,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   // Display MD / flexibility map / trajectory (mirrors the mdViz flex/traj stop path).
   function _restoreDesign() {
     _stopLiveBar()
-    mdOverlay?.dispose?.()
+    _setSwitchBusy(false, null)   // a stop mid-switch must not strand the toast
     designRenderer?.applyFemPositions(null)   // always drop MD-displaced CG positions
     const { showNativeCg, rebuildHeavy } = restorePlan(_sceneRepr)
     if (showNativeCg) {
@@ -602,6 +605,8 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       }
       _updateTimeline(msg.frame_idx)
       _lastFrameMsg = msg
+      // The rep switch is over the moment a frame in the NEW wire format is on screen.
+      _setSwitchBusy(false, null)
       if (_displayVisible) {
         _applyFrame(msg)
         _emitMdDisplayEvent({
@@ -621,6 +626,7 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
     if (msg.type === 'error') {
       _loadInFlight = false
+      _setSwitchBusy(false, null)   // never leave the switch toast up on a dead load
       _log('Error: ' + msg.message, 'error')
       if (statusLine) statusLine.textContent = 'Error — see Output'
       _emitMdDisplayEvent({ state: 'error', message: msg.message })
@@ -629,7 +635,6 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
   // ── Apply frame to scene ──────────────────────────────────────────────────
   function _applyFrame(msg) {
-    console.log(`[MD] _applyFrame frame=${msg.frame_idx} pos=${msg.positions?.length ?? 0} repr=${_repr} amp=${_amp} live=${_live}`)
     if (_repr === 'nadoc') {
       if (!msg.positions) return
       designRenderer?.applyFemPositions(
@@ -643,9 +648,6 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
         })),
         _amp
       )
-    } else if (_repr === 'beads') {
-      if (!msg.positions) return
-      mdOverlay?.update(msg.positions, _beadSize * 0.15, _opacity)
     } else if (_repr === 'ballstick') {
       if (!msg.atoms) return
       atomisticRenderer?.setMode(_sceneRepr === 'vdw' ? 'vdw' : 'ballstick')
@@ -662,6 +664,12 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       // now-correct mode, and a mid-playback palette/mode change is already picked up
       // by atom_surface_display's own store subscription.
       if (!_atomColorsPrimed) { _atomColorsPrimed = true; refreshAtomColors?.() }
+      // The MD atoms are now on screen, so the CG design underneath them must go. On the
+      // displayLatest path that already happened up front, but a CG→atomistic REP CHANGE
+      // only reopens the socket — and when atom_surface_display defers its design build to
+      // this controller (drivesHeavy below) it deliberately leaves the CG up until the
+      // simulated atoms land. This is where they land. Idempotent.
+      _setShowNadoc(false)
     }
   }
 
@@ -814,6 +822,34 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
   }
   liveBtn?.addEventListener('click', () => _setLive(!_live))
 
+  // ── Rep-switch progress ───────────────────────────────────────────────────
+  // Changing representation while a live display is up means a NEW WIRE FORMAT, so the
+  // socket is torn down and reloaded — and the reload re-parses the PSF, which is seconds
+  // on a big system.  Two things make that window invisible without this:
+  //   • atom_surface_display now DEFERS its design build to this controller (drivesHeavy),
+  //     so it shows none of its own "Loading atomistic model…" toast; and
+  //   • the CG model is deliberately left on screen until the simulated atoms land.
+  // So the user clicks F7 and, for several seconds, nothing whatsoever changes.  Announce
+  // it on the SAME channel the oxDNA/mdViz controllers use, so there is one toast owner
+  // (atom_surface_display) and the three paths can't fight over the persistent toast.
+  //
+  // Scoped to the rep-switch reload ONLY — _openWebSocket runs for many other reasons and
+  // toasting all of them would flash on every 5 s live poll.  The MD jobs panel's own
+  // status-line spinner ('loading' on nadoc:md-display-state) is unchanged; it stays the
+  // detailed readout, this is the one you can't miss while looking at the 3D view.
+  // Tracks the KIND as well as the flag: switching again mid-wait (F7 then F4 before the
+  // first reload lands) changes which text is correct, and a plain `building === _busy`
+  // guard would swallow that and leave "Loading atomistic model…" up over a CG reload.
+  let _switchBusy = null   // null = idle, else the kind currently announced
+  function _setSwitchBusy(building, kind) {
+    const next = building ? kind : null
+    if (next === _switchBusy) return
+    _switchBusy = next
+    window.dispatchEvent(new CustomEvent('nadoc:md-heavy-status', {
+      detail: { kind: kind ?? 'atomistic', building, mode: 'live' },
+    }))
+  }
+
   // Thin closures over the live _sceneRepr around the shared pure helpers
   // (md_display_state.js) so the decision logic is unit-tested in one place.
   function _sceneUsesNativeCg() { return sceneUsesNativeCg(_sceneRepr) }
@@ -838,6 +874,10 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
         if (modeChanged && _configPath) {
           _lastFrameMsg = null
           _latestOnReady = true
+          // Both directions reload the socket and both leave a stale scene up meanwhile:
+          // CG→atomistic keeps the CG until the atoms land, atomistic→CG drops the atoms
+          // and shows the design at NATIVE positions until the bead frame lands.
+          _setSwitchBusy(true, _sceneUsesAtomistic() ? 'atomistic' : 'cg')
           _openWebSocket()
           return
         }
@@ -855,29 +895,6 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
 
   strideInput?.addEventListener('change', () => {
     _stride = Math.max(1, parseInt(strideInput.value) || 1)
-  })
-
-  reprSel?.addEventListener('change', () => {
-    _repr = reprSel.value
-    if (beadSizeRow) beadSizeRow.style.display = _repr === 'beads' ? '' : 'none'
-    if (_repr !== 'beads')     mdOverlay?.dispose()
-    if (_repr !== 'ballstick') atomisticRenderer?.setMode('off')
-    // Revert MD-displaced positions when leaving nadoc mode.
-    if (_repr !== 'nadoc')     designRenderer?.applyFemPositions(null)
-    // Re-apply user's show/hide preference for the NADOC model.
-    designRenderer?.setDesignVisible(_showNadoc)
-    if (_configPath) _openWebSocket()
-  })
-
-  opacitySlider?.addEventListener('input', () => {
-    _opacity = parseFloat(opacitySlider.value)
-    if (opacityVal) opacityVal.textContent = _opacity.toFixed(2)
-    mdOverlay?.setOpacity(_opacity)
-  })
-
-  beadSizeSlider?.addEventListener('input', () => {
-    _beadSize = parseFloat(beadSizeSlider.value)
-    if (beadSizeVal) beadSizeVal.textContent = _beadSize.toFixed(1) + '×'
   })
 
   ampSlider?.addEventListener('input', () => {
@@ -915,13 +932,10 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
       _repr = nextMode
       _latestOnReady = true
       _latestOnceOnReady = !live
-      if (beadSizeRow) beadSizeRow.style.display = 'none'
       if (_sceneUsesNativeCg()) {
-        mdOverlay?.dispose?.()
         atomisticRenderer?.setMode?.('off')
         _setShowNadoc(true)
       } else if (_sceneUsesAtomistic()) {
-        mdOverlay?.dispose?.()
         designRenderer?.applyFemPositions(null)
         designRenderer?.setDesignVisible(false)
         atomisticRenderer?.setMode?.(_sceneRepr)
@@ -989,6 +1003,22 @@ export function initMdPanel(store, { designRenderer, mdOverlay, atomisticRendere
         } catch { /* ok */ }
         _ws = null
       }
+    },
+
+    /**
+     * Will this controller rebuild the heavy rep from the SIMULATION rather than let the
+     * design's own heavy build stand?  Only ever atomistic: the live stream carries beads
+     * ('nadoc') or all-atom coordinates ('ballstick'), never a surface — so the surface
+     * path must keep building the design mesh, not wait for a frame that never comes.
+     *
+     * Deliberately NOT gated on `_sceneRepr`: this is asked from inside
+     * applyAtomisticMode(), which runs BEFORE the representation-change event updates
+     * `_sceneRepr` here.  The question is "is a live display up and will it push atoms
+     * once the scene is atomistic", and an active, visible display always will.
+     */
+    drivesHeavy(kind = null) {
+      if (kind && kind !== 'atomistic') return false
+      return _autoDisplayActive && _displayVisible
     },
 
     stopAndRestore() {

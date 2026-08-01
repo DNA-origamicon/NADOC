@@ -250,6 +250,73 @@ describe('menu click — design mode', () => {
     expect(deps.api.clearRepresentationOverrides).toHaveBeenCalled()
     expect(deps.setCurrentRepr).toHaveBeenCalledWith('beads')
   })
+
+  // Dispatching 'nadoc:representation-change' is not free: six listeners fan out of it
+  // and several do real network work (oxDNA/NAMD heavy-frame reconstruction, the solvent
+  // refetch, the NAMD trajectory prebuild). Re-picking what is already on screen must not
+  // pay any of that.
+  describe('no-op re-pick', () => {
+    it('re-clicking the active repr does not re-apply or re-dispatch', async () => {
+      mountIds(DOM)
+      const deps = makeDeps({ currentDesign: { id: 'd1' }, assemblyActive: false })
+      initRepresentationSwitcher(deps)
+      document.getElementById('menu-view-detail-beads').click()
+      await new Promise(r => setTimeout(r, 0))
+
+      const seen = vi.fn()
+      window.addEventListener('nadoc:representation-change', seen)
+      deps.setCurrentRepr.mockClear()
+      deps.reprOptionSliders.mockClear()
+      document.getElementById('menu-view-detail-beads').click()
+      await new Promise(r => setTimeout(r, 0))
+      window.removeEventListener('nadoc:representation-change', seen)
+
+      expect(seen).not.toHaveBeenCalled()
+      expect(deps.setCurrentRepr).not.toHaveBeenCalled()
+      expect(deps.reprOptionSliders).not.toHaveBeenCalled()
+    })
+
+    it('a DIFFERENT repr still applies normally', async () => {
+      mountIds(DOM)
+      const deps = makeDeps({ currentDesign: { id: 'd1' }, assemblyActive: false })
+      initRepresentationSwitcher(deps)
+      document.getElementById('menu-view-detail-beads').click()
+      await new Promise(r => setTimeout(r, 0))
+      deps.setCurrentRepr.mockClear()
+      document.getElementById('menu-view-detail-cylinders').click()
+      await new Promise(r => setTimeout(r, 0))
+      expect(deps.setCurrentRepr).toHaveBeenCalledWith('cylinders')
+    })
+
+    // The master reset: the structure on screen genuinely diverges from the nominal
+    // global rep while per-region overrides are live, so the same name is real work.
+    it('re-clicking the active repr DOES re-apply when it clears overrides', async () => {
+      mountIds(DOM)
+      const deps = makeDeps({
+        currentDesign: { id: 'd1', representation_overrides: [{ strand_id: 1 }] },
+        assemblyActive: false,
+      })
+      initRepresentationSwitcher(deps)
+      document.getElementById('menu-view-detail-beads').click()
+      await new Promise(r => setTimeout(r, 0))
+      deps.setCurrentRepr.mockClear()
+      document.getElementById('menu-view-detail-beads').click()
+      await new Promise(r => setTimeout(r, 0))
+      expect(deps.api.clearRepresentationOverrides).toHaveBeenCalledTimes(2)
+      expect(deps.setCurrentRepr).toHaveBeenCalledWith('beads')
+    })
+
+    // The first click after boot always goes through: nothing has been applied yet, so
+    // the menu's is-checked class is a claim about the HTML default, not about state.
+    it('the first click is never skipped', async () => {
+      mountIds(DOM)
+      const deps = makeDeps({ currentDesign: { id: 'd1' }, assemblyActive: false })
+      initRepresentationSwitcher(deps)
+      document.getElementById('menu-view-detail-full').click()
+      await new Promise(r => setTimeout(r, 0))
+      expect(deps.setCurrentRepr).toHaveBeenCalledWith('full')
+    })
+  })
 })
 
 describe('menu click — assembly mode', () => {
@@ -260,6 +327,44 @@ describe('menu click — assembly mode', () => {
     document.getElementById('menu-view-detail-cylinders').click()
     await new Promise(r => setTimeout(r, 0))
     expect(deps.api.batchPatchInstances).not.toHaveBeenCalled()
+  })
+
+  // Every instance already agrees on this repr → the PATCH would rewrite each one to the
+  // value it already holds and the renderer would rebuild for nothing.
+  it('already-uniform repr → no PATCH', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({
+      assemblyActive: true,
+      currentAssembly: {
+        instances: [{ id: 'a', representation: 'cylinders' },
+                    { id: 'b', representation: 'cylinders' }],
+      },
+    })
+    initRepresentationSwitcher(deps)
+    document.getElementById('menu-view-detail-cylinders').click()
+    await new Promise(r => setTimeout(r, 0))
+    expect(deps.api.batchPatchInstances).not.toHaveBeenCalled()
+    // …but the menu still reads as checked.
+    expect(document.getElementById('menu-view-detail-cylinders').classList.contains('is-checked')).toBe(true)
+  })
+
+  // Mixed state still goes through: there the click means "make them all agree".
+  it('mixed reprs → PATCHes even when one instance already matches', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({
+      assemblyActive: true,
+      currentAssembly: {
+        instances: [{ id: 'a', representation: 'cylinders' },
+                    { id: 'b', representation: 'full' }],
+      },
+    })
+    initRepresentationSwitcher(deps)
+    document.getElementById('menu-view-detail-cylinders').click()
+    await new Promise(r => setTimeout(r, 0))
+    expect(deps.api.batchPatchInstances).toHaveBeenCalledWith([
+      { id: 'a', representation: 'cylinders' },
+      { id: 'b', representation: 'cylinders' },
+    ])
   })
 
   it('cheap repr → batch-PATCHes every instance to that repr (no confirm)', async () => {

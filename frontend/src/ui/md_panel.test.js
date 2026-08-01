@@ -240,3 +240,106 @@ describe('live solvent side-channel', () => {
     expect(ws.binaryType).toBe('arraybuffer')
   })
 })
+
+// ── Rep-switch progress signal ───────────────────────────────────────────────
+//
+// Switching representation while a live display is up changes the WIRE FORMAT, so the
+// socket is torn down and reloaded (re-parsing the PSF — seconds on a big system). Two
+// changes conspire to make that window invisible: atom_surface_display now defers its own
+// design build to this controller, so it shows none of its own toast; and the previous
+// geometry is deliberately left on screen until the new frame lands. Without a signal the
+// user presses F7 and nothing at all happens for several seconds.
+describe('rep-switch progress signal', () => {
+  let sockets, RealWS, seen
+
+  class MockSocket {
+    static OPEN = 1
+    constructor(url) { this.url = url; this.readyState = 0; this.sent = []; sockets.push(this) }
+    send(s) { this.sent.push(JSON.parse(s)) }
+    close() { this.readyState = 3 }
+    open() { this.readyState = 1; this.onopen?.() }
+    msg(o) { this.onmessage?.({ data: JSON.stringify(o) }) }
+  }
+
+  const onHeavy = (e) => seen.push(e.detail)
+
+  beforeEach(() => {
+    sockets = []; seen = []
+    RealWS = globalThis.WebSocket
+    globalThis.WebSocket = MockSocket
+    globalThis.WebSocket.OPEN = 1
+    globalThis.WebSocket.CONNECTING = 0
+    window.addEventListener('nadoc:md-heavy-status', onHeavy)
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    window.removeEventListener('nadoc:md-heavy-status', onHeavy)
+    vi.useRealTimers()
+    globalThis.WebSocket = RealWS
+  })
+
+  function live() {
+    const c = initMdPanel(store, deps)
+    c.displayLatest('/tmp/run.json', { forceReload: true, live: true, jobId: 'j1' })
+    vi.advanceTimersByTime(200)
+    sockets.at(-1).open()
+    seen.length = 0
+    return c
+  }
+
+  // requestAnimationFrame is how the listener defers past the renderer's own rebuild.
+  const flushRaf = () => { vi.advanceTimersByTime(50) }
+
+  it('announces the wait when CG → atomistic reloads the socket', () => {
+    live()
+    setSceneRepr('ballstick')
+    flushRaf()
+    expect(seen).toContainEqual(expect.objectContaining({ kind: 'atomistic', building: true }))
+  })
+
+  // The reverse direction is just as blind: the atoms are torn down and the design shows
+  // at NATIVE positions until the bead frame lands.
+  it('announces the wait when atomistic → CG reloads the socket', () => {
+    const c = live()
+    setSceneRepr('ballstick'); flushRaf()
+    sockets.at(-1).open()
+    seen.length = 0
+    setSceneRepr('full'); flushRaf()
+    expect(seen).toContainEqual(expect.objectContaining({ kind: 'cg', building: true }))
+    expect(c).toBeTruthy()
+  })
+
+  it('clears it when a frame in the new format lands', () => {
+    live()
+    setSceneRepr('ballstick'); flushRaf()
+    const ws = sockets.at(-1); ws.open()
+    ws.msg({ type: 'frame', frame_idx: 0, n_frames: 10, atoms: [] })
+    expect(seen.at(-1)).toMatchObject({ building: false })
+  })
+
+  // A dead load must not strand a persistent toast over the app forever.
+  it('clears it when the load errors', () => {
+    live()
+    setSceneRepr('ballstick'); flushRaf()
+    const ws = sockets.at(-1); ws.open()
+    ws.msg({ type: 'error', message: 'no such config' })
+    expect(seen.at(-1)).toMatchObject({ building: false })
+  })
+
+  it('clears it when the display is stopped mid-switch', () => {
+    const c = live()
+    setSceneRepr('ballstick'); flushRaf()
+    seen.length = 0
+    c.stopAndRestore()
+    expect(seen).toContainEqual(expect.objectContaining({ building: false }))
+  })
+
+  // Only the rep-switch reload is announced. _openWebSocket runs for many other reasons
+  // and toasting all of them would flash on every 5 s live poll.
+  it('stays silent on a same-format reload', () => {
+    const c = live()
+    c.displayLatest('/tmp/run.json', { forceReload: true, live: true, jobId: 'j1' })
+    vi.advanceTimersByTime(200)
+    expect(seen.filter(d => d.building)).toEqual([])
+  })
+})

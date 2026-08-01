@@ -276,6 +276,32 @@ describe('initAtomSurfaceDisplay', () => {
     expect(deps.atomisticRenderer.update).toHaveBeenCalled()
   })
 
+  // The predicate is asked PER KIND, and the kind is load-bearing, not decoration: the live
+  // "Display MD" stream drives atomistic and never a surface, and a NAMD flexibility map
+  // drives neither.  A caller that drops the argument defers the surface to an overlay that
+  // will never deliver one — a permanently blank surface, which is worse than the flash.
+  it('asks getSimOverlayWillDriveHeavy for the specific kind being built', async () => {
+    mountIds(DOM)
+    const seen = []
+    const deps = makeDeps({ getSimOverlayWillDriveHeavy: (kind) => { seen.push(kind); return false } })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applyAtomisticMode('ballstick')
+    await api.applySurfaceMode('on')
+    expect(seen).toContain('atomistic')
+    expect(seen).toContain('surface')
+    expect(seen).not.toContain(undefined)
+  })
+
+  it('an overlay that drives ONLY atomistic does not make the surface defer', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({ getSimOverlayWillDriveHeavy: (kind) => kind === 'atomistic' })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applySurfaceMode('on')
+    // Design surface IS computed — nothing else is going to produce one.
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(deps._root.visible).toBe(false)
+  })
+
   it('applySurfaceMode DEFERS to an active sim overlay: no native flash (keeps CG, skips design surface fetch)', async () => {
     mountIds(DOM)
     const deps = makeDeps({ getSimOverlayWillDriveHeavy: () => true })

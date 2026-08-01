@@ -19,7 +19,7 @@ import { filterAtomData } from './atom_filter.js'
 import { surfaceSegments } from './design_queries.js'
 import { buildNucLetterMap, buildStapleColorMap } from './helix_renderer.js'
 import { atomColorsFromLetters, computeAtomStrandColors } from './color_util.js'
-import { showPersistentToast, dismissToast } from '../ui/toast.js'
+import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { parseSurfaceBin } from './surface_bin.js'
 
@@ -33,10 +33,13 @@ export function regionSurfaceSignature(design) {
 export function initAtomSurfaceDisplay({
   scene, store, api, designRenderer, atomisticRenderer, surfaceRenderer,
   unfoldView, overhangLinkArcs,
-  // True when a simulation overlay is active in a mode that REBUILDS the heavy rep
-  // (atomistic OR surface) from the job's atoms + relaxed frame (oxDNA relaxed/rmsf/
-  // trajectory).  When so, switching to atomistic/surface skips the DESIGN heavy build
-  // (the "native flash") and keeps the relaxed CG up until the overlay swaps in.
+  // (kind: 'atomistic' | 'surface') → true when a simulation overlay is active AND can
+  // actually rebuild THAT kind from the job's atoms + relaxed frame (oxDNA or NAMD:
+  // relaxed / rmsf / trajectory).  When so, switching to atomistic/surface skips the
+  // DESIGN heavy build (the "native flash") and keeps the relaxed CG up until the overlay
+  // swaps in.  It MUST be asked per kind: the live NAMD display drives atomistic and never
+  // surface, and a NAMD flexibility map drives neither — deferring to an overlay that
+  // cannot deliver leaves a blank surface / empty atoms on screen forever.
   getSimOverlayWillDriveHeavy = () => false,
   // Called when a surface option (probe radius / colour mode) changes WHILE a sim overlay
   // owns the surface — the overlay must re-generate its mesh with the new params (the
@@ -92,7 +95,7 @@ export function initAtomSurfaceDisplay({
     // atoms + relaxed frame — so DON'T compute+show the DESIGN surface first (the "native
     // flash").  Keep the relaxed CG up until the overlay's mesh lands (it hides CG on
     // apply via onHeavyApplied).
-    const _deferToOverlay = !!getSimOverlayWillDriveHeavy()
+    const _deferToOverlay = !!getSimOverlayWillDriveHeavy('surface')
     _setCGVisible(_deferToOverlay)
     if (atomisticRenderer.getMode() !== 'off') {
       atomisticRenderer.setMode('off')
@@ -167,7 +170,7 @@ export function initAtomSurfaceDisplay({
   store.subscribe((newState, prevState) => {
     if (newState.surfaceColorMode !== prevState.surfaceColorMode) {
       if (_surfaceMode !== 'off') {
-        if (getSimOverlayWillDriveHeavy() && newState.surfaceColorMode !== 'uniform') {
+        if (getSimOverlayWillDriveHeavy('surface') && newState.surfaceColorMode !== 'uniform') {
           // Overlay owns the surface and needs strand vertex colours it may not have →
           // set the renderer's colour mode so the regenerated mesh's colours are applied,
           // then re-generate the overlay mesh (with the new color_mode). Uniform is in-place.
@@ -234,7 +237,7 @@ export function initAtomSurfaceDisplay({
   // take the defer path and just blank it; otherwise re-fetch the design surface.
   function _regenSurfaceForParamChange() {
     if (_surfaceMode === 'off') return
-    if (getSimOverlayWillDriveHeavy()) onSurfaceParamsChanged()
+    if (getSimOverlayWillDriveHeavy('surface')) onSurfaceParamsChanged()
     else { _surfaceDataCache = null; _applySurfaceMode('on') }
   }
 
@@ -369,7 +372,7 @@ export function initAtomSurfaceDisplay({
     // (the multi-second "native flash").  Keep the relaxed CG visible; the overlay hides
     // it when its atoms land (onHeavyApplied → setCGVisible(false)).  If the overlay
     // never lands (build fails), the relaxed CG stays up — a sane fallback.
-    const _deferToOverlay = mode !== 'off' && !!getSimOverlayWillDriveHeavy()
+    const _deferToOverlay = mode !== 'off' && !!getSimOverlayWillDriveHeavy('atomistic')
     atomisticRenderer.setMode(mode)
     // Hide CG model when any atomistic mode is active; restore when off — but keep it
     // up while deferring to the overlay.
@@ -405,11 +408,32 @@ export function initAtomSurfaceDisplay({
   // (kind='atomistic' only fires when an overlay drives atomistic — i.e. the deferred
   // case), so mirror the toast off it.  `building:false` fires in the build's `finally`,
   // so the toast clears on completion AND on failure.
+  // `kind: 'cg'` is the live MD panel's rep-SWITCH reload (md_panel._setSwitchBusy): the
+  // socket is reloading in the other wire format and the scene is showing stale geometry
+  // meanwhile.  It routes here rather than owning its own toast so there is exactly one
+  // owner of the global persistent toast across all three sim-display controllers.
+  const _BUSY_TEXT = {
+    surface:   'Computing surface…',
+    atomistic: 'Loading atomistic model…',
+    cg:        'Loading MD frame…',
+  }
   for (const _evt of ['nadoc:oxdna-heavy-status', 'nadoc:md-heavy-status']) {
     window.addEventListener(_evt, (e) => {
       const kind = e.detail?.kind
-      if (kind !== 'atomistic' && kind !== 'surface') return
-      if (e.detail.building) showPersistentToast(kind === 'surface' ? 'Computing surface…' : 'Loading atomistic model…')
+      if (!(kind in _BUSY_TEXT)) return
+      // The overlay has no route for this (mode, kind) — a NAMD flexibility map in a
+      // heavy rep, which md_viz_adapter leaves unmapped.  It used to fail silently and
+      // leave the DESIGN's equilibrium structure on screen looking like a result.
+      if (e.detail.unsupported) {
+        dismissToast()
+        showToast(
+          `The flexibility map has no ${kind === 'surface' ? 'surface' : 'all-atom'} view for `
+          + 'this engine — showing the design at equilibrium. Use a coarse-grained '
+          + 'representation (F2-F4) to see the map.',
+          { severity: 'warn' })
+        return
+      }
+      if (e.detail.building) showPersistentToast(_BUSY_TEXT[kind])
       else dismissToast()
     })
   }

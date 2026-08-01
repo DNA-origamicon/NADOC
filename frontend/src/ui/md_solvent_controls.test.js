@@ -292,3 +292,96 @@ describe('live transport', () => {
     expect(setSolvent).not.toHaveBeenCalled()
   })
 })
+
+// A scene-representation change used to invalidate the whole solvent cache and refetch
+// unconditionally.  But solventRepMode() collapses the SEVEN scene reps onto THREE modes,
+// so most rep changes don't touch the wire format at all — and every buffered frame was
+// being re-downloaded for nothing.  These pin which changes really are wire-format flips.
+describe('representation change → cache invalidation', () => {
+  const IDS = [
+    ['md-jobs-solvent-opts', 'div'], ['md-jobs-water-toggle', 'input'],
+    ['md-jobs-water-opts', 'div'], ['md-jobs-water-scope-shell', 'input'],
+    ['md-jobs-water-scope-box', 'input'], ['md-jobs-water-shell', 'input'],
+    ['md-jobs-water-count', 'div'], ['md-jobs-ions-toggle', 'input'],
+    ['md-jobs-ions-legend', 'div'], ['md-jobs-box-toggle', 'input'],
+    ['md-jobs-solvent-status', 'div'],
+  ]
+
+  let api, made, repr
+
+  // Let the not-awaited _fetchAround settle so `_inflight` clears before the next act.
+  const settle = () => new Promise(r => setTimeout(r, 0))
+
+  const changeRepr = async (next) => {
+    repr = next
+    window.dispatchEvent(new CustomEvent('nadoc:representation-change',
+                                         { detail: { representation: next } }))
+    await settle()
+  }
+
+  beforeEach(async () => {
+    localStorage.clear()
+    for (const [id, tag] of IDS) {
+      const el = document.createElement(tag)
+      el.id = id
+      if (tag === 'input') el.type = id.includes('scope') ? 'radio' : 'checkbox'
+      if (id === 'md-jobs-water-shell') { el.type = 'number'; el.value = '5' }
+      document.body.appendChild(el)
+    }
+    document.getElementById('md-jobs-water-scope-shell').checked = true
+    repr = 'full'
+    api = {
+      getMdSolventMeta: vi.fn(async () => ({ ready: true, n_waters: 1000, n_ions: 10,
+                                             species: { NA: 8, CL: 1, MG: 1 } })),
+      getMdFramesSolventBin: vi.fn(async () => null),
+      cancelMdAnalysis: vi.fn(),
+    }
+    made = initMdSolventControls({
+      api,
+      getSolventOverlay: () => ({ setIonSpecies: vi.fn(), setMode: vi.fn(), setFrame: vi.fn(),
+                                  setWaterVisible: vi.fn(), setIonsVisible: vi.fn(), clear: vi.fn() }),
+      getBoxOverlay: () => ({ setCorners: vi.fn(), hide: vi.fn() }),
+      getCurrentRepr: () => repr,
+      getLiveDisplay: () => ({ setSolvent: vi.fn(() => true) }),
+    })
+    await made.setJob('job-1', { stride: 1, nFrames: 20 })
+    made.setEnabled(true, 'traj')
+    document.getElementById('md-jobs-water-toggle').checked = true
+    document.getElementById('md-jobs-water-toggle').dispatchEvent(new Event('change'))
+    await settle()
+    // One fetch has happened for the initial 'sphere' (full) view; count from here.
+    expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(1)
+    api.getMdFramesSolventBin.mockClear()
+  })
+
+  afterEach(() => { document.body.innerHTML = '' })
+
+  it('does not refetch when the wire mode is unchanged (full → beads, both sphere)', async () => {
+    await changeRepr('beads')
+    expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
+  })
+
+  it('does not refetch between two reps that both draw no solvent (cylinders → hull-prism)', async () => {
+    await changeRepr('cylinders')       // sphere → off: a real change, clears the scene
+    api.getMdFramesSolventBin.mockClear()
+    await changeRepr('hull-prism')      // off → off: nothing to do
+    expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
+  })
+
+  // 3 floats per molecule vs 9 — the payload really is a different shape, so the cached
+  // frames are unusable and this one MUST refetch.
+  it('refetches when the wire mode flips (full → vdw, sphere → atomistic)', async () => {
+    await changeRepr('vdw')
+    expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(1)
+    expect(api.getMdFramesSolventBin.mock.calls[0][2]).toMatchObject({ atomistic: true })
+  })
+
+  // Same 'atomistic' payload; only whether the overlay draws the O-H bonds differs, which
+  // is a redraw of the frames already in hand.
+  it('does not refetch on vdw → ballstick', async () => {
+    await changeRepr('vdw')
+    api.getMdFramesSolventBin.mockClear()
+    await changeRepr('ballstick')
+    expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
+  })
+})

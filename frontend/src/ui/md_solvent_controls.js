@@ -386,11 +386,32 @@ export function initMdSolventControls({
   shellInput?.addEventListener('input', () => { _measuredWater = null; _renderCount() })
   shellInput?.addEventListener('change', _refresh)
 
-  // A rep change flips between two different WIRE payloads (3 vs 9 floats per
-  // molecule), so the cache must be dropped, not just re-rendered.
+  // A rep change MAY flip between two different WIRE payloads (3 vs 9 floats per
+  // molecule) — when it does the cache must be dropped, not just re-rendered.  But
+  // solventRepMode() collapses the seven scene reps onto three modes, so most rep
+  // changes don't touch the wire format at all: full↔beads are both 'sphere', and
+  // cylinders/hull-prism/surface are all 'off'.  Refetching every buffered frame on
+  // those is pure waste — re-derive the mode and only invalidate when it moved.
+  //
+  // vdw↔ballstick is the third case: same 'atomistic' payload, but the overlay draws
+  // O–H bonds only for ballstick, so it needs a REDRAW of the cached frame and no fetch.
+  // Seeded by setEnabled(), never at wiring time: main.js's `getCurrentRepr` closes over
+  // a `let` declared further down in the same function, so reading it during this
+  // factory's construction is a temporal-dead-zone throw that takes the app boot with it
+  // (`?.` does not save you). Null here means the controls were never enabled, so there
+  // is nothing on screen to invalidate either way.
+  let _lastRepMode   = null
+  let _lastBallstick = null
   window.addEventListener('nadoc:representation-change', () => {
-    if (!_enabled) return
-    _refresh()
+    if (!_enabled || _lastRepMode === null) return
+    const mode = _repMode()
+    const ballstick = getCurrentRepr?.() === 'ballstick'
+    const modeChanged      = mode !== _lastRepMode
+    const ballstickChanged = ballstick !== _lastBallstick
+    _lastRepMode   = mode
+    _lastBallstick = ballstick
+    if (modeChanged) { _refresh(); return }
+    if (ballstickChanged) _draw(_frameIdx)   // cached frame, new bond geometry
   })
 
   return {
@@ -427,6 +448,13 @@ export function initMdSolventControls({
       // closes over a `let` declared FURTHER DOWN in the same function — reading it
       // then is a temporal-dead-zone throw that takes the whole app boot with it.
       const mode = _enabled ? _repMode() : 'off'
+      // Safe moment to seed the rep-change comparison (post-boot, past the TDZ above):
+      // whatever is fetched from here on was fetched under THIS mode, so the listener
+      // can tell a real wire-format flip from a rep change that doesn't touch it.
+      if (_enabled) {
+        _lastRepMode   = mode
+        _lastBallstick = getCurrentRepr?.() === 'ballstick'
+      }
       const ok = _enabled && mode !== 'off'
       const why = mode === 'off'
         ? 'Solvent is drawn in the Beads, Full, VDW and Ball-and-stick representations'

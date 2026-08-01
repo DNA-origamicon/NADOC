@@ -23,8 +23,18 @@ everything above it in this file is history.
 | Renderer alpha path | `helix_renderer.js` `_installInstanceAlpha:238`, `_ensureRepAlpha:2469`, `_applyRepOverrides:2493`, public `applyRepOverrides:2588` |
 | Rebuild + no-rebuild wiring | `design_renderer.js` `_applyRepresentationOverrides:387` (calls `setDetailLevel` first — bug-A fix intact), `getDetailLevel:1167`, `columnRepAt/isColumnAtomistic/isColumnSurface:1185-1187` |
 | Right-click menu | `selection_manager.js` `_appendRepresentationMenu:411` (6 call sites) |
-| F1–F7 + global-rep master reset | `frontend/src/ui/representation_switcher.js:256` / `:286` — **no longer `main.js`** |
-| Region atom/surface overlays | `frontend/src/scene/atom_surface_display.js` (`initAtomSurfaceDisplay`, called `main.js:2442`); segment extraction moved to `surfaceSegments()` in `design_queries.js` |
+| F1–F7 + global-rep master reset | `frontend/src/ui/representation_switcher.js:271` / `:307` (anchors refreshed 2026-08-01) — **no longer `main.js`** |
+| Region atom/surface overlays | `frontend/src/scene/atom_surface_display.js` (`initAtomSurfaceDisplay`, called `main.js:2461`); segment extraction moved to `surfaceSegments()` in `design_queries.js` |
+
+**The master reset is exempt from the no-op guard (2026-08-01).** Re-picking the representation
+already on screen now returns before `_setRepresentation` (`representation_switcher.js:279`),
+because dispatching `nadoc:representation-change` fans out to six listeners and several do real
+network work. **A click that clears overrides is NOT a no-op** even when the name matches — the
+displayed structure genuinely diverged from the nominal global rep — so the guard is
+`if (!hadOverrides && repr === _appliedRepr) return`, evaluated *after* the clear. Same idea as
+the F-key handler's existing `_hasRepOverrides` branch (`:307`), which already routed an
+already-checked rep to a real re-apply instead of a coloring cycle. Pinned by
+`representation_switcher.test.js` → `no-op re-pick` (4 tests, incl. the overrides exemption).
 | Photo export | `frontend/src/scene/photo_mode.js` — **no longer `main.js ~12886`** |
 
 **Stale claims corrected 2026-07-28:** `editOverridesForStrands`/`editOverridesForClusters`

@@ -160,6 +160,13 @@ export function initRepresentationSwitcher({
     updateColoringOptions(activeRepr)
   }
 
+  // The representation _setRepresentation last actually applied. Used by the click
+  // handler to skip a no-op re-pick: dispatching 'nadoc:representation-change' is not
+  // free — six listeners fan out of it and several do real network work (oxDNA/NAMD
+  // heavy-frame reconstruction, the solvent refetch, the NAMD trajectory prebuild).
+  // Null until the first apply, so the very first click always goes through.
+  let _appliedRepr = null
+
   async function _setRepresentation(repr) {
     setCurrentRepr(repr)
     flexibleArcs?.setRepresentation?.(repr)
@@ -203,6 +210,7 @@ export function initRepresentationSwitcher({
       getJointRenderer()?.setHullRepr(true)
     }
 
+    _appliedRepr = repr
     _updateReprRadio(repr)
     reprOptionSliders(repr)
     window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
@@ -218,6 +226,13 @@ export function initRepresentationSwitcher({
       if (assemblyActive) {
         const instances = currentAssembly?.instances ?? []
         if (!instances.length) return
+
+        // Every instance is already on this representation → the PATCH would rewrite
+        // each one to the value it already holds and the renderer would rebuild for
+        // nothing. (Mixed state still goes through: there the click means "make them
+        // all agree", which is real work.)
+        const st = reprMenuState(instances)
+        if (st.kind === 'single' && st.repr === repr) { _updateReprRadio(repr); return }
 
         if (repr === 'vdw' || repr === 'ballstick' || repr === 'surface') {
           const ok = await showConfirm({
@@ -253,9 +268,15 @@ export function initRepresentationSwitcher({
       // a master reset: it clears any per-region representation overrides so the new
       // global wins everywhere. Internal _setRepresentation calls (reset-to-full,
       // hull-prism auto-switch on edit) bypass this handler and leave overrides intact.
-      if (currentDesign.representation_overrides?.length) {
+      const hadOverrides = (currentDesign.representation_overrides?.length ?? 0) > 0
+      if (hadOverrides) {
         await api.clearRepresentationOverrides()
       }
+      // Re-picking the representation already on screen is a no-op — skip the whole
+      // apply + the 'nadoc:representation-change' fan-out. EXCEPT when this click just
+      // cleared per-region overrides: the displayed structure genuinely diverged from
+      // the nominal global rep, so it has to be re-applied even though the name matches.
+      if (!hadOverrides && repr === _appliedRepr) return
       await _setRepresentation(repr)
     })
   }

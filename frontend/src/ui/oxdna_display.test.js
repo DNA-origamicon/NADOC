@@ -1006,6 +1006,179 @@ describe('initOxdnaDisplay heavy reps (atomistic / surface)', () => {
     expect(api.getOxdnaFramesSurface).toHaveBeenCalled()
     expect(surf.applyPositionLerp).toHaveBeenCalled()
   })
+
+  // Trajectory frames are grid-cached; relaxed + RMSF were not, so every rep change
+  // re-downloaded a multi-megabyte all-atom payload — including vdw <-> ballstick, which
+  // changes the renderer's GEOMETRY and not one coordinate.
+  describe('relaxed / RMSF payload memo', () => {
+    it('vdw → ballstick does not re-fetch the relaxed atomistic frame', async () => {
+      const { ctrl, api, atom, state } = makeHeavyDeps('vdw')
+      await ctrl.displayJob('job1'); await tick()
+      expect(api.getOxdnaDisplayAtomistic).toHaveBeenCalledTimes(1)
+
+      state.repr = 'ballstick'
+      await ctrl.reapplyForRepr(); await tick()
+      expect(api.getOxdnaDisplayAtomistic).toHaveBeenCalledTimes(1)   // memo hit
+      // …and the atoms were still re-applied to the rebuilt ball-and-stick geometry.
+      expect(atom.applyPositionLerp.mock.calls.length).toBeGreaterThan(1)
+    })
+
+    it('vdw → ballstick does not re-fetch the RMSF atomistic payload', async () => {
+      const { ctrl, api, state } = makeHeavyDeps('vdw')
+      await ctrl.displayRmsf('job1'); await tick()
+      expect(api.getOxdnaRmsfAtomistic).toHaveBeenCalledTimes(1)
+      state.repr = 'ballstick'
+      await ctrl.reapplyForRepr(); await tick()
+      expect(api.getOxdnaRmsfAtomistic).toHaveBeenCalledTimes(1)
+    })
+
+    it('a different job re-fetches (the memo is not keyed to the renderer)', async () => {
+      const { ctrl, api } = makeHeavyDeps('vdw')
+      await ctrl.displayJob('job1'); await tick()
+      await ctrl.displayJob('job2'); await tick()
+      expect(api.getOxdnaDisplayAtomistic).toHaveBeenCalledTimes(2)
+    })
+
+    // A running job accumulates production frames — refresh() is the "get me the newer
+    // data" button, so it must not be answered from the memo.
+    it('refresh() re-fetches', async () => {
+      const { ctrl, api } = makeHeavyDeps('vdw')
+      await ctrl.displayJob('job1'); await tick()
+      await ctrl.refresh(); await tick()
+      expect(api.getOxdnaDisplayAtomistic).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  // The MD backend treats (job_id, kind) as a single-slot resource: run_analysis KILLS any
+  // in-flight analysis for the same key before starting, so a second overlapping request
+  // does not queue — it murders the first, which returns 500 "analysis worker died without
+  // a result". Two of this controller's own callers want frames at the same moment
+  // (prebuildHeavy's chunk loop and _applyHeavy's single frame), so it must not race
+  // itself. Reproduced against the real backend before the fix: two overlapping POSTs to
+  // /md/jobs/{id}/frames-atomistic → the earlier one 500s in 0.25 s, while either alone
+  // succeeds in ~2.3 s.
+  describe('heavy frame fetches are serialised', () => {
+    /** Wrap the frame fetchers so the test can see overlap, and control completion. */
+    function instrument(api) {
+      // NOTE: this replaces the vi.fn, so `.mock.calls` is gone — record here instead.
+      const state = { inFlight: 0, maxInFlight: 0, calls: 0, release: [], idxs: [] }
+      const gate = () => new Promise(r => state.release.push(r))
+      const wrap = (orig) => async (...args) => {
+        state.calls++
+        state.idxs.push([...(args[1] || [])])
+        state.inFlight++
+        state.maxInFlight = Math.max(state.maxInFlight, state.inFlight)
+        await gate()
+        try { return await orig(...args) } finally { state.inFlight-- }
+      }
+      api.getOxdnaFramesAtomistic = wrap(api.getOxdnaFramesAtomistic)
+      return state
+    }
+    const drain = async (state) => {
+      for (let i = 0; i < 40; i++) {
+        while (state.release.length) state.release.shift()()
+        await tick()
+      }
+    }
+
+    it('never has two frame requests in flight at once', async () => {
+      const { ctrl, api } = makeHeavyDeps('ballstick')
+      await ctrl.loadTrajectory('jobT'); await tick()
+      const state = instrument(api)
+
+      // Exactly the collision the 500 came from: a prebuild sweep and a scrub-driven
+      // single-frame fetch issued in the same tick.
+      const p = Promise.all([ctrl.prebuildHeavy(() => {}), (ctrl.showFrame(3), Promise.resolve())])
+      await drain(state)
+      await p
+
+      expect(state.calls, 'the fetcher must actually have run').toBeGreaterThan(0)
+      expect(state.maxInFlight, 'overlapping frame requests kill each other server-side').toBe(1)
+    })
+
+    it('does not re-request cells another caller fetched while it waited', async () => {
+      const { ctrl, api } = makeHeavyDeps('ballstick')
+      await ctrl.loadTrajectory('jobT'); await tick()
+      const state = instrument(api)
+      const p = Promise.all([
+        ctrl.prebuildHeavy(() => {}),
+        ctrl.prebuildHeavy(() => {}),
+      ])
+      await drain(state)
+      await p
+      // Second sweep finds everything cached; the queue re-filters on entry rather than
+      // re-asking for cells that landed while it was waiting its turn.
+      const idxs = state.idxs.flat()
+      expect(new Set(idxs).size, `a cell was fetched twice: ${JSON.stringify(state.idxs)}`)
+        .toBe(idxs.length)
+    })
+  })
+
+  // The caller skips the DESIGN heavy build ("native flash") only when an overlay will
+  // rebuild it from the job. Answering that without the kind is how a NAMD flexibility
+  // map — which can deliver NEITHER kind — ended up deferring to nothing.
+  describe('drivesHeavy(kind) capability', () => {
+    // md_viz_adapter maps the trajectory heavy routes but deliberately not the
+    // flexibility-map ones; the controller reads that off the injected api.
+    function makeAdapterLike(repr) {
+      const made = makeHeavyDeps(repr)
+      delete made.api.getOxdnaRmsfAtomistic
+      delete made.api.getOxdnaRmsfSurface
+      return made
+    }
+
+    it('false when nothing is displayed', () => {
+      const { ctrl } = makeHeavyDeps('ballstick')
+      expect(ctrl.drivesHeavy('atomistic')).toBe(false)
+      expect(ctrl.drivesHeavy()).toBe(false)
+    })
+
+    it('a full oxDNA api drives both kinds in every heavy mode', async () => {
+      const { ctrl } = makeHeavyDeps('ballstick')
+      await ctrl.displayJob('job1'); await tick()
+      expect(ctrl.drivesHeavy('atomistic')).toBe(true)
+      expect(ctrl.drivesHeavy('surface')).toBe(true)
+      await ctrl.displayRmsf('job1'); await tick()
+      expect(ctrl.drivesHeavy('atomistic')).toBe(true)
+      expect(ctrl.drivesHeavy('surface')).toBe(true)
+    })
+
+    it('an adapter with no RMSF heavy routes drives NEITHER kind in rmsf mode', async () => {
+      const { ctrl } = makeAdapterLike('full')
+      await ctrl.displayRmsf('job1'); await tick()
+      expect(ctrl.drivesHeavy('atomistic')).toBe(false)
+      expect(ctrl.drivesHeavy('surface')).toBe(false)
+      // The kind-less form still reports "a heavy mode is active" — that is what the
+      // old single-boolean caller saw, and why it deferred to an overlay with no route.
+      expect(ctrl.drivesHeavy()).toBe(true)
+    })
+
+    it('…but still drives both kinds in trajectory mode', async () => {
+      const { ctrl } = makeAdapterLike('full')
+      await ctrl.loadTrajectory('jobT'); await tick()
+      expect(ctrl.drivesHeavy('atomistic')).toBe(true)
+      expect(ctrl.drivesHeavy('surface')).toBe(true)
+    })
+
+    // Silent failure was the bug: the missing route threw into a blanket catch and the
+    // user was left looking at the design's equilibrium structure with no RMSF colouring.
+    it('reports unsupported instead of throwing into the catch', async () => {
+      const { ctrl, api, atom, onHeavyStatus, state } = makeAdapterLike('full')
+      await ctrl.displayRmsf('job1'); await tick()
+      onHeavyStatus.mockClear()
+      atom.applyPositionLerp.mockClear()
+
+      state.repr = 'ballstick'
+      await ctrl.reapplyForRepr(); await tick()
+
+      expect(onHeavyStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'atomistic', unsupported: true, building: false }))
+      // No spinner left up, and nothing painted from a half-built fetch.
+      expect(onHeavyStatus).not.toHaveBeenCalledWith(expect.objectContaining({ building: true }))
+      expect(atom.applyPositionLerp).not.toHaveBeenCalled()
+      expect(api.getOxdnaRmsf).toHaveBeenCalledTimes(1)   // CG payload only, not re-fetched
+    })
+  })
 })
 
 describe('proteinTransformMap', () => {
