@@ -161,7 +161,7 @@ is the universal teardown and calls `designRenderer.endDeformPreview()` `:489`.
 | 157 | `getJointRenderer().applyDeformLerp(t)` → `joint_renderer.js:2981` | 1 |
 
 **Add a subsystem that owns positions and it must join this list**, or it stays straight while
-everything else bends. The `getBluntEnds` slot is wired to `initDomainEnds` (`main.js:2988`) —
+everything else bends. The `getBluntEnds` slot is wired to `initDomainEnds` (`main.js:3006`) —
 the parameter name is legacy (`blunt_ends.js` no longer exists).
 
 **The base-normal map is not optional.** `_straightBnMap` (`deform_view.js:42`,

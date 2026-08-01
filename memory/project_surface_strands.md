@@ -6,6 +6,14 @@ does **not** include capture-strand state → toggling capture strands won't inv
 (Phase-2 item 7, never wired — low impact, staleness only); (2) `validate_capture_build` oracle is
 called from tests only, not the production `append_capture_strands` build path. Do both when convenient.
 
+**Display bug fixed 2026-08-01 (tech-debt TD-05).** The "Highlight strands" toggle's white halo
+did **not** follow the capture strands during a sim overlay. `design_renderer.refreshAllGlow()` —
+called on every `applyFemPositions` frame — refreshed 6 of its 7 glow layers and omitted
+`_captureGlowLayer`, so the halos stayed at the build positions while the strands moved to the
+oxDNA frame, until the next full rebuild. One line; pinned by `scene/design_renderer.test.js`,
+which asserts the created- and refreshed-layer lists agree. **Not re-verified in-app** — needs a
+design with capture strands + a live oxDNA job; worth an eyeball next time one is running.
+
 **Audit note (2026-07-25):** codebase probe confirmed anchors 1–9 EXISTS+WIRED. The
 "topology build DEFERRED to Phase 2" framing in older indexes is **STALE** — Phase 2a–2d all shipped.
 Doc-path nit: `prepare_oxdna_job` lives in `backend/core/oxdna_runner.py` (not `backend/physics/`).

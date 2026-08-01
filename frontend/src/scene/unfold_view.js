@@ -1166,8 +1166,8 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     setSlicePlane(sp) { _slicePlane = sp },
 
     /**
-     * Re-apply the current unfold offsets to helices and blunt ends without
-     * animating.  Called by blunt_ends after it rebuilds so that label sprites
+     * Re-apply the current unfold offsets to helices and domain ends without
+     * animating.  Called by domain_ends.js after it rebuilds so that label sprites
      * land at their unfolded positions rather than the 3D geometry positions.
      */
     /**

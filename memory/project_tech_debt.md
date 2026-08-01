@@ -66,8 +66,8 @@ outranks a stale comment; a stale comment outranks a program of work.
 | ~~TD-02~~ | ~~`STAPLE_PALETTE` index agreement + 2 stale sync comments~~ | — | **CLOSED 2026-07-31** — 1 STALE / 4 FIXED / 1 DECIDE (DEC-01). Found + fixed a bug the entry didn't know about: the backend .xlsx export was still on the retired palette. Archived. |
 | ~~TD-03~~ | ~~Cadnano-editor app stragglers~~ | — | **CLOSED 2026-07-31** — 5 FIXED / 1 PROMOTED (MV-EDITORDOC) / 1 DECIDE (DEC-02) / 2 ACCEPTED / 1 STALE. Also closed TD-14's reverse-coupling bullet; spawned TD-26. Archived. |
 | ~~TD-04~~ | ~~Dead `POST /design/auto-scaffold` + orphaned matched-ends fns~~ | — | **CLOSED 2026-08-01** — 2 FIXED / 1 DELETED. The "silently fake coverage" was false: all 4 call sites guarded the dead POST and fell back to domain-paint, so the specs always scaffolded. Archived. |
-| ▶ TD-05 | Rendering stragglers | P0 | `refreshAllGlow` skips the 7th glow layer (live lag bug); a 4-test file pins a module that doesn't exist. |
-| TD-06 | Cross-cutting sweeps (see its section) | P0 | Three separate audits each re-found the same rot (`docs/triage/` fiction, `, null)` init args, phantom `MAP_*.md`). Resolve once, strike in all sections. |
+| ~~TD-05~~ | ~~Rendering stragglers~~ | — | **CLOSED 2026-08-01** — 2 FIXED / 2 DECIDE (DEC-03, DEC-04) / 1 ACCEPTED / 1 PROMOTED. The `refreshAllGlow` lag bug was real *and understated* (fires on every sim frame, not just unfold); fixed + pinned. Also closed TD-09's `reapplyLerp` half. Section kept here until DEC-03/04 are answered. |
+| ▶ TD-06 | Cross-cutting sweeps (see its section) | P0 | Three separate audits each re-found the same rot (`docs/triage/` fiction, `, null)` init args, phantom `MAP_*.md`). Resolve once, strike in all sections. |
 | TD-07 | Dead `lattice.auto_scaffold(mode=…)` in 2 scripts | P1 | Two unrunnable scripts (ImportError) + an orphaned `_pull_window_turns`. |
 | TD-08 | `CELLS_6HB` / `CELLS_18HB` divergent copies | P1 | Copying the name between files silently changes the neighbour graph. |
 | TD-09 | Deformation stragglers | P1 | 3 comments that contradict the code + a possible silent bend-loss in `assembly_flatten.py`. |
@@ -105,6 +105,35 @@ outcomes**; surface them in batches, don't block a pass on an answer.
   comments added 2026-07-31, which future sweeps must trust.
   *(No code change either way is risky — the values already match. This is purely "should they be
   allowed to diverge later".)*
+- **DEC-03 (from TD-05 + TD-09, 2026-08-01) — is `deform_view.reapplyLerp()` a latent bug to WIRE,
+  or an obsolete invariant to DELETE?** It has zero callers and never has had one (verified
+  repo-wide 2026-08-01; the only other mentions are two comments at `helix_renderer.js:555,595`).
+  The mechanism it would fix is real and reads as a genuine defect: stopping an oxDNA/mrDNA/
+  trajectory overlay calls `applyFemPositions(null)` → `revertToGeometry()` **with no arguments**
+  (`helix_renderer.js:3317`), which restores `nuc.backbone_position` — the **deformed** backend
+  geometry — ignoring the deform view's `_currentT`. So with the deform toggle OFF (t=0), stopping a
+  sim overlay should snap the design **bent** while the toggle reads straight.
+  **Not reproduced in-app — mechanism verified by reading only.**
+  **(a) Wire it** — call it (or pass the straight maps to `revertToGeometry(straightPosMap,
+  straightAxesMap)`, which is what `unfold_view.js:925/1024` already do) on the overlay-stop paths.
+  Fixes the bend-snap if it is real; touches 8 display modules' stop path.
+  **(b) Delete it** — plus `setT`/`getT`, and drop the invariant from the rule and runbook (both
+  already corrected to say it has no callers). Cheap and honest if the bend-snap can't be reproduced.
+  *Cheapest way to settle it: load a design with an active deformation, run any sim overlay, stop
+  it, and see whether the design snaps bent. One app exercise decides the whole question — I'd want
+  that observation before writing either patch.*
+- **DEC-04 (from TD-05, 2026-08-01) — delete `frontend/src/scene/arc_tube_geometry.test.js`?**
+  It is a 4-test file testing a module that does not exist (`rg --files` confirms: no
+  `arc_tube_geometry.js` anywhere), its own header calls it *"a throwaway diagnostic test — delete
+  once the cause is fixed + pinned"* (2026-06-07), it imports only `vitest` + `three` and
+  re-implements the tube build inline, and it has **drifted** — hardcoded radius `0.63` vs the live
+  `PREVIEW_ARC_RADIUS = SELECTION_ARC_RADIUS = 0.147` (`design_renderer.js:78-79`).
+  **(a) Delete it** — recommended; it is green, pins nothing, and its bbox assertions now describe
+  geometry the app has not built since 2026-06-07, so a future reader will trust it wrongly.
+  **(b) Keep it** — only worth it if the 2026-06-07 crossover-selection TubeGeometry collapse is
+  still considered unfixed and this is the record of it; then it needs re-pinning to `0.147`.
+  *(Deleting a test is a user call per `CLAUDE.md` → Risky-action policy — the only reason this is
+  a DECISION rather than a DELETED. No behaviour is covered by it either way.)*
 - ~~**DEC-02 (from TD-03, 2026-07-31)**~~ — **RESOLVED 2026-08-01: user chose (a), delete.** The four
   `run.py` files are gone. **Only the scripts** — each directory keeps its `hypothesis.md`,
   `conclusion.md` and `results/` (metrics.json + plots), verified present before deleting, so the
@@ -152,6 +181,51 @@ outcomes**; surface them in batches, don't block a pass on an answer.
 
 ## Next-session handoff
 
+**Pass 5 (2026-08-01) closed TD-05** — **2 FIXED / 2 DECIDE / 1 ACCEPTED / 1 PROMOTED.** First pass
+in five where the ledger **understated** the headline item instead of overstating it, and the first
+that shipped a real bug fix.
+
+- **The `refreshAllGlow` bug was real and bigger than written.** The entry said capture glow "will
+  lag its beads during unfold animation". It has **5 callers**, and the one the entry didn't know
+  about is inside `applyFemPositions` (`design_renderer.js:1069`) — every simulation frame. The
+  omitted layer decorates the oxDNA **surface capture strands**, which are exactly the beads
+  `applyFemPositions` moves. So the white halos sat at design positions while the strands they
+  highlight went to the oxDNA frame. One line to fix.
+- **The lesson to carry: when an entry says "X is omitted from Y", the debt is in Y's CALLERS,
+  not in X.** Pass 4's lesson was *read the block, not the line*; this is the next ring out —
+  **read the call sites, not the block.** The block (`refreshAllGlow`'s body) told me a layer was
+  missing. Only `rg refreshAllGlow` told me how often and in what context that costs, and that is
+  what moved it from cosmetic-lag to a visible defect in a shipped feature.
+- **Severity ran the other way on the cheap bullet.** `blunt_ends` naming was filed "cosmetic".
+  `getBluntEnds` is a named dep in **7 factory signatures** + 4 destructured opts + 4 mock-building
+  test files, and `toolFilters.bluntEnds` is a **persisted** store key — renaming it resets a user
+  toggle without a migration. Fixed the 3 comments; ACCEPTED the identifiers with the reason
+  recorded so no sweep re-opens it. Also: `blunt` is in 79 files and most of it is **correct** DNA
+  vocabulary (`blunt_end_menus.js`, `blunt_end_connectors.js`, the backend). Never blanket-rename.
+- **Anchor drift, again, and one flatly wrong:** `refreshAllGlow` `:955` → `:980`,
+  `design_renderer.js` 1,529 → 1,549 LOC, and `main.js:2988` (the `initDomainEnds` site) is
+  **`main.js:3006`** — that wrong anchor had been copied into **4** `.claude/rules/*.md` files.
+  All corrected. Prose anchors in this ledger remain roughly half-reliable at 5 passes in.
+- **Test-ordering discipline paid off.** `design_renderer.test.js` was written first, run against
+  the unfixed file, and failed with exactly `[ '_captureGlowLayer' ]`. That is the only thing that
+  makes "green after the fix" evidence rather than decoration — and it is now the template for the
+  rest of this pipeline (see the promoted plan in `.claude/rules/rendering.md` § Coverage).
+
+**▶ NEXT: TD-06** (cross-cutting sweeps). It moves to the top by default — it is the other P0, and
+it is the item whose whole purpose is *resolve once, strike in N sections*, which this pass just
+demonstrated the value of twice (TD-09's `reapplyLerp` bullet closed for free; one bad `main.js`
+anchor was fixed in 4 rule files at once).
+
+**The traps to expect in TD-06:** (1) It is a **meta-item** — its bullets are "the same rot appears
+in N places", so the failure mode is doing N separate fixes instead of one. Find the single source
+first. (2) `docs/triage/*.md` is 12 files of the same 2026-vintage fiction (TD-15 already proved
+`05_animation.md` documents three symbols that never existed); deleting or stamping a `docs/`
+directory is a **file deletion → user confirm**, so expect a DECIDE, and probe the other 11 before
+framing it — one question about 12 files beats 12 questions. (3) The phantom `MAP_*.md` bullet is
+pure absence-evidence: per pass 3's lesson, every "never existed" verdict must cite the
+`rg --files` that proves the *path* was searched correctly. (4) Given this pass, when a bullet says
+"harmless / cosmetic / doc-only", spend the one extra grep on **who calls it** before agreeing.
+
 **Pass 4 (2026-08-01) closed TD-04** — **2 FIXED / 1 DELETED / 0 DECIDE.** Cheapest pass yet; no
 user decisions raised. The predicted miscount was real (queue said "4 E2E specs"; it is **3 files /
 4 call sites** — `atomistic_helix_parity.spec.js` holds two), and one line anchor had drifted
@@ -172,21 +246,11 @@ user decisions raised. The predicted miscount was real (queue said "4 E2E specs"
   client methods by string (`apiMethod: 'autoScaffoldSeamed'`), so a live caller can exist with no
   `foo(` anywhere. `autoScaffoldMatched` was clean on that test; the next one may not be.
 
-**▶ NEXT: TD-05** (rendering stragglers). Now the top P0: it claims a live per-frame lag bug
-(`refreshAllGlow` refreshing 6 of 7 glow layers) plus a 4-test file pinning a module that doesn't
-exist.
-
-**The traps to expect in TD-05:** (1) It is the **first item that pre-declares its own DECIDE** —
-`deform_view.reapplyLerp()` (zero callers, but it is the written-but-unwired fix for a real
-mechanism). Do **not** delete it to clear the bullet; the ledger already says decide first, and
-**the identical bullet also sits in TD-09**, so resolve once and strike in both (that is what TD-06
-exists for). (2) `scene/arc_tube_geometry.test.js` is a **test file deletion → user confirm**
-(`CLAUDE.md` → Risky-action policy), not a free DELETED. (3) Given this pass's finding, verify the
-`refreshAllGlow` "live lag" claim by reading what `_captureGlowLayer` actually holds and when it is
-rebuilt before treating it as P0 — an omitted layer only lags if something re-reads `entry.pos`
-during unfold. (4) Two bullets (the ~8.6k-LOC CG render pipeline's ~20 tests; the
-representation-vs-LOD mismatch) are PROMOTE/ACCEPTED shaped — don't start a test program inside
-this loop.
+*(Pass 4's four trap predictions for TD-05 all landed: the pre-declared DECIDE stayed a DECIDE and
+closed TD-09's twin, the test file went to user-confirm, the CG-coverage and representation/LOD
+bullets stayed out of this loop. Its one miss was telling pass 5 to check whether the glow omission
+"only lags if something re-reads entry.pos during unfold" — the right question, but the answer came
+from the caller list, not the layer.)*
 
 **Pass 3 (2026-07-31) closed TD-03** — **5 FIXED / 1 PROMOTED / 1 DECIDE / 2 ACCEPTED / 1 STALE.**
 The predicted landmine (the `experiments/` scripts) was real but *understated*, and the two cheapest
@@ -539,54 +603,83 @@ these are the artifacts outside them.
   `main_js_carveup.md` + `main_js_extraction_log.md` + `memory/main_init_detail.md`. Every other
   loop in the repo has a skill; this one is invoked from memory. Plausible cause of the 5-week idle.
 
-### TD-05 — Rendering stragglers (found 2026-07-30, `/audit-plan` rule sweep)
-Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` against the code.
+### ~~TD-05~~ — Rendering stragglers — **CLOSED 2026-08-01** (2 FIXED / 2 DECIDE / 1 ACCEPTED / 1 PROMOTED)
+Found 2026-07-30 rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md`.
+▶ REMAINING: nothing in this loop. Two user calls are parked as **DEC-03** and **DEC-04** below.
 
-- **`deform_view.reapplyLerp()` is exported with ZERO callers** —
-  [deform_view.js:378](frontend/src/scene/deform_view.js#L378), exported `:409`; the only other hits
-  are two comments in `helix_renderer.js:555,595`. Both the rendering rule and its runbook stated,
-  as a first-check invariant, *"after any `revertToGeometry()`, call `deformView.reapplyLerp()`"* —
-  **nothing has ever called it.** So either (a) there is a real latent bug (a design with an active
-  deformation that comes back straight after a sim overlay toggles off), or (b) the invariant is
-  obsolete and the function should be deleted. `oxdna_display.test.js:424` explicitly pins that
-  `applyFemPositions(null)` is the LAST call with no re-apply after it, which suggests (b) — but it
-  pins the *current* behaviour, not the correct one. **Decide before deleting**; the wired analogue
-  for unfold is `getUnfoldView?.()?.reapplyIfActive()` (`deform_view.js:308`, `domain_ends.js:593`).
-  Related: `clearFemOverlay` above, same family of dead overlay-teardown code.
-- **`refreshAllGlow()` refreshes 6 of the 7 glow layers** —
-  [design_renderer.js:955-962](frontend/src/scene/design_renderer.js#L955) omits `_captureGlowLayer`
-  (created `:71`) while refreshing `_glowLayer`, `_undefinedGlowLayer`, `_anchorGlowLayer`,
-  `_clashGlowLayer`, `_previewGlowLayer`, `_fluoroGlowLayer`. Since the function's job is "re-read
-  entry.pos each frame during unfold animation", capture glow will lag its beads. Looks like an
-  omission at the time a 7th layer was added, not a decision.
-- **`scene/arc_tube_geometry.test.js` (4 tests) tests a module that does not exist** — there is no
-  `arc_tube_geometry.js`. Its own header calls it "a throwaway diagnostic test — delete once the
-  cause is fixed + pinned" (2026-06-07, crossover-selection TubeGeometry collapse). Still in the
-  suite, still green, pinning nothing.
-- **The CG render pipeline has ~20 tests for ~8.6k LOC.** `design_renderer.js` (1,529 LOC, **92
-  public methods**) and `glow_layer.js` have **zero** test files; `helix_renderer.js` (5,232 LOC,
-  69 controller methods) has **4** tests, both on pure helpers — `buildHelixObjects` (~2,200 LOC)
-  is untested. Worse than the raw number: `ui/cando_display.test.js`, `ui/lammps_display.test.js`,
-  `ui/md_panel.test.js`, `scene/slice_highlighter.test.js` all **mock** `designRenderer`, so a green
-  suite is evidence about the callers only. Cheapest real win: pin the pure functions
-  (`_effectiveColors`, `bezierAt`/`arcControlPoint` in `crossover_connections.js`, `CG_LOD`
-  mapping) rather than attempting a WebGL harness.
-- **Stale `blunt_ends` naming survives the `domain_ends.js` rename** — comments at
-  `loop_skip_highlight.js:254`, `unfold_view.js:1170`, `cadnano_view.js:91`, and the live local
-  variable/opt names `bluntEnds`/`getBluntEnds` (`main.js:2988`, `unfold_view.js:1279`,
-  `cadnano_view.js:439,582`). Cosmetic, but it is why two separate rule audits had to re-derive
-  that `domain_ends.js` is the file. (`.claude/rules/unfold.md`'s dead `blunt_ends.js` path was
-  fixed in this pass.)
-- **`ui/representation_switcher.js` has 7 representations; `setDetailLevel` has 3 levels** — no
-  shared constant ties `hull-prism/cylinders/beads/full/surface/vdw/ballstick` (`:36-44`) to
-  `CG_LOD = {full:0, beads:1, cylinders:2}` (`helix_renderer.js:64`). Four of the seven silently
-  bypass this pipeline entirely. Not a bug today; it is the reason the LOD/representation
-  distinction keeps getting confused in docs.
+- ~~**`deform_view.reapplyLerp()` is exported with ZERO callers**~~ — **DECIDE 2026-08-01 → DEC-03.**
+  Probe reproduced every claim exactly, no drift: definition `deform_view.js:378`, export `:409`,
+  and the ONLY other references repo-wide are the two *comments* at `helix_renderer.js:555,595` —
+  zero call sites in any code file, string-name search included. Confirmed
+  `helix_renderer.js:3317` is `if (!updates) { revertToGeometry(); return }` — argument-less, so it
+  restores `nuc.backbone_position` (the **deformed** geometry) ignoring `_currentT`, exactly the
+  mechanism described. One correction: `oxdna_display.test.js:425` asserts only
+  `applyFemPositions` `toHaveBeenLastCalledWith(null)` — it would **not** fail if a `reapplyLerp`
+  call were added after it, so it is a much weaker argument for "obsolete" than the entry claimed.
+  **The identical bullet is the first one in TD-09 — resolving DEC-03 closes both.**
+- ~~**`refreshAllGlow()` refreshes 6 of the 7 glow layers**~~ — **FIXED 2026-08-01.** Real bug, and
+  the entry **understated** it. Line anchor had drifted `:955-962` → `:975-982`; content was exact
+  (7 created at `:60,62,65,68,71,75,106`, `_captureGlowLayer` the only one omitted). The severity
+  miss: `refreshAllGlow` has **5 callers**, and the entry only knew about unfold. The fifth is
+  `design_renderer.js:1069`, **inside `applyFemPositions`** — i.e. every simulation frame. And
+  `_extraNucs` are, per `:420-422`, the oxDNA **surface capture strands** that `applyFemPositions`
+  moves; `_applyCaptureGlow` (`:431`) hands the layer the *same* entry objects the helix renderer
+  mutates in place (`helix_renderer.js:3335` `entry.pos.set(...)`), and `_applyCaptureGlow` is
+  called from only `:502` (post-rebuild) and `:1111`. So with "Highlight strands" on, the white
+  halos stayed at the design positions while the strands they decorate moved to the oxDNA frame,
+  until the next full rebuild. Fix = one added `_captureGlowLayer.refresh()` line.
+  **Pinned by a new `frontend/src/scene/design_renderer.test.js`** (3 tests) — source-text
+  assertions that the created-glow-layer list and the refreshed list agree, so an 8th layer can't
+  repeat this. **Pin proven by test-ordering:** written first, run against the unfixed file, failed
+  with exactly `[ '_captureGlowLayer' ]`, then the fix made it green.
+- ~~**`scene/arc_tube_geometry.test.js` (4 tests) tests a module that does not exist**~~ —
+  **DECIDE 2026-08-01 → DEC-04** (deleting a test is a user call, `CLAUDE.md` → Risky-action).
+  Probe confirmed with `rg --files`: exactly one `arc_tube` file in the repo and it is the
+  `.test.js`; `frontend/src/scene/` has `assembly_connector_arcs.js` / `flexible_arcs.js` /
+  `overhang_link_arcs.js` but **no `arc_tube_geometry.js`**. It imports only `vitest` + `three` and
+  re-implements the tube inline. **New finding: it has also drifted** — it hardcodes radius `0.63`
+  while the live constants are `PREVIEW_ARC_RADIUS = SELECTION_ARC_RADIUS = 0.147`
+  (`design_renderer.js:78-79`, changed 2026-06-07), so its exact bbox tuples pin geometry the app
+  no longer builds. Green, and describing nothing.
+- ~~**The CG render pipeline has ~20 tests for ~8.6k LOC**~~ — **PROMOTED 2026-08-01 to
+  `.claude/rules/rendering.md` § Coverage — honest**, which now carries the ranked plan (pin pure
+  functions; use source-text cross-list tests) and is the owner because it **auto-loads** on these
+  files, which this ledger does not. All figures re-verified: `design_renderer.js` 1,529 → **1,549**
+  LOC (pre-fix), `helix_renderer.js` **5,232** exact, `glow_layer.js` 188; no `design_renderer.test.js`
+  or `glow_layer.test.js` existed; `helix_renderer.test.js` is 4 tests on `orderStrandNucleotides` +
+  `directConnectedOverhangIds` only; all four named sibling tests do build literal `designRenderer`
+  mocks. Not started here — a test program is not this loop (`design_renderer.test.js` above is the
+  first instalment, added because the glow fix needed a pin).
+- ~~**Stale `blunt_ends` naming survives the `domain_ends.js` rename**~~ — **3 comments FIXED /
+  identifier rename ACCEPTED, 2026-08-01.** Fixed the three comments (`loop_skip_highlight.js:254`,
+  `unfold_view.js:1170`, `cadnano_view.js:91`). One anchor was **wrong**: `main.js:2988` is a
+  comment about the extensions dialog; the real init is **`main.js:3006`** (that stale anchor was
+  also copied into 4 `.claude/rules/*.md` — all corrected). **"Cosmetic" was badly understated and
+  the rename is now ACCEPTED, not deferred:** `getBluntEnds` is a named dep in **7 factory
+  signatures** (`unfold_view:42`, `cadnano_view:42`, `deform_view:25`, `slice_plane:144`,
+  `expanded_spacing`, `animation_player`, `debug_overlay`), a destructured `bluntEnds` opt in 4 more
+  (`photo_mode`, `overhang_orientation_panel`, `response_delta`, `script_runner`) with 4 test files
+  building the mocks — and **`toolFilters.bluntEnds` is a PERSISTED store key** (`store.js:137`, in
+  the persisted `ui` slice `:411`, read by 4 modules, pinned by 3 test files). Renaming it silently
+  resets that toggle for every existing session unless migrated: not worth it for a name.
+  **Do not blanket-rename `blunt`** — `ui/blunt_end_menus.js`, `scene/blunt_end_connectors.js` and
+  the backend's `blunt` usage are correctly named (real blunt-end duplex termini). `blunt` appears
+  in 79 files; only the `getBluntEnds`/`bluntEnds` wiring is the stale subset.
+- ~~**`ui/representation_switcher.js` has 7 representations; `setDetailLevel` has 3 levels**~~ —
+  **ACCEPTED 2026-08-01.** Both counts verified exact and line-exact (`:36-44`, `helix_renderer.js:64`),
+  and "no shared constant" confirmed: `CG_LOD` is imported by exactly 3 modules, all in the assembly
+  stack, and `representation_switcher.js` is not one of them. The entry says it plainly — *"not a bug
+  today"* — and the mapping is documented in `.claude/rules/rendering.md` § Representation / LOD plus
+  a comment block at `representation_switcher.js:29-35`. Deliberate: 4 of the 7 reps are separate
+  renderers, so a shared enum would imply a relationship that does not exist. Don't re-report.
 
 ### TD-09 — Deformation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 
 - **`deform_view.js` exposes 8 methods; 4 have ZERO callers in all of `frontend/`** —
   `reapplyLerp` (`:378`), `snapOff` (`:218`), `setT` (`:388`), `getT` (`:403`), plus `dispose`.
+  **`reapplyLerp` half: DECIDE 2026-08-01 → DEC-03** (probed while closing TD-05 — same bullet;
+  every anchor reproduced, and `oxdna_display.test.js` turned out to be a weaker "it's obsolete"
+  argument than claimed). The `snapOff`/`setT`/`getT` half is still open here.
   **Decide before deleting `reapplyLerp`:** it is `_applyLerp(_currentT)` and its JSDoc says
   "call after physics is stopped" — XPBD/FEM was retired to `archive/physics_xpbd_fem/`, which is
   how it lost its caller. It is also the written-but-unwired fix for a real mechanism:

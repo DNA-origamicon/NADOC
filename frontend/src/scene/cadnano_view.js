@@ -88,7 +88,8 @@ export function initCadnanoView(sceneCtx, designRenderer, getUnfoldView, getSequ
   let _midX    = 0     // X centre of helix bundle — all cadnano beads are at this X
   let _minBp   = 0
   let _maxBp   = 0
-  let _rowMap  = null  // Map<helixId, rowIndex> — saved for blunt_ends.applyCadnanoPositions
+  let _rowMap  = null  // Map<helixId, rowIndex> — saved for domain_ends.applyCadnanoPositions
+                       // (reached through the `getBluntEnds` dep — the module was renamed, the wiring name was not)
   let _spacing = 2.5   // unfoldSpacing at last _computeCadnanoPosMap call
 
   // ── Position computation ─────────────────────────────────────────────────────

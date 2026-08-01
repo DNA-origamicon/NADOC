@@ -23,10 +23,10 @@ own rule: [cadnano-editor](cadnano-editor.md).
 | Main module | `frontend/src/scene/cadnano_view.js` — `initCadnanoView(...)` :42 |
 | Init site | `main.js:1542` (import :106) — **still in main.js; not carved out** |
 | Flat-position collaborator | `frontend/src/scene/unfold_view.js` — `applyCadnanoPositions(toMap, t, fromMap)` :1205 |
-| Domain ends | `frontend/src/scene/domain_ends.js` — `initDomainEnds` (aliased `bluntEnds`, built `main.js:2988`); `applyCadnanoPositions` :736 |
+| Domain ends | `frontend/src/scene/domain_ends.js` — `initDomainEnds` (aliased `bluntEnds`, built `main.js:3006`); `applyCadnanoPositions` :736 |
 | Loop/skip markers | `frontend/src/scene/loop_skip_highlight.js` — `applyCadnanoPositions(rowMap, spacing, midX)` :303 |
 | Axis arrows | `design_renderer.js:1478` → `helix_renderer.js:4405` `setAxisArrowsVisible()` |
-| Renderer hooks | `design_renderer.js` — `refreshAllGlow()` :955 · `applyCadnanoPositions()` :1264 · `getBackboneEntries()` :795 |
+| Renderer hooks | `design_renderer.js` — `refreshAllGlow()` :980 · `applyCadnanoPositions()` :1264 · `getBackboneEntries()` :795 |
 | Minimap | `frontend/src/scene/cross_section_minimap.js` — `hide()` :661, `clearSlice()` :675 (built `main.js:2530`) |
 | Slice highlights | `sliceHighlighter.clear()` — `initSliceHighlighter` at `main.js:2922` |
 

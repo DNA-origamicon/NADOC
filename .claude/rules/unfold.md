@@ -36,7 +36,7 @@ initUnfoldView(scene, designRenderer, () => bluntEnds, () => loopSkipHighlight,
 ```
 - The 7th arg is **vestigial**: the callee names it `_getCrossoverLocations` (`unfold_view.js:42`)
   and never uses it. Always `null`.
-- The `bluntEnds` dep is `initDomainEnds` at `main.js:2988` — the module was renamed
+- The `bluntEnds` dep is `initDomainEnds` at `main.js:3006` — the module was renamed
   `blunt_ends.js` → `scene/domain_ends.js`; **only the local variable still says `bluntEnds`.**
   There is no `blunt_ends.js`.
 - All deps are lazy getters (`domain_ends` initializes 1,400 lines later; see the ordering law).
@@ -139,7 +139,7 @@ Arc maps: `_buildXbArcMap` (`:435`, extra-base / `crossover_bases` beads) and `_
 
 ## Ordering law (the "subscription order bug" — still real)
 
-`unfoldView` subscribes at `main.js:1535`; `domainEnds` at `main.js:2988`. The store fires
+`unfoldView` subscribes at `main.js:1535`; `domainEnds` at `main.js:3006`. The store fires
 subscribers in registration order, so on any topology mutation:
 
 1. `unfoldView`'s subscriber fires → offsets applied to the **old** sprites

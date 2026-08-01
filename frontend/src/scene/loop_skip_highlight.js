@@ -251,7 +251,7 @@ export function initLoopSkipHighlight(scene) {
 
   /**
    * Translate all markers by their helix's unfold offset.
-   * Uses straight axis positions as base (same convention as blunt_ends).
+   * Uses straight axis positions as base (same convention as domain_ends.js).
    *
    * @param {Map<string,THREE.Vector3>}                             helixOffsets
    * @param {number}                                                t  lerp 0→1
