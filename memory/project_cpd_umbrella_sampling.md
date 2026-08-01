@@ -87,9 +87,50 @@ Seeding rides on `weld_trace` (`with_windows: true`) because it needs the same d
 and the ladder beads colour by it: **amber = unseeded**, and that outranks stiffness and
 reach on a bead, because an unseeded window cannot be run at all.
 
-**Next:** run the SMD pull on 2hb_1xT, re-seed, then launch the ladder. Per-window NAMD
-configs (`.namd` + start coordinates per window) are still unbuilt — the emitter produces
-the colvars half only.
+## Plan inverted 2026-08-01: eABF FIRST, ladder second
+
+The seeding check showed 8/13 windows need an SMD pull to exist at all. **eABF sidesteps
+that entirely** — it starts from equilibrium, walks outward under its own adaptive bias,
+and needs no seeds, no ladder and no MBAR. For a 1D coordinate that is strictly less
+machinery. Order is now:
+
+1. **eABF on d_mid, 3.4–12 Å** — the shortest path to F(d).
+2. **Umbrella ladder as an independent cross-check**, seeded from the eABF trajectory
+   (which will have visited every separation, so seeding becomes free).
+3. **CG F(d)** as cheap cross-validation — gated on the untested ellipsoid blocker.
+
+The SMD work is not wasted: it quantified the gap and flushed out the coverage bug. It
+stays as the fallback if eABF stalls against the short-range wall.
+
+### The eABF emitter was BROKEN and is now fixed (2026-08-01)
+
+The first `mode="eabf"` emitted invalid Colvars and the tests passed anyway because they
+only checked substring presence. Three defects:
+
+1. **A phantom `colvar { name d_mid_ext }` with no component.** `extendedLagrangian` must
+   sit on the *actual* `d_mid` colvar; a colvar with no component is not valid Colvars.
+2. **No `lowerBoundary`/`upperBoundary`.** ABF needs a bounded grid.
+3. **`width 0.01`.** For ABF `width` is the *bin size* — 0.01 Å over 8.6 Å is ~860 bins
+   that never fill. Now 0.1 Å (86 bins), with `extendedFluctuation` matched to it.
+
+Tests now parse the emitted blocks and assert structure (every colvar has a component,
+exactly `{d_mid, eta}`, keywords on the biased variable, bounded ordered grid, bin count
+sane). **Never assert a config is valid by substring.**
+
+### Production runs can carry a bias (2026-08-01)
+
+`build_production_conf(colvars_file=...)` → `colvars on` / `colvarsConfig`, riding
+alongside the external-forces block. So a biased free-energy run goes through the ordinary
+job system — same health gates, disk forecast and trajectory tooling — instead of a
+hand-rolled script. Previously `colvars_file` existed only on the carved-shell path
+(`md_shell_reprep`).
+
+**STILL MISSING before eABF can launch:** the production *route* has no way to request a
+bias. It needs: a `colvars` field on `ProductionRequest`, generation of the config via
+`cpd_colvars.emit_colvars`, writing it into the package dir, and passing the filename to
+`_conservative_production_conf`. The builder end is done and tested; the request end is
+not. Do NOT hand-roll the run around this — an untracked multi-hour GPU job has no health
+gate, no disk guard, and confuses the segment list.
 
 ## ✅ FIXED 2026-07-31 — resumed runs were analysed at ~1/3 coverage
 

@@ -771,11 +771,18 @@ def build_production_conf(
     start_checkpoint: Optional[str] = None,
     anchors_file: Optional[str] = None,
     field: Optional[dict] = None,
+    colvars_file: Optional[str] = None,
     n_atoms: Optional[int] = None,
     force_resident: Optional[bool] = None,
     npt: bool = True,
 ) -> str:
-    """Unrestrained NPT production conf, continuing from a prior checkpoint (pure).
+    """NPT production conf, continuing from a prior checkpoint (pure).
+
+    ``colvars_file`` attaches a Colvars configuration — an umbrella window, an eABF bias
+    or a steered pull (see ``backend/core/cpd_colvars.py``). The run is then NOT
+    unrestrained, which is the point: it is how a biased free-energy run is launched
+    through the ordinary job system instead of by hand, so it lands in the jobs list with
+    the same health gates, disk forecast and trajectory tooling as any other run.
 
     ``npt=False`` runs the stage at constant volume.  Pass it whenever the package was
     solvated with a water-shell carve: the cell then contains vacuum, and a barostat
@@ -861,6 +868,10 @@ def build_production_conf(
     # let the uniform force stream the whole structure across the box (COM drift).
     # Default (None, None) → "" so the ensemble path stays byte-identical.
     ext_forces = external_forces_block(anchors_file, field)
+    # Colvars rides alongside the external-forces block: both are optional NAMD stanzas
+    # and neither knows about the other.
+    if colvars_file:
+        ext_forces += f"colvars            on\ncolvarsConfig      {colvars_file}\n"
     # Scale the I/O cadences to the RUN, not to a 250k-atom local job (see
     # _production_output_freqs): the hardcoded outputEnergies 100 / restartfreq 1000
     # were pure overhead on a 1.9M-atom GPU-resident run — a GPU->host energy pull every

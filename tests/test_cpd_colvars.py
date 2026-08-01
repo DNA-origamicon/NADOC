@@ -90,12 +90,91 @@ def test_umbrella_mode_restrains_d_mid_and_leaves_eta_passive():
     assert "eta" not in bias
 
 
-def test_eabf_mode_uses_extended_lagrangian_plus_abf():
+def _colvar_blocks(text: str) -> dict[str, str]:
+    """{colvar name: block body}. Structural, not substring — the first eabf emission
+    passed every substring check while being invalid Colvars."""
+    blocks: dict[str, str] = {}
+    for chunk in text.split("colvar {")[1:]:
+        depth, end = 1, 0
+        for i, ch in enumerate(chunk):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        body = chunk[:end]
+        name = re.search(r"name\s+(\S+)", body)
+        if name:
+            blocks[name.group(1)] = body
+    return blocks
+
+
+def test_every_emitted_colvar_has_a_component():
+    """A colvar with no component is not valid Colvars. The first eabf version emitted a
+    phantom `d_mid_ext` block carrying only keywords — NAMD would have refused it."""
+    for mode, kw in (("metrics", {}), ("umbrella", {"center_ang": 5.5}),
+                     ("eabf", {}), ("smd", {"center_ang": 11.4, "target_ang": 3.4})):
+        blocks = _colvar_blocks(cc.emit_colvars([PAIR], mode=mode, **kw))
+        assert blocks, mode
+        for name, body in blocks.items():
+            assert any(c in body for c in ("distance {", "dihedral {")), \
+                f"{mode}/{name} has no component"
+
+
+def test_eabf_emits_exactly_the_two_real_colvars_no_phantom():
+    blocks = _colvar_blocks(cc.emit_colvars([PAIR], mode="eabf"))
+    assert set(blocks) == {"d_mid", "eta"}
+
+
+def test_eabf_keywords_live_on_the_biased_variable_itself():
+    blocks = _colvar_blocks(cc.emit_colvars([PAIR], mode="eabf"))
+    d = blocks["d_mid"]
+
+    assert "extendedLagrangian on" in d
+    assert "extendedFluctuation" in d
+    assert "lowerBoundary" in d and "upperBoundary" in d
+    assert "extendedLagrangian" not in blocks["eta"]
+
+
+def test_eabf_grid_is_bounded_and_ordered():
+    out = cc.emit_colvars([PAIR], mode="eabf", lower_ang=3.4, upper_ang=12.0)
+    d = _colvar_blocks(out)["d_mid"]
+    lo = float(re.search(r"lowerBoundary\s+(\S+)", d).group(1))
+    hi = float(re.search(r"upperBoundary\s+(\S+)", d).group(1))
+
+    assert lo < hi
+    assert lo == pytest.approx(3.4) and hi == pytest.approx(12.0)
+
+
+def test_eabf_width_is_the_grid_bin_not_the_metrics_discretisation():
+    """For ABF, `width` IS the bin size. The metrics default (0.01 A) would ask for ~860
+    bins over this range, which never fill."""
+    d = _colvar_blocks(cc.emit_colvars([PAIR], mode="eabf"))["d_mid"]
+    width = float(re.search(r"width\s+(\S+)", d).group(1))
+
+    assert width == pytest.approx(0.1)
+    span = 12.0 - 3.4
+    assert span / width < 200, "too many bins to ever fill"
+
+
+def test_eabf_biases_d_mid_and_nothing_else():
     out = cc.emit_colvars([PAIR], mode="eabf")
 
-    assert "extendedLagrangian on" in out
     assert "abf {" in out
     assert "harmonic {" not in out
+    abf = out.split("abf {")[1]
+    assert "d_mid" in abf and "eta" not in abf
+
+
+def test_metrics_mode_keeps_the_fine_discretisation_and_no_boundaries():
+    """Only ABF needs a coarse bounded grid; an observer should not be quantised to it."""
+    d = _colvar_blocks(cc.emit_colvars([PAIR], mode="metrics"))["d_mid"]
+
+    assert float(re.search(r"width\s+(\S+)", d).group(1)) == pytest.approx(0.01)
+    assert "lowerBoundary" not in d
+    assert "extendedLagrangian" not in d
 
 
 def test_umbrella_without_a_centre_is_refused():
@@ -184,3 +263,52 @@ def test_ladder_windows_emit_one_config_each():
     assert all("harmonic {" in c for c in configs)
     # each window restrains a different centre — otherwise the ladder samples one point
     assert len({re.search(r"centers\s+(\S+)", c).group(1) for c in configs}) == len(windows)
+
+
+# ── the production conf carries the bias ─────────────────────────────────────
+#
+# An eABF or umbrella run has to go through the ordinary job system — same health gates,
+# disk forecast and trajectory tooling as any other run — not a hand-rolled script. That
+# means build_production_conf has to be able to attach a Colvars file.
+
+
+def _spec(name="prod"):
+    from backend.core.md_protocols import SegmentSpec
+
+    return SegmentSpec(name=name, stage="md", percent=100, steps=1000, temp=300,
+                       damping=5, scale=0.0, npt=True, previous="prev", reinit=False,
+                       dcd_freq=25000)
+
+
+def test_production_conf_attaches_a_colvars_file():
+    from backend.core.md_protocols import build_production_conf
+
+    conf = build_production_conf(_spec(), "stem", (100.0, 100.0, 100.0), False,
+                                 colvars_file="weld_eabf.in")
+
+    assert "colvars            on" in conf
+    assert "colvarsConfig      weld_eabf.in" in conf
+
+
+def test_production_conf_is_unchanged_without_one():
+    """The overwhelmingly common case: no bias, and not a single extra line."""
+    from backend.core.md_protocols import build_production_conf
+
+    plain = build_production_conf(_spec(), "stem", (100.0, 100.0, 100.0), False)
+
+    assert "colvars" not in plain
+
+
+def test_colvars_and_external_forces_coexist():
+    """Both are optional NAMD stanzas and neither knows about the other; an anchored
+    eABF run needs both."""
+    from backend.core.md_protocols import build_production_conf
+
+    conf = build_production_conf(
+        _spec(), "stem", (100.0, 100.0, 100.0), False,
+        colvars_file="weld_eabf.in",
+        field={"e_field": [0.0, 0.0, 1.0]},
+    )
+
+    assert "colvarsConfig      weld_eabf.in" in conf
+    assert "colvars            on" in conf

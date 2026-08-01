@@ -39,21 +39,30 @@ def _fmt(value: float) -> str:
     return f"{value:g}"
 
 
-def colvar_blocks(pair: dict, *, suffix: str = "") -> str:
-    """The two colvar definitions for one weld pair, without any bias."""
+def colvar_blocks(pair: dict, *, suffix: str = "", d_width: float = _WIDTH_D_ANG,
+                  d_extra: Sequence[str] = ()) -> str:
+    """The two colvar definitions for one weld pair, without any bias.
+
+    ``d_extra`` injects extra keywords INTO the d_mid colvar block — eABF needs
+    ``extendedLagrangian`` and the ABF grid boundaries to live on the variable itself,
+    not in a second block. ``d_width`` overrides the discretisation: for ABF this is the
+    grid BIN SIZE, so the metrics default (0.01 A) would ask for hundreds of bins that
+    never fill.
+    """
     c5a = int(pair["c5_a"]) + 1
     c6a = int(pair["c6_a"]) + 1
     c5b = int(pair["c5_b"]) + 1
     c6b = int(pair["c6_b"]) + 1
     a = f"{pair.get('segid_a', '?')}:{pair.get('resid_a', '?')}"
     b = f"{pair.get('segid_b', '?')}:{pair.get('resid_b', '?')}"
+    _extra = "\n".join(f"  {line}" for line in d_extra)
     return f"""\
 # d_mid{suffix}: distance between the centres of the two {{C5,C6}} groups (A).
 # A two-atom group's centre of mass IS the C5=C6 bond midpoint (both are carbon).
 colvar {{
   name d_mid{suffix}
-  width {_WIDTH_D_ANG}
-
+  width {_fmt(d_width)}
+{_extra}
   distance {{
     group1 {{ atomNumbers {{ {c5a} {c6a} }} }}  # {a}: C5,C6 (1-based)
     group2 {{ atomNumbers {{ {c5b} {c6b} }} }}  # {b}: C5,C6 (1-based)
@@ -79,6 +88,8 @@ colvar {{
 def emit_colvars(pairs: Sequence[dict], *, mode: str = "metrics",
                  center_ang: float | None = None, force_constant: float = 2.0,
                  target_ang: float | None = None, target_num_steps: int = 10_000_000,
+                 lower_ang: float = VDW_FLOOR_ANG, upper_ang: float = 12.0,
+                 grid_width_ang: float = 0.1,
                  traj_freq: int = 500, restart_freq: int = 10000,
                  comment: str = "") -> str:
     """A complete Colvars config for the given weld pairs.
@@ -130,11 +141,28 @@ def emit_colvars(pairs: Sequence[dict], *, mode: str = "metrics",
         "",
     ]
 
+    # eABF puts the grid + extended-Lagrangian keywords on the variable itself.
+    d_extra: list[str] = []
+    d_width = _WIDTH_D_ANG
+    if mode == "eabf":
+        d_width = grid_width_ang
+        d_extra = [
+            f"lowerBoundary {_fmt(float(lower_ang))}",
+            f"upperBoundary {_fmt(float(upper_ang))}",
+            "extendedLagrangian on",
+            # Comparable to the grid width, per the Colvars guidance: much smaller and
+            # the extended variable is too stiff to smooth anything.
+            f"extendedFluctuation {_fmt(float(grid_width_ang))}",
+        ]
+
     body = []
     for i, pair in enumerate(usable):
         suffix = "" if len(usable) == 1 else f"_{i + 1}"
         body.append(f"# pair: {pair.get('label', pair.get('id', '?'))}")
-        body.append(colvar_blocks(pair, suffix=suffix))
+        # Only the FIRST pair carries the bias keywords; the rest are observers.
+        body.append(colvar_blocks(pair, suffix=suffix,
+                                  d_width=d_width if i == 0 else _WIDTH_D_ANG,
+                                  d_extra=d_extra if i == 0 else ()))
 
     primary = "" if len(usable) == 1 else "_1"
     bias = []
@@ -170,20 +198,18 @@ def emit_colvars(pairs: Sequence[dict], *, mode: str = "metrics",
         ]
     elif mode == "eabf":
         bias = [
-            "# eABF: the bias adapts as it samples, so no window grid and no WHAM/MBAR.",
-            "# Declaring extendedLagrangian on the variable and an abf bias over it IS",
-            "# eABF in Colvars — there is no separate keyword. The CZAR estimator in the",
-            "# output is the one to read.",
-            "colvar {",
-            f"    name d_mid{primary}_ext",
-            "    extendedLagrangian on",
-            "    extendedFluctuation 0.1",
-            "}",
-            "",
+            "# eABF: the bias adapts as it samples, so no window ladder, no per-window",
+            "# seeds and no WHAM/MBAR. Declaring extendedLagrangian ON THE VARIABLE and an",
+            "# abf bias over it IS eABF in Colvars — there is no separate keyword, and the",
+            "# keywords must live in the colvar block above, not in one of their own.",
+            "# Read the CZAR estimator from the output, not the naive ABF gradient.",
             "abf {",
             f"    colvars        d_mid{primary}",
+            "    # No bias applied until a bin has this many samples, so early noise is",
+            "    # not amplified into a bias that then has to be unlearned.",
             "    fullSamples    500",
-            "    outputFreq     5000",
+            "    historyFreq    100000",
+            "    outputFreq     10000",
             "}",
             "",
         ]

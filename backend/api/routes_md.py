@@ -1124,6 +1124,7 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
                                   structure_psf: Optional[str] = None,
                                   anchors_file: Optional[str] = None,
                                   field: Optional[dict] = None,
+                                  colvars_file: Optional[str] = None,
                                   n_atoms: Optional[int] = None,
                                   force_resident: Optional[bool] = None,
                                   package_dir: Optional[Path] = None) -> str:
@@ -1140,7 +1141,7 @@ def _conservative_production_conf(spec: SegmentSpec, name_stem: str,
     return build_production_conf(
         spec, name_stem, box, mgh_extrabonds,
         fast=fast, timestep_fs=timestep_fs, structure_psf=structure_psf,
-        anchors_file=anchors_file, field=field,
+        anchors_file=anchors_file, field=field, colvars_file=colvars_file,
         n_atoms=n_atoms, force_resident=force_resident,
         npt=package_npt_allowed(package_dir) if package_dir else True,
     )
