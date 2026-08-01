@@ -536,6 +536,45 @@ def composite_raw_frame_map(segments, max_frames: int = 200,
     return [g for seg in _composite_indices(counts, max_frames, stride) for g in seg]
 
 
+def heavy_bond_pairs(u, heavy_indices, *, nested: bool = False):
+    """Topology bonds restricted to the heavy atoms the ball-and-stick view draws.
+
+    Ends are the universe-global ``Atom.index`` — the SAME serial space ``atom_meta``
+    uses — so the frontend resolves each through the serial→row map it already builds.
+    Bonds with an endpoint outside the heavy subset (every X–H bond) are dropped: those
+    atoms are not in the atom table, so the renderer would discard them anyway.
+
+    ``nested`` picks the wire shape, and the two consumers genuinely differ:
+
+    * ``False`` → flat ``[i0, j0, i1, j1, …]``. The live WS stream, whose frontend runs
+      it through ``md_display_state.toBondPairs`` into a typed array. Flat saves ~30 % of
+      the JSON, which matters at ~325 k pairs.
+    * ``True``  → nested ``[[i, j], …]``. The REST model, which is handed straight to
+      ``atomistic_renderer._rebuild``. That reader treats a **plain** array as nested and
+      only a **typed** array as flat, so a flat plain list would be silently misparsed
+      into no bonds at all.
+
+    Returns None when the topology carries no bonds (GRO files don't), leaving the
+    display exactly as it was: spheres, no sticks.
+
+    Single owner for both callers on purpose — ``ws.py`` delegates here. The serial space
+    has to match ``atom_meta`` exactly, and two copies of that rule drift.
+    """
+    try:
+        idx = u.bonds.to_indices()      # raises NoDataError when there is no bond data
+    except Exception:  # noqa: BLE001
+        return None
+    if idx is None or len(idx) == 0:
+        return None
+    in_heavy = np.zeros(len(u.atoms), dtype=bool)
+    in_heavy[np.asarray(heavy_indices, dtype=np.int64)] = True
+    keep = in_heavy[idx[:, 0]] & in_heavy[idx[:, 1]]
+    if not keep.any():
+        return None
+    kept = np.asarray(idx[keep], dtype=np.int32)
+    return kept.tolist() if nested else kept.ravel().tolist()
+
+
 def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict:
     """The NAMD job's STATIC heavy-atom set → ``{atoms, bonds, n_serials}``.
 
@@ -557,16 +596,25 @@ def md_atomistic_model(topology_path, segments, coordinate_path, design) -> dict
                               with_atoms=True)
     atoms = _extract_md_atoms_frame(ctx, 0) if ctx["n_frames"] > 0 else []
     n_serials = (max((int(a["serial"]) for a in atoms), default=-1) + 1)
-    # bonds: [] — THIS path (the trajectory-scrub REST model) still serves atoms
-    # unbonded.  It is no longer the whole NAMD story: the live/MD-Display stream now
-    # sends heavy-atom bond topology once in its 'ready' message
-    # (`ws.py::_heavy_bond_pairs`), so ball-and-stick has real sticks there.  Porting
-    # that here is the same three lines against `ctx["universe"]` — do it when the
-    # scrub view needs sticks, and drop bonds_available with it.
-    # bonds_available=False is a DECLARATION, not just an empty list: it tells the display
-    # there is nothing more to fetch, so flipping vdw→ball-and-stick doesn't re-run this
-    # ~30 s reconstruction hunting for bonds that were never going to arrive.
-    return {"atoms": atoms, "bonds": [], "bonds_available": False,
+    # Bonds, NESTED — see heavy_bond_pairs: this payload is handed straight to
+    # atomistic_renderer._rebuild, which reads a plain array as [[i, j], …] and only a
+    # TYPED array as flat, so flat-plain would silently render as no sticks at all.
+    bonds = None
+    if atoms and ctx.get("heavy_idx") is not None:
+        try:
+            bonds = heavy_bond_pairs(ctx["universe"], ctx["heavy_idx"], nested=True)
+        except Exception:  # noqa: BLE001 - never fail the model over sticks
+            bonds = None
+    # The scrub view DOES serve sticks now (2026-07-31). It used to return bonds: [] with
+    # a note to port ws.py's version "when the scrub view needs sticks" — which is exactly
+    # what watching the CPD weld overlay on a finished run needs.
+    #
+    # bonds_available is a DECLARATION, not just "is the list non-empty": it tells the
+    # display there is nothing more to fetch, so flipping vdw→ball-and-stick doesn't
+    # re-run this ~30 s reconstruction hunting for bonds that were never going to arrive.
+    # A topology with no bond records at all (GRO) still declares False and renders as
+    # spheres, which is the honest answer rather than a spinner.
+    return {"atoms": atoms, "bonds": bonds or [], "bonds_available": bool(bonds),
             "n_serials": n_serials, "n_atoms": len(atoms)}
 
 

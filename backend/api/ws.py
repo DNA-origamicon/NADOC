@@ -125,19 +125,15 @@ def _heavy_bond_pairs(u, heavy_indices) -> "list[int] | None":
 
     Returns None when the topology carries no bonds (GRO files don't), leaving the
     display exactly as it was: spheres, no sticks.
+
+    Delegates to ``md_trajectory.heavy_bond_pairs``, which the REST atomistic-model path
+    also uses. Both have to emit ends in the SAME serial space ``atom_meta`` uses, and
+    two copies of that rule drift — so there is one implementation, with the flat/nested
+    wire shape as its only knob.
     """
-    try:
-        idx = u.bonds.to_indices()      # raises NoDataError when there is no bond data
-    except Exception:  # noqa: BLE001
-        return None
-    if idx is None or len(idx) == 0:
-        return None
-    in_heavy = np.zeros(len(u.atoms), dtype=bool)
-    in_heavy[np.asarray(heavy_indices, dtype=np.int64)] = True
-    keep = in_heavy[idx[:, 0]] & in_heavy[idx[:, 1]]
-    if not keep.any():
-        return None
-    return np.asarray(idx[keep], dtype=np.int32).ravel().tolist()
+    from backend.core.md_trajectory import heavy_bond_pairs
+
+    return heavy_bond_pairs(u, heavy_indices, nested=False)
 
 
 def _preload_size_note(config_str: str, topology_str: str) -> "str | None":

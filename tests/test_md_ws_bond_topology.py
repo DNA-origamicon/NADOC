@@ -84,3 +84,55 @@ def test_survives_a_universe_that_raises_on_bonds():
 
     # Colour and connectivity are cosmetic — a bad topology must never fail a display.
     assert _heavy_bond_pairs(_Exploding(), np.array([0])) is None
+
+
+# ── the REST trajectory-scrub model (the OTHER consumer) ─────────────────────
+#
+# The live WS stream and the REST atomistic-model both need these bonds, in the same
+# serial space, but on DIFFERENT wire shapes. That difference is not cosmetic:
+# ``atomistic_renderer._rebuild`` reads a **typed** array as flat and a **plain** array
+# as nested pairs, so handing the REST path a flat plain list renders NO sticks at all
+# and reports no error. These pin both shapes and the fact that they agree.
+
+
+def test_nested_shape_is_pairs_not_a_flat_list():
+    from backend.core.md_trajectory import heavy_bond_pairs
+
+    u = _universe(6, bonds=[(0, 1), (1, 2), (3, 4)])
+
+    out = heavy_bond_pairs(u, np.arange(6), nested=True)
+
+    assert all(isinstance(p, list) and len(p) == 2 for p in out)
+    assert {tuple(p) for p in out} == {(0, 1), (1, 2), (3, 4)}
+    assert all(isinstance(v, int) for p in out for v in p)   # JSON, not np.int32
+
+
+def test_flat_and_nested_carry_the_same_bonds():
+    from backend.core.md_trajectory import heavy_bond_pairs
+
+    u = _universe(10, bonds=[(7, 9), (2, 7), (0, 1)])
+    heavy = np.array([9, 2, 7])
+
+    flat = heavy_bond_pairs(u, heavy, nested=False)
+    nested = heavy_bond_pairs(u, heavy, nested=True)
+
+    assert _pairs(flat) == {tuple(p) for p in nested}
+
+
+def test_ws_delegates_to_the_shared_implementation():
+    """One owner: the serial space has to match atom_meta on both paths, and two copies
+    of that rule drift."""
+    from backend.core.md_trajectory import heavy_bond_pairs
+
+    u = _universe(6, bonds=[(0, 1), (1, 2), (3, 4)])
+
+    assert _heavy_bond_pairs(u, np.arange(6)) == heavy_bond_pairs(
+        u, np.arange(6), nested=False)
+
+
+def test_nested_returns_none_with_no_bonds_so_the_model_declares_unavailable():
+    from backend.core.md_trajectory import heavy_bond_pairs
+
+    # md_atomistic_model turns this None into bonds_available=False, which tells the
+    # display to stop hunting rather than re-run a ~30 s reconstruction per repr flip.
+    assert heavy_bond_pairs(_universe(4), np.arange(4), nested=True) is None

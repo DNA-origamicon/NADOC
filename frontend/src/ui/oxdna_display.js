@@ -537,7 +537,11 @@ export function initOxdnaDisplay({
     // "fetch the bonds" round trip that would re-do a ~30 s reconstruction for nothing.
     // Note this is an explicit declaration, NOT an empty bond list: oxDNA's VDW fetch
     // also comes back bondless, and there the warm-ahead re-fetch is exactly right.
+    // ...and a model that ALREADY carries bonds is equally complete, whatever repr asked
+    // for it. NAMD's REST model ships sticks unconditionally as of 2026-07-31, so without
+    // this clause a vdw→ballstick flip would re-fetch bonds it is already holding.
     _atomTopoBonds = needBonds || model.bonds_available === false
+      || (model.bonds?.length > 0)
     _atomTopoJob = null    // this model differs from whatever the renderer holds → re-apply it
     return true
   }
