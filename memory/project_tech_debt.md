@@ -711,3 +711,13 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   never-read `binding_mode`/`target_joint_id`/`locked_angle_deg`, the false `models.py:537`
   docstring, and the three zero-caller client fns are open items **1-6** in
   `project_overhang_duplex_foundation.md`, because that plan owns them.
+- **Three stale references to a deleted function, `apply_end_to_root_binder`.** The end-to-root
+  binder *splice* was deleted 2026-06-30 (unified into one relocated `OverhangBinding`), but two
+  docstrings — `backend/core/lattice.py:3394` and `:3693` — plus a comment at
+  `backend/core/deformation.py:1029` still describe it as if it runs. A session reading
+  `autodetect_overhangs` or the co-rotation predicate is told about a code path that no longer
+  exists. (Found by `/audit-plan` 2026-07-31 on `overhang_connections_panel`; the panel-owned
+  stragglers stayed in that plan's head.)
+- **`.claude/rules/rendering.md:237` cites `main.js:4119`; the glow-layer injection is at
+  `main.js:4130`.** Eleven-line drift in an auto-loaded rule. Cheap to fix, but the real lesson is
+  that line anchors in auto-loaded rules need re-probing whenever `main.js` moves.
