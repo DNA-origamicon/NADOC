@@ -87,6 +87,7 @@ unless a migration touches code.
 | 07-31 | project_overhang_connections_panel | Probe of ~75 anchors. **The first plan pass where every single anchor resolved alive — and the doc was still wrong about itself, by undercount.** Panel `overhang_connections_panel.js` is 1713 LOC, injected in exactly 2 `main.js` lines as designed (`:98`/`:4130`); all 15 named internals present (`_onConnect:665`, `_onApply:759`, `_onSecondary:438`, `_ensureDuplexForPair:595`, `_placePick:1640`, LRU stamps, `_openPopover:1656`). All 9 `ct_icons.js` exports live with **identical 3-importer sets**. All 11 client wrappers have real call sites (only `relaxEndToRoot` is gone, correctly). Backend: `ConnectionVersion` `models.py:675-702`, `Design.connection_versions:2256`, 4 routes **still in `crud.py`** (`:7511/7543/7577/7699`; no `routes_connection_versions.py` — the carve-up has not reached them, so the doc's file claim is still right), 8 `_cv_*` helpers all with callers, zero orphans. The length-fork guard is verbatim intact (`crud.py:7642-7653`, doc said 7645-7655 — 3-line drift) and so is the duplex mirror guard (`routes_duplex.py:205-215`). 07-30's `_bound_driver_driven_pairs:985` co-rotation fix confirmed in place with both `test_diff_length_duplex_*` pins. **Headline question answered NO:** `bound` does not lock a joint here — the doc never claimed it did, and the code hard-writes `locked_angle_deg=None` on bind (`crud.py:8688`) with `compute_locked_angle` at **0 callers** — the same reverted-05-14 signature as `overhang_subdomains`, but this doc was already clean. **Where it was wrong: counts, not facts.** Tests 16/10/4 backend (doc said 12), **12 vitest panel spec files** where the doc named 6, `ct_icons` 17 (doc said 11). Real finds: (1) different-length direct connect is **frontend-only** — `_cv_create_bound_binding` bails and its comment defers to `_ensureDuplexForPair`, so raw-API/headless `apply_connection_version` is a **silent no-op**; (2) `_onSecondary`'s docstring `:429-437` still describes the swing relax deleted 2026-07-01; (3) `patchOverhang` imported `:40`, never called; (4-5) both old deferrals (3 duplicate forbidden-rule copies, `length_unit` hardcoded `'bp'` at `:821`) untouched. Deferred #1 (retire the 2473-LOC modal) is **not** an open item — the user declined it. No supersession: `overhang_duplex_foundation` (P1) and `overhang_duplex_cluster` both *delegate* this pipeline to this file | UNFINISHED-ACTIVE | Kept; **rank P2**; 492-line file split → lean head + `_archive.md` (known-stale banner; everything past the "Apply ⇄ Unapply" bullet is the deleted splice model). Head rewritten as status banner + the Connect/Apply pipeline + the corrected length-fork truth table + the "direct apply = relocation, NOT a joint lock" law + 2 probed code tables + corrected test inventory + 6 live open items + a 5-doc fork table. **Filed the MV rows this file owed** (the `duplex_foundation` precedent — it admitted "NOT hand-driven" 4× and filed zero): `MV-OCONN-1/2/3` in `manual_validation_debt.md`. 2 cross-cutting stragglers → `project_tech_debt` (3 stale `apply_end_to_root_binder` refs in `lattice.py:3394/3693` + `deformation.py:1029` for a function deleted 06-30; `.claude/rules/rendering.md:237` cites `main.js:4119`, actual `:4130`). MEMORY.md hook updated |
 | 07-31 | project_overhang_sequence_display | Probe of ~30 anchors. **Second consecutive pass where every anchor is alive** — assembler `assembleOverhangSequence` (`design_queries.js:144`, optional `domainLen` 2nd arg intact) + backend twin `_assemble_overhang_5to3` (`sequences.py:410`), authoritative length `overhangDomainLength:122` = `abs(end_bp-start_bp)+1` mirrored by `duplex.overhang_offset_bases:122` (docstrings name each other); sidebar's three claims all hold verbatim (`overhang_sequences_panel.js:230-242`: assembled seq, `readOnly` on per-sub-domain, Gen hidden, Set-sends-label-only); `cadnano_view.js:402-403` still empty no-ops, `_savedShowSeq` gone; 3 hooks all targeted (`crud.py:5009/7240/7787`) w/ headless wrappers for 2 of 3. **No supersession** (the `overhang_generator` fns are random-sequence *generators*, not assemblers). The doc was wrong in 4 places, and the probe found the bug the doc could not know: **`sequence_overlay.js:227` calls bare `assembleOverhangSequence(ovhg)`** — the ONE production caller that drops the length arg, so a drag-resized overhang's 3D letters draw the stale nominal length while sidebar + connections panel show the grown tail; `overhangDomainLength`'s own docstring falsely lists the overlay as a consumer. Two more bypasses never migrated: `overhangs_manager_popup.js:529` returns raw `o.sequence` (imports nothing from `design_queries.js`) and `assembly_overhangs_manager_popup.js:986` is a **third** length formula. Counts wrong as always: propagation tests **3** not 4; `design_queries.test.js` **53** `it(`, 9 on these symbols; e2e path is `frontend/e2e/`, not `e2e/`. `reassign_if_sequenced:742` = **zero callers** (the "kept for headless/ML" note was aspirational) | UNFINISHED-ACTIVE | Kept; **rank P2** (display-only, no topology risk, item 1 is a one-line fix); head rewritten as status banner + one-assembler-per-side table + 12-row probed code-location table + 5 live open items + a "closed since written" block absorbing the two in-file update banners; MEMORY.md hook updated. Dead `reassign_if_sequenced` + its 3 lying docstrings → `project_tech_debt` |
 | 07-31 | project_ux_overhaul | Probe of ~45 anchors + the 3 handoff tells. **First pass where the SHIPPED list is the wrong part** — two entries describe code that no longer exists: `input/drag_scrub.js` (claimed wired into 7 panels; **0 hits for `dragScrub` in `frontend/src`**, `input/` holds only `shortcuts.js`, no doc records the removal → **HOLD**, user's call) and `scene/overhang_binding_lines.js` (**deleted 2026-07-01** with `overhang_binding_menu.js`, recorded in `overhang_duplex_foundation:112`, never crossed off here — while item 3's own *guesses*, `overhang_link_arcs.js`/`crossover_connections.js`, both still exist). Third reversal: part-origin fix #2's `originAxes.visible = false` is now `= true` + a force-on-for-empty subscriber (`main.js:274-285`). Of 4 open items: **1** (joint Polymerize) real but relocated — `pickPartJoint` `assembly_renderer.js:1032` (⚠ **no-op stub** in `assembly_renderer_shared.js:88`, now the default renderer) + `setSelectedJoint` `polymerize_panel.js:606` both alive, `_onAssemblyContextMenu` moved main.js→`assembly_pointer.js:591` (never calls `pickPartJoint`), `_lastRightClickedKind` = 0 hits, and the item is **partly obsolete** — `setSelectedJoint` already ships on left-click (`assembly_pointer.js:236-243`); **8** confirmed open (both manager modals still raw `display:none` wrappers `index.html:2831/3179`, 0 `createModal` imports — and `conjugate_manager.js:330` copied the anti-pattern *after* the doc); **14** backend **0 hits** but the frontend half is mis-wired not missing — `op_progress.js:47` already takes `onCancel`, `client.js:337` never passes it; **15** must be re-scoped — its target is orphaned AND its DOM mount `#validation-report-content` isn't in `index.html`, and `project_tech_debt:98,103` holds both panels *citing this item* (circular). Line refs rotted hard: `main.js:10517` cited against an **8,070-line** file (moved to `ui/export_menu.js:330`), `index.html:2845`→`:3302`. Tells paid: argument-diff → 3 destructive `showConfirm` sites missing `danger` (`assembly_panel.js:1433/1595`, `chain_sim_panel.js:178`) + `import_menu.js` the lone file on legacy `showToast(msg, ms)` (4 sites of 374); rival-check → `sim_folders`/`sidebar_resize` are **clean** (both listers import, no copies) but `file_picker`/`folder_picker` don't filter at all; counts → `confirm.js` (~25 consumers) and `edit_feature_popover.js` have **0** tests, `toast.js` (374 consumers) has **1**. **No supersession** — 11 `.claude/rules/` + all `memory/` panel docs checked, none covers UI chrome; this file is the sole owner | UNFINISHED-ACTIVE | Kept; **rank P2**; 221-line file split → lean head + `_archive.md` (w/ known-stale banner); head rewritten as rank + status banner + a **corrections table** (6 rows where the archive is wrong) + 11-row probed code table + 4 corrected open items + 3 NEW ones (16 `danger` misses, 17 legacy toast, 18 primitive test debt) + the picker-filter gap; `drag_scrub` parked in HOLD; MEMORY.md hook updated. No tech_debt entries added — the plan owns UI chrome, and `tech_debt:98,103` already points here |
+| 07-31 | pipeline_validation_log | Probe of ~18 anchors. **The self-label was the lie, twice over: it is neither un-validated nor a live log.** Every code anchor is alive and its bug-fixes are all still in the code — `md_setup.py` `max_residues` POSRES skip (`:376/:394-400`, caller `:615/:630`), and all 4 extraction fixes visibly present in `param_extract.py` (paired-chain `>=2x` `:272-279`, local-0-based `_MEASUREMENT_BP_LO/HI=8/26` `:65-68`, frame-0 axis anchor `:159`, Euclidean `r0=|q_mean[:3]|` `:449`); `generate_variant_pdb` `crossover_extract.py:206` wired ×2; variants come from `FIRST_BATCH_VARIANTS` `crossover_extract.py:165-169`, not the script. **But the work it says is 'next' was done, abandoned, and replaced — nine days later.** The successor `project_crossover_parameterization` (dated 04-30) records T0 200 ns / T1 185 ns / T2 10 ns complete under **charmm36**, then the CRITICAL FINDING that tau~11 ns makes Method B need ~2 us for ESS=100 → whole 2hb-isolated route dropped for Method A (10hb local junction). Its force-field caveat is closed: `gromacs_package.py:84-90` orders charmm36* first and `_pick_ff:163-175` **blocks** amber when proteins are present. Live DB `crossover_params.json` (05-10) contradicts every one of the log's 4 numbers (`r0` 25.33→**19.031**, `k_bond` 2.060→**0.04695**, `hj` -82.5→**-7.523**, `k_dih` 1.588→**0.4319**) and is read on **every mrDNA relax** (`ws.py:1513`, `mrdna_runner.py:795`). **Artifacts contradict the doc too:** `params.json`/`convergence_report.json` **exist nowhere** (real name `params_c36.json`; `convergence.py` only returns a dict), the staged T0 file is still the short un-converged run, all trajectories are deleted, and `runs/` is **gitignored** (`.gitignore:112`) so the driver + every artifact are local-only. `run_pipeline.py` has zero inbound refs. Successor's own dead anchor found: `extract_crossover_and_validate.py` (`:32`) is not on disk | SUPERSEDED-DOCUMENTED (successor: `project_crossover_parameterization`) | Deleted + `MEMORY.md` pointer scrubbed (successor promoted to bold w/ a real hook). Migrated first — 3 facts recorded **nowhere else**: the **triclinic-box result** (41,304 atoms in 4.4×6.7×14.4 nm vs ~360k cubic = **8.6× speedup**; 220/231/257 ns/day; `EM_GPU=-nb gpu`, `MD_GPU=-nb gpu -pme gpu -bonded gpu`; **PME-GPU unsupported for `steep`**), the **gitignored-`runs/`** consequence, and the real artifact filenames. Also added to the successor: a **'Superseded numbers — do not resurrect'** block (the 4 amber-10 ns values, so a future session that finds them quoted knows), a 'Traps already fixed' block w/ file:line, the live-consumption sites, T2's absence from the DB, the ff-picker location, modules 6→8, and its own dead-script line struck. 1 straggler → `project_tech_debt` (~900 LOC of zero-importer `local_crossover_extract.py`+`bundle_extract.py` in `backend/`, carrying a **third** ESS implementation — `bundle_extract.py:186` `_ess`, `local_crossover_extract.py:154` `_ess_1d`, vs canonical `convergence.py`) |
 
 ## HOLD — flagged to user, decision pending
 
@@ -123,7 +124,8 @@ Small-tail / verify-if-superseded:
   probe found a live overlay bug the doc couldn't know about),
   ~~project_assembly_groups~~ (UNFINISHED-ACTIVE, P2, 07-30),
   ~~project_ux_overhaul~~ (UNFINISHED-ACTIVE, **P2**, 07-31 — 2 "SHIPPED" entries describe deleted code),
-  memory/pipeline_validation_log (NOT YET VALIDATED),
+  ~~memory/pipeline_validation_log~~ (SUPERSEDED-DOCUMENTED, deleted 07-31 — its "NOT YET
+  VALIDATED" label was false in both directions; successor `crossover_parameterization`),
   ~~photo_mode_audit_plan~~ (root; SUPERSEDED-UNDOCUMENTED, deleted 07-30),
   ~~project_overhang_duplex_foundation~~ (UNFINISHED-ACTIVE, P1, 07-30)
 
@@ -159,6 +161,45 @@ onto *more* files. Glob fix and body rewrite go together, in one pass, per rule.
 
 ## Next-session handoff
 
+**THE AUDIT QUEUE IS EMPTY. The loop has reached its terminal state.** 38 recorded rows (30 here
++ 8 in the archive): every
+`memory/project_*.md` in the queue, both root plans, and all 11 `.claude/rules/` (10 rewritten,
+1 written new) are audited. **Do not invent new targets.** What remains is three one-question
+HOLDs that only the user can settle — see the HOLD section, and surface all three together:
+`drag_scrub` (shipped-then-vanished: dropped, or lost in the carve-up?),
+`bundle_stiffness_params` (user said delete; it's a live 0T parameter DB → provisional
+LIVE-REFERENCE), `periodic_md` (user said archive; the backend is live → provisional
+LIVE-REFERENCE). If a *new* plan file is written later, it joins the queue then.
+
+**This pass's tell — a doc's self-label is a claim, and it can be false in BOTH directions at
+once.** `pipeline_validation_log` was headed "NOT YET VALIDATED" and sat in the unfinished band
+for that reason alone. It was neither: the validation it called pending had been **run to
+completion** (T0 200 ns, T1 185 ns) *and* the whole method it validated had been **abandoned**
+nine days later (τ≈11 ns → needs ~2 µs), by a successor doc that was already the one `MEMORY.md`
+and the code point at. **Tell: a self-labelled-incomplete doc is the cheapest kind to over-rank.
+Before ranking anything on its own status line, diff it against its newest sibling by DATE — the
+successor here was 9 days newer and answered every open item.**
+
+Second: **check whether the artifacts a log claims to have produced actually carry those names.**
+The log named `T0/params.json` and `T0/convergence_report.json` as outputs. Neither string exists
+anywhere in the repo — the real file is `params_c36.json` (and `convergence.py` returns its report
+as a dict, never writing one). A filename in a log is as falsifiable as a symbol, and it's an
+`ls` away. The `_c36` suffix was also the whole story: it proved a charmm36 re-run the log never
+mentions.
+
+Third: **`.gitignore` is part of the probe.** `runs/` is gitignored, so `run_pipeline.py` and
+every artifact this "log of record" describes exist **on one computer only** — a two-computer
+repo where half the evidence isn't in the repo. Nothing in the doc said so.
+**Tell: when anchors resolve to paths outside `backend/`/`frontend/`/`tests/`, grep `.gitignore`
+for the top-level dir before you trust that the next session can see them.**
+
+(The count/number tell paid again: the live DB contradicts all **four** headline parameters, not
+some; and modules were 6 in the doc, 8 on disk.)
+
+---
+
+*(Previous pass — `project_ux_overhaul`, 07-31)*
+
 **Audit the SHIPPED list, not just the open list.** Every prior pass treated "shipped" rows as
 settled and spent its probe on the open items. This pass inverted it and found the two worst
 errors in the file there: `input/drag_scrub.js` — claimed shipped and wired into 7 panels — **does
@@ -187,21 +228,10 @@ it or delete it") rather than leaving two mutual deferrals.**
 `danger:true`, and `import_menu.js` as the lone holdout on the legacy `showToast(msg, ms)` form —
 4 sites out of 374. Both were invisible to existence-level probing.)
 
-▶ **NEXT: `memory/pipeline_validation_log`** — the queue's last non-HOLD entry (55 lines,
-self-labelled "NOT YET VALIDATED"). **Treat that label as the claim to falsify, not as the
-finding** — three passes running, the doc's self-assessment of its own state has been wrong.
-Opening moves: (1) it is a *log*, not a plan, so the anchors are validation runs and their
-artifacts — check whether the runs it says are pending have since been executed elsewhere
-(`sim_coverage_log.md`, `md_twist_validation`, `pipeline` topic files); (2) apply this pass's
-shipped-list tell to any "done" rows it has; (3) if it turns out to be a record of completed work
-with nothing outstanding, that is LIVE-REFERENCE or SUPERSEDED-DOCUMENTED, not UNFINISHED —
-don't rank it just because the queue put it in the unfinished band.
+*(Its ▶ NEXT — `pipeline_validation_log` — was executed 07-31; the prediction "don't rank it just
+because the queue put it in the unfinished band" was right: it deleted.)*
 
-After it, **the audit queue is empty** and only the two standing HOLDs
-(`bundle_stiffness_params`, `periodic_md`) plus the new `drag_scrub` HOLD remain — all three need
-the user. At that point the loop's terminal state is reached; say so rather than inventing targets.
-
-Carry into it:
+Carried in:
 
 - **The UI-chrome band is closed** — `project_ux_overhaul` (P2) is the sole owner of file
   browser / library panel / sidebar widths / modals / toasts; no rule and no other topic file

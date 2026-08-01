@@ -1,19 +1,123 @@
 ---
 name: tech-debt-ledger
-description: Running technical-debt ledger — code paths flagged for review/removal (with why + supersession). Check when touching a flagged area.
-metadata: 
+description: Tech-debt ledger + driver for the /audit-debt loop — ID'd debt items, each driven to a terminal state (fixed / deleted / stale / decided / promoted / accepted). Check when touching a flagged area.
+metadata:
   node_type: memory
   type: project
   originSessionId: a42a916c-90da-4711-b831-59182e249f46
 ---
 
-Running ledger of known technical debt — code that works today but is flagged for
-review or removal. Each entry: location, why it's debt, what supersedes it. Append
-new items; strike through (and date) when resolved.
+# Tech-Debt Ledger — drive each item to a terminal state
 
-## Open
+Two jobs in one file:
 
-### `just lint` is RED, so it cannot act as a gate — 5 dead-code errors to clear (found 2026-07-31, health-card audit)
+1. **Reference** — when you touch a flagged area, the `TD-NN` section tells you what's rotten there.
+2. **Driver for the `/audit-debt` loop** — one `TD-NN` per iteration, probed against live code and
+   driven to a terminal state. The loop ends when the queue is empty.
+
+This is the **head**. Closed items move to `project_tech_debt_archive.md` — **never read the
+archive in a routine pass.** Protocol: `.claude/skills/audit-debt/SKILL.md`.
+
+## The bright line (read first)
+
+**A debt entry is a claim, not a fact.** Most entries here were written by an `/audit-plan` pass on
+2026-07-30/31; code has moved since, and some bullets were wrong when written. **Probe first, act
+second** — a bullet whose anchor no longer exists is STALE, not a fix. Two more:
+
+- **"Decide before deleting" means the user decides.** Several entries name dead code that is
+  *dead because a feature was retired* — deleting it can bury a latent bug (`reapplyLerp`) or a
+  cheaper code path (the deformation in-place-PATCH branch). Those go to **DECISIONS**, never to a
+  silent delete.
+- **Never invent scope.** If resolving a bullet turns into a program of work (write 4 new rules,
+  test a 4k-LOC module, carve a god-file), that is **PROMOTE**, not this loop.
+
+## Terminal states (pick exactly one per bullet)
+
+| State | Test | Action |
+|---|---|---|
+| **STALE** | The probe shows the anchor is gone / already fixed / never existed. | Strike the bullet + date + one line of probe evidence. No code change. |
+| **FIXED** | Small, safe, verifiable change (wrong comment, wrong default, missing field, real defect). | Fix, run the gate, strike + date + what changed. |
+| **DELETED** | Dead symbol/file/test with **zero callers**, and no open question about why it died. | Verify zero callers repo-wide, delete, run the gate, strike. |
+| **DECIDE** | The bullet itself flags a judgement call (revive vs excise, behavior change, science call). | Move a **one-question** framing to **DECISIONS** below. Do not guess. |
+| **PROMOTE** | Real, but a multi-session program (new rules, test suites for 4k-LOC modules, carve-ups). | Point it at the owning loop/plan (create the topic file if none), strike here with the pointer. |
+| **ACCEPTED** | Deliberate, correct as-is; only costs a re-investigation each sweep. | Move a one-liner to **ACCEPTED** below so future sweeps stop re-finding it. |
+
+An iteration's target `TD-NN` is **done when every bullet in it carries one of the six** — not when
+the easy ones are cleared.
+
+## Gate (per iteration)
+
+- Backend code touched → `just test-smart`; cite decision (`FAST`/`fast+slow[area]`) + pass count +
+  any `DEFERRED` group. Never `just test` / `just test-slow` (test-dedicated session only).
+- Frontend code touched → `just test-frontend`, **plus exercise it in the running app**, or lead the
+  report with `NOT VERIFIED IN APP`.
+- Prose-only bullets (comments, docs, memory files) → no tests; say so.
+- Deleting code that a test names → the test goes with it; say which tests were removed and why the
+  behavior is still covered (or that it is not).
+
+## Queue (priority top-first; `▶ NEXT` = this iteration's target)
+
+Rank = **active harm × cheapness**. A bullet that paints the wrong colour in an exported oligo sheet
+outranks a stale comment; a stale comment outranks a program of work.
+
+| ID | Item | Band | Why here |
+|---|---|---|---|
+| ▶ TD-01 | `just lint` is RED (5 `F401`) | P0 | The gate is dead until it's green; a NEW lint error is invisible today. ~20 min. |
+| TD-02 | `STAPLE_PALETTE` index agreement + 2 stale sync comments | P0 | Colour assignment can still drift between panel and 3D after mutations → wrong hues in the **exported oligo order sheet**. |
+| TD-03 | Cadnano-editor app stragglers | P0 | `unligatedCrossoverIds` undeclared (2nd reader crashes), `DEBUG = true` shipping to production console. Both cheap. |
+| TD-04 | Dead `POST /design/auto-scaffold` + orphaned matched-ends fns | P0 | 4 e2e specs 404 at runtime → that coverage is silently fake. |
+| TD-05 | Rendering stragglers | P0 | `refreshAllGlow` skips the 7th glow layer (live lag bug); a 4-test file pins a module that doesn't exist. |
+| TD-06 | Cross-cutting sweeps (see its section) | P0 | Three separate audits each re-found the same rot (`docs/triage/` fiction, `, null)` init args, phantom `MAP_*.md`). Resolve once, strike in all sections. |
+| TD-07 | Dead `lattice.auto_scaffold(mode=…)` in 2 scripts | P1 | Two unrunnable scripts (ImportError) + an orphaned `_pull_window_turns`. |
+| TD-08 | `CELLS_6HB` / `CELLS_18HB` divergent copies | P1 | Copying the name between files silently changes the neighbour graph. |
+| TD-09 | Deformation stragglers | P1 | 3 comments that contradict the code + a possible silent bend-loss in `assembly_flatten.py`. |
+| TD-10 | Cluster-scoped deformation stragglers | P1 | `_arm_filter_cluster` resolves by list order (mechanical root of the two-cluster limitation). |
+| TD-11 | Autorefine skip-placement stragglers | P1 | `finetune` has opposite defaults route vs function; unsigned-metric ranking is **always on**. |
+| TD-12 | Selection stragglers | P1 | 4 wrong comments + an incomplete `selectableTypes` write. |
+| TD-13 | `api-and-state` stragglers | P1 | Doc-only rot (`PATCH /design/extensions/{id}`) + the `responses.py` extraction question. |
+| TD-14 | Cadnano-2D-mode stragglers | P2 | Dead `clearFemOverlay`, duplicated `PERSP_FOV_DEG`, vestigial param. |
+| TD-15 | Animation stragglers | P2 | `captureClusterBase` has two incompatible signatures on the same path. |
+| TD-16 | Unfold stragglers | P2 | Two divergent fan-out lists; `unfoldHelixOrder` derived 4×. |
+| TD-17 | Strand-anim stragglers | P2 | Sandbox `DEFAULTS` is a production constant source; 6 stale comments. |
+| TD-18 | Stale workspace-fixture test skips | P2 | Silently skips; pick one of the 3 documented options. |
+| TD-19 | Unimported frontend modules (5 held) | P2 | A decision per file, not another audit. |
+| TD-20 | `main.js` stragglers | P3 | Mostly PROMOTE → the main.js carve-up loop (which has no slash command — that gap is itself a bullet). |
+| TD-21 | DELETE-ON-COMPLETION: legacy OverhangSpec pose overlay | P3 · **BLOCKED** | Gated on `overhang_duplex_cluster` P4 migrate-on-load. Don't start until that ships. |
+| TD-22 | Rule coverage is 33% of production LOC | P3 | PROMOTE — 4 new rules, one per pass, not a debt fix. |
+| TD-23 | Duplex-foundation stragglers | P1 | Two `showChoice`s; 20 e2e specs hardcode an absolute path; `reassign_if_sequenced` is a zero-caller footgun with 3 lying docstrings. |
+| TD-24 | Photo-mode v1 stragglers | P2 | Orphaned fluorophore fn whose comment is the only record of *why* the clamp exists. |
+
+## DECISIONS — one question each, the user's call
+
+Park a bullet here when the call is genuinely the user's. Keep it to **one question + the two
+outcomes**; surface them in batches, don't block a pass on an answer.
+
+*(empty — the loop seeds this)*
+
+## ACCEPTED — deliberate, do not re-report
+
+- **`backend/ml/propagator/` lint errors (6)** — shelved BLADE/atomistic-propagator code, dormant on
+  purpose (user decision 2026-07-31). If lint must be green, per-file-ignore the directory; never
+  edit the dormant code. See TD-01.
+- **`scene/joint_panel_experiments.js`** (456 ln) — a DevTools console harness for still-live
+  `_computeExteriorPanels`. Unreferenced *by design*, like `src/debug_snippet.js`. See TD-19.
+
+## Next-session handoff
+
+**▶ NEXT: TD-01** (`just lint` is RED). Cheapest item with the largest downstream effect: every other
+`/audit-debt` pass that touches Python wants a lint signal it can trust, and today there isn't one.
+Watch the trap already written into the entry — an unused import of a *private* helper
+(`_ssdna_frame_override`, `_strand_nucleotide_order`) may mean the test stopped exercising it, so
+check what each import was for before deleting it; that check is the actual work.
+
+No pass has run yet. The 24 items below are as `/audit-plan` left them on 2026-07-30/31 —
+**treat every anchor as unverified.**
+
+---
+
+## Open items
+
+### TD-01 — `just lint` is RED, so it cannot act as a gate — 5 dead-code errors to clear (found 2026-07-31, health-card audit)
 
 `just lint` exits 1 on `master` with 11 ruff errors, none of which are in actively-developed code.
 Because it is always red it is useless as a pre-commit signal — a NEW lint error is invisible.
@@ -35,7 +139,7 @@ purpose. 3× `F541` f-string-without-placeholder in `scaling.py:248,249,268`, 2�
 `systems.py:36,42`, 1× `F841` unused local `n` in `windows.py:132`. If lint must go green while
 that code stays shelved, per-file-ignore the directory rather than editing dormant code.
 
-### DELETE-ON-COMPLETION: legacy OverhangSpec pose overlay + standalone orientation panel (superseded by the duplex CLUSTER)
+### TD-21 — DELETE-ON-COMPLETION: legacy OverhangSpec pose overlay + standalone orientation panel (superseded by the duplex CLUSTER)
 - **Where / delete when [[overhang-duplex-cluster]] ships end-to-end:**
   - `OverhangSpec.rotation` / `OverhangSpec.translation` (backend/core/models.py) — the
     world-frame per-overhang pose. Superseded by the child `ClusterRigidTransform`
@@ -68,7 +172,7 @@ that code stays shelved, per-file-ignore the directory rather than editing dorma
   clears the pose; `dematerialize` restores it. Do NOT delete until Apply/relax/axis are on
   the cluster AND a migration-on-load converts existing `.nadoc`.
 
-### Stale workspace-fixture test skips instead of running (TODO: re-pin or rebuild fixture)
+### TD-18 — Stale workspace-fixture test skips instead of running (TODO: re-pin or rebuild fixture)
 - **Where:** [tests/test_feature_log_snapshot.py](tests/test_feature_log_snapshot.py)
   `test_delete_workspace_independent_strutted_corner_extrude_scrubs_survivors`.
 - **Why it's debt:** the test loads `workspace/2x2_strutted_corner.nadoc`, which is
@@ -83,7 +187,7 @@ that code stays shelved, per-file-ignore the directory rather than editing dorma
   (b) rebuild the assertion synthetically (no workspace file), or (c) delete the
   test as redundant. Until then it silently skips when the local fixture has drifted.
 
-### Unimported frontend modules — 5 held, 2 deleted (dead-file sweep 2026-07-25)
+### TD-19 — Unimported frontend modules — 5 held, 2 deleted (dead-file sweep 2026-07-25)
 A repo-wide sweep found 7 `frontend/src` modules with **zero references** anywhere (no import, no
 dynamic/glob import, no `index.html` id, no e2e). Two were deleted; the other five were HELD because
 each has a documented reason to exist. Re-check this list before assuming any of them is dead.
@@ -111,7 +215,7 @@ each has a documented reason to exist. Re-check this list before assuming any of
 **Why this is debt at all:** unreferenced modules read as dead to every future sweep, so each one costs
 a fresh investigation. The fix is a decision per file (revive or delete), not another audit.
 
-### Dead `lattice.auto_scaffold(mode=…)` API still referenced by 2 scripts + 1 auto-loaded rule (found 2026-07-30, `/audit-plan`)
+### TD-07 — Dead `lattice.auto_scaffold(mode=…)` API still referenced by 2 scripts + 1 auto-loaded rule (found 2026-07-30, `/audit-plan`)
 The old per-helix router (`auto_scaffold(design, mode="seam_line"|"end_to_end", scaffold_loops=…)`,
 `_build_seam_line_domains`, `_expand_helices_for_seam`, `_assemble_dumbbell_path`, `_HC_SCAF_VALID`,
 `_route_standard_virt_seg`, `_scaffold_direction_from_helix_id`, `_HC_XOVER_PERIOD`) was **deleted from
@@ -127,7 +231,7 @@ the dead API:
   primary router file) — globs now cover all three routers + both route files.
 Also orphaned: `section_router.py:255` `_pull_window_turns` — self-labelled `⚠ WIP — NOT YET WIRED`, called nowhere.
 
-### `CELLS_6HB` / `CELLS_18HB` are copy-pasted with *divergent* geometry (found 2026-07-30, `/audit-plan`)
+### TD-08 — `CELLS_6HB` / `CELLS_18HB` are copy-pasted with *divergent* geometry (found 2026-07-30, `/audit-plan`)
 Both read like shared fixtures — every doc that mentions them says "use `CELLS_6HB` as the minimum test
 fixture" — but there is no shared definition. Each is re-declared locally with **different cell lists**:
 `CELLS_6HB` in `scripts/inspect_bp0.py:16` `[(0,0),(0,1),(1,0),(1,2),(0,2),(2,1)]` vs
@@ -138,7 +242,7 @@ variants are not the same shape — one is a bent/L cluster, the other two clean
 between files silently changes its neighbour graph. Fix = one fixture module; until then, never copy the
 name without copying the list.
 
-### Dead `POST /design/auto-scaffold` (unsuffixed) + orphaned matched-ends client fns (found 2026-07-30, `/audit-plan`)
+### TD-04 — Dead `POST /design/auto-scaffold` (unsuffixed) + orphaned matched-ends client fns (found 2026-07-30, `/audit-plan`)
 Commit `e9d6750` consolidated the plain endpoint into `-seamed`/`-seamless` (the three live routes are
 `routes_scaffold_routing.py:86/112/140`). Stragglers:
 - **4 E2E specs still POST the removed path → 404 at runtime:** `frontend/e2e/atomistic_helix_parity.spec.js:41,157`,
@@ -152,7 +256,7 @@ Commit `e9d6750` consolidated the plain endpoint into `-seamed`/`-seamless` (the
 - **Stale header comment:** `frontend/src/ui/autoscaffold_picker.js:2` still lists "seamed / seamless / matched /
   advanced-*" while `AUTOSCAFFOLD_MODES` (`:11-19`) has exactly two keys.
 
-### Cadnano-2D-mode stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-14 — Cadnano-2D-mode stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Turned up while rewriting `.claude/rules/cadnano-2d.md` against the code. All low-stakes but each is
 a live trap for the next reader:
 - **`design_renderer.clearFemOverlay()` is dead code** — `frontend/src/scene/design_renderer.js:1241`,
@@ -177,7 +281,7 @@ a live trap for the next reader:
   moves the main app's Domain Designer — and pulling 4 numbers out of `pathview.js` drags the whole
   4977-LOC module graph into the main-app bundle.
 
-### `STAPLE_PALETTE` — 3 copies that agree, 1 that doesn't, and 3 comments pointing at the wrong files (found 2026-07-30, `/audit-plan`)
+### TD-02 — `STAPLE_PALETTE` — 3 copies that agree, 1 that doesn't, and 3 comments pointing at the wrong files (found 2026-07-30, `/audit-plan`)
 - **Agreeing three-way invariant** (same 12 colours, same order today): `backend/core/constants.py:325-329`
   (`'#rrggbb'`) · `frontend/src/cadnano-editor/pathview/palette.js:85-89` (`'#rrggbb'`) ·
   `frontend/src/scene/helix_renderer/palette.js:23-26` (`0xrrggbb` ints).
@@ -209,7 +313,7 @@ a live trap for the next reader:
   consume the renderer's `buildStapleColorMap` (it already receives `designRenderer`) instead of
   recomputing — one source of truth for the assignment, not just for the colour list.
 
-### Cadnano-editor app stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-03 — Cadnano-editor app stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Small, each a live trap; all documented in `.claude/rules/cadnano-editor.md`.
 - **`unligatedCrossoverIds` is written but never declared** — `cadnano-editor/api.js:120`
   (`_absorbAuxFields`) sets it on the store, but it is absent from `store.js:14-58` `_initialState`,
@@ -248,7 +352,7 @@ architecture content lives in the rule):
 - **`paletteColor` was cited for years and never existed** — `strands_spreadsheet.js` has only
   `effectiveColor` (:72). Symptom of prose anchors nobody greps; no code action.
 
-### Animation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-15 — Animation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Found while rewriting `.claude/rules/animation.md`. The rule + `RUNBOOK_ANIMATION.md` are fixed;
 these are the artifacts outside them.
 - **`docs/triage/05_animation.md` (193 lines) is fiction** — it documents `config_panel.js`
@@ -271,7 +375,7 @@ these are the artifacts outside them.
   `List[DesignConfiguration]` — a field and a model that never existed. Fixed 2026-07-30; noted here
   because the same stale root fed the rule, the runbook, and `docs/triage/`.
 
-### Selection stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-12 — Selection stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Found while rewriting `.claude/rules/selection.md` + `RUNBOOK_SELECTION.md`. Both are fixed;
 these are the artifacts outside them.
 - **`selection_manager.js` is 4179 LOC with ZERO unit tests** — no `selection_manager.test.js`
@@ -307,7 +411,7 @@ these are the artifacts outside them.
   `domain_ends.js`, `helix_renderer.js`, `design_renderer.js`, `ui/file_io.js`,
   `ui/conjugate_manager.js`. A cross-cutting display mode with 7 consumers and no owning doc.
 
-### Rule coverage is 33% of production LOC — the measured hole (found 2026-07-30, `/audit-plan` coverage sweep)
+### TD-22 — Rule coverage is 33% of production LOC — the measured hole (found 2026-07-30, `/audit-plan` coverage sweep)
 - **Method (reusable):** match every `.py`/`.js` under `frontend/src/` + `backend/` against the
   `paths:` globs of all 11 `.claude/rules/*.md` (minimatch semantics: `a/**/*.py` matches
   `a/x.py`). Script kept at the pass's scratchpad; ~20 lines, re-runnable.
@@ -336,7 +440,7 @@ these are the artifacts outside them.
   (`scene/assembly_*.js` + `joint_renderer.js`), `md-jobs` (backend MD core + the job panels),
   `lattice-geometry` (lattice.py + constants.py, carrying the locked-constants warning).
 
-### `api-and-state` stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-13 — `api-and-state` stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 - **`crud.py` is the response chokepoint for the whole backend.** `_design_response` /
   `_design_response_with_geometry` ([crud.py:268/339](backend/api/crud.py#L268)) are imported by
   **34 modules** — every `routes_*.py`, plus `backend/core/design_geometry.py`, `api/state.py` and
@@ -361,7 +465,7 @@ these are the artifacts outside them.
   POST/PUT/DELETE + both `/batch` forms, no PATCH decorator. Either the route was dropped or the
   partial-update capability was never built; nothing calls it, so it's doc-only rot today.
 
-### `main.js` stragglers — the composition root is re-growing and has zero tests (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-20 — `main.js` stragglers — the composition root is re-growing and has zero tests (found 2026-07-30, `/audit-plan` rule sweep)
 - **`main.js` is 8,059 LOC and RISING.** Measured 2026-07-30: **+245 since 7,814 (2026-07-13)** and
   **+1,094 since the 6,965 the last carve session left it at (2026-06-06)**. MD/SNUPI/jobs feature
   work is landing cohesive blocks in the closure — the module-first law in `CLAUDE.md` /
@@ -386,7 +490,7 @@ these are the artifacts outside them.
   `main_js_carveup.md` + `main_js_extraction_log.md` + `memory/main_init_detail.md`. Every other
   loop in the repo has a skill; this one is invoked from memory. Plausible cause of the 5-week idle.
 
-### Rendering stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-05 — Rendering stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` against the code.
 
 - **`deform_view.reapplyLerp()` is exported with ZERO callers** —
@@ -430,7 +534,7 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   bypass this pipeline entirely. Not a bug today; it is the reason the LOD/representation
   distinction keeps getting confused in docs.
 
-### Deformation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-09 — Deformation stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 
 - **`deform_view.js` exposes 8 methods; 4 have ZERO callers in all of `frontend/`** —
   `reapplyLerp` (`:378`), `snapOff` (`:218`), `setT` (`:388`), `getT` (`:403`), plus `dispose`.
@@ -474,7 +578,7 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   for the same thing. Extends the existing `docs/triage/` finding from the animation pass — that
   directory is now 2 for 2 fiction; treat all 12 files as suspect.
 
-### Cluster-scoped deformation stragglers (found 2026-07-30, `/audit-plan` — [[deformation-cluster-scope]])
+### TD-10 — Cluster-scoped deformation stragglers (found 2026-07-30, `/audit-plan` — [[deformation-cluster-scope]])
 
 - **The in-place-PATCH edit branch in `deformation_editor.js` is fully written and unreachable.**
   `_editOpId`/`_editOrigParams`/`_editDirty`/`_editCommitted` (`:60-63`), their assignment in
@@ -508,7 +612,7 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
 - **Name collision:** two unrelated `_bundle_centroid_and_tangent` — `deformation.py:189` (8 call
   sites, the arm-centroid one) and `loop_skip_calculator.py:148`. A grep for the name returns both.
 
-### Unfold stragglers (found 2026-07-30, `/audit-plan` rule sweep)
+### TD-16 — Unfold stragglers (found 2026-07-30, `/audit-plan` rule sweep)
 
 - **Two parallel implementations of the `applyUnfoldOffsets` fan-out, with different callee
   lists.** `unfold_view.js` notifies 5 (`:883-893`, `:941-949`, `:997-1002`, `:1277-1284`);
@@ -541,7 +645,7 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   animation, deformation and unfold passes; the directory should be deleted or moved under
   `archive/` rather than audited file by file.
 
-### Strand-anim stragglers (found 2026-07-30, `/audit-plan` rule sweep — final rule)
+### TD-17 — Strand-anim stragglers (found 2026-07-30, `/audit-plan` rule sweep — final rule)
 
 - **`strand-anim/params.js` `DEFAULTS` is a production constant source, not sandbox-local.**
   `scene/overhang_unzip_overlay.js:33-34` imports it as `STRAND_DEFAULTS` and reads `rise`,
@@ -580,69 +684,7 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   imports it from `geometry_straight.js:33`), `model.js:35` re-exports it again, and
   `melt.js:13` `smoothstep` (see above). Facade surface vs dead code — decide before deleting.
 
-### ~~Advanced/seamless scaffold routing is hash-seed non-deterministic~~ — FIXED 2026-07-13
-- **Resolution (verified 2026-07-13):** the `(len(adj[n]), n)` lex tiebreaker is now applied to
-  **both** the starter sort and the neighbor key handed to `_ham_path_search`
-  ([seamed_router.py:296](backend/core/seamed_router.py#L296)); the in-code
-  `FIXME(advanced-routing-nondeterminism)` is gone. `test_seamless_router.py::
-  test_teeth_closing_zig` passes **8/8 fresh `PYTHONHASHSEED` values** (was ~4/8).
-  Routing is deterministic run-to-run again. **Invariant: keep the tiebreaker on BOTH keys** —
-  dropping either silently reintroduces run-to-run scaffold-strand-count drift (this
-  regressed once already, via the 2026-06-01 budgeted-DFS refactor).
-- **Historical detail (why it happened)** — kept because it regressed once and could again:
-- **Where it was:** [seamed_router.py](backend/core/seamed_router.py) `_ham_path_ending`
-  (~line 291) + the neighbor key it hands to `_ham_path_search`. Both sorted by
-  `len(adj[n])` with **no secondary `n` tiebreaker**, so equal-degree nodes kept
-  their set-derived (hash-seed-dependent) order.
-- **Why it was debt:** the Hamiltonian path → scaffold routing came out differently
-  run-to-run. `auto_scaffold_seamless` / `auto_scaffold_advanced_seamed` emitted a
-  **different scaffold-strand count** depending on `PYTHONHASHSEED`. Real-app impact:
-  the same design routed differently on different backend runs (not just tests).
-- **Repro (2026-06-04, now stale):** `tests/test_seamless_router.py::test_teeth_closing_zig`
-  (asserts exact `bridge_xovers==6`, `scaf_strands==4`) was **flaky ~50%** — 4 pass /
-  4 fail across 8 fresh processes. Also varied `advanced_seamed` on teeth between 1
-  and 4 scaffolds (originally misattributed to the live app rewriting the fixture).
-- **History:** `seamless_router._ham_path_ending` (its OWN copy) deliberately used
-  `(len(adj[n]), n)` WITH the `n` tiebreaker to avoid exactly this (documented in
-  [[seamless-scaffold-router-architecture-and-hard-won-lessons]]). The
-  2026-06-01 budgeted-DFS refactor that delegated the search to the shared
-  `seamed_router._ham_path_search` dropped the tiebreaker → regression. The fix
-  restored it on both keys.
-- **Topology check on the fix:** teeth routing topology is unchanged
-  (`bridge_xovers==6`, `scaf_strands==4`) — that is exactly what the now-deterministic
-  test asserts, so the tiebreaker picked the same path the good seeds always picked.
-  It de-flaked the test without moving the route.
-
-### ~~Overhang Bind/Unbind button (legacy OverhangBinding pair model)~~ — REMOVED 2026-06-30
-- **Where:** [overhang_sequences_panel.js](frontend/src/ui/overhang_sequences_panel.js).
-- **Resolution (2026-06-30, final):** the per-row Bind/Unbind toggle was **removed entirely**
-  — user feedback: mixing bind/relax actions between the Overhangs list and the Overhang
-  Connections section was a bad idea; keep each section's job separate. (A short-lived
-  intermediate version rewired the toggle to the unified relax; that was scrapped.)
-- **Replaced by a LINK ICON:** for any overhang that participates in a connection (a
-  `overhang_bindings` / `overhang_connections` / `connection_versions` entry — see pure
-  `connectionPairForOverhang(design, ovhgId)`), the last column shows a chain-link button.
-  Click → `openConnectionForPair(a, b)` (new export from
-  [overhang_connections_panel.js](frontend/src/ui/overhang_connections_panel.js)) which
-  expands the Connections section, sets the A/B dropdowns to the pair, and selects the
-  pair's **applied** ConnectionVersion (falling back to the live linker/binding row).
-  Imported directly (singleton entry point) → **no main.js change**. All bind/unbind /
-  relax lives in the Connections section only.
-- **Keystone backend fix (kept):** `crud.patch_overhang_binding` passes `driver_side`
-  (from `target.driver_oh_id`) into `compute_bind_topology`, so toggling a UNIFIED
-  same-rigid-body root-to-root binding's `bound` flag no longer 422s on the same-cluster
-  guard. This now serves the Connections section's **Bound checkbox** (the proper home of
-  bind/unbind), NOT the removed sidebar button. Legacy bindings (`driver_oh_id=None`)
-  unchanged. Pin: `test_direct_connection_unified.py::
-  test_unbind_then_rebind_roundtrips_same_body_unified_binding` (proven red without it).
-- **Note:** the OverhangBinding model is NOT abandoned — it IS the current unified direct
-  connection record (see [[overhang-connections-panel]]). The old "superseded by oh_binder"
-  framing was stale.
-- **NOT hand-driven in-app** (manual-validation debt): the link icon (appears for connected
-  overhangs, click opens the Connections section on the applied version) is pinned by jsdom
-  but not exercised against a real overhang-bearing design in the running app.
-
-### Autorefine skip placement — stragglers found by the 2026-07-30 plan audit ([[project_regional_autorefine]])
+### TD-11 — Autorefine skip placement — stragglers found by the 2026-07-30 plan audit ([[project_regional_autorefine]])
 - **`redistribute_by_twist_profile` (`backend/core/regional_skip_placer.py:208`) is fully
   orphaned** — zero non-test callers; its only references are 3 tests
   (`tests/test_regional_skip_placer.py:207/234/263`). It is the wholesale-redistribution
@@ -671,7 +713,7 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   pre-exp34 mid-transient measurement (LESSONS A8) — still qualitatively right, but the comment
   should say so or point at `project_skip_twist_curvature_sweep.md`.
 
-### Photo-mode v1 stragglers (found 2026-07-30, `/audit-plan` — [[photo-mode]])
+### TD-24 — Photo-mode v1 stragglers (found 2026-07-30, `/audit-plan` — [[photo-mode]])
 
 - **A live module holds an orphaned function.** `frontend/src/scene/photo_renderer/material_presets.js`
   SURVIVED the v1 archival (it is one of the six shared sub-modules v2 kept), but its
@@ -695,7 +737,7 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
   `.claude/rules/main-init.md:171`) — the camera-clip seam left behind when v1's ground plane was
   deliberately not ported. Listed here so it is counted, not re-discovered.
 
-### Duplex-foundation stragglers (found 2026-07-30, `/audit-plan` — [[overhang-duplex-foundation]])
+### TD-23 — Duplex-foundation stragglers (found 2026-07-30, `/audit-plan` — [[overhang-duplex-foundation]])
 
 - **Two `showChoice` implementations.** `frontend/src/ui/primitives/choice.js:32` (used by
   `overhang_gen.js`, `run_location.js`) and `frontend/src/ui/primitives/confirm.js:111` (used by
@@ -730,3 +772,49 @@ Turned up rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md` agains
 - **`.claude/rules/rendering.md:237` cites `main.js:4119`; the glow-layer injection is at
   `main.js:4130`.** Eleven-line drift in an auto-loaded rule. Cheap to fix, but the real lesson is
   that line anchors in auto-loaded rules need re-probing whenever `main.js` moves.
+- **~900 LOC of zero-importer parameterization tooling, with a third duplicated ESS estimator.**
+  `backend/parameterization/local_crossover_extract.py` (426 L) and `bundle_extract.py` (480 L)
+  are *tracked* backend modules with **no importer anywhere** — not backend, not tests, not
+  scripts (`bundle_extract` is named only by itself). They are hand-run research tooling that
+  landed in `backend/` instead of `runs/`. Worse, effective-sample-size is now implemented
+  **three times**: `convergence.py` (the canonical gate), `bundle_extract.py:186` `_ess`, and
+  `local_crossover_extract.py:154` `_ess_1d` — so a fix to the convergence criterion reaches one
+  of three call paths. Either import `convergence._ess` from both, or move both modules out of
+  `backend/`. `validation_stub.py` is a related stub with no caller (and its own `ruff` F821
+  exemption at `pyproject.toml:84`). (Found by `/audit-plan` 2026-07-31 on
+  `pipeline_validation_log`.)
+
+### TD-06 — Cross-cutting sweeps: the same rot found independently by 3+ audits (synthesized 2026-07-31)
+
+Each bullet below is written up *inside* two or more other TD sections. Resolving it means one
+repo-wide sweep, then striking it in **every** section that names it (listed per bullet). Doing it
+per-section is how it got re-discovered three times.
+
+- **`docs/triage/` is 3-for-3 fiction across the audits that probed it** — `05_animation.md`
+  documents `config_panel.js` / `DesignConfiguration` / `update_configuration` (none exist);
+  `04_deform_tools.md` cites the never-existent `MAP_DEFORMATION.md` and repeats an obsolete
+  `Design(...)` invariant as *critical*; `00_MASTER_GUIDE.md` / `01_expanded_quick_view.md` /
+  `02_cadnano_3d_mode.md` cite `MAP_CADNANO.md`, also never existent. **12 files, 3 probed, 3 false.**
+  Sweep = probe the other 9, then delete the directory or move it under `archive/` with a banner.
+  **Deleting a docs directory is user-confirm territory → expect DECIDE, not a silent `rm`.**
+  (Named in TD-15, TD-09, TD-16.)
+- **Phantom `MAP_*.md` citations — 5 filenames that never existed in this repo.** They read
+  authoritative and cost a search every time. Sweep `rg 'MAP_[A-Z_]+\.md'` and repoint or strike
+  each cite. (Named in TD-09, TD-16.)
+- **Vestigial `, null)` init arguments — 3 known, sweep for the rest.**
+  `initCadnanoView(..., _getCrossoverLocations, ...)` (`cadnano_view.js:42`, always `null` from
+  `main.js:1542`), `initDeformView`'s 3rd `_getCrossoverMarkers` (`main.js:1558`),
+  `initUnfoldView`'s 7th `_getCrossoverLocations` (`main.js:1535`). Each is a dead parameter that
+  a reader must trace. One sweep of the `init*` call sites, not three notes.
+  (Named in TD-14, TD-09, TD-16.)
+- **"Keep in sync with X" comments naming a file that no longer holds the constant.** Confirmed:
+  `cadnano-editor/pathview/palette.js:83-84` and `backend/core/constants.py:324` (both still point
+  at files that shed `STAPLE_PALETTE`), and `photo_renderer/material_presets.js` citing
+  `_FLUORO_LIGHT_GAIN in photo_renderer.js` (no live file of that name). Sweep for the pattern —
+  a stale sync pointer is worse than no pointer, because it *stops* the reader looking further.
+  (Named in TD-02, TD-24.)
+- **Line-number anchors inside auto-loaded `.claude/rules/*.md` drift silently.**
+  `rendering.md:237` cites `main.js:4119`; the glow-layer injection is at `main.js:4130`. Rules are
+  loaded automatically, so a drifted anchor teaches the wrong location with no signal. Sweep every
+  `file.js:NNNN` in `.claude/rules/` and re-probe; prefer symbol names over line numbers when
+  rewriting. (Named in TD-23, and it is the mechanism behind half of TD-20's staleness.)

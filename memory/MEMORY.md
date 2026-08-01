@@ -13,7 +13,7 @@ prompt prefix, so every change to it invalidates the prompt cache for all sessio
 - **[REFERENCE_DNA_TOPOLOGY](REFERENCE_DNA_TOPOLOGY.md)** — strand/scaffold/polarity rules. Always.
 - **[architecture_decisions](architecture_decisions.md)** — binding cross-cutting laws (DTP-PMD-1/2). Don't drift without sign-off.
 - **`FEATURE_DEVELOPMENT.md`** (root) — module-first guardrails. READ BEFORE ADDING ANY FEATURE.
-- **[tech_debt](project_tech_debt.md)** — code flagged for review/removal.
+- **[tech_debt](project_tech_debt.md)** — code flagged for review/removal; now the `TD-NN` driver for the `/audit-debt` burn-down loop (head + `_archive`).
 - **[reference_assembly_test_fixture](reference_assembly_test_fixture.md)** — `workspace/Belt_test1.nass`, any assembly test.
 - **[reference_efield_crossval_fixture](reference_efield_crossval_fixture.md)** — `workspace/6hb_e_test.nadoc`, E-field cross-val.
 - [test_parallelization](project_test_parallelization.md) — **`just test-smart` is the DEFAULT per-change loop**; full `just test` = pre-push gate only.
@@ -28,6 +28,7 @@ prompt prefix, so every change to it invalidates the prompt cache for all sessio
 | Design automation | `design_automation_{backlog,log}.md`; `{harness,metrics}` on demand | `/automate-feature` |
 | Sim/feature coverage | `SIM_COVERAGE_PLAN.md` + `sim_coverage_plan.json` + `sim_coverage_log.md` | `/continue-coverage` |
 | Stale-plan audit | `plan_audit_ledger.md` | `/audit-plan` |
+| Tech-debt burn-down | `memory/project_tech_debt.md` (+ `_archive`) | `/audit-debt` |
 
 ## Path-scoped architecture maps
 
@@ -109,7 +110,7 @@ skip_twist_selfconsistency · **regional_autorefine** (LIVE REF — the always-o
 
 **BLADE — ARCHIVED 2026-07-20:** **project_blade_frontend** (shipped then removed by user decision; code dormant, one-line revive) · **atomistic_propagator** (the science + why it's shelved: ~60× too slow)
 
-**Multi-resolution / CG bridge:** multiresolution_roadmap · crossover_parameterization · bundle_stiffness_params · pipeline_validation_log · session_handoff
+**Multi-resolution / CG bridge:** multiresolution_roadmap · **crossover_parameterization** (the mrDNA crossover-param pipeline of record — live DB feeds every mrDNA relax) · bundle_stiffness_params · session_handoff
 
 **NAMD production / solvation:** **periodic_md** (governed by [architecture_decisions](architecture_decisions.md)) · btube_benchmark · periodic_cell · namd_solvate · water_shell_carve · 3x4sq_md_run · exp30_18hb_production ·
 **extra_base_4fs_geometric_fixb** (winning seed = GEOMETRIC build + Fix B, NOT the oxDNA position-seed) ·
