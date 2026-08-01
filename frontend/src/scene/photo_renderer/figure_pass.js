@@ -343,6 +343,10 @@ export class FigurePass extends Pass {
       if (!isHelper && !obj.isMesh && !obj.isInstancedMesh) return
       const skip = isHelper
         || obj.userData?.sharedLodImpostor
+        // The shadow catcher is a surface, but not one of the STRUCTURE's — it
+        // would stamp a huge depth step and draw a contour along the horizon
+        // and around every silhouette where the design meets the plane.
+        || obj.userData?.photoFloor
         || m?.isLineBasicMaterial
         || m?.isLineDashedMaterial
         || m?.blending === THREE.AdditiveBlending

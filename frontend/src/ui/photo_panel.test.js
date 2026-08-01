@@ -113,9 +113,6 @@ const PANEL_IDS = {
   'photo-materials-heading':      'div',
   'photo-materials-body':         'div',
   'photo-materials-arrow':        'span',
-  'photo-bg-heading':             'div',
-  'photo-bg-body':                'div',
-  'photo-bg-arrow':               'span',
   'photo-fov':                    'input',
   'photo-fov-label':              'span',
   'photo-parallel':               'input',
@@ -132,6 +129,13 @@ const PANEL_IDS = {
   'photo-export-arrow':           'span',
   'photo-bg-type':                'select',
   'photo-bg-color':               'input',
+  'photo-floor':                  'input',
+  'photo-floor-controls':         'div',
+  'photo-floor-axis':             'select',
+  'photo-floor-opacity':          'input',
+  'photo-floor-opacity-label':    'span',
+  'photo-floor-offset':           'input',
+  'photo-floor-offset-label':     'span',
 }
 
 function makeMode(overrides = {}) {
@@ -140,6 +144,7 @@ function makeMode(overrides = {}) {
     pinLights: true, keyShadow: true, keyShadowMapSize: 2048,
     keyShadowBias: 1.0, shadowStrength: 1.0,
     keyAzimuth: 135, keyElevation: 35.264,
+    floor: true, floorAxis: '-y', floorOpacity: 0.35, floorOffset: 0,
     keyIntensity: 2.0, fillIntensity: 0, ambientIntensity: 0.15,
     full: 'flat', cylinders: 'flat', surface: 'flat', atomistic: 'cpk-flat',
     outline: false, outlineColor: '#1b1f24', outlineStrength: 1.0,
@@ -160,6 +165,8 @@ function makeMode(overrides = {}) {
     setOutline: vi.fn(), setOutlineColor: vi.fn(), setOutlineStrength: vi.fn(),
     setOutlineThickness: vi.fn(), setOutlineSensitivity: vi.fn(), setOutlineDepthJump: vi.fn(),
     setDepthCue: vi.fn(), setDepthCueColor: vi.fn(), setDepthCueStrength: vi.fn(),
+    setFloor: vi.fn(), setFloorOpacity: vi.fn(), setFloorOffset: vi.fn(),
+    setFloorAxis: vi.fn(),
     setFOV: vi.fn(), setParallel: vi.fn(), setExportSize: vi.fn(),
     renderToBlob: vi.fn(async () => null),
   }
@@ -172,9 +179,11 @@ describe('initPhotoPanel', () => {
     vi.useFakeTimers()
     els = mountIds(PANEL_IDS)
     for (const id of ['photo-pin-lights', 'photo-key-shadow',
-                      'photo-outline', 'photo-depthcue']) els[id].type = 'checkbox'
+                      'photo-outline', 'photo-depthcue',
+                      'photo-floor']) els[id].type = 'checkbox'
     for (const id of ['photo-outline-color', 'photo-depthcue-color']) els[id].type = 'color'
     for (const id of ['photo-key-shadow-bias', 'photo-shadow-strength',
+                      'photo-floor-opacity', 'photo-floor-offset',
                       'photo-fov']) els[id].type = 'range'
     for (const id of ['photo-res-w', 'photo-res-h']) els[id].type = 'number'
     els['photo-parallel'].type = 'checkbox'
@@ -183,6 +192,7 @@ describe('initPhotoPanel', () => {
       ['photo-key-shadow-mapsize', ['1024', '2048', '4096', '8192']],
       ['photo-res-preset', ['screen', 'x2', 'p300', 'p600', 'custom']],
       ['photo-bg-type', ['color', 'transparent']],
+      ['photo-floor-axis', ['-y', '+y', '-x', '+x', '-z', '+z']],
     ]) {
       for (const v of values) {
         const o = document.createElement('option')
@@ -334,10 +344,35 @@ describe('initPhotoPanel', () => {
     expect(els['photo-mat-atomistic'].value).toBe('cpk-flat')
   })
 
+  it('syncToState and the Side dropdown drive the shadow catcher', () => {
+    panel.syncToState()
+    expect(els['photo-floor'].checked).toBe(true)
+    expect(els['photo-floor-axis'].value).toBe('-y')
+    expect(els['photo-floor-opacity-label'].textContent).toBe('0.35')
+    expect(els['photo-floor-offset-label'].textContent).toBe('0.0 nm')
+
+    els['photo-floor-axis'].value = '+y'
+    els['photo-floor-axis'].dispatchEvent(new Event('change'))
+    expect(mode.setFloorAxis).toHaveBeenCalledWith('+y')
+
+    els['photo-floor-offset'].value = '12'
+    els['photo-floor-offset'].dispatchEvent(new Event('input'))
+    expect(mode.setFloorOffset).toHaveBeenCalledWith(12)
+    expect(els['photo-floor-offset-label'].textContent).toBe('12.0 nm')
+
+    // Unchecking hides the sub-controls, same pattern as the key-shadow group.
+    els['photo-floor'].checked = false
+    els['photo-floor'].dispatchEvent(new Event('change'))
+    expect(mode.setFloor).toHaveBeenCalledWith(false)
+    expect(els['photo-floor-controls'].style.display).toBe('none')
+  })
+
   it('renders every section as a collapsible card', () => {
     // Same contract as the Simulations-tab cards: clicking the heading toggles
     // the body and rotates the chevron.
-    for (const id of ['lighting', 'figure', 'materials', 'camera', 'export', 'bg']) {
+    // No 'bg' — the background controls moved INTO the Figure card, so that
+    // card and its heading/body/chevron no longer exist.
+    for (const id of ['lighting', 'figure', 'materials', 'camera', 'export']) {
       const head = els[`photo-${id}-heading`]
       const body = els[`photo-${id}-body`]
       const arrow = els[`photo-${id}-arrow`]

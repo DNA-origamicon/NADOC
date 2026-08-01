@@ -6069,6 +6069,40 @@
                   <input id="photo-shadow-strength" type="range" min="0" max="1" step="0.05" value="1" class="pxr-rng" style="accent-color:#f0b429">
                   <span id="photo-shadow-strength-label" class="pxr-val">1.00</span>
                 </div>
+
+                <!-- Shadow-catching floor. NOT photo mode v1's ground plane:
+                     that one was visible and GATED the shadow rig. This is a
+                     ShadowMaterial — transparent everywhere except where the
+                     shadow lands — so it only adds a surface for the existing
+                     key shadow to fall onto. -->
+                <label class="pxr-check"
+                       title="An invisible plane under the design that shows nothing but the shadow landing on it, so the structure reads as sitting on a surface instead of floating. Auto-fitted to the design's bounds; needs the key shadow on.">
+                  <input id="photo-floor" type="checkbox" checked> Shadow-catching floor
+                </label>
+
+                <div id="photo-floor-controls" class="pxr-col">
+                  <div class="pxr-row">
+                    <span class="pxr-lbl" title="Which face of the design the plane sits against. WORLD axes, not screen axes — the plane has to stay put while the camera-pinned key light sweeps across it, which is the whole effect. -Y is the floor; +Y makes it a ceiling; the X/Z sides make it a back wall.">Side</span>
+                    <select id="photo-floor-axis" class="pxr-sel">
+                      <option value="-y" selected>&minus;Y (below)</option>
+                      <option value="+y">+Y (above)</option>
+                      <option value="-x">&minus;X</option>
+                      <option value="+x">+X</option>
+                      <option value="-z">&minus;Z</option>
+                      <option value="+z">+Z</option>
+                    </select>
+                  </div>
+                  <div class="pxr-row">
+                    <span class="pxr-lbl" title="How dark the pool of shadow on the floor is. 0 hides the floor entirely.">Floor shadow</span>
+                    <input id="photo-floor-opacity" type="range" min="0" max="1" step="0.05" value="0.35" class="pxr-rng" style="accent-color:#f0b429">
+                    <span id="photo-floor-opacity-label" class="pxr-val">0.35</span>
+                  </div>
+                  <div class="pxr-row">
+                    <span class="pxr-lbl" title="How far OUTWARD from the chosen face the plane sits. 0 = flush with the outermost atom on that side, giving a hard contact shadow; pushing it out detaches the shadow into a softer pool.">Floor gap</span>
+                    <input id="photo-floor-offset" type="range" min="0" max="100" step="0.5" value="0" class="pxr-rng" style="accent-color:#f0b429">
+                    <span id="photo-floor-offset-label" class="pxr-val">0.0 nm</span>
+                  </div>
+                </div>
               </div>
 
               <!-- Key-light direction, in the SCREEN frame (the rig is pinned to
@@ -6185,6 +6219,23 @@
                   excluded from that pre-pass (their custom vertex shaders collapse under an
                   override material), so they get no contour.
                 </div>
+
+                <!-- Background lives here, not in its own card: it is a figure
+                     decision, and it is coupled to the two effects above — the
+                     depth cue fades TOWARD a colour, and the ChimeraX silhouette
+                     deliberately draws onto background pixels (raising alpha) so
+                     a transparent export keeps the contour it drew. -->
+                <div class="pxr-col" style="border-top:1px solid #21262d;padding-top:6px">
+                  <div class="pxr-row">
+                    <span class="pxr-lbl" title="Solid colour, or transparent for a PNG you can drop onto a journal figure's own background.">Background</span>
+                    <select id="photo-bg-type" class="pxr-sel">
+                      <option value="color" selected>Solid colour</option>
+                      <option value="transparent">Transparent</option>
+                    </select>
+                    <input id="photo-bg-color" type="color" value="#0b0d10"
+                           style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -6274,21 +6325,6 @@
             </div>
           </div>
 
-          <div class="ox-card" id="photo-bg-panel">
-            <div id="photo-bg-heading" class="ox-card__header" style="color:#c9d1d9">
-              <span id="photo-bg-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title">Background</span>
-            </div>
-            <div id="photo-bg-body" class="ox-card__body">
-            <div class="pxr-row">
-              <select id="photo-bg-type" class="pxr-sel">
-                <option value="color" selected>Solid colour</option>
-                <option value="transparent">Transparent</option>
-              </select>
-              <input id="photo-bg-color" type="color" value="#0b0d10"
-                     style="flex:0 0 36px;background:transparent;border:1px solid #30363d;border-radius:3px;height:20px;padding:0;cursor:pointer">
-            </div>
-            </div>
-          </div>
           </div>
 
         </div><!-- /#tab-content-photo -->

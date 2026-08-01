@@ -91,8 +91,13 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
     keyDirReset:       $('photo-key-dir-reset'),
     shadowStrength:      $('photo-shadow-strength'),
     shadowStrengthLabel: $('photo-shadow-strength-label'),
-    shadowStrength:      $('photo-shadow-strength'),
-    shadowStrengthLabel: $('photo-shadow-strength-label'),
+    floor:             $('photo-floor'),
+    floorControls:     $('photo-floor-controls'),
+    floorAxis:         $('photo-floor-axis'),
+    floorOpacity:      $('photo-floor-opacity'),
+    floorOpacityLabel: $('photo-floor-opacity-label'),
+    floorOffset:       $('photo-floor-offset'),
+    floorOffsetLabel:  $('photo-floor-offset-label'),
     keyIntensity:        $('photo-key-intensity'),
     keyIntensityLabel:   $('photo-key-intensity-label'),
     fillIntensity:       $('photo-fill-intensity'),
@@ -173,6 +178,13 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
     if (els.shadowStrength)      els.shadowStrength.value = String(s.shadowStrength)
     if (els.shadowStrengthLabel) els.shadowStrengthLabel.textContent = s.shadowStrength.toFixed(2)
     if (els.keyShadowControls)  els.keyShadowControls.style.display = s.keyShadow ? 'flex' : 'none'
+    if (els.floor) els.floor.checked = s.floor
+    if (els.floorControls) els.floorControls.style.display = s.floor ? 'flex' : 'none'
+    if (els.floorAxis)         els.floorAxis.value = s.floorAxis
+    if (els.floorOpacity)      els.floorOpacity.value = String(s.floorOpacity)
+    if (els.floorOpacityLabel) els.floorOpacityLabel.textContent = s.floorOpacity.toFixed(2)
+    if (els.floorOffset)       els.floorOffset.value = String(s.floorOffset)
+    if (els.floorOffsetLabel)  els.floorOffsetLabel.textContent = `${s.floorOffset.toFixed(1)} nm`
     for (const [k, el, lab] of [
       ['shadowStrength',   els.shadowStrength,   els.shadowStrengthLabel],
       ['keyIntensity',     els.keyIntensity,     els.keyIntensityLabel],
@@ -290,6 +302,25 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
     const v = Number(els.shadowStrength.value)
     photoMode.setShadowStrength(v)
     if (els.shadowStrengthLabel) els.shadowStrengthLabel.textContent = v.toFixed(2)
+  })
+
+  els.floor?.addEventListener('change', () => {
+    photoMode.setFloor(els.floor.checked)
+    if (els.floorControls) els.floorControls.style.display = els.floor.checked ? 'flex' : 'none'
+  })
+
+  els.floorAxis?.addEventListener('change', () => photoMode.setFloorAxis(els.floorAxis.value))
+
+  els.floorOpacity?.addEventListener('input', () => {
+    const v = Number(els.floorOpacity.value)
+    photoMode.setFloorOpacity(v)
+    if (els.floorOpacityLabel) els.floorOpacityLabel.textContent = v.toFixed(2)
+  })
+
+  els.floorOffset?.addEventListener('input', () => {
+    const v = Number(els.floorOffset.value)
+    photoMode.setFloorOffset(v)
+    if (els.floorOffsetLabel) els.floorOffsetLabel.textContent = `${v.toFixed(1)} nm`
   })
 
   for (const [el, lab, setter, unit] of [
@@ -468,8 +499,10 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
   _initCard('camera')
   _initCard('export')
   _initCard('figure')
+  // No 'bg' card — the background controls moved INTO the Figure card, where
+  // they belong: the depth cue fades toward that colour and the silhouette
+  // deliberately paints onto background pixels.
   _initCard('materials')
-  _initCard('bg')
 
   els.keyDirReset?.addEventListener('click', () => {
     photoMode.resetKeyDirection()

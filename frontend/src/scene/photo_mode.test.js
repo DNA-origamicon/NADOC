@@ -156,6 +156,30 @@ describe('swapToFlatMaterials', () => {
     ;[line, glow, lod, floor].forEach((m, i) => expect(m.material).toBe(originals[i]))
   })
 
+  it('leaves an invisible material alone — three\'s gizmo drag plane', () => {
+    // The regression: TransformControls adds a 100000×100000 PlaneGeometry whose
+    // material is `visible:false`, and it becomes visible in the scene the
+    // moment a gizmo attaches (selecting a cluster). A fresh photo material
+    // defaults to visible:true, so the swap turned it into a translucent
+    // infinite ground plane — and because the new material also defaults to
+    // depthWrite:true, isShadowExcluded stopped recognising it as an overlay and
+    // it started receiving the key shadow. That is where the accidental "floor"
+    // in photo mode came from.
+    const scene = new THREE.Scene()
+    const drag = new THREE.Mesh(
+      new THREE.PlaneGeometry(100000, 100000),
+      new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide, transparent: true, opacity: 0.1 }),
+    )
+    scene.add(drag)
+    const original = drag.material
+
+    const { count } = swapToFlatMaterials(scene)
+
+    expect(count).toBe(0)
+    expect(drag.material).toBe(original)
+    expect(drag.material.visible).toBe(false)
+  })
+
   it('restore() puts every original material back', () => {
     const scene = new THREE.Scene()
     const a = new THREE.Mesh(box(), new THREE.MeshPhongMaterial())
@@ -556,6 +580,105 @@ describe('createPhotoMode', () => {
     ctx.camera.updateMatrixWorld()
     mode._syncFrame()
     expect(u.uCueFar.value - u.uCueNear.value).toBeCloseTo(span, 6)
+  })
+
+  // ── Shadow-catching floor ─────────────────────────────────────────────────
+
+  it('raises a shadow catcher on activate and drops it on deactivate', () => {
+    expect(mode.getSettings().floor).toBe(true)
+    mode.activate()
+    const mesh = mode._getFloor().getMesh()
+    expect(mesh).not.toBe(null)
+    expect(ctx.scene.children).toContain(mesh)
+    // Auto-fitted to the seeded 2x2x2 box: flush with its lowest point.
+    expect(mesh.position.y).toBeCloseTo(-1, 6)
+
+    mode.deactivate()
+    expect(mode._getFloor()).toBe(null)
+    expect(ctx.scene.children.some(o => o.userData?.photoFloor)).toBe(false)
+  })
+
+  it('the catcher receives the key shadow — the exclusion list must not blank it', () => {
+    // isShadowExcluded(photoFloor) is TRUE (it must never CAST, and must never
+    // set the fitted frustum), so falling through _applyMeshShadowFlags would
+    // set receiveShadow = !excluded = false on the one mesh whose job is to
+    // receive. That is the whole reason for the explicit skip.
+    mode.activate()
+    const mesh = mode._getFloor().getMesh()
+    expect(mesh.receiveShadow).toBe(true)
+    expect(mesh.castShadow).toBe(false)
+  })
+
+  it('never inflates the fitted shadow frustum', () => {
+    // The plane is ~1.25 diagonals across. If it reached computeShadowBounds the
+    // radius would jump and the design would end up inside a single texel.
+    mode.activate()
+    const before = mode.getStatus().radius
+    mode.resync()                        // refits the rig with the floor present
+    expect(mode.getStatus().radius).toBeCloseTo(before, 6)
+  })
+
+  it('setFloor(false) removes it; the key shadow is untouched either way', () => {
+    // The difference from photo mode v1, whose shadow rig was GATED on a floor.
+    mode.activate()
+    mode.setFloor(false)
+    expect(mode._getFloor().getMesh()).toBe(null)
+    expect(mode._getKeyLight().castShadow).toBe(true)
+    mode.setFloor(true)
+    expect(mode._getFloor().getMesh()).not.toBe(null)
+  })
+
+  it('turning the key shadow off takes the catcher with it — nothing to catch', () => {
+    mode.activate()
+    mode.setKeyShadow(false)
+    expect(mode._getFloor().getMesh()).toBe(null)
+    mode.setKeyShadow(true)
+    expect(mode._getFloor().getMesh()).not.toBe(null)
+  })
+
+  it('floor opacity and gap are live', () => {
+    mode.activate()
+    mode.setFloorOpacity(0.8)
+    expect(mode._getFloor().getMesh().material.opacity).toBeCloseTo(0.8, 6)
+    mode.setFloorOffset(12)
+    expect(mode._getFloor().getMesh().position.y).toBeCloseTo(-13, 6)   // -1 - 12
+  })
+
+  it('setFloorAxis moves the plane to that face of the seeded 2x2x2 box', () => {
+    mode.activate()
+    expect(mode.getSettings().floorAxis).toBe('-y')
+    const mesh = mode._getFloor().getMesh()
+
+    mode.setFloorAxis('+y')
+    expect(mode.getSettings().floorAxis).toBe('+y')
+    expect(mesh.position.y).toBeCloseTo(1, 6)      // ceiling: box.max.y
+
+    mode.setFloorAxis('-z')
+    expect(mesh.position.z).toBeCloseTo(-1, 6)     // wall: box.min.z
+    expect(mesh.position.y).toBeCloseTo(0, 6)      // centred in Y now
+
+    // The gap still means "outward", whichever face is selected.
+    mode.setFloorOffset(5)
+    expect(mesh.position.z).toBeCloseTo(-6, 6)
+  })
+
+  it('setFloorAxis rejects an unknown axis instead of breaking the plane', () => {
+    mode.activate()
+    mode.setFloorAxis('+x')
+    mode.setFloorAxis('diagonal')
+    expect(mode.getSettings().floorAxis).toBe('+x')
+    expect(mode._getFloor().getMesh().position.x).toBeCloseTo(1, 6)
+  })
+
+  it('getFloorReach feeds the adaptive far clip only while a floor exists', () => {
+    expect(mode.getFloorReach()).toBe(null)
+    mode.activate()
+    const r = mode.getFloorReach()
+    expect(r.reach).toBeGreaterThan(0)
+    mode.setFloor(false)
+    expect(mode.getFloorReach()).toBe(null)
+    mode.deactivate()
+    expect(mode.getFloorReach()).toBe(null)
   })
 
   // ── Camera + export ───────────────────────────────────────────────────────

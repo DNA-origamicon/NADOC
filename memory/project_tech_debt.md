@@ -594,10 +594,10 @@ these are the artifacts outside them.
   ([main.js:733](frontend/src/main.js#L733); callers `:829`, `:840`, `:3496`, `:3891`, `:3918`).
   `_routingChecks` lost its `prebreak` and `autoMerge` fields; the clear-hook survived them. Either
   delete the function + its 5 calls, or restore whatever staple-routing check it was clearing.
-- **`_floorReach` is a permanent `() => null` stub** ([main.js:614](frontend/src/main.js#L614))
-  whose only consumer is a live per-frame callback (`:615`) that therefore evaluates a dead branch
-  every frame. Deliberate revive seam for photo-mode v1's ground plane (archived to
-  `archive/photo_mode_v1/`) — keep or excise, but it's currently cost with no benefit.
+- ~~**`_floorReach` is a permanent `() => null` stub**~~ **RESOLVED 2026-08-01.** The seam is live:
+  photo mode's shadow catcher (`scene/photo_renderer/shadow_catcher.js`) reports its centre + far
+  corner through `getFloorReach()`, so the per-frame branch does real work. See
+  [[project_photo_mode]].
 - **The main.js carve-up loop has no slash command.** `/carve-router` explicitly disclaims main.js
   ("NOT for frontend main.js — that's its own loop"), but that loop's only artifacts are
   `main_js_carveup.md` + `main_js_extraction_log.md` + `memory/main_init_detail.md`. Every other
@@ -875,9 +875,8 @@ Found 2026-07-30 rewriting `.claude/rules/rendering.md` + `RUNBOOK_RENDERING.md`
   outside vitest's `include: ['src/**/*.test.js']`. Fine as archive, but nothing marks them as
   non-running, so a future grep for "is X tested?" will find false positives. Consider a one-line
   banner in `frontend/archive/photo_mode_v1/README.md`.
-- **`_floorReach` is a permanent `() => null` stub** in `main.js` (already noted in
-  `.claude/rules/main-init.md:171`) — the camera-clip seam left behind when v1's ground plane was
-  deliberately not ported. Listed here so it is counted, not re-discovered.
+- ~~**`_floorReach` is a permanent `() => null` stub** in `main.js`~~ **RESOLVED 2026-08-01** —
+  the shadow catcher closed the seam. See [[project_photo_mode]].
 
 ### TD-23 — Duplex-foundation stragglers (found 2026-07-30, `/audit-plan` — [[overhang-duplex-foundation]])
 

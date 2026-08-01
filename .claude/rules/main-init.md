@@ -168,8 +168,10 @@ lazy-arrow fixes are in the detail file below — read it when you're placing an
 - **`designRenderer.clearFemOverlay()` (`design_renderer.js:1241`) has zero callers.** It still
   contains a cadnano/unfold guard that this rule once presented as a CRITICAL live invariant. It
   guards nothing; logged in `project_tech_debt`.
-- `_floorReach` (`:614`) is a permanent `() => null` stub — photo-mode v1's ground plane was
-  archived. The frame callback that reads it is dead weight, deliberately kept as a revive seam.
+- `_floorReach` is **no longer a stub** (2026-08-01). It now delegates to a forward-declared
+  `let _photoFloorReach`, assigned at the photo-mode init ~6100 lines below the frame callback that
+  reads it. The forward declaration is the whole point: a direct const read there is a TDZ throw
+  inside a frame callback, i.e. a permanently dead render loop.
 
 ## Test coverage — none
 

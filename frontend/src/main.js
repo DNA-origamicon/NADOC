@@ -592,6 +592,12 @@ async function main() {
   // depth range tight enough for z-precision. The O(N) bounds recompute is
   // throttled (every 15 frames); the per-frame cost is a single distance calc.
   // Outside assembly mode we restore the 0.1 / 2000 default.
+  //
+  // Declared OUT here (not in the block below) so the photo-mode init ~6100
+  // lines down can assign it: `_photoMode` is a closure const declared far
+  // below the frame callback that reads this, and reading a const from its TDZ
+  // inside a frame callback throws — which kills setAnimationLoop permanently.
+  let _photoFloorReach = () => null
   {
     const _clipCtr  = new THREE.Vector3()
     const _clipSize = new THREE.Vector3()
@@ -613,8 +619,10 @@ async function main() {
     // Photo mode v1 owned the ground plane; it was archived with the rest of
     // that mode (archive/photo_mode_v1/) and the current photo mode is
     // deliberately floorless — a ground plane is the last thing a bundle figure
-    // wants. The seam stays so reviving a floor is a one-line change.
-    const _floorReach = () => null
+    // wants. The seam is LIVE again as of the shadow catcher
+    // (scene/photo_renderer/shadow_catcher.js): an invisible plane that shows
+    // only the shadow landing on it, which still has to be inside the far clip.
+    const _floorReach = () => _photoFloorReach()
     addFrameCallback(() => {
       if (!store.getState().assemblyActive) {
         // Part mode: far is normally pinned at 2000. If a photo floor is up,
@@ -6770,6 +6778,9 @@ async function main() {
     assemblyJointRenderer, bluntEnds, originAxes,
   })
   window.__photoMode = _photoMode.mode   // console seam for tuning
+  // Close the adaptive-clip seam (~600): the shadow catcher extends past the
+  // content, so far has to reach its far corner or the plane gets cropped.
+  _photoFloorReach = () => _photoMode.mode.getFloorReach()
 
   // Save/Save-As dispatch factory (ui/file_io.js initFileSave, extraction #60).
   // Placed here — not at the menu listeners (~3924) — because its deps span the

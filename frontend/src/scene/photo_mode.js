@@ -13,10 +13,15 @@
  *     shadow sweeps across the structure as you reorient it
  *   • a real KEY-LIGHT SHADOW MAP, with no floor required, so an object casts
  *     onto whatever is behind it
+ *   • an optional SHADOW-CATCHING floor (photo_renderer/shadow_catcher.js) —
+ *     invisible except where the shadow lands, so the structure reads as sitting
+ *     on something. Additive to the key shadow, never a precondition for it,
+ *     which is the whole difference from v1's ground plane.
  *   • the ChimeraX depth-outline silhouette + a depth cue
  *   • flat-colour background, SMAA, and tiled PNG export
  *
- * No HDRI, no bloom, no path tracer, no floor, no mist — all deliberate.
+ * No HDRI, no bloom, no path tracer, no visible ground plane, no mist — all
+ * deliberate.
  *
  * REMOVED 2026-07-28 — multishadow ambient occlusion. A faithful port of
  * ChimeraX's 64-direction ambient shadows shipped here and was cut after
@@ -47,6 +52,8 @@ import { dollyDistanceForFov, PARALLEL_FOV, PERSPECTIVE_FOV }
 import { applyLighting, LIGHTING_PRESETS } from './photo_renderer/lighting_presets.js'
 import { computeShadowBounds, isShadowExcluded, findBoundsOutlier, rejectedObjects,
          sceneSignature } from './photo_renderer/shadow_bounds.js'
+import { createShadowCatcher, FLOOR_AXES, DEFAULT_FLOOR_AXIS }
+  from './photo_renderer/shadow_catcher.js'
 import { initPhotoPanel }          from '../ui/photo_panel.js'
 
 /**
@@ -140,6 +147,17 @@ export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
 
   // A real shadow map cast by the key light, deliberately NOT gated on a floor.
   keyShadow:  true,
+
+  // Shadow-CATCHING floor: an invisible plane under the design that shows
+  // nothing but the shadow landing on it (photo_renderer/shadow_catcher.js).
+  // Note what this is NOT: photo mode v1's visible ground plane, which GATED the
+  // whole shadow rig. Here the key shadow works with or without it — this only
+  // adds a surface for the shadow to fall onto, so the structure reads as
+  // sitting on something instead of floating in a void.
+  floor:        true,
+  floorOpacity: 0.35,         // ShadowMaterial opacity = how dark the pool is
+  floorOffset:  0,            // nm OUTWARD from the chosen face; 0 = flush
+  floorAxis:    DEFAULT_FLOOR_AXIS,   // which bbox face it sits against: ±x/±y/±z
   keyShadowMapSize: 2048,     // ChimeraX shadow_map_size; one map, so it is cheap
   keyShadowBias: 1.0,         // × the texel-scaled normalBias; raise to kill acne
   shadowStrength:   1.0,      // three's LightShadow.intensity; 1 = physical
@@ -179,7 +197,8 @@ export const DEFAULT_PHOTO_SETTINGS = Object.freeze({
  *
  * Skipped: impostor materials (their sphere ray-paint lives in an
  * onBeforeCompile patch that a fresh material would drop), shared-renderer LOD
- * impostors, additive glow sprites, helper lines, and the photo floor.
+ * impostors, additive glow sprites, helper lines, the shadow catcher, and
+ * anything whose material is `visible:false` (three's own gizmo drag plane).
  *
  * @param {THREE.Object3D} root
  * @returns {{restore: () => void, count: number}}
@@ -198,6 +217,17 @@ export function swapToFlatMaterials(root, presets = null) {
     if (src.userData?.isImpostor || src.userData?.impostorRadius != null) return
     if (obj.userData?.sharedLodImpostor) return
     if (obj.userData?.photoFloor) return
+    // A material flagged `visible:false` means "never draw this", and a fresh
+    // material defaults to visible:true — the same class of bug as depthWrite
+    // below. The live offender is three's own TransformControlsPlane: a
+    // 100000×100000 invisible drag plane that TransformControls adds to the
+    // scene when a gizmo attaches. Swapped, it became a translucent infinite
+    // ground plane that also passed the depthWrite test in isShadowExcluded and
+    // started receiving the key shadow — which is where the accidental "floor"
+    // that appeared on selecting a cluster in photo mode came from. Skipping the
+    // mesh entirely (rather than copying `visible` across) also keeps it out of
+    // the restore map, since nothing about it changed.
+    if (src.visible === false) return
 
     const vc = Boolean(src.vertexColors)
     // Representation is read from the ORIGINAL material, before any swap —
@@ -278,6 +308,7 @@ export function createPhotoMode(sceneCtx) {
   let _rejected = new Set()             // objects too large to be part of the structure
   let _signature = null                 // geometry fingerprint the rig is fitted to
   let _sigFrame  = 0
+  let _floor     = null                 // shadow catcher, created on activate
 
   // ── Scene state save / restore ─────────────────────────────────────────────
 
@@ -381,6 +412,27 @@ export function createPhotoMode(sceneCtx) {
     _applyKeyShadow()
   }
 
+  /**
+   * Fit the shadow-catching floor to the current bounds.
+   *
+   * Called from the tail of `_applyKeyShadow`, which is both the end of every
+   * `_rebuildRig` (fresh bounds) and the direct entry point for every shadow
+   * setting — so the plane can never be left fitted to stale bounds or sampling
+   * a shadow map that was just turned off. `invalidate()` covers the flag flip:
+   * `shadowMap.enabled` is compiled into the program and three never re-checks
+   * it, exactly as for the swapped physical materials.
+   */
+  function _applyFloor() {
+    if (!_floor) return
+    _floor.update(_bounds, {
+      enabled: _settings.floor && _settings.keyShadow,
+      opacity: _settings.floorOpacity,
+      offset:  _settings.floorOffset,
+      axis:    _settings.floorAxis,
+    })
+    _floor.invalidate()
+  }
+
   /** Pin the rig to the camera — ChimeraX's move_lights_with_camera.
    *  World quaternion, not the local one: the render camera is unparented today,
    *  but a nested camera would silently mis-orient the whole rig. */
@@ -452,6 +504,7 @@ export function createPhotoMode(sceneCtx) {
       }
     }
     _applyMeshShadowFlags(want)
+    _applyFloor()
   }
 
   /** Mark every swapped material for recompile — needed whenever a value that
@@ -468,6 +521,11 @@ export function createPhotoMode(sceneCtx) {
     if (!on) { _restoreMeshShadowFlags(); return }
     scene.traverse(obj => {
       if (!obj.isMesh && !obj.isInstancedMesh) return
+      // The shadow catcher owns its own flags (never casts, always receives) and
+      // is not the editor's mesh, so it must stay out of the save/restore map.
+      // Falling through would set receiveShadow = !isShadowExcluded(obj) = FALSE
+      // on the one object whose entire job is to receive.
+      if (obj.userData?.photoFloor) return
       if (_savedMeshShadows.has(obj)) return
       _savedMeshShadows.set(obj, { cast: obj.castShadow, receive: obj.receiveShadow })
       // Impostors and shared-LOD instancing cannot cast correctly: three drives
@@ -536,6 +594,11 @@ export function createPhotoMode(sceneCtx) {
     _matSwap = swapToFlatMaterials(scene, _materialPresets())
     _applyBackground()
 
+    // Before _rebuildRig, which fits the catcher at the tail of _applyKeyShadow.
+    // Safe to create pre-swap-independent: the catcher's material carries
+    // userData.photoFloor and is never swapped.
+    _floor = createShadowCatcher(scene)
+
     _buildComposer()
 
     // Rig last: it fits itself to the scene bounds, and the material swap above
@@ -595,6 +658,8 @@ export function createPhotoMode(sceneCtx) {
 
     // Shadow state — restore BEFORE the rig is torn down (the flags live on the
     // scene meshes and the lights we are about to drop).
+    _floor?.remove()
+    _floor = null
     _restoreMeshShadowFlags()
     if (_savedShadowEnabled !== null) {
       renderer.shadowMap.enabled = _savedShadowEnabled
@@ -904,6 +969,37 @@ export function createPhotoMode(sceneCtx) {
     if (_active) _applyKeyShadow()
   }
 
+  /** Shadow-catching floor. Unlike photo mode v1's ground plane this gates
+   *  nothing — the key shadow is unchanged with it off. */
+  function setFloor(on) {
+    _settings.floor = !!on
+    if (_active) _applyFloor()
+  }
+
+  function setFloorOpacity(v) {
+    _settings.floorOpacity = Math.max(0, Math.min(1, v))
+    if (_active) _applyFloor()
+  }
+
+  /** nm outward from the chosen face. 0 = flush (hard contact shadow); larger
+   *  pushes the plane away for a detached, softer pool. */
+  function setFloorOffset(nm) {
+    _settings.floorOffset = Number.isFinite(nm) ? nm : 0
+    if (_active) _applyFloor()
+  }
+
+  /** Which side of the design the plane sits against: '-y' (floor), '+y'
+   *  (ceiling), '±x' / '±z' (walls). World axes — the plane must stay put while
+   *  the camera-pinned key light sweeps across it. */
+  function setFloorAxis(axis) {
+    if (!FLOOR_AXES.includes(axis)) return
+    _settings.floorAxis = axis
+    if (_active) _applyFloor()
+  }
+
+  /** World centre + reach of the catcher, for main.js's adaptive far clip. */
+  function getFloorReach() { return _floor?.getReach() ?? null }
+
   /** Absolute per-light intensities — the real shadow-contrast controls. */
   function setKeyIntensity(v)     { _settings.keyIntensity = Math.max(0, v);     if (_active) _rebuildRig() }
   function setFillIntensity(v)    { _settings.fillIntensity = Math.max(0, v);    if (_active) _rebuildRig() }
@@ -1021,6 +1117,7 @@ export function createPhotoMode(sceneCtx) {
     setOutlineSensitivity, setOutlineDepthJump,
     setDepthCue, setDepthCueColor, setDepthCueStrength,
     setPinLights, setKeyShadow, setKeyShadowBias, setKeyShadowMapSize,
+    setFloor, setFloorOpacity, setFloorOffset, setFloorAxis, getFloorReach,
     setKeyAzimuth, setKeyElevation, resetKeyDirection,
     setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
     setKeyIntensity, setFillIntensity, setAmbientIntensity, setShadowStrength,
@@ -1031,6 +1128,7 @@ export function createPhotoMode(sceneCtx) {
     _getKeyLight:  () => _keyLight,
     _getFigurePass: () => _figurePass,
     _getLightGroup: () => _lightGroup,
+    _getFloor:      () => _floor,
   }
 }
 
