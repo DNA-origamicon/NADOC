@@ -95,15 +95,19 @@ export function computeAtomStrandColors(state, staplePalette) {
 }
 
 /**
- * strand id → owning cluster INDEX, for the atomistic and surface paths.
+ * strand id → owning cluster INDEX. **SURFACE ONLY.**
  *
- * Those two renderers only ever know a *strand* per atom / per vertex — atoms carry
- * no `domain_index` (see atom_table.js ATOM_FIELDS) and the surface's
- * `vertex_strand_index_table` is strand-only. So unlike the CG path, which resolves
- * per nucleotide, this collapses each strand onto the FIRST of its domains that any
- * cluster claims. A strand split across two clusters therefore takes one of them,
- * which is the same approximation cluster COLOUR has always made here — colour and
- * opacity agreeing matters more than either being per-domain.
+ * Collapses each strand onto the FIRST of its domains any cluster claims, so a strand
+ * spanning two clusters takes one of them. That is WRONG for anything that can do
+ * better — it is why the scaffold, which passes through nearly every cluster, was
+ * painted a single colour in atomistic (reported 2026-08-01 on VoltronCoreScad: the
+ * scaffold inside Cluster 3 came out Cluster 4's colour). Atomistic now uses
+ * `buildNucClusterIndex` and resolves per nucleotide.
+ *
+ * The surface cannot: `vertex_strand_index_table` gives a vertex its strand id and
+ * nothing else, so there is no bp index to resolve a domain with. Fixing it needs
+ * helix/bp per vertex in the backend surface payload. Until then a scaffold-spanning
+ * surface still takes one cluster's colour and fade.
  *
  * @param {object} currentDesign
  * @returns {Map<string, number>} strand id → cluster index
@@ -140,7 +144,8 @@ export function resolveStrandClusters(currentDesign) {
 }
 
 /**
- * strand id → per-cluster OPACITY, for the atomistic and surface renderers.
+ * strand id → per-cluster OPACITY. **SURFACE ONLY** — see resolveStrandClusters for
+ * why atomistic no longer uses this. Atomistic's twin is `computeAtomNucAlphas`.
  *
  * Unlike colour, opacity applies in EVERY coloring mode — so this does not consult
  * `coloringMode` at all. Strands in no cluster, and clusters at full opacity, are
@@ -157,6 +162,107 @@ export function computeAtomStrandAlphas(currentDesign) {
   for (const [sid, ci] of resolveStrandClusters(currentDesign)) {
     const a = clusters[ci]?.opacity
     if (typeof a === 'number' && a < 1) out.set(sid, Math.max(0, a))
+  }
+  return out
+}
+
+/**
+ * `helix:bp:dir` → owning cluster INDEX, for the atomistic path.
+ *
+ * WHY this exists on top of resolveStrandClusters: a strand can pass through several
+ * clusters — the scaffold passes through nearly all of them — so collapsing a strand
+ * onto ONE cluster paints every scaffold atom with whichever cluster happened to own
+ * its first domain. On VoltronCoreScad that is Cluster 4, so the scaffold segments
+ * genuinely inside Cluster 3 came out Cluster 4's colour.
+ *
+ * Atoms carry no `domain_index`, but they DO carry helix + bp + direction, so walking
+ * the design's domains recovers the (strand_id, domain_index) an atom belongs to. Each
+ * domain is then resolved by the SAME two-tier lookup the bead view uses
+ * (helix_renderer/palette.js::buildClusterColorLookup semantics: a domain-level entry
+ * beats the helix-level fallback), which is what makes atomistic agree with the beads.
+ *
+ * Cost is one entry per nucleotide of every clustered domain — tens of thousands for a
+ * large origami, built once per design change, O(1) per atom afterwards. A per-atom
+ * range scan would be O(domains) against millions of atoms.
+ *
+ * @param {object} design
+ * @returns {Map<string, number>} 'helix:bp:dir' → cluster index
+ */
+export function buildNucClusterIndex(design) {
+  const out = new Map()
+  const clusters = design?.cluster_transforms ?? []
+  if (!clusters.length) return out
+
+  const helixCluster = new Map()   // helix_id → cluster index (the fallback tier)
+  const domainCluster = new Map()  // 'strand_id:domain_index' → cluster index (wins)
+  const strandMap = new Map((design.strands ?? []).map(s => [s.id, s]))
+  clusters.forEach((c, i) => {
+    if (c.domain_ids?.length) {
+      const bridges = new Set()
+      for (const dr of c.domain_ids) {
+        domainCluster.set(`${dr.strand_id}:${dr.domain_index}`, i)
+        const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
+        if (dom) bridges.add(dom.helix_id)
+      }
+      for (const hid of (c.helix_ids ?? [])) if (!bridges.has(hid)) helixCluster.set(hid, i)
+    } else {
+      for (const hid of (c.helix_ids ?? [])) helixCluster.set(hid, i)
+    }
+  })
+
+  for (const s of design.strands ?? []) {
+    const doms = s.domains ?? []
+    for (let di = 0; di < doms.length; di++) {
+      const d = doms[di]
+      if (!d?.helix_id) continue
+      const ci = domainCluster.get(`${s.id}:${di}`) ?? helixCluster.get(d.helix_id)
+      if (ci == null) continue
+      // REVERSE domains store start_bp > end_bp.
+      const lo = Math.min(d.start_bp, d.end_bp)
+      const hi = Math.max(d.start_bp, d.end_bp)
+      for (let bp = lo; bp <= hi; bp++) out.set(`${d.helix_id}:${bp}:${d.direction}`, ci)
+    }
+  }
+  return out
+}
+
+/**
+ * `helix:bp:dir` → per-cluster COLOUR for the atomistic path. Empty unless the viewer
+ * is in cluster-coloring mode. Explicit colour beats the auto palette slot, matching
+ * the bead view.
+ * @param {object} state  the store state ({ currentDesign, coloringMode })
+ * @returns {Map<string, number>} packed 0xRRGGBB
+ */
+export function computeAtomNucColors(state) {
+  const out = new Map()
+  const design = state?.currentDesign
+  if (state?.coloringMode !== 'cluster') return out
+  const clusters = design?.cluster_transforms ?? []
+  if (!clusters.length) return out
+  const resolved = clusters.map((c, i) => {
+    const custom = c?.color
+    return (typeof custom === 'string' && /^#[0-9a-fA-F]{6}$/.test(custom))
+      ? parseInt(custom.slice(1), 16)
+      : ATOM_STAPLE_PALETTE[i % ATOM_STAPLE_PALETTE.length]
+  })
+  for (const [k, ci] of buildNucClusterIndex(design)) out.set(k, resolved[ci])
+  return out
+}
+
+/**
+ * `helix:bp:dir` → per-cluster OPACITY for the atomistic path. Unlike colour this
+ * ignores coloringMode — a fade applies in every mode. Clusters at full opacity are
+ * omitted, so an unstyled design yields an empty map and costs nothing.
+ * @param {object} design
+ * @returns {Map<string, number>}
+ */
+export function computeAtomNucAlphas(design) {
+  const out = new Map()
+  const clusters = design?.cluster_transforms ?? []
+  if (!clusters.some(c => typeof c?.opacity === 'number' && c.opacity < 1)) return out
+  for (const [k, ci] of buildNucClusterIndex(design)) {
+    const a = clusters[ci]?.opacity
+    if (typeof a === 'number' && a < 1) out.set(k, Math.max(0, a))
   }
   return out
 }

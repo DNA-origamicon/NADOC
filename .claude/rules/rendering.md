@@ -234,15 +234,27 @@ stock chunk variable (LESSONS D5).
 >    below 0.02, so a premature call makes every bead vanish.
 >
 > **Atomistic + surface too, 2026-08-01** (their renderers are `Not this rule` above, but the
-> contract is here because it reuses this machinery). Both fade **per STRAND**, not per
-> nucleotide: atoms carry no `domain_index` (`atom_table.js` `ATOM_FIELDS`) and surface vertices
-> carry only a strand id (`vertex_strand_index_table`), so a strand split across two clusters
-> takes one of them — the same approximation cluster *colour* has always made there.
-> `color_util.js::resolveStrandClusters` is the single resolution both colour and opacity use, so
-> they cannot disagree about which cluster owns a strand.
-> - **Atomistic**: `setStrandAlphas(Map)`. The sweep lives inside `_applyColors`, which `_rebuild`
->   already calls, so it survives a rebuild for free. Bonds take the LOWER of their two atoms'
->   alphas. Impostor atom materials route through `enableImpostorInstanceAlpha`, same as the beads.
+> contract is here because it reuses this machinery).
+>
+> **Resolve cluster identity per NUCLEOTIDE, never per strand.** A strand can pass through several
+> clusters and the scaffold passes through nearly all of them, so collapsing a strand onto one
+> cluster paints the whole scaffold with whichever cluster owns its first domain. That shipped as a
+> bug (VoltronCoreScad: 979 scaffold nucleotides genuinely in Cluster 3 came out Cluster 4's
+> colour) and it is silent — the CG bead view was right the whole time, because it resolves per
+> nucleotide via `domain_index`.
+> - **Atomistic**: `setClusterDisplay(alphas, colors)`, both keyed `helix:bp:dir`. Atoms carry no
+>   `domain_index` (`atom_table.js` `ATOM_FIELDS`) but they do carry helix + bp + direction, so
+>   `color_util.js::buildNucClusterIndex` walks the design's domains once to recover which
+>   (strand, domain) each nucleotide belongs to, then applies the same two-tier rule as the beads.
+>   O(1) per atom; a per-atom range scan would be O(domains) against millions of atoms. The sweep
+>   lives inside `_applyColors`, which `_rebuild` already calls, so it survives a rebuild for free.
+>   Bonds take the LOWER of their two atoms' alphas. Impostor atom materials route through
+>   `enableImpostorInstanceAlpha`, same as the beads. Note `<REVERSE>` domains store
+>   `start_bp > end_bp` — min/max the range or half of them vanish.
+> - **Surface is the one place still per STRAND, and cannot do better**:
+>   `vertex_strand_index_table` gives a vertex its strand and nothing else, so there is no bp to
+>   resolve a domain with. A scaffold-spanning surface still takes one cluster's colour and fade.
+>   Fixing it needs helix/bp per vertex in the backend surface payload.
 > - **Surface**: `applyStrandAlphas(Map)`. One merged mesh, one material, so `material.opacity` is
 >   global (the sidebar slider owns it) and the fade rides a per-VERTEX attribute — **reusing the
 >   same `instanceAlpha` name and patch**, because `attribute float instanceAlpha` is per-vertex in

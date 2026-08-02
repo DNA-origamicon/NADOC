@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { heatmapHex, hexFromInt, atomColorsFromLetters, BASE_HEX, computeAtomStrandColors, ATOM_STAPLE_PALETTE, resolveStrandClusters, computeAtomStrandAlphas } from './color_util.js'
+import { heatmapHex, hexFromInt, atomColorsFromLetters, BASE_HEX, computeAtomStrandColors, ATOM_STAPLE_PALETTE, resolveStrandClusters, computeAtomStrandAlphas, buildNucClusterIndex, computeAtomNucColors, computeAtomNucAlphas } from './color_util.js'
 
 const rgb = (hex) => [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff]
 
@@ -265,5 +265,121 @@ describe('computeAtomStrandAlphas', () => {
     expect(alphas.get('s1')).toBeCloseTo(0.4)
     expect(colors.get('s2')).toBe(0x00ffcc)
     expect(alphas.get('s2')).toBeCloseTo(0.9)
+  })
+})
+
+// ── Per-nucleotide cluster resolution (atomistic) ─────────────────────────────
+// The bug this fixes, reported against workspace/VoltronCoreScad.nadoc: ONE scaffold
+// strand with 97 domains passes through both Cluster 3 and Cluster 4. Resolving per
+// STRAND takes the first covered domain — domain 0, which is in Cluster 4 — so the 8
+// scaffold domains genuinely inside Cluster 3 were painted Cluster 4's colour.
+
+// A scaffold threading hA (in cluster 0) then hB (in cluster 1), plus a staple.
+const spanningDesign = (over = {}) => ({
+  strands: [
+    { id: 'scaffold', strand_type: 'scaffold', domains: [
+      { helix_id: 'hA', start_bp: 0, end_bp: 2, direction: 'FORWARD' },
+      { helix_id: 'hB', start_bp: 0, end_bp: 2, direction: 'FORWARD' },
+    ] },
+    { id: 'st1', domains: [{ helix_id: 'hB', start_bp: 0, end_bp: 2, direction: 'REVERSE' }] },
+  ],
+  cluster_transforms: [
+    { id: 'c3', helix_ids: ['hA'], ...over.a },
+    { id: 'c4', helix_ids: ['hB'], ...over.b },
+  ],
+})
+
+describe('buildNucClusterIndex', () => {
+  it('splits ONE strand across the clusters it actually passes through', () => {
+    // The core regression pin: resolveStrandClusters collapses the scaffold onto a
+    // single cluster; this must not.
+    const m = buildNucClusterIndex(spanningDesign())
+    expect(m.get('hA:0:FORWARD')).toBe(0)
+    expect(m.get('hA:2:FORWARD')).toBe(0)
+    expect(m.get('hB:0:FORWARD')).toBe(1)
+    expect(m.get('hB:2:FORWARD')).toBe(1)
+
+    // …and the per-strand resolution really does collapse it, so the two disagree
+    // exactly where the bug was visible.
+    expect(resolveStrandClusters(spanningDesign()).get('scaffold')).toBe(0)
+  })
+
+  it('covers every bp of a domain, not just its ends', () => {
+    const m = buildNucClusterIndex(spanningDesign())
+    expect(m.get('hA:1:FORWARD')).toBe(0)
+  })
+
+  it('handles REVERSE domains, which store start_bp > end_bp', () => {
+    const design = {
+      strands: [{ id: 's1', domains: [
+        { helix_id: 'hA', start_bp: 8, end_bp: 4, direction: 'REVERSE' },
+      ] }],
+      cluster_transforms: [{ id: 'cA', helix_ids: ['hA'] }],
+    }
+    const m = buildNucClusterIndex(design)
+    for (const bp of [4, 5, 6, 7, 8]) expect(m.get(`hA:${bp}:REVERSE`)).toBe(0)
+  })
+
+  it('keys direction apart — two strands share a helix and bp', () => {
+    const m = buildNucClusterIndex(spanningDesign())
+    expect(m.get('hB:0:FORWARD')).toBe(1)     // the scaffold
+    expect(m.get('hB:0:REVERSE')).toBe(1)     // the staple, same helix
+  })
+
+  it('lets a domain-level entry beat the helix-level fallback', () => {
+    const design = {
+      strands: [{ id: 's1', domains: [
+        { helix_id: 'hA', start_bp: 0, end_bp: 1, direction: 'FORWARD' },
+        { helix_id: 'hA', start_bp: 2, end_bp: 3, direction: 'FORWARD' },
+      ] }],
+      cluster_transforms: [
+        { id: 'whole', helix_ids: ['hA'] },
+        { id: 'bridge', helix_ids: ['hA'], domain_ids: [{ strand_id: 's1', domain_index: 1 }] },
+      ],
+    }
+    const m = buildNucClusterIndex(design)
+    expect(m.get('hA:0:FORWARD')).toBe(0)     // helix fallback
+    expect(m.get('hA:2:FORWARD')).toBe(1)     // the bridge domain wins
+  })
+
+  it('is empty for a design with no clusters', () => {
+    expect(buildNucClusterIndex({ strands: [] }).size).toBe(0)
+    expect(buildNucClusterIndex(null).size).toBe(0)
+  })
+})
+
+describe('computeAtomNucColors', () => {
+  const state = (design, coloringMode = 'cluster') => ({ currentDesign: design, coloringMode })
+
+  it('gives each half of the spanning strand its OWN cluster colour', () => {
+    const m = computeAtomNucColors(state(spanningDesign(
+      { a: { color: '#ff00ff' }, b: { color: '#00ffcc' } })))
+    expect(m.get('hA:0:FORWARD')).toBe(0xff00ff)
+    expect(m.get('hB:0:FORWARD')).toBe(0x00ffcc)
+  })
+
+  it('falls back to the auto palette slot', () => {
+    const m = computeAtomNucColors(state(spanningDesign()))
+    expect(m.get('hA:0:FORWARD')).toBe(ATOM_STAPLE_PALETTE[0])
+    expect(m.get('hB:0:FORWARD')).toBe(ATOM_STAPLE_PALETTE[1])
+  })
+
+  it('is EMPTY outside cluster-coloring mode — colour is mode-gated', () => {
+    expect(computeAtomNucColors(state(spanningDesign(), 'strand')).size).toBe(0)
+  })
+})
+
+describe('computeAtomNucAlphas', () => {
+  it('fades each half of the spanning strand independently', () => {
+    const m = computeAtomNucAlphas(spanningDesign({ a: { opacity: 0.3 } }))
+    expect(m.get('hA:0:FORWARD')).toBeCloseTo(0.3)
+    expect(m.has('hB:0:FORWARD')).toBe(false)   // the other half stays opaque
+  })
+
+  it('is EMPTY when nothing is faded, and ignores coloringMode', () => {
+    expect(computeAtomNucAlphas(spanningDesign()).size).toBe(0)
+    expect(computeAtomNucAlphas(spanningDesign({ a: { opacity: 1 } })).size).toBe(0)
+    // no mode argument at all — a fade applies in every coloring mode
+    expect(computeAtomNucAlphas(spanningDesign({ a: { opacity: 0.5 } })).size).toBeGreaterThan(0)
   })
 })

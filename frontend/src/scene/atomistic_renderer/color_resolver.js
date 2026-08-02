@@ -25,7 +25,7 @@ import {
  * Priority cascade (coarsest to finest):
  *   multi-lasso → strand → domain → nucleotide
  *
- * @param {object}  ctx       { colorMode, strandColors:Map, baseColors:Map }
+ * @param {object}  ctx       { colorMode, strandColors:Map, baseColors:Map, clusterColors:Map }
  * @param {object}  atom      atom record
  * @param {object|null} sel   current selection
  * @param {string[]}    multiIds  multi-lasso strand ids
@@ -92,6 +92,16 @@ export function colorForAtom(ctx, atom, sel, multiIds) {
  * the colouring buttons.)
  */
 function _colorByMode(ctx, atom, cpk) {
+  // Per-cluster colour is resolved per NUCLEOTIDE, not per strand: a strand can pass
+  // through several clusters (the scaffold passes through nearly all of them), so a
+  // strand-keyed lookup paints every scaffold atom with one cluster's colour. The map
+  // is populated only in cluster-coloring mode, so no mode gate is needed here.
+  // Extra-base / extension atoms carry their ANCHOR nucleotide's helix:bp:dir, so they
+  // inherit that nucleotide's cluster — which is what you want.
+  if (ctx.clusterColors?.size) {
+    const c = ctx.clusterColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
+    if (c != null) return c
+  }
   if (ctx.colorMode === 'strand') return ctx.strandColors.get(atom.strand_id) ?? cpk
   if (ctx.colorMode === 'base') {
     if (atom.aux_helix_id) return ctx.strandColors.get(atom.strand_id) ?? cpk

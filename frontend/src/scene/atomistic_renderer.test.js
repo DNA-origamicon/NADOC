@@ -317,31 +317,45 @@ describe('live MD ball-and-stick payload (flat Int32 serials + sparse object ato
   })
 })
 
-// ── Per-cluster opacity ───────────────────────────────────────────────────────
-// Strand-keyed, because atoms carry no domain_index. Lazy: an unstyled design must
-// never flip these materials to transparent.
+// ── Per-cluster colour + opacity ──────────────────────────────────────────────
+// Keyed per NUCLEOTIDE (`helix:bp:dir`), not per strand. The bug that forced this: a
+// strand can pass through several clusters and the scaffold passes through nearly all
+// of them, so a strand-keyed lookup painted every scaffold atom with whichever cluster
+// owned its first domain — the scaffold inside Cluster 3 came out Cluster 4's colour.
 
-function twoStrandScene() {
+function twoNucScene() {
   const scene = new THREE.Scene()
   const ar = initAtomisticRenderer(scene)
   ar.setMode('ballstick')
   ar.update({
     atoms: [
-      { serial: 0, element: 'P', helix_id: 'h0', strand_id: 's1', x: 0, y: 0, z: 0 },
-      { serial: 1, element: 'P', helix_id: 'h0', strand_id: 's2', x: 0.15, y: 0, z: 0 },
+      // Same STRAND, different nucleotides — the case strand-keying got wrong.
+      { serial: 0, element: 'P', helix_id: 'hA', bp_index: 5, direction: 'FORWARD',
+        strand_id: 'scaffold', x: 0, y: 0, z: 0 },
+      { serial: 1, element: 'P', helix_id: 'hB', bp_index: 9, direction: 'FORWARD',
+        strand_id: 'scaffold', x: 0.15, y: 0, z: 0 },
     ],
     bonds: [[0, 1]],
   })
   return { scene, ar }
 }
+const KA = 'hA:5:FORWARD'
+const KB = 'hB:9:FORWARD'
 const atomMeshes = (scene) =>
   scene.children.filter(o => o.isInstancedMesh && o.name === 'atomSpheres')
 const alphaAt = (mesh, i) => mesh.geometry.getAttribute('instanceAlpha')?.getX(i)
+const allAlphas = (scene) => atomMeshes(scene).flatMap(m =>
+  Array.from({ length: m.count }, (_, i) => alphaAt(m, i)))
+const instColorAt = (mesh, i) => {
+  const c = new THREE.Color(); mesh.getColorAt(i, c); return c.getHex()
+}
+const allColors = (scene) => atomMeshes(scene).flatMap(m =>
+  Array.from({ length: m.count }, (_, i) => instColorAt(m, i)))
 
-describe('atomistic per-cluster opacity', () => {
+describe('atomistic per-cluster colour + opacity', () => {
   it('installs NOTHING while nothing is faded', () => {
-    const { scene, ar } = twoStrandScene()
-    ar.setStrandAlphas(new Map())
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map())
     for (const m of atomMeshes(scene)) {
       expect(m.geometry.getAttribute('instanceAlpha')).toBeUndefined()
       expect(m.material.transparent).toBe(false)
@@ -349,39 +363,55 @@ describe('atomistic per-cluster opacity', () => {
     ar.dispose()
   })
 
-  it('fades only the atoms of the faded strand', () => {
-    const { scene, ar } = twoStrandScene()
-    ar.setStrandAlphas(new Map([['s1', 0.3]]))
-    const meshes = atomMeshes(scene)
-    const seen = meshes.flatMap(m =>
-      Array.from({ length: m.count }, (_, i) => alphaAt(m, i)))
-    // Float32 storage, so compare with tolerance rather than identity.
-    expect(seen.some(a => Math.abs(a - 0.3) < 1e-6)).toBe(true)   // s1's atom
-    expect(seen).toContain(1)                                     // s2's, untouched
+  it('fades ONE nucleotide of a strand without touching its neighbour', () => {
+    // The regression pin. Both atoms share a strand id; only one is in the faded
+    // cluster. Strand-keyed resolution could not express this at all.
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map([[KA, 0.3]]))
+    const seen = allAlphas(scene)
+    expect(seen.some(a => Math.abs(a - 0.3) < 1e-6)).toBe(true)
+    expect(seen).toContain(1)
+    ar.dispose()
+  })
+
+  it('colours ONE nucleotide of a strand without touching its neighbour', () => {
+    // The reported bug, directly: the scaffold segment inside Cluster 3 must take
+    // Cluster 3's colour even though the rest of the same strand is in Cluster 4.
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map(), new Map([[KA, 0xff00ff], [KB, 0x00ffcc]]))
+    const seen = allColors(scene)
+    expect(seen).toContain(0xff00ff)
+    expect(seen).toContain(0x00ffcc)
+    ar.dispose()
+  })
+
+  it('leaves an atom in no cluster on its normal colour', () => {
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map(), new Map([[KA, 0xff00ff]]))
+    const seen = allColors(scene)
+    expect(seen).toContain(0xff00ff)
+    expect(seen.some(c => c !== 0xff00ff)).toBe(true)
     ar.dispose()
   })
 
   it('marks the material transparent so the alpha actually blends', () => {
-    const { scene, ar } = twoStrandScene()
-    ar.setStrandAlphas(new Map([['s1', 0.3]]))
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map([[KA, 0.3]]))
     for (const m of atomMeshes(scene)) expect(m.material.transparent).toBe(true)
     ar.dispose()
   })
 
   it('fades a BOND to the lower of its two atoms', () => {
-    // A bond from a faded cluster into an opaque one must fade, not hang on at
-    // full strength across the boundary.
-    const { scene, ar } = twoStrandScene()
-    ar.setStrandAlphas(new Map([['s1', 0.3]]))
-    const bond = _bondMesh(scene)
-    expect(alphaAt(bond, 0)).toBeCloseTo(0.3, 5)
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map([[KA, 0.3]]))
+    expect(alphaAt(_bondMesh(scene), 0)).toBeCloseTo(0.3, 5)
     ar.dispose()
   })
 
   it('restores every instance to opaque when cleared', () => {
-    const { scene, ar } = twoStrandScene()
-    ar.setStrandAlphas(new Map([['s1', 0.3]]))
-    ar.setStrandAlphas(new Map())
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map([[KA, 0.3]]))
+    ar.setClusterDisplay(new Map())
     for (const m of atomMeshes(scene)) {
       for (let i = 0; i < m.count; i++) expect(alphaAt(m, i)).toBe(1)
     }
@@ -389,27 +419,25 @@ describe('atomistic per-cluster opacity', () => {
   })
 
   it('survives a rebuild — the sweep rides _applyColors, which update() calls', () => {
-    const { scene, ar } = twoStrandScene()
-    ar.setStrandAlphas(new Map([['s1', 0.3]]))
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map([[KA, 0.3]]))
     ar.update({
       atoms: [
-        { serial: 0, element: 'P', helix_id: 'h0', strand_id: 's1', x: 0, y: 0, z: 0 },
-        { serial: 1, element: 'P', helix_id: 'h0', strand_id: 's2', x: 0.15, y: 0, z: 0 },
+        { serial: 0, element: 'P', helix_id: 'hA', bp_index: 5, direction: 'FORWARD',
+          strand_id: 'scaffold', x: 0, y: 0, z: 0 },
+        { serial: 1, element: 'P', helix_id: 'hB', bp_index: 9, direction: 'FORWARD',
+          strand_id: 'scaffold', x: 0.15, y: 0, z: 0 },
       ],
       bonds: [[0, 1]],
     })
-    const seen = atomMeshes(scene).flatMap(m =>
-      Array.from({ length: m.count }, (_, i) => alphaAt(m, i)))
-    expect(seen.some(a => Math.abs(a - 0.3) < 1e-6)).toBe(true)
+    expect(allAlphas(scene).some(a => Math.abs(a - 0.3) < 1e-6)).toBe(true)
     ar.dispose()
   })
 
-  it('leaves atoms of unlisted strands opaque', () => {
-    const { scene, ar } = twoStrandScene()
-    ar.setStrandAlphas(new Map([['nobody', 0.1]]))
-    const seen = atomMeshes(scene).flatMap(m =>
-      Array.from({ length: m.count }, (_, i) => alphaAt(m, i)))
-    expect(seen.every(a => a === 1)).toBe(true)
+  it('leaves atoms of unlisted nucleotides opaque', () => {
+    const { scene, ar } = twoNucScene()
+    ar.setClusterDisplay(new Map([['hZ:0:FORWARD', 0.1]]))
+    expect(allAlphas(scene).every(a => a === 1)).toBe(true)
     ar.dispose()
   })
 })

@@ -77,6 +77,7 @@ FIX (both layers): (A) write side — `build_replica_package` now copies `parent
 - **D7** — Curved-helix TubeGeometry is uncapped — bent-helix tips read as dark holes / disappear at angles. [detail](LESSONS_archive.md#d7)
 - **D8** — opacity-0 depthWrite:true mesh is an invisible occluder — bent-cylinder portions disappear at certain angles (voids). [detail](LESSONS_archive.md#d8)
 - **D5** — Shader-chunk variable redefinition via onBeforeCompile — `geometryNormal redefinition`; impostor beads don't render. [detail](LESSONS_archive.md#d5)
+- **D15** — Per-STRAND resolution of a per-nucleotide property — the scaffold spans nearly every cluster, so it took one cluster’s colour/fade in atomistic while the bead view was right. [detail](LESSONS_archive.md#d15)
 - **D9** — Selection box from mid-LOD chords collapses for bent parts — box is too THIN, doesn't bound a bent/curved part. [detail](LESSONS_archive.md#d9)
 - **D10** — Blunt-end rings float past a bent-helix tip — far-end ring extrapolates ~26nm past the real bent tip. [detail](LESSONS_archive.md#d10)
 - **D11** — Cluster move: axis follows but beads/slabs snap back — an inactive display overlay's `stopAndRestore` reverts on design-changed. [detail](LESSONS_archive.md#d11-2)

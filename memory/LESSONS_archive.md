@@ -1476,3 +1476,32 @@ downstream detectors will report its *consequence* (a strained bond, a stiff jun
 defect, so the check has to live at build time. Fixed by `backend/core/ring_piercing.py` +
 a `(pierced, penalty, clashes, n_try)` rung score + a build gate; see
 [[project_crossover_catenation]] §2026-07-31.
+
+### D15 — Per-STRAND resolution of a per-nucleotide property
+
+**Symptom.** In atomistic (vdw / ball-and-stick), a segment of scaffold sitting inside
+Cluster 3 rendered with Cluster 4's colour. The CG bead view showed it correctly, which
+is what makes this hard to spot: two representations of the same design disagreeing,
+with no error anywhere.
+
+**Cause.** `color_util.js` resolved a strand's cluster by scanning its domains and taking
+the FIRST one any cluster claimed, then applying that cluster's colour to the whole
+strand. That is fine for a staple, which lives in one place. It is wrong for the
+scaffold, which by definition threads the entire structure: on `workspace/VoltronCoreScad.nadoc`
+the scaffold has 97 domains across 50 helices, domain 0 falls in Cluster 4, and so all
+979 of its nucleotides inside Cluster 3 were painted Cluster 4's colour. The logic
+predated per-cluster styling — it was written when cluster colour was the only consumer
+and nobody had a scaffold spanning two coloured clusters.
+
+**Why it was not obvious.** Atoms carry no `domain_index`, so per-strand looked like the
+only option. It is not: atoms carry `helix_id` + `bp_index` + `direction`, and walking the
+design's domains once recovers the (strand, domain_index) for every nucleotide —
+`buildNucClusterIndex`, keyed `helix:bp:dir` (the app's canonical nucleotide key).
+
+**How to avoid.** When a property belongs to a *nucleotide*, never key it by strand
+because the strand id is the field you happen to have. Ask what the finest identity
+reachable from the data is. Check the scaffold specifically — it is the one strand that
+crosses every partition, so any per-strand approximation shows up there first and only
+there. Surface is the genuine exception: its vertices carry a strand id and nothing else,
+so it stays per-strand until the backend payload grows helix/bp.
+

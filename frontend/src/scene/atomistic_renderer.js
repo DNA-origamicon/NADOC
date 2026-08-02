@@ -98,9 +98,12 @@ export function initAtomisticRenderer(scene) {
     matCache:       new Map(),  // `${el}|${radius}` → material; see _material()
     bondMesh:       null,
     bondAtomIdx:    null, // Int32Array [a0,b0,a1,b1,…] atom rows, bond instance order
-    // strand id → per-cluster opacity (<1 only). Empty = nothing faded, and the
-    // alpha channel is never installed, so an unstyled design pays nothing.
-    strandAlphas:   new Map(),
+    // 'helix:bp:dir' → per-cluster opacity (<1 only) and → per-cluster colour.
+    // Both are keyed per NUCLEOTIDE rather than per strand: a strand can span several
+    // clusters, and the scaffold spans nearly all of them. Empty = nothing to do, and
+    // the alpha channel is never installed, so an unstyled design pays nothing.
+    nucAlphas:      new Map(),
+    clusterColors:  new Map(),
     atoms:          makeAtomTable(null),
     mode:           'off',
     lastData:       null,
@@ -275,7 +278,7 @@ export function initAtomisticRenderer(scene) {
   // Pass 14+ scope per Pass 12-B's surface map.
   function _colorCtx() {
     return { colorMode: _colorMode, strandColors: _strandColors, baseColors: _baseColors,
-             scalarColors: _scalarColors }
+             scalarColors: _scalarColors, clusterColors: _state.clusterColors }
   }
 
   function _applyColors(sel, multiIds) {
@@ -295,7 +298,7 @@ export function initAtomisticRenderer(scene) {
         dirty = true
       }
       if (dirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-      if (_state.strandAlphas.size) {
+      if (_state.nucAlphas.size) {
         _ensureAtomAlpha(mesh)
         for (let i = 0; i < group.length; i++) {
           setInstanceAlpha(mesh, i, _alphaOfRow(group[i]))
@@ -314,7 +317,7 @@ export function initAtomisticRenderer(scene) {
         _state.bondMesh.setColorAt(i, tColor)
       }
       if (_state.bondMesh.instanceColor) _state.bondMesh.instanceColor.needsUpdate = true
-      if (_state.strandAlphas.size) {
+      if (_state.nucAlphas.size) {
         _ensureAtomAlpha(_state.bondMesh)
         for (let i = 0; i < bidx.length / 2; i++) {
           // A bond spanning two clusters takes the LOWER alpha, so a bond into a
@@ -326,11 +329,13 @@ export function initAtomisticRenderer(scene) {
     }
   }
 
-  /** Per-cluster opacity of one atom row, via its strand. Atoms carry no
-   *  domain_index, so the map is strand-keyed (see color_util.resolveStrandClusters). */
+  /** Per-cluster opacity of one atom row, keyed per nucleotide. Atoms carry no
+   *  domain_index but they do carry helix + bp + direction, which
+   *  color_util.buildNucClusterIndex walks the design's domains to resolve. */
   function _alphaOfRow(row) {
-    const sid = _state.atoms?.get(row)?.strand_id
-    return _state.strandAlphas.get(sid) ?? 1
+    const a = _state.atoms?.get(row)
+    if (!a) return 1
+    return _state.nucAlphas.get(`${a.helix_id}:${a.bp_index}:${a.direction}`) ?? 1
   }
 
   /** Install the per-instance alpha channel, routing impostor materials through
@@ -536,20 +541,29 @@ export function initAtomisticRenderer(scene) {
     },
 
     /**
-     * Per-cluster opacity, keyed by STRAND — atoms carry no domain_index, so this is
-     * the granularity both this renderer and the surface can address (see
-     * color_util.resolveStrandClusters). Applies in every coloring mode, unlike
-     * colour. Pass an empty map to clear.
+     * Per-cluster colour + opacity, both keyed `helix:bp:dir` — per NUCLEOTIDE, because
+     * a strand can pass through several clusters and the scaffold passes through nearly
+     * all of them. A strand-keyed lookup painted every scaffold atom with whichever
+     * cluster owned its first domain. Colour is non-empty only in cluster-coloring mode;
+     * opacity applies in every mode. Pass empty maps to clear.
      *
      * Re-applied automatically after a rebuild, because the sweep lives inside
      * _applyColors, which _rebuild already calls.
-     * @param {Map<string, number>} alphas
+     * @param {Map<string, number>} alphas    'helix:bp:dir' → alpha
+     * @param {Map<string, number>} [colors]  'helix:bp:dir' → packed 0xRRGGBB
      */
-    setStrandAlphas(alphas) {
-      const next = alphas instanceof Map ? alphas : new Map()
-      if (!next.size && !_state.strandAlphas.size) return
+    setClusterDisplay(alphas, colors = new Map()) {
+      const next       = alphas instanceof Map ? alphas : new Map()
+      const nextColors = colors instanceof Map ? colors : new Map()
+      const hadColors  = _state.clusterColors.size
+      _state.clusterColors = nextColors
+      if (!next.size && !_state.nucAlphas.size) {
+        // No fade either way — but a colour change still needs a repaint.
+        if (hadColors || nextColors.size) _applyColors(_state.lastSel, _state.lastMulti)
+        return
+      }
       const clearing = !next.size
-      _state.strandAlphas = next
+      _state.nucAlphas = next
       if (clearing) {
         // Restore every installed instance to opaque; the buffers stay installed.
         for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
@@ -560,7 +574,6 @@ export function initAtomisticRenderer(scene) {
         if (_state.bondMesh && bidx?.length) {
           for (let i = 0; i < bidx.length / 2; i++) setInstanceAlpha(_state.bondMesh, i, 1)
         }
-        return
       }
       _applyColors(_state.lastSel, _state.lastMulti)
     },
