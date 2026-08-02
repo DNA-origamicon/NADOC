@@ -378,6 +378,22 @@ stock chunk variable (LESSONS D5).
   does not recolour untouched staples. **Any consumer that wants to agree with 3D must call it, not
   re-derive `index % 12`** — `ui/spreadsheet.js` did the latter until 2026-07-31 (TD-02) and its
   row swatches, colour sort key and exported .xlsx each used a different index.
+- **Cluster colour precedence, highest first (2026-08-02):** `provenance` → tier → explicit
+  colour → later array entry. **A cluster the USER built always outranks one the app made by
+  itself**, because auto clusters routinely blanket every helix — an imported design gets a
+  "Scaffold Cluster" AND a "Geometry Cluster" covering all of them, and either could silently
+  win the colour on a nucleotide the user had deliberately clustered. Provenance is
+  `ClusterRigidTransform.auto_created`, set at every auto creation site (the catch-all,
+  all four `cluster_autodetect` passes, overhang-duplex children, the deformation synthetic,
+  PDB import); only `POST /design/cluster` leaves it false. Designs saved before the field
+  existed are backfilled once on load by a `model_validator(mode="before")`.
+  **Name is NOT a usable proxy** — `cluster_autodetect` also emits a plain `"Cluster N"`,
+  identical to the user-created default — so the legacy inference keys only on `is_default`,
+  `overhang_duplex_driver_id`, and the two unambiguous `"Scaffold Cluster "` / `"Geometry
+  Cluster "` prefixes. The single predicate is `cluster_entries.isAutoCluster`, used by
+  `palette.buildClusterColorLookup` and both walks in `color_util`, so the bead, atomistic and
+  surface views cannot disagree. **OPACITY deliberately ignores provenance** — overlapping
+  fades take the minimum, so there is no winner to pick.
 - **Cluster coloring goes through `buildClusterColorLookup`, not `buildClusterLookup`.** The latter
   returns a cluster *array index* and still has three consumers that want exactly that
   (`joint_renderer`, `assembly_renderer_shared` ×2). The former returns a packed colour and is what

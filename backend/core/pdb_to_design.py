@@ -580,6 +580,7 @@ def import_pdb(
     cluster = ClusterRigidTransform(
         name=cluster_name,
         is_default=len(helices) > 0,
+        auto_created=True,
         helix_ids=helix_ids,
     )
     design = Design(

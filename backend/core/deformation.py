@@ -1214,6 +1214,7 @@ def apply_overhang_rotation_if_needed(
             partner_refs = _overhang_binding_partner_refs(design, helix.id, domain)
             synthetic = ClusterRigidTransform(
                 id="__ovhg_rot__",
+                auto_created=True,
                 helix_ids=[helix.id],
                 rotation=ovhg.rotation,
                 pivot=pivot,

@@ -202,7 +202,7 @@ def materialize_duplex_cluster(
         helix_ids=[helix_id], domain_ids=refs,
         parent_cluster_id=(parent.id if parent is not None else None),
         rotation=q_c, pivot=piv_c, translation=t_c,
-        overhang_duplex_driver_id=driver_oh_id, **kw,
+        overhang_duplex_driver_id=driver_oh_id, auto_created=True, **kw,
     )
     out = cleared.model_copy(update={
         "cluster_transforms": [*design.cluster_transforms, cluster]})

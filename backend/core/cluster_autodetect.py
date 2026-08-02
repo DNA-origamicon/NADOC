@@ -98,7 +98,7 @@ def _cluster_bundle_regions(design: Design) -> Design:
 
     components.sort(key=lambda c: c[0])
     clusters = [
-        ClusterRigidTransform(name=f"Cluster {n}", is_default=False, helix_ids=hids)
+        ClusterRigidTransform(name=f"Cluster {n}", is_default=False, auto_created=True, helix_ids=hids)
         for n, hids in enumerate(components, start=1)
     ]
     return design.copy_with(cluster_transforms=clusters)
@@ -388,6 +388,7 @@ def _cluster_by_lattice_neighbors(design: Design) -> Design:
         ClusterRigidTransform(
             name=f"Cluster {n}",
             is_default=False,
+            auto_created=True,
             helix_ids=hids,
             domain_ids=comp_domain_ids.get(ci, []),
         )
@@ -523,6 +524,7 @@ def _cluster_by_scaffold_routing(design: Design) -> Design:
         ClusterRigidTransform(
             name=f"Scaffold Cluster {n}",
             is_default=False,
+            auto_created=True,
             helix_ids=sorted(cluster_helix_ids[si]),
             domain_ids=cluster_domain_ids[si],
         )
@@ -617,6 +619,7 @@ def _geometry_clusters_multi_scaffold(design: Design) -> Design:
         ClusterRigidTransform(
             name=f"Geometry Cluster {n}",
             is_default=False,
+            auto_created=True,
             helix_ids=sorted(cluster_helix_ids[si]),
             domain_ids=[],
         )

@@ -202,3 +202,72 @@ def test_display_fields_survive_a_design_round_trip(client):
     ct = next(c for c in reloaded.cluster_transforms if c.id == "cA")
     assert ct.color == "#ff8800"
     assert ct.opacity == pytest.approx(0.4)
+
+
+# ── Provenance: which clusters the app made by itself ─────────────────────────
+# COLOUR resolution ranks a hand-made cluster above an auto one. Auto clusters routinely
+# blanket every helix (an imported design gets a "Scaffold Cluster" AND a "Geometry
+# Cluster" covering all of them), so without provenance an auto cluster could silently
+# win the colour on a nucleotide the user had deliberately clustered.
+
+
+def test_user_created_clusters_are_not_auto(client):
+    """POST /design/cluster is the only manual path — it must leave auto_created False."""
+    design_state.set_design(_seed())
+    r = client.post("/api/design/cluster",
+                    json={"name": "My bar", "helix_ids": ["h_XY_0_0"]})
+    assert r.status_code == 200, r.text
+    made = next(c for c in r.json()["design"]["cluster_transforms"] if c["name"] == "My bar")
+    assert made["auto_created"] is False
+
+
+def test_every_autodetect_creation_site_marks_itself_auto():
+    """Cross-list pin: cluster_autodetect is the main producer of "premade" clusters, and
+    a site that forgets the flag silently outranks the user's own clusters. Source-text,
+    because the alternative is running four different autodetect passes."""
+    import re
+    from pathlib import Path
+    src = Path("backend/core/cluster_autodetect.py").read_text()
+    sites = [m.start() for m in re.finditer(r"ClusterRigidTransform\(", src)]
+    assert sites, "no creation sites found — did the module move?"
+    for pos in sites:
+        # The call spans a few lines; look at the balanced-ish window after it.
+        window = src[pos:pos + 400]
+        assert "auto_created=True" in window, (
+            f"cluster_autodetect creation site at offset {pos} does not set auto_created")
+
+
+@pytest.mark.parametrize("payload,expected", [
+    ({"name": "Scaffold Cluster 1"}, True),
+    ({"name": "Geometry Cluster 2"}, True),
+    ({"name": "Cluster 1", "is_default": True}, True),
+    ({"name": "Duplex 1", "overhang_duplex_driver_id": "oh1"}, True),
+    # The load-bearing limit: cluster_autodetect also emits a plain "Cluster N", so the
+    # name cannot separate it from a user-created one. Guessing auto here would demote
+    # real user clusters, so the inference deliberately does not.
+    ({"name": "Cluster 3"}, False),
+    ({"name": "My bar"}, False),
+])
+def test_legacy_designs_backfill_provenance_on_load(payload, expected):
+    """A design saved before auto_created existed infers it once, on load, so the
+    inference is persisted on the next save rather than re-guessed forever."""
+    ct = ClusterRigidTransform.model_validate({**payload, "helix_ids": ["h0"]})
+    assert ct.auto_created is expected
+
+
+def test_an_explicit_flag_always_beats_the_name_inference():
+    ct = ClusterRigidTransform.model_validate(
+        {"name": "Scaffold Cluster 1", "helix_ids": ["h0"], "auto_created": False})
+    assert ct.auto_created is False
+
+
+def test_provenance_survives_paste(client):
+    """cluster_copy uses model_copy, so a pasted cluster keeps the provenance of the one
+    it came from — a copy of a user cluster must not silently become auto."""
+    design_state.set_design(_seed())
+    r = client.post("/api/design/cluster-paste",
+                    json={"cluster_ids": ["cA"], "delta_row": 0, "delta_col": 2})
+    assert r.status_code == 200, r.text
+    cts = {c["id"]: c for c in r.json()["design"]["cluster_transforms"]}
+    new = next(c for cid, c in cts.items() if cid != "cA")
+    assert new["auto_created"] == cts["cA"]["auto_created"]

@@ -1,5 +1,7 @@
 // ── Palette ───────────────────────────────────────────────────────────────────
 
+import { isAutoCluster } from '../cluster_entries.js'
+
 export const C = {
   scaffold_backbone: 0x0070bb,
   scaffold_slab:     0x0277bd,
@@ -204,9 +206,18 @@ export function buildClusterColorLookup(design) {
 
   const helixWin  = new Map()   // helix_id → cluster index
   const domainWin = new Map()   // "strand_id:domain_index" → cluster index
-  /** Later index wins, except that an explicit colour outranks an auto one. */
-  const better = (cand, held) =>
-    held === undefined || explicit[cand] === explicit[held] || explicit[cand]
+  // Provenance outranks everything: a cluster the USER built always beats one the app
+  // made by itself. Auto clusters routinely blanket every helix, so otherwise an
+  // imported design's "Scaffold Cluster"/"Geometry Cluster" could win the colour on a
+  // nucleotide the user had deliberately clustered.
+  const auto = clusters.map(isAutoCluster)
+  /** Manual beats auto; then an explicit colour beats the auto palette; then later wins. */
+  const better = (cand, held) => {
+    if (held === undefined) return true
+    if (auto[cand] !== auto[held]) return !auto[cand]
+    if (explicit[cand] !== explicit[held]) return explicit[cand]
+    return true                                   // same rank → later entry wins
+  }
 
   const strands = design?.strands ?? []
   // Bucket strand domains by helix once, so the per-helix coverage check below is

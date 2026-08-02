@@ -328,3 +328,70 @@ describe('buildClusterColorLookup', () => {
     })
   })
 })
+
+// ── Provenance: a hand-made cluster outranks an auto one ─────────────────────
+// The VoltronCoreScad shape, which is what produced the unreproducible colour
+// weirdness: two AUTO clusters ("Scaffold Cluster 1", "Geometry Cluster 1") each blanket
+// all the helices, and the user's own clusters overlap them. Before this the auto
+// clusters could win by being later in the array, or by carrying an explicit colour.
+
+describe('buildClusterColorLookup — manual beats auto', () => {
+  const strands = [{ id: 's1', domains: [{ helix_id: 'h1' }, { helix_id: 'h2' }] }]
+  const nuc = (helix_id, strand_id, domain_index) => ({ helix_id, strand_id, domain_index })
+  const build = (cts) => buildClusterColorLookup({ strands, cluster_transforms: cts })
+
+  it('a manual cluster wins over a LATER auto cluster', () => {
+    const fn = build([
+      { id: 'mine', helix_ids: ['h1'], auto_created: false, color: '#ff00ff' },
+      { id: 'auto', helix_ids: ['h1'], auto_created: true,  color: '#00ffcc' },
+    ])
+    expect(fn(nuc('h1', 's1', 0))).toBe(0xff00ff)
+  })
+
+  it('…and over an auto cluster that has an EXPLICIT colour while the manual one does not', () => {
+    // Provenance outranks the explicit-colour tiebreak: the manual cluster falls back to
+    // its auto palette slot rather than surrendering the nucleotide.
+    const fn = build([
+      { id: 'auto', helix_ids: ['h1'], auto_created: true, color: '#00ffcc' },
+      { id: 'mine', helix_ids: ['h1'], auto_created: false },
+    ])
+    expect(fn(nuc('h1', 's1', 0))).toBe(STAPLE_PALETTE[1])
+  })
+
+  it('legacy designs infer provenance from the autodetect name prefix', () => {
+    const fn = build([
+      { id: 'mine', name: 'Cluster 3', helix_ids: ['h1'], color: '#ff00ff' },
+      { id: 'auto', name: 'Scaffold Cluster 1', helix_ids: ['h1'], color: '#00ffcc' },
+    ])
+    expect(fn(nuc('h1', 's1', 0))).toBe(0xff00ff)
+  })
+
+  it('between two AUTO clusters the old rules still decide', () => {
+    const fn = build([
+      { id: 'a', name: 'Scaffold Cluster 1', helix_ids: ['h1'], color: '#ff00ff' },
+      { id: 'b', name: 'Geometry Cluster 1', helix_ids: ['h1'] },
+    ])
+    expect(fn(nuc('h1', 's1', 0))).toBe(0xff00ff)   // explicit beats auto-palette
+  })
+
+  it('between two MANUAL clusters the old rules still decide', () => {
+    const fn = build([
+      { id: 'a', helix_ids: ['h1'], auto_created: false, color: '#ff00ff' },
+      { id: 'b', helix_ids: ['h1'], auto_created: false, color: '#00ffcc' },
+    ])
+    expect(fn(nuc('h1', 's1', 0))).toBe(0x00ffcc)   // later entry wins
+  })
+
+  it('an unstyled design still renders identically to the auto palette', () => {
+    // The no-regression pin: with no provenance difference and no colours set, the
+    // output must match what buildClusterLookup would have produced.
+    const design = { strands, cluster_transforms: [
+      { id: 'a', helix_ids: ['h1'] }, { id: 'b', helix_ids: ['h2'] },
+    ] }
+    const fn = buildClusterColorLookup(design)
+    const idx = buildClusterLookup(design)
+    for (const n of [nuc('h1', 's1', 0), nuc('h2', 's1', 1)]) {
+      expect(fn(n)).toBe(STAPLE_PALETTE[idx(n) % STAPLE_PALETTE.length])
+    }
+  })
+})

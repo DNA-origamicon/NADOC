@@ -1195,6 +1195,39 @@ class ClusterRigidTransform(BaseModel):
     # 1.0 = unset/opaque. Where clusters overlap the LOWEST opacity wins, matching
     # the sidebar visibility toggle, which already unions across clusters.
     opacity: float = 1.0
+    # PROVENANCE. True for clusters the app made by itself — the auto-created catch-all,
+    # everything cluster_autodetect emits (connectivity "Cluster N", "Scaffold Cluster N",
+    # "Geometry Cluster N"), overhang-duplex children, the deformation synthetic, and PDB
+    # import. False only for a cluster the USER built from a selection
+    # (POST /design/cluster).
+    #
+    # It exists because COLOUR resolution ranks a hand-made cluster above an auto one:
+    # auto clusters routinely blanket every helix, so before this an auto cluster could
+    # silently win the colour on a nucleotide the user had deliberately clustered.
+    # Name is NOT a usable proxy — cluster_autodetect also emits plain "Cluster N".
+    auto_created: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _infer_auto_created(cls, data):
+        """Backfill provenance for designs saved before ``auto_created`` existed.
+
+        Runs once on load, so the inference is persisted on the next save rather than
+        being re-guessed forever. `is_default` is decisive; beyond that only the two
+        autodetect prefixes are safe to infer from, because a connectivity-autodetected
+        cluster and a user-created one can both be called "Cluster 3".
+        """
+        if not isinstance(data, dict) or "auto_created" in data:
+            return data
+        name = str(data.get("name") or "")
+        data = dict(data)
+        data["auto_created"] = bool(
+            data.get("is_default")
+            or data.get("overhang_duplex_driver_id")
+            or name.startswith("Scaffold Cluster ")
+            or name.startswith("Geometry Cluster ")
+        )
+        return data
 
 
 class ClusterJoint(BaseModel):

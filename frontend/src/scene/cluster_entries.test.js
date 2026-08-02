@@ -8,6 +8,7 @@ import {
   clusterNucKeys,
   clusterNucKeysFor,
   withClusterDisplay,
+  isAutoCluster,
 } from './cluster_entries.js'
 
 const entry = (helix_id, strand_id, domain_index) => ({ nuc: { helix_id, strand_id, domain_index } })
@@ -371,5 +372,39 @@ describe('clusterAlphaForNuc', () => {
 
   it('tolerates a null nucleotide', () => {
     expect(clusterAlphaForNuc(new Map([['h:h1', 0.3]]), null)).toBe(1)
+  })
+})
+
+// ── Cluster provenance ───────────────────────────────────────────────────────
+// A cluster the USER built outranks one the app made by itself when resolving COLOUR.
+// Auto clusters routinely blanket every helix — an imported design gets a "Scaffold
+// Cluster" and a "Geometry Cluster" each covering all of them — so without this an auto
+// cluster could silently win the colour on a nucleotide the user had deliberately
+// clustered. That was the unreproducible "weirdness in colour assignment".
+
+describe('isAutoCluster', () => {
+  it('trusts the backend flag when present', () => {
+    expect(isAutoCluster({ name: 'Cluster 3', auto_created: true })).toBe(true)
+    // …even against a name that would otherwise infer auto — an explicit false wins.
+    expect(isAutoCluster({ name: 'Scaffold Cluster 1', auto_created: false })).toBe(false)
+  })
+
+  it('infers from the autodetect name prefixes on legacy designs', () => {
+    expect(isAutoCluster({ name: 'Scaffold Cluster 1' })).toBe(true)
+    expect(isAutoCluster({ name: 'Geometry Cluster 2' })).toBe(true)
+  })
+
+  it('treats the catch-all and overhang-duplex children as auto', () => {
+    expect(isAutoCluster({ name: 'Cluster 1', is_default: true })).toBe(true)
+    expect(isAutoCluster({ name: 'Duplex 1', overhang_duplex_driver_id: 'oh1' })).toBe(true)
+  })
+
+  it('does NOT infer auto from a bare "Cluster N" name', () => {
+    // The load-bearing limit of the name fallback: cluster_autodetect also emits plain
+    // "Cluster N", exactly like a user-created one, so the name cannot separate them.
+    // Guessing "auto" here would demote real user clusters.
+    expect(isAutoCluster({ name: 'Cluster 3' })).toBe(false)
+    expect(isAutoCluster({ name: 'My bar' })).toBe(false)
+    expect(isAutoCluster({})).toBe(false)
   })
 })

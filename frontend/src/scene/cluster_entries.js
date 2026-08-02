@@ -162,6 +162,28 @@ export function clusterAlphaKeys(design) {
 }
 
 /**
+ * Is this cluster one the app made by itself, rather than one the user built?
+ *
+ * COLOUR resolution ranks a hand-made cluster ABOVE an auto one, unconditionally: auto
+ * clusters routinely blanket every helix (an imported design gets a "Scaffold Cluster"
+ * and a "Geometry Cluster" each covering all of them), so without this an auto cluster
+ * could silently win the colour on a nucleotide the user had deliberately clustered.
+ *
+ * `auto_created` is the backend's provenance flag. The name fallback is only for designs
+ * saved before it existed and that the backend has not re-serialised yet — and only the
+ * two autodetect PREFIXES are safe to infer from, because cluster_autodetect also emits
+ * plain "Cluster N", exactly like the user-created default.
+ *
+ * OPACITY deliberately does NOT use this: overlapping fades take the minimum, so there is
+ * no winner to pick.
+ */
+export function isAutoCluster(c) {
+  if (typeof c?.auto_created === 'boolean') return c.auto_created
+  return Boolean(c?.is_default) || Boolean(c?.overhang_duplex_driver_id) ||
+    /^(Scaffold|Geometry) Cluster /.test(c?.name ?? '')
+}
+
+/**
  * Resolve one nucleotide's alpha out of a `clusterAlphaKeys` map. Domain-level
  * entries win over the helix-level fallback, matching `clusterMemberFilter` and
  * `buildClusterColorLookup`. Anything not covered is opaque.

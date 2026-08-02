@@ -236,6 +236,7 @@ def _ensure_default_cluster(design: Design) -> Design:
     default_ct = ClusterRigidTransform(
         name="Cluster 1",
         is_default=True,
+        auto_created=True,
         helix_ids=[h.id for h in design.helices if h.id not in ref_ids],
     )
     updated = design.copy_with(cluster_transforms=[default_ct])

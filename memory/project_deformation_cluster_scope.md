@@ -45,8 +45,10 @@ Consequences, all real:
   all 59 helices) that the new per-cluster **display** fields had to pick explicit rules rather
   than inherit an arbitrary one — colour resolves *explicit beats unstyled, then last-listed*;
   opacity takes the **minimum** across every cluster covering a nucleotide, matching the sidebar
-  visibility toggle, which already unions. Those rules are display-only and change nothing here;
-  the geometry conflict below is untouched.
+  visibility toggle, which already unions. **Colour additionally ranks a USER-created cluster
+  above an auto one** (`auto_created`, 2026-08-02) — auto clusters blanket every helix, so an
+  imported design's Scaffold/Geometry clusters were winning colour over the user's own. Those
+  rules are display-only and change nothing here; the geometry conflict below is untouched.
 - **PATCH cannot change scope** (`UpdateDeformationBody` is `params` only). Changing the picker
   mid-session deletes and re-creates the preview op.
 

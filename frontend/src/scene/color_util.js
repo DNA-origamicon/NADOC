@@ -3,6 +3,8 @@
  * color_util.test.js.
  */
 
+import { isAutoCluster } from './cluster_entries.js'
+
 // Strand-length heatmap domain (nt): clamps below 14 / above 60.
 const HEATMAP_MIN = 14, HEATMAP_MAX = 60
 
@@ -120,17 +122,29 @@ export function resolveStrandClusters(currentDesign) {
   const helixCluster = new Map()
   const domainCluster = new Map()
   const strandMap = new Map((currentDesign.strands ?? []).map(s => [s.id, s]))
+  // A cluster the USER built always outranks one the app made by itself — auto clusters
+  // routinely blanket every helix. Within the same provenance the later entry wins, the
+  // long-standing rule. Mirrors palette.js::buildClusterColorLookup, so the bead,
+  // atomistic and surface views cannot disagree about which cluster owns a nucleotide.
+  const auto = clusters.map(isAutoCluster)
+  const beats = (cand, held) => held === undefined ||
+    (auto[cand] !== auto[held] ? !auto[cand] : true)
   clusters.forEach((c, i) => {
     if (c.domain_ids?.length) {
       const bridges = new Set()
       for (const dr of c.domain_ids) {
-        domainCluster.set(`${dr.strand_id}:${dr.domain_index}`, i)
+        const k = `${dr.strand_id}:${dr.domain_index}`
+        if (beats(i, domainCluster.get(k))) domainCluster.set(k, i)
         const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
         if (dom) bridges.add(dom.helix_id)
       }
-      for (const hid of (c.helix_ids ?? [])) if (!bridges.has(hid)) helixCluster.set(hid, i)
+      for (const hid of (c.helix_ids ?? [])) {
+        if (!bridges.has(hid) && beats(i, helixCluster.get(hid))) helixCluster.set(hid, i)
+      }
     } else {
-      for (const hid of (c.helix_ids ?? [])) helixCluster.set(hid, i)
+      for (const hid of (c.helix_ids ?? [])) {
+        if (beats(i, helixCluster.get(hid))) helixCluster.set(hid, i)
+      }
     }
   })
   for (const s of currentDesign.strands ?? []) {
@@ -197,17 +211,29 @@ export function buildNucClusterIndex(design) {
   const helixCluster = new Map()   // helix_id → cluster index (the fallback tier)
   const domainCluster = new Map()  // 'strand_id:domain_index' → cluster index (wins)
   const strandMap = new Map((design.strands ?? []).map(s => [s.id, s]))
+  // A cluster the USER built always outranks one the app made by itself — auto clusters
+  // routinely blanket every helix. Within the same provenance the later entry wins, the
+  // long-standing rule. Mirrors palette.js::buildClusterColorLookup, so the bead,
+  // atomistic and surface views cannot disagree about which cluster owns a nucleotide.
+  const auto = clusters.map(isAutoCluster)
+  const beats = (cand, held) => held === undefined ||
+    (auto[cand] !== auto[held] ? !auto[cand] : true)
   clusters.forEach((c, i) => {
     if (c.domain_ids?.length) {
       const bridges = new Set()
       for (const dr of c.domain_ids) {
-        domainCluster.set(`${dr.strand_id}:${dr.domain_index}`, i)
+        const k = `${dr.strand_id}:${dr.domain_index}`
+        if (beats(i, domainCluster.get(k))) domainCluster.set(k, i)
         const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
         if (dom) bridges.add(dom.helix_id)
       }
-      for (const hid of (c.helix_ids ?? [])) if (!bridges.has(hid)) helixCluster.set(hid, i)
+      for (const hid of (c.helix_ids ?? [])) {
+        if (!bridges.has(hid) && beats(i, helixCluster.get(hid))) helixCluster.set(hid, i)
+      }
     } else {
-      for (const hid of (c.helix_ids ?? [])) helixCluster.set(hid, i)
+      for (const hid of (c.helix_ids ?? [])) {
+        if (beats(i, helixCluster.get(hid))) helixCluster.set(hid, i)
+      }
     }
   })
 
