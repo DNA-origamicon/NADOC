@@ -6332,6 +6332,8 @@ async function main() {
       unfoldView.refreshClusterDisplay(preview)
       overhangLinkArcs.refreshClusterDisplay(preview)
       flexibleArcs.refreshClusterDisplay(preview)
+      // Atomistic + surface are their own renderers again, driven by atom_surface_display.
+      _atomSurface?.refreshClusterDisplay(preview)
     },
   })
 

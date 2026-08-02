@@ -82,41 +82,83 @@ export function computeAtomStrandColors(state, staplePalette) {
   // palette colour, keyed off the strand's first domain helix.
   // 'base' is left as strand colour (atomistic lacks per-atom base mapping).
   if (coloringMode === 'cluster' && currentDesign?.cluster_transforms?.length) {
-    const helixCluster = new Map()
-    const domainCluster = new Map()
-    const strandMap = new Map((currentDesign.strands ?? []).map(s => [s.id, s]))
-    currentDesign.cluster_transforms.forEach((c, i) => {
-      if (c.domain_ids?.length) {
-        const bridges = new Set()
-        for (const dr of c.domain_ids) {
-          domainCluster.set(`${dr.strand_id}:${dr.domain_index}`, i)
-          const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
-          if (dom) bridges.add(dom.helix_id)
-        }
-        for (const hid of (c.helix_ids ?? [])) if (!bridges.has(hid)) helixCluster.set(hid, i)
-      } else {
-        for (const hid of (c.helix_ids ?? [])) helixCluster.set(hid, i)
-      }
-    })
-    for (const s of currentDesign.strands ?? []) {
-      let ci = null
-      for (let di = 0; di < (s.domains ?? []).length; di++) {
-        const k = `${s.id}:${di}`
-        if (domainCluster.has(k)) { ci = domainCluster.get(k); break }
-        const hid = s.domains[di].helix_id
-        if (helixCluster.has(hid)) { ci = helixCluster.get(hid); break }
-      }
-      if (ci == null) continue
+    for (const [sid, ci] of resolveStrandClusters(currentDesign)) {
       // A user-set cluster colour overrides the auto palette slot, matching the CG
-      // path (helix_renderer/palette.js::buildClusterColorLookup). Opacity is NOT
-      // honoured here — per-cluster fade covers the design-view meshes only.
+      // path (helix_renderer/palette.js::buildClusterColorLookup).
       const custom = currentDesign.cluster_transforms[ci]?.color
-      effective[s.id] = (typeof custom === 'string' && /^#[0-9a-fA-F]{6}$/.test(custom))
+      effective[sid] = (typeof custom === 'string' && /^#[0-9a-fA-F]{6}$/.test(custom))
         ? parseInt(custom.slice(1), 16)
         : ATOM_STAPLE_PALETTE[ci % ATOM_STAPLE_PALETTE.length]
     }
   }
   return new Map(Object.entries(effective).map(([k, v]) => [k, typeof v === 'number' ? v : parseInt(v.replace('#',''), 16)]))
+}
+
+/**
+ * strand id → owning cluster INDEX, for the atomistic and surface paths.
+ *
+ * Those two renderers only ever know a *strand* per atom / per vertex — atoms carry
+ * no `domain_index` (see atom_table.js ATOM_FIELDS) and the surface's
+ * `vertex_strand_index_table` is strand-only. So unlike the CG path, which resolves
+ * per nucleotide, this collapses each strand onto the FIRST of its domains that any
+ * cluster claims. A strand split across two clusters therefore takes one of them,
+ * which is the same approximation cluster COLOUR has always made here — colour and
+ * opacity agreeing matters more than either being per-domain.
+ *
+ * @param {object} currentDesign
+ * @returns {Map<string, number>} strand id → cluster index
+ */
+export function resolveStrandClusters(currentDesign) {
+  const out = new Map()
+  const clusters = currentDesign?.cluster_transforms ?? []
+  if (!clusters.length) return out
+  const helixCluster = new Map()
+  const domainCluster = new Map()
+  const strandMap = new Map((currentDesign.strands ?? []).map(s => [s.id, s]))
+  clusters.forEach((c, i) => {
+    if (c.domain_ids?.length) {
+      const bridges = new Set()
+      for (const dr of c.domain_ids) {
+        domainCluster.set(`${dr.strand_id}:${dr.domain_index}`, i)
+        const dom = strandMap.get(dr.strand_id)?.domains?.[dr.domain_index]
+        if (dom) bridges.add(dom.helix_id)
+      }
+      for (const hid of (c.helix_ids ?? [])) if (!bridges.has(hid)) helixCluster.set(hid, i)
+    } else {
+      for (const hid of (c.helix_ids ?? [])) helixCluster.set(hid, i)
+    }
+  })
+  for (const s of currentDesign.strands ?? []) {
+    for (let di = 0; di < (s.domains ?? []).length; di++) {
+      const k = `${s.id}:${di}`
+      if (domainCluster.has(k)) { out.set(s.id, domainCluster.get(k)); break }
+      const hid = s.domains[di].helix_id
+      if (helixCluster.has(hid)) { out.set(s.id, helixCluster.get(hid)); break }
+    }
+  }
+  return out
+}
+
+/**
+ * strand id → per-cluster OPACITY, for the atomistic and surface renderers.
+ *
+ * Unlike colour, opacity applies in EVERY coloring mode — so this does not consult
+ * `coloringMode` at all. Strands in no cluster, and clusters at full opacity, are
+ * omitted: an empty map is the signal that nothing needs fading, which is what keeps
+ * the whole path free for designs nobody has styled.
+ *
+ * @param {object} currentDesign
+ * @returns {Map<string, number>} strand id → alpha in [0,1)
+ */
+export function computeAtomStrandAlphas(currentDesign) {
+  const out = new Map()
+  const clusters = currentDesign?.cluster_transforms ?? []
+  if (!clusters.length) return out
+  for (const [sid, ci] of resolveStrandClusters(currentDesign)) {
+    const a = clusters[ci]?.opacity
+    if (typeof a === 'number' && a < 1) out.set(sid, Math.max(0, a))
+  }
+  return out
 }
 
 /** Map an nt count to a blue→red heatmap colour (packed 0xRRGGBB int). */

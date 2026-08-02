@@ -22,6 +22,7 @@
  */
 
 import * as THREE from 'three'
+import { applyInstanceAlphaMaterial } from './instance_alpha.js'
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,9 @@ export function initSurfaceRenderer(scene) {
   let _mode         = 'off'  // 'off' | 'on' — mirrors _surfaceMode in main.js
   let _liveVerts    = null   // Float32Array reference into the live mesh position buffer
   let _strandHexMap = null   // Map<strand_id, hex> last applied via applyStrandColors
+  // Map<strand_id, alpha> — per-cluster opacity. Empty = nothing faded, and the
+  // alpha attribute/patch are never installed.
+  let _strandAlphaMap = new Map()
   let _meshName     = 'dna-surface'  // overridable so the region overlay can use a distinct name
   let _crispZones   = false  // crisp per-face strand zones (ChimeraX look) vs Gouraud-blended
   let _crispFaceVert = null  // Int32Array[nFaces]: source vertex whose strand colours each face
@@ -196,6 +200,71 @@ export function initSurfaceRenderer(scene) {
     return !!_cachedData.vertex_colors
   }
 
+  /**
+   * Per-vertex alpha for per-cluster opacity.
+   *
+   * The surface is ONE merged mesh with one material, so `material.opacity` is
+   * global — the sidebar slider already owns it. Per-cluster fade therefore needs a
+   * per-vertex channel, and it reuses the SAME attribute name and SAME shader patch
+   * as the instanced meshes: `attribute float instanceAlpha` is a plain per-vertex
+   * attribute in GLSL, it is only "per instance" when the buffer is an
+   * InstancedBufferAttribute. That reuse is what makes photo mode's re-install work
+   * here for free (it keys on `userData.instanceAlphaPatch`).
+   *
+   * The two multiply in the shader — vertex alpha lands in `diffuseColor.a` at
+   * `<color_fragment>`, material opacity is applied after — so a 0.5 cluster inside
+   * a 0.8 surface slider reads 0.4, which is what you want.
+   *
+   * Vertices carry only a STRAND id (`vertex_strand_index_table`), so the map is
+   * strand-keyed, matching how strand colour already resolves here.
+   */
+  function _buildVertexAlphaArray(data, strandAlphaMap) {
+    if (!strandAlphaMap?.size) return null
+    const tbl = data?.vertex_strand_index_table
+    const idx = data?.vertex_strand_index
+    if (!tbl || !idx) return null
+    const tblA = new Float32Array(tbl.length)
+    for (let k = 0; k < tbl.length; k++) tblA[k] = strandAlphaMap.get(tbl[k]) ?? 1
+    const out = new Float32Array(idx.length)
+    for (let v = 0; v < idx.length; v++) out[v] = tblA[idx[v]]
+    return out
+  }
+
+  /** Crisp (non-indexed, per-face) twin — one alpha resolved per face, splatted to
+   *  its three corners, mirroring _buildCrispColorArray. */
+  function _buildCrispAlphaArray(data, strandAlphaMap, faceVert) {
+    if (!strandAlphaMap?.size || !faceVert) return null
+    const tbl = data?.vertex_strand_index_table
+    const idx = data?.vertex_strand_index
+    if (!tbl || !idx) return null
+    const out = new Float32Array(faceVert.length)
+    for (let f = 0; f < faceVert.length / 3; f++) {
+      const a = strandAlphaMap.get(tbl[idx[faceVert[f * 3]]]) ?? 1
+      out[f * 3] = a; out[f * 3 + 1] = a; out[f * 3 + 2] = a
+    }
+    return out
+  }
+
+  /** Write (or clear) the alpha attribute + its shader patch on the live mesh. */
+  function _applyVertexAlpha() {
+    if (!_mesh || !_cachedData) return
+    const arr = (_crispZones && _colorMode === 'strand' && _crispFaceVert)
+      ? _buildCrispAlphaArray(_cachedData, _strandAlphaMap, _crispFaceVert)
+      : _buildVertexAlphaArray(_cachedData, _strandAlphaMap)
+    if (!arr) {
+      // Cleared: hand every vertex back to opaque rather than dropping the
+      // attribute, so the compiled program stays stable.
+      const existing = _mesh.geometry.getAttribute('instanceAlpha')
+      if (existing) { existing.array.fill(1); existing.needsUpdate = true }
+      return
+    }
+    _mesh.geometry.setAttribute('instanceAlpha', new THREE.BufferAttribute(arr, 1))
+    if (!_mesh.material.userData?.instanceAlphaPatch) applyInstanceAlphaMaterial(_mesh.material)
+    // The slider's own `transparent = val < 1` would switch blending off at 1.0 and
+    // silently kill the per-vertex fade.
+    _mesh.material.transparent = true
+  }
+
   function _buildMaterial() {
     const useVertex = (_colorMode === 'strand' && _hasVertexColorSource())
     return new THREE.MeshPhongMaterial({
@@ -242,6 +311,18 @@ export function initSurfaceRenderer(scene) {
    *
    * @param {Map<string, number>|null} strandHexMap
    */
+  /**
+   * Per-cluster opacity, keyed by strand. Applies in every coloring mode (unlike
+   * colour). Pass an empty map to clear.
+   * @param {Map<string, number>} strandAlphaMap
+   */
+  function applyStrandAlphas(strandAlphaMap) {
+    const next = strandAlphaMap instanceof Map ? strandAlphaMap : new Map()
+    if (!next.size && !_strandAlphaMap?.size) return
+    _strandAlphaMap = next
+    _applyVertexAlpha()
+  }
+
   function applyStrandColors(strandHexMap) {
     _strandHexMap = strandHexMap instanceof Map ? strandHexMap : null
     if (!_mesh || !_cachedData) return
@@ -255,6 +336,7 @@ export function initSurfaceRenderer(scene) {
       _mesh.material.color.setHex(0xFFFFFF)
       _mesh.material.needsUpdate = true
     }
+    _applyVertexAlpha()   // a recolour must not drop the cluster fade
   }
 
   /**
@@ -280,7 +362,9 @@ export function initSurfaceRenderer(scene) {
     if (!_mesh) return
     const m = _mesh.material
     m.opacity     = val
-    m.transparent = val < 1.0
+    // `|| _strandAlphaMap.size` — at slider 1.0 this would otherwise switch blending
+    // off entirely and silently discard the per-cluster per-vertex fade.
+    m.transparent = val < 1.0 || _strandAlphaMap.size > 0
     // Photo-mode MeshPhysicalMaterial carries a `transmission` channel that is
     // independent of opacity; if we don't drive it here, sliders never produce
     // a fully-opaque surface in photo mode (the gummy preset bakes in
@@ -324,6 +408,7 @@ export function initSurfaceRenderer(scene) {
     _mesh.name = _meshName        // 'dna-surface' (global) or 'dna-surface-region' (overlay)
     _mesh.frustumCulled = false   // surface spans the full design; skip frustum test
     scene.add(_mesh)
+    _applyVertexAlpha()           // fresh geometry knows nothing about the fade
   }
 
   /**
@@ -458,5 +543,5 @@ export function initSurfaceRenderer(scene) {
   }
 
   return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode,
-           applyStrandColors, applyScalarVertexColors, getMesh, strandIdAt, setCrispZones }
+           applyStrandColors, applyStrandAlphas, applyScalarVertexColors, getMesh, strandIdAt, setCrispZones }
 }

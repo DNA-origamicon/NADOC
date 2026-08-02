@@ -41,7 +41,16 @@ import {
   makeBondMaterial,
   atomSphereGeometry, makeAtomSphereMaterial, atomInstanceScale,
 } from './atomistic_renderer/geometry_builder.js'
-import { impostorsEnabled, installSphereImpostorRaycast } from './impostor_material.js'
+import {
+  impostorsEnabled,
+  installSphereImpostorRaycast,
+  enableImpostorInstanceAlpha,
+} from './impostor_material.js'
+import {
+  installInstanceAlpha,
+  installInstanceAlphaGeometry,
+  setInstanceAlpha,
+} from './instance_alpha.js'
 import { resolveAtomColor } from './atomistic_renderer/color_resolver.js'
 import { makeAtomTable } from './atom_table.js'
 
@@ -89,6 +98,9 @@ export function initAtomisticRenderer(scene) {
     matCache:       new Map(),  // `${el}|${radius}` → material; see _material()
     bondMesh:       null,
     bondAtomIdx:    null, // Int32Array [a0,b0,a1,b1,…] atom rows, bond instance order
+    // strand id → per-cluster opacity (<1 only). Empty = nothing faded, and the
+    // alpha channel is never installed, so an unstyled design pays nothing.
+    strandAlphas:   new Map(),
     atoms:          makeAtomTable(null),
     mode:           'off',
     lastData:       null,
@@ -283,6 +295,12 @@ export function initAtomisticRenderer(scene) {
         dirty = true
       }
       if (dirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      if (_state.strandAlphas.size) {
+        _ensureAtomAlpha(mesh)
+        for (let i = 0; i < group.length; i++) {
+          setInstanceAlpha(mesh, i, _alphaOfRow(group[i]))
+        }
+      }
     }
     // Bond cylinders — colour each half of the cylinder isn't supported by
     // a single instance, so just paint each bond with its first atom's colour.
@@ -296,6 +314,35 @@ export function initAtomisticRenderer(scene) {
         _state.bondMesh.setColorAt(i, tColor)
       }
       if (_state.bondMesh.instanceColor) _state.bondMesh.instanceColor.needsUpdate = true
+      if (_state.strandAlphas.size) {
+        _ensureAtomAlpha(_state.bondMesh)
+        for (let i = 0; i < bidx.length / 2; i++) {
+          // A bond spanning two clusters takes the LOWER alpha, so a bond into a
+          // faded cluster fades with it rather than hanging on at full strength.
+          setInstanceAlpha(_state.bondMesh, i,
+            Math.min(_alphaOfRow(bidx[i * 2]), _alphaOfRow(bidx[i * 2 + 1])))
+        }
+      }
+    }
+  }
+
+  /** Per-cluster opacity of one atom row, via its strand. Atoms carry no
+   *  domain_index, so the map is strand-keyed (see color_util.resolveStrandClusters). */
+  function _alphaOfRow(row) {
+    const sid = _state.atoms?.get(row)?.strand_id
+    return _state.strandAlphas.get(sid) ?? 1
+  }
+
+  /** Install the per-instance alpha channel, routing impostor materials through
+   *  their own composed patch — applyInstanceAlphaMaterial ASSIGNS onBeforeCompile,
+   *  which on an impostor would wipe the billboard + gl_FragDepth patch. Lazy: a
+   *  design with nothing faded never flips these materials to transparent. */
+  function _ensureAtomAlpha(mesh) {
+    if (!mesh || mesh._instanceAlpha) return
+    if (mesh.material?.userData?.isImpostor) {
+      if (installInstanceAlphaGeometry(mesh)) enableImpostorInstanceAlpha(mesh.material)
+    } else {
+      installInstanceAlpha(mesh)
     }
   }
 
@@ -485,6 +532,36 @@ export function initAtomisticRenderer(scene) {
       _colorMode    = mode
       _strandColors = strandColors instanceof Map ? strandColors : new Map()
       if (baseColors instanceof Map) _baseColors = baseColors
+      _applyColors(_state.lastSel, _state.lastMulti)
+    },
+
+    /**
+     * Per-cluster opacity, keyed by STRAND — atoms carry no domain_index, so this is
+     * the granularity both this renderer and the surface can address (see
+     * color_util.resolveStrandClusters). Applies in every coloring mode, unlike
+     * colour. Pass an empty map to clear.
+     *
+     * Re-applied automatically after a rebuild, because the sweep lives inside
+     * _applyColors, which _rebuild already calls.
+     * @param {Map<string, number>} alphas
+     */
+    setStrandAlphas(alphas) {
+      const next = alphas instanceof Map ? alphas : new Map()
+      if (!next.size && !_state.strandAlphas.size) return
+      const clearing = !next.size
+      _state.strandAlphas = next
+      if (clearing) {
+        // Restore every installed instance to opaque; the buffers stay installed.
+        for (const [el, mesh] of Object.entries(_state.elementMeshes)) {
+          const group = _state.elementAtoms[el]
+          for (let i = 0; i < group.length; i++) setInstanceAlpha(mesh, i, 1)
+        }
+        const bidx = _state.bondAtomIdx
+        if (_state.bondMesh && bidx?.length) {
+          for (let i = 0; i < bidx.length / 2; i++) setInstanceAlpha(_state.bondMesh, i, 1)
+        }
+        return
+      }
       _applyColors(_state.lastSel, _state.lastMulti)
     },
 

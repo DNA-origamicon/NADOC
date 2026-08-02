@@ -24,7 +24,8 @@ it sounds).
 and it calls `buildHelixObjects` too) · selection/glow *policy* (`selection.md`) · the deform
 tool (`deformation.md`) · unfold (`unfold.md`) · the K-key 2D view (`cadnano-2d.md`) ·
 atomistic/surface reps (`scene/atomistic_renderer/`, `scene/atom_surface_display.js` — also
-uncovered).
+uncovered, though as of 2026-08-01 they share this rule's per-cluster alpha contract; see the
+instanceAlpha section).
 
 *Rewritten 2026-07-30 against live code. Line anchors are dated, not permanent — re-grep before
 citing one.*
@@ -232,9 +233,29 @@ stock chunk variable (LESSONS D5).
 >    actually has the attribute** — GLSL reads a missing attribute as 0 and the patch discards
 >    below 0.02, so a premature call makes every bead vanish.
 >
-> Still genuinely out of scope (different renderers, `Not this rule` above): per-cluster
-> **opacity** on `surface` and `vdw`/`ballstick`. Cluster **colour** does reach both via
-> `color_util.js`.
+> **Atomistic + surface too, 2026-08-01** (their renderers are `Not this rule` above, but the
+> contract is here because it reuses this machinery). Both fade **per STRAND**, not per
+> nucleotide: atoms carry no `domain_index` (`atom_table.js` `ATOM_FIELDS`) and surface vertices
+> carry only a strand id (`vertex_strand_index_table`), so a strand split across two clusters
+> takes one of them — the same approximation cluster *colour* has always made there.
+> `color_util.js::resolveStrandClusters` is the single resolution both colour and opacity use, so
+> they cannot disagree about which cluster owns a strand.
+> - **Atomistic**: `setStrandAlphas(Map)`. The sweep lives inside `_applyColors`, which `_rebuild`
+>   already calls, so it survives a rebuild for free. Bonds take the LOWER of their two atoms'
+>   alphas. Impostor atom materials route through `enableImpostorInstanceAlpha`, same as the beads.
+> - **Surface**: `applyStrandAlphas(Map)`. One merged mesh, one material, so `material.opacity` is
+>   global (the sidebar slider owns it) and the fade rides a per-VERTEX attribute — **reusing the
+>   same `instanceAlpha` name and patch**, because `attribute float instanceAlpha` is per-vertex in
+>   GLSL and only becomes per-instance when the buffer is an `InstancedBufferAttribute`. That reuse
+>   is what makes photo mode's re-install work here for free. The two multiply in the shader.
+>   **Trap:** `setOpacity`'s `transparent = val < 1.0` would switch blending off at slider 1.0 and
+>   silently discard the fade — it is now `|| _strandAlphaMap.size > 0`.
+>
+> Both are driven by `atom_surface_display.js`, whose colour subscriber did **not** watch
+> `currentDesign` — a swatch drag changes neither `coloringMode` nor `strandColors`, so it needed a
+> `clusterDisplaySignature` guard to see cluster edits at all.
+>
+> **Nothing in this pipeline is left uncovered.**
 >
 > **Closed 2026-08-01: overhang link arcs + flexible arcs.** `scene/overhang_link_arcs.js` and
 > `scene/flexible_arcs.js` each own their meshes and honoured no colouring mode at all. Both now

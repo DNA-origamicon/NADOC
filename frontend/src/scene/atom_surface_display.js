@@ -18,7 +18,8 @@ import { repColumnsByRep } from './representation_overrides.js'
 import { filterAtomData } from './atom_filter.js'
 import { surfaceSegments } from './design_queries.js'
 import { buildNucLetterMap, buildStapleColorMap } from './helix_renderer.js'
-import { atomColorsFromLetters, computeAtomStrandColors } from './color_util.js'
+import { atomColorsFromLetters, computeAtomStrandColors, computeAtomStrandAlphas } from './color_util.js'
+import { clusterDisplaySignature } from './cluster_entries.js'
 import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { parseSurfaceBin } from './surface_bin.js'
@@ -54,6 +55,9 @@ export function initAtomSurfaceDisplay({
   const regionVdwRenderer       = initAtomisticRenderer(scene)
   const regionBallstickRenderer = initAtomisticRenderer(scene)
   const regionSurfaceRenderer = initSurfaceRenderer(scene)   // per-region SURFACE overlay
+  // Guards the cluster-display repaint against gizmo-drag thrash (see the colour
+  // subscriber below).
+  let _clusterDisplaySig = ''
   if (window.__NADOC_DBG__) {
     window.__NADOC_DBG__.regionVdwRenderer       = regionVdwRenderer
     window.__NADOC_DBG__.regionBallstickRenderer = regionBallstickRenderer
@@ -315,13 +319,37 @@ export function initAtomSurfaceDisplay({
     }
   }
 
+  /** Push per-cluster opacity at both renderers. Strand-keyed: atoms have no
+   *  domain_index and surface vertices carry only a strand id. */
+  function refreshClusterDisplay(design = null) {
+    const alphas = computeAtomStrandAlphas(design ?? store.getState().currentDesign)
+    atomisticRenderer.setStrandAlphas(alphas)
+    surfaceRenderer.applyStrandAlphas(alphas)
+    // The mixed-representation region overlays are separate renderer instances and
+    // draw the same strands, so they must fade in step or a region pinned to
+    // vdw/surface would stay opaque inside a faded cluster.
+    regionVdwRenderer.setStrandAlphas(alphas)
+    regionBallstickRenderer.setStrandAlphas(alphas)
+    regionSurfaceRenderer.applyStrandAlphas(alphas)
+  }
+
   // Keep atom + surface strand colours in sync when groups/colors change.
   // Always refresh regardless of CPK/strand mode so extra-base coloring stays current.
   store.subscribe((newState, prevState) => {
-    if (newState.strandColors === prevState.strandColors
+    // Per-cluster opacity lives on design.cluster_transforms, which none of the keys
+    // below track — a swatch drag changes neither coloringMode nor strandColors, so
+    // without this guard the fade never reached either renderer. Signature-keyed
+    // because cluster_transforms is replaced on every gizmo-drag patch (~60/s) while
+    // only the pose moves.
+    const sig = clusterDisplaySignature(newState.currentDesign)
+    const clusterChanged = sig !== _clusterDisplaySig
+    if (clusterChanged) _clusterDisplaySig = sig
+    if (!clusterChanged
+        && newState.strandColors === prevState.strandColors
         && newState.strandGroups === prevState.strandGroups
         && newState.coloringMode === prevState.coloringMode
         && newState.loopStrandIds === prevState.loopStrandIds) return
+    if (clusterChanged) refreshClusterDisplay(newState.currentDesign)
     if (atomisticRenderer.getMode() !== 'off') _refreshAtomColors()
     if (_surfaceMode !== 'off') {
       surfaceRenderer.applyStrandColors(_getAtomStrandColors())
@@ -545,6 +573,10 @@ export function initAtomSurfaceDisplay({
     setAtomisticSlidersVisible: _setAtomisticSlidersVisible,
     refetchAtomistic: _refetchAtomistic,
     refreshAtomColors: _refreshAtomColors,
+    /** Per-cluster opacity for the atomistic + surface reps. The store subscriber
+     *  drives the committed path; this is the entry point for the sidebar swatch's
+     *  live preview, which patches a design locally and never touches the store. */
+    refreshClusterDisplay,
     getAtomStrandColors: _getAtomStrandColors,
     getRegionVdwRenderer:       () => regionVdwRenderer,
     getRegionBallstickRenderer: () => regionBallstickRenderer,

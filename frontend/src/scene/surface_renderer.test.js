@@ -79,3 +79,102 @@ describe('surface_renderer crisp strand zones', () => {
     expect(sr.getMesh().geometry.getAttribute('position').count).toBe(4)
   })
 })
+
+// ── Per-cluster opacity ───────────────────────────────────────────────────────
+// The surface is ONE merged mesh with one material, so material.opacity is global
+// (the sidebar slider owns it). Per-cluster fade therefore rides a per-VERTEX
+// channel, reusing the same attribute name and shader patch as the instanced
+// meshes — `attribute float instanceAlpha` is per-vertex in GLSL and only becomes
+// per-instance when the buffer is an InstancedBufferAttribute.
+
+describe('surface per-cluster opacity', () => {
+  const build = () => {
+    const scene = makeScene()
+    const sr = initSurfaceRenderer(scene)
+    sr.setColorMode('strand')
+    sr.update(DATA)
+    return { scene, sr }
+  }
+  const alphaAttr = (sr) => sr.getMesh()?.geometry.getAttribute('instanceAlpha')
+
+  it('installs nothing while nothing is faded', () => {
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map())
+    expect(alphaAttr(sr)).toBeUndefined()
+  })
+
+  it('writes a per-vertex alpha for the faded strand only', () => {
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    const a = alphaAttr(sr)
+    expect(a).toBeTruthy()
+    // verts 0,1 = strand A; verts 2,3 = strand B
+    expect(a.getX(0)).toBeCloseTo(0.3, 5)
+    expect(a.getX(1)).toBeCloseTo(0.3, 5)
+    expect(a.getX(2)).toBe(1)
+    expect(a.getX(3)).toBe(1)
+  })
+
+  it('uses itemSize 1 — a float per vertex, not a widened colour', () => {
+    const { sr } = build()
+    sr.applyStrandColors(new Map([['sA', 0xff0000], ['sB', 0x00ff00]]))
+    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    expect(alphaAttr(sr).itemSize).toBe(1)
+    // …and the colour attribute is untouched, still RGB. Widening THAT to RGBA was
+    // the alternative; a separate attribute leaves all five colour-write sites alone.
+    expect(sr.getMesh().geometry.getAttribute('color').itemSize).toBe(3)
+  })
+
+  it('patches the material so the alpha blends', () => {
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    expect(sr.getMesh().material.userData.instanceAlphaPatch).toBe(true)
+    expect(sr.getMesh().material.transparent).toBe(true)
+  })
+
+  it('the global slider at 1.0 does NOT switch blending off under a fade', () => {
+    // setOpacity's `transparent = val < 1.0` would otherwise silently discard the
+    // per-vertex fade the moment the slider reached full.
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    sr.setOpacity(1.0)
+    expect(sr.getMesh().material.transparent).toBe(true)
+    expect(sr.getMesh().material.opacity).toBe(1.0)
+  })
+
+  it('…and still turns blending off when nothing is faded', () => {
+    const { sr } = build()
+    sr.setOpacity(1.0)
+    expect(sr.getMesh().material.transparent).toBe(false)
+  })
+
+  it('restores every vertex to opaque when cleared', () => {
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    sr.applyStrandAlphas(new Map())
+    const a = alphaAttr(sr)
+    for (let v = 0; v < 4; v++) expect(a.getX(v)).toBe(1)
+  })
+
+  it('survives a recolour — applyStrandColors must not drop the fade', () => {
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    sr.applyStrandColors(new Map([['sA', 0xff0000], ['sB', 0x00ff00]]))
+    expect(alphaAttr(sr).getX(0)).toBeCloseTo(0.3, 5)
+  })
+
+  it('survives a geometry rebuild', () => {
+    // _replaceMesh builds a fresh geometry that knows nothing about the fade.
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    sr.update(DATA)
+    expect(alphaAttr(sr).getX(0)).toBeCloseTo(0.3, 5)
+  })
+
+  it('leaves unlisted strands opaque', () => {
+    const { sr } = build()
+    sr.applyStrandAlphas(new Map([['nobody', 0.1]]))
+    const a = alphaAttr(sr)
+    for (let v = 0; v < 4; v++) expect(a.getX(v)).toBe(1)
+  })
+})

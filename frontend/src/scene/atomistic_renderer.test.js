@@ -11,7 +11,10 @@ import { BALL_RADIUS, ELEMENTS } from './atomistic_renderer/atom_palette.js'
 // them stretches over the whole structure. The renderer must HIDE such bonds.
 
 function _bondMesh(scene) {
-  return scene.children.find((o) => o.isInstancedMesh && o.geometry === CYLINDER_GEO)
+  // By NAME, not by geometry identity: installing the per-instance alpha channel
+  // clones the geometry off the shared CYLINDER_GEO template, so an identity test
+  // silently stops finding the mesh once a cluster is faded.
+  return scene.children.find((o) => o.isInstancedMesh && o.name === 'atomBonds')
 }
 
 function bondCylinderScaleY(scene, index = 0) {
@@ -311,5 +314,102 @@ describe('live MD ball-and-stick payload (flat Int32 serials + sparse object ato
     // Spheres still render: this was exactly what a live NAMD run used to look like.
     expect(scene.children.filter((o) => o.isInstancedMesh).length).toBeGreaterThan(0)
     ar.dispose?.()
+  })
+})
+
+// ── Per-cluster opacity ───────────────────────────────────────────────────────
+// Strand-keyed, because atoms carry no domain_index. Lazy: an unstyled design must
+// never flip these materials to transparent.
+
+function twoStrandScene() {
+  const scene = new THREE.Scene()
+  const ar = initAtomisticRenderer(scene)
+  ar.setMode('ballstick')
+  ar.update({
+    atoms: [
+      { serial: 0, element: 'P', helix_id: 'h0', strand_id: 's1', x: 0, y: 0, z: 0 },
+      { serial: 1, element: 'P', helix_id: 'h0', strand_id: 's2', x: 0.15, y: 0, z: 0 },
+    ],
+    bonds: [[0, 1]],
+  })
+  return { scene, ar }
+}
+const atomMeshes = (scene) =>
+  scene.children.filter(o => o.isInstancedMesh && o.name === 'atomSpheres')
+const alphaAt = (mesh, i) => mesh.geometry.getAttribute('instanceAlpha')?.getX(i)
+
+describe('atomistic per-cluster opacity', () => {
+  it('installs NOTHING while nothing is faded', () => {
+    const { scene, ar } = twoStrandScene()
+    ar.setStrandAlphas(new Map())
+    for (const m of atomMeshes(scene)) {
+      expect(m.geometry.getAttribute('instanceAlpha')).toBeUndefined()
+      expect(m.material.transparent).toBe(false)
+    }
+    ar.dispose()
+  })
+
+  it('fades only the atoms of the faded strand', () => {
+    const { scene, ar } = twoStrandScene()
+    ar.setStrandAlphas(new Map([['s1', 0.3]]))
+    const meshes = atomMeshes(scene)
+    const seen = meshes.flatMap(m =>
+      Array.from({ length: m.count }, (_, i) => alphaAt(m, i)))
+    // Float32 storage, so compare with tolerance rather than identity.
+    expect(seen.some(a => Math.abs(a - 0.3) < 1e-6)).toBe(true)   // s1's atom
+    expect(seen).toContain(1)                                     // s2's, untouched
+    ar.dispose()
+  })
+
+  it('marks the material transparent so the alpha actually blends', () => {
+    const { scene, ar } = twoStrandScene()
+    ar.setStrandAlphas(new Map([['s1', 0.3]]))
+    for (const m of atomMeshes(scene)) expect(m.material.transparent).toBe(true)
+    ar.dispose()
+  })
+
+  it('fades a BOND to the lower of its two atoms', () => {
+    // A bond from a faded cluster into an opaque one must fade, not hang on at
+    // full strength across the boundary.
+    const { scene, ar } = twoStrandScene()
+    ar.setStrandAlphas(new Map([['s1', 0.3]]))
+    const bond = _bondMesh(scene)
+    expect(alphaAt(bond, 0)).toBeCloseTo(0.3, 5)
+    ar.dispose()
+  })
+
+  it('restores every instance to opaque when cleared', () => {
+    const { scene, ar } = twoStrandScene()
+    ar.setStrandAlphas(new Map([['s1', 0.3]]))
+    ar.setStrandAlphas(new Map())
+    for (const m of atomMeshes(scene)) {
+      for (let i = 0; i < m.count; i++) expect(alphaAt(m, i)).toBe(1)
+    }
+    ar.dispose()
+  })
+
+  it('survives a rebuild — the sweep rides _applyColors, which update() calls', () => {
+    const { scene, ar } = twoStrandScene()
+    ar.setStrandAlphas(new Map([['s1', 0.3]]))
+    ar.update({
+      atoms: [
+        { serial: 0, element: 'P', helix_id: 'h0', strand_id: 's1', x: 0, y: 0, z: 0 },
+        { serial: 1, element: 'P', helix_id: 'h0', strand_id: 's2', x: 0.15, y: 0, z: 0 },
+      ],
+      bonds: [[0, 1]],
+    })
+    const seen = atomMeshes(scene).flatMap(m =>
+      Array.from({ length: m.count }, (_, i) => alphaAt(m, i)))
+    expect(seen.some(a => Math.abs(a - 0.3) < 1e-6)).toBe(true)
+    ar.dispose()
+  })
+
+  it('leaves atoms of unlisted strands opaque', () => {
+    const { scene, ar } = twoStrandScene()
+    ar.setStrandAlphas(new Map([['nobody', 0.1]]))
+    const seen = atomMeshes(scene).flatMap(m =>
+      Array.from({ length: m.count }, (_, i) => alphaAt(m, i)))
+    expect(seen.every(a => a === 1)).toBe(true)
+    ar.dispose()
   })
 })
