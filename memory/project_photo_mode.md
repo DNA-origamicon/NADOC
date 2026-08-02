@@ -273,6 +273,29 @@ ground up. The shipping photo mode keeps its own floor-gated shadow rig,
 4. Editor overlay geometry (~100 µm) silently sets the frustum and puts the whole
    design inside one texel. `shadow_bounds.js` rejects contributors >8× the
    median extent and names them in a console warning.
+5. **`swapToFlatMaterials` must also carry `onBeforeCompile` — 2026-08-01.** The
+   same class of bug as 3, one level deeper. `makeMaterial` builds a *brand-new*
+   material, so any behaviour living in a shader patch on the source material is
+   silently gone. The live case is `instanceAlpha`, the per-instance alpha channel
+   behind reference-geometry ghosting, mixed-representation region visibility and
+   (new) per-cluster opacity: the geometry attribute survives the swap untouched
+   (geometry is never replaced here), but with no `onBeforeCompile` the fragment
+   never multiplies by it, so **everything faded rendered fully OPAQUE in photo
+   mode and in the tiled export** — which reuses the same swapped materials.
+   FIX: the patch moved out to `scene/instance_alpha.js` as a module-level named
+   function + `applyInstanceAlphaMaterial(mat)`, which marks
+   `userData.instanceAlphaPatch`; the swap re-installs it on that marker, exactly
+   how `photoForceDepthWrite` works. Two subtleties worth not rediscovering:
+   `transparent` must be set explicitly (the swap's opacity carry-over is gated on
+   `src.opacity < 1`, and it is 1 — the fade is in the attribute), and the function
+   must stay module-level, because three derives its program cache key from
+   `onBeforeCompile.toString()`; a per-material closure would compile one shader
+   per mesh. `depthWrite` stays TRUE — one InstancedMesh holds both faded and
+   opaque instances, and `isShadowExcluded` would drop the whole mesh from the key
+   shadow. **No new save slot is needed:** the patched photo material is one of the
+   `saved` map's swapped materials, so `restore()` already disposes it and puts the
+   original (which kept its own patch) back. Pinned by 4 `photo_mode.test.js` cases
+   + `instance_alpha.test.js`.
 
 **After ANY edit to a tab pane in index.html**, check whole-file `<div>`/`</div>`
 balance and that the pane's nesting depth matches its siblings. A stray `</div>`

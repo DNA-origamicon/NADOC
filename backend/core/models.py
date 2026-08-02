@@ -1185,6 +1185,16 @@ class ClusterRigidTransform(BaseModel):
     # sidebar badge, lookup, validation, and to gate the legacy OverhangSpec pose overlay
     # off for the migrated pose. See [[overhang-duplex-cluster]].
     overhang_duplex_driver_id: Optional[str] = None
+    # ── Display metadata (Physical layer — never affects geometry or topology) ──
+    # color: "#rrggbb" override for this cluster, honoured ONLY when the viewer's
+    # coloring mode is 'cluster'. None = use the auto index palette
+    # (STAPLE_PALETTE[i % 12]). On overlapping clusters an explicit color beats a
+    # cluster still on the auto palette; ties break to the later array entry.
+    color: Optional[str] = None
+    # opacity: 0..1 fade applied in EVERY coloring mode (and in photo mode).
+    # 1.0 = unset/opaque. Where clusters overlap the LOWEST opacity wins, matching
+    # the sidebar visibility toggle, which already unions across clusters.
+    opacity: float = 1.0
 
 
 class ClusterJoint(BaseModel):

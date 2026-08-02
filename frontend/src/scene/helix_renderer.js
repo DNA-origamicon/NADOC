@@ -34,11 +34,14 @@ import {
   BASE_COLORS,
   buildNucLetterMap,
   buildClusterLookup,
+  buildClusterColorLookup,
   buildStapleColorMap,
   nucColor,
   nucSlabColor,
   nucArrowColor,
 } from './helix_renderer/palette.js'
+import { installInstanceAlpha } from './instance_alpha.js'
+import { clusterAlphaForNuc } from './cluster_entries.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -236,31 +239,7 @@ function _setEntryAlpha(entry, a) {
  * Clones the shared geometry first. Only touches diffuseColor.a — no stock shader
  * chunk variable is redefined (see LESSONS D5). No-op on impostor meshes.
  */
-function _installInstanceAlpha(mesh) {
-  if (mesh._instanceAlpha) return
-  const capacity = mesh.instanceMatrix.count
-  mesh.geometry = mesh.geometry.clone()   // detach from the shared template
-  const attr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1)
-  attr.setUsage(THREE.DynamicDrawUsage)
-  mesh.geometry.setAttribute('instanceAlpha', attr)
-  mesh._instanceAlpha = attr
-  const mat = mesh.material
-  mat.transparent = true
-  mat.onBeforeCompile = (shader) => {
-    shader.vertexShader =
-      'attribute float instanceAlpha;\nvarying float vInstanceAlpha;\n' + shader.vertexShader
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      '#include <begin_vertex>\n  vInstanceAlpha = instanceAlpha;',
-    )
-    shader.fragmentShader = 'varying float vInstanceAlpha;\n' + shader.fragmentShader
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <color_fragment>',
-      '#include <color_fragment>\n  diffuseColor.a *= vInstanceAlpha;\n  if ( diffuseColor.a < 0.02 ) discard;',
-    )
-  }
-  mat.needsUpdate = true
-}
+const _installInstanceAlpha = installInstanceAlpha
 
 // ── Slab helpers ──────────────────────────────────────────────────────────────
 
@@ -2442,12 +2421,43 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     if (!_refIdSet.has(strandId)) return 1.0
     return _refHidden ? 0.0 : REF_ALPHA
   }
-  function _applyReferenceAlpha() {
+
+  // ── Per-cluster opacity ─────────────────────────────────────────────────────
+  // The third factor on the shared instanceAlpha channel. Keyed by the same nucKey
+  // strings setHiddenNucs uses ('h:<helix_id>' / 'd:<strand_id>:<domain_index>'),
+  // built by scene/cluster_entries.js and pushed in by design_renderer, which
+  // re-pushes after every rebuild (a rebuild makes fresh meshes).
+  let _clusterAlphaKeys = new Map()
+  const _clusterAlphaFor = (nuc) => clusterAlphaForNuc(_clusterAlphaKeys, nuc)
+  // A cylinder spans one domain, so it has its own {helixId, strandId, domainIndex}.
+  const _clusterAlphaForCyl = (dom) => _clusterAlphaFor(
+    dom && { helix_id: dom.helixId, strand_id: dom.strandId, domain_index: dom.domainIndex })
+
+  // ── The composite alpha channel ─────────────────────────────────────────────
+  // THREE independent factors multiply into ONE instanceAlpha attribute:
+  //   reference-geometry ghosting × mixed-representation visibility × cluster opacity
+  // They used to be written by two separate ABSOLUTE writers that clobbered each
+  // other (the second hand-multiplied the first's factor back in). This is the
+  // single writer for the no-override case; _applyRepOverrides is the single writer
+  // when overrides are active. A future fourth factor is a new term, not a new sweep.
+  const _anyAlpha = () => _hasReference || _repActive || _clusterAlphaKeys.size > 0
+  function _applyAlphaChannel() {
+    if (!_anyAlpha() && !_repAlphaReady) return
+    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc))
+    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc))
+    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * _clusterAlphaFor(e.nuc))
+    for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId) * _clusterAlphaFor(e.fromNuc))
+    // Cylinders only once the buffers exist. Reference ghosting never drove them, so
+    // this stays a no-op until per-cluster opacity (or a rep override) installs them
+    // — and once installed it keeps maintaining them, so clearing a fade restores 1.
+    if (_repAlphaReady) {
+      for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom))
+      for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, _refAlphaFor(dom.strandId) * _clusterAlphaForCyl(dom))
+      // Bridge cylinders live on synthetic '__lnk__' helices that no cluster lists,
+      // so they never carry a cluster fade — restored to opaque, as before.
+      for (const br of _bridgeCylData)    _setCylAlpha(iLinkerBridgeCylinders, br.cylIdx, 1)
+    }
     if (!_hasReference) return
-    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
-    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
-    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
-    for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId))
     // Helical axis arrows of reference-only helices: hard-hide when reference is
     // hidden; restore via the normal shaft-mode logic when shown (respecting the
     // cadnano global axis gate).
@@ -2474,6 +2484,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // and override visibility multiply.
   let _repColumnRep  = new Map()  // "helixId:bp" -> 'full' | 'cylinders' (both strands)
   let _repActive     = false
+  // Latch: once the instanceAlpha buffers exist, every alpha writer keeps
+  // maintaining them (so clearing a fade or an override restores 1.0 rather than
+  // leaving the last written value baked in).
   let _repAlphaReady = false
   function _setCylAlpha(mesh, idx, a) {
     const attr = mesh._instanceAlpha
@@ -2481,7 +2494,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     attr.setX(idx, a)
     attr.needsUpdate = true
   }
-  function _ensureRepAlpha() {
+  /** Install per-instance alpha on every mesh the alpha channel drives. Lazy and
+   *  idempotent: _installInstanceAlpha clones geometry and flips the material to
+   *  transparent, so a design with no reference strands, no rep override and no
+   *  cluster fade must never pay for it. */
+  function _ensureAlphaInstalled() {
     if (_repAlphaReady) return
     if (!_useImpostors) _installInstanceAlpha(iSpheres)
     _installInstanceAlpha(iCubes)
@@ -2507,20 +2524,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
   function _applyRepOverrides() {
     if (!_repActive) {
-      if (_repAlphaReady) {
-        // Restore alpha to reference-only (1.0 for non-reference) and cyl→opaque.
-        for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
-        for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
-        for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id))
-        for (const e of coneEntries)     _setEntryAlpha(e, _refAlphaFor(e.strandId))
-        for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, 1)
-        for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, 1)
-        for (const br of _bridgeCylData)    _setCylAlpha(iLinkerBridgeCylinders, br.cylIdx, 1)
-      }
+      // Overrides off — hand the channel back to its other two factors.
+      _applyAlphaChannel()
       _reapplyDetailVisibility()
       return
     }
-    _ensureRepAlpha()
+    _ensureAlphaInstalled()
     const baseCyl = _detailLevel === 2   // global rep is cylinders
     // Effective rep at a duplex column (override wins; else the global rep).
     const effCol = (helixId, bp) => {
@@ -2529,12 +2538,12 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     // A bead (either strand) shows only where its column resolves to 'full'.
     const beadVis = (nuc) => (nuc && effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
-    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc))
-    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc))
-    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc))
+    for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
+    for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
+    for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
     for (const e of coneEntries) {
       const vis = e.isCrossHelix ? 1 : beadVis(e.fromNuc)
-      _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis)
+      _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis * _clusterAlphaFor(e.fromNuc))
     }
     // A domain cylinder (the duplex tube) shows only where EVERY column it spans
     // resolves to 'cylinders' — so a region boundary cutting a domain falls back
@@ -2545,8 +2554,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       return 1
     }
-    for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, cylVis(dom))
-    for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, cylVis(dom))
+    for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, cylVis(dom) * _clusterAlphaForCyl(dom))
+    for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, cylVis(dom) * _clusterAlphaForCyl(dom))
     // ds-linker bridge cylinder: keyed on its own __lnk__ bridge helix span.
     const bridgeVis = (br) => {
       for (let bp = br.bp_lo; bp <= br.bp_hi; bp++) {
@@ -2585,13 +2594,35 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Mark which strand IDs are reference geometry (rendered translucent). */
     setReferenceStrands(idSet) {
       _refIdSet = idSet instanceof Set ? idSet : new Set(idSet)
-      _applyReferenceAlpha()
+      _applyAlphaChannel()
     },
     /** Hide (alpha→0, fragment-discarded) or show reference geometry. */
     setReferenceHidden(hidden) {
       _refHidden = !!hidden
-      _applyReferenceAlpha()
+      _applyAlphaChannel()
       if (_repActive) _applyRepOverrides()   // re-multiply override visibility over ref alpha
+    },
+
+    /**
+     * Per-cluster opacity. `map` is nucKey → alpha (0..1), keyed exactly like
+     * setHiddenNucs ('h:<helix_id>' / 'd:<strand_id>:<domain_index>'); keys absent
+     * from the map are opaque. Built by scene/cluster_entries.js::clusterAlphaKeys.
+     *
+     * Multiplies with reference-ghost alpha and mixed-representation visibility on
+     * the shared instanceAlpha channel — it does not replace them. design_renderer
+     * re-pushes this after every rebuild, since a rebuild makes fresh meshes.
+     *
+     * Covers the design-view meshes (beads/cones/slabs/fluoros + the straight
+     * cylinders). Curved/deformed tubes, impostor beads, crossover extra-base
+     * meshes and the hull prism are NOT covered — same gap list as mixed
+     * representation, see .claude/rules/rendering.md.
+     */
+    setClusterAlphas(map) {
+      const next = map instanceof Map ? map : new Map(map ?? [])
+      if (!next.size && !_clusterAlphaKeys.size) return   // nothing to do, install nothing
+      _clusterAlphaKeys = next
+      if (next.size) _ensureAlphaInstalled()
+      if (_repActive) _applyRepOverrides(); else _applyAlphaChannel()
     },
 
     /**
@@ -2881,7 +2912,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const loop = loopIds instanceof Set ? loopIds : new Set(loopIds ?? [])
 
       let perNuc = () => null
-      let clusterIdxFn = null
+      let clusterColorFn = null
 
       if (m === 'base') {
         const allNucs = backboneEntries.map(e => e.nuc).filter(Boolean)
@@ -2891,11 +2922,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           return ch ? BASE_COLORS[ch] : null
         }
       } else if (m === 'cluster') {
-        clusterIdxFn = buildClusterLookup(design)
-        perNuc = (nuc) => {
-          const ci = clusterIdxFn(nuc)
-          return ci != null ? STAPLE_PALETTE[ci % STAPLE_PALETTE.length] : null
-        }
+        // A cluster's user-set colour overrides its auto palette slot; unstyled
+        // clusters keep STAPLE_PALETTE[index % 12] exactly as before.
+        clusterColorFn = buildClusterColorLookup(design)
+        perNuc = (nuc) => clusterColorFn(nuc) ?? null
       } else if (m === 'overhang-only') {
         // Overhang nucs return null → fall through to strand color.
         // Everything else gets dim gray.
@@ -2947,13 +2977,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // to the (effective) strand colour.  In 'overhang-only' mode regular
       // cylinders go dim gray; overhang cylinders keep their strand colour.
       const cylColorFor = (dom) => {
-        if (clusterIdxFn) {
-          const ci = clusterIdxFn({
+        if (clusterColorFn) {
+          const c = clusterColorFn({
             helix_id:    dom.helixId,
             strand_id:   dom.strandId,
             domain_index: dom.domainIndex ?? 0,
           })
-          if (ci != null) return STAPLE_PALETTE[ci % STAPLE_PALETTE.length]
+          if (c != null) return c
         }
         return strandHexFor(dom.strandId)
       }

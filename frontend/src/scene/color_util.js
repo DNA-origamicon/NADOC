@@ -106,7 +106,14 @@ export function computeAtomStrandColors(state, staplePalette) {
         const hid = s.domains[di].helix_id
         if (helixCluster.has(hid)) { ci = helixCluster.get(hid); break }
       }
-      if (ci != null) effective[s.id] = ATOM_STAPLE_PALETTE[ci % ATOM_STAPLE_PALETTE.length]
+      if (ci == null) continue
+      // A user-set cluster colour overrides the auto palette slot, matching the CG
+      // path (helix_renderer/palette.js::buildClusterColorLookup). Opacity is NOT
+      // honoured here — per-cluster fade covers the design-view meshes only.
+      const custom = currentDesign.cluster_transforms[ci]?.color
+      effective[s.id] = (typeof custom === 'string' && /^#[0-9a-fA-F]{6}$/.test(custom))
+        ? parseInt(custom.slice(1), 16)
+        : ATOM_STAPLE_PALETTE[ci % ATOM_STAPLE_PALETTE.length]
     }
   }
   return new Map(Object.entries(effective).map(([k, v]) => [k, typeof v === 'number' ? v : parseInt(v.replace('#',''), 16)]))

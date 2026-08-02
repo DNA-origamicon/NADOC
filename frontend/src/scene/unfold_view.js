@@ -24,6 +24,8 @@ import * as THREE from 'three'
 import { store } from '../state/store.js'
 import { createGlowLayer } from './glow_layer.js'
 import { arcControlPoint } from './crossover_connections.js'
+import { buildClusterColorLookup } from './helix_renderer/palette.js'
+import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
 const ARC_SEGS         = 20    // bezier sample count per arc line
@@ -161,7 +163,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     const N         = arcs.length
     const vertCount = N * (ARC_SEGS + 1)
     const positions = new Float32Array(vertCount * 3)
-    const colors    = new Float32Array(vertCount * 3)
+    // RGBA, not RGB. A 4-component colour attribute makes three define
+    // USE_COLOR_ALPHA, so `diffuseColor *= vColor` fades per VERTEX — the only
+    // per-arc alpha channel available here, since all arcs of a strand type share
+    // one merged LineSegments and therefore one material. Per-cluster opacity
+    // rides this.
+    const colors    = new Float32Array(vertCount * 4)
     // LineSegments uses pairs: each of the ARC_SEGS segments has 2 index entries.
     const idxCount  = N * ARC_SEGS * 2
     const idx       = vertCount > 65535
@@ -175,15 +182,16 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         idx[(a * ARC_SEGS + s) * 2]     = base + s
         idx[(a * ARC_SEGS + s) * 2 + 1] = base + s + 1
       }
-      tc.setHex(arcs[a].color ?? 0x00ccff)
+      tc.setHex(_arcModeColor(arcs[a]))
+      const alpha = _arcAlpha(arcs[a])
       for (let v = 0; v <= ARC_SEGS; v++) {
-        const ci = (base + v) * 3
-        colors[ci] = tc.r; colors[ci + 1] = tc.g; colors[ci + 2] = tc.b
+        const ci = (base + v) * 4
+        colors[ci] = tc.r; colors[ci + 1] = tc.g; colors[ci + 2] = tc.b; colors[ci + 3] = alpha
       }
     }
     const geo  = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3))
+    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    4))
     geo.setIndex(new THREE.BufferAttribute(idx, 1))
     const mat  = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })
     const line = new THREE.LineSegments(geo, mat)
@@ -199,29 +207,74 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     return { geo, line, positions, colors }
   }
 
+  // ── Per-cluster display (colour + opacity) ──────────────────────────────────
+  // Arcs are visible in the plain 3D view too (straight, bow = 0), so a cluster
+  // that fades or recolours has to take its crossover arcs with it or the design
+  // looks half-styled. An arc belongs to whichever cluster owns its `fromNuc`,
+  // falling back to `toNuc` — the same owner rule the extra-base beads use, so an
+  // arc and the beads riding it never disagree.
+  let _clusterColorFn   = null    // set while coloringMode === 'cluster'
+  let _clusterAlphaKeys = new Map()
+  let _clusterDisplaySig = ''
+
+  /**
+   * Re-read the per-cluster display fields off a design and repaint every arc.
+   * Cheap by arc count (one 21-vertex write each), and a no-op for a design where
+   * nothing is styled.
+   * @param {object} [design]  defaults to the store's current design
+   */
+  function _refreshClusterDisplay(design = null) {
+    const d = design ?? store.getState().currentDesign
+    const mode = store.getState().coloringMode || 'strand'
+    _clusterColorFn   = (mode === 'cluster') ? buildClusterColorLookup(d) : null
+    _clusterAlphaKeys = clusterAlphaKeys(d)
+    for (const e of _arcMeta) _paintArcByMode(e)
+  }
+
+  const _arcClusterColor = (e) =>
+    _clusterColorFn ? (_clusterColorFn(e.fromNuc) ?? _clusterColorFn(e.toNuc)) : undefined
+
+  /** Per-cluster opacity for one arc. Lowest of the two endpoints, matching the
+   *  overlap rule everywhere else (a faded cluster must visibly fade). */
+  function _arcAlpha(e) {
+    if (!_clusterAlphaKeys.size) return 1
+    return Math.min(clusterAlphaForNuc(_clusterAlphaKeys, e.fromNuc),
+                    clusterAlphaForNuc(_clusterAlphaKeys, e.toNuc))
+  }
+
   /**
    * Mode-aware render color for an arc.  `e.color` always tracks the strand's
    * natural color (palette + customColors + groups).  In 'overhang-only' mode
    * we override non-overhang crossovers to dim gray; an arc is "overhang"
-   * when either endpoint nuc carries an overhang_id.  All other modes use
-   * `e.color` directly (cluster / base aren't wired to crossovers).
+   * when either endpoint nuc carries an overhang_id.  In 'cluster' mode the arc
+   * takes its cluster's colour (falling back to the strand colour when neither
+   * endpoint is in a cluster).  'base' is still not wired to crossovers — an arc
+   * spans two nucleotides and has no single base identity.
    */
   function _arcModeColor(e) {
     const mode = store.getState().coloringMode || 'strand'
+    if (mode === 'cluster') return _arcClusterColor(e) ?? e.color
     if (mode !== 'overhang-only') return e.color
     const isOvhg = (e.fromNuc?.overhang_id != null) || (e.toNuc?.overhang_id != null)
     return isOvhg ? e.color : 0xbbbbbb
   }
   function _paintArcByMode(e) { _setArcColor(e, _arcModeColor(e)) }
 
-  /** Update the vertex color of a single arc in its merged buffer. */
-  function _setArcColor(e, hex) {
+  /**
+   * Update the vertex colour of a single arc in its merged buffer.
+   *
+   * `alpha` defaults to the arc's per-cluster opacity, so every other colour
+   * writer (selection highlight, the RMSF/flex scalar overlay, strand-group
+   * recolours) preserves the fade for free instead of resetting it to opaque.
+   */
+  function _setArcColor(e, hex, alpha = _arcAlpha(e)) {
     const merged = e.merged === 'scaffold' ? _scaffoldMerged : _stapleMerged
     if (!merged) return
     const tc = new THREE.Color(hex)
     for (let v = 0; v <= ARC_SEGS; v++) {
-      const ci = (e.vertIdx + v) * 3
+      const ci = (e.vertIdx + v) * 4
       merged.colors[ci] = tc.r; merged.colors[ci + 1] = tc.g; merged.colors[ci + 2] = tc.b
+      merged.colors[ci + 3] = alpha
     }
     merged.geo.attributes.color.needsUpdate = true
   }
@@ -419,10 +472,11 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
     if (_scaffoldMerged) _arcGroup.add(_scaffoldMerged.line)
     if (_stapleMerged)   _arcGroup.add(_stapleMerged.line)
 
-    // Apply current coloring-mode override (e.g. dim non-overhang arcs gray).
-    if ((store.getState().coloringMode || 'strand') !== 'strand') {
-      for (const e of _arcMeta) _paintArcByMode(e)
-    }
+    // Rebuild the cluster lookups against the current design and apply the current
+    // coloring-mode override (dim non-overhang arcs, cluster colours, cluster fade).
+    // Unconditional: a fade applies in EVERY coloring mode, including 'strand', and
+    // the freshly-built buffers know nothing about it.
+    _refreshClusterDisplay()
   }
 
   /**
@@ -1118,7 +1172,20 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
   store.subscribe((newState, prevState) => {
     if (newState.coloringMode === prevState.coloringMode) return
     if (!_arcMeta.length) return
-    for (const e of _arcMeta) _paintArcByMode(e)
+    _refreshClusterDisplay(newState.currentDesign)
+  })
+
+  // …and when a cluster's own colour/opacity changes, which the subscriber above
+  // cannot see: editing a swatch leaves coloringMode at 'cluster' and only mutates
+  // cluster_transforms. Keyed on the display signature rather than array identity
+  // because cluster_transforms is replaced on every gizmo-drag patch (~60/s) while
+  // only the pose moves — see cluster_entries.clusterDisplaySignature.
+  store.subscribe((newState) => {
+    if (!_arcMeta.length) return
+    const sig = clusterDisplaySignature(newState.currentDesign)
+    if (sig === _clusterDisplaySig) return
+    _clusterDisplaySig = sig
+    _refreshClusterDisplay(newState.currentDesign)
   })
 
   return {
@@ -1599,6 +1666,15 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
       }
       return hiddenXoverIds
     },
+
+    /**
+     * Repaint every arc from a design's per-cluster colour + opacity. The store
+     * subscribers handle the committed path; this is the entry point for the
+     * sidebar swatch's live preview, which patches a design locally and never
+     * touches the store until pointer-up.
+     * @param {object} [design]
+     */
+    refreshClusterDisplay(design = null) { _refreshClusterDisplay(design) },
 
     dispose() {
       if (_animFrame) cancelAnimationFrame(_animFrame)

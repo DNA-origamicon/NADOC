@@ -156,18 +156,103 @@ shadows in photo mode. Pinned by `photo_mode.test.js`. Any future structural mes
 tracks a user opacity control needs the same flag.
 
 **Per-column/strand overrides** (mixed representation): `resolveRepOverrides`
-(`scene/representation_overrides.js`, used `design_renderer.js:396` inside
-`_applyRepresentationOverrides` :387) → `_applyRepOverrides` (`helix_renderer.js:2493`, public as
-`applyRepOverrides` :2588) → per-instance alpha via `_installInstanceAlpha` (:238).
+(`scene/representation_overrides.js`, used inside `_applyRepresentationOverrides`) →
+`_applyRepOverrides` (`helix_renderer.js`, public as `applyRepOverrides`) → per-instance alpha
+via `_installInstanceAlpha`.
 
-> **Known gap — do not assume overrides cover everything.** `_applyRepOverrides` (:2493-2549)
-> touches none of `_curvedCylGroup`, `_curvedOvhgGroup`, `iCurvedHelixCylinders`,
-> `iCurvedOverhangCylinders`, `iCurvedOverhangFullCylinders`, `iLinkerBindingCylinders` —
-> `_reapplyDetailVisibility` (:2484) does. And `_installInstanceAlpha` **skips `iSpheres`/
-> `iFluoros` when `_useImpostors`** (:2420-2424, :2471-2479), so impostor beads get no
-> per-instance alpha at all. Net: mixed representation and reference-ghosting silently no-op on
-> deformed/curved cylinders and on impostor beads. This is the P1 item in
-> `memory/project_mixed_representation.md`.
+### The instanceAlpha channel has THREE factors and ONE writer (2026-08-01)
+
+`instanceAlpha` is a per-instance buffer attribute multiplied into `diffuseColor.a` by an
+`onBeforeCompile` patch. **Three independent features share it:**
+
+| Factor | Set by | Source |
+|---|---|---|
+| reference-geometry ghosting | `setReferenceStrands` / `setReferenceHidden` | `_refAlphaFor(strandId)`, `REF_ALPHA = 0.4` |
+| mixed-representation visibility | `applyRepOverrides` | `beadVis(nuc)` / `cylVis(dom)`, 0 or 1 |
+| **per-cluster opacity** | `setClusterAlphas(Map)` | `scene/cluster_entries.js::clusterAlphaKeys`, nucKey → alpha |
+
+They **multiply**. Until 2026-08-01 the first two were separate ABSOLUTE writers that clobbered
+each other (`_applyRepOverrides` hand-multiplied `_refAlphaFor` back in), which does not scale —
+so they were collapsed: `_applyAlphaChannel()` (formerly `_applyReferenceAlpha`) is the single
+writer when no override is active, `_applyRepOverrides` when one is. **A fourth factor is a new
+term in those two functions, never a fourth sweep.** `_ensureAlphaInstalled` (formerly
+`_ensureRepAlpha`) is the single lazy installer, latched by `_repAlphaReady`; once latched every
+writer keeps maintaining the buffers, which is how clearing a fade restores 1.0 instead of baking
+in the last value.
+
+**The shader patch lives in `scene/instance_alpha.js`, not here** — `instanceAlphaOnBeforeCompile`
+(a module-level NAMED function, because three derives the program cache key from
+`onBeforeCompile.toString()`: one shared function = one shared compiled program) and
+`applyInstanceAlphaMaterial(mat)`, which also stamps `userData.instanceAlphaPatch`. That marker
+exists because **`photo_mode.js::swapToFlatMaterials` replaces every mesh material and copies no
+`onBeforeCompile`** — before the fix, everything faded rendered fully opaque in photo mode and in
+the tiled export. The swap now re-installs the patch on the marker, and must set `transparent`
+explicitly (the fade is in the attribute, so `src.opacity` is 1 and the swap's opacity carry-over
+never fires). Pinned by `instance_alpha.test.js` + 4 tests in `photo_mode.test.js`.
+
+Keep `depthWrite: true` on these materials. One InstancedMesh holds both faded and opaque
+instances, so dropping it would break the opaque ones — and `shadow_bounds.js::isShadowExcluded`
+reads `depthWrite:false` as "overlay, cannot occlude", silently removing the whole mesh from the
+photo key shadow. The `< 0.02 discard` in the patch is what keeps a fully-faded instance from
+being an invisible occluder (LESSONS D8); the patch touches only `diffuseColor.a`, redefining no
+stock chunk variable (LESSONS D5).
+
+> **Known gap — do not assume the alpha channel covers everything.** `_applyRepOverrides` and
+> `_applyAlphaChannel` touch none of `_curvedCylGroup`, `_curvedOvhgGroup`,
+> `iCurvedHelixCylinders`, `iCurvedOverhangCylinders`, `iCurvedOverhangFullCylinders`,
+> `iLinkerBindingCylinders` — `_reapplyDetailVisibility` does. `_installInstanceAlpha` **skips
+> `iSpheres`/`iFluoros` when `_useImpostors`**, so impostor beads get no per-instance alpha at
+> all. Net: mixed representation, reference ghosting and per-cluster opacity all silently no-op
+> on deformed/curved cylinders, impostor beads and binding cylinders. Concretely: *a deformed
+> design shows no cluster fade at `cylinders` rep.*
+>
+> **Closed 2026-08-01: overhang link arcs + flexible arcs.** `scene/overhang_link_arcs.js` and
+> `scene/flexible_arcs.js` each own their meshes and honoured no colouring mode at all. Both now
+> resolve their cluster from the A-side anchor nucleotide, falling back to B, and fade to the
+> LOWER of the two alphas — the same owner rule as crossover arcs and extra bases, so a connection
+> never disagrees with the geometry it joins. Two things worth knowing:
+> - **`flexible_arcs` had three module-level SHARED materials** (`_tubeMat`/`_beadMat`/`_slabMat`)
+>   handed to every connection's meshes, so per-connection colour or fade was structurally
+>   impossible — one write hit every arc. They are now per-connection, and `_clear()` disposes
+>   them (the shared ones deliberately were not disposed; that asymmetry is a leak if you revert
+>   half of this).
+> - **`overhang_link_arcs` materials carry their own base opacity** (arcs 0.85, slabs 0.90), so the
+>   cluster factor MULTIPLIES rather than replaces — captured once as `userData.baseOpacity` so
+>   repeated refreshes don't compound. Both are pinned by real behavioural tests in their
+>   `.test.js` files.
+>
+> Still true for both: they respond to `coloringMode` via their own subscribers, because the
+> design-change subscriber that drives their rebuild never fires for a mode switch.
+>
+> **Closed 2026-08-01: crossover ARCS.** Plain crossovers (no extra bases) are drawn as arcs by
+> `unfold_view.js`, and **they render in the plain 3D view too** (straight, bow = 0), so this was
+> visible without ever entering unfold. They had no cluster colour (`_arcModeColor` handled only
+> `overhang-only`; the file's comment said cluster "isn't wired to crossovers") and no per-arc
+> alpha at all. Fixed by widening the merged colour attribute from RGB to **RGBA** — all arcs of a
+> strand type share one `LineSegments` and one material, so three's `USE_COLOR_ALPHA` is the only
+> per-arc channel there is. See `.claude/rules/unfold.md` for the stride contract; a `* 3` index
+> left in that buffer silently smears one arc's blue into its neighbour's alpha.
+>
+> **Closed 2026-08-01: crossover extra bases and 5′/3′ extensions.** Both were reported in-app as
+> "doesn't inherit the cluster's colour" and both had the same root shape — geometry that is not
+> addressed the way the lookup assumed.
+> - **Extra bases** live in `design_renderer`'s own `_xoverBeadsMesh`/`_xoverSlabsMesh`/
+>   `_xoverConnMesh`, which `applyColoring` and `setClusterAlphas` cannot reach at all. They now
+>   get `_applyXoverColoring('cluster', design)` for colour and `_applyXoverClusterAlpha()` for
+>   fade (lazy install, so a design with nothing faded pays nothing). An extra base takes the
+>   cluster of the crossover's A-side nuc, falling back to B — same owner for both, so they cannot
+>   disagree.
+> - **Extensions** render on synthetic `__ext_<id>` helices that appear in no cluster's
+>   `helix_ids`, and their `domain_index` is an out-of-range sentinel (`-1` for 5′,
+>   `len(domains)` for 3′ — `design_geometry.py`), so **neither** the domain tier nor the helix
+>   tier could ever resolve them. Opacity always worked (`clusterNucKeys` emits `h:__ext_<id>`);
+>   colour did not, until `buildClusterColorLookup` grew the matching registration pass. If you
+>   add a third thing keyed by nucleotide, check it against an extension bead first.
+>
+> The curved groups look like a one-line `_fadeMat(mesh.material, a)` and are not: their
+> `material.opacity` is already absolutely owned by the deform cross-fade at four sites, each
+> writing an absolute value, so an alpha factor written there is clobbered on the next lerp frame.
+> This is the P1 item in `memory/project_mixed_representation.md`; fixing it now buys two features.
 
 ## Color merge
 
@@ -186,6 +271,16 @@ tracks a user opacity control needs the same flag.
   does not recolour untouched staples. **Any consumer that wants to agree with 3D must call it, not
   re-derive `index % 12`** — `ui/spreadsheet.js` did the latter until 2026-07-31 (TD-02) and its
   row swatches, colour sort key and exported .xlsx each used a different index.
+- **Cluster coloring goes through `buildClusterColorLookup`, not `buildClusterLookup`.** The latter
+  returns a cluster *array index* and still has three consumers that want exactly that
+  (`joint_renderer`, `assembly_renderer_shared` ×2). The former returns a packed colour and is what
+  `applyColoring('cluster', …)` + `cylColorFor` use, because a cluster can now carry a user-set
+  `color` that overrides its `STAPLE_PALETTE[i % 12]` slot. Overlap resolution: domain tier beats
+  helix tier (unchanged), and **within a tier an explicit colour beats an unstyled cluster**, ties to
+  the later array entry. That last rule exists because overlapping clusters are normal — a design
+  with a scaffold cluster and a geometry cluster over the same 59 helices would otherwise make the
+  swatch on one of them do nothing at all. With no colours set the output is identical to the old
+  palette path (pinned in `palette.test.js`). `color_util.js` carries the atomistic/surface twin.
 - `setEntryColor(entry, hex)` — `design_renderer:808` → `_setInstColor` (`helix_renderer:192`).
   Main callers are `selection_manager.js` (12 sites), `ui/view_tool_buttons.js`,
   `scene/slice_highlighter.js`.

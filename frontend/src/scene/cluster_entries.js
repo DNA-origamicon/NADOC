@@ -1,11 +1,13 @@
 /**
  * Cluster → nucleotide membership. One definition of "which nucleotides belong to
- * this cluster", in two shapes: a reusable predicate (`clusterMemberFilter`) and
- * the entry-list convenience wrapper (`clusterBackboneEntries`) main.js uses.
+ * this cluster", in three shapes: a reusable predicate (`clusterMemberFilter`), the
+ * entry-list convenience wrapper (`clusterBackboneEntries`), and the renderer's
+ * nucKey string form (`clusterNucKeys` and friends).
  *
  * The predicate was a byte-identical second copy inside assembly_renderer.js
- * (`_clusterMemberFilter`) until that file's split; both now share this one, so a
- * membership fix lands once. Pure — the backbone entries are an argument.
+ * (`_clusterMemberFilter`) until that file's split, and the nucKey expansion was a
+ * third copy inlined in main.js's visibility handler; all now share this one, so a
+ * membership fix lands once. Pure — entries and design are arguments.
  * Unit-tested in cluster_entries.test.js.
  */
 
@@ -52,4 +54,172 @@ export function clusterBackboneEntries(cluster, design, backboneEntries) {
   if (!cluster?.helix_ids?.length || !backboneEntries?.length) return []
   const isMember = clusterMemberFilter(cluster, design)
   return isMember ? backboneEntries.filter(entry => isMember(entry.nuc)) : []
+}
+
+// ── nucKey form ───────────────────────────────────────────────────────────────
+// The renderer addresses nucleotides by string key, in two formats (documented at
+// helix_renderer.js's _isNucHidden):
+//     'h:<helix_id>'                  — every nucleotide on that helix
+//     'd:<strand_id>:<domain_index>'  — one domain
+// Extension beads live on synthetic helices named '__ext_<id>', so they are
+// addressed as 'h:__ext_<id>'.
+
+/**
+ * The nucKeys covered by ONE cluster, extension beads included.
+ *
+ * Same membership rule as `clusterMemberFilter`: a plain cluster covers its whole
+ * helix_ids; a MIXED cluster covers each bridge domain by domain key plus the
+ * helices it owns exclusively (helix_ids no bridge domain sits on). An extension
+ * is covered when its host strand is covered, or when its terminal domain sits on
+ * a covered helix.
+ *
+ * @param {object} cluster { helix_ids:[], domain_ids?:[{strand_id, domain_index}] }
+ * @param {object} design  { strands:[{id, domains}], extensions?:[{id, strand_id, end}] }
+ * @returns {Set<string>}
+ */
+export function clusterNucKeys(cluster, design) {
+  const keys = new Set()
+  if (!cluster?.helix_ids?.length) return keys
+
+  const strandIds = new Set()   // strands this cluster covers by domain key
+  const helixIds  = new Set()   // helices this cluster covers whole
+
+  if (cluster.domain_ids?.length) {
+    const strandMap = new Map((design?.strands ?? []).map(s => [s.id, s]))
+    const bridgeHelixIds = new Set()
+    for (const d of cluster.domain_ids) {
+      const dom = strandMap.get(d.strand_id)?.domains?.[d.domain_index]
+      if (dom) bridgeHelixIds.add(dom.helix_id)
+      keys.add(`d:${d.strand_id}:${d.domain_index}`)
+      strandIds.add(d.strand_id)
+    }
+    // Helices the cluster lists but no bridge domain sits on are owned whole.
+    for (const hid of cluster.helix_ids) {
+      if (!bridgeHelixIds.has(hid)) { keys.add(`h:${hid}`); helixIds.add(hid) }
+    }
+  } else {
+    for (const hid of cluster.helix_ids) { keys.add(`h:${hid}`); helixIds.add(hid) }
+  }
+
+  for (const ext of design?.extensions ?? []) {
+    if (strandIds.has(ext.strand_id)) {
+      keys.add('h:__ext_' + ext.id)
+    } else if (helixIds.size) {
+      const strand  = (design?.strands ?? []).find(s => s.id === ext.strand_id)
+      const termDom = strand && (ext.end === 'five_prime'
+        ? strand.domains[0]
+        : strand.domains[strand.domains.length - 1])
+      if (termDom && helixIds.has(termDom.helix_id)) keys.add('h:__ext_' + ext.id)
+    }
+  }
+  return keys
+}
+
+/**
+ * Union of `clusterNucKeys` over the clusters named in `idSet`. What the sidebar's
+ * visibility toggle wants: hiding any cluster that covers a nucleotide hides it.
+ * @param {object} design
+ * @param {Set<string>|Array<string>} idSet
+ * @returns {Set<string>}
+ */
+export function clusterNucKeysFor(design, idSet) {
+  const want = idSet instanceof Set ? idSet : new Set(idSet ?? [])
+  const keys = new Set()
+  if (!want.size) return keys
+  for (const c of design?.cluster_transforms ?? []) {
+    if (!want.has(c.id)) continue
+    for (const k of clusterNucKeys(c, design)) keys.add(k)
+  }
+  return keys
+}
+
+/**
+ * nucKey → alpha, for the per-cluster opacity fade.
+ *
+ * Clusters at full opacity contribute nothing, so an unstyled design yields an
+ * EMPTY map — that is what keeps the whole feature free (the renderer only installs
+ * its per-instance alpha buffers when the map is non-empty).
+ *
+ * Where clusters OVERLAP the lowest opacity wins, matching the visibility toggle,
+ * which already unions: fading a cluster must visibly fade it whatever else happens
+ * to cover the same helices.
+ *
+ * @param {object} design
+ * @returns {Map<string, number>}
+ */
+export function clusterAlphaKeys(design) {
+  const out = new Map()
+  for (const c of design?.cluster_transforms ?? []) {
+    const a = typeof c.opacity === 'number' ? c.opacity : 1
+    if (!(a < 1)) continue          // NaN-safe: only a real fade contributes
+    const alpha = Math.max(0, a)
+    for (const k of clusterNucKeys(c, design)) {
+      const prev = out.get(k)
+      if (prev === undefined || alpha < prev) out.set(k, alpha)
+    }
+  }
+  return out
+}
+
+/**
+ * Resolve one nucleotide's alpha out of a `clusterAlphaKeys` map. Domain-level
+ * entries win over the helix-level fallback, matching `clusterMemberFilter` and
+ * `buildClusterColorLookup`. Anything not covered is opaque.
+ *
+ * Shared so the helix meshes and the crossover extra-base meshes cannot drift —
+ * they are separate InstancedMeshes driven from different modules.
+ *
+ * @param {Map<string, number>} map
+ * @param {{helix_id, strand_id, domain_index}} nuc
+ * @returns {number} 0..1
+ */
+export function clusterAlphaForNuc(map, nuc) {
+  if (!map?.size || !nuc) return 1
+  if (nuc.domain_index != null) {
+    const d = map.get(`d:${nuc.strand_id}:${nuc.domain_index}`)
+    if (d !== undefined) return d
+  }
+  return map.get(`h:${nuc.helix_id}`) ?? 1
+}
+
+/**
+ * Cheap change detector for the cluster DISPLAY fields only.
+ *
+ * `cluster_transforms` gets a fresh array identity on every gizmo-drag patch (~60/s),
+ * and repainting means an O(nucleotides) recolour sweep. Comparing identities would
+ * therefore recolour the scene every frame of a drag; this signature is stable across
+ * a pose-only change and moves only when colour/opacity/membership does.
+ *
+ * @param {object} design
+ * @returns {string}
+ */
+export function clusterDisplaySignature(design) {
+  return (design?.cluster_transforms ?? [])
+    .map(c => `${c.id}:${c.color ?? ''}:${c.opacity ?? 1}`)
+    .join('|')
+}
+
+/**
+ * Shallow design copy with ONE cluster's display fields overridden — the zero-latency
+ * live preview while the user drags the opacity slider, before any PATCH round-trips.
+ * Never mutates the input; untouched clusters stay identity-equal.
+ *
+ * `color: ''` clears back to the auto palette, the same sentinel the PATCH body uses.
+ *
+ * @param {object} design
+ * @param {string} clusterId
+ * @param {{color?: string|null, opacity?: number}} patch
+ */
+export function withClusterDisplay(design, clusterId, patch) {
+  if (!design?.cluster_transforms) return design
+  return {
+    ...design,
+    cluster_transforms: design.cluster_transforms.map(c => {
+      if (c.id !== clusterId) return c
+      const next = { ...c }
+      if (patch?.color !== undefined) next.color = patch.color === '' ? null : patch.color
+      if (patch?.opacity !== undefined) next.opacity = patch.opacity
+      return next
+    }),
+  }
 }

@@ -20,7 +20,8 @@ everything above it in this file is history.
 | `PUT`/`DELETE /design/representation-overrides` | `backend/api/routes_display_metadata.py:117` / `:142` (registered `backend/api/main.py:55`) — **no longer `crud.py`** |
 | `POST /design/surface/region` | `backend/api/routes_display_geometry.py:301` |
 | Pure resolution + segment helpers | `frontend/src/scene/representation_overrides.js` — `resolveRepOverrides`, `repColumnsByRep`, `strandsToSegments`/`domainsToSegments`/`overhangsToSegments`/`clustersToSegments`, `editOverridesForSegments`, `createRepresentationMenuItem` |
-| Renderer alpha path | `helix_renderer.js` `_installInstanceAlpha:238`, `_ensureRepAlpha:2469`, `_applyRepOverrides:2493`, public `applyRepOverrides:2588` |
+| Renderer alpha path | `helix_renderer.js` `_installInstanceAlpha`, `_ensureAlphaInstalled` (was `_ensureRepAlpha`), `_applyRepOverrides`, public `applyRepOverrides` — **re-grep, these moved 2026-08-01** |
+| The shader patch itself | `frontend/src/scene/instance_alpha.js` — `instanceAlphaOnBeforeCompile` + `applyInstanceAlphaMaterial`. Extracted 2026-08-01 so photo mode can re-install it after its material swap (see item 1 below) |
 | Rebuild + no-rebuild wiring | `design_renderer.js` `_applyRepresentationOverrides:387` (calls `setDetailLevel` first — bug-A fix intact), `getDetailLevel:1167`, `columnRepAt/isColumnAtomistic/isColumnSurface:1185-1187` |
 | Right-click menu | `selection_manager.js` `_appendRepresentationMenu:411` (6 call sites) |
 | F1–F7 + global-rep master reset | `frontend/src/ui/representation_switcher.js:271` / `:307` (anchors refreshed 2026-08-01) — **no longer `main.js`** |
@@ -474,6 +475,21 @@ Debug handles added: `__NADOC_DBG__.designRenderer`, `__NADOC_DBG__.unfoldView` 
 
 **Rank: P1.** Feature ships; these are the holes. Ordered worst-first.
 
+> **2026-08-01 — item 6 (extra-base beads) is now half-closed.** They are still not *per-region*,
+> but they are no longer invisible to the alpha/colour channel: `design_renderer` gained
+> `_applyXoverClusterAlpha()` (lazy `installInstanceAlpha` on the three xover meshes) and a
+> `'cluster'` branch in `_applyXoverColoring`. Wiring per-*region* overrides through the same two
+> functions is now a small job rather than a new mechanism.
+>
+> **2026-08-01 — items 3, 4 and 5 got a second stakeholder.** Per-cluster opacity
+> (`memory/project_deformation_cluster_scope.md`, sidebar swatch → `setClusterAlphas`) rides the
+> SAME `instanceAlpha` channel, so it inherits exactly these gaps: a faded cluster does not fade
+> on deformed/curved tubes, on impostor beads, on `iLinkerBindingCylinders`, or on crossover
+> extra-base beads. Fixing any of them now fixes two features at once, which is what makes this
+> rank stick. The three absolute writers were also collapsed into one compositor at that time —
+> reference ghosting × override visibility × cluster opacity multiply into one attribute, so a
+> fourth factor is a new term rather than a fourth sweep that clobbers the other three.
+
 1. ~~**SUSPECTED BUG — photo export may blank all beads once an override has been used.**~~
    **WITHDRAWN 2026-07-30** (`/audit-plan` rendering probe). The mechanism does not exist:
    `_withHighDetailGeometry`, `hd.bead` and `hd.fluoro` have **zero hits anywhere in
@@ -483,11 +499,22 @@ Debug handles added: `__NADOC_DBG__.designRenderer`, `__NADOC_DBG__.unfoldView` 
    `photo_renderer/mesh_repr.js:18,22` (`backboneSpheres: 'full'`, `extensionFluorophores:
    'full'`), which never touches geometry or attributes. `instanceAlpha` appears **only** in
    `helix_renderer.js` — nothing outside it clones, swaps, or drops the attribute.
-   *Still true and still unverified:* `_installInstanceAlpha` does permanently patch the shared
-   bead/fluoro material with `if (a < 0.02) discard` on a cloned per-mesh geometry
-   [helix_renderer.js:238-260], so **whether photo export honours per-instance alpha at all is
-   still an open question** — it just isn't the HD-swap bug described above. Fold that question
-   into item 2 and answer it in the app, not on paper.
+   *The open sub-question — "does photo export honour per-instance alpha at all?" — was
+   **ANSWERED NO and FIXED 2026-08-01** while adding per-cluster opacity.* It did not, and the
+   mechanism was one line up from where this item was looking: `swapToFlatMaterials`
+   ([photo_mode.js:209](../frontend/src/scene/photo_mode.js#L209)) REPLACES every mesh material
+   with a fresh one from `makeMaterial` and copies `side`/`depthWrite`/`depthTest`/`vertexColors`/
+   `color`/conditional-opacity across — but **not `onBeforeCompile`**. The alpha patch lives
+   entirely in that callback, so in photo mode (viewport *and* tiled export, which reuses the same
+   swapped materials) every ghosted reference strand and every alpha-hidden override region
+   rendered **fully opaque**. The geometry attribute always survived; only the material half was
+   lost. FIX: the patch moved to `scene/instance_alpha.js` as a module-level named function plus
+   `applyInstanceAlphaMaterial(mat)`, which stamps `userData.instanceAlphaPatch`; the swap
+   re-installs it when it sees that marker. Setting `transparent` there is **not optional** —
+   `makeMaterial` forces `transparent:false` for non-surface reps, and the swap's opacity
+   carry-over is gated on `src.opacity < 1`, which is false when the fade lives in the attribute.
+   Pinned by 4 tests in `photo_mode.test.js` + `instance_alpha.test.js`. So mixed-representation
+   ghosting now survives export too, for free.
 2. **Photo mode does not read `representation_overrides` at all** (zero hits across
    photo_mode / photo_panel / photo_renderer/* (v1's photo_renderer.js is archived) /
    photo_figure_panel). The old fear — that export force-flattens to one global rep — turns out

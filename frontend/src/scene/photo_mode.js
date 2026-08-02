@@ -46,6 +46,7 @@ import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js'
 
 import { makeMaterial }               from './photo_renderer/material_presets.js'
 import { reprOf }                     from './photo_renderer/mesh_repr.js'
+import { applyInstanceAlphaMaterial } from './instance_alpha.js'
 import { FigurePass }                 from './photo_renderer/figure_pass.js'
 import { dollyDistanceForFov, PARALLEL_FOV, PERSPECTIVE_FOV }
   from './photo_renderer/figure_camera.js'
@@ -249,6 +250,16 @@ export function swapToFlatMaterials(root, presets = null) {
     // stays a shadow caster/receiver in the figure at any opacity.
     mat.depthWrite = src.userData?.photoForceDepthWrite ? true : src.depthWrite
     mat.depthTest  = src.depthTest
+    // Per-instance alpha (reference ghosting, mixed representation, per-cluster
+    // opacity) lives in an onBeforeCompile patch, which a fresh material has no
+    // trace of — so without this the faded geometry rendered fully OPAQUE in photo
+    // mode and in the tiled export. The instanceAlpha geometry attribute survives
+    // the swap untouched (geometry is never replaced here), so re-installing the
+    // same shared patch is the whole fix. Note it also has to set `transparent`:
+    // makeMaterial forces transparent:false/opacity:1 for non-surface reps, and the
+    // opacity carry-over just below is gated on src.opacity < 1 — which is false
+    // here, because the fade lives in the attribute, not in the material.
+    if (src.userData?.instanceAlphaPatch) applyInstanceAlphaMaterial(mat)
     if (src.transparent && src.opacity < 1) {
       mat.transparent = true
       mat.opacity     = src.opacity

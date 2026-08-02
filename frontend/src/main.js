@@ -147,6 +147,7 @@ import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel, helixIdsFromStrandIds } from './ui/cluster_panel.js'
+import { clusterNucKeysFor, withClusterDisplay } from './scene/cluster_entries.js'
 import { initPlateView }                           from './ui/plate_view.js'
 import { STAPLE_PALETTE as PLATE_STAPLE_PALETTE } from './scene/helix_renderer/palette.js'
 import { initJointsPanel }                          from './ui/joints_panel.js'
@@ -6305,55 +6306,23 @@ async function main() {
     },
     api,
     onVisibilityChange: (hiddenClusterIds) => {
-      const { currentDesign } = store.getState()
-      const clusters = currentDesign?.cluster_transforms ?? []
-      const nucKeys = new Set()
-      // Track which strand IDs / helix IDs are hidden so we can include extensions.
-      const hiddenStrandIds = new Set()
-      const hiddenHelixIds  = new Set()
-      const strandMap = new Map((currentDesign?.strands ?? []).map(s => [s.id, s]))
-      for (const c of clusters) {
-        if (!hiddenClusterIds.has(c.id)) continue
-        if (c.domain_ids?.length) {
-          // Mixed cluster: bridge helices hidden by domain key; exclusive helices
-          // (in helix_ids but not touched by any domain_ids entry) hidden whole.
-          const bridgeHelixIds = new Set()
-          for (const d of c.domain_ids) {
-            const dom = strandMap.get(d.strand_id)?.domains?.[d.domain_index]
-            if (dom) bridgeHelixIds.add(dom.helix_id)
-            nucKeys.add(`d:${d.strand_id}:${d.domain_index}`)
-            hiddenStrandIds.add(d.strand_id)
-          }
-          for (const hid of c.helix_ids) {
-            if (!bridgeHelixIds.has(hid)) {
-              nucKeys.add(`h:${hid}`)
-              hiddenHelixIds.add(hid)
-            }
-          }
-        } else {
-          // Helix-level cluster — hide whole helices
-          for (const hid of c.helix_ids) {
-            nucKeys.add(`h:${hid}`)
-            hiddenHelixIds.add(hid)
-          }
-        }
-      }
-      // Include extension beads attached to hidden strands / helices.
-      // Extension nucs have helix_id = '__ext_<id>', matched by 'h:__ext_<id>' keys.
-      for (const ext of currentDesign?.extensions ?? []) {
-        if (hiddenStrandIds.has(ext.strand_id)) {
-          nucKeys.add('h:__ext_' + ext.id)
-        } else if (hiddenHelixIds.size) {
-          const strand  = currentDesign.strands.find(s => s.id === ext.strand_id)
-          const termDom = strand && (ext.end === 'five_prime'
-            ? strand.domains[0]
-            : strand.domains[strand.domains.length - 1])
-          if (termDom && hiddenHelixIds.has(termDom.helix_id)) nucKeys.add('h:__ext_' + ext.id)
-        }
-      }
+      const nucKeys = clusterNucKeysFor(store.getState().currentDesign, hiddenClusterIds)
       designRenderer.setHiddenNucs(nucKeys)
-      const hiddenXoverIds = unfoldView.setHiddenNucs(nucKeys)
-      designRenderer.setHiddenCrossovers(hiddenXoverIds)
+      designRenderer.setHiddenCrossovers(unfoldView.setHiddenNucs(nucKeys))
+    },
+    // Live preview while the style popover's colour/opacity controls are dragged —
+    // a locally-patched design, so nothing hits the network until pointer-up. Both
+    // halves of the repaint are O(nucleotides), so only the one that changed runs.
+    onStylePreview: (clusterId, patch) => {
+      const preview = withClusterDisplay(store.getState().currentDesign, clusterId, patch)
+      designRenderer.refreshClusterDisplay(preview,
+        { color: patch.color !== undefined, opacity: patch.opacity !== undefined })
+      // The four arc-like systems each own their meshes and only see COMMITTED
+      // store changes, so the live preview has to reach them directly. Crossover
+      // arcs (unfoldView) are drawn in the 3D view too, just straight.
+      unfoldView.refreshClusterDisplay(preview)
+      overhangLinkArcs.refreshClusterDisplay(preview)
+      flexibleArcs.refreshClusterDisplay(preview)
     },
   })
 

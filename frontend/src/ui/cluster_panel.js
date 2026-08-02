@@ -14,10 +14,21 @@
  * @param {function} opts.onClusterClick    — called with (clusterId, {additive}) when user clicks a row
  * @param {object}  opts.api               — api module for createCluster / deleteCluster
  * @param {function} [opts.onVisibilityChange] — called with Set<clusterId> of hidden clusters
+ * @param {function} [opts.onStylePreview] — called with (clusterId, {color?, opacity?}) while
+ *   the style popover's controls are dragged; renderer-only, no persistence.
  */
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { initClusterStylePopover } from './cluster_style_popover.js'
+import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 
-export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null }) {
+/** The auto palette slot a cluster gets when it has no explicit colour — the same
+ *  index-mod-12 rule the 3D cluster coloring uses, so the swatch agrees with it. */
+function _paletteHex(index) {
+  const c = STAPLE_PALETTE[index % STAPLE_PALETTE.length]
+  return '#' + c.toString(16).padStart(6, '0')
+}
+
+export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null, onStylePreview = null }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
   const heading  = document.getElementById('cluster-panel-heading')
@@ -31,6 +42,16 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   function _notifyVisibility() {
     onVisibilityChange?.(_hiddenClusterIds)
   }
+
+  // ── Cluster colour + opacity ────────────────────────────────────────────────
+  // One shared popover in document.body, reused across rows (the list is rebuilt
+  // wholesale on every design change, so it cannot live inside a row).
+  // Commit is the no-commit PATCH form, exactly like the rename below: a cosmetic
+  // edit must not land on the undo stack.
+  const _stylePopover = initClusterStylePopover({
+    onPreview: (id, patch) => onStylePreview?.(id, patch),
+    onCommit:  (id, patch) => api.patchCluster(id, patch),
+  })
 
   let _collapsed = getSectionCollapsed('dynamics', 'cluster-panel', false)
 
@@ -121,7 +142,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       return
     }
 
-    for (const cluster of clusters) {
+    for (const [clusterIndex, cluster] of clusters.entries()) {
       const isActive = _isSelected(cluster.id)
 
       const row = document.createElement('div')
@@ -230,6 +251,30 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         duplexTag.style.cssText = 'font-size:var(--text-xs);color:#57d0b0;flex-shrink:0'
       }
 
+      // Colour + opacity swatch → the style popover. The swatch shows this
+      // cluster's OWN colour (its explicit one, else its auto palette slot) and
+      // dims to advertise a fade, so the list reads at a glance.
+      const swatchBtn = document.createElement('button')
+      const swatchHex = cluster.color ?? _paletteHex(clusterIndex)
+      const swatchOpacity = typeof cluster.opacity === 'number' ? cluster.opacity : 1
+      swatchBtn.style.cssText = _editStyle +
+        `;background:${swatchHex};border-color:#30363d;width:18px;padding:3px 0;` +
+        `opacity:${Math.max(0.25, swatchOpacity)}`
+      swatchBtn.title = swatchOpacity < 1
+        ? `Colour & opacity — ${Math.round(swatchOpacity * 100)}%`
+        : 'Colour & opacity'
+      swatchBtn.addEventListener('click', e => {
+        // The row's own click handler would otherwise toggle cluster selection
+        // every time the swatch is opened.
+        e.stopPropagation()
+        if (_stylePopover.isOpenFor(cluster.id)) {
+          _stylePopover.close()
+        } else {
+          _stylePopover.openFor(cluster.id, swatchBtn,
+            { color: cluster.color ?? null, opacity: swatchOpacity })
+        }
+      })
+
       // Visibility toggle button
       const isHidden = _hiddenClusterIds.has(cluster.id)
       const _visOnStyle  = 'background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:3px;font-size:11px;line-height:1.4;cursor:pointer;padding:3px 5px;flex-shrink:0'
@@ -271,9 +316,13 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         onClusterClick(cluster.id, { additive: e.ctrlKey || e.metaKey || e.shiftKey })
       })
 
-      row.append(dot, nameSpan, ...(duplexTag ? [duplexTag] : []), badge, visBtn, editBtn, delBtn)
+      row.append(dot, nameSpan, ...(duplexTag ? [duplexTag] : []), badge, swatchBtn, visBtn, editBtn, delBtn)
       listEl.appendChild(row)
     }
+    // The list was just rebuilt from scratch, so an open popover's anchor button is
+    // gone. It lives in document.body and is keyed by id, so it survives — unless
+    // its cluster was deleted or reshuffled away.
+    _stylePopover.closeIfMissing(new Set(clusters.map(c => c.id)))
   }
 
   // ── Assembly mode rendering ───────────────────────────────────────────────────
@@ -399,6 +448,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
   function setAssemblyMode(instances) {
     _assemblyMode = true
+    _stylePopover.close()   // the assembly list has no swatches
     _instanceOrder.length = 0
     _instanceNames.clear()
     _instanceDesigns.clear()
@@ -437,6 +487,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
   function clearAssemblyMode() {
     _assemblyMode = false
+    _stylePopover.close()
     _instanceOrder.length = 0
     _instanceNames.clear()
     _instanceDesigns.clear()
@@ -474,7 +525,11 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     if (!_collapsed) _rebuildAssembly()
   }
 
-  return { setAssemblyMode, clearAssemblyMode, syncInstanceDesign, expandInstance, selectAssemblyCluster }
+  return {
+    setAssemblyMode, clearAssemblyMode, syncInstanceDesign, expandInstance, selectAssemblyCluster,
+    /** Tear down the style popover's document-level listeners (smoke-test gate). */
+    destroy: _stylePopover.destroy,
+  }
 }
 
 /**

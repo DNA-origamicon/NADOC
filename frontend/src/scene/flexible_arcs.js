@@ -19,6 +19,9 @@
  *   arcs.applyLiveUpdate(helixIds, centerVec, dummyPos, incrQuat)   // per drag frame
  */
 import * as THREE from 'three'
+import { store } from '../state/store.js'
+import { buildClusterColorLookup } from './helix_renderer/palette.js'
+import { clusterAlphaForNuc, clusterAlphaKeys } from './cluster_entries.js'
 
 const ARC_COLOR = 0xff33cc      // magenta — flexible ssDNA
 const BEAD_RADIUS = 0.12
@@ -105,9 +108,67 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
   // geometric arc. null = geometric-arc mode (the default).
   let _simByKey = null
   const _lastBow = new Map()   // connection id -> THREE.Vector3 (hysteresis)
-  const _tubeMat = new THREE.MeshPhongMaterial({ color: ARC_COLOR })
-  const _beadMat = new THREE.MeshPhongMaterial({ color: ARC_COLOR })
-  const _slabMat = new THREE.MeshPhongMaterial({ color: ARC_COLOR })
+
+  // ── Per-cluster display (colour + opacity) ────────────────────────────────
+  // These materials used to be three module-level singletons shared by every
+  // connection's meshes, which makes per-connection colour or fade impossible —
+  // one write hits every arc. They are now created PER CONNECTION (and disposed
+  // in _clear, which the shared ones deliberately were not). A flexible design
+  // has a handful of connections, so the extra materials are free.
+  //
+  // A run bridges two anchors that may sit in different clusters: it takes the
+  // A-side anchor's cluster colour (falling back to B) and fades to the LOWER of
+  // the two alphas — the same owner rule as crossover arcs, extra bases and
+  // overhang link arcs.
+  let _clusterColorFn   = null    // non-null only while coloringMode === 'cluster'
+  let _clusterAlphaKeys = new Map()
+
+  /** Re-read the cluster colour/alpha lookups off a design. */
+  function _syncClusterLookups(design) {
+    _clusterColorFn = (store.getState().coloringMode === 'cluster')
+      ? buildClusterColorLookup(design)
+      : null
+    _clusterAlphaKeys = clusterAlphaKeys(design)
+  }
+
+  /** Pseudo-nucleotide for an anchor, in the shape the cluster lookups expect. */
+  function _anchorNuc(design, anc) {
+    const s = (design?.strands ?? []).find(x => x.id === anc?.strand_id)
+    const d = s?.domains?.[anc?.domain_index]
+    return d ? { helix_id: d.helix_id, strand_id: anc.strand_id, domain_index: anc.domain_index } : null
+  }
+
+  function _connDisplay(design, c) {
+    const nucA = _anchorNuc(design, c.anchor_a)
+    const nucB = _anchorNuc(design, c.anchor_b)
+    const color = _clusterColorFn
+      ? (_clusterColorFn(nucA) ?? _clusterColorFn(nucB) ?? ARC_COLOR)
+      : ARC_COLOR
+    const alpha = _clusterAlphaKeys.size
+      ? Math.min(clusterAlphaForNuc(_clusterAlphaKeys, nucA),
+                 clusterAlphaForNuc(_clusterAlphaKeys, nucB))
+      : 1
+    return { color, alpha }
+  }
+
+  /** One fresh material set for a connection. */
+  function _makeMats({ color, alpha }) {
+    const opts = {
+      color,
+      transparent: alpha < 1,
+      opacity: alpha,
+      // Structural geometry, not an overlay — keep writing depth so a faded run
+      // still occludes and still casts/receives the photo-mode key shadow.
+      depthWrite: true,
+    }
+    const mats = {
+      tube: new THREE.MeshPhongMaterial(opts),
+      bead: new THREE.MeshPhongMaterial(opts),
+      slab: new THREE.MeshPhongMaterial(opts),
+    }
+    for (const m of Object.values(mats)) m.userData.photoForceDepthWrite = true
+    return mats
+  }
 
   function _entryPosMap() {
     const m = new Map()
@@ -181,17 +242,20 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     for (const ch of [...group.children]) {
       group.remove(ch)
       ch.geometry?.dispose?.()
+      // Materials are per-connection now (they used to be shared singletons that
+      // must NOT be disposed) — dropping them here or they leak on every render.
+      ch.material?.dispose?.()
     }
   }
 
-  function _drawArc(pA, pB, beads, bow, connId) {
+  function _drawArc(pA, pB, beads, bow, connId, mats) {
     const pts = [pA, ...beads, pB]
     const curve = new THREE.CatmullRomCurve3(pts)
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), _tubeMat)
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), mats.tube)
     tube.userData.connectionId = connId
     group.add(tube)
     if (!beads.length) return
-    const inst = new THREE.InstancedMesh(GEO_BEAD, _beadMat, beads.length)
+    const inst = new THREE.InstancedMesh(GEO_BEAD, mats.bead, beads.length)
     const m = new THREE.Matrix4()
     beads.forEach((p, i) => { m.makeTranslation(p.x, p.y, p.z); inst.setMatrixAt(i, m) })
     inst.instanceMatrix.needsUpdate = true
@@ -206,7 +270,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
       new THREE.Vector3().subVectors(pB, pA).normalize(), bow)
     if (planeN.lengthSq() < 1e-9) return
     planeN.normalize()
-    const slabs = new THREE.InstancedMesh(GEO_SLAB, _slabMat, beads.length)
+    const slabs = new THREE.InstancedMesh(GEO_SLAB, mats.slab, beads.length)
     const sm = new THREE.Matrix4(), q = new THREE.Quaternion()
     const tan = new THREE.Vector3(), bn = new THREE.Vector3(), center = new THREE.Vector3()
     const scl = new THREE.Vector3(1, 1, 1)
@@ -240,21 +304,21 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
 
   // Draw one connection's run at explicit SIMULATED bead positions (oxDNA/MD frame):
   // tube + beads through the sim points, slabs oriented from the sim base-normal.
-  function _drawSimSegment(pA, entries, pB, connId) {
+  function _drawSimSegment(pA, entries, pB, connId, mats) {
     const beads = entries.map(e => e.pos)
     const pts = [pA, ...beads, pB]
     const curve = new THREE.CatmullRomCurve3(pts)
-    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), _tubeMat)
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), mats.tube)
     tube.userData.connectionId = connId
     group.add(tube)
-    const inst = new THREE.InstancedMesh(GEO_BEAD, _beadMat, beads.length)
+    const inst = new THREE.InstancedMesh(GEO_BEAD, mats.bead, beads.length)
     const m = new THREE.Matrix4()
     beads.forEach((p, i) => { m.makeTranslation(p.x, p.y, p.z); inst.setMatrixAt(i, m) })
     inst.instanceMatrix.needsUpdate = true
     inst.frustumCulled = false
     inst.userData.connectionId = connId
     group.add(inst)
-    const slabs = new THREE.InstancedMesh(GEO_SLAB, _slabMat, beads.length)
+    const slabs = new THREE.InstancedMesh(GEO_SLAB, mats.slab, beads.length)
     const sm = new THREE.Matrix4(), q = new THREE.Quaternion()
     const tan = new THREE.Vector3(), bn = new THREE.Vector3(), center = new THREE.Vector3()
     const scl = new THREE.Vector3(1, 1, 1)
@@ -282,6 +346,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
   function _render(live = null) {
     _clear()
     if (!_design || !_visible || !_reprVisible) return
+    _syncClusterLookups(_design)
     const conns = _design.flexible_connections ?? []
     if (!conns.length) return
     const posMap = _entryPosMap()
@@ -295,10 +360,11 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
       // present in the frame; otherwise fall through to the geometric arc.
       if (_simByKey) {
         const entries = (c.segment_bead_keys ?? []).map(k => _simByKey.get(helixOf(k) ?? ''))
-        if (entries.length && entries.every(Boolean)) { _drawSimSegment(pA, entries, pB, c.id); continue }
+        if (entries.length && entries.every(Boolean)) { _drawSimSegment(pA, entries, pB, c.id, _makeMats(_connDisplay(_design, c))); continue }
       }
       const bow = _bowDir(pA, pB, c.id, obstacles)
-      _drawArc(pA, pB, _arcPoints(pA, pB, c.contour_length_nm, c.n_ss_bases, bow), bow, c.id)
+      _drawArc(pA, pB, _arcPoints(pA, pB, c.contour_length_nm, c.n_ss_bases, bow), bow, c.id,
+               _makeMats(_connDisplay(_design, c)))
     }
   }
 
@@ -342,9 +408,45 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     _render()
   }
   function dispose() {
-    _clear(); scene.remove(group); _tubeMat.dispose(); _beadMat.dispose(); _slabMat.dispose()
+    // _clear() disposes the per-connection materials; only the shared geometries
+    // are left to release here.
+    _clear(); scene.remove(group)
     GEO_BEAD.dispose(); GEO_SLAB.dispose()
   }
 
-  return { rebuild, applyLiveUpdate, setVisible, setRepresentation, applySimPositions, dispose, hitTest, group }
+  /**
+   * Re-read per-cluster colour + opacity and repaint IN PLACE.
+   *
+   * Deliberately not a re-render: `_render` rebuilds a TubeGeometry per
+   * connection, and this runs live while the sidebar swatch is dragged. Because
+   * every mesh now owns its material and carries `userData.connectionId`, the
+   * repaint is a handful of material writes. It also must not latch `_design` —
+   * the preview design is transient and never reaches the store.
+   *
+   * @param {object} [design]  defaults to the last rendered design
+   */
+  function refreshClusterDisplay(design = null) {
+    const d = design ?? _design
+    _syncClusterLookups(d)
+    const byId = new Map((d?.flexible_connections ?? []).map(c => [c.id, _connDisplay(d, c)]))
+    for (const ch of group.children) {
+      const disp = byId.get(ch.userData?.connectionId)
+      const mat = ch.material
+      if (!disp || !mat || Array.isArray(mat)) continue
+      mat.color.setHex(disp.color)
+      mat.opacity = disp.alpha
+      mat.transparent = disp.alpha < 1
+      mat.needsUpdate = true
+    }
+  }
+
+  // Entering or leaving cluster-coloring mode changes nothing about the design, so
+  // the design subscriber that drives rebuild() never fires for it.
+  store.subscribe((newState, prevState) => {
+    if (newState.coloringMode === prevState.coloringMode) return
+    if (!group.children.length) return
+    refreshClusterDisplay(newState.currentDesign)
+  })
+
+  return { rebuild, applyLiveUpdate, setVisible, setRepresentation, applySimPositions, dispose, hitTest, group, refreshClusterDisplay }
 }

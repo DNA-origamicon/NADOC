@@ -24,6 +24,7 @@ URLs are unchanged from their previous home in crud.py. Mounting is done in
 
 from __future__ import annotations
 
+import re
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -50,12 +51,22 @@ class AddClusterBody(BaseModel):
 
 
 class PatchClusterBody(BaseModel):
+    """PATCH body. Every field is a whitelist entry — a key that is not declared
+    here is silently dropped, so a new cluster property must be added in BOTH this
+    model and ``update_cluster``'s field-copy block.
+
+    ``color`` uses a sentinel: ``None`` means "not supplied" (PATCH semantics), so
+    the empty string ``""`` is what CLEARS the color back to the auto palette. That
+    is what the sidebar's Reset button sends.
+    """
     name: Optional[str] = None
     helix_ids: Optional[List[str]] = None
     domain_ids: Optional[List[dict]] = None     # [{strand_id, domain_index}]
     translation: Optional[List[float]] = None   # [x, y, z] nm
     rotation: Optional[List[float]] = None      # [x, y, z, w] quaternion
     pivot: Optional[List[float]] = None         # [x, y, z] nm
+    color: Optional[str] = None                 # "#rrggbb"; "" clears to the auto palette
+    opacity: Optional[float] = None             # 0..1, clamped
     commit: bool = False                         # when True: push to undo stack
     log: bool = False                            # when True (with commit): append to feature_log
 
@@ -141,6 +152,15 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     if body.translation is not None: fields["translation"] = body.translation
     if body.rotation    is not None: fields["rotation"]    = body.rotation
     if body.pivot       is not None: fields["pivot"]       = body.pivot
+    # Display-only fields. "" clears the color back to the auto palette (see the
+    # PatchClusterBody docstring); anything else must be a #rrggbb hex.
+    if body.color is not None:
+        c = body.color.strip()
+        if c and not re.fullmatch(r"#[0-9a-fA-F]{6}", c):
+            raise HTTPException(400, detail=f"color must be #rrggbb, got {body.color!r}")
+        fields["color"] = c or None
+    if body.opacity is not None:
+        fields["opacity"] = max(0.0, min(1.0, float(body.opacity)))
 
     cts[idx] = cts[idx].model_copy(update=fields)
     updated_ct = cts[idx]

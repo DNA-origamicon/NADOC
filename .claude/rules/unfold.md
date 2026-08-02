@@ -71,9 +71,10 @@ Also read (not written): `currentDesign`, `currentGeometry`, `straightGeometry`,
 `straightHelixAxes`, `strandColors`, `strandGroups`, `coloringMode`, `staplesHidden`,
 `showReferenceGeometry`, `showPeriodicSeamArcs`, `selectedObject`.
 
-`unfold_view.js` registers **9 `store.subscribe`** callbacks (`:955, 1018, 1031, 1042, 1047,
-1058, 1068, 1087, 1118`) — no `subscribeSlice`. The minimap registers 1 (`:616`) and writes
-**nothing**.
+`unfold_view.js` registers **10 `store.subscribe`** callbacks — no `subscribeSlice`; re-grep for
+the line numbers, the 2026-08-01 cluster-display work shifted them all. The 10th is the
+cluster-display subscriber (keyed on `clusterDisplaySignature`, see the arc-colour section). The
+minimap registers 1 and writes **nothing**.
 
 `unfoldHelixOrder` / `unfoldSpacing` are also re-read independently by `cadnano_view.js` at
 `:97, :164, :264`, each re-deriving `unfoldHelixOrder ?? allIds` itself. Change the ordering
@@ -132,6 +133,30 @@ entry.
 Arcs are **`THREE.LineSegments`** (`:189`), *not* `THREE.Line` — the file's own header comment
 (`:9`) and the old runbook both said `Line`. `line.frustumCulled = false` at `:190` is real and
 is what stops arcs vanishing when zoomed.
+
+### Arc vertex colours are RGBA (itemSize 4), not RGB — 2026-08-01
+
+All arcs of a strand type share ONE merged `LineSegments`, hence one material, so there is no
+per-arc material to fade. A **4-component** colour attribute makes three define `USE_COLOR_ALPHA`
+(`diffuseColor *= vColor` in `color_fragment`), which is the only per-arc alpha channel available
+here. Per-cluster opacity rides it. Consequences:
+
+- `_setArcColor(e, hex, alpha = _arcAlpha(e))` is the single write funnel, stride **4**. A leftover
+  `* 3` index does not throw — it smears each arc's blue channel into its neighbour's alpha.
+- The `alpha` default is load-bearing: selection highlight (`_setArcColor(e, 0xffffff)`), the
+  RMSF/flex overlay (`applyFemArcColors`) and the strand-colour/group subscribers all pass a colour
+  only, and would each silently un-fade the arc they touched if the default were 1.
+- `transparent: true` on the material is required or the alpha is ignored.
+- **Arcs are drawn in the plain 3D view too** (straight, bow = 0 at `t = 0`), so an arc-side gap in
+  colouring or fading is visible without ever entering unfold.
+
+Pinned by `scene/unfold_view.test.js` — source-text assertions, the file's first tests.
+
+**Colouring modes are `strand` / `overhang-only` / `cluster`.** `_arcModeColor` resolves an arc's
+cluster from `fromNuc`, falling back to `toNuc` — the same owner rule `design_renderer` uses for the
+extra-base beads, so an arc and the inserted bases riding it can never disagree. Alpha takes the
+**lower** of the two endpoints. `base` is still unwired and should stay that way: an arc spans two
+nucleotides and has no single base identity.
 
 Arc maps: `_buildXbArcMap` (`:435`, extra-base / `crossover_bases` beads) and `_buildExtArcMap`
 (`:510`, strand extensions fanned 5′-left / 3′-right past the terminus). **There is no
@@ -237,10 +262,13 @@ that path, this is the pattern to copy — don't "simplify" it away.
 
 ## Test coverage — honest version
 
-**Zero unit tests.** No `.test.js` anywhere imports `unfold_view.js`, `cross_section_minimap.js`
-or `expanded_spacing.js` (2,618 LOC, 0 tests). The only automated coverage is one Playwright
-smoke, `frontend/e2e/test_unfold_debug.spec.js` (43 lines) — it loads a design, toggles unfold and
-asserts no console errors. It does not assert a single position, offset or arc.
+**Almost zero.** `scene/unfold_view.test.js` (added 2026-08-01) is the only unit test, and it is
+**source-text only** — it pins the arc colour-buffer contract (RGBA stride, the `_setArcColor`
+alpha default, the cluster-display subscriber guard) because a stride bug there is silent. It runs
+no code. `cross_section_minimap.js` and `expanded_spacing.js` still have **0 tests**. The only
+behavioural coverage is one Playwright smoke, `frontend/e2e/test_unfold_debug.spec.js` (43 lines)
+— it loads a design, toggles unfold and asserts no console errors. It does not assert a single
+position, offset or arc.
 
 ## Removed API — do not resurrect
 

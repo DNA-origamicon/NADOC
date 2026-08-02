@@ -328,6 +328,11 @@ def _rebuild_clusters(
     ``is_default`` is always cleared: a copy is never the auto-created catch-all.
     ``DomainRef``s pointing at domains that truncation dropped are dropped too.
     ``pivot`` stays in source coordinates; the graft shifts it.
+
+    Display fields (``color``, ``opacity``) ride along untouched via
+    ``model_copy`` — a pasted cluster keeps the styling of the one it came from.
+    If this is ever rewritten to construct ``ClusterRigidTransform`` explicitly,
+    carry them over by hand or they vanish silently on paste.
     """
     out: list[ClusterRigidTransform] = []
     for c in closure:

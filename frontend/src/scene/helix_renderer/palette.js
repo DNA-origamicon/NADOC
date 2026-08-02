@@ -163,6 +163,132 @@ export function buildClusterLookup(design) {
   }
 }
 
+/** "#rrggbb" → packed 0xRRGGBB, or null for anything malformed. */
+function _hexToInt(c) {
+  return (typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c))
+    ? parseInt(c.slice(1), 16)
+    : null
+}
+
+/**
+ * Build a (nuc-or-domain) → cluster COLOUR lookup for `coloringMode === 'cluster'`.
+ *
+ * A cluster's user-set `color` overrides its automatic palette slot; a cluster with
+ * no colour keeps `STAPLE_PALETTE[index % 12]`, so a design where nobody has picked
+ * a colour renders exactly as it always did.
+ *
+ * Resolution when clusters OVERLAP (two clusters listing the same helix, which is
+ * normal for scaffold-vs-geometry cluster pairs):
+ *
+ *     tier:          a domain-level entry beats the helix-level fallback
+ *                    (unchanged — same rule as buildClusterLookup)
+ *     within a tier: a cluster with an explicit colour beats one still on the
+ *                    auto palette, so the swatch you just set is never silently
+ *                    overridden by an unstyled cluster that happens to be later
+ *                    in the array
+ *     tie:           the later array entry wins (buildClusterLookup's rule)
+ *
+ * Colours are resolved once per cluster here, not per nucleotide — applyColoring
+ * runs this across every nucleotide in the design.
+ *
+ * @param {object} design
+ * @returns {(nuc:object) => number|undefined}   packed 0xRRGGBB
+ */
+export function buildClusterColorLookup(design) {
+  const clusters = design?.cluster_transforms ?? []
+  if (!clusters.length) return () => undefined
+
+  // Per-cluster resolved colour + whether the user picked it (the tiebreak rank).
+  const colorOf = clusters.map((c, i) => _hexToInt(c?.color) ?? STAPLE_PALETTE[i % STAPLE_PALETTE.length])
+  const explicit = clusters.map(c => _hexToInt(c?.color) != null)
+
+  const helixWin  = new Map()   // helix_id → cluster index
+  const domainWin = new Map()   // "strand_id:domain_index" → cluster index
+  /** Later index wins, except that an explicit colour outranks an auto one. */
+  const better = (cand, held) =>
+    held === undefined || explicit[cand] === explicit[held] || explicit[cand]
+
+  const strands = design?.strands ?? []
+  // Bucket strand domains by helix once, so the per-helix coverage check below is
+  // cheap when a cluster lists hundreds of domain_ids.
+  const domainsByHelix = new Map()
+  for (const s of strands) {
+    for (let di = 0; di < (s.domains ?? []).length; di++) {
+      const d = s.domains[di]
+      if (!d?.helix_id) continue
+      let arr = domainsByHelix.get(d.helix_id)
+      if (!arr) { arr = []; domainsByHelix.set(d.helix_id, arr) }
+      arr.push({ key: `${s.id}:${di}`, helix_id: d.helix_id })
+    }
+  }
+
+  // Per-cluster coverage, kept so the extension pass below can re-use it.
+  const ownedHelices = clusters.map(() => new Set())
+  const ownedStrands = clusters.map(() => new Set())
+
+  for (let i = 0; i < clusters.length; i++) {
+    const c = clusters[i]
+    if (c.domain_ids?.length) {
+      const keys = new Set()
+      for (const dr of c.domain_ids) {
+        const k = `${dr.strand_id}:${dr.domain_index}`
+        keys.add(k)
+        ownedStrands[i].add(dr.strand_id)
+        if (better(i, domainWin.get(k))) domainWin.set(k, i)
+      }
+      // Same full-coverage rule as buildClusterLookup: the cluster owns a helix
+      // only when EVERY strand domain on it is in keys; partial coverage = bridge.
+      for (const hid of (c.helix_ids ?? [])) {
+        const arr = domainsByHelix.get(hid) ?? []
+        let allCovered = true
+        for (const d of arr) {
+          if (!keys.has(d.key)) { allCovered = false; break }
+        }
+        if (allCovered) {
+          ownedHelices[i].add(hid)
+          if (better(i, helixWin.get(hid))) helixWin.set(hid, i)
+        }
+      }
+    } else {
+      for (const hid of (c.helix_ids ?? [])) {
+        ownedHelices[i].add(hid)
+        if (better(i, helixWin.get(hid))) helixWin.set(hid, i)
+      }
+    }
+  }
+
+  // 5′/3′ extension beads. They sit on SYNTHETIC helices named '__ext_<id>' that no
+  // cluster lists, and their domain_index is a sentinel (-1 for 5′, len(domains) for
+  // 3′ — design_geometry.py), so neither of the two tiers above can ever resolve
+  // them: an extension rendered at its strand colour while the helix it grows out of
+  // took the cluster colour. Register the synthetic helix id explicitly, using the
+  // same rule clusterNucKeys uses for the opacity side, so colour and fade agree:
+  // the extension follows its host strand when a cluster owns that strand by domain,
+  // otherwise the cluster owning its terminal domain's helix.
+  const strandById = new Map(strands.map(s => [s.id, s]))
+  for (const ext of (design?.extensions ?? [])) {
+    const strand = strandById.get(ext.strand_id)
+    const termDom = strand && (ext.end === 'five_prime'
+      ? strand.domains?.[0]
+      : strand.domains?.[strand.domains.length - 1])
+    const key = `__ext_${ext.id}`
+    for (let i = 0; i < clusters.length; i++) {
+      const covered = ownedStrands[i].has(ext.strand_id) ||
+        (termDom && ownedHelices[i].has(termDom.helix_id))
+      if (covered && better(i, helixWin.get(key))) helixWin.set(key, i)
+    }
+  }
+
+  return (nuc) => {
+    if (nuc?.strand_id != null && nuc?.domain_index != null) {
+      const k = `${nuc.strand_id}:${nuc.domain_index}`
+      if (domainWin.has(k)) return colorOf[domainWin.get(k)]
+    }
+    const hi = helixWin.get(nuc?.helix_id)
+    return hi === undefined ? undefined : colorOf[hi]
+  }
+}
+
 // Per-design pinned staple colours: designId → Map(strandId → hex). A staple
 // with no explicit colour gets a palette slot the FIRST time it is seen and
 // keeps it for the life of the design (mirrors the 2D editor's

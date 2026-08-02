@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { clearDom } from '../test-helpers/factory_dom.js'
 import { LIGHTING_PRESETS } from './photo_renderer/lighting_presets.js'
+import { applyInstanceAlphaMaterial, instanceAlphaOnBeforeCompile } from './instance_alpha.js'
 import {
   keyLightDirection,
   swapToFlatMaterials,
@@ -98,6 +99,56 @@ describe('swapToFlatMaterials', () => {
     scene.add(slabs)
     swapToFlatMaterials(scene)
     expect(slabs.material.depthWrite).toBe(true)
+  })
+
+  it('re-installs the instanceAlpha patch a fresh material would silently drop', () => {
+    // Per-cluster opacity / reference ghosting / mixed representation all fade via
+    // an onBeforeCompile patch. makeMaterial builds a brand-new material with no
+    // patch, so before this the faded geometry rendered fully OPAQUE in photo mode
+    // and in the tiled export.
+    const scene = new THREE.Scene()
+    const mesh = new THREE.InstancedMesh(box(), new THREE.MeshPhongMaterial(), 4)
+    applyInstanceAlphaMaterial(mesh.material)
+    scene.add(mesh)
+    swapToFlatMaterials(scene)
+    expect(mesh.material.onBeforeCompile).toBe(instanceAlphaOnBeforeCompile)
+    expect(mesh.material.userData.instanceAlphaPatch).toBe(true)
+  })
+
+  it('the re-installed patch is transparent AND still depth-writing', () => {
+    // transparent: makeMaterial forces transparent:false for non-surface reps, and
+    // the src.opacity < 1 carry-over never fires here (the fade is in the attribute,
+    // so the material's own opacity is 1). depthWrite: one InstancedMesh holds both
+    // faded and opaque instances, and shadow_bounds reads depthWrite:false as
+    // "cannot occlude" — dropping it would remove the mesh from the key shadow.
+    const scene = new THREE.Scene()
+    const mesh = new THREE.InstancedMesh(box(), new THREE.MeshPhongMaterial(), 4)
+    applyInstanceAlphaMaterial(mesh.material)
+    scene.add(mesh)
+    swapToFlatMaterials(scene)
+    expect(mesh.material.transparent).toBe(true)
+    expect(mesh.material.depthWrite).toBe(true)
+  })
+
+  it('does NOT blanket-apply the patch to unpatched meshes', () => {
+    const scene = new THREE.Scene()
+    const mesh = new THREE.Mesh(box(), new THREE.MeshPhongMaterial())
+    scene.add(mesh)
+    swapToFlatMaterials(scene)
+    expect(mesh.material.onBeforeCompile).not.toBe(instanceAlphaOnBeforeCompile)
+    expect(mesh.material.userData.instanceAlphaPatch).toBeUndefined()
+  })
+
+  it('restore() puts back the original patched material', () => {
+    const scene = new THREE.Scene()
+    const mesh = new THREE.InstancedMesh(box(), new THREE.MeshPhongMaterial(), 4)
+    applyInstanceAlphaMaterial(mesh.material)
+    const original = mesh.material
+    scene.add(mesh)
+    const swap = swapToFlatMaterials(scene)
+    swap.restore()
+    expect(mesh.material).toBe(original)
+    expect(mesh.material.onBeforeCompile).toBe(instanceAlphaOnBeforeCompile)
   })
 
   it('preserves vertexColors so strand colouring survives', () => {

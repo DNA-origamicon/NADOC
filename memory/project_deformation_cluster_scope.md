@@ -40,6 +40,13 @@ Consequences, all real:
   recomputed, so an op saved before a scope-affecting fix stays wrong until re-applied.
 - A helix in **two** non-default clusters gets `non_default[0]` — arbitrary list order. This is the
   mechanical root of the known "two clusters sharing a helix conflict" limitation (below).
+  **Note (2026-08-01):** overlapping clusters are common enough in real designs
+  (`workspace/VoltronCoreScad.nadoc` has a scaffold cluster and a geometry cluster each claiming
+  all 59 helices) that the new per-cluster **display** fields had to pick explicit rules rather
+  than inherit an arbitrary one — colour resolves *explicit beats unstyled, then last-listed*;
+  opacity takes the **minimum** across every cluster covering a nucleotide, matching the sidebar
+  visibility toggle, which already unions. Those rules are display-only and change nothing here;
+  the geometry conflict below is untouched.
 - **PATCH cannot change scope** (`UpdateDeformationBody` is `params` only). Changing the picker
   mid-session deletes and re-creates the preview op.
 
@@ -48,6 +55,7 @@ Consequences, all real:
 | Thing | Where |
 |---|---|
 | `DeformationOp.cluster_ids: List[str]` | `backend/core/models.py:1129` (class `:1120`). Empty = unscoped |
+| `ClusterRigidTransform.color` / `.opacity` (display-only, 2026-08-01) | `backend/core/models.py` — `color: Optional[str]` "#rrggbb", None = auto palette; `opacity: float = 1.0`. PATCH whitelist in `routes_clusters.py::PatchClusterBody` (`color: ""` clears). Consumed by `frontend/src/scene/helix_renderer/palette.js::buildClusterColorLookup` and `scene/cluster_entries.js::clusterAlphaKeys` → `helix_renderer.setClusterAlphas`. Rides `model_copy` through `cluster_copy.py`, so paste keeps them. Tests: `tests/test_cluster_style.py` |
 | `resolve_cluster_scope(design, cluster_ids, helix_ids) -> dict` | `backend/core/deformation.py:2683` |
 | — called from | `routes_deformation.py:111` (POST) · `core/feature_log_edit.py:162` (edit) · **`routes_loop_skip.py:269`** |
 | `helices_crossing_planes` (overlap test, not full-span) | `deformation.py:2646`; callers `feature_log_edit.py:159`, `routes_deformation.py:105`, `routes_loop_skip.py:266` |

@@ -32,6 +32,9 @@ import {
   SLAB_OFFSET,
 } from './crossover_connections.js'
 import { fjcChainBetween, isLoaded as fjcLookupLoaded, ensureLoaded as ensureFjcLookup, onLoaded as onFjcLookupLoaded } from './ssdna_fjc.js'
+import { store } from '../state/store.js'
+import { buildClusterColorLookup } from './helix_renderer/palette.js'
+import { clusterAlphaForNuc, clusterAlphaKeys } from './cluster_entries.js'
 
 const ARC_COLOR        = 0xffffff
 const ARC_TUBE_RADIUS  = 0.30   // nm — visibly thicker than backbone beads (0.10)
@@ -56,6 +59,13 @@ export function initOverhangLinkArcs(scene) {
   let _highlightedIds = new Set()
   let _detailLevel = 0
   let _cgVisible = true
+  // ── Per-cluster display (colour + opacity) ────────────────────────────────
+  // A link arc bridges two overhangs that may sit in different clusters. It takes
+  // the colour of its A-side anchor's cluster (falling back to B), and fades to
+  // the LOWER of the two alphas — same owner rule as crossover arcs and extra
+  // bases, so a connection never disagrees with the geometry it joins.
+  let _clusterColorFn   = null    // non-null only while coloringMode === 'cluster'
+  let _clusterAlphaKeys = new Map()
   // Track the latest design/geometry so we can re-render once the FJC
   // lookup arrives (the first ss linker rendered before the fetch lands
   // will use the Bezier fallback; we re-run rebuild on load to swap in
@@ -118,6 +128,10 @@ export function initOverhangLinkArcs(scene) {
           strandIds,
           group: ssGroup,
           kind: 'ss',
+          // Anchor nucleotides on the two OVERHANG helices (not the synthetic
+          // __lnk__ ones) — what the per-cluster colour/opacity lookup resolves.
+          nucA: a.nuc,
+          nucB: b.nuc,
           beads: ssGroup.getObjectByName('overhangSsLinkerBeads'),
           slabs: ssGroup.getObjectByName('overhangSsLinkerSlabs'),
           backbone: ssGroup.getObjectByName('overhangSsLinkerBackboneArc'),
@@ -139,6 +153,8 @@ export function initOverhangLinkArcs(scene) {
           strandIds,
           group: dsGroup,
           kind: 'ds',
+          nucA: a.nuc,
+          nucB: b.nuc,
           backbone: dsGroup.getObjectByName('overhangDsConnectorArcA'),
           connectorArcs: [
             dsGroup.getObjectByName('overhangDsConnectorArcA'),
@@ -158,8 +174,60 @@ export function initOverhangLinkArcs(scene) {
       }
     }
     if (DEBUG) console.debug('[overhangLinkArcs] rebuild done — group has %d children', group.children.length)
-    _applyHighlight()
+    _syncClusterLookups(design)
+    _applyHighlight()          // paints cluster colour when in cluster mode
+    _applyClusterAlpha()
     _applyDetailVisibility()
+  }
+
+  /** Re-read the cluster colour/alpha lookups off a design. */
+  function _syncClusterLookups(design) {
+    const d = design ?? _lastDesign
+    _clusterColorFn = (store.getState().coloringMode === 'cluster')
+      ? buildClusterColorLookup(d)
+      : null
+    _clusterAlphaKeys = clusterAlphaKeys(d)
+  }
+
+  /** This entry's cluster colour, or undefined when it has none. */
+  function _entryClusterColor(e) {
+    if (!_clusterColorFn) return undefined
+    return _clusterColorFn(e.nucA) ?? _clusterColorFn(e.nucB)
+  }
+
+  /** This entry's cluster opacity — the lower of its two anchors. */
+  function _entryAlpha(e) {
+    if (!_clusterAlphaKeys.size) return 1
+    return Math.min(clusterAlphaForNuc(_clusterAlphaKeys, e.nucA),
+                    clusterAlphaForNuc(_clusterAlphaKeys, e.nucB))
+  }
+
+  /**
+   * Fade an entry's meshes to its cluster opacity.
+   *
+   * Every material here is created per-mesh (per connection), so a plain
+   * `material.opacity` write is safe — nothing is shared with another connection.
+   * The factor MULTIPLIES each material's own base opacity (the arcs already ship
+   * at 0.85, slabs at 0.90), so a cluster fade dims them rather than resetting
+   * them to fully opaque.
+   */
+  function _applyClusterAlpha() {
+    for (const e of _ssEntries) {
+      const a = _entryAlpha(e)
+      e.group?.traverse?.((obj) => {
+        const mat = obj.material
+        if (!mat || Array.isArray(mat)) return
+        mat.userData = mat.userData || {}
+        if (mat.userData.baseOpacity === undefined) mat.userData.baseOpacity = mat.opacity ?? 1
+        const o = mat.userData.baseOpacity * a
+        mat.opacity = o
+        mat.transparent = o < 1
+        // Structural geometry, not an overlay: keep writing depth so it still
+        // occludes and still casts/receives the photo-mode key shadow.
+        mat.userData.photoForceDepthWrite = true
+        mat.needsUpdate = true
+      })
+    }
   }
 
   function dispose() {
@@ -302,9 +370,12 @@ export function initOverhangLinkArcs(scene) {
       // unchanged (single strand `__s`).
       const entryOn = e.strandIds.some(id => _highlightedIds.has(id))
       _scaleSsBeads(e.beads, entryOn ? 1.3 : 1.0)
+      // In cluster-coloring mode the cluster colour replaces the linker's own
+      // strand colour — but never the red highlight, which still wins below.
+      const clusterColor = _entryClusterColor(e)
       e.group?.traverse?.((obj) => {
         if (!obj.material?.color) return
-        const defaultColor = obj.userData?.defaultColor ?? e.defaultColor
+        const defaultColor = clusterColor ?? obj.userData?.defaultColor ?? e.defaultColor
         // Per-object override: if this mesh advertises its own strand id
         // (ds connector arcs do — `userData.strandId` = `__a` or `__b`),
         // highlight only when that specific strand is selected. Otherwise
@@ -316,7 +387,29 @@ export function initOverhangLinkArcs(scene) {
     }
   }
 
-  return { rebuild, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible, setConnectionScales, resetConnectionScales }
+  /**
+   * Re-read per-cluster colour + opacity and repaint. Called by the store-driven
+   * path after a PATCH lands and by the sidebar swatch's live preview, which
+   * patches a design locally and never touches the store.
+   * @param {object} [design]
+   */
+  function refreshClusterDisplay(design = null) {
+    _syncClusterLookups(design)
+    _applyHighlight()
+    _applyClusterAlpha()
+  }
+
+  // Entering or leaving cluster-coloring mode changes nothing about the design, so
+  // the design/geometry subscriber that drives rebuild() never fires for it.
+  // (A cluster's own colour/opacity edit DOES change the design, and that path
+  // already runs a full rebuild.)
+  store.subscribe((newState, prevState) => {
+    if (newState.coloringMode === prevState.coloringMode) return
+    if (!_ssEntries.length) return
+    refreshClusterDisplay(newState.currentDesign)
+  })
+
+  return { rebuild, dispose, group, hitTest, setHighlightedStrands, setDetailLevel, setRepresentation, setVisible, setConnectionScales, resetConnectionScales, refreshClusterDisplay }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

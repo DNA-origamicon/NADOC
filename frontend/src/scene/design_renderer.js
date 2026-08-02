@@ -17,6 +17,9 @@ import { resolveRepOverrides } from './representation_overrides.js'
 import { buildCrossoverConnections, bezierAt, arcControlPoint, updateExtraBaseInstances, setExtraBaseInstanceFromSim, simBeadIndex, partitionExtraBaseUpdates, setExtraBaseConnectors, hideExtraBaseConnectors, extraBaseConnectorScalarColors } from './crossover_connections.js'
 import { auditRenderedBonds, inventoryRenderedElements } from './render_bond_audit.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
+import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
+import { buildClusterColorLookup } from './helix_renderer/palette.js'
+import { installInstanceAlpha, setInstanceAlpha } from './instance_alpha.js'
 
 /**
  * Initialise the design renderer.
@@ -113,6 +116,11 @@ export function initDesignRenderer(scene, storeRef) {
 
   let _hiddenNucKeys      = new Set()  // persists across rebuilds; set by cluster visibility toggle
   let _hiddenCrossoverIds = new Set()  // extra-base bead/slab instances to suppress
+  // Per-cluster opacity — same nucKey format as _hiddenNucKeys, and the same
+  // "persists across rebuilds" contract (a rebuild makes fresh meshes, so it is
+  // re-pushed below). Empty for every design where nobody has faded a cluster.
+  let _clusterAlphaKeys   = new Map()
+  let _clusterDisplaySig  = ''         // guards the repaint against gizmo-drag thrash
 
   // ── Deform preview overlay ────────────────────────────────────────────────
   // While the bend/twist tool previews a deformation we show BOTH:
@@ -165,24 +173,76 @@ export function initDesignRenderer(scene, storeRef) {
     return result
   }
 
+  /**
+   * Push a design's per-cluster display fields at the renderer: the opacity fade
+   * and, when the viewer is actually in cluster-coloring mode, a recolour so a new
+   * swatch shows up immediately. Repaints in place — never rebuilds.
+   *
+   * BOTH halves are O(nucleotides) sweeps, and the popover calls this live on every
+   * pointer move while a slider or the colour map is dragged. So each half is opt-out:
+   * dragging the colour map must not re-walk every cluster's membership to rebuild an
+   * alpha map that did not change, and dragging the opacity slider must not repaint
+   * every instance colour. The store-driven path (a PATCH landing) passes neither
+   * flag and does both.
+   *
+   * @param {object} design
+   * @param {{color?: boolean, opacity?: boolean}} [what]
+   */
+  function _refreshClusterDisplay(design, what = null) {
+    if (!_helixCtrl) return
+    const doColor   = what?.color   !== false
+    const doOpacity = what?.opacity !== false
+    if (doOpacity) {
+      _clusterAlphaKeys = clusterAlphaKeys(design)
+      _helixCtrl.setClusterAlphas(_clusterAlphaKeys)
+      _applyXoverClusterAlpha()   // separate meshes; setClusterAlphas can't reach them
+    }
+    if (!doColor) return
+    const st = storeRef.getState()
+    if (st.coloringMode === 'cluster') {
+      _helixCtrl.applyColoring(
+        'cluster', design,
+        _effectiveColors(st.strandColors, st.strandGroups),
+        new Set(st.loopStrandIds ?? []))
+      // Extra-base crossover beads live in their own mesh and are not touched by
+      // applyColoring — they need the cluster colour pushed separately.
+      _applyXoverColoring('cluster', design)
+    }
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /**
    * Re-skin extra-base crossover beads + slabs to honor the current global
-   * coloringMode.  Only 'overhang-only' actually overrides — for every other
+   * coloringMode.  'overhang-only' and 'cluster' override — for every other
    * mode (including 'strand') we restore the build-time bead/slab colors
    * captured by buildCrossoverConnections.  Crossovers that bridge an overhang
    * (either endpoint nuc has overhang_id != null) keep their strand color.
+   *
+   * The inserted bases live in their own instanced meshes, so applyColoring (which
+   * walks the helix renderer's entries) never reaches them — without the 'cluster'
+   * branch here they stayed at their build-time strand colour while the helices they
+   * bridge took the cluster colour.  An extra base belongs to whichever cluster owns
+   * the crossover's A-side nucleotide, falling back to the B side.
+   *
+   * @param {string} mode
+   * @param {object} [design]  required for 'cluster'; defaults to the store's design
    */
-  function _applyXoverColoring(mode) {
+  function _applyXoverColoring(mode, design = null) {
     if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
     const _col = new THREE.Color()
     const ovhgOnly = (mode === 'overhang-only')
     const DIM_GRAY = 0xbbbbbb
+    const clusterColorFn = (mode === 'cluster')
+      ? buildClusterColorLookup(design ?? storeRef.getState().currentDesign)
+      : null
     for (const ad of _xoverArcData) {
       const isOvhg = (ad.nucA?.overhang_id != null) || (ad.nucB?.overhang_id != null)
-      const bc = (ovhgOnly && !isOvhg) ? DIM_GRAY : ad.beadBaseColor
-      const sc = (ovhgOnly && !isOvhg) ? DIM_GRAY : ad.slabBaseColor
+      const cc = clusterColorFn
+        ? (clusterColorFn(ad.nucA) ?? clusterColorFn(ad.nucB))
+        : undefined
+      const bc = cc ?? ((ovhgOnly && !isOvhg) ? DIM_GRAY : ad.beadBaseColor)
+      const sc = cc ?? ((ovhgOnly && !isOvhg) ? DIM_GRAY : ad.slabBaseColor)
       for (let i = 0; i < ad.beadCount; i++) {
         const idx = ad.beadStartIdx + i
         _xoverBeadsMesh.setColorAt(idx, _col.setHex(bc))
@@ -275,6 +335,42 @@ export function initDesignRenderer(scene, storeRef) {
     if (_xoverBeadsMesh) _xoverBeadsMesh.visible = show
     if (_xoverSlabsMesh) _xoverSlabsMesh.visible = show
     if (_xoverConnMesh)  _xoverConnMesh.visible  = show
+  }
+
+  /**
+   * Per-cluster opacity for the crossover extra-base beads/slabs/connectors.
+   *
+   * These are their own InstancedMeshes, so the helix renderer's alpha channel never
+   * reaches them — an inserted base stayed fully opaque inside a faded cluster. The
+   * alpha channel is installed LAZILY (it flips the material to transparent) and only
+   * once something is actually faded. An extra base takes the alpha of whichever
+   * cluster owns the crossover's A-side nucleotide, falling back to the B side — the
+   * same owner its colour uses, so the two can't disagree.
+   *
+   * Photo mode carries this across for free: `applyInstanceAlphaMaterial` stamps the
+   * userData marker that `swapToFlatMaterials` re-installs the patch from.
+   */
+  function _applyXoverClusterAlpha() {
+    if (!_xoverArcData || !_xoverBeadsMesh || !_xoverSlabsMesh) return
+    if (!_clusterAlphaKeys.size && !_xoverBeadsMesh._instanceAlpha) return
+    installInstanceAlpha(_xoverBeadsMesh)
+    installInstanceAlpha(_xoverSlabsMesh)
+    if (_xoverConnMesh) installInstanceAlpha(_xoverConnMesh)
+    for (const ad of _xoverArcData) {
+      const a = _clusterAlphaKeys.size
+        ? Math.min(clusterAlphaForNuc(_clusterAlphaKeys, ad.nucA),
+                   clusterAlphaForNuc(_clusterAlphaKeys, ad.nucB))
+        : 1
+      for (let i = 0; i < ad.beadCount; i++) {
+        setInstanceAlpha(_xoverBeadsMesh, ad.beadStartIdx + i, a)
+        setInstanceAlpha(_xoverSlabsMesh, ad.beadStartIdx + i, a)
+      }
+      if (_xoverConnMesh) {
+        for (let s = 0; s < ad.beadCount + 1; s++) {
+          setInstanceAlpha(_xoverConnMesh, ad.connStartIdx + s, a)
+        }
+      }
+    }
   }
 
   /** Zero the InstancedMesh scale for every extra-base bead/slab whose crossover
@@ -547,6 +643,10 @@ export function initDesignRenderer(scene, storeRef) {
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
     if (isolatedStrandId) _helixCtrl.setIsolatedStrand(isolatedStrandId)
     if (_hiddenNucKeys.size) _helixCtrl.setHiddenNucs(_hiddenNucKeys)
+    if (_clusterAlphaKeys.size) {
+      _helixCtrl.setClusterAlphas(_clusterAlphaKeys)
+      _applyXoverClusterAlpha()
+    }
     // Reference geometry: translucent, hidden when the View toggle is off.
     const _refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
     if (_refIds.size) {
@@ -717,6 +817,21 @@ export function initDesignRenderer(scene, storeRef) {
     if (designChanged && _helixCtrl &&
         newState.currentDesign?.representation_overrides !== prevState.currentDesign?.representation_overrides) {
       _applyRepresentationOverrides(newState.currentDesign)
+    }
+
+    // Per-cluster colour + opacity are visual-only design fields too, so the
+    // structural early-return below skips them. Repaint here instead.
+    //
+    // Guarded by a cheap signature rather than by array identity: cluster_transforms
+    // gets a NEW array on every gizmo-drag patch (~60/s) while only the pose moves,
+    // and repainting means an O(nucleotides) applyColoring sweep. The signature is
+    // stable across a pose-only change.
+    if (designChanged && _helixCtrl) {
+      const sig = clusterDisplaySignature(newState.currentDesign)
+      if (sig !== _clusterDisplaySig) {
+        _clusterDisplaySig = sig
+        _refreshClusterDisplay(newState.currentDesign)
+      }
     }
 
     // Strand and group colours are presentation-only. Repaint the existing mesh
@@ -1347,6 +1462,17 @@ export function initDesignRenderer(scene, storeRef) {
     setHiddenNucs(keys) {
       _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
       _helixCtrl?.setHiddenNucs(_hiddenNucKeys)
+    },
+
+    /**
+     * Re-read the per-cluster display fields (`color`, `opacity`) off a design and
+     * push them to the renderer. Two callers: the store subscriber above (after a
+     * PATCH lands) and the sidebar's swatch popover, which passes a locally-patched
+     * design for a zero-latency live preview while the slider is dragged.
+     * @param {object} [design]  defaults to the store's current design
+     */
+    refreshClusterDisplay(design = null, what = null) {
+      _refreshClusterDisplay(design ?? storeRef.getState().currentDesign, what)
     },
 
     /**
