@@ -260,6 +260,16 @@ stock chunk variable (LESSONS D5).
 >   frame-surface overlay, a surface cached from before — still fades at strand granularity
 >   instead of silently doing nothing.
 >
+>   **Synthetic helices need the bare-helix fallback.** 5′/3′ extension tails live on
+>   `__ext_<id>` helices that appear in NO strand's domains, so the domain walk that builds
+>   `buildNucClusterIndex` cannot reach them — extension vertices on the coarse surface took no
+>   cluster colour or fade at all (reported 2026-08-01). Their per-bp keys are not enumerable
+>   from the design either (a tail's length is a geometry property), so the index carries a BARE
+>   `__ext_<id>` entry and every consumer resolves through `color_util.clusterOfNucKey`, which
+>   falls back from `helix:bp:dir` to the bare helix. Real helix ids carry no colons, so the two
+>   key shapes cannot collide. The bead view was never affected — `cluster_entries.clusterNucKeys`
+>   emits its own `h:__ext_<id>` keys.
+>
 >   **The binary format has no version field, and deliberately so.** Each trailing block is
 >   `u32 kind · u32 tableLen · UTF-8 JSON table · u32[nVerts] index`, optional and
 >   self-describing, so an old decoder stops when it runs out of bytes. That is how the

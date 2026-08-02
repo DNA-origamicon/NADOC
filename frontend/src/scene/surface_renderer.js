@@ -23,6 +23,7 @@
 
 import * as THREE from 'three'
 import { applyInstanceAlphaMaterial } from './instance_alpha.js'
+import { clusterOfNucKey } from './color_util.js'
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
@@ -261,7 +262,9 @@ export function initSurfaceRenderer(scene) {
     const id = _vertexIdentity(data)
     if (!id) return null
     const tblA = new Float32Array(id.table.length)
-    for (let k = 0; k < id.table.length; k++) tblA[k] = alphaMap.get(id.table[k]) ?? 1
+    for (let k = 0; k < id.table.length; k++) {
+      tblA[k] = (id.perNuc ? clusterOfNucKey(alphaMap, id.table[k]) : alphaMap.get(id.table[k])) ?? 1
+    }
     const out = new Float32Array(id.index.length)
     for (let v = 0; v < id.index.length; v++) out[v] = tblA[id.index[v]]
     return out
@@ -275,7 +278,8 @@ export function initSurfaceRenderer(scene) {
     if (!id) return null
     const out = new Float32Array(faceVert.length)
     for (let f = 0; f < faceVert.length / 3; f++) {
-      const a = alphaMap.get(id.table[id.index[faceVert[f * 3]]]) ?? 1
+      const key = id.table[id.index[faceVert[f * 3]]]
+      const a = (id.perNuc ? clusterOfNucKey(alphaMap, key) : alphaMap.get(key)) ?? 1
       out[f * 3] = a; out[f * 3 + 1] = a; out[f * 3 + 2] = a
     }
     return out
@@ -300,7 +304,8 @@ export function initSurfaceRenderer(scene) {
     const n = colArr.length / 3
     for (let i = 0; i < n; i++) {
       const vert = crisp ? _crispFaceVert[Math.floor(i / 3) * 3] : i
-      const hex = map.get(id.table[id.index[vert]])
+      const k = id.table[id.index[vert]]
+      const hex = id.perNuc ? clusterOfNucKey(map, k) : map.get(k)
       if (hex == null) continue
       colArr[i * 3]     = ((hex >> 16) & 0xFF) / 255
       colArr[i * 3 + 1] = ((hex >>  8) & 0xFF) / 255

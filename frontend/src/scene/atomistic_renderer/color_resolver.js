@@ -99,7 +99,9 @@ function _colorByMode(ctx, atom, cpk) {
   // Extra-base / extension atoms carry their ANCHOR nucleotide's helix:bp:dir, so they
   // inherit that nucleotide's cluster — which is what you want.
   if (ctx.clusterColors?.size) {
+    // Bare-helix fallback covers synthetic `__ext_` helices (see color_util.clusterOfNucKey).
     const c = ctx.clusterColors.get(`${atom.helix_id}:${atom.bp_index}:${atom.direction}`)
+      ?? ctx.clusterColors.get(atom.helix_id)
     if (c != null) return c
   }
   if (ctx.colorMode === 'strand') return ctx.strandColors.get(atom.strand_id) ?? cpk

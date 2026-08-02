@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { heatmapHex, hexFromInt, atomColorsFromLetters, BASE_HEX, computeAtomStrandColors, ATOM_STAPLE_PALETTE, resolveStrandClusters, computeAtomStrandAlphas, buildNucClusterIndex, computeAtomNucColors, computeAtomNucAlphas } from './color_util.js'
+import { heatmapHex, hexFromInt, atomColorsFromLetters, BASE_HEX, computeAtomStrandColors, ATOM_STAPLE_PALETTE, resolveStrandClusters, computeAtomStrandAlphas, buildNucClusterIndex, computeAtomNucColors, computeAtomNucAlphas, clusterOfNucKey } from './color_util.js'
 
 const rgb = (hex) => [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff]
 
@@ -381,5 +381,83 @@ describe('computeAtomNucAlphas', () => {
     expect(computeAtomNucAlphas(spanningDesign({ a: { opacity: 1 } })).size).toBe(0)
     // no mode argument at all — a fade applies in every coloring mode
     expect(computeAtomNucAlphas(spanningDesign({ a: { opacity: 0.5 } })).size).toBeGreaterThan(0)
+  })
+})
+
+// ── Synthetic-helix geometry (5′/3′ extension tails) ─────────────────────────
+// Reported 2026-08-01: extensions did not respond to the cluster opacity slider on the
+// SURFACE. The coarse surface (the default) builds its beads straight from CG geometry,
+// which puts extension tails on synthetic `__ext_<id>` helices — and those appear in no
+// strand's domains, so the domain walk could never reach them. The bead view was fine
+// (cluster_entries.clusterNucKeys emits `h:__ext_<id>` keys of its own).
+
+const extDesign = (clusters) => ({
+  strands: [{ id: 's1', domains: [
+    { helix_id: 'hA', start_bp: 0, end_bp: 2, direction: 'FORWARD' },
+    { helix_id: 'hB', start_bp: 0, end_bp: 2, direction: 'FORWARD' },
+  ] }],
+  extensions: [
+    { id: 'e5', strand_id: 's1', end: 'five_prime' },
+    { id: 'e3', strand_id: 's1', end: 'three_prime' },
+  ],
+  cluster_transforms: clusters,
+})
+
+describe('buildNucClusterIndex — extension tails', () => {
+  it('maps a synthetic __ext_ helix to its host strand’s cluster', () => {
+    const m = buildNucClusterIndex(extDesign([{ id: 'cA', helix_ids: ['hA', 'hB'] }]))
+    expect(m.get('__ext_e5')).toBe(0)
+    expect(m.get('__ext_e3')).toBe(0)
+  })
+
+  it('keys extensions by BARE helix — per-bp keys are not enumerable from the design', () => {
+    // The tail's length is a geometry property the design does not spell out, which is
+    // why consumers fall back from `helix:bp:dir` to the bare helix.
+    const m = buildNucClusterIndex(extDesign([{ id: 'cA', helix_ids: ['hA'] }]))
+    expect(m.has('__ext_e5')).toBe(true)
+    expect(m.has('__ext_e5:0:FORWARD')).toBe(false)
+  })
+
+  it('omits an extension whose host strand is in no cluster', () => {
+    const m = buildNucClusterIndex({
+      ...extDesign([{ id: 'cA', helix_ids: ['hZ'] }]),
+    })
+    expect(m.has('__ext_e5')).toBe(false)
+  })
+
+  it('carries through to the colour and alpha maps', () => {
+    const design = extDesign([{ id: 'cA', helix_ids: ['hA', 'hB'], color: '#ff8800', opacity: 0.3 }])
+    expect(computeAtomNucColors({ currentDesign: design, coloringMode: 'cluster' }).get('__ext_e5'))
+      .toBe(0xff8800)
+    expect(computeAtomNucAlphas(design).get('__ext_e5')).toBeCloseTo(0.3)
+  })
+})
+
+describe('clusterOfNucKey', () => {
+  const map = new Map([['hA:5:FORWARD', 0.3], ['__ext_e5', 0.7]])
+
+  it('prefers an exact nucleotide key', () => {
+    expect(clusterOfNucKey(map, 'hA:5:FORWARD')).toBe(0.3)
+  })
+
+  it('falls back to the bare helix for a synthetic-helix vertex', () => {
+    // This is the whole fix: a surface vertex on an extension tail arrives as
+    // `__ext_e5:0:FORWARD`, which no per-bp entry can match.
+    expect(clusterOfNucKey(map, '__ext_e5:0:FORWARD')).toBe(0.7)
+    expect(clusterOfNucKey(map, '__ext_e5:12:REVERSE')).toBe(0.7)
+  })
+
+  it('returns undefined when neither matches', () => {
+    expect(clusterOfNucKey(map, 'hZ:1:FORWARD')).toBeUndefined()
+  })
+
+  it('does not confuse a real helix key for a bare one', () => {
+    // Real helix ids carry no colons, so the two shapes cannot collide.
+    expect(clusterOfNucKey(map, 'hA:6:FORWARD')).toBeUndefined()
+  })
+
+  it('tolerates an empty map or key', () => {
+    expect(clusterOfNucKey(new Map(), 'hA:5:FORWARD')).toBeUndefined()
+    expect(clusterOfNucKey(map, '')).toBeUndefined()
   })
 })

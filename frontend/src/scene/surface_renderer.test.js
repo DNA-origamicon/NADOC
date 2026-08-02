@@ -224,3 +224,41 @@ describe('surface per-cluster colour + opacity', () => {
     for (let v = 0; v < 4; v++) expect(a.getX(v)).toBe(1)
   })
 })
+
+// The extension-tail case, end to end through the renderer: a surface vertex on a
+// synthetic `__ext_` helix arrives as `__ext_e5:0:FORWARD`, which no per-bp map entry
+// can match — it resolves via the bare-helix fallback.
+describe('surface — extension tails on synthetic helices', () => {
+  const EXT_DATA = {
+    ...DATA,
+    vertex_strand_index_table: ['s1'],
+    vertex_strand_index: [0, 0, 0, 0],
+    // verts 0,1 = a real duplex nucleotide; verts 2,3 = an extension tail bead
+    vertex_nuc_index_table: ['hA:5:FORWARD', '__ext_e5:0:FORWARD'],
+    vertex_nuc_index: [0, 0, 1, 1],
+  }
+  const build = () => {
+    const scene = makeScene()
+    const sr = initSurfaceRenderer(scene)
+    sr.setColorMode('strand')
+    sr.update(EXT_DATA)
+    return sr
+  }
+
+  it('fades an extension vertex via the bare-helix key', () => {
+    const sr = build()
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3], ['__ext_e5', 0.3]]) })
+    const a = sr.getMesh().geometry.getAttribute('instanceAlpha')
+    expect(a.getX(0)).toBeCloseTo(0.3, 5)   // duplex
+    expect(a.getX(2)).toBeCloseTo(0.3, 5)   // extension tail — the reported gap
+  })
+
+  it('colours an extension vertex via the bare-helix key', () => {
+    const sr = build()
+    sr.applyStrandColors(new Map([['s1', 0x000000]]))
+    sr.applyClusterDisplay({ nucColors: new Map([['__ext_e5', 0xff0000]]) })
+    const c = sr.getMesh().geometry.getAttribute('color')
+    expect([c.getX(2), c.getY(2), c.getZ(2)]).toEqual([1, 0, 0])
+    expect([c.getX(0), c.getY(0), c.getZ(0)]).toEqual([0, 0, 0])   // duplex untouched
+  })
+})

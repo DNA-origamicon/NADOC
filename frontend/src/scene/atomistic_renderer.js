@@ -335,7 +335,10 @@ export function initAtomisticRenderer(scene) {
   function _alphaOfRow(row) {
     const a = _state.atoms?.get(row)
     if (!a) return 1
-    return _state.nucAlphas.get(`${a.helix_id}:${a.bp_index}:${a.direction}`) ?? 1
+    // Bare-helix fallback covers geometry on synthetic `__ext_` helices, whose per-bp
+    // keys are not enumerable from the design.
+    return _state.nucAlphas.get(`${a.helix_id}:${a.bp_index}:${a.direction}`)
+      ?? _state.nucAlphas.get(a.helix_id) ?? 1
   }
 
   /** Install the per-instance alpha channel, routing impostor materials through

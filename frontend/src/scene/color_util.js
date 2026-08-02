@@ -211,6 +211,7 @@ export function buildNucClusterIndex(design) {
     }
   })
 
+  const strandCluster = new Map()   // strand id → cluster, for the extension pass below
   for (const s of design.strands ?? []) {
     const doms = s.domains ?? []
     for (let di = 0; di < doms.length; di++) {
@@ -218,13 +219,50 @@ export function buildNucClusterIndex(design) {
       if (!d?.helix_id) continue
       const ci = domainCluster.get(`${s.id}:${di}`) ?? helixCluster.get(d.helix_id)
       if (ci == null) continue
+      if (!strandCluster.has(s.id)) strandCluster.set(s.id, ci)
       // REVERSE domains store start_bp > end_bp.
       const lo = Math.min(d.start_bp, d.end_bp)
       const hi = Math.max(d.start_bp, d.end_bp)
       for (let bp = lo; bp <= hi; bp++) out.set(`${d.helix_id}:${bp}:${d.direction}`, ci)
     }
   }
+
+  // 5′/3′ EXTENSION tails. Their geometry rows sit on SYNTHETIC `__ext_<id>` helices
+  // that appear in no strand's domains, so the walk above cannot reach them — which is
+  // why extension vertices on the coarse surface took no cluster colour or fade at all.
+  //
+  // Keyed by the bare helix id rather than per bp: the tail's length is a geometry
+  // property the design does not spell out, and consumers fall back from the full
+  // `helix:bp:dir` key to the bare helix (see clusterOfNucKey). An extension follows its
+  // host strand, else the cluster owning its terminal domain's helix — the same rule
+  // cluster_entries.clusterNucKeys uses for the bead view, so the two agree.
+  for (const ext of design.extensions ?? []) {
+    const s = (design.strands ?? []).find(x => x.id === ext.strand_id)
+    const termDom = s && (ext.end === 'five_prime'
+      ? s.domains?.[0]
+      : s.domains?.[s.domains.length - 1])
+    const ci = strandCluster.get(ext.strand_id) ??
+      (termDom ? helixCluster.get(termDom.helix_id) : undefined)
+    if (ci != null) out.set(`__ext_${ext.id}`, ci)
+  }
   return out
+}
+
+/**
+ * Resolve a cluster from a `helix:bp:direction` key, falling back to the bare helix id.
+ *
+ * The fallback is what covers geometry on SYNTHETIC helices — extension tails
+ * (`__ext_<id>`) — whose per-bp keys are not enumerable from the design. Real helix ids
+ * carry no colons, so the two key shapes cannot collide.
+ *
+ * @param {Map<string, *>} map
+ * @param {string} key  'helix:bp:dir'
+ */
+export function clusterOfNucKey(map, key) {
+  if (!map?.size || !key) return undefined
+  const hit = map.get(key)
+  if (hit !== undefined) return hit
+  return map.get(key.replace(/:[^:]*:[^:]*$/, ''))
 }
 
 /**
