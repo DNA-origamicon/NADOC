@@ -185,4 +185,40 @@ describe('cluster panel — style round trip', () => {
     const [, , uiState] = onStylePreview.mock.calls.at(-1)
     expect(uiState.color).toBe('#00ff00')
   })
+
+  it('THE REPORTED BUG: colour-map pick + click outside updates the sidebar pill', () => {
+    // A native colour input fires `input` live while its map is open and `change` only
+    // when the map is dismissed — so this flow produced previews (3D updated) and no
+    // commit (store, and therefore the pill, did not).
+    swatchOf(rows()[0]).click()
+    colorInput().value = '#ff0000'
+    colorInput().dispatchEvent(new Event('input', { bubbles: true }))
+    vi.advanceTimersByTime(20)
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    vi.advanceTimersByTime(300)
+
+    expect(api.patchCluster).toHaveBeenCalledWith('cA', { color: '#ff0000' })
+    expect(store.getState().currentDesign.cluster_transforms[0].color).toBe('#ff0000')
+    expect(swatchBg(rows()[0])).toBe('#ff0000')
+  })
+
+  it('…and the colour then SURVIVES a later opacity edit', () => {
+    // The earlier "reverts to an old colour" symptom was this same uncommitted colour
+    // being wiped by the next repaint from the store.
+    swatchOf(rows()[0]).click()
+    colorInput().value = '#ff0000'
+    colorInput().dispatchEvent(new Event('input', { bubbles: true }))
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    vi.advanceTimersByTime(300)
+
+    swatchOf(rows()[0]).click()
+    rangeInput().value = '0.4'
+    rangeInput().dispatchEvent(new Event('change', { bubbles: true }))
+    vi.advanceTimersByTime(300)
+
+    const c = store.getState().currentDesign.cluster_transforms[0]
+    expect(c.color).toBe('#ff0000')
+    expect(c.opacity).toBeCloseTo(0.4)
+    expect(swatchBg(rows()[0])).toBe('#ff0000')
+  })
 })

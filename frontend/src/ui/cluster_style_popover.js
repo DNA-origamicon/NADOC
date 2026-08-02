@@ -73,9 +73,10 @@ const LABEL_CSS = 'flex:1;color:#8b949e'
  * @param {(clusterId:string, patch:object) => void} opts.onCommit   persist (debounced)
  */
 export function initClusterStylePopover({ onPreview = null, onCommit = null } = {}) {
-  let _clusterId = null
-  let _pending   = null          // accumulated patch awaiting its debounced commit
-  let _timer     = null
+  let _clusterId  = null
+  let _pending    = null         // accumulated patch awaiting its debounced commit
+  let _timer      = null
+  let _openedWith = null         // control values at open, for the on-close diff
 
   // ── DOM (built once, reused) ────────────────────────────────────────────────
   const el = document.createElement('div')
@@ -246,9 +247,36 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
   function close() {
     if (!_clusterId) return
     _flushPreview()    // show the last previewed value without waiting for a frame
+    _commitOnClose()
     _flush()
     _clusterId = null
+    _openedWith = null
     el.style.display = 'none'
+  }
+
+  /**
+   * Commit whatever the controls are actually showing, if it differs from what they were
+   * opened with.
+   *
+   * `change` is NOT reliable here. A native `<input type="color">` fires `input` live
+   * while its colour map is open but only fires `change` when the map is dismissed — so
+   * picking a colour and then clicking outside the popover produced previews and NO
+   * commit at all. The colour reached 3D (previews go straight to the renderers) while
+   * the store never learned about it, which is why the sidebar pill kept the old colour
+   * AND why the colour later "reverted": the next repaint from the store had never heard
+   * of it.
+   *
+   * Anything already queued by a real `change` wins, so Reset's clear sentinel
+   * (`color: ''`) is not overwritten by the concrete hex its input is showing.
+   */
+  function _commitOnClose() {
+    if (!_clusterId || !_openedWith) return
+    const now = _uiState()
+    const diff = {}
+    if (now.color !== _openedWith.color) diff.color = now.color
+    if (now.opacity !== _openedWith.opacity) diff.opacity = now.opacity
+    if (!Object.keys(diff).length) return
+    _pending = { ...diff, ...(_pending ?? {}) }
   }
 
   return {
@@ -259,6 +287,7 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
      */
     openFor(clusterId, anchorEl, { color = null, opacity = 1 } = {}) {
       _cancelPreview()               // a queued preview belongs to the PREVIOUS cluster
+      _commitOnClose()               // …and so does an edit `change` never queued
       _flush()                       // …and so does a pending commit
       _clusterId = clusterId
       colorInput.value = normaliseHex(color, '#888888')
@@ -275,6 +304,9 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
       )
       el.style.left = `${left}px`
       el.style.top  = `${top}px`
+      // Baseline AFTER the inputs are set, so an untouched open/close diffs to nothing —
+      // an unstyled cluster's input shows a neutral placeholder, not its stored value.
+      _openedWith = _uiState()
     },
 
     close,

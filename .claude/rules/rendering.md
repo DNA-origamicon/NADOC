@@ -378,6 +378,17 @@ stock chunk variable (LESSONS D5).
   does not recolour untouched staples. **Any consumer that wants to agree with 3D must call it, not
   re-derive `index % 12`** — `ui/spreadsheet.js` did the latter until 2026-07-31 (TD-02) and its
   row swatches, colour sort key and exported .xlsx each used a different index.
+- **The swatch popover commits on CLOSE, from the control values — `change` is not
+  reliable.** A native `<input type="color">` fires `input` live while its colour map is open
+  and only fires `change` when the map is dismissed, so "pick a colour, click outside" produced
+  previews and NO commit. Previews go straight to the renderers, so 3D updated while the store
+  never learned about it — that is why the sidebar pill stayed stale, and why the colour later
+  "reverted" (the next repaint from the store had never heard of it). `close()` and `openFor()`
+  both diff the live controls against a baseline captured AFTER the inputs are populated, and
+  anything a real `change` already queued wins so Reset's `color: ''` sentinel survives. The
+  after-populate baseline is load-bearing: an unstyled cluster's input shows a neutral
+  placeholder, so diffing against the stored value would commit grey to every cluster the user
+  merely opened.
 - **The swatch popover's preview sends the FULL control state, not the delta.** Commits are
   debounced (300 ms), so when a user picks a colour and immediately drags opacity the colour
   PATCH is still in flight and `store.currentDesign` does not have it. A preview built only

@@ -328,4 +328,71 @@ describe('initClusterStylePopover', () => {
     expect(uiState.color).toBe('#ff8800')
     expect(uiState.opacity).toBeCloseTo(0.25)
   })
+
+  // ── Commit-on-close ────────────────────────────────────────────────────────
+  // `change` is not reliable for a native colour input: it fires `input` live while its
+  // colour map is open, and only fires `change` when the map is dismissed. Picking a
+  // colour and then clicking outside produced previews and NO commit — the colour reached
+  // 3D (previews go straight to the renderers) while the store never learned about it.
+
+  it('THE REPORTED BUG: picking a colour then clicking outside commits it', () => {
+    pop.openFor('cA', anchor, { color: null, opacity: 1 })
+    colorInput().value = '#ff0000'
+    fire(colorInput(), 'input')                 // input ONLY — no change event
+    vi.advanceTimersByTime(20)
+    expect(onCommit).not.toHaveBeenCalled()
+
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(onCommit).toHaveBeenCalledWith('cA', { color: '#ff0000' })
+  })
+
+  it('Escape commits it too', () => {
+    pop.openFor('cA', anchor, { color: null, opacity: 1 })
+    colorInput().value = '#00ff00'
+    fire(colorInput(), 'input')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(onCommit).toHaveBeenCalledWith('cA', { color: '#00ff00' })
+  })
+
+  it('an untouched open/close commits NOTHING', () => {
+    // The trap the baseline guards: an unstyled cluster's input shows a neutral
+    // placeholder, so diffing against the stored value would commit grey to every
+    // cluster the user merely looked at.
+    pop.openFor('cA', anchor, { color: null, opacity: 1 })
+    pop.close()
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('an opacity-only edit does not also commit the placeholder colour', () => {
+    pop.openFor('cA', anchor, { color: null, opacity: 1 })
+    opacityInput().value = '0.4'
+    fire(opacityInput(), 'input')
+    pop.close()
+    expect(onCommit).toHaveBeenCalledTimes(1)
+    expect(onCommit.mock.calls[0][1]).toEqual({ opacity: 0.4 })
+  })
+
+  it('Reset’s clear sentinel is not overwritten by the input’s concrete hex', () => {
+    // Reset closes, and close diffs the controls — but a real queued change wins.
+    pop.openFor('cA', anchor, { color: '#ff8800', opacity: 0.4 })
+    resetBtn().click()
+    expect(onCommit).toHaveBeenCalledWith('cA', { color: '', opacity: 1 })
+  })
+
+  it('switching clusters commits the first one’s uncommitted edit', () => {
+    pop.openFor('cA', anchor, { color: null, opacity: 1 })
+    colorInput().value = '#ff0000'
+    fire(colorInput(), 'input')
+    pop.openFor('cB', anchor, { color: null, opacity: 1 })
+    expect(onCommit).toHaveBeenCalledWith('cA', { color: '#ff0000' })
+  })
+
+  it('does not double-commit when change DID fire', () => {
+    pop.openFor('cA', anchor, { color: null, opacity: 1 })
+    colorInput().value = '#ff0000'
+    fire(colorInput(), 'change')
+    pop.close()
+    expect(onCommit).toHaveBeenCalledTimes(1)
+    expect(onCommit).toHaveBeenCalledWith('cA', { color: '#ff0000' })
+  })
 })
