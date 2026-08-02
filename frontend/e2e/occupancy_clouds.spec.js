@@ -165,6 +165,52 @@ test('occupancy clouds superpose the likely configurations and tear down cleanly
 
   await page.screenshot({ path: 'e2e/screenshots/occupancy-clouds.png', fullPage: false })
 
+  // ── Scope: whole structure vs specific elements ────────────────────────────────
+  const scopeSel = page.locator('#oxdna-jobs-occupancy-scope')
+  await expect(scopeSel).toBeVisible()
+  const scopeCard = page.locator('#oxdna-occupancy-scope-card')
+  await expect(scopeCard).toBeHidden()
+
+  await scopeSel.selectOption('selection')
+  await expect(scopeCard).toBeVisible()
+  // The shared anchor widget's own skeleton must have hydrated, or nothing can be added.
+  await expect(page.locator('#oxdna-occupancy-scope-add')).toBeVisible()
+  await expect(page.locator('#oxdna-occupancy-scope-list')).toBeVisible()
+
+  // With nothing picked, it must say so rather than quietly clustering everything —
+  // that would answer a different question from the one the user asked.
+  await expect(page.locator('#oxdna-jobs-occupancy-status'))
+    .toContainText(/Add selection to scope/i, { timeout: 20_000 })
+
+  // Select a real strand the way the app does — through the store the anchor picker
+  // reads — then scope to it.
+  const strandId = await page.evaluate(async () => {
+    const { store } = await import('/src/state/store.js')
+    const sid = store.getState().currentDesign?.strands?.[0]?.id
+    if (sid) store.setState({ selectedObject: { type: 'strand', id: sid } })
+    return sid ?? null
+  })
+  expect(strandId, 'the loaded design has a strand to scope to').toBeTruthy()
+
+  const scopedReq = page.waitForRequest(
+    (r) => r.url().includes(`/oxdna/jobs/${JOB_ID}/occupancy`) && r.method() === 'POST',
+    { timeout: 60_000 })
+  await page.click('#oxdna-occupancy-scope-add')
+
+  // A chip appears in the scrolling list, carrying the shared widget's data-key.
+  await expect(page.locator('#oxdna-occupancy-scope-list [data-key]')).toHaveCount(1)
+
+  // ...and the scoped analysis goes out as a POST carrying that strand.
+  const scopedPost = await scopedReq
+  expect(JSON.parse(scopedPost.postData() ?? '{}').selection.strand_ids).toEqual([strandId])
+
+  // The chip's × removes it again, and the scope empties.
+  await page.click('#oxdna-occupancy-scope-list [data-key] span:last-child')
+  await expect(page.locator('#oxdna-occupancy-scope-list [data-key]')).toHaveCount(0)
+
+  await scopeSel.selectOption('all')
+  await expect(scopeCard).toBeHidden()
+
   // Switching to the flexibility map must drop the ghosts with the model.
   await page.locator('#oxdna-jobs-flex-toggle').check()
   await expect

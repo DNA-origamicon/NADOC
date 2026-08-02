@@ -440,3 +440,36 @@ describe('index.html carries every element the occupancy UI binds', () => {
     expect(tag).toContain('type="radio"')
   })
 })
+
+describe('the scope picker is reused, not reimplemented', () => {
+  const HTML = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
+  const CTRL = readFileSync(resolve(process.cwd(), 'src/ui/occupancy_controls.js'), 'utf8')
+
+  it('instantiates the shared anchor widget rather than forking it', () => {
+    // initOxdnaAnchorsSetup already drives five engine cards off an `ids` override; a
+    // fork would drift from the chips / x-delete / purple-halo behaviour it provides.
+    expect(CTRL).toMatch(/initOxdnaAnchorsSetup\(/)
+    expect(CTRL).toMatch(/engine: 'occupancy'/)
+  })
+
+  it('carries the full id skeleton the widget needs', () => {
+    // The factory returns an inert stub when its toggle or body id is missing, so a
+    // typo'd skeleton silently yields a card where nothing can be added.
+    for (const id of ['toggle', 'arrow', 'body', 'add', 'clear', 'list', 'status', 'glow']) {
+      expect(HTML, `#oxdna-occupancy-scope-${id}`)
+        .toContain(`id="oxdna-occupancy-scope-${id}"`)
+    }
+  })
+
+  it('gives the scope list its own scroll container', () => {
+    const i = HTML.indexOf('id="oxdna-occupancy-scope-list"')
+    expect(HTML.slice(i, HTML.indexOf('>', i))).toMatch(/overflow-y:auto/)
+  })
+
+  it('offers whole-structure and specific-elements, defaulting to whole', () => {
+    const i = HTML.indexOf('id="oxdna-jobs-occupancy-scope"')
+    const block = HTML.slice(i, i + 500)
+    expect(block).toMatch(/value="all" selected/)
+    expect(block).toMatch(/value="selection"/)
+  })
+})

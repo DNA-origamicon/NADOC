@@ -2042,7 +2042,7 @@ async function main() {
   const lammpsDisplay = initLammpsDisplay({ designRenderer })
   oxdnaPanel = initOxdnaJobsPanel({
     oxdnaDisplay, lammpsDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
-    getOccupancyOverlay: () => occupancyOverlay,
+    getOccupancyOverlay: () => occupancyOverlay, getAnchorSelection: _anchorSelectionState,
     flexScale,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
@@ -2141,7 +2141,11 @@ async function main() {
   const _anchorsByEngine = {}   // engine key → that card's last highlighted anchor set
   const _refreshAnchorGlow = () => {
     const engine = engineSelector?.getSelected?.() ?? 'oxdna'
-    anchorGlow.setAnchors(_anchorsByEngine[engine] || [])
+    // The occupancy-cloud SCOPE picker is a sixth channel that is not an engine tab, so
+    // it would never be the "selected engine" — union it in, or its purple halo could
+    // never show. Each card gates its own contribution with its highlight checkbox.
+    anchorGlow.setAnchors([...(_anchorsByEngine[engine] || []),
+                           ...(_anchorsByEngine.occupancy || [])])
   }
   // The card owns which anchors are lit (its "Highlight all anchors" toggle + any focused
   // chip) and ships that subset on the event, so the chips and the halo can't disagree.

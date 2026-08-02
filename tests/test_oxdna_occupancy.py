@@ -454,3 +454,169 @@ def test_occupancy_progress_dict_is_separate_from_the_trajectory_one():
     from backend.api.routes_oxdna import _OCC_PROGRESS, _TRAJ_PROGRESS
 
     assert _OCC_PROGRESS is not _TRAJ_PROGRESS
+
+
+# ── Scoped analysis: clustering only part of the structure ────────────────────────
+class _FakeCluster:
+    def __init__(self, cid, helix_ids):
+        self.id = cid
+        self.helix_ids = list(helix_ids)
+
+
+class _ScopedDesign:
+    """Only what resolve_selection_keys reaches: cluster_transforms (+ the strand walk,
+    which the tests monkeypatch)."""
+    def __init__(self, clusters=()):
+        self.cluster_transforms = list(clusters)
+
+
+def _keys(n_helices=3, n_bp=4):
+    return [(f"h{h}", b, d)
+            for h in range(n_helices) for b in range(n_bp)
+            for d in ("FORWARD", "REVERSE")]
+
+
+def test_no_selection_means_the_whole_structure():
+    from backend.core.oxdna_occupancy import resolve_selection_keys
+    ks = _keys()
+    assert resolve_selection_keys(_ScopedDesign(), ks, None) == ks
+    assert resolve_selection_keys(_ScopedDesign(), ks, {}) == ks
+
+
+def test_selection_by_helix():
+    from backend.core.oxdna_occupancy import resolve_selection_keys
+    got = resolve_selection_keys(_ScopedDesign(), _keys(), {"helix_ids": ["h1"]})
+    assert got and all(k[0] == "h1" for k in got)
+    assert len(got) == 8
+
+
+def test_a_cluster_expands_to_its_member_helices():
+    from backend.core.oxdna_occupancy import resolve_selection_keys
+    d = _ScopedDesign([_FakeCluster("c1", ["h0", "h2"])])
+    got = resolve_selection_keys(d, _keys(), {"cluster_ids": ["c1"]})
+    assert {k[0] for k in got} == {"h0", "h2"}
+
+
+def test_selection_by_individual_base_picks_up_its_loop_copies():
+    # A base is matched on (helix, bp, direction), so selecting a position takes every
+    # loop-insertion copy at it rather than an arbitrary one.
+    from backend.core.oxdna_occupancy import resolve_selection_keys
+    ks = [("h0", 0, "FORWARD"), ("h0", 0, "FORWARD", 1), ("h0", 1, "FORWARD")]
+    got = resolve_selection_keys(_ScopedDesign(), ks, {"bases": [["h0", 0, "FORWARD"]]})
+    assert got == [("h0", 0, "FORWARD"), ("h0", 0, "FORWARD", 1)]
+
+
+def test_selection_by_strand(monkeypatch):
+    import backend.core.oxdna_occupancy as occ
+
+    ks = _keys(n_helices=2, n_bp=2)
+    owner = {k: ("sA" if k[0] == "h0" else "sB") for k in ks}
+
+    class _Step:
+        def __init__(self, key, sid):
+            self.key = key
+            self.strand = type("S", (), {"id": sid})()
+
+    monkeypatch.setattr(occ, "_walk_strand_nucleotides",
+                        lambda design: [_Step(k, owner[k]) for k in ks])
+    got = occ.resolve_selection_keys(_ScopedDesign(), ks, {"strand_ids": ["sB"]})
+    assert {k[0] for k in got} == {"h1"}
+
+
+def test_criteria_union_rather_than_intersect():
+    # "Pick these things" means a union; intersecting would make a helix + a base from a
+    # different helix select nothing, which is not what the user did.
+    from backend.core.oxdna_occupancy import resolve_selection_keys
+    got = resolve_selection_keys(_ScopedDesign(), _keys(),
+                                 {"helix_ids": ["h0"], "bases": [["h2", 1, "FORWARD"]]})
+    assert {k[0] for k in got} == {"h0", "h2"}
+    assert sum(1 for k in got if k[0] == "h2") == 1
+
+
+def test_synthetic_beads_are_never_selectable(monkeypatch):
+    import backend.core.oxdna_occupancy as occ
+    monkeypatch.setattr(occ, "is_synthetic_nuc_key", lambda k: k[0] == "__xb__")
+    ks = [("h0", 0, "FORWARD"), ("__xb__", "x1", 0)]
+    assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"helix_ids": ["h0", "__xb__"]}) \
+        == [("h0", 0, "FORWARD")]
+
+
+def test_subset_superposition_removes_rigid_body_motion():
+    """The reason a scoped run needs its own fit: a region that only SWINGS must come out
+    as one state, not two."""
+    from backend.core.oxdna_occupancy import _superpose_on_subset, occupancy_clusters
+
+    rng = np.random.default_rng(5)
+    base = rng.normal(size=(12, 3)) * 2.0
+    frames = []
+    for t in range(60):
+        th = 0.9 * np.sin(t / 3.0)                      # the region swings back and forth
+        R = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        # A little thermal jitter, so what remains after the fit is a real (unimodal)
+        # ensemble rather than float noise that clustering cannot meaningfully describe.
+        frames.append(((base @ R.T) + np.array([3 * np.cos(th), 0, 0])).ravel()
+                      + rng.normal(scale=0.05, size=36))
+    X = np.array(frames)
+
+    # Unfitted, the swing dominates and looks like well-separated states.
+    assert occupancy_clusters(X)["silhouette"] > 0.25
+    # Fitted on the region itself, the rigid motion is gone and it reads as one shape.
+    fitted = _superpose_on_subset(X)
+    assert fitted.std(axis=0).max() < X.std(axis=0).max() / 10
+    assert occupancy_clusters(fitted)["verdict"] == "unimodal"
+
+
+def test_subset_superposition_keeps_a_real_shape_change():
+    """...while an actual internal deformation must survive the fit."""
+    from backend.core.oxdna_occupancy import _superpose_on_subset, occupancy_clusters
+
+    rng = np.random.default_rng(9)
+    base = rng.normal(size=(12, 3)) * 2.0
+    frames, labels = [], []
+    for t in range(60):
+        bent = base.copy()
+        sign = 1.0 if (t % 6) < 3 else -1.0              # two genuine internal shapes
+        bent[:, 2] += sign * 1.5 * bent[:, 0] ** 2 / 4.0
+        frames.append(bent.ravel() + rng.normal(scale=0.02, size=36))
+        labels.append(sign)
+    res = occupancy_clusters(_superpose_on_subset(np.array(frames)))
+    assert res["verdict"] == "switching"
+    assert res["k"] == 2
+
+
+def test_selection_by_domain_and_overhang(monkeypatch):
+    """The shared anchor picker emits domain and overhang descriptors too, so the
+    resolver must understand them or those picks would silently select nothing."""
+    import backend.core.oxdna_occupancy as occ
+
+    ks = [("h0", 0, "FORWARD"), ("h0", 1, "FORWARD"), ("h1", 0, "FORWARD")]
+    meta = {
+        ks[0]: ("sA", 0, None),
+        ks[1]: ("sA", 1, "ovh1"),
+        ks[2]: ("sB", 0, None),
+    }
+
+    class _Step:
+        def __init__(self, key):
+            sid, di, oid = meta[key]
+            self.key = key
+            self.strand = type("S", (), {"id": sid})()
+            self.domain_index = di
+            self.overhang_id = oid
+
+    monkeypatch.setattr(occ, "_walk_strand_nucleotides", lambda d: [_Step(k) for k in ks])
+
+    assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"domains": [["sA", 1]]}) == [ks[1]]
+    assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"overhang_ids": ["ovh1"]}) == [ks[1]]
+
+
+def test_selection_signature_ignores_ordering():
+    """Two identical selections made in a different click order are the same analysis and
+    must hit the same cache entry."""
+    from backend.core.oxdna_occupancy import _selection_sig
+
+    a = {"helix_ids": ["h1", "h0"], "bases": [["h0", 1, "FORWARD"], ["h0", 0, "FORWARD"]]}
+    b = {"helix_ids": ["h0", "h1"], "bases": [["h0", 0, "FORWARD"], ["h0", 1, "FORWARD"]]}
+    assert _selection_sig(a) == _selection_sig(b)
+    assert _selection_sig(None) == ""
+    assert _selection_sig({"helix_ids": ["h0"]}) != _selection_sig({"helix_ids": ["h1"]})

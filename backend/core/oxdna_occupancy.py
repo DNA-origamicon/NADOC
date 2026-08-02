@@ -58,10 +58,15 @@ from backend.core.oxdna_health import (
     _aligned_downsampled_frames,
     _fene_violation_fraction,
     _flatten_cg_frame,
+    _kabsch_superpose,
     _strain_index,
     twist_series_stats,
 )
-from backend.physics.oxdna_interface import oxdna_backbone_sites
+from backend.physics.oxdna_interface import (
+    _walk_strand_nucleotides,
+    is_synthetic_nuc_key,
+    oxdna_backbone_sites,
+)
 
 # ── Tunables ──────────────────────────────────────────────────────────────────────
 _OCC_SEED = 0                  # fixed → deterministic clustering (the tests rely on it)
@@ -83,8 +88,112 @@ _OCCUPANCY_CACHE = None
 _OCCUPANCY_CACHE_MAX = 6
 
 
+# ── Scope: which nucleotides the clustering is allowed to see ─────────────────────
+def resolve_selection_keys(design, keys, selection) -> list:
+    """Filter the frame key list down to a user selection. Pure.
+
+    ``selection`` is a union of four optional criteria — a key is kept if it matches
+    ANY of them, which is what "pick these things" means to a user::
+
+        {"cluster_ids":  [...],   # expanded to their member helices
+         "helix_ids":    [...],
+         "strand_ids":   [...],
+         "overhang_ids": [...],
+         "domains":      [[strand_id, domain_index], ...],
+         "bases":        [[helix_id, bp_index, direction], ...]}
+
+    The five non-base criteria mirror the kinds the shared anchor picker emits
+    (``cluster`` / ``strand`` / ``domain`` / ``overhang`` / ``base``), so a selection made
+    with that widget maps across without a lossy translation step.
+
+    A base is matched on its first three elements, so selecting a position picks up all
+    of its loop-insertion copies rather than an arbitrary one.
+
+    An empty/absent selection means the whole structure — the caller gets ``keys`` back
+    unchanged, and no re-alignment happens.
+    """
+    if not selection:
+        return list(keys)
+
+    helix_ids = set(selection.get("helix_ids") or [])
+    strand_ids = set(str(s) for s in (selection.get("strand_ids") or []))
+    want_clusters = set(selection.get("cluster_ids") or [])
+    overhang_ids = set(str(o) for o in (selection.get("overhang_ids") or []))
+    domains = {(str(d[0]), int(d[1])) for d in (selection.get("domains") or []) if len(d) >= 2}
+    bases = {tuple(b)[:3] for b in (selection.get("bases") or [])}
+
+    # A cluster IS a named set of helices (ClusterRigidTransform.helix_ids), so it
+    # expands rather than needing a parallel code path.
+    if want_clusters:
+        for ct in (getattr(design, "cluster_transforms", None) or []):
+            if getattr(ct, "id", None) in want_clusters:
+                helix_ids.update(getattr(ct, "helix_ids", None) or [])
+
+    # One walk serves strand / domain / overhang — they are all properties of the same
+    # step, and walking three times would be three full strand traversals.
+    strand_of, domain_of, overhang_of = {}, {}, {}
+    if strand_ids or domains or overhang_ids:
+        try:
+            for step in _walk_strand_nucleotides(design):
+                sid = str(getattr(step.strand, "id", ""))
+                strand_of[step.key] = sid
+                # getattr rather than attribute access: one missing field must not take
+                # the whole selection down with it via the except below.
+                di = getattr(step, "domain_index", None)
+                if di is not None:
+                    domain_of[step.key] = (sid, int(di))
+                oid = getattr(step, "overhang_id", None)
+                if oid is not None:
+                    overhang_of[step.key] = str(oid)
+        except Exception:
+            strand_of, domain_of, overhang_of = {}, {}, {}
+
+    out = []
+    for k in keys:
+        if is_synthetic_nuc_key(k):
+            continue                       # __xb__ / __ext_ beads are never user-pickable
+        if helix_ids and k[0] in helix_ids:
+            out.append(k)
+        elif bases and tuple(k)[:3] in bases:
+            out.append(k)
+        elif strand_ids and strand_of.get(k) in strand_ids:
+            out.append(k)
+        elif domains and domain_of.get(k) in domains:
+            out.append(k)
+        elif overhang_ids and overhang_of.get(k) in overhang_ids:
+            out.append(k)
+    return out
+
+
+def _superpose_on_subset(X):
+    """Re-superpose every frame onto the ensemble mean using ONLY these coordinates.
+
+    This is what makes a SCOPED run mean anything. The frames arrive Kabsch-fitted on the
+    whole structure, so a selected sub-region still carries its rigid-body motion inside
+    that fit — swinging on a hinge, or riding a global bend. PCA would then report that
+    motion as the region's dominant "mode" and cluster on where the region WAS rather than
+    what shape it took. Fitting on the selection removes the rigid part and leaves the
+    internal conformational change, which is the whole reason to scope an analysis.
+
+    Feature-space only: the medoid frames handed back for rendering are the untouched,
+    globally-aligned ones, so the drawn states stay in the same pose as every other
+    overlay. Same discipline as the mean-centring in :func:`_pca_scores`.
+    """
+    X = np.asarray(X, dtype=float)
+    if X.shape[0] < 2 or X.shape[1] < 9:      # < 3 points: no rotation to speak of
+        return X
+    n = X.shape[1] // 3
+    P = X.reshape(X.shape[0], n, 3)
+    ref = P.mean(axis=0)
+    out = np.empty_like(P)
+    for i in range(P.shape[0]):
+        _R, Pa, _Qc, Qmean = _kabsch_superpose(P[i], ref)
+        out[i] = Pa + Qmean
+    return out.reshape(X.shape[0], -1)
+
+
 # ── Feature vectors ───────────────────────────────────────────────────────────────
-def occupancy_features(frames, keys, design, *, basis: str = "nt"):
+def occupancy_features(frames, keys, design, *, basis: str = "nt", selection=None):
     """Build the ``(F, D)`` feature matrix from aligned per-nucleotide frame dicts.
 
     ``basis="nt"`` uses every nucleotide's backbone site — the same atom set the
@@ -117,11 +226,32 @@ def occupancy_features(frames, keys, design, *, basis: str = "nt"):
         raise ValueError(f"basis must be 'nt' or 'bp', got {basis!r}")
 
     key_list = list(keys)
+    # The FENE gate stays on the WHOLE structure even for a scoped run: a tear anywhere
+    # means the PBC unwrap failed, which invalidates the frame's alignment and therefore
+    # the selected region's coordinates too.
     ia_bb, ib_bb = _strain_index(design, key_list, "backbone")
+
+    scoped = resolve_selection_keys(design, key_list, selection)
+    if selection and not scoped:
+        raise ValueError("the selection matched no nucleotides")
+    is_scoped = bool(selection) and len(scoped) < len(key_list)
     if basis == "bp":
         ia_wc, ib_wc = _strain_index(design, key_list, "wc")
         if len(ia_wc) < _OCC_MIN_BP_COLUMNS:
             basis = "nt"
+
+    # Index into whatever the basis produces: nucleotide rows for "nt", duplex columns
+    # for "bp" (a column is selected when EITHER of its two strands was picked).
+    sel_idx = None
+    if is_scoped:
+        want = set(scoped)
+        if basis == "nt":
+            sel_idx = [i for i, k in enumerate(key_list) if k in want]
+        else:
+            sel_idx = [c for c, (a, b) in enumerate(zip(ia_wc, ib_wc))
+                       if key_list[a] in want or key_list[b] in want]
+        if not sel_idx:
+            raise ValueError("the selection matched no nucleotides in this basis")
 
     rows: list[np.ndarray] = []
     kept: list[int] = []
@@ -135,11 +265,19 @@ def occupancy_features(frames, keys, design, *, basis: str = "nt"):
         if len(ia_bb) and _fene_violation_fraction(cm, a1, a3, ia_bb, ib_bb) > _STRAIN_FRAME_REJECT_FRAC:
             continue
         sites = oxdna_backbone_sites(cm, a1, a3)
-        v = sites if basis == "nt" else 0.5 * (sites[ia_wc] + sites[ib_wc])
+        if basis == "nt":
+            v = sites[sel_idx] if sel_idx is not None else sites
+        else:
+            mid = 0.5 * (sites[ia_wc] + sites[ib_wc])
+            v = mid[sel_idx] if sel_idx is not None else mid
         rows.append(np.asarray(v, dtype=float).ravel())
         kept.append(i)
 
-    feature_keys = key_list if basis == "nt" else [key_list[i] for i in ia_wc]
+    if basis == "nt":
+        feature_keys = [key_list[i] for i in sel_idx] if sel_idx is not None else key_list
+    else:
+        cols = [key_list[i] for i in ia_wc]
+        feature_keys = [cols[i] for i in sel_idx] if sel_idx is not None else cols
     if not rows:
         return np.zeros((0, 0)), feature_keys, [], basis
     return np.array(rows, dtype=float), feature_keys, kept, basis
@@ -412,7 +550,7 @@ def _sampling_indices(out_stages) -> list[int]:
 
 def production_occupancy(design, stages, reference_conf_path, *, max_frames: int = 200,
                          n_clusters: int = 0, method: str = "pca", basis: str = "nt",
-                         align: bool = True, progress=None,
+                         align: bool = True, progress=None, selection=None,
                          n_trailing_extra: int = 0,
                          trailing_extra_strand_length: int = 0) -> dict:
     """Occupancy states for a job's sampling stages — the route payload.
@@ -439,8 +577,11 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
         return {"ready": False, "reason": "no production or field run yet"}
 
     samples = [ordered[i] for i in idx]
-    X, _feature_keys, kept_rows, basis_used = occupancy_features(
-        samples, key_list, design, basis=basis)
+    try:
+        X, feature_keys, kept_rows, basis_used = occupancy_features(
+            samples, key_list, design, basis=basis, selection=selection)
+    except ValueError as e:
+        return {"ready": False, "reason": str(e)}
     n_torn = len(samples) - len(kept_rows)
     if X.shape[0] < _OCC_MIN_FRAMES:
         return {"ready": False,
@@ -458,6 +599,9 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
     res["method"] = method
     res["basis"] = basis_used           # what was actually used, not what was asked for
     res["basis_requested"] = basis
+    res["scoped"] = bool(selection) and len(feature_keys) < len(key_list)
+    res["n_selected"] = len(feature_keys)
+    res["n_total"] = len(key_list)
     res["n_frames_total"] = len(ordered)
     res["n_frames_torn"] = n_torn
     res["keys"] = [list(k) for k in key_list]
@@ -469,9 +613,24 @@ def production_occupancy(design, stages, reference_conf_path, *, max_frames: int
     return res
 
 
+def _selection_sig(selection) -> str:
+    """Stable cache signature for a selection. Order must not matter — the same set of
+    picks made in a different order is the same analysis."""
+    if not selection:
+        return ""
+    parts = []
+    for field in ("cluster_ids", "helix_ids", "strand_ids", "overhang_ids"):
+        parts.append(",".join(sorted(str(v) for v in (selection.get(field) or []))))
+    for field, width in (("domains", 2), ("bases", 3)):
+        parts.append(",".join(sorted("/".join(str(x) for x in tuple(v)[:width])
+                                     for v in (selection.get(field) or []))))
+    return "|".join(parts)
+
+
 def production_occupancy_cached(design, stages, reference_conf_path, *, max_frames: int = 200,
                                 n_clusters: int = 0, method: str = "pca", basis: str = "nt",
                                 align: bool = True, progress=None, refetch: bool = False,
+                                selection=None,
                                 n_trailing_extra: int = 0,
                                 trailing_extra_strand_length: int = 0) -> dict:
     """LRU over :func:`production_occupancy`, keyed on the full parameter set.
@@ -488,7 +647,7 @@ def production_occupancy_cached(design, stages, reference_conf_path, *, max_fram
 
     key = (_aligned_cache_key(stages, reference_conf_path, max_frames, True),
            bool(align), int(n_trailing_extra), int(trailing_extra_strand_length),
-           int(n_clusters), str(method), str(basis))
+           int(n_clusters), str(method), str(basis), _selection_sig(selection))
 
     if refetch:
         _OCCUPANCY_CACHE.pop(key, None)
@@ -503,7 +662,7 @@ def production_occupancy_cached(design, stages, reference_conf_path, *, max_fram
 
     res = production_occupancy(
         design, stages, reference_conf_path, max_frames=max_frames, n_clusters=n_clusters,
-        method=method, basis=basis, align=align, progress=progress,
+        method=method, basis=basis, align=align, progress=progress, selection=selection,
         n_trailing_extra=n_trailing_extra,
         trailing_extra_strand_length=trailing_extra_strand_length)
 

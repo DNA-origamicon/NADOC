@@ -16,7 +16,21 @@
  * text rather than left in the JSON.
  */
 
+import { anchorsToSelection } from '../scene/efield_math.js'
+import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
+
 const C = { dim: '#8b949e', warn: '#d29922', bad: '#f85149', ok: '#3fb950' }
+
+/** The scope picker is the SHARED anchor widget on its own id skeleton — chips, x-delete,
+ *  Clear, the scrolling list and the purple halo all come for free, and the scope speaks
+ *  the same descriptor vocabulary the engine anchor cards do. */
+const _SCOPE_IDS = {
+  add: 'oxdna-occupancy-scope-add', clear: 'oxdna-occupancy-scope-clear',
+  list: 'oxdna-occupancy-scope-list', status: 'oxdna-occupancy-scope-status',
+  glow: 'oxdna-occupancy-scope-glow',
+  toggle: 'oxdna-occupancy-scope-toggle', arrow: 'oxdna-occupancy-scope-arrow',
+  body: 'oxdna-occupancy-scope-body',
+}
 
 /** Clamp the UI parameters to what the route accepts. Pure. */
 export function normalizeOccupancyParams({ nClusters = 0, basis = 'nt', maxFrames = 200 } = {}) {
@@ -155,7 +169,7 @@ export function occupancyFooterHtml(resp) {
 }
 
 export function initOccupancyControls({
-  api, getOverlay, getDisplay, getSelectedJobId, onStatus = null,
+  api, getOverlay, getDisplay, getSelectedJobId, getAnchorSelection = null, onStatus = null,
 } = {}) {
   const $ = (id) => (typeof document === 'undefined' ? null : document.getElementById(id))
   const toggle = $('oxdna-jobs-occupancy-toggle')
@@ -163,6 +177,8 @@ export function initOccupancyControls({
   const nSel = $('oxdna-jobs-occupancy-n')
   const basisSel = $('oxdna-jobs-occupancy-basis')
   const rerunBtn = $('oxdna-jobs-occupancy-rerun')
+  const scopeSel = $('oxdna-jobs-occupancy-scope')
+  const scopeCard = $('oxdna-occupancy-scope-card')
   const statusEl = $('oxdna-jobs-occupancy-status')
   const legendEl = $('oxdna-jobs-occupancy-legend')
 
@@ -181,8 +197,10 @@ export function initOccupancyControls({
     onStatus?.({ text, color })
   }
 
-  function _paramKey(jobId, p) {
-    return `${jobId}|${p.nClusters}|${p.basis}|${p.maxFrames}|${p.method}`
+  function _paramKey(jobId, p, sel) {
+    // The scope is part of the identity of the analysis — two different regions are two
+    // different clusterings and must never share a cached result.
+    return `${jobId}|${p.nClusters}|${p.basis}|${p.maxFrames}|${p.method}|${JSON.stringify(sel)}`
   }
 
   function params_() {
@@ -192,18 +210,53 @@ export function initOccupancyControls({
     })
   }
 
+  // Instantiated, not copied: initOxdnaAnchorsSetup already drives five engine panels
+  // off an `ids` override, and `engine: 'occupancy'` gives this card its own halo channel.
+  const _scope = initOxdnaAnchorsSetup({
+    ids: _SCOPE_IDS,
+    engine: 'occupancy',
+    getSelection: getAnchorSelection,
+    onChange: () => { if (_active && scopeSel?.value === 'selection') refresh() },
+  })
+
+  /** The scope the user picked, or null for the whole structure. */
+  function selection_() {
+    if (scopeSel?.value !== 'selection') return null
+    return anchorsToSelection(_scope?.getAnchors?.() ?? [])
+  }
+
+  function _syncScopeCard() {
+    if (scopeCard) scopeCard.style.display = scopeSel?.value === 'selection' ? '' : 'none'
+  }
+  _syncScopeCard()
+
+  // The shared widget collapses itself on init (every engine's anchor card ships
+  // collapsed). Here the whole card is already gated by the "Analyse:" selector, so
+  // arriving at a collapsed body would just be an extra click — open it once, leaving it
+  // collapsible for anyone who wants the room back.
+  const _scopeBody = $('oxdna-occupancy-scope-body')
+  if (_scopeBody && _scopeBody.style.display === 'none') $('oxdna-occupancy-scope-toggle')?.click()
+
   async function refresh({ refetch = false } = {}) {
     const jobId = getSelectedJobId?.()
     if (!jobId) return { ok: false, reason: 'no job' }
 
     const p = params_()
-    const key = _paramKey(jobId, p)
+    const sel = selection_()
+    const key = _paramKey(jobId, p, sel)
 
     // Becoming active must happen BEFORE the cache short-circuit: a re-toggle after off()
     // hits the cache, and returning early would leave the parameter controls hidden and
     // the module marked inactive while the view is plainly on screen.
     _active = true
     if (params) params.style.display = ''
+
+    if (scopeSel?.value === 'selection' && !sel) {
+      getOverlay?.()?.clear()
+      _setStatus('Pick clusters, strands or bases in the 3D view, then "Add selection to scope".',
+                 C.warn)
+      return { ok: false, reason: 'empty scope' }
+    }
 
     if (!refetch && _cache?.key === key) return _apply(_cache.resp)
 
@@ -214,7 +267,9 @@ export function initOccupancyControls({
 
     let resp
     try {
-      resp = await api.getOxdnaOccupancy(jobId, { ...p, refetch, signal: _abort.signal })
+      resp = sel
+        ? await api.postOxdnaOccupancy(jobId, { ...p, refetch, selection: sel, signal: _abort.signal })
+        : await api.getOxdnaOccupancy(jobId, { ...p, refetch, signal: _abort.signal })
     } catch (e) {
       if (e?.name === 'AbortError') return { ok: false, reason: 'aborted' }
       _setStatus(`Occupancy failed: ${e?.message ?? e}`, C.bad)
@@ -291,6 +346,7 @@ export function initOccupancyControls({
     _resetChoices()
     getOverlay?.()?.clear()
     if (params) params.style.display = 'none'
+    if (scopeCard) scopeCard.style.display = 'none'
     if (legendEl) { legendEl.style.display = 'none'; legendEl.innerHTML = '' }
     _setStatus('')
   }
@@ -323,6 +379,11 @@ export function initOccupancyControls({
     }
   })
 
+  scopeSel?.addEventListener('change', () => {
+    _syncScopeCard()
+    _resetChoices()
+    if (_active) refresh()
+  })
   nSel?.addEventListener('change', () => { _resetChoices(); if (_active) refresh() })
   basisSel?.addEventListener('change', () => { _resetChoices(); if (_active) refresh() })
   rerunBtn?.addEventListener('click', () => { if (_active) refresh({ refetch: true }) })
@@ -334,5 +395,7 @@ export function initOccupancyControls({
     params: params_,
     lastResponse: () => _lastResp,
     toggleEl: () => toggle,
+    scope: () => _scope,
+    selection: selection_,
   }
 }

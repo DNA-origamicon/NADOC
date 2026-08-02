@@ -265,6 +265,33 @@ export function anchorLabel(a) {
   return anchorKey(a)
 }
 
+/**
+ * Anchor descriptors → the backend's occupancy `selection` dict.
+ *
+ * Same descriptors the anchor picker produces, so the scope card and the anchor cards
+ * share one selection vocabulary rather than translating between two. Every kind the
+ * picker can emit has a slot here — a descriptor that quietly had none would select
+ * nothing and look like an empty region.
+ *
+ * Returns null for an empty list, which is how the caller says "whole structure".
+ */
+export function anchorsToSelection(anchors) {
+  const sel = { cluster_ids: [], helix_ids: [], strand_ids: [], overhang_ids: [],
+                domains: [], bases: [] }
+  let n = 0
+  for (const a of anchors ?? []) {
+    if (!a?.kind) continue
+    if (a.kind === 'cluster') sel.cluster_ids.push(a.id)
+    else if (a.kind === 'strand') sel.strand_ids.push(a.id)
+    else if (a.kind === 'overhang') sel.overhang_ids.push(a.id)
+    else if (a.kind === 'domain') sel.domains.push([a.strandId, a.domainIndex])
+    else if (a.kind === 'base') sel.bases.push([a.helixId, a.bp, a.direction])
+    else continue
+    n++
+  }
+  return n ? sel : null
+}
+
 /** Dedupe a list of anchor descriptors, preserving first-seen order. */
 export function dedupeAnchors(list) {
   const seen = new Set()

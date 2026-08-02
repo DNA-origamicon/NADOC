@@ -1731,6 +1731,15 @@ async def get_oxdna_occupancy(job_id: str, request: Request, align: bool = True,
       present them as likelihoods.
     * ``"unimodal"`` — one basin. The flexibility map already describes this ensemble.
     """
+    return await _occupancy_impl(job_id, request, align=align, scope=scope,
+                                 max_frames=max_frames, n_clusters=n_clusters,
+                                 method=method, basis=basis, refetch=refetch)
+
+
+async def _occupancy_impl(job_id: str, request: Request, *, align: bool, scope: str,
+                          max_frames: int, n_clusters: int, method: str, basis: str,
+                          refetch: bool, selection=None) -> dict:
+    """Shared body for the GET (whole structure) and POST (scoped) occupancy routes."""
     from backend.core.oxdna_occupancy import production_occupancy_cached
 
     if method != "pca":
@@ -1761,6 +1770,7 @@ async def get_oxdna_occupancy(job_id: str, request: Request, align: bool = True,
             lambda: production_occupancy_cached(
                 design, stages, ref, max_frames=max_frames, n_clusters=n_clusters,
                 method=method, basis=basis, align=align, progress=_prog, refetch=refetch,
+                selection=selection,
                 n_trailing_extra=_capture_bead_count(job),
                 trailing_extra_strand_length=_capture_strand_length(job))))
         while not task.done():
@@ -1779,6 +1789,53 @@ async def get_oxdna_occupancy(job_id: str, request: Request, align: bool = True,
     prod_running = any(s.status == "running" for s in job.stages
                        if s.kind in ("production", "field"))
     return {**result, "production_running": prod_running}
+
+
+class OccupancySelection(BaseModel):
+    """Which part of the structure the clustering may look at.
+
+    A union of four criteria — a nucleotide is in scope if it matches ANY of them.
+    Everything empty means the whole structure, which is the same analysis the GET does.
+    """
+    model_config = ConfigDict(extra="forbid")
+    cluster_ids: list[str] = Field(default_factory=list)
+    helix_ids: list[str] = Field(default_factory=list)
+    strand_ids: list[str] = Field(default_factory=list)
+    overhang_ids: list[str] = Field(default_factory=list)
+    domains: list[list] = Field(default_factory=list)  # [strand_id, domain_index]
+    bases: list[list] = Field(default_factory=list)    # [helix_id, bp_index, direction]
+
+
+class OccupancyBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    align: bool = True
+    scope: str = "lineage"
+    max_frames: int = _SPARSE_FRAME_CAP
+    n_clusters: int = 0
+    method: str = "pca"
+    basis: str = "nt"
+    refetch: bool = False
+    selection: Optional[OccupancySelection] = None
+
+
+@router.post("/oxdna/jobs/{job_id}/occupancy")
+async def post_oxdna_occupancy(job_id: str, request: Request, body: OccupancyBody) -> dict:
+    """Occupancy clouds restricted to PART of the structure.
+
+    Same analysis as the GET, plus a `selection` of clusters / strands / individual bases.
+    Scoping matters because a global clustering is dominated by the largest-amplitude
+    motion in the whole object; a local hinge or a single flexible seam that flips between
+    two well-defined states can sit entirely inside the noise floor of that fit. Restricting
+    the feature matrix — and re-superposing on the selection, so its rigid-body motion is
+    removed rather than clustered on — is what makes those local states visible.
+
+    POST rather than GET because a base-level selection is far too big for a query string.
+    """
+    return await _occupancy_impl(
+        job_id, request, align=body.align, scope=body.scope, max_frames=body.max_frames,
+        n_clusters=body.n_clusters, method=body.method, basis=body.basis,
+        refetch=body.refetch,
+        selection=body.selection.model_dump() if body.selection else None)
 
 
 @router.get("/oxdna/jobs/{job_id}/occupancy-progress")

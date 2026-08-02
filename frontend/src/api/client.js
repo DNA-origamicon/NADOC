@@ -2320,6 +2320,18 @@ export const getOxdnaOccupancy = (id, opts) => {
       + `&max_frames=${maxFrames}&method=${method}&basis=${basis}&refetch=${refetch}`,
     undefined, { signal })
 }
+/** Occupancy clouds restricted to PART of the structure — same payload as
+ *  getOxdnaOccupancy plus `opts.selection` (clusters / strands / domains / overhangs /
+ *  bases). POST because a base-level selection is far too big for a query string. */
+export const postOxdnaOccupancy = (id, opts) => {
+  const { align, signal, scope } = _vizOpts(opts, 'postOxdnaOccupancy')
+  const { nClusters = 0, maxFrames = 200, method = 'pca', basis = 'nt', refetch = false,
+          selection = null } = opts ?? {}
+  return _oxdnaJSON('POST', `/oxdna/jobs/${id}/occupancy`, {
+    align, scope, max_frames: maxFrames, n_clusters: nClusters, method, basis, refetch,
+    selection,
+  }, { signal })
+}
 /** Live frames-processed progress for an in-flight occupancy build ({active,done,total}). */
 export const getOxdnaOccupancyProgress = (id) =>
   _oxdnaJSON('GET', `/oxdna/jobs/${id}/occupancy-progress`)

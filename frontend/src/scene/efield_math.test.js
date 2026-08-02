@@ -5,6 +5,7 @@ import {
   vecLen, scaleVec, normalize, rayPlaneVector,
   arrowLenForPn, pnForArrowLen, EFIELD_MAX_LEN_NM, EFIELD_MIN_LEN_NM, EFIELD_NM_PER_PN,
   resolveSelectionAnchors, anchorSelectionState, highlightedAnchors, anchorKey, anchorLabel, dedupeAnchors, addAnchors, removeAnchor,
+  anchorsToSelection,
   buildFieldSpec, fieldSpecReady,
   fieldColorHex, fieldZone, EFIELD_PN_LOW, EFIELD_PN_GOOD, EFIELD_PN_DISRUPT,
   anchorAmplification, anchorTensionPn, safePnFor, disruptPnFor,
@@ -423,5 +424,35 @@ describe('base-count drag scaling (nmPerPnForN)', () => {
     expect(pnForArrowLen(lenNm, big)).toBeLessThan(pnForArrowLen(lenNm, small))
     // and round-trips with its own scale
     expect(pnForArrowLen(arrowLenForPn(0.3, big), big)).toBeCloseTo(0.3, 6)
+  })
+})
+
+describe('anchorsToSelection — anchor descriptors → the occupancy scope dict', () => {
+  it('maps every kind the picker can emit', () => {
+    // A kind with no slot would select nothing and read as an empty region, so all five
+    // the anchor picker produces must land somewhere.
+    const sel = anchorsToSelection([
+      { kind: 'cluster', id: 'c1' },
+      { kind: 'strand', id: 's2' },
+      { kind: 'overhang', id: 'o1' },
+      { kind: 'domain', strandId: 's3', domainIndex: 2 },
+      { kind: 'base', helixId: 'h0', bp: 5, direction: 'FORWARD' },
+    ])
+    expect(sel).toEqual({
+      cluster_ids: ['c1'], helix_ids: [], strand_ids: ['s2'], overhang_ids: ['o1'],
+      domains: [['s3', 2]], bases: [['h0', 5, 'FORWARD']],
+    })
+  })
+
+  it('returns null for nothing selected — that is how "whole structure" is expressed', () => {
+    expect(anchorsToSelection([])).toBeNull()
+    expect(anchorsToSelection(null)).toBeNull()
+    expect(anchorsToSelection([{ id: 'x' }])).toBeNull()      // no kind → not a descriptor
+  })
+
+  it('ignores an unknown kind rather than inventing a slot for it', () => {
+    const sel = anchorsToSelection([{ kind: 'cluster', id: 'c1' }, { kind: 'wat', id: 'z' }])
+    expect(sel.cluster_ids).toEqual(['c1'])
+    expect(Object.values(sel).flat()).toHaveLength(1)
   })
 })

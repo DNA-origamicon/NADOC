@@ -4144,6 +4144,34 @@
                         <option value="bp">Base-pair midpoints (duplex only)</option>
                       </select>
                     </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
+                           title="Which part of the structure the clustering may look at. A global fit is dominated by the largest-amplitude motion in the whole object, so a local hinge or a single flexible seam that flips between two well-defined states can sit entirely inside its noise floor. Scoping to that region — and re-fitting on it, so its rigid-body swing is removed rather than clustered on — is what makes those local states visible.">
+                      Analyse:
+                      <select id="oxdna-jobs-occupancy-scope"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="all" selected>Whole structure</option>
+                        <option value="selection">Specific elements…</option>
+                      </select>
+                    </label>
+                    <!-- Scope picker: the SAME shared anchor widget (chips, x-delete, Clear,
+                         purple halo) the five engine panels use, on its own id skeleton. -->
+                    <div id="oxdna-occupancy-scope-card" style="display:none;margin-top:4px">
+                      <div id="oxdna-occupancy-scope-toggle" class="ox-card__header" style="color:#c9d1d9;padding:0 0 3px 0">
+                        <span id="oxdna-occupancy-scope-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title" style="font-size:var(--text-xs)">Scope</span>
+                      </div>
+                      <div id="oxdna-occupancy-scope-body">
+                      <div style="font-size:11px;color:#6a737d;margin-bottom:5px;line-height:1.35">Select clusters, strands or bases in the 3D view, then add them. Only these are clustered.</div>
+                      <div style="display:flex;align-items:center;gap:5px">
+                        <button id="oxdna-occupancy-scope-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#2d1b4e;border:1px solid #b14aff;color:#e9d5ff;border-radius:3px;cursor:pointer">Add selection to scope</button>
+                        <button id="oxdna-occupancy-scope-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                      </div>
+                      <div id="oxdna-occupancy-scope-list" style="max-height:110px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#010409;padding:3px;margin-top:5px"></div>
+                      <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-top:6px">
+                        <input type="checkbox" id="oxdna-occupancy-scope-glow" checked> Highlight scope
+                      </label>
+                      <div id="oxdna-occupancy-scope-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                      </div>
+                    </div>
                     <button id="oxdna-jobs-occupancy-rerun" type="button"
                             style="margin-top:4px;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 8px;cursor:pointer"
                             title="Recompute from the trajectory, ignoring the cached result.">Recompute</button>

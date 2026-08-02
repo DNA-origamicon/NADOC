@@ -28,6 +28,44 @@ so it survives at cylinder LOD. Per-state choices live outside the response cach
 survive a refetch, and are dropped when the CLUSTERING changes — "state 2" of k=5 is a
 different structure from "state 2" of k=2.
 
+## Scope: whole structure vs specific elements (2026-08-01)
+
+A global clustering is dominated by the largest-amplitude motion in the whole object, so a
+local hinge or a single flexible seam that flips between two well-defined states can sit
+entirely inside its noise floor. `Analyse: [Whole structure | Specific elements…]` restricts
+the feature matrix to picked clusters / strands / domains / overhangs / individual bases.
+
+**A scoped run re-superposes on the selection** (`_superpose_on_subset`). Without it PCA
+reports where the region WAS — its rigid-body swing inside the global fit — instead of what
+shape it took, which would defeat the entire point of scoping. Feature-space only; the
+medoids handed back for rendering stay globally aligned so the drawn states keep the same
+pose as every other overlay. Pinned by `test_subset_superposition_removes_rigid_body_motion`
+(a pure swing must read unimodal) and `..._keeps_a_real_shape_change`.
+
+**The picker is the SHARED anchor widget, instantiated not forked.** `initOxdnaAnchorsSetup`
+already drives five engine cards off an `ids` override; occupancy adds a sixth channel with
+`engine: 'occupancy'`, inheriting chips, `×` delete, Clear, the scrolling list and the purple
+`0xb14aff` halo. Two things this cost:
+
+- The factory returns an **inert stub** when its `toggle`/`body` ids are missing
+  (`oxdna_anchors_setup.js`), so the skeleton must be complete — a card that looks right but
+  adds nothing is the failure mode. Pinned by a source-text test over `index.html`.
+- It **collapses itself on init**, so the scope body is opened once after construction (it
+  is already gated by the Analyse selector; a second click to reveal it is friction).
+- `main.js:_refreshAnchorGlow` showed only the *engine selector's* engine, and occupancy is
+  not an engine tab — its halo could never appear. It now unions the `occupancy` channel in.
+
+Backend: `resolve_selection_keys(design, keys, selection)` — a UNION of `cluster_ids` /
+`helix_ids` / `strand_ids` / `overhang_ids` / `domains` / `bases`. Bases match on the first
+three key elements so a position takes all its loop copies; synthetic `__xb__`/`__ext_` beads
+are never selectable. Domain and overhang criteria exist **because the picker emits those
+kinds** — without them those picks would silently select nothing.
+
+Transport is `POST /oxdna/jobs/{id}/occupancy` (a base-level selection is far too big for a
+query string); the unscoped `GET` is unchanged and both share one `_occupancy_impl`. The
+selection is part of the cache key on both sides, order-independent (`_selection_sig`), so
+two different regions can never collide — and the frontend's own cache key includes it too.
+
 ## The three invariants (do not weaken any of them)
 
 1. **The representative is a medoid, never a within-cluster average.** Averaging positions

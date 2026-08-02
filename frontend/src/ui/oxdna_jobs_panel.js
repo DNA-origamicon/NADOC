@@ -423,7 +423,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -1092,6 +1092,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     getOverlay: () => getOccupancyOverlay?.() ?? null,
     getDisplay: () => oxdnaDisplay,
     getSelectedJobId: () => _selectedId,
+    getAnchorSelection,
   })
   const _SHOW_ALL_KEY = 'nadoc:oxdna-jobs-show-all'
 

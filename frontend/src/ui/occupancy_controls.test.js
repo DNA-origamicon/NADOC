@@ -426,3 +426,126 @@ describe('state rows survive a narrow panel', () => {
     expect((html.match(/flex:none/g) ?? []).length).toBe(4)   // 2 controls x 2 states
   })
 })
+
+describe('scope: whole structure vs specific elements', () => {
+  function mountScopeDom() {
+    document.body.innerHTML = `
+      <input id="oxdna-jobs-occupancy-toggle" type="radio">
+      <div id="oxdna-jobs-occupancy-params"></div>
+      <select id="oxdna-jobs-occupancy-n"><option value="0" selected>auto</option></select>
+      <select id="oxdna-jobs-occupancy-basis"><option value="nt" selected>nt</option></select>
+      <select id="oxdna-jobs-occupancy-scope">
+        <option value="all" selected>Whole structure</option>
+        <option value="selection">Specific elements</option>
+      </select>
+      <div id="oxdna-occupancy-scope-card">
+        <div id="oxdna-occupancy-scope-toggle"></div>
+        <div id="oxdna-occupancy-scope-body">
+      <button id="oxdna-occupancy-scope-add"></button>
+      <button id="oxdna-occupancy-scope-clear"></button>
+      <div id="oxdna-occupancy-scope-list"></div>
+      <input id="oxdna-occupancy-scope-glow" type="checkbox" checked>
+      <div id="oxdna-occupancy-scope-status"></div>
+        </div>
+      </div>
+      <button id="oxdna-jobs-occupancy-rerun"></button>
+      <div id="oxdna-jobs-occupancy-status"></div>
+      <div id="oxdna-jobs-occupancy-legend"></div>`
+  }
+
+  async function mount(selectionState = null) {
+    mountScopeDom()
+    const { initOccupancyControls } = await import('./occupancy_controls.js')
+    const overlay = {
+      setClusters: vi.fn().mockResolvedValue({ states: 2 }), clear: vi.fn(),
+      defaultColors: (n) => Array.from({ length: n }, () => 0xd29922),
+      setStateVisible: vi.fn(), setStateColor: vi.fn(),
+    }
+    const api = {
+      getOxdnaOccupancy: vi.fn().mockResolvedValue(SWITCHING),
+      postOxdnaOccupancy: vi.fn().mockResolvedValue({ ...SWITCHING, scoped: true }),
+    }
+    const ctrl = initOccupancyControls({
+      api, getOverlay: () => overlay,
+      getDisplay: () => ({ displayOccupancy: vi.fn().mockResolvedValue({ ok: true }) }),
+      getSelectedJobId: () => 'job1',
+      getAnchorSelection: () => selectionState,
+    })
+    return { ctrl, api, overlay }
+  }
+
+  const setScope = (v) => {
+    const el = document.getElementById('oxdna-jobs-occupancy-scope')
+    el.value = v
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  it('uses the plain GET for the whole structure', async () => {
+    const { ctrl, api } = await mount()
+    await ctrl.refresh()
+    expect(api.getOxdnaOccupancy).toHaveBeenCalled()
+    expect(api.postOxdnaOccupancy).not.toHaveBeenCalled()
+  })
+
+  it('shows the scope card only when specific elements are chosen', async () => {
+    await mount()
+    const card = document.getElementById('oxdna-occupancy-scope-card')
+    expect(card.style.display).toBe('none')
+    setScope('selection')
+    expect(card.style.display).not.toBe('none')
+    setScope('all')
+    expect(card.style.display).toBe('none')
+  })
+
+  it('refuses to run with an empty scope, and says what to do', async () => {
+    // Silently clustering the whole structure here would answer a different question
+    // from the one the user asked.
+    const { ctrl, api, overlay } = await mount()
+    setScope('selection')
+    const r = await ctrl.refresh()
+    expect(r.ok).toBe(false)
+    expect(r.reason).toBe('empty scope')
+    expect(api.postOxdnaOccupancy).not.toHaveBeenCalled()
+    expect(api.getOxdnaOccupancy).not.toHaveBeenCalled()
+    expect(overlay.clear).toHaveBeenCalled()
+    expect(document.getElementById('oxdna-jobs-occupancy-status').textContent)
+      .toMatch(/Add selection to scope/)
+  })
+
+  it('POSTs the resolved selection once elements are picked', async () => {
+    const { ctrl, api } = await mount({
+      selectedObject: { type: 'cluster', id: 'c1' },
+      multiSelectedClusterIds: [], multiSelectedStrandIds: [],
+      multiSelectedDomainIds: [], multiSelectedOverhangIds: [], ctrlBeadNucs: [],
+    })
+    setScope('selection')
+    document.getElementById('oxdna-occupancy-scope-add').click()
+    await new Promise((r) => setTimeout(r, 0))
+    await ctrl.refresh()
+
+    expect(api.postOxdnaOccupancy).toHaveBeenCalled()
+    expect(api.postOxdnaOccupancy.mock.calls.at(-1)[1].selection.cluster_ids).toEqual(['c1'])
+  })
+
+  it('a different scope is a different analysis — it must not reuse the cache', async () => {
+    const { ctrl, api } = await mount({
+      selectedObject: { type: 'cluster', id: 'c1' },
+      multiSelectedClusterIds: [], multiSelectedStrandIds: [],
+      multiSelectedDomainIds: [], multiSelectedOverhangIds: [], ctrlBeadNucs: [],
+    })
+    await ctrl.refresh()                       // whole structure → GET
+    setScope('selection')
+    document.getElementById('oxdna-occupancy-scope-add').click()
+    await new Promise((r) => setTimeout(r, 0))  // adding auto-refreshes; let it settle
+    await ctrl.refresh()                       // scoped → served from the scoped cache
+
+    expect(api.getOxdnaOccupancy).toHaveBeenCalledTimes(1)
+    expect(api.postOxdnaOccupancy).toHaveBeenCalledTimes(1)
+  })
+
+  it('exposes the shared anchor widget so the panel can clear it', async () => {
+    const { ctrl } = await mount()
+    expect(typeof ctrl.scope().getAnchors).toBe('function')
+    expect(typeof ctrl.scope().clear).toBe('function')
+  })
+})
