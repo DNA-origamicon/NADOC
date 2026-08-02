@@ -9,11 +9,15 @@
 //             selected strand selects the leaf UNDER THE CURSOR (bead → end |
 //             cone/arc → xover); a repeat click KEEPS it. Drill ladder.
 //   strand → every click selects the whole clicked strand (no leaf drill).
-//   cluster | domain | end | xover → every click selects at that FIXED level.
+//   cluster | domain | end | xover | base → every click selects at that FIXED level.
 //
-// Tab cycles strand → domain → end → xover → none(default) → strand. Escape returns
-// to `default`. The #select-filter level buttons drive the SAME state
-// (clust/strand/line/ends/xover); no button lit = `default`. CLUSTER is reached via
+// `base` is the finest grain: ONE backbone bead, spanning all five bead renderers
+// (backbone/5′ cubes/extension tails, fluorophore tips, extra crossover bases, flexible
+// ssDNA arcs, ss-linker bridges). It has its own key-based pool — see `base_ref.js`.
+//
+// Tab cycles strand → domain → end → xover → base → none(default) → strand. Escape
+// returns to `default`. The #select-filter level buttons drive the SAME state
+// (clust/strand/line/ends/xover/base); no button lit = `default`. CLUSTER is reached via
 // its button ONLY — removed from the Tab cycle 2026-06-07 (rarely used: only for
 // repositioning in dynamic parts, after staple routing is mostly done).
 //
@@ -23,17 +27,18 @@
 //
 // Everything here is pure (no DOM / scene / store) so it unit-tests directly.
 
-export const LEVELS    = ['default', 'cluster', 'strand', 'domain', 'end', 'xover']
-// Tab cycles strand → domain → end → xover → none(default) → strand. Cluster is NOT
-// in the cycle (button-only access, 2026-06-07). `default` = no button engaged = the
-// drill ladder (user model 2026-06-06).
-export const TAB_CYCLE = ['strand', 'domain', 'end', 'xover', 'default']
+export const LEVELS    = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
+// Tab cycles strand → domain → end → xover → base → none(default) → strand. Cluster is
+// NOT in the cycle (button-only access, 2026-06-07). `base` sits last, immediately before
+// the wrap: it is the finest grain there is, and the position mirrors its button sitting
+// to the right of xover. `default` = no button engaged = the drill ladder (2026-06-06).
+export const TAB_CYCLE = ['strand', 'domain', 'end', 'xover', 'base', 'default']
 
 // Filter-button dataKey ↔ selectionLevel. `strand` is now a DISTINCT fixed level
 // (every click → whole strand), separate from `default` (no button = drill ladder).
 // `default` has NO button — it is the neutral no-button state.
-export const BTN_LEVEL = { clust: 'cluster', strand: 'strand', line: 'domain', ends: 'end', xover: 'xover' }
-export const LEVEL_BTN = { cluster: 'clust', strand: 'strand', domain: 'line', end: 'ends', xover: 'xover' }
+export const BTN_LEVEL = { clust: 'cluster', strand: 'strand', line: 'domain', ends: 'end', xover: 'xover', base: 'base' }
+export const LEVEL_BTN = { cluster: 'clust', strand: 'strand', domain: 'line', end: 'ends', xover: 'xover', base: 'base' }
 
 /** Coerce any value to a valid level, defaulting unknowns to `default`. */
 export function normalizeLevel(level) {
@@ -72,13 +77,18 @@ export function toggleLevel(cur, level) {
  *
  * Pure resolver shared by `_finalizeLasso` so the lasso's "what am I selecting"
  * truth is testable without the scene. Returns a flag bag the lasso loop reads:
- *   { strands, domains, ends, beadLevel, cluster, xover, overhangs, loops, skips }
- * (`beadLevel` = capture EVERY bead in the rect, not just 5'/3' termini.)
+ *   { strands, domains, ends, beadLevel, cluster, xover, base, overhangs, loops, skips }
  *
  * The engaged `selLevel` is the single source of truth — the lasso captures the
  * SAME element type a click at that level would select (default/strand→strand,
- * cluster→cluster, domain→domain, end→bead, xover→crossover). This is the fix for
- * the "Tab to ends, lasso grabs a cluster" bug (ISSUE-4 Phase 3-filter-audit).
+ * cluster→cluster, domain→domain, end→bead, xover→crossover, base→one bead). This is
+ * the fix for the "Tab to ends, lasso grabs a cluster" bug (ISSUE-4 Phase 3-filter-audit).
+ *
+ * `beadLevel` vs `base` — NOT the same flag, don't merge them. `beadLevel` ("capture
+ * every bead in the rect, not just 5'/3' termini") is a hard-coded `false` recording a
+ * user decision about the END level; it drains into `_ctrlBeads`, the MEASUREMENT pool
+ * that measurement_tool.js expects to hold exactly 2. `base` is the base level's own
+ * flag and drains into the key-based base pool. Leave `beadLevel` alone.
  *
  * EXCEPTION — the overhang filter (`overhangFilter`, i.e. `selectableTypes.overhangs`):
  * when it is on, the lasso captures OVERHANGS ONLY, taking precedence over the engaged
@@ -94,7 +104,7 @@ export function lassoCaptureType({ selLevel, overhangFilter = false }) {
   if (overhangFilter) {
     return {
       strands: false, domains: false, ends: false, beadLevel: false,
-      cluster: false, xover: false, overhangs: true, loops: false, skips: false,
+      cluster: false, xover: false, base: false, overhangs: true, loops: false, skips: false,
     }
   }
   const lv = normalizeLevel(selLevel)
@@ -105,6 +115,7 @@ export function lassoCaptureType({ selLevel, overhangFilter = false }) {
     beadLevel: false,            // 'end' captures 5'/3' termini only (user decision)
     cluster:   lv === 'cluster',
     xover:     lv === 'xover',
+    base:      lv === 'base',    // individual beads, into the key-based base pool
     overhangs: false,            // gate, not a level — capturable only via overhangFilter
     loops:     false,
     skips:     false,

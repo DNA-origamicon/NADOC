@@ -4,8 +4,9 @@ import { createMockStore } from '../test-helpers/mock_store.js'
 import { clearDom } from '../test-helpers/factory_dom.js'
 
 // All dataKeys the module touches (SEL_KEY_MAP + LEVEL_BTN). LEVEL_BTN's keys are
-// clust/strand/line/ends/xover; SEL_KEY_MAP adds scaf/stap/loop/skip/ovhangs.
-const DATA_KEYS = ['scaf', 'stap', 'clust', 'strand', 'line', 'ends', 'xover', 'loop', 'skip', 'ovhangs']
+// clust/strand/line/ends/xover/base; SEL_KEY_MAP adds scaf/stap/loop/skip/ovhangs.
+// `base` is level-only — it has no selectableTypes key, so it lives in LEVEL_ONLY_BTNS.
+const DATA_KEYS = ['scaf', 'stap', 'clust', 'strand', 'line', 'ends', 'xover', 'base', 'loop', 'skip', 'ovhangs']
 
 /** Build the #select-filter container with a .sf-btn[data-key] per key. */
 function mountSelectFilter() {
@@ -158,6 +159,39 @@ describe('initSelectionFilter — selectionLevel + visibility gates', () => {
     f.reflectDrillLevel('default')
     expect(document.querySelector('.sf-btn[data-key="strand"]').classList.contains('active')).toBe(false)
     expect(document.querySelector('.sf-btn[data-key="clust"]').classList.contains('active')).toBe(false)
+  })
+
+  // The base button has NO SEL_KEY_MAP row (it gates nothing), so it only gets a click
+  // listener via LEVEL_ONLY_BTNS. Without that it would light from Tab and do nothing.
+  it('the base button sets the base level and never touches selectableTypes', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    const before = store.getState().selectableTypes
+    document.querySelector('.sf-btn[data-key="base"]').click()
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('base')
+    expect(store.getState().selectableTypes).toBe(before)
+  })
+
+  it('re-clicking the engaged base button toggles back to default', () => {
+    const f = makeV2(); f.attachFilterButtons()
+    level = 'base'
+    document.querySelector('.sf-btn[data-key="base"]').click()
+    expect(sm.setSelectionLevel).toHaveBeenCalledWith('default')
+  })
+
+  it('reflectDrillLevel lights the base button and clears the others', () => {
+    const f = makeV2()
+    f.reflectDrillLevel('base')
+    expect(document.querySelector('.sf-btn[data-key="base"]').classList.contains('active')).toBe(true)
+    expect(document.querySelector('.sf-btn[data-key="xover"]').classList.contains('active')).toBe(false)
+    f.reflectDrillLevel('xover')
+    expect(document.querySelector('.sf-btn[data-key="base"]').classList.contains('active')).toBe(false)
+  })
+
+  it('the base button is suppressed while a tool is active, like every level button', () => {
+    store.setState({ deformToolActive: true })
+    const f = makeV2(); f.attachFilterButtons()
+    document.querySelector('.sf-btn[data-key="base"]').click()
+    expect(sm.setSelectionLevel).not.toHaveBeenCalled()
   })
 
   it('a type-visibility button (loops) still plain-toggles selectableTypes in v2', () => {

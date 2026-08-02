@@ -4684,6 +4684,7 @@ async function main() {
       unfoldView.applyClusterExtArcUpdate(helixIds)
       designRenderer.applyClusterCrossoverUpdate(helixIds)
       flexibleArcs.applyLiveUpdate(helixIds, centerVec, dummyPos, incrRotQuat)   // re-solve arcs + bow-away from live cylinders
+      selectionManager.refreshBaseGlow()   // flexibleArcs just rebuilt its meshes; re-resolve base-pool glow (no-op when empty)
       // Extra-base beads now live in crossoverConnections group — rebuilt on full scene rebuild.
       // DEBUG — log once per frame so you can see cone state during a drag
       helixCtrl?.logConeDebug('LIVE-FRAME')
@@ -7539,6 +7540,10 @@ async function main() {
       }),
       /** Count of Alt-picked measurement beads (the measurement tool's input). */
       getCtrlBeadCount: () => selectionManager.getCtrlBeads?.().length ?? 0,
+      /** Base-level pool — app-wide base keys (scene/base_ref.js). */
+      getSelectedBaseKeys: () => selectionManager.getSelectedBaseKeys?.() ?? [],
+      /** Every base-level pick candidate as {key, family} — proves a bead family is reachable. */
+      getBaseCandidates: () => selectionManager.getBaseCandidates?.() ?? [],
       /** Current single-selection ({type,id,...}) or null. */
       getSelectedObject: () => store.getState().selectedObject ?? null,
       /** Multi-selection pools (cluster multi-select gesture e2e). */
@@ -7546,7 +7551,7 @@ async function main() {
         clusterIds: store.getState().multiSelectedClusterIds ?? [],
         strandIds:  store.getState().multiSelectedStrandIds ?? [],
       }),
-      /** Drill-v2 engaged selection level ('default'|'cluster'|'strand'|'domain'|'end'|'xover'). */
+      /** Drill-v2 engaged selection level ('default'|'cluster'|'strand'|'domain'|'end'|'xover'|'base'). */
       getSelectionLevel: () => selectionManager.getSelectionLevel?.() ?? 'default',
 
       // ── Robust gesture harness (MapGrab-style controller) ──────────────────

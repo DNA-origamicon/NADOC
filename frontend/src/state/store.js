@@ -123,6 +123,21 @@ const _initialState = {
   multiSelectedClusterIds: [],
 
   /**
+   * Individually-picked BASES (the `base` selectionLevel) as app-wide base keys —
+   * `helix:bp:dir[:copy]`, or `__xb__:<crossoverId>:<k>` for an extra crossover base.
+   * See scene/base_ref.js for the format and scene/base_pick.js for how a click resolves
+   * to one.
+   *
+   * Spans all five bead families (backbone, 5′ cubes, extension tails, fluorophore tips,
+   * extra crossover bases, flexible-ssDNA arc beads, ss-linker bridge beads). Strings, not
+   * objects, so the pool is trivially serialisable and Set-dedupable.
+   *
+   * Base level deliberately leaves `selectedObject` null — this is a selection primitive,
+   * and consumers opt in by reading this pool. Empty array when nothing is picked.
+   */
+  multiSelectedBaseKeys: [],
+
+  /**
    * The lattice plane used for the most recent extrude.  Set by main.js after
    * a successful createBundle call.  Used to initialise the slice plane.
    * Shape: 'XY' | 'XZ' | 'YZ' | null
@@ -395,6 +410,7 @@ const _SLICES = {
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selectedObject', 'multiSelectedStrandIds', 'multiSelectedDomainIds',
                       'multiSelectedOverhangIds', 'multiSelectedClusterIds',
+                      'multiSelectedBaseKeys',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
                       'activeClusterId', 'translateRotateActive', 'debugOverlayActive',
                       'domainDesigner']),

@@ -6,12 +6,12 @@ import {
 } from './selection_level.js'
 
 describe('selection_level — constants & maps', () => {
-  it('LEVELS is the six-state set (strand is a distinct level)', () => {
-    expect(LEVELS).toEqual(['default', 'cluster', 'strand', 'domain', 'end', 'xover'])
+  it('LEVELS is the seven-state set (strand and base are distinct levels)', () => {
+    expect(LEVELS).toEqual(['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base'])
   })
 
-  it('Tab cycle is strand → domain → end → xover → none(default) — cluster excluded (button-only)', () => {
-    expect(TAB_CYCLE).toEqual(['strand', 'domain', 'end', 'xover', 'default'])
+  it('Tab cycle is strand → domain → end → xover → base → none(default) — cluster excluded (button-only)', () => {
+    expect(TAB_CYCLE).toEqual(['strand', 'domain', 'end', 'xover', 'base', 'default'])
     expect(TAB_CYCLE).not.toContain('cluster')
   })
 
@@ -45,11 +45,12 @@ describe('nextTabLevel — Tab cycle', () => {
   it('cluster is not in the cycle → Tab from cluster restarts at strand', () => {
     expect(nextTabLevel('cluster')).toBe('strand')   // cluster excluded → first
   })
-  it('walks strand → domain → end → xover → none(default) → strand', () => {
+  it('walks strand → domain → end → xover → base → none(default) → strand', () => {
     expect(nextTabLevel('strand')).toBe('domain')
     expect(nextTabLevel('domain')).toBe('end')
     expect(nextTabLevel('end')).toBe('xover')
-    expect(nextTabLevel('xover')).toBe('default')   // → none
+    expect(nextTabLevel('xover')).toBe('base')      // base is the finest grain, last stop
+    expect(nextTabLevel('base')).toBe('default')    // → none
     expect(nextTabLevel('default')).toBe('strand')  // wraps
   })
 })
@@ -139,6 +140,32 @@ describe('lassoCaptureType — the engaged selLevel is the single source of trut
     const r = lassoCaptureType({ selLevel: 'xover' })
     expect(r.xover).toBe(true)
     expect(r.strands).toBe(false)
+  })
+
+  it('base level → base only; `ends`/`beadLevel` stay false so it can never drain into _ctrlBeads', () => {
+    const r = lassoCaptureType({ selLevel: 'base' })
+    expect(r.base).toBe(true)
+    // The measurement pool guard: the end-bead lasso path is `useEnds && (beadLevel || isEnd)`,
+    // and it pushes into _ctrlBeads (which measurement_tool expects to hold 2). Base must
+    // not travel that path.
+    expect(r.ends).toBe(false)
+    expect(r.beadLevel).toBe(false)
+    expect(r.strands).toBe(false)
+    expect(r.domains).toBe(false)
+    expect(r.cluster).toBe(false)
+    expect(r.xover).toBe(false)
+  })
+
+  it('every non-base level leaves `base` false', () => {
+    for (const lv of ['default', 'strand', 'domain', 'end', 'xover', 'cluster']) {
+      expect(lassoCaptureType({ selLevel: lv }).base).toBe(false)
+    }
+  })
+
+  it('the overhang filter still wins over base, like every other level', () => {
+    const r = lassoCaptureType({ selLevel: 'base', overhangFilter: true })
+    expect(r.overhangs).toBe(true)
+    expect(r.base).toBe(false)
   })
 
   it('default level → strands (strand-first model)', () => {

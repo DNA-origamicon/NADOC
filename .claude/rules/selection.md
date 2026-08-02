@@ -26,8 +26,8 @@ Verified against the code 2026-07-30 (`/audit-plan`). Line numbers drift; symbol
 
 ## Selection-level model (ISSUE-4) — the ONLY selection model
 
-One `selectionLevel ∈ {default, cluster, strand, domain, end, xover}`
-(`selection_level.js:26`). `default` = no filter button engaged → click selects the strand, or
+One `selectionLevel ∈ {default, cluster, strand, domain, end, xover, base}`
+(`selection_level.js`). `default` = no filter button engaged → click selects the strand, or
 the leaf under the cursor (bead→end, cone/arc→crossover). A fixed level selects **only its own
 type**: a mismatched click is a **no-op**, never a strand fallback. Esc → `default`. An engaged
 level persists across an empty-space click.
@@ -35,10 +35,12 @@ level persists across an empty-space click.
 - **Pure model** lives in `scene/selection_level.js` (150 LOC, no DOM/scene/store — unit-tested).
 - **Click paths** are `_v2HandleBead` (`selection_manager.js:1840`), `_v2HandleCone` (`:1884`),
   `_v2HandleArc` (`:1938`).
-- **Tab cycle is `strand → domain → end → xover → default`** — `TAB_CYCLE`
-  (`selection_level.js:30`). **`cluster` is NOT in the cycle** (button-only; its `#select-filter`
+- **Tab cycle is `strand → domain → end → xover → base → default`** — `TAB_CYCLE`
+  (`selection_level.js`). **`cluster` is NOT in the cycle** (button-only; its `#select-filter`
   button sits in the gate group with skip/loop/ovhg). Two code comments still claim otherwise —
   see *Traps*.
+- **`base` picks ONE bead** and is the only level that spans all five bead renderers — see
+  *Base level* below. It is a level, not a gate: it has **no `selectableTypes` key**.
 - Tab and Esc are bound in **`ui/keyboard_shortcuts.js`** (Tab `:285`, handler `:289`; Esc
   `:707`), **not** `main.js`. Tab is blocked while translate/rotate is active.
 - API: `selectionManager.getSelectionLevel()` / `.setSelectionLevel(lv)`.
@@ -48,7 +50,9 @@ level persists across an empty-space click.
 | File | LOC | Role | Tests |
 |---|---|---|---|
 | `scene/selection_manager.js` | 4179 | Everything stateful: raycasting, click/lasso/modifier paths, multi-select pools, hover preview, context menus | **none** |
-| `scene/selection_level.js` | 150 | Pure model: `LEVELS`, `TAB_CYCLE`, `BTN_LEVEL`/`LEVEL_BTN`, `normalizeLevel`, `nextTabLevel`, `toggleLevel`, `lassoCaptureType`, `toggleClusterSelection`, `hoverPreviewTarget` | 33 |
+| `scene/selection_level.js` | ~160 | Pure model: `LEVELS`, `TAB_CYCLE`, `BTN_LEVEL`/`LEVEL_BTN`, `normalizeLevel`, `nextTabLevel`, `toggleLevel`, `lassoCaptureType`, `toggleClusterSelection`, `hoverPreviewTarget` | 36 |
+| `scene/base_ref.js` | ~125 | Pure: the base-level KEY format — `baseKey`, `xbKey`, `parseBaseKey`, `baseFamily`, `toggleBaseKey`, `dedupeBaseKeys`, `mergeBaseKeys` | 20 |
+| `scene/base_pick.js` | ~215 | Base-level candidates across all five bead renderers + the pure `nearestCandidate` / `candidatesInRect` / `isVisibleChain` | 27 |
 | `ui/selection_filter.js` | 129 | Wires the `#select-filter` buttons ↔ level; `computeFilterToggle`, `initSelectionFilter` | 15 |
 | `scene/selection_bbox.js` | 108 | Pure geometry: `selectionBBox`, `instanceUnionBox`, `nucleotideLocalBox`, `nucleotideBoxOverflow` (used by `main.js`, assembly renderers) | 17 |
 | `scene/right_click_menu.js` | — | `deferrableContextMenu(canvas, handler)` — the shared contextmenu wrapper | yes |
@@ -57,7 +61,8 @@ level persists across an empty-space click.
 | `scene/empty_space_menu.js`, `scene/representation_overrides.js`, `scene/assembly_context_menu.js`, `ui/overhang_orientation_menu.js` | — | Further menu owners split out of selection_manager | — |
 
 The `#select-filter` buttons are **static markup in `frontend/index.html:6255–6298`** — no JS
-builds them. DOM order: `scaf, stap | strand, line, ends, xover | skip, loop, ovhangs, clust`.
+builds them. DOM order: `scaf, stap | strand, line, ends, xover, base | skip, loop, ovhangs, clust`.
+Every button needs its own `.sf-btn.active[data-key="…"]` CSS rule or it is **invisible when lit**.
 
 ## Entry & Initialization
 
@@ -95,6 +100,7 @@ Returned API (19 methods, `:4037–4178`): `selectStrand`, `selectNucleotide`, `
 | `multiSelectedDomainIds` | `:108` | `{strandId, domainIndex}[]` |
 | `multiSelectedOverhangIds` | `:113` | `string[]` |
 | `multiSelectedClusterIds` | `:123` | `string[]` |
+| `multiSelectedBaseKeys` | — | `string[]` — base-level pool; **the only multi-pool with no `selectedObject` counterpart** |
 | `toolFilters` | `:136` | `{bluntEnds, overhangLocations, extensionLocations}` — overlay **visibility only** |
 | `selectableTypes` | `:148` | 11 flags, below |
 
@@ -162,8 +168,13 @@ Modifier precedence is **Alt > Shift > Ctrl** (`:3298`). `_altDownPos` (`:3289`)
 `_shiftDownPos` (`:3290`) hold deferred-click positions; both clear on lasso-finalize
 (`:3380`) and on their own click paths (`:3389`, `:3397`).
 
-`lassoCaptureType` returns `{strands, domains, ends, beadLevel, cluster, xover, overhangs, loops,
-skips}`. **`beadLevel` is hard-coded `false`** (`:105`) — `end` captures 5′/3′ termini only.
+`lassoCaptureType` returns `{strands, domains, ends, beadLevel, cluster, xover, base, overhangs,
+loops, skips}`. **`beadLevel` is hard-coded `false`** — `end` captures 5′/3′ termini only.
+
+**`beadLevel` is NOT the base-level hook. Do not merge them.** It looks like one, but at `base`
+level `ends` is false so the loop guard `useEnds && (beadLevel || isEnd)` never fires — and if it
+did, `endEntries` drains into **`_ctrlBeads`**, the measurement pool `measurement_tool.js` expects
+to hold exactly 2. `base` has its own flag and its own accumulator.
 
 ## Crossover arcs & hover preview
 
@@ -182,6 +193,58 @@ skips}`. **`beadLevel` is hard-coded `false`** (`:105`) — `end` captures 5′/
   `_NEAR_HOVER_PX = 80` (`selection_manager.js:2031`); the click commits the previewed nearest.
   The already-selected element is skipped (stays green) via `_selectedLevelKey()` (`:2118`,
   used `:2208`). Three code comments still call this preview "red" — see *Traps*.
+
+## Base level — one bead, five renderers
+
+`base` is the finest grain and the only level whose candidates come from **four different
+renderers**. Every other picker in the app does
+`[...new Set(backboneEntries.map(e => e.instMesh))].filter(m => m.visible)`, which reaches family 1
+and nothing else; there is still no other aggregator.
+
+| Family | Drawn by | Key |
+|---|---|---|
+| backbone beads · 5′ cubes · extension tails | `helix_renderer` `iSpheres`/`iCubes` | `helix:bp:dir[:copy]` |
+| fluorophore / modification tips | `helix_renderer` `iFluoros` (`getFluoroEntries`) | same |
+| extra crossover bases | `crossover_connections` `beadsMesh` | `__xb__:<xoId>:<k>` |
+| flexible ssDNA arc beads | `flexible_arcs`, one mesh per connection | resolved via `segment_bead_keys[i]` |
+| ss-linker bridge beads | `overhang_link_arcs`, one mesh per connection | `__lnk__<connId>:<slot>:FORWARD` |
+
+- **Keys are strings, not objects** — `scene/base_ref.js` owns the format. `__xb__:<xoId>:<k>` is
+  the repo's pre-existing pseudo-nucleotide address (crossover_connections, design_renderer's scalar
+  colour path, `backend/core/atomistic.py`), reused verbatim rather than re-invented.
+- **`parseBaseKey` splits from the RIGHT** — `__ext_<uuid>`, `__lnk__<connId>` and `__xb__`'s
+  crossover-id field all contain separators.
+- **The pool is key-based on purpose.** `flexible_arcs._render()` disposes and rebuilds its
+  InstancedMeshes on every render — including every cluster-drag frame — so a pool holding
+  mesh+instance references would go stale mid-gesture. Positions re-resolve at paint time via
+  `_repaintBaseGlow()`; the rebuild subscriber re-resolves rather than clearing, and `main.js` calls
+  `selectionManager.refreshBaseGlow()` right after `flexibleArcs.applyLiveUpdate`.
+- **`selectedObject` stays `null` at base level** — deliberate. ~85 sites read that slot (delete
+  key, per-bead context menu, extrude arrows); base is a selection *primitive*, so consumers opt in
+  by reading `multiSelectedBaseKeys`. The only consumer today is the properties panel's readout.
+  `_promoteSelectionToMulti` early-returns here: one pool means nothing to promote.
+- **Highlight is glow-only** — no `setEntryColor`/`setBeadScale` (those exist only for families 1–2,
+  `setEntryColor` is clobbered by any colour repaint, and `_clearCtrlBeads` restores scale `1.0`
+  rather than `_beadScale`). Touches `instanceAlpha` zero times.
+- **Visibility uses `isVisibleChain`, not `.filter(m => m.visible)`** — flexible-arc and ss-linker
+  groups are **scene** children, not design-root children, so a hidden group is invisible to the
+  leaf-only check. (It is wrong for the backbone meshes too: `iSpheres.visible` stays true while the
+  design root is hidden in atomistic/surface mode.)
+- **The `simBeadIndex` flip is load-bearing.** The geometric bead slot a click yields is not the
+  5′→3′ insert index `__xb__:<xo>:<k>` means; `designRenderer.getXoverBeadEntries()` applies
+  `simBeadIndex` and the candidate carries both `i` and `simK`. Getting it backwards silently
+  mislabels every bead on a B→A crossover.
+- **Explicit no-op at cylinder LOD** (no beads exist) and at the overhang filter (which keeps its
+  documented precedence over every level).
+- **Cost:** `_baseCandidates()` is rebuilt per pointer event and never memoized — 1.2 ms for 18k
+  candidates, the same order `_nearestBead` already pays.
+
+**Unverified:** the ss-linker slot→bp mapping. The bridge nucleotides are real (`__lnk__<conn>__s`,
+excluded from `iSpheres` so the arc can draw them), but the mesh is *sized* from
+`linkerLengthToBases(conn)` — derived from `conn.length_value`, independent of the geometry — so a
+slot is addressed-but-unproven. Family 4 (flexible arcs) has **no fixture in the repo at all**
+(`flexible_connections` is empty in every `.nadoc`); its builder is unit-tested but has never run
+against real meshes.
 
 ## NDC rule
 
@@ -208,6 +271,23 @@ All raycaster NDC coords use `canvas.getBoundingClientRect()` (`_setNdc`, `:3226
 6. `_effectiveColors(strandColors, strandGroups)` (`design_renderer.js:151`) merges
    `store.strandColors` + `store.strandGroups`, **group wins**.
 
+## Traps — silent failures when adding a LEVEL
+
+Three sites fail *quietly* — no error, just wrong behaviour. Learned adding `base`; check all three
+before adding the next level.
+
+1. **`_v2HandleCone` and `_v2HandleArc` guard by explicit OR-LIST**
+   (`if (_selLevel === 'domain' || _selLevel === 'end' || _selLevel === 'base')`), not by `else`.
+   An unlisted level **falls through to the default drill branch and selects a whole strand**.
+2. **`attachFilterButtons` iterates `SEL_KEY_MAP`**, which is keyed on `selectableTypes`. A
+   level-only button has no row there, so it gets **no click listener** — while `V2_LEVEL_KEYS` and
+   `reflectDrillLevel` (both derived from `BTN_LEVEL`/`LEVEL_BTN`) *do* pick it up and light it from
+   Tab. Result: a button that looks live and does nothing. `LEVEL_ONLY_BTNS` exists for this.
+3. **`_toggleAtLevel` and `_promoteSelectionToMulti` branch on `st.crossoverArcs`** — a
+   `selectableTypes` flag *independent of the engaged level*. A new level's branch must sit **after**
+   the overhang branch (preserving overhang precedence) and **before** the crossoverArcs branch, or
+   that gate hijacks its Ctrl+clicks.
+
 ## Traps — code comments that contradict the code
 
 These are wrong in the *source*, not here. Don't "fix" the code to match them.
@@ -222,17 +302,27 @@ These are wrong in the *source*, not here. Don't "fix" the code to match them.
 ## Test coverage — be honest
 
 `selection_manager.js` is **4179 LOC with zero unit tests**. There is no `selection_manager.test.js`.
-Everything that *is* pinned is the pure/DOM-thin periphery: `selection_level.test.js` (33),
-`selection_bbox.test.js` (17), `selection_filter.test.js` (15), plus Tab/Esc cycling inside
-`keyboard_shortcuts.test.js` (`:150, 614–651`). Assembly-side selection has its own
-(`assembly_lasso.test.js`, `assembly_pointer.test.js`, `assembly_multi_box.test.js`) — different
-stack. No pytest touches selection.
+Everything that *is* pinned is the pure/DOM-thin periphery: `selection_level.test.js` (36),
+`selection_bbox.test.js` (17), `selection_filter.test.js` (19), `base_ref.test.js` (20),
+`base_pick.test.js` (27), plus Tab/Esc cycling inside `keyboard_shortcuts.test.js`. Assembly-side
+selection has its own (`assembly_lasso.test.js`, `assembly_pointer.test.js`,
+`assembly_multi_box.test.js`) — different stack. No pytest touches selection.
 
 E2E exists but is **not** routine (see `CLAUDE.md`): `frontend/e2e/` has `drill_v2_select.spec.js`,
-`bead_select.spec.js`, `assembly_select.spec.js`, `assembly_overhang_select.spec.js`,
-`dsdna_linker_selection.spec.js`, `joint_indicator_selection.spec.js`.
+`bead_select.spec.js`, `base_select.spec.js`, `base_select_families.spec.js`,
+`assembly_select.spec.js`, `assembly_overhang_select.spec.js`, `dsdna_linker_selection.spec.js`,
+`joint_indicator_selection.spec.js`.
 
-**The pattern to copy:** the three tested modules are tested *because* they were extracted pure.
+**Camera trap for any bead-picking spec.** `loadScaffoldedPart` never moves the camera, so every
+bead projects outside the NDC cube and `beadCandidates` returns `[]` — this is why
+`bead_select.spec.js` fails in a fresh checkout. Even after `f` (fit-to-view) the whole 200-bp part
+spans ~24 px, so all 199 beads sit inside the 80 px magnet and no two clicks can resolve to
+different bases. `base_select.spec.js`'s `loadFramedPart` does fit **then wheel-zoom** to a ~670 px
+spread; copy it rather than re-deriving.
+
+**The pattern to copy:** the tested modules are tested *because* they were extracted pure.
+`base_pick.js` takes an injected `project(cand) → {x,y}|null` for exactly this reason — the magnet
+and rect tests run against a fake projector with no scene.
 New logic in `selection_manager.js` should land in `selection_level.js` (pure) wherever it can.
 
 ## Removed API — do not resurrect

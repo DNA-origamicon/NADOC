@@ -96,6 +96,28 @@ function _arcPoints(a, b, L, n, bowDir) {
   return pts
 }
 
+/**
+ * FlexibleAnchor → the app-wide nucleotide key `helix:bp:dir`.
+ *
+ * An anchor addresses a base strand-relatively ({strand_id, domain_index, bp_index,
+ * direction}); the rest of the app addresses it helix-relatively. This is the only walk
+ * between the two, and `design.flexible_connections[].segment_bead_keys[i]` is the map
+ * from a drawn bead instance to its real nucleotide — so base-level picking needs it too
+ * (base_pick.js `flexCandidates`). Curried by design so the strand index is built once.
+ *
+ * @param {object} design
+ * @returns {(anchor:object) => string|null}
+ */
+export function flexAnchorKey(design) {
+  const byId = new Map((design?.strands ?? []).map(s => [s.id, s]))
+  return (anc) => {
+    if (!anc) return null
+    const s = byId.get(anc.strand_id)
+    const d = s?.domains?.[anc.domain_index]
+    return d ? `${d.helix_id}:${anc.bp_index}:${anc.direction}` : null
+  }
+}
+
 export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => null) {
   const group = new THREE.Group()
   group.name = 'flexibleArcs'
@@ -179,14 +201,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     return m
   }
 
-  function _helixResolver(design) {
-    const byId = new Map((design.strands ?? []).map(s => [s.id, s]))
-    return (anc) => {
-      const s = byId.get(anc.strand_id)
-      const d = s?.domains?.[anc.domain_index]
-      return d ? `${d.helix_id}:${anc.bp_index}:${anc.direction}` : null
-    }
-  }
+  const _helixResolver = flexAnchorKey
 
   // Build world-space helix-axis obstacle segments. `live` (when dragging) =
   // {helixIds:Set, centerVec, dummyPos, incrQuat} — transforms the moving
@@ -261,6 +276,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     inst.instanceMatrix.needsUpdate = true
     inst.frustumCulled = false
     inst.userData.connectionId = connId
+    inst.name = 'flexSegmentBeads'   // base-level picking finds beads by name (base_pick.js)
     group.add(inst)
     // Base slabs — base-normal faces inward toward the arc's centre of
     // curvature (same orientation curved dsDNA uses). The arc is planar with
@@ -286,6 +302,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     slabs.instanceMatrix.needsUpdate = true
     slabs.frustumCulled = false
     slabs.userData.connectionId = connId
+    slabs.name = 'flexSegmentSlabs'  // named so it is NOT mistaken for the bead mesh
     group.add(slabs)
   }
 
@@ -317,6 +334,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     inst.instanceMatrix.needsUpdate = true
     inst.frustumCulled = false
     inst.userData.connectionId = connId
+    inst.name = 'flexSegmentBeads'   // sim-frame twin of _drawArc's mesh — same name, same picking
     group.add(inst)
     const slabs = new THREE.InstancedMesh(GEO_SLAB, mats.slab, beads.length)
     const sm = new THREE.Matrix4(), q = new THREE.Quaternion()
@@ -340,6 +358,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     slabs.instanceMatrix.needsUpdate = true
     slabs.frustumCulled = false
     slabs.userData.connectionId = connId
+    slabs.name = 'flexSegmentSlabs'
     group.add(slabs)
   }
 

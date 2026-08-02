@@ -31,6 +31,16 @@ const SEL_KEY_MAP = [
   ['overhangs',     'ovhangs'],
 ]
 
+// Level buttons with NO `selectableTypes` counterpart. `base` is a pure selection level
+// (it gates nothing — it changes what a click resolves to), so it has no store key and
+// therefore no SEL_KEY_MAP row. Without this list `attachFilterButtons` would skip it
+// entirely and the button would get no click listener, while `reflectDrillLevel` (which
+// iterates LEVEL_BTN) would still light it from Tab — a button that looks live and does
+// nothing. `null` storeKey means "level-only": never touch selectableTypes.
+const LEVEL_ONLY_BTNS = [
+  [null, 'base'],
+]
+
 /**
  * Pure: given the current `selectableTypes`, the clicked filter's store key, the
  * full set of filter keys, and the saved pre-loop/skip snapshot, compute the next
@@ -77,10 +87,12 @@ export function initSelectionFilter({ store, getSelectionManager }) {
   // Register the #select-filter button click handlers + 2 store subscribers.
   // Called at the original ~4852 spot in main() so subscription order is preserved.
   function attachFilterButtons() {
+    // _allSelKeys stays derived from SEL_KEY_MAP alone — it is the selectableTypes key
+    // list computeFilterToggle clears, and a level-only button has no key to put in it.
     const _allSelKeys = SEL_KEY_MAP.map(([k]) => k)
     const _selectFilter = document.getElementById('select-filter')
 
-    for (const [storeKey, dataKey] of SEL_KEY_MAP) {
+    for (const [storeKey, dataKey] of [...SEL_KEY_MAP, ...LEVEL_ONLY_BTNS]) {
       const btn = document.querySelector(`#select-filter .sf-btn[data-key="${dataKey}"]`)
       if (!btn) continue
 

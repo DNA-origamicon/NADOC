@@ -40,6 +40,12 @@ import { clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
+import { baseKey, toggleBaseKey, mergeBaseKeys } from './base_ref.js'
+import {
+  backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
+  nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
+} from './base_pick.js'
+import { flexAnchorKey } from './flexible_arcs.js'
 
 // Kick off the FJC lookup fetch at module load so the linker-config modal
 // opens instantly with the per-bin histograms already cached.
@@ -1864,6 +1870,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       // Fixed level: a plain bead carries no crossover — select nothing.
       _emitDrillLevel('xover'); return
     }
+    if (_selLevel === 'base') {
+      // Fixed level: one bead. The click is normally committed earlier, off the hover
+      // magnet (which spans all five bead families, not just backboneEntries) — this
+      // branch only catches a raw raycast hit that bypassed the magnet.
+      _selectBaseKey(baseKey(hitEntry.nuc, hitEntry._copy))
+      _emitDrillLevel('base'); return
+    }
     // default: strand-first, then the leaf under the cursor. A repeat click on the
     // already-selected leaf KEEPS it selected (no toggle-clear) — user feedback 2026-06-06.
     const onSameStrand = (_mode === 'strand' || _mode === 'bead') && _strandId === hitStrandId
@@ -1899,8 +1912,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
       _emitDrillLevel('strand'); return
     }
-    if (_selLevel === 'domain' || _selLevel === 'end') {
-      // Fixed level: a cone is neither a domain nor an end — select nothing.
+    // NOTE this guard is an explicit OR-LIST, not an else: an unlisted level falls
+    // through to the default drill below and selects a whole strand. Every new fixed
+    // level must be added here.
+    if (_selLevel === 'domain' || _selLevel === 'end' || _selLevel === 'base') {
+      // Fixed level: a cone is neither a domain, an end, nor a base — select nothing.
+      // (At base level the bead itself is the target, reached via the hover magnet.)
       _emitDrillLevel(_selLevel); return
     }
     // default: strand-first, then the cone (xover) under the cursor.
@@ -1953,8 +1970,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _selectStrandV2(hitStrandId, null, backboneEntries, coneEntries)
       _emitDrillLevel('strand'); return
     }
-    if (_selLevel === 'domain' || _selLevel === 'end') {
-      // Fixed level: an arc is neither a domain nor an end — select nothing.
+    // Explicit OR-LIST, not an else — see the matching note in _v2HandleCone.
+    if (_selLevel === 'domain' || _selLevel === 'end' || _selLevel === 'base') {
+      // Fixed level: an arc is neither a domain, an end, nor a base — select nothing.
       _emitDrillLevel(_selLevel); return
     }
     // default: strand-first, then the crossover under the cursor.
@@ -2164,6 +2182,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         designRenderer.clearPreviewArc?.()
         const beads = designRenderer.getBackboneEntries().filter(b => b.nuc.overhang_id === ovhgId)
         designRenderer.setPreviewGlow(beads.map(b => ({ pos: _instWorld(b.instMesh, b.id, new THREE.Vector3()) })))
+      }
+      return
+    }
+
+    // Base level: preview (yellow glow) the nearest bead of ANY family within the magnet
+    // radius. Same form as the end-level preview, but the candidate set spans all five
+    // bead renderers rather than just backboneEntries.
+    if (_selLevel === 'base') {
+      const c = _nearestBaseCand(_sx, _sy)
+      if (!c) { _clearHoverPreview(); return }
+      if (_baseKeys.includes(c.key)) { _clearHoverPreview(); return }  // already selected → stays green
+      if (c.key !== _hoverKey) {
+        _hoverKey = c.key; _hoverBead = null; _hoverCone = null; _hoverArc = null
+        designRenderer.clearPreviewArc?.()
+        designRenderer.setPreviewGlow([{ pos: worldPosOf(c, new THREE.Vector3()) }])
       }
       return
     }
@@ -2392,6 +2425,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _clearMultiDomainSelection()
     _clearMultiCrossoverArcs()
     _clearMultiOverhangSelection()
+    _clearBaseSelection()
   }
 
   // ── Multi-selection (Ctrl+drag rectangle lasso) ──────────────────────────
@@ -2621,8 +2655,24 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   let _ctrlBeads             = []   // [{entry, nuc}, ...] individually ctrl-picked beads
   let _ctrlBeadsChangeCbs    = []   // array — multiple subscribers allowed
   let _selectionGlowEntries = []   // current glow from regular strand/bead selection
+  let _baseGlowEntries      = []   // base-level pool glow (see _repaintBaseGlow)
 
-  // Merged glow: always combines selection glow + ctrl bead glow.
+  // ── The ONE writer of designRenderer.setGlowEntries ───────────────────────
+  //
+  // Three independent pools feed the same glow layer — the regular strand/bead
+  // selection, the Alt-picked measurement beads, and the base-level pool. Each used to
+  // call setGlowEntries itself, so whichever wrote last clobbered the other two. Every
+  // path now composes here instead. (Same single-writer discipline the instanceAlpha
+  // channel has; see .claude/rules/rendering.md.)
+  function _composeGlow(beadEntries = _selectionGlowEntries) {
+    designRenderer.setGlowEntries([
+      ...beadEntries,
+      ..._ctrlBeads.map(b => b.entry),
+      ..._baseGlowEntries,
+    ])
+  }
+
+  // Merged glow: always combines selection glow + ctrl bead glow + base pool.
   function _setSelectionGlow(entries) {
     _selectionGlowEntries = entries
     // Split highlighted entries: bead-rendered domains keep the sphere glow;
@@ -2638,20 +2688,19 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         beadEntries.push(e)
       }
     }
-    designRenderer.setGlowEntries([...beadEntries, ..._ctrlBeads.map(b => b.entry)])
+    _composeGlow(beadEntries)
     designRenderer.glowCylinderDomains([...cylRefs.values()])
   }
 
   function _clearSelectionGlow() {
     _selectionGlowEntries = []
     designRenderer.clearCylinderDomainGlow?.()
-    const ctrlEntries = _ctrlBeads.map(b => b.entry)
-    if (ctrlEntries.length) designRenderer.setGlowEntries(ctrlEntries)
-    else                    designRenderer.clearGlow()
+    if (_ctrlBeads.length || _baseGlowEntries.length) _composeGlow([])
+    else                                              designRenderer.clearGlow()
   }
 
   function _refreshCtrlGlow() {
-    designRenderer.setGlowEntries([..._selectionGlowEntries, ..._ctrlBeads.map(b => b.entry)])
+    _composeGlow()
   }
 
   function _notifyCtrlBeadsChange() {
@@ -2669,6 +2718,112 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _ctrlBeads = []
     _refreshCtrlGlow()
     _notifyCtrlBeadsChange()
+  }
+
+  // ── Base-level selection (the `base` selectionLevel) ─────────────────────
+  //
+  // ONE pool, keyed by the app-wide base key string (see base_ref.js). It spans all five
+  // bead families — backbone/5′/extension/fluorophore beads, extra crossover bases,
+  // flexible-ssDNA arc beads and ss-linker bridge beads — which live in four different
+  // renderers behind four different meshes.
+  //
+  // KEY-based, not entry-based, deliberately: flexible_arcs disposes and rebuilds its
+  // InstancedMeshes on every render (including every cluster-drag frame), so a pool
+  // holding mesh references would go stale mid-drag. Positions are re-resolved from the
+  // live candidate list at paint time.
+  //
+  // Highlight is GLOW ONLY — no setEntryColor / setBeadScale. Those exist only for
+  // families 1–2; setEntryColor writes instanceColor absolutely so any strand/group
+  // colour repaint clobbers it; and _clearCtrlBeads restores scale 1.0 rather than the
+  // bead-radius slider's value. The glow layer needs only `{pos}`, so it works uniformly
+  // across all five families and touches instanceAlpha zero times.
+  //
+  // `selectedObject` is deliberately NOT written here. This is a selection primitive, and
+  // ~85 sites read that slot (delete key, per-bead context menu, extrude arrows) — future
+  // consumers opt in by reading the pool instead.
+
+  let _baseKeys      = []   // string[] — the pool, in pick order
+  let _baseChangeCbs = []
+
+  /**
+   * Every individually-selectable bead in the scene, right now.
+   *
+   * Rebuilt per call and never memoized: the flexible-arc meshes are recreated on every
+   * cluster-drag frame, so a cached list would hold disposed meshes within one gesture.
+   * Measured at 1.2 ms for 18k candidates (Ultimate Polymer Hinge), so the per-pointermove
+   * cost is comfortably inside a frame — the same order `_nearestBead` already pays.
+   */
+  function _baseCandidates() {
+    const st     = store.getState()
+    const design = st.currentDesign
+    const flex   = getFlexibleArcs?.()
+    return [
+      ...backboneCandidates(
+        designRenderer.getBackboneEntries(),
+        designRenderer.getFluoroEntries?.() ?? [],
+        st.selectableTypes,
+      ),
+      ...xoverCandidates(designRenderer.getXoverBeadEntries?.() ?? []),
+      ...flexCandidates(flex?.group ?? null, design, design ? flexAnchorKey(design) : null),
+      ...ssLinkCandidates(getOverhangLinkArcs?.()?.group ?? null),
+    ]
+  }
+
+  // Live position accessor — glow_layer's refresh() re-reads entry.pos on every
+  // simulation frame, and _writeEntries copies immediately, so one shared scratch vector
+  // is safe and the glow tracks a bead that is moving under MD playback.
+  const _basePosScratch = new THREE.Vector3()
+  const _baseGlowEntry = (cand) => ({
+    get pos() { return worldPosOf(cand, _basePosScratch) },
+  })
+
+  /** Re-resolve the pool's keys against the live candidate list and repaint. */
+  function _repaintBaseGlow() {
+    if (!_baseKeys.length) {
+      _baseGlowEntries = []
+      _composeGlow()
+      return
+    }
+    const want = new Set(_baseKeys)
+    _baseGlowEntries = _baseCandidates().filter(c => want.has(c.key)).map(_baseGlowEntry)
+    _composeGlow()
+  }
+
+  function _notifyBaseChange() {
+    const snapshot = [..._baseKeys]
+    for (const cb of _baseChangeCbs) cb(snapshot)
+  }
+
+  function _setBaseKeys(keys) {
+    _baseKeys = keys
+    store.setState({ multiSelectedBaseKeys: [..._baseKeys] })
+    _repaintBaseGlow()
+    _notifyBaseChange()
+  }
+
+  /** Plain click: replace the pool with this one base; re-clicking the sole pick clears. */
+  function _selectBaseKey(key) {
+    if (!key) return
+    if (_baseKeys.length === 1 && _baseKeys[0] === key) { _setBaseKeys([]); return }
+    _setBaseKeys([key])
+  }
+
+  /** Ctrl/Shift+click: additive toggle. */
+  function _toggleBase(key) {
+    if (!key) return
+    _setBaseKeys(toggleBaseKey(_baseKeys, key))
+  }
+
+  function _clearBaseSelection() {
+    if (!_baseKeys.length && !_baseGlowEntries.length) return
+    _setBaseKeys([])
+  }
+
+  /** The hover magnet, across all five families. (sx, sy) are canvas-relative. */
+  function _nearestBaseCand(sx, sy) {
+    return nearestCandidate(
+      _baseCandidates(), sx, sy, _NEAR_HOVER_PX, makeProjector(_cam(), canvas),
+    )
   }
 
   // ── Multi-crossover arc selection (Ctrl+click / lasso) ──────────────────
@@ -2878,6 +3033,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // survives. No-op once already multi-selecting (a plain click leaves the pools
   // empty and seeds `selectedObject`; entering multi mode nulls `selectedObject`).
   function _promoteSelectionToMulti() {
+    // Base level has ONE pool and never writes `selectedObject`, so there is no single
+    // selection to fold in — plain click and Ctrl+click both land in `_baseKeys`.
+    if (_selLevel === 'base') return
     const sel = store.getState().selectedObject
     if (!sel) return
     const st = store.getState().selectableTypes
@@ -2974,6 +3132,17 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       return
     }
 
+    // Base level → toggle the nearest bead of any family.
+    //
+    // MUST sit above the crossoverArcs branch: that branch fires on a `selectableTypes`
+    // flag which is INDEPENDENT of the engaged level, so with the xover gate on it would
+    // otherwise hijack every base-level Ctrl+click.
+    if (_selLevel === 'base') {
+      const c = _nearestBaseCand(sx, sy)
+      if (c) _toggleBase(c.key)
+      return
+    }
+
     // Crossover level → toggle the nearest crossover arc.
     if (_selLevel === 'xover' || st.crossoverArcs) {
       const arc = _selLevel === 'xover' ? _nearestXover(sx, sy) : _findArcAt(sx, sy)
@@ -3044,12 +3213,26 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const useSkips    = cap.skips
     const useXover    = cap.xover
     const useCluster  = cap.cluster
+    const useBase     = cap.base
     // A lasso is additive: fold a prior plain-click cluster into the pool first, so
     // "click cluster A, Ctrl+drag over B" ends with both selected.
     if (useCluster) _promoteSelectionToMulti()
     const cylMesh = designRenderer.getCylinderMesh()
     // Global LOD level, not mesh .visible — mixed-rep makes cylinders visible at full LOD.
     const inCylinderLOD = (designRenderer.getDetailLevel?.() ?? 0) === 2
+
+    // ── Base level: additive union over ALL five bead families ──────────────
+    // Owns the lasso outright (nothing else is captured at this level), and is a no-op at
+    // cylinder LOD where there are no beads to pick. The scaffold/staple gates are already
+    // applied inside backboneCandidates.
+    if (useBase) {
+      if (inCylinderLOD) return
+      const hits = candidatesInRect(
+        _baseCandidates(), { x1: cx1, y1: cy1, x2: cx2, y2: cy2 }, makeProjector(_cam(), canvas),
+      )
+      if (hits.length) _setBaseKeys(mergeBaseKeys(_baseKeys, hits.map(c => c.key)))
+      return
+    }
 
     // ── Cylinder LOD strands ───────────────────────────────────────────────
     // When iHelixCylinders is visible, project each cylinder center into screen
@@ -3422,6 +3605,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Regular (non-ctrl) click clears the ctrl-click nucleotide selection
     if (_ctrlBeads.length > 0) _clearCtrlBeads()
 
+    // ...and the base pool — but NOT while base level is engaged, where a plain click
+    // REPLACES the pick (clearing here would wipe it before the branch below sets it).
+    if (_selLevel !== 'base' && _baseKeys.length > 0) _clearBaseSelection()
+
     _setNdc(e.clientX, e.clientY)
     raycaster.setFromCamera(_ndc, _cam())
 
@@ -3439,6 +3626,21 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       const oe = _nearestOverhangBead(e.clientX - _rect.left, e.clientY - _rect.top)
       if (oe) _selectOverhangDomain(oe.nuc.overhang_id)
       else    _clearAll()
+      return
+    }
+
+    // Base level fully owns the click, like the overhang filter: the magnet spans all
+    // five bead families, so re-running the hover magnet here (rather than trusting
+    // `_hoverBead`, which only ever holds a backboneEntries entry) is what makes extra
+    // crossover bases, flexible-arc beads and linker beads clickable at all. Nothing
+    // within the radius → clear, never fall through to a strand select.
+    if (_selLevel === 'base') {
+      const _rect = canvas.getBoundingClientRect()
+      const c = _nearestBaseCand(e.clientX - _rect.left, e.clientY - _rect.top)
+      _clearHoverPreview()
+      if (c) _selectBaseKey(c.key)
+      else   _clearBaseSelection()
+      _emitDrillLevel('base')
       return
     }
 
@@ -3979,6 +4181,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_multiOverhangIds.length > 0) _applyMultiOverhangHighlight(_multiOverhangIds)
     // Ctrl-selected beads become stale after a rebuild — clear them
     if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
+    // The base pool SURVIVES a rebuild — that is the point of keying it by string rather
+    // than by mesh+instance. Only its glow entries went stale, so re-resolve them against
+    // the new meshes. (Keys naming a base the rebuild removed simply stop resolving; they
+    // stay in the pool and light up again if it comes back, e.g. after an undo.)
+    if (_baseKeys.length > 0) _repaintBaseGlow()
 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()
@@ -4146,6 +4353,37 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
     /** Programmatically clear all ctrl-selected beads. */
     clearCtrlBeads() { _clearCtrlBeads() },
+
+    /** Copy of the base-level pool — app-wide base keys (see scene/base_ref.js). */
+    getSelectedBaseKeys() { return [..._baseKeys] },
+
+    /**
+     * Every base-level pick candidate right now, as `{key, family}` — the same union a
+     * click or lasso resolves against.
+     *
+     * Exposed so a check can prove a bead FAMILY is reachable without having to land a
+     * pixel-precise click on it: the four exotic renderers (fluorophore tips, extra
+     * crossover bases, flexible-arc beads, ss-linker bridges) each live outside
+     * `backboneEntries`, and "unreachable" vs "just missed" are otherwise indistinguishable.
+     */
+    getBaseCandidates() {
+      return _baseCandidates().map(c => ({ key: c.key, family: c.family }))
+    },
+
+    /** Register a callback fired whenever the base pool changes. Multiple allowed. */
+    onBaseSelectionChange(fn) { _baseChangeCbs.push(fn) },
+
+    /** Programmatically clear the base-level pool. */
+    clearBaseSelection() { _clearBaseSelection() },
+
+    /**
+     * Re-resolve the base pool against freshly-built meshes and repaint its glow.
+     *
+     * Required because the pool is key-based: flexible_arcs disposes and rebuilds its
+     * InstancedMeshes on every render (every cluster-drag frame), so the glow entries
+     * point at dead meshes until this runs. Called from the design/geometry subscriber.
+     */
+    refreshBaseGlow() { _repaintBaseGlow() },
 
     /** Programmatically apply multi-strand highlight from a cross-window broadcast.
      *  Replaces any existing multi-selection. Pass [] to clear. */

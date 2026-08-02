@@ -1384,6 +1384,35 @@ export function initDesignRenderer(scene, storeRef) {
     },
 
     /**
+     * Every extra-base crossover bead as a base-level PICK candidate.
+     *
+     * `i` is the geometric bead slot (what a click resolves to, laid out A→B); `simK` is
+     * the simulation insert index (5′→3′), which is what `__xb__:<xoId>:<k>` means
+     * everywhere else in the app and in the backend. On a B→A crossover those run
+     * opposite ways — `simBeadIndex` is its own inverse, so it maps both directions.
+     *
+     * Computed fresh per call and deliberately NOT sharing `_xoverGlowLive`:
+     * getXoverBeadGlowEntries overwrites that array and three live-update loops read it,
+     * so a second consumer would fight them.
+     */
+    getXoverBeadEntries() {
+      if (!_xoverBeadsMesh || !_xoverArcData) return []
+      const out = []
+      for (const ad of _xoverArcData) {
+        for (let i = 0; i < ad.beadCount; i++) {
+          out.push({
+            xoId: ad.xoId,
+            i,
+            simK: simBeadIndex(i, ad.beadCount, ad.simReversed),
+            instMesh: _xoverBeadsMesh,
+            id: ad.beadStartIdx + i,
+          })
+        }
+      }
+      return out
+    },
+
+    /**
      * Scale extra-base crossover beads for the given strand IDs.
      * Pass scale=1.0 to restore default size.
      */

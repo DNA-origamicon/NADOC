@@ -1357,6 +1357,7 @@
     .sf-btn.active[data-key="stap"]   { color: #ef5350; border-color: #b71c1c; background: rgba(239,83,80,0.08); }
     .sf-btn.active[data-key="ends"]   { color: #79c0ff; border-color: #388bfd; background: rgba(56,139,253,0.08); }
     .sf-btn.active[data-key="xover"]  { color: #78d5f5; border-color: #006688; background: rgba(120,213,245,0.08); }
+    .sf-btn.active[data-key="base"]   { color: #ff7ad9; border-color: #8a2f6c; background: rgba(255,122,217,0.08); }
     .sf-btn.active[data-key="strand"] { color: #c9d1d9; border-color: #6e7681; background: rgba(201,209,217,0.08); }
     .sf-btn.active[data-key="line"]   { color: #a0b8c8; border-color: #456070; background: rgba(160,184,200,0.08); }
     .sf-btn.active[data-key="loop"]   { color: #4488dd; border-color: #2266aa; background: rgba(68,136,221,0.08); }
@@ -6430,6 +6431,10 @@
             <button class="sf-btn" data-key="xover" title="Crossover arcs">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,9 Q8,1 13,9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="9" r="1.5" fill="currentColor"/><circle cx="13" cy="9" r="1.5" fill="currentColor"/></svg>
               <span class="sf-label-text">xover</span>
+            </button>
+            <button class="sf-btn" data-key="base" title="Single base — pick one backbone bead (incl. extensions, extra crossover bases, flexible/linker arcs)">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><circle cx="3.5" cy="5" r="1" fill="currentColor" opacity="0.35"/><circle cx="8" cy="5" r="2.6" fill="currentColor"/><circle cx="12.5" cy="5" r="1" fill="currentColor" opacity="0.35"/></svg>
+              <span class="sf-label-text">base</span>
             </button>
             <span class="sf-divider" style="width:1px;height:16px;background:#30363d;margin:0 2px;flex-shrink:0"></span>
             <button class="sf-btn" data-key="skip" title="Skip markers (−1 deleted base)">

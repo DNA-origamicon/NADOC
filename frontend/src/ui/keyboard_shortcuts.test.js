@@ -630,8 +630,15 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) Tab/Escape', () =>
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
   })
 
-  it('Tab wraps xover→none(default), then default→strand', async () => {
+  it('Tab steps xover→base (base is the finest grain, last stop before the wrap)', async () => {
     const d = makeV2Deps('xover')
+    initKeyboardShortcuts(d)
+    await press('Tab')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('base')
+  })
+
+  it('Tab wraps base→none(default)', async () => {
+    const d = makeV2Deps('base')
     initKeyboardShortcuts(d)
     await press('Tab')
     expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('default')

@@ -407,11 +407,24 @@ undefined-base, anchor, clash, capture, preview-hover, fluorophore), plus `unfol
 `ui/overhang_connections_panel.js:134-135` (the factory is injected at `main.js:4119`).
 
 **Selection does not drive glow through a store subscriber.** It is imperative, inside the click
-handlers: `selection_manager.js` `_highlightStrand:2338` / `_highlightDomain:2351` /
-`_highlightBead:2360` / `_highlightCluster:1749` → `_setSelectionGlow:2626` →
-`designRenderer.setGlowEntries` (:2641) **and** `designRenderer.glowCylinderDomains` (:2642) — at
-cylinder LOD the glow is an additive *cylinder* outline, not spheres. `store.setState({selectedObject})`
-happens in the same handlers but nothing keys off it for glow.
+handlers: `selection_manager.js` `_highlightStrand` / `_highlightDomain` / `_highlightBead` /
+`_highlightCluster` → `_setSelectionGlow` → `designRenderer.setGlowEntries` **and**
+`designRenderer.glowCylinderDomains` — at cylinder LOD the glow is an additive *cylinder* outline,
+not spheres. `store.setState({selectedObject})` happens in the same handlers but nothing keys off
+it for glow.
+
+**`setGlowEntries` has ONE writer: `_composeGlow()`** (`selection_manager.js`). Three independent
+pools feed the same layer — the strand/bead selection (`_selectionGlowEntries`), the Alt-picked
+measurement beads (`_ctrlBeads`), and the base-level pool (`_baseGlowEntries`) — and each used to
+call `setGlowEntries` itself, so whichever wrote last clobbered the other two. `_setSelectionGlow`,
+`_clearSelectionGlow` and `_refreshCtrlGlow` all route through the composer now. **Adding a fourth
+pool means adding a term to `_composeGlow`, never a new `setGlowEntries` call** — the same
+single-writer discipline the `instanceAlpha` channel has.
+
+Base-level glow entries expose a **live `pos` getter** (read from `getMatrixAt` on access) rather
+than a captured Vector3: `refreshAllGlow` fires every simulation frame and `glow_layer`'s
+`_writeEntries` copies immediately, so one shared scratch vector is safe and the glow tracks a bead
+moving under MD playback.
 
 ## `domain_ends.js` (formerly `blunt_ends.js`)
 

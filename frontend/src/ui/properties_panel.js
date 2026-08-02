@@ -368,8 +368,35 @@ export function initPropertiesPanel() {
     `
   }
 
+  /**
+   * Base-level pool readout (the `base` selectionLevel).
+   *
+   * That level deliberately leaves `selectedObject` null — it is a selection primitive, so
+   * consumers read `multiSelectedBaseKeys` instead. This is the only such consumer today.
+   * Keys are app-wide base keys; see scene/base_ref.js for the format.
+   */
+  function _renderBaseKeys(keys) {
+    const shown = keys.slice(0, 12)
+    const rows = shown.map(k => `
+      <div class="prop-row">
+        <span class="prop-val mono" style="font-size:var(--text-xs)">${k}</span>
+      </div>`).join('')
+    const more = keys.length > shown.length
+      ? `<div class="prop-row"><span class="dim">…and ${keys.length - shown.length} more</span></div>`
+      : ''
+    content.innerHTML = `
+      <div class="prop-row">
+        <span class="prop-label">bases</span>
+        <span class="prop-val">${keys.length}</span>
+      </div>
+      ${rows}${more}
+    `
+  }
+
   function _render(selectedObject) {
     if (!selectedObject) {
+      const baseKeys = store.getState().multiSelectedBaseKeys ?? []
+      if (baseKeys.length) { _renderBaseKeys(baseKeys); return }
       content.innerHTML = '<span class="dim">Click a backbone bead to select.</span>'
       return
     }
@@ -404,7 +431,8 @@ export function initPropertiesPanel() {
   store.subscribe((newState, prevState) => {
     const selChanged = newState.selectedObject !== prevState.selectedObject
     const designChanged = newState.currentDesign !== prevState.currentDesign
-    if (selChanged || (designChanged && newState.selectedObject)) {
+    const baseChanged = newState.multiSelectedBaseKeys !== prevState.multiSelectedBaseKeys
+    if (selChanged || baseChanged || (designChanged && newState.selectedObject)) {
       _render(newState.selectedObject)
     }
   })

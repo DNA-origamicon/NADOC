@@ -23,6 +23,7 @@
 
 import * as THREE from 'three'
 import { showToast, showPersistentToast, dismissToast } from '../ui/toast.js'
+import { isVisibleChain } from './base_pick.js'
 
 export function initSceneInspector({ scene, camera, canvas }) {
   let _active = false
@@ -44,15 +45,12 @@ export function initSceneInspector({ scene, camera, canvas }) {
    * the parent chain for visibility — `_allHittables` used to check only the
    * leaf's own `.visible`, surfacing hits on hidden subtrees and crowding out
    * the real culprit.)
+   *
+   * Shared with base-level picking, which needs the same predicate for the flexible-arc
+   * and ss-linker groups (scene children, not design-root children). One copy, in
+   * base_pick.js.
    */
-  function _isVisibleChain(obj) {
-    let cur = obj
-    while (cur) {
-      if (cur.visible === false) return false
-      cur = cur.parent
-    }
-    return true
-  }
+  const _isVisibleChain = isVisibleChain
 
   function _allHittables() {
     const out = []
