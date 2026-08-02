@@ -343,6 +343,10 @@ export function initOxdnaDisplay({
   getAtomisticRenderer = null, getSurfaceRenderer = null,
   getCurrentRepr = null, onRestoreDesignHeavy = null, onHeavyStatus = null,
   onFrame = null,
+  // Called from stopAndRestore() so the occupancy overlay drops its ghost copies at the
+  // same moment the real model reverts — otherwise turning the view off leaves the
+  // superposed configurations floating around a design that no longer matches them.
+  onOccupancyClear = null,
   // Real relaxed surface capture strands (per-strand world-nm bead lists) from a displayed
   // job → drives the results overlay (replaces the seed preview). Null clears it.
   onSurfaceStrands = null,
@@ -368,7 +372,7 @@ export function initOxdnaDisplay({
   }
   let _active = false
   let _jobId = null
-  let _mode = null     // 'relaxed' | 'rmsf' | 'deviation' | 'strain' | 'trajectory'
+  let _mode = null     // 'relaxed' | 'rmsf' | 'deviation' | 'strain' | 'trajectory' | 'occupancy'
   let _rmsfResp = null // cached /rmsf payload so the scale can recolour without re-fetching
   let _devResp = null  // cached /deviation payload so the scale can recolour without re-fetching
   let _strainResp = null // cached /strain payload (same reason)
@@ -1141,6 +1145,38 @@ export function initOxdnaDisplay({
    * Fetch the production flexibility map for jobId, deform the model to the
    * average structure, and recolour beads by RMSF (rigid→flexible).
    */
+  /**
+   * Occupancy clouds: move the design to the MOST POPULATED configuration.
+   *
+   * This owns only rank 0 — the real model, which alone carries strand colours, hidden
+   * staples, rep overrides, crossover arcs and protein poses. The remaining states are
+   * translucent ghosts owned by scene/occupancy_overlay.js, which the caller drives with
+   * the same response.
+   *
+   * It must be a `_mode` even though it paints no scalar map: `_mode` is what every peer
+   * view's teardown switches on, so a mode-less occupancy display would survive being
+   * "turned off" and leave the design stuck on a medoid.
+   */
+  async function displayOccupancy(jobId, resp) {
+    if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
+    if (!resp?.ready) return { ok: false, reason: resp?.reason || 'not ready' }
+    const top = resp.clusters?.[0]
+    if (!top?.frame?.length || !resp.keys?.length) {
+      return { ok: false, reason: 'no configurations' }
+    }
+    const epoch = ++_epoch
+    if (!await _applyJobSurfaceStrands(jobId, true, epoch, null)) {
+      return { ok: false, reason: 'superseded' }
+    }
+    _applyFem(framesToUpdates(resp.keys, top.frame))
+    _active = true
+    _mode = 'occupancy'
+    _jobId = jobId
+    // No _applyHeavy(): ghosts are coarse-grained only, and drivesHeavy() already returns
+    // false outside relaxed|rmsf|trajectory, so the design's own heavy build proceeds.
+    return { ok: true, verdict: resp.verdict, k: resp.k, nClusters: resp.clusters.length }
+  }
+
   async function displayRmsf(jobId, { refetch = false, align = true } = {}) {
     if (!jobId || !designRenderer) return { ok: false, reason: 'no job' }
     const epoch = ++_epoch
@@ -1430,6 +1466,7 @@ export function initOxdnaDisplay({
     _mode = null
     _jobId = null
     designRenderer?.clearScalarColors?.()
+    onOccupancyClear?.()   // drop any superposed configuration ghosts with the model
     _applyFem(null)
     onSurfaceStrands?.(null)   // drop the real strands → seed preview resumes
     proteinRenderer?.clearOxdnaTransforms?.()   // proteins back to design pose
@@ -1443,6 +1480,7 @@ export function initOxdnaDisplay({
     displayJob,
     displayLiveFrame,
     displayRmsf,
+    displayOccupancy,
     displayDeviation,
     displayStrain,
     recolorRmsf,

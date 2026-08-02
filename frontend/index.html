@@ -4116,6 +4116,40 @@
                   </label>
                   <div id="oxdna-jobs-strain-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="oxdna-jobs-strain-bar" style="margin-top:3px;display:none"></div>
+                  <!-- Occupancy clouds: the top-N most likely CONFIGURATIONS, superposed. -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="The most likely CONFIGURATIONS over the sampling run, superposed. Frames are clustered by shape; each cluster's real medoid frame is drawn, opacity set by how often the structure is in that state. A plate that flips between saddle senses shows BOTH — the flexibility map averages them into one flat structure that never occurs. Reports 'unimodal' when there is only one state, and 'drift' when the run is still moving one way rather than switching.">
+                    <input id="oxdna-jobs-occupancy-toggle" name="oxdna-viz" type="radio" value="occupancy" disabled> Occupancy clouds (likely configurations)
+                  </label>
+                  <div id="oxdna-jobs-occupancy-params" style="display:none;margin-left:18px;margin-top:3px">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e"
+                           title="How many configurations to look for. Auto picks the count that separates best, and reports a single state when the ensemble is unimodal rather than inventing a split.">
+                      States:
+                      <select id="oxdna-jobs-occupancy-n"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="0" selected>Auto (best separation)</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                      </select>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
+                           title="Which coordinates the shape clustering sees. All nucleotides matches the flexibility map exactly. Base-pair midpoints sit on the duplex axis: that drops the helical-phase wobble and every unpaired base (overhangs, ssDNA loops, frayed ends), whose motion can otherwise outweigh the global shape change.">
+                      Coordinates:
+                      <select id="oxdna-jobs-occupancy-basis"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="nt" selected>All nucleotides</option>
+                        <option value="bp">Base-pair midpoints (duplex only)</option>
+                      </select>
+                    </label>
+                    <button id="oxdna-jobs-occupancy-rerun" type="button"
+                            style="margin-top:4px;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 8px;cursor:pointer"
+                            title="Recompute from the trajectory, ignoring the cached result.">Recompute</button>
+                  </div>
+                  <div id="oxdna-jobs-occupancy-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="oxdna-jobs-occupancy-legend" style="display:none;margin-top:3px;max-height:132px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                   <!-- Sparse trajectory: the whole lineage, strided to ~200 frames -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
                          title="Play/scrub the composite trajectory: relaxation stages + every production run, with markers at each transition. Evenly strided to ~200 frames across the whole chain, so it loads quickly.">

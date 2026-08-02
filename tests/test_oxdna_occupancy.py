@@ -1,0 +1,456 @@
+"""Occupancy clouds — clustering an oxDNA ensemble into its top-N configurations.
+
+Every test here runs on small numpy arrays or hand-built frame dicts: no file I/O, no
+trajectory, no Design build. Fast-suite safe by construction.
+
+The two pins that matter most are ``test_medoid_is_a_real_frame_never_a_mean`` (a cluster
+mean would collapse bond lengths, reproducing the very artefact this feature replaces) and
+``test_monotone_drift_is_not_reported_as_two_states`` (a drift scores a HIGH silhouette
+while never revisiting a state — measured on a real job, see the module docstring).
+"""
+
+import numpy as np
+import pytest
+
+from backend.core.constants import OXDNA_LENGTH_UNIT
+from backend.core.oxdna_health import FENE_R0_OXDNA2
+from backend.core.oxdna_occupancy import (
+    OCCUPANCY_PRELIM_NEFF,
+    _OCC_MIN_FRAMES,
+    occupancy_clusters,
+    occupancy_confidence,
+    occupancy_features,
+    state_recurrence,
+)
+
+
+# ── Fixtures with analytically known answers ──────────────────────────────────────
+def _two_state(n_a=80, n_b=40, d=30, sep=10.0, noise=0.3, seed=7, interleave=True):
+    """Two well-separated basins with populations exactly n_a/(n_a+n_b) and n_b/(...).
+
+    ``interleave=True`` shuffles membership through time so each state is revisited many
+    times — a genuine switching ensemble. ``False`` puts all of A then all of B, which is
+    what a one-way drift looks like.
+    """
+    rng = np.random.default_rng(seed)
+    mu_b = np.zeros(d)
+    mu_b[:6] = sep
+    labels = np.array([0] * n_a + [1] * n_b)
+    if interleave:
+        rng.shuffle(labels)
+    X = np.where(labels[:, None] == 0, 0.0, mu_b[None, :]) + rng.normal(scale=noise, size=(labels.size, d))
+    return X, labels
+
+
+def _unimodal(n=100, d=30, seed=3):
+    return np.random.default_rng(seed).normal(scale=1.0, size=(n, d))
+
+
+# ── Core clustering behaviour ─────────────────────────────────────────────────────
+def test_two_state_ensemble_recovers_both_states():
+    X, truth = _two_state()
+    res = occupancy_clusters(X)
+
+    assert res["ready"] is True
+    assert res["k"] == 2
+    assert res["verdict"] == "switching"
+    assert res["multimodal"] is True
+
+    pops = sorted(c["population"] for c in res["clusters"])
+    assert pops == pytest.approx([40 / 120, 80 / 120], abs=1e-9)
+
+    # every frame of a returned cluster really belongs to one true basin
+    for cl in res["clusters"]:
+        assert len({truth[i] for i in cl["frames"]}) == 1
+
+
+def test_unimodal_ensemble_reports_one_state():
+    """A single Gaussian basin must NOT be split. Inventing states is worse than none."""
+    res = occupancy_clusters(_unimodal())
+    assert res["verdict"] == "unimodal"
+    assert res["multimodal"] is False
+    assert res["k"] == 1
+    assert len(res["clusters"]) == 1
+    assert res["clusters"][0]["population"] == pytest.approx(1.0)
+
+
+def test_monotone_drift_is_not_reported_as_two_states():
+    """A one-way drift scores a high silhouette but is not two configurations.
+
+    Measured on ``exp35_.../oxdna_jobs/14b896dab3c2``: silhouette +0.58 at k=2, label
+    sequence ``1111111111111111111111111 0000000000000000000000000`` — one transition,
+    PC1 lag-1 autocorrelation +1.000. Calling those "states" with 50/50 populations
+    would be a confident lie about an unequilibrated run.
+    """
+    t = np.linspace(0.0, 1.0, 60)
+    X = np.outer(t, np.ones(20)) * 10.0 + np.random.default_rng(1).normal(scale=0.05, size=(60, 20))
+    res = occupancy_clusters(X)
+
+    assert res["silhouette"] > 0.25, "the drift should still LOOK separated"
+    assert res["verdict"] == "drift"
+    assert res["multimodal"] is False, "a drift must never be advertised as switching"
+    assert res["transitions"] <= 1
+    assert res["pc1_lag1"] > 0.9, "a smooth path, not hopping between basins"
+
+
+def test_switching_and_drift_are_distinguished_on_identical_geometry():
+    """Same two basins, same populations — only the TIME ORDER differs."""
+    X_sw, _ = _two_state(interleave=True)
+    X_dr, _ = _two_state(interleave=False)
+
+    assert occupancy_clusters(X_sw)["verdict"] == "switching"
+    assert occupancy_clusters(X_dr)["verdict"] == "drift"
+
+
+def test_medoid_is_a_real_frame_never_a_mean():
+    """The representative must be an observed frame, not a within-cluster average.
+
+    Averaging positions collapses bond lengths; a mean structure is as unreal as the flat
+    RMSF mean this feature exists to replace.
+    """
+    X, _ = _two_state()
+    res = occupancy_clusters(X)
+
+    ensemble_mean = X.mean(axis=0)
+    for cl in res["clusters"]:
+        row = X[cl["medoid_index"]]
+        assert np.any(np.all(np.isclose(X, row), axis=1)), "medoid is not an input row"
+        # and it is far from the ensemble mean — the thing RMSF would have shown
+        assert np.linalg.norm(row - ensemble_mean) > 1.0
+
+
+def test_clustering_is_deterministic():
+    X, _ = _two_state()
+    a, b = occupancy_clusters(X), occupancy_clusters(X)
+    assert [c["frames"] for c in a["clusters"]] == [c["frames"] for c in b["clusters"]]
+    assert [c["medoid_index"] for c in a["clusters"]] == [c["medoid_index"] for c in b["clusters"]]
+
+
+def test_populations_carry_an_autocorrelation_aware_error_bar():
+    """Frames are not independent — a naive binomial error overstates confidence.
+
+    A blocky membership series (long runs in each state) must yield tau_int > 1 and an
+    error bar strictly larger than sqrt(p(1-p)/n).
+    """
+    block = np.array(([0] * 20 + [1] * 20) * 5)
+    rng = np.random.default_rng(11)
+    mu = np.zeros(20)
+    mu[:5] = 8.0
+    X = np.where(block[:, None] == 0, 0.0, mu[None, :]) + rng.normal(scale=0.2, size=(block.size, 20))
+
+    res = occupancy_clusters(X)
+    assert res["verdict"] == "switching"
+    cl = res["clusters"][0]
+    p, n = cl["population"], res["n_frames"]
+    naive = float(np.sqrt(p * (1 - p) / n))
+
+    assert cl["tau_int"] > 1.0
+    assert cl["n_eff"] < n
+    assert cl["population_sem"] > naive
+
+
+def test_forced_k_is_honoured_and_reports_weak_separation():
+    X, _ = _two_state()
+    res = occupancy_clusters(X, n_clusters=3)
+    assert res["auto_k"] is False
+    assert res["k"] == 3
+    assert len(res["clusters"]) == 3
+    assert "silhouette" in res
+
+
+def test_too_few_frames_is_not_ready():
+    res = occupancy_clusters(np.random.default_rng(0).normal(size=(_OCC_MIN_FRAMES - 1, 12)))
+    assert res["ready"] is False
+    assert "at least" in res["reason"]
+
+
+def test_variance_explained_is_descending_and_bounded():
+    X, _ = _two_state()
+    var = occupancy_clusters(X)["variance_explained"]
+    assert var == sorted(var, reverse=True)
+    assert 0.0 <= var[0] <= 1.0
+    assert sum(var) <= 1.0 + 1e-9
+
+
+def test_rank_zero_is_the_most_populated_and_rmsd_to_top_is_zero():
+    X, _ = _two_state()
+    res = occupancy_clusters(X)
+    assert res["clusters"][0]["rank"] == 0
+    assert res["clusters"][0]["population"] >= res["clusters"][-1]["population"]
+    assert res["clusters"][0]["rmsd_to_top_nm"] == pytest.approx(0.0, abs=1e-9)
+    assert res["clusters"][-1]["rmsd_to_top_nm"] > 0.0
+
+
+# ── Recurrence + confidence helpers ───────────────────────────────────────────────
+def test_state_recurrence_counts_visits_not_frames():
+    rec = state_recurrence([0, 0, 0, 1, 1, 0, 0, 1], 2)
+    assert rec["visits"] == [2, 2]
+    assert rec["transitions"] == 3
+    assert rec["recurrent"] is True
+
+    once = state_recurrence([0] * 5 + [1] * 5, 2)
+    assert once["visits"] == [1, 1]
+    assert once["transitions"] == 1
+    assert once["recurrent"] is False
+
+
+def test_occupancy_confidence_flags_undersampled_populations():
+    assert occupancy_confidence(200, 2.6)["preliminary"] is True
+    assert occupancy_confidence(200, OCCUPANCY_PRELIM_NEFF + 1)["preliminary"] is False
+    # more independent samples → smaller relative error
+    assert occupancy_confidence(200, 100)["rel_error"] < occupancy_confidence(200, 10)["rel_error"]
+
+
+# ── Feature extraction ────────────────────────────────────────────────────────────
+class _FakeDesign:
+    """Minimal stand-in — occupancy_features only reaches the design via _strain_index."""
+
+
+# Bonded neighbours must sit inside oxDNA's FENE window or the quality gate (correctly)
+# throws the frame away. Derive it from the constants rather than hardcoding 0.64 nm, so
+# these fixtures follow the model if it is ever retuned.
+_BOND_NM = FENE_R0_OXDNA2 * OXDNA_LENGTH_UNIT
+
+
+def _frame(keys, positions, a1s=None):
+    """a1s defaults to +x for every nucleotide. Pass explicit vectors to model a real
+    duplex, where the two strands' base vectors OPPOSE — that opposition is what makes a
+    base-pair midpoint land on the duplex axis."""
+    if a1s is None:
+        a1s = [[1.0, 0.0, 0.0]] * len(keys)
+    return {k: {"backbone_position": np.array(p, dtype=float),
+                "a1": np.array(a, dtype=float),
+                "a3": np.array([0.0, 0.0, 1.0])}
+            for k, p, a in zip(keys, positions, a1s)}
+
+
+def test_features_reject_torn_frames_and_report_which_survived(monkeypatch):
+    """A PBC-torn frame carries box-scale bonds and would become its own 'configuration'."""
+    import backend.core.oxdna_occupancy as occ
+
+    keys = [("h0", i, "FORWARD") for i in range(4)]
+    monkeypatch.setattr(occ, "_strain_index",
+                        lambda design, k, metric: (np.array([0, 1, 2]), np.array([1, 2, 3])))
+
+    good = [_frame(keys, [[0, 0, i * _BOND_NM] for i in range(4)]) for _ in range(3)]
+    # a PBC tear: the last two nucleotides snapped to a different periodic image
+    torn = _frame(keys, [[0, 0, 0], [0, 0, _BOND_NM], [0, 0, 90.0], [0, 0, 90.0 + _BOND_NM]])
+    frames = [good[0], torn, good[1], good[2]]
+
+    X, _fk, kept, _basis = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
+
+    assert kept == [0, 2, 3], "the torn frame must be dropped, the rest kept in order"
+    assert X.shape[0] == 3
+    assert len(frames) - len(kept) == 1
+
+
+def _duplex_fixture(n_bp):
+    """n_bp duplex columns stacked along z, plus one unpaired ssDNA overhang bead.
+
+    Keys interleave FORWARD/REVERSE per column, so column c is keys[2c], keys[2c+1].
+    """
+    keys = []
+    for c in range(n_bp):
+        keys.append(("h0", c, "FORWARD"))
+        keys.append(("h0", c, "REVERSE"))
+    keys.append(("h0", n_bp, "FORWARD"))                # unpaired overhang
+
+    positions, a1s = [], []
+    for c in range(n_bp):
+        positions.append([0.0, 0.0, c * _BOND_NM])      # FORWARD strand
+        a1s.append([1.0, 0.0, 0.0])                     # base points across the duplex…
+        positions.append([1.0, 0.0, c * _BOND_NM])      # REVERSE strand
+        a1s.append([-1.0, 0.0, 0.0])                    # …and its partner points back
+    positions.append([5.0, 5.0, 5.0])                   # the ssDNA bead, far away
+    a1s.append([1.0, 0.0, 0.0])
+
+    wc_a = np.array([2 * c for c in range(n_bp)])
+    wc_b = np.array([2 * c + 1 for c in range(n_bp)])
+    # backbone 3'-neighbours WITHIN each strand (never across the duplex)
+    bb_a = np.array([2 * c for c in range(n_bp - 1)] + [2 * c + 1 for c in range(n_bp - 1)])
+    bb_b = np.array([2 * (c + 1) for c in range(n_bp - 1)] + [2 * (c + 1) + 1 for c in range(n_bp - 1)])
+
+    def fake_index(design, k, metric):
+        return (wc_a, wc_b) if metric == "wc" else (bb_a, bb_b)
+
+    return keys, positions, a1s, fake_index
+
+
+def test_bp_basis_uses_only_paired_columns(monkeypatch):
+    import backend.core.oxdna_occupancy as occ
+
+    n_bp = 12                                            # ≥ _OCC_MIN_BP_COLUMNS
+    keys, positions, a1s, fake_index = _duplex_fixture(n_bp)
+    monkeypatch.setattr(occ, "_strain_index", fake_index)
+    frames = [_frame(keys, positions, a1s) for _ in range(2)]
+
+    X, feature_keys, kept, basis_used = occ.occupancy_features(
+        frames, keys, _FakeDesign(), basis="bp")
+
+    assert basis_used == "bp"
+    assert X.shape[1] == n_bp * 3, "one 3-vector per duplex column, ssDNA excluded"
+    assert feature_keys == [keys[2 * c] for c in range(n_bp)]
+    assert kept == [0, 1]
+
+    # the bp feature is the midpoint of the two strands → x = 0.5, on the duplex axis
+    assert X[0].reshape(n_bp, 3)[:, 0] == pytest.approx(np.full(n_bp, 0.5))
+
+
+def test_bp_basis_falls_back_to_nt_and_says_so(monkeypatch):
+    """A construct with no real duplex must not silently claim a bp basis."""
+    import backend.core.oxdna_occupancy as occ
+
+    n_bp = 2                                             # < _OCC_MIN_BP_COLUMNS
+    keys, positions, a1s, fake_index = _duplex_fixture(n_bp)
+    monkeypatch.setattr(occ, "_strain_index", fake_index)
+    frames = [_frame(keys, positions, a1s) for _ in range(2)]
+
+    X, feature_keys, _kept, basis_used = occ.occupancy_features(
+        frames, keys, _FakeDesign(), basis="bp")
+
+    assert basis_used == "nt", "the fallback must be reported, not applied silently"
+    assert X.shape[1] == len(keys) * 3
+    assert feature_keys == keys
+
+
+def test_nt_basis_keeps_every_nucleotide(monkeypatch):
+    import backend.core.oxdna_occupancy as occ
+
+    keys = [("h0", i, "FORWARD") for i in range(4)]
+    monkeypatch.setattr(occ, "_strain_index",
+                        lambda design, k, metric: (np.array([0, 1, 2]), np.array([1, 2, 3])))
+    frames = [_frame(keys, [[0, 0, i * _BOND_NM] for i in range(4)]) for _ in range(2)]
+
+    X, feature_keys, _kept, _basis = occ.occupancy_features(frames, keys, _FakeDesign(), basis="nt")
+    assert X.shape[1] == 4 * 3
+    assert feature_keys == keys
+
+
+def test_features_reject_an_unknown_basis():
+    with pytest.raises(ValueError, match="basis"):
+        occupancy_features([], [], _FakeDesign(), basis="axis")
+
+
+# ── Stage slicing ─────────────────────────────────────────────────────────────────
+def test_sampling_indices_skip_relaxation_and_the_seed_frame():
+    """Relaxation stages are a transient; composite index 0 is the design pose."""
+    from backend.core.oxdna_occupancy import _sampling_indices
+
+    stages = [{"name": "1_mc_relax", "kind": "mc", "n_frames": 3},
+              {"name": "2_equil", "kind": "equil", "n_frames": 2},
+              {"name": "3_production", "kind": "production", "n_frames": 4}]
+    assert _sampling_indices(stages) == [5, 6, 7, 8]
+
+    # production first → index 0 is the prepended seed and must be dropped
+    seeded = [{"name": "1_production", "kind": "production", "n_frames": 3},
+              {"name": "2_field", "kind": "field", "n_frames": 2}]
+    assert _sampling_indices(seeded) == [1, 2, 3, 4]
+
+
+# ── Route layer ───────────────────────────────────────────────────────────────────
+class _FakeStage:
+    def __init__(self, kind="production", status="done"):
+        self.kind = kind
+        self.status = status
+        self.name = f"1_{kind}"
+
+
+class _FakeJob:
+    job_id = "occ-test"
+    stages = [_FakeStage()]
+
+
+@pytest.fixture
+def occ_client(monkeypatch):
+    """TestClient with the job lookup and frame walk stubbed out.
+
+    Returns (client, calls) where ``calls`` collects the kwargs the route passed down,
+    so the tests can assert on what the route ASKED for rather than on a real trajectory.
+    """
+    from fastapi.testclient import TestClient
+
+    import backend.api.routes_oxdna as ro
+    import backend.core.oxdna_occupancy as occ
+    from backend.api.main import app
+
+    calls = []
+
+    monkeypatch.setattr(ro, "_load_job", lambda job_id: _FakeJob())
+    monkeypatch.setattr(ro, "_composite_inputs",
+                        lambda job, scope: ("DESIGN", [("1_production", "production", "t.dat", None, None)], "ref.dat"))
+    monkeypatch.setattr(ro, "_capture_bead_count", lambda job: 0)
+    monkeypatch.setattr(ro, "_capture_strand_length", lambda job: 0)
+
+    def fake_cached(design, stages, ref, **kw):
+        calls.append(kw)
+        return {"ready": True, "verdict": "unimodal", "k": 1, "clusters": [], "keys": []}
+
+    monkeypatch.setattr(occ, "production_occupancy_cached", fake_cached)
+    return TestClient(app), calls
+
+
+def test_route_defaults_match_the_trajectory_route(occ_client):
+    """The shared _ALIGNED_CACHE only hits if both routes ask for the same frames.
+
+    ``/trajectory`` uses scope='lineage' and max_frames=_SPARSE_FRAME_CAP. If this route's
+    defaults drift, every occupancy request silently re-reads the whole trajectory.
+    """
+    from backend.api.routes_oxdna import _SPARSE_FRAME_CAP
+
+    client, calls = occ_client
+    assert client.get("/api/oxdna/jobs/occ-test/occupancy").status_code == 200
+    assert calls[-1]["max_frames"] == _SPARSE_FRAME_CAP
+    assert calls[-1]["align"] is True
+
+
+def test_route_rejects_unknown_method_and_basis(occ_client):
+    client, _ = occ_client
+    assert client.get("/api/oxdna/jobs/occ-test/occupancy?method=rmsd").status_code == 400
+    assert client.get("/api/oxdna/jobs/occ-test/occupancy?basis=axis").status_code == 400
+
+
+def test_route_clamps_n_clusters(occ_client):
+    client, calls = occ_client
+    client.get("/api/oxdna/jobs/occ-test/occupancy?n_clusters=99")
+    assert calls[-1]["n_clusters"] == 6
+    client.get("/api/oxdna/jobs/occ-test/occupancy?n_clusters=-3")
+    assert calls[-1]["n_clusters"] == 0
+
+
+def test_route_passes_basis_and_refetch_through(occ_client):
+    client, calls = occ_client
+    client.get("/api/oxdna/jobs/occ-test/occupancy?basis=bp&refetch=true")
+    assert calls[-1]["basis"] == "bp"
+    assert calls[-1]["refetch"] is True
+
+
+def test_route_not_ready_without_a_sampling_stage(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    import backend.api.routes_oxdna as ro
+    from backend.api.main import app
+
+    monkeypatch.setattr(ro, "_load_job", lambda job_id: _FakeJob())
+    monkeypatch.setattr(ro, "_composite_inputs", lambda job, scope: (None, [], None))
+
+    r = TestClient(app).get("/api/oxdna/jobs/occ-test/occupancy")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ready"] is False
+    assert "production" in body["reason"]
+
+
+def test_occupancy_progress_is_inactive_when_nothing_is_building():
+    from fastapi.testclient import TestClient
+
+    from backend.api.main import app
+
+    assert TestClient(app).get("/api/oxdna/jobs/nobody/occupancy-progress").json() == {"active": False}
+
+
+def test_occupancy_progress_dict_is_separate_from_the_trajectory_one():
+    """One job can build a trajectory and an occupancy map at once; sharing the dict
+    would make each overwrite the other's bar."""
+    from backend.api.routes_oxdna import _OCC_PROGRESS, _TRAJ_PROGRESS
+
+    assert _OCC_PROGRESS is not _TRAJ_PROGRESS

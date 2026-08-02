@@ -123,6 +123,7 @@ skip_twist_selfconsistency · **regional_autorefine** (LIVE REF — the always-o
 **Simulate-panel overhaul:** simulate_panel_overhaul (P1 — Phases A/B shipped; Phase C half done: mrDNA+CanDo lack the contextual Run/Stop/Resume button and still paint their own progress bars)
 
 **MD visualization / overlay:** md_viz_tools · md_panel_status · md_sidebar_audit · md_live_model_cache ·
+**oxdna_occupancy_clouds** (top-N configurations superposed; verdict switching/drift/unimodal — read before touching ensemble clustering) ·
 **atomistic_base_orient** (`base_orient="oxdna_a3"`, default-on; pending in-app visual check)
 
 **Automation / jobs infra:** staleness_diagnostics · job_activity_spinner · job_disk_usage · job_archive

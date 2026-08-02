@@ -22,6 +22,7 @@ import { jobOutOfDate, ensureJobCurrent } from './job_staleness.js'
 import { filterJobsForPart, newestCompletedForPart } from './md_jobs_panel.js'
 import { isUndefinedSequenceError, showSequenceWarningModal } from './sequence_warning_modal.js'
 import { initOxdnaTrajectoryPlayer, fieldAtFrame } from './oxdna_trajectory_player.js'
+import { initOccupancyControls } from './occupancy_controls.js'
 import { initOxdnaMetricsCard } from './oxdna_metrics_card.js'
 import { initOxdnaExportCard } from './oxdna_export_card.js'
 import { initShapeCompareCard } from './shape_compare_card.js'
@@ -422,7 +423,7 @@ export function runChildTitle(job) {
   return parts.length ? `Production run · ${parts.join(' · ')}` : 'Production run'
 }
 
-export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
+export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, getOccupancyOverlay = null, getWorkspacePath = null, flexScale = null, getRunElements = null, applyRunConfig = null, onTrajectoryField = null, oxdnaLive = null, getDesignLattice = null, getCandoJob = null, getMrdnaJob = null, getMdJob = null, getChainMode = null, enqueueChainStage = null, simGuard = null } = {}) {
   const panel   = document.getElementById('oxdna-jobs-panel')
   const heading = document.getElementById('oxdna-jobs-heading')
   const arrow   = document.getElementById('oxdna-jobs-arrow')
@@ -445,6 +446,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const autorefineDevToggle = document.getElementById('oxdna-jobs-deviation-toggle')
   const autorefineDevStatus = document.getElementById('oxdna-jobs-deviation-status')
   const strainToggle  = document.getElementById('oxdna-jobs-strain-toggle')
+  const occupancyToggle = document.getElementById('oxdna-jobs-occupancy-toggle')
   const strainStatus  = document.getElementById('oxdna-jobs-strain-status')
   const strainBar     = document.getElementById('oxdna-jobs-strain-bar')
   const strainMetricSel = document.getElementById('oxdna-jobs-strain-metric')
@@ -515,7 +517,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
     const anyOn = [displayToggle, flexToggle, trajToggle, trajFullToggle, autorefineDevToggle,
-                   strainToggle].some(t => t?.checked)
+                   strainToggle, occupancyToggle].some(t => t?.checked)
     if (!anyOn) vizOffRadio.checked = true
   }
 
@@ -847,6 +849,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
+      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
       await _refreshDeviation()
     } else {
       _setDeviationOff()
@@ -979,10 +982,46 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
       await _refreshStrain()
     } else {
       _setStrainOff()
     }
+  })
+
+  // ── Occupancy clouds ─────────────────────────────────────────────────────
+  // Turning it off must drop BOTH halves: the ghosts owned by the overlay and the real
+  // model that displayOccupancy moved to the top configuration.
+  function _setOccupancyOff() {
+    _occupancy?.off()
+    if (oxdnaDisplay?.mode() === 'occupancy') oxdnaDisplay.stopAndRestore()
+    if (occupancyToggle) occupancyToggle.checked = false
+    _syncVizOffRadio()
+  }
+  occupancyToggle?.addEventListener('change', async () => {
+    if (_lammpsMode) return   // LAMMPS runs have no occupancy endpoint — radio stays disabled
+    if (!occupancyToggle.checked) { _setOccupancyOff(); return }
+    if (!_selectedId) {
+      occupancyToggle.checked = false
+      showToast('Select an oxDNA job first', 'warn')
+      _syncVizOffRadio()
+      return
+    }
+    const ss = samplingState(_selectedJob())
+    if (ss !== 'done' && ss !== 'running') {
+      occupancyToggle.checked = false
+      showToast('Occupancy needs a production or field run', 'warn')
+      _syncVizOffRadio()
+      return
+    }
+    oxdnaLive?.stop()
+    if (oxdnaDisplay?.mode() === 'relaxed') _setDisplayOff()
+    if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
+    if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
+    if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
+    if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
+    if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
+    await _occupancy?.refresh()
   })
   // Switching metric while the map is up re-fetches it in place (backbone ⇄ WC).
   strainMetricSel?.addEventListener('change', async () => {
@@ -1046,6 +1085,14 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // colormap re-colours the active map live without re-fetching.  A no-op stub keeps
   // the panel safe if the widget wasn't provided (e.g. isolated tests).
   const _flexScale = flexScale || { show: () => {}, hide: () => {} }
+  // Occupancy clouds own their DOM, cache and network; the panel only says which job is
+  // selected and drives the mutual-exclusion teardown.
+  const _occupancy = initOccupancyControls({
+    api,
+    getOverlay: () => getOccupancyOverlay?.() ?? null,
+    getDisplay: () => oxdnaDisplay,
+    getSelectedJobId: () => _selectedId,
+  })
   const _SHOW_ALL_KEY = 'nadoc:oxdna-jobs-show-all'
 
   if (showAllToggle) showAllToggle.checked = localStorage.getItem(_SHOW_ALL_KEY) === '1'
@@ -1783,6 +1830,20 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       }
     }
 
+    // Occupancy clouds — same gate as the flexibility map: both read the sampling
+    // stages, and LAMMPS jobs have no occupancy endpoint.
+    if (occupancyToggle) {
+      const ok = !liveOn && !_lammpsMode
+        && (samplingState(job) === 'done' || samplingState(job) === 'running')
+      occupancyToggle.disabled = !ok
+      const lab = occupancyToggle.closest('label')
+      if (lab) {
+        lab.style.opacity = ok ? '1' : '0.5'
+        lab.style.cursor = ok ? 'pointer' : 'not-allowed'
+        lab.title = liveOn ? 'Stop Live to use occupancy clouds' : lab.title
+      }
+    }
+
     // Deviation map — same gate as the flexibility map (any job with sampling).
     if (autorefineDevToggle && !_devBusy) {
       const ok = !liveOn && (samplingState(job) === 'done' || samplingState(job) === 'running')
@@ -2040,6 +2101,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
       if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
+      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
       await _refreshFlex()
     } else {
       _setFlexOff()
@@ -2162,6 +2224,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (oxdnaDisplay?.mode() === 'rmsf') _setFlexOff()
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
+    if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
     // Switching sparse↔full leaves the OTHER trajectory mode still active (both are
     // mode 'trajectory', so the teardowns above don't fire) — stop playback and clear
     // the stale frame cache before reloading at the new scope.
@@ -2341,6 +2404,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
       if (oxdnaDisplay?.mode() === 'trajectory') _setTrajOff()
       if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
       if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
+      if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
       await _refreshDisplay()
     } else {
       _setDisplayOff()
@@ -2473,6 +2537,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     _autorefineCleanForDesign = false
     if (oxdnaDisplay?.mode() === 'deviation') _setDeviationOff()
     if (oxdnaDisplay?.mode() === 'strain') _setStrainOff()
+    if (oxdnaDisplay?.mode() === 'occupancy') _setOccupancyOff()
     _metricsCard?.refresh()      // cached twist/curve/bp graphs no longer match the edited design
     _compareCard?.refresh()      // cached cross-engine comparison no longer matches the edited design
     _fetchJobs()

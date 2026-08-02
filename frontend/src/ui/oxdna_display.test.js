@@ -1314,3 +1314,94 @@ describe('prebuildMemoryPlan', () => {
     expect(prebuildMemoryPlan({ nFrames: 0, nSerials: 100 }).frames).toBe(0)
   })
 })
+
+describe('displayOccupancy', () => {
+  function occResp(clusters, extra = {}) {
+    return {
+      ready: true, verdict: 'switching', k: clusters.length,
+      keys: [['h0', 0, 'FORWARD'], ['h0', 1, 'FORWARD']],
+      clusters: clusters.map((population, rank) => ({
+        rank, population,
+        frame: [rank, 0, 0, 0, 0, 1, rank, 0, 1, 0, 0, 1],
+      })),
+      ...extra,
+    }
+  }
+
+  function deps() {
+    return {
+      designRenderer: {
+        applyFemPositions: vi.fn(), applyScalarColors: vi.fn(), clearScalarColors: vi.fn(),
+      },
+      api: {},
+    }
+  }
+
+  it('moves the model to the MOST POPULATED configuration, not the mean', async () => {
+    const d = deps()
+    const ctrl = initOxdnaDisplay(d)
+    const r = await ctrl.displayOccupancy('job1', occResp([0.62, 0.28, 0.10]))
+
+    expect(r.ok).toBe(true)
+    expect(r.verdict).toBe('switching')
+    expect(ctrl.mode()).toBe('occupancy')
+    expect(ctrl.activeJobId()).toBe('job1')
+
+    // rank 0's frame starts with x=0; had it taken rank 1 the first x would be 1
+    const applied = d.designRenderer.applyFemPositions.mock.calls.at(-1)[0]
+    expect(applied[0].backbone_position[0]).toBe(0)
+    expect(applied).toHaveLength(2)
+  })
+
+  it('carries the base normal through to the renderer', async () => {
+    const d = deps()
+    const ctrl = initOxdnaDisplay(d)
+    await ctrl.displayOccupancy('job1', occResp([1.0]))
+    const applied = d.designRenderer.applyFemPositions.mock.calls.at(-1)[0]
+    expect(applied[0]).toMatchObject({ nx: 0, ny: 0, nz: 1 })
+  })
+
+  it('paints no scalar map — occupancy is a shape view, not a heat map', async () => {
+    const d = deps()
+    const ctrl = initOxdnaDisplay(d)
+    await ctrl.displayOccupancy('job1', occResp([0.6, 0.4]))
+    expect(d.designRenderer.applyScalarColors).not.toHaveBeenCalled()
+  })
+
+  it('refuses a not-ready response and stays inactive', async () => {
+    const ctrl = initOxdnaDisplay(deps())
+    const r = await ctrl.displayOccupancy('job1', { ready: false, reason: 'no production or field run yet' })
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/no production/)
+    expect(ctrl.isActive()).toBe(false)
+  })
+
+  it('refuses a ready response that carries no configurations', async () => {
+    const ctrl = initOxdnaDisplay(deps())
+    const r = await ctrl.displayOccupancy('job1', { ready: true, clusters: [], keys: [] })
+    expect(r.ok).toBe(false)
+    expect(ctrl.mode()).not.toBe('occupancy')
+  })
+
+  it('stopAndRestore reverts the model AND clears the ghosts', async () => {
+    // If the ghosts outlived the model revert they would float around a design that no
+    // longer matches them.
+    const d = deps()
+    const onOccupancyClear = vi.fn()
+    const ctrl = initOxdnaDisplay({ ...d, onOccupancyClear })
+
+    await ctrl.displayOccupancy('job1', occResp([0.6, 0.4]))
+    ctrl.stopAndRestore()
+
+    expect(onOccupancyClear).toHaveBeenCalled()
+    expect(d.designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
+    expect(ctrl.mode()).toBeNull()
+    expect(ctrl.isActive()).toBe(false)
+  })
+
+  it('does not drive the heavy representation — ghosts are coarse-grained only', async () => {
+    const ctrl = initOxdnaDisplay(deps())
+    await ctrl.displayOccupancy('job1', occResp([0.6, 0.4]))
+    expect(ctrl.drivesHeavy?.()).toBeFalsy()
+  })
+})

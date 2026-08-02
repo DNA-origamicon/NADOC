@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   getOxdnaTrajectory, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
-  getOxdnaRmsfAtomistic, getOxdnaRmsfSurface,
+  getOxdnaRmsfAtomistic, getOxdnaRmsfSurface, getOxdnaOccupancy,
   getLammpsTrajectory, getLammpsRmsf, getLammpsDeviation, getLammpsDisplay,
   getMdTrajectory,
 } from './client.js'
@@ -21,7 +21,7 @@ import {
 const VIZ = {
   getOxdnaTrajectory, getOxdnaRmsf, getOxdnaDeviation, getOxdnaDisplay,
   getLammpsTrajectory, getLammpsRmsf, getLammpsDeviation, getLammpsDisplay,
-  getOxdnaRmsfAtomistic,
+  getOxdnaRmsfAtomistic, getOxdnaOccupancy,
 }
 
 describe('viz fetchers reject the legacy positional forms LOUDLY', () => {
@@ -94,5 +94,39 @@ describe('_oxdnaJSON choke point: a non-AbortSignal signal never reaches fetch',
     const c = new AbortController()
     const err = await getMdTrajectory('J1', c.signal).then(() => null, e => e)
     expect(String(err?.message ?? '')).not.toMatch(/must be an AbortSignal/i)
+  })
+})
+
+describe('getOxdnaOccupancy option passthrough', () => {
+  it('defaults to the frame budget the trajectory route uses', async () => {
+    // Any other max_frames misses the shared _ALIGNED_CACHE and silently re-reads the
+    // whole trajectory.
+    let url = null
+    global.fetch = async (u) => { url = u; return { ok: true, status: 200, json: async () => ({}) } }
+    await getOxdnaOccupancy('J1')
+    expect(url).toMatch(/max_frames=200/)
+    expect(url).toMatch(/scope=lineage/)
+    expect(url).toMatch(/n_clusters=0/)
+    expect(url).toMatch(/basis=nt/)
+  })
+
+  it('puts the caller\'s parameters on the wire', async () => {
+    let url = null
+    global.fetch = async (u) => { url = u; return { ok: true, status: 200, json: async () => ({}) } }
+    await getOxdnaOccupancy('J1', { nClusters: 3, basis: 'bp', refetch: true, maxFrames: 500 })
+    expect(url).toMatch(/n_clusters=3/)
+    expect(url).toMatch(/basis=bp/)
+    expect(url).toMatch(/refetch=true/)
+    expect(url).toMatch(/max_frames=500/)
+  })
+})
+
+describe('_vizOpts defaults scope even with no options object', () => {
+  it('never puts the literal scope=undefined on the wire', async () => {
+    let url = null
+    global.fetch = async (u) => { url = u; return { ok: true, status: 200, json: async () => ({}) } }
+    await getOxdnaTrajectory('J1')
+    expect(url).toMatch(/scope=lineage/)
+    expect(url).not.toMatch(/undefined/)
   })
 })

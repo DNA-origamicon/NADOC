@@ -2187,7 +2187,10 @@ export const lammpsAvailable     = ()            => _oxdnaJSON('GET',  '/lammps/
  * guard is the tripwire for anything still on the old shape.
  */
 function _vizOpts(opts, fn) {
-  if (opts == null) return { align: true, signal: undefined }
+  // `scope` must be defaulted here too — omitting it put the literal `scope=undefined` on
+  // the wire for any no-options call (the backend then fell through to lineage by
+  // accident, which is the right answer for the wrong reason).
+  if (opts == null) return { align: true, signal: undefined, scope: 'lineage' }
   if (typeof opts === 'boolean' || opts instanceof AbortSignal) {
     throw new TypeError(
       `${fn}(id, opts): expected an options object like { align, signal }, got a positional `
@@ -2303,6 +2306,23 @@ export const getOxdnaRmsf = (id, opts) => {
   const { align, signal } = _vizOpts(opts, 'getOxdnaRmsf')
   return _oxdnaJSON('GET', `/oxdna/jobs/${id}/rmsf?align=${align}`, undefined, { signal })
 }
+/** Top-N most likely CONFIGURATIONS ({ready, verdict, clusters:[{population, frame, …}], keys}).
+ *  Where RMSF gives one mean structure, this gives several real medoid frames with weights.
+ *  `opts.nClusters` 0 = auto; `opts.basis` 'nt'|'bp'; `opts.maxFrames` — leave at 200 to share
+ *  the trajectory route's frame cache, anything else re-reads the trajectory.
+ *  Read `verdict` first: 'switching' | 'drift' | 'unimodal' (see routes_oxdna.get_oxdna_occupancy). */
+export const getOxdnaOccupancy = (id, opts) => {
+  const { align, signal, scope } = _vizOpts(opts, 'getOxdnaOccupancy')
+  const { nClusters = 0, maxFrames = 200, method = 'pca', basis = 'nt', refetch = false } = opts ?? {}
+  return _oxdnaJSON(
+    'GET',
+    `/oxdna/jobs/${id}/occupancy?align=${align}&scope=${scope}&n_clusters=${nClusters}`
+      + `&max_frames=${maxFrames}&method=${method}&basis=${basis}&refetch=${refetch}`,
+    undefined, { signal })
+}
+/** Live frames-processed progress for an in-flight occupancy build ({active,done,total}). */
+export const getOxdnaOccupancyProgress = (id) =>
+  _oxdnaJSON('GET', `/oxdna/jobs/${id}/occupancy-progress`)
 /** Composite trajectory. `opts.scope`: 'lineage' (default, whole ancestor chain strided to
  *  ~200 frames — the fast view) or 'job' (this job's own stages only, EVERY written frame,
  *  no stride — the slow view). Scope must match whatever getOxdnaTrajectoryMeta was given. */

@@ -88,6 +88,9 @@ router = APIRouter(tags=["oxdna"])
 # /trajectory-progress is served while it computes.  A plain dict assignment is
 # GIL-atomic; the entry is created when the build starts and removed when it ends.
 _TRAJ_PROGRESS: dict[str, dict] = {}
+# Occupancy-cloud build progress. Separate from _TRAJ_PROGRESS on purpose — the two
+# builds share a frame cache but not a progress bar, and one job can be doing both.
+_OCC_PROGRESS: dict[str, dict] = {}
 # Same idea for a trajectory-RANGE export build (POST /export-trajectory); kept separate from
 # the view-trajectory build so an export and a scrub can't clobber each other's progress. Each
 # entry carries a "phase" ('align' | 'write') the export card renders.
@@ -1693,6 +1696,98 @@ async def get_oxdna_trajectory_progress(job_id: str) -> dict:
     structure's multi-second load shows an accurate bar instead of a dead spinner.
     ``{active:false}`` once the build has finished (or never started)."""
     p = _TRAJ_PROGRESS.get(job_id)
+    if not p:
+        return {"active": False}
+    return {"active": True, **p}
+
+
+@router.get("/oxdna/jobs/{job_id}/occupancy")
+async def get_oxdna_occupancy(job_id: str, request: Request, align: bool = True,
+                              scope: str = "lineage", max_frames: int = _SPARSE_FRAME_CAP,
+                              n_clusters: int = 0, method: str = "pca",
+                              basis: str = "nt", refetch: bool = False) -> dict:
+    """The top-N most likely CONFIGURATIONS of this job's sampling ensemble.
+
+    Where ``/rmsf`` gives one mean structure plus a per-nucleotide spread, this gives
+    several REAL frames — the medoid of each conformational cluster — with a population
+    weight apiece.  A plate that flips between the two saddle senses of a hyperbolic
+    paraboloid has a FLAT mean, a shape it never occupies; this route returns both senses
+    instead.  See :mod:`backend.core.oxdna_occupancy` for the algorithm and its three
+    invariants.
+
+    The defaults deliberately match what ``/trajectory`` passes
+    (``scope='lineage'``, ``max_frames=_SPARSE_FRAME_CAP``, ``copies=True``) so both
+    routes hit the SAME ``_ALIGNED_CACHE`` entry — after a trajectory scrub the frames are
+    already unwrapped and aligned, and occupancy costs only the linear algebra.  Changing
+    ``max_frames`` is therefore not free: it re-reads the trajectory.
+
+    ``n_clusters=0`` selects k automatically.  Read ``verdict`` before believing anything
+    else in the payload:
+
+    * ``"switching"`` — separated states that the run REVISITS. Populations are meaningful
+      (check ``confidence.preliminary`` for whether they are converged).
+    * ``"drift"`` — separated, but each state is entered at most once. The clusters are
+      "early" and "late" in a one-way path, not configurations in equilibrium. Do not
+      present them as likelihoods.
+    * ``"unimodal"`` — one basin. The flexibility map already describes this ensemble.
+    """
+    from backend.core.oxdna_occupancy import production_occupancy_cached
+
+    if method != "pca":
+        raise HTTPException(400, "method must be 'pca'")
+    if basis not in ("nt", "bp"):
+        raise HTTPException(400, "basis must be 'nt' or 'bp'")
+    n_clusters = int(max(0, min(6, n_clusters)))
+    max_frames = int(max(0, max_frames))
+
+    job = _load_job(job_id)
+    design, stages, ref = _composite_inputs(job, scope)
+    if not stages:
+        return {"ready": False, "reason": "no production or field run yet"}
+
+    cancelled = threading.Event()
+
+    class _OccupancyCancelled(Exception):
+        pass
+
+    def _prog(done: int, total: int) -> None:
+        if cancelled.is_set():
+            raise _OccupancyCancelled()
+        _OCC_PROGRESS[job_id] = {"done": done, "total": total}
+
+    _OCC_PROGRESS[job_id] = {"done": 0, "total": 0}
+    try:
+        task = asyncio.create_task(run_in_threadpool(
+            lambda: production_occupancy_cached(
+                design, stages, ref, max_frames=max_frames, n_clusters=n_clusters,
+                method=method, basis=basis, align=align, progress=_prog, refetch=refetch,
+                n_trailing_extra=_capture_bead_count(job),
+                trailing_extra_strand_length=_capture_strand_length(job))))
+        while not task.done():
+            if await request.is_disconnected():
+                cancelled.set()
+                break
+            await asyncio.sleep(0.1)
+        try:
+            result = await task
+        except _OccupancyCancelled:
+            return {"ready": False, "reason": "cancelled", "clusters": [], "keys": []}
+    finally:
+        cancelled.set()
+        _OCC_PROGRESS.pop(job_id, None)
+
+    prod_running = any(s.status == "running" for s in job.stages
+                       if s.kind in ("production", "field"))
+    return {**result, "production_running": prod_running}
+
+
+@router.get("/oxdna/jobs/{job_id}/occupancy-progress")
+async def get_oxdna_occupancy_progress(job_id: str) -> dict:
+    """Live frames-processed progress for an in-flight occupancy build.
+
+    Deliberately a SEPARATE dict from ``_TRAJ_PROGRESS``: a trajectory build and an
+    occupancy build for the same job would otherwise overwrite each other's bar."""
+    p = _OCC_PROGRESS.get(job_id)
     if not p:
         return {"active": False}
     return {"active": True, **p}

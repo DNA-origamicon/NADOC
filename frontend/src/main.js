@@ -189,6 +189,7 @@ import { nadocBroadcast } from './shared/broadcast.js'
 import { getDocId, mintDocId, docHeaders, docHeadersFor, docKey } from './shared/doc_id.js'
 import { initMdOverlay }             from './scene/md_overlay.js'
 import { initMdSolventOverlay }      from './scene/md_solvent_overlay.js'
+import { initOccupancyOverlay }     from './scene/occupancy_overlay.js'
 import { initMdBoxOverlay }          from './scene/md_box_overlay.js'
 import { initMdSegmentationOverlay } from './scene/md_segmentation_overlay.js'
 import { initMdPanel }    from './ui/md_panel.js'
@@ -1879,6 +1880,7 @@ async function main() {
   // builds its own initMdOverlay instance below — that one is a real standalone rep.)
   const mdSolventOverlay  = initMdSolventOverlay(scene)
   const mdBoxOverlay      = initMdBoxOverlay(scene)
+  const occupancyOverlay  = initOccupancyOverlay({ scene, getGeometry: () => store.getState().currentGeometry, getDesign: () => store.getState().currentDesign, getHelixAxes: () => store.getState().currentHelixAxes, getRepr: () => _currentRepr, setDesignVisible: (v) => designRenderer.setDesignVisible(v), onStatus: (s) => showToast(s.text, s.level) })
   const mdDisplayController = initMdPanel(store, {
     designRenderer, atomisticRenderer,
     onRestoreDesignHeavy: _restoreDesignHeavy,
@@ -1950,6 +1952,7 @@ async function main() {
     // Toggle-off / job-switch: rebuild the atomistic + surface meshes from the
     // live design so they drop the oxDNA overlay (mirrors the animation player's
     // stop handler).
+    onOccupancyClear:     () => occupancyOverlay.clear(),
     onRestoreDesignHeavy: _restoreDesignHeavy,
     // A heavy (atomistic/surface) frame rebuild started/finished — forward to the
     // panel so it can show a "building…" spinner instead of looking frozen.
@@ -1971,6 +1974,7 @@ async function main() {
   // Renderer-level regression diagnostics: lets automated app tests activate the exact
   // saved job/mode, then query __nadocDR.debugRenderedAudit() without brittle sidebar clicks.
   if (import.meta.env.DEV) window.__nadocOxdnaDisplay = oxdnaDisplay
+  if (import.meta.env.DEV) { window.__nadocOccupancy = occupancyOverlay; window.__nadocScene = scene }
   // When the scene representation changes while an oxDNA overlay is active, re-apply
   // the current frame to the freshly-built atomistic/surface mesh.
   window.addEventListener('nadoc:representation-change', () => oxdnaDisplay.reapplyForRepr())
@@ -2038,6 +2042,7 @@ async function main() {
   const lammpsDisplay = initLammpsDisplay({ designRenderer })
   oxdnaPanel = initOxdnaJobsPanel({
     oxdnaDisplay, lammpsDisplay, oxdnaLive, getWorkspacePath: () => _workspacePath,
+    getOccupancyOverlay: () => occupancyOverlay,
     flexScale,
     getRunElements: _oxdnaRunElements,
     getDesignLattice: () => store.getState().currentDesign?.lattice_type ?? null,
