@@ -36,9 +36,14 @@ const SQ_PLUS_Z  = new Set([0, 8, 16, 24])  // _stapH
 const SQ_MINUS_Z = new Set([7, 15, 23, 31]) // _stapL
 
 // Local geometry templates (duplicated from helix_renderer to avoid coupling).
-const GEO_SPHERE    = new THREE.SphereGeometry(BEAD_RADIUS, 8, 6)
-const GEO_UNIT_BOX  = new THREE.BoxGeometry(1, 1, 1)
-const GEO_UNIT_CONE = new THREE.ConeGeometry(1, 1, 8)  // backbone arrow, apex along +Y
+// `userData.shared` marks them the same way helix_renderer._markShared does: they are
+// module-level singletons handed to EVERY build, so a traverse-and-dispose over any one
+// consumer's subtree (a ghost copy, an assembly instance being torn down) must skip them
+// or it silently guts the meshes every other consumer is still drawing from.
+function _markShared(g) { g.userData.shared = true; return g }
+const GEO_SPHERE    = _markShared(new THREE.SphereGeometry(BEAD_RADIUS, 8, 6))
+const GEO_UNIT_BOX  = _markShared(new THREE.BoxGeometry(1, 1, 1))
+const GEO_UNIT_CONE = _markShared(new THREE.ConeGeometry(1, 1, 8))  // backbone arrow, apex +Y
 
 export const CONN_RADIUS = 0.075  // nm — matches helix_renderer CONE_RADIUS
 const Y_HAT = new THREE.Vector3(0, 1, 0)

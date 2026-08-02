@@ -29,9 +29,16 @@
  *    `_detailLevel` to 0 (full). Building at `lod='cylinders'` and never calling
  *    `setDetailLevel(CG_LOD.cylinders)` draws exactly nothing, silently.
  *
- * 4. **Shared geometries must survive disposal.** The template geometries are
- *    module-level in helix_renderer and marked `userData.shared` precisely so
- *    traverse-and-dispose call sites skip them. Disposing them would break the main model.
+ * 4. **Shared geometries must survive disposal.** The template geometries in BOTH
+ *    helix_renderer and crossover_connections are module-level singletons marked
+ *    `userData.shared`, precisely so traverse-and-dispose call sites skip them. Disposing
+ *    one would gut the main model's meshes the first time a ghost is torn down.
+ *
+ * 5. **Crossover extra bases are a separate mesh family.** They have no
+ *    (helix, bp, direction) key, so `buildHelixObjects` emits nothing for them and
+ *    `applyFemPositions` drops their `__xb__` updates. Each ghost therefore also builds
+ *    `buildCrossoverConnections` and places the inserts itself. Extension tails need none
+ *    of this — they carry real `("__ext_<id>", i, dir)` keys and ride the normal path.
  *
  * Ghosts are coarse-grained only. On a switch to a heavy representation
  * (atomistic/surface) they are cleared with a status message rather than left to
@@ -41,7 +48,11 @@
  */
 import * as THREE from 'three'
 
-import { CG_LOD, buildHelixObjects } from './helix_renderer.js'
+import {
+  arcControlPoint, buildCrossoverConnections, partitionExtraBaseUpdates, setExtraBaseConnectors,
+  setExtraBaseInstanceFromSim, simBeadIndex, updateExtraBaseInstances,
+} from './crossover_connections.js'
+import { CG_LOD, buildHelixObjects, buildStapleColorMap } from './helix_renderer.js'
 
 /** Ghost palette, most-populated first. Rank 0 is the real model and takes none of these. */
 export const OCCUPANCY_COLORS = [0xd29922, 0xa371f7, 0x3fb950, 0xf85149, 0x58a6ff]
@@ -214,6 +225,71 @@ export function initOccupancyOverlay({
     return r === 'beads' || r === 'cylinders' ? r : 'full'
   }
 
+  /**
+   * Place a ghost's crossover extra bases.
+   *
+   * Extra bases have NO (helix, bp, direction) key, so `helix_renderer` cannot draw or
+   * move them — `buildHelixObjects` emits no geometry for them at all and
+   * `applyFemPositions` drops their updates on the floor. They live in their own
+   * instanced meshes built by `buildCrossoverConnections`, and the simulated frame
+   * carries their real positions under `__xb__` keys. This is the ghost's copy of what
+   * `design_renderer.applyClusterCrossoverUpdate` does for the live model.
+   *
+   * Must run AFTER `applyFemPositions`: the no-sim-data fallback threads a Bezier between
+   * the arc's two endpoint nucleotides, and those have to have moved first.
+   */
+  function _placeExtraBases(ctrl, xo, simXb) {
+    const ctrlPt = new THREE.Vector3()
+    for (const ad of xo.arcData ?? []) {
+      const sim = simXb?.get(ad.xoId)
+      if (sim) {
+        for (let k = 0; k < ad.beadCount; k++) {
+          const sBead = sim.get(k)
+          if (!sBead) continue
+          // Simulated k runs 5′→3′ from the strand's exit half; beads run A→B.
+          const bi = simBeadIndex(k, ad.beadCount, ad.simReversed)
+          setExtraBaseInstanceFromSim(xo.beadsMesh, xo.slabsMesh, ad.beadStartIdx + bi,
+                                      sBead.pos, sBead.normal, ad.avgAx)
+        }
+        continue
+      }
+      // No simulated data for this arc (e.g. a scoped run, or a crossover the frame does
+      // not cover) — fall back to the geometric Bezier from the ghost's LIVE endpoints,
+      // so the inserts still sit on the moved structure rather than at the design pose.
+      const a = ctrl.getNucLivePos?.(ad.nucA)
+      const b = ctrl.getNucLivePos?.(ad.nucB)
+      if (!a || !b) continue
+      arcControlPoint(a, b, ad.nucA, ad.nucB, ctrlPt)
+      updateExtraBaseInstances(xo.beadsMesh, xo.slabsMesh, ad.beadStartIdx, ad.beadCount,
+                               a, ctrlPt, b, ad.avgAx, ad.zOffset)
+    }
+    xo.beadsMesh.instanceMatrix.needsUpdate = true
+    xo.slabsMesh.instanceMatrix.needsUpdate = true
+    _threadConnectors(ctrl, xo)
+  }
+
+  /** Re-thread the backbone arrows through the beads' now-live matrices, so the inserts
+   *  read as part of the strand instead of floating dots. */
+  function _threadConnectors(ctrl, xo) {
+    if (!xo.connMesh) return
+    const mat = new THREE.Matrix4()
+    for (const ad of xo.arcData ?? []) {
+      const a = ctrl.getNucLivePos?.(ad.nucA)
+      const b = ctrl.getNucLivePos?.(ad.nucB)
+      if (!a || !b) continue
+      const pts = [new THREE.Vector3().copy(a)]
+      for (let k = 0; k < ad.beadCount; k++) {
+        xo.beadsMesh.getMatrixAt(ad.beadStartIdx + k, mat)
+        pts.push(new THREE.Vector3().setFromMatrixPosition(mat))
+      }
+      pts.push(new THREE.Vector3().copy(b))
+      // null colour: the meshes were built with the ghost's flat tint already, and
+      // re-colouring per arc here would fight it.
+      setExtraBaseConnectors(xo.connMesh, ad.connStartIdx, pts, ad.beadCount + 1, null)
+    }
+    xo.connMesh.instanceMatrix.needsUpdate = true
+  }
+
   function _buildState(cluster, rank, hex, lod, visible) {
     const design = getDesign()
     const geometry = getGeometry()
@@ -228,20 +304,49 @@ export function initOccupancyOverlay({
 
     const group = new THREE.Group()
     group.name = `occupancyGhost${rank}`
-    const ctrl = buildHelixObjects(
-      geometry, design, group, _tintAll(design, hex), [], getHelixAxes(), lod)
+    const tint = _tintAll(design, hex)
+    const ctrl = buildHelixObjects(geometry, design, group, tint, [], getHelixAxes(), lod)
 
     // A cylinder/beads copy is built with those meshes hidden — without this it draws
     // nothing at all, silently.
     const level = CG_LOD[lod]
     if (level != null && level !== CG_LOD.full) ctrl.setDetailLevel?.(level)
 
-    ctrl.applyFemPositions?.(occupancyFrameToUpdates(_lastResp.keys, cluster.frame))
+    // Crossover extra bases are a separate mesh family that buildHelixObjects knows
+    // nothing about; without this the inserts are simply absent from every ghost.
+    // Extension tails need no such treatment — they carry real ("__ext_<id>", i, dir)
+    // keys, so the builder draws them and applyFemPositions moves them like any base.
+    // Returns null when the design has no crossover with extra bases — the common case.
+    // A THROW is different: that is a real breakage, and swallowing it would leave the
+    // inserts silently missing again, so it is recorded for stats().
+    let xo = null
+    try {
+      xo = buildCrossoverConnections(design, geometry, buildStapleColorMap(geometry, design), tint)
+    } catch (e) {
+      xo = null
+      _lastSkip = `extra bases unavailable: ${e?.message ?? e}`
+    }
+    if (xo?.group) {
+      group.add(xo.group)
+      // Cylinder LOD has no per-insert representation, matching the live model.
+      if (level === CG_LOD.cylinders) {
+        xo.beadsMesh.visible = xo.slabsMesh.visible = false
+        if (xo.connMesh) xo.connMesh.visible = false
+      }
+    }
+
+    const updates = occupancyFrameToUpdates(_lastResp.keys, cluster.frame)
+    const { real, simXb } = partitionExtraBaseUpdates(updates)
+    ctrl.applyFemPositions?.(real ?? updates)
+    if (xo) _placeExtraBases(ctrl, xo, simXb)
+
+    // AFTER the extra-base group is attached — this traverses the whole subtree, and a
+    // group added later would keep opaque materials.
     _setGroupOpacity(group, clusterOpacity(cluster.population))
     group.renderOrder = 10 + rank
     group.visible = _visible && visible
     scene.add(group)
-    return { group, ctrl, rank, color: hex, visible, cluster }
+    return { group, ctrl, rank, color: hex, visible, cluster, hasExtraBases: !!xo }
   }
 
   const api = {

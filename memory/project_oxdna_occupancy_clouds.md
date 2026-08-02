@@ -86,6 +86,41 @@ query string); the unscoped `GET` is unchanged and both share one `_occupancy_im
 selection is part of the cache key on both sides, order-independent (`_selection_sig`), so
 two different regions can never collide — and the frontend's own cache key includes it too.
 
+## Extra bases and extension tails in the drawn states (2026-08-01)
+
+They are NOT the same mechanism, and only one was broken:
+
+| | wire key | how it is drawn |
+|---|---|---|
+| crossover extra base | `["__xb__", <crossover_id>, k]` | **no** (helix,bp,dir) key → own instanced meshes from `buildCrossoverConnections`; `applyFemPositions` silently drops these updates |
+| extension tail | `["__ext_<id>", i, direction]` | a **real** key on a synthetic helix → ordinary beads from `buildHelixObjects`, moved by `applyFemPositions` like any base |
+
+So a ghost built from `buildHelixObjects` alone had **no extra-base geometry at all**, while
+tails already worked. `_buildState` now also calls `buildCrossoverConnections` into the
+ghost group and places the inserts itself (`_placeExtraBases`), mirroring
+`design_renderer.applyClusterCrossoverUpdate`. Ordering is load-bearing:
+
+1. `partitionExtraBaseUpdates` BEFORE `applyFemPositions` — the helix controller cannot
+   place `__xb__` rows, and you need `simXb` anyway.
+2. insert placement AFTER it — the no-sim-data fallback threads a Bezier between the arc's
+   two endpoint nucleotides, which must have moved first.
+3. `_setGroupOpacity` AFTER `group.add(xo.group)` — it traverses, so a subtree attached
+   later keeps opaque materials.
+
+**Latent bug fixed at source:** `crossover_connections.js` allocated `GEO_SPHERE` /
+`GEO_UNIT_BOX` / `GEO_UNIT_CONE` at module level but never marked them
+`userData.shared`. The ghost's traverse-and-dispose skips only flagged geometry, so the
+first ghost teardown would have disposed the templates the **main model's** extra-base
+meshes still draw from. Marked shared (same convention as `helix_renderer._markShared`),
+which also closes the identical hazard in `assembly_renderer`'s orphan cleanup.
+
+Verified on job `012a0fbe2de2` (6hbx100_1xT, 60 inserts): every insert is drawn at its
+simulated coordinate — `frontend/e2e/occupancy_extra_bases.spec.js`. Two traps that cost a
+run each there: bead instances are ordered by the design's crossover iteration while
+payload keys follow the strand walk (compare SETS, never index-for-index), and a job's
+`design_source_path` is a bare filename the backend resolves against the REPO ROOT
+although designs live in `workspace/`.
+
 ## The three invariants (do not weaken any of them)
 
 1. **The representative is a medoid, never a within-cluster average.** Averaging positions

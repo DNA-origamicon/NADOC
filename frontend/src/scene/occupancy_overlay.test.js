@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const built = []
 vi.mock('./helix_renderer.js', () => ({
   CG_LOD: { full: 0, beads: 1, cylinders: 2 },
+  buildStapleColorMap: vi.fn(() => new Map()),
   buildHelixObjects: vi.fn((geometry, design, group, customColors, _loop, _axes, lod) => {
     const shared = new THREE.SphereGeometry(1, 4, 3)
     shared.userData.shared = true                      // a module-level template
@@ -22,6 +23,7 @@ vi.mock('./helix_renderer.js', () => ({
       root: group, lod, customColors,
       setDetailLevel: vi.fn(() => ({ needsRebuild: false })),
       applyFemPositions: vi.fn(),
+      getNucLivePos: vi.fn(() => new THREE.Vector3()),
       _shared: shared, _own: own,
     }
     built.push(ctrl)
@@ -29,7 +31,47 @@ vi.mock('./helix_renderer.js', () => ({
   }),
 }))
 
+// crossover_connections owns the extra-base meshes; mocked so the ghost's use of them is
+// observable without a real Design full of crossovers.
+const xoBuilt = []
+vi.mock('./crossover_connections.js', () => ({
+  buildCrossoverConnections: vi.fn((design) => {
+    if (!design?.crossovers?.length) return null           // real behaviour: null when none
+    const mesh = () => ({ visible: true, instanceMatrix: { needsUpdate: false },
+                          getMatrixAt: () => {} })
+    const xo = {
+      group: Object.assign(new THREE.Group(), { name: 'crossoverConnections' }),
+      arcData: design.crossovers.map((c, i) => ({
+        xoId: c.id, nucA: { helix_id: 'h0' }, nucB: { helix_id: 'h1' },
+        beadStartIdx: i * 2, beadCount: 2, connStartIdx: i * 3,
+        avgAx: new THREE.Vector3(0, 1, 0), simReversed: false, zOffset: 0,
+      })),
+      beadsMesh: mesh(), slabsMesh: mesh(), connMesh: mesh(),
+    }
+    xoBuilt.push(xo)
+    return xo
+  }),
+  partitionExtraBaseUpdates: vi.fn((updates) => {
+    if (!updates?.some((u) => u.helix_id === '__xb__')) return { real: updates, simXb: null }
+    const real = []
+    const simXb = new Map()
+    for (const u of updates) {
+      if (u.helix_id !== '__xb__') { real.push(u); continue }
+      if (!simXb.has(u.bp_index)) simXb.set(u.bp_index, new Map())
+      simXb.get(u.bp_index).set(u.direction | 0,
+        { pos: u.backbone_position, normal: [u.nx, u.ny, u.nz] })
+    }
+    return { real, simXb }
+  }),
+  setExtraBaseInstanceFromSim: vi.fn(),
+  setExtraBaseConnectors: vi.fn(),
+  updateExtraBaseInstances: vi.fn(),
+  simBeadIndex: vi.fn((k) => k),
+  arcControlPoint: vi.fn(),
+}))
+
 const { CG_LOD, buildHelixObjects } = await import('./helix_renderer.js')
+const xoMod = await import('./crossover_connections.js')
 const {
   OCCUPANCY_COLORS,
   OCC_MAX_ALPHA,
@@ -471,5 +513,116 @@ describe('the scope picker is reused, not reimplemented', () => {
     const block = HTML.slice(i, i + 500)
     expect(block).toMatch(/value="all" selected/)
     expect(block).toMatch(/value="selection"/)
+  })
+})
+
+// ── Extra crossover bases and extension tails in the drawn states ─────────────────
+describe('extra bases and extension tails appear in every state', () => {
+  function respWithExtras(populations) {
+    // A real payload interleaves ordinary nucleotides, __xb__ inserts (keyed by CROSSOVER
+    // ID with the insert index in the direction slot) and __ext_ tail beads (a real
+    // 3-tuple key on a synthetic helix).
+    const keys = [
+      ['h0', 0, 'FORWARD'],
+      ['__xb__', 'xo1', 0],
+      ['__xb__', 'xo1', 1],
+      ['__ext_e1', 0, 'FORWARD'],
+      ['__ext_e1', 1, 'FORWARD'],
+    ]
+    const frame = keys.flatMap((_, i) => [i, i, i, 0, 0, 1])
+    return {
+      keys,
+      clusters: populations.map((population, rank) => ({ rank, population, frame: [...frame] })),
+    }
+  }
+
+  const withXovers = { strands: [{ id: 's1' }], crossovers: [{ id: 'xo1' }] }
+
+  beforeEach(() => {
+    built.length = 0
+    xoBuilt.length = 0
+    buildHelixObjects.mockClear()
+    xoMod.buildCrossoverConnections.mockClear()
+    xoMod.setExtraBaseInstanceFromSim.mockClear()
+    xoMod.setExtraBaseConnectors.mockClear()
+  })
+
+  it('builds the extra-base meshes into every ghost', () => {
+    // buildHelixObjects emits NO geometry for __xb__ inserts — they have no
+    // (helix, bp, direction) key — so without this call they are simply absent.
+    const { scene, overlay } = makeOverlay({ getDesign: () => withXovers })
+    return overlay.setClusters(respWithExtras([0.6, 0.4])).then(() => {
+      expect(xoMod.buildCrossoverConnections).toHaveBeenCalledTimes(2)
+      for (const n of [0, 1]) {
+        const g = scene.children.find((c) => c.name === `occupancyGhost${n}`)
+        expect(g.children.some((c) => c.name === 'crossoverConnections')).toBe(true)
+      }
+    })
+  })
+
+  it('places each insert at its SIMULATED position, not the design pose', async () => {
+    const { overlay } = makeOverlay({ getDesign: () => withXovers })
+    await overlay.setClusters(respWithExtras([1.0]))
+
+    expect(xoMod.setExtraBaseInstanceFromSim).toHaveBeenCalledTimes(2)   // beadCount 2
+    const [, , , pos] = xoMod.setExtraBaseInstanceFromSim.mock.calls[0]
+    expect(pos).toEqual([1, 1, 1])                                       // key index 1
+    // The geometric Bezier fallback must NOT run when simulated data exists.
+    expect(xoMod.updateExtraBaseInstances).not.toHaveBeenCalled()
+  })
+
+  it('keeps __xb__ updates OUT of applyFemPositions, which cannot place them', async () => {
+    const { overlay } = makeOverlay({ getDesign: () => withXovers })
+    await overlay.setClusters(respWithExtras([1.0]))
+
+    const applied = built[0].applyFemPositions.mock.calls[0][0]
+    expect(applied.some((u) => u.helix_id === '__xb__')).toBe(false)
+  })
+
+  it('sends extension tails THROUGH applyFemPositions — they are ordinary nucleotides', async () => {
+    // __ext_ beads carry a real ("__ext_<id>", i, direction) key and are drawn by the
+    // normal bead path, so filtering them out here would strand them at the design pose.
+    const { overlay } = makeOverlay({ getDesign: () => withXovers })
+    await overlay.setClusters(respWithExtras([1.0]))
+
+    const applied = built[0].applyFemPositions.mock.calls[0][0]
+    const tails = applied.filter((u) => String(u.helix_id).startsWith('__ext_'))
+    expect(tails).toHaveLength(2)
+    expect(tails[0].backbone_position).toEqual([3, 3, 3])
+  })
+
+  it('threads the connector arrows through the placed beads', async () => {
+    const { overlay } = makeOverlay({ getDesign: () => withXovers })
+    await overlay.setClusters(respWithExtras([1.0]))
+    expect(xoMod.setExtraBaseConnectors).toHaveBeenCalled()
+    // null colour — the meshes already carry the ghost's flat tint.
+    expect(xoMod.setExtraBaseConnectors.mock.calls[0][4]).toBeNull()
+  })
+
+  it('hides the inserts at cylinder LOD, matching the live model', async () => {
+    const { overlay } = makeOverlay({ getDesign: () => withXovers, getRepr: () => 'cylinders' })
+    await overlay.setClusters(respWithExtras([1.0]))
+    expect(xoBuilt[0].beadsMesh.visible).toBe(false)
+    expect(xoBuilt[0].slabsMesh.visible).toBe(false)
+  })
+
+  it('is a no-op for a design with no extra bases', async () => {
+    const { overlay } = makeOverlay()                       // default design: no crossovers
+    const r = await overlay.setClusters(respWithExtras([1.0]))
+    expect(r.states).toBe(1)
+    expect(xoBuilt).toHaveLength(0)
+  })
+})
+
+describe('crossover_connections templates survive a ghost teardown', () => {
+  it('marks its module-level geometries shared', () => {
+    // They are singletons handed to EVERY consumer. The ghost's traverse-and-dispose skips
+    // anything flagged shared; unflagged, tearing down one ghost would gut the main
+    // model's extra-base meshes.
+    const SRC = readFileSync(resolve(process.cwd(), 'src/scene/crossover_connections.js'), 'utf8')
+    for (const g of ['GEO_SPHERE', 'GEO_UNIT_BOX', 'GEO_UNIT_CONE']) {
+      const line = SRC.split('\n').find((l) => l.startsWith(`const ${g}`))
+      expect(line, `${g} must be _markShared()`).toMatch(/_markShared\(/)
+    }
   })
 })
