@@ -126,6 +126,7 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
     matAtomistic: $('photo-mat-atomistic'),
     fov:        $('photo-fov'),
     fovLabel:   $('photo-fov-label'),
+    fovReset:   $('photo-fov-reset'),
     parallel:   $('photo-parallel'),
     resPreset:  $('photo-res-preset'),
     resW:       $('photo-res-w'),
@@ -423,6 +424,10 @@ export function initPhotoPanel(photoMode, { onExit } = {}) {
     photoMode.setFOV(v)
     if (els.fovLabel) els.fovLabel.textContent = `${v}°`
     if (els.parallel) els.parallel.checked = photoMode.getSettings().parallel
+  })
+  els.fovReset?.addEventListener('click', () => {
+    photoMode.resetFOV()
+    syncToState()          // slider, label and the Parallel checkbox all follow
   })
   els.parallel?.addEventListener('change', () => {
     photoMode.setParallel(els.parallel.checked)

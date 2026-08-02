@@ -22,6 +22,7 @@
  */
 
 import * as THREE from 'three'
+import { fovPanScale } from './fov_pan.js'
 
 // Velocity envelope: target speed = SPEED_FRAC * camera_to_target_distance.
 // At minDist=10 that's ~6/sec; at maxDist=10000 that's ~6000/sec — keeps the
@@ -72,7 +73,11 @@ export function initNavController({
       if (_tmpRight.lengthSq() < 1e-8) _tmpRight.set(1, 0, 0)
       else _tmpRight.normalize()
       const distToTarget = camera.position.distanceTo(controls.target)
-      const speed = Math.max(distToTarget * SPEED_FRAC, MIN_SPEED) *
+      // Distance alone is the wrong yardstick once the lens moves: photo mode
+      // dollies the camera when the FOV changes, so a long lens sits far out
+      // and WASD would rocket, a wide one crawls. Scale by the frustum height
+      // at the pivot instead — exactly 1× at the default 55° lens.
+      const speed = Math.max(distToTarget * SPEED_FRAC * fovPanScale(camera.fov), MIN_SPEED) *
                     (_keys.has('shift') ? BOOST_MULT : 1)
       _tmpTargetVel.addScaledVector(_tmpRight,  dx * speed)
       _tmpTargetVel.addScaledVector(_worldUp,   dy * speed)

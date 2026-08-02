@@ -10,6 +10,7 @@ import * as THREE from 'three'
 import { OrbitControls }    from 'three/addons/controls/OrbitControls.js'
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js'
 import { makeMultiscaleControls } from './multiscale_controls.js'
+import { fovPanScale } from './fov_pan.js'
 
 function _makeOrbitControls(camera, canvas, target) {
   const c = new OrbitControls(camera, canvas)
@@ -165,11 +166,18 @@ export function initScene(canvas) {
   }, { capture: true, passive: true })
 
   // Shift+drag → fast pan: live-update panSpeed each pointermove while Shift is held.
+  //
+  // The same listener normalises pan against the lens. TrackballControls (and
+  // Multiscale, built on it) pan by |camera − target| with no FOV term, so a
+  // photo-mode FOV change — which dollies to preserve framing — silently
+  // rescales pan: wild at 8°, glacial at 90°. OrbitControls already folds
+  // tan(fov/2) into its own pan maths, so it must NOT get the factor.
   canvas.addEventListener('pointermove', e => {
     const isTrackball = _inner instanceof TrackballControls
-    _inner.panSpeed = (e.shiftKey && e.buttons !== 0)
+    const base = (e.shiftKey && e.buttons !== 0)
       ? (isTrackball ? 3.2 : 4.0)
       : (isTrackball ? 0.8 : 1.0)
+    _inner.panSpeed = isTrackball ? base * fovPanScale(camera.fov) : base
   }, { capture: true, passive: true })
 
   // Double-click → re-center orbit on the clicked 3-D point.

@@ -213,7 +213,29 @@ defines baked into the post passes at construction, OrbitControls' distance-base
 zoom, main.js's per-frame near/far rewrite). `setFOV` dollies via
 `dollyDistanceForFov` so framing is preserved, and `deactivate` restores the
 editor's lens WITH a dolly. A FOV at or below 8° sets the `parallel` flag, so the
-checkbox can't lie.
+checkbox can't lie. `#photo-fov-reset` (the `↺` next to the slider) calls
+`photoMode.resetFOV()` → `setFOV(PERSPECTIVE_FOV)`, so the default lives in the
+mode, not the panel — same rule as `resetKeyDirection`.
+
+**The FOV slider used to break panning** (2026-08-02). `setFOV` dollies, so a long
+lens parks the camera ~7× further out — and TrackballControls (i.e. Multiscale,
+the default nav mode) pans by `|camera − target| × panSpeed` with **no lens term**,
+as does `nav_controller`'s WASD. Result: pan flew at 8° and crawled at 90°.
+[scene/fov_pan.js](../frontend/src/scene/fov_pan.js) `fovPanScale()` =
+tan(fov/2)/tan(55°/2) now multiplies both — pixels-per-drag ∝ panSpeed/tan(fov/2),
+so the lens cancels. **Do not apply it to OrbitControls**: its own `panLeft/panUp`
+already folds `tan(fov/2)` in, so it would double-correct.
+
+Measured on 18hb, identical restored pose, one 120 px right-drag (throwaway e2e
+stack, spec deleted after the run): 55° → 54 px of structure travel, 20° → 78 px,
+8° → 86 px, 90° → 21 px, with `panSpeed` = 0.800 / 0.271 / 0.108 / 1.537 exactly
+tracking tan(fov/2). Pre-fix the same drags would have been ~639 px at 8° and
+~11 px at 90° — a 59× spread, now 4×. **The residual 4× is NOT the lens**: it is
+Multiscale re-parking the pivot on the NEAREST helix axis at every pointerdown,
+so pan is scaled by (camera−surface) while what you watch move is the structure
+CENTRE — a gap that closes as the long lens dollies out. Flattening that means
+changing the near-surface pivot rule (`multiscale_controls._repivot`), which is a
+whole-app nav-feel change, not a photo-mode one.
 
 **Export card** — tiled PNG at any resolution. TILING IS NOT OPTIONAL: a render
 target above `MAX_TEXTURE_SIZE` silently clamps and yields a black image, and 300

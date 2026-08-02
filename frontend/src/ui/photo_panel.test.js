@@ -115,6 +115,7 @@ const PANEL_IDS = {
   'photo-materials-arrow':        'span',
   'photo-fov':                    'input',
   'photo-fov-label':              'span',
+  'photo-fov-reset':              'button',
   'photo-parallel':               'input',
   'photo-res-preset':             'select',
   'photo-res-w':                  'input',
@@ -167,7 +168,7 @@ function makeMode(overrides = {}) {
     setDepthCue: vi.fn(), setDepthCueColor: vi.fn(), setDepthCueStrength: vi.fn(),
     setFloor: vi.fn(), setFloorOpacity: vi.fn(), setFloorOffset: vi.fn(),
     setFloorAxis: vi.fn(),
-    setFOV: vi.fn(), setParallel: vi.fn(), setExportSize: vi.fn(),
+    setFOV: vi.fn(), resetFOV: vi.fn(), setParallel: vi.fn(), setExportSize: vi.fn(),
     renderToBlob: vi.fn(async () => null),
   }
 }
@@ -396,6 +397,19 @@ describe('initPhotoPanel', () => {
     els['photo-parallel'].checked = true
     els['photo-parallel'].dispatchEvent(new Event('change'))
     expect(mode.setParallel).toHaveBeenCalledWith(true)
+  })
+
+  it('the FOV reset button defers to the mode and re-syncs the slider', () => {
+    els['photo-fov'].value = '20'
+    els['photo-fov'].dispatchEvent(new Event('input'))
+    expect(els['photo-fov-label'].textContent).toBe('20°')
+
+    // The mock's settings still report 55 — syncToState must pull the slider
+    // and label back from the mode rather than leaving the hand-set value.
+    els['photo-fov-reset'].dispatchEvent(new Event('click'))
+    expect(mode.resetFOV).toHaveBeenCalledTimes(1)
+    expect(els['photo-fov'].value).toBe('55')
+    expect(els['photo-fov-label'].textContent).toBe('55°')
   })
 
   it('resolution presets set a real pixel size', () => {

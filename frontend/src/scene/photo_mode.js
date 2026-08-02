@@ -797,6 +797,11 @@ export function createPhotoMode(sceneCtx) {
     if (_active) _applyFovWithDolly(fov)
   }
 
+  /** Back to the default 55° lens (and out of parallel projection), dollying so
+   *  the framing survives. Lives here, not in the panel, for the same reason
+   *  resetKeyDirection() does: one home for the defaults. */
+  function resetFOV() { setFOV(PERSPECTIVE_FOV) }
+
   function setParallel(on) {
     _settings.parallel = !!on
     _settings.fov = on ? PARALLEL_FOV : PERSPECTIVE_FOV
@@ -1123,7 +1128,7 @@ export function createPhotoMode(sceneCtx) {
     getDiagnostics,
     isActive: () => _active,
     setBackground, setMaterialPreset,
-    setFOV, setParallel, setExportSize, renderToBlob,
+    setFOV, resetFOV, setParallel, setExportSize, renderToBlob,
     setOutline, setOutlineColor, setOutlineStrength, setOutlineThickness,
     setOutlineSensitivity, setOutlineDepthJump,
     setDepthCue, setDepthCueColor, setDepthCueStrength,

@@ -761,6 +761,21 @@ describe('createPhotoMode', () => {
     m2.deactivate()
   })
 
+  it('resetFOV goes back to the 55 degree default, clearing parallel, and dollies in', () => {
+    ctx.controls = { target: new THREE.Vector3(0, 0, 0), update: vi.fn() }
+    const m2 = createPhotoMode(ctx)
+    ctx.camera.position.set(0, 0, 40)
+    m2.activate()
+    m2.setParallel(true)
+    const atLongLens = ctx.camera.position.length()
+    m2.resetFOV()
+    expect(ctx.camera.fov).toBe(55)
+    expect(m2.getSettings().fov).toBe(55)
+    expect(m2.getSettings().parallel).toBe(false)
+    expect(ctx.camera.position.length()).toBeLessThan(atLongLens)   // dollied back IN
+    m2.deactivate()
+  })
+
   it('deactivate restores the editor lens', () => {
     ctx.controls = { target: new THREE.Vector3(0, 0, 0), update: vi.fn() }
     ctx.camera.fov = 55
