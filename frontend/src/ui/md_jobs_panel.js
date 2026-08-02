@@ -917,7 +917,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // With its peers, not beside the occupancy card below: _syncVizOffRadio reads this in
   // its `anyOn` array and runs during init, so a later `const` is a TDZ that kills boot.
   const occupancyToggle = document.getElementById('md-jobs-occupancy-toggle')
-  const occupancyAllStages = document.getElementById('md-jobs-occupancy-all-stages')
   // Declared HERE, with the elements, not beside the controls factory ~1100 lines below:
   // _updateVizToggles reads it during init, and a `let` declared later is a TDZ.
   let _occupancyReady = false
@@ -2035,9 +2034,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       `<span>${max.toFixed(2)} nm</span></div>` +
       `<div style="font-size:9px;color:${_C.dim}">rigid → flexible (RMSF)</div>`
   }
-  // The SAME card the oxDNA panel uses, on the md- id prefix with its own fetch. A NAMD
-  // analysis has no shared frame cache and re-reads the whole trajectory, so the fetch
-  // also carries `allStages` — the ENM restraint ramp is excluded by default.
+  // The SAME card the oxDNA panel uses, on the md- id prefix with its own fetch.
+  // Only production (unrestrained) dynamics is ever clustered — see mdHasFreeSampling.
   const _occupancy = initOccupancyControls({
     api,
     engine: 'md',
@@ -2046,7 +2044,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     getSelectedJobId: () => _selectedId,
     getAnchorSelection,
     fetchOccupancy: ({ jobId, params, selection, refetch, signal }) => {
-      const opts = { ...params, refetch, allStages: !!occupancyAllStages?.checked }
+      const opts = { ...params, refetch }
       return selection
         ? api.postMdOccupancy(jobId, signal, { ...opts, selection })
         : api.getMdOccupancy(jobId, signal, opts)
@@ -2073,9 +2071,6 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _setFlexOff()
     _setTrajOff()
     await _occupancy?.refresh()
-  })
-  occupancyAllStages?.addEventListener('change', () => {
-    if (occupancyToggle?.checked) _occupancy?.refresh()
   })
 
   function _setFlexOff() {

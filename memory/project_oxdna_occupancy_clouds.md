@@ -142,14 +142,25 @@ and `("__ext_<id>", …)`, so scoping and clustering transfer verbatim.
 - **No FENE gate.** `FENE_R0_OXDNA2` is an oxDNA potential, not a calibrated NAMD frame
   check. (If one is ever wanted, `md_health.C1_PAIRED_MAX_DEFAULT` is the MD-native cutoff.)
 
-**Only unrestrained stages form the ensemble.** The `equilibrium_aware_namd` protocol ramps
-ENM restraints k=0.5 → 0.1 → 0.01 → None (`md_protocols.py` npt_ladder), plus a
-`settle (DNA fixed)` stage and an ENM minimisation. That ramp is a one-way relaxation by
-construction, so clustering across it reports "early vs late" — a drift — and buries the
-free ensemble. `md_free_sampling_segments` keeps stages whose label carries none of
-`enm`/`fixed`/`minim` (the exact inverse of the label generator: `"300K NPT k=0" if scale is
-None else f"300K NPT ENM k={scale}"`). An unfamiliar protocol falls back to ALL stages with a
-`sampling_note` rather than returning an empty ensemble; `all_stages=true` opts in explicitly.
+**Only PRODUCTION (unrestrained) dynamics forms the ensemble, and there is NO opt-in.**
+NAMD does have production runs — the Run-production button emits segments labelled
+`"<N> ns <fast|medium|conservative> production run"` with `scale=None`
+(`routes_md.py` → `build_production_conf`). Before them the `equilibrium_aware_namd`
+protocol ramps ENM restraints k=0.5 → 0.1 → 0.01 → None, plus a `settle (DNA fixed)` stage
+and an ENM minimisation; that ramp is a one-way relaxation, so an ensemble built from it
+describes the ramp. An `all_stages` opt-in existed briefly and was **removed on user
+instruction** — an occupancy cloud over relaxation frames is not a useful object.
+
+`md_free_sampling_segments` keeps segments whose label carries none of
+`enm`/`fixed`/`minim`. Deliberately a NEGATIVE test, not a positive `production` match, so
+it admits both the explicit production segments AND the ladder's terminal unrestrained
+`300K NPT k=0` stage — on `24hb_0xT` that stage is the only free sampling there is, and a
+positive-only rule would make the feature unavailable. An unfamiliar protocol falls back to
+all stages with a `sampling_note` rather than returning nothing.
+
+The UI gate is the same rule: `mdHasFreeSampling(job)` over `job.segments[].stage`, sharing
+the markers so the panel cannot offer a view the analysis would refuse. It also requires the
+free segment to have written frames (done/running) — a pending stage is not sampling.
 
 **No shareable frame cache, and this is the dominant cost.** Every MD analysis runs through
 `md_analysis_runner` in a spawned, killed-on-exit subprocess, so nothing a child computes can

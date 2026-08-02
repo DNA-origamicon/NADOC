@@ -1230,12 +1230,13 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
 #: protocol ramps elastic-network restraints k=0.5 → 0.1 → 0.01 → None, labelling each
 #: ``"300K NPT ENM k=<scale>"`` and the unrestrained one ``"300K NPT k=0"``
 #: (``md_protocols`` builds both from the same ``scale is None`` test), plus a
-#: ``"300K NPT settle (DNA fixed)"`` stage and an ENM minimisation.
+#: ``"300K NPT settle (DNA fixed)"`` stage and an ENM minimisation. A run started from the
+#: Run-production button adds ``"<N> ns <fast|medium|conservative> production run"``
+#: segments, also ``scale=None`` — those are the ensemble this feature exists for.
 #:
-#: This matters more here than anywhere else: a restraint RAMP is a one-way relaxation by
-#: construction, so clustering across it finds "early vs late" — a drift — and buries
-#: whatever the free ensemble actually does. oxDNA's equivalent is keeping only
-#: production/field stages.
+#: Negative markers rather than a positive "production" match, so BOTH the explicit
+#: production segments and the ladder's terminal unrestrained stage qualify, and any
+#: future free-dynamics label does too without another edit here.
 _MD_RESTRAINED_MARKERS = ("enm", "fixed", "minim")
 
 
@@ -1251,8 +1252,7 @@ def md_free_sampling_segments(segments) -> list[int]:
 
 
 def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: int = 200,
-                 n_clusters: int = 0, basis: str = "nt", selection=None,
-                 all_stages: bool = False) -> dict:
+                 n_clusters: int = 0, basis: str = "nt", selection=None) -> dict:
     """Top-N most likely CONFIGURATIONS of a NAMD ensemble.
 
     The NAMD counterpart of :func:`backend.core.oxdna_occupancy.production_occupancy`.
@@ -1297,8 +1297,11 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     if sum(seg_counts) == 0:
         return {"ready": False, "reason": "no trajectory frames yet"}
 
-    free_idx = list(range(len(segments))) if all_stages else md_free_sampling_segments(segments)
-    fell_back = not all_stages and free_idx == list(range(len(segments))) and any(
+    # Production dynamics only. There is deliberately no opt-in for the restrained ladder:
+    # an occupancy cloud over relaxation frames describes the restraint ramp, not the
+    # structure, so it is not a useful object to offer.
+    free_idx = md_free_sampling_segments(segments)
+    fell_back = free_idx == list(range(len(segments))) and any(
         any(m in str(s[1]).lower() for m in _MD_RESTRAINED_MARKERS) for s in segments)
 
     # Global frame indices belonging to the sampling segments only.
@@ -1367,7 +1370,7 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     res["n_frames_total"] = sum(seg_counts)
     res["n_frames_torn"] = 0
     res["sampling_stages"] = [str(segments[i][1]) for i in free_idx]
-    res["all_stages"] = bool(all_stages or fell_back)
+    res["all_stages"] = bool(fell_back)   # true only via the no-free-stage fallback
     if fell_back:
         res["sampling_note"] = ("no unrestrained stage identified in this protocol — "
                                 "clustered every stage, which mixes restrained dynamics")

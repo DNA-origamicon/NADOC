@@ -27,6 +27,15 @@ def test_the_enm_restraint_ramp_is_not_free_sampling():
     assert md_free_sampling_segments(segs) == [3]
 
 
+def test_an_explicit_production_run_is_free_sampling():
+    """The Run-production button emits `"<N> ns <fast|medium|conservative> production run"`
+    segments with scale=None. Those are the ensemble this feature exists for, and they
+    must qualify without the label needing a special case."""
+    segs = _segs("300K NPT ENM k=0.5", "300K NPT k=0", "50 ns fast production run")
+    assert md_free_sampling_segments(segs) == [1, 2]
+    assert md_free_sampling_segments(_segs("100 ns conservative production run")) == [0]
+
+
 def test_every_free_segment_is_kept():
     segs = _segs("300K NPT ENM k=0.5", "300K NPT k=0", "300K NPT k=0")
     assert md_free_sampling_segments(segs) == [1, 2]
@@ -138,10 +147,10 @@ def test_md_occupancy_cache_key_self_invalidates_on_growth(tmp_path):
     dcd.write_bytes(b"x" * 10)
     psf.write_bytes(b"p")
     segs = [("s", "300K NPT k=0", dcd)]
-    k1 = _md_occ_cache_key(segs, psf, 200, 0, "nt", False, None)
+    k1 = _md_occ_cache_key(segs, psf, 200, 0, "nt", None)
 
     dcd.write_bytes(b"x" * 20)
-    k2 = _md_occ_cache_key(segs, psf, 200, 0, "nt", False, None)
+    k2 = _md_occ_cache_key(segs, psf, 200, 0, "nt", None)
     assert k1 != k2
 
 
@@ -150,17 +159,21 @@ def test_md_occupancy_cache_key_separates_scopes():
     from backend.api.routes_oxdna import OccupancySelection
 
     segs = [("s", "300K NPT k=0", "/tmp/none.dcd")]
-    a = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt", False,
+    a = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt",
                           OccupancySelection(helix_ids=["h0"]).model_dump())
-    b = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt", False,
+    b = _md_occ_cache_key(segs, "/tmp/none.psf", 200, 0, "nt",
                           OccupancySelection(helix_ids=["h1"]).model_dump())
     assert a != b
 
 
-def test_all_stages_is_part_of_the_cache_key():
-    from backend.api.routes_md import _md_occ_cache_key
+def test_there_is_no_opt_in_for_restrained_stages():
+    """An occupancy cloud over relaxation frames describes the restraint ramp, not the
+    structure, so the option was removed rather than defaulted off."""
+    import inspect
 
-    segs = [("s", "300K NPT k=0", "/tmp/none.dcd")]
-    a = _md_occ_cache_key(segs, "/tmp/n.psf", 200, 0, "nt", False, None)
-    b = _md_occ_cache_key(segs, "/tmp/n.psf", 200, 0, "nt", True, None)
-    assert a != b
+    from backend.api import routes_md
+    from backend.core import md_trajectory
+
+    assert "all_stages" not in inspect.signature(md_trajectory.md_occupancy).parameters
+    assert "all_stages" not in routes_md.MdOccupancyBody.model_fields
+    assert "all_stages" not in inspect.signature(routes_md.get_md_occupancy).parameters

@@ -737,7 +737,6 @@ class MdOccupancyBody(BaseModel):
     n_clusters: int = 0
     basis: str = "nt"
     refetch: bool = False
-    all_stages: bool = False
     selection: Optional[OccupancySelection] = None
 
 
@@ -750,7 +749,7 @@ _MD_OCC_CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
 _MD_OCC_CACHE_MAX = 6
 
 
-def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, all_stages, selection):
+def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection):
     """size+mtime per DCD, so a GROWING trajectory self-invalidates — the property
     oxDNA's ``_aligned_cache_key`` relies on."""
     from backend.core.occupancy_core import _selection_sig
@@ -763,12 +762,12 @@ def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, all_stages, 
             return (str(path), -1, -1)
 
     return (tuple(sig(s[2]) for s in segments), sig(psf), int(max_frames), int(n_clusters),
-            str(basis), bool(all_stages), _selection_sig(selection))
+            str(basis), _selection_sig(selection))
 
 
 async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
                              n_clusters: int, basis: str, refetch: bool,
-                             all_stages: bool, selection=None) -> dict:
+                             selection=None) -> dict:
     """Shared body for the GET (whole structure) and POST (scoped) MD occupancy routes."""
     if basis not in ("nt", "bp"):
         raise HTTPException(400, "basis must be 'nt' or 'bp'")
@@ -781,7 +780,7 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
                 "clusters": [], "keys": []}
     psf, ref, segments, design = inputs
 
-    key = _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, all_stages, selection)
+    key = _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, selection)
     if refetch:
         _MD_OCC_CACHE.pop(key, None)
     else:
@@ -793,7 +792,7 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
     result = await _run_md_analysis(
         request, job_id, "occupancy", "md_occupancy",
         (psf, segments, ref, design, max_frames, n_clusters, basis,
-         selection.model_dump() if selection is not None else None, all_stages),
+         selection.model_dump() if selection is not None else None),
         timeout_s=900.0)
 
     if result.get("ready"):
@@ -806,7 +805,7 @@ async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
 @router.get("/md/jobs/{job_id}/occupancy")
 async def get_md_occupancy(job_id: str, request: Request, max_frames: int = 200,
                            n_clusters: int = 0, basis: str = "nt",
-                           refetch: bool = False, all_stages: bool = False) -> dict:
+                           refetch: bool = False) -> dict:
     """The top-N most likely CONFIGURATIONS of this NAMD run's free-sampling ensemble.
 
     Where the flexibility map gives one mean structure, this gives several REAL frames —
@@ -814,19 +813,19 @@ async def get_md_occupancy(job_id: str, request: Request, max_frames: int = 200,
     payload shape as ``GET /oxdna/jobs/{id}/occupancy``, so the frontend draws it with the
     identical code.
 
-    **Restrained stages are excluded by default.** The equilibrium-aware protocol ramps
-    elastic-network restraints (k=0.5 → 0.1 → 0.01 → none), and that ramp is a one-way
-    relaxation: clustering across it finds "early vs late" and buries whatever the free
-    ensemble does. ``all_stages=true`` opts back in. If no stage can be identified as
-    unrestrained the analysis falls back to every stage and says so in ``sampling_note``
-    rather than returning an empty ensemble.
+    **Only PRODUCTION (unrestrained) dynamics is clustered.** The equilibrium-aware
+    protocol ramps elastic-network restraints (k=0.5 → 0.1 → 0.01 → none) before any
+    production run; that ramp is a one-way relaxation, so an ensemble built from it
+    describes the ramp rather than the structure. There is deliberately no opt-in — an
+    occupancy cloud over relaxation frames is not a useful object. If no stage can be
+    identified as unrestrained the analysis falls back to every stage and says so in
+    ``sampling_note`` rather than returning nothing.
 
     Read ``verdict`` before believing anything else — ``"switching"`` | ``"drift"`` |
     ``"unimodal"``; see :mod:`backend.core.occupancy_core`.
     """
     return await _md_occupancy_impl(job_id, request, max_frames=max_frames,
-                                    n_clusters=n_clusters, basis=basis, refetch=refetch,
-                                    all_stages=all_stages)
+                                    n_clusters=n_clusters, basis=basis, refetch=refetch)
 
 
 @router.post("/md/jobs/{job_id}/occupancy")
@@ -838,8 +837,7 @@ async def post_md_occupancy(job_id: str, request: Request, body: MdOccupancyBody
     """
     return await _md_occupancy_impl(
         job_id, request, max_frames=body.max_frames, n_clusters=body.n_clusters,
-        basis=body.basis, refetch=body.refetch, all_stages=body.all_stages,
-        selection=body.selection)
+        basis=body.basis, refetch=body.refetch, selection=body.selection)
 
 
 @router.get("/md/jobs/{job_id}/shape-source")

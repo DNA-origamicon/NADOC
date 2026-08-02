@@ -48,7 +48,9 @@ test('NAMD occupancy clusters the free-sampling ensemble only', async ({ page, r
   const toggle = page.locator('#md-jobs-occupancy-toggle')
   await expect(toggle).toHaveCount(1)
   expect(await toggle.getAttribute('name')).toBe('md-viz')
-  await expect(page.locator('#md-jobs-occupancy-all-stages')).toHaveCount(1)
+  // No restrained-stages opt-in exists: an occupancy cloud over relaxation frames
+  // describes the restraint ramp, not the structure.
+  await expect(page.locator('#md-jobs-occupancy-all-stages')).toHaveCount(0)
   await expect(page.locator('#md-occupancy-scope-list')).toHaveCount(1)
 
   // The gate: occupancy is only offered for FREE (unrestrained) dynamics. Computed from

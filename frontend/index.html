@@ -5555,10 +5555,6 @@
                         <div id="md-occupancy-scope-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
                       </div>
                     </div>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
-                           title="Include the ENM restraint ramp. Off by default: those stages are a controlled relaxation toward the free ensemble, so clustering across them reports the ramp itself as a 'drift' rather than telling you about the structure.">
-                      <input type="checkbox" id="md-jobs-occupancy-all-stages"> Include restrained stages
-                    </label>
                     <button id="md-jobs-occupancy-rerun" type="button"
                             style="margin-top:4px;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 8px;cursor:pointer"
                             title="Recompute from the trajectory, ignoring the cached result. A NAMD analysis re-reads the whole trajectory — expect tens of seconds.">Recompute</button>

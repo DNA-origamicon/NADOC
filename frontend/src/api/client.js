@@ -2621,23 +2621,22 @@ export const getMdTrajectoryMeta = (id, opts = {})       =>
  *  getOxdnaRmsf, so the flexibility-map display code is shared. */
 export const getMdRmsf           = (id, signal)  => _oxdnaJSON('GET',  `/md/jobs/${id}/rmsf`, undefined, { signal })
 /** Occupancy clouds for a NAMD run — same payload shape as the oxDNA twin, so the same
- *  overlay draws it. `opts.allStages` opts back into the ENM restraint ramp, which is
- *  excluded by default because a restraint ramp is a one-way relaxation, not sampling. */
+ *  overlay draws it. Only PRODUCTION (unrestrained) dynamics is clustered — frames from
+ *  the restrained relaxation ladder describe the ramp, not the structure. */
 export const getMdOccupancy = (id, signal, opts = {}) => {
-  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false, allStages = false } = opts
+  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false } = opts
   return _oxdnaJSON('GET',
     `/md/jobs/${id}/occupancy?max_frames=${maxFrames}&n_clusters=${nClusters}`
-    + `&basis=${basis}&refetch=${refetch}&all_stages=${allStages}`,
+    + `&basis=${basis}&refetch=${refetch}`,
     undefined, { signal })
 }
 /** Occupancy clouds restricted to picked clusters / strands / bases. POST because a
  *  base-level selection is far too big for a query string. */
 export const postMdOccupancy = (id, signal, opts = {}) => {
-  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false, allStages = false,
+  const { nClusters = 0, maxFrames = 200, basis = 'nt', refetch = false,
           selection = null } = opts
   return _oxdnaJSON('POST', `/md/jobs/${id}/occupancy`, {
-    max_frames: maxFrames, n_clusters: nClusters, basis, refetch,
-    all_stages: allStages, selection,
+    max_frames: maxFrames, n_clusters: nClusters, basis, refetch, selection,
   }, { signal })
 }
 /** Kill the in-flight trajectory/RMSF/surface analysis for a job (view toggled

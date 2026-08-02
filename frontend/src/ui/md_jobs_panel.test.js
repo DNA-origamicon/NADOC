@@ -1542,6 +1542,15 @@ describe('mdHasFreeSampling — occupancy is only offered for production dynamic
       .toBe(false)
   })
 
+  it('accepts an explicit production run', () => {
+    // The Run-production button emits "<N> ns <tier> production run" segments; those are
+    // exactly what occupancy is for.
+    expect(mdHasFreeSampling({ segments: [seg('50 ns fast production run')] })).toBe(true)
+    expect(mdHasFreeSampling({
+      segments: [seg('300K NPT ENM k=0.5'), seg('120 ns conservative production run')],
+    })).toBe(true)
+  })
+
   it('uses the same markers as the backend, so the UI and the analysis agree', () => {
     expect(MD_RESTRAINED_MARKERS).toEqual(['enm', 'fixed', 'minim'])
   })
