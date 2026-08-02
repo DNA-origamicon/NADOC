@@ -29,6 +29,8 @@
  * all 200 present ~25 s later, after which play starts in ~1.2 s. Show the wait up front.
  */
 
+import { initFrameSteppers } from './frame_steppers.js'
+
 /**
  * Pure: place stage-transition markers along the slider track.
  * Returns [{frame, label, kind, pct}] with pct ∈ [0,100] (frame / (n-1)).
@@ -66,10 +68,10 @@ export function fieldAtFrame(stages, frameIndex) {
   return stageAtFrame(stages, frameIndex)?.field ?? null
 }
 
-const _MARKER_COLOR = { production: '#3fb950', equil: '#4a9eff', md_relax: '#e0a800', mc: '#8a8a8a' }
+const _MARKER_COLOR ={ production: '#3fb950', equil: '#4a9eff', md_relax: '#e0a800', mc: '#8a8a8a' }
 
 export function initOxdnaTrajectoryPlayer({
-  playBtn, slider, markersEl, label, onSeek,
+  playBtn, slider, markersEl, label, onSeek, prevBtn = null, nextBtn = null,
   onBeforePlay = null, onPlayStateChange = null, fps = 8,
 } = {}) {
   let _n = 0          // frame count
@@ -79,6 +81,13 @@ export function initOxdnaTrajectoryPlayer({
   let _preparing = false   // awaiting onBeforePlay (pre-building heavy frames)
   let _prepToken = 0       // bumped to cancel an in-flight prepare (user clicked again)
   let _bgPrep = null       // {done,total} while frames are prepared in the BACKGROUND
+
+  // ◂ / ▸ — step exactly one frame. Scrubbing a 200-frame slider moves several frames
+  // per pixel, so these are the only way to land on a specific one.
+  const _steppers = initFrameSteppers({
+    prevBtn, nextBtn, count: () => _n, current: () => _i,
+    onStep: (i) => { pause(); seek(i) },
+  })
 
   function _setLabel() {
     if (label) label.textContent = _n ? `Frame ${_i + 1} / ${_n}` : ''
@@ -150,6 +159,7 @@ export function initOxdnaTrajectoryPlayer({
     _i = Math.max(0, Math.min(_n - 1, i | 0))
     if (slider) slider.value = String(_i)
     _setLabel()
+    _steppers.refresh()
     if (fire) onSeek?.(_i)
   }
 
@@ -197,6 +207,7 @@ export function initOxdnaTrajectoryPlayer({
     if (slider) { slider.max = String(Math.max(0, _n - 1)); slider.value = '0'; slider.disabled = _n < 2 }
     _renderMarkers()
     _setLabel()
+    _steppers.refresh()
   }
 
   /** Clear everything (toggle off / job switch). */
@@ -209,6 +220,7 @@ export function initOxdnaTrajectoryPlayer({
     if (slider) { slider.value = '0'; slider.disabled = true }
     if (markersEl) markersEl.innerHTML = ''
     _setLabel()
+    _steppers.refresh()
     _renderPlayBtn()
   }
 

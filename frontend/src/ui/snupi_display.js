@@ -19,6 +19,7 @@
 
 import { toFemUpdates, flexColorMap, deviationColorMap } from './cando_display.js'
 import { framesToUpdates } from './oxdna_display.js'
+import { initFrameSteppers } from './frame_steppers.js'
 
 export function initSnupiDisplay({
   designRenderer, api, cylinderOverlay = null, setDesignVisible = null, flexScale = null,
@@ -194,6 +195,7 @@ export function initSnupiDisplay({
     designRenderer.applyFemPositions(framesToUpdates(_traj.keys, _traj.frames[_trajIdx]))
     const sc = _tel('snupi-traj-scrubber'); if (sc) sc.value = String(_trajIdx)
     const lbl = _tel('snupi-traj-frame'); if (lbl) lbl.textContent = `${_trajIdx + 1}/${_traj.frames.length}`
+    _trajSteppers?.refresh()
   }
 
   function _trajTick(now) {
@@ -210,12 +212,19 @@ export function initSnupiDisplay({
   }
 
   let _trajWired = false
+  let _trajSteppers = null
   function _wireTrajControls() {
     if (_trajWired) return
     _trajWired = true
     _tel('snupi-traj-play')?.addEventListener('click', () => _trajSetPlaying(!_trajPlaying))
     _tel('snupi-traj-scrubber')?.addEventListener('input', (e) => {
       _trajSetPlaying(false); _trajApplyFrame(parseInt(e.target.value, 10) || 0)
+    })
+    // ◂ / ▸ — one frame at a time; playback wraps, so these do too.
+    _trajSteppers = initFrameSteppers({
+      prevBtn: _tel('snupi-traj-prev'), nextBtn: _tel('snupi-traj-next'), wrap: true,
+      count: () => _traj?.frames?.length || 0, current: () => _trajIdx,
+      onStep: (i) => { _trajSetPlaying(false); _trajApplyFrame(i) },
     })
   }
 

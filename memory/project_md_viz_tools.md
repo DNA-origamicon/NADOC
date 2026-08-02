@@ -113,6 +113,18 @@ so none of the simulated solvent ever reached the viewer.
   `md_display_state.solventRepMode`. Pins: 4 fast pytest files (61) + 5 vitest files (~100) + a
   cross-language byte pin + `tests/test_md_solvent_extraction.py` (16, slow/`md`).
 
+**Frame steppers ◂/▸ (2026-08-01).** Every trajectory scrubber in the app now has ±1-frame arrow
+buttons flanking its slider: oxDNA/LAMMPS + NAMD (both via `oxdna_trajectory_player.js`'s new
+`prevBtn`/`nextBtn` opts), SNUPI, BLADE, and the live `#md-panel` scrubber. Dragging a range input
+across a few hundred frames moves several frames per pixel, so landing on a specific frame was luck.
+Shared module: `frontend/src/ui/frame_steppers.js` (`stepFrameIndex` / `frameStepperDisabled` pure +
+`initFrameSteppers({prevBtn,nextBtn,count,current,onStep,wrap})`); markup is `.frame-step-btn` in
+index.html next to each scrubber. Clamps at the ends (buttons grey out) except SNUPI/BLADE, whose
+playback already wraps, so their steppers wrap too. Stepping always pauses playback. The live
+`#md-panel` one moves its own readout optimistically before the WS `seek`, so rapid clicks step from
+the last click rather than the last delivered frame. Pins: `frame_steppers.test.js` (18) +
+`oxdna_trajectory_player.test.js` `◂ / ▸ frame steppers` block (4).
+
 **Panel (md_jobs_panel.js).** flex + traj toggles/controls mirror oxdna_jobs_panel; reuse `oxdna_trajectory_player.js`. Three display modes (live "Display MD" / flexibility map / trajectory) are MUTUALLY EXCLUSIVE — each deforms the same design model, so activating one calls stopAndRestore on the others. Rows now have `data-job-id` (for the e2e + the existing md_live_no_stale spec).
 
 **v1 scope = CG/nadoc representation only.** Deliberate follow-ons: (1) heavy-rep (atomistic/surface) RMSF colouring — the per-frame atomistic data shapes differ between oxDNA (template) and NAMD (real DCD atoms), needs its own mapping, so the adapter intentionally omits the heavy methods (controller heavy path is a no-op for CG, fails closed for atomistic/surface scenes); ~~(2) the draggable colour-rescale widget~~ **DONE 2026-07-10** — see below.

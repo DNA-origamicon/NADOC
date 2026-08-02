@@ -71,6 +71,59 @@ describe('initOxdnaTrajectoryPlayer', () => {
     expect(label.textContent).toContain('4 / 10')
   })
 
+  describe('◂ / ▸ frame steppers', () => {
+    let prevBtn, nextBtn
+    beforeEach(() => {
+      prevBtn = document.createElement('button')
+      nextBtn = document.createElement('button')
+      seeks = []
+      player.stop()
+      player = initOxdnaTrajectoryPlayer({
+        playBtn, slider, markersEl, label, prevBtn, nextBtn,
+        onSeek: (i) => seeks.push(i), fps: 10,
+      })
+    })
+
+    it('steps one frame and moves the slider + label with it', () => {
+      player.setTrajectory(10, [])
+      player.seek(4)
+      nextBtn.click()
+      expect(player.current()).toBe(5)
+      expect(slider.value).toBe('5')
+      expect(label.textContent).toContain('6 / 10')
+      prevBtn.click()
+      prevBtn.click()
+      expect(seeks).toEqual([4, 5, 4, 3])
+    })
+
+    it('greys out at whichever end the trajectory is parked on', () => {
+      player.setTrajectory(10, [])
+      expect(prevBtn.disabled).toBe(true)     // reset to frame 0
+      expect(nextBtn.disabled).toBe(false)
+      player.seek(9)
+      expect(prevBtn.disabled).toBe(false)
+      expect(nextBtn.disabled).toBe(true)
+    })
+
+    it('both are dead with no trajectory loaded', () => {
+      expect(prevBtn.disabled).toBe(true)
+      expect(nextBtn.disabled).toBe(true)
+      player.setTrajectory(1, [])             // single frame: nothing to step to
+      expect(nextBtn.disabled).toBe(true)
+      nextBtn.click()
+      expect(seeks).toEqual([])
+    })
+
+    it('stepping pauses playback', () => {
+      vi.useFakeTimers()
+      player.setTrajectory(10, [])
+      player.play()
+      expect(player.isPlaying()).toBe(true)
+      nextBtn.click()
+      expect(player.isPlaying()).toBe(false)
+    })
+  })
+
   it('play advances frames on a timer; pause stops it', () => {
     vi.useFakeTimers()
     player.setTrajectory(5, [])

@@ -26,6 +26,7 @@
  */
 
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
+import { initFrameSteppers } from './frame_steppers.js'
 import {
   targetStreamMode,
   sceneUsesAtomistic,
@@ -110,6 +111,8 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   const statTemp       = document.getElementById('md-stat-temp')
   const controls       = document.getElementById('md-controls')
   const scrubber       = document.getElementById('md-scrubber')
+  const prevFrameBtn   = document.getElementById('md-prev-frame-btn')
+  const nextFrameBtn   = document.getElementById('md-next-frame-btn')
   const timeCur        = document.getElementById('md-time-cur')
   const timeTot        = document.getElementById('md-time-tot')
   const playBtn        = document.getElementById('md-play-btn')
@@ -674,6 +677,15 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
   }
 
   // ── Timeline ──────────────────────────────────────────────────────────────
+  // ◂ / ▸ — step exactly one frame. `_updateTimeline` moves the readout immediately so
+  // repeated clicks step from where the user last clicked, not from the last frame the
+  // socket happened to deliver; the incoming 'frame' message then confirms it.
+  const _steppers = initFrameSteppers({
+    prevBtn: prevFrameBtn, nextBtn: nextFrameBtn,
+    count: () => _nFrames, current: () => _curFrame,
+    onStep: (i) => { _setPlaying(false); _updateTimeline(i); _seekFrame(i) },
+  })
+
   function _frameTons(idx) {
     if (_dtPs == null || _nstComp == null) return null
     return idx * _nstComp * _dtPs / 1000
@@ -684,6 +696,7 @@ export function initMdPanel(store, { designRenderer, atomisticRenderer,
     if (scrubber) scrubber.value = idx
     const ns = _frameTons(idx)
     if (timeCur) timeCur.textContent = ns != null ? ns.toFixed(3) + ' ns' : idx + ' fr'
+    _steppers.refresh()
   }
 
   function _seekFrame(idx) {

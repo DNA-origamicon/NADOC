@@ -502,6 +502,8 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   const trajStatus    = document.getElementById('oxdna-jobs-traj-status')
   const trajControls  = document.getElementById('oxdna-jobs-traj-controls')
   const trajPlay      = document.getElementById('oxdna-jobs-traj-play')
+  const trajPrev      = document.getElementById('oxdna-jobs-traj-prev')
+  const trajNext      = document.getElementById('oxdna-jobs-traj-next')
   const trajSlider    = document.getElementById('oxdna-jobs-traj-slider')
   const trajMarkers   = document.getElementById('oxdna-jobs-traj-markers')
   const trajLabel     = document.getElementById('oxdna-jobs-traj-label')
@@ -1059,6 +1061,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
   // every coarse playback frame (spinner + "building k/N"), then runs the loop smoothly.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
+    prevBtn: trajPrev, nextBtn: trajNext,
     onSeek: (i) => {
       if (_lammpsMode) { lammpsDisplay?.showFrame(i); return }   // CG only — no field arrow
       oxdnaDisplay?.showFrame(i); _applyTrajField(i)

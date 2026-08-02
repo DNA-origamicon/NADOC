@@ -1409,6 +1409,22 @@
     }
     .panel-action-btn.is-active:hover { background: #388bfd; }
 
+    /* ── Trajectory frame steppers (◂ / ▸ flanking a scrub slider) ──── */
+    .frame-step-btn {
+      flex: 0 0 auto;
+      padding: 2px 5px;
+      font-size: 11px;
+      line-height: 1;
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: var(--font-ui);
+    }
+    .frame-step-btn:hover:not(:disabled) { background: #30363d; border-color: #484f58; }
+    .frame-step-btn:disabled { opacity: 0.3; cursor: default; }
+
     /* ── Nucleotide slab sliders ───────────────────────────────────── */
     .slider-row {
       display: grid;
@@ -4194,12 +4210,14 @@
                     <div style="display:flex;align-items:center;gap:6px">
                       <button id="oxdna-jobs-traj-play" title="Play / pause"
                               style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                      <button id="oxdna-jobs-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
                       <div style="position:relative;flex:1;min-width:0">
                         <input id="oxdna-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
                                style="width:100%;display:block;margin:0">
                         <!-- stage-transition markers overlaid on the slider track -->
                         <div id="oxdna-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
                       </div>
+                      <button id="oxdna-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     </div>
                     <div id="oxdna-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
                   </div>
@@ -4989,7 +5007,9 @@
                   <div id="snupi-traj-controls" style="display:none;align-items:center;gap:6px;margin:3px 0 5px">
                     <button id="snupi-traj-play" type="button" title="Play / pause"
                             style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:1px 7px;font-size:var(--text-xs);cursor:pointer">⏸</button>
+                    <button id="snupi-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
                     <input id="snupi-traj-scrubber" type="range" min="0" max="0" value="0" step="1" style="flex:1;min-width:0">
+                    <button id="snupi-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     <span id="snupi-traj-frame" style="font-size:var(--text-xs);color:#8b949e;min-width:48px;text-align:right">0/0</span>
                   </div>
                   <div id="snupi-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px"></div>
@@ -5192,7 +5212,9 @@
                   <div id="blade-traj-controls" style="display:none;align-items:center;gap:6px;margin:3px 0 5px">
                     <button id="blade-traj-play" type="button" title="Play / pause"
                             style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:1px 7px;font-size:var(--text-xs);cursor:pointer">⏸</button>
+                    <button id="blade-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
                     <input id="blade-traj-scrubber" type="range" min="0" max="0" value="0" step="1" style="flex:1;min-width:0">
+                    <button id="blade-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     <span id="blade-traj-frame" style="font-size:var(--text-xs);color:#8b949e;min-width:48px;text-align:right">0/0</span>
                   </div>
                   <div id="blade-jobs-display-status" style="font-size:var(--text-xs);color:#8b949e;min-height:14px"></div>
@@ -5508,11 +5530,13 @@
                     <div style="display:flex;align-items:center;gap:6px">
                       <button id="md-jobs-traj-play" title="Play / pause"
                               style="flex:0 0 auto;font-size:12px;line-height:1;padding:3px 8px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;cursor:pointer">▶</button>
+                      <button id="md-jobs-traj-prev" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
                       <div style="position:relative;flex:1;min-width:0">
                         <input id="md-jobs-traj-slider" type="range" min="0" max="0" value="0" step="1"
                                style="width:100%;display:block;margin:0">
                         <div id="md-jobs-traj-markers" style="position:absolute;left:0;right:0;top:50%;height:12px;transform:translateY(-50%);pointer-events:none"></div>
                       </div>
+                      <button id="md-jobs-traj-next" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
                     </div>
                     <div id="md-jobs-traj-label" style="font-size:9px;color:#8b949e;margin-top:2px"></div>
                   </div>
@@ -5847,8 +5871,12 @@
               <!-- Controls (hidden until loaded) -->
               <div id="md-controls" style="display:none">
 
-                <input type="range" id="md-scrubber" min="0" max="0" value="0"
-                       style="width:100%;margin-bottom:3px;accent-color:#58a6ff">
+                <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+                  <button id="md-prev-frame-btn" class="frame-step-btn" type="button" title="Previous frame (−1)">◂</button>
+                  <input type="range" id="md-scrubber" min="0" max="0" value="0"
+                         style="flex:1;min-width:0;accent-color:#58a6ff">
+                  <button id="md-next-frame-btn" class="frame-step-btn" type="button" title="Next frame (+1)">▸</button>
+                </div>
                 <div style="display:flex;justify-content:space-between;font-size:var(--text-xs);color:#8b949e;margin-bottom:6px">
                   <span id="md-time-cur">0.00 ns</span>
                   <span id="md-time-tot">0.00 ns</span>

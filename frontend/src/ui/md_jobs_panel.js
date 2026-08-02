@@ -893,6 +893,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const trajStatus   = document.getElementById('md-jobs-traj-status')
   const trajControls = document.getElementById('md-jobs-traj-controls')
   const trajPlay     = document.getElementById('md-jobs-traj-play')
+  const trajPrev     = document.getElementById('md-jobs-traj-prev')
+  const trajNext     = document.getElementById('md-jobs-traj-next')
   const trajSlider   = document.getElementById('md-jobs-traj-slider')
   const trajMarkers  = document.getElementById('md-jobs-traj-markers')
   const trajLabel    = document.getElementById('md-jobs-traj-label')
@@ -1951,6 +1953,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // Trajectory player (play/pause + scrub slider); seeks drive the display frame.
   const trajPlayer = initOxdnaTrajectoryPlayer({
     playBtn: trajPlay, slider: trajSlider, markersEl: trajMarkers, label: trajLabel,
+    prevBtn: trajPrev, nextBtn: trajNext,
     onSeek: (i) => { getMdViz?.()?.showFrame(i); solvent?.showFrame(i) },
     onBeforePlay: async () => {
       const v = getMdViz?.()

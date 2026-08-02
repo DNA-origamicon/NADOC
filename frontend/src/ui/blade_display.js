@@ -25,6 +25,7 @@
  */
 
 import { framesToUpdates } from './oxdna_display.js'
+import { initFrameSteppers } from './frame_steppers.js'
 
 export function initBladeDisplay({ designRenderer, api, setDesignVisible = null }) {
   let _epoch = 0            // bumps on every request → stale responses ignored
@@ -110,6 +111,7 @@ export function initBladeDisplay({ designRenderer, api, setDesignVisible = null 
     designRenderer.applyFemPositions(framesToUpdates(_traj.keys, _traj.frames[_trajIdx]))
     const sc = _tel('blade-traj-scrubber'); if (sc) sc.value = String(_trajIdx)
     const lbl = _tel('blade-traj-frame'); if (lbl) lbl.textContent = `${_trajIdx + 1}/${_traj.frames.length}`
+    _trajSteppers?.refresh()
   }
 
   function _trajTick(now) {
@@ -126,12 +128,19 @@ export function initBladeDisplay({ designRenderer, api, setDesignVisible = null 
   }
 
   let _trajWired = false
+  let _trajSteppers = null
   function _wireTrajControls() {
     if (_trajWired) return
     _trajWired = true
     _tel('blade-traj-play')?.addEventListener('click', () => _trajSetPlaying(!_trajPlaying))
     _tel('blade-traj-scrubber')?.addEventListener('input', (e) => {
       _trajSetPlaying(false); _trajApplyFrame(parseInt(e.target.value, 10) || 0)
+    })
+    // ◂ / ▸ — one frame at a time; playback wraps, so these do too.
+    _trajSteppers = initFrameSteppers({
+      prevBtn: _tel('blade-traj-prev'), nextBtn: _tel('blade-traj-next'), wrap: true,
+      count: () => _traj?.frames?.length || 0, current: () => _trajIdx,
+      onStep: (i) => { _trajSetPlaying(false); _trajApplyFrame(i) },
     })
   }
 
