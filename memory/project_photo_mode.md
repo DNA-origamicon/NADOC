@@ -488,6 +488,41 @@ Fix ([main.js](frontend/src/main.js)):
   *same* open file — that's not a context switch and the renderer adopts rebuilt
   meshes on the fly.
 
+### No design ⇒ no open sidebar (Close Session) — 2026-08-02
+
+**The bug was CSS specificity, and it is not photo-specific.**
+[sidebar_resize.js:45](../frontend/src/ui/sidebar_resize.js#L45) persists a dragged
+sidebar width as an **inline** `style.width`, which outranks
+`#left-panel.hidden { width: 0 }` from the stylesheet. So for any user who had ever
+resized the sidebar, `.hidden` stopped collapsing it — and Close Session fires
+`nadoc:workspace-path-change` with a null path, whose handler RE-APPLIES the saved
+global width, inline, onto the panel it just hid. Symptom: close the session and the
+sidebar is still there, showing an empty pane. A fresh browser profile never
+reproduces it (no saved width) — that is why the first repro of this looked clean.
+
+Three parts, all in the "shut" direction:
+1. `#left-panel.hidden { width: 0 !important; min-width: 0 }` — an author
+   `!important` beats a non-important inline style. Load-bearing; don't drop it
+   while `sidebar_resize` writes inline widths.
+2. `_render()` derives `shut = collapsed || locked` and drives the tab highlight and
+   the toggle arrow off it, not off `collapsed` alone — a lit tab and a "Hide
+   sidebar" arrow over a shut panel were most of what read as "still open".
+3. `_showWelcome()` calls `__leftSidebar.collapseForTeardown()` (via `window.`, NOT
+   the closure const — `_showWelcome` runs at boot, thousands of lines before that
+   `let` initialises → TDZ). It drops a RENDER_OVERRIDE tab (`_photoMode.exit()`,
+   activeTab → feature-log) so the override is off and the pane can't flash back.
+   It does **not** touch `collapsed` and persists nothing: that is the user's
+   preference, replayed by `_setLeftPanelEnabled(true)` on the next design open.
+
+Also: `_setLeftPanelEnabled(false)` now disables the Photo tab button with the rest.
+Its exemption ("works on any scene, even empty") had been dead for a long time —
+`setActiveTab`/`toggleCollapsed` both early-return while `locked-hidden` is set, so
+the button was clickable and inert.
+
+Verified with a saved global width, closing from Photo AND from Feature Log:
+`{inlineWidth: '420px', width: 1, enabledTabs: []}` — inline width back, panel shut
+anyway — and re-opening a design restores both the 420 px width and Feature Log.
+
 ## Exit on sidebar-tab switch + feature-log default on load — 2026-06-20
 
 Two related sidebar behaviours:

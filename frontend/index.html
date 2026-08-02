@@ -433,7 +433,11 @@
       transition: width 0.15s;
       position: relative;   /* so absolutely-positioned resize handle anchors here */
     }
-    #left-panel.hidden { width: 0; overflow: hidden; }
+    /* !important because sidebar_resize.js persists the dragged width as an
+       INLINE style, which otherwise outranks this rule — so any user who had
+       ever resized the sidebar kept a full-width panel through every collapse,
+       including the welcome screen with no design loaded. */
+    #left-panel.hidden { width: 0 !important; min-width: 0; overflow: hidden; }
     /* Tab strip on the outer edge of the left panel — always visible (even when
        the panel is collapsed) so any tab click can re-open the sidebar. Tabs
        are vertically centered; a dedicated toggle arrow at the top mirrors the

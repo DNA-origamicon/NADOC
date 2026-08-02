@@ -3135,12 +3135,14 @@ async function main() {
     } else {
       // Collapse and lock the panel; disable all tab buttons + toggle arrow
       // via the `:disabled` selector (CSS handles the visual dimming).
-      // Photo tab is exempt: it works on any scene (even empty) and manages
-      // its own panel visibility, so it must stay clickable.
+      // The Photo tab used to be exempt here ("works on any scene, even
+      // empty"), but that exemption had been dead for a long time — every entry
+      // point (`setActiveTab`, `toggleCollapsed`) early-returns while
+      // `locked-hidden` is set, so the button was clickable and inert. It is
+      // disabled with the rest now: with no design loaded the sidebar does not
+      // open, whichever tab you aim at.
       leftPanel.classList.add('hidden', 'locked-hidden')
-      for (const b of tabBtns) {
-        if (b.dataset.tab !== 'photo') b.disabled = true
-      }
+      for (const b of tabBtns) b.disabled = true
       if (toggleBtn) toggleBtn.disabled = true
     }
   }
@@ -3164,6 +3166,12 @@ async function main() {
     _welcomeScreen?.classList.remove('hidden')
     _setMenusEnabled(false)
     _setLeftPanelEnabled(false)
+    // No design ⇒ no open sidebar, whichever tab was selected. The lock above
+    // shuts it; this drops any render-override tab (Photo) so the override is
+    // off and its pane isn't armed to flash back on the next design open.
+    // `window.__leftSidebar` rather than the closure const: `_showWelcome` runs
+    // during boot, thousands of lines before that `let` is initialised (TDZ).
+    window.__leftSidebar?.collapseForTeardown?.()
     _setRightPanelEnabled(false)
     _setFilterStripEnabled(false)
     api.clearPersistedDesign()
@@ -6452,19 +6460,23 @@ async function main() {
       }
 
       function _render() {
-        for (const id of TABS) {
-          if (btns[id])  btns[id].classList.toggle('active', id === activeTab && !collapsed)
-          if (panes[id]) panes[id].hidden = (id !== activeTab)
-        }
         // While locked (welcome screen / part-context), force visual hidden
         // regardless of the controller's internal `collapsed` state, so the
         // persisted "expanded" state doesn't leak through and pop the panel
-        // open at the welcome screen.
+        // open at the welcome screen. `locked` also drives the tab highlight
+        // and the toggle arrow: a lit tab and a "Hide sidebar" arrow over a
+        // panel that is shut read as a bug, and they were what made a closed
+        // session still look like it had the sidebar open.
         const locked = leftPanel.classList.contains('locked-hidden')
-        leftPanel.classList.toggle('hidden', collapsed || locked)
+        const shut   = collapsed || locked
+        for (const id of TABS) {
+          if (btns[id])  btns[id].classList.toggle('active', id === activeTab && !shut)
+          if (panes[id]) panes[id].hidden = (id !== activeTab)
+        }
+        leftPanel.classList.toggle('hidden', shut)
         if (toggleBtn) {
-          toggleBtn.textContent = collapsed ? '▶' : '◀'
-          toggleBtn.title       = collapsed ? 'Show sidebar' : 'Hide sidebar'
+          toggleBtn.textContent = shut ? '▶' : '◀'
+          toggleBtn.title       = shut ? 'Show sidebar' : 'Hide sidebar'
         }
       }
 
@@ -6569,6 +6581,24 @@ async function main() {
         _persist()
       }
 
+      // Session teardown (`_showWelcome`). The `locked-hidden` lock + `_render`
+      // above do the collapsing for EVERY tab; what this adds is dropping a
+      // render-override tab, so the override is off (idempotent — the usual
+      // close path already exited via `_resetForNewDesign`, but Close Session
+      // with no design loaded never goes there, and photo mode runs on an empty
+      // scene) and the pane isn't armed to flash back on the next design open.
+      //
+      // `collapsed` itself is deliberately NOT touched and nothing is persisted:
+      // it is the user's expanded/collapsed PREFERENCE, and `_setLeftPanelEnabled(true)`
+      // replays it when a design opens. Teardown overrides the view, not the choice.
+      function collapseForTeardown() {
+        if (RENDER_OVERRIDE_TABS.includes(activeTab)) {
+          _photoMode.exit()
+          activeTab = 'feature-log'
+        }
+        _render()
+      }
+
       for (const id of TABS) {
         if (btns[id]) btns[id].addEventListener('click', () => setActiveTab(id))
       }
@@ -6582,6 +6612,7 @@ async function main() {
         setActiveTab,
         selectTab,
         toggleCollapsed,
+        collapseForTeardown,
         getActiveTab: () => activeTab,
         isCollapsed:  () => collapsed,
         // Re-applies visual state from internal `collapsed` + `locked-hidden`.
