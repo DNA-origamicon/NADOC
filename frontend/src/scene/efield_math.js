@@ -15,6 +15,10 @@
  * topology.
  */
 
+// base_ref is the only import, and is itself pure (no THREE / DOM / store), so the
+// "every export is unit-testable in isolation" property above still holds.
+import { parseBaseKey, XB_HELIX } from './base_ref.js'
+
 // ── Physical constants ──────────────────────────────────────────────────────
 export const OXDNA_FORCE_PN = 48.63           // 1 oxDNA force unit in pN
 export const ELEM_CHARGE_C  = 1.602176634e-19 // electron charge (Coulombs)
@@ -355,6 +359,46 @@ export function anchorSelectionState({ state, ctrlBeadNucs = [], clusterMemberSt
 }
 
 /**
+ * Split the base-level pool (`multiSelectedBaseKeys`) into keys an anchor can address
+ * and keys it cannot.
+ *
+ * An anchor resolves through `resolve_anchor_particles`, which matches a `base`
+ * descriptor on `(helix_id, bp, direction)` from the strand walk's provenance. Two of
+ * the five bead families the `base` selection level can pick have **no** such triple —
+ * `_walk_strand_nucleotides` gives crossover extra-base inserts and strand-extension
+ * tail beads `helix_id=None, bp=None, direction=None`, so they occupy a particle index
+ * but are unaddressable. Posting them anyway would select nothing and look like a
+ * silently empty anchor set.
+ *
+ * Rather than guess by key prefix, the test is data-driven: a base is anchorable iff its
+ * helix actually exists in the design. That is exactly the condition the backend match
+ * needs, so it stays correct as families are added.
+ *
+ * @param {string[]} keys   app-wide base keys (scene/base_ref.js)
+ * @param {Set<string>} designHelixIds  ids from design.helices
+ * @returns {{anchorable: object[], unsupported: string[]}} anchorable = parsed base parts
+ */
+export function partitionBaseKeys(keys, designHelixIds) {
+  const anchorable = []
+  const unsupported = []
+  for (const key of keys || []) {
+    const p = parseBaseKey(key)
+    // __xb__ parses to {crossover_id, k} — no helix/bp/direction at all.
+    if (!p || p.helix_id === XB_HELIX || p.bp_index == null) { unsupported.push(key); continue }
+    if (designHelixIds && !designHelixIds.has(p.helix_id)) { unsupported.push(key); continue }
+    anchorable.push(p)
+  }
+  return { anchorable, unsupported }
+}
+
+/** The base keys in a selection snapshot that no anchor can address. */
+export function unsupportedBaseKeys(state) {
+  const s = state || {}
+  const helixIds = new Set((s.currentDesign?.helices ?? []).map(h => h.id))
+  return partitionBaseKeys(s.multiSelectedBaseKeys ?? [], helixIds).unsupported
+}
+
+/**
  * Collect anchor descriptors from a store state snapshot.  Reads the multi-select
  * arrays (lasso) + the single `selectedObject`, restricted to the anchorable
  * scopes: overhang / domain / cluster / whole strand (e.g. an overhang-binding
@@ -381,6 +425,16 @@ export function resolveSelectionAnchors(state) {
   // passes their nuc records through so multi-picked bases resolve like any other anchor.
   for (const n of s.ctrlBeadNucs || []) {
     if (n) out.push({ kind: 'base', helixId: n.helix_id, bp: n.bp_index, direction: n.direction })
+  }
+  // The `base` selection level's pool. Unlike ctrlBeadNucs these are KEY strings, and the
+  // level can pick beads from renderers whose nucleotides have no (helix, bp, direction)
+  // triple — partitionBaseKeys drops those rather than posting an anchor that would match
+  // nothing. `unsupportedBaseKeys` lets the card tell the user what it skipped.
+  {
+    const helixIds = new Set((s.currentDesign?.helices ?? []).map(h => h.id))
+    for (const p of partitionBaseKeys(s.multiSelectedBaseKeys ?? [], helixIds).anchorable) {
+      out.push({ kind: 'base', helixId: p.helix_id, bp: p.bp_index, direction: p.direction })
+    }
   }
   const sel = s.selectedObject
   if (sel) {

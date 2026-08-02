@@ -3021,6 +3021,10 @@ function _clearStaleSelections() {
     updates.multiSelectedOverhangIds = filteredOverhangs
   }
 
+  // NOTE the base-level pool (multiSelectedBaseKeys) is pruned by selection_manager's own
+  // rebuild subscriber, not here — it owns the `_baseKeys` closure that drives the glow, and
+  // two writers to one pool would race.
+
   if (state.isolatedStrandId && !strandIds.has(state.isolatedStrandId)) {
     updates.isolatedStrandId = null
   }

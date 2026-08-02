@@ -29,7 +29,8 @@
  */
 
 import {
-  resolveSelectionAnchors, anchorKey, anchorLabel, addAnchors, removeAnchor, highlightedAnchors,
+  resolveSelectionAnchors, unsupportedBaseKeys,
+  anchorKey, anchorLabel, addAnchors, removeAnchor, highlightedAnchors,
 } from '../scene/efield_math.js'
 
 // Chip palette. The highlighted chip echoes the 3D halo's purple (design_renderer's
@@ -107,7 +108,11 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
   function _renderAnchors() {
     if (statusEl) {
       const n = _anchors.length
-      _setStatus(n ? `${n} fixed strand${n === 1 ? '' : 's'}.` : 'No anchors — runs are free unless you add fixed strands.')
+      // "strands" was accurate when overhangs/strands/domains were the only scopes; an
+      // anchor set can now be entirely individual bases, so name what is actually held.
+      const noun = _anchors.every(a => a?.kind === 'base') ? 'base' : 'anchor'
+      _setStatus(n ? `${n} fixed ${noun}${n === 1 ? '' : 's'}.`
+                   : 'No anchors — runs are free unless you add fixed strands.')
     }
     if (!listEl) return
     const lit = new Set(getHighlighted().map(anchorKey))
@@ -148,16 +153,29 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
   }
 
   function addSelectedAnchors() {
-    const found = resolveSelectionAnchors(getSelection ? getSelection() : null)
+    const sel = getSelection ? getSelection() : null
+    const found = resolveSelectionAnchors(sel)
+    // Bases the `base` selection level can pick but no anchor can address: crossover
+    // extra-base inserts and extension-tail beads have no (helix, bp, direction) in the
+    // strand walk, so they would resolve to zero particles. Say so rather than dropping
+    // them silently — a user who lassoed a run of extra bases must not read an empty
+    // anchor set as "added".
+    const skipped = unsupportedBaseKeys(sel)
     if (!found.length) {
-      _setStatus('Select an overhang, binding strand, domain, cluster, or base first.', _C.warn)
+      _setStatus(skipped.length
+        ? `Can't anchor ${skipped.length} picked base${skipped.length === 1 ? '' : 's'} — extra crossover bases and extension tails aren't addressable as anchors.`
+        : 'Select an overhang, binding strand, domain, cluster, or base first.', _C.warn)
       return 0
     }
     const before = _anchors.length
     _anchors = addAnchors(_anchors, found)
     _renderAnchors()
     _emit()
-    return _anchors.length - before
+    const added = _anchors.length - before
+    if (skipped.length) {
+      _setStatus(`Added ${added}; skipped ${skipped.length} base${skipped.length === 1 ? '' : 's'} (extra crossover / extension beads aren't anchorable).`, _C.warn)
+    }
+    return added
   }
 
   function clear() { _anchors = []; _focusKey = null; _renderAnchors(); _emit() }

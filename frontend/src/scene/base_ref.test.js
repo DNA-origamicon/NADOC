@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   XB_HELIX, baseKey, xbKey, parseBaseKey, baseFamily,
-  toggleBaseKey, dedupeBaseKeys, mergeBaseKeys,
+  toggleBaseKey, dedupeBaseKeys, mergeBaseKeys, pruneBaseKeys,
 } from './base_ref.js'
 
 const nuc = (helix_id, bp_index, direction = 'FORWARD') => ({ helix_id, bp_index, direction })
@@ -115,6 +115,51 @@ describe('toggleBaseKey', () => {
     const out = toggleBaseKey(pool, null)
     expect(out).toEqual(pool)
     expect(out).not.toBe(pool)
+  })
+})
+
+describe('pruneBaseKeys — drops only what is positively gone', () => {
+  const S = (...v) => new Set(v)
+
+  it('drops a key whose helix was deleted, keeps the rest', () => {
+    const keys = ['h1:3:FORWARD', 'gone:4:FORWARD', 'h2:5:REVERSE']
+    expect(pruneBaseKeys(keys, { helixIds: S('h1', 'h2') }))
+      .toEqual(['h1:3:FORWARD', 'h2:5:REVERSE'])
+  })
+
+  it('drops an extra base whose crossover was deleted', () => {
+    const keys = ['__xb__:xo1:0', '__xb__:xoGone:1']
+    expect(pruneBaseKeys(keys, { crossoverIds: S('xo1') })).toEqual(['__xb__:xo1:0'])
+  })
+
+  it('drops an extension base whose extension was deleted', () => {
+    const keys = ['__ext_e1:0:FORWARD', '__ext_eGone:0:FORWARD']
+    expect(pruneBaseKeys(keys, { extensionIds: S('e1') })).toEqual(['__ext_e1:0:FORWARD'])
+  })
+
+  it('drops a linker base whose connection was deleted', () => {
+    const keys = ['__lnk__c1:0:FORWARD', '__lnk__cGone:2:FORWARD']
+    expect(pruneBaseKeys(keys, { connectionIds: S('c1') })).toEqual(['__lnk__c1:0:FORWARD'])
+  })
+
+  // The conservative half: an omitted id set means "can't tell", never "delete it".
+  it('keeps every family whose id set was not supplied', () => {
+    const keys = ['h1:3:FORWARD', '__xb__:xo1:0', '__ext_e1:0:FORWARD', '__lnk__c1:0:FORWARD']
+    expect(pruneBaseKeys(keys, {})).toEqual(keys)
+  })
+
+  it('supplying only helixIds does not prune the synthetic families', () => {
+    const keys = ['__xb__:xo1:0', '__ext_e1:0:FORWARD', '__lnk__c1:0:FORWARD']
+    expect(pruneBaseKeys(keys, { helixIds: S() })).toEqual(keys)
+  })
+
+  it('drops unparseable keys — they can never resolve', () => {
+    expect(pruneBaseKeys(['garbage', 'h1:3:FORWARD'], { helixIds: S('h1') }))
+      .toEqual(['h1:3:FORWARD'])
+  })
+
+  it('an empty pool stays empty', () => {
+    expect(pruneBaseKeys([], { helixIds: S('h1') })).toEqual([])
   })
 })
 

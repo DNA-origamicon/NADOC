@@ -40,7 +40,7 @@ import { clusterMemberFilter } from './cluster_entries.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, toggleClusterSelection } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
-import { baseKey, toggleBaseKey, mergeBaseKeys } from './base_ref.js'
+import { baseKey, toggleBaseKey, mergeBaseKeys, pruneBaseKeys } from './base_ref.js'
 import {
   backboneCandidates, xoverCandidates, flexCandidates, ssLinkCandidates,
   nearestCandidate, candidatesInRect, makeProjector, worldPosOf,
@@ -4182,10 +4182,23 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Ctrl-selected beads become stale after a rebuild — clear them
     if (_ctrlBeads.length > 0) { _ctrlBeads = []; _notifyCtrlBeadsChange() }
     // The base pool SURVIVES a rebuild — that is the point of keying it by string rather
-    // than by mesh+instance. Only its glow entries went stale, so re-resolve them against
-    // the new meshes. (Keys naming a base the rebuild removed simply stop resolving; they
-    // stay in the pool and light up again if it comes back, e.g. after an undo.)
-    if (_baseKeys.length > 0) _repaintBaseGlow()
+    // than by mesh+instance. Only the glow entries went stale, so re-resolve them against
+    // the new meshes. But a rebuild can also follow a real DELETION, and a key whose helix /
+    // crossover / extension / linker is gone can never resolve again — prune those so they
+    // don't sit in the pool as phantoms (the properties panel and the anchor cards read it).
+    // Conservative by construction: pruneBaseKeys drops a key only when its owner is
+    // positively absent, so a key merely hidden by the current representation survives.
+    if (_baseKeys.length > 0) {
+      const d = newState.currentDesign
+      const pruned = pruneBaseKeys(_baseKeys, {
+        helixIds:      new Set((d?.helices ?? []).map(h => h.id)),
+        crossoverIds:  new Set((d?.crossovers ?? []).map(x => x.id)),
+        extensionIds:  new Set((d?.extensions ?? []).map(e => e.id)),
+        connectionIds: new Set((d?.overhang_connections ?? []).map(c => c.id)),
+      })
+      if (pruned.length !== _baseKeys.length) _setBaseKeys(pruned)
+      else                                    _repaintBaseGlow()
+    }
 
     const backboneEntries = designRenderer.getBackboneEntries()
     const coneEntries     = designRenderer.getConeEntries()

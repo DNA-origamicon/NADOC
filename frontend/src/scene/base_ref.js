@@ -130,3 +130,38 @@ export function dedupeBaseKeys(keys = []) {
 export function mergeBaseKeys(existing = [], incoming = []) {
   return dedupeBaseKeys([...existing, ...incoming])
 }
+
+/**
+ * Drop keys whose owning object no longer exists in the design.
+ *
+ * DELIBERATELY CONSERVATIVE: a key survives unless its owner is *positively* known to be
+ * gone. Pass only the id sets you actually have — an omitted set means "can't tell", and
+ * keys of that family are kept.
+ *
+ * This is not the same as a mesh rebuild. A rebuild replaces the InstancedMeshes while the
+ * bases still exist, and the pool is key-based precisely so it survives that (the glow
+ * re-resolves). This prunes the other case: the helix/crossover/extension/linker was
+ * actually deleted, so the key can never resolve again and would otherwise sit in the pool
+ * as a phantom.
+ *
+ * @param {string[]} keys
+ * @param {{helixIds?:Set<string>, crossoverIds?:Set<string>,
+ *          extensionIds?:Set<string>, connectionIds?:Set<string>}} live
+ */
+export function pruneBaseKeys(keys = [], live = {}) {
+  const { helixIds, crossoverIds, extensionIds, connectionIds } = live
+  return keys.filter((key) => {
+    const p = parseBaseKey(key)
+    if (!p) return false                       // unparseable → never resolvable
+    if (p.helix_id === XB_HELIX) {
+      return !crossoverIds || crossoverIds.has(p.crossover_id)
+    }
+    if (p.helix_id.startsWith('__ext_')) {
+      return !extensionIds || extensionIds.has(p.helix_id.slice('__ext_'.length))
+    }
+    if (p.helix_id.startsWith('__lnk__')) {
+      return !connectionIds || connectionIds.has(p.helix_id.slice('__lnk__'.length))
+    }
+    return !helixIds || helixIds.has(p.helix_id)
+  })
+}

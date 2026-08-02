@@ -5,6 +5,7 @@ import {
   vecLen, scaleVec, normalize, rayPlaneVector,
   arrowLenForPn, pnForArrowLen, EFIELD_MAX_LEN_NM, EFIELD_MIN_LEN_NM, EFIELD_NM_PER_PN,
   resolveSelectionAnchors, anchorSelectionState, highlightedAnchors, anchorKey, anchorLabel, dedupeAnchors, addAnchors, removeAnchor,
+  partitionBaseKeys, unsupportedBaseKeys,
   anchorsToSelection,
   buildFieldSpec, fieldSpecReady,
   fieldColorHex, fieldZone, EFIELD_PN_LOW, EFIELD_PN_GOOD, EFIELD_PN_DISRUPT,
@@ -107,6 +108,113 @@ describe('anchor descriptors', () => {
     expect(a.map(anchorKey)).toEqual(['overhang:o1', 'cluster:c1'])
     a = removeAnchor(a, 'overhang:o1')
     expect(a.map(anchorKey)).toEqual(['cluster:c1'])
+  })
+})
+
+describe('partitionBaseKeys — which base-level picks an anchor can address', () => {
+  const design = { helices: [{ id: 'h1' }, { id: 'h2' }, { id: '__lnk__c1' }] }
+  const helixIds = new Set(design.helices.map(h => h.id))
+
+  it('accepts bases on a real design helix', () => {
+    const { anchorable, unsupported } = partitionBaseKeys(['h1:12:FORWARD', 'h2:3:REVERSE'], helixIds)
+    expect(unsupported).toEqual([])
+    expect(anchorable).toEqual([
+      { helix_id: 'h1', bp_index: 12, direction: 'FORWARD', copy: 0 },
+      { helix_id: 'h2', bp_index: 3,  direction: 'REVERSE', copy: 0 },
+    ])
+  })
+
+  // These two families have helix_id/bp/direction = None in the backend strand walk
+  // (_walk_strand_nucleotides), so an anchor descriptor for them matches zero particles.
+  it('rejects extra crossover bases — __xb__ has no helix/bp/direction at all', () => {
+    const { anchorable, unsupported } = partitionBaseKeys(['__xb__:xo1:2'], helixIds)
+    expect(anchorable).toEqual([])
+    expect(unsupported).toEqual(['__xb__:xo1:2'])
+  })
+
+  it('rejects extension-tail bases — their synthetic helix is not in the design', () => {
+    const { anchorable, unsupported } = partitionBaseKeys(['__ext_e1:0:FORWARD'], helixIds)
+    expect(anchorable).toEqual([])
+    expect(unsupported).toEqual(['__ext_e1:0:FORWARD'])
+  })
+
+  // The test is data-driven, not prefix-based: a synthetic helix that IS in the design
+  // (ss-linker bridges) is anchorable, and would start working the moment it appears.
+  it('accepts an ss-linker base when its __lnk__ helix really exists', () => {
+    const { anchorable, unsupported } = partitionBaseKeys(['__lnk__c1:0:FORWARD'], helixIds)
+    expect(unsupported).toEqual([])
+    expect(anchorable).toHaveLength(1)
+    expect(anchorable[0].helix_id).toBe('__lnk__c1')
+  })
+
+  it('rejects a base on a helix that was deleted', () => {
+    expect(partitionBaseKeys(['gone:1:FORWARD'], helixIds).unsupported).toEqual(['gone:1:FORWARD'])
+  })
+
+  it('rejects unparseable keys', () => {
+    expect(partitionBaseKeys(['junk'], helixIds).unsupported).toEqual(['junk'])
+  })
+
+  it('unsupportedBaseKeys reads the pool straight off a state snapshot', () => {
+    expect(unsupportedBaseKeys({
+      currentDesign: design,
+      multiSelectedBaseKeys: ['h1:1:FORWARD', '__xb__:xo1:0', '__ext_e1:0:FORWARD'],
+    })).toEqual(['__xb__:xo1:0', '__ext_e1:0:FORWARD'])
+  })
+
+  it('unsupportedBaseKeys is empty for an empty pool', () => {
+    expect(unsupportedBaseKeys({ currentDesign: design })).toEqual([])
+  })
+})
+
+describe('resolveSelectionAnchors — base-level pool', () => {
+  const design = { helices: [{ id: 'h1' }, { id: 'h2' }] }
+
+  it('turns multiSelectedBaseKeys into base anchors', () => {
+    const out = resolveSelectionAnchors({
+      currentDesign: design,
+      multiSelectedBaseKeys: ['h1:12:FORWARD', 'h2:3:REVERSE'],
+    })
+    expect(out).toEqual([
+      { kind: 'base', helixId: 'h1', bp: 12, direction: 'FORWARD' },
+      { kind: 'base', helixId: 'h2', bp: 3,  direction: 'REVERSE' },
+    ])
+  })
+
+  it('drops unaddressable bases rather than emitting anchors that match nothing', () => {
+    const out = resolveSelectionAnchors({
+      currentDesign: design,
+      multiSelectedBaseKeys: ['h1:1:FORWARD', '__xb__:xo1:0', '__ext_e1:0:FORWARD'],
+    })
+    expect(out).toEqual([{ kind: 'base', helixId: 'h1', bp: 1, direction: 'FORWARD' }])
+  })
+
+  it('dedupes a base already contributed by ctrlBeadNucs', () => {
+    const out = resolveSelectionAnchors({
+      currentDesign: design,
+      ctrlBeadNucs: [{ helix_id: 'h1', bp_index: 12, direction: 'FORWARD' }],
+      multiSelectedBaseKeys: ['h1:12:FORWARD'],
+    })
+    expect(out).toHaveLength(1)
+  })
+
+  it('coexists with the other scopes', () => {
+    const out = resolveSelectionAnchors({
+      currentDesign: design,
+      multiSelectedOverhangIds: ['o1'],
+      multiSelectedBaseKeys: ['h1:5:FORWARD'],
+    })
+    expect(out.map(anchorKey).sort()).toEqual(['base:h1:5:FORWARD', 'overhang:o1'].sort())
+  })
+
+  // The occupancy scope picker feeds the SAME descriptors through anchorsToSelection,
+  // so wiring the pool once lights up both features.
+  it('flows through anchorsToSelection into the occupancy `bases` wire format', () => {
+    const sel = anchorsToSelection(resolveSelectionAnchors({
+      currentDesign: design,
+      multiSelectedBaseKeys: ['h1:12:FORWARD'],
+    }))
+    expect(sel.bases).toEqual([['h1', 12, 'FORWARD']])
   })
 })
 
