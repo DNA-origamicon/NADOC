@@ -48,9 +48,8 @@ export function initSurfaceRenderer(scene) {
   // alpha attribute/patch are never installed.
   // Per-cluster display maps. Two key spaces: NUCLEOTIDE (`helix:bp:dir`) when the
   // payload carries the nucleotide table, STRAND otherwise. Both are kept so the choice
-  // can be made per payload — an old cached surface, or the oxDNA frame overlay, has no
-  // nucleotide table and still gets the (coarser but correct-for-a-single-cluster)
-  // strand-keyed fade.
+  // can be made per payload — an old cached surface still gets the (coarser but
+  // correct-for-a-single-cluster) strand-keyed fade.
   let _clusterMaps = { nucColors: null, nucAlphas: null, strandColors: null, strandAlphas: null }
 
   /** The alpha map matching this payload's identity space. */
@@ -76,8 +75,9 @@ export function initSurfaceRenderer(scene) {
    * Per-vertex identity table + index, preferring the NUCLEOTIDE pair over the strand
    *   pair. A strand id cannot resolve per-cluster colour for a strand that spans clusters —
    *   the scaffold spans nearly all of them (LESSONS D15) — so the backend now ships
-   *   `helix:bp:direction` per vertex. Payloads without it (the oxDNA frame-surface overlay,
-   *   anything cached from before 2026-08-01) transparently fall back to strands.
+   *   `helix:bp:direction` per vertex — the design surface and, since 2026-08-02, the
+   *   simulation-frame surfaces too. Payloads without it (anything cached from before, or a
+   *   producer with no nucleotide identity) transparently fall back to strands.
    *
    * @returns {{table: string[], index: ArrayLike<number>, perNuc: boolean}|null}
    */
@@ -517,6 +517,13 @@ export function initSurfaceRenderer(scene) {
    */
   function applyPositionLerp(fromData, toData, t) {
     if (!_mesh || !fromData || !toData) return
+    // Record the frame BEFORE any branch below. Only one of the three paths rebuilds
+    // topology; the in-place lerp keeps the existing buffers, and it is taken whenever
+    // the vertex count happens to match. Without this, `_cachedData` kept describing the
+    // DESIGN surface while a simulation frame was on screen, so per-cluster colour and
+    // opacity resolved against the wrong identity table — or against none at all.
+    const _identityChanged = _cachedData !== toData
+    _cachedData = toData
     // Scalar overlay (oxDNA flexibility map): a single colour-baked frame — always
     // rebuild so the per-vertex viridis colours land even if the vertex count
     // happens to match the current mesh (the in-place lerp never touches colour).
@@ -532,17 +539,39 @@ export function initSurfaceRenderer(scene) {
         _liveVerts[i] = fromV[i] + (toV[i] - fromV[i]) * t
       }
       _mesh.geometry.attributes.position.needsUpdate = true
+      if (_identityChanged) _applyFrameClusterDisplay(toData)
     } else {
       // Topology mismatch — snap to nearest keyframe state.
       const snapData = t < 0.5 ? fromData : toData
+      _cachedData = snapData
       if (snapData.vertices.length !== _liveVerts?.length) {
         _rebuildTopology(snapData)
       } else {
         const sv = snapData.vertices
         for (let i = 0; i < sv.length; i++) _liveVerts[i] = sv[i]
         _mesh.geometry.attributes.position.needsUpdate = true
+        if (_identityChanged) _applyFrameClusterDisplay(snapData)
       }
     }
+  }
+
+  /**
+   * Re-apply per-cluster colour + fade for a frame that reused the existing buffers
+   * (the in-place lerp path, which never goes through _rebuildTopology).
+   *
+   * Colour is skipped for a scalar payload — the flexibility map's viridis ramp IS the
+   * information there, and a cluster tint would destroy it. Opacity always applies:
+   * "colour is mode-gated, opacity is not" is the contract everywhere else.
+   */
+  function _applyFrameClusterDisplay(data) {
+    if (!data.scalar) {
+      const colAttr = _mesh.geometry.getAttribute('color')
+      if (colAttr && _colorMapFor(data)?.size) {
+        _overlayClusterColors(colAttr.array)
+        colAttr.needsUpdate = true
+      }
+    }
+    _applyVertexAlpha()
   }
 
   /**
@@ -560,6 +589,14 @@ export function initSurfaceRenderer(scene) {
    */
   function _rebuildTopology(data) {
     if (!_mesh) return
+    // A SIMULATION frame replaces the mesh wholesale, so this payload — not the design
+    // surface — is now what is on screen. Recording it is what lets the per-cluster
+    // machinery reach a simulated surface at all: every engine overlay (oxDNA relaxed /
+    // RMSF / trajectory, and NAMD through mdViz) funnels through applyPositionLerp, and
+    // without this `_cachedData` still described the design surface while the mesh was a
+    // sim frame, so applyClusterDisplay / _applyVertexAlpha early-returned or resolved
+    // against the wrong identity table.
+    _cachedData    = data
     const oldGeo   = _mesh.geometry
     const vertsArr = new Float32Array(data.vertices)
     _liveVerts     = vertsArr
@@ -587,6 +624,9 @@ export function initSurfaceRenderer(scene) {
     }
     _mesh.geometry = newGeo
     oldGeo.dispose()
+
+    // Per-cluster colour + fade, exactly as _replaceMesh does for the design surface.
+    _applyFrameClusterDisplay(data)
   }
 
   /**

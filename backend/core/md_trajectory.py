@@ -506,12 +506,21 @@ def _extract_md_atoms_frame(ctx: dict, frame_idx: int,
 
 
 class _SurfAtom:
-    """Minimal atom for compute_surface (reads .x/.y/.z/.element + .strand_id)."""
-    __slots__ = ("x", "y", "z", "element", "strand_id")
+    """Minimal atom for compute_surface.
 
-    def __init__(self, x, y, z, element, strand_id=""):
+    Reads ``.x/.y/.z/.element`` plus the identity fields ``_assign_vertex_owners``
+    needs: ``.strand_id`` and the nucleotide triple ``.helix_id/.bp_index/.direction``.
+    The triple is what lets a NAMD surface be coloured and faded per CLUSTER — a strand
+    id alone collapses the scaffold onto one cluster (LESSONS D15) — and
+    ``_extract_md_atoms_frame`` already yields all three.
+    """
+    __slots__ = ("x", "y", "z", "element", "strand_id", "helix_id", "bp_index", "direction")
+
+    def __init__(self, x, y, z, element, strand_id="",
+                 helix_id="", bp_index=0, direction="FORWARD"):
         self.x = x; self.y = y; self.z = z; self.element = element
         self.strand_id = strand_id
+        self.helix_id = helix_id; self.bp_index = bp_index; self.direction = direction
 
 
 def composite_raw_frame_map(segments, max_frames: int = 200,
@@ -760,7 +769,7 @@ def md_frames_surface(topology_path, segments, coordinate_path, design, frame_in
     """Per-frame molecular surface from the NAMD DNA heavy atoms → surface-batch
     shape ``{ "<idx>": {vertices, faces} }`` (uniform colour for v1).  Indices are
     COMPOSITE, translated like md_frames_atomistic's."""
-    from backend.core.surface import compute_surface, smooth_mesh
+    from backend.core.surface import compute_surface, smooth_mesh, vertex_index_tables
 
     seg_paths = [s[2] for s in segments]
     ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
@@ -774,13 +783,19 @@ def md_frames_surface(topology_path, segments, coordinate_path, design, frame_in
         gidx = raw_of[idx]
         if gidx >= n:
             continue
-        atoms = [_SurfAtom(a["x"], a["y"], a["z"], a["element"], a.get("strand_id", ""))
+        atoms = [_SurfAtom(a["x"], a["y"], a["z"], a["element"], a.get("strand_id", ""),
+                           a.get("helix_id", ""), a.get("bp_index", 0),
+                           a.get("direction", "FORWARD"))
                  for a in _extract_md_atoms_frame(ctx, gidx)]
         mesh = compute_surface(atoms, grid_spacing=grid_spacing,
                                probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
         mesh = smooth_mesh(mesh, iterations=smooth)
-        out[str(idx)] = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
-                         "faces": [int(f) for f in mesh.faces.ravel()]}
+        entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
+                 "faces": [int(f) for f in mesh.faces.ravel()]}
+        # Per-vertex identity, so the NAMD surface honours per-cluster colour + opacity
+        # like every other surface. Without it the client has nothing to resolve against.
+        entry.update(vertex_index_tables(mesh))
+        out[str(idx)] = entry
     return out
 
 

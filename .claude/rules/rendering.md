@@ -270,6 +270,28 @@ stock chunk variable (LESSONS D5).
 >   key shapes cannot collide. The bead view was never affected — `cluster_entries.clusterNucKeys`
 >   emits its own `h:__ext_<id>` keys.
 >
+>   **Simulation surfaces too, 2026-08-02.** Every engine overlay that draws a surface —
+>   oxDNA relaxed / RMSF / trajectory, and NAMD through the mdViz adapter — shares the ONE
+>   `surfaceRenderer` from `main.js` and reaches it through `applyPositionLerp`, never
+>   `update()`. That path did not record the payload, so `_cachedData` still described the
+>   DESIGN surface while a sim frame was on screen and the cluster machinery either
+>   early-returned or resolved against the wrong identity table. `applyPositionLerp` now
+>   records the frame on ALL THREE of its branches (in-place lerp, snap, rebuild) — the
+>   in-place branch is the easy one to miss, and it is taken whenever the vertex count
+>   happens to match. Backend side, `frame_surface_json` and `md_frames_surface` emit the
+>   tables via the shared `surface.vertex_index_tables(mesh)`; the identity was always on
+>   the mesh, both were building their payload by hand and dropping it. `_SurfAtom` (NAMD)
+>   had to grow the nucleotide triple — it carried only `strand_id`.
+>
+>   **Colour is suppressed for a `scalar` payload, opacity is not.** The flexibility map's
+>   viridis ramp IS the information in RMSF mode, so a cluster tint would destroy it; the
+>   fade still applies, matching "colour is mode-gated, opacity is not" everywhere else.
+>
+>   The oxDNA display cache (`_DISPLAY_OUT_CACHE`) is an in-process dict with no natural
+>   invalidation, so `_SURF_PAYLOAD_V` participates in its key — **bump it whenever
+>   `frame_surface_json`'s output changes shape**, or a long-running server keeps serving
+>   pre-change payloads.
+>
 >   **The binary format has no version field, and deliberately so.** Each trailing block is
 >   `u32 kind · u32 tableLen · UTF-8 JSON table · u32[nVerts] index`, optional and
 >   self-describing, so an old decoder stops when it runs out of bytes. That is how the

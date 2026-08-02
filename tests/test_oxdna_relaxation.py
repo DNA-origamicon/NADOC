@@ -4755,3 +4755,45 @@ def test_composite_trajectory_reuses_sibling_ancestor_frames(tmp_path, design, g
     assert b_parsed < a_parsed                             # the sibling parsed fewer frames
     assert sum(n for p, n in calls if p.endswith("root.dat")) == 0   # root NOT re-parsed (reused)
     assert sum(n for p, n in calls if p.endswith("B.dat")) > 0       # its own leaf WAS parsed
+
+
+def test_frame_surface_json_carries_per_vertex_identity(design, geometry, tmp_path):
+    """A SIMULATION-frame surface must ship the same per-vertex identity the design
+    surface does, or the client has nothing to resolve a cluster against — which is why
+    per-cluster colour and opacity were silently ignored on every engine overlay.
+
+    The identity was always on the mesh (compute_surface assigns it); frame_surface_json
+    built its payload by hand and dropped it."""
+    from backend.core.oxdna_health import production_rmsf, frame_surface_json
+    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 2)
+    frame = production_rmsf(design, t, ref, include_average_frame=True)["average_frame"]
+
+    entry = frame_surface_json(design, frame, smooth=3)
+    tbl = entry.get("vertex_nuc_index_table")
+    idx = entry.get("vertex_nuc_index")
+    assert tbl, "simulation surface carries no nucleotide table"
+    assert len(idx) * 3 == len(entry["vertices"])
+    for key in tbl:
+        helix, bp, direction = key.rsplit(":", 2)
+        assert helix and bp.isdigit()
+        assert direction in ("FORWARD", "REVERSE")
+    # …and finer than strands, which is the whole point (a scaffold spans clusters).
+    assert len(tbl) > len(entry["vertex_strand_index_table"])
+
+
+def test_frame_surface_json_rmsf_mode_still_carries_identity(design, geometry, tmp_path):
+    """Identity is independent of colour mode: the flexibility ramp owns the COLOUR, but
+    per-cluster OPACITY still has to apply, so the tables must ship in rmsf mode too."""
+    from backend.core.oxdna_health import production_rmsf, frame_surface_json
+    ref = tmp_path / "ref.dat"; _write_traj(design, geometry, ref, 1)
+    t = tmp_path / "p.dat";     _write_traj(design, geometry, t, 3)
+    res = production_rmsf(design, t, ref, include_average_frame=True)
+    rmsf_by_key = {(p["helix_id"], p["bp_index"], p["direction"]): p["rmsf"]
+                   for p in res["positions"]}
+
+    entry = frame_surface_json(design, res["average_frame"], color_mode="rmsf",
+                               smooth=3, rmsf_by_key=rmsf_by_key)
+    assert "vertex_rmsf" in entry
+    assert "vertex_colors" not in entry
+    assert entry.get("vertex_nuc_index_table")

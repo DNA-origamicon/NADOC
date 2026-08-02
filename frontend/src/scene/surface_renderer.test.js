@@ -262,3 +262,98 @@ describe('surface — extension tails on synthetic helices', () => {
     expect([c.getX(0), c.getY(0), c.getZ(0)]).toEqual([0, 0, 0])   // duplex untouched
   })
 })
+
+// ── Simulation-frame surfaces ────────────────────────────────────────────────
+// Every engine overlay (oxDNA relaxed / RMSF / trajectory, NAMD via mdViz) reaches the
+// renderer through applyPositionLerp → _rebuildTopology, NOT through update(). That path
+// never recorded the payload, so `_cachedData` still described the DESIGN surface while
+// the mesh on screen was a sim frame — and the cluster machinery either early-returned
+// or resolved against the wrong identity table. The whole suite went through update(),
+// which is why the gap was invisible.
+
+describe('surface — simulation frames keep cluster colour + opacity', () => {
+  const SIM = {
+    vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0],
+    faces: [0, 1, 2, 1, 3, 2],
+    vertex_colors: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    vertex_strand_index_table: ['s1'],
+    vertex_strand_index: [0, 0, 0, 0],
+    vertex_nuc_index_table: ['hA:5:FORWARD', 'hB:9:FORWARD'],
+    vertex_nuc_index: [0, 0, 1, 1],
+  }
+  const build = () => {
+    const scene = makeScene()
+    const sr = initSurfaceRenderer(scene)
+    sr.setColorMode('strand')
+    sr.update(DATA)                 // a design surface is on screen first, as in the app
+    // …and it has been coloured, so a `color` attribute exists. The in-place lerp path
+    // reuses the existing buffers, so a cluster tint has somewhere to land only if one
+    // does — which is the real app's state.
+    sr.applyStrandColors(new Map([['sA', 0x000000], ['sB', 0x000000]]))
+    return sr
+  }
+  const push = (sr, data) => sr.applyPositionLerp(data, data, 0)
+  const alphaAt = (sr, v) => sr.getMesh().geometry.getAttribute('instanceAlpha')?.getX(v)
+  const colorAt = (sr, v) => {
+    const c = sr.getMesh().geometry.getAttribute('color')
+    return [c.getX(v), c.getY(v), c.getZ(v)]
+  }
+
+  it('fades a simulated surface per nucleotide', () => {
+    const sr = build()
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
+    push(sr, SIM)
+    expect(alphaAt(sr, 0)).toBeCloseTo(0.3, 5)
+    expect(alphaAt(sr, 2)).toBe(1)
+  })
+
+  it('colours a simulated surface per nucleotide', () => {
+    const sr = build()
+    sr.applyClusterDisplay({ nucColors: new Map([['hA:5:FORWARD', 0xff0000]]) })
+    push(sr, SIM)
+    expect(colorAt(sr, 0)).toEqual([1, 0, 0])
+    expect(colorAt(sr, 2)).toEqual([0, 0, 0])
+  })
+
+  it('applies a fade set AFTER the frame landed', () => {
+    // Dragging the opacity slider while a simulation overlay is on screen.
+    const sr = build()
+    push(sr, SIM)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
+    expect(alphaAt(sr, 0)).toBeCloseTo(0.3, 5)
+  })
+
+  it('does NOT tint a scalar (RMSF) payload — the viridis ramp is the information', () => {
+    const sr = build()
+    sr.applyClusterDisplay({ nucColors: new Map([['hA:5:FORWARD', 0xff0000]]) })
+    push(sr, { ...SIM, scalar: true, vertex_colors: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1] })
+    expect(colorAt(sr, 0)).toEqual([0, 0, 1])      // untouched viridis
+  })
+
+  it('…but still FADES a scalar payload — opacity is never mode-gated', () => {
+    const sr = build()
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
+    push(sr, { ...SIM, scalar: true })
+    expect(alphaAt(sr, 0)).toBeCloseTo(0.3, 5)
+  })
+
+  it('falls back to strand keys for a frame with no nucleotide table', () => {
+    const sr = build()
+    sr.applyClusterDisplay({ strandAlphas: new Map([['s1', 0.4]]) })
+    const { vertex_nuc_index_table, vertex_nuc_index, ...noNuc } = SIM
+    push(sr, noNuc)
+    expect(alphaAt(sr, 0)).toBeCloseTo(0.4, 5)
+  })
+
+  it('re-resolves against the NEW frame, not the design surface it replaced', () => {
+    // The concrete failure `_cachedData` caused: identity resolved against whatever
+    // update() last cached, so vertices took another mesh's cluster.
+    const sr = build()
+    sr.applyClusterDisplay({
+      nucAlphas: new Map([['hA:5:FORWARD', 0.3]]),
+      strandAlphas: new Map([['sA', 0.9]]),        // DATA's strands — must not win
+    })
+    push(sr, SIM)
+    expect(alphaAt(sr, 0)).toBeCloseTo(0.3, 5)
+  })
+})

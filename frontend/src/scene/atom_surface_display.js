@@ -334,8 +334,8 @@ export function initAtomSurfaceDisplay({
    * owns its first domain (LESSONS D15).
    *
    * The surface gets the strand-keyed maps too, as a fallback — a payload without
-   * `vertex_nuc_index_table` (the oxDNA frame-surface overlay, or a surface cached before
-   * the backend shipped it) still fades, just at strand granularity. The renderer picks
+   * `vertex_nuc_index_table` (one cached before the backend shipped it, or a producer with
+   * no nucleotide identity) still fades, just at strand granularity. The renderer picks
    * the space per payload.
    */
   function refreshClusterDisplay(design = null) {

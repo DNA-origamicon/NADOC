@@ -3095,7 +3095,8 @@ def frame_surface_json(design, frame: dict, color_mode: str = "strand",
     all-atom rebuild — ~3× faster, ~2.8 Å from the atomic surface); ``'fine'`` uses the
     full all-atom model."""
     from backend.core.surface import (compute_surface, smooth_mesh, surface_to_json,
-                                       adaptive_grid_spacing, cg_surface_mesh)
+                                       adaptive_grid_spacing, cg_surface_mesh,
+                                       vertex_index_tables)
     if detail == "coarse":
         beads = _cg_beads_from_frame(design, frame)
         mesh = cg_surface_mesh(beads, grid_spacing=grid_spacing, probe_radius=probe_radius, smooth=smooth)
@@ -3122,6 +3123,12 @@ def frame_surface_json(design, frame: dict, color_mode: str = "strand",
         rmsf_atoms = model.atoms
     entry = {"vertices": [round(float(v), 5) for v in mesh.vertices.ravel()],
              "faces": [int(f) for f in mesh.faces.ravel()]}
+    # Per-vertex identity, exactly as the DESIGN surface ships it. Without it a simulated
+    # surface carries no way to resolve a cluster, so per-cluster colour and opacity were
+    # silently ignored on every engine overlay. Both the coarse (CG-bead) and fine
+    # (all-atom) meshes above already carry it — this used to build `entry` by hand and
+    # throw it away. Cheap: two int lists plus a small string table.
+    entry.update(vertex_index_tables(mesh))
     if color_mode == "rmsf" and rmsf_by_key:
         entry["vertex_rmsf"] = _vertex_rmsf(mesh, rmsf_atoms, rmsf_by_key)
     elif color_mode == "strand":
@@ -3145,8 +3152,8 @@ def pack_surface_bin(data: dict) -> bytes:
              uint32 nuc_kind
              nuc_kind 1 → uint32 table_len · bytes[table_len] (UTF-8 JSON "helix:bp:dir" list)
                             · uint32[n_verts] vertex_nuc_index ; 0 → none
-    The trailing strand block lets the DESIGN surface recolour client-side by strand/group/
-    cluster WITHOUT a re-fetch (the overlay omits it — its ``data`` has no strand table).
+    The trailing strand block lets a surface recolour client-side by strand/group/cluster
+    WITHOUT a re-fetch. Both the design surface and the simulation-frame surfaces ship it.
     The nucleotide block (added 2026-08-01) is what makes per-CLUSTER colouring correct: a
     strand can span several clusters and the scaffold spans nearly all of them, so a
     strand-keyed lookup paints the whole scaffold one colour (LESSONS D15).

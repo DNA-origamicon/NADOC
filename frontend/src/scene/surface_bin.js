@@ -59,8 +59,8 @@ export function parseSurfaceBin(buf) {
   _indexBlock('vertex_strand_index_table', 'vertex_strand_index')
   // Nucleotide block (2026-08-01) — `helix:bp:dir` per vertex, so per-CLUSTER colouring
   // can resolve a strand that spans several clusters. The scaffold spans nearly all of
-  // them, so a strand-keyed lookup paints it one colour (LESSONS D15). Absent from the
-  // oxDNA frame-surface overlay, which has no nucleotide identity.
+  // them, so a strand-keyed lookup paints it one colour (LESSONS D15). Shipped by the
+  // DESIGN surface and, since 2026-08-02, by the SIMULATION-frame surfaces too.
   _indexBlock('vertex_nuc_index_table', 'vertex_nuc_index')
   return out
 }

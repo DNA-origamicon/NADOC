@@ -85,6 +85,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["oxdna"])
 
+# Schema version for the cached simulation-surface payload. v2 added the per-vertex
+# identity tables (vertex_strand_index* / vertex_nuc_index*) that per-cluster colour and
+# opacity resolve against.
+_SURF_PAYLOAD_V = 2
+
 # Live frames-processed progress for the composite-trajectory build, keyed by job id.
 # The build runs in a threadpool (off the event loop) so a concurrent poll of
 # /trajectory-progress is served while it computes.  A plain dict assignment is

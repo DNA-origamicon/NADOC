@@ -644,6 +644,42 @@ def compute_colored_surfaces(
 
 # ── JSON serialisation ────────────────────────────────────────────────────────
 
+def vertex_index_tables(mesh: SurfaceMesh) -> dict:
+    """Per-vertex identity as ``(unique table, per-vertex index)`` pairs — the compact
+    wire form of ``vertex_strand_ids`` / ``vertex_nuc_ids``.
+
+    Shared by :func:`surface_to_json` (the DESIGN surface) and
+    ``oxdna_health.frame_surface_json`` (the SIMULATION-frame surface) so both carry the
+    identity a client needs to colour and fade by cluster. The sim path built its payload
+    by hand and so shipped no identity at all, which is why a simulated surface ignored
+    cluster colour and opacity entirely.
+
+    The nucleotide pair is omitted when the mesh has none (older producers, the welded
+    multi-material path); clients fall back to the strand pair.
+    """
+    def _dedupe(ids: list[str]) -> tuple[list[str], list[int]]:
+        table: list[str] = []
+        index: dict[str, int] = {}
+        out: list[int] = []
+        for v in ids:
+            i = index.get(v)
+            if i is None:
+                i = len(table)
+                index[v] = i
+                table.append(v)
+            out.append(i)
+        return table, out
+
+    sid_table, sid_index = _dedupe(mesh.vertex_strand_ids)
+    tables = {"vertex_strand_index_table": sid_table, "vertex_strand_index": sid_index}
+    nuc_ids = mesh.vertex_nuc_ids or []
+    if len(nuc_ids) == len(mesh.vertex_strand_ids) and any(nuc_ids):
+        nuc_table, nuc_index = _dedupe(nuc_ids)
+        tables["vertex_nuc_index_table"] = nuc_table
+        tables["vertex_nuc_index"] = nuc_index
+    return tables
+
+
 def surface_to_json(
     mesh: SurfaceMesh,
     design: Design,
@@ -695,47 +731,21 @@ def surface_to_json(
     # surface client-side using the same palette/group/cluster overrides as
     # the bead view.  Sent as (unique_id_list, index_per_vertex) to keep the
     # payload small for large meshes.
-    unique_strand_ids: list[str] = []
-    sid_index: dict[str, int] = {}
-    vertex_strand_idx: list[int] = []
-    for sid in mesh.vertex_strand_ids:
-        i = sid_index.get(sid)
-        if i is None:
-            i = len(unique_strand_ids)
-            sid_index[sid] = i
-            unique_strand_ids.append(sid)
-        vertex_strand_idx.append(i)
-
-    # Same dedupe, one level finer: the per-vertex NUCLEOTIDE key. A strand id alone
-    # cannot resolve per-cluster colour for a strand that spans clusters — the scaffold
-    # spans nearly all of them (LESSONS D15). Omitted entirely when the mesh has no nuc
-    # ids (older producers, the welded multi-material path), and the client falls back
-    # to the strand table, so this stays additive.
-    unique_nuc_ids: list[str] = []
-    nuc_index: dict[str, int] = {}
-    vertex_nuc_idx: list[int] = []
-    for nid in (mesh.vertex_nuc_ids or []):
-        i = nuc_index.get(nid)
-        if i is None:
-            i = len(unique_nuc_ids)
-            nuc_index[nid] = i
-            unique_nuc_ids.append(nid)
-        vertex_nuc_idx.append(i)
-    has_nuc = len(vertex_nuc_idx) == len(mesh.vertex_strand_ids) and bool(unique_nuc_ids)
+    tables = vertex_index_tables(mesh)
 
     out = {
         "vertices": verts_flat,
         "faces": faces_flat,
         "vertex_colors": vertex_colors,
-        "vertex_strand_index_table": unique_strand_ids,
-        "vertex_strand_index": vertex_strand_idx,
+        "vertex_strand_index_table": tables["vertex_strand_index_table"],
+        "vertex_strand_index": tables["vertex_strand_index"],
         "stats": {
             "n_verts": len(mesh.vertices),
             "n_faces": len(mesh.faces),
             "compute_ms": round(t_ms, 1),
         },
     }
-    if has_nuc:
-        out["vertex_nuc_index_table"] = unique_nuc_ids
-        out["vertex_nuc_index"] = vertex_nuc_idx
+    if "vertex_nuc_index_table" in tables:
+        out["vertex_nuc_index_table"] = tables["vertex_nuc_index_table"]
+        out["vertex_nuc_index"] = tables["vertex_nuc_index"]
     return out
