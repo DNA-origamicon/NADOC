@@ -13,8 +13,20 @@ Playwright tests that create transient `.nadoc` fixtures (saved designs, "New de
 
 **Why:** Past test runs already littered `workspace/` with `CT-tab-test_*.nadoc`, `DD-test.nadoc`, and similar one-shot files alongside real designs. Mixing them makes it harder to find the user's actual fixtures (e.g. `hinge.nadoc`, `Examples/teeth.nadoc`) and risks accidentally loading a stale test artifact. A dedicated subfolder keeps test detritus quarantined; aggressive cleanup keeps it from accumulating across runs.
 
-**How to apply:**
-- When writing a new spec that calls `POST /api/design/save`, `File → Save`, the "New design" flow, or any other path that produces a `.nadoc` on disk: route the path through `workspace/playwright_tests/<spec>-<n>.nadoc`. Create the directory on demand if missing.
+**A spec that OPENS an existing design and edits it through the UI writes to that file (2026-08-02).**
+This is the sharper version of the rule above, and it bit: a throwaway verification spec loaded
+`workspace/6hb_sim_v2.nadoc` from the welcome screen, clicked "+ New animation" and "Add trajectory
+keyframe", and the app **auto-saved all of it back to the user's design** — three animations across
+three runs. `workspace/` is gitignored, so `git status` shows nothing and there is no backup to
+restore from; the session cache is no help either (the e2e backend runs with
+`NADOC_DISABLE_SESSION_CACHE=1`, and it only snapshots the docs it happens to have open).
+
+**How to apply:** before a spec mutates an existing design through the UI, either (a) copy the
+fixture to `workspace/playwright_tests/` first and open the copy, or (b) `cp` the original to the
+scratchpad and restore it in `afterAll`. If neither happened and you only notice afterwards:
+snapshot the file as-found, work out exactly what the spec added (the pre-run state is often
+recoverable by reasoning — count the spec's create-clicks against what is in the file), and **ask
+before writing** — it is the user's data and the prior state cannot be diffed.
 - Before claiming the spec done, add a `test.afterEach` / `test.afterAll` (or inline `fs.unlinkSync` at the end of the `test()` body) that deletes anything the spec wrote.
 - Tests that only READ existing fixtures (`workspace/hinge.nadoc`, `Examples/*.nadoc`) are unaffected — this rule covers test-generated files only.
 - If you see `CT-tab-test_*.nadoc` / `DD-test.nadoc` / similar at the top of `workspace/`, treat them as legacy debris from earlier work — safe to delete, and confirm with the user before bulk-removing if more than a handful.

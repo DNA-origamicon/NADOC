@@ -1011,6 +1011,69 @@ export function initOxdnaDisplay({
     } finally { if (busy && live()) _setHeavyBusy(false, kind) }
   }
 
+  /**
+   * Hand the heavy rep back to the DESIGN without discarding this job's caches.
+   *
+   * For a caller that INTERLEAVES job frames with design frames — the animation player,
+   * whose keyframes mix trajectory segments with feature-log segments. `stopAndRestore()`
+   * is wrong there: it throws away the trajectory and every prebuilt frame, so the next
+   * trajectory keyframe re-downloads the lot. Doing nothing is also wrong: the renderer
+   * holds the JOB's atom set, and design coordinates written onto it map every serial to
+   * the wrong atom once the design has been edited since the job ran.
+   *
+   * So: restore the design's heavy rep and forget which topology is PAINTED, but keep the
+   * fetched topology held (`_pendingTopoModel`) and both frame bakes. The next job frame
+   * repaints from the held model in its usual single tick — no refetch, no flash.
+   */
+  function releaseHeavyToDesign() {
+    if (!_heavyActive && _atomTopoJob === null) return
+    getAtomisticRenderer?.()?.clearScalarColors?.()
+    onRestoreDesignHeavy?.()
+    _heavyActive = false
+    _atomTopoJob = null
+  }
+
+  /**
+   * Restore the DESIGN display but KEEP this job's trajectory and frame bakes.
+   *
+   * `stopAndRestore()` is the "done with this job" teardown: it drops `_traj`, both
+   * coarse bakes and the held topology, so coming back costs the whole download again —
+   * on a 16 k-nt origami that is a 370 MB composite trajectory. The animation player
+   * stops SHOWING a trajectory every time playback ends but is not done with it (the
+   * user presses Play again), which is exactly the case this exists for.
+   *
+   * Pairs with `resumeTrajectory(jobId)`. While suspended the controller reports
+   * `isActive() === false`, so the design owns the display and `drivesHeavy()` correctly
+   * declines to defer to us; `mode()`/`activeJobId()` still name what is held.
+   *
+   * Memory: one job's trajectory stays resident, the same as leaving the panel's
+   * trajectory view open. A job switch or `stopAndRestore()` frees it.
+   */
+  function suspendToDesign() {
+    if (!_active) return
+    _heavyToken++       // and any in-flight heavy reconstruction
+    _prebuildToken++    // and any in-flight playback prebuild
+    _playing = false
+    _setHeavyBusy(false, null)
+    _active = false     // BEFORE the restore, same ordering reason as stopAndRestore
+    designRenderer?.clearScalarColors?.()
+    onOccupancyClear?.()
+    _applyFem(null)
+    onSurfaceStrands?.(null)
+    proteinRenderer?.clearOxdnaTransforms?.()
+    releaseHeavyToDesign()
+    // KEPT: _traj, _jobId, _mode, _bakedAtom, _bakedSurf, _pendingTopoModel, _atomSerials.
+  }
+
+  /** Re-activate a trajectory suspended by `suspendToDesign()` and show its last frame.
+   *  False when this controller isn't holding that job — the caller must load it. */
+  function resumeTrajectory(jobId) {
+    if (_active || _mode !== 'trajectory' || !_traj || _jobId !== jobId) return false
+    _active = true
+    showFrame(_frameIdx)
+    return true
+  }
+
   function _restoreHeavy() {
     // Drop the flex-map overlay BEFORE the design rebuild — otherwise the scalar
     // colours (keyed by helix:bp:dir, which the design's own atoms also match)
@@ -1495,6 +1558,9 @@ export function initOxdnaDisplay({
     setGranularity,
     setPlaying,
     prebuildHeavy,
+    releaseHeavyToDesign,
+    suspendToDesign,
+    resumeTrajectory,
     reapplyForRepr,
     granularity: () => _granularity,
     isActive: () => _active,

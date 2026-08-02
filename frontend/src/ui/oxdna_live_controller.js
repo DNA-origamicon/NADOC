@@ -27,7 +27,7 @@
  */
 
 import { showToast } from './toast.js'
-import { shouldTearDownDisplays } from './display_tab_policy.js'
+import { shouldStopLiveSession } from './display_tab_policy.js'
 import * as api from '../api/client.js'
 
 const _C = { ok: '#5cb85c', warn: '#e0a800', err: '#d9534f', accent: '#4a9eff', dim: '#8b949e' }
@@ -341,10 +341,12 @@ export function initOxdnaLive({
     if (_on) stop()
     _setButton()
   })
-  // Leaving the Dynamics tab or switching design → stop the live session. The
-  // view-only tabs (Photo) are exempt: they render the live frames as-is.
+  // Leaving the Dynamics tab or switching design → stop the live session. Photo is
+  // exempt: it renders the live frames as-is. The ANIMATIONS tab is deliberately NOT
+  // exempt even though it now preserves painted displays — a live stream writes bead
+  // positions every frame and would fight animation playback for the same beads.
   window.addEventListener('nadoc:left-tab-change', (e) => {
-    if (shouldTearDownDisplays(e.detail?.activeTab) && _on) stop()
+    if (shouldStopLiveSession(e.detail?.activeTab) && _on) stop()
   })
   window.addEventListener('nadoc:workspace-path-change', () => { if (_on) stop() })
 

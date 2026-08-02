@@ -158,6 +158,8 @@ import { initAnimationPanel }                     from './ui/animation_panel.js'
 // the Feature Log panel (target dropdown → "Configurations").
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
+import { initTrajectoryKeyframes }                from './scene/trajectory_keyframes.js'
+import { initTrajPrebuildPlan }                   from './ui/traj_prebuild_plan.js'
 import { applyAnimationTextOverlay }              from './scene/animation_text_overlay.js'
 import { exportVideo }          from './scene/export_video.js'
 import { initClusterGizmo, computeClusterPivotFromEntries, rebaseClusterTranslationForPivot } from './scene/cluster_gizmo.js'
@@ -1571,6 +1573,15 @@ async function main() {
   const deformView = initDeformView(designRenderer, () => bluntEnds, null, () => unfoldView, () => loopSkipHighlight, () => overhangLocations, () => jointRenderer)
 
   // ── Animation player ────────────────────────────────────────────────────────
+  // Trajectory keyframes drive the SAME display controllers the jobs panels drive
+  // (declared ~1948 / ~2020 — resolved lazily, first call is a user Play), so an
+  // animation and a panel scrub share one frame cache, one memory budget and one
+  // backend fetch slot instead of racing each other.
+  const _trajPlan = initTrajPrebuildPlan({ api })
+  const trajectoryKeyframes = initTrajectoryKeyframes({
+    getController: (engine) => (engine === 'namd' ? mdViz : oxdnaDisplay),
+    planPrebuild:  (ctrl) => _trajPlan.planFor(ctrl),
+  })
   const animPlayer = initAnimationPlayer({
     camera,
     controls,
@@ -1590,38 +1601,7 @@ async function main() {
     // generic "Working…" auto-popup so the panel's "Rendering Animation"
     // popup stays in front.
     onFetchGeometryBatch:   (positions, opts) => api.getGeometryBatch(positions, opts),
-    // Trajectory keyframes: fetch a job's composite trajectory (all frames + stage
-    // markers, aligned to the design) once per job — oxDNA or NAMD/MD by engine.
-    onFetchTrajectory:      (jobId, engine) => engine === 'namd'
-      ? api.getMdTrajectory(jobId)
-      : api.getOxdnaTrajectory(jobId),
-    // Heavy reps following a trajectory: per-frame atomistic / surface for a
-    // downsampled subset of frame indices (same wire format as the batch calls).
-    // oxDNA reconstructs the design's atoms; NAMD renders its own heavy atoms.
-    onFetchTrajectoryAtomistic: (jobId, frameIndices, engine) => engine === 'namd'
-      ? api.getMdFramesAtomistic(jobId, frameIndices)
-      : api.getOxdnaFramesAtomistic(jobId, frameIndices),
-    onFetchTrajectorySurface:   (jobId, frameIndices, engine) => {
-      if (engine === 'namd') {
-        return api.getMdFramesSurface(jobId, frameIndices, {
-          probe_radius: _atomSurface.getSurfaceProbeRadius(),
-        })
-      }
-      const { surfaceColorMode } = store.getState()
-      return api.getOxdnaFramesSurface(jobId, frameIndices, {
-        color_mode: surfaceColorMode,
-        probe_radius: _atomSurface.getSurfaceProbeRadius(),
-      })
-    },
-    // Restore the DESIGN atom set in the atomistic renderer after a NAMD
-    // trajectory segment swapped in the MD model's own atoms (Phase 2b).
-    onRestoreDesignAtomistic: () => {
-      const mode = atomisticRenderer.getMode?.()
-      if (mode && mode !== 'off') {
-        _atomSurface.invalidateAtomCache()
-        _atomSurface.applyAtomisticMode(mode)
-      }
-    },
+    trajectoryKeyframes,
     onFetchAtomisticBatch:  (positions, opts) => api.getAtomisticBatch(positions, opts),
     getAtomisticRenderer:   () => atomisticRenderer,
     onFetchSurfaceBatch: (positions, opts) => {

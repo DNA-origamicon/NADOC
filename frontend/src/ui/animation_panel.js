@@ -1424,7 +1424,9 @@ export function initAnimationPanel(store, { player, captureCurrentCamera, api, e
       const { done, total } = evt
       if (_bakeProgressOpen) {
         if (total > 0) setOpProgressFraction(done / total)
-        setOpProgressLabel(null, `Rendering frame ${done} of ${total}`)
+        // The trajectory phase counts a different thing (frames of a simulation, not
+        // feature-log positions) and says so in its own label.
+        setOpProgressLabel(null, evt.label || `Rendering frame ${done} of ${total}`)
       }
     } else if (evt.type === 'baking_done') {
       // Batch complete, playback now starting — restore play button to pause label

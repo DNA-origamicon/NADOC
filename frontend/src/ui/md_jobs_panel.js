@@ -28,7 +28,8 @@ import { initMdWeldControls } from './md_weld_controls.js'
 import { initOxdnaAnchorsSetup } from './oxdna_anchors_setup.js'
 import { initForcesCard } from './forces_card.js'
 import { initOxdnaTrajectoryPlayer } from './oxdna_trajectory_player.js'
-import { prebuildMemoryPlan, repKind } from './oxdna_display.js'
+import { repKind } from './oxdna_display.js'
+import { initTrajPrebuildPlan } from './traj_prebuild_plan.js'
 import { shouldShowFixButton, openVramFixModal } from './md_vram_fix.js'
 import { openGpuDecisionModal, hasPendingGpuDecision } from './md_gate_b.js'
 import { gateAMessage, openGateAModal } from './md_gate_a.js'
@@ -49,7 +50,7 @@ import * as api from '../api/client.js'
 import { initRunpodStatus, runpodBlockReason, runpodCanLaunch } from './runpod_status.js'
 import { initRunpodSetup } from './runpod_setup.js'
 import { initRunpodGpuPicker } from './runpod_gpu_picker.js'
-import { shouldTearDownDisplays, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
+import { shouldStopLiveSession, shouldResumeDisplays, displayTabIds } from './display_tab_policy.js'
 import { initRelaxPresets } from './md_relax_presets.js'
 import { mdMinimizationRow, mdLatestStageLabel } from './md_stage_timeline.js'
 import { mdHealthTileStates, TILE_STATE } from './md_health_tiles.js'
@@ -963,8 +964,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // job_id → per-segment RAW DCD frame counts, from the header-only /trajectory-meta read.
   // Prices the "→ N frames" readout for any interval without a round trip per keystroke.
   const _trajRawCounts = new Map()
-  // Host MemAvailable, briefly cached — read once per prebuild decision, never polled.
-  let _ramCache = null
+  // Host MemAvailable + the prebuild memory plan. One instance per panel, so this
+  // panel's two consumers (DNA prebuild + solvent) price against ONE reading.
+  const _memPlan = initTrajPrebuildPlan({ api })
   const _collapsedParents = new Set()   // parent job_ids whose child rows are hidden (chevron)
   const _autoCollapsed    = new Set()   // ensemble parents we've already default-collapsed once
   let _fetchFails   = 0      // consecutive failed job-list polls (backend-down detector)
@@ -1243,9 +1245,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     api, getSolventOverlay, getBoxOverlay, getCurrentRepr,
     getLiveDisplay: () => mdDisplayController,
     // Synchronous read of the same MemAvailable cache the DNA prebuild uses, so
-    // both price against ONE budget. Null until _freeRamBytes() has run, which is
+    // both price against ONE budget. Null until it has been read once, which is
     // the honest answer (an unknown machine is not assumed to be a large one).
-    getAvailableBytes: () => _ramCache?.bytes ?? null,
+    getAvailableBytes: () => _memPlan.lastFreeRamBytes(),
   })
   // CPD weld pair — markers on the designed extra-base UV weld. Owns its own DOM +
   // readout ticker; the panel only tells it which job is selected. Most designs have no
@@ -2184,32 +2186,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
    *  One batched prebuild pays that context cost once.
    *
    *  No-op for the CG bead rep, which is instant and needs nothing baked. */
-  /** Host MemAvailable in bytes, or null when unknown. Cached briefly — this is asked
-   *  once per prebuild decision, not polled. The backend runs on the same machine as the
-   *  browser (localhost), so its reading is the right one; if it ever isn't, `null` is
-   *  the honest answer and the fixed budget still applies. */
-  async function _freeRamBytes() {
-    const now = Date.now()
-    if (_ramCache && now - _ramCache.at < 10_000) return _ramCache.bytes
-    const r = await api.getSystemResources?.().catch(() => null)
-    const mb = Number(r?.ram_available_mb)
-    const bytes = Number.isFinite(mb) && mb > 0 ? mb * 1024 * 1024 : null
-    _ramCache = { at: now, bytes }
-    return bytes
-  }
-
+  const _freeRamBytes  = () => _memPlan.freeRamBytes()
   /** What an all-atom prebuild for the loaded trajectory would cost on THIS machine. */
-  async function _trajMemoryPlan(v) {
-    const info = v?.trajectoryInfo?.() || {}
-    const nFrames = Number(info.total) || 0
-    if (!nFrames) return null
-    return prebuildMemoryPlan({
-      nFrames,
-      nSerials: Number(info.atomSerials) || 0,
-      nNucleotides: Number(info.nNucleotides) || 0,
-      availableBytes: await _freeRamBytes(),
-    })
-  }
+  const _trajMemoryPlan = (v) => _memPlan.planFor(v)
 
   const _LIMIT_WHY = {
     ram: 'free RAM', heap: 'browser memory limit', budget: 'memory budget',
@@ -2553,7 +2532,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
 
   window.addEventListener('nadoc:left-tab-change', evt => {
     const tab = evt.detail?.activeTab
-    if (shouldTearDownDisplays(tab)) {
+    // The LIVE "Display MD" socket, not the painted trajectory scrub — so this uses the
+    // stricter predicate and still stops on the Animations tab, where a stream would
+    // fight animation playback for the same beads.
+    if (shouldStopLiveSession(tab)) {
       if (displayToggle?.checked) _stopMdDisplay('Native positions restored')  // resumes prewarm
     } else if (shouldResumeDisplays(tab) && !displayToggle?.checked) {
       _startMdPrewarm()

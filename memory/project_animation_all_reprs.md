@@ -6,6 +6,13 @@ originSessionId: 7e08699f-f784-4b54-ac56-e0a843377a6f
 ---
 All three representations are animated via the same pre-bake pipeline in `animation_player.js`.
 
+> **Scope (2026-08-02):** this file covers the **feature-log** pre-bake only. **Trajectory
+> keyframes no longer bake here at all** — they drive the jobs panels' display controllers via
+> `scene/trajectory_keyframes.js`, so they inherit that path's per-job cache, memory budget,
+> topology-once fetch and serialised fetch queue. See `.claude/rules/animation.md` →
+> "Trajectory keyframes". The player's private trajectory pipeline (`_bakedTrajectories`,
+> `_bakedTrajAtom`, `_bakedTrajSurf`, the fixed 40/20-frame caps) is **deleted**.
+
 ## Pre-bake endpoints (called once before playback starts)
 
 | Representation | Endpoint | Storage |

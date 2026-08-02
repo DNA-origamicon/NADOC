@@ -42,7 +42,9 @@ field `configuration_id` (not `config_id`). Topic file: `memory/project_assembly
 
 | File | LOC | Role |
 |---|---|---|
-| [scene/animation_player.js](../../frontend/src/scene/animation_player.js) | 1298 | The player. `initAnimationPlayer({…23 deps})` at `:53`, init site [main.js:1561](../../frontend/src/main.js#L1561) |
+| [scene/animation_player.js](../../frontend/src/scene/animation_player.js) | 1205 | The player. `initAnimationPlayer({…20 deps})` at `:52`, init site [main.js:1581](../../frontend/src/main.js#L1581) |
+| [scene/trajectory_keyframes.js](../../frontend/src/scene/trajectory_keyframes.js) | 197 | Trajectory keyframes → the jobs panels' display controllers. **Unit-tested** (26 `it`) |
+| [ui/traj_prebuild_plan.js](../../frontend/src/ui/traj_prebuild_plan.js) | 62 | Free-RAM read + prebuild memory plan, shared by the MD panel and the animation path. **Unit-tested** (8 `it`) |
 | [ui/animation_panel.js](../../frontend/src/ui/animation_panel.js) | 1624 | Authoring UI. `initAnimationPanel(store, {player, captureCurrentCamera, api, exportVideo, renderer, scene, camera, pinToFeature, getWorkspacePath})` at `:100`, init [main.js:6714](../../frontend/src/main.js#L6714) |
 | [ui/camera_panel.js](../../frontend/src/ui/camera_panel.js) | 363 | `initCameraPanel(store, {captureCurrentCamera, animateCameraTo, api})` `:15`, init [main.js:6357](../../frontend/src/main.js#L6357) |
 | [ui/keyframe_text_popup.js](../../frontend/src/ui/keyframe_text_popup.js) | 319 | `openKeyframeTextPopup` — text-keyframe editor, imported `animation_panel.js:22` |
@@ -65,16 +67,18 @@ adjacent to any of them.
 
 ## Player
 
-`initAnimationPlayer` takes **23 deps**, nearly all lazy getters:
+`initAnimationPlayer` takes **20 deps**, nearly all lazy getters:
 
 ```
 camera, controls, getCameraPoses, getDesign, getClusterTransforms, getHelixCtrl,
 getBluntEnds, getUnfoldView, getDesignRenderer, getOverhangLinkArcs,
 getOverhangUnzipOverlay, getMultiOverhangStrandAnim, getDesignGeometry,
-onFetchGeometryBatch, onFetchTrajectory, onFetchTrajectoryAtomistic,
-onFetchTrajectorySurface, onRestoreDesignAtomistic, onFetchAtomisticBatch,
+onFetchGeometryBatch, trajectoryKeyframes, onFetchAtomisticBatch,
 getAtomisticRenderer, onFetchSurfaceBatch, getSurfaceRenderer, onEvent, onTextOverlayUpdate
 ```
+
+`trajectoryKeyframes` replaced the four `onFetchTrajectory*` / `onRestoreDesignAtomistic`
+callbacks — see "Trajectory keyframes" below.
 
 Public API (`:1297`): `play, pause, resume, stop, seekTo, cancelBake, setBounce, getBounce,
 setLoopMode, getLoopMode, setDisablePoses, getDisablePoses, isPlaying, getDirection,
@@ -97,6 +101,50 @@ Internals worth knowing:
 feature-log index: `POST /design/features/geometry-batch` (`routes_feature_log.py:112`), plus
 `atomistic-batch` (`:138`) and `surface-batch` (`:168`). `POST /design/features/seek` is `:72`.
 This is why `seekTo` needs no backend round-trip.
+
+## Trajectory keyframes — ONE pipeline, and it is the jobs panel's (2026-08-02)
+
+**The player fetches no trajectory data.** `scene/trajectory_keyframes.js`
+(`initTrajectoryKeyframes({getController, planPrebuild})` — **unit-tested, 26 `it`**) drives the
+SAME display controllers the jobs panels drive: `oxdnaDisplay` for oxDNA/LAMMPS, `mdViz` for NAMD
+(both `initOxdnaDisplay`, `main.js` ~1948 / ~2020). Consequences worth knowing:
+
+- The trajectory, its heavy frames, its memory budget and its job topology are fetched **once** and
+  shared with the panel. Scrub a job in the Simulations tab, then play an animation over it, and the
+  bake is a no-op (`activeJobId() === jobId` → no reload).
+- Frame caps come from `prebuildMemoryPlan` + free RAM (`ui/traj_prebuild_plan.js`, a factory so
+  each consumer caches its own MemAvailable reading), **not** a fixed number.
+- `show()` calls `showFrame` only when the index CHANGES; `suspend()` hands the heavy rep back to
+  the design between trajectory segments via `oxdnaDisplay.releaseHeavyToDesign()`.
+- **Three methods on `oxdna_display.js` exist for this caller, and the distinction is the whole
+  cross-play cache.** `stopAndRestore()` = done with the job, drops `_traj` + both bakes.
+  `suspendToDesign()` = stop SHOWING it, restore the design, **keep** `_traj`/bakes/held topology;
+  paired with `resumeTrajectory(jobId)`. `releaseHeavyToDesign()` = same but for the heavy rep only.
+  `release()` on stop calls `suspendToDesign()` when the animation was the sole owner, or
+  `showFrame(prevFrame)` when the panel was already scrubbing that job. **Using `stopAndRestore()`
+  here re-downloads the trajectory on every Play** — on VoltronCoreScad that is 370 MB and >120 s,
+  which is how the bug was caught (the e2e's second play timed out).
+- **One job per controller at a time.** `prepare` loads the first job per controller; a second job
+  on the SAME engine swaps in when its segment is reached (a reload each pass). Two jobs on
+  different engines are free. No saved animation uses more than one job today.
+- Bake progress for this phase has its own denominator, so it emits `baking_progress` with a
+  `label` the panel prefers over its own "Rendering frame X of Y".
+
+**The Animations tab now PRESERVES displays** (`ui/display_tab_policy.js`,
+`DISPLAY_PRESERVING_TABS = ['photo', 'scene']`). Sharing the controller made an old,
+previously-unreachable teardown live: arriving on `'scene'` fires `nadoc:left-tab-change` →
+`oxdna_jobs_panel.js:2523` `_allDisplaysOff()` → `stopAndRestore()` on the controller the
+animation is playing through. Symptom: **Animations → Photo → Animations reverted the model to
+native positions** (Photo defers the leave, so the return trip is what tore it down). It was a
+silent no-op before, because the player never made `oxdnaDisplay.isActive()` true.
+`shouldStopLiveSession()` is the stricter sibling that keeps the OLD behaviour for streaming
+sessions (oxDNA Live, "Display MD") — a stream writes the same beads every frame and must still
+stop on `'scene'`. Both pinned in `display_tab_policy.test.js`.
+
+**Deleted with the old pipeline — do not resurrect:** `_bakedTrajectories`, `_bakedTrajAtom`,
+`_bakedTrajSurf`, `_TRAJ_ATOM_MAX`/`_TRAJ_SURF_MAX` (40/20), `_ensureDesignAtoms`,
+`_mdAtomsActive`, `_lastMdAtomKey`, and the player's import of `framesToUpdates` from
+`ui/oxdna_display.js`. The player no longer calls `applyFemPositions` for trajectories at all.
 
 ## Renderer hooks (in `scene/helix_renderer.js`, covered by `rendering.md`)
 
@@ -198,8 +246,10 @@ its only caller is the sandbox's own `strand-anim/app.js:42`. The editor path im
 | `tests/test_assembly_api.py` | 3 of 75 | `:231` config restore ignores newer parts, `:275` assembly camera-pose CRUD, `:294` keyframe accepts pose+configuration |
 | `frontend/src/scene/assembly_config_animator.test.js` | 13 | pure interpolation core |
 | `frontend/src/ui/animation_panel.normalize.test.js` | 5 | panel normalization helpers only |
+| `frontend/src/scene/trajectory_keyframes.test.js` | 26 | job collection, no-reload-when-held, per-engine routing, budget hand-off, frame-change guard, suspend/release/cancel |
+| `frontend/src/ui/traj_prebuild_plan.test.js` | 8 | RAM cache + which ceiling binds |
 
-**Zero tests** for `animation_player.js` (1298 LOC), `export_video.js`, `overhang_unzip_overlay.js`,
+**Zero tests** for `animation_player.js` (1205 LOC), `export_video.js`, `overhang_unzip_overlay.js`,
 `overhang_strand_anim.js`, `camera_panel.js`. **Zero e2e specs** touch animation.
 Names that sound relevant but are not: `tests/test_cluster_config.py` (Alpine HPC submission
 profiles), `frontend/src/ui/export_menu.test.js` / `metric_export_modal.test.js` /

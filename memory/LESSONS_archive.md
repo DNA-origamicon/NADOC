@@ -1505,3 +1505,36 @@ crosses every partition, so any per-strand approximation shows up there first an
 there. Surface is the genuine exception: its vertices carry a strand id and nothing else,
 so it stays per-strand until the backend payload grows helix/bp.
 
+
+---
+
+### D16 — Sharing a singleton controller makes a previously-DEAD teardown live (2026-08-02)
+
+**Symptom.** After trajectory keyframes were rewired to drive the jobs panels' `oxdnaDisplay`
+controller instead of the animation player's own pipeline: go to the Animations tab, play a
+trajectory keyframe, jump to Photomode and back — the model snaps to **NADOC native positions**
+instead of holding the trajectory frame. No console error. Photo mode itself was innocent (it
+only swaps materials, and `_leaveAnimationsTabUnlessPhoto` deliberately *defers* the leave).
+
+**Cause.** `ui/display_tab_policy.js` said only `'photo'` preserves a display, so *arriving* on
+the Animations tab (`'scene'`) satisfied `shouldTearDownDisplays` and
+`oxdna_jobs_panel.js`'s `left-tab-change` listener ran `_allDisplaysOff()` →
+`oxdnaDisplay.stopAndRestore()`. That code had been there all along and had always been a
+**no-op**, because the animation player used a private pipeline and never made
+`oxdnaDisplay.isActive()` true. The moment the animation started driving the shared controller,
+a dormant branch became the thing that undid its work — and `stopAndRestore()` also discarded the
+trajectory cache, so the next Play re-downloaded it.
+
+**The general shape:** when you make subsystem A drive subsystem B's shared object, every
+`if (B.isActive())` in the codebase is a branch that just changed meaning. Grep for the
+predicate, not just the object. A teardown that was unreachable is not the same as a teardown
+that is absent.
+
+**How to avoid.** Before routing a feature through an existing singleton controller, enumerate
+its `isActive()` / `mode()` guards repo-wide and ask which ones now fire. Where the answer is
+"this tab is now a legitimate home for the display", widen the policy — but split the predicate
+if some consumers need the old, stricter answer: here `shouldStopLiveSession()` keeps oxDNA Live
+and "Display MD" stopping on the Animations tab (a stream keeps *writing* the same beads and
+would fight playback), while `shouldTearDownDisplays()` now preserves the painted frame.
+Related: **D11** (`#d11-2`) is the mirror image — an *inactive* overlay's `stopAndRestore`
+reverting geometry on `design-changed`.
