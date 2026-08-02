@@ -26,13 +26,14 @@ import shutil
 import time
 import uuid
 from dataclasses import asdict
+from collections import OrderedDict
 from pathlib import Path
 import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.api import state as design_state
 from backend.api.assembly import _WORKSPACE_DIR
@@ -722,6 +723,123 @@ async def get_md_job_rmsf(job_id: str, request: Request) -> dict:
     if result.get("ready"):
         result["confidence"] = rmsf_confidence(result.get("n_frames", 0))
     return result
+
+
+from backend.api.routes_oxdna import OccupancySelection  # noqa: E402  (shared vocabulary)
+
+
+class MdOccupancyBody(BaseModel):
+    """Scoped occupancy request. Mirrors ``OccupancyBody`` minus the oxDNA-only knobs
+    (``align``/``scope``/``basis='bp'``): NAMD frames arrive already Kabsch-aligned, have
+    no job lineage, and have one site per nucleotide."""
+    model_config = ConfigDict(extra="forbid")
+    max_frames: int = 200
+    n_clusters: int = 0
+    basis: str = "nt"
+    refetch: bool = False
+    all_stages: bool = False
+    selection: Optional[OccupancySelection] = None
+
+
+#: Result-level LRU. There is no MD equivalent of oxDNA's shared ``_ALIGNED_CACHE``: every
+#: analysis runs in a spawned, killed-on-exit subprocess (``md_analysis_runner``), so no
+#: frame cache can survive the call and a request pays the full ~30 s context build plus a
+#: whole-trajectory read. Caching the ANSWER here at least makes a re-toggle free; a
+#: parameter change is still a full re-read.
+_MD_OCC_CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
+_MD_OCC_CACHE_MAX = 6
+
+
+def _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, all_stages, selection):
+    """size+mtime per DCD, so a GROWING trajectory self-invalidates — the property
+    oxDNA's ``_aligned_cache_key`` relies on."""
+    from backend.core.occupancy_core import _selection_sig
+
+    def sig(path):
+        try:
+            st = Path(path).stat()
+            return (str(path), st.st_size, st.st_mtime_ns)
+        except OSError:
+            return (str(path), -1, -1)
+
+    return (tuple(sig(s[2]) for s in segments), sig(psf), int(max_frames), int(n_clusters),
+            str(basis), bool(all_stages), _selection_sig(selection))
+
+
+async def _md_occupancy_impl(job_id: str, request: Request, *, max_frames: int,
+                             n_clusters: int, basis: str, refetch: bool,
+                             all_stages: bool, selection=None) -> dict:
+    """Shared body for the GET (whole structure) and POST (scoped) MD occupancy routes."""
+    if basis not in ("nt", "bp"):
+        raise HTTPException(400, "basis must be 'nt' or 'bp'")
+    n_clusters = int(max(0, min(6, n_clusters)))
+    max_frames = int(max(0, max_frames)) or 200
+
+    inputs = _md_traj_inputs(job_id)
+    if inputs is None:
+        return {"ready": False, "reason": "topology/reference or trajectory not found",
+                "clusters": [], "keys": []}
+    psf, ref, segments, design = inputs
+
+    key = _md_occ_cache_key(segments, psf, max_frames, n_clusters, basis, all_stages, selection)
+    if refetch:
+        _MD_OCC_CACHE.pop(key, None)
+    else:
+        hit = _MD_OCC_CACHE.get(key)
+        if hit is not None:
+            _MD_OCC_CACHE.move_to_end(key)
+            return hit
+
+    result = await _run_md_analysis(
+        request, job_id, "occupancy", "md_occupancy",
+        (psf, segments, ref, design, max_frames, n_clusters, basis,
+         selection.model_dump() if selection is not None else None, all_stages),
+        timeout_s=900.0)
+
+    if result.get("ready"):
+        _MD_OCC_CACHE[key] = result
+        while len(_MD_OCC_CACHE) > _MD_OCC_CACHE_MAX:
+            _MD_OCC_CACHE.popitem(last=False)
+    return result
+
+
+@router.get("/md/jobs/{job_id}/occupancy")
+async def get_md_occupancy(job_id: str, request: Request, max_frames: int = 200,
+                           n_clusters: int = 0, basis: str = "nt",
+                           refetch: bool = False, all_stages: bool = False) -> dict:
+    """The top-N most likely CONFIGURATIONS of this NAMD run's free-sampling ensemble.
+
+    Where the flexibility map gives one mean structure, this gives several REAL frames —
+    the medoid of each conformational cluster — with a population weight apiece. Same
+    payload shape as ``GET /oxdna/jobs/{id}/occupancy``, so the frontend draws it with the
+    identical code.
+
+    **Restrained stages are excluded by default.** The equilibrium-aware protocol ramps
+    elastic-network restraints (k=0.5 → 0.1 → 0.01 → none), and that ramp is a one-way
+    relaxation: clustering across it finds "early vs late" and buries whatever the free
+    ensemble does. ``all_stages=true`` opts back in. If no stage can be identified as
+    unrestrained the analysis falls back to every stage and says so in ``sampling_note``
+    rather than returning an empty ensemble.
+
+    Read ``verdict`` before believing anything else — ``"switching"`` | ``"drift"`` |
+    ``"unimodal"``; see :mod:`backend.core.occupancy_core`.
+    """
+    return await _md_occupancy_impl(job_id, request, max_frames=max_frames,
+                                    n_clusters=n_clusters, basis=basis, refetch=refetch,
+                                    all_stages=all_stages)
+
+
+@router.post("/md/jobs/{job_id}/occupancy")
+async def post_md_occupancy(job_id: str, request: Request, body: MdOccupancyBody) -> dict:
+    """Occupancy clouds restricted to PART of the structure — see the oxDNA POST twin.
+
+    POST because a base-level selection is far too big for a query string. NAMD and oxDNA
+    speak the same nucleotide keys, so the selection vocabulary is literally identical.
+    """
+    return await _md_occupancy_impl(
+        job_id, request, max_frames=body.max_frames, n_clusters=body.n_clusters,
+        basis=body.basis, refetch=body.refetch, all_stages=body.all_stages,
+        selection=body.selection)
 
 
 @router.get("/md/jobs/{job_id}/shape-source")

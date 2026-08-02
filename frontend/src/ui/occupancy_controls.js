@@ -24,12 +24,28 @@ const C = { dim: '#8b949e', warn: '#d29922', bad: '#f85149', ok: '#3fb950' }
 /** The scope picker is the SHARED anchor widget on its own id skeleton — chips, x-delete,
  *  Clear, the scrolling list and the purple halo all come for free, and the scope speaks
  *  the same descriptor vocabulary the engine anchor cards do. */
-const _SCOPE_IDS = {
-  add: 'oxdna-occupancy-scope-add', clear: 'oxdna-occupancy-scope-clear',
-  list: 'oxdna-occupancy-scope-list', status: 'oxdna-occupancy-scope-status',
-  glow: 'oxdna-occupancy-scope-glow',
-  toggle: 'oxdna-occupancy-scope-toggle', arrow: 'oxdna-occupancy-scope-arrow',
-  body: 'oxdna-occupancy-scope-body',
+/** Every id this card binds, derived from one prefix. The oxDNA and NAMD panels are the
+ *  same card twice over, so they share one factory and differ only by prefix — the same
+ *  `ids`-override shape `initOxdnaAnchorsSetup` uses to serve five engine panels. */
+export function occupancyIds(prefix = 'oxdna') {
+  return {
+    toggle: `${prefix}-jobs-occupancy-toggle`,
+    params: `${prefix}-jobs-occupancy-params`,
+    n: `${prefix}-jobs-occupancy-n`,
+    basis: `${prefix}-jobs-occupancy-basis`,
+    rerun: `${prefix}-jobs-occupancy-rerun`,
+    status: `${prefix}-jobs-occupancy-status`,
+    legend: `${prefix}-jobs-occupancy-legend`,
+    scopeSel: `${prefix}-jobs-occupancy-scope`,
+    scopeCard: `${prefix}-occupancy-scope-card`,
+    scope: {
+      add: `${prefix}-occupancy-scope-add`, clear: `${prefix}-occupancy-scope-clear`,
+      list: `${prefix}-occupancy-scope-list`, status: `${prefix}-occupancy-scope-status`,
+      glow: `${prefix}-occupancy-scope-glow`,
+      toggle: `${prefix}-occupancy-scope-toggle`, arrow: `${prefix}-occupancy-scope-arrow`,
+      body: `${prefix}-occupancy-scope-body`,
+    },
+  }
 }
 
 /** Clamp the UI parameters to what the route accepts. Pure. */
@@ -170,17 +186,27 @@ export function occupancyFooterHtml(resp) {
 
 export function initOccupancyControls({
   api, getOverlay, getDisplay, getSelectedJobId, getAnchorSelection = null, onStatus = null,
+  engine = 'oxdna', ids = null, fetchOccupancy = null,
 } = {}) {
-  const $ = (id) => (typeof document === 'undefined' ? null : document.getElementById(id))
-  const toggle = $('oxdna-jobs-occupancy-toggle')
-  const params = $('oxdna-jobs-occupancy-params')
-  const nSel = $('oxdna-jobs-occupancy-n')
-  const basisSel = $('oxdna-jobs-occupancy-basis')
-  const rerunBtn = $('oxdna-jobs-occupancy-rerun')
-  const scopeSel = $('oxdna-jobs-occupancy-scope')
-  const scopeCard = $('oxdna-occupancy-scope-card')
-  const statusEl = $('oxdna-jobs-occupancy-status')
-  const legendEl = $('oxdna-jobs-occupancy-legend')
+  const id = ids ?? occupancyIds(engine === 'md' ? 'md' : 'oxdna')
+  const $ = (x) => (typeof document === 'undefined' ? null : document.getElementById(x))
+  const toggle = $(id.toggle)
+  const params = $(id.params)
+  const nSel = $(id.n)
+  const basisSel = $(id.basis)
+  const rerunBtn = $(id.rerun)
+  const scopeSel = $(id.scopeSel)
+  const scopeCard = $(id.scopeCard)
+  const statusEl = $(id.status)
+  const legendEl = $(id.legend)
+
+  // How this engine talks to its backend. Injected rather than branched on, because the
+  // two clients have genuinely different signatures (oxDNA takes an options object, MD is
+  // positional (id, signal, opts)) and neither should leak in here.
+  const _fetch = fetchOccupancy ?? (({ jobId, params: p, selection, refetch, signal }) => (
+    selection
+      ? api.postOxdnaOccupancy(jobId, { ...p, refetch, selection, signal })
+      : api.getOxdnaOccupancy(jobId, { ...p, refetch, signal })))
 
   let _abort = null
   let _active = false
@@ -213,8 +239,8 @@ export function initOccupancyControls({
   // Instantiated, not copied: initOxdnaAnchorsSetup already drives five engine panels
   // off an `ids` override, and `engine: 'occupancy'` gives this card its own halo channel.
   const _scope = initOxdnaAnchorsSetup({
-    ids: _SCOPE_IDS,
-    engine: 'occupancy',
+    ids: id.scope,
+    engine: engine === 'md' ? 'md-occupancy' : 'occupancy',
     getSelection: getAnchorSelection,
     onChange: () => { if (_active && scopeSel?.value === 'selection') refresh() },
   })
@@ -234,8 +260,8 @@ export function initOccupancyControls({
   // collapsed). Here the whole card is already gated by the "Analyse:" selector, so
   // arriving at a collapsed body would just be an extra click — open it once, leaving it
   // collapsible for anyone who wants the room back.
-  const _scopeBody = $('oxdna-occupancy-scope-body')
-  if (_scopeBody && _scopeBody.style.display === 'none') $('oxdna-occupancy-scope-toggle')?.click()
+  const _scopeBody = $(id.scope.body)
+  if (_scopeBody && _scopeBody.style.display === 'none') $(id.scope.toggle)?.click()
 
   async function refresh({ refetch = false } = {}) {
     const jobId = getSelectedJobId?.()
@@ -249,6 +275,7 @@ export function initOccupancyControls({
     // hits the cache, and returning early would leave the parameter controls hidden and
     // the module marked inactive while the view is plainly on screen.
     _active = true
+    _claimOverlay()
     if (params) params.style.display = ''
 
     if (scopeSel?.value === 'selection' && !sel) {
@@ -267,9 +294,7 @@ export function initOccupancyControls({
 
     let resp
     try {
-      resp = sel
-        ? await api.postOxdnaOccupancy(jobId, { ...p, refetch, selection: sel, signal: _abort.signal })
-        : await api.getOxdnaOccupancy(jobId, { ...p, refetch, signal: _abort.signal })
+      resp = await _fetch({ jobId, params: p, selection: sel, refetch, signal: _abort.signal })
     } catch (e) {
       if (e?.name === 'AbortError') return { ok: false, reason: 'aborted' }
       _setStatus(`Occupancy failed: ${e?.message ?? e}`, C.bad)
@@ -338,6 +363,20 @@ export function initOccupancyControls({
     _hidden = new Set()
   }
 
+  // One overlay serves both engine panels, so two active cards would fight over it and
+  // the loser's list would keep describing states that are no longer on screen. Whichever
+  // card runs last wins the overlay and tells the other to stand down.
+  const _OCC_ACTIVE_EVENT = 'nadoc:occupancy-active'
+  if (typeof window !== 'undefined') {
+    window.addEventListener(_OCC_ACTIVE_EVENT, (e) => {
+      if (e?.detail?.engine && e.detail.engine !== engine && _active) off()
+    })
+  }
+  function _claimOverlay() {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(new CustomEvent(_OCC_ACTIVE_EVENT, { detail: { engine } }))
+  }
+
   function off() {
     _abort?.abort()
     _abort = null
@@ -394,6 +433,7 @@ export function initOccupancyControls({
     isActive: () => _active,
     params: params_,
     lastResponse: () => _lastResp,
+    setStatus: (t, c = C.warn) => _setStatus(t, c),
     toggleEl: () => toggle,
     scope: () => _scope,
     selection: selection_,

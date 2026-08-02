@@ -549,3 +549,52 @@ describe('scope: whole structure vs specific elements', () => {
     expect(typeof ctrl.scope().clear).toBe('function')
   })
 })
+
+describe('one card per engine, one overlay', () => {
+  it('derives every id from an engine prefix', async () => {
+    const { occupancyIds } = await import('./occupancy_controls.js')
+    expect(occupancyIds('oxdna').toggle).toBe('oxdna-jobs-occupancy-toggle')
+    expect(occupancyIds('md').toggle).toBe('md-jobs-occupancy-toggle')
+    expect(occupancyIds('md').scope.list).toBe('md-occupancy-scope-list')
+    // The two engines must not collide on a single id, or one card would drive the other.
+    const a = JSON.stringify(occupancyIds('oxdna'))
+    const b = JSON.stringify(occupancyIds('md'))
+    expect(a).not.toBe(b)
+  })
+
+  it('uses the injected fetch instead of branching on the engine', async () => {
+    const { initOccupancyControls } = await import('./occupancy_controls.js')
+    const fetchOccupancy = vi.fn().mockResolvedValue(UNIMODAL)
+    const ctrl = initOccupancyControls({
+      api: {}, engine: 'md', fetchOccupancy,
+      getOverlay: () => ({ clear: vi.fn(), setClusters: vi.fn(), defaultColors: () => [] }),
+      getDisplay: () => ({ displayOccupancy: vi.fn().mockResolvedValue({ ok: true }) }),
+      getSelectedJobId: () => 'J1',
+    })
+    await ctrl.refresh()
+    expect(fetchOccupancy).toHaveBeenCalled()
+    expect(fetchOccupancy.mock.calls[0][0]).toMatchObject({ jobId: 'J1' })
+  })
+
+  it('a second engine claiming the overlay stands the first one down', async () => {
+    // Both cards share ONE overlay; two active cards would leave the loser's list
+    // describing states no longer on screen.
+    const { initOccupancyControls } = await import('./occupancy_controls.js')
+    const mk = (engine) => initOccupancyControls({
+      api: {}, engine,
+      fetchOccupancy: vi.fn().mockResolvedValue(UNIMODAL),
+      getOverlay: () => ({ clear: vi.fn(), setClusters: vi.fn(), defaultColors: () => [] }),
+      getDisplay: () => ({ displayOccupancy: vi.fn().mockResolvedValue({ ok: true }) }),
+      getSelectedJobId: () => 'J1',
+    })
+    const oxdna = mk('oxdna')
+    const md = mk('md')
+
+    await oxdna.refresh()
+    expect(oxdna.isActive()).toBe(true)
+
+    await md.refresh()
+    expect(md.isActive()).toBe(true)
+    expect(oxdna.isActive(), 'the oxDNA card stood down').toBe(false)
+  })
+})

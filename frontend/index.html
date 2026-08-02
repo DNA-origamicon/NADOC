@@ -5513,6 +5513,58 @@
                   <div id="md-jobs-flex-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
                   <div id="md-jobs-flex-bar" style="margin-top:3px;display:none"></div>
                   <div id="md-jobs-flex-legend" style="display:none"></div>
+                  <!-- Occupancy clouds: the top-N most likely CONFIGURATIONS, superposed. -->
+                  <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
+                         title="The most likely CONFIGURATIONS over this run's FREE (unrestrained) sampling, superposed. Frames are clustered by shape; each cluster's real medoid frame is drawn, opacity set by how often the structure is in that state. The ENM restraint ramp is excluded by default — a restraint ramp is a one-way relaxation, so clustering across it finds 'early vs late' rather than what the free ensemble does.">
+                    <input id="md-jobs-occupancy-toggle" name="md-viz" type="radio" value="occupancy" disabled> Occupancy clouds (likely configurations)
+                  </label>
+                  <div id="md-jobs-occupancy-params" style="display:none;margin-left:18px;margin-top:3px">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e"
+                           title="How many configurations to look for. Auto picks the count that separates best, and reports a single state when the ensemble is unimodal rather than inventing a split.">
+                      States:
+                      <select id="md-jobs-occupancy-n"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="0" selected>Auto (best separation)</option>
+                        <option value="2">2</option><option value="3">3</option>
+                        <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                      </select>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
+                           title="Which part of the structure the clustering may look at.">
+                      Analyse:
+                      <select id="md-jobs-occupancy-scope"
+                              style="flex:1;min-width:0;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px">
+                        <option value="all" selected>Whole structure</option>
+                        <option value="selection">Specific elements…</option>
+                      </select>
+                    </label>
+                    <div id="md-occupancy-scope-card" style="display:none;margin-top:4px">
+                      <div id="md-occupancy-scope-toggle" class="ox-card__header" style="color:#c9d1d9;padding:0 0 3px 0">
+                        <span id="md-occupancy-scope-arrow" class="ox-card__chevron icon icon--xs icon--rotates" data-icon="chevron-down"></span><span class="ox-card__title" style="font-size:var(--text-xs)">Scope</span>
+                      </div>
+                      <div id="md-occupancy-scope-body">
+                        <div style="font-size:11px;color:#6a737d;margin-bottom:5px;line-height:1.35">Select clusters, strands or bases in the 3D view, then add them. Only these are clustered.</div>
+                        <div style="display:flex;align-items:center;gap:5px">
+                          <button id="md-occupancy-scope-add" style="flex:1;font-size:var(--text-xs);padding:4px;background:#2d1b4e;border:1px solid #b14aff;color:#e9d5ff;border-radius:3px;cursor:pointer">Add selection to scope</button>
+                          <button id="md-occupancy-scope-clear" style="font-size:var(--text-xs);padding:4px 8px;background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:3px;cursor:pointer">Clear</button>
+                        </div>
+                        <div id="md-occupancy-scope-list" style="max-height:110px;overflow-y:auto;border:1px solid #21262d;border-radius:3px;background:#010409;padding:3px;margin-top:5px"></div>
+                        <label style="display:flex;align-items:center;gap:6px;color:#c9d1d9;font-size:var(--text-xs);cursor:pointer;margin-top:6px">
+                          <input type="checkbox" id="md-occupancy-scope-glow" checked> Highlight scope
+                        </label>
+                        <div id="md-occupancy-scope-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:4px;min-height:14px"></div>
+                      </div>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#8b949e;margin-top:3px"
+                           title="Include the ENM restraint ramp. Off by default: those stages are a controlled relaxation toward the free ensemble, so clustering across them reports the ramp itself as a 'drift' rather than telling you about the structure.">
+                      <input type="checkbox" id="md-jobs-occupancy-all-stages"> Include restrained stages
+                    </label>
+                    <button id="md-jobs-occupancy-rerun" type="button"
+                            style="margin-top:4px;font-size:var(--text-xs);background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:3px;padding:2px 8px;cursor:pointer"
+                            title="Recompute from the trajectory, ignoring the cached result. A NAMD analysis re-reads the whole trajectory — expect tens of seconds.">Recompute</button>
+                  </div>
+                  <div id="md-jobs-occupancy-status" style="font-size:var(--text-xs);color:#8b949e;margin-top:3px;min-height:14px"></div>
+                  <div id="md-jobs-occupancy-legend" style="display:none;margin-top:3px;max-height:132px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
                   <!-- View trajectory: scrub every written segment (relaxation + production) -->
                   <label style="display:flex;align-items:center;gap:6px;font-size:var(--text-xs);color:#c9d1d9;margin-top:8px;cursor:not-allowed;opacity:0.5"
                          title="Play/scrub the composite NAMD trajectory: every written segment, with a marker at each transition. Replaces VMD for reviewing MD runs.">

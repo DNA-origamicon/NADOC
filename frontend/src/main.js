@@ -1924,6 +1924,7 @@ async function main() {
     // mdViz is declared below (~after oxdnaDisplay): the MD trajectory-scrub +
     // flexibility-map tools reuse the oxDNA display controller via an MD api adapter.
     getMdViz: () => mdViz,
+    getOccupancyOverlay: () => occupancyOverlay, getAnchorSelection: _anchorSelectionState,
     getWeldOverlay: () => cpdWeldOverlay,
     // Explicit water / ions / periodic cell overlays for the Visualizations card.
     getSolventOverlay: () => mdSolventOverlay,
@@ -2018,6 +2019,7 @@ async function main() {
   // reused for NAMD jobs without touching the validated oxDNA controller.
   const mdViz = initOxdnaDisplay({
     designRenderer, api: mdVizApiAdapter(api), proteinRenderer,
+    onOccupancyClear:     () => occupancyOverlay.clear(),
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,
     getCurrentRepr:       () => _currentRepr,

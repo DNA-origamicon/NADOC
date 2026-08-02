@@ -517,7 +517,8 @@ def test_selection_by_strand(monkeypatch):
             self.key = key
             self.strand = type("S", (), {"id": sid})()
 
-    monkeypatch.setattr(occ, "_walk_strand_nucleotides",
+    import backend.core.occupancy_core as core
+    monkeypatch.setattr(core, "_walk_strand_nucleotides",
                         lambda design: [_Step(k, owner[k]) for k in ks])
     got = occ.resolve_selection_keys(_ScopedDesign(), ks, {"strand_ids": ["sB"]})
     assert {k[0] for k in got} == {"h1"}
@@ -657,7 +658,8 @@ def test_selection_by_domain_and_overhang(monkeypatch):
             self.domain_index = di
             self.overhang_id = oid
 
-    monkeypatch.setattr(occ, "_walk_strand_nucleotides", lambda d: [_Step(k) for k in ks])
+    import backend.core.occupancy_core as core
+    monkeypatch.setattr(core, "_walk_strand_nucleotides", lambda d: [_Step(k) for k in ks])
 
     assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"domains": [["sA", 1]]}) == [ks[1]]
     assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"overhang_ids": ["ovh1"]}) == [ks[1]]
@@ -673,3 +675,25 @@ def test_selection_signature_ignores_ordering():
     assert _selection_sig(a) == _selection_sig(b)
     assert _selection_sig(None) == ""
     assert _selection_sig({"helix_ids": ["h0"]}) != _selection_sig({"helix_ids": ["h1"]})
+
+
+def test_cached_wrapper_resolves_its_module_globals():
+    """production_occupancy_cached declares `global _OCCUPANCY_CACHE`; if that name is
+    missing from the module the FIRST real request dies with a NameError while every unit
+    test still passes, because nothing here otherwise calls the cached wrapper.
+
+    Regression: extracting the shared core dropped the definition and broke every oxDNA
+    occupancy request; only an end-to-end run caught it.
+    """
+    import backend.core.oxdna_occupancy as occ
+
+    assert hasattr(occ, "_OCCUPANCY_CACHE")
+    assert hasattr(occ, "_OCCUPANCY_CACHE_MAX")
+
+    # Exercise the wrapper far enough to bind the global and build a cache key — a real
+    # reference path is needed because the key stats each trajectory file.
+    import inspect
+    src = inspect.getsource(occ.production_occupancy_cached)
+    assert "global _OCCUPANCY_CACHE" in src
+    occ.occupancy_cache_clear()
+    assert occ._OCCUPANCY_CACHE is None

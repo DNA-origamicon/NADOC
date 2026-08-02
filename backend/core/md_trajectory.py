@@ -1208,3 +1208,158 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
     return {"n_frames": len(out_frames), "n_nucleotides": len(key_list),
             "keys": key_list, "frames": out_frames,
             "stages": out_stages, "markers": markers}
+
+
+# ── Occupancy clouds ─────────────────────────────────────────────────────────────
+#: Stage-label markers for dynamics that is NOT free sampling. The equilibrium-aware
+#: protocol ramps elastic-network restraints k=0.5 → 0.1 → 0.01 → None, labelling each
+#: ``"300K NPT ENM k=<scale>"`` and the unrestrained one ``"300K NPT k=0"``
+#: (``md_protocols`` builds both from the same ``scale is None`` test), plus a
+#: ``"300K NPT settle (DNA fixed)"`` stage and an ENM minimisation.
+#:
+#: This matters more here than anywhere else: a restraint RAMP is a one-way relaxation by
+#: construction, so clustering across it finds "early vs late" — a drift — and buries
+#: whatever the free ensemble actually does. oxDNA's equivalent is keeping only
+#: production/field stages.
+_MD_RESTRAINED_MARKERS = ("enm", "fixed", "minim")
+
+
+def md_free_sampling_segments(segments) -> list[int]:
+    """Indices of the segments that are FREE (unrestrained) dynamics.
+
+    Returns every index when no segment can be identified as free — an unfamiliar protocol
+    should degrade to "use everything, and say so", not to an empty ensemble.
+    """
+    free = [i for i, seg in enumerate(segments)
+            if not any(m in str(seg[1]).lower() for m in _MD_RESTRAINED_MARKERS)]
+    return free if free else list(range(len(segments)))
+
+
+def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: int = 200,
+                 n_clusters: int = 0, basis: str = "nt", selection=None,
+                 all_stages: bool = False) -> dict:
+    """Top-N most likely CONFIGURATIONS of a NAMD ensemble.
+
+    The NAMD counterpart of :func:`backend.core.oxdna_occupancy.production_occupancy`.
+    Everything downstream of the feature matrix — PCA, k-means, the medoid, the
+    drift/unimodal verdict, the autocorrelation-aware population errors — is the SAME
+    engine-agnostic core (:mod:`backend.core.occupancy_core`), because MD and oxDNA already
+    speak the same nucleotide keys (``md_pkey`` emits the identical tuples, ``__xb__`` and
+    ``__ext_`` forms included).
+
+    What is NOT shared is the feature assembly, and deliberately so:
+
+    * MD has **no ``a3``**, and its ``p_nm`` is already the backbone site (the P atom),
+      whereas oxDNA stores a centre of mass from which the site is derived. Running
+      oxDNA's ``occupancy_features`` over MD data would fabricate an offset.
+    * The FENE window is an oxDNA potential. It is not the calibrated gate for a NAMD
+      frame, so no torn-frame rejection is applied here; MD frames arrive PBC-corrected
+      and Kabsch-aligned from :func:`_extract_md_nadoc_frame` already.
+
+    Unlike ``md_rmsf``'s one-pass accumulator this RETAINS every sampled frame — clustering
+    needs them all at once — so cost scales with ``max_frames`` in memory as well as time.
+
+    Runs inside ``md_analysis_runner``'s killable subprocess, so it must stay picklable in
+    and out and must not rely on any module-level cache surviving the call.
+    """
+    import MDAnalysis as mda  # type: ignore  # noqa: PLC0415  (heavy; lazy like its siblings)
+
+    from backend.core.occupancy_core import occupancy_clusters, resolve_selection_keys
+
+    seg_paths = [s[2] for s in segments]
+    ctx = _build_md_nadoc_ctx(topology_path, seg_paths, coordinate_path, design,
+                              with_termini=True)
+    p_order = ctx["p_order"]
+    term_specs = ctx.get("term_specs") or []
+    key_list = [tuple(k) for k in p_order] + [tuple(s[0]) for s in term_specs]
+    if not key_list:
+        return {"ready": False, "reason": "no mapped nucleotides"}
+
+    seg_counts: list[int] = []
+    for _, _, dcd in segments:
+        su = mda.Universe(str(topology_path), str(dcd))
+        seg_counts.append(len(su.trajectory))
+    if sum(seg_counts) == 0:
+        return {"ready": False, "reason": "no trajectory frames yet"}
+
+    free_idx = list(range(len(segments))) if all_stages else md_free_sampling_segments(segments)
+    fell_back = not all_stages and free_idx == list(range(len(segments))) and any(
+        any(m in str(s[1]).lower() for m in _MD_RESTRAINED_MARKERS) for s in segments)
+
+    # Global frame indices belonging to the sampling segments only.
+    starts, at = [], 0
+    for c in seg_counts:
+        starts.append(at)
+        at += c
+    pool: list[int] = []
+    for i in free_idx:
+        pool.extend(range(starts[i], starts[i] + seg_counts[i]))
+    if not pool:
+        return {"ready": False, "reason": "no free-sampling frames in this run"}
+
+    picked = pool if len(pool) <= max_frames else _stride_pick(pool, max_frames)
+
+    scoped = resolve_selection_keys(design, key_list, selection)
+    if selection and not scoped:
+        return {"ready": False, "reason": "the selection matched no nucleotides"}
+    is_scoped = bool(selection) and len(scoped) < len(key_list)
+    want = set(scoped)
+    sel_idx = [i for i, k in enumerate(key_list) if k in want] if is_scoped else None
+
+    n_p = len(p_order)
+    rows: list[np.ndarray] = []
+    kept: list[int] = []
+    frames_out: dict[int, list[float]] = {}
+    for gidx in picked:
+        p_nm, normals, tpos, tnorm = _extract_md_nadoc_frame(ctx, gidx, with_termini=True)
+        if p_nm is None or len(p_nm) != n_p:
+            continue
+        pos = np.vstack([p_nm, tpos]) if term_specs and tpos is not None and len(tpos) else p_nm
+        if len(pos) != len(key_list):
+            continue
+        nrm = normals if normals is not None and len(normals) == n_p else np.tile([0.0, 0.0, 1.0], (n_p, 1))
+        if term_specs and tnorm is not None and len(tnorm) == len(term_specs):
+            nrm = np.vstack([nrm, tnorm])
+        elif term_specs:
+            nrm = np.vstack([nrm, np.tile([0.0, 0.0, 1.0], (len(term_specs), 1))])
+
+        v = pos[sel_idx] if sel_idx is not None else pos
+        rows.append(np.asarray(v, dtype=float).ravel())
+        kept.append(gidx)
+        # Same 6-float stride as md_composite_trajectory / _flatten_cg_frame, so the
+        # frontend consumes an MD medoid with the oxDNA code path unchanged.
+        flat: list[float] = []
+        for i in range(len(key_list)):
+            flat.extend((float(pos[i, 0]), float(pos[i, 1]), float(pos[i, 2])))
+            flat.extend((float(nrm[i, 0]), float(nrm[i, 1]), float(nrm[i, 2])))
+        frames_out[gidx] = flat
+
+    if len(rows) < 20:
+        return {"ready": False,
+                "reason": f"need at least 20 frames to cluster (have {len(rows)})",
+                "n_frames": len(rows)}
+
+    res = occupancy_clusters(np.array(rows, dtype=float), n_clusters=n_clusters)
+    if not res.get("ready"):
+        return res
+
+    res["method"] = "pca"
+    res["basis"] = "nt"          # MD has one site per nucleotide; no bp-midpoint basis yet
+    res["basis_requested"] = basis
+    res["scoped"] = bool(is_scoped)
+    res["n_selected"] = len(sel_idx) if sel_idx is not None else len(key_list)
+    res["n_total"] = len(key_list)
+    res["n_frames_total"] = sum(seg_counts)
+    res["n_frames_torn"] = 0
+    res["sampling_stages"] = [str(segments[i][1]) for i in free_idx]
+    res["all_stages"] = bool(all_stages or fell_back)
+    if fell_back:
+        res["sampling_note"] = ("no unrestrained stage identified in this protocol — "
+                                "clustered every stage, which mixes restrained dynamics")
+    res["keys"] = [list(k) for k in key_list]
+    for cl in res["clusters"]:
+        gidx = kept[cl["medoid_index"]]
+        cl["medoid_frame"] = int(gidx)
+        cl["frames"] = [int(kept[r]) for r in cl["frames"]]
+        cl["frame"] = frames_out[gidx]
+    return res

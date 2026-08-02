@@ -11,6 +11,7 @@
  * Falls back to REST polling for completed jobs.
  */
 
+import { initOccupancyControls } from './occupancy_controls.js'
 import { initJobsPanelBase } from './jobs_panel_base.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from './op_progress.js'
 import { showToast } from './toast.js'
@@ -698,7 +699,7 @@ export function mdEarlyStopToggleState(job, busy = false) {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null } = {}) {
+export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverlay = null, getAnchorSelection = null, getWorkspacePath = null, getOxdnaDisplay = null, getMdViz = null, getFlexScale = null, getClusterState = null, getSelection = null, getChainMode = null, enqueueChainStage = null, getSolventOverlay = null, getBoxOverlay = null, getCurrentRepr = null, getWeldOverlay = null } = {}) {
   const panel   = document.getElementById('md-jobs-panel')
   const heading = document.getElementById('md-jobs-panel-heading')
   const arrow   = document.getElementById('md-jobs-panel-arrow')
@@ -818,7 +819,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   // lost trajectory, failed load).
   function _syncVizOffRadio() {
     if (!vizOffRadio) return
-    const anyOn = [displayToggle, flexToggle, trajToggle].some(t => t?.checked)
+    const anyOn = [displayToggle, flexToggle, trajToggle, occupancyToggle].some(t => t?.checked)
     if (!anyOn) vizOffRadio.checked = true
   }
 
@@ -890,6 +891,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
   const flexBar      = document.getElementById('md-jobs-flex-bar')
   const flexLegend   = document.getElementById('md-jobs-flex-legend')
   const trajToggle   = document.getElementById('md-jobs-traj-toggle')
+  // With its peers, not beside the occupancy card below: _syncVizOffRadio reads this in
+  // its `anyOn` array and runs during init, so a later `const` is a TDZ that kills boot.
+  const occupancyToggle = document.getElementById('md-jobs-occupancy-toggle')
+  const occupancyAllStages = document.getElementById('md-jobs-occupancy-all-stages')
   const trajStatus   = document.getElementById('md-jobs-traj-status')
   const trajControls = document.getElementById('md-jobs-traj-controls')
   const trajPlay     = document.getElementById('md-jobs-traj-play')
@@ -2004,6 +2009,47 @@ export function initMdJobsPanel({ mdDisplayController = null, getWorkspacePath =
       `<span>${max.toFixed(2)} nm</span></div>` +
       `<div style="font-size:9px;color:${_C.dim}">rigid → flexible (RMSF)</div>`
   }
+  // The SAME card the oxDNA panel uses, on the md- id prefix with its own fetch. A NAMD
+  // analysis has no shared frame cache and re-reads the whole trajectory, so the fetch
+  // also carries `allStages` — the ENM restraint ramp is excluded by default.
+  const _occupancy = initOccupancyControls({
+    api,
+    engine: 'md',
+    getOverlay: () => getOccupancyOverlay?.() ?? null,
+    getDisplay: () => getMdViz?.() ?? null,
+    getSelectedJobId: () => _selectedId,
+    getAnchorSelection,
+    fetchOccupancy: ({ jobId, params, selection, refetch, signal }) => {
+      const opts = { ...params, refetch, allStages: !!occupancyAllStages?.checked }
+      return selection
+        ? api.postMdOccupancy(jobId, signal, { ...opts, selection })
+        : api.getMdOccupancy(jobId, signal, opts)
+    },
+  })
+
+  function _setOccupancyOff() {
+    _occupancy?.off()
+    if (getMdViz?.()?.mode?.() === 'occupancy') getMdViz().stopAndRestore()
+    if (occupancyToggle) occupancyToggle.checked = false
+    _syncVizOffRadio()
+  }
+  occupancyToggle?.addEventListener('change', async () => {
+    if (!occupancyToggle.checked) { _setOccupancyOff(); return }
+    if (!_selectedId) {
+      occupancyToggle.checked = false
+      showToast('Select an MD job first', 'warn')
+      _syncVizOffRadio()
+      return
+    }
+    if (displayToggle?.checked) _stopMdDisplay('Native positions restored')
+    _setFlexOff()
+    _setTrajOff()
+    await _occupancy?.refresh()
+  })
+  occupancyAllStages?.addEventListener('change', () => {
+    if (occupancyToggle?.checked) _occupancy?.refresh()
+  })
+
   function _setFlexOff() {
     if (getMdViz?.()?.mode?.() === 'rmsf') getMdViz().stopAndRestore()
     if (flexToggle) flexToggle.checked = false
