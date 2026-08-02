@@ -26,6 +26,7 @@ everything above it in this file is history.
 | Right-click menu | `selection_manager.js` `_appendRepresentationMenu:411` (6 call sites) |
 | F1–F7 + global-rep master reset | `frontend/src/ui/representation_switcher.js:271` / `:307` (anchors refreshed 2026-08-01) — **no longer `main.js`** |
 | Region atom/surface overlays | `frontend/src/scene/atom_surface_display.js` (`initAtomSurfaceDisplay`, called `main.js:2461`); segment extraction moved to `surfaceSegments()` in `design_queries.js` |
+| Photo export | `frontend/src/scene/photo_mode.js` — **no longer `main.js ~12886`** |
 
 **The master reset is exempt from the no-op guard (2026-08-01).** Re-picking the representation
 already on screen now returns before `_setRepresentation` (`representation_switcher.js:279`),
@@ -36,7 +37,6 @@ displayed structure genuinely diverged from the nominal global rep — so the gu
 the F-key handler's existing `_hasRepOverrides` branch (`:307`), which already routed an
 already-checked rep to a real re-apply instead of a coloring cycle. Pinned by
 `representation_switcher.test.js` → `no-op re-pick` (4 tests, incl. the overrides exemption).
-| Photo export | `frontend/src/scene/photo_mode.js` — **no longer `main.js ~12886`** |
 
 **Stale claims corrected 2026-07-28:** `editOverridesForStrands`/`editOverridesForClusters`
 (named as shipped in the 06-02 Progress block) **do not exist** — the column pivot replaced them
