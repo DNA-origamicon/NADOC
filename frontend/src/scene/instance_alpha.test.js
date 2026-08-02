@@ -4,6 +4,8 @@ import {
   instanceAlphaOnBeforeCompile,
   applyInstanceAlphaMaterial,
   installInstanceAlpha,
+  installInstanceAlphaGeometry,
+  patchShaderForInstanceAlpha,
   setInstanceAlpha,
 } from './instance_alpha.js'
 
@@ -175,5 +177,44 @@ describe('setInstanceAlpha', () => {
     const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshPhongMaterial(), 4)
     expect(() => setInstanceAlpha(m, 0, 0.5)).not.toThrow()
     expect(() => setInstanceAlpha(null, 0, 0.5)).not.toThrow()
+  })
+})
+
+describe('installInstanceAlphaGeometry', () => {
+  const mesh = (count = 4) => new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, 1, 1), new THREE.MeshPhongMaterial(), count)
+
+  it('adds the attribute WITHOUT touching the material', () => {
+    // The split exists for materials that already own an onBeforeCompile (the
+    // sphere impostors): assigning over it would wipe their billboard patch.
+    const m = mesh()
+    const before = m.material.onBeforeCompile
+    expect(installInstanceAlphaGeometry(m)).toBe(true)
+    expect(m.geometry.getAttribute('instanceAlpha')).toBeTruthy()
+    expect(m.material.onBeforeCompile).toBe(before)
+    expect(m.material.userData.instanceAlphaPatch).toBeUndefined()
+  })
+
+  it('reports false when already installed, so callers can skip the material half', () => {
+    const m = mesh()
+    expect(installInstanceAlphaGeometry(m)).toBe(true)
+    expect(installInstanceAlphaGeometry(m)).toBe(false)
+  })
+})
+
+describe('patchShaderForInstanceAlpha composes with another patch', () => {
+  it('leaves an existing patch’s replacements intact', () => {
+    // Impostors replace <common>, <clipping_planes_fragment> and
+    // <normal_fragment_begin>; the alpha patch prepends to <common> and replaces
+    // <color_fragment>. Only the <common> prepend overlaps, and it composes.
+    const shader = {
+      vertexShader: '#include <common>\nvoid main(){\n#include <begin_vertex>\n#include <project_vertex>\n}',
+      fragmentShader: '#include <common>\nvoid main(){\n#include <clipping_planes_fragment>\n#include <color_fragment>\n}',
+    }
+    shader.fragmentShader = shader.fragmentShader.replace('#include <clipping_planes_fragment>', 'IMPOSTOR_SPHERE;')
+    patchShaderForInstanceAlpha(shader)
+    expect(shader.fragmentShader).toContain('IMPOSTOR_SPHERE;')
+    expect(shader.fragmentShader).toContain('diffuseColor.a *= vInstanceAlpha;')
+    expect(shader.vertexShader).toContain('vInstanceAlpha = instanceAlpha;')
   })
 })

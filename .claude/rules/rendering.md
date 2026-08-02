@@ -197,14 +197,44 @@ photo key shadow. The `< 0.02 discard` in the patch is what keeps a fully-faded 
 being an invisible occluder (LESSONS D8); the patch touches only `diffuseColor.a`, redefining no
 stock chunk variable (LESSONS D5).
 
-> **Known gap — do not assume the alpha channel covers everything.** `_applyRepOverrides` and
-> `_applyAlphaChannel` touch none of `_curvedCylGroup`, `_curvedOvhgGroup`,
-> `iCurvedHelixCylinders`, `iCurvedOverhangCylinders`, `iCurvedOverhangFullCylinders`,
-> `iLinkerBindingCylinders` — `_reapplyDetailVisibility` does. `_installInstanceAlpha` **skips
-> `iSpheres`/`iFluoros` when `_useImpostors`**, so impostor beads get no per-instance alpha at
-> all. Net: mixed representation, reference ghosting and per-cluster opacity all silently no-op
-> on deformed/curved cylinders, impostor beads and binding cylinders. Concretely: *a deformed
-> design shows no cluster fade at `cylinders` rep.*
+> **Gap list — CLOSED 2026-08-01.** The alpha channel now drives every mesh family in this
+> pipeline. What used to be missing, and why each was missing, because the shapes recur:
+>
+> | Was missing | Root cause |
+> |---|---|
+> | curved TUBE meshes (`_curvedCylGroup`, `_curvedOvhgGroup`) | the deform cross-fade owned `material.opacity` ABSOLUTELY at 4 sites, so any per-domain factor was clobbered on the next lerp frame |
+> | curved PROXIES (`iCurvedHelixCylinders`, `iCurvedOverhang*`) | no alpha channel installed, and their data arrays had no `domainIndex`, so only helix-level keys could ever resolve |
+> | `iLinkerBindingCylinders` | **no instance→domain array existed at all** — `bindIdx` was never recorded |
+> | impostor beads (`iSpheres`/`iFluoros`) | `_installInstanceAlpha` was skipped outright under `_useImpostors` |
+>
+> The fixes, in the order you'd need to understand them:
+>
+> 1. **The cross-fade is now a compositor.** `_fadeCurvedTube(mesh, base)` stores the cross-fade
+>    base on the mesh and applies `base × _curvedTubeFactor(userData)`; `_refreshCurvedAlpha()`
+>    re-applies stored bases when a factor changes. **Never write `_fadeMat` on a curved mesh
+>    directly again** — there is one legitimate raw write left and it is inside the compositor
+>    (pinned by `helix_renderer.test.js`).
+> 2. **`_fadeCurvedProxy` keeps `_fadeMat`'s depth contract** (`depthWrite` only when opaque —
+>    an opacity-0 depth-writing mesh is an invisible occluder, LESSONS D8) but forces
+>    `transparent` while any per-instance factor is live, or `instanceAlpha` would have nothing
+>    to blend into. Material opacity × instanceAlpha compose for free in the shader, which is why
+>    the proxies need no compositor of their own.
+> 3. **`_effCol` / `_cylRepVis` / `_cylFactor` are hoisted to closure scope** and shared by the
+>    instanced writers and the curved-tube compositor, so the two cannot disagree about which
+>    columns resolve to `cylinders`. **This closes the mixed-representation P1 too** — region
+>    overrides now reach deformed geometry, not just cluster opacity.
+> 4. **Impostors compose rather than clobber.** `applyInstanceAlphaMaterial` *assigns*
+>    `onBeforeCompile`; doing that to an impostor would wipe its billboard + `gl_FragDepth`
+>    patch and leave flat quads. So `instance_alpha.js` exports the raw transform
+>    (`patchShaderForInstanceAlpha`) and the geometry half (`installInstanceAlphaGeometry`)
+>    separately, and `impostor_material.js` composes the transform inside its own
+>    `onBeforeCompile`, opted in by `enableImpostorInstanceAlpha`. **Only opt in once the mesh
+>    actually has the attribute** — GLSL reads a missing attribute as 0 and the patch discards
+>    below 0.02, so a premature call makes every bead vanish.
+>
+> Still genuinely out of scope (different renderers, `Not this rule` above): per-cluster
+> **opacity** on `surface` and `vdw`/`ballstick`. Cluster **colour** does reach both via
+> `color_util.js`.
 >
 > **Closed 2026-08-01: overhang link arcs + flexible arcs.** `scene/overhang_link_arcs.js` and
 > `scene/flexible_arcs.js` each own their meshes and honoured no colouring mode at all. Both now

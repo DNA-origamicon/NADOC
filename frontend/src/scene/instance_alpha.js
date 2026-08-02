@@ -32,6 +32,21 @@ import * as THREE from 'three'
  * mesh for no benefit.
  */
 export function instanceAlphaOnBeforeCompile(shader) {
+  patchShaderForInstanceAlpha(shader)
+}
+
+/**
+ * The patch as a plain shader-source transform, so a material that ALREADY has an
+ * `onBeforeCompile` (the sphere impostors) can compose it instead of being
+ * clobbered by an assignment. Safe to compose: it touches only the `<common>`
+ * prepend, `<begin_vertex>` and `<color_fragment>`, none of which the impostor
+ * patch replaces.
+ *
+ * Only apply this to a mesh that actually HAS the `instanceAlpha` attribute — an
+ * absent attribute reads as 0 in GLSL, which the discard below turns into an
+ * invisible mesh.
+ */
+export function patchShaderForInstanceAlpha(shader) {
   shader.vertexShader =
     'attribute float instanceAlpha;\nvarying float vInstanceAlpha;\n' + shader.vertexShader
   shader.vertexShader = shader.vertexShader.replace(
@@ -43,6 +58,23 @@ export function instanceAlphaOnBeforeCompile(shader) {
     '#include <color_fragment>',
     '#include <color_fragment>\n  diffuseColor.a *= vInstanceAlpha;\n  if ( diffuseColor.a < 0.02 ) discard;',
   )
+}
+
+/**
+ * The geometry half only: clone the shared template and add the attribute, without
+ * touching the material. For meshes whose material needs a bespoke composition
+ * (impostors) rather than the stock assignment.
+ * @returns {boolean} true if it installed, false if already present
+ */
+export function installInstanceAlphaGeometry(mesh) {
+  if (!mesh || mesh._instanceAlpha) return false
+  const capacity = mesh.instanceMatrix.count
+  mesh.geometry = mesh.geometry.clone()
+  const attr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1)
+  attr.setUsage(THREE.DynamicDrawUsage)
+  mesh.geometry.setAttribute('instanceAlpha', attr)
+  mesh._instanceAlpha = attr
+  return true
 }
 
 /**
@@ -83,13 +115,7 @@ export function applyInstanceAlphaMaterial(mat) {
  * @param {THREE.InstancedMesh} mesh
  */
 export function installInstanceAlpha(mesh) {
-  if (!mesh || mesh._instanceAlpha) return
-  const capacity = mesh.instanceMatrix.count
-  mesh.geometry = mesh.geometry.clone()
-  const attr = new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1)
-  attr.setUsage(THREE.DynamicDrawUsage)
-  mesh.geometry.setAttribute('instanceAlpha', attr)
-  mesh._instanceAlpha = attr
+  if (!installInstanceAlphaGeometry(mesh)) return
   applyInstanceAlphaMaterial(mesh.material)
 }
 

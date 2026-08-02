@@ -26,6 +26,7 @@ import {
   IMPOSTOR_QUAD,
   makeImpostorPhongMaterial,
   installSphereImpostorRaycast,
+  enableImpostorInstanceAlpha,
 } from './impostor_material.js'
 
 import {
@@ -40,7 +41,7 @@ import {
   nucSlabColor,
   nucArrowColor,
 } from './helix_renderer/palette.js'
-import { installInstanceAlpha } from './instance_alpha.js'
+import { installInstanceAlpha, installInstanceAlphaGeometry } from './instance_alpha.js'
 import { clusterAlphaForNuc } from './cluster_entries.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -234,12 +235,20 @@ function _setEntryAlpha(entry, a) {
 }
 
 /**
- * Give *mesh* a per-instance `instanceAlpha` (default 1.0) and patch its material
- * to multiply fragment alpha by it, discarding near-zero alpha (the hide toggle).
- * Clones the shared geometry first. Only touches diffuseColor.a — no stock shader
- * chunk variable is redefined (see LESSONS D5). No-op on impostor meshes.
+ * Install per-instance alpha, routing impostor materials through their own
+ * composed patch. `applyInstanceAlphaMaterial` ASSIGNS onBeforeCompile, which on an
+ * impostor would wipe the billboard + gl_FragDepth patch and leave flat quads — so
+ * impostors get the geometry half plus an opt-in flag their own factory reads.
+ * This is why `iSpheres`/`iFluoros` used to be skipped entirely under impostors.
  */
-const _installInstanceAlpha = installInstanceAlpha
+function _installInstanceAlpha(mesh) {
+  if (!mesh) return
+  if (mesh.material?.userData?.isImpostor) {
+    if (installInstanceAlphaGeometry(mesh)) enableImpostorInstanceAlpha(mesh.material)
+    return
+  }
+  installInstanceAlpha(mesh)
+}
 
 // ── Slab helpers ──────────────────────────────────────────────────────────────
 
@@ -1284,7 +1293,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _overhangCylData      = []
   const _curvedOvhgCylData    = []
   // Linker cylinder bookkeeping (populated in the cylinder build pass).
-  const _deferredBindings     = []   // {helixId, lo, hi, color, arrow} — emitted opposite their overhang
+  const _deferredBindings     = []   // {helixId, strandId, domainIndex, lo, hi, color, arrow} — emitted opposite their overhang
+  // Instance→domain map for iLinkerBindingCylinders. Did not exist until 2026-08-01,
+  // which is why binding cylinders were the one cylinder family with no per-instance
+  // alpha: nothing could say which domain an instance belonged to.
+  const _bindingCylData       = []   // {helixId, strandId, domainIndex, bp_lo, bp_hi, cylIdx}
   const _ovhgBuildXform       = new Map()  // `${helixId}|${lo}|${hi}` → {pos, quat, lenY} of the overhang half
   const _bridgeCylData        = []   // per ds-bridge cylinder instance: {bridgeHelixId, strandId}
 
@@ -1396,7 +1409,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         // Linker binding (complement) domain: defer — drawn as a half-cylinder
         // opposite its overhang half, in the linker colour, after this loop.
         if (isLinker) {
-          _deferredBindings.push({ helixId: dom.helix_id, lo, hi, color: strandColor, arrow })
+          _deferredBindings.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, lo, hi, color: strandColor, arrow })
           continue
         }
 
@@ -1415,7 +1428,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
                 side: (isOvhg && !isDirectFullOvhg) ? THREE.DoubleSide : THREE.FrontSide,
               }),
             )
-            tubeMesh.userData = { helixId: dom.helix_id, strandId: strand.id, t0: built.t0Curve, t1: built.t1Curve, isOvhg, fullCylinder: isDirectFullOvhg, defaultColor: strandColor }
+            tubeMesh.userData = { helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, bp_lo: lo, bp_hi: hi, t0: built.t0Curve, t1: built.t1Curve, isOvhg, fullCylinder: isDirectFullOvhg, defaultColor: strandColor }
             if (isOvhg) _curvedOvhgGroup.add(tubeMesh)
             else        _curvedCylGroup.add(tubeMesh)
           }
@@ -1447,9 +1460,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
             iProxy.setColorAt(idxProxy, _tColor.setHex(strandColor))
             if (isOvhg) {
               const cylIdx = isDirectFullOvhg ? curvedOvhgFullIdx++ : curvedOvhgIdx++
-              _curvedOvhgCylData.push({ helixId: dom.helix_id, strandId: strand.id, bp_lo: lo, bp_hi: hi, t0: t0p, t1: t1p, cylIdx, arrow, fullCylinder: isDirectFullOvhg, defaultColor: strandColor })
+              _curvedOvhgCylData.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, bp_lo: lo, bp_hi: hi, t0: t0p, t1: t1p, cylIdx, arrow, fullCylinder: isDirectFullOvhg, defaultColor: strandColor })
             } else {
-              _curvedDomainCylData.push({ helixId: dom.helix_id, strandId: strand.id, bp_lo: lo, bp_hi: hi, t0: t0p, t1: t1p, cylIdx: curvedIdx, arrow, defaultColor: strandColor })
+              _curvedDomainCylData.push({ helixId: dom.helix_id, strandId: strand.id, domainIndex: domIdx, bp_lo: lo, bp_hi: hi, t0: t0p, t1: t1p, cylIdx: curvedIdx, arrow, defaultColor: strandColor })
               curvedIdx++
             }
           }
@@ -1545,6 +1558,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       }
       iLinkerBindingCylinders.setMatrixAt(bindIdx, _tMatrix)
       iLinkerBindingCylinders.setColorAt(bindIdx, _tColor.setHex(b.color))
+      // Record the instance→domain mapping. It must be written INSIDE the loop:
+      // the fallback branch above can `continue` without incrementing bindIdx, so
+      // an instance's index is not its position in _deferredBindings.
+      _bindingCylData.push({
+        helixId: b.helixId, strandId: b.strandId, domainIndex: b.domainIndex,
+        bp_lo: b.lo, bp_hi: b.hi, cylIdx: bindIdx,
+      })
       bindIdx++
     }
     iLinkerBindingCylinders.count = bindIdx
@@ -2105,8 +2125,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     }
     iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
     const _cvProxyOp = useStraight ? 1 : 0
-    _fadeMat(iCurvedHelixCylinders.material, _cvProxyOp)
-    for (const mesh of _curvedCylGroup.children)   _fadeMat(mesh.material, 1 - _cvProxyOp)
+    _fadeCurvedProxy(iCurvedHelixCylinders.material, _cvProxyOp)
+    for (const mesh of _curvedCylGroup.children)   _fadeCurvedTube(mesh, 1 - _cvProxyOp)
     for (const dom of _curvedOvhgCylData) {
       const sa = useStraight ? straightAxesMap?.get(dom.helixId) : null
       const s  = sa ? sa.start : dom.arrow.aStart
@@ -2122,9 +2142,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       _curvedOvhgCylMesh(dom).setMatrixAt(dom.cylIdx, _tMatrix)
     }
     _markCurvedOvhgCylMatricesDirty()
-    _fadeMat(iCurvedOverhangCylinders.material, _cvProxyOp)
-    _fadeMat(iCurvedOverhangFullCylinders.material, _cvProxyOp)
-    for (const mesh of _curvedOvhgGroup.children) _fadeMat(mesh.material, 1 - _cvProxyOp)
+    _fadeCurvedProxy(iCurvedOverhangCylinders.material, _cvProxyOp)
+    _fadeCurvedProxy(iCurvedOverhangFullCylinders.material, _cvProxyOp)
+    for (const mesh of _curvedOvhgGroup.children) _fadeCurvedTube(mesh, 1 - _cvProxyOp)
 
     // 6. Fluorophore beads — always revert to backbone_position (no straight map).
     for (const entry of fluoroEntries) {
@@ -2411,9 +2431,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     return ref
   })()
   if (_hasReference) {
-    if (!_useImpostors) _installInstanceAlpha(iSpheres)
+    _installInstanceAlpha(iSpheres)
     _installInstanceAlpha(iCubes)
-    if (!_useImpostors) _installInstanceAlpha(iFluoros)
+    _installInstanceAlpha(iFluoros)
     _installInstanceAlpha(iCones)
     _installInstanceAlpha(iSlabs)
   }
@@ -2457,6 +2477,10 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // so they never carry a cluster fade — restored to opaque, as before.
       for (const br of _bridgeCylData)    _setCylAlpha(iLinkerBridgeCylinders, br.cylIdx, 1)
     }
+    // Curved proxies, curved tubes and binding cylinders. Unconditional: the tube
+    // compositor has to run even before the instanceAlpha buffers exist, because
+    // tube meshes fade through material.opacity, not through the buffers.
+    _refreshCurvedAlpha()
     if (!_hasReference) return
     // Helical axis arrows of reference-only helices: hard-hide when reference is
     // hidden; restore via the normal shaft-mode logic when shown (respecting the
@@ -2500,12 +2524,22 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
    *  cluster fade must never pay for it. */
   function _ensureAlphaInstalled() {
     if (_repAlphaReady) return
-    if (!_useImpostors) _installInstanceAlpha(iSpheres)
+    _installInstanceAlpha(iSpheres)
     _installInstanceAlpha(iCubes)
-    if (!_useImpostors) _installInstanceAlpha(iFluoros)
+    _installInstanceAlpha(iFluoros)
     _installInstanceAlpha(iCones)
     _installInstanceAlpha(iSlabs)
     _installInstanceAlpha(iHelixCylinders)
+    // The curved proxies and the linker BINDING cylinders were the last three
+    // cylinder families with no alpha channel. Their material.opacity is owned by
+    // the deform cross-fade (proxies) or nothing at all (binding), so a per-instance
+    // channel is the only way to fade one domain without touching the rest — and the
+    // two compose for free: three multiplies material opacity into diffuseColor.a
+    // before the instanceAlpha patch multiplies again.
+    _installInstanceAlpha(iCurvedHelixCylinders)
+    _installInstanceAlpha(iCurvedOverhangCylinders)
+    _installInstanceAlpha(iCurvedOverhangFullCylinders)
+    _installInstanceAlpha(iLinkerBindingCylinders)
     _installInstanceAlpha(iOverhangCylinders)
     _installInstanceAlpha(iOverhangFullCylinders)
     _installInstanceAlpha(iLinkerBridgeCylinders)
@@ -2522,6 +2556,68 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     iCurvedOverhangCylinders.visible = coarse; iCurvedOverhangFullCylinders.visible = coarse; _curvedOvhgGroup.visible = coarse
     iLinkerBindingCylinders.visible = coarse; iLinkerBridgeCylinders.visible = coarse
   }
+  // Effective rep at a duplex column (override wins; else the global rep). Hoisted
+  // out of _applyRepOverrides so the curved-tube compositor can consult it too.
+  function _effCol(helixId, bp) {
+    const r = _repColumnRep.get(`${helixId}:${bp}`)
+    return r ?? (_detailLevel === 2 ? 'cylinders' : 'full')
+  }
+  /** A domain cylinder shows only where EVERY column it spans resolves to
+   *  'cylinders' — a region boundary cutting a domain falls back to beads rather
+   *  than covering the full-rep half. Returns 1 when no override is active. */
+  function _cylRepVis(dom) {
+    if (!_repActive) return 1
+    for (let bp = dom.bp_lo; bp <= dom.bp_hi; bp++) {
+      if (_effCol(dom.helixId, bp) !== 'cylinders') return 0
+    }
+    return 1
+  }
+  /** The full alpha for one cylinder instance: ghosting x override x cluster. */
+  function _cylFactor(dom) {
+    return _refAlphaFor(dom.strandId) * _cylRepVis(dom) * _clusterAlphaForCyl(dom)
+  }
+
+  // ── Curved (deformed) tube compositor ───────────────────────────────────────
+  // The curved tube meshes and their straight proxies cross-fade against each other
+  // (`t` = 0 straight, 1 deformed), and that cross-fade used to write
+  // `material.opacity` ABSOLUTELY — so any per-domain factor written there was
+  // clobbered on the next lerp frame, which is why deformed designs showed no
+  // cluster fade and no region override at cylinders rep. The cross-fade base is now
+  // remembered per mesh and multiplied by the same three factors as everything else.
+  //
+  // Proxies are InstancedMeshes and carry the per-domain factor on their own
+  // instanceAlpha channel, so their material only holds the base; the two multiply
+  // in the shader. Only the non-instanced tube meshes need this.
+  function _curvedTubeFactor(ud) {
+    return _refAlphaFor(ud.strandId) * _cylRepVis(ud) *
+      _clusterAlphaFor({ helix_id: ud.helixId, strand_id: ud.strandId, domain_index: ud.domainIndex })
+  }
+  /** Set a curved TUBE's cross-fade base and re-apply base x per-domain factor. */
+  function _fadeCurvedTube(mesh, base) {
+    mesh.userData.crossfadeBase = base
+    _fadeMat(mesh.material, base * _curvedTubeFactor(mesh.userData))
+  }
+  /** Set a curved PROXY material's cross-fade base. Keeps _fadeMat's depth contract
+   *  (depthWrite only when opaque — an invisible occluder is LESSONS D8) but stays
+   *  in the transparent queue whenever a per-instance factor is live, or the
+   *  instanceAlpha multiply would have nothing to blend into. */
+  function _fadeCurvedProxy(mat, base) {
+    _fadeMat(mat, base)
+    if (_anyAlpha()) mat.transparent = true
+  }
+  /** Re-apply every curved mesh's stored cross-fade base against current factors. */
+  function _refreshCurvedAlpha() {
+    for (const mesh of _curvedCylGroup.children)  _fadeCurvedTube(mesh, mesh.userData.crossfadeBase ?? 1)
+    for (const mesh of _curvedOvhgGroup.children) _fadeCurvedTube(mesh, mesh.userData.crossfadeBase ?? 1)
+    if (!_repAlphaReady) return
+    for (const dom of _curvedDomainCylData) _setCylAlpha(iCurvedHelixCylinders, dom.cylIdx, _cylFactor(dom))
+    for (const dom of _curvedOvhgCylData)   _setCylAlpha(_curvedOvhgCylMesh(dom), dom.cylIdx, _cylFactor(dom))
+    for (const b of _bindingCylData)        _setCylAlpha(iLinkerBindingCylinders, b.cylIdx, _cylFactor(b))
+    _fadeCurvedProxy(iCurvedHelixCylinders.material, iCurvedHelixCylinders.material.opacity)
+    _fadeCurvedProxy(iCurvedOverhangCylinders.material, iCurvedOverhangCylinders.material.opacity)
+    _fadeCurvedProxy(iCurvedOverhangFullCylinders.material, iCurvedOverhangFullCylinders.material.opacity)
+  }
+
   function _applyRepOverrides() {
     if (!_repActive) {
       // Overrides off — hand the channel back to its other two factors.
@@ -2530,14 +2626,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       return
     }
     _ensureAlphaInstalled()
-    const baseCyl = _detailLevel === 2   // global rep is cylinders
-    // Effective rep at a duplex column (override wins; else the global rep).
-    const effCol = (helixId, bp) => {
-      const r = _repColumnRep.get(`${helixId}:${bp}`)
-      return r ?? (baseCyl ? 'cylinders' : 'full')
-    }
     // A bead (either strand) shows only where its column resolves to 'full'.
-    const beadVis = (nuc) => (nuc && effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
+    const beadVis = (nuc) => (nuc && _effCol(nuc.helix_id, nuc.bp_index) === 'full' ? 1 : 0)
     for (const e of backboneEntries) _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
     for (const e of slabEntries)     _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
     for (const e of fluoroEntries)   _setEntryAlpha(e, _refAlphaFor(e.nuc?.strand_id) * beadVis(e.nuc) * _clusterAlphaFor(e.nuc))
@@ -2545,25 +2635,21 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const vis = e.isCrossHelix ? 1 : beadVis(e.fromNuc)
       _setEntryAlpha(e, _refAlphaFor(e.strandId) * vis * _clusterAlphaFor(e.fromNuc))
     }
-    // A domain cylinder (the duplex tube) shows only where EVERY column it spans
-    // resolves to 'cylinders' — so a region boundary cutting a domain falls back
-    // to beads rather than covering the full-rep half.
-    const cylVis = (dom) => {
-      for (let bp = dom.bp_lo; bp <= dom.bp_hi; bp++) {
-        if (effCol(dom.helixId, bp) !== 'cylinders') return 0
-      }
-      return 1
-    }
-    for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, cylVis(dom) * _clusterAlphaForCyl(dom))
-    for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, cylVis(dom) * _clusterAlphaForCyl(dom))
-    // ds-linker bridge cylinder: keyed on its own __lnk__ bridge helix span.
+    for (const dom of _domainCylData)   _setCylAlpha(iHelixCylinders, dom.cylIdx, _cylFactor(dom))
+    for (const dom of _overhangCylData) _setCylAlpha(_ovhgCylMesh(dom), dom.cylIdx, _cylFactor(dom))
+    // ds-linker bridge cylinder: keyed on its own __lnk__ bridge helix span, so it
+    // needs its own column test rather than _cylRepVis's helixId one.
     const bridgeVis = (br) => {
       for (let bp = br.bp_lo; bp <= br.bp_hi; bp++) {
-        if (effCol(br.bridgeHelixId, bp) !== 'cylinders') return 0
+        if (_effCol(br.bridgeHelixId, bp) !== 'cylinders') return 0
       }
       return 1
     }
     for (const br of _bridgeCylData) _setCylAlpha(iLinkerBridgeCylinders, br.cylIdx, bridgeVis(br))
+    // Curved proxies + linker binding cylinders (2026-08-01). Binding cylinders are
+    // still not column-driven — only the bridge was ever requested ("dsDNA only for
+    // now") — so _cylRepVis contributes nothing new for them beyond the guard.
+    _refreshCurvedAlpha()
     // Make every driven mesh renderable; alpha selects what actually shows.
     iSpheres.visible = iCubes.visible = iCones.visible = iSlabs.visible = iFluoros.visible = true
     iHelixCylinders.visible = iOverhangCylinders.visible = iOverhangFullCylinders.visible = iLinkerBridgeCylinders.visible = true
@@ -3885,8 +3971,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         iCurvedHelixCylinders.setMatrixAt(dom.cylIdx, _tMatrix)
       }
       iCurvedHelixCylinders.instanceMatrix.needsUpdate = true
-      _fadeMat(iCurvedHelixCylinders.material, 1 - t)
-      for (const mesh of _curvedCylGroup.children)   _fadeMat(mesh.material, t)
+      _fadeCurvedProxy(iCurvedHelixCylinders.material, 1 - t)
+      for (const mesh of _curvedCylGroup.children)   _fadeCurvedTube(mesh, t)
       for (const dom of _curvedOvhgCylData) {
         const sa  = straightAxesMap?.get(dom.helixId)
         const lx0 = sa ? sa.start.x + (dom.arrow.aStart.x - sa.start.x) * t : dom.arrow.aStart.x
@@ -3906,9 +3992,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         _curvedOvhgCylMesh(dom).setMatrixAt(dom.cylIdx, _tMatrix)
       }
       _markCurvedOvhgCylMatricesDirty()
-      _fadeMat(iCurvedOverhangCylinders.material, 1 - t)
-      _fadeMat(iCurvedOverhangFullCylinders.material, 1 - t)
-      for (const mesh of _curvedOvhgGroup.children)  _fadeMat(mesh.material, t)
+      _fadeCurvedProxy(iCurvedOverhangCylinders.material, 1 - t)
+      _fadeCurvedProxy(iCurvedOverhangFullCylinders.material, 1 - t)
+      for (const mesh of _curvedOvhgGroup.children)  _fadeCurvedTube(mesh, t)
     },
 
     /**

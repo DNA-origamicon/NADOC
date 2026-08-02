@@ -22,6 +22,7 @@
  */
 
 import * as THREE from 'three'
+import { patchShaderForInstanceAlpha } from './instance_alpha.js'
 
 // ── Runtime flag (opt-in until validated, then flip default) ──────────────────
 //   • `?impostors=1` in the URL (per-tab), or
@@ -139,6 +140,11 @@ export function makeImpostorPhongMaterial({ radius, color = 0xffffff }) {
       .replace('#include <common>', _FRAG_DECL)
       .replace('#include <clipping_planes_fragment>', _FRAG_SPHERE)
       .replace('#include <normal_fragment_begin>', _FRAG_NORMAL)
+    // Per-instance alpha, when the mesh has the attribute (see
+    // enableImpostorInstanceAlpha). This is why the patch is COMPOSED here rather
+    // than assigned by applyInstanceAlphaMaterial: that assigns onBeforeCompile,
+    // which would wipe the billboard + depth patches above and leave flat quads.
+    if (mat.userData.instanceAlphaPatch) patchShaderForInstanceAlpha(shader)
     mat.userData.shader = shader
   }
   // Unique cache key per material so onBeforeCompile runs for each (otherwise
@@ -147,6 +153,29 @@ export function makeImpostorPhongMaterial({ radius, color = 0xffffff }) {
   mat.customProgramCacheKey = () => 'impostorPhong_' + mat.uuid
   mat.userData.isImpostor = true
   mat.userData.impostorRadius = radius
+  return mat
+}
+
+/**
+ * Opt an impostor material into the per-instance alpha channel.
+ *
+ * Call ONLY after the mesh's geometry actually carries an `instanceAlpha`
+ * attribute — GLSL reads a missing attribute as 0, and the patch discards below
+ * 0.02, so a premature call makes the beads vanish entirely.
+ *
+ * Idempotent. Bumps `needsUpdate` so the program recompiles with the composed
+ * patch; the per-material `customProgramCacheKey` above means that recompile is
+ * scoped to this material.
+ */
+export function enableImpostorInstanceAlpha(mat) {
+  if (!mat || mat.userData?.instanceAlphaPatch) return mat
+  mat.userData.instanceAlphaPatch = true
+  mat.transparent = true
+  // Structural geometry: keep writing depth so a faded bead still occludes and
+  // still casts the photo-mode key shadow (the fully-faded case is handled by the
+  // shader's discard, which suppresses the depth write for that fragment).
+  mat.userData.photoForceDepthWrite = true
+  mat.needsUpdate = true
   return mat
 }
 

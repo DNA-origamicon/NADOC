@@ -1,9 +1,11 @@
 # Mixed Representation — per-region representation for a single structure
 
-Status: **SHIPPED — PATH A COMPLETE** (probe-verified 2026-07-28). **Rank: P1** — the core
-feature is live end-to-end and in daily use; what's left is a small set of coverage holes
-(deformed cylinders, impostors) plus one suspected photo-export bug, all of which bite the
-publication-figure use case this feature exists for.
+Status: **SHIPPED — PATH A COMPLETE** (probe-verified 2026-07-28). **Rank: P2 as of 2026-08-01**
+(was P1). The renderer coverage holes that made it P1 — deformed/curved cylinders, impostor
+beads, binding cylinders — are CLOSED, and the suspected photo-export bug was found and fixed
+(photo mode dropped the per-instance alpha patch entirely). What is left is the un-guarded
+photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
+real, but none of them silently wrong geometry.
 
 The 2026-06-02 "PATH A IN PROGRESS / UI + photo-mode pending" banner was **stale**. Codebase
 probe (2026-07-28) found every backend + frontend + UI anchor EXISTS and WIRED: model +
@@ -481,14 +483,29 @@ Debug handles added: `__NADOC_DBG__.designRenderer`, `__NADOC_DBG__.unfoldView` 
 > `'cluster'` branch in `_applyXoverColoring`. Wiring per-*region* overrides through the same two
 > functions is now a small job rather than a new mechanism.
 >
-> **2026-08-01 — items 3, 4 and 5 got a second stakeholder.** Per-cluster opacity
-> (`memory/project_deformation_cluster_scope.md`, sidebar swatch → `setClusterAlphas`) rides the
-> SAME `instanceAlpha` channel, so it inherits exactly these gaps: a faded cluster does not fade
-> on deformed/curved tubes, on impostor beads, on `iLinkerBindingCylinders`, or on crossover
-> extra-base beads. Fixing any of them now fixes two features at once, which is what makes this
-> rank stick. The three absolute writers were also collapsed into one compositor at that time —
-> reference ghosting × override visibility × cluster opacity multiply into one attribute, so a
-> fourth factor is a new term rather than a fourth sweep that clobbers the other three.
+> **2026-08-01 — items 3, 4 and 5 are DONE.** They were fixed alongside per-cluster opacity,
+> which rides the same `instanceAlpha` channel, so one fix served both features:
+> - **3 (deformed/curved cylinders)** — the deform cross-fade owned `material.opacity`
+>   absolutely, so any per-domain factor was clobbered on the next lerp frame. It is now a
+>   compositor (`_fadeCurvedTube` stores the cross-fade base, `_refreshCurvedAlpha` re-applies
+>   it against the current factors). `_curvedDomainCylData` / `_curvedOvhgCylData` and the tube
+>   meshes' `userData` gained `domainIndex` + `bp_lo`/`bp_hi`, and `_effCol`/`_cylRepVis` were
+>   hoisted to closure scope so the curved path uses the SAME column test as the straight one.
+>   **Per-region overrides now reach deformed geometry.**
+> - **4 (impostor beads)** — `iSpheres`/`iFluoros` are no longer skipped. The alpha patch is
+>   composed inside `makeImpostorPhongMaterial` rather than assigned over it (an assignment
+>   would have wiped the billboard patch); opt-in via `enableImpostorInstanceAlpha`.
+> - **5 (`iLinkerBindingCylinders`)** — had no instance→domain array at all; `_bindingCylData`
+>   now exists and the mesh is installed + written. Still not *column*-driven ("dsDNA only for
+>   now" stands), but it fades with its cluster.
+>
+> The three absolute writers were also collapsed into one compositor: reference ghosting ×
+> override visibility × cluster opacity multiply into one attribute, so a fourth factor is a new
+> term rather than a fourth sweep that clobbers the other three. See `.claude/rules/rendering.md`
+> for the full contract. **Remaining: items 2, 6, 7, 8** — photo mode still does not read
+> `representation_overrides` (2), extra bases are not per-region though they now take cluster
+> colour/alpha (6), `representation_overrides.js` still has no direct vitest (7), and no
+> real-mouse-click verification (8).
 
 1. ~~**SUSPECTED BUG — photo export may blank all beads once an override has been used.**~~
    **WITHDRAWN 2026-07-30** (`/audit-plan` rendering probe). The mechanism does not exist:

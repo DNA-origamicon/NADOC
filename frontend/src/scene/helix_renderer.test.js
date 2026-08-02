@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { directConnectedOverhangIds, orderStrandNucleotides } from './helix_renderer.js'
 
 // A nucleotide with just the fields orderStrandNucleotides reads. `z` stands in for
@@ -52,5 +54,127 @@ describe('directConnectedOverhangIds', () => {
       ],
     })
     expect([...ids].sort()).toEqual(['dxA', 'dxB', 'legacyA', 'legacyB', 'ohA', 'ohB'])
+  })
+})
+
+// ── The instanceAlpha compositor ──────────────────────────────────────────────
+// buildHelixObjects builds a live scene graph and its 69 controller methods are not
+// unit-testable without WebGL, so these are source-text assertions — the same
+// approach design_renderer.test.js uses for cross-list agreement. They exist because
+// the failure mode here is silent: an alpha writer that misses a mesh family, or a
+// data array that lacks the field a lookup needs, produces no error at all — just
+// geometry that quietly refuses to fade.
+
+const HR = readFileSync(resolve(process.cwd(), 'src/scene/helix_renderer.js'), 'utf8')
+
+/** Body of a named function declaration, brace-matched. */
+function fnBody(src, name) {
+  const start = src.indexOf(`function ${name}(`)
+  if (start < 0) return null
+  const open = src.indexOf('{', start)
+  let depth = 0
+  for (let j = open; j < src.length; j++) {
+    if (src[j] === '{') depth++
+    else if (src[j] === '}' && --depth === 0) return src.slice(open, j + 1)
+  }
+  return null
+}
+
+describe('instanceAlpha coverage', () => {
+  it('every cylinder data array carries domainIndex', () => {
+    // Without it, _clusterAlphaForCyl can only ever resolve the helix-level key —
+    // a domain-level cluster silently fails to fade that cylinder. The curved
+    // arrays lacked this until 2026-08-01.
+    for (const arr of ['_domainCylData', '_overhangCylData',
+                       '_curvedDomainCylData', '_curvedOvhgCylData']) {
+      const push = HR.slice(HR.indexOf(`${arr}.push({`))
+      expect(push.slice(0, 400), arr).toContain('domainIndex')
+    }
+  })
+
+  it('curved TUBE meshes carry the identity a per-domain factor needs', () => {
+    const ud = HR.slice(HR.indexOf('tubeMesh.userData = {'))
+    expect(ud.slice(0, 300)).toContain('domainIndex')
+    expect(ud.slice(0, 300)).toContain('bp_lo')      // for the rep-override column test
+  })
+
+  it('binding cylinders have an instance→domain array at all', () => {
+    // There was none: bindIdx was never recorded, which is exactly why binding
+    // cylinders were the one cylinder family with no per-instance alpha.
+    expect(HR).toContain('_bindingCylData')
+    const push = HR.slice(HR.indexOf('_bindingCylData.push({'))
+    expect(push.slice(0, 300)).toContain('cylIdx')
+    expect(push.slice(0, 300)).toContain('domainIndex')
+  })
+
+  it('the installer covers every mesh the alpha writers drive', () => {
+    // Cross-list agreement: a mesh written but never installed is a silent no-op,
+    // because _setCylAlpha/_setEntryAlpha return early with no attribute.
+    const install = fnBody(HR, '_ensureAlphaInstalled')
+    expect(install).not.toBeNull()
+    for (const mesh of [
+      'iSpheres', 'iCubes', 'iFluoros', 'iCones', 'iSlabs',
+      'iHelixCylinders', 'iOverhangCylinders', 'iOverhangFullCylinders',
+      'iLinkerBridgeCylinders', 'iLinkerBindingCylinders',
+      'iCurvedHelixCylinders', 'iCurvedOverhangCylinders', 'iCurvedOverhangFullCylinders',
+    ]) {
+      expect(install, mesh).toContain(`_installInstanceAlpha(${mesh})`)
+    }
+  })
+
+  it('no longer skips the impostor beads', () => {
+    // iSpheres/iFluoros used to be skipped outright under impostors, so bead alpha
+    // was a silent no-op with ?impostors=1.
+    expect(HR).not.toContain('if (!_useImpostors) _installInstanceAlpha')
+  })
+
+  it('routes impostor materials through their own composed patch', () => {
+    // applyInstanceAlphaMaterial ASSIGNS onBeforeCompile; on an impostor that would
+    // wipe the billboard + gl_FragDepth patch and leave flat quads.
+    const body = fnBody(HR, '_installInstanceAlpha')
+    expect(body).toContain('isImpostor')
+    expect(body).toContain('enableImpostorInstanceAlpha')
+    expect(body).toContain('installInstanceAlphaGeometry')
+  })
+
+  it('both alpha writers drive the curved + binding families', () => {
+    // When an override is active ONLY _applyRepOverrides runs, and when it is not
+    // ONLY _applyAlphaChannel runs. A family handled by just one reverts the moment
+    // the user toggles an override.
+    expect(fnBody(HR, '_applyAlphaChannel')).toContain('_refreshCurvedAlpha()')
+    expect(fnBody(HR, '_applyRepOverrides')).toContain('_refreshCurvedAlpha()')
+  })
+
+  it('the deform cross-fade composes instead of writing opacity absolutely', () => {
+    // The cross-fade owns material.opacity on the curved meshes. Writing a
+    // per-domain factor there directly got clobbered on the next lerp frame — the
+    // reason deformed designs showed no cluster fade at cylinders rep.
+    // Exactly ONE raw write to a tube material may exist: the compositor's own,
+    // which multiplies the stored base by the per-domain factor.
+    const rawTubeWrites = [...HR.matchAll(/_fadeMat\(mesh\.material,/g)]
+    expect(rawTubeWrites.length).toBe(1)
+    expect(fnBody(HR, '_fadeCurvedTube')).toContain('_fadeMat(mesh.material,')
+    expect(fnBody(HR, '_fadeCurvedTube')).toContain('crossfadeBase')
+    expect(fnBody(HR, '_fadeCurvedTube')).toContain('_curvedTubeFactor')
+    // The proxies never take a raw write at all — they go through _fadeCurvedProxy.
+    expect(HR).not.toMatch(/_fadeMat\(iCurved\w+\.material,/)
+  })
+
+  it('the curved proxy keeps _fadeMat’s depth contract', () => {
+    // depthWrite only when opaque — an opacity-0 depth-writing mesh is an invisible
+    // occluder (LESSONS D8). But it must stay in the transparent queue while a
+    // per-instance factor is live, or instanceAlpha has nothing to blend into.
+    const body = fnBody(HR, '_fadeCurvedProxy')
+    expect(body).toContain('_fadeMat(mat, base)')
+    expect(body).toMatch(/_anyAlpha\(\)/)
+  })
+
+  it('the rep-override column test is shared, not duplicated', () => {
+    // _cylRepVis is consulted by both the instanced writers and the curved-tube
+    // compositor; a second copy would let the two disagree about which columns
+    // resolve to cylinders.
+    expect(fnBody(HR, '_cylRepVis')).toContain('_effCol')
+    expect(fnBody(HR, '_cylFactor')).toContain('_cylRepVis')
+    expect(fnBody(HR, '_curvedTubeFactor')).toContain('_cylRepVis')
   })
 })
