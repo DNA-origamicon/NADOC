@@ -326,32 +326,36 @@ export function initAtomSurfaceDisplay({
   }
 
   /**
-   * Push per-cluster colour + opacity at both renderers.
+   * Push per-cluster colour + opacity at both renderers, per NUCLEOTIDE.
    *
-   * ATOMISTIC resolves per NUCLEOTIDE (`helix:bp:dir`). It has to: a strand can pass
-   * through several clusters, and the scaffold passes through nearly all of them, so a
-   * strand-keyed lookup painted every scaffold atom with whichever cluster owned its
-   * first domain.
+   * Both resolve on the app-wide `helix:bp:direction` key. A strand id is too coarse: a
+   * strand can pass through several clusters and the scaffold passes through nearly all
+   * of them, so a strand-keyed lookup paints the whole scaffold with whichever cluster
+   * owns its first domain (LESSONS D15).
    *
-   * SURFACE stays per STRAND, and cannot do better — `vertex_strand_index_table` gives
-   * a vertex its strand and nothing else, so there is no bp to resolve a domain with.
-   * A scaffold-spanning surface therefore still takes one cluster's fade. Fixing that
-   * needs helix/bp in the surface payload from the backend.
+   * The surface gets the strand-keyed maps too, as a fallback — a payload without
+   * `vertex_nuc_index_table` (the oxDNA frame-surface overlay, or a surface cached before
+   * the backend shipped it) still fades, just at strand granularity. The renderer picks
+   * the space per payload.
    */
   function refreshClusterDisplay(design = null) {
-    const d          = design ?? store.getState().currentDesign
-    const state      = design ? { ...store.getState(), currentDesign: design } : store.getState()
-    const nucAlphas  = computeAtomNucAlphas(d)
-    const nucColors  = computeAtomNucColors(state)
-    const strandAlphas = computeAtomStrandAlphas(d)
+    const d     = design ?? store.getState().currentDesign
+    const state = design ? { ...store.getState(), currentDesign: design } : store.getState()
+    const nucAlphas = computeAtomNucAlphas(d)
+    const nucColors = computeAtomNucColors(state)
+    const surfaceMaps = {
+      nucAlphas, nucColors,
+      strandAlphas: computeAtomStrandAlphas(d),
+      strandColors: state.coloringMode === 'cluster' ? computeAtomStrandColors(state, null) : null,
+    }
     atomisticRenderer.setClusterDisplay(nucAlphas, nucColors)
-    surfaceRenderer.applyStrandAlphas(strandAlphas)
+    surfaceRenderer.applyClusterDisplay(surfaceMaps)
     // The mixed-representation region overlays are separate renderer instances and
     // draw the same strands, so they must fade in step or a region pinned to
     // vdw/surface would stay opaque inside a faded cluster.
     regionVdwRenderer.setClusterDisplay(nucAlphas, nucColors)
     regionBallstickRenderer.setClusterDisplay(nucAlphas, nucColors)
-    regionSurfaceRenderer.applyStrandAlphas(strandAlphas)
+    regionSurfaceRenderer.applyClusterDisplay(surfaceMaps)
   }
 
   // Keep atom + surface strand colours in sync when groups/colors change.

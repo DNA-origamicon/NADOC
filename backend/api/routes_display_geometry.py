@@ -242,10 +242,11 @@ def _build_design_surface_mesh(design, grid_spacing, probe_radius, radius_inflat
     # those designs fall back to the exact Atom-object build (correctness over speed).
     if _can_use_surface_cloud(design):
         from backend.core.atomistic import surface_atom_cloud
-        pos, radii, sids = surface_atom_cloud(design)
+        pos, radii, sids, nucs = surface_atom_cloud(design)
         gs = adaptive_grid_spacing_arr(pos, grid_spacing)
         mesh = compute_surface_from_cloud(pos, radii, sids, grid_spacing=gs,
-                                          probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+                                          probe_radius=probe_radius, radius_scale=1.2 * radius_inflate,
+                                          nuc_ids=nucs)
         return smooth_mesh(mesh, iterations=smooth)
 
     from backend.core.atomistic import build_atomistic_model
@@ -268,10 +269,10 @@ def _build_chimerax_surface(design):
     blob with a jagged colour seam.  See ``surface.compute_split_surfaces_from_cloud`` +
     ``surface.CHIMERAX_*``.  EXPENSIVE (one marching-cubes pass per strand) but voxel-capped."""
     import numpy as np
-    from backend.core.surface import compute_split_surfaces_from_cloud
+    from backend.core.surface import compute_split_surfaces_from_cloud, _nuc_key
     if _can_use_surface_cloud(design):
         from backend.core.atomistic import surface_atom_cloud
-        pos, radii, sids = surface_atom_cloud(design)
+        pos, radii, sids, nucs = surface_atom_cloud(design)
     else:
         # Extra-base crossovers / flexible ssDNA / extension tails → exact Atom build (includes
         # every atom the cloud omits; the extra-base atoms carry their crossover's strand id).
@@ -281,7 +282,8 @@ def _build_chimerax_surface(design):
         pos = np.array([[a.x, a.y, a.z] for a in model.atoms], dtype=float)
         radii = np.array([VDW_RADIUS.get(a.element, VDW_RADIUS["C"]) for a in model.atoms], dtype=float)
         sids = [a.strand_id or "" for a in model.atoms]
-    return compute_split_surfaces_from_cloud(pos, radii, sids)
+        nucs = [_nuc_key(a) for a in model.atoms]
+    return compute_split_surfaces_from_cloud(pos, radii, sids, nuc_ids=nucs)
 
 
 def _can_use_surface_cloud(design) -> bool:

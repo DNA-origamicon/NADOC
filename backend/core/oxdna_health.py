@@ -3142,8 +3142,18 @@ def pack_surface_bin(data: dict) -> bytes:
              uint32 strand_kind
              strand_kind 1 → uint32 table_len · bytes[table_len] (UTF-8 JSON strand-id list)
                             · uint32[n_verts] vertex_strand_index ; 0 → none
+             uint32 nuc_kind
+             nuc_kind 1 → uint32 table_len · bytes[table_len] (UTF-8 JSON "helix:bp:dir" list)
+                            · uint32[n_verts] vertex_nuc_index ; 0 → none
     The trailing strand block lets the DESIGN surface recolour client-side by strand/group/
     cluster WITHOUT a re-fetch (the overlay omits it — its ``data`` has no strand table).
+    The nucleotide block (added 2026-08-01) is what makes per-CLUSTER colouring correct: a
+    strand can span several clusters and the scaffold spans nearly all of them, so a
+    strand-keyed lookup paints the whole scaffold one colour (LESSONS D15).
+
+    There is deliberately NO version field. Both trailing blocks are optional and
+    self-describing, so a decoder that predates one simply stops early — which is exactly
+    how the nucleotide block was added without breaking anything.
     n_verts == 0 signals "not ready / empty"."""
     import struct
     v = np.asarray(data.get("vertices") or [], dtype=np.float32)
@@ -3156,17 +3166,31 @@ def pack_surface_bin(data: dict) -> bytes:
         color_kind, color_bytes = 2, np.asarray(data["vertex_rmsf"], dtype=np.float32).tobytes()
     else:
         color_kind, color_bytes = 0, b""
-    tbl = data.get("vertex_strand_index_table")
-    idx = data.get("vertex_strand_index")
-    if nv and tbl is not None and idx is not None:
-        import json
-        tbl_bytes = json.dumps(tbl).encode("utf-8")
-        strand_block = (struct.pack("<II", 1, len(tbl_bytes)) + tbl_bytes
-                        + np.asarray(idx, dtype=np.uint32).tobytes())
-    else:
-        strand_block = struct.pack("<I", 0)
+    import json
+
+    def _index_block(table_key: str, index_key: str) -> bytes:
+        """``u32 kind · u32 tableLen · UTF-8 JSON string table · u32[nVerts] index``,
+        or a bare ``u32 0`` when absent. Two of these are appended back to back — the
+        strand block first (unchanged since the format shipped), then the nucleotide
+        block. Both are optional and self-describing, which is what makes this
+        extensible without a magic/version bump: an OLD decoder stops after the strand
+        block and simply never sees the second one."""
+        table = data.get(table_key)
+        index = data.get(index_key)
+        if not nv or table is None or index is None:
+            return struct.pack("<I", 0)
+        tbl_bytes = json.dumps(table).encode("utf-8")
+        return (struct.pack("<II", 1, len(tbl_bytes)) + tbl_bytes
+                + np.asarray(index, dtype=np.uint32).tobytes())
+
+    strand_block = _index_block("vertex_strand_index_table", "vertex_strand_index")
+    # Per-vertex NUCLEOTIDE key (helix:bp:direction). Lets per-cluster colouring resolve
+    # a strand that spans several clusters — the scaffold spans nearly all of them
+    # (LESSONS D15). Absent from producers that have no nucleotide identity (the oxDNA
+    # frame-surface overlay), and the client falls back to the strand table.
+    nuc_block = _index_block("vertex_nuc_index_table", "vertex_nuc_index")
     return (struct.pack("<IIII", 0x4E535246, nv, nf, color_kind)
-            + v.tobytes() + f.tobytes() + color_bytes + strand_block)
+            + v.tobytes() + f.tobytes() + color_bytes + strand_block + nuc_block)
 
 
 def composite_trajectory_atomistic(design, stages, reference_conf_path,

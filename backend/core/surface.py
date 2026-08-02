@@ -29,7 +29,7 @@ palette matches helix_renderer.js exactly (first-appearance ordering).
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.ndimage import binary_dilation, binary_erosion
@@ -67,6 +67,12 @@ class SurfaceMesh:
     vertices: np.ndarray          # (N, 3) float32, world coords (nm)
     faces: np.ndarray             # (M, 3) int32, triangle indices
     vertex_strand_ids: list[str]  # length N; empty string = unassigned
+    # Length N, "helix_id:bp_index:direction" — the app's canonical nucleotide key.
+    # Defaulted so the four external constructors (STL / 3MF exporters and their tests)
+    # keep working. WHY it exists: a strand id alone cannot resolve per-cluster colour,
+    # because a strand can pass through several clusters and the scaffold passes through
+    # nearly all of them — see LESSONS D15. Empty string = unassigned.
+    vertex_nuc_ids: list[str] = field(default_factory=list)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -126,15 +132,32 @@ def _build_occupancy_grid(
     return final_grid, bbox_min
 
 
-def _assign_vertex_strand_ids(
+def _nuc_key(a: Atom) -> str:
+    """``helix:bp:dir`` for one atom — the app-wide nucleotide key.
+
+    ``direction`` arrives as either the enum or its value depending on the producer
+    (same guard oxdna_health._vertex_rmsf uses), so normalise it here.
+    """
+    if not a.helix_id:
+        return ""
+    d = a.direction.value if hasattr(a.direction, "value") else a.direction
+    return f"{a.helix_id}:{a.bp_index}:{d}"
+
+
+def _assign_vertex_owners(
     verts: np.ndarray,
     atoms: list[Atom],
-) -> list[str]:
-    """Nearest-atom KD-tree lookup → per-vertex strand IDs."""
+) -> tuple[list[str], list[str]]:
+    """Nearest-atom KD-tree lookup → per-vertex (strand IDs, nucleotide keys).
+
+    One query serves both: the nucleotide key is on the same Atom the strand id comes
+    from, so resolving it costs nothing extra.
+    """
     positions = np.array([[a.x, a.y, a.z] for a in atoms], dtype=np.float64)
     tree = cKDTree(positions)
     _, nearest_idx = tree.query(verts, workers=-1)
-    return [atoms[int(i)].strand_id or "" for i in nearest_idx]
+    owners = [atoms[int(i)] for i in nearest_idx]
+    return ([a.strand_id or "" for a in owners], [_nuc_key(a) for a in owners])
 
 
 # ── Public surface computation ────────────────────────────────────────────────
@@ -156,8 +179,9 @@ def _marching_cubes_safe(
     verts, faces, _, _ = marching_cubes(grid.astype(np.float32), level=level, allow_degenerate=False)
     verts = (verts * grid_spacing + bbox_min).astype(np.float32)
     faces = faces.astype(np.int32)
-    strand_ids = _assign_vertex_strand_ids(verts, atoms)
-    return SurfaceMesh(vertices=verts, faces=faces, vertex_strand_ids=strand_ids)
+    strand_ids, nuc_ids = _assign_vertex_owners(verts, atoms)
+    return SurfaceMesh(vertices=verts, faces=faces, vertex_strand_ids=strand_ids,
+                       vertex_nuc_ids=nuc_ids)
 
 
 # Voxel budget for the adaptive grid.  At 0.20 nm a 14774-nt VoltronCore rasterises to
@@ -289,13 +313,18 @@ def compute_surface_from_cloud(
     grid_spacing: float = 0.20,
     probe_radius: float = 0.28,
     radius_scale: float = 1.2,
+    nuc_ids: list | None = None,
 ) -> SurfaceMesh:
     """Molecular surface from a raw point cloud (positions + per-atom VdW radius + per-atom
     strand id) instead of ``Atom`` objects — the fast fine-surface path fed by
     ``atomistic.surface_atom_cloud``.  Same morphological-closing algorithm as
     :func:`compute_surface` (scaled VdW spheres → dilate/erode by the probe → marching cubes),
     but the occupancy grid is built by grouping the FEW distinct radii rather than by element,
-    and vertex strand ids come from a nearest-cloud-point KD-tree."""
+    and vertex strand ids come from a nearest-cloud-point KD-tree.
+
+    ``nuc_ids`` is the parallel per-point ``helix:bp:direction`` key. Supplying it makes the
+    mesh carry a per-vertex NUCLEOTIDE identity, which is what lets per-cluster colouring
+    resolve a strand that spans several clusters (LESSONS D15). One KD-tree query serves both."""
     positions = np.asarray(positions, dtype=np.float64)
     radii = np.asarray(radii, dtype=np.float64) * radius_scale
     if positions.shape[0] == 0:
@@ -335,7 +364,9 @@ def compute_surface_from_cloud(
     verts = (verts * grid_spacing + bbox_min).astype(np.float32)
     _, nn = cKDTree(positions).query(verts, workers=-1)
     vsids = [strand_ids[int(i)] if strand_ids else "" for i in nn]
-    return SurfaceMesh(vertices=verts, faces=faces.astype(np.int32), vertex_strand_ids=vsids)
+    vnucs = [nuc_ids[int(i)] if nuc_ids else "" for i in nn]
+    return SurfaceMesh(vertices=verts, faces=faces.astype(np.int32), vertex_strand_ids=vsids,
+                       vertex_nuc_ids=vnucs)
 
 
 def compute_split_surfaces_from_cloud(
@@ -348,6 +379,7 @@ def compute_split_surfaces_from_cloud(
     smooth: int = CHIMERAX_SMOOTH,
     cap_voxels: int = CHIMERAX_VOXEL_CAP,
     max_spacing: float = CHIMERAX_MAX_SPACING,
+    nuc_ids: list | None = None,
 ) -> SurfaceMesh:
     """Per-STRAND independent solvent-excluded surfaces, concatenated into ONE mesh.
 
@@ -383,6 +415,7 @@ def compute_split_surfaces_from_cloud(
     parts_v: list[np.ndarray] = []
     parts_f: list[np.ndarray] = []
     parts_sid: list[str] = []
+    parts_nuc: list[str] = []
     voff = 0
     for s in order:
         mask = sids_arr == s
@@ -392,14 +425,17 @@ def compute_split_surfaces_from_cloud(
         sub_r = radii[mask]
         gs = adaptive_grid_spacing_arr(sub_pos, grid_spacing, cap_voxels=eff_cap,
                                        max_spacing=max_spacing)
+        sub_nuc = [nuc_ids[i] for i in np.nonzero(mask)[0]] if nuc_ids else None
         m = compute_surface_from_cloud(sub_pos, sub_r, None, grid_spacing=gs,
-                                       probe_radius=probe_radius, radius_scale=radius_scale)
+                                       probe_radius=probe_radius, radius_scale=radius_scale,
+                                       nuc_ids=sub_nuc)
         if m.vertices.shape[0] == 0:
             continue
         m = smooth_mesh(m, iterations=smooth)
         parts_v.append(m.vertices)
         parts_f.append(m.faces + voff)
         parts_sid.extend([s] * m.vertices.shape[0])
+        parts_nuc.extend(m.vertex_nuc_ids or [""] * m.vertices.shape[0])
         voff += m.vertices.shape[0]
 
     if not parts_v:
@@ -408,6 +444,7 @@ def compute_split_surfaces_from_cloud(
         vertices=np.concatenate(parts_v, axis=0).astype(np.float32),
         faces=np.concatenate(parts_f, axis=0).astype(np.int32),
         vertex_strand_ids=parts_sid,
+        vertex_nuc_ids=parts_nuc,
     )
 
 
@@ -468,6 +505,7 @@ def smooth_mesh(
         vertices=V.astype(np.float32),
         faces=F,
         vertex_strand_ids=mesh.vertex_strand_ids,
+        vertex_nuc_ids=mesh.vertex_nuc_ids,
     )
 
 
@@ -668,7 +706,24 @@ def surface_to_json(
             unique_strand_ids.append(sid)
         vertex_strand_idx.append(i)
 
-    return {
+    # Same dedupe, one level finer: the per-vertex NUCLEOTIDE key. A strand id alone
+    # cannot resolve per-cluster colour for a strand that spans clusters — the scaffold
+    # spans nearly all of them (LESSONS D15). Omitted entirely when the mesh has no nuc
+    # ids (older producers, the welded multi-material path), and the client falls back
+    # to the strand table, so this stays additive.
+    unique_nuc_ids: list[str] = []
+    nuc_index: dict[str, int] = {}
+    vertex_nuc_idx: list[int] = []
+    for nid in (mesh.vertex_nuc_ids or []):
+        i = nuc_index.get(nid)
+        if i is None:
+            i = len(unique_nuc_ids)
+            nuc_index[nid] = i
+            unique_nuc_ids.append(nid)
+        vertex_nuc_idx.append(i)
+    has_nuc = len(vertex_nuc_idx) == len(mesh.vertex_strand_ids) and bool(unique_nuc_ids)
+
+    out = {
         "vertices": verts_flat,
         "faces": faces_flat,
         "vertex_colors": vertex_colors,
@@ -680,3 +735,7 @@ def surface_to_json(
             "compute_ms": round(t_ms, 1),
         },
     }
+    if has_nuc:
+        out["vertex_nuc_index_table"] = unique_nuc_ids
+        out["vertex_nuc_index"] = vertex_nuc_idx
+    return out

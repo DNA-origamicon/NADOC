@@ -41,17 +41,26 @@ export function parseSurfaceBin(buf) {
   } else if (colorKind === 2) {                        // rmsf scalar (frontend maps via colormap)
     out.vertex_rmsf = new Float32Array(buf, off, nv); off += nv * 4
   }
-  // Optional trailing strand-index block (design surface → client-side recolour).
-  if (off + 4 <= buf.byteLength) {
-    const strandKind = dv.getUint32(off, true); off += 4
-    if (strandKind === 1) {
-      const tableLen = dv.getUint32(off, true); off += 4
-      out.vertex_strand_index_table = JSON.parse(
-        new TextDecoder().decode(new Uint8Array(buf, off, tableLen))); off += tableLen
-      // The variable-length JSON table can leave `off` unaligned for a Uint32 view, so
-      // copy the index block out via slice (its own buffer is 4-byte aligned at 0).
-      out.vertex_strand_index = new Uint32Array(buf.slice(off, off + nv * 4)); off += nv * 4
-    }
+  // Optional trailing index blocks, each `u32 kind · u32 tableLen · JSON · u32[nv]`.
+  // Both are optional and self-describing, which is what lets the format grow without a
+  // version field: a decoder that predates a block simply runs out of bytes and stops.
+  const _indexBlock = (tableKey, indexKey) => {
+    if (off + 4 > buf.byteLength) return
+    const kind = dv.getUint32(off, true); off += 4
+    if (kind !== 1) return
+    const tableLen = dv.getUint32(off, true); off += 4
+    out[tableKey] = JSON.parse(
+      new TextDecoder().decode(new Uint8Array(buf, off, tableLen))); off += tableLen
+    // The variable-length JSON table can leave `off` unaligned for a Uint32 view, so
+    // copy the index block out via slice (its own buffer is 4-byte aligned at 0).
+    out[indexKey] = new Uint32Array(buf.slice(off, off + nv * 4)); off += nv * 4
   }
+  // Strand block — design surface → client-side recolour by strand/group.
+  _indexBlock('vertex_strand_index_table', 'vertex_strand_index')
+  // Nucleotide block (2026-08-01) — `helix:bp:dir` per vertex, so per-CLUSTER colouring
+  // can resolve a strand that spans several clusters. The scaffold spans nearly all of
+  // them, so a strand-keyed lookup paints it one colour (LESSONS D15). Absent from the
+  // oxDNA frame-surface overlay, which has no nucleotide identity.
+  _indexBlock('vertex_nuc_index_table', 'vertex_nuc_index')
   return out
 }

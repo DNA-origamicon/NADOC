@@ -1835,9 +1835,10 @@ def _surface_stamp_templates() -> dict:
 
 def surface_atom_cloud(
     design: Design,
-) -> tuple[_np.ndarray, _np.ndarray, list[str]]:
+) -> tuple[_np.ndarray, _np.ndarray, list[str], list[str]]:
     """FAST vectorised all-atom point cloud for the DESIGN molecular surface — positions +
-    per-atom VdW radius + per-atom strand id, WITHOUT the ~300k ``Atom`` dataclass objects
+    per-atom VdW radius + per-atom strand id + per-atom nucleotide key
+    (``helix:bp:direction``), WITHOUT the ~300k ``Atom`` dataclass objects
     or the per-nucleotide ``numpy.cross`` overhead that dominate ``build_atomistic_model``.
 
     Reproduces the design-surface build (``build_atomistic_model(design, fast_bridges=True)``
@@ -1955,7 +1956,7 @@ def surface_atom_cloud(
 
     n = len(positions)
     if n == 0:
-        return (_np.empty((0, 3), _np.float32), _np.empty(0, _np.float32), [])
+        return (_np.empty((0, 3), _np.float32), _np.empty(0, _np.float32), [], [])
 
     pos = _np.asarray(positions, float); axt = _np.asarray(tangents, float)
     bn = _np.asarray(normals, float); axp = _np.asarray(axis_pts, float)
@@ -1980,6 +1981,11 @@ def surface_atom_cloud(
     radii_out = _np.empty(total, dtype=_np.float64)
     strand_ids_arr = _np.asarray(strand_ids, dtype=object)
     sids_out = _np.empty(total, dtype=object)
+    # Per-point nucleotide key, expanded exactly like the strand id below. The surface
+    # needs it so per-cluster colour can resolve per nucleotide rather than per strand
+    # (a strand — the scaffold above all — can span several clusters; LESSONS D15).
+    nkeys_arr = _np.asarray([f"{h}:{b}:{d}" for (h, b, d) in keys_hbd], dtype=object)
+    nkeys_out = _np.empty(total, dtype=object)
 
     # ── Batch-stamp per (residue, direction) group, scattered to each nucleotide's rows ──
     for (residue, dstr), (local, radii) in templates.items():
@@ -1992,6 +1998,7 @@ def surface_atom_cloud(
         positions_out[rows] = world.reshape(-1, 3)
         radii_out[rows] = _np.tile(radii, sel.size)
         sids_out[rows] = _np.repeat(strand_ids_arr[sel], K)
+        nkeys_out[rows] = _np.repeat(nkeys_arr[sel], K)
 
     # ── Crossover + skip-site phosphate-bridge interpolation (fast_bridges) ──
     # Reproduces build_atomistic_model's _interpolate_backbone_bridge at each junction so the
@@ -2001,7 +2008,8 @@ def surface_atom_cloud(
     key3_to_off: dict[tuple, int] = {keys_hbd[i]: int(offsets[i]) for i in range(n)}
     _apply_cloud_bridges(design, helix_map, positions_out, key3_to_off)
 
-    return (positions_out.astype(_np.float32), radii_out.astype(_np.float32), list(sids_out))
+    return (positions_out.astype(_np.float32), radii_out.astype(_np.float32),
+            list(sids_out), list(nkeys_out))
 
 
 # Sugar-template local atom indices (order fixed by _SUGAR) — the bridge atoms.

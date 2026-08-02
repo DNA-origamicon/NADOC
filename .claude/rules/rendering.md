@@ -251,10 +251,22 @@ stock chunk variable (LESSONS D5).
 >   Bonds take the LOWER of their two atoms' alphas. Impostor atom materials route through
 >   `enableImpostorInstanceAlpha`, same as the beads. Note `<REVERSE>` domains store
 >   `start_bp > end_bp` — min/max the range or half of them vanish.
-> - **Surface is the one place still per STRAND, and cannot do better**:
->   `vertex_strand_index_table` gives a vertex its strand and nothing else, so there is no bp to
->   resolve a domain with. A scaffold-spanning surface still takes one cluster's colour and fade.
->   Fixing it needs helix/bp per vertex in the backend surface payload.
+> - **Surface** resolves per nucleotide too, as of 2026-08-01 — it needed a backend payload
+>   change. `surface_to_json` now emits `vertex_nuc_index_table` / `vertex_nuc_index` beside the
+>   strand pair, sourced from the same nearest-point KD-tree query that already assigned the
+>   strand (`SurfaceMesh.vertex_nuc_ids`; `surface_atom_cloud` returns a 4th per-point array).
+>   `applyClusterDisplay({nucColors, nucAlphas, strandColors, strandAlphas})` takes BOTH key
+>   spaces and the renderer picks per payload, so anything without the block — the oxDNA
+>   frame-surface overlay, a surface cached from before — still fades at strand granularity
+>   instead of silently doing nothing.
+>
+>   **The binary format has no version field, and deliberately so.** Each trailing block is
+>   `u32 kind · u32 tableLen · UTF-8 JSON table · u32[nVerts] index`, optional and
+>   self-describing, so an old decoder stops when it runs out of bytes. That is how the
+>   nucleotide block was added without a magic bump. Two traps if you add a third: the
+>   variable-length JSON table leaves the offset unaligned, so index blocks must be copied via
+>   `buf.slice()` and never viewed in place; and `tests/test_surface_bin_transfer.py::_unpack`
+>   asserts zero trailing bytes, which is the canary that catches an encoder/decoder mismatch.
 > - **Surface**: `applyStrandAlphas(Map)`. One merged mesh, one material, so `material.opacity` is
 >   global (the sidebar slider owns it) and the fade rides a per-VERTEX attribute — **reusing the
 >   same `instanceAlpha` name and patch**, because `attribute float instanceAlpha` is per-vertex in

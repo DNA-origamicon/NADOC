@@ -101,10 +101,11 @@ def vectorized_fine_surface(design, grid_spacing=0.20, probe_radius=0.28, radius
     tolerance on every design it covers."""
     from backend.core.atomistic import surface_atom_cloud
     from backend.core.surface import compute_surface_from_cloud, adaptive_grid_spacing_arr
-    pos, radii, sids = surface_atom_cloud(design)
+    pos, radii, sids, nucs = surface_atom_cloud(design)
     gs = adaptive_grid_spacing_arr(pos, grid_spacing)
     mesh = compute_surface_from_cloud(pos, radii, sids, grid_spacing=gs,
-                                      probe_radius=probe_radius, radius_scale=1.2 * radius_inflate)
+                                      probe_radius=probe_radius, radius_scale=1.2 * radius_inflate,
+                                      nuc_ids=nucs)
     return smooth_mesh(mesh, iterations=smooth)
 
 

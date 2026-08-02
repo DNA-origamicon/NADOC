@@ -104,10 +104,11 @@ export function computeAtomStrandColors(state, staplePalette) {
  * scaffold inside Cluster 3 came out Cluster 4's colour). Atomistic now uses
  * `buildNucClusterIndex` and resolves per nucleotide.
  *
- * The surface cannot: `vertex_strand_index_table` gives a vertex its strand id and
- * nothing else, so there is no bp index to resolve a domain with. Fixing it needs
- * helix/bp per vertex in the backend surface payload. Until then a scaffold-spanning
- * surface still takes one cluster's colour and fade.
+ * The surface used to have the same problem for the same reason. It no longer does: the
+ * backend ships `vertex_nuc_index_table` / `vertex_nuc_index` alongside the strand pair
+ * (2026-08-01), so the surface resolves per nucleotide too. These strand-level helpers
+ * survive only as the FALLBACK for payloads without that block — the oxDNA frame-surface
+ * overlay, or a surface cached before it shipped.
  *
  * @param {object} currentDesign
  * @returns {Map<string, number>} strand id → cluster index

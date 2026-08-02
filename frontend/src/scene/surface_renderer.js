@@ -6,19 +6,19 @@
  * with computed vertex normals).
  *
  * Supports two colour modes without requiring a re-fetch:
- *   'strand'  — per-vertex RGB colours derived client-side from the response's
- *               vertex_strand_index_table + vertex_strand_index, using the
- *               strand→hex map supplied by applyStrandColors().  Falls back to
- *               the backend-baked vertex_colors when no map is available.
- *   'uniform' — single flat grey material
+   *   'strand'  — per-vertex RGB colours derived client-side from the response's
+   *               vertex_strand_index_table + vertex_strand_index, using the
+   *               strand→hex map supplied by applyStrandColors().  Falls back to
+   *               the backend-baked vertex_colors when no map is available.
+   *   'uniform' — single flat grey material
  *
  * Usage:
- *   const sr = initSurfaceRenderer(scene)
- *   sr.update(data, 'strand')             // data = GET /api/design/surface response
- *   sr.applyStrandColors(strandHexMap)    // recolour without re-fetch
- *   sr.setColorMode('uniform')
- *   sr.setOpacity(0.6)
- *   sr.dispose()
+   *   const sr = initSurfaceRenderer(scene)
+   *   sr.update(data, 'strand')             // data = GET /api/design/surface response
+   *   sr.applyStrandColors(strandHexMap)    // recolour without re-fetch
+   *   sr.setColorMode('uniform')
+   *   sr.setOpacity(0.6)
+   *   sr.dispose()
  */
 
 import * as THREE from 'three'
@@ -45,12 +45,50 @@ export function initSurfaceRenderer(scene) {
   let _strandHexMap = null   // Map<strand_id, hex> last applied via applyStrandColors
   // Map<strand_id, alpha> — per-cluster opacity. Empty = nothing faded, and the
   // alpha attribute/patch are never installed.
-  let _strandAlphaMap = new Map()
+  // Per-cluster display maps. Two key spaces: NUCLEOTIDE (`helix:bp:dir`) when the
+  // payload carries the nucleotide table, STRAND otherwise. Both are kept so the choice
+  // can be made per payload — an old cached surface, or the oxDNA frame overlay, has no
+  // nucleotide table and still gets the (coarser but correct-for-a-single-cluster)
+  // strand-keyed fade.
+  let _clusterMaps = { nucColors: null, nucAlphas: null, strandColors: null, strandAlphas: null }
+
+  /** The alpha map matching this payload's identity space. */
+  function _alphaMapFor(data) {
+    const id = _vertexIdentity(data)
+    if (!id) return null
+    return id.perNuc ? _clusterMaps.nucAlphas : _clusterMaps.strandAlphas
+  }
+
+  /** The cluster-colour map matching this payload's identity space. */
+  function _colorMapFor(data) {
+    const id = _vertexIdentity(data)
+    if (!id) return null
+    return id.perNuc ? _clusterMaps.nucColors : _clusterMaps.strandColors
+  }
   let _meshName     = 'dna-surface'  // overridable so the region overlay can use a distinct name
   let _crispZones   = false  // crisp per-face strand zones (ChimeraX look) vs Gouraud-blended
   let _crispFaceVert = null  // Int32Array[nFaces]: source vertex whose strand colours each face
 
   // ── Geometry builder ────────────────────────────────────────────────────────
+
+  /**
+   * Per-vertex identity table + index, preferring the NUCLEOTIDE pair over the strand
+   *   pair. A strand id cannot resolve per-cluster colour for a strand that spans clusters —
+   *   the scaffold spans nearly all of them (LESSONS D15) — so the backend now ships
+   *   `helix:bp:direction` per vertex. Payloads without it (the oxDNA frame-surface overlay,
+   *   anything cached from before 2026-08-01) transparently fall back to strands.
+   *
+   * @returns {{table: string[], index: ArrayLike<number>, perNuc: boolean}|null}
+   */
+  function _vertexIdentity(data) {
+    const nt = data?.vertex_nuc_index_table
+    const ni = data?.vertex_nuc_index
+    if (nt && _isIndexable(ni)) return { table: nt, index: ni, perNuc: true }
+    const st = data?.vertex_strand_index_table
+    const si = data?.vertex_strand_index
+    if (st && _isIndexable(si)) return { table: st, index: si, perNuc: false }
+    return null
+  }
 
   function _buildVertexColorArray(data, strandHexMap) {
     // Prefer a client-side recompute when both the index table and a strand
@@ -218,39 +256,64 @@ export function initSurfaceRenderer(scene) {
    * Vertices carry only a STRAND id (`vertex_strand_index_table`), so the map is
    * strand-keyed, matching how strand colour already resolves here.
    */
-  function _buildVertexAlphaArray(data, strandAlphaMap) {
-    if (!strandAlphaMap?.size) return null
-    const tbl = data?.vertex_strand_index_table
-    const idx = data?.vertex_strand_index
-    if (!tbl || !idx) return null
-    const tblA = new Float32Array(tbl.length)
-    for (let k = 0; k < tbl.length; k++) tblA[k] = strandAlphaMap.get(tbl[k]) ?? 1
-    const out = new Float32Array(idx.length)
-    for (let v = 0; v < idx.length; v++) out[v] = tblA[idx[v]]
+  function _buildVertexAlphaArray(data, alphaMap) {
+    if (!alphaMap?.size) return null
+    const id = _vertexIdentity(data)
+    if (!id) return null
+    const tblA = new Float32Array(id.table.length)
+    for (let k = 0; k < id.table.length; k++) tblA[k] = alphaMap.get(id.table[k]) ?? 1
+    const out = new Float32Array(id.index.length)
+    for (let v = 0; v < id.index.length; v++) out[v] = tblA[id.index[v]]
     return out
   }
 
   /** Crisp (non-indexed, per-face) twin — one alpha resolved per face, splatted to
    *  its three corners, mirroring _buildCrispColorArray. */
-  function _buildCrispAlphaArray(data, strandAlphaMap, faceVert) {
-    if (!strandAlphaMap?.size || !faceVert) return null
-    const tbl = data?.vertex_strand_index_table
-    const idx = data?.vertex_strand_index
-    if (!tbl || !idx) return null
+  function _buildCrispAlphaArray(data, alphaMap, faceVert) {
+    if (!alphaMap?.size || !faceVert) return null
+    const id = _vertexIdentity(data)
+    if (!id) return null
     const out = new Float32Array(faceVert.length)
     for (let f = 0; f < faceVert.length / 3; f++) {
-      const a = strandAlphaMap.get(tbl[idx[faceVert[f * 3]]]) ?? 1
+      const a = alphaMap.get(id.table[id.index[faceVert[f * 3]]]) ?? 1
       out[f * 3] = a; out[f * 3 + 1] = a; out[f * 3 + 2] = a
     }
     return out
+  }
+
+  /**
+   * Paint per-cluster colour over an already-built vertex-colour array, in place.
+   *
+   * Overlays rather than replaces because strand/group colour is genuinely per-strand
+   * and stays correct; only the cluster tint needs the finer identity. Vertices in no
+   * cluster keep whatever the strand pass gave them.
+   *
+   * NOTE: crisp mode splats one colour per FACE (3 consecutive entries), so the array is
+   * indexed by the same faceVert order `_buildCrispColorArray` used, not by vertex.
+   */
+  function _overlayClusterColors(colArr) {
+    const map = _colorMapFor(_cachedData)
+    if (!map?.size) return
+    const id = _vertexIdentity(_cachedData)
+    if (!id) return
+    const crisp = _crispZones && _colorMode === 'strand' && _crispFaceVert
+    const n = colArr.length / 3
+    for (let i = 0; i < n; i++) {
+      const vert = crisp ? _crispFaceVert[Math.floor(i / 3) * 3] : i
+      const hex = map.get(id.table[id.index[vert]])
+      if (hex == null) continue
+      colArr[i * 3]     = ((hex >> 16) & 0xFF) / 255
+      colArr[i * 3 + 1] = ((hex >>  8) & 0xFF) / 255
+      colArr[i * 3 + 2] = ( hex        & 0xFF) / 255
+    }
   }
 
   /** Write (or clear) the alpha attribute + its shader patch on the live mesh. */
   function _applyVertexAlpha() {
     if (!_mesh || !_cachedData) return
     const arr = (_crispZones && _colorMode === 'strand' && _crispFaceVert)
-      ? _buildCrispAlphaArray(_cachedData, _strandAlphaMap, _crispFaceVert)
-      : _buildVertexAlphaArray(_cachedData, _strandAlphaMap)
+      ? _buildCrispAlphaArray(_cachedData, _alphaMapFor(_cachedData), _crispFaceVert)
+      : _buildVertexAlphaArray(_cachedData, _alphaMapFor(_cachedData))
     if (!arr) {
       // Cleared: hand every vertex back to opaque rather than dropping the
       // attribute, so the compiled program stays stable.
@@ -312,14 +375,28 @@ export function initSurfaceRenderer(scene) {
    * @param {Map<string, number>|null} strandHexMap
    */
   /**
-   * Per-cluster opacity, keyed by strand. Applies in every coloring mode (unlike
-   * colour). Pass an empty map to clear.
-   * @param {Map<string, number>} strandAlphaMap
+   * Per-cluster colour + opacity.
+   *
+   * Takes BOTH key spaces because only the payload knows which one applies: a surface
+   * carrying `vertex_nuc_index_table` resolves per NUCLEOTIDE (correct for a strand that
+   * spans clusters — the scaffold spans nearly all of them, LESSONS D15), and anything
+   * older or without nucleotide identity falls back to the strand-keyed maps.
+   *
+   * Colour is non-empty only in cluster-coloring mode; opacity applies in every mode.
+   *
+   * @param {{nucColors?:Map, nucAlphas?:Map, strandColors?:Map, strandAlphas?:Map}} maps
    */
-  function applyStrandAlphas(strandAlphaMap) {
-    const next = strandAlphaMap instanceof Map ? strandAlphaMap : new Map()
-    if (!next.size && !_strandAlphaMap?.size) return
-    _strandAlphaMap = next
+  function applyClusterDisplay(maps = {}) {
+    _clusterMaps = {
+      nucColors:    maps.nucColors    instanceof Map ? maps.nucColors    : null,
+      nucAlphas:    maps.nucAlphas    instanceof Map ? maps.nucAlphas    : null,
+      strandColors: maps.strandColors instanceof Map ? maps.strandColors : null,
+      strandAlphas: maps.strandAlphas instanceof Map ? maps.strandAlphas : null,
+    }
+    if (!_mesh || !_cachedData) return
+    // applyStrandColors early-returns when there is no colour source at all (no strand
+    // map and no baked vertex_colors), so the fade must be applied independently of it.
+    applyStrandColors(_strandHexMap)   // re-runs the cluster colour overlay
     _applyVertexAlpha()
   }
 
@@ -330,6 +407,7 @@ export function initSurfaceRenderer(scene) {
       ? _buildCrispColorArray(_cachedData, _strandHexMap, _crispFaceVert)
       : _buildVertexColorArray(_cachedData, _strandHexMap)
     if (!colArr) return
+    _overlayClusterColors(colArr)
     _mesh.geometry.setAttribute('color', new THREE.BufferAttribute(colArr, 3))
     if (_colorMode === 'strand' && !_mesh.material.vertexColors) {
       _mesh.material.vertexColors = true
@@ -364,7 +442,7 @@ export function initSurfaceRenderer(scene) {
     m.opacity     = val
     // `|| _strandAlphaMap.size` — at slider 1.0 this would otherwise switch blending
     // off entirely and silently discard the per-cluster per-vertex fade.
-    m.transparent = val < 1.0 || _strandAlphaMap.size > 0
+    m.transparent = val < 1.0 || (_alphaMapFor(_cachedData)?.size ?? 0) > 0
     // Photo-mode MeshPhysicalMaterial carries a `transmission` channel that is
     // independent of opacity; if we don't drive it here, sliders never produce
     // a fully-opaque surface in photo mode (the gummy preset bakes in
@@ -543,5 +621,5 @@ export function initSurfaceRenderer(scene) {
   }
 
   return { update, setColorMode, setOpacity, dispose, applyPositionLerp, getMode,
-           applyStrandColors, applyStrandAlphas, applyScalarVertexColors, getMesh, strandIdAt, setCrispZones }
+           applyStrandColors, applyClusterDisplay, applyScalarVertexColors, getMesh, strandIdAt, setCrispZones }
 }

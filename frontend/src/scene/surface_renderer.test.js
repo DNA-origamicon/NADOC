@@ -80,54 +80,101 @@ describe('surface_renderer crisp strand zones', () => {
   })
 })
 
-// ── Per-cluster opacity ───────────────────────────────────────────────────────
-// The surface is ONE merged mesh with one material, so material.opacity is global
-// (the sidebar slider owns it). Per-cluster fade therefore rides a per-VERTEX
-// channel, reusing the same attribute name and shader patch as the instanced
-// meshes — `attribute float instanceAlpha` is per-vertex in GLSL and only becomes
-// per-instance when the buffer is an InstancedBufferAttribute.
+// ── Per-cluster colour + opacity ──────────────────────────────────────────────
+// The surface is ONE merged mesh with one material, so material.opacity is global (the
+// sidebar slider owns it) and the fade rides a per-VERTEX channel — the same
+// `instanceAlpha` attribute and shader patch the instanced meshes use, because
+// `attribute float instanceAlpha` is per-vertex in GLSL.
+//
+// Identity is per NUCLEOTIDE when the payload carries `vertex_nuc_index_table`, and per
+// strand otherwise. A strand id alone cannot resolve a strand that spans clusters — the
+// scaffold spans nearly all of them (LESSONS D15).
 
-describe('surface per-cluster opacity', () => {
-  const build = () => {
+// Same two triangles, but vertices 0,1 and 2,3 are DIFFERENT NUCLEOTIDES OF ONE STRAND —
+// the case a strand-keyed lookup cannot express.
+const NUC_DATA = {
+  ...DATA,
+  vertex_strand_index_table: ['scaffold'],
+  vertex_strand_index: [0, 0, 0, 0],
+  vertex_nuc_index_table: ['hA:5:FORWARD', 'hB:9:FORWARD'],
+  vertex_nuc_index: [0, 0, 1, 1],
+}
+
+describe('surface per-cluster colour + opacity', () => {
+  const build = (data = DATA) => {
     const scene = makeScene()
     const sr = initSurfaceRenderer(scene)
     sr.setColorMode('strand')
-    sr.update(DATA)
+    sr.update(data)
     return { scene, sr }
   }
   const alphaAttr = (sr) => sr.getMesh()?.geometry.getAttribute('instanceAlpha')
+  const colorAt = (sr, v) => {
+    const c = sr.getMesh().geometry.getAttribute('color')
+    return [c.getX(v), c.getY(v), c.getZ(v)]
+  }
 
   it('installs nothing while nothing is faded', () => {
     const { sr } = build()
-    sr.applyStrandAlphas(new Map())
+    sr.applyClusterDisplay({})
     expect(alphaAttr(sr)).toBeUndefined()
   })
 
-  it('writes a per-vertex alpha for the faded strand only', () => {
-    const { sr } = build()
-    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+  it('fades ONE nucleotide of a strand without touching its neighbour', () => {
+    // The regression pin. All four vertices share a strand; only two are in the faded
+    // cluster, which strand-keyed resolution could not express at all.
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
     const a = alphaAttr(sr)
-    expect(a).toBeTruthy()
-    // verts 0,1 = strand A; verts 2,3 = strand B
     expect(a.getX(0)).toBeCloseTo(0.3, 5)
     expect(a.getX(1)).toBeCloseTo(0.3, 5)
     expect(a.getX(2)).toBe(1)
     expect(a.getX(3)).toBe(1)
   })
 
+  it('colours ONE nucleotide of a strand without touching its neighbour', () => {
+    const { sr } = build(NUC_DATA)
+    sr.applyStrandColors(new Map([['scaffold', 0x000000]]))
+    sr.applyClusterDisplay({ nucColors: new Map([['hA:5:FORWARD', 0xff0000]]) })
+    expect(colorAt(sr, 0)).toEqual([1, 0, 0])          // cluster tint
+    expect(colorAt(sr, 2)).toEqual([0, 0, 0])          // untouched strand colour
+  })
+
+  it('FALLS BACK to strand keys when the payload has no nucleotide table', () => {
+    // An oxDNA frame-surface overlay, or a surface cached before the backend shipped
+    // the block. Coarser, but it still fades rather than silently doing nothing.
+    const { sr } = build(DATA)
+    sr.applyClusterDisplay({
+      nucAlphas: new Map([['hA:5:FORWARD', 0.3]]),
+      strandAlphas: new Map([['sA', 0.4]]),
+    })
+    const a = alphaAttr(sr)
+    expect(a.getX(0)).toBeCloseTo(0.4, 5)              // strand sA
+    expect(a.getX(2)).toBe(1)                          // strand sB
+  })
+
+  it('prefers the NUCLEOTIDE table when both are supplied', () => {
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({
+      nucAlphas: new Map([['hA:5:FORWARD', 0.3]]),
+      strandAlphas: new Map([['scaffold', 0.9]]),
+    })
+    expect(alphaAttr(sr).getX(0)).toBeCloseTo(0.3, 5)
+  })
+
   it('uses itemSize 1 — a float per vertex, not a widened colour', () => {
-    const { sr } = build()
-    sr.applyStrandColors(new Map([['sA', 0xff0000], ['sB', 0x00ff00]]))
-    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    const { sr } = build(NUC_DATA)
+    sr.applyStrandColors(new Map([['scaffold', 0xff0000]]))
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
     expect(alphaAttr(sr).itemSize).toBe(1)
-    // …and the colour attribute is untouched, still RGB. Widening THAT to RGBA was
-    // the alternative; a separate attribute leaves all five colour-write sites alone.
+    // …and the colour attribute is untouched, still RGB. Widening THAT to RGBA was the
+    // alternative; a separate attribute leaves all five colour-write sites alone.
     expect(sr.getMesh().geometry.getAttribute('color').itemSize).toBe(3)
   })
 
   it('patches the material so the alpha blends', () => {
-    const { sr } = build()
-    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
     expect(sr.getMesh().material.userData.instanceAlphaPatch).toBe(true)
     expect(sr.getMesh().material.transparent).toBe(true)
   })
@@ -135,45 +182,44 @@ describe('surface per-cluster opacity', () => {
   it('the global slider at 1.0 does NOT switch blending off under a fade', () => {
     // setOpacity's `transparent = val < 1.0` would otherwise silently discard the
     // per-vertex fade the moment the slider reached full.
-    const { sr } = build()
-    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
     sr.setOpacity(1.0)
     expect(sr.getMesh().material.transparent).toBe(true)
     expect(sr.getMesh().material.opacity).toBe(1.0)
   })
 
   it('…and still turns blending off when nothing is faded', () => {
-    const { sr } = build()
+    const { sr } = build(NUC_DATA)
     sr.setOpacity(1.0)
     expect(sr.getMesh().material.transparent).toBe(false)
   })
 
   it('restores every vertex to opaque when cleared', () => {
-    const { sr } = build()
-    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
-    sr.applyStrandAlphas(new Map())
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
+    sr.applyClusterDisplay({})
     const a = alphaAttr(sr)
     for (let v = 0; v < 4; v++) expect(a.getX(v)).toBe(1)
   })
 
   it('survives a recolour — applyStrandColors must not drop the fade', () => {
-    const { sr } = build()
-    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
-    sr.applyStrandColors(new Map([['sA', 0xff0000], ['sB', 0x00ff00]]))
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
+    sr.applyStrandColors(new Map([['scaffold', 0x00ff00]]))
     expect(alphaAttr(sr).getX(0)).toBeCloseTo(0.3, 5)
   })
 
   it('survives a geometry rebuild', () => {
-    // _replaceMesh builds a fresh geometry that knows nothing about the fade.
-    const { sr } = build()
-    sr.applyStrandAlphas(new Map([['sA', 0.3]]))
-    sr.update(DATA)
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hA:5:FORWARD', 0.3]]) })
+    sr.update(NUC_DATA)
     expect(alphaAttr(sr).getX(0)).toBeCloseTo(0.3, 5)
   })
 
-  it('leaves unlisted strands opaque', () => {
-    const { sr } = build()
-    sr.applyStrandAlphas(new Map([['nobody', 0.1]]))
+  it('leaves unlisted nucleotides opaque', () => {
+    const { sr } = build(NUC_DATA)
+    sr.applyClusterDisplay({ nucAlphas: new Map([['hZ:0:FORWARD', 0.1]]) })
     const a = alphaAttr(sr)
     for (let v = 0; v < 4; v++) expect(a.getX(v)).toBe(1)
   })

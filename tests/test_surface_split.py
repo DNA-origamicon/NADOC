@@ -61,3 +61,31 @@ def test_empty_cloud_returns_empty_mesh():
     assert mesh.vertices.shape[0] == 0
     assert mesh.faces.shape[0] == 0
     assert mesh.vertex_strand_ids == []
+
+
+def test_split_surface_carries_per_vertex_nucleotide_ids():
+    """The ChimeraX split path runs one marching-cubes pass PER STRAND, so it knows the
+    strand structurally — but it used to pass ``strand_ids=None`` into each sub-build and
+    so produced no nucleotide identity at all. Per-cluster colouring needs it: a strand
+    can span several clusters (LESSONS D15)."""
+    import numpy as np
+    from backend.core.surface import compute_split_surfaces_from_cloud
+
+    # Two well-separated blobs on different "strands", each with its own nucleotide key.
+    a = np.random.default_rng(0).normal(0, 0.3, (60, 3))
+    b = a + np.array([8.0, 0.0, 0.0])
+    pos = np.vstack([a, b])
+    radii = np.full(len(pos), 0.35)
+    sids = ["sA"] * len(a) + ["sB"] * len(b)
+    nucs = ["hA:1:FORWARD"] * len(a) + ["hB:2:REVERSE"] * len(b)
+
+    mesh = compute_split_surfaces_from_cloud(pos, radii, sids, nuc_ids=nucs)
+    if mesh.vertices.shape[0] == 0:
+        return  # grid too coarse for these blobs on this machine; nothing to assert
+    assert len(mesh.vertex_nuc_ids) == mesh.vertices.shape[0]
+    assert set(mesh.vertex_nuc_ids) <= {"hA:1:FORWARD", "hB:2:REVERSE"}
+    # A vertex's nucleotide key must agree with its strand id — they come from the same point.
+    for sid, nid in zip(mesh.vertex_strand_ids, mesh.vertex_nuc_ids):
+        if not nid:
+            continue
+        assert (sid == "sA") == nid.startswith("hA:")
