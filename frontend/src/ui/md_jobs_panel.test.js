@@ -1,15 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { normalizeWorkspacePath, filterJobsForPart, newestCompletedForPart, seededBadge, mdSegGlyphKind,
-  mdIsLocalTarget,
-  mdIsRemoteJob,
-  productionNsFromSteps,
-  jobProductionTimestepFs,
-  effectiveProductionTimestepFs,
-  DEFAULT_PRODUCTION_TIMESTEP_FS,
-  stridedFrameCount,
-  DEFAULT_TRAJ_INTERVAL,
-  TRAJ_FRAME_CONFIRM,
-} from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, DEFAULT_TRAJ_INTERVAL, MD_RESTRAINED_MARKERS, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasFreeSampling, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
 // (only the shared-base parity block at the bottom drives the real panel; the
@@ -1510,5 +1500,49 @@ describe('initMdJobsPanel — Health card tile states', () => {
     const byLabel = Object.fromEntries(tiles())
     expect(byLabel['Broken bp']).toBe('0')      // zero is a reading, not an absence
     expect(byLabel['Shell charge']).toMatch(/-244/)
+  })
+})
+
+describe('mdHasFreeSampling — occupancy is only offered for production dynamics', () => {
+  const seg = (stage, status = 'done') => ({ stage, status, name: stage })
+
+  it('accepts a job with an unrestrained stage that has run', () => {
+    expect(mdHasFreeSampling({ segments: [seg('300K NPT ENM k=0.5'), seg('300K NPT k=0')] }))
+      .toBe(true)
+  })
+
+  it('rejects a job that never left the ENM restraint ramp', () => {
+    // The ramp is a controlled relaxation; an ensemble built from it describes the ramp,
+    // not the structure — so occupancy must not be offered at all.
+    expect(mdHasFreeSampling({
+      segments: [seg('300K NPT ENM k=0.5'), seg('300K NPT ENM k=0.1'), seg('300K NPT ENM k=0.01')],
+    })).toBe(false)
+  })
+
+  it('rejects the DNA-fixed settle stage and minimisation', () => {
+    expect(mdHasFreeSampling({ segments: [seg('300K NPT settle (DNA fixed)')] })).toBe(false)
+    expect(mdHasFreeSampling({ segments: [seg('Minimization ENM k=0.5')] })).toBe(false)
+  })
+
+  it('requires the free stage to have actually written frames', () => {
+    // Queued/pending is not sampling — offering occupancy there would fetch nothing.
+    expect(mdHasFreeSampling({ segments: [seg('300K NPT k=0', 'pending')] })).toBe(false)
+    expect(mdHasFreeSampling({ segments: [seg('300K NPT k=0', 'running')] })).toBe(true)
+  })
+
+  it('is false for a job with no segments at all', () => {
+    expect(mdHasFreeSampling({ segments: [] })).toBe(false)
+    expect(mdHasFreeSampling(null)).toBe(false)
+  })
+
+  it('falls back to the segment name when no stage label is present', () => {
+    expect(mdHasFreeSampling({ segments: [{ name: 'x_04_300K_NPT_MGHH_only_p10', status: 'done' }] }))
+      .toBe(true)
+    expect(mdHasFreeSampling({ segments: [{ name: 'x_01_300K_NPT_ENM_k0p5_p10', status: 'done' }] }))
+      .toBe(false)
+  })
+
+  it('uses the same markers as the backend, so the UI and the analysis agree', () => {
+    expect(MD_RESTRAINED_MARKERS).toEqual(['enm', 'fixed', 'minim'])
   })
 })

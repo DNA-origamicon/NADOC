@@ -81,6 +81,29 @@ export function productionNsFromSteps(steps, timestepFs = DEFAULT_PRODUCTION_TIM
 // same idea as the stride field when a DCD is imported into VMD.  The DEFAULT lives in
 // index.html's `value=` attribute (form_defaults reads el.defaultValue) — this constant is
 // only the fallback for an unreadable/empty field.
+/** Segment labels that are NOT free sampling — the same markers the backend's
+ *  `md_free_sampling_segments` uses, kept in step with it deliberately. */
+export const MD_RESTRAINED_MARKERS = ['enm', 'fixed', 'minim']
+
+/**
+ * Does this job have PRODUCTION (unrestrained, free-sampling) frames? Pure.
+ *
+ * Occupancy clustering is only meaningful over free dynamics. The equilibrium-aware
+ * protocol ramps ENM restraints k=0.5 → 0.1 → 0.01 → none and also runs a DNA-fixed
+ * settle stage and an ENM minimisation; those are a controlled relaxation, so an ensemble
+ * built from them describes the ramp, not the structure.
+ *
+ * A segment counts only once it has actually written frames (done/running). A job whose
+ * free stage has not started yet is correctly NOT offered occupancy.
+ */
+export function mdHasFreeSampling(job) {
+  return (job?.segments || []).some((seg) => {
+    if (seg?.status !== 'done' && seg?.status !== 'running') return false
+    const label = String(seg.stage ?? seg.name ?? '').toLowerCase()
+    return label !== '' && !MD_RESTRAINED_MARKERS.some((m) => label.includes(m))
+  })
+}
+
 export const DEFAULT_TRAJ_INTERVAL = 20
 // Past this many frames a load is slow and memory-hungry enough to be worth confirming
 // rather than silently starting.  Warn, don't cap — the user asked for the frames.
@@ -895,6 +918,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // its `anyOn` array and runs during init, so a later `const` is a TDZ that kills boot.
   const occupancyToggle = document.getElementById('md-jobs-occupancy-toggle')
   const occupancyAllStages = document.getElementById('md-jobs-occupancy-all-stages')
+  // Declared HERE, with the elements, not beside the controls factory ~1100 lines below:
+  // _updateVizToggles reads it during init, and a `let` declared later is a TDZ.
+  let _occupancyReady = false
   const trajStatus   = document.getElementById('md-jobs-traj-status')
   const trajControls = document.getElementById('md-jobs-traj-controls')
   const trajPlay     = document.getElementById('md-jobs-traj-play')
@@ -2027,6 +2053,8 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     },
   })
 
+  _occupancyReady = true
+
   function _setOccupancyOff() {
     _occupancy?.off()
     if (getMdViz?.()?.mode?.() === 'occupancy') getMdViz().stopAndRestore()
@@ -2319,6 +2347,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _setRadioEnabled(displayToggle, hasJob)
     _setRadioEnabled(flexToggle, hasTraj)
     _setRadioEnabled(trajToggle, hasTraj)
+    // Occupancy needs FREE dynamics, not merely frames: clustering the ENM restraint
+    // ramp describes the ramp. Gated tighter than the flexibility map on purpose.
+    const hasFree = mdHasFreeSampling(job)
+    _setRadioEnabled(occupancyToggle, hasFree)
+    // `_ready` guards the `const _occupancy` this tears down: _updateVizToggles runs
+    // during init, before that const exists, and touching it there is a TDZ that aborts
+    // the whole panel's boot (it did once — see the occupancyToggle note above).
+    if (!hasFree && occupancyToggle?.checked && _occupancyReady) _setOccupancyOff()
     if (!hasJob && displayToggle?.checked) _stopMdDisplay('Native positions restored')
     if (!hasTraj) { if (flexToggle?.checked) _setFlexOff(); if (trajToggle?.checked) _setTrajOff() }
     // Solvent layers over any view that shows ONE FRAME — the live stream or the

@@ -51,6 +51,17 @@ test('NAMD occupancy clusters the free-sampling ensemble only', async ({ page, r
   await expect(page.locator('#md-jobs-occupancy-all-stages')).toHaveCount(1)
   await expect(page.locator('#md-occupancy-scope-list')).toHaveCount(1)
 
+  // The gate: occupancy is only offered for FREE (unrestrained) dynamics. Computed from
+  // the job payload already fetched above — an in-page round-trip here hung the run,
+  // and opening the panel starts its own polling, neither of which this assertion needs.
+  const segs = job?.segments ?? []
+  const free = segs.filter((sg) => (sg.status === 'done' || sg.status === 'running')
+    && !/enm|fixed|minim/i.test(String(sg.stage ?? sg.name ?? '')))
+  expect(segs.length, 'the job has segments').toBeGreaterThan(0)
+  expect(free.length,
+    `this job has an unrestrained stage; stages were ${JSON.stringify([...new Set(segs.map((x) => x.stage))])}`)
+    .toBeGreaterThan(0)
+
   // Drive the route directly: it is the payload contract that matters here, and the
   // subprocess read is far too slow to sit behind a UI toggle in a test.
   const info = await page.evaluate(async (jobId) => {
