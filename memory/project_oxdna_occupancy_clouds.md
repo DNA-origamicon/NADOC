@@ -142,25 +142,47 @@ and `("__ext_<id>", …)`, so scoping and clustering transfer verbatim.
 - **No FENE gate.** `FENE_R0_OXDNA2` is an oxDNA potential, not a calibrated NAMD frame
   check. (If one is ever wanted, `md_health.C1_PAIRED_MAX_DEFAULT` is the MD-native cutoff.)
 
-**Only PRODUCTION (unrestrained) dynamics forms the ensemble, and there is NO opt-in.**
-NAMD does have production runs — the Run-production button emits segments labelled
-`"<N> ns <fast|medium|conservative> production run"` with `scale=None`
-(`routes_md.py` → `build_production_conf`). Before them the `equilibrium_aware_namd`
-protocol ramps ENM restraints k=0.5 → 0.1 → 0.01 → None, plus a `settle (DNA fixed)` stage
-and an ENM minimisation; that ramp is a one-way relaxation, so an ensemble built from it
-describes the ramp. An `all_stages` opt-in existed briefly and was **removed on user
-instruction** — an occupancy cloud over relaxation frames is not a useful object.
+**Only PRODUCTION segments form the ensemble — a POSITIVE match on `"production"`.**
+`md_production_segments` / `mdHasProductionRun` keep segments whose stage label contains
+that word, and there is no opt-in and **no fallback**: a job with only equilibration
+returns *"no production run yet"* rather than clustering its ramp.
 
-`md_free_sampling_segments` keeps segments whose label carries none of
-`enm`/`fixed`/`minim`. Deliberately a NEGATIVE test, not a positive `production` match, so
-it admits both the explicit production segments AND the ladder's terminal unrestrained
-`300K NPT k=0` stage — on `24hb_0xT` that stage is the only free sampling there is, and a
-positive-only rule would make the feature unavailable. An unfamiliar protocol falls back to
-all stages with a `sampling_note` rather than returning nothing.
+Every production builder puts the word in the label, which is why the positive test works:
 
-The UI gate is the same rule: `mdHasFreeSampling(job)` over `job.segments[].stage`, sharing
-the markers so the panel cannot offer a view the analysis would refuse. It also requires the
-free segment to have written frames (done/running) — a pending stage is not sampling.
+| builder | label |
+|---|---|
+| `routes_md` (Run production) | `"<N> ns <fast\|medium\|conservative> production run"` |
+| `md_ensemble` | `"<N> ns production replica (seed <n>)"` |
+| `md_protocols` | `"310K NPT conservative production <N> ns unrestrained"` |
+| `md_shell_reprep` | `"shell NVT production (COM-restrained, HMR 4 fs)"` |
+
+**This replaced a keyword-EXCLUSION filter that was badly wrong.** The first version kept
+segments carrying none of `enm`/`fixed`/`minim`, built from the four `SegmentSpec` sites
+that happen to spell restraint "ENM". Dumping the distinct stage labels across all 85 MD
+jobs on this machine showed protocols that encode restraint as **`k=<value>`** instead —
+and the exclusion filter admitted **every one** of:
+
+```
+50K / 100K / 200K / 300K NVT k=5.0             heating, restrained
+310K NPT k=5.0 → 4.0 → … → 0.01  (11 stages)   restraint ramp
+Vacuum ENRG-MD shape relaxation                restrained; "ENRG-MD" is not "ENM"
+solvent equilibration (DNA position-restrained, NVT)
+310K NPT unrestrained qualification            unrestrained, but a probe not sampling
+```
+
+i.e. the whole relaxation schedule. **Never enumerate "restrained" keywords here** — there
+is no closed set. Match production positively; unknown labels then fail closed, which for
+this feature is the safe direction.
+
+Note `"300K NPT k=0"`, the ENM ladder's terminal unrestrained stage, is also excluded: it
+is unrestrained but still equilibration. Consequence on the real job set — **17 of 85 jobs
+have a production segment and get occupancy; 15 that stop at the ladder correctly do not.**
+
+**Measured on a real production run** (`6fc87681f9de`, 24hb_0xT, 50 ns production replica,
+6720 nt): **18.7 s**, 30 of 30 frames, verdict `drift`, PC1 0.35, n_eff 2.81 (preliminary).
+An earlier "36.1 s / 30 frames" figure in this file came from `383f7dcc4a5d`'s terminal
+EQUILIBRATION stage, before the filter was corrected — that job has no production run and
+now returns not-ready.
 
 **No shareable frame cache, and this is the dominant cost.** Every MD analysis runs through
 `md_analysis_runner` in a spawned, killed-on-exit subprocess, so nothing a child computes can

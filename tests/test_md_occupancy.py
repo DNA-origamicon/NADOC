@@ -11,7 +11,7 @@ here. What IS MD-specific, and what these pin:
 All fast: no PSF, no DCD, no MDAnalysis.
 """
 
-from backend.core.md_trajectory import _MD_RESTRAINED_MARKERS, md_free_sampling_segments
+from backend.core.md_trajectory import _MD_PRODUCTION_MARKER, md_production_segments
 
 
 def _segs(*labels):
@@ -19,59 +19,60 @@ def _segs(*labels):
 
 
 # ── Which stages are the ensemble ─────────────────────────────────────────────────
-def test_the_enm_restraint_ramp_is_not_free_sampling():
-    """k=0.5 → 0.1 → 0.01 → none is a one-way relaxation. Clustering across it finds
-    "early vs late" — a drift — and buries whatever the free ensemble does."""
+def test_only_production_segments_are_clustered():
+    """Every production builder puts the word in its stage label."""
+    for label in ("50 ns fast production run",
+                  "2 ns production replica (seed 54321)",
+                  "310K NPT conservative production 0.5 ns unrestrained",
+                  "shell NVT production (COM-restrained, HMR 4 fs)"):
+        assert md_production_segments(_segs("300K NPT ENM k=0.5", label)) == [1], label
+
+
+def test_a_restraint_ramp_that_encodes_k_in_the_label_is_excluded():
+    """The bug a keyword-EXCLUSION filter had: these carry no enm/fixed/minim keyword, so
+    excluding by keyword admitted the ENTIRE relaxation schedule. Measured against the 85
+    MD jobs on this machine — 50K/100K/200K/300K NVT k=5.0 and the 11-step
+    310K NPT k=5.0 → 0.01 ramp were all being clustered as if they were production."""
+    for label in ("50K NVT k=5.0", "100K NVT k=5.0", "300K NVT k=5.0",
+                  "310K NPT k=5.0", "310K NPT k=0.5", "310K NPT k=0.01",
+                  "Vacuum ENRG-MD shape relaxation",
+                  "solvent equilibration (DNA position-restrained, NVT)"):
+        assert md_production_segments(_segs(label)) == [], label
+
+
+def test_the_enm_ladder_and_its_terminal_unrestrained_stage_are_both_excluded():
+    """"300K NPT k=0" ends the ENM ladder unrestrained, but it is still equilibration —
+    not a production run."""
     segs = _segs("300K NPT ENM k=0.5", "300K NPT ENM k=0.1",
                  "300K NPT ENM k=0.01", "300K NPT k=0")
-    assert md_free_sampling_segments(segs) == [3]
+    assert md_production_segments(segs) == []
 
 
-def test_an_explicit_production_run_is_free_sampling():
-    """The Run-production button emits `"<N> ns <fast|medium|conservative> production run"`
-    segments with scale=None. Those are the ensemble this feature exists for, and they
-    must qualify without the label needing a special case."""
-    segs = _segs("300K NPT ENM k=0.5", "300K NPT k=0", "50 ns fast production run")
-    assert md_free_sampling_segments(segs) == [1, 2]
-    assert md_free_sampling_segments(_segs("100 ns conservative production run")) == [0]
+def test_the_qualification_stage_is_not_production():
+    # Unrestrained, but a qualification probe rather than sampling.
+    assert md_production_segments(_segs("310K NPT unrestrained qualification")) == []
 
 
-def test_every_free_segment_is_kept():
-    segs = _segs("300K NPT ENM k=0.5", "300K NPT k=0", "300K NPT k=0")
-    assert md_free_sampling_segments(segs) == [1, 2]
+def test_the_dna_fixed_settle_stage_and_minimisation_are_excluded():
+    assert md_production_segments(_segs("300K NPT settle (DNA fixed)")) == []
+    assert md_production_segments(_segs("Minimization ENM k=0.5")) == []
 
 
-def test_the_dna_fixed_settle_stage_is_excluded():
-    # The cell is equilibrating around a FIXED solute — those frames carry no
-    # conformational information at all.
-    segs = _segs("300K NPT settle (DNA fixed)", "300K NPT k=0")
-    assert md_free_sampling_segments(segs) == [1]
+def test_every_production_segment_is_kept():
+    segs = _segs("300K NPT ENM k=0.5", "5 ns production run", "10 ns production run")
+    assert md_production_segments(segs) == [1, 2]
 
 
-def test_minimisation_is_excluded():
-    segs = _segs("Minimization ENM k=0.5", "300K NPT k=0")
-    assert md_free_sampling_segments(segs) == [1]
-
-
-def test_an_unfamiliar_protocol_falls_back_to_everything():
-    """Degrade to "use it all, and say so" rather than to an empty ensemble — an unknown
-    label must not silently mean "no frames"."""
-    segs = _segs("some future stage", "another one")
-    assert md_free_sampling_segments(segs) == [0, 1]
-
-
-def test_a_run_that_never_left_restraints_falls_back_rather_than_returning_nothing():
-    segs = _segs("300K NPT ENM k=0.5", "300K NPT ENM k=0.1")
-    assert md_free_sampling_segments(segs) == [0, 1]
+def test_no_production_means_NO_fallback():
+    """Falling back to every segment would cluster the restraint ladder and answer a
+    different question than the one asked."""
+    assert md_production_segments(_segs("300K NPT ENM k=0.5", "300K NPT k=0")) == []
+    assert md_production_segments([]) == []
 
 
 def test_marker_matching_is_case_insensitive():
-    assert md_free_sampling_segments(_segs("300K NPT enm k=0.5", "300K NPT k=0")) == [1]
-    assert all(m == m.lower() for m in _MD_RESTRAINED_MARKERS)
-
-
-def test_empty_segment_list():
-    assert md_free_sampling_segments([]) == []
+    assert md_production_segments(_segs("50 ns FAST PRODUCTION RUN")) == [0]
+    assert _MD_PRODUCTION_MARKER == _MD_PRODUCTION_MARKER.lower()
 
 
 # ── The wire contract MD must satisfy for the shared frontend ─────────────────────

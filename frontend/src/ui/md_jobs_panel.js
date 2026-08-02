@@ -81,26 +81,30 @@ export function productionNsFromSteps(steps, timestepFs = DEFAULT_PRODUCTION_TIM
 // same idea as the stride field when a DCD is imported into VMD.  The DEFAULT lives in
 // index.html's `value=` attribute (form_defaults reads el.defaultValue) — this constant is
 // only the fallback for an unreadable/empty field.
-/** Segment labels that are NOT free sampling — the same markers the backend's
- *  `md_free_sampling_segments` uses, kept in step with it deliberately. */
-export const MD_RESTRAINED_MARKERS = ['enm', 'fixed', 'minim']
+/** A segment is PRODUCTION dynamics iff its stage label says so — the same rule as the
+ *  backend's `md_production_segments`, so the panel cannot offer a view the analysis
+ *  refuses. Every builder that emits a production segment puts the word in its label
+ *  ("… production run", "… production replica (seed n)", "… conservative production N ns
+ *  unrestrained", "shell NVT production (…)"). */
+export const MD_PRODUCTION_MARKER = 'production'
 
 /**
- * Does this job have PRODUCTION (unrestrained, free-sampling) frames? Pure.
+ * Does this job have PRODUCTION frames? Pure.
  *
- * Occupancy clustering is only meaningful over free dynamics. The equilibrium-aware
- * protocol ramps ENM restraints k=0.5 → 0.1 → 0.01 → none and also runs a DNA-fixed
- * settle stage and an ENM minimisation; those are a controlled relaxation, so an ensemble
- * built from them describes the ramp, not the structure.
+ * Occupancy clustering is only meaningful over free dynamics. A POSITIVE test, because
+ * restraint is encoded in the label as `k=<value>` — `50K NVT k=5.0`,
+ * `310K NPT k=5.0 → … → 0.01`, `Vacuum ENRG-MD shape relaxation` — and no reasonable list
+ * of "restrained" keywords catches them all. Excluding by keyword admitted every one of
+ * those on the real job set; matching "production" admits exactly the runs the
+ * Run-production button (and the ensemble/replica builders) create.
  *
- * A segment counts only once it has actually written frames (done/running). A job whose
- * free stage has not started yet is correctly NOT offered occupancy.
+ * A segment counts only once it has written frames (done/running): a queued production
+ * run is not sampling yet.
  */
-export function mdHasFreeSampling(job) {
+export function mdHasProductionRun(job) {
   return (job?.segments || []).some((seg) => {
     if (seg?.status !== 'done' && seg?.status !== 'running') return false
-    const label = String(seg.stage ?? seg.name ?? '').toLowerCase()
-    return label !== '' && !MD_RESTRAINED_MARKERS.some((m) => label.includes(m))
+    return String(seg.stage ?? seg.name ?? '').toLowerCase().includes(MD_PRODUCTION_MARKER)
   })
 }
 
@@ -2342,9 +2346,9 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     _setRadioEnabled(displayToggle, hasJob)
     _setRadioEnabled(flexToggle, hasTraj)
     _setRadioEnabled(trajToggle, hasTraj)
-    // Occupancy needs FREE dynamics, not merely frames: clustering the ENM restraint
-    // ramp describes the ramp. Gated tighter than the flexibility map on purpose.
-    const hasFree = mdHasFreeSampling(job)
+    // Occupancy needs PRODUCTION dynamics, not merely frames: clustering the relaxation
+    // ladder describes the schedule. Gated tighter than the flexibility map on purpose.
+    const hasFree = mdHasProductionRun(job)
     _setRadioEnabled(occupancyToggle, hasFree)
     // `_ready` guards the `const _occupancy` this tears down: _updateVizToggles runs
     // during init, before that const exists, and touching it there is a TDZ that aborts

@@ -1226,29 +1226,38 @@ def md_composite_trajectory(topology_path, segments, coordinate_path, design,
 
 
 # ── Occupancy clouds ─────────────────────────────────────────────────────────────
-#: Stage-label markers for dynamics that is NOT free sampling. The equilibrium-aware
-#: protocol ramps elastic-network restraints k=0.5 → 0.1 → 0.01 → None, labelling each
-#: ``"300K NPT ENM k=<scale>"`` and the unrestrained one ``"300K NPT k=0"``
-#: (``md_protocols`` builds both from the same ``scale is None`` test), plus a
-#: ``"300K NPT settle (DNA fixed)"`` stage and an ENM minimisation. A run started from the
-#: Run-production button adds ``"<N> ns <fast|medium|conservative> production run"``
-#: segments, also ``scale=None`` — those are the ensemble this feature exists for.
+#: A segment is PRODUCTION dynamics iff its stage label says so. Every builder that emits
+#: one puts the word in:
 #:
-#: Negative markers rather than a positive "production" match, so BOTH the explicit
-#: production segments and the ladder's terminal unrestrained stage qualify, and any
-#: future free-dynamics label does too without another edit here.
-_MD_RESTRAINED_MARKERS = ("enm", "fixed", "minim")
+#:   routes_md.build → "<N> ns <fast|medium|conservative> production run"
+#:   md_ensemble     → "<N> ns production replica (seed <n>)"
+#:   md_protocols    → "310K NPT conservative production <N> ns unrestrained"
+#:   md_shell_reprep → "shell NVT production (COM-restrained, HMR 4 fs)"
+#:
+#: A POSITIVE test, and the earlier negative one (exclude enm/fixed/minim) was a real bug.
+#: Measured against the 85 MD jobs on this machine, that filter admitted every one of:
+#:
+#:   50K/100K/200K/300K NVT k=5.0            heating, restrained
+#:   310K NPT k=5.0 → 4.0 → … → 0.01         the restraint ramp, ~11 stages
+#:   310K NPT unrestrained qualification     unrestrained, but a qualification stage
+#:   Vacuum ENRG-MD shape relaxation         restrained ("ENRG-MD" is not "ENM")
+#:   solvent equilibration (DNA position-restrained, NVT)
+#:
+#: because they encode restraint as ``k=<value>`` rather than as one of three magic words.
+#: Clustering those describes the relaxation schedule, not the structure.
+_MD_PRODUCTION_MARKER = "production"
 
 
-def md_free_sampling_segments(segments) -> list[int]:
-    """Indices of the segments that are FREE (unrestrained) dynamics.
+def md_production_segments(segments) -> list[int]:
+    """Indices of the segments that are PRODUCTION dynamics.
 
-    Returns every index when no segment can be identified as free — an unfamiliar protocol
-    should degrade to "use everything, and say so", not to an empty ensemble.
+    Returns ``[]`` when there are none — deliberately NOT a fall back to every segment.
+    A job that has only equilibrated has nothing an occupancy cloud can describe, and
+    silently clustering its restraint ladder would answer a different question than the
+    one asked.
     """
-    free = [i for i, seg in enumerate(segments)
-            if not any(m in str(seg[1]).lower() for m in _MD_RESTRAINED_MARKERS)]
-    return free if free else list(range(len(segments)))
+    return [i for i, seg in enumerate(segments)
+            if _MD_PRODUCTION_MARKER in str(seg[1]).lower()]
 
 
 def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: int = 200,
@@ -1297,12 +1306,12 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     if sum(seg_counts) == 0:
         return {"ready": False, "reason": "no trajectory frames yet"}
 
-    # Production dynamics only. There is deliberately no opt-in for the restrained ladder:
-    # an occupancy cloud over relaxation frames describes the restraint ramp, not the
-    # structure, so it is not a useful object to offer.
-    free_idx = md_free_sampling_segments(segments)
-    fell_back = free_idx == list(range(len(segments))) and any(
-        any(m in str(s[1]).lower() for m in _MD_RESTRAINED_MARKERS) for s in segments)
+    # Production dynamics only, and no fallback: see md_production_segments.
+    free_idx = md_production_segments(segments)
+    if not free_idx:
+        return {"ready": False,
+                "reason": "no production run yet — occupancy needs free dynamics, and this "
+                          "job has only equilibration/relaxation segments"}
 
     # Global frame indices belonging to the sampling segments only.
     starts, at = [], 0
@@ -1370,10 +1379,6 @@ def md_occupancy(topology_path, segments, coordinate_path, design, max_frames: i
     res["n_frames_total"] = sum(seg_counts)
     res["n_frames_torn"] = 0
     res["sampling_stages"] = [str(segments[i][1]) for i in free_idx]
-    res["all_stages"] = bool(fell_back)   # true only via the no-free-stage fallback
-    if fell_back:
-        res["sampling_note"] = ("no unrestrained stage identified in this protocol — "
-                                "clustered every stage, which mixes restrained dynamics")
     res["keys"] = [list(k) for k in key_list]
     for cl in res["clusters"]:
         gidx = kept[cl["medoid_index"]]

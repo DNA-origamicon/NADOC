@@ -15,7 +15,9 @@
 import { expect, test } from '@playwright/test'
 
 const API = `${process.env.NADOC_E2E_API_BASE || 'http://127.0.0.1:8002'}/api`
-const JOB_ID = process.env.NADOC_E2E_MD_JOB || '383f7dcc4a5d'   // 24hb_0xT, 4 stages
+// A job with a real PRODUCTION segment — 24hb_0xT/383f7dcc4a5d has only the ENM
+// ladder, so occupancy is correctly unavailable there.
+const JOB_ID = process.env.NADOC_E2E_MD_JOB || '6fc87681f9de'   // 24hb_0xT, 50 ns production replica
 
 test('NAMD occupancy clusters the free-sampling ensemble only', async ({ page, request }) => {
   test.setTimeout(900_000)
@@ -57,11 +59,11 @@ test('NAMD occupancy clusters the free-sampling ensemble only', async ({ page, r
   // the job payload already fetched above — an in-page round-trip here hung the run,
   // and opening the panel starts its own polling, neither of which this assertion needs.
   const segs = job?.segments ?? []
-  const free = segs.filter((sg) => (sg.status === 'done' || sg.status === 'running')
-    && !/enm|fixed|minim/i.test(String(sg.stage ?? sg.name ?? '')))
+  const prod = segs.filter((sg) => (sg.status === 'done' || sg.status === 'running')
+    && /production/i.test(String(sg.stage ?? sg.name ?? '')))
   expect(segs.length, 'the job has segments').toBeGreaterThan(0)
-  expect(free.length,
-    `this job has an unrestrained stage; stages were ${JSON.stringify([...new Set(segs.map((x) => x.stage))])}`)
+  expect(prod.length,
+    `this job has a production run; stages were ${JSON.stringify([...new Set(segs.map((x) => x.stage))])}`)
     .toBeGreaterThan(0)
 
   // Drive the route directly: it is the payload contract that matters here, and the
@@ -90,11 +92,10 @@ test('NAMD occupancy clusters the free-sampling ensemble only', async ({ page, r
   expect(['switching', 'drift', 'unimodal']).toContain(info.verdict)
   expect(info.hasConfidence).toBe(true)
 
-  // The ENM restraint ramp is a one-way relaxation; clustering across it would report the
-  // ramp itself rather than the structure. Only unrestrained stages form the ensemble.
-  if (!info.allStages) {
-    expect(info.stages.every((s) => !/enm|fixed|minim/i.test(s)),
-      `sampling stages were ${JSON.stringify(info.stages)}`).toBe(true)
-    expect(info.nFrames, 'a subset of the run').toBeLessThan(info.nFramesTotal)
-  }
+  // Only production segments form the ensemble. Restraint is encoded as `k=<value>` in
+  // several protocols, so this asserts the POSITIVE property rather than the absence of
+  // a keyword — the exclusion form admitted the whole relaxation ladder.
+  expect(info.stages.length, 'at least one sampling stage').toBeGreaterThan(0)
+  expect(info.stages.every((s) => /production/i.test(s)),
+    `sampling stages were ${JSON.stringify(info.stages)}`).toBe(true)
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { DEFAULT_PRODUCTION_TIMESTEP_FS, DEFAULT_TRAJ_INTERVAL, MD_RESTRAINED_MARKERS, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasFreeSampling, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
+import { DEFAULT_PRODUCTION_TIMESTEP_FS, DEFAULT_TRAJ_INTERVAL, MD_PRODUCTION_MARKER, TRAJ_FRAME_CONFIRM, effectiveProductionTimestepFs, filterJobsForPart, jobProductionTimestepFs, mdHasProductionRun, mdIsLocalTarget, mdIsRemoteJob, mdSegGlyphKind, newestCompletedForPart, normalizeWorkspacePath, productionNsFromSteps, seededBadge, stridedFrameCount } from './md_jobs_panel.js'
 
 // Auto-mock the API client so the real panel constructs without touching the network
 // (only the shared-base parity block at the bottom drives the real panel; the
@@ -1503,55 +1503,69 @@ describe('initMdJobsPanel — Health card tile states', () => {
   })
 })
 
-describe('mdHasFreeSampling — occupancy is only offered for production dynamics', () => {
+describe('mdHasProductionRun — occupancy is only offered for production dynamics', () => {
   const seg = (stage, status = 'done') => ({ stage, status, name: stage })
 
-  it('accepts a job with an unrestrained stage that has run', () => {
-    expect(mdHasFreeSampling({ segments: [seg('300K NPT ENM k=0.5'), seg('300K NPT k=0')] }))
-      .toBe(true)
+  it('rejects the terminal unrestrained equilibration stage', () => {
+    // "300K NPT k=0" ends the ENM ladder. It is unrestrained, but it is still
+    // equilibration — not a production run.
+    expect(mdHasProductionRun({ segments: [seg('300K NPT ENM k=0.5'), seg('300K NPT k=0')] }))
+      .toBe(false)
+  })
+
+  it('rejects a restraint ramp that encodes k in the label', () => {
+    // The real killer: these carry no enm/fixed/minim keyword at all, so a
+    // keyword-EXCLUSION filter admitted every one of them.
+    for (const l of ['50K NVT k=5.0', '310K NPT k=5.0', '310K NPT k=0.01',
+                     'Vacuum ENRG-MD shape relaxation',
+                     'solvent equilibration (DNA position-restrained, NVT)',
+                     '310K NPT unrestrained qualification']) {
+      expect(mdHasProductionRun({ segments: [seg(l)] }), l).toBe(false)
+    }
   })
 
   it('rejects a job that never left the ENM restraint ramp', () => {
-    // The ramp is a controlled relaxation; an ensemble built from it describes the ramp,
-    // not the structure — so occupancy must not be offered at all.
-    expect(mdHasFreeSampling({
+    expect(mdHasProductionRun({
       segments: [seg('300K NPT ENM k=0.5'), seg('300K NPT ENM k=0.1'), seg('300K NPT ENM k=0.01')],
     })).toBe(false)
   })
 
   it('rejects the DNA-fixed settle stage and minimisation', () => {
-    expect(mdHasFreeSampling({ segments: [seg('300K NPT settle (DNA fixed)')] })).toBe(false)
-    expect(mdHasFreeSampling({ segments: [seg('Minimization ENM k=0.5')] })).toBe(false)
+    expect(mdHasProductionRun({ segments: [seg('300K NPT settle (DNA fixed)')] })).toBe(false)
+    expect(mdHasProductionRun({ segments: [seg('Minimization ENM k=0.5')] })).toBe(false)
   })
 
-  it('requires the free stage to have actually written frames', () => {
-    // Queued/pending is not sampling — offering occupancy there would fetch nothing.
-    expect(mdHasFreeSampling({ segments: [seg('300K NPT k=0', 'pending')] })).toBe(false)
-    expect(mdHasFreeSampling({ segments: [seg('300K NPT k=0', 'running')] })).toBe(true)
+  it('requires the production stage to have actually written frames', () => {
+    // Queued is not sampling — offering occupancy there would fetch nothing.
+    expect(mdHasProductionRun({ segments: [seg('5 ns production run', 'pending')] })).toBe(false)
+    expect(mdHasProductionRun({ segments: [seg('5 ns production run', 'running')] })).toBe(true)
   })
 
   it('is false for a job with no segments at all', () => {
-    expect(mdHasFreeSampling({ segments: [] })).toBe(false)
-    expect(mdHasFreeSampling(null)).toBe(false)
+    expect(mdHasProductionRun({ segments: [] })).toBe(false)
+    expect(mdHasProductionRun(null)).toBe(false)
   })
 
   it('falls back to the segment name when no stage label is present', () => {
-    expect(mdHasFreeSampling({ segments: [{ name: 'x_04_300K_NPT_MGHH_only_p10', status: 'done' }] }))
+    expect(mdHasProductionRun({ segments: [{ name: 'x_seq02_production_k0_p10', status: 'done' }] }))
       .toBe(true)
-    expect(mdHasFreeSampling({ segments: [{ name: 'x_01_300K_NPT_ENM_k0p5_p10', status: 'done' }] }))
+    expect(mdHasProductionRun({ segments: [{ name: 'x_01_300K_NPT_ENM_k0p5_p10', status: 'done' }] }))
       .toBe(false)
   })
 
-  it('accepts an explicit production run', () => {
-    // The Run-production button emits "<N> ns <tier> production run" segments; those are
-    // exactly what occupancy is for.
-    expect(mdHasFreeSampling({ segments: [seg('50 ns fast production run')] })).toBe(true)
-    expect(mdHasFreeSampling({
+  it('accepts every label a production builder emits', () => {
+    for (const l of ['50 ns fast production run',
+                     '2 ns production replica (seed 54321)',
+                     '310K NPT conservative production 0.5 ns unrestrained',
+                     'shell NVT production (COM-restrained, HMR 4 fs)']) {
+      expect(mdHasProductionRun({ segments: [seg(l)] }), l).toBe(true)
+    }
+    expect(mdHasProductionRun({
       segments: [seg('300K NPT ENM k=0.5'), seg('120 ns conservative production run')],
     })).toBe(true)
   })
 
-  it('uses the same markers as the backend, so the UI and the analysis agree', () => {
-    expect(MD_RESTRAINED_MARKERS).toEqual(['enm', 'fixed', 'minim'])
+  it('uses the same marker as the backend, so the UI and the analysis agree', () => {
+    expect(MD_PRODUCTION_MARKER).toBe('production')
   })
 })
