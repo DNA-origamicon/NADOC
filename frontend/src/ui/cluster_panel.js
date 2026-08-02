@@ -49,7 +49,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   // Commit is the no-commit PATCH form, exactly like the rename below: a cosmetic
   // edit must not land on the undo stack.
   const _stylePopover = initClusterStylePopover({
-    onPreview: (id, patch) => onStylePreview?.(id, patch),
+    onPreview: (id, patch, uiState) => onStylePreview?.(id, patch, uiState),
     onCommit:  (id, patch) => api.patchCluster(id, patch),
   })
 
@@ -258,8 +258,12 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       const swatchHex = cluster.color ?? _paletteHex(clusterIndex)
       const swatchOpacity = typeof cluster.opacity === 'number' ? cluster.opacity : 1
       swatchBtn.style.cssText = _editStyle +
-        `;background:${swatchHex};border-color:#30363d;width:18px;padding:3px 0;` +
-        `opacity:${Math.max(0.25, swatchOpacity)}`
+        ';border-color:#30363d;width:18px;padding:3px 0'
+      // Set the colour as its OWN property rather than a second `background` shorthand
+      // in the cssText above — a duplicate declaration only works by last-one-wins and
+      // is invisible to anything reading backgroundColor.
+      swatchBtn.style.backgroundColor = swatchHex
+      swatchBtn.style.opacity = String(Math.max(0.25, swatchOpacity))
       swatchBtn.title = swatchOpacity < 1
         ? `Colour & opacity — ${Math.round(swatchOpacity * 100)}%`
         : 'Colour & opacity'

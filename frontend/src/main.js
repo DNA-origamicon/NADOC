@@ -6325,8 +6325,12 @@ async function main() {
     // Live preview while the style popover's colour/opacity controls are dragged —
     // a locally-patched design, so nothing hits the network until pointer-up. Both
     // halves of the repaint are O(nucleotides), so only the one that changed runs.
-    onStylePreview: (clusterId, patch) => {
-      const preview = withClusterDisplay(store.getState().currentDesign, clusterId, patch)
+    onStylePreview: (clusterId, patch, uiState) => {
+      // Build the preview from the popover's FULL current state, not just the field that
+      // changed: the previous field's commit is debounced and may still be in flight, so
+      // `currentDesign` can lag it. `patch` is only used to decide which half to repaint.
+      const preview = withClusterDisplay(store.getState().currentDesign, clusterId,
+                                         uiState ?? patch)
       designRenderer.refreshClusterDisplay(preview,
         { color: patch.color !== undefined, opacity: patch.opacity !== undefined })
       // The four arc-like systems each own their meshes and only see COMMITTED

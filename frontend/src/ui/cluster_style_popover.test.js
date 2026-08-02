@@ -120,6 +120,10 @@ describe('initClusterStylePopover', () => {
     expect(colorInput().value).toBe('#888888')   // not #000000
   })
 
+  // onPreview receives (clusterId, patch, uiState). `patch` is what CHANGED — it drives
+  // which half of the O(nucleotides) repaint runs. `uiState` is the popover's full
+  // current state, so the preview design does not depend on a debounced commit having
+  // landed in the store yet.
   it('a slider drag previews but does NOT commit', () => {
     // The pin for "no network on input": committing at frame rate would rebuild
     // the sidebar list under the user's cursor.
@@ -127,7 +131,7 @@ describe('initClusterStylePopover', () => {
     opacityInput().value = '0.35'
     fire(opacityInput(), 'input')
     vi.advanceTimersByTime(20)                       // previews land on the next frame
-    expect(onPreview).toHaveBeenCalledWith('cA', { opacity: 0.35 })
+    expect(onPreview.mock.calls.at(-1).slice(0, 2)).toEqual(['cA', { opacity: 0.35 }])
     vi.advanceTimersByTime(1000)
     expect(onCommit).not.toHaveBeenCalled()
   })
@@ -144,7 +148,7 @@ describe('initClusterStylePopover', () => {
     expect(onPreview).not.toHaveBeenCalled()         // nothing yet — still this frame
     vi.advanceTimersByTime(20)
     expect(onPreview).toHaveBeenCalledTimes(1)
-    expect(onPreview).toHaveBeenCalledWith('cA', { opacity: 0.5 })
+    expect(onPreview.mock.calls.at(-1).slice(0, 2)).toEqual(['cA', { opacity: 0.5 }])
   })
 
   it('merges a colour and an opacity input in the same frame into one preview', () => {
@@ -155,7 +159,7 @@ describe('initClusterStylePopover', () => {
     fire(opacityInput(), 'input')
     vi.advanceTimersByTime(20)
     expect(onPreview).toHaveBeenCalledTimes(1)
-    expect(onPreview).toHaveBeenCalledWith('cA', { color: '#00ffcc', opacity: 0.5 })
+    expect(onPreview.mock.calls.at(-1).slice(0, 2)).toEqual(['cA', { color: '#00ffcc', opacity: 0.5 }])
   })
 
   it('still previews across frames during a long drag', () => {
@@ -206,7 +210,7 @@ describe('initClusterStylePopover', () => {
     colorInput().value = '#00ffcc'
     fire(colorInput(), 'input')
     vi.advanceTimersByTime(20)
-    expect(onPreview).toHaveBeenCalledWith('cA', { color: '#00ffcc' })
+    expect(onPreview.mock.calls.at(-1).slice(0, 2)).toEqual(['cA', { color: '#00ffcc' }])
     expect(onCommit).not.toHaveBeenCalled()
   })
 
@@ -215,7 +219,7 @@ describe('initClusterStylePopover', () => {
     resetBtn().click()
     // Reset closes, and closing FLUSHES the queued preview synchronously — a
     // discrete click must show immediately, not wait for its PATCH to round-trip.
-    expect(onPreview).toHaveBeenCalledWith('cA', { color: '', opacity: 1 })
+    expect(onPreview.mock.calls.at(-1).slice(0, 2)).toEqual(['cA', { color: '', opacity: 1 }])
     expect(onCommit).toHaveBeenCalledWith('cA', { color: '', opacity: 1 })
     expect(pop.isOpenFor('cA')).toBe(false)
   })
@@ -226,7 +230,7 @@ describe('initClusterStylePopover', () => {
     fire(opacityInput(), 'input')
     expect(onPreview).not.toHaveBeenCalled()
     pop.close()
-    expect(onPreview).toHaveBeenCalledWith('cA', { opacity: 0.35 })
+    expect(onPreview.mock.calls.at(-1).slice(0, 2)).toEqual(['cA', { opacity: 0.35 }])
   })
 
   it('switching clusters DROPS the previous one’s queued preview', () => {
@@ -300,5 +304,28 @@ describe('initClusterStylePopover', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(after).toHaveBeenCalledTimes(1)
     document.removeEventListener('keydown', after)
+  })
+
+  it('the preview carries the FULL control state, not just what changed', () => {
+    // The reported bug: a colour commit is debounced, so when the user immediately
+    // drags opacity the store has not caught up. main.js builds the preview design from
+    // this uiState, so it must carry the colour the user already picked.
+    pop.openFor('cA', anchor, { color: '#ff8800', opacity: 1 })
+    opacityInput().value = '0.4'
+    fire(opacityInput(), 'input')
+    vi.advanceTimersByTime(20)
+    const [, patch, uiState] = onPreview.mock.calls.at(-1)
+    expect(patch).toEqual({ opacity: 0.4 })       // only the opacity half repaints
+    expect(uiState).toEqual({ color: '#ff8800', opacity: 0.4 })
+  })
+
+  it('a synchronous flush on close carries it too', () => {
+    pop.openFor('cA', anchor, { color: '#ff8800', opacity: 1 })
+    opacityInput().value = '0.25'
+    fire(opacityInput(), 'input')
+    pop.close()
+    const [, , uiState] = onPreview.mock.calls.at(-1)
+    expect(uiState.color).toBe('#ff8800')
+    expect(uiState.opacity).toBeCloseTo(0.25)
   })
 })

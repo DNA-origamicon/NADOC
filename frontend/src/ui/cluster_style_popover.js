@@ -146,6 +146,20 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
   // map fires `input` far faster than 60 Hz, and each preview is an O(nucleotides)
   // repaint of the scene — running one per event is what made the picker lag. Only
   // the newest patch matters, so intermediate ones are merged and dropped.
+  /**
+   * The popover's CURRENT control values — both of them, always.
+   *
+   * The preview needs this, not just the field that changed. A commit is debounced, so
+   * when the user picks a colour and then immediately drags opacity, the colour PATCH is
+   * still in flight and `store.currentDesign` does not have it yet. A preview built from
+   * the store would then repaint the OLD colour — which is exactly the reported "change
+   * the colour, change the opacity, it reverts" bug.
+   */
+  const _uiState = () => ({
+    color: colorInput.value,
+    opacity: parseFloat(opacityInput.value),
+  })
+
   let _previewPatch = null
   let _previewRaf   = null
   const _raf = (typeof requestAnimationFrame === 'function')
@@ -163,7 +177,7 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
       _previewRaf = null
       const p = _previewPatch
       _previewPatch = null
-      if (p && _clusterId) onPreview?.(_clusterId, p)
+      if (p && _clusterId) onPreview?.(_clusterId, p, _uiState())
     })
   }
 
@@ -178,8 +192,9 @@ export function initClusterStylePopover({ onPreview = null, onCommit = null } = 
   function _flushPreview() {
     const p = _previewPatch
     const id = _clusterId
+    const ui = _uiState()
     _cancelPreview()
-    if (p && id) onPreview?.(id, p)
+    if (p && id) onPreview?.(id, p, ui)
   }
 
   function _setOpacityReadout(v) {

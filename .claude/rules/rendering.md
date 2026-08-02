@@ -378,6 +378,14 @@ stock chunk variable (LESSONS D5).
   does not recolour untouched staples. **Any consumer that wants to agree with 3D must call it, not
   re-derive `index % 12`** — `ui/spreadsheet.js` did the latter until 2026-07-31 (TD-02) and its
   row swatches, colour sort key and exported .xlsx each used a different index.
+- **The swatch popover's preview sends the FULL control state, not the delta.** Commits are
+  debounced (300 ms), so when a user picks a colour and immediately drags opacity the colour
+  PATCH is still in flight and `store.currentDesign` does not have it. A preview built only
+  from the store then repaints the OLD colour — that is what "change the colour, change the
+  opacity, it reverts" was. `onPreview(clusterId, patch, uiState)`: `patch` is what CHANGED
+  and decides which half of the O(nucleotides) repaint runs; `uiState` is both current
+  control values and is what the preview design is built from. Pinned in
+  `ui/cluster_panel.test.js` with the commit deliberately left un-resolved.
 - **Cluster colour precedence, highest first (2026-08-02):** `provenance` → tier → explicit
   colour → later array entry. **A cluster the USER built always outranks one the app made by
   itself**, because auto clusters routinely blanket every helix — an imported design gets a
