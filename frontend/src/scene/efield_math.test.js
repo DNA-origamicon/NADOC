@@ -95,6 +95,21 @@ describe('anchor descriptors', () => {
     expect(anchorLabel({ kind: 'strand', id: 's7' })).toBe('strand s7')
     expect(anchorLabel({ kind: 'base', helixId: 'h2', bp: 5, direction: 'reverse' })).toBe('base h2.5 reverse')
   })
+  it('synthetic kinds key and label distinctly, with a wildcard for the whole run/tail', () => {
+    expect(anchorKey({ kind: 'extra_base', crossoverId: 'xo1', k: 2 })).toBe('extra_base:xo1:2')
+    expect(anchorKey({ kind: 'extra_base', crossoverId: 'xo1' })).toBe('extra_base:xo1:*')
+    expect(anchorKey({ kind: 'extension', extensionId: 'e1', k: 0 })).toBe('extension:e1:0')
+    expect(anchorKey({ kind: 'extension', extensionId: 'e1' })).toBe('extension:e1:*')
+    expect(anchorLabel({ kind: 'extra_base', crossoverId: 'xo1', k: 2 })).toBe('xover base xo1#2')
+    expect(anchorLabel({ kind: 'extra_base', crossoverId: 'xo1' })).toBe('xover bases xo1')
+    expect(anchorLabel({ kind: 'extension', extensionId: 'e1', k: 0 })).toBe('ext base e1#0')
+    expect(anchorLabel({ kind: 'extension', extensionId: 'e1' })).toBe('ext tail e1')
+  })
+  it('a whole-run scope and its index-0 member are DIFFERENT anchors (no dedupe collision)', () => {
+    const a = addAnchors([{ kind: 'extra_base', crossoverId: 'xo1' }],
+                         [{ kind: 'extra_base', crossoverId: 'xo1', k: 0 }])
+    expect(a).toHaveLength(2)
+  })
   it('dedupe keeps first-seen order', () => {
     const out = dedupeAnchors([
       { kind: 'overhang', id: 'o1' },
@@ -111,64 +126,83 @@ describe('anchor descriptors', () => {
   })
 })
 
-describe('partitionBaseKeys — which base-level picks an anchor can address', () => {
-  const design = { helices: [{ id: 'h1' }, { id: 'h2' }, { id: '__lnk__c1' }] }
-  const helixIds = new Set(design.helices.map(h => h.id))
+describe('partitionBaseKeys — one descriptor kind per bead family', () => {
+  const design = {
+    helices: [{ id: 'h1' }, { id: 'h2' }, { id: '__lnk__c1' }],
+    crossovers: [{ id: 'xo1' }],
+    extensions: [{ id: 'e1' }, { id: '9f3a-2b_11' }],
+  }
+  const helixIds = {
+    helixIds:     new Set(design.helices.map(h => h.id)),
+    crossoverIds: new Set(design.crossovers.map(x => x.id)),
+    extensionIds: new Set(design.extensions.map(e => e.id)),
+  }
 
-  it('accepts bases on a real design helix', () => {
-    const { anchorable, unsupported } = partitionBaseKeys(['h1:12:FORWARD', 'h2:3:REVERSE'], helixIds)
+  it('real nucleotides become kind:base', () => {
+    const { anchors, unsupported } = partitionBaseKeys(['h1:12:FORWARD', 'h2:3:REVERSE'], helixIds)
     expect(unsupported).toEqual([])
-    expect(anchorable).toEqual([
-      { helix_id: 'h1', bp_index: 12, direction: 'FORWARD', copy: 0 },
-      { helix_id: 'h2', bp_index: 3,  direction: 'REVERSE', copy: 0 },
+    expect(anchors).toEqual([
+      { kind: 'base', helixId: 'h1', bp: 12, direction: 'FORWARD' },
+      { kind: 'base', helixId: 'h2', bp: 3,  direction: 'REVERSE' },
     ])
   })
 
-  // These two families have helix_id/bp/direction = None in the backend strand walk
-  // (_walk_strand_nucleotides), so an anchor descriptor for them matches zero particles.
-  it('rejects extra crossover bases — __xb__ has no helix/bp/direction at all', () => {
-    const { anchorable, unsupported } = partitionBaseKeys(['__xb__:xo1:2'], helixIds)
-    expect(anchorable).toEqual([])
-    expect(unsupported).toEqual(['__xb__:xo1:2'])
+  // These two families have helix_id/bp/direction = None in the backend strand walk, so
+  // they cannot be a kind:'base'; they are matched on their key tuple instead.
+  it('extra crossover bases become kind:extra_base, keyed by crossover + insert index', () => {
+    expect(partitionBaseKeys(['__xb__:xo1:2'], helixIds).anchors)
+      .toEqual([{ kind: 'extra_base', crossoverId: 'xo1', k: 2 }])
   })
 
-  it('rejects extension-tail bases — their synthetic helix is not in the design', () => {
-    const { anchorable, unsupported } = partitionBaseKeys(['__ext_e1:0:FORWARD'], helixIds)
-    expect(anchorable).toEqual([])
-    expect(unsupported).toEqual(['__ext_e1:0:FORWARD'])
+  it('extension-tail bases become kind:extension, keyed by extension + bead index', () => {
+    expect(partitionBaseKeys(['__ext_e1:3:FORWARD'], helixIds).anchors)
+      .toEqual([{ kind: 'extension', extensionId: 'e1', k: 3 }])
   })
 
-  // The test is data-driven, not prefix-based: a synthetic helix that IS in the design
-  // (ss-linker bridges) is anchorable, and would start working the moment it appears.
-  it('accepts an ss-linker base when its __lnk__ helix really exists', () => {
-    const { anchorable, unsupported } = partitionBaseKeys(['__lnk__c1:0:FORWARD'], helixIds)
+  it('an extension id containing underscores survives the prefix strip', () => {
+    expect(partitionBaseKeys(['__ext_9f3a-2b_11:0:FORWARD'], helixIds).anchors[0].extensionId)
+      .toBe('9f3a-2b_11')
+  })
+
+  // Data-driven, not prefix-based: a synthetic helix that IS in the design is a real base.
+  it('an ss-linker base is a plain base when its __lnk__ helix exists', () => {
+    const { anchors, unsupported } = partitionBaseKeys(['__lnk__c1:0:FORWARD'], helixIds)
     expect(unsupported).toEqual([])
-    expect(anchorable).toHaveLength(1)
-    expect(anchorable[0].helix_id).toBe('__lnk__c1')
+    expect(anchors).toEqual([{ kind: 'base', helixId: '__lnk__c1', bp: 0, direction: 'FORWARD' }])
   })
 
-  it('rejects a base on a helix that was deleted', () => {
-    expect(partitionBaseKeys(['gone:1:FORWARD'], helixIds).unsupported).toEqual(['gone:1:FORWARD'])
+  // Every family's owner is checked, because the backend resolves a stale descriptor to
+  // zero particles silently — an anchor that looks added and holds nothing.
+  it('a stale key is unsupported whatever its family', () => {
+    expect(partitionBaseKeys(
+      ['gone:1:FORWARD', '__xb__:xoGone:0', '__ext_eGone:0:FORWARD', 'junk'], helixIds))
+      .toEqual({ anchors: [],
+                 unsupported: ['gone:1:FORWARD', '__xb__:xoGone:0', '__ext_eGone:0:FORWARD', 'junk'] })
   })
 
-  it('rejects unparseable keys', () => {
-    expect(partitionBaseKeys(['junk'], helixIds).unsupported).toEqual(['junk'])
+  it('an omitted id set means "cannot tell" and keeps the key', () => {
+    expect(partitionBaseKeys(['__xb__:anything:0'], {}).anchors)
+      .toEqual([{ kind: 'extra_base', crossoverId: 'anything', k: 0 }])
   })
 
   it('unsupportedBaseKeys reads the pool straight off a state snapshot', () => {
     expect(unsupportedBaseKeys({
       currentDesign: design,
       multiSelectedBaseKeys: ['h1:1:FORWARD', '__xb__:xo1:0', '__ext_e1:0:FORWARD'],
-    })).toEqual(['__xb__:xo1:0', '__ext_e1:0:FORWARD'])
-  })
-
-  it('unsupportedBaseKeys is empty for an empty pool', () => {
-    expect(unsupportedBaseKeys({ currentDesign: design })).toEqual([])
+    })).toEqual([])
+    expect(unsupportedBaseKeys({
+      currentDesign: design,
+      multiSelectedBaseKeys: ['gone:1:FORWARD', '__xb__:xoGone:0', '__ext_eGone:0:FORWARD'],
+    })).toEqual(['gone:1:FORWARD', '__xb__:xoGone:0', '__ext_eGone:0:FORWARD'])
   })
 })
 
 describe('resolveSelectionAnchors — base-level pool', () => {
-  const design = { helices: [{ id: 'h1' }, { id: 'h2' }] }
+  const design = {
+    helices: [{ id: 'h1' }, { id: 'h2' }],
+    crossovers: [{ id: 'xo1' }],
+    extensions: [{ id: 'e1' }],
+  }
 
   it('turns multiSelectedBaseKeys into base anchors', () => {
     const out = resolveSelectionAnchors({
@@ -181,12 +215,31 @@ describe('resolveSelectionAnchors — base-level pool', () => {
     ])
   })
 
-  it('drops unaddressable bases rather than emitting anchors that match nothing', () => {
+  it('emits the right kind for each family, all three from one pool', () => {
     const out = resolveSelectionAnchors({
       currentDesign: design,
-      multiSelectedBaseKeys: ['h1:1:FORWARD', '__xb__:xo1:0', '__ext_e1:0:FORWARD'],
+      multiSelectedBaseKeys: ['h1:1:FORWARD', '__xb__:xo1:0', '__ext_e1:2:FORWARD'],
     })
-    expect(out).toEqual([{ kind: 'base', helixId: 'h1', bp: 1, direction: 'FORWARD' }])
+    expect(out).toEqual([
+      { kind: 'base', helixId: 'h1', bp: 1, direction: 'FORWARD' },
+      { kind: 'extra_base', crossoverId: 'xo1', k: 0 },
+      { kind: 'extension', extensionId: 'e1', k: 2 },
+    ])
+  })
+
+  it('still drops a base whose helix was deleted', () => {
+    expect(resolveSelectionAnchors({
+      currentDesign: design, multiSelectedBaseKeys: ['gone:1:FORWARD'],
+    })).toEqual([])
+  })
+
+  it('synthetic descriptors reach the occupancy wire format too', () => {
+    const sel = anchorsToSelection(resolveSelectionAnchors({
+      currentDesign: design,
+      multiSelectedBaseKeys: ['__xb__:xo1:0', '__ext_e1:2:FORWARD'],
+    }))
+    expect(sel.extra_bases).toEqual([['xo1', 0]])
+    expect(sel.extensions).toEqual([['e1', 2]])
   })
 
   it('dedupes a base already contributed by ctrlBeadNucs', () => {
@@ -537,7 +590,7 @@ describe('base-count drag scaling (nmPerPnForN)', () => {
 
 describe('anchorsToSelection — anchor descriptors → the occupancy scope dict', () => {
   it('maps every kind the picker can emit', () => {
-    // A kind with no slot would select nothing and read as an empty region, so all five
+    // A kind with no slot would select nothing and read as an empty region, so all seven
     // the anchor picker produces must land somewhere.
     const sel = anchorsToSelection([
       { kind: 'cluster', id: 'c1' },
@@ -545,11 +598,28 @@ describe('anchorsToSelection — anchor descriptors → the occupancy scope dict
       { kind: 'overhang', id: 'o1' },
       { kind: 'domain', strandId: 's3', domainIndex: 2 },
       { kind: 'base', helixId: 'h0', bp: 5, direction: 'FORWARD' },
+      { kind: 'extra_base', crossoverId: 'xo1', k: 1 },
+      { kind: 'extension', extensionId: 'e1', k: 0 },
     ])
     expect(sel).toEqual({
       cluster_ids: ['c1'], helix_ids: [], strand_ids: ['s2'], overhang_ids: ['o1'],
       domains: [['s3', 2]], bases: [['h0', 5, 'FORWARD']],
+      extra_bases: [['xo1', 1]], extensions: [['e1', 0]],
     })
+  })
+
+  it('a synthetic scope with no index is sent as a 1-element entry (the whole run/tail)', () => {
+    const sel = anchorsToSelection([
+      { kind: 'extra_base', crossoverId: 'xo1' },
+      { kind: 'extension', extensionId: 'e1' },
+    ])
+    expect(sel.extra_bases).toEqual([['xo1']])
+    expect(sel.extensions).toEqual([['e1']])
+  })
+
+  it('index 0 is not confused with "no index"', () => {
+    expect(anchorsToSelection([{ kind: 'extra_base', crossoverId: 'xo1', k: 0 }]).extra_bases)
+      .toEqual([['xo1', 0]])
   })
 
   it('returns null for nothing selected — that is how "whole structure" is expressed', () => {

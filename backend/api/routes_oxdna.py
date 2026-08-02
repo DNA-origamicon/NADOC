@@ -65,8 +65,10 @@ from backend.core.oxdna_runner import (
 )
 from backend.physics.oxdna_interface import (
     DEFAULT_ANCHOR_STIFF,
+    _XB_SENTINEL,
     _strand_nucleotide_order,
     count_undefined_bases,
+    is_extension_key,
     designed_pair_complementarity,
     max_crossover_backbone_stretch,
     oxdna_backbone_site,
@@ -198,8 +200,16 @@ class ProductionRequest(BaseModel):
 class AnchorRef(BaseModel):
     """An anchor selection held fixed during a field stage — one of: cluster,
     domain, overhang, a whole strand (``kind='strand'``, e.g. an overhang-binding
-    oligo), or a single base (``kind='base'`` at helix/bp/direction).  Accepts the
-    frontend's camelCase keys (strandId/domainIndex/helixId)."""
+    oligo), a single base (``kind='base'`` at helix/bp/direction), a crossover's
+    inserted extra base(s) (``kind='extra_base'``) or a strand extension's tail
+    bead(s) (``kind='extension'``).  Accepts the frontend's camelCase keys
+    (strandId/domainIndex/helixId/crossoverId/extensionId).
+
+    NOTE this model is ``extra='ignore'`` (pydantic's default), so an unknown field
+    is dropped SILENTLY rather than rejected — a descriptor carrying a field that is
+    not declared here resolves to zero anchors with no error anywhere. Any new
+    anchor kind must add its fields here in the same commit.
+    """
     model_config = ConfigDict(populate_by_name=True)
     kind:         str
     id:           Optional[str] = None
@@ -208,6 +218,11 @@ class AnchorRef(BaseModel):
     helix_id:     Optional[str] = Field(None, alias="helixId")
     bp:           Optional[int] = None
     direction:    Optional[str] = None
+    # Synthetic-bead scopes. `k` is the 5'→3' insert index (extra_base) or the tail
+    # bead index (extension); None means the whole run/tail.
+    crossover_id: Optional[str] = Field(None, alias="crossoverId")
+    extension_id: Optional[str] = Field(None, alias="extensionId")
+    k:            Optional[int] = None
 
 
 class FieldRequest(BaseModel):
@@ -1794,8 +1809,12 @@ async def _occupancy_impl(job_id: str, request: Request, *, align: bool, scope: 
 class OccupancySelection(BaseModel):
     """Which part of the structure the clustering may look at.
 
-    A union of four criteria — a nucleotide is in scope if it matches ANY of them.
+    A union of criteria — a nucleotide is in scope if it matches ANY of them.
     Everything empty means the whole structure, which is the same analysis the GET does.
+
+    ``extra="forbid"``, so a criterion the model does not declare is a 422 rather than a
+    silent no-scope. Any new criterion must also be added to
+    ``oxdna_occupancy._selection_sig`` or two different scopes collide in the cache.
     """
     model_config = ConfigDict(extra="forbid")
     cluster_ids: list[str] = Field(default_factory=list)
@@ -1804,6 +1823,9 @@ class OccupancySelection(BaseModel):
     overhang_ids: list[str] = Field(default_factory=list)
     domains: list[list] = Field(default_factory=list)  # [strand_id, domain_index]
     bases: list[list] = Field(default_factory=list)    # [helix_id, bp_index, direction]
+    # Synthetic beads — omit the trailing index to take the whole run/tail.
+    extra_bases: list[list] = Field(default_factory=list)  # [crossover_id, k?]
+    extensions: list[list] = Field(default_factory=list)   # [extension_id, k?]
 
 
 class OccupancyBody(BaseModel):
@@ -1822,12 +1844,18 @@ class OccupancyBody(BaseModel):
 async def post_oxdna_occupancy(job_id: str, request: Request, body: OccupancyBody) -> dict:
     """Occupancy clouds restricted to PART of the structure.
 
-    Same analysis as the GET, plus a `selection` of clusters / strands / individual bases.
-    Scoping matters because a global clustering is dominated by the largest-amplitude
-    motion in the whole object; a local hinge or a single flexible seam that flips between
-    two well-defined states can sit entirely inside the noise floor of that fit. Restricting
-    the feature matrix — and re-superposing on the selection, so its rigid-body motion is
-    removed rather than clustered on — is what makes those local states visible.
+    Same analysis as the GET, plus a `selection` of clusters / strands / domains /
+    overhangs / individual bases / crossover extra bases / extension tails. Scoping matters
+    because a global clustering is dominated by the largest-amplitude motion in the whole
+    object; a local hinge or a single flexible seam that flips between two well-defined
+    states can sit entirely inside the noise floor of that fit. Restricting the feature
+    matrix is what makes those local states visible.
+
+    CAVEAT: this docstring used to claim the scoped run also re-superposes on the selection
+    so the region's rigid-body motion is removed rather than clustered on. It does not —
+    ``_superpose_on_subset`` has no production call site (verified 2026-08-01). So a scoped
+    PCA still sees the region's swing inside the GLOBAL fit. See
+    ``memory/project_oxdna_occupancy_clouds.md``.
 
     POST rather than GET because a base-level selection is far too big for a query string.
     """
@@ -2267,11 +2295,20 @@ def _relaxed_full_map(job, align: bool, *, copies: bool = False,
     # conf.dat, so root jobs are unaffected.
     ref_conf = _design_ref_conf(jd, design)
     if anchor_keys:
+        # An anchor on a SYNTHETIC bead (crossover extra base / extension tail) can only
+        # act as the alignment reference if that bead is in the map at all. The default
+        # here is include_*=False, so without this the align subset comes back empty,
+        # `unwrap_align_to_reference` falls through to T = zeros(3), and the structure
+        # renders UNALIGNED with no error — the exact silent failure that makes an anchor
+        # look like it did nothing.
+        _keys = [tuple(k) for k in anchor_keys]
+        _extra_b = include_extra_bases or any(k and k[0] == _XB_SENTINEL for k in _keys)
+        _exts    = include_extensions or any(is_extension_key(k) for k in _keys if k)
         full_map = read_configuration_unwrapped(
             conf_path, design, ref_conf,
-            align_keys=[tuple(k) for k in anchor_keys], rotate=False, align=align,
-            copies=copies, include_extra_bases=include_extra_bases,
-            include_extensions=include_extensions, n_trailing_extra=cap_beads)
+            align_keys=_keys, rotate=False, align=align,
+            copies=copies, include_extra_bases=_extra_b,
+            include_extensions=_exts, n_trailing_extra=cap_beads)
     else:
         full_map = read_configuration_unwrapped(conf_path, design, ref_conf,
                                                 align=align, copies=copies,

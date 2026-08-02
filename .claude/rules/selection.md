@@ -239,6 +239,29 @@ and nothing else; there is still no other aggregator.
 - **Cost:** `_baseCandidates()` is rebuilt per pointer event and never memoized — 1.2 ms for 18k
   candidates, the same order `_nearestBead` already pays.
 
+### Downstream: anchors + the occupancy-cloud scope
+
+The pool feeds both, through ONE read — `resolveSelectionAnchors` (`scene/efield_math.js`). The
+occupancy scope card *is* the anchor widget with `engine:'occupancy'`, so wiring the pool there
+lit up all six anchor cards, the scope picker and the purple halo at once.
+
+`partitionBaseKeys` maps each family to the descriptor kind the backend can actually resolve:
+
+| Family | Kind | Backend match |
+|---|---|---|
+| backbone · flexible ssDNA · ss-linker | `base` | `(helix_id, bp, direction)` provenance |
+| crossover extra bases | `extra_base` | key `("__xb__", crossover_id, k)` |
+| extension tails | `extension` | key `("__ext_<id>", k, direction)` |
+
+The synthetic two exist because `_walk_strand_nucleotides` gives those beads
+`helix_id/bp/direction = None` — no coordinate criterion can ever reach them. Omit `k` to take
+the whole run/tail. Staleness is checked per family against the live design, because the backend
+resolves a dead descriptor to **zero particles silently**.
+
+**oxDNA only.** mrDNA double-filters extension beads and has no `nt_key` for extra bases; NAMD's
+`built_pdb_residue_keys` stores a synthetic residue under its *flanking* nucleotide's key, so a
+`base` anchor there already over-selects them; CanDo/SNUPI mesh nodes are duplex-core only.
+
 **Unverified:** the ss-linker slot→bp mapping. The bridge nucleotides are real (`__lnk__<conn>__s`,
 excluded from `iSpheres` so the arc can draw them), but the mesh is *sized* from
 `linkerLengthToBases(conn)` — derived from `conn.length_value`, independent of the geometry — so a

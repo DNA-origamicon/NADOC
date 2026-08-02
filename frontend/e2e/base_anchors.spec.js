@@ -113,14 +113,15 @@ test.describe('Base picks → anchors & occupancy scope', () => {
     expect(chips.match(/base /g)?.length).toBe(pool)
   })
 
-  // The boundary that matters: extra crossover bases and extension tails are pickable at
-  // base level but carry helix_id/bp/direction = None in _walk_strand_nucleotides, so an
-  // anchor for them resolves to zero particles. Silence would read as "added".
-  test('unaddressable bases are reported, not silently dropped', async ({ page }) => {
+  // Staleness, across all three descriptor kinds. The backend resolves a descriptor whose
+  // owner is gone to ZERO particles without complaining, so an anchor set that looks added
+  // and holds nothing is the failure to avoid.
+  test('stale base picks are reported, not silently dropped', async ({ page }) => {
     test.setTimeout(180000)
     await loadScaffoldedPart(page, { doc: 'e2e-base-skip', name: 'base-skip' })
     await page.waitForTimeout(500)
 
+    // One live base + one dead crossover + one dead extension.
     await page.evaluate(() => {
       const h = window.__nadocTest.store.getState().currentDesign?.helices?.[0]?.id
       window.__nadocTest.store.setState({
@@ -136,8 +137,8 @@ test.describe('Base picks → anchors & occupancy scope', () => {
       status: document.getElementById('oxdna-anchors-status')?.textContent ?? '',
       n: window.__nadocTest.anchors.card?.getAnchors?.().length ?? -1,
     }))
-    expect(mixed.n, 'only the addressable base was added').toBe(1)
-    expect(mixed.status).toMatch(/skipped 2 bases/i)
+    expect(mixed.n, 'only the live base was added').toBe(1)
+    expect(mixed.status).toMatch(/skipped 2 stale bases/i)
 
     await page.evaluate(() => document.getElementById('oxdna-anchors-clear')?.click())
     await page.evaluate(() => window.__nadocTest.store.setState({
@@ -151,6 +152,53 @@ test.describe('Base picks → anchors & occupancy scope', () => {
       n: window.__nadocTest.anchors.card?.getAnchors?.().length ?? -1,
     }))
     expect(only.n).toBe(0)
-    expect(only.status).toMatch(/can't anchor 2 picked bases/i)
+    expect(only.status).toMatch(/no longer exist/i)
+  })
+
+  // Real extra crossover bases from a real design. They have no (helix, bp, direction) at
+  // all, so they travel as `kind:'extra_base'` keyed on (crossover_id, insert index).
+  test('picked extra crossover bases become extra_base anchors', async ({ page }) => {
+    test.setTimeout(180000)
+    await page.goto('/?doc=e2e-base-xb')
+    await page.waitForSelector('#canvas')
+    await page.evaluate(async (p) => {
+      const api = await import('/src/api/client.js')
+      await api.loadDesign(p)
+    }, '/home/jojo/Work/NADOC/workspace/6hbS42_1xT.nadoc')
+    await expect.poll(
+      () => page.evaluate(() =>
+        window.__nadocTest.getBaseCandidates().filter(c => c.family === 'xover').length),
+      { timeout: 25_000, message: 'design never produced extra crossover bases' },
+    ).toBeGreaterThan(0)
+
+    const seeded = await page.evaluate(() => {
+      const keys = window.__nadocTest.getBaseCandidates()
+        .filter(c => c.family === 'xover').slice(0, 3).map(c => c.key)
+      window.__nadocTest.store.setState({ multiSelectedBaseKeys: keys })
+      return keys
+    })
+    expect(seeded.every(k => k.startsWith('__xb__:'))).toBe(true)
+
+    const r = await page.evaluate(async () => {
+      const { resolveSelectionAnchors, anchorSelectionState, anchorsToSelection, unsupportedBaseKeys }
+        = await import('/src/scene/efield_math.js')
+      const snap = anchorSelectionState({ state: window.__nadocTest.store.getState(), ctrlBeadNucs: [] })
+      const anchors = resolveSelectionAnchors(snap)
+      return { anchors, sel: anchorsToSelection(anchors), skipped: unsupportedBaseKeys(snap) }
+    })
+    expect(r.skipped, 'extra bases are addressable now, nothing skipped').toEqual([])
+    expect(r.anchors.every(a => a.kind === 'extra_base')).toBe(true)
+    expect(r.sel.extra_bases).toHaveLength(seeded.length)
+
+    await page.evaluate(() => document.getElementById('oxdna-anchors-toggle')?.click())
+    await page.waitForTimeout(250)
+    await page.evaluate(() => document.getElementById('oxdna-anchors-add')?.click())
+    await page.waitForTimeout(400)
+    const card = await page.evaluate(() => ({
+      chips: document.getElementById('oxdna-anchors-list')?.textContent ?? '',
+      n: window.__nadocTest.anchors.card?.getAnchors?.().length ?? -1,
+    }))
+    expect(card.n).toBe(seeded.length)
+    expect(card.chips).toContain('xover base')
   })
 })

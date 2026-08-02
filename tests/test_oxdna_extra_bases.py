@@ -371,3 +371,118 @@ def test_all_crossovers_insert_keys_unique_and_topology_consistent(routed_6hb):
 def test_oracle_fires_without_extra_bases(routed_6hb):
     with pytest.raises(AssertionError):
         assert_extra_bases_in_oxdna(routed_6hb, expected_count=2, expected_sequence="TT")
+
+
+# ── Anchoring synthetic beads (extra bases + extension tails) ─────────────────
+#
+# These beads occupy real oxDNA particle indices but have no (helix, bp, direction) —
+# `_walk_strand_nucleotides` gives them None for all three — so the coordinate-matching
+# anchor kinds can never reach them. They are addressed by their KEY instead:
+# ("__xb__", crossover_id, k) and ("__ext_<id>", k, direction).
+#
+# A particle index is all `anchor_trap_block` needs, so nothing downstream changes.
+
+
+def _xb_keys(design):
+    """Every ("__xb__", xo_id, k) key in oxDNA particle order."""
+    return [k for k in ox._strand_nucleotide_order(design) if k[0] == ox._XB_SENTINEL]
+
+
+def test_extra_base_anchor_selects_one_insert(routed_6hb):
+    d = _with_extra(routed_6hb, "TTT")
+    xo_id = d.crossovers[0].id
+    order = ox._strand_nucleotide_order(d)
+    assert len(_xb_keys(d)) == 3, "fixture should have a 3-base insert run"
+
+    parts, keys = ox.resolve_anchor_particles(
+        d, [{"kind": "extra_base", "crossover_id": xo_id, "k": 1}])
+    assert keys == [(ox._XB_SENTINEL, xo_id, 1)]
+    assert len(parts) == 1
+    assert order[parts[0]] == keys[0], "particle index must address that exact bead"
+
+
+def test_extra_base_anchor_without_k_takes_the_whole_run(routed_6hb):
+    d = _with_extra(routed_6hb, "TTT")
+    xo_id = d.crossovers[0].id
+    parts, keys = ox.resolve_anchor_particles(
+        d, [{"kind": "extra_base", "crossover_id": xo_id}])
+    assert len(parts) == 3
+    assert [k[2] for k in keys] == [0, 1, 2], "5'→3' insert order"
+    assert all(k[1] == xo_id for k in keys)
+
+
+def test_extra_base_anchor_accepts_the_camelCase_alias(routed_6hb):
+    d = _with_extra(routed_6hb, "TT")
+    xo_id = d.crossovers[0].id
+    a = ox.resolve_anchor_particles(d, [{"kind": "extra_base", "crossoverId": xo_id}])
+    b = ox.resolve_anchor_particles(d, [{"kind": "extra_base", "crossover_id": xo_id}])
+    assert a == b and len(a[0]) == 2
+
+
+def test_extra_base_anchor_does_not_leak_across_crossovers(routed_6hb):
+    d = _with_extra(routed_6hb, "TT", all_crossovers=True)
+    xo_id = d.crossovers[0].id
+    _parts, keys = ox.resolve_anchor_particles(
+        d, [{"kind": "extra_base", "crossover_id": xo_id}])
+    assert {k[1] for k in keys} == {xo_id}
+    assert len(_xb_keys(d)) > len(keys), "other crossovers also carry inserts"
+
+
+def test_unknown_extra_base_anchor_drops_silently(routed_6hb):
+    d = _with_extra(routed_6hb, "TT")
+    assert ox.resolve_anchor_particles(
+        d, [{"kind": "extra_base", "crossover_id": "nope"}]) == ([], [])
+    # A run index past the end of the insert is also just empty, not an error.
+    assert ox.resolve_anchor_particles(
+        d, [{"kind": "extra_base", "crossover_id": d.crossovers[0].id, "k": 99}]) == ([], [])
+    # No crossover_id at all must select NOTHING (not every extra base in the design).
+    assert ox.resolve_anchor_particles(d, [{"kind": "extra_base"}]) == ([], [])
+
+
+def test_extension_anchor_selects_tail_beads(routed_6hb):
+    from backend.core.models import StrandExtension
+    d = routed_6hb.model_copy(deep=True)
+    ext = StrandExtension(strand_id=d.strands[1].id, end="three_prime", sequence="TTTT")
+    d.extensions = [ext]
+    order = ox._strand_nucleotide_order(d)
+
+    parts, keys = ox.resolve_anchor_particles(
+        d, [{"kind": "extension", "extension_id": ext.id, "k": 2}])
+    assert len(parts) == 1
+    assert keys[0][0] == f"{ox._EXT_PREFIX}{ext.id}" and keys[0][1] == 2
+    assert order[parts[0]] == keys[0]
+
+    # Whole tail.
+    wparts, wkeys = ox.resolve_anchor_particles(
+        d, [{"kind": "extension", "extensionId": ext.id}])
+    assert len(wparts) == 4 == len(wkeys)
+    assert sorted(k[1] for k in wkeys) == [0, 1, 2, 3]
+
+    assert ox.resolve_anchor_particles(d, [{"kind": "extension", "extension_id": "nope"}]) \
+        == ([], [])
+    assert ox.resolve_anchor_particles(d, [{"kind": "extension"}]) == ([], [])
+
+
+def test_a_bare_base_anchor_selects_nothing_not_every_synthetic(routed_6hb):
+    """Regression: synthetic rows have helix_id/bp/direction all None, so a descriptor
+    with no coordinates used to match EVERY one of them."""
+    from backend.core.models import StrandExtension
+    d = _with_extra(routed_6hb, "TT")
+    d.extensions = [StrandExtension(strand_id=d.strands[1].id, end="three_prime",
+                                    sequence="TT")]
+    assert ox.resolve_anchor_particles(d, [{"kind": "base"}]) == ([], [])
+    assert ox.resolve_anchor_particles(d, [{"kind": "domain", "strand_id": d.strands[0].id}]) \
+        == ([], [])
+    assert ox.resolve_anchor_particles(d, [{"kind": "overhang"}]) == ([], [])
+    assert ox.resolve_anchor_particles(d, [{"kind": "strand"}]) == ([], [])
+
+
+def test_strand_anchor_still_sweeps_its_synthetic_beads(routed_6hb):
+    """Unchanged, load-bearing behaviour: mrdna_anchors filters these out again, and
+    its test pins that. Don't "fix" the strand scope to exclude them."""
+    d = _with_extra(routed_6hb, "TT")
+    owner = ox.crossover_extra_base_junctions(d)
+    assert owner, "fixture must have an owning strand for the insert"
+    sid = next(iter(owner))[0]
+    _parts, keys = ox.resolve_anchor_particles(d, [{"kind": "strand", "id": sid}])
+    assert any(k[0] == ox._XB_SENTINEL for k in keys)

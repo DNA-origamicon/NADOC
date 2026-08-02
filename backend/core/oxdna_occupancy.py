@@ -63,7 +63,10 @@ from backend.core.oxdna_health import (
     twist_series_stats,
 )
 from backend.physics.oxdna_interface import (
+    _EXT_PREFIX,
+    _XB_SENTINEL,
     _walk_strand_nucleotides,
+    is_extension_key,
     is_synthetic_nuc_key,
     oxdna_backbone_sites,
 )
@@ -89,10 +92,30 @@ _OCCUPANCY_CACHE_MAX = 6
 
 
 # ── Scope: which nucleotides the clustering is allowed to see ─────────────────────
+def _synthetic_selected(key, xb_exact, xb_whole, ext_exact, ext_whole) -> bool:
+    """Does this synthetic bead key match one of the two synthetic scopes?
+
+    ``("__xb__", crossover_id, k)`` → extra_bases; ``("__ext_<id>", k, direction)`` →
+    extensions. Element [1] is a crossover-id STRING for one and a bead-index INT for the
+    other — the asymmetry ``is_synthetic_nuc_key`` exists to paper over — so each form is
+    matched explicitly rather than by a shared index rule.
+    """
+    if is_extension_key(key):
+        ext_id = str(key[0])[len(_EXT_PREFIX):]
+        if ext_id in ext_whole:
+            return True
+        return len(key) >= 2 and (ext_id, int(key[1])) in ext_exact
+    if key[0] == _XB_SENTINEL and len(key) >= 3:
+        xo_id = str(key[1])
+        if xo_id in xb_whole:
+            return True
+        return (xo_id, int(key[2])) in xb_exact
+    return False
+
 def resolve_selection_keys(design, keys, selection) -> list:
     """Filter the frame key list down to a user selection. Pure.
 
-    ``selection`` is a union of four optional criteria — a key is kept if it matches
+    ``selection`` is a union of optional criteria — a key is kept if it matches
     ANY of them, which is what "pick these things" means to a user::
 
         {"cluster_ids":  [...],   # expanded to their member helices
@@ -100,14 +123,23 @@ def resolve_selection_keys(design, keys, selection) -> list:
          "strand_ids":   [...],
          "overhang_ids": [...],
          "domains":      [[strand_id, domain_index], ...],
-         "bases":        [[helix_id, bp_index, direction], ...]}
+         "bases":        [[helix_id, bp_index, direction], ...],
+         "extra_bases":  [[crossover_id, k?], ...],   # k omitted → the whole run
+         "extensions":   [[extension_id, k?], ...]}   # k omitted → the whole tail
 
-    The five non-base criteria mirror the kinds the shared anchor picker emits
-    (``cluster`` / ``strand`` / ``domain`` / ``overhang`` / ``base``), so a selection made
+    Every criterion mirrors a kind the shared anchor picker emits, so a selection made
     with that widget maps across without a lossy translation step.
 
     A base is matched on its first three elements, so selecting a position picks up all
     of its loop-insertion copies rather than an arbitrary one.
+
+    SYNTHETIC beads — crossover extra-base inserts (``("__xb__", xo_id, k)``) and
+    extension tail beads (``("__ext_<id>", k, direction)``) — are addressed by the last
+    two criteria and by those ONLY. Note the asymmetry this fixes: an *unscoped* run has
+    always included them (``key_list`` comes from ``_strand_nucleotide_order``, which
+    emits them), so they were in the feature basis by default yet impossible to name when
+    scoping. They stay excluded from a scoped selection that does not ask for them, which
+    keeps every coordinate-based criterion above meaning exactly what it did before.
 
     An empty/absent selection means the whole structure — the caller gets ``keys`` back
     unchanged, and no re-alignment happens.
@@ -121,6 +153,24 @@ def resolve_selection_keys(design, keys, selection) -> list:
     overhang_ids = set(str(o) for o in (selection.get("overhang_ids") or []))
     domains = {(str(d[0]), int(d[1])) for d in (selection.get("domains") or []) if len(d) >= 2}
     bases = {tuple(b)[:3] for b in (selection.get("bases") or [])}
+
+    # Synthetic scopes match on the key tuple directly, so they need no strand walk:
+    # element [0] carries the owner (crossover sentinel / "__ext_<id>") and element
+    # [1]/[2] the index. `whole` = the ids selected without a specific index.
+    def _split(entries):
+        exact, whole = set(), set()
+        for e in entries or []:
+            t = tuple(e)
+            if not t:
+                continue
+            if len(t) >= 2 and t[1] is not None:
+                exact.add((str(t[0]), int(t[1])))
+            else:
+                whole.add(str(t[0]))
+        return exact, whole
+
+    xb_exact, xb_whole = _split(selection.get("extra_bases"))
+    ext_exact, ext_whole = _split(selection.get("extensions"))
 
     # A cluster IS a named set of helices (ClusterRigidTransform.helix_ids), so it
     # expands rather than needing a parallel code path.
@@ -150,8 +200,13 @@ def resolve_selection_keys(design, keys, selection) -> list:
 
     out = []
     for k in keys:
+        # Synthetic beads carry no (helix, bp, direction), so they can only ever match
+        # their own two criteria — never the coordinate-based ones above, whose fields
+        # are all None on these rows.
         if is_synthetic_nuc_key(k):
-            continue                       # __xb__ / __ext_ beads are never user-pickable
+            if _synthetic_selected(k, xb_exact, xb_whole, ext_exact, ext_whole):
+                out.append(k)
+            continue
         if helix_ids and k[0] in helix_ids:
             out.append(k)
         elif bases and tuple(k)[:3] in bases:
@@ -621,7 +676,8 @@ def _selection_sig(selection) -> str:
     parts = []
     for field in ("cluster_ids", "helix_ids", "strand_ids", "overhang_ids"):
         parts.append(",".join(sorted(str(v) for v in (selection.get(field) or []))))
-    for field, width in (("domains", 2), ("bases", 3)):
+    for field, width in (("domains", 2), ("bases", 3),
+                         ("extra_bases", 2), ("extensions", 2)):
         parts.append(",".join(sorted("/".join(str(x) for x in tuple(v)[:width])
                                      for v in (selection.get(field) or []))))
     return "|".join(parts)

@@ -35,12 +35,20 @@ local hinge or a single flexible seam that flips between two well-defined states
 entirely inside its noise floor. `Analyse: [Whole structure | Specific elements…]` restricts
 the feature matrix to picked clusters / strands / domains / overhangs / individual bases.
 
-**A scoped run re-superposes on the selection** (`_superpose_on_subset`). Without it PCA
-reports where the region WAS — its rigid-body swing inside the global fit — instead of what
-shape it took, which would defeat the entire point of scoping. Feature-space only; the
-medoids handed back for rendering stay globally aligned so the drawn states keep the same
-pose as every other overlay. Pinned by `test_subset_superposition_removes_rigid_body_motion`
-(a pure swing must read unimodal) and `..._keeps_a_real_shape_change`.
+**⚠️ A scoped run does NOT currently re-superpose on the selection.** `_superpose_on_subset`
+exists and is correct (plain Kabsch, pinned by `test_subset_superposition_removes_rigid_body_motion`
+and `..._keeps_a_real_shape_change`) but **has no production call site** — `occupancy_features`
+never calls it, and `production_occupancy` goes straight to `occupancy_clusters`. Verified
+2026-08-01: the only callers repo-wide are those two tests.
+
+Consequence, and it is a real one: a scoped run's PCA reports where the region WAS — its
+rigid-body swing inside the GLOBAL fit — rather than what shape it took, which is the thing
+scoping exists to avoid. This paragraph previously asserted the opposite, as did the route
+docstring; both were describing intent, not behaviour. **Unfixed** — wiring it changes the
+scientific output of every scoped run already shipped, so it needs a deliberate call, plus a
+decision about whether a MIXED selection (duplex + floppy tail) should fit on all of its
+points or only the duplex ones. Kabsch weights every point equally, and an ssDNA tail's RMSF
+is several times the duplex value.
 
 **The picker is the SHARED anchor widget, instantiated not forked.** `initOxdnaAnchorsSetup`
 already drives five engine cards off an `ids` override; occupancy adds a sixth channel with
@@ -56,10 +64,22 @@ already drives five engine cards off an `ids` override; occupancy adds a sixth c
   not an engine tab — its halo could never appear. It now unions the `occupancy` channel in.
 
 Backend: `resolve_selection_keys(design, keys, selection)` — a UNION of `cluster_ids` /
-`helix_ids` / `strand_ids` / `overhang_ids` / `domains` / `bases`. Bases match on the first
-three key elements so a position takes all its loop copies; synthetic `__xb__`/`__ext_` beads
-are never selectable. Domain and overhang criteria exist **because the picker emits those
-kinds** — without them those picks would silently select nothing.
+`helix_ids` / `strand_ids` / `overhang_ids` / `domains` / `bases` / `extra_bases` /
+`extensions`. Bases match on the first three key elements so a position takes all its loop
+copies. Every criterion exists **because the picker emits that kind** — without it those
+picks would silently select nothing.
+
+**Synthetic beads are scopeable (2026-08-01).** Crossover extra-base inserts
+(`("__xb__", xo_id, k)`) and extension tail beads (`("__ext_<id>", k, dir)`) carry no
+(helix, bp, direction), so no coordinate criterion can reach them; `extra_bases` /
+`extensions` address them by key instead — `[[owner_id, k]]`, or `[[owner_id]]` for the whole
+run/tail. The asymmetry this fixed: an **unscoped** run has always included them (`key_list`
+comes from `_strand_nucleotide_order`, which emits them), so they were in the feature basis by
+default yet impossible to name when scoping. A scoped selection that doesn't ask for them
+still excludes them, so every existing scope means exactly what it did.
+
+Both new fields are in `OccupancySelection` (`extra="forbid"` — a criterion the model doesn't
+declare is a 422) **and** in `_selection_sig`, or two different scopes collide in the cache.
 
 Transport is `POST /oxdna/jobs/{id}/occupancy` (a base-level selection is far too big for a
 query string); the unscoped `GET` is unchanged and both share one `_occupancy_impl`. The

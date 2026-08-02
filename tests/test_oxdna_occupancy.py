@@ -533,12 +533,65 @@ def test_criteria_union_rather_than_intersect():
     assert sum(1 for k in got if k[0] == "h2") == 1
 
 
-def test_synthetic_beads_are_never_selectable(monkeypatch):
-    import backend.core.oxdna_occupancy as occ
-    monkeypatch.setattr(occ, "is_synthetic_nuc_key", lambda k: k[0] == "__xb__")
-    ks = [("h0", 0, "FORWARD"), ("__xb__", "x1", 0)]
-    assert occ.resolve_selection_keys(_ScopedDesign(), ks, {"helix_ids": ["h0", "__xb__"]}) \
-        == [("h0", 0, "FORWARD")]
+# ── Synthetic beads (crossover extra bases + extension tails) ─────────────────────
+# They carry no (helix, bp, direction), so the coordinate criteria must never reach them
+# — but they ARE addressable through their own two criteria. The asymmetry this fixes:
+# an UNSCOPED run has always included them (key_list comes from _strand_nucleotide_order),
+# so they were in the feature basis by default yet impossible to name when scoping.
+
+_XB = ("__xb__", "x1", 0)
+_XB2 = ("__xb__", "x1", 1)
+_XB_OTHER = ("__xb__", "x2", 0)
+_EXT = ("__ext_e1", 0, "FORWARD")
+_EXT2 = ("__ext_e1", 1, "FORWARD")
+_EXT_OTHER = ("__ext_e2", 0, "FORWARD")
+_REAL = ("h0", 0, "FORWARD")
+_SYNTH_KEYS = [_REAL, _XB, _XB2, _XB_OTHER, _EXT, _EXT2, _EXT_OTHER]
+
+
+def _sel(design=None, keys=None, **selection):
+    from backend.core.oxdna_occupancy import resolve_selection_keys
+    return resolve_selection_keys(design or _ScopedDesign(), keys or _SYNTH_KEYS, selection)
+
+
+def test_a_coordinate_scope_never_reaches_synthetic_beads():
+    """helix/base/strand/domain/overhang all match on fields synthetics don't have."""
+    assert _sel(helix_ids=["h0", "__xb__", "__ext_e1"]) == [_REAL]
+    assert _sel(bases=[["h0", 0, "FORWARD"]]) == [_REAL]
+
+
+def test_extra_bases_scope_selects_one_insert():
+    assert _sel(extra_bases=[["x1", 0]]) == [_XB]
+
+
+def test_extra_bases_scope_without_an_index_takes_the_whole_run():
+    assert _sel(extra_bases=[["x1"]]) == [_XB, _XB2]
+
+
+def test_extra_bases_scope_does_not_leak_across_crossovers():
+    assert _XB_OTHER not in _sel(extra_bases=[["x1"]])
+
+
+def test_extensions_scope_selects_one_tail_bead_or_the_whole_tail():
+    assert _sel(extensions=[["e1", 1]]) == [_EXT2]
+    assert _sel(extensions=[["e1"]]) == [_EXT, _EXT2]
+    assert _EXT_OTHER not in _sel(extensions=[["e1"]])
+
+
+def test_synthetic_and_real_scopes_union():
+    assert _sel(helix_ids=["h0"], extra_bases=[["x1", 0]], extensions=[["e1"]]) \
+        == [_REAL, _XB, _EXT, _EXT2]
+
+
+def test_a_scope_that_asks_for_no_synthetics_still_excludes_them():
+    """The pre-existing contract: scoping to real geometry must not silently pull in
+    extra-base or tail coordinates, which are far floppier than the duplex."""
+    assert _sel(strand_ids=["s0"], keys=_SYNTH_KEYS) == []
+
+
+def test_an_unscoped_run_keeps_synthetics(monkeypatch):
+    from backend.core.oxdna_occupancy import resolve_selection_keys
+    assert resolve_selection_keys(_ScopedDesign(), _SYNTH_KEYS, None) == _SYNTH_KEYS
 
 
 def test_subset_superposition_removes_rigid_body_motion():

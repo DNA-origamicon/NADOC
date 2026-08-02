@@ -155,15 +155,14 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
   function addSelectedAnchors() {
     const sel = getSelection ? getSelection() : null
     const found = resolveSelectionAnchors(sel)
-    // Bases the `base` selection level can pick but no anchor can address: crossover
-    // extra-base inserts and extension-tail beads have no (helix, bp, direction) in the
-    // strand walk, so they would resolve to zero particles. Say so rather than dropping
-    // them silently — a user who lassoed a run of extra bases must not read an empty
-    // anchor set as "added".
+    // Picked bases that resolve to nothing — a key whose helix was deleted, or an
+    // unparseable one. Normally empty (extra crossover bases and extension tails ARE
+    // addressable, via the extra_base/extension kinds), but a stale pick must not be
+    // dropped silently: a user reading "added" over an empty anchor set is the failure.
     const skipped = unsupportedBaseKeys(sel)
     if (!found.length) {
       _setStatus(skipped.length
-        ? `Can't anchor ${skipped.length} picked base${skipped.length === 1 ? '' : 's'} — extra crossover bases and extension tails aren't addressable as anchors.`
+        ? `${skipped.length} picked base${skipped.length === 1 ? '' : 's'} no longer exist${skipped.length === 1 ? 's' : ''} in the design.`
         : 'Select an overhang, binding strand, domain, cluster, or base first.', _C.warn)
       return 0
     }
@@ -173,7 +172,7 @@ export function initOxdnaAnchorsSetup({ getSelection = null, onChange = null, id
     _emit()
     const added = _anchors.length - before
     if (skipped.length) {
-      _setStatus(`Added ${added}; skipped ${skipped.length} base${skipped.length === 1 ? '' : 's'} (extra crossover / extension beads aren't anchorable).`, _C.warn)
+      _setStatus(`Added ${added}; skipped ${skipped.length} stale base${skipped.length === 1 ? '' : 's'}.`, _C.warn)
     }
     return added
   }

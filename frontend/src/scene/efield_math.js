@@ -255,6 +255,8 @@ export function anchorKey(a) {
   if (!a) return ''
   if (a.kind === 'domain') return `domain:${a.strandId}:${a.domainIndex}`
   if (a.kind === 'base') return `base:${a.helixId}:${a.bp}:${a.direction}`
+  if (a.kind === 'extra_base') return `extra_base:${a.crossoverId}:${a.k ?? '*'}`
+  if (a.kind === 'extension') return `extension:${a.extensionId}:${a.k ?? '*'}`
   return `${a.kind}:${a.id}`
 }
 
@@ -266,6 +268,13 @@ export function anchorLabel(a) {
   if (a.kind === 'cluster') return `cluster ${a.id}`
   if (a.kind === 'strand') return `strand ${a.id}`
   if (a.kind === 'base') return `base ${a.helixId}.${a.bp} ${a.direction}`
+  // `k == null` means the whole run/tail, which the backend also accepts.
+  if (a.kind === 'extra_base') {
+    return a.k == null ? `xover bases ${a.crossoverId}` : `xover base ${a.crossoverId}#${a.k}`
+  }
+  if (a.kind === 'extension') {
+    return a.k == null ? `ext tail ${a.extensionId}` : `ext base ${a.extensionId}#${a.k}`
+  }
   return anchorKey(a)
 }
 
@@ -281,7 +290,7 @@ export function anchorLabel(a) {
  */
 export function anchorsToSelection(anchors) {
   const sel = { cluster_ids: [], helix_ids: [], strand_ids: [], overhang_ids: [],
-                domains: [], bases: [] }
+                domains: [], bases: [], extra_bases: [], extensions: [] }
   let n = 0
   for (const a of anchors ?? []) {
     if (!a?.kind) continue
@@ -290,7 +299,13 @@ export function anchorsToSelection(anchors) {
     else if (a.kind === 'overhang') sel.overhang_ids.push(a.id)
     else if (a.kind === 'domain') sel.domains.push([a.strandId, a.domainIndex])
     else if (a.kind === 'base') sel.bases.push([a.helixId, a.bp, a.direction])
-    else continue
+    // A missing index means the whole run/tail; the backend reads a 1-element entry
+    // that way, so don't pad it with null.
+    else if (a.kind === 'extra_base') {
+      sel.extra_bases.push(a.k == null ? [a.crossoverId] : [a.crossoverId, a.k])
+    } else if (a.kind === 'extension') {
+      sel.extensions.push(a.k == null ? [a.extensionId] : [a.extensionId, a.k])
+    } else continue
     n++
   }
   return n ? sel : null
@@ -359,43 +374,72 @@ export function anchorSelectionState({ state, ctrlBeadNucs = [], clusterMemberSt
 }
 
 /**
- * Split the base-level pool (`multiSelectedBaseKeys`) into keys an anchor can address
- * and keys it cannot.
+ * Turn the base-level pool (`multiSelectedBaseKeys`) into anchor descriptors.
  *
- * An anchor resolves through `resolve_anchor_particles`, which matches a `base`
- * descriptor on `(helix_id, bp, direction)` from the strand walk's provenance. Two of
- * the five bead families the `base` selection level can pick have **no** such triple —
- * `_walk_strand_nucleotides` gives crossover extra-base inserts and strand-extension
- * tail beads `helix_id=None, bp=None, direction=None`, so they occupy a particle index
- * but are unaddressable. Posting them anyway would select nothing and look like a
- * silently empty anchor set.
+ * The five bead families the `base` selection level can pick need three different
+ * descriptor kinds, because the backend addresses them three different ways:
  *
- * Rather than guess by key prefix, the test is data-driven: a base is anchorable iff its
- * helix actually exists in the design. That is exactly the condition the backend match
- * needs, so it stays correct as families are added.
+ *  - real nucleotides (backbone, extension-adjacent duplex, flexible ssDNA, ss-linker
+ *    bridge) → `kind:'base'`, matched on `(helix_id, bp, direction)` provenance;
+ *  - crossover extra-base inserts → `kind:'extra_base'`, matched on the key tuple
+ *    `("__xb__", crossover_id, k)` — these have NO helix/bp/direction at all;
+ *  - strand-extension tail beads → `kind:'extension'`, matched on `("__ext_<id>", k, …)`.
+ *
+ * Each kind's owner is checked against the live design, because the backend resolves a
+ * stale descriptor to zero particles SILENTLY — a deleted helix, a deleted crossover and
+ * a deleted extension all produce an anchor that looks added and holds nothing. Omitting
+ * an id set means "can't tell", which keeps the key rather than dropping it.
  *
  * @param {string[]} keys   app-wide base keys (scene/base_ref.js)
- * @param {Set<string>} designHelixIds  ids from design.helices
- * @returns {{anchorable: object[], unsupported: string[]}} anchorable = parsed base parts
+ * @param {{helixIds?:Set<string>, crossoverIds?:Set<string>, extensionIds?:Set<string>}} live
+ * @returns {{anchors: object[], unsupported: string[]}}
  */
-export function partitionBaseKeys(keys, designHelixIds) {
-  const anchorable = []
+export function partitionBaseKeys(keys, live = {}) {
+  const { helixIds, crossoverIds, extensionIds } = live
+  const anchors = []
   const unsupported = []
   for (const key of keys || []) {
     const p = parseBaseKey(key)
-    // __xb__ parses to {crossover_id, k} — no helix/bp/direction at all.
-    if (!p || p.helix_id === XB_HELIX || p.bp_index == null) { unsupported.push(key); continue }
-    if (designHelixIds && !designHelixIds.has(p.helix_id)) { unsupported.push(key); continue }
-    anchorable.push(p)
+    if (!p) { unsupported.push(key); continue }
+    if (p.helix_id === XB_HELIX) {
+      if (crossoverIds && !crossoverIds.has(p.crossover_id)) { unsupported.push(key); continue }
+      anchors.push({ kind: 'extra_base', crossoverId: p.crossover_id, k: p.k })
+      continue
+    }
+    if (p.helix_id.startsWith('__ext_')) {
+      const extId = p.helix_id.slice('__ext_'.length)
+      if (extensionIds && !extensionIds.has(extId)) { unsupported.push(key); continue }
+      anchors.push({ kind: 'extension', extensionId: extId, k: p.bp_index })
+      continue
+    }
+    if (p.bp_index == null) { unsupported.push(key); continue }
+    if (helixIds && !helixIds.has(p.helix_id)) { unsupported.push(key); continue }
+    anchors.push({ kind: 'base', helixId: p.helix_id, bp: p.bp_index, direction: p.direction })
   }
-  return { anchorable, unsupported }
+  return { anchors, unsupported }
 }
 
-/** The base keys in a selection snapshot that no anchor can address. */
+/** The live owner-id sets a selection snapshot's design provides. */
+function _liveIds(state) {
+  const d = state?.currentDesign
+  return {
+    helixIds:     new Set((d?.helices ?? []).map(h => h.id)),
+    crossoverIds: new Set((d?.crossovers ?? []).map(x => x.id)),
+    extensionIds: new Set((d?.extensions ?? []).map(e => e.id)),
+  }
+}
+
+/**
+ * The base keys in a selection snapshot that no anchor can address.
+ *
+ * Every bead family is addressable now, so this is only STALE keys — one whose helix,
+ * crossover or extension is gone from the design, or an unparseable string. Normally
+ * empty; the anchor card reports it rather than dropping silently, because the backend
+ * would resolve such a descriptor to zero particles without complaint.
+ */
 export function unsupportedBaseKeys(state) {
   const s = state || {}
-  const helixIds = new Set((s.currentDesign?.helices ?? []).map(h => h.id))
-  return partitionBaseKeys(s.multiSelectedBaseKeys ?? [], helixIds).unsupported
+  return partitionBaseKeys(s.multiSelectedBaseKeys ?? [], _liveIds(s)).unsupported
 }
 
 /**
@@ -426,16 +470,11 @@ export function resolveSelectionAnchors(state) {
   for (const n of s.ctrlBeadNucs || []) {
     if (n) out.push({ kind: 'base', helixId: n.helix_id, bp: n.bp_index, direction: n.direction })
   }
-  // The `base` selection level's pool. Unlike ctrlBeadNucs these are KEY strings, and the
-  // level can pick beads from renderers whose nucleotides have no (helix, bp, direction)
-  // triple — partitionBaseKeys drops those rather than posting an anchor that would match
-  // nothing. `unsupportedBaseKeys` lets the card tell the user what it skipped.
-  {
-    const helixIds = new Set((s.currentDesign?.helices ?? []).map(h => h.id))
-    for (const p of partitionBaseKeys(s.multiSelectedBaseKeys ?? [], helixIds).anchorable) {
-      out.push({ kind: 'base', helixId: p.helix_id, bp: p.bp_index, direction: p.direction })
-    }
-  }
+  // The `base` selection level's pool. Unlike ctrlBeadNucs these are KEY strings spanning
+  // five bead renderers, so partitionBaseKeys picks the right descriptor kind per family
+  // (base / extra_base / extension) and drops stale ones. `unsupportedBaseKeys` reports
+  // what it dropped.
+  out.push(...partitionBaseKeys(s.multiSelectedBaseKeys ?? [], _liveIds(s)).anchors)
   const sel = s.selectedObject
   if (sel) {
     if (sel.type === 'overhang') out.push({ kind: 'overhang', id: sel.id })

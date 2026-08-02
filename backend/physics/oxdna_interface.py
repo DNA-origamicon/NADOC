@@ -2275,9 +2275,12 @@ def _strand_nucleotide_provenance(design: Design) -> list[dict]:
     topology traversal."""
     prov: list[dict] = []
     for step in _walk_strand_nucleotides(design):
-        # Extra-base inserts carry helix_id/bp/direction/domain_index = None, so no
-        # anchor kind (overhang/cluster/domain) ever selects them — they only occupy
-        # the correct particle index so real-nucleotide anchors stay aligned.
+        # SYNTHETIC beads (crossover extra-base inserts, extension tail beads) carry
+        # helix_id/bp/direction/domain_index = None, so the coordinate-matching kinds
+        # (overhang/cluster/domain/base) never reach them — but they DO carry the owning
+        # strand_id, so `kind:'strand'` sweeps them in, and the `extra_base`/`extension`
+        # kinds address them by their `key`. (An earlier comment here claimed no anchor
+        # kind could select them; that was never true of the strand scope.)
         prov.append({
             "particle":     len(prov),
             "strand_id":    step.strand.id,
@@ -2307,10 +2310,32 @@ def resolve_anchor_particles(
           strand (used to pin an overhang-binding oligo, which is a whole strand).
       ``{'kind':'base', 'helix_id'|'helixId', 'bp'|'bp_index', 'direction'}`` → one
           individual nucleotide at (helix, bp, direction) — all loop copies of it.
+      ``{'kind':'extra_base', 'crossover_id'|'crossoverId', 'k'?}`` → a crossover's
+          inserted extra base(s).  ``k`` is the 5'→3' insert index; omit it to take
+          the whole run.
+      ``{'kind':'extension', 'extension_id'|'extensionId', 'k'?}`` → a strand
+          extension's tail bead(s); omit ``k`` to take the whole tail.
+
+    The last two address SYNTHETIC beads — ones the design emits into the oxDNA
+    topology but that have no ``(helix, bp, direction)``: ``_walk_strand_nucleotides``
+    gives them ``helix_id/bp/direction = None`` and a key of ``("__xb__", xo_id, k)``
+    or ``("__ext_<ext_id>", k, direction)``.  They match on that key instead, which is
+    globally unique (``crossover_extra_base_junctions`` registers each crossover at one
+    half only).  A particle index is all the force writer needs, so nothing downstream
+    changes — see :func:`anchor_trap_block`.
+
+    Note ``kind:'strand'`` has always swept a strand's synthetic beads in too (they
+    carry the owning ``strand_id``); that is deliberate and unchanged.  Engines that
+    cannot represent them filter afterwards — e.g. ``mrdna_anchors._anchor_nt_positions``.
 
     Unknown ids / kinds contribute nothing, so a stale selection silently drops
-    rather than raising.  Particle indices match the topology / configuration
-    order (:func:`_strand_nucleotide_order`)."""
+    rather than raising.  A descriptor missing the fields its kind needs also
+    contributes nothing: matching ``None`` against ``None`` would otherwise make a
+    bare ``{'kind':'base'}`` select every synthetic bead in the design, since those
+    are exactly the rows whose helix/bp/direction are all ``None``.
+
+    Particle indices match the topology / configuration order
+    (:func:`_strand_nucleotide_order`)."""
     prov = _strand_nucleotide_provenance(design)
     cluster_helices = {c.id: set(c.helix_ids) for c in design.cluster_transforms}
     selected: dict[int, tuple] = {}
@@ -2318,22 +2343,28 @@ def resolve_anchor_particles(
         kind = a.get("kind")
         if kind == "overhang":
             oid = a.get("id")
+            if oid is None:
+                continue
             for p in prov:
                 if p["overhang_id"] == oid:
                     selected[p["particle"]] = p["key"]
         elif kind == "cluster":
             helset = cluster_helices.get(a.get("id"), set())
             for p in prov:
-                if p["helix_id"] in helset:
+                if p["helix_id"] is not None and p["helix_id"] in helset:
                     selected[p["particle"]] = p["key"]
         elif kind == "domain":
             sid = a.get("strand_id", a.get("strandId"))
             didx = a.get("domain_index", a.get("domainIndex"))
+            if sid is None or didx is None:
+                continue
             for p in prov:
                 if p["strand_id"] == sid and p["domain_index"] == didx:
                     selected[p["particle"]] = p["key"]
         elif kind == "strand":
             sid = a.get("id") or a.get("strand_id") or a.get("strandId")
+            if sid is None:
+                continue
             for p in prov:
                 if p["strand_id"] == sid:
                     selected[p["particle"]] = p["key"]
@@ -2341,10 +2372,35 @@ def resolve_anchor_particles(
             hid = a.get("helix_id", a.get("helixId"))
             bp = a.get("bp", a.get("bp_index", a.get("bpIndex")))
             direction = a.get("direction")
+            if hid is None or bp is None or direction is None:
+                continue
             for p in prov:
                 if (p["helix_id"] == hid and p["bp"] == bp
                         and p["direction"] == direction):
                     selected[p["particle"]] = p["key"]
+        elif kind == "extra_base":
+            xo_id = a.get("crossover_id", a.get("crossoverId"))
+            k = a.get("k", a.get("extra_base_k", a.get("extraBaseK")))
+            if xo_id is None:
+                continue
+            for p in prov:
+                key = p["key"]
+                if (len(key) >= 3 and key[0] == _XB_SENTINEL and key[1] == xo_id
+                        and (k is None or key[2] == k)):
+                    selected[p["particle"]] = key
+        elif kind == "extension":
+            ext_id = a.get("extension_id", a.get("extensionId"))
+            k = a.get("k", a.get("ext_k", a.get("extK")))
+            if ext_id is None:
+                continue
+            want = f"{_EXT_PREFIX}{ext_id}"
+            for p in prov:
+                key = p["key"]
+                # Direction is part of the key but is fixed per extension, so it is not
+                # required of the caller — id + bead index already name the bead.
+                if (len(key) >= 2 and key[0] == want
+                        and (k is None or key[1] == k)):
+                    selected[p["particle"]] = key
     parts = sorted(selected)
     return parts, [selected[i] for i in parts]
 
